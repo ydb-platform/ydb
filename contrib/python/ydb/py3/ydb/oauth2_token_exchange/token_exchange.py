@@ -5,13 +5,14 @@ import abc
 import os
 import base64
 
+requests: typing.Any
 try:
     import requests
 except ImportError:
     requests = None
 
-from ydb import credentials, tracing, issues
-from .token_source import TokenSource, FixedTokenSource, JwtTokenSource
+from ydb import credentials, tracing, issues  # noqa: E402
+from .token_source import TokenSource, FixedTokenSource, JwtTokenSource  # noqa: E402
 
 
 # method -> is HMAC

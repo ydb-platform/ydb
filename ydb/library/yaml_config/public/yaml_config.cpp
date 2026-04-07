@@ -1308,6 +1308,72 @@ selector: {}
     selectors.at(0).Map().Append(config.Buildf("config"), node);
 }
 
+// Storage-only keys that should not be included in dynamic node configs
+// See ydb/tools/ydbd_slice/yaml_configurator.py STORAGE_ONLY_KEYS
+static const THashSet<TString> StorageOnlyKeys = {
+    "static_erasure",
+    "host_configs",
+    "nameservice_config",
+    "blob_storage_config",
+    "hosts"
+};
+
+NFyaml::TDocument FuseConfigs(const TString& baseConfig, const TString& consoleConfig) {
+    auto consoleDoc = NFyaml::TDocument::Parse(consoleConfig);
+
+    auto consoleRoot = consoleDoc.Root().Map();
+    Y_ENSURE_EX(consoleRoot.Has("config"), TYamlConfigEx() << "Console config must have 'config' section");
+
+    // Create output document
+    auto outputDoc = NFyaml::TDocument::Parse("{}");
+    auto outRoot = outputDoc.Root().Map();
+
+    // Copy metadata from console
+    if (consoleRoot.Has("metadata")) {
+        outRoot.Append(outputDoc.Buildf("metadata"), consoleRoot.at("metadata").Copy(outputDoc).Ref());
+    }
+
+    // Start with console config as the target (console wins)
+    auto mergedConfig = consoleRoot.at("config").Copy(outputDoc);
+    auto mergedMap = mergedConfig.Ref().Map();
+
+    // Add base config keys that are NOT in console (emplace behavior)
+    // Like init.cpp:800-802 but with console as target
+    // Skip storage-only keys that shouldn't be in dynamic node configs
+    if (!baseConfig.empty()) {
+        auto baseDoc = NFyaml::TDocument::Parse(baseConfig);
+        auto baseRoot = baseDoc.Root();
+        if (baseRoot.Type() == NFyaml::ENodeType::Mapping) {
+            auto baseMap = baseRoot.Map();
+            for (auto it = baseMap.begin(); it != baseMap.end(); ++it) {
+                auto key = it->Key().Scalar();
+                // Skip storage-only keys
+                if (StorageOnlyKeys.contains(key)) {
+                    continue;
+                }
+                // Only add if key doesn't exist in console (emplace)
+                if (!mergedMap.Has(key)) {
+                    mergedMap.Append(it->Key().Copy(outputDoc).Ref(), it->Value().Copy(outputDoc).Ref());
+                }
+            }
+        }
+    }
+
+    outRoot.Append(outputDoc.Buildf("config"), mergedConfig.Ref());
+
+    // Copy allowed_labels from console
+    if (consoleRoot.Has("allowed_labels")) {
+        outRoot.Append(outputDoc.Buildf("allowed_labels"), consoleRoot.at("allowed_labels").Copy(outputDoc).Ref());
+    }
+
+    // Copy selector_config from console (preserved intact)
+    if (consoleRoot.Has("selector_config")) {
+        outRoot.Append(outputDoc.Buildf("selector_config"), consoleRoot.at("selector_config").Copy(outputDoc).Ref());
+    }
+
+    return outputDoc;
+}
+
 ui64 GetVersion(const TString& config) {
     auto metadata = GetMainMetadata(config);
     return metadata.Version.value_or(0);

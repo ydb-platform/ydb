@@ -5,6 +5,7 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 PROTO_NAMESPACE(yt)
 
 SRCS(
+    yt/yt/core/rpc/unittests/authentificated_identity_guard_ut.cpp
     yt/yt/core/rpc/unittests/overload_controller_ut.cpp
     yt/yt/core/rpc/unittests/handle_channel_failure_ut.cpp
     yt/yt/core/rpc/unittests/roaming_channel_ut.cpp

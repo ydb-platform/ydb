@@ -75,10 +75,7 @@ public:
     return sdk::common::ExportResult::kSuccess;
   }
 
-  virtual bool ForceFlush(std::chrono::microseconds /* timeout */) noexcept override
-  {
-    return true;
-  }
+  bool ForceFlush(std::chrono::microseconds /* timeout */) noexcept override { return true; }
 
   /**
    * Attempt to shut down the in-memory span exporter.

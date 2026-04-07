@@ -16,6 +16,7 @@
 #include <util/string/type.h>
 #include <util/system/info.h>
 #include <string>
+#include <functional>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -23,6 +24,18 @@ namespace NConsoleClient {
 struct TCommandFlags {
     bool Dangerous = false;
     bool OnlyExplicitProfile = false;
+};
+
+struct TAiPresetConfig {
+    TString Name;
+    TString ApiType;
+    TString ApiEndpoint;
+    TString ModelName;
+};
+
+struct TAiTokenConfig {
+    TString Token;
+    bool WasUpdated = false;
 };
 
 class TClientCommand {
@@ -34,6 +47,7 @@ public:
     TString Name;
     TVector<TString> Aliases;
     TString Description;
+    TString CompletionDescription;
     bool Visible = true;
     bool Hidden = false;
     bool Dangerous = false;
@@ -88,9 +102,6 @@ public:
             TArgSetting Min;
             TArgSetting Max;
         };
-
-        static ELogPriority VerbosityLevelToELogPriority(ui32 lvl);
-        static ELogPriority VerbosityLevelToELogPriorityChatty(ui32 lvl);
 
         int ArgC;
         char** ArgV;
@@ -152,6 +163,7 @@ public:
         TString ChosenAuthMethod;
 
         TString ProfileFile;
+        TString AiProfileFile = GetHomeDir() + "/.config/ydb/ai_profiles.yaml";
         bool UseAccessToken = true;
         bool UseIamAuth = false;
         bool UseStaticCredentials = false;
@@ -166,6 +178,11 @@ public:
         bool OnlyExplicitProfile = false;
         bool AssumeYes = false;
         std::optional<std::string> StorageUrl = std::nullopt;
+
+        // AI configuration
+        bool EnableAiInteractive = false;
+        std::vector<TAiPresetConfig> AiPredefinedProfiles;
+        std::function<TAiTokenConfig()> AiTokenGetter;
 
         TCredentialsGetter CredentialsGetter;
         std::shared_ptr<ICredentialsProviderFactory> SingletonCredentialsProviderFactory = nullptr;
@@ -430,6 +447,10 @@ public:
     void MarkDangerous();
     void UseOnlyExplicitProfile();
 
+    const TString& GetCompletionDescription() const {
+        return CompletionDescription ? CompletionDescription : Description;
+    }
+
 protected:
     virtual void Config(TConfig& config);
     virtual void SaveParseResult(TConfig& config);
@@ -449,6 +470,9 @@ private:
     void CheckForExecutableOptions(TConfig& config);
 
     constexpr static int DESCRIPTION_ALIGNMENT = 28;
+
+    friend class TYdbCommandAutoCompletionWrapper;
+    friend class TYdbCommandTreeAutoCompletionWrapper;
 };
 
 class TClientCommandTree : public TClientCommand {
@@ -487,6 +511,8 @@ protected:
 
     TMap<TString, std::unique_ptr<TClientCommand>> SubCommands;
     TMap<TString, TString> Aliases;
+
+    friend class TYdbCommandTreeAutoCompletionWrapper;
 };
 
 class TCommandWithPath {

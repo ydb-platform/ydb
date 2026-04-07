@@ -1,5 +1,6 @@
 #include "common_helper.h"
 #include "../datashard_impl.h"
+#include "../range_ops.h"
 #include "../scan_common.h"
 #include "../upload_stats.h"
 #include "../buffer_data.h"
@@ -7,6 +8,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/json_index.h>
 #include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 
@@ -30,8 +32,8 @@ using namespace NKikimr::NFulltext;
  * This scan takes the main table and writes output to indexImplTable.
  *
  * Source columns: <PK columns>, <text column>, <data columns>
- * Destination columns with FLAT index layout: __ydb_token, <PK columns>, __ydb_freq
- * Destination columns with FLAT_RELEVANCE index layout: __ydb_token, <PK columns>, <data columns>
+ * Destination columns with a FulltextPlain index: __ydb_token, <PK columns>, __ydb_freq
+ * Destination columns with a FulltextRelevance index: __ydb_token, <PK columns>, <data columns>
  *
  * Request:
  * - The client sends TEvBuildFulltextIndexRequest with:
@@ -42,7 +44,7 @@ using namespace NKikimr::NFulltext;
  * Execution Flow:
  * - TBuildFulltextIndexScan scans the whole input shard
  * - Extracts tokens from the text column using tokenizers set in the index settings
- * - When the index layout is FLAT_RELEVANCE it also calculates __ydb_freq for each token
+ * - When the index has FulltextRelevance type, it also calculates __ydb_freq for each token
  *   as the number of its occurrences in the document
  * - Tokens are inserted into the index table with their __ydb_freqs if required
  */
@@ -55,6 +57,7 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
 
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
+    ui64 JsonErrors = 0;
 
     ui64 DocCount = 0;
     ui64 TotalDocLength = 0;
@@ -62,10 +65,17 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
     TTags ScanTags;
     TString TextColumn;
     Ydb::Table::FulltextIndexSettings::Analyzers TextAnalyzers;
+    bool IsBinaryJson = false;
 
     TBatchRowsUploader Uploader;
     TBufferData* UploadBuf = nullptr;
     TBufferData* DocsBuf = nullptr;
+
+    TVector<NScheme::TTypeInfo> KeyTypes;
+    TSerializedTableRange RequestedRange;
+    TSerializedTableRange TableRange;
+    TSerializedCellVec LastProcessedKey;
+    TSerializedCellVec LastAckedKey;
 
     const NKikimrTxDataShard::TEvBuildFulltextIndexRequest Request;
     const TActorId ResponseActorId;
@@ -83,10 +93,18 @@ public:
         , TabletId(tabletId)
         , BuildId{request.GetId()}
         , Uploader(request.GetDatabaseName(), request.GetScanSettings())
+        , KeyTypes(table.KeyColumnTypes)
+        , TableRange(table.Range)
         , Request(std::move(request))
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
     {
+        if (Request.HasKeyRange()) {
+            RequestedRange.Load(Request.GetKeyRange());
+        } else {
+            RequestedRange = TableRange;
+        }
+
         LOG_I("Create " << Debug());
 
         Y_ENSURE(Request.settings().columns().size() == 1);
@@ -95,6 +113,11 @@ public:
 
         auto tags = GetAllTags(table);
         auto types = GetAllTypes(table);
+
+        const auto& textType = types.at(TextColumn);
+        if (textType.GetTypeId() == NUdf::TDataType<NUdf::TJsonDocument>::Id) {
+            IsBinaryJson = true;
+        }
 
         {
             ScanTags.push_back(tags.at(TextColumn));
@@ -117,7 +140,11 @@ public:
 
         {
             auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
-            {
+            if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json) {
+                Ydb::Type type;
+                type.set_type_id(Ydb::Type::STRING);
+                uploadTypes->emplace_back(TokenColumn, type);
+            } else {
                 Ydb::Type type;
                 NScheme::ProtoFromTypeInfo(types.at(TextColumn), type);
                 uploadTypes->emplace_back(TokenColumn, type);
@@ -125,7 +152,7 @@ public:
             for (const auto& column : table.KeyColumnIds) {
                 addType(uploadTypes, table.Columns.at(column).Name);
             }
-            if (Request.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+            if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
                 Ydb::Type type;
                 type.set_type_id(TokenCountType);
                 uploadTypes->emplace_back(FreqColumn, type);
@@ -137,7 +164,7 @@ public:
             UploadBuf = Uploader.AddDestination(Request.GetIndexName(), std::move(uploadTypes));
         }
 
-        if (Request.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+        if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
             auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
             for (const auto& column : table.KeyColumnIds) {
                 addType(uploadTypes, table.Columns.at(column).Name);
@@ -175,7 +202,18 @@ public:
                 : EScan::Sleep;
         }
 
-        lead.To(ScanTags, {}, NTable::ESeek::Lower);
+        auto scanRange = Intersect(KeyTypes, RequestedRange.ToTableRange(), TableRange.ToTableRange());
+
+        if (scanRange.From) {
+            auto seek = scanRange.InclusiveFrom ? NTable::ESeek::Lower : NTable::ESeek::Upper;
+            lead.To(ScanTags, scanRange.From, seek);
+        } else {
+            lead.To(ScanTags, {}, NTable::ESeek::Lower);
+        }
+
+        if (scanRange.To) {
+            lead.Until(scanRange.To, scanRange.InclusiveTo);
+        }
 
         return EScan::Feed;
     }
@@ -187,12 +225,26 @@ public:
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 
+        LastProcessedKey = TSerializedCellVec(key);
+
         TVector<TCell> uploadKey(::Reserve(key.size() + 1));
         TVector<TCell> uploadValue(::Reserve(Request.GetDataColumns().size()));
 
-        TString text((*row).at(0).AsBuf());
-        auto tokens = Analyze(text, TextAnalyzers);
-        if (Request.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE) {
+        TVector<TString> tokens;
+        if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json) {
+            if (IsBinaryJson) {
+                tokens = NJsonIndex::TokenizeBinaryJson(row.Get(0).AsBuf());
+            } else {
+                TString error;
+                tokens = NJsonIndex::TokenizeJson(row.Get(0).AsBuf(), error);
+                if (error != "") {
+                    JsonErrors++;
+                }
+            }
+        } else {
+            tokens = Analyze(row.Get(0).AsBuf(), TextAnalyzers);
+        }
+        if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
             ui32 totalTokens = 0;
             THashMap<TString, ui32> tokenFreq;
             for (const auto& token : tokens) {
@@ -217,7 +269,7 @@ public:
                 if (dataColumn != TextColumn) {
                     uploadValue.push_back(row.Get(index++));
                 } else {
-                    uploadValue.push_back(TCell(text));
+                    uploadValue.push_back(row.Get(0));
                 }
             }
             // Document length column
@@ -239,7 +291,7 @@ public:
                     if (dataColumn != TextColumn) {
                         uploadValue.push_back(row.Get(index++));
                     } else {
-                        uploadValue.push_back(TCell(text));
+                        uploadValue.push_back(row.Get(0));
                     }
                 }
 
@@ -258,6 +310,9 @@ public:
 
     EScan Exhausted() final
     {
+        if (JsonErrors > 0) {
+            LOG_W("Invalid JSON encountered in " << JsonErrors << " rows " << Debug());
+        }
         LOG_T("Exhausted " << Debug());
 
         // call Seek to wait uploads
@@ -278,6 +333,10 @@ public:
         record.MutableMeteringStats()->SetCpuTimeUs(Driver->GetTotalCpuTimeUs());
         record.SetDocCount(DocCount);
         record.SetTotalDocLength(TotalDocLength);
+
+        if (LastAckedKey.GetBuffer()) {
+            record.SetLastKeyAck(LastAckedKey.GetBuffer());
+        }
 
         Uploader.Finish(record, status);
 
@@ -335,9 +394,23 @@ protected:
             return;
         }
 
-        Uploader.Handle(ev);
+        bool batchUploaded = Uploader.Handle(ev);
 
         if (Uploader.GetUploadStatus().IsSuccess()) {
+            if (batchUploaded && LastProcessedKey.GetBuffer() &&
+                LastProcessedKey.GetBuffer() != LastAckedKey.GetBuffer()) {
+                LastAckedKey = LastProcessedKey;
+
+                auto progress = MakeHolder<TEvDataShard::TEvBuildFulltextIndexResponse>();
+                auto& record = progress->Record;
+                record.SetId(BuildId);
+                record.SetTabletId(TabletId);
+                record.SetRequestSeqNoGeneration(Request.GetSeqNoGeneration());
+                record.SetRequestSeqNoRound(Request.GetSeqNoRound());
+                record.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
+                record.SetLastKeyAck(LastAckedKey.GetBuffer());
+                Send(ResponseActorId, progress.Release());
+            }
             Driver->Touch(EScan::Feed);
             return;
         }
@@ -356,6 +429,7 @@ protected:
     TString Debug() const
     {
         return TStringBuilder() << "TBuildFulltextIndexScan TabletId: " << TabletId << " Id: " << BuildId
+            << ", last acked key: " << DebugPrintPoint(KeyTypes, LastAckedKey.GetCells(), *AppData()->TypeRegistry)
             << " " << Uploader.Debug();
     }
 };
@@ -461,9 +535,14 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         }
 
         auto tags = GetAllTags(userTable);
+        auto types = GetAllTypes(userTable);
         for (auto column : request.GetSettings().columns()) {
             if (!tags.contains(column.column())) {
                 badRequest(TStringBuilder() << "Unknown key column: " << column.column());
+            } else if (types.at(column.column()).GetTypeId() == NUdf::TDataType<NUdf::TJsonDocument>::Id) {
+                if (request.GetIndexType() != NKikimrTxDataShard::EFulltextIndexType::Json) {
+                    badRequest("Indexing binary JSON requires JSON index type");
+                }
             }
         }
         for (auto dataColumn : request.GetDataColumns()) {
@@ -479,12 +558,16 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         // 3. Validating fulltext index settings
         if (!request.HasSettings()) {
             badRequest(TStringBuilder() << "Missing fulltext index settings");
+        } else if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json) {
+            if (!request.GetSettings().columns_size()) {
+                badRequest(TStringBuilder() << "JSON columns should be set");
+            }
         } else {
             TString error;
             if (!NKikimr::NFulltext::ValidateSettings(request.GetSettings(), error)) {
                 badRequest(error);
             }
-            if (request.GetSettings().layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE &&
+            if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance &&
                 !request.GetDocsTableName()) {
                 badRequest(TStringBuilder() << "Empty index documents table name");
             }

@@ -9,8 +9,7 @@
 #include <util/system/yassert.h>
 #include <util/string/hex.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 template <bool HasLength = true>
 class TLazyList: public NUdf::TBoxedValue {
@@ -116,5 +115,4 @@ private:
     i32 From_, To_;
 };
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

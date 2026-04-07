@@ -1,0 +1,188 @@
+{
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "name" = "s_store_sk";
+            "required" = %true;
+            "sort_order" = "ascending";
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "s_store_id";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "s_rec_start_date";
+            "required" = %false;
+            "type" = "date";
+            "type_v3" = {
+                "type_name" = "optional";
+                "item" = "date";
+            };
+        };
+        {
+            "name" = "s_rec_end_date";
+            "required" = %false;
+            "type" = "date";
+            "type_v3" = {
+                "type_name" = "optional";
+                "item" = "date";
+            };
+        };
+        {
+            "name" = "s_closed_date_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "s_store_name";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "s_number_employees";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "s_floor_space";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "s_hours";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "s_manager";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "s_market_id";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "s_geography_class";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "s_market_desc";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "s_market_manager";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "s_division_id";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "s_division_name";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "s_company_id";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "s_company_name";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "s_street_number";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "s_street_name";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "s_street_type";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "s_suite_number";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "s_city";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "s_county";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "s_state";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "s_zip";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "s_country";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "s_gmt_offset";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "s_tax_precentage";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+    ];
+}

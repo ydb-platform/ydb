@@ -7,13 +7,14 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node.h>
 
-namespace NYql {
-namespace NUdf {
+#include <utility>
+
+namespace NYql::NUdf {
 
 using namespace NProtoBuf;
 
-TProtobufValue::TProtobufValue(const TProtoInfo& info)
-    : Info_(info)
+TProtobufValue::TProtobufValue(TProtoInfo info)
+    : Info_(std::move(info))
 {
 }
 
@@ -38,8 +39,8 @@ TUnboxedValue TProtobufValue::Run(
     }
 }
 
-TProtobufSerialize::TProtobufSerialize(const TProtoInfo& info)
-    : Info_(info)
+TProtobufSerialize::TProtobufSerialize(TProtoInfo info)
+    : Info_(std::move(info))
 {
 }
 
@@ -85,7 +86,7 @@ static TUnboxedValuePod CreateEnumValue(
             return valueBuilder->NewString(desc->full_name()).Release();
     }
 
-    Y_UNREACHABLE();
+    Y_ENSURE(false, "Unreachable");
 }
 
 static TUnboxedValuePod CreateSingleField(
@@ -345,5 +346,4 @@ TUnboxedValue FillValueFromProto(
     return value;
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

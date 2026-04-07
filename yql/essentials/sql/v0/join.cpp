@@ -9,6 +9,8 @@
 #include <util/string/split.h>
 #include <util/string/join.h>
 
+#include <utility>
+
 using namespace NYql;
 
 namespace NSQLTranslationV0 {
@@ -37,8 +39,8 @@ struct TJoinDescr {
 
     TVector<std::pair<TFullColumn, TFullColumn>> Keys;
 
-    TJoinDescr(const TString& op)
-        : Op(op)
+    explicit TJoinDescr(TString op)
+        : Op(std::move(op))
     {}
 };
 
@@ -329,7 +331,7 @@ protected:
         }
 
         JoinDescrs_.back().Keys.push_back({ { leftSourceIdx, op ? op->GetArgs()[leftArg] : nullptr},
-            { rightSourceIdx, op ? op->GetArgs()[rightArg] : nullptr } });
+                    { rightSourceIdx, op ? op->GetArgs()[rightArg] : nullptr } });
         KeysInitializing_ = false;
         return true;
     }

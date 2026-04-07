@@ -24,7 +24,6 @@ namespace NKikimr::NKqp::NWorkload {
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << stream)
 #define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[WorkloadService] " << LogPrefix() << stream)
 
-
 template <typename TDerived>
 class TSchemeActorBase : public NActors::TActorBootstrapped<TDerived> {
     using TRetryPolicy = IRetryPolicy<bool>;

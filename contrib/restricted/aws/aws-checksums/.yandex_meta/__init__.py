@@ -1,9 +1,18 @@
+import os
+
 from devtools.yamaker.project import CMakeNinjaNixProject
 
 
 def post_install(self):
     # Otherwise debug build fails with gcc, as expected by the authors.
     with self.yamakes["."] as m:
+        # Use xxhash from contrib
+        m.SRCS.remove("source/external/xxhash.c")
+        os.remove(f"{self.dstdir}/source/external/xxhash.c")
+        os.remove(f"{self.dstdir}/source/external/xxhash.h")
+        m.PEERDIR.add("contrib/libs/xxhash")
+
+        # Support opt-in compilation targeting avx512
         m.SRCS.remove("source/intel/intrin/crc64nvme_clmul.c")
         m.SRCS.remove("source/intel/intrin/crc32c_sse42_avx512.c")
         m.SRCS.remove("source/intel/intrin/crc64nvme_avx512.c")
@@ -29,6 +38,8 @@ aws_checksums = CMakeNinjaNixProject(
         "source/arm/crc32c_arm.c",
     ],
     flags=["-DBUILD_JNI_BINDINGS=OFF"],
-    disable_includes=["aws/checksums/crc_jni.h"],
+    disable_includes=[
+        "aws/checksums/crc_jni.h",
+    ],
     post_install=post_install,
 )

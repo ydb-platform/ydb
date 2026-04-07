@@ -1,7 +1,5 @@
 #pragma once
 
-#include "account_read_quoter.h"
-
 #include "working_time_counter.h"
 #include "subscriber.h"
 #include <ydb/core/persqueue/public/counters/percentile_counter.h>
@@ -78,7 +76,7 @@ struct TUserInfo: public TUserInfoBase, public TAtomicRefCount<TUserInfo> {
     TUserInfo(
         const TActorContext& ctx,
         NMonitoring::TDynamicCounterPtr streamCountersSubgroup,
-        NMonitoring::TDynamicCounterPtr partitionCountersSubgroup,
+        TConstArrayRef<NMonitoring::TDynamicCounterPtr> partitionCountersSubgroups,
         const TString& user,
         const ui64 readRuleGeneration, const bool important, const TDuration availabilityPeriod,
         const NPersQueue::TTopicConverterPtr& topicConverter,
@@ -94,7 +92,7 @@ struct TUserInfo: public TUserInfoBase, public TAtomicRefCount<TUserInfo> {
     void ReadDone(const TActorContext& ctx, const TInstant& now, ui64 readSize, ui32 readCount,
                   const TString& clientDC, const TActorId& tablet, bool isExternalRead, i64 endOffset);
 
-    void SetupDetailedMetrics(const TActorContext& ctx, NMonitoring::TDynamicCounterPtr subgroup);
+    void SetupDetailedMetrics(const TActorContext& ctx, TConstArrayRef<NMonitoring::TDynamicCounterPtr> subgroups);
     void ResetDetailedMetrics();
     void SetupStreamCounters(NMonitoring::TDynamicCounterPtr subgroup);
     void SetupTopicCounters(const TActorContext& ctx, const TString& dcId, const TString& partition);
@@ -154,14 +152,17 @@ public:
     TMap<TString, NKikimr::NPQ::TMultiCounter> BytesReadFromDC;
 
     // Per partition counters
-    NMonitoring::TDynamicCounters::TCounterPtr BytesReadPerPartition;
-    NMonitoring::TDynamicCounters::TCounterPtr MessagesReadPerPartition;
-    NMonitoring::TDynamicCounters::TCounterPtr MessageLagByLastReadPerPartition;
-    NMonitoring::TDynamicCounters::TCounterPtr MessageLagByCommittedPerPartition;
-    NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByLastReadPerPartition;
-    NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByCommittedPerPartition;
-    NMonitoring::TDynamicCounters::TCounterPtr TimeSinceLastReadMsPerPartition;
-    NMonitoring::TDynamicCounters::TCounterPtr ReadTimeLagMsPerPartition;
+    struct TPerPartitionCounters {
+        NMonitoring::TDynamicCounters::TCounterPtr BytesReadPerPartition;
+        NMonitoring::TDynamicCounters::TCounterPtr MessagesReadPerPartition;
+        NMonitoring::TDynamicCounters::TCounterPtr MessageLagByLastReadPerPartition;
+        NMonitoring::TDynamicCounters::TCounterPtr MessageLagByCommittedPerPartition;
+        NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByLastReadPerPartition;
+        NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByCommittedPerPartition;
+        NMonitoring::TDynamicCounters::TCounterPtr TimeSinceLastReadMsPerPartition;
+        NMonitoring::TDynamicCounters::TCounterPtr ReadTimeLagMsPerPartition;
+    };
+    TVector<TPerPartitionCounters> PerPartitionCounters;
 
     ui32 ActiveReads;
     ui32 ReadsInQuotaQueue;
@@ -194,8 +195,7 @@ public:
         const TString& DbId,
         const TString& DbPath,
         const bool isServerless,
-        const TString& FolderId,
-        const TString& MonitoringProjectId);
+        const TString& FolderId);
 
     void Init(TActorId tabletActor, TActorId partitionActor, const TActorContext& ctx);
 
@@ -238,12 +238,18 @@ public:
 
     void Remove(const TString& user, const TActorContext& ctx);
 
-    ::NMonitoring::TDynamicCounterPtr GetPartitionCounterSubgroup(const TActorContext& ctx) const;
+    struct TDetailedCounterSubgroup {
+        ::NMonitoring::TDynamicCounterPtr Subgroup;
+        TString Key;
+    };
+
     void SetupDetailedMetrics(const TActorContext& ctx);
     void ResetDetailedMetrics();
-    bool DetailedMetricsAreEnabled() const;
 
     void SetImportant(TUserInfo& userInfo, bool important, TDuration availabilityPeriod);
+
+    TInstant GetLastReadMetricsUpdateTime() const;
+    void SetLastReadMetricsUpdateTime(TInstant time);
 
 private:
 
@@ -265,6 +271,10 @@ private:
         Remove,
     };
     void UpdateImportantExtSlice(TUserInfo* userInfo, EImportantSliceAction action);
+
+    TDetailedCounterSubgroup GetPartitionCounterSubgroupImpl(const TActorContext& ctx, const TString& monitoringProjectId) const;
+    TDetailedCounterSubgroup GetPartitionCounterSubgroup(const TActorContext& ctx) const;
+    TDetailedCounterSubgroup GetConsumerCounterSubgroup(const TActorContext& ctx, const NKikimrPQ::TPQTabletConfig_TConsumer& consumerConfig) const;
 private:
     THashMap<TString, TIntrusivePtr<TUserInfo>> UsersInfo;
     THashMap<TString, TIntrusivePtr<TUserInfo>> ImportantExtUsersInfoSlice;
@@ -283,8 +293,9 @@ private:
     TString DbPath;
     bool IsServerless;
     TString FolderId;
-    TString MonitoringProjectId;
     mutable ui64 CurReadRuleGeneration;
+
+    TInstant LastReadMetricsUpdateTime;
 };
 
 

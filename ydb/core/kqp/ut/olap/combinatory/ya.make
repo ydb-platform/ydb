@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     abstract.cpp
+    check_counter.cpp
     execute.cpp
     actualization.cpp
     compaction.cpp

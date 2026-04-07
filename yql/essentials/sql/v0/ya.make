@@ -1,6 +1,7 @@
 LIBRARY()
 
 ENABLE(SKIP_YQL_STYLE_CPP)
+NO_CLANG_TIDY()
 
 PEERDIR(
     library/cpp/charset/lite

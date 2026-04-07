@@ -4,6 +4,7 @@
 #include "schemeshard_path.h"
 #include "schemeshard_import_helpers.h"  // for ValidateImportDstPath
 
+#include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/channel_profiles.h>
 #include <ydb/core/base/table_index.h>
@@ -101,7 +102,7 @@ void TSubDomainInfo::ApplyAuditSettings(const TSubDomainInfo::TMaybeAuditSetting
 }
 
 void TSubDomainInfo::UpdateCounters(IQuotaCounters* counters) {
-    counters->SetPathCount(GetPathsInside());
+    counters->SetPathCount(GetPathsInside() - GetBackupPaths() - GetSystemPaths());
 
     const auto shardsTotal = GetShardsInside();
     const auto backupShards = GetBackupShards();
@@ -377,7 +378,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         } else if (col.HasFamily()) {
             columnFamily = columnFamilyMerger.Get(col.GetFamily(), errStr);
         } else if (col.HasFamilyName()) {
-            columnFamily = columnFamilyMerger.AddOrGet(col.GetFamilyName(), errStr);
+            columnFamily = columnFamilyMerger.Get(col.GetFamilyName(), errStr);
         }
 
         if ((col.HasFamily() || col.HasFamilyName()) && !columnFamily) {
@@ -399,7 +400,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
             bool isChangeNotNullConstraint = col.HasNotNull();
 
-            if (!isChangeNotNullConstraint && !columnFamily && !col.HasDefaultFromSequence() && !col.HasEmptyDefault()) {
+            if (!isChangeNotNullConstraint && !columnFamily && !col.HasDefaultFromSequence() && !col.HasEmptyDefault() && !col.HasDefaultFromLiteral()) {
                 errStr = Sprintf("Nothing to alter for column '%s'", colName.data());
                 return nullptr;
             }
@@ -416,8 +417,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     case NKikimrSchemeOp::TColumnDescription::kEmptyDefault: {
                         break;
                     }
+                    case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
+                        break;
+                    }
                     default: {
-                        errStr = Sprintf("Cannot set default from literal for column '%s'", colName.c_str());
+                        errStr = Sprintf("Cannot set default for column '%s'", colName.c_str());
                         return nullptr;
                     }
                 }
@@ -516,6 +520,11 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 case NKikimrSchemeOp::TColumnDescription::kEmptyDefault: {
                     column.DefaultKind = ETableColumnDefaultKind::None;
                     column.DefaultValue = "";
+                    break;
+                }
+                case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
+                    column.DefaultKind = ETableColumnDefaultKind::FromLiteral;
+                    column.DefaultValue = col.GetDefaultFromLiteral().SerializeAsString();
                     break;
                 }
                 default: break;
@@ -770,40 +779,6 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     return alterData;
 }
 
-void TTableInfo::GetIndexObjectCount(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc, ui32& indexTableCount, ui32& sequenceCount, ui32& indexTableShards) {
-    indexTableCount = 1;
-    sequenceCount = 0;
-    switch (GetIndexType(indexDesc)) {
-        case NKikimrSchemeOp::EIndexTypeGlobal:
-        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-            break;
-        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
-            const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
-            indexTableCount = (prefixVectorIndex ? 3 : 2);
-            sequenceCount = (prefixVectorIndex ? 1 : 0);
-            break;
-        }
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltext: {
-            bool withRelevance = indexDesc.GetFulltextIndexDescription().GetSettings()
-                .layout() == Ydb::Table::FulltextIndexSettings::FLAT_RELEVANCE;
-            indexTableCount = (withRelevance ? 4 : 1);
-            break;
-        }
-        default:
-            Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexDesc.GetType()));
-            break;
-    }
-    if (indexDesc.IndexImplTableDescriptionsSize() == indexTableCount) {
-        indexTableShards = 0;
-        for (const auto& indexTableDesc: indexDesc.GetIndexImplTableDescriptions()) {
-            indexTableShards += TTableInfo::ShardsToCreate(indexTableDesc);
-        }
-    } else {
-        indexTableShards = indexTableCount;
-    }
-}
-
 void TTableInfo::ResetDescriptionCache() {
     TableDescription.ClearId_Deprecated();
     TableDescription.ClearPathId();
@@ -923,11 +898,12 @@ NKikimrSchemeOp::TPartitionConfig TPartitionConfigMerger::DefaultConfig(const TA
 bool TPartitionConfigMerger::ApplyChanges(
     NKikimrSchemeOp::TPartitionConfig &result,
     const NKikimrSchemeOp::TPartitionConfig &src, const NKikimrSchemeOp::TPartitionConfig &changes,
+    const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& columns,
     const TAppData *appData, const bool isServerlessDomain, TString &errDescr)
 {
     result.CopyFrom(src); // inherit all data from src
 
-    if (!ApplyChangesInColumnFamilies(result, src, changes, isServerlessDomain, errDescr)) {
+    if (!ApplyChangesInColumnFamilies(result, src, changes, columns, isServerlessDomain, errDescr)) {
         return false;
     }
 
@@ -1086,8 +1062,37 @@ bool TPartitionConfigMerger::ApplyChanges(
         result.MutablePipelineConfig()->CopyFrom(changes.GetPipelineConfig());
     }
 
+    if (changes.HasEnableFilterByKey() && !changes.GetEnableFilterByKey() &&
+        changes.ByKeyFilterPrefixesSize() > 0) {
+        errDescr = "Cannot disable KEY_BLOOM_FILTER and add bloom filter prefixes in the same operation";
+        return false;
+    }
+
     if (changes.HasEnableFilterByKey()) {
         result.SetEnableFilterByKey(changes.GetEnableFilterByKey());
+        if (!changes.GetEnableFilterByKey()) {
+            // Disabling KEY_BLOOM_FILTER clears all bloom filter state including prefixed filters
+            result.ClearByKeyFilterPrefixes();
+        }
+    }
+
+    if (changes.ByKeyFilterPrefixesSize() > 0) {
+        TVector<ui32> prefixes;
+        for (auto p : result.GetByKeyFilterPrefixes()) {
+            if (p > 0) {
+                prefixes.push_back(p);
+            }
+        }
+        for (auto p : changes.GetByKeyFilterPrefixes()) {
+            if (p > 0) {
+                prefixes.push_back(p);
+            }
+        }
+        SortUnique(prefixes);
+        result.ClearByKeyFilterPrefixes();
+        for (auto p : prefixes) {
+            result.AddByKeyFilterPrefixes(p);
+        }
     }
 
     if (changes.HasExecutorFastLogPolicy()) {
@@ -1127,6 +1132,7 @@ bool TPartitionConfigMerger::ApplyChanges(
 bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
     NKikimrSchemeOp::TPartitionConfig &result,
     const NKikimrSchemeOp::TPartitionConfig &src, const NKikimrSchemeOp::TPartitionConfig &changes,
+    const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription>& columns,
     const bool isServerlessDomain,
     TString &errDescr)
 {
@@ -1243,6 +1249,15 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
 
             if (srcStorage.HasExternalChannelsCount()) {
                 dstStorage.SetExternalChannelsCount(srcStorage.GetExternalChannelsCount());
+            }
+        }
+    }
+
+    // generate families from family names in column descriptions if needed
+    for (const auto& col : columns) {
+        if (!col.HasFamily() && col.HasFamilyName()) {
+            if (!merger.AddOrGet(col.GetFamilyName(), errDescr)) {
+                return false;
             }
         }
     }
@@ -2134,8 +2149,9 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
 
     // Check that total load doesn't exceed the limits
     if (canMergeByLoad) {
-        if (shardLoad + totalLoad > cpuUsageThreshold)
+        if (shardLoad + totalLoad > cpuUsageThreshold) {
             return false;
+        }
 
         reason = TStringBuilder() << "merge by load ("
             << "shardLoad: " << shardLoad << ")";
@@ -2422,6 +2438,30 @@ void TImportInfo::AddNotifySubscriber(const TActorId &actorId) {
     Subscribers.insert(actorId);
 }
 
+bool TImportInfo::CompileExcludeRegexps(TString& errorDescription) {
+    if (!ExcludeRegexps) {
+        try {
+            Visit([this](const auto& settings) {
+                ExcludeRegexps = NBackup::CombineRegexps(settings.exclude_regexps());
+            });
+        } catch (const std::exception& ex) {
+            errorDescription = TStringBuilder() << "Invalid regexp: " << ex.what();
+            return false;
+        }
+    }
+    return true;
+}
+
+bool TImportInfo::IsExcludedFromImport(const TString& path) const {
+    Y_ENSURE(ExcludeRegexps.Defined());
+    for (const TRegExMatch& regexp : *ExcludeRegexps) {
+        if (regexp.Match(path.c_str())) {
+            return true;
+        }
+    }
+    return false;
+}
+
 TColumnFamiliesMerger::TColumnFamiliesMerger(NKikimrSchemeOp::TPartitionConfig &container)
     : Container(container)
     , DeduplicationById(TPartitionConfigMerger::DeduplicateColumnFamiliesById(Container))
@@ -2445,7 +2485,7 @@ bool TColumnFamiliesMerger::Has(ui32 familyId) const {
 NKikimrSchemeOp::TFamilyDescription *TColumnFamiliesMerger::Get(ui32 familyId, TString &errDescr) {
     if (!Has(familyId)) {
         errDescr = TStringBuilder()
-            << "Column family with id: " << familyId << " doesn't present"
+            << "Column family with id " << familyId << " is not present"
             << ", auto generation new column family is allowed only by name in column description";
         return nullptr;
     }
@@ -2462,6 +2502,18 @@ NKikimrSchemeOp::TFamilyDescription *TColumnFamiliesMerger::AddOrGet(ui32 family
 
     auto& dstFamily = TPartitionConfigMerger::MutableColumnFamilyById(Container, DeduplicationById, familyId);
     return &dstFamily;
+}
+
+NKikimrSchemeOp::TFamilyDescription *TColumnFamiliesMerger::Get(const TString &familyName, TString &errDescr) {
+    const auto& canonicFamilyName = CanonizeName(familyName);
+
+    if (IdByName.contains(canonicFamilyName)) {
+        return Get(IdByName.at(canonicFamilyName), canonicFamilyName, errDescr);
+    }
+
+    errDescr = TStringBuilder() << "Column family with name " << familyName << " is not present";
+
+    return nullptr;
 }
 
 NKikimrSchemeOp::TFamilyDescription *TColumnFamiliesMerger::AddOrGet(const TString &familyName, TString &errDescr) {
@@ -2720,17 +2772,19 @@ NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
 TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaMapping(TSchemeShard* ss) {
     TFillItemsFromSchemaMappingResult result;
 
-    Y_ABORT_UNLESS(Kind == EKind::S3);
-    auto settings = GetS3Settings();
-
-    TString dstRoot;
-    if (settings.destination_path().empty()) {
-        dstRoot = CanonizePath(ss->RootPathElements);
-    } else {
-        dstRoot = CanonizePath(settings.destination_path());
+    if (TString err; !CompileExcludeRegexps(err)) {
+        result.AddError(err);
+        return result;
     }
 
-    TString sourcePrefix = NBackup::NormalizeExportPrefix(settings.source_prefix());
+    TString dstRoot;
+    if (GetDestinationPath().empty()) {
+        dstRoot = CanonizePath(ss->RootPathElements);
+    } else {
+        dstRoot = CanonizePath(GetDestinationPath());
+    }
+
+    TString sourcePrefix = NBackup::NormalizeExportPrefix(GetSource());
     if (sourcePrefix) {
         sourcePrefix.push_back('/');
     }
@@ -2753,6 +2807,10 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
     TVector<TImportInfo::TItem> items;
     if (Items.empty()) { // Fill the whole list from schema mapping
         for (const auto& schemaMappingItem : SchemaMapping->Items) {
+            if (IsExcludedFromImport(schemaMappingItem.ObjectPath)) {
+                continue;
+            }
+
             TString dstPath = combineDstPath(schemaMappingItem.ObjectPath, dstRoot);
             TString explain;
             if (!ValidateImportDstPath(dstPath, ss, explain)) {
@@ -2782,6 +2840,7 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
             }
         }
 
+        bool notAllItemsFound = false;
         for (auto& item : Items) {
             const TMapping::value_type::second_type* found = nullptr;
             if (item.SrcPrefix) {
@@ -2800,6 +2859,10 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
                 const bool isDstPathAbsolute = item.DstPathName && item.DstPathName.front() == '/';
                 for (const auto& [index, suffix] : *found) {
                     const auto& schemaMappingItem = SchemaMapping->Items[index];
+                    if (IsExcludedFromImport(schemaMappingItem.ObjectPath)) {
+                        continue;
+                    }
+
                     TStringBuilder dstPath;
                     if (item.DstPathName) {
                         if (isDstPathAbsolute) {
@@ -2826,14 +2889,17 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
                     auto& item = items.emplace_back(dstPath);
                     init(schemaMappingItem, item);
                 }
+            } else {
+                notAllItemsFound = true;
             }
+        }
+
+        if (notAllItemsFound) {
+            // Just in case: we already validate it, but double check
+            result.AddError("error: not all import items were found in schema mapping");
         }
     }
 
-    if (items.size() < Items.size()) {
-        // Just in case: we already validate it, but double check
-        result.AddError("error: not all import items were found in schema mapping");
-    }
 
     if (items.empty()) {
         // Schema mapping should not be empty
@@ -2854,6 +2920,23 @@ void TImportInfo::TFillItemsFromSchemaMappingResult::AddError(const TString& err
         ErrorMessage += '\n';
     }
     ErrorMessage += err;
+}
+
+bool TForcedCompactionInfo::IsFinished() const {
+    return State == EState::Done || State == EState::Cancelled;
+}
+
+void TForcedCompactionInfo::AddNotifySubscriber(const TActorId& actorId) {
+    Y_ENSURE(!IsFinished());
+    Subscribers.insert(actorId);
+}
+
+float TForcedCompactionInfo::CalcProgress() const {
+    return TotalShardCount > 0 ? (100.f * DoneShardCount / TotalShardCount) : 0;
+}
+
+bool IsPathTypeTable(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
+    return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable;
 }
 
 } // namespace NSchemeShard

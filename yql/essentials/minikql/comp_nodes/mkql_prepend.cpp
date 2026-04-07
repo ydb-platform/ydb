@@ -37,8 +37,6 @@ public:
 
         const auto factory = ctx.GetFactory();
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::Prepend>());
-
         const auto left = GetNodeValue(Left, ctx, block);
         const auto right = GetNodeValue(Right, ctx, block);
 
@@ -55,9 +53,7 @@ public:
             BranchInst::Create(work, done, check, block);
             block = work;
 
-            const auto funType = FunctionType::get(right->getType(), {factory->getType(), left->getType(), right->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            const auto res = CallInst::Create(funType, funcPtr, {factory, left, right}, "res", block);
+            const auto res = EmitFunctionCall<&THolderFactory::Prepend>(right->getType(), {factory, left, right}, ctx, block);
             result->addIncoming(res, block);
 
             BranchInst::Create(done, block);
@@ -65,10 +61,7 @@ public:
             block = done;
             return result;
         } else {
-            const auto funType = FunctionType::get(right->getType(), {factory->getType(), left->getType(), right->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-            const auto res = CallInst::Create(funType, funcPtr, {factory, left, right}, "res", block);
-            return res;
+            return EmitFunctionCall<&THolderFactory::Prepend>(right->getType(), {factory, left, right}, ctx, block);
         }
     }
 #endif

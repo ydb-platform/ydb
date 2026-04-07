@@ -15,6 +15,8 @@
 
 #include <ydb/core/protos/auth.pb.h>
 
+#include <ydb/library/security/util.h>
+
 namespace NKikimr::NSQS {
 
 bool UseMockedVersion(const NKikimrConfig::TSqsConfig& config) {
@@ -248,7 +250,7 @@ void TBaseCloudAuthRequestProxy::ProcessAuthorizationResult(const TEvTicketParse
         Counters_.AuthorizeDuration->Collect((TActivationContext::Now() - AuthorizeRequestStartTimestamp_).MilliSeconds());
     });
 
-    if (result.Error) {
+    if (result.HasError()) {
         if (CanRetry() && result.Error.Retryable) {
             ScheduleAuthorizationRetry();
         } else {
@@ -263,7 +265,14 @@ void TBaseCloudAuthRequestProxy::ProcessAuthorizationResult(const TEvTicketParse
     }
 
     UserSID_ = result.Token->GetUserSID();
-    AuthType_ = result.Token->GetAuthType();
+    MaskedToken_ = NKikimr::MaskIAMTicket(IamToken_);
+
+    // Of course, in practice the accounts that come in aren’t always of the "service_account" type.
+    // Nevertheless, this value is used only for logging, as it’s required by the cloud_events format.
+    // To determine the actual type of the cloud account, we would need to do some additional work—essentially,
+    //                                                                  make a careful request to the AccessService.
+    AuthType_ = "service_account";
+
     UserSidCallback_(UserSID_);
     OnFinishedRequest();
 }
@@ -402,11 +411,15 @@ void TBaseCloudAuthRequestProxy::Authorize() {
     } else {
         TEvTicketParser::TEvAuthorizeTicketResult result("fake_token", nullptr);
         if (AccessKeySignature_ && AccessKeySignature_->AccessKeyId.empty()) {
-            result.Error.Message = "mocked_auth_error: empty access key";
-            result.Error.Retryable = false;
+            result.SetError({
+                .Message = "mocked_auth_error: empty access key",
+                .Retryable = false
+            });
         } else if (AccessKeySignature_ && AccessKeySignature_->AccessKeyId == "TEST_ID_FOR_RETRYIES") {
-            result.Error.Message = "mocked_auth_error: correct process retries";
-            result.Error.Retryable = true;
+            result.SetError({
+                .Message = "mocked_auth_error: correct process retries",
+                .Retryable = true
+            });
         } else {
             result.Token = MakeIntrusive<NACLib::TUserToken>("fake_user_sid@as", TVector<TString>());
         }
@@ -438,6 +451,7 @@ void TBaseCloudAuthRequestProxy::ProposeStaticCreds(TProto& req) {
     req.MutableAuth()->SetFolderId(FolderId_);
     req.MutableAuth()->SetUserSID(UserSID_);
     req.MutableAuth()->SetAuthType(AuthType_);
+    req.MutableAuth()->SetMaskedToken(MaskedToken_);
 }
 
 void TBaseCloudAuthRequestProxy::Bootstrap() {
@@ -593,8 +607,9 @@ void TMultiAuthFactory::RegisterAuthActor(NActors::TActorSystem& system, TAuthAc
     const TString token = UseResourceManagerFolderService_ ? CredentialsProvider_->GetAuthInfo() : "";
 
     if (data.RequestFormat == NSQS::TAuthActorData::Json) {
+        auto requester = data.Requester;
         system.Register(
-            new THttpProxyAuthRequestProxy(std::move(data), token, data.Requester),
+            new THttpProxyAuthRequestProxy(std::move(data), token, requester),
             NActors::TMailboxType::HTSwap,
             poolID);
     } else {

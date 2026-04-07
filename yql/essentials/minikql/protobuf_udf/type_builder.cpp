@@ -11,8 +11,7 @@
 
 #include <optional>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 namespace {
 
 using namespace NProtoBuf;
@@ -62,7 +61,7 @@ private:
     IFunctionTypeInfoBuilder&
         Builder_;
     TProtoInfo* Info_;
-    TType* BasicTypes_[FieldDescriptor::Type::MAX_TYPE + 1];
+    std::array<TType*, FieldDescriptor::Type::MAX_TYPE + 1> BasicTypes_;
     TType* YsonType_;
     TSet<TString> KnownMessages_;
     TTypeMap Optionals_;
@@ -88,8 +87,8 @@ TTypeBuilder::TTypeBuilder(EEnumFormat enumFormat,
     , Info_(nullptr)
     , YsonType_(nullptr)
 {
-    for (size_t i = 0; i < Y_ARRAY_SIZE(BasicTypes_); ++i) {
-        BasicTypes_[i] = nullptr;
+    for (auto& basicType : BasicTypes_) {
+        basicType = nullptr;
     }
 }
 
@@ -522,5 +521,4 @@ bool AvoidOptionalScalars(bool syntaxAware, const FieldDescriptor* fd) {
     return syntaxAware && fd->file()->syntax() == FileDescriptor::SYNTAX_PROTO3;
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

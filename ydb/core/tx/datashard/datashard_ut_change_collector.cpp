@@ -54,20 +54,21 @@ auto GetChangeRecords(TTestActorRuntime& runtime, const TActorId& sender, ui64 t
 auto GetChangeRecordDetails(TTestActorRuntime& runtime, const TActorId& sender, ui64 tabletId) {
     auto protoValue = GetValueFromLocalDb(runtime, sender, tabletId, R"((
         (let range '( '('Order (Uint64 '0) (Void) )))
-        (let columns '('Order 'Kind 'Body) )
+        (let columns '('Order 'Kind 'Body 'UserSID) )
         (let result (SelectRange 'ChangeRecordDetails range columns '()))
         (return (AsList (SetResult 'Result result) ))
     ))");
     auto value = NClient::TValue::Create(protoValue);
     const auto& result = value["Result"]["List"];
 
-    TVector<std::tuple<ui64, TChangeRecord::EKind, TString>> records;
+    TVector<std::tuple<ui64, TChangeRecord::EKind, TString, TString>> records;
     for (size_t i = 0; i < result.Size(); ++i) {
         const auto& item = result[i];
         records.emplace_back(
             item["Order"],
             static_cast<TChangeRecord::EKind>(ui8(item["Kind"])),
-            item["Body"]
+            item["Body"],
+            item["UserSID"]
         );
     }
 
@@ -100,6 +101,7 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
                 .WithPathId(std::get<4>(record))
                 .WithSchemaVersion(std::get<5>(record))
                 .WithBody(std::get<2>(detail))
+                .WithUserSID(std::get<3>(detail))
                 .Build()
         );
     }
@@ -160,6 +162,7 @@ static void OutKvContainer(IOutputStream& out, const C& c) {
 template <typename SK>
 struct TStructRecordBase {
     TChangeRecord::EKind Kind;
+    TString UserSID;
     NTable::ERowOp Rop;
     TStructKey<SK> Key;
     TStructValue Update;
@@ -182,8 +185,24 @@ struct TStructRecordBase {
     {
     }
 
+    TStructRecordBase(TChangeRecord::EKind kind, const TString& userSID, NTable::ERowOp rop,
+            const TStructKey<SK>& key,
+            const TStructValue& update = {},
+            const TStructValue& oldImage = {},
+            const TStructValue& newImage = {})
+        : Kind(kind)
+        , UserSID(userSID)
+        , Rop(rop)
+        , Key(key)
+        , Update(update)
+        , OldImage(oldImage)
+        , NewImage(newImage)
+    {
+    }
+
     bool operator==(const TStructRecordBase<SK>& rhs) const {
         return Kind == rhs.Kind
+            && UserSID == rhs.UserSID
             && Rop == rhs.Rop
             && Key == rhs.Key
             && Update == rhs.Update
@@ -198,8 +217,11 @@ struct TStructRecordBase {
             << " Key: " << Key
             << " Update: " << Update
             << " OldImage: " << OldImage
-            << " NewImage: " << NewImage
-        << " }";
+            << " NewImage: " << NewImage;
+        if (!UserSID.empty()) {
+            out << " UserSID: " << UserSID;
+        }
+        out << " }";
     }
 
     static TStructRecordBase<SK> Parse(TChangeRecord::EKind kind,
@@ -247,7 +269,9 @@ struct TStructRecordBase {
         const auto& serializedProto = record.GetBody();
         NKikimrChangeExchange::TDataChange proto;
         Y_PROTOBUF_SUPPRESS_NODISCARD proto.ParseFromArray(serializedProto.data(), serializedProto.size());
-        return Parse(record.GetKind(), proto, tagToName);
+        auto result = Parse(record.GetKind(), proto, tagToName);
+        result.UserSID = record.GetUserSID();
+        return result;
     }
 
 private:
@@ -685,6 +709,16 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             : TStructRecordBase<ui32>(TChangeRecord::EKind::CdcDataChange, rop, key, update, oldImage, newImage)
         {
         }
+
+        TStructRecord(const TString& userSID, 
+                NTable::ERowOp rop,
+                const TStructKey<ui32>& key,
+                const TStructValue& update = {},
+                const TStructValue& oldImage = {},
+                const TStructValue& newImage = {})
+            : TStructRecordBase<ui32>(TChangeRecord::EKind::CdcDataChange, userSID, rop, key, update, oldImage, newImage)
+        {
+        }
     };
 
     NKikimrPQ::TPQConfig WithProtoSourceIdInfo() {
@@ -700,7 +734,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     template <typename SK = ui32>
     void Run(const NSharedCache::TSharedCacheConfig& sharedCacheConfig, const TString& path,
-            const TShardedTableOptions& opts, const TVector<TCdcStream>& streams,
+            const TShardedTableOptions& opts, const TString& userSID, const TVector<TCdcStream>& streams,
             const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
     {
         const auto pathParts = SplitPath(path);
@@ -755,7 +789,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
                 UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
                 RebootTablet(runtime, tabletIds[0], sender);
             } else {
-                ExecSQL(server, sender, query, !query.Contains("ALTER"));
+                ExecSQL(server, sender, query, !query.Contains("ALTER"), userSID);
             }
         }
 
@@ -803,6 +837,15 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         }
     }
 
+    template <typename SK = ui32>
+    void Run(const NSharedCache::TSharedCacheConfig& sharedCacheConfig, const TString& path,
+            const TShardedTableOptions& opts, 
+            const TVector<TCdcStream>& streams,
+            const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
+    {
+        Run(sharedCacheConfig, path, opts, "", streams, queries, expectedRecords);
+    }
+
     const NSharedCache::TSharedCacheConfig DefaultCacheParams() {
         NSharedCache::TSharedCacheConfig config;
         config.SetMemoryLimit(32_MB);
@@ -820,6 +863,15 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
     {
         Run(DefaultCacheParams(), path, opts, streams, queries, expectedRecords);
+    }
+
+    template <typename SK = ui32>
+    void Run(const TString& path, const TShardedTableOptions& opts, 
+            const TString& userSID,
+            const TVector<TCdcStream>& streams,
+            const TVector<TString>& queries, const TStructRecords<SK>& expectedRecords)
+    {
+        Run(DefaultCacheParams(), path, opts, userSID, streams, queries, expectedRecords);
     }
 
     template <typename SK = ui32>
@@ -963,6 +1015,27 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
                 TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {}, {{"value", 10}}),
                 TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {{"value", 10}}, {{"value", 20}}),
                 TStructRecord(NTable::ERowOp::Erase,  {{"key", 1}}, {}, {{"value", 20}}, {}),
+            }},
+        });
+    }
+
+    Y_UNIT_TEST(PassUserSID) {
+        const TString userSID{"cdcuser@test"};
+        Run("/Root/path", SimpleTable(), userSID, TVector<TCdcStream>{NewAndOldImages()}, TVector<TString>{
+            "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10);",
+            "UPSERT INTO `/Root/path` (key, value) VALUES (1, 20);",
+            "DELETE FROM `/Root/path` WHERE key = 1;",
+            "INSERT INTO `/Root/path` (key, value) VALUES (2, 10);",
+            "UPDATE `/Root/path` SET value=20 WHERE key=2;",
+            "REPLACE INTO `/Root/path` (key, value) VALUES (3, 30);",
+        }, {
+            {"new_and_old_images", {
+                TStructRecord(userSID, NTable::ERowOp::Upsert, {{"key", 1}}, {}, {}, {{"value", 10}}),
+                TStructRecord(userSID, NTable::ERowOp::Upsert, {{"key", 1}}, {}, {{"value", 10}}, {{"value", 20}}),
+                TStructRecord(userSID, NTable::ERowOp::Erase,  {{"key", 1}}, {}, {{"value", 20}}, {}),
+                TStructRecord(userSID, NTable::ERowOp::Upsert, {{"key", 2}}, {}, {}, {{"value", 10}}),
+                TStructRecord(userSID, NTable::ERowOp::Upsert, {{"key", 2}}, {}, {{"value", 10}}, {{"value", 20}}),
+                TStructRecord(userSID, NTable::ERowOp::Absent, {{"key", 3}}, {}, {}, {{"value", 30}}),
             }},
         });
     }

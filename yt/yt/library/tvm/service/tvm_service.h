@@ -37,7 +37,6 @@ struct ITvmService
 struct IDynamicTvmService
     : public virtual ITvmService
 {
-public:
     //! Add destination service IDs to fetch. It is possible to add the same ID multiple
     //! times, though it will be added only once really.
     virtual void AddDestinationServiceIds(const std::vector<TTvmId>& serviceIds) = 0;

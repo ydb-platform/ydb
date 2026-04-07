@@ -1,0 +1,20 @@
+/* dqfile can not - missing langver support */
+/* hybridfile can not - missing langver support */
+PRAGMA YqlSelect = 'force';
+
+USE plato;
+
+INSERT INTO @tmp (
+    a
+)
+VALUES
+    (1)
+;
+
+COMMIT;
+
+SELECT
+    a
+FROM
+    @tmp
+;

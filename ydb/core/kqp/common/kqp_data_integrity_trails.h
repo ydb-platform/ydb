@@ -4,6 +4,9 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/actors/core/log.h>
+#include <util/string/escape.h>
 
 #include <ydb/core/data_integrity_trails/data_integrity_trails.h>
 #include <ydb/core/tx/data_events/events.h>
@@ -11,6 +14,33 @@
 
 namespace NKikimr {
 namespace NDataIntegrity {
+
+inline void LogQueryTextImpl(TStringStream& ss, const TString& queryText, bool hashed) {
+    if (!hashed) {
+        LogKeyValue("QueryText", EscapeC(queryText), ss);
+        return;
+    }
+
+    // Hash the query text
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    SHA256_CTX sha256;
+    if (SHA256_Init(&sha256) != 1) {
+        return;
+    }
+    if (SHA256_Update(&sha256, queryText.data(), queryText.size()) != 1) {
+        return;
+    }
+    if (SHA256_Final(hash, &sha256) != 1) {
+        return;
+    }
+    std::string hashedQueryText(reinterpret_cast<char*>(hash), SHA256_DIGEST_LENGTH);
+    LogKeyValue("QueryText", Base64Encode(hashedQueryText), ss);
+}
+
+inline void LogQueryText(TStringStream& ss, const TString& queryText) {
+    const auto& config = AppData()->DataIntegrityTrailsConfig;
+    LogQueryTextImpl(ss, queryText, config.GetQueryTextLogMode() == NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_HASHED);
+}
 
 inline bool ShouldBeLogged(NKikimrKqp::EQueryAction action, NKikimrKqp::EQueryType type) {
     switch (type) {
@@ -44,26 +74,16 @@ inline void LogIntegrityTrails(const NKqp::TEvKqp::TEvQueryRequest::TPtr& reques
         TStringStream ss;
         LogKeyValue("Component", "SessionActor", ss);
         LogKeyValue("SessionId", request->Get()->GetSessionId(), ss);
-        LogKeyValue("TraceId", request->Get()->GetTraceId(), ss);
+
+        if (!request->Get()->GetTraceId().empty()) {
+            LogKeyValue("TraceId", request->Get()->GetTraceId(), ss);
+        }
+
         LogKeyValue("Type", "Request", ss);
         LogKeyValue("QueryAction", ToString(request->Get()->GetAction()), ss);
         LogKeyValue("QueryType", ToString(request->Get()->GetType()), ss);
 
-        const auto queryTextLogMode = AppData()->DataIntegrityTrailsConfig.HasQueryTextLogMode()
-            ? AppData()->DataIntegrityTrailsConfig.GetQueryTextLogMode()
-            : NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_HASHED;
-        if (queryTextLogMode == NKikimrProto::TDataIntegrityTrailsConfig_ELogMode_ORIGINAL) {
-            LogKeyValue("QueryText", EscapeC(request->Get()->GetQuery()), ss);
-        } else {
-            std::string hashedQueryText;
-            hashedQueryText.resize(SHA256_DIGEST_LENGTH);
-
-            SHA256_CTX sha256;
-            SHA256_Init(&sha256);
-            SHA256_Update(&sha256, request->Get()->GetQuery().data(), request->Get()->GetQuery().size());
-            SHA256_Final(reinterpret_cast<unsigned char*>(&hashedQueryText[0]), &sha256);
-            LogKeyValue("QueryText", Base64Encode(hashedQueryText), ss);
-        }
+        LogQueryText(ss, request->Get()->GetQuery());
 
         if (request->Get()->HasTxControl()) {
             LogTxControl(request->Get()->GetTxControl(), ss);
@@ -86,11 +106,15 @@ inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction 
         TStringStream ss;
         LogKeyValue("Component", "SessionActor", ss);
         LogKeyValue("SessionId", record.GetResponse().GetSessionId(), ss);
-        LogKeyValue("TraceId", traceId, ss);
+
+        if (!traceId.empty()) {
+            LogKeyValue("TraceId", traceId, ss);
+        }
+
         LogKeyValue("Type", "Response", ss);
         LogKeyValue("TxId", record.GetResponse().HasTxMeta() ? record.GetResponse().GetTxMeta().id() : "Empty", ss);
         LogKeyValue("Status", ToString(record.GetYdbStatus()), ss);
-        LogKeyValue("Issues", ToString(record.GetResponse().GetQueryIssues()), ss, /*last*/ true);
+        LogKeyValue("Issues", ToString(record.GetResponse().GetQueryIssues()), ss, true);
 
         return ss.Str();
     };
@@ -104,7 +128,11 @@ inline void LogIntegrityTrails(const TString& txType, const TString& txLocksDebu
         TStringStream ss;
         LogKeyValue("Component", "Executer", ss);
         LogKeyValue("Type", "Request", ss);
-        LogKeyValue("TraceId", traceId, ss);
+
+        if (!traceId.empty()) {
+            LogKeyValue("TraceId", traceId, ss);
+        }
+
         LogKeyValue("PhyTxId", ToString(txId), ss);
         LogKeyValue("Locks", "[" + txLocksDebugStr + "]", ss);
 
@@ -128,7 +156,11 @@ inline void LogIntegrityTrails(const TString& state, const TString& traceId, con
         LogKeyValue("Component", "Executer", ss);
         LogKeyValue("Type", "Response", ss);
         LogKeyValue("State", state, ss);
-        LogKeyValue("TraceId", traceId, ss);
+
+        if (!traceId.empty()) {
+            LogKeyValue("TraceId", traceId, ss);
+        }
+
         LogKeyValue("PhyTxId", ToString(record.GetTxId()), ss);
         LogKeyValue("ShardId", ToString(record.GetOrigin()), ss);
 
@@ -160,7 +192,11 @@ inline void LogIntegrityTrails(const TString& state, const TString& traceId, con
         LogKeyValue("Component", "Executer", ss);
         LogKeyValue("Type", "Response", ss);
         LogKeyValue("State", state, ss);
-        LogKeyValue("TraceId", traceId, ss);
+
+        if (!traceId.empty()) {
+            LogKeyValue("TraceId", traceId, ss);
+        }
+
         LogKeyValue("PhyTxId", ToString(record.GetTxId()), ss);
         LogKeyValue("ShardId", ToString(record.GetOrigin()), ss);
 
@@ -187,7 +223,11 @@ inline void LogIntegrityTrails(const TString& type, const TString& traceId, ui64
         TStringStream ss;
         LogKeyValue("Component", "Executer", ss);
         LogKeyValue("Type", type, ss);
-        LogKeyValue("TraceId", traceId, ss);
+
+        if (!traceId.empty()) {
+            LogKeyValue("TraceId", traceId, ss);
+        }
+
         LogKeyValue("PhyTxId", ToString(txId), ss);
 
         TStringBuilder locksDebugStr;
@@ -197,7 +237,7 @@ inline void LogIntegrityTrails(const TString& type, const TString& traceId, ui64
         }
         locksDebugStr << "]";
 
-        LogKeyValue("Locks", locksDebugStr, ss);
+        LogKeyValue("Locks", locksDebugStr, ss, true);
 
         return ss.Str();
     };
@@ -216,7 +256,7 @@ inline void LogIntegrityTrails(const TString& txType, ui64 txId, TMaybe<ui64> sh
             LogKeyValue("ShardId", ToString(*shardId), ss);
         }
 
-        LogKeyValue("Type", type, ss, /*last*/ true);
+        LogKeyValue("Type", type, ss, true);
 
         return ss.Str();
     };

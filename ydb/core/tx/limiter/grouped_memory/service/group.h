@@ -39,6 +39,8 @@ public:
     }
 
     std::vector<std::shared_ptr<TAllocationInfo>> AllocatePossible(const ui32 allocationsLimit);
+
+    TString DebugString() const;
 };
 
 class TAllocationGroups {
@@ -87,6 +89,8 @@ public:
     void AddAllocationExt(const ui64 externalGroupId, const std::shared_ptr<TAllocationInfo>& allocation) {
         Groups[externalGroupId].AddAllocation(allocation);
     }
+
+    TString DebugString() const;
 };
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

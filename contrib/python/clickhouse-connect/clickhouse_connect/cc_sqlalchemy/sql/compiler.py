@@ -1,4 +1,5 @@
 from sqlalchemy.exc import CompileError
+from sqlalchemy.sql import elements
 from sqlalchemy.sql.compiler import SQLCompiler
 
 from clickhouse_connect.cc_sqlalchemy import ArrayJoin
@@ -84,7 +85,36 @@ class ChStatementCompiler(SQLCompiler):
     def visit_sequence(self, sequence, **kw):
         raise NotImplementedError("ClickHouse doesn't support sequences")
 
+    def group_by_clause(self, select, **kw):
+        """Render GROUP BY using label aliases instead of full expressions."""
+        kw["_ch_group_by"] = True
+        return super().group_by_clause(select, **kw)
+
+    # pylint: disable=protected-access
+    def visit_label(
+        self,
+        label,
+        within_columns_clause=False,
+        render_label_as_label=None,
+        **kw,
+    ):
+        ch_group_by = kw.pop("_ch_group_by", False)
+        if ch_group_by and not within_columns_clause and render_label_as_label is None:
+            if isinstance(label.name, elements._truncated_label):
+                labelname = self._truncated_identifier("colident", label.name)
+            else:
+                labelname = label.name
+            return self.preparer.format_label(label, labelname)
+        return super().visit_label(
+            label,
+            within_columns_clause=within_columns_clause,
+            render_label_as_label=render_label_as_label,
+            **kw,
+        )
+
     def get_from_hint_text(self, table, text):
         if text == "FINAL":
             return "FINAL"
+        if text.startswith("SAMPLE"):
+            return text
         return super().get_from_hint_text(table, text)

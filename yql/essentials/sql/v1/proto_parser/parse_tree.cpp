@@ -1,5 +1,7 @@
 #include "parse_tree.h"
 
+#include <yql/essentials/utils/yql_panic.h>
+
 namespace NSQLTranslationV1 {
 
 const TRule_select_or_expr* GetSelectOrExpr(const TRule_smart_parenthesis& msg) {
@@ -105,6 +107,22 @@ bool IsSelect(const TRule_expr& msg) {
 bool IsOnlySubExpr(const TRule_select_subexpr& node) {
     return node.GetBlock2().size() == 0 &&
            node.GetRule_select_subexpr_intersect1().GetBlock2().size() == 0;
+}
+
+bool IsOnlySelect(const TRule_select_stmt& rule) {
+    return rule.GetBlock2().size() == 0 &&
+           rule.GetRule_select_stmt_intersect1().GetBlock2().size() == 0;
+}
+
+const TRule_select_kind_partial& Unpack(const TRule_select_kind_parenthesis& rule) {
+    switch (rule.GetAltCase()) {
+        case NSQLv1Generated::TRule_select_kind_parenthesis::kAltSelectKindParenthesis1:
+            return rule.GetAlt_select_kind_parenthesis1().GetRule_select_kind_partial1();
+        case NSQLv1Generated::TRule_select_kind_parenthesis::kAltSelectKindParenthesis2:
+            return rule.GetAlt_select_kind_parenthesis2().GetRule_select_kind_partial2();
+        case NSQLv1Generated::TRule_select_kind_parenthesis::ALT_NOT_SET:
+            YQL_ENSURE(false, "Unreachable");
+    }
 }
 
 } // namespace NSQLTranslationV1

@@ -6,7 +6,7 @@ import uuid
 from importlib import import_module
 from importlib.metadata import version as dist_version
 from base64 import b64encode
-from typing import Optional, Dict, Any, Sequence, Union, List, Callable, Generator, BinaryIO
+from typing import Literal, Optional, Dict, Any, Sequence, Union, List, Callable, Generator, BinaryIO
 from urllib.parse import urlencode
 
 from urllib3 import Timeout
@@ -26,7 +26,7 @@ from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.httputil import ResponseSource, get_pool_manager, get_response_data, \
     default_pool_manager, get_proxy_manager, all_managers, check_env_proxy, check_conn_expiration
 from clickhouse_connect.driver.insert import InsertContext
-from clickhouse_connect.driver.query import QueryResult, QueryContext
+from clickhouse_connect.driver.query import QueryResult, QueryContext, TzSource
 from clickhouse_connect.driver.binding import quote_identifier, bind_query
 from clickhouse_connect.driver.summary import QuerySummary
 from clickhouse_connect.driver.transform import NativeTransform
@@ -34,6 +34,7 @@ from clickhouse_connect.driver.transform import NativeTransform
 logger = logging.getLogger(__name__)
 columns_only_re = re.compile(r'LIMIT 0\s*$', re.IGNORECASE)
 ex_header = 'X-ClickHouse-Exception-Code'
+ex_tag_header = 'X-ClickHouse-Exception-Tag'
 
 
 # pylint: disable=too-many-instance-attributes
@@ -75,10 +76,13 @@ class HttpClient(Client):
                  http_proxy: Optional[str] = None,
                  https_proxy: Optional[str] = None,
                  server_host_name: Optional[str] = None,
+                 tz_source: Optional[TzSource] = None,
+                 tz_mode: Optional[str] = None,
+                 utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
                  apply_server_timezone: Optional[Union[str, bool]] = None,
-                 utc_tz_aware: Optional[bool] = None,
                  show_clickhouse_errors: Optional[bool] = None,
                  autogenerate_session_id: Optional[bool] = None,
+                 autogenerate_query_id: Optional[bool] = None,
                  tls_mode: Optional[str] = None,
                  proxy_path: str = '',
                  form_encode_query_params: bool = False,
@@ -161,6 +165,11 @@ class HttpClient(Client):
         elif 'session_id' not in ch_settings and _autogenerate_session_id:
             ch_settings['session_id'] = str(uuid.uuid4())
 
+        # allow to override the global autogenerate_query_id setting via the constructor params
+        self._autogenerate_query_id = common.get_setting('autogenerate_query_id') \
+            if autogenerate_query_id is None \
+            else autogenerate_query_id
+
         if coerce_bool(compress):
             compression = ','.join(available_compression)
             self.write_compression = available_compression[0]
@@ -177,10 +186,16 @@ class HttpClient(Client):
                          query_limit=query_limit,
                          query_retries=query_retries,
                          server_host_name=server_host_name,
-                         apply_server_timezone=apply_server_timezone,
+                         tz_source=tz_source,
+                         tz_mode=tz_mode,
                          utc_tz_aware=utc_tz_aware,
+                         apply_server_timezone=apply_server_timezone,
                          show_clickhouse_errors=show_clickhouse_errors)
         self.params = dict_copy(self.params, self._validate_settings(ch_settings))
+        cancel_setting = self._setting_status("cancel_http_readonly_queries_on_client_close")
+        if cancel_setting.is_writable and not cancel_setting.is_set and \
+                "cancel_http_readonly_queries_on_client_close" not in (settings or {}):
+            self.params["cancel_http_readonly_queries_on_client_close"] = "1"
         comp_setting = self._setting_status('enable_http_compression')
         self._send_comp_setting = not comp_setting.is_set and comp_setting.is_writable
         if comp_setting.is_set or comp_setting.is_writable:
@@ -191,15 +206,15 @@ class HttpClient(Client):
                 self._setting_status('http_headers_progress_interval_ms').is_writable:
             self._progress_interval = str(min(120000, max(10000, (send_receive_timeout - 5) * 1000)))
 
-    def set_client_setting(self, key, value):
+    def set_client_setting(self, key: str, value: Any) -> None:
         str_value = self._validate_setting(key, value, common.get_setting('invalid_setting_action'))
         if str_value is not None:
             self.params[key] = str_value
 
-    def get_client_setting(self, key) -> Optional[str]:
+    def get_client_setting(self, key: str) -> Optional[str]:
         return self.params.get(key)
 
-    def set_access_token(self, access_token: str):
+    def set_access_token(self, access_token: str) -> None:
         auth_header = self.headers.get('Authorization')
         if auth_header and not auth_header.startswith('Bearer'):
             raise ProgrammingError('Cannot set access token when a different auth type is used')
@@ -293,7 +308,8 @@ class HttpClient(Client):
                                      retries=self.query_retries,
                                      fields=fields,
                                      server_wait=not context.streaming)
-        byte_source = RespBuffCls(ResponseSource(response))  # pylint: disable=not-callable
+        exception_tag = response.headers.get(ex_tag_header)
+        byte_source = RespBuffCls(ResponseSource(response, exception_tag=exception_tag))  # pylint: disable=not-callable
         context.set_response_tz(self._check_tz_change(response.headers.get('X-ClickHouse-Timezone')))
         query_result = self._transform.parse_response(byte_source, context)
         query_result.summary = self._summary(response)
@@ -327,10 +343,12 @@ class HttpClient(Client):
             params['database'] = self.database
         params.update(self._validate_settings(context.settings))
         headers = dict_copy(headers, context.transport_settings)
-        response = self._raw_request(block_gen, params, headers, error_handler=error_handler, server_wait=False)
-        logger.debug('Context insert response code: %d, content: %s', response.status, response.data)
-        context.data = None
-        return QuerySummary(self._summary(response))
+        try:
+            response = self._raw_request(block_gen, params, headers, error_handler=error_handler, server_wait=False)
+            logger.debug('Context insert response code: %d, content: %s', response.status, response.data)
+            return QuerySummary(self._summary(response))
+        finally:
+            context.data = None
 
     def raw_insert(self, table: str = None,
                    column_names: Optional[Sequence[str]] = None,
@@ -375,11 +393,11 @@ class HttpClient(Client):
         return summary
 
     def command(self,
-                cmd,
+                cmd: str,
                 parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                 data: Union[str, bytes] = None,
                 settings: Optional[Dict] = None,
-                use_database: int = True,
+                use_database: bool = True,
                 external_data: Optional[ExternalData] = None,
                 transport_settings: Optional[Dict[str, str]] = None) -> Union[str, int, Sequence[str], QuerySummary]:
         """
@@ -495,6 +513,10 @@ class HttpClient(Client):
             final_params['http_headers_progress_interval_ms'] = self._progress_interval
         final_params = dict_copy(self.params, final_params)
         final_params = dict_copy(final_params, params)
+
+        if self._autogenerate_query_id and "query_id" not in final_params:
+            final_params["query_id"] = str(uuid.uuid4())
+
         url = f'{self.url}?{urlencode(final_params)}'
         kwargs = {
             'headers': headers,
@@ -656,7 +678,7 @@ class HttpClient(Client):
         except Exception as e:
             logger.debug("Problem adding '%s' to User-Agent: %s", name, e)
 
-    def ping(self):
+    def ping(self) -> bool:
         """
         See BaseClient doc_string for this method
         """
@@ -667,10 +689,10 @@ class HttpClient(Client):
             logger.debug('ping failed', exc_info=True)
             return False
 
-    def close_connections(self):
+    def close_connections(self) -> None:
         self.http.clear()
 
-    def close(self):
+    def close(self) -> None:
         if self._owns_pool_manager:
             self.http.clear()
             all_managers.pop(self.http, None)

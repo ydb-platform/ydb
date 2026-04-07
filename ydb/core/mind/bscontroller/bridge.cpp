@@ -61,10 +61,7 @@ public:
             }
         }
 
-        if (TString error; State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {
-            State->Rollback();
-            State.reset();
-        }
+        Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags::SuppressAll(), txc);
 
         return true;
     }
@@ -137,10 +134,7 @@ public:
             State->GroupContentChanged.insert(GroupId);
         }
 
-        if (TString error; State->Changed() && !Self->CommitConfigUpdates(*State, true, true, true, txc, &error)) {
-            State->Rollback();
-            State.reset();
-        }
+        Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags::SuppressAll(), txc);
 
         return true;
     }
@@ -264,7 +258,7 @@ void TBlobStorageController::CheckUnsyncedBridgePiles() {
 }
 
 void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
-        TSet<ui32>& groupIdsToRead, bool comprehensive) {
+        TSet<TGroupId>& groupIdsToRead, bool comprehensive) {
     STLOG(PRI_DEBUG, BS_CONTROLLER, BSCBR00, "ApplySyncerState", (NodeId, nodeId), (Update, update),
         (Comprehensive, comprehensive));
 
@@ -333,7 +327,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
         }
         if (updateGroupInfo) {
             // report fresh groups to the NodeWarden
-            groupIdsToRead.insert({groupId.GetRawId(), sourceGroupId.GetRawId(), targetGroupId.GetRawId()});
+            groupIdsToRead.insert({groupId, sourceGroupId, targetGroupId});
         }
         if (!correct) {
             updateNodeWarden = true;
@@ -447,26 +441,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
             updates.emplace_back(targetGroupId, TTxUpdateBridgeSyncState::TChangeStage{});
 
             if (staticGroup) {
-                NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot request;
-                auto *cmd = request.MutableUpdateBridgeGroupInfo();
-                groupId.CopyToProto(cmd, &std::decay_t<decltype(*cmd)>::SetGroupId);
-                cmd->SetGroupGeneration(generation);
-                cmd->MutableBridgeGroupInfo()->Swap(&bridgeGroupInfo);
-                InvokeOnRoot(std::move(request), [=](NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& result) {
-                    if (result.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
-                        Y_DEBUG_ABORT("UpdateBridgeGroupInfo has unexpectedly failed");
-                        STLOG(PRI_ERROR, BS_CONTROLLER, BSCBR08, "UpdateBridgeGroupInfo has unexpectedly failed",
-                            (Result, result));
-                    }
-                    if (const auto it = TargetGroupToSyncerState.find(targetGroupId); it != TargetGroupToSyncerState.end()) {
-                        TSyncerState& syncerState = it->second;
-                        Y_ABORT_UNLESS(syncerState.InCommit);
-                        syncerState.InCommit = false;
-                        if (!syncerState.NodeIds) {
-                            SyncersRequiringAction.PushBack(&syncerState);
-                        }
-                    }
-                });
+                UpdateStaticGroupBridgeGroupInfo(groupId, generation, std::move(bridgeGroupInfo), targetGroupId);
             } else {
                 Execute(std::make_unique<TTxUpdateBridgeGroupInfo>(this, groupId, generation,
                     std::move(bridgeGroupInfo), targetGroupId));
@@ -494,6 +469,30 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
         nodesToUpdate.insert(nodeId);
     }
     ProcessSyncers(std::move(nodesToUpdate));
+}
+
+void TBlobStorageController::UpdateStaticGroupBridgeGroupInfo(TGroupId groupId, ui32 generation,
+        NKikimrBlobStorage::TGroupInfo bridgeGroupInfo, TGroupId targetGroupId) {
+    NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot request;
+    auto *cmd = request.MutableUpdateBridgeGroupInfo();
+    groupId.CopyToProto(cmd, &std::decay_t<decltype(*cmd)>::SetGroupId);
+    cmd->SetGroupGeneration(generation);
+    cmd->MutableBridgeGroupInfo()->CopyFrom(bridgeGroupInfo);
+    InvokeOnRoot(std::move(request), [=](NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& result) {
+        if (result.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
+            STLOG(PRI_ERROR, BS_CONTROLLER, BSCBR08, "UpdateBridgeGroupInfo has unexpectedly failed",
+                (Result, result));
+            return UpdateStaticGroupBridgeGroupInfo(groupId, generation, std::move(bridgeGroupInfo), targetGroupId);
+        }
+        if (const auto it = TargetGroupToSyncerState.find(targetGroupId); it != TargetGroupToSyncerState.end()) {
+            TSyncerState& syncerState = it->second;
+            Y_ABORT_UNLESS(syncerState.InCommit);
+            syncerState.InCommit = false;
+            if (!syncerState.NodeIds) {
+                SyncersRequiringAction.PushBack(&syncerState);
+            }
+        }
+    });
 }
 
 void TBlobStorageController::CheckSyncerDisconnectedNodes() {
@@ -630,7 +629,7 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
 
     for (TNodeId nodeId : nodesToUpdate) {
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
-        TSet<ui32> groupIdsToRead;
+        TSet<TGroupId> groupIdsToRead;
         SerializeSyncers(nodeId, &ev->Record, groupIdsToRead);
         ReadGroups(groupIdsToRead, false, ev.get(), nodeId);
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCBR09, "ProcessSyncers: sending an update", (NodeId, nodeId),
@@ -640,7 +639,7 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
 }
 
 void TBlobStorageController::SerializeSyncers(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update,
-        TSet<ui32>& groupIdsToRead) {
+        TSet<TGroupId>& groupIdsToRead) {
     for (auto it = NodeToSyncerState.lower_bound({nodeId, nullptr}); it != NodeToSyncerState.end() && std::get<0>(*it) == nodeId; ++it) {
         const auto& [nodeId, syncerState] = *it;
 
@@ -657,7 +656,11 @@ void TBlobStorageController::SerializeSyncers(TNodeId nodeId, NKikimrBlobStorage
 
         if (const TGroupInfo *group = FindGroup(syncerState->BridgeProxyGroupId)) {
             syncer->SetBridgeProxyGroupGeneration(group->Generation);
-            groupIdsToRead.insert({syncer->GetBridgeProxyGroupId(), syncer->GetSourceGroupId(), syncer->GetTargetGroupId()});
+            groupIdsToRead.insert({
+                syncerState->BridgeProxyGroupId,
+                syncerState->TargetGroupId,
+                sourceGroupId,
+            });
         } else if (const auto it = StaticGroups.find(syncerState->BridgeProxyGroupId); it != StaticGroups.end()) {
             syncer->SetBridgeProxyGroupGeneration(it->second.Info->GroupGeneration);
         } else {
@@ -671,7 +674,7 @@ void TBlobStorageController::SerializeSyncers(TNodeId nodeId, NKikimrBlobStorage
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateSyncerState::TPtr ev) {
     const TNodeId nodeId = ev->Sender.NodeId();
     STLOG(PRI_DEBUG, BS_CONTROLLER, BSCBR04, "TEvControllerUpdateSyncerState", (NodeId, nodeId), (Msg, ev->Get()->Record));
-    TSet<ui32> groupIdsToRead;
+    TSet<TGroupId> groupIdsToRead;
     ApplySyncerState(nodeId, ev->Get()->Record, groupIdsToRead, false);
     if (groupIdsToRead) {
         auto update = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
@@ -848,7 +851,7 @@ void TBlobStorageController::ApplyStaticGroupUpdateForSyncers(std::map<TGroupId,
     // kick syncers for changed groups
     for (TNodeId nodeId : nodesToUpdate) {
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
-        TSet<ui32> groupIdsToRead;
+        TSet<TGroupId> groupIdsToRead;
         SerializeSyncers(nodeId, &ev->Record, groupIdsToRead);
         ReadGroups(groupIdsToRead, false, ev.get(), nodeId);
         SendToWarden(nodeId, std::move(ev), 0);

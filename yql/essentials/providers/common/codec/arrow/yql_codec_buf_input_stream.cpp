@@ -6,8 +6,7 @@
 #include <arrow/buffer.h>
 #include <arrow/buffer.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 arrow::Result<int64_t> TInputBufArrowInputStream::Read(int64_t bytesToRead, void* outBuffer) {
     auto outBufferPtr = static_cast<char*>(outBuffer);
@@ -34,5 +33,4 @@ arrow::Result<std::shared_ptr<arrow::Buffer>> TInputBufArrowInputStream::Read(in
     return outBuffer;
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

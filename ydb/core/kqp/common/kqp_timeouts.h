@@ -9,9 +9,7 @@ namespace NKikimr::NKqp {
 
 constexpr TDuration SCRIPT_TIMEOUT_LIMIT = TDuration::Days(365);
 
-TDuration GetQueryTimeout(NKikimrKqp::EQueryType queryType,
-                          ui64 timeoutMs,
-                          const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-                          const NKikimrConfig::TQueryServiceConfig& queryServiceConfig);
+TDuration GetQueryTimeout(NKikimrKqp::EQueryType queryType, ui64 timeoutMs, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
+    const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, bool disableDefaultTimeout);
 
-}
+} // namespace NKikimr::NKqp

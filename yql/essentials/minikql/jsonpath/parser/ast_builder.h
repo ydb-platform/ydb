@@ -8,7 +8,7 @@ namespace NYql::NJsonPath {
 
 class TAstBuilder {
 public:
-    TAstBuilder(TIssues& issues);
+    explicit TAstBuilder(TIssues& issues);
 
     TAstNodePtr Build(const NJsonPathGenerated::TJsonPathParserAST& ast);
 
@@ -44,7 +44,7 @@ private:
     TAstNodePtr BuildExpr(const NJsonPathGenerated::TRule_expr& node);
     TAstNodePtr BuildJsonPath(const NJsonPathGenerated::TRule_jsonpath& node);
 
-    void Error(TPosition pos, const TStringBuf message);
+    void Error(TPosition pos, TStringBuf message);
 
     TIssues& Issues_;
 };

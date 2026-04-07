@@ -27,8 +27,7 @@
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 TType* ExtractDictTypeFromMutDic(const TExprNode& node, TMkqlBuildContext& ctx) {
     auto tag = node.GetTypeAnn()->Cast<TLinearExprType>()->GetItemType()->Cast<TResourceExprType>()->GetTag();
@@ -427,7 +426,6 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"Last", &TProgramBuilder::Last},
 
         {"ToList", &TProgramBuilder::ToList},
-        {"ToFlow", &TProgramBuilder::ToFlow},
         {"FromFlow", &TProgramBuilder::FromFlow},
 
         {"WideToBlocks", &TProgramBuilder::WideToBlocks},
@@ -471,8 +469,6 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"DictPayloads", &TProgramBuilder::DictPayloads},
 
         {"QueuePop", &TProgramBuilder::QueuePop},
-
-        {"ToDynamicLinear", &TProgramBuilder::ToDynamicLinear},
     });
 
     AddSimpleCallables({
@@ -578,6 +574,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"ListFromRange", &TProgramBuilder::ListFromRange},
 
         {"PreserveStream", &TProgramBuilder::PreserveStream},
+        {"WinFramesCollector", &TProgramBuilder::WinFramesCollector},
 
         {"BlockIf", &TProgramBuilder::BlockIf},
     });
@@ -758,10 +755,27 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             return ctx.ProgramBuilder.WideCombiner(flow, memLimit, keyExtractor, init, update, finish);
         }
 
-        if (isStatePersistable && RuntimeVersion >= 49U) {
+        if (isStatePersistable) {
             return ctx.ProgramBuilder.WideLastCombinerWithSpilling(flow, keyExtractor, init, update, finish);
         }
         return ctx.ProgramBuilder.WideLastCombiner(flow, keyExtractor, init, update, finish);
+    });
+
+    AddCallable("WinFrame", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        auto queue = MkqlBuildExpr(*node.Child(0), ctx);
+        auto handle = MkqlBuildExpr(*node.Child(1), ctx);
+        auto isIncremental = MkqlBuildExpr(*node.Child(2), ctx);
+        auto isRange = MkqlBuildExpr(*node.Child(3), ctx);
+        auto isSingleElement = MkqlBuildExpr(*node.Child(4), ctx);
+        const auto& args = GetArgumentsFrom<5U>(node, ctx);
+        const auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
+        return ctx.ProgramBuilder.WinFrame(queue,
+                                           handle,
+                                           isIncremental,
+                                           isRange,
+                                           isSingleElement,
+                                           args,
+                                           returnType);
     });
 
     AddCallable("WideChopper", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -930,7 +944,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
             defineVarNames,
             getDefines,
             streamingMode,
-            NYql::NMatchRecognize::TAfterMatchSkipTo{to, TString{var}},
+            NYql::NMatchRecognize::TAfterMatchSkipTo{.To = to, .Var = TString{var}},
             rowsPerMatch);
     });
 
@@ -1382,6 +1396,12 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.Unwrap(opt, message, pos.File, pos.Row, pos.Column);
     });
 
+    AddCallable("ToDynamicLinear", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto input = MkqlBuildExpr(node.Head(), ctx);
+        const auto pos = ctx.ExprCtx.GetPosition(node.Pos());
+        return ctx.ProgramBuilder.ToDynamicLinear(input, pos.File, pos.Row, pos.Column);
+    });
+
     AddCallable("FromDynamicLinear", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto input = MkqlBuildExpr(node.Head(), ctx);
         const auto pos = ctx.ExprCtx.GetPosition(node.Pos());
@@ -1465,6 +1485,12 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.Switch(stream, inputs, [&](ui32 index, TRuntimeNode item) -> TRuntimeNode {
             return MkqlBuildLambda(*node.Child(2 + 2 * index + 1), ctx, {item});
         }, memoryLimitBytes, returnType);
+    });
+
+    AddCallable("ToFlow", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto arg = MkqlBuildExpr(node.Head(), ctx);
+        const auto& args = GetArgumentsFrom<1U>(node, ctx);
+        return ctx.ProgramBuilder.ToFlow(arg, args);
     });
 
     AddCallable("ToStream", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -1920,10 +1946,26 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         };
 
         const auto watermarksMode = ctx.ProgramBuilder.NewDataLiteral(FromString<bool>(*node.Child(13), NUdf::EDataSlot::Bool));
-
+        TRuntimeNode sizeLimit;
+        if (NNodes::TCoMultiHoppingCore::idx_SizeLimit < node.ChildrenSize()) {
+            sizeLimit = MkqlBuildExpr(*node.Child(NNodes::TCoMultiHoppingCore::idx_SizeLimit), ctx);
+        }
+        TRuntimeNode timeLimit;
+        if (NNodes::TCoMultiHoppingCore::idx_TimeLimit < node.ChildrenSize()) {
+            timeLimit = MkqlBuildExpr(*node.Child(NNodes::TCoMultiHoppingCore::idx_TimeLimit), ctx);
+        }
+        TRuntimeNode earlyPolicy;
+        if (NNodes::TCoMultiHoppingCore::idx_EarlyPolicy < node.ChildrenSize()) {
+            earlyPolicy = MkqlBuildExpr(*node.Child(NNodes::TCoMultiHoppingCore::idx_EarlyPolicy), ctx);
+        }
+        TRuntimeNode latePolicy;
+        if (NNodes::TCoMultiHoppingCore::idx_LatePolicy < node.ChildrenSize()) {
+            latePolicy = MkqlBuildExpr(*node.Child(NNodes::TCoMultiHoppingCore::idx_LatePolicy), ctx);
+        }
         return ctx.ProgramBuilder.MultiHoppingCore(
             stream, keyExtractor, timeExtractor, init, update, save, load, merge, finish,
-            hop, interval, delay, dataWatermarks, watermarksMode);
+            hop, interval, delay, dataWatermarks, watermarksMode,
+            sizeLimit, timeLimit, earlyPolicy, latePolicy);
     });
 
     AddCallable("ToDict", [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -3125,5 +3167,4 @@ TRuntimeNode MkqlBuildExpr(const TExprNode& node, TMkqlBuildContext& ctx) {
     }
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

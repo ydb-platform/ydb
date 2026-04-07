@@ -34,6 +34,7 @@ public:
 
 private:
     std::shared_ptr<TExportTask> Task;
+    TString ErrorMessage;
     mutable EStatus Status = EStatus::Draft;
     TCursor Cursor;
 
@@ -55,6 +56,7 @@ public:
     virtual bool IsReadyForStart() const override;
     virtual bool IsFinished() const override;
     virtual bool IsReadyForRemoveOnFinished() const override;
+    virtual TStatus GetStatus() const override;
 
     virtual TString GetClassName() const override;
 
@@ -74,7 +76,7 @@ public:
 
     void Confirm();
 
-    void Abort();
+    void Abort(const TString& errorMessage);
 
     bool IsStarted() const;
 

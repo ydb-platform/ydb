@@ -66,7 +66,7 @@ void NFq::TYdbControlPlaneStorageActor::Handle(NFq::TEvControlPlaneStorage::TEvD
     auto result = Write(query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [response] { return *response; };
 
-    auto success = result.Apply([=, requestCounters=requestCounters](const auto& future) mutable {
+    auto success = result.Apply([scope, user, prepare, debugInfo, requestCounters=requestCounters, sender=ev->Sender, cookie=ev->Cookie, selfId=SelfId(), startTime](const auto& future) mutable {
             NYql::TIssues internalIssues;
             NYql::TIssues issues;
             Ydb::Operations::Operation result;
@@ -79,7 +79,7 @@ void NFq::TYdbControlPlaneStorageActor::Handle(NFq::TEvControlPlaneStorage::TEvD
                     issues.AddIssues(NYdb::NAdapters::ToYqlIssues(status.GetIssues()));
                     internalIssues.AddIssues(NYdb::NAdapters::ToYqlIssues(status.GetIssues()));
                 }
-            } catch (const NYql::TCodeLineException& exception) {
+            } catch (const NKikimr::TCodeLineException& exception) {
                 NYql::TIssue issue = MakeErrorIssue(exception.Code, exception.GetRawMessage());
                 issues.AddIssue(issue);
                 NYql::TIssue internalIssue = MakeErrorIssue(exception.Code, CurrentExceptionMessage());
@@ -101,7 +101,7 @@ void NFq::TYdbControlPlaneStorageActor::Handle(NFq::TEvControlPlaneStorage::TEvD
                 auto event = std::make_unique<TEvControlPlaneStorage::TEvDeleteFolderResourcesResponse>(issues);
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
-                NActors::TActivationContext::ActorSystem()->Send(new IEventHandle(ev->Sender, SelfId(), event.release(), 0, ev->Cookie));
+                NActors::TActivationContext::ActorSystem()->Send(new IEventHandle(sender, selfId, event.release(), 0, cookie));
                 requestCounters.IncError();
                 for (const auto& issue : issues) {
                     NYql::WalkThroughIssues(issue, true, [&requestCounters](const NYql::TIssue& err, ui16 level) {
@@ -115,7 +115,7 @@ void NFq::TYdbControlPlaneStorageActor::Handle(NFq::TEvControlPlaneStorage::TEvD
                 event = std::make_unique<TEvControlPlaneStorage::TEvDeleteFolderResourcesResponse>(result);
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
-                NActors::TActivationContext::ActorSystem()->Send(new IEventHandle(ev->Sender, SelfId(), event.release(), 0, ev->Cookie));
+                NActors::TActivationContext::ActorSystem()->Send(new IEventHandle(sender, selfId, event.release(), 0, cookie));
                 requestCounters.IncOk();
             }
             requestCounters.DecInFly();

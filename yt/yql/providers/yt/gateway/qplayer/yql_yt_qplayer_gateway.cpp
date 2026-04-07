@@ -13,6 +13,7 @@
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/node/node_builder.h>
 
+#include <util/random/random.h>
 #include <util/stream/file.h>
 
 #include <openssl/sha.h>
@@ -242,6 +243,7 @@ public:
                     data.Meta->YqlCompatibleScheme = metaNode["YqlCompatibleScheme"].AsBool();
                     data.Meta->InferredScheme = metaNode["InferredScheme"].AsBool();
                     data.Meta->IsDynamic = metaNode["IsDynamic"].AsBool();
+                    data.Meta->HasRLS = metaNode.HasKey("HasRLS") ? metaNode["HasRLS"].AsBool() : false;
                     data.Meta->SqlView = metaNode["SqlView"].AsString();
                     data.Meta->SqlViewSyntaxVersion = metaNode["SqlViewSyntaxVersion"].AsUint64();
                     for (const auto& x : metaNode["Attrs"].AsMap()) {
@@ -274,6 +276,7 @@ public:
                 for (auto& table : options.Tables()) {
                     auto dumpPath = GetTableDumpPath(table.Table(), table.Cluster());
                     if (dumpPath.Defined()) {
+                        AddRandomSuffixToDumpPath(*dumpPath);
                         table.Table() = *dumpPath;
                     }
                 }
@@ -322,6 +325,7 @@ public:
                         ("YqlCompatibleScheme",data.Meta->YqlCompatibleScheme)
                         ("InferredScheme",data.Meta->InferredScheme)
                         ("IsDynamic",data.Meta->IsDynamic)
+                        ("HasRLS",data.Meta->HasRLS)
                         ("SqlView",data.Meta->SqlView)
                         ("SqlViewSyntaxVersion",ui64(data.Meta->SqlViewSyntaxVersion))
                         ("Attrs",attrsNode) : NYT::TNode();
@@ -790,6 +794,7 @@ public:
             for (auto& path : options.Pathes()) {
                 auto dumpPath = GetTableDumpPath(path.Path, path.Cluster);
                 if (dumpPath.Defined()) {
+                    AddRandomSuffixToDumpPath(*dumpPath);
                     path.Path = *dumpPath;
                 }
             }
@@ -875,6 +880,7 @@ public:
                 for (auto& path : options.Paths()) {
                     auto dumpPath = GetTableDumpPath(path.Path().Path_, options.Cluster());
                     if (dumpPath.Defined()) {
+                        AddRandomSuffixToDumpPath(*dumpPath);
                         path.Path().Path_ = *dumpPath;
                     }
                 }
@@ -930,6 +936,7 @@ public:
                 for (auto& path : options.Paths()) {
                     auto dumpPath = GetTableDumpPath(path.Path().Path_, options.Cluster());
                     if (dumpPath.Defined()) {
+                        AddRandomSuffixToDumpPath(*dumpPath);
                         path.Path().Path_ = *dumpPath;
                     }
                 }
@@ -1088,21 +1095,23 @@ private:
         return GetDumpPath(name, cluster, YtGateway_TableDumpPath, QContext_);
     }
 
-    TExprNode::TPtr ReplaceTablesWithDump(TExprNode::TPtr start, TExprContext& ctx) const {
+    TExprNode::TPtr ReplaceTablesWithDump(TExprNode::TPtr start, TExprContext& ctx) {
         TNodeOnNodeOwnedMap replaces;
         VisitExpr(start, [&](const TExprNode::TPtr& node) {
             if (NNodes::TYtTable::Match(node.Get())) {
-                auto table = TString(node->Child(NNodes::TYtTable::idx_Name)->Content());
-                auto cluster = TString(node->Child(NNodes::TYtTable::idx_Cluster)->Content());
-                auto dumpPath = GetTableDumpPath(table, cluster);
+                auto tableInfo = TYtTableBaseInfo::Parse(NNodes::TExprBase(node.Get()));
+
+                auto dumpPath = GetTableDumpPath(tableInfo->Name, tableInfo->Cluster);
                 if (dumpPath.Defined()) {
-                    YQL_CLOG(INFO, ProviderYt) << "Substituting table " << table << " with dump " << *dumpPath << " on cluster " << cluster;
+                    AddRandomSuffixToDumpPath(*dumpPath);
+
+                    YQL_CLOG(INFO, ProviderYt) << "Substituting table " << tableInfo->Name << " with dump " << *dumpPath << " on cluster " << tableInfo->Cluster;
                     replaces[node.Get()] = ctx.ChangeChild(*node, NNodes::TYtTable::idx_Name, ctx.NewAtom(node->Pos(), *dumpPath, TNodeFlags::Default));
 
-                    auto& origTableData = TablesData_->GetTable(cluster, table, {});
-                    if (!TablesData_->FindTable(cluster, *dumpPath, {})) {
-                        // Add fake table data to allow YT type annotation
-                        TablesData_->GetOrAddTable(cluster, *dumpPath, {}) = origTableData;
+                    // Add fake table data to allow YT type annotation
+                    for (auto epoch : {tableInfo->Epoch, tableInfo->CommitEpoch}) {
+                        auto& origTableData = TablesData_->GetTable(tableInfo->Cluster, tableInfo->Name, epoch);
+                        TablesData_->GetOrAddTable(tableInfo->Cluster, *dumpPath, epoch) = origTableData;
                     }
                 }
 
@@ -1123,12 +1132,25 @@ private:
         return start;
     }
 
-    TExprNode::TListType ReplaceTablesWithDump(const TExprNode::TListType& starts, TExprContext& ctx) const {
+    TExprNode::TListType ReplaceTablesWithDump(const TExprNode::TListType& starts, TExprContext& ctx) {
         TExprNode::TListType result;
         for (const auto& node : starts) {
             result.push_back(ReplaceTablesWithDump(node, ctx));
         }
         return result;
+    }
+
+    void AddRandomSuffixToDumpPath(TString& path) {
+        if (!path.StartsWith(NonExistentTableDumpPrefix)) {
+            return;
+        }
+
+        // Add random suffixes to avoid locking problems during concurrent replays
+        if (!RandomSuffixes_.contains(path)) {
+            RandomSuffixes_[path] = "_" + ToString(RandomNumber<unsigned int>());
+        }
+
+        path += RandomSuffixes_[path];
     }
 
     void DumpTables(const TVector<TTableInfoResult::TTableData>& tables, const TGetTableInfoOptions& options) {
@@ -1155,6 +1177,9 @@ private:
                     if (tableInfo.Meta->IsDynamic) {
                         throw yexception() << "dynamic table " << req.Table() << " on cluster " << req.Cluster();
                     }
+                    if (tableInfo.Meta->HasRLS) {
+                        throw yexception() << "rls table " << req.Table() << " on cluster " << req.Cluster();
+                    }
 
                     YQL_ENSURE(tableInfo.Stat);
                     tableDataSize += tableInfo.Stat->DataSize;
@@ -1166,7 +1191,7 @@ private:
                         .DstPath = dumpPath,
                     });
                 } else {
-                    dumpPath = MakeDumpPath(req.Table(), req.Cluster(), OperationOptions_, options.Config(), true);
+                    dumpPath = MakeDumpPath(req.Table(), req.Cluster(), OperationOptions_, options.Config(), false);
                     YQL_CLOG(INFO, ProviderYt) << "Subst table " << req.Table() << " to " << dumpPath << " on cluster " << req.Cluster();
                 }
 
@@ -1199,6 +1224,10 @@ private:
         return Inner_->DownloadTable(std::move(options));
     }
 
+    IYtTokenResolver::TPtr GetYtTokenResolver() const override {
+        return Inner_->GetYtTokenResolver();
+    }
+
 private:
     const IYtGateway::TPtr Inner_;
     const TQContext QContext_;
@@ -1211,6 +1240,8 @@ private:
 
     THashSet<TString> PathStatKeys_;
     THashMap<TString, ui64> SessionGenerations_;
+
+    THashMap<TString, TString> RandomSuffixes_;
 };
 
 }

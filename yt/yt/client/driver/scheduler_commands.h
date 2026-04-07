@@ -293,9 +293,29 @@ public:
 private:
     NJobTrackerClient::TJobId JobId;
     NYTree::INodePtr Parameters;
+    // TODO(bystrovserg): Move ShellName to options parameter.
     std::optional<TString> ShellName;
 
     void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TRunJobShellCommandCommand
+    : public TTypedCommand<NApi::TRunJobShellCommandOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TRunJobShellCommandCommand);
+
+    static void Register(TRegistrar registrar);
+
+    void DoExecute(ICommandContextPtr context) override;
+
+private:
+    NJobTrackerClient::TJobId JobId;
+    // TODO(bystrovserg): Move ShellName to options parameter.
+    std::optional<std::string> ShellName;
+    std::string Command;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

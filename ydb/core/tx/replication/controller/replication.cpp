@@ -9,6 +9,7 @@
 #include "tenant_resolver.h"
 #include "util.h"
 
+#include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/events.h>
@@ -101,6 +102,10 @@ class TReplication::TImpl: public TLagProvider {
         for (auto& [_, target] : Targets) {
             target->Progress(ctx);
         }
+    }
+
+    void SetLocation(const NKikimrReplication::TReplicationLocationConfig& location) {
+        Config.MutableLocation()->CopyFrom(location);
     }
 
 public:
@@ -245,7 +250,35 @@ public:
         Issue = TruncatedIssue(issue);
     }
 
+    static void KeepResourceId(
+            const NKikimrReplication::TReplicationConfig& oldConfig,
+            NKikimrReplication::TReplicationConfig& newConfig)
+    {
+        const auto& oldParams = oldConfig.GetSrcConnectionParams();
+        if (!oldParams.HasIamCredentials()) {
+            return;
+        }
+
+        const auto& oldIam = oldParams.GetIamCredentials();
+        if (!oldIam.HasResourceId()) {
+            return;
+        }
+
+        if (!newConfig.HasSrcConnectionParams()) {
+            return;
+        }
+
+        auto& newParams = *newConfig.MutableSrcConnectionParams();
+        if (!newParams.HasIamCredentials()) {
+            return;
+        }
+
+        auto& newIam = *newParams.MutableIamCredentials();
+        newIam.SetResourceId(oldIam.GetResourceId());
+    }
+
     void SetConfig(NKikimrReplication::TReplicationConfig&& config) {
+        KeepResourceId(Config, config);
         Config = config;
     }
 
@@ -473,6 +506,14 @@ void TReplication::UpdateLag(ui64 targetId, TDuration lag) {
 
 const TMaybe<TDuration> TReplication::GetLag() const {
     return Impl->GetLag();
+}
+
+void TReplication::SetLocation(const NKikimrReplication::TReplicationLocationConfig& location) {
+    Impl->SetLocation(location);
+}
+
+const NKikimrReplication::TReplicationLocationConfig& TReplication::GetLocation() const {
+    return Impl->Config.GetLocation();
 }
 
 }

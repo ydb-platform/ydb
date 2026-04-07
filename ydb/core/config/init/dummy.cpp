@@ -13,13 +13,13 @@ TAutoPtr<NKikimrConfig::TChannelProfileConfig> DummyChannelProfileConfig() {
     auto *channel1 = profile->AddChannel();
     auto *channel2 = profile->AddChannel();
 
-    channel0->SetErasureSpecies(NKikimr::TBlobStorageGroupType::ErasureName[NKikimr::TBlobStorageGroupType::ErasureMirror3]);
+    channel0->SetErasureSpecies(NKikimr::TBlobStorageGroupType::ErasureNames.at(NKikimr::TBlobStorageGroupType::Erasure4Plus2Block));
     channel0->SetPDiskCategory(0);
 
-    channel1->SetErasureSpecies(NKikimr::TBlobStorageGroupType::ErasureName[NKikimr::TBlobStorageGroupType::ErasureMirror3]);
+    channel1->SetErasureSpecies(NKikimr::TBlobStorageGroupType::ErasureNames.at(NKikimr::TBlobStorageGroupType::Erasure4Plus2Block));
     channel1->SetPDiskCategory(0);
 
-    channel2->SetErasureSpecies(NKikimr::TBlobStorageGroupType::ErasureName[NKikimr::TBlobStorageGroupType::ErasureMirror3]);
+    channel2->SetErasureSpecies(NKikimr::TBlobStorageGroupType::ErasureNames.at(NKikimr::TBlobStorageGroupType::Erasure4Plus2Block));
     channel2->SetPDiskCategory(0);
 
     return ret;

@@ -31,6 +31,12 @@ namespace NKikimr::NKqp::NScheduler {
         } // namespace NDynamic
 
         namespace NSnapshot {
+            enum class ELeafFairShare : ui8 {
+                DEFAULT_FIFO = 0,
+                ALLOW_OVERLIMIT = 1,
+                EQUAL_TO_PARENT = 2,
+            };
+
             struct TTreeElement;
 
             class TQuery;

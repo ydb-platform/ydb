@@ -93,7 +93,7 @@ namespace NKikimr {
         ui64 LogRecAddBulkSst = 0;
         ui64 LogRecScrub = 0;
         ui64 LogRecMetadata = 0;
-
+        ui64 LogRecChunkKeeper = 0;
 
         // statistics for record dispatching
         NLocRecovery::TRecordDispatcherStat RecDispatcherStat;
@@ -142,6 +142,7 @@ namespace NKikimr {
         DISPATCH_SIGNATURE_FUNC_GEN(AddBulkSst, LogRecAddBulkSst)
         DISPATCH_SIGNATURE_FUNC_GEN(Scrub, LogRecScrub)
         DISPATCH_SIGNATURE_FUNC_GEN(Metadata, LogRecMetadata)
+        DISPATCH_SIGNATURE_FUNC_GEN(ChunkKeeper, LogRecChunkKeeper)
 
         ///////////////////////////////////////////////////////////////////////////////
         // Log Applied/Skipped items

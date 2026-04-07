@@ -26,9 +26,9 @@ TPyObjectPtr CreateNewStrucInstance(const TPyCastContext::TPtr& ctx, const NKiki
 #if PY_MAJOR_VERSION >= 3
         std::vector<PyStructSequence_Field> fields(inspector.GetMembersCount() + 1U);
         for (ui32 i = 0U; i < inspector.GetMembersCount(); ++i) {
-            fields[i] = {const_cast<char*>(inspector.GetMemberName(i).Data()), nullptr};
+            fields[i] = {.name = const_cast<char*>(inspector.GetMemberName(i).Data()), .doc = nullptr};
         }
-        fields.back() = {nullptr, nullptr};
+        fields.back() = {.name = nullptr, .doc = nullptr};
 
         PyStructSequence_Desc desc = {
             INIT_MEMBER(name, "yql.Struct"),

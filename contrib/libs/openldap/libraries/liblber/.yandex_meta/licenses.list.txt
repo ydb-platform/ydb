@@ -18,7 +18,7 @@
 
 
 ====================COPYRIGHT====================
-Copyright 1998-2024 The OpenLDAP Foundation
+Copyright 1998-2026 The OpenLDAP Foundation
 All rights reserved.
 
 
@@ -123,7 +123,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 1998-2026 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without

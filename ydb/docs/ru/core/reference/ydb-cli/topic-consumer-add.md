@@ -50,7 +50,7 @@
 Результат:
 
 ```text
-RetentionPeriod: 2 hours
+RetentionPeriod: 2h
 PartitionsCount: 2
 SupportedCodecs: RAW, GZIP
 

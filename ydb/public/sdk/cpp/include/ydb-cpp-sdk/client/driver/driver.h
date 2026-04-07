@@ -32,6 +32,9 @@ public:
     //! client will connect to others nodes according to client loadbalancing
     TDriverConfig& SetEndpoint(const std::string& endpoint);
 
+    //! Get endpoint, returns the endpoint set via connection string or SetEndpoint()
+    const std::string& GetEndpoint() const;
+
     //! Set number of network threads, default: 2
     TDriverConfig& SetNetworkThreadsNum(size_t sz);
 
@@ -100,6 +103,13 @@ public:
     //! default: true, 30, 5, 10 for linux, and true and OS default for others POSIX
     TDriverConfig& SetTcpKeepAliveSettings(bool enable, size_t idle, size_t count, size_t interval);
 
+    //! Set TCP_NODELAY socket option
+    //! enable - if true TCP_NODELAY is enabled (default, no Nagle algorithm, low latency, packet fragmentation)
+    //!        - if false TCP_NODELAY is disabled (Nagle algorithm enabled, reduced packet fragmentation)
+    //! NOTE: This affects network performance. Disable only if you want to reduce packet fragmentation.
+    //! default: true
+    TDriverConfig& SetTcpNoDelay(bool enable);
+
     //! Enable or disable drain of client logic (e.g. session pool drain) during dtor call
     TDriverConfig& SetDrainOnDtors(bool allowed);
 
@@ -112,6 +122,7 @@ public:
     //! Params is a optionally field to set policy settings
     //! default: EBalancingPolicy::UsePreferableLocation
     TDriverConfig& SetBalancingPolicy(EBalancingPolicy policy, const std::string& params = "");
+
     //! Set grpc level keep alive. If keepalive ping was delayed more than given timeout
     //! internal grpc routine fails request with TRANSIENT_FAILURE or TRANSPORT_UNAVAILABLE error
     //! Note: this timeout should not be too small to prevent fail due to
@@ -120,6 +131,11 @@ public:
     //! default: enabled, 10 seconds
     TDriverConfig& SetGRpcKeepAliveTimeout(TDuration timeout);
     TDriverConfig& SetGRpcKeepAlivePermitWithoutCalls(bool permitWithoutCalls);
+
+    //! Set grpc load balancing policy
+    //! policy - name of the load balancing policy, see grpc documentation for available policies
+    //! default: "round_robin"
+    TDriverConfig& SetGRpcLoadBalancingPolicy(const std::string& policy);
 
     //! Set inactive socket timeout.
     //! Used to close connections, that were inactive for given time.

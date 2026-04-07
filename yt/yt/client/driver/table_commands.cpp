@@ -2,6 +2,7 @@
 #include "config.h"
 #include "helpers.h"
 
+#include <yt/yt/client/api/formatted_table_reader.h>
 #include <yt/yt/client/api/rowset.h>
 #include <yt/yt/client/api/skynet.h>
 #include <yt/yt/client/api/table_partition_reader.h>
@@ -249,6 +250,8 @@ void TReadBlobTableCommand::DoExecute(ICommandContextPtr context)
 void TReadTablePartitionCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("cookie", &TThis::Cookie);
+    registrar.Parameter("control_attributes", &TThis::ControlAttributes)
+        .DefaultNew();
 }
 
 void TReadTablePartitionCommand::DoExecute(ICommandContextPtr context)
@@ -264,29 +267,27 @@ void TReadTablePartitionCommand::DoExecute(ICommandContextPtr context)
         THROW_ERROR_EXCEPTION("Signature validation failed");
     }
 
-    auto reader = WaitFor(client->CreateTablePartitionReader(cookie))
+    Options.EnableTableIndex = ControlAttributes->EnableTableIndex;
+    Options.EnableRowIndex = ControlAttributes->EnableRowIndex;
+    Options.EnableRangeIndex = ControlAttributes->EnableRangeIndex;
+    Options.EnableTabletIndex = ControlAttributes->EnableTabletIndex;
+
+    auto format = NYson::ConvertToYsonString(context->GetOutputFormat());
+    auto formatStream = WaitFor(client->CreateFormattedTablePartitionReader(cookie, format, Options))
         .ValueOrThrow();
 
-    auto format = context->GetOutputFormat();
-    auto formatWriter = CreateStaticTableWriterForFormat(
-        /*format*/ format,
-        /*nameTable*/ reader->GetNameTable(),
-        /*tableSchemas*/ GetTableSchemas(reader),
-        /*columnFilters*/ GetColumnFilters(reader),
-        /*output*/ context->Request().OutputStream,
-        /*enableContextSaving*/ false,
-        /*controlAttributesConfig*/ New<TControlAttributesConfig>(),
-        /*keyColumnCount*/ 0);
+    auto output = context->Request().OutputStream;
+    while (true) {
+        auto block = WaitFor(formatStream->Read())
+            .ValueOrThrow();
 
-    TRowBatchReadOptions options{
-        .MaxRowsPerRead = context->GetConfig()->ReadBufferRowCount,
-        .Columnar = (format.GetType() == EFormatType::Arrow),
-    };
+        if (!block) {
+            break;
+        }
 
-    PipeReaderToWriterByBatches(
-        reader,
-        formatWriter,
-        options);
+        WaitFor(output->Write(block))
+            .ThrowOnError();
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -315,7 +316,9 @@ void TLocateSkynetShareCommand::DoExecute(ICommandContextPtr context)
         syncOutputStream.get());
 
     Serialize(*skynetPartsLocations.ValueOrThrow(), consumer.get());
+
     consumer->Flush();
+    syncOutputStream->Finish();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -497,7 +500,7 @@ void TGetTableColumnarStatisticsCommand::DoExecute(ICommandContextPtr context)
                             })
                             .OptionalItem("chunk_row_count", statistics.ChunkRowCount)
                             .OptionalItem("legacy_chunk_row_count", statistics.LegacyChunkRowCount)
-                            .OptionalItem("read_size_estimation", statistics.ReadDataSizeEstimate)
+                            .OptionalItem("read_size_estimate", statistics.ReadDataSizeEstimate)
                         .EndMap();
                 }
             });
@@ -512,7 +515,11 @@ void TPartitionTablesCommand::Register(TRegistrar registrar)
     registrar.Parameter("partition_mode", &TThis::PartitionMode)
         .Default(ETablePartitionMode::Unordered);
     registrar.Parameter("data_weight_per_partition", &TThis::DataWeightPerPartition)
-        .GreaterThan(0);
+        .GreaterThan(0)
+        .Default();
+    registrar.Parameter("compressed_data_size_per_partition", &TThis::CompressedDataSizePerPartition)
+        .GreaterThan(0)
+        .Default();
     registrar.Parameter("max_partition_count", &TThis::MaxPartitionCount)
         .GreaterThan(0)
         .Default();
@@ -524,6 +531,11 @@ void TPartitionTablesCommand::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("omit_inaccessible_rows", &TThis::OmitInaccessibleRows)
         .Default(false);
+    registrar.Postprocessor([] (TThis* command) {
+        if (!command->DataWeightPerPartition && !command->CompressedDataSizePerPartition) {
+            THROW_ERROR_EXCEPTION("Must specify either \"data_weight_per_partition\" or \"compressed_data_size_per_partition\"");
+        }
+    });
 }
 
 void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
@@ -534,6 +546,7 @@ void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
 
     Options.PartitionMode = PartitionMode;
     Options.DataWeightPerPartition = DataWeightPerPartition;
+    Options.CompressedDataSizePerPartition = CompressedDataSizePerPartition;
     Options.MaxPartitionCount = MaxPartitionCount;
     Options.EnableKeyGuarantee = EnableKeyGuarantee;
     Options.AdjustDataWeightPerPartition = AdjustDataWeightPerPartition;

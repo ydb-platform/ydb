@@ -9,6 +9,7 @@ from typing import (
     List,
     Optional,
     Tuple,
+    TYPE_CHECKING,
 )
 
 import ydb
@@ -21,10 +22,14 @@ from ydb.table import (
     _scan_query_request_factory,
     _wrap_scan_query_response,
     BaseTxContext,
+    TableClientSettings,
     TableDescription,
 )
 from . import _utilities
 from ydb import _apis, _session_impl
+
+if TYPE_CHECKING:
+    from .driver import Driver as AsyncDriver
 
 logger = logging.getLogger(__name__)
 
@@ -149,9 +154,8 @@ class Session(BaseSession):
         return await super().rename_tables(rename_items, settings)
 
 
-class TableClient(BaseTableClient):
-    def __init__(self, driver, table_client_settings=None):
-        # type:(ydb.Driver, ydb.TableClientSettings) -> None
+class TableClient(BaseTableClient["AsyncDriver"]):
+    def __init__(self, driver: "AsyncDriver", table_client_settings: Optional[TableClientSettings] = None) -> None:
         super().__init__(driver=driver, table_client_settings=table_client_settings)
         self._pool: Optional[SessionPool] = None
 
@@ -181,7 +185,7 @@ class TableClient(BaseTableClient):
             lambda resp: _wrap_scan_query_response(resp, self._table_client_settings),
         )
 
-    def _init_pool_if_needed(self):
+    def _init_pool_if_needed(self) -> None:
         if self._pool is None:
             self._pool = SessionPool(self._driver, 10)
 
@@ -207,6 +211,7 @@ class TableClient(BaseTableClient):
         """
 
         self._init_pool_if_needed()
+        assert self._pool is not None
 
         async def callee(session: Session):
             return await session.create_table(path=path, table_description=table_description, settings=settings)
@@ -228,6 +233,7 @@ class TableClient(BaseTableClient):
         """
 
         self._init_pool_if_needed()
+        assert self._pool is not None
 
         async def callee(session: Session):
             return await session.drop_table(path=path, settings=settings)
@@ -278,6 +284,7 @@ class TableClient(BaseTableClient):
         """
 
         self._init_pool_if_needed()
+        assert self._pool is not None
 
         async def callee(session: Session):
             return await session.alter_table(
@@ -317,6 +324,7 @@ class TableClient(BaseTableClient):
         """
 
         self._init_pool_if_needed()
+        assert self._pool is not None
 
         async def callee(session: Session):
             return await session.describe_table(path=path, settings=settings)
@@ -340,6 +348,7 @@ class TableClient(BaseTableClient):
         """
 
         self._init_pool_if_needed()
+        assert self._pool is not None
 
         async def callee(session: Session):
             return await session.copy_table(
@@ -365,6 +374,7 @@ class TableClient(BaseTableClient):
         """
 
         self._init_pool_if_needed()
+        assert self._pool is not None
 
         async def callee(session: Session):
             return await session.copy_tables(source_destination_pairs=source_destination_pairs, settings=settings)
@@ -386,6 +396,7 @@ class TableClient(BaseTableClient):
         """
 
         self._init_pool_if_needed()
+        assert self._pool is not None
 
         async def callee(session: Session):
             return await session.rename_tables(rename_items=rename_items, settings=settings)
@@ -490,7 +501,7 @@ class SessionPool:
         self._should_stop = asyncio.Event()
         self._waiters = 0
         self._driver = driver
-        self._active_queue = asyncio.PriorityQueue()
+        self._active_queue: asyncio.PriorityQueue[Any] = asyncio.PriorityQueue()
         self._active_count = 0
         self._size = size
         self._req_settings = settings_impl.BaseRequestSettings().with_timeout(3)
@@ -554,25 +565,29 @@ class SessionPool:
             i += 1
         return None
 
-    async def _prepare_session(self, timeout, retry_num) -> ydb.ISession:
+    async def _prepare_session(
+        self, timeout: typing.Optional[float], retry_num: typing.Optional[int]
+    ) -> typing.Optional[ydb.ISession]:
         session = self._create()
         try:
             new_sess = await asyncio.wait_for(self._init_session(session, retry_num=retry_num), timeout=timeout)
             if not new_sess:
                 self._destroy(session)
+                return None
             return new_sess
         except BaseException as e:
             self._destroy(session)
             raise e
 
-    async def _get_session_from_queue(self, timeout: float):
+    async def _get_session_from_queue(self, timeout: typing.Optional[float]) -> Session:
         task_wait = asyncio.ensure_future(asyncio.wait_for(self._active_queue.get(), timeout=timeout))
         task_should_stop = asyncio.ensure_future(self._should_stop.wait())
         try:
             done, _ = await asyncio.wait((task_wait, task_should_stop), return_when=asyncio.FIRST_COMPLETED)
         except asyncio.CancelledError:
+            task_should_stop.cancel()
             cancelled = task_wait.cancel()
-            if not cancelled:
+            if not cancelled and not task_wait.exception():
                 priority, session = task_wait.result()
                 self._active_queue.put_nowait((priority, session))
             raise
@@ -582,8 +597,12 @@ class SessionPool:
         _, session = task_wait.result()
         return session
 
-    async def acquire(self, timeout: float = None, retry_timeout: float = None, retry_num: int = None) -> Session:
-
+    async def acquire(
+        self,
+        timeout: typing.Optional[float] = None,
+        retry_timeout: typing.Optional[float] = None,
+        retry_num: typing.Optional[int] = None,
+    ) -> Session:
         if self._should_stop.is_set():
             self._logger.error("Take session from closed session pool")
             raise ValueError("Take session from closed session pool.")
@@ -605,13 +624,13 @@ class SessionPool:
                 self._size,
             )
             try:
-                session = await self._prepare_session(timeout=retry_timeout, retry_num=retry_num)
+                prepared_session = await self._prepare_session(timeout=retry_timeout, retry_num=retry_num)
             except asyncio.TimeoutError:
                 raise issues.SessionPoolEmpty("Timeout when creating session") from None
 
-            if session is not None:
-                self._logger.debug("Acquired new created session: %s", session.session_id)
-                return session
+            if prepared_session is not None:
+                self._logger.debug("Acquired new created session: %s", prepared_session.session_id)
+                return typing.cast(Session, prepared_session)
 
         try:
             self._waiters += 1
@@ -684,7 +703,7 @@ class SessionPool:
         await self._active_queue.put((priority, session))
         return None
 
-    async def _send_keep_alive(self, session: ydb.ISession):
+    async def _send_keep_alive(self, session: typing.Optional[ydb.ISession]) -> bool:
         if session is None:
             return False
         if self._should_stop.is_set():
@@ -692,9 +711,10 @@ class SessionPool:
             return False
         await session.keep_alive(self._req_settings)
         try:
-            await self.release(session)
+            await self.release(typing.cast(Session, session))
         except BaseException:  # pylint: disable=W0703
             self._destroy(session)
+        return True
 
     async def _keep_alive_loop(self):
         while True:

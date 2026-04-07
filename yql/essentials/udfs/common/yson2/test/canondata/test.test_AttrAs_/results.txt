@@ -1,0 +1,141 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "DataType";
+                                    "Int64"
+                                ]
+                            ];
+                            [
+                                "column2";
+                                [
+                                    "DataType";
+                                    "Uint64"
+                                ]
+                            ];
+                            [
+                                "column3";
+                                [
+                                    "DataType";
+                                    "Double"
+                                ]
+                            ];
+                            [
+                                "column4";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ];
+                            [
+                                "column5";
+                                [
+                                    "ListType";
+                                    [
+                                        "DataType";
+                                        "Yson"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column6";
+                                [
+                                    "ListType";
+                                    [
+                                        "DataType";
+                                        "Yson"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column7";
+                                [
+                                    "DictType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ];
+                                    [
+                                        "DataType";
+                                        "Yson"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "column8";
+                                [
+                                    "ListType";
+                                    [
+                                        "TupleType";
+                                        [
+                                            [
+                                                "DataType";
+                                                "String"
+                                            ];
+                                            [
+                                                "DataType";
+                                                "Yson"
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true;
+                        "1";
+                        "2";
+                        "3.4";
+                        "foo";
+                        [];
+                        [
+                            {
+                                "$type" = "int64";
+                                "$value" = "1"
+                            };
+                            {
+                                "$type" = "string";
+                                "$value" = "foo"
+                            }
+                        ];
+                        [];
+                        [
+                            [
+                                "a";
+                                {
+                                    "$type" = "int64";
+                                    "$value" = "1"
+                                }
+                            ];
+                            [
+                                "b";
+                                {
+                                    "$type" = "string";
+                                    "$value" = "foo"
+                                }
+                            ]
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

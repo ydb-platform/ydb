@@ -212,7 +212,8 @@ private:
     void CommitDone(ui64 cookie, const TActorContext& ctx);
     void SendPartitionReady(const TActorContext& ctx);
 
-    const std::set<NPQ::TPartitionGraph::Node*>& GetParents() const;
+    const std::set<NPQ::TPartitionGraph::Node*>& GetParents(std::shared_ptr<const NPQ::TPartitionGraph> partitionGraph) const;
+
 private:
     const TActorId ParentId;
     const TString InternalClientId;
@@ -811,9 +812,9 @@ void TReadSessionActor::Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& 
     TString ticket = ev->Get()->Ticket;
     TString maskedTicket = ticket.size() > 5 ? (ticket.substr(0, 5) + "***" + ticket.substr(ticket.size() - 5)) : "***";
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "CheckACL ticket " << maskedTicket << " got result from TICKET_PARSER response: error: " << ev->Get()->Error << " user: "
-                            << (ev->Get()->Error.empty() ? ev->Get()->Token->GetUserSID() : ""));
+                            << (!ev->Get()->HasError() ? ev->Get()->Token->GetUserSID() : ""));
 
-    if (!ev->Get()->Error.empty()) {
+    if (ev->Get()->HasError()) {
         CloseSession(TStringBuilder() << "Ticket parsing error: " << ev->Get()->Error, NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
         return;
     }
@@ -989,7 +990,7 @@ void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const 
             topicHolder->IsServerless = t.IsServerless;
             topicHolder->FolderId = t.FolderId;
             topicHolder->FullConverter = t.TopicNameConverter;
-            topicHolder->PartitionGraph = t.PartitionGraph;
+            topicHolder->SetPartitionGraph(t.PartitionGraph);
             FullPathToConverter[t.TopicNameConverter->GetPrimaryPath()] = t.TopicNameConverter;
             const auto& second = t.TopicNameConverter->GetSecondaryPath();
             if (!second.empty()) {
@@ -1018,7 +1019,7 @@ void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const 
                              NPersQueue::NErrorCode::BAD_REQUEST, ctx);
                 return;
             }
-            it->second->PartitionGraph = t.PartitionGraph;
+            it->second->SetPartitionGraph(t.PartitionGraph);
         }
     }
 
@@ -1067,7 +1068,8 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
         return;
     }
 
-    auto* partitionNode = jt->second->PartitionGraph->GetPartition(record.GetPartition());
+    auto partitionGraph = jt->second->GetPartitionGraph();
+    auto* partitionNode = partitionGraph->GetPartition(record.GetPartition());
     if (!partitionNode) {
         LOG_DEBUG_S(
             ctx, NKikimrServices::PQ_READ_PROXY,
@@ -1857,7 +1859,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadingStarted::TPtr& ev, const TA
     }
 
     auto& topic = it->second;
-    NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionStartedRequest(InternalClientId, msg->PartitionId));
+    NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionStartedRequest(topic->PipeClient, InternalClientId, msg->PartitionId));
 }
 
 void TReadSessionActor::Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const TActorContext& ctx) {
@@ -1869,7 +1871,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadingFinished::TPtr& ev, const T
     }
 
     auto& topic = it->second;
-    NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(InternalClientId, msg->PartitionId, false, msg->FirstMessage));
+    NTabletPipe::SendData(ctx, topic->PipeClient, new TEvPersQueue::TEvReadingPartitionFinishedRequest(topic->PipeClient, InternalClientId, msg->PartitionId, false, msg->FirstMessage));
 }
 
 
@@ -1946,8 +1948,8 @@ void TPartitionActor::CheckRelease(const TActorContext& ctx) {
     }
 }
 
-const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents() const {
-    const auto* partition = TopicHolder->PartitionGraph->GetPartition(Partition);
+const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::shared_ptr<const NPQ::TPartitionGraph> partitionGraph) const {
+    const auto* partition = partitionGraph->GetPartition(Partition);
     if (partition) {
         return partition->AllParents;
     }
@@ -1957,16 +1959,36 @@ const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents() const
 }
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
-    const auto& parents = GetParents();
+    // extend the lifetime for PartitionGraph
+    auto partitionGraph = TopicHolder->GetPartitionGraph();
+    const auto& parents = GetParents(partitionGraph);
     if (!ClientHasAnyCommits && parents.size() != 0) {
         std::vector<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo> commits;
+        auto topicPath = Topic->GetPrimaryPath();
         for (auto& parent: parents) {
-            NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = false, .OnlyCheckCommitedToFinish = true, .ReadSessionId = Session};
+            NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo commit {
+                .PartitionId = parent->Id,
+                .Offset = Max<i64>(),
+                .KillReadSession = false,
+                .OnlyCheckCommitedToFinish = true,
+                .ReadSessionId = Session,
+                .TopicPath = topicPath
+            };
             commits.push_back(commit);
         }
-        NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo commit {.PartitionId = Partition, .Offset = (i64)offset, .KillReadSession = false, .OnlyCheckCommitedToFinish = false, .ReadSessionId = Session};
+
+        NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo commit {
+            .PartitionId = Partition,
+            .Offset = (i64)offset,
+            .KillReadSession = false,
+            .OnlyCheckCommitedToFinish = false,
+            .ReadSessionId = Session,
+            .TopicPath = topicPath
+        };
         commits.push_back(commit);
-        auto kqp = std::make_shared<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper>(Database, InternalClientId, Topic->GetPrimaryPath(), commits, readId);
+
+        auto kqp = std::make_shared<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper>(
+            Database, InternalClientId, commits, readId);
         Kqps.emplace(readId, kqp);
 
         kqp->SendCreateSessionRequest(ctx);

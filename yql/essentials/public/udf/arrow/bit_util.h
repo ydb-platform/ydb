@@ -5,8 +5,7 @@
 
 #include <array>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 inline ui8* CompressAsSparseBitmap(const ui8* src, size_t srcOffset, const ui8* sparseBitmap, ui8* dst, size_t count) {
     while (count--) {
@@ -206,5 +205,4 @@ Y_FORCE_INLINE std::array<ui64, 8> BitToByteExpand(ui8 x) {
     return output;
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

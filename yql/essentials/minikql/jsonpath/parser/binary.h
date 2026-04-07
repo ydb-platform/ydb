@@ -180,9 +180,9 @@ public:
 private:
     void WriteZeroInputItem(EJsonPathItemType type, const TAstNode& node);
 
-    void WriteSingleInputItem(EJsonPathItemType type, const TAstNode& node, const TAstNodePtr input);
+    void WriteSingleInputItem(EJsonPathItemType type, const TAstNode& node, const TAstNodePtr& input);
 
-    void WriteTwoInputsItem(EJsonPathItemType type, const TAstNode& node, const TAstNodePtr firstInput, const TAstNodePtr secondInput);
+    void WriteTwoInputsItem(EJsonPathItemType type, const TAstNode& node, const TAstNodePtr& firstInput, const TAstNodePtr& secondInput);
 
     void WritePos(const TAstNode& node);
 
@@ -221,7 +221,7 @@ private:
 
 class TJsonPathReader {
 public:
-    TJsonPathReader(const TJsonPathPtr path);
+    explicit TJsonPathReader(TJsonPathPtr path);
 
     const TJsonPathItem& ReadFirst();
 

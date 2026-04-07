@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(4.0.0)
+VERSION(4.2.0)
 
 LICENSE(MIT)
 
@@ -10,6 +10,7 @@ PEERDIR(
     contrib/python/jaraco.context
     contrib/python/jaraco.functools
     contrib/python/more-itertools
+    contrib/python/typer
 )
 
 NO_LINT()
@@ -33,6 +34,7 @@ RESOURCE_FILES(
     .dist-info/METADATA
     .dist-info/top_level.txt
     jaraco/text/Lorem_ipsum.txt
+    jaraco/text/py.typed
 )
 
 END()

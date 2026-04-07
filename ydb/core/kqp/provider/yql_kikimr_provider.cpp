@@ -642,116 +642,22 @@ TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const TKiOperationList& o
     return protoOps;
 }
 
-// Is used only for key types now
-template<typename TProto>
-void FillLiteralProtoImpl(const NNodes::TCoDataCtor& literal, TProto& proto) {
-    auto type = literal.Ref().GetTypeAnn();
 
-    YQL_ENSURE(type->GetKind() == ETypeAnnotationKind::Data, "unexpected type: " << type->GetKind());
-
-    auto slot = type->Cast<TDataExprType>()->GetSlot();
-    auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
-
-    YQL_ENSURE(NKikimr::NScheme::NTypeIds::IsYqlType(typeId));
-    YQL_ENSURE(typeId == NKikimr::NScheme::NTypeIds::Decimal || NKikimr::IsAllowedKeyType(NKikimr::NScheme::TTypeInfo(typeId)));
-
-    auto& protoType = *proto.MutableType();
-    auto& protoValue = *proto.MutableValue();
-
-    protoType.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-    protoType.MutableData()->SetScheme(typeId);
-
-    auto value = literal.Literal().Value();
-
-    switch (slot) {
-        case EDataSlot::Bool:
-            protoValue.SetBool(FromString<bool>(value));
-            break;
-        case EDataSlot::Uint8:
-        case EDataSlot::Uint16:
-        case EDataSlot::Uint32:
-        case EDataSlot::Date:
-        case EDataSlot::Datetime:
-            protoValue.SetUint32(FromString<ui32>(value));
-            break;
-        case EDataSlot::Int8:
-        case EDataSlot::Int16:
-        case EDataSlot::Int32:
-        case EDataSlot::Date32:
-            protoValue.SetInt32(FromString<i32>(value));
-            break;
-        case EDataSlot::Int64:
-        case EDataSlot::Interval:
-        case EDataSlot::Datetime64:
-        case EDataSlot::Timestamp64:
-        case EDataSlot::Interval64:
-            protoValue.SetInt64(FromString<i64>(value));
-            break;
-        case EDataSlot::Uint64:
-        case EDataSlot::Timestamp:
-            protoValue.SetUint64(FromString<ui64>(value));
-            break;
-        case EDataSlot::String:
-        case EDataSlot::DyNumber:
-            protoValue.SetBytes(value.data(), value.size());
-            break;
-        case EDataSlot::Utf8:
-        case EDataSlot::Json:
-            protoValue.SetText(ToString(value));
-            break;
-        case EDataSlot::Double:
-            protoValue.SetDouble(FromString<double>(value));
-            break;
-        case EDataSlot::Float:
-            protoValue.SetFloat(FromString<float>(value));
-            break;
-        case EDataSlot::Yson:
-            protoValue.SetBytes(ToString(value));
-            break;
-        case EDataSlot::Decimal: {
-            const auto paramsDataType = type->Cast<TDataExprParamsType>();
-            auto precision = FromString<ui8>(paramsDataType->GetParamOne());
-            auto scale = FromString<ui8>(paramsDataType->GetParamTwo());
-            protoType.MutableData()->MutableDecimalParams()->SetPrecision(precision);
-            protoType.MutableData()->MutableDecimalParams()->SetScale(scale);
-
-            auto v = NDecimal::FromString(literal.Cast<TCoDecimal>().Literal().Value(), precision, scale);
-            const auto p = reinterpret_cast<ui8*>(&v);
-            protoValue.SetLow128(*reinterpret_cast<ui64*>(p));
-            protoValue.SetHi128(*reinterpret_cast<ui64*>(p + 8));
-            break;
-        }
-        case EDataSlot::Uuid: {
-            const ui64* uuidData = reinterpret_cast<const ui64*>(value.data());
-            protoValue.SetLow128(uuidData[0]);
-            protoValue.SetHi128(uuidData[1]);
-            break;
-        }
-
-        default:
-            YQL_ENSURE(false, "Unexpected type slot " << slot);
-    }
-}
-
-void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKqpProto::TKqpPhyLiteralValue& proto) {
-    FillLiteralProtoImpl(literal, proto);
-}
-
-void FillLiteralProto(const NNodes::TCoPgConst& pgLiteral, NKqpProto::TKqpPhyLiteralValue& proto) {
+void FillLiteralProto(const NNodes::TCoPgConst& pgLiteral, Ydb::TypedValue& proto) {
     auto type = pgLiteral.Ref().GetTypeAnn();
     auto actualPgType = type->Cast<TPgExprType>();
     auto typeDesc = NKikimr::NPg::TypeDescFromPgTypeId(actualPgType->GetId());
 
-    auto& protoType = *proto.MutableType();
-    auto& protoValue = *proto.MutableValue();
+    auto& protoType = *proto.mutable_type();
+    auto& protoValue = *proto.mutable_value();
 
-    protoType.SetKind(NKikimrMiniKQL::ETypeKind::Pg);
-    protoType.MutablePg()->Setoid(actualPgType->GetId());
+    protoType.mutable_pg_type()->set_type_name(NKikimr::NPg::PgTypeNameFromTypeDesc(typeDesc));
+    protoType.mutable_pg_type()->set_oid(NKikimr::NPg::PgTypeIdFromTypeDesc(typeDesc));
 
     TString content = TString(pgLiteral.Value().Value());
     auto parseResult = NKikimr::NPg::PgNativeBinaryFromNativeText(content, typeDesc);
 
-    protoValue.SetBytes(parseResult.Str.data(), parseResult.Str.size());
+    protoValue.set_bytes_value(parseResult.Str.data(), parseResult.Str.size());
 }
 
 bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral) {
@@ -1002,22 +908,6 @@ bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, 
     }
     return true;
 }
-
-bool AddDmlIssue(const TIssue& issue, TExprContext& ctx) {
-    auto newIssue = AddDmlIssue(issue);
-    ctx.AddError(newIssue);
-    return false;
-}
-
-TIssue AddDmlIssue(const TIssue& issue) {
-    TIssue newIssue;
-    newIssue.SetCode(issue.GetCode(), ESeverity::TSeverityIds_ESeverityId_S_ERROR);
-    newIssue.SetMessage("Detected violation of logical DML constraints. YDB transactions don't see their own"
-        " changes, make sure you perform all table reads before any modifications.");
-    newIssue.AddSubIssue(new TIssue(issue));
-    return newIssue;
-}
-
 TKiDataQueryBlockSettings TKiDataQueryBlockSettings::Parse(const NNodes::TKiDataQueryBlock& node) {
     TKiDataQueryBlockSettings settings;
 

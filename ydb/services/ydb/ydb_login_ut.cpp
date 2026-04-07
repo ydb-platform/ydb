@@ -1,5 +1,6 @@
 #include <format>
 
+#include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -151,6 +152,41 @@ Y_UNIT_TEST_SUITE(TGRpcAuthentication) {
         loginConnection.Stop();
     }
 
+    Y_UNIT_TEST(ValidHashCredentials) {
+        TLoginClientConnection loginConnection;
+
+        std::string hash = R"(
+            {
+                "version": 1,
+                "argon2id": "HTkpQjtVJgBoA0CZu+i3zg==$ZO37rNB37kP9hzmKRGfwc4aYrboDt4OBDsF1TBn5oLw=",
+                "scram-sha-256": "4096:s0QSrrFVkMTh3k2TTk860A==$LmCubRpIYV1zHMLucTtu7XjhB+PgWwH8ABCYGyVF1mo=:eUrie0C98tEFgygSOtom/fwPmgnMxeq53l7YTFfYncc="
+            }
+        )";
+        auto createUserQuery = std::format("CREATE USER {0:} HASH '{1:}'", std::string(User), std::string(Base64Encode(hash)));
+        auto result = loginConnection.ExecuteSql("root@builtin", TString(createUserQuery));
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto factory = CreateLoginCredentialsProviderFactory({.User = User, .Password = "password1"});
+        auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
+        UNIT_ASSERT_NO_EXCEPTION(loginProvider->GetAuthInfo());
+
+        hash = R"(
+            {
+                "version": 1,
+                "argon2id": "HTkpQjtVJgBoA0CZu+i3zg==$ZO37rNB37kP9hzmKRGfwc4aYrboDt4OBDsF1TBn5oLw="
+            }
+        )";
+        auto alterUserQuery = std::format("ALTER USER {0:} HASH '{1:}'", std::string(User), std::string(Base64Encode(hash)));
+        result = loginConnection.ExecuteSql("root@builtin", TString(alterUserQuery));
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        factory = CreateLoginCredentialsProviderFactory({.User = User, .Password = "password1"});
+        loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
+        UNIT_ASSERT_NO_EXCEPTION(loginProvider->GetAuthInfo());
+
+        loginConnection.Stop();
+    }
+
     Y_UNIT_TEST(InvalidPassword) {
         TLoginClientConnection loginConnection;
         loginConnection.CreateUser(User, Password);
@@ -158,6 +194,45 @@ Y_UNIT_TEST_SUITE(TGRpcAuthentication) {
         auto factory = CreateLoginCredentialsProviderFactory({.User = User, .Password = "WrongPassword"});
         auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
         UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Invalid password");
+
+        std::string hash = R"(
+            {
+                "version": 1,
+                "argon2id": "HTkpQjtVJgBoA0CZu+i3zg==$ZO37rNB37kP9hzmKRGfwc4aYrboDt4OBDsF1TBn5oLw=",
+                "scram-sha-256": "4096:s0QSrrFVkMTh3k2TTk860A==$LmCubRpIYV1zHMLucTtu7XjhB+PgWwH8ABCYGyVF1mo=:eUrie0C98tEFgygSOtom/fwPmgnMxeq53l7YTFfYncc="
+            }
+        )";
+        auto alterUserQuery = std::format("ALTER USER {0:} HASH '{1:}'", std::string(User), std::string(Base64Encode(hash)));
+        auto result = loginConnection.ExecuteSql("root@builtin", TString(alterUserQuery));
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        factory = CreateLoginCredentialsProviderFactory({.User = User, .Password = Password});
+        loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Invalid password");
+
+        loginConnection.Stop();
+    }
+
+    Y_UNIT_TEST(UnknownUser) {
+        TLoginClientConnection loginConnection;
+
+        auto factory = CreateLoginCredentialsProviderFactory({.User = User, .Password = Password});
+        auto loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Cannot find user 'user'");
+
+        loginConnection.CreateUser(User, Password);
+
+        factory = CreateLoginCredentialsProviderFactory({.User = User, .Password = Password});
+        loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
+        UNIT_ASSERT_NO_EXCEPTION(loginProvider->GetAuthInfo());
+
+        auto dropUserQuery = std::format("DROP USER {0:}", std::string(User));
+        auto result = loginConnection.ExecuteSql("root@builtin", TString(dropUserQuery));
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        factory = CreateLoginCredentialsProviderFactory({.User = User, .Password = Password});
+        loginProvider = factory->CreateProvider(loginConnection.GetCoreFacility());
+        UNIT_ASSERT_EXCEPTION_CONTAINS(loginProvider->GetAuthInfo(), yexception, "Cannot find user 'user'");
 
         loginConnection.Stop();
     }

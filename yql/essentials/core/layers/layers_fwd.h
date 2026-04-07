@@ -19,7 +19,7 @@ using TLocations = TVector<TLocation>;
 
 class TKey {
 public:
-    TKey(TMaybe<TString>&& name, TMaybe<TString>&& url = {})
+    explicit TKey(TMaybe<TString>&& name, TMaybe<TString>&& url = {})
         : Name(name)
         , Url(url)
     {

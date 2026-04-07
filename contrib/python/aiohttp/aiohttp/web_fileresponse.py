@@ -3,6 +3,7 @@ import os
 import pathlib
 import sys
 from contextlib import suppress
+from importlib.resources.abc import Traversable
 from mimetypes import MimeTypes
 from stat import S_ISREG
 from types import MappingProxyType
@@ -89,7 +90,7 @@ class FileResponse(StreamResponse):
     ) -> None:
         super().__init__(status=status, reason=reason, headers=headers)
 
-        self._path = pathlib.Path(path)
+        self._path = pathlib.Path(path) if not isinstance(path, Traversable) else path
         self._chunk_size = chunk_size
 
     async def _sendfile_fallback(
@@ -319,7 +320,7 @@ class FileResponse(StreamResponse):
         #  can be ignored since the map was cleared above.
         if hdrs.CONTENT_TYPE not in self.headers:
             self.content_type = (
-                CONTENT_TYPES.guess_type(self._path)[0] or FALLBACK_CONTENT_TYPE
+                CONTENT_TYPES.guess_type(self._path.name)[0] or FALLBACK_CONTENT_TYPE
             )
 
         if file_encoding:

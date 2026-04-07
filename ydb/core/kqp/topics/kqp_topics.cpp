@@ -223,7 +223,7 @@ void TTopicPartitionOperations::AddKafkaApiReadOperation(const TString& topic, u
     Operations_[consumerName].AddKafkaApiOffsetCommit(consumerName, offset);
 }
 
-void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs)
+void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs, bool skipConflictCheck)
 {
     Y_ENSURE(TabletId_.Defined());
     Y_ENSURE(Partition_.Defined());
@@ -261,6 +261,7 @@ void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs)
         } else if (SupportivePartition_.Defined()) {
             o->SetSupportivePartition(*SupportivePartition_);
         }
+        o->SetSkipConflictCheck(skipConflictCheck);
         t.hasWrite = true;
     }
 }
@@ -614,7 +615,7 @@ void TTopicOperations::CacheSchemeCacheNavigate(const NSchemeCache::TSchemeCache
 void TTopicOperations::BuildTopicTxs(TTopicOperationTransactions& txs)
 {
     for (auto& [_, operations] : Operations_) {
-        operations.BuildTopicTxs(txs);
+        operations.BuildTopicTxs(txs, CalcSkipConflictCheck());
     }
 }
 
@@ -628,6 +629,9 @@ void TTopicOperations::Merge(const TTopicOperations& rhs)
     HasReadOperations_ |= rhs.HasReadOperations_;
     HasWriteOperations_ |= rhs.HasWriteOperations_;
     HasKafkaOperations_ |= rhs.HasKafkaOperations_;
+
+    MergeSkipConflictCheck(rhs.SkipConflictCheck_);
+    MergeTrackProducerId(rhs.TrackProducerId_);
 }
 
 TSet<ui64> TTopicOperations::GetReceivingTabletIds() const
@@ -643,6 +647,11 @@ TSet<ui64> TTopicOperations::GetSendingTabletIds() const
 {
     TSet<ui64> ids;
     for (auto& [_, operations] : Operations_) {
+        if (!operations.HasReadOperations() &&
+            operations.HasWriteOperations() && CalcSkipConflictCheck()) {
+            continue;
+        }
+
         ids.insert(operations.GetTabletId());
     }
     return ids;
@@ -662,6 +671,31 @@ TMaybe<TString> TTopicOperations::GetTabletName(ui64 tabletId) const {
 size_t TTopicOperations::GetSize() const
 {
     return Operations_.size();
+}
+
+void TTopicOperations::SetSkipConflictCheck(bool skipConflictCheck)
+{
+    SkipConflictCheck_ = skipConflictCheck;
+}
+
+void TTopicOperations::SetTrackProducerId(bool trackProducerId)
+{
+    TrackProducerId_ = trackProducerId;
+}
+
+void TTopicOperations::MergeSkipConflictCheck(bool rhs)
+{
+    SkipConflictCheck_ = SkipConflictCheck_ && rhs;
+}
+
+void TTopicOperations::MergeTrackProducerId(bool rhs)
+{
+    TrackProducerId_ = TrackProducerId_ || rhs;
+}
+
+bool TTopicOperations::CalcSkipConflictCheck() const
+{
+    return !TrackProducerId_ && SkipConflictCheck_;
 }
 
 }

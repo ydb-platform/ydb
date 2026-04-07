@@ -17,6 +17,7 @@
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
 #include <yql/essentials/core/layers/layers.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/sql/settings/translation_sql_flags.h>
 #include <yql/essentials/sql/sql.h>
 
 #include <library/cpp/yson/node/node.h>
@@ -31,6 +32,7 @@
 #include <util/digest/city.h>
 
 #include <functional>
+#include <utility>
 #include <vector>
 
 namespace NYql {
@@ -39,7 +41,7 @@ using TTypeAnnCallableFactory = std::function<TAutoPtr<IGraphTransformer>()>;
 
 class IUrlLoader : public TThrRefBase {
 public:
-    ~IUrlLoader() = default;
+    ~IUrlLoader() override = default;
 
     virtual TString Load(const TString& url, const TString& token) = 0;
 
@@ -50,17 +52,17 @@ class TModuleResolver : public IModuleResolver {
 public:
     using TModuleChecker = std::function<bool(const TString& query, const TString& fileName, TExprContext& ctx)>;
 
-    TModuleResolver(const NSQLTranslation::TTranslators& translators, TModulesTable&& modules,
+    TModuleResolver(NSQLTranslation::TTranslators translators, TModulesTable&& modules,
         ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
         const THashSet<TString>& sqlFlags, bool optimizeLibraries = true,
         THolder<TExprContext> ownedCtx = {}, TModuleChecker moduleChecker = {})
-        : Translators_(translators)
+        : Translators_(std::move(translators))
         , OwnedCtx_(std::move(ownedCtx))
         , LibsContext_(nextUniqueId)
         , Modules_(std::move(modules))
         , ClusterMapping_(clusterMapping)
         , SqlFlags_(sqlFlags)
-        , ModuleChecker_(moduleChecker)
+        , ModuleChecker_(std::move(moduleChecker))
         , OptimizeLibraries_(optimizeLibraries)
     {
         if (OwnedCtx_) {
@@ -68,20 +70,20 @@ public:
         }
     }
 
-    TModuleResolver(const NSQLTranslation::TTranslators& translators, const TModulesTable* parentModules,
+    TModuleResolver(NSQLTranslation::TTranslators translators, const TModulesTable* parentModules,
         ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
         const THashSet<TString>& sqlFlags, bool optimizeLibraries, const TSet<TString>& knownPackages, const THashMap<TString,
-        THashMap<int, TLibraryCohesion>>& libs, const TString& fileAliasPrefix, TModuleChecker moduleChecker)
-        : Translators_(translators)
+        THashMap<int, TLibraryCohesion>>& libs, TString fileAliasPrefix, TModuleChecker moduleChecker)
+        : Translators_(std::move(translators))
         , ParentModules_(parentModules)
         , LibsContext_(nextUniqueId)
         , KnownPackages_(knownPackages)
         , Libs_(libs)
         , ClusterMapping_(clusterMapping)
         , SqlFlags_(sqlFlags)
-        , ModuleChecker_(moduleChecker)
+        , ModuleChecker_(std::move(moduleChecker))
         , OptimizeLibraries_(optimizeLibraries)
-        , FileAliasPrefix_(fileAliasPrefix)
+        , FileAliasPrefix_(std::move(fileAliasPrefix))
     {
     }
 
@@ -194,7 +196,7 @@ public:
     struct TOrderedItem {
         TString LogicalName;
         TString PhysicalName;
-        TOrderedItem(const TString& logical, const TString& physical) : LogicalName(logical), PhysicalName(physical) {}
+        TOrderedItem(TString logical, TString physical) : LogicalName(std::move(logical)), PhysicalName(std::move(physical)) {}
         TOrderedItem(TOrderedItem&&) = default;
         TOrderedItem(const TOrderedItem&) = default;
         TOrderedItem& operator=(const TOrderedItem&) = default;
@@ -355,6 +357,14 @@ struct TUdfCachedInfo {
     TLangVersion MaxLangVer = UnknownLangVersion;
 };
 
+struct TLineageStats {
+    TMaybe<bool> Correct;
+    TMaybe<bool> CorrectStandalone;
+    ui64 Size = 0;
+    ui64 Memory = 0;
+    ui64 Duration = 0;
+};
+
 const TString TypeAnnotationContextComponent = "TypeAnnotationContext";
 const TString NowKey = "Now";
 const TString RandomKey = "Random";
@@ -443,6 +453,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     THashMap<std::tuple<TString, TString, const TTypeAnnotationNode*>, TUdfCachedInfo> UdfTypeCache; // (name,typecfg,type)->info
     bool UseTableMetaFromGraph = false;
     bool DiscoveryMode = false;
+    bool WindowNewPipeline = false;
     bool ForceDq = false;
     bool DqCaptured = false; // TODO: Add before/after recapture transformers
     EFallbackPolicy DqFallbackPolicy = EFallbackPolicy::Default;
@@ -462,6 +473,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ECostBasedOptimizerType CostBasedOptimizer = ECostBasedOptimizerType::Disable;
     ui32 CostBasedOptimizerVersion = 0;
     bool MatchRecognize = false;
+    TMaybe<NSQLTranslation::TSqlFlags> SqlFlags;
     EMatchRecognizeStreamingMode MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Force;
     i64 TimeOrderRecoverDelay = -10'000'000; //microseconds
     i64 TimeOrderRecoverAhead = 10'000'000; //microseconds
@@ -481,9 +493,11 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool DirectRowDependsOn = true;
     bool EnableLineage = false;
     bool EnableStandaloneLineage = false;
-    TMaybe<bool> CorrectLineage;
-    TMaybe<bool> CorrectStandaloneLineage;
-    TMaybe<ui32> LineageSize;
+    TLineageStats LineageStats;
+    ui64 LineageOutputLimit = 40 * 1024 * 1024; // 40 mb limit for lineage representation
+    ui64 LineageMemoryLimit = 150 * 1024 * 1024; // 150 mb limit for memory allocation in lineage calculation
+    bool FuzzUntypedLambda = false;
+    bool FuzzUniversal = false;
 
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayerProviderByName;
     NLayers::ILayersRegistryPtr LayersRegistry;
@@ -529,7 +543,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui64 GetCachedNow() {
         if (!CachedNow) {
             if (QContext.CanRead()) {
-                auto item = QContext.GetReader()->Get({TypeAnnotationContextComponent, NowKey}).GetValueSync();
+                auto item = QContext.GetReader()->Get({.Component=TypeAnnotationContextComponent, .Label=NowKey}).GetValueSync();
                 if (!item) {
                     throw yexception() << "Missing replay data";
                 }
@@ -538,7 +552,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
             } else {
                 CachedNow = TimeProvider->Now().GetValue();
                 if (QContext.CanWrite()) {
-                    QContext.GetWriter()->Put({TypeAnnotationContextComponent, NowKey}, SerializeBinary<ui64>(*CachedNow)).GetValueSync();
+                    QContext.GetWriter()->Put({.Component=TypeAnnotationContextComponent, .Label=NowKey}, SerializeBinary<ui64>(*CachedNow)).GetValueSync();
                 }
             }
         }

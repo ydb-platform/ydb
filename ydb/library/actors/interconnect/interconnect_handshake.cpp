@@ -12,12 +12,14 @@
 #include <ydb/library/actors/core/actor_coroutine.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
+#include <util/network/socket.h>
 #include <util/system/getpid.h>
 #include <util/random/entropy.h>
 #include <util/generic/overloaded.h>
 
 #include <google/protobuf/text_format.h>
 
+#include <limits>
 #include <variant>
 
 namespace NActors {
@@ -95,6 +97,7 @@ namespace NActors {
             THandshakeActor *Actor = nullptr;
             TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
             TPollerToken::TPtr PollerToken;
+            bool KernelLivenessReady = false;
 
         public:
             TConnection(THandshakeActor *actor, TIntrusivePtr<NInterconnect::TStreamSocket> socket)
@@ -148,6 +151,7 @@ namespace NActors {
             void Reset() {
                 Socket.Reset();
                 PollerToken.Reset();
+                KernelLivenessReady = false;
             }
 
             void SetupSocket() {
@@ -163,6 +167,8 @@ namespace NActors {
                 if (const auto& buffer = Actor->Common->Settings.TCPSocketBufferSize) {
                     Socket->SetSendBufferSize(buffer);
                 }
+
+                KernelLivenessReady = SetupKernelLiveness();
             }
 
             void RegisterInPoller() {
@@ -226,8 +232,94 @@ namespace NActors {
                 }
             }
 
+            bool IsKernelLivenessReady() const {
+                return KernelLivenessReady;
+            }
+
             TIntrusivePtr<NInterconnect::TStreamSocket>& GetSocketRef() { return Socket; }
             operator bool() const { return static_cast<bool>(Socket); }
+
+        private:
+            static int ClampSockOptValue(ui64 value) {
+                constexpr ui64 maxValue = static_cast<ui64>(std::numeric_limits<int>::max());
+                return value > maxValue ? std::numeric_limits<int>::max() : static_cast<int>(value);
+            }
+
+            bool SetIntSockOpt(int level, int option, int value, const char *name) {
+                if (SetSockOpt(*Socket, level, option, value) == 0) {
+                    return true;
+                }
+
+                const int err = errno;
+                LOG_LOG(*TlsActivationContext, NLog::PRI_WARN, NActorsServices::INTERCONNECT,
+                    "%s ICH40 Kernel liveness disabled for socket# %d due to setsockopt(%s=%d) failure, errno# %d (%s)",
+                    Actor->LogPrefix.data(), int(*Socket), name, value, err, strerror(err));
+                return false;
+            }
+
+            bool SetupKernelLiveness() {
+                if (!Actor->Common->Settings.EnableKernelLiveness) {
+                    return false;
+                }
+
+#if defined(_linux_)
+#if !defined(TCP_KEEPIDLE) || !defined(TCP_KEEPINTVL) || !defined(TCP_KEEPCNT)
+                LOG_LOG(*TlsActivationContext, NLog::PRI_WARN, NActorsServices::INTERCONNECT,
+                    "%s ICH42 Kernel liveness requested, but TCP keepalive tuning options are unavailable on this platform",
+                    Actor->LogPrefix.data());
+                return false;
+#else
+                auto toSockOptSeconds = [](TDuration value) -> ui64 {
+                    const ui64 ms = value.MilliSeconds();
+                    return ms ? (ms - 1) / 1000 + 1 : 0; // ceil(ms / 1000) for non-zero durations
+                };
+
+                const auto& settings = Actor->Common->Settings;
+                const ui64 keepAliveIdleSec = toSockOptSeconds(settings.KernelKeepAliveIdle);
+                const ui64 keepAliveIntervalSec = toSockOptSeconds(settings.KernelKeepAliveInterval);
+                const ui64 userTimeoutMs = settings.KernelUserTimeout.MilliSeconds();
+                if (!keepAliveIdleSec || !keepAliveIntervalSec || !settings.KernelKeepAliveProbes || !userTimeoutMs) {
+                    LOG_LOG(*TlsActivationContext, NLog::PRI_WARN, NActorsServices::INTERCONNECT,
+                        "%s ICH43 Kernel liveness disabled due to invalid settings KeepAliveIdle# %s KeepAliveInterval# %s KeepAliveProbes# %" PRIu32
+                        " KernelUserTimeout# %s",
+                        Actor->LogPrefix.data(), settings.KernelKeepAliveIdle.ToString().data(),
+                        settings.KernelKeepAliveInterval.ToString().data(), settings.KernelKeepAliveProbes,
+                        settings.KernelUserTimeout.ToString().data());
+                    return false;
+                }
+
+                if (!SetIntSockOpt(SOL_SOCKET, SO_KEEPALIVE, 1, "SO_KEEPALIVE")) {
+                    return false;
+                }
+                if (!SetIntSockOpt(IPPROTO_TCP, TCP_KEEPIDLE, ClampSockOptValue(keepAliveIdleSec), "TCP_KEEPIDLE")) {
+                    return false;
+                }
+                if (!SetIntSockOpt(IPPROTO_TCP, TCP_KEEPINTVL, ClampSockOptValue(keepAliveIntervalSec), "TCP_KEEPINTVL")) {
+                    return false;
+                }
+                if (!SetIntSockOpt(IPPROTO_TCP, TCP_KEEPCNT, ClampSockOptValue(settings.KernelKeepAliveProbes), "TCP_KEEPCNT")) {
+                    return false;
+                }
+
+#if defined(TCP_USER_TIMEOUT)
+                if (!SetIntSockOpt(IPPROTO_TCP, TCP_USER_TIMEOUT, ClampSockOptValue(userTimeoutMs), "TCP_USER_TIMEOUT")) {
+                    return false;
+                }
+#else
+                LOG_LOG(*TlsActivationContext, NLog::PRI_WARN, NActorsServices::INTERCONNECT,
+                    "%s ICH45 Kernel liveness requested, but TCP_USER_TIMEOUT is unavailable on this platform",
+                    Actor->LogPrefix.data());
+                return false;
+#endif
+
+                return true;
+#endif
+#else
+                LOG_LOG(*TlsActivationContext, NLog::PRI_WARN, NActorsServices::INTERCONNECT,
+                    "%s ICH44 Kernel liveness requested, but this platform is unsupported", Actor->LogPrefix.data());
+                return false;
+#endif
+            }
         };
 
     private:
@@ -263,6 +355,7 @@ namespace NActors {
                 return Cq && Qp;
             }
         } Rdma;
+        bool RunDelayedRdmaHandshake = false;
 
     public:
         THandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self, const TActorId& peer,
@@ -390,6 +483,10 @@ namespace NActors {
                                         "RDMA memory read failed, disable rdma on the initiator");
                                     Rdma.HandShakeMemRegion.Reset();
                                     Rdma.Clear();
+                                    // During outgoing handshake we got rdma qp
+                                    // but unable to got rdma read confirmation - run pending rdma handshake to try to reestablish
+                                    // session with rdma in a future
+                                    RunDelayedRdmaHandshake = true;
                                 } else {
                                     Params.UseRdma = true;
                                 }
@@ -416,9 +513,12 @@ namespace NActors {
                 MainChannel.ResetPollerToken();
                 ExternalDataChannel.ResetPollerToken();
                 Y_ABORT_UNLESS(!ExternalDataChannel == !Params.UseExternalDataChannel);
+                TEvHandshakeDone::TRdmaResult rdmaResult = (Rdma.Qp && Rdma.Cq)
+                    ? TEvHandshakeDone::TRdmaResult(std::move(Rdma.Qp), std::move(Rdma.Cq))
+                    : TEvHandshakeDone::TRdmaResult(TEvHandshakeDone::TRdmaResult::TDisabled(RunDelayedRdmaHandshake));
                 SendToProxy(MakeHolder<TEvHandshakeDone>(std::move(MainChannel.GetSocketRef()), PeerVirtualId, SelfVirtualId,
                     *NextPacketFromPeer, ProgramInfo->Release(), std::move(Params), std::move(ExternalDataChannel.GetSocketRef()),
-                    std::move(Rdma.Qp), std::move(Rdma.Cq)));
+                    rdmaResult));
             }
 
             Rdma.Clear();
@@ -725,6 +825,7 @@ namespace NActors {
             if (!region) {
                 LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,
                     "Unable to allocate memory region to perform rdma handshake");
+                RunDelayedRdmaHandshake = true;
                 return nullptr;
             }
 
@@ -924,6 +1025,9 @@ namespace NActors {
                 Params.UseExternalDataChannel = success.GetUseExternalDataChannel();
                 Params.UseXxhash = success.GetUseXxhash();
                 Params.UseXdcShuffle = success.GetUseXdcShuffle();
+                // Kernel liveness mode is a local transport decision: it depends on whether this side
+                // configured keepalive/user-timeout on its own socket.
+                Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
                 if (success.HasServerScopeId()) {
                     ParsePeerScopeId(success.GetServerScopeId());
                 }
@@ -972,6 +1076,8 @@ namespace NActors {
             } else {
                 ProgramInfo.ConstructInPlace(); // successful handshake
             }
+
+            Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
         }
 
         std::vector<NInterconnect::TAddress> ResolvePeer() {
@@ -1103,6 +1209,7 @@ namespace NActors {
                     PeerVirtualId = request.Header.SelfVirtualId;
                     NextPacketToPeer = ack->NextPacket;
                     Params = ack->Params;
+                    Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
 
                     // only succeed in case when proxy returned valid SelfVirtualId; otherwise it wants us to terminate
                     // the handshake process and it does not expect the handshake reply
@@ -1218,6 +1325,7 @@ namespace NActors {
                 Params.UseExternalDataChannel = request.GetRequestExternalDataChannel() && Common->Settings.EnableExternalDataChannel;
                 Params.UseXxhash = request.GetRequestXxhash();
                 Params.UseXdcShuffle = request.GetRequestXdcShuffle();
+                Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
 
                 if (Params.UseExternalDataChannel) {
                     if (request.HasHandshakeId()) {
@@ -1270,13 +1378,15 @@ namespace NActors {
                         TryRdmaQpExchange(rdmaIncommingHandshake.value(), success);
                         if (Rdma && rdmaIncommingHandshake->HasRead()) {
                             rdma = rdmaIncommingHandshake->GetRead();
-                        }
-                        if (rdmaIncommingHandshake->HasRdmaChecksum() && rdmaIncommingHandshake->GetRdmaChecksum() == true) {
-                            Params.ChecksumRdmaEvent = Common->Settings.RdmaChecksum;
-                            success.MutableQpPrepared()->SetRdmaChecksum(Params.ChecksumRdmaEvent);
+                            if (rdmaIncommingHandshake->HasRdmaChecksum() && rdmaIncommingHandshake->GetRdmaChecksum() == true) {
+                                Params.ChecksumRdmaEvent = Common->Settings.RdmaChecksum;
+                                success.MutableQpPrepared()->SetRdmaChecksum(Params.ChecksumRdmaEvent);
+                            } else {
+                                Params.ChecksumRdmaEvent = false;
+                                success.MutableQpPrepared()->SetRdmaChecksum(false);
+                            }
                         } else {
-                            Params.ChecksumRdmaEvent = false;
-                            success.MutableQpPrepared()->SetRdmaChecksum(false);
+                            success.SetRdmaErr("Unable to perform qp exchange on the incomming side");
                         }
                     } else {
                         success.SetRdmaErr("Rdma is not ready on the incomming side");
@@ -1405,11 +1515,13 @@ namespace NActors {
                     if (err) {
                         LOG_ERROR_IC("ICRDMA", "Unable to initialize QP, no more attempt to use RDMA on this session");
                         Rdma.Qp.reset();
+                        RunDelayedRdmaHandshake = true;
                     } else {
                         Rdma.Cq = cqPtr;
                     }
-                 } else {
+                } else {
                     LOG_ERROR_IC("ICRDMA", "Unable to get CQ handle, no more attempt to use RDMA on this session");
+                    RunDelayedRdmaHandshake = true;
                 }
             }
         }

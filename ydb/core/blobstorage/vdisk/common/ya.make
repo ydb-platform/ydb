@@ -45,6 +45,8 @@ SRCS(
     vdisk_hulllogctx.h
     vdisk_log.cpp
     vdisk_log.h
+    vdisk_log_context.cpp
+    vdisk_log_context.h
     vdisk_lsnmngr.h
     vdisk_events_quoter.h
     vdisk_mon.h

@@ -7,6 +7,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/fetcher/fetch_request_actor.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/services/persqueue_v1/actors/read_init_auth_actor.h>
@@ -170,7 +171,7 @@ private:
     EReadSessionSteps ReadStep = EReadSessionSteps::WAIT_JOIN_GROUP;
     TNextRequestError NextRequestError;
 
-    THashMap<TString, NGRpcProxy::TTopicHolder> TopicsInfo; // topic -> info
+    THashMap<TString, NGRpcProxy::TTopicHolderBase> TopicsInfo; // topic -> info
     NPersQueue::TTopicsToConverter TopicsToConverter;
     THashSet<TString> TopicsToReadNames;
     THashMap<TString, TString> OriginalTopicNames;

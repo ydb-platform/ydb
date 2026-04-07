@@ -7,6 +7,7 @@
 #include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
+#include <ydb/core/protos/pqdata_mlp.pb.h>
 
 #include <memory>
 
@@ -21,7 +22,7 @@ bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev);
 void RequestInfoRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
 void RequestDataRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
 void RequestDeduplicatorRange(const TActorContext& ctx, const TActorId& dst, const TPartitionId& partition, const TString& key);
-void ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev);
+[[nodiscard]] bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev);
 
 //
 // TInitializer
@@ -106,6 +107,11 @@ void TInitializerStep::Done(const TActorContext& ctx) {
     Initializer->Next(ctx);
 }
 
+void TInitializerStep::RestartTablet(const std::string_view message) const {
+    PQ_INIT_LOG_E("Restarting tablet " << Partition()->TabletId << ": " << message);
+    Partition()->RestartTablet();
+}
+
 bool TInitializerStep::Handle(STFUNC_SIG) {
     Y_UNUSED(ev);
 
@@ -170,7 +176,9 @@ void TInitConfigStep::Execute(const TActorContext& ctx) {
 }
 
 void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-    ValidateResponse(*this, ev);
+    if (!ValidateResponse(*this, ev)) {
+        return;
+    }
 
     auto& res = ev->Get()->Record;
     PQ_INIT_ENSURE(res.ReadResultSize() == 1);
@@ -241,7 +249,9 @@ void TInitDiskStatusStep::Execute(const TActorContext& ctx) {
 }
 
 void TInitDiskStatusStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-    ValidateResponse(*this, ev);
+    if (!ValidateResponse(*this, ev)) {
+        return;
+    }
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.GetStatusResultSize());
@@ -279,7 +289,9 @@ void TInitMetaStep::Execute(const TActorContext& ctx) {
 }
 
 void TInitMetaStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    ValidateResponse(*this, ev);
+    if (!ValidateResponse(*this, ev)) {
+        return;
+    }
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.ReadResultSize() == 2);
@@ -366,7 +378,9 @@ void TInitInfoRangeStep::Execute(const TActorContext &ctx) {
 }
 
 void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    ValidateResponse(*this, ev);
+    if (!ValidateResponse(*this, ev)) {
+        return;
+    }
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
@@ -449,7 +463,9 @@ void TInitDataRangeStep::Execute(const TActorContext &ctx) {
 }
 
 void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    ValidateResponse(*this, ev);
+    if (!ValidateResponse(*this, ev)) {
+        return;
+    }
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
@@ -842,7 +858,9 @@ void TDeleteKeysStep::Execute(const TActorContext &ctx) {
 }
 
 void TDeleteKeysStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    ValidateResponse(*this, ev);
+    if (!ValidateResponse(*this, ev)) {
+        return;
+    }
 
     Done(ctx);
 }
@@ -864,7 +882,9 @@ void TInitMessageDeduplicatorStep::Execute(const TActorContext &ctx) {
 }
 
 void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    ValidateResponse(*this, ev);
+    if (!ValidateResponse(*this, ev)) {
+        return;
+    }
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.ReadRangeResultSize() == 1);
@@ -875,12 +895,12 @@ void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, co
     switch(range->GetStatus()) {
         case NKikimrProto::OK:
         case NKikimrProto::OVERRUN:
-            for (auto& w : *range->MutablePair()) {
+            for (auto& w : range->GetPair()) {
                 NKikimrPQ::TMessageDeduplicationIdWAL wal;
                 auto r = wal.ParseFromString(w.GetValue());
                 AFL_ENSURE(r)("key", w.key());
 
-                auto a = Partition()->MessageIdDeduplicator.ApplyWAL(std::move(*w.MutableKey()), std::move(wal));
+                auto a = Partition()->MessageIdDeduplicator.ApplyWAL(TString{w.GetKey()}, std::move(wal));
                 AFL_ENSURE(a)("key", w.key());
             }
 
@@ -930,7 +950,9 @@ void TInitDataStep::Execute(const TActorContext &ctx) {
 }
 
 void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-    ValidateResponse(*this, ev);
+    if (!ValidateResponse(*this, ev)) {
+        return;
+    }
 
     auto& response = ev->Get()->Record;
     PQ_INIT_ENSURE(response.ReadResultSize());
@@ -1069,7 +1091,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     CreationTime = ctx.Now();
     WriteCycleStartTime = ctx.Now();
 
-    ReadQuotaTrackerActor = RegisterWithSameMailbox(new TReadQuoter(
+    ReadQuotaTrackerActor = RegisterWithSameMailbox(CreateReadQuoter(
         AppData(ctx)->PQConfig,
         TopicConverter,
         Config,
@@ -1099,8 +1121,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
                                       DbId,
                                       Config.GetYdbDatabasePath(),
                                       IsServerless,
-                                      FolderId,
-                                      MonitoringProjectId);
+                                      FolderId);
     TotalChannelWritesByHead.resize(NumChannels);
 
     if (!IsSupportive()) {
@@ -1160,14 +1181,10 @@ void TPartition::Initialize(const TActorContext& ctx) {
         } else {
             SetupTopicCounters(ctx);
         }
-        if (DetailedMetricsAreEnabled()) {
-            SetupDetailedMetrics();
-        }
-    }
-}
 
-bool TPartition::DetailedMetricsAreEnabled() const {
-    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == METRICS_LEVEL_DETAILED);
+        SetupDetailedMetrics();
+        UsersInfoStorage->SetupDetailedMetrics(ctx);
+    }
 }
 
 void TPartition::SetupTopicCounters(const TActorContext& ctx) {
@@ -1425,20 +1442,22 @@ void TPartition::CreateCompacter() {
 // Functions
 //
 
-void ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev) {
+[[nodiscard]] bool ValidateResponse(const TInitializerStep& step, TEvKeyValue::TEvResponse::TPtr& ev) {
     auto& response = ev->Get()->Record;
-    AFL_ENSURE(response.GetStatus() == NMsgBusProxy::MSTATUS_OK)
-        ("d", "commands for topic are not processed at all")
-        ("topic", step.TopicName())
-        ("status", response.GetStatus());
+    if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
+        step.RestartTablet(TStringBuilder() << "commands for topic are not processed at all. status: " << response.GetStatus());
+        return false;
+    }
 
     for (ui32 i = 0; i < response.GetStatusResultSize(); ++i) {
         auto& res = response.GetGetStatusResult(i);
-        AFL_ENSURE(res.GetStatus() == NKikimrProto::OK)
-            ("d", "got KV error in CmdGetStatus")
-            ("topic", step.TopicName())
-            ("status", res.GetStatus());
+        if (res.GetStatus() != NKikimrProto::OK) {
+            step.RestartTablet(TStringBuilder() << "got KV error in CmdGetStatus. status: " << res.GetStatus());
+            return false;
+        }
     }
+
+    return true;
 }
 
 bool DiskIsFull(TEvKeyValue::TEvResponse::TPtr& ev) {

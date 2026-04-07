@@ -3,5 +3,10 @@
         {
             "uri": "file://test.test_count_min_sketch_/results.txt"
         }
+    ],
+    "test.test[equi_width_histogram]": [
+        {
+            "uri": "file://test.test_equi_width_histogram_/results.txt"
+        }
     ]
 }

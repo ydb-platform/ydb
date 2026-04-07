@@ -3,8 +3,7 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 // TODO: move this class to beter place
 class TStatus {
@@ -44,7 +43,7 @@ public:
 private:
     inline TStatus() = default;
 
-    inline TStatus(TString&& error)
+    inline explicit TStatus(TString&& error)
         : Error_(std::move(error))
     {
     }
@@ -53,5 +52,4 @@ private:
     TString Error_;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

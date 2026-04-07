@@ -49,7 +49,7 @@ TYsonStructBase& TYsonStructBase::operator=(const TYsonStructBase& that)
     return *this;
 }
 
-TYsonStructBase& TYsonStructBase::operator=(TYsonStructBase&& that)
+TYsonStructBase& TYsonStructBase::operator=(TYsonStructBase&& that) noexcept
 {
     // The type of destination should not be changed so Meta_ should not be copied.
     LocalUnrecognized_ = std::move(that.LocalUnrecognized_);

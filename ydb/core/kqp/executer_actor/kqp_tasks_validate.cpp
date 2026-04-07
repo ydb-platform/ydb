@@ -57,10 +57,6 @@ private:
         for (auto& output : task.Outputs) {
             ValidateOutput(output);
         }
-
-        if (task.Meta.Writes) {
-            YQL_ENSURE(task.Outputs.size() == 1, "Read-write tasks should have single output.");
-        }
     }
 
     bool IsDataExec() {

@@ -1,8 +1,25 @@
-#include "yql_s3_listing_strategy.cpp"
+#include "yql_s3_listing_strategy.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/threading/future/future.h>
 
 namespace NYql {
+
+using namespace NThreading;
+using namespace NS3Lister;
+
+TListError MakeGenericError(const TString& description) {
+    auto issue = TIssue(description);
+    return TListError{EListError::GENERAL, TIssues{std::move(issue)}};
+}
+
+TListError MakeLimitExceededError(
+    const TString& componentName, ui64 limit, ui64 actual, ui64 listObjectSize) {
+    auto issue = TIssue(
+        TStringBuilder{} << '[' << componentName << "] Limit exceeded. Limit: " << limit
+                         << " Actual: " << actual);
+    return TListError{EListError::LIMIT_EXCEEDED, TIssues{std::move(issue)}, listObjectSize};
+}
 
 class TMockS3Lister : public NS3Lister::IS3Lister {
 public:
@@ -96,7 +113,7 @@ void UnitAssertListResultEquals(
 }
 
 Y_UNIT_TEST(IfNoIssuesOccursShouldReturnCollectedPaths) {
-    auto strategy = TCollectingS3ListingStrategy{
+    auto strategy = MakeCollectingS3ListingStrategy(
         [](const NS3Lister::TListingRequest& listingRequest, TS3ListingOptions options) {
             UNIT_ASSERT_VALUES_EQUAL(listingRequest.Prefix, "TEST_INPUT");
             UNIT_ASSERT_VALUES_EQUAL(options.IsPartitionedDataset, false);
@@ -116,9 +133,9 @@ Y_UNIT_TEST(IfNoIssuesOccursShouldReturnCollectedPaths) {
                                 .Size = 15,
                             }}}})));
         },
-        "TTest"};
+        "TTest");
 
-    auto actualResultFuture = strategy.List(
+    auto actualResultFuture = strategy->List(
         NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"}, TS3ListingOptions{.MaxResultSet = 10});
     auto expectedResult = NS3Lister::TListResult{NS3Lister::TListEntries{
         .Objects = std::vector<NS3Lister::TObjectListEntry>{
@@ -135,7 +152,7 @@ Y_UNIT_TEST(IfNoIssuesOccursShouldReturnCollectedPaths) {
 }
 
 Y_UNIT_TEST(IfThereAreMoreRecordsThanSpecifiedByLimitShouldReturnError) {
-    auto strategy = TCollectingS3ListingStrategy{
+    auto strategy = MakeCollectingS3ListingStrategy(
         [](const NS3Lister::TListingRequest& listingRequest, TS3ListingOptions options) {
             UNIT_ASSERT_VALUES_EQUAL(listingRequest.Prefix, "TEST_INPUT");
             UNIT_ASSERT_VALUES_EQUAL(options.IsPartitionedDataset, false);
@@ -155,9 +172,9 @@ Y_UNIT_TEST(IfThereAreMoreRecordsThanSpecifiedByLimitShouldReturnError) {
                                 .Size = 15,
                             }}}})));
         },
-        "TTest"};
+        "TTest");
 
-    auto actualResultFuture = strategy.List(
+    auto actualResultFuture = strategy->List(
         NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"}, TS3ListingOptions{.MaxResultSet = 1});
     auto expectedResult = NS3Lister::TListResult{MakeLimitExceededError("TTest", 1, 2, 0)};
     const auto& actualResult = actualResultFuture.GetValue();
@@ -165,7 +182,7 @@ Y_UNIT_TEST(IfThereAreMoreRecordsThanSpecifiedByLimitShouldReturnError) {
 }
 
 Y_UNIT_TEST(IfAnyIterationReturnIssueThanWholeStrategyShouldReturnIt) {
-    auto strategy = TCollectingS3ListingStrategy{
+    auto strategy = MakeCollectingS3ListingStrategy(
         [](const NS3Lister::TListingRequest& listingRequest, TS3ListingOptions options) {
             UNIT_ASSERT_VALUES_EQUAL(listingRequest.Prefix, "TEST_INPUT");
             UNIT_ASSERT_VALUES_EQUAL(options.IsPartitionedDataset, false);
@@ -180,9 +197,9 @@ Y_UNIT_TEST(IfAnyIterationReturnIssueThanWholeStrategyShouldReturnIt) {
                             }}},
                     MakeGenericError("TEST_ISSUE")})));
         },
-        "TTest"};
+        "TTest");
 
-    auto actualResultFuture = strategy.List(
+    auto actualResultFuture = strategy->List(
         NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"}, TS3ListingOptions{.MaxResultSet = 1});
     auto expectedResult = NS3Lister::TListResult{MakeGenericError("TEST_ISSUE")};
     const auto& actualResult = actualResultFuture.GetValue();
@@ -190,7 +207,7 @@ Y_UNIT_TEST(IfAnyIterationReturnIssueThanWholeStrategyShouldReturnIt) {
 }
 
 Y_UNIT_TEST(IfExceptionIsReturnedFromIteratorThanItShouldCovertItToIssue) {
-    auto strategy = TCollectingS3ListingStrategy{
+    auto strategy = MakeCollectingS3ListingStrategy(
         [](const NS3Lister::TListingRequest& listingRequest, TS3ListingOptions options) {
             UNIT_ASSERT_VALUES_EQUAL(listingRequest.Prefix, "TEST_INPUT");
             UNIT_ASSERT_VALUES_EQUAL(options.IsPartitionedDataset, false);
@@ -198,9 +215,9 @@ Y_UNIT_TEST(IfExceptionIsReturnedFromIteratorThanItShouldCovertItToIssue) {
             return MakeFuture(std::static_pointer_cast<NS3Lister::IS3Lister>(
                 std::make_shared<TMockS3ExceptionLister>("EXCEPTION MESSAGE")));
         },
-        "TTest"};
+        "TTest");
 
-    auto actualResultFuture = strategy.List(
+    auto actualResultFuture = strategy->List(
         NS3Lister::TListingRequest{.Prefix = "TEST_INPUT"}, TS3ListingOptions{.MaxResultSet = 10});
     UNIT_ASSERT(actualResultFuture.HasValue());
     auto expectedResult = NS3Lister::TListResult{MakeGenericError("EXCEPTION MESSAGE")};

@@ -11,7 +11,7 @@ namespace NYT::NFormats {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <NSkiff::EWireType wireType>
-Y_FORCE_INLINE auto TSimpleSkiffParser<wireType>::operator () (NSkiff::TCheckedInDebugSkiffParser* parser) const
+Y_FORCE_INLINE auto TSimpleSkiffParser<wireType>::operator()(NSkiff::TCheckedInDebugSkiffParser* parser) const
 {
     using namespace NSkiff;
 
@@ -53,7 +53,7 @@ TTzSkiffParser<internalWireType>::TTzSkiffParser()
 }
 
 template <NSkiff::EWireType internalWireType>
-Y_FORCE_INLINE TStringBuf TTzSkiffParser<internalWireType>::operator () (NSkiff::TCheckedInDebugSkiffParser* parser)
+Y_FORCE_INLINE TStringBuf TTzSkiffParser<internalWireType>::operator()(NSkiff::TCheckedInDebugSkiffParser* parser)
 {
     using namespace NSkiff;
     using namespace NTzTypes;
@@ -81,7 +81,7 @@ Y_FORCE_INLINE TStringBuf TTzSkiffParser<internalWireType>::operator () (NSkiff:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <NSkiff::EWireType internalWireType>
-void TTzSkiffWriter<internalWireType>::operator() (TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const
+void TTzSkiffWriter<internalWireType>::operator()(TStringBuf value, NSkiff::TCheckedInDebugSkiffWriter* writer) const
 {
     using namespace NSkiff;
     using namespace NTzTypes;
@@ -123,7 +123,7 @@ TDecimalSkiffParser<SkiffWireType>::TDecimalSkiffParser(int precision)
 }
 
 template <NSkiff::EWireType SkiffWireType>
-Y_FORCE_INLINE TStringBuf TDecimalSkiffParser<SkiffWireType>::operator() (NSkiff::TCheckedInDebugSkiffParser* parser) const
+Y_FORCE_INLINE TStringBuf TDecimalSkiffParser<SkiffWireType>::operator()(NSkiff::TCheckedInDebugSkiffParser* parser) const
 {
     using namespace NSkiff;
     using namespace NDecimal;

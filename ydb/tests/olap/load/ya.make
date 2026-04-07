@@ -3,6 +3,7 @@ PY3TEST()
     TAG(ya:manual)
 
     SIZE(LARGE)
+    REQUIREMENTS(cpu:2)
 
     ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
     ENV(SIMPLE_QUEUE_BINARY="ydb/tests/stress/simple_queue/simple_queue")
@@ -27,6 +28,7 @@ PY3TEST()
         test_clickbench.py
         test_external.py
         test_import_csv.py
+        test_tpcc.py
         test_tpcds.py
         test_tpch.py
         test_upload.py

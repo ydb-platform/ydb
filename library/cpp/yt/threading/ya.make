@@ -6,6 +6,7 @@ SRCS(
     at_fork.cpp
     count_down_latch.cpp
     event_count.cpp
+    execution_stack.cpp
     fork_aware_spin_lock.cpp
     fork_aware_rw_spin_lock.cpp
     futex.cpp

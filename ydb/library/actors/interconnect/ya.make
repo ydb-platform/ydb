@@ -24,6 +24,8 @@ SRCS(
     interconnect.h
     interconnect_handshake.cpp
     interconnect_handshake.h
+    interconnect_host_metrics_aggregator.cpp
+    interconnect_host_metrics_aggregator.h
     interconnect_impl.h
     interconnect_mon.cpp
     interconnect_mon.h
@@ -73,6 +75,7 @@ PEERDIR(
     ydb/library/actors/util
     ydb/library/actors/wilson
     library/cpp/digest/crc32c
+    library/cpp/html/pcdata
     library/cpp/json
     library/cpp/lwtrace
     library/cpp/monlib/dynamic_counters
@@ -99,4 +102,5 @@ RECURSE_FOR_TESTS(
     ut
     ut_fat
     ut_huge_cluster
+    ut_kernel_liveness
 )

@@ -23,7 +23,7 @@ $ goose <DB> <CONNECTION_STRING> <COMMAND> <COMMAND_ARGUMENTS>
 - `<COMMAND>` - команда, которую требуется выполнить. Полный перечень команд доступен во встроенной справке (`goose help`).
 - `<COMMAND_ARGUMENTS>` - аргументы команды.
 
-## Строка подлкючения к {{ ydb-short-name }}
+## Строка подключения к {{ ydb-short-name }}
 
 Для подключения к {{ ydb-short-name }} следует использовать строку подключения вида
 

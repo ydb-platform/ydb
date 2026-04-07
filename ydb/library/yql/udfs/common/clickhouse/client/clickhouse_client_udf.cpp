@@ -37,6 +37,7 @@
 #include "src/Processors/Formats/InputStreamFromInputFormat.h"
 #include "src/Processors/Formats/OutputStreamToOutputFormat.h"
 
+#include <util/datetime/base.h>
 #include <util/generic/size_literals.h>
 #include <util/generic/yexception.h>
 #include <util/string/split.h>
@@ -45,6 +46,7 @@ using namespace NYql;
 using namespace NUdf;
 
 namespace {
+
 struct TPgConvertInfo {
     ui32 TypeId = 0;
     TStringRef TypeName;
@@ -1027,20 +1029,25 @@ class TSerializeFormat : public TBoxedValue {
         using TPartitionByKey = std::vector<TUnboxedValue, TStdAllocatorForUdf<TUnboxedValue>>;
 
         struct TPartitionMapStuff {
-            explicit TPartitionMapStuff(size_t size) : Size(size) {}
+            explicit TPartitionMapStuff(size_t size)
+                : Size(size)
+            {}
 
             bool operator()(const TPartitionByKey& left, const TPartitionByKey& right) const {
-                for (auto i = 0U; i < Size; ++i)
-                    if (left[i].AsStringRef() != right[i].AsStringRef())
+                for (auto i = 0U; i < Size; ++i) {
+                    if (left[i].AsStringRef() != right[i].AsStringRef()) {
                         return false;
+                    }
+                }
 
                 return true;
             }
 
             size_t operator()(const TPartitionByKey& value) const {
                 size_t hash = 0ULL;
-                for (auto i = 0U; i < Size; ++i)
+                for (auto i = 0U; i < Size; ++i) {
                     hash = CombineHashes(hash, std::hash<std::string_view>()(value[i].AsStringRef()));
+                }
                 return hash;
             }
 
@@ -1052,15 +1059,33 @@ class TSerializeFormat : public TBoxedValue {
                 : Block(std::move(block))
             {}
 
+            TInstant CreatedAt = TInstant::Now();
             NDB::Block Block;
             std::unique_ptr<NDB::IBlockOutputStream> OutputStream;
             size_t CurrentFileSize = 0; // Sum of size of blocks that were written to output with this key before closing footer
-            bool hasDataInBlock = false; // We wrote something to block at least once.
+            bool HasDataInBlock = false; // We wrote something to block at least once.
         };
 
         using TPartitionsMap = std::unordered_map<TPartitionByKey, TPartitionByPayload, TPartitionMapStuff, TPartitionMapStuff, TStdAllocatorForUdf<std::pair<const TPartitionByKey, TPartitionByPayload>>>;
+
+        struct TPartitionCreationTime {
+            TPartitionCreationTime(TInstant time, TPartitionsMap::iterator iterator)
+                : Time(time)
+                , Iterator(std::move(iterator))
+            {}
+
+            bool operator<(const TPartitionCreationTime& other) const {
+                // assumes iterator returns stable references
+                return Time < other.Time ||
+                    (Time == other.Time && (uintptr_t)&*Iterator < (uintptr_t)&*other.Iterator);
+            }
+
+            TInstant Time;
+            TPartitionsMap::iterator Iterator;
+        };
+
     public:
-        TStreamValue(const IValueBuilder* valueBuilder, const TUnboxedValue& stream, const std::string& type, const NDB::FormatSettings& settings, const std::vector<ui32>& keysIndexes, const std::vector<ui32>& payloadsIndexes, size_t blockSizeLimit, size_t keysCountLimit, size_t totalSizeLimit, size_t fileSizeLimit, const std::vector<TColumnMeta>& inMeta, const NDB::ColumnsWithTypeAndName& columns, const TSourcePosition& pos)
+        TStreamValue(const IValueBuilder* valueBuilder, const TUnboxedValue& stream, const std::string& type, const NDB::FormatSettings& settings, const std::vector<ui32>& keysIndexes, const std::vector<ui32>& payloadsIndexes, size_t blockSizeLimit, size_t keysCountLimit, size_t totalSizeLimit, size_t fileSizeLimit, TDuration keyFlushTimeout, const std::vector<TColumnMeta>& inMeta, const NDB::ColumnsWithTypeAndName& columns, const TSourcePosition& pos)
             : ValueBuilder(valueBuilder)
             , Stream(stream)
             , InMeta(inMeta)
@@ -1070,6 +1095,7 @@ class TSerializeFormat : public TBoxedValue {
             , KeysCountLimit(keysCountLimit)
             , TotalSizeLimit(totalSizeLimit)
             , FileSizeLimit(fileSizeLimit)
+            , KeyFlushTimeout(keyFlushTimeout)
             , Pos(pos)
             , HeaderBlock(columns)
             , Buffer(std::make_unique<NDB::WriteBufferFromOwnString>())
@@ -1078,44 +1104,54 @@ class TSerializeFormat : public TBoxedValue {
             , PartitionsMap(0ULL, TPartitionMapStuff(KeysIndexes.size()), TPartitionMapStuff(KeysIndexes.size()))
             , Cache(KeysIndexes.size() + 1U)
         {}
+
     private:
+        void EraseKey(const TPartitionsMap::iterator it) {
+            if (KeyFlushTimeout) {
+                PartitionCreationTimes.erase(TPartitionCreationTime(it->second.CreatedAt, it));
+            }
+            PartitionsMap.erase(it);
+        }
+
         bool FlushKey(const TPartitionsMap::iterator it, TUnboxedValue& result, bool finishFile = false) {
-            const size_t currentBlockSize = it->second.Block.bytes();
-            TotalSize -= currentBlockSize;
-            const bool hasDataInFile = it->second.hasDataInBlock || it->second.OutputStream;
-            if (!hasDataInFile) {
+            auto& payload = it->second;
+            auto& block = payload.Block;
+            TotalSize -= block.bytes();
+
+            auto& hasDataInBlock = payload.HasDataInBlock;
+            auto& outputStream = payload.OutputStream;
+            if (!hasDataInBlock && !outputStream) {
+                EraseKey(it);
                 return false;
             }
-            if (!it->second.OutputStream) {
-                it->second.OutputStream = std::make_unique<NDB::OutputStreamToOutputFormat>(NDB::FormatFactory::instance().getOutputFormat(Type, *Buffer, HeaderBlock, nullptr, {}, Settings));
-                it->second.OutputStream->writePrefix();
+
+            if (!outputStream) {
+                outputStream = std::make_unique<NDB::OutputStreamToOutputFormat>(NDB::FormatFactory::instance().getOutputFormat(Type, *Buffer, HeaderBlock, nullptr, {}, Settings));
+                outputStream->writePrefix();
             }
-            if (it->second.hasDataInBlock) {
-                it->second.OutputStream->write(it->second.Block);
+            if (hasDataInBlock) {
+                outputStream->write(block);
             }
-            it->second.CurrentFileSize += Buffer->stringRef().size;
-            if (it->second.CurrentFileSize >= FileSizeLimit) { // Finish current file.
+
+            auto& currentFileSize = payload.CurrentFileSize;
+            currentFileSize += Buffer->stringRef().size;
+            if (currentFileSize >= FileSizeLimit) { // Finish current file.
                 finishFile = true;
             }
 
-            if (finishFile && hasDataInFile) {
-                it->second.OutputStream->writeSuffix(); // Finish current file with optional footer.
-            }
-            it->second.OutputStream->flush();
-
             if (finishFile) {
-                it->second.OutputStream.reset();
-                it->second.CurrentFileSize = 0;
+                outputStream->writeSuffix(); // Finish current file with optional footer.
             }
-            it->second.Block = HeaderBlock.cloneEmpty();
-            it->second.hasDataInBlock = false;
+            outputStream->flush();
+            block = HeaderBlock.cloneEmpty();
+            hasDataInBlock = false;
 
-            std::string& resultString = Buffer->str();
+            const std::string& resultString = Buffer->str();
             bool hasResult = resultString.size() > 0;
             if (hasResult) {
-                if (KeysIndexes.empty())
+                if (KeysIndexes.empty()) {
                     result = ValueBuilder->NewString(resultString);
-                else {
+                } else {
                     TUnboxedValue* tupleItems = nullptr;
                     result = Cache.NewArray(*ValueBuilder, tupleItems);
                     *tupleItems++ = ValueBuilder->NewString(resultString);
@@ -1136,6 +1172,7 @@ class TSerializeFormat : public TBoxedValue {
                     result = FinishCurrentFileValue;
                     hasResult = true;
                 }
+                EraseKey(it);
             }
 
             Buffer->restart();
@@ -1149,22 +1186,38 @@ class TSerializeFormat : public TBoxedValue {
                 return EFetchStatus::Ok;
             }
 
-            if (IsFinished && PartitionsMap.empty())
+            if (IsFinished && PartitionsMap.empty()) {
                 return EFetchStatus::Finish;
+            }
 
             for (TUnboxedValue row; !IsFinished;) {
                 switch (const auto status = Stream.Fetch(row)) {
-                    case EFetchStatus::Yield:
+                    case EFetchStatus::Yield: {
+                        if (KeyFlushTimeout) {
+                            const auto now = TInstant::Now();
+                            while (!PartitionCreationTimes.empty() && PartitionCreationTimes.cbegin()->Time + KeyFlushTimeout < now) {
+                                if (FlushKey(PartitionCreationTimes.cbegin()->Iterator, result, true)) {
+                                    return EFetchStatus::Ok;
+                                }
+                            }
+                        }
                         return EFetchStatus::Yield;
+                    }
                     case EFetchStatus::Ok: {
                         TPartitionByKey keys(KeysIndexes.size());
-                        for (auto i = 0U; i < keys.size(); ++i)
+                        for (auto i = 0U; i < keys.size(); ++i) {
                             keys[i] = row.GetElement(KeysIndexes[i]);
+                        }
 
                         const auto [partIt, insertedNew] = PartitionsMap.emplace(std::move(keys), HeaderBlock.cloneEmpty());
 
-                        if (insertedNew && PartitionsMap.size() > KeysCountLimit) {
-                            UdfTerminate((TStringBuilder() << ValueBuilder->WithCalleePosition(Pos) << " Too many unique keys: " << PartitionsMap.size()).data());
+                        if (insertedNew) {
+                            if (PartitionsMap.size() > KeysCountLimit) {
+                                UdfTerminate((TStringBuilder() << ValueBuilder->WithCalleePosition(Pos) << " Too many unique keys: " << PartitionsMap.size()).data());
+                            }
+                            if (KeyFlushTimeout) {
+                                Y_ABORT_UNLESS(PartitionCreationTimes.emplace(partIt->second.CreatedAt, partIt).second);
+                            }
                         }
 
                         bool flush = !insertedNew && partIt->second.Block.bytes() >= BlockSizeLimit;
@@ -1182,7 +1235,7 @@ class TSerializeFormat : public TBoxedValue {
 
                         TotalSize -= partIt->second.Block.bytes();
                         auto columns = partIt->second.Block.mutateColumns();
-                        partIt->second.hasDataInBlock = true;
+                        partIt->second.HasDataInBlock = true;
                         for (auto i = 0U; i < columns.size(); ++i) {
                             const auto index = PayloadsIndexes[i];
                             ConvertInputValue(row.GetElement(index), columns[i].get(), InMeta[index]);
@@ -1190,33 +1243,32 @@ class TSerializeFormat : public TBoxedValue {
                         partIt->second.Block.setColumns(std::move(columns));
                         TotalSize += partIt->second.Block.bytes();
 
-                        if (flush)
+                        if (flush) {
                             return EFetchStatus::Ok;
-                        else
-                            continue;
+                        }
+
+                        break;
                     }
-                    case EFetchStatus::Finish:
+                    case EFetchStatus::Finish: {
                         IsFinished = true;
                         break;
+                    }
                 }
             }
 
-            if (PartitionsMap.empty() && !FinishCurrentFileFlag)
+            if (PartitionsMap.empty() && !FinishCurrentFileFlag) {
                 return EFetchStatus::Finish;
+            }
 
             while (!PartitionsMap.empty()) {
-                const bool hasResult = FlushKey(PartitionsMap.begin(), result, true);
-                PartitionsMap.erase(PartitionsMap.cbegin());
-                if (hasResult) {
+                if (FlushKey(PartitionsMap.begin(), result, true)) {
                     return EFetchStatus::Ok;
                 }
             }
             return EFetchStatus::Finish;
-        }
-        catch (const Poco::Exception& e) {
+        } catch (const Poco::Exception& e) {
             UdfTerminate((TStringBuilder() << ValueBuilder->WithCalleePosition(Pos) << " " << e.displayText()).data());
-        }
-        catch (const std::exception& e) {
+        } catch (const std::exception& e) {
             UdfTerminate((TStringBuilder() << ValueBuilder->WithCalleePosition(Pos) << " " << e.what()).data());
         }
 
@@ -1229,6 +1281,7 @@ class TSerializeFormat : public TBoxedValue {
         const size_t KeysCountLimit;
         const size_t TotalSizeLimit;
         const size_t FileSizeLimit;
+        const TDuration KeyFlushTimeout;
         const TSourcePosition Pos;
         TUnboxedValue FinishCurrentFileValue;
         bool FinishCurrentFileFlag = false;
@@ -1239,26 +1292,38 @@ class TSerializeFormat : public TBoxedValue {
         const std::string Type;
 
         TPartitionsMap PartitionsMap;
+        std::set<TPartitionCreationTime> PartitionCreationTimes;
 
         TPlainArrayCache Cache;
 
         bool IsFinished = false;
         size_t TotalSize = 0ULL;
     };
+
 public:
-    TSerializeFormat(const std::string_view& type, const std::string_view& settings, std::vector<ui32>&& keysIndexes, std::vector<ui32>&& payloadsIndexes, size_t blockSizeLimit, size_t keysCountLimit, size_t totalSizeLimit, size_t fileSizeLimit, const TSourcePosition& pos, std::vector<TColumnMeta>&& inMeta, NDB::ColumnsWithTypeAndName&& columns)
-        : Type(type), Settings(GetFormatSettings(settings)), KeysIndexes(std::move(keysIndexes)), PayloadsIndexes(std::move(payloadsIndexes)), BlockSizeLimit(blockSizeLimit), KeysCountLimit(keysCountLimit), TotalSizeLimit(totalSizeLimit), FileSizeLimit(fileSizeLimit), Pos(pos), InMeta(std::move(inMeta)), Columns(std::move(columns))
+    TSerializeFormat(const std::string_view& type, const std::string_view& settings, std::vector<ui32>&& keysIndexes, std::vector<ui32>&& payloadsIndexes, size_t blockSizeLimit, size_t keysCountLimit, size_t totalSizeLimit, size_t fileSizeLimit, TDuration keyFlushTimeout, const TSourcePosition& pos, std::vector<TColumnMeta>&& inMeta, NDB::ColumnsWithTypeAndName&& columns)
+        : Type(type)
+        , Settings(GetFormatSettings(settings))
+        , KeysIndexes(std::move(keysIndexes))
+        , PayloadsIndexes(std::move(payloadsIndexes))
+        , BlockSizeLimit(blockSizeLimit)
+        , KeysCountLimit(keysCountLimit)
+        , TotalSizeLimit(totalSizeLimit)
+        , FileSizeLimit(fileSizeLimit)
+        , KeyFlushTimeout(keyFlushTimeout)
+        , Pos(pos)
+        , InMeta(std::move(inMeta))
+        , Columns(std::move(columns))
     {}
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final try {
-        return TUnboxedValuePod(new TStreamValue(valueBuilder, *args, Type, Settings, KeysIndexes, PayloadsIndexes, BlockSizeLimit, KeysCountLimit, TotalSizeLimit, FileSizeLimit, InMeta, Columns, Pos));
-    }
-    catch (const Poco::Exception& e) {
+        return TUnboxedValuePod(new TStreamValue(valueBuilder, *args, Type, Settings, KeysIndexes, PayloadsIndexes, BlockSizeLimit, KeysCountLimit, TotalSizeLimit, FileSizeLimit, KeyFlushTimeout, InMeta, Columns, Pos));
+    } catch (const Poco::Exception& e) {
         UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos) << " " << e.displayText()).data());
-    }
-    catch (const std::exception& e) {
+    } catch (const std::exception& e) {
         UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos) << " " << e.what()).data());
     }
+
 private:
     const std::string Type;
     const NDB::FormatSettings Settings;
@@ -1268,6 +1333,7 @@ private:
     const size_t KeysCountLimit;
     const size_t TotalSizeLimit;
     const size_t FileSizeLimit;
+    const TDuration KeyFlushTimeout;
     const TSourcePosition Pos;
 
     const std::vector<TColumnMeta> InMeta;
@@ -1404,10 +1470,9 @@ SIMPLE_UDF(TToYqlType, TOptional<TUtf8>(TUtf8, TUtf8)) {
     return TUnboxedValue();
 }
 
-}
+} // anonymous namespace
 
-class TClickHouseClientModule : public IUdfModule
-{
+class TClickHouseClientModule : public IUdfModule {
 public:
     TClickHouseClientModule() = default;
 
@@ -1426,12 +1491,7 @@ public:
         sink.Add(TStringRef::Of("SerializeFormat"))->SetTypeAwareness();
     }
 
-    void BuildFunctionTypeInfo(
-                        const TStringRef& name,
-                        TType* userType,
-                        const TStringRef& typeConfig,
-                        ui32 flags,
-                        IFunctionTypeInfoBuilder& builder) const final try {
+    void BuildFunctionTypeInfo(const TStringRef& name, TType* userType, const TStringRef& typeConfig, ui32 flags, IFunctionTypeInfoBuilder& builder) const final try {
         LazyInitContext();
         auto argBuilder = builder.Args();
         if (name == "ToYqlType") {
@@ -1615,6 +1675,7 @@ public:
             size_t keysCountLimit = 4096;
             size_t totalSizeLimit = 10_MB;
             size_t fileSizeLimit = 50_MB;
+            TDuration keyFlushTimeout;
             if (!tail.empty()) {
                 const std::string str(tail);
                 const JSON json(str);
@@ -1635,18 +1696,22 @@ public:
                 if (json.has("file_size_limit")) {
                     fileSizeLimit = FromString(TStringBuf(json["file_size_limit"].getString()));
                 }
+                if (json.has("key_flush_timeout_ms")) {
+                    keyFlushTimeout = TDuration::MilliSeconds(FromString<ui64>(TStringBuf(json["key_flush_timeout_ms"].getString())));
+                }
             }
             blockSizeLimit = Min(blockSizeLimit, fileSizeLimit);
 
             builder.UserType(userType);
             builder.Args()->Add(inputType).Done();
-            if (keys.empty())
+            if (keys.empty()) {
                 builder.Returns(builder.Stream()->Item(builder.Optional()->Item<const char*>()));
-            else {
+            } else {
                 const auto tuple = builder.Tuple();
                 tuple->Add(builder.Optional()->Item<const char*>());
-                for (auto k =0U; k < keys.size(); ++k)
+                for (size_t k = 0; k < keys.size(); ++k) {
                     tuple->Add<TUtf8>();
+                }
                 builder.Returns(builder.Stream()->Item(tuple->Build()));
             }
 
@@ -1679,7 +1744,7 @@ public:
                 }
 
                 if (!(flags & TFlags::TypesOnly)) {
-                    builder.Implementation(new TSerializeFormat(typeCfg.substr(0U, jsonFrom), tail, std::move(keyIndexes), std::move(payloadIndexes), blockSizeLimit, keysCountLimit, totalSizeLimit, fileSizeLimit, builder.GetSourcePosition(), std::move(inMeta), std::move(columns)));
+                    builder.Implementation(new TSerializeFormat(typeCfg.substr(0U, jsonFrom), tail, std::move(keyIndexes), std::move(payloadIndexes), blockSizeLimit, keysCountLimit, totalSizeLimit, fileSizeLimit, keyFlushTimeout, builder.GetSourcePosition(), std::move(inMeta), std::move(columns)));
                 }
                 return;
             } else {
@@ -1722,13 +1787,12 @@ public:
                 return builder.SetError(sb);
             }
         }
-    }
-    catch (const Poco::Exception& e) {
+    } catch (const Poco::Exception& e) {
         builder.SetError(e.displayText());
-    }
-    catch (const std::exception& e) {
+    } catch (const std::exception& e) {
         builder.SetError(TStringBuf(e.what()));
     }
+
 private:
     void LazyInitContext() const {
         const std::unique_lock lock(CtxMutex);

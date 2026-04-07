@@ -136,8 +136,6 @@ void ValidateLogicalType(
 // or it is optional<A> where A is any type otherwise it's true.
 std::pair<ESimpleLogicalValueType, bool> CastToV1Type(const TLogicalTypePtr& logicalType);
 
-EValueType GetWireType(const TLogicalTypePtr& logicalType);
-
 // Return true if given type is pure v1 type
 // (i.e. expressible with `type` and `required` fields in schema).
 bool IsV1Type(const TLogicalTypePtr& logicalType);

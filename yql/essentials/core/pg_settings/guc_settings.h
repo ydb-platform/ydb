@@ -12,7 +12,7 @@
 class TGUCSettings {
 public:
     TGUCSettings() = default;
-    TGUCSettings(const TString& serialized);
+    explicit TGUCSettings(const TString& serialized);
 
     using TPtr = std::shared_ptr<TGUCSettings>;
     void Setup(const std::unordered_map<std::string, std::string>& runtimeSettings);

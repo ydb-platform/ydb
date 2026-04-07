@@ -6,15 +6,17 @@
 
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 
+#include <utility>
+
 namespace NYql {
 
 using namespace NNodes;
 
 class TPgDataSourceTypeAnnotationTransformer: public TVisitorTransformerBase {
 public:
-    TPgDataSourceTypeAnnotationTransformer(TPgState::TPtr state)
+    explicit TPgDataSourceTypeAnnotationTransformer(TPgState::TPtr state)
         : TVisitorTransformerBase(true)
-        , State_(state)
+        , State_(std::move(state))
     {
         using TSelf = TPgDataSourceTypeAnnotationTransformer;
         AddHandler({TPgReadTable::CallableName()}, Hndl(&TSelf::HandleReadTable));
@@ -107,7 +109,7 @@ public:
 
         auto tableName = input->Child(TNode::idx_Table)->Content();
         TVector<const TItemExprType*> items;
-        auto columnsPtr = NPg::GetStaticColumns().FindPtr(NPg::TTableInfoKey{cluster, TString(tableName)});
+        auto columnsPtr = NPg::GetStaticColumns().FindPtr(NPg::TTableInfoKey{.Schema = cluster, .Name = TString(tableName)});
         if (!columnsPtr) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TPgReadTable::idx_Table)->Pos()), TStringBuilder() << "Unsupported table: " << tableName));
             return TStatus::Error;
@@ -117,7 +119,7 @@ public:
             AddColumn(items, ctx, c.Name, c.UdtType);
         }
 
-        const auto relKind = NPg::LookupStaticTable(NPg::TTableInfoKey{cluster, TString(tableName)}).Kind;
+        const auto relKind = NPg::LookupStaticTable(NPg::TTableInfoKey{.Schema = cluster, .Name = TString(tableName)}).Kind;
         if (relKind == NPg::ERelKind::Relation) {
             AddSystemColumn(items, ctx, "tableoid", "oid");
             AddSystemColumn(items, ctx, "xmin", "xid");

@@ -6,11 +6,12 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(0.2.7)
+VERSION(0.2.9)
 
-ORIGINAL_SOURCE(https://github.com/awslabs/aws-checksums/archive/v0.2.7.tar.gz)
+ORIGINAL_SOURCE(https://github.com/awslabs/aws-checksums/archive/v0.2.9.tar.gz)
 
 PEERDIR(
+    contrib/libs/xxhash
     contrib/restricted/aws/aws-c-common
 )
 
@@ -35,7 +36,9 @@ SRCS(
     source/crc64.c
     source/crc64_sw.c
     source/crc_sw.c
+    source/crc_util.c
     source/intel/asm/crc32c_sse42_asm.c
+    source/xxhash.c
 )
 
 IF (ARCH_X86_64)

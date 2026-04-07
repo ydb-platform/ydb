@@ -1,5 +1,4 @@
 #include <util/generic/string.h>
-#include <util/random/random.h>
 #include <util/string/builder.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/library/actors/http/http.h>
@@ -16,7 +15,7 @@ TContext::TContext(const TInitializer& initializer)
 {}
 
 TContext::TContext(const NHttp::THttpIncomingRequestPtr& request)
-    : State(GenerateState())
+    : State(GenerateRandomBase64())
     , AjaxRequest(DetectAjaxRequest(request))
     , RequestedAddress(GetRequestedUrl(request, AjaxRequest))
 {}
@@ -59,15 +58,6 @@ TString TContext::GenerateCookie(const TString& key) const {
     signedRequestedAddress << "{\"requested_address_context\":\"" << Base64Encode(requestedAddressContext)
                            << "\",\"digest\":\"" << Base64Encode(digest) << "\"}";
     return Base64Encode(signedRequestedAddress);
-}
-
-TString TContext::GenerateState() {
-    TStringBuilder sb;
-    static constexpr size_t CHAR_NUMBER = 15;
-    for (size_t i{0}; i < CHAR_NUMBER; i++) {
-        sb << RandomNumber<char>();
-    }
-    return Base64EncodeUrlNoPadding(sb);
 }
 
 bool TContext::DetectAjaxRequest(const NHttp::THttpIncomingRequestPtr& request) {

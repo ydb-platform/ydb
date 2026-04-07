@@ -1,8 +1,9 @@
+#include "kafka_transaction_actor_sql.h"
 #include <util/generic/string.h>
 
 namespace NKafka::NKafkaTransactionSql {
 
-    TString SELECT_FOR_VALIDATION_WITHOUT_CONSUMERS = R"sql(
+    const TString SELECT_FOR_VALIDATION_WITHOUT_CONSUMERS = R"sql(
         --!syntax_v1
         DECLARE $Database AS Utf8;
         DECLARE $TransactionalId AS Utf8;
@@ -12,7 +13,7 @@ namespace NKafka::NKafkaTransactionSql {
         AND transactional_id = $TransactionalId;
     )sql";
 
-    TString SELECT_FOR_VALIDATION_WITH_CONSUMERS = R"sql(
+    const TString SELECT_FOR_VALIDATION_WITH_CONSUMERS = R"sql(
         --!syntax_v1
         DECLARE $Database AS Utf8;
         DECLARE $TransactionalId AS Utf8;

@@ -88,10 +88,9 @@ public:
 
 class TKqpTranslationSettingsBuilder {
 public:
-    TKqpTranslationSettingsBuilder(NYql::EKikimrQueryType queryType, ui16 kqpYqlSyntaxVersion, const TString& cluster,
+    TKqpTranslationSettingsBuilder(NYql::EKikimrQueryType queryType, const TString& cluster,
             const TString& queryText, const NSQLTranslation::EBindingsMode& bindingsMode, const TGUCSettings::TPtr& gUCSettings)
         : QueryType(queryType)
-        , KqpYqlSyntaxVersion(kqpYqlSyntaxVersion)
         , Cluster(cluster)
         , QueryText(queryText)
         , BindingsMode(bindingsMode)
@@ -165,9 +164,14 @@ public:
         return IsAmbiguityError;
     }
 
+    TKqpTranslationSettingsBuilder& SetYqlSelect(TMaybe<NSQLTranslation::EYqlSelect> yqlSelect) {
+        YqlSelect = yqlSelect;
+        return *this;
+    }
+
 private:
     const NYql::EKikimrQueryType QueryType;
-    const ui16 KqpYqlSyntaxVersion;
+    ui16 KqpYqlSyntaxVersion = 1;
     const TString Cluster;
     const TString QueryText;
     const NSQLTranslation::EBindingsMode BindingsMode;
@@ -185,9 +189,8 @@ private:
     NYql::TLangVersion LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
     bool IsAmbiguityError = false;
+    TMaybe<NSQLTranslation::EYqlSelect> YqlSelect = {};
 };
-
-NSQLTranslation::EBindingsMode RemapBindingsMode(NKikimrConfig::TTableServiceConfig::EBindingsMode mode);
 
 NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type);
 

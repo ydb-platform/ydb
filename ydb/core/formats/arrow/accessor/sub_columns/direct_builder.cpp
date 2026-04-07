@@ -6,12 +6,7 @@
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 
-#include <contrib/libs/simdjson/include/simdjson/dom/array-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/document-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/element-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/object-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/parser-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/ondemand.h>
+#include <contrib/libs/simdjson/include/simdjson.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 

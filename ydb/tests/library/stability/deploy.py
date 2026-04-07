@@ -1,13 +1,15 @@
 from collections import defaultdict
+import random
 import allure
 import logging
 import os
 import time as time_module
+from typing import Optional
 import yatest.common
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from ydb.tests.library.stability.utils.collect_errors import create_cluster_issue
-from ydb.tests.library.stability.utils.remote_execution import copy_file, execute_command, deploy_binaries_to_hosts
+from ydb.tests.library.stability.utils.remote_execution import patch_max_suffix, copy_file, execute_command, deploy_binaries_to_hosts
 from ydb.tests.library.stability.utils.upload_results import test_event_report
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.library.stability.utils.results_models import StressUtilDeployResult
@@ -25,6 +27,7 @@ class StressUtilDeployer:
         self.cluster_path = cluster_path
         self.yaml_config = yaml_config
         self.nodes = YdbCluster.get_cluster_nodes()
+        patch_max_suffix(1000000)
 
         # Collect unique hosts and their corresponding nodes
         unique_hosts = set(node.host for node in self.nodes)
@@ -33,7 +36,7 @@ class StressUtilDeployer:
     def prepare_stress_execution(
         self,
         workload_params: dict,
-        nodes_percentage: int = 100,
+        nodes_percentage: Optional[int] = None,
     ):
         """
         PHASE 1: Prepare for workload execution
@@ -121,7 +124,7 @@ class StressUtilDeployer:
                     processed_binaries[workload_info['local_path']].append(workload_name)
                     deploy_futures.append(
                         (
-                            tpe.submit(self._deploy_workload_binary, workload_name, workload_info['local_path'], nodes_percentage),
+                            tpe.submit(self._deploy_workload_binary, workload_name, workload_info['local_path'], nodes_percentage or workload_info.get('nodes_percentage', 1)),
                             workload_name,
                             workload_info['local_path'],
                         )
@@ -202,8 +205,7 @@ class StressUtilDeployer:
                 num_nodes = max(
                     1, int(
                         len(unique_nodes) * nodes_percentage / 100))
-
-                selected_nodes = unique_nodes[:num_nodes]
+                selected_nodes = random.sample(unique_nodes, num_nodes)
 
                 allure.attach(
                     f"Selected {

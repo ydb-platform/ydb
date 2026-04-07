@@ -87,7 +87,7 @@ void TPDisk::InitSysLogger() {
     SysLogger.Reset(new TSysLogWriter(Mon, *BlockDevice.Get(), Format,
         SysLogRecord.Nonces.Value[NonceSysLog], Format.SysLogKey, BufferPool.Get(),
         beginSectorIdx, endSectorIdx, Format.MagicSysLogChunk, 0, nullptr, writeSectorIdx, nullptr, PCtx,
-        &DriveModel, Cfg->EnableSectorEncryption));
+        &DriveModel, Cfg->FeatureFlags.GetEnablePDiskDataEncryption(), {}));
 }
 
 bool TPDisk::InitCommonLogger() {
@@ -106,7 +106,7 @@ bool TPDisk::InitCommonLogger() {
     CommonLogger.Reset(new TLogWriter(Mon, *BlockDevice.Get(), Format,
             SysLogRecord.Nonces.Value[NonceLog], Format.LogKey, BufferPool.Get(), 0, UsableSectorsPerLogChunk(),
             Format.MagicLogChunk, chunkIdx, info, std::min(sectorIdx, UsableSectorsPerLogChunk()),
-            InitialTailBuffer, PCtx, &DriveModel, Cfg->EnableSectorEncryption));
+            InitialTailBuffer, PCtx, &DriveModel, Cfg->FeatureFlags.GetEnablePDiskDataEncryption(), {}));
     InitialTailBuffer = nullptr;
     if (sectorIdx >= UsableSectorsPerLogChunk()) {
         if (!AllocateLogChunks(1, 0, OwnerSystem, 0, EOwnerGroupType::Static, true)) {
@@ -1522,7 +1522,7 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
         ui32 dataChunkSizeSectors = Format.ChunkSize / Format.SectorSize;
         TLogWriter writer(Mon, *BlockDevice.Get(), Format, nonce, Format.LogKey, BufferPool.Get(), desiredSectorIdx,
                 dataChunkSizeSectors, Format.MagicLogChunk, req.GapStart->ChunkIdx, nullptr, desiredSectorIdx,
-                nullptr, PCtx, &DriveModel, Cfg->EnableSectorEncryption);
+                nullptr, PCtx, &DriveModel, Cfg->FeatureFlags.GetEnablePDiskDataEncryption(), {});
 
         Y_VERIFY_S(req.GapEnd->DesiredPrevChunkLastNonce, PCtx->PDiskLogPrefix
             << "Zero GapEnd->DesiredPrevChunkLastNonce, chunkInfo# " << *req.GapEnd);
@@ -1716,11 +1716,22 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                 }
             }
 
-            // Increase Nonces to prevent collisions
-            NPrivate::TMersenne64 randGen(Seed());
             do {
+                // chances that after restart we get the same random number are very low,
+                // but not zero. We don't want to restart PDisk many times and test
+                // this part and the rest with some probability, so we force seed to get
+                // the same random number (and hence nonces) between PDisk restarts
+                ui64 randNum;
+                if (!Cfg->NonceRandNum.has_value()) {
+                    NPrivate::TMersenne64 randGen(Seed());
+                    randNum = randGen.GenRand();
+                } else {
+                    randNum = *Cfg->NonceRandNum;
+                }
+
+                // Increase Nonces to prevent collisions
                 for (ui32 i = 0; i < NonceCount; ++i) {
-                    SysLogRecord.Nonces.Value[i] += ForceLogNonceDiff.Value[i] + 1 + randGen.GenRand() % ForceLogNonceDiff.Value[i];
+                    SysLogRecord.Nonces.Value[i] += ForceLogNonceDiff.Value[i] + 1 + randNum % ForceLogNonceDiff.Value[i];
                 }
             } while (SysLogRecord.Nonces.Value[NonceLog] <= InitialPreviousNonce);
             InitSysLogger();

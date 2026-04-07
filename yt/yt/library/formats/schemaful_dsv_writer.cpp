@@ -154,9 +154,9 @@ private:
                 }
             }
             WriteRaw(Config_->RecordSeparator);
-            TryFlushBuffer(false);
+            MaybeFlushBuffer(/*force*/ false);
         }
-        TryFlushBuffer(true);
+        MaybeFlushBuffer(/*force*/ true);
     }
 
     void WriteRaw(TStringBuf str)
@@ -184,6 +184,8 @@ public:
         : TSchemafulDsvWriterBase(
             config,
             IdToIndexInRow)
+        // XXX(babenko): this leads to unexpected context switches and must be
+        // completely reworked.
         , Output_(CreateBufferedSyncAdapter(stream))
     {
         WriteColumnNamesHeader([this] (TStringBuf buf, char c) {
@@ -194,8 +196,8 @@ public:
 
     TFuture<void> Close() override
     {
-        DoFlushBuffer();
-        return VoidFuture;
+        Output_->Finish();
+        return OKFuture;
     }
 
     bool Write(TRange<TUnversionedRow> rows) override
@@ -238,7 +240,7 @@ public:
             }
             Output_->Write(Config_->RecordSeparator);
         }
-        DoFlushBuffer();
+        Output_->Flush();
 
         return true;
     }
@@ -254,13 +256,9 @@ public:
     }
 
 private:
-    std::unique_ptr<IOutputStream> Output_;
+    const std::unique_ptr<IOutputStream> Output_;
 
-    void DoFlushBuffer()
-    {
-        Output_->Flush();
-    }
-
+    // XXX(babenko): is not actually used
     TFuture<void> Result_;
 };
 

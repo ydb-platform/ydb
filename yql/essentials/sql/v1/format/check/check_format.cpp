@@ -13,20 +13,24 @@
 
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 namespace NSQLFormat {
 
-bool Validate(const NYql::TAstParseResult& result, NYql::TIssues& issues) {
-    const auto isError = [](const auto& issue) {
-        return issue.GetSeverity() <= NYql::TSeverityIds::S_ERROR;
-    };
+bool Validate(
+    const NYql::TAstNode* original,
+    const NYql::TAstParseResult& formatted,
+    NYql::TIssues& issues)
+{
+    const bool originalIsOk = static_cast<bool>(original);
 
-    if (!result.Issues.Empty() && AnyOf(result.Issues, isError)) {
-        return false;
-    }
-
-    if (!result.IsOk()) {
-        issues.AddIssue("No error reported, but no yql compiled result!");
+    if (originalIsOk != formatted.IsOk()) {
+        issues.AddIssue(
+            TStringBuilder()
+            << "Formatter changed semantics: "
+            << "original was " << (originalIsOk ? "OK" : "BAD")
+            << ", but "
+            << "formatted is " << (formatted.IsOk() ? "OK" : "BAD"));
         return false;
     }
 
@@ -35,9 +39,10 @@ bool Validate(const NYql::TAstParseResult& result, NYql::TIssues& issues) {
 
 TMaybe<TString> CheckedFormat(
     const TString& query,
+    const NYql::TAstNode* ast,
     const NSQLTranslation::TTranslationSettings& settings,
     NYql::TIssues& issues,
-    bool isIdempotencyChecked)
+    EConvergenceRequirement convergence)
 {
     NSQLTranslationV1::TLexers lexers = {
         .Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory(),
@@ -61,30 +66,46 @@ TMaybe<TString> CheckedFormat(
         return Nothing();
     }
 
-    NYql::TAstParseResult expectedYQLs = NSQLTranslation::SqlToYql(translators, query, settings);
-    if (!Validate(expectedYQLs, issues)) {
-        return Nothing();
-    }
-
+    const NYql::TAstNode* expectedYQLs = ast;
     NYql::TAstParseResult formattedYQLs = NSQLTranslation::SqlToYql(translators, formatted, settings);
-    if (!Validate(formattedYQLs, issues)) {
+    if (!Validate(expectedYQLs, formattedYQLs, issues)) {
         return Nothing();
     }
 
-    const auto printFlags = NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote;
+    if (expectedYQLs && formattedYQLs.IsOk()) {
+        const auto printFlags = NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote;
 
-    TStringStream formattedYQLsText;
-    formattedYQLs.Root->PrettyPrintTo(formattedYQLsText, printFlags);
+        TStringStream formattedYQLsText;
+        formattedYQLs.Root->PrettyPrintTo(formattedYQLsText, printFlags);
 
-    TStringStream expectedYQLsText;
-    expectedYQLs.Root->PrettyPrintTo(expectedYQLsText, printFlags);
+        TStringStream expectedYQLsText;
+        expectedYQLs->PrettyPrintTo(expectedYQLsText, printFlags);
 
-    if (expectedYQLsText.Str() != formattedYQLsText.Str()) {
-        issues.AddIssue("Source query's AST and formatted query's AST are not same");
-        return Nothing();
+        if (expectedYQLsText.Str() != formattedYQLsText.Str()) {
+            issues.AddIssue("Source query's AST and formatted query's AST are not same");
+            return Nothing();
+        }
     }
 
-    if (isIdempotencyChecked) {
+    if (convergence == EConvergenceRequirement::Triple) {
+        TString formatted2;
+        if (!formatter->Format(formatted, formatted2, issues)) {
+            return Nothing();
+        }
+
+        TString formatted3;
+        if (!formatter->Format(formatted2, formatted3, issues)) {
+            return Nothing();
+        }
+
+        if (formatted2 != formatted3) {
+            issues.AddIssue(
+                TStringBuilder()
+                << "Triple formatting check failed. "
+                << "Formatting a doubly formatted query yielded a different result.");
+            return Nothing();
+        }
+    } else if (convergence == EConvergenceRequirement::Double) {
         TString formatted2;
         if (!formatter->Format(formatted, formatted2, issues)) {
             return Nothing();
@@ -93,6 +114,7 @@ TMaybe<TString> CheckedFormat(
         if (formatted != formatted2) {
             issues.AddIssue(
                 TStringBuilder()
+                << "Double formatting check failed. "
                 << "Formatting an already formatted query yielded a different result. "
                 << "Add /* skip double format */ to suppress");
             return Nothing();

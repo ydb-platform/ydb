@@ -58,11 +58,17 @@ enum class EBackupFileType : unsigned char {
     // Replication
     AsyncReplicationCreate = 10,
 
+    // Transfer
+    TransferCreate = 10,
+
     // External data source
     ExternalDataSourceCreate = 10,
 
     // External table
     ExternalTableCreate = 10,
+
+    // System view
+    SysViewDescription = 10,
 };
 
 struct TEncryptionIV {

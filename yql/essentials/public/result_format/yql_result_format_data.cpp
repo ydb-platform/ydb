@@ -110,7 +110,7 @@ public:
 
 class TOptionalProcessor: public IDataProcessor {
 public:
-    TOptionalProcessor(std::unique_ptr<IDataProcessor>&& inner)
+    explicit TOptionalProcessor(std::unique_ptr<IDataProcessor>&& inner)
         : Inner_(std::move(inner))
     {
     }
@@ -135,7 +135,7 @@ private:
 
 class TListProcessor: public IDataProcessor {
 public:
-    TListProcessor(std::unique_ptr<IDataProcessor>&& inner)
+    explicit TListProcessor(std::unique_ptr<IDataProcessor>&& inner)
         : Inner_(std::move(inner))
     {
     }
@@ -158,7 +158,7 @@ private:
 
 class TTupleProcessor: public IDataProcessor {
 public:
-    TTupleProcessor(TVector<std::unique_ptr<IDataProcessor>>&& inners)
+    explicit TTupleProcessor(TVector<std::unique_ptr<IDataProcessor>>&& inners)
         : Inners_(std::move(inners))
     {
     }
@@ -182,7 +182,7 @@ private:
 
 class TStructProcessor: public IDataProcessor {
 public:
-    TStructProcessor(TVector<std::unique_ptr<IDataProcessor>>&& inners)
+    explicit TStructProcessor(TVector<std::unique_ptr<IDataProcessor>>&& inners)
         : Inners_(std::move(inners))
     {
     }
@@ -237,7 +237,7 @@ private:
 
 class TVariantProcessor: public IDataProcessor {
 public:
-    TVariantProcessor(TVector<std::unique_ptr<IDataProcessor>>&& inners)
+    explicit TVariantProcessor(TVector<std::unique_ptr<IDataProcessor>>&& inners)
         : Inners_(std::move(inners))
     {
     }
@@ -508,19 +508,19 @@ public:
         Stack_.push_back(std::make_unique<TDictProcessor>(std::move(innerKey), std::move(innerPayload)));
     }
 
-    void OnBeginVariant() {
+    void OnBeginVariant() override {
         IsVariant_.push_back(true);
     }
 
-    void OnEndVariant() {
+    void OnEndVariant() override {
         IsVariant_.pop_back();
     }
 
-    void OnBeginTagged(TStringBuf tag) {
+    void OnBeginTagged(TStringBuf tag) override {
         Y_UNUSED(tag);
     }
 
-    void OnEndTagged() {
+    void OnEndTagged() override {
     }
 
     void OnPg(TStringBuf name, TStringBuf category) final {

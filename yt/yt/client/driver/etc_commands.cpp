@@ -458,7 +458,7 @@ void TExecuteBatchCommand::DoExecute(ICommandContextPtr context)
         callbacks.push_back(BIND(&TRequestExecutor::Run, executor));
     }
 
-    auto results = WaitFor(RunWithBoundedConcurrency(std::move(callbacks), Options.Concurrency))
+    auto results = WaitFor(CancelableRunWithBoundedConcurrency(std::move(callbacks), Options.Concurrency))
         .ValueOrThrow();
 
     ProduceSingleOutput(context, "results", [&] (NYson::IYsonConsumer* consumer) {

@@ -26,10 +26,10 @@ TResponseWriterMock::TResponseWriterMock()
     ON_CALL(*this, GetTrailers()).WillByDefault(::testing::ReturnRef(Trailers));
 
     ON_CALL(*this, GetStatus()).WillByDefault(::testing::Return(std::make_optional(EStatusCode::InternalServerError)));
-    ON_CALL(*this, Write(::testing::_)).WillByDefault(::testing::Return(VoidFuture));
-    ON_CALL(*this, WriteBody(::testing::_)).WillByDefault(::testing::Return(VoidFuture));
-    ON_CALL(*this, Flush()).WillByDefault(::testing::Return(VoidFuture));
-    ON_CALL(*this, Close()).WillByDefault(::testing::Return(VoidFuture));
+    ON_CALL(*this, Write(::testing::_)).WillByDefault(::testing::Return(OKFuture));
+    ON_CALL(*this, WriteBody(::testing::_)).WillByDefault(::testing::Return(OKFuture));
+    ON_CALL(*this, Flush()).WillByDefault(::testing::Return(OKFuture));
+    ON_CALL(*this, Close()).WillByDefault(::testing::Return(OKFuture));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

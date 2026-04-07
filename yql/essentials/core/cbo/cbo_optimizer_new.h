@@ -9,6 +9,7 @@
 #include <memory>
 #include <map>
 #include <sstream>
+#include <utility>
 
 #include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
 
@@ -35,7 +36,7 @@ public:
     EOptimizerNodeKind Kind;
     TOptimizerStatistics Stats;
 
-    IBaseOptimizerNode(EOptimizerNodeKind k)
+    explicit IBaseOptimizerNode(EOptimizerNodeKind k)
         : Kind(k)
     {
     }
@@ -64,7 +65,7 @@ enum EJoinKind: ui32 {
 };
 
 EJoinKind ConvertToJoinKind(const TString& joinString);
-TString ConvertToJoinString(const EJoinKind kind);
+TString ConvertToJoinString(EJoinKind kind);
 
 struct TCardinalityHints {
     enum ECardOperation: ui32 {
@@ -164,7 +165,7 @@ struct TJoinOrderHints {
     };
 
     struct TRelationNode: public ITreeNode {
-        TRelationNode(TString label)
+        explicit TRelationNode(TString label)
             : Label(std::move(label))
         {
             this->Type = ITreeNode::Relation;
@@ -219,8 +220,8 @@ struct IProviderContext {
     virtual double ComputeJoinCost(
         const TOptimizerStatistics& leftStats,
         const TOptimizerStatistics& rightStats,
-        const double outputRows,
-        const double outputByteSize,
+        double outputRows,
+        double outputByteSize,
         EJoinAlgoType joinAlgo) const = 0;
 
     virtual TOptimizerStatistics ComputeJoinStats(
@@ -274,8 +275,8 @@ struct TBaseProviderContext: public IProviderContext {
     double ComputeJoinCost(
         const TOptimizerStatistics& leftStats,
         const TOptimizerStatistics& rightStats,
-        const double outputRows,
-        const double outputByteSize,
+        double outputRows,
+        double outputByteSize,
         EJoinAlgoType joinAlgo) const override;
 
     bool IsJoinApplicable(
@@ -330,15 +331,15 @@ struct TRelOptimizerNode: public IBaseOptimizerNode {
 
     TRelOptimizerNode(TString label, TOptimizerStatistics stats)
         : IBaseOptimizerNode(RelNodeType, std::move(stats))
-        , Label(label)
+        , Label(std::move(label))
     {
     }
 
     virtual ~TRelOptimizerNode() {
     }
 
-    virtual TVector<TString> Labels();
-    virtual void Print(std::stringstream& stream, int ntabs = 0);
+    TVector<TString> Labels() override;
+    void Print(std::stringstream& stream, int ntabs = 0) override;
 };
 
 /**
@@ -364,15 +365,15 @@ struct TJoinOptimizerNode: public IBaseOptimizerNode {
                        const std::shared_ptr<IBaseOptimizerNode>& right,
                        TVector<NDq::TJoinColumn> leftKeys,
                        TVector<NDq::TJoinColumn> rightKeys,
-                       const EJoinKind joinType,
-                       const EJoinAlgoType joinAlgo,
+                       EJoinKind joinType,
+                       EJoinAlgoType joinAlgo,
                        bool leftAny,
                        bool rightAny,
                        bool nonReorderable = false);
     virtual ~TJoinOptimizerNode() {
     }
-    virtual TVector<TString> Labels();
-    virtual void Print(std::stringstream& stream, int ntabs = 0);
+    TVector<TString> Labels() override;
+    void Print(std::stringstream& stream, int ntabs = 0) override;
 };
 
 class IOptimizerNew {
@@ -380,7 +381,7 @@ public:
     using TPtr = std::shared_ptr<IOptimizerNew>;
     IProviderContext& Pctx;
 
-    IOptimizerNew(IProviderContext& ctx)
+    explicit IOptimizerNew(IProviderContext& ctx)
         : Pctx(ctx)
     {
     }

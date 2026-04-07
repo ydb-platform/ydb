@@ -55,7 +55,7 @@ message TBootstrap {
         optional bool StandBy = 4;
         optional uint64 WatchThreshold = 5;
         optional bool StartFollowers = 6;
-        optional bool AllowDynamicConfiguration = 7 [default = false];
+        optional bool AllowDynamicConfiguration = 7 [default = true];
         optional EBootType BootType = 8;
     }
 

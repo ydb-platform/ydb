@@ -95,8 +95,8 @@ class TCreateBackupCollection : public TSubOperation {
         }
     }
 
-    static void AddPathInSchemeShard(const THolder<TProposeResponse>& result, TPath& dstPath, const TString& owner) {
-        dstPath.MaterializeLeaf(owner);
+    static void AddPathInSchemeShard(const THolder<TProposeResponse>& result, TPath& dstPath, const TString& owner, const TPathId& allocatedPathId) {
+        dstPath.MaterializeLeaf(owner, allocatedPathId);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
     }
 
@@ -169,21 +169,39 @@ public:
             return result;
         }
 
-        AddPathInSchemeShard(result, dstPath, owner);
+        // Track memory and database changes for proper abort handling
+        auto guard = context.DbGuard();
+        TPathId allocatedPathId = context.SS->AllocatePathId();
+
+        context.MemChanges.GrabNewPath(context.SS, allocatedPathId);
+        context.MemChanges.GrabPath(context.SS, rootPath.Base()->PathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+        context.MemChanges.GrabNewBackupCollection(context.SS, allocatedPathId);
+        context.MemChanges.GrabDomain(context.SS, rootPath.GetPathIdForDomain());
+
+        context.DbChanges.PersistPath(allocatedPathId);
+        context.DbChanges.PersistPath(rootPath.Base()->PathId);
+        context.DbChanges.PersistTxState(OperationId);
+
+        AddPathInSchemeShard(result, dstPath, owner, allocatedPathId);
         auto pathEl = CreateBackupCollectionPathElement(dstPath);
 
-        IncAliveChildrenDirect(OperationId, rootPath, context); // for correct discard of ChildrenExist prop
-        rootPath.DomainInfo()->IncPathsInside(context.SS);
+        if (!acl.empty()) {
+            pathEl->ApplyACL(acl);
+        }
 
         auto backupCollection = TBackupCollectionInfo::Create(desc);
-        context.SS->BackupCollections[dstPath->PathId] = backupCollection;
-        context.SS->TabletCounters->Simple()[COUNTER_BACKUP_COLLECTION_COUNT].Add(1);
-        context.SS->CreateTx(
+        context.SS->BackupCollections[allocatedPathId] = backupCollection;
+        context.SS->RegisterBackupCollectionTables(backupCollection);
+        context.SS->IncrementPathDbRefCount(allocatedPathId);
+
+        context.DbChanges.PersistBackupCollection(allocatedPathId, backupCollection);
+
+        TTxState& txState = context.SS->CreateTx(
             OperationId,
             TTxState::TxCreateBackupCollection,
-            pathEl->PathId);
-
-        NIceDb::TNiceDb db(context.GetDB());
+            allocatedPathId);
+        txState.State = TTxState::Propose;
 
         if (rootPath.Base()->HasActiveChanges()) {
             const TTxId parentTxId = rootPath.Base()->PlannedToCreate()
@@ -192,28 +210,15 @@ public:
             context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
         }
 
-        context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
-        context.OnComplete.ActivateTx(OperationId);
-
-        const auto& backupCollectionPathId = pathEl->PathId;
-
-        context.SS->BackupCollections[dstPath->PathId] = backupCollection;
-        context.SS->IncrementPathDbRefCount(backupCollectionPathId);
-
-        if (!acl.empty()) {
-            pathEl->ApplyACL(acl);
-        }
-        context.SS->PersistPath(db, backupCollectionPathId);
-
-        context.SS->PersistBackupCollection(db,
-                                            backupCollectionPathId,
-                                            backupCollection);
-        context.SS->PersistTxState(db, OperationId);
-
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId,
                                                           dstPath,
                                                           context.SS,
                                                           context.OnComplete);
+
+        rootPath.DomainInfo()->IncPathsInside(context.SS);
+        IncAliveChildrenSafeWithUndo(OperationId, rootPath, context);
+
+        context.OnComplete.ActivateTx(OperationId);
 
         SetState(NextState());
         return result;

@@ -3,6 +3,8 @@
 #include <library/cpp/regex/pcre/regexp.h>
 #include <util/generic/vector.h>
 
+#include <utility>
+
 namespace NYql {
 
 class TUrlMapper {
@@ -12,9 +14,9 @@ public:
 
 private:
     struct TCustomScheme {
-        TCustomScheme(const TString& pattern, const TString& url)
+        TCustomScheme(const TString& pattern, TString url)
             : Pattern(pattern)
-            , TargetUrlHolder(url)
+            , TargetUrlHolder(std::move(url))
             , TargetUrlSubst(pattern.data())
         {
             if (0 == TargetUrlSubst.ParseReplacement(TargetUrlHolder.data())) {

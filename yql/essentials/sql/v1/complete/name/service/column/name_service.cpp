@@ -77,8 +77,12 @@ public:
 
 private:
     static TString Escaped(TString tableName) {
-        // Saves when name is empty
-        tableName.prepend("table_");
+        if (tableName.empty()) {
+            tableName.prepend("table_");
+        }
+
+        SubstGlobal(tableName, "/", "%2F");
+
         return tableName;
     }
 

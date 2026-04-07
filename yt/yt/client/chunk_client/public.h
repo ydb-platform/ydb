@@ -91,6 +91,7 @@ YT_DEFINE_ERROR_ENUM(
     ((TotalMemoryLimitExceeded)              (761))
     ((ForbiddenErasureCodec)                 (762))
     ((ReadMetaTimeout)                       (763))
+    ((ReaderRetryCountLimitExceeded)         (764))
 );
 
 DEFINE_ENUM_WITH_UNDERLYING_TYPE(EUpdateMode, i8,

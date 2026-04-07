@@ -44,8 +44,8 @@ namespace {
             bld.SetFamilyCacheMode(TableId, GroupId1, ECacheMode::TryKeepInMemory);
             bld.SetFamilyCache(TableId, GroupId1, ECache::Ever);
             bld.AddFamily(TableId, GroupId2, StoreIdOut);
-            bld.AddColumn(TableId, "key", ColId1, NScheme::TSmallBoundedString::TypeId, false);
-            bld.AddColumn(TableId, "value", ColId2, NScheme::TUint32::TypeId, false);
+            bld.AddColumn(TableId, "key", ColId1, NScheme::TSmallBoundedString::TypeId, false, false);
+            bld.AddColumn(TableId, "value", ColId2, NScheme::TUint32::TypeId, false, false);
             bld.AddColumnToKey(TableId, ColId1);
             bld.AddColumnToFamily(TableId, ColId1, GroupId1);
             bld.AddColumnToFamily(TableId, ColId2, GroupId2);

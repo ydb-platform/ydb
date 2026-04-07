@@ -9,13 +9,32 @@
 
 namespace NKikimr::NOlap {
 
+std::vector<std::string> TPKRangesFilter::GetSortingColumnNames() const {
+    for (auto&& range : SortedRanges) {
+        auto fromCols = range.GetPredicateFrom().GetColumnNames();
+        if (!fromCols.empty()) {
+            return fromCols;
+        }
+
+        auto toCols = range.GetPredicateTo().GetColumnNames();
+        if (!toCols.empty()) {
+            return toCols;
+        }
+    }
+
+    return {};
+}
+
 NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const {
     if (IsEmpty()) {
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
 
     auto result = NArrow::TColumnFilter::BuildDenyFilter();
-    NArrow::NMerger::TRWSortableBatchPosition iterator(data, 0, false);
+    const auto sortingColumns = GetSortingColumnNames();
+    NArrow::NMerger::TRWSortableBatchPosition iterator = sortingColumns.empty()
+        ? NArrow::NMerger::TRWSortableBatchPosition(data, 0, false)
+        : NArrow::NMerger::TRWSortableBatchPosition(data, 0, sortingColumns, {}, false);
     bool reachedEnd = false;
     for (const auto& range : SortedRanges) {
         const ui64 initialIdx = iterator.GetPosition();

@@ -8,10 +8,26 @@ TFmrInitializationOptions GetFmrInitializationInfoFromConfig(
     const TFmrInstance& fmrConfiguration,
     const google::protobuf::RepeatedPtrField<TFmrFileRemoteCache>& fileCacheConfigurations
 ) {
+    // initializing tvm
+
+    TMaybe<TFmrTvmGatewaySettings> tvmSettings = Nothing();
+    if (fmrConfiguration.HasTvmConfig()) {
+        YQL_CLOG(DEBUG, FastMapReduce) << "Found tvm config " << fmrConfiguration.GetTvmConfig().DebugString() << " for fmr";
+        tvmSettings = TFmrTvmGatewaySettings{
+            .CoordinatorTvmId = static_cast<TTvmId>(fmrConfiguration.GetTvmConfig().GetCoordinatorTvmId()),
+            .GatewayTvmId = static_cast<TTvmId>(fmrConfiguration.GetTvmConfig().GetGatewayTvmId()),
+            .TvmDiskCacheDir = fmrConfiguration.GetTvmConfig().GetTvmDiskCacheDir()
+        };
+
+        TString gatewayTvmSecretFile = fmrConfiguration.GetTvmConfig().GetGatewayTvmSecretFile();
+        YQL_ENSURE(NFs::Exists(gatewayTvmSecretFile), "Gateway tvm secret file should exist, if it is set in gateways.conf");
+        tvmSettings->GatewayTvmSecret = StripStringRight(TFileInput(gatewayTvmSecretFile).ReadLine());
+    }
+
     // initializing fmr file metadata and upload services
     TString coordinatorUrl = fmrConfiguration.GetCoordinatorUrl();
     if (!fmrConfiguration.HasFileRemoteCacheName()) {
-        return TFmrInitializationOptions{coordinatorUrl, nullptr, nullptr};
+        return TFmrInitializationOptions{coordinatorUrl, nullptr, nullptr, TFmrDistributedCacheSettings(), tvmSettings};
     }
     TString fmrRemoteCacheName = fmrConfiguration.GetFileRemoteCacheName();
 
@@ -41,31 +57,43 @@ TFmrInitializationOptions GetFmrInitializationInfoFromConfig(
     if (fileCacheInfo.HasFileExpirationInterval()) {
         uploadOptions.ExpirationInterval = TDuration::Seconds(fileCacheInfo.GetFileExpirationInterval());
     }
+    TString distCacheYtToken;
     if (fileCacheInfo.HasTokenFile()) {
         TString tokenFile = fileCacheInfo.GetTokenFile();
         YQL_ENSURE(NFs::Exists(tokenFile), "Token file should exist, if it is set in gateways.conf");
-        TString token = StripStringRight(TFileInput(tokenFile).ReadLine());
-        metadataOptions.YtToken = token;
-        uploadOptions.YtToken = token;
+        distCacheYtToken = StripStringRight(TFileInput(tokenFile).ReadLine());
+        metadataOptions.YtToken = distCacheYtToken;
+        uploadOptions.YtToken = distCacheYtToken;
         YQL_CLOG(DEBUG, FastMapReduce) << "Found token for writing to fmr dist cache";
     }
     YQL_CLOG(DEBUG, FastMapReduce) << "Successfully initialized fmr remote file cache with cluster: " << distCacheYtCluster << " and path: " << distCacheYtPath;
 
+    TFmrDistributedCacheSettings fmrDistCacheSettings{
+        .Path = distCacheYtPath,
+        .YtServerName = distCacheYtCluster,
+        .YtToken = distCacheYtToken
+    };
+
     return NFmr::TFmrInitializationOptions {
         .FmrCoordinatorUrl = coordinatorUrl,
         .FmrFileMetadataService =  NFmr::MakeYtFileMetadataService(metadataOptions),
-        .FmrFileUploadService = NFmr::MakeYtFileUploadService(uploadOptions)
+        .FmrFileUploadService = NFmr::MakeYtFileUploadService(uploadOptions),
+        .FmrDistributedCacheSettings = fmrDistCacheSettings,
+        .FmrTvmSettings = tvmSettings
     };
 }
 
 std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::TPtr slave, const TFmrServices::TPtr fmrServices) {
     TFmrCoordinatorSettings coordinatorSettings{};
+    NYT::TNode fmrOperationSpec;
     TString fmrOperationSpecFilePath = fmrServices->FmrOperationSpecFilePath;
     if (!fmrOperationSpecFilePath.empty()) {
         TFileInput input(fmrOperationSpecFilePath);
-        auto fmrOperationSpec = NYT::NodeFromYsonStream(&input);
+        fmrOperationSpec = NYT::NodeFromYsonStream(&input);
         coordinatorSettings.DefaultFmrOperationSpec = fmrOperationSpec;
     }
+
+    auto tvmSettings = fmrServices->TvmSettings;
 
     ITableDataService::TPtr tableDataService = nullptr;
     bool disableLocalFmrWorker = fmrServices->DisableLocalFmrWorker;
@@ -87,7 +115,19 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
         }
         coordinatorClientSettings.Port = parsedUrl.GetPort();
         coordinatorClientSettings.Host = parsedUrl.GetHost();
-        coordinator = MakeFmrCoordinatorClient(coordinatorClientSettings);
+        IFmrTvmClient::TPtr coordinatorTvmClient = nullptr;
+
+        if (tvmSettings) {
+            coordinatorClientSettings.DestinationTvmId = tvmSettings->CoordinatorTvmId;
+            TFmrTvmApiSettings gatewayTvmSettings{
+                .SourceTvmId = tvmSettings->GatewayTvmId,
+                .TvmSecret = tvmSettings->GatewayTvmSecret,
+                .TvmDiskCacheDir = tvmSettings->TvmDiskCacheDir,
+                .DestinationTvmIds = {tvmSettings->CoordinatorTvmId}
+            };
+            coordinatorTvmClient = MakeFmrTvmClient(gatewayTvmSettings);
+        }
+        coordinator = MakeFmrCoordinatorClient(coordinatorClientSettings, coordinatorTvmClient);
         YQL_CLOG(INFO, FastMapReduce) << "Created client to connect to coordinator server with host " << parsedUrl.GetHost() << " and port " << parsedUrl.GetPort();
     } else {
         // creating local coordinator since url was not passed via services
@@ -103,11 +143,13 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
             return RunJob(task, tableDataServiceDiscoveryFilePath, fmrYtJobSerivce, jobLauncher, cancelFlag);
         };
 
-        NFmr::TFmrJobFactorySettings settings{.Function=func};
+        auto settings = NFmr::GetDefaultJobFactorySettings(fmrOperationSpec);
+        settings.Function = func;
         auto jobFactory = MakeFmrJobFactory(settings);
         NFmr::TFmrWorkerSettings workerSettings{.WorkerId = 0, .RandomProvider = CreateDefaultRandomProvider(),
             .TimeToSleepBetweenRequests=TDuration::Seconds(1)};
-        worker = MakeFmrWorker(coordinator, jobFactory, workerSettings);
+
+        worker = MakeFmrWorker(coordinator, jobFactory, fmrServices->JobPreparer, workerSettings);
         worker->Start();
     }
     return std::pair<IYtGateway::TPtr, IFmrWorker::TPtr>{CreateYtFmrGateway(slave, coordinator, fmrServices), std::move(worker)};

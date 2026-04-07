@@ -1,6 +1,7 @@
 #pragma once
 
 #include <queue>
+#include <utility>
 
 #include <yql/essentials/minikql/defs.h>
 #include <yql/essentials/minikql/computation/mkql_spiller.h>
@@ -23,7 +24,7 @@ public:
     };
 
     TVectorSpillerAdapter(ISpiller::TPtr spiller, size_t sizeLimit)
-        : Spiller_(spiller)
+        : Spiller_(std::move(spiller))
         , SizeLimit_(sizeLimit)
     {
     }
@@ -146,7 +147,7 @@ private:
         }
 
     private:
-        virtual void DoWrite(const void* buf, size_t len) override {
+        void DoWrite(const void* buf, size_t len) override {
             MKQL_ENSURE(len % sizeof(T) == 0, "size should always by multiple of sizeof(T)");
             const T* data = reinterpret_cast<const T*>(buf);
             Dst_.insert(Dst_.end(), data, data + len / sizeof(T));

@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <utility>
 
 using namespace NKikimr;
 using namespace NUdf;
@@ -453,7 +454,7 @@ private:
 
 public:
     explicit TTopCreate(ICompare::TPtr compare)
-        : Compare_(compare)
+        : Compare_(std::move(compare))
     {
     }
 
@@ -550,7 +551,7 @@ private:
 
 public:
     explicit TTopDeserialize(ICompare::TPtr compare)
-        : Compare_(compare)
+        : Compare_(std::move(compare))
     {
     }
 
@@ -579,7 +580,7 @@ private:
 
 public:
     explicit TTopMerge(ICompare::TPtr compare)
-        : Compare_(compare)
+        : Compare_(std::move(compare))
     {
     }
 
@@ -619,7 +620,7 @@ public:
                                                                 TopResourceName_##slot##_##hasKey##_##isTop> {         \
     public:                                                                                                            \
         template <typename... Args>                                                                                    \
-        inline TTopResourceData(Args&&... args)                                                                        \
+        inline explicit TTopResourceData(Args&&... args)                                                               \
             : TBoxedResource(std::forward<Args>(args)...)                                                              \
         {                                                                                                              \
         }                                                                                                              \
@@ -712,7 +713,7 @@ UDF_TYPE_ID_MAP(RESOURCE_11)
                                            TopResourceName_Generic_##hasKey##_##isTop> { \
     public:                                                                              \
         template <typename... Args>                                                      \
-        inline TTopResource(Args&&... args)                                              \
+        inline explicit TTopResource(Args&&... args)                                     \
             : TBoxedResource(std::forward<Args>(args)...)                                \
         {                                                                                \
         }                                                                                \

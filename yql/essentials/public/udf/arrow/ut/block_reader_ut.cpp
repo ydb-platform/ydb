@@ -88,8 +88,8 @@ Y_UNIT_TEST_F(TestLogicalDataSize, TBlockReaderFixture) {
         const auto str = NUnitTest::RandomString(stringSize, i);
         arrayHelpers[1]->Builder->Add((i % 2) ? TBlockItem(str) : TBlockItem());
 
-        TBlockItem tuple[] = {((i / 2) % 2) ? TBlockItem(i) : TBlockItem(), TBlockItem(str)};
-        arrayHelpers[2]->Builder->Add((i % 2) ? TBlockItem(tuple) : TBlockItem());
+        auto tuple = std::to_array<TBlockItem>({((i / 2) % 2) ? TBlockItem(i) : TBlockItem(), TBlockItem(str)});
+        arrayHelpers[2]->Builder->Add((i % 2) ? TBlockItem(tuple.data()) : TBlockItem());
 
         TBlockItem tzDate(i);
         tzDate.SetTimezoneId(i % 100);

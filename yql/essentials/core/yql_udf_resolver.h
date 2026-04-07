@@ -11,6 +11,8 @@
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 
+#include <utility>
+
 namespace NYql {
 
 class TTypeAnnotationNode;
@@ -21,9 +23,9 @@ struct TFilePathWithMd5 {
     TString Path;
     TString Md5;
 
-    explicit TFilePathWithMd5(const TString& path = "", const TString& md5 = "")
-        : Path(path)
-        , Md5(md5)
+    explicit TFilePathWithMd5(TString path = "", TString md5 = "")
+        : Path(std::move(path))
+        , Md5(std::move(md5))
     {
     }
 
@@ -35,7 +37,7 @@ class IUdfResolver : public TThrRefBase {
 public:
     using TPtr = TIntrusiveConstPtr<IUdfResolver>;
 
-    virtual ~IUdfResolver() = default;
+    ~IUdfResolver() override = default;
 
     struct TFunction {
         // input
@@ -78,6 +80,7 @@ public:
 
     virtual TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const = 0;
     virtual bool ContainsModule(const TStringBuf& moduleName) const = 0;
+    virtual bool IsPartial() const;
 };
 
 TResolveResult LoadRichMetadata(const IUdfResolver& resolver, const TVector<TUserDataBlock>& blocks, THoldingFileStorage& storage, NUdf::ELogLevel logLevel = NUdf::ELogLevel::Info);

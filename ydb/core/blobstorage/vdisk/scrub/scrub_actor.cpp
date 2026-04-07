@@ -256,7 +256,7 @@ namespace NKikimr {
         auto res = WaitForPDiskEvent<TEvBlobStorage::TEvCheckIntegrityResult>();
 
         TErasureType::EErasureSpecies erasure = Info->Type.GetErasure();
-        
+
         NMonGroup::TDeepScrubbingGroup* counters = DeepScrubbingSubgroups.GetCounters(isHuge, erasure);
         if (counters) {
             ++counters->BlobsChecked();

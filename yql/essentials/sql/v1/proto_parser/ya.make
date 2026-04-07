@@ -9,6 +9,7 @@ PEERDIR(
 SRCS(
     parse_tree.cpp
     proto_parser.cpp
+    token.cpp
 )
 
 END()

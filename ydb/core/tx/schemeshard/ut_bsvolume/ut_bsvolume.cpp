@@ -8,8 +8,11 @@ using namespace NSchemeShardUT_Private;
 Y_UNIT_TEST_SUITE(TBSV) {
     Y_UNIT_TEST(CleanupDroppedVolumesOnRestart) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         runtime.GetAppData().DisableSchemeShardCleanupOnDropForTest = true;
 
@@ -26,11 +29,15 @@ Y_UNIT_TEST_SUITE(TBSV) {
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
 
+        expectedDomainPaths += 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(2)});
 
         TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume");
         env.TestWaitNotification(runtime, txId);
+
+        expectedDomainPaths -= 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::PathNotExist});
@@ -38,7 +45,7 @@ Y_UNIT_TEST_SUITE(TBSV) {
         env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                           {NLs::Finished, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(0)});
 
         TActorId sender = runtime.AllocateEdgeActor();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
@@ -54,8 +61,11 @@ Y_UNIT_TEST_SUITE(TBSV) {
 
     Y_UNIT_TEST(ShardsNotLeftInShardsToDelete) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
         vdescr.SetName("BSVolume");
@@ -70,11 +80,15 @@ Y_UNIT_TEST_SUITE(TBSV) {
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
 
+        expectedDomainPaths += 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
+                           {NLs::Finished, NLs::PathsInsideDomain(expectedDomainPaths), NLs::ShardsInsideDomain(2)});
 
         TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume");
         env.TestWaitNotification(runtime, txId);
+
+        expectedDomainPaths -= 1;
 
         env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1});
 
@@ -201,5 +215,59 @@ Y_UNIT_TEST_SUITE(TBSV) {
 
         TestDropBlockStoreVolume(runtime, ++txId, root, name);
         env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(CreateBlockStoreVolumeDirect) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
+        vdescr.SetName("BSVolumeDirect");
+        auto& vc = *vdescr.MutableVolumeConfig();
+
+        // Set TabletVersion = 3 for BlockStoreVolumeDirect
+        vc.SetTabletVersion(3);
+        vc.SetBlockSize(4096);
+        vc.AddPartitions()->SetBlockCount(16);
+
+        // Add channel profiles for partition (only 2 channels)
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+
+        // Add volume channel profiles for BlockStoreVolumeDirect
+        vc.AddVolumeExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.AddVolumeExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.AddVolumeExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+
+        // Test that schema operation is accepted and recognizes TabletVersion=3
+        AsyncCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+
+        // Wait for the operation to complete
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify that the schemeshard created shards for the volume
+        // With TabletVersion=3 and 1 partition, we should have 2 shards:
+        // - 1 BlockStorePartitionDirect shard
+        // - 1 BlockStoreVolumeDirect shard
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolumeDirect"),
+                           {NLs::PathExist, NLs::Finished});
+
+        // Also verify the partition exists and shard count
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolumeDirect", true, true, true),
+                           {NLs::PathExist, NLs::ShardsInsideDomain(2)});
+
+        // Verify that the actual tablet types are BlockStoreVolumeDirect and BlockStorePartitionDirect
+        ui32 volumeDirectCount = 0;
+        ui32 partitionDirectCount = 0;
+        for (const auto& kv : env.GetHiveState()->Tablets) {
+            if (kv.second.Type == TTabletTypes::BlockStoreVolumeDirect) {
+                ++volumeDirectCount;
+            } else if (kv.second.Type == TTabletTypes::BlockStorePartitionDirect) {
+                ++partitionDirectCount;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(volumeDirectCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(partitionDirectCount, 1);
     }
 }

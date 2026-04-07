@@ -106,7 +106,7 @@ TString TEvPartitionWriter::TEvWriteResponse::ToString() const {
     return out;
 }
 
-class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TRlHelpers {
+class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPartitionWriterOpts::IGetter, private TRlHelpers {
     using EErrorCode = TEvPartitionWriter::TEvWriteResponse::EErrorCode;
 
     struct TUserWriteRequest {
@@ -331,6 +331,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
         ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(Opts.TxId);
 
         auto* operations = ev->Record.MutableRequest()->MutableTopicOperations();
+        operations->SetTrackProducerId(Opts.TrackProducerId);
         auto* topics = operations->AddTopics();
         topics->set_path(Opts.TopicPath);
         auto* partitions = topics->add_partitions();
@@ -586,6 +587,23 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, private TR
             ERROR("The cookie of WriteRequest is invalid. Cookie=" << cookie);
             Disconnected(EErrorCode::InternalError);
             return false;
+        }
+
+        auto& pqConfig = AppData(ActorContext())->PQConfig;
+        for (const auto& write : record.GetPartitionRequest().GetCmdWrite()) {
+            if (write.GetData().size() > pqConfig.GetMaxMessageSizeBytes()) {
+                auto errorMsg = TStringBuilder() << "Too big message. Max message size is " << pqConfig.GetMaxMessageSizeBytes()
+                    << " bytes, but got " << write.GetData().size() << " bytes";
+
+                BecomeZombie(EErrorCode::InternalError, errorMsg);
+
+                auto response = MakeResponse(cookie);
+                response.SetErrorCode(NPersQueue::NErrorCode::BAD_REQUEST);
+                response.SetErrorReason(errorMsg);
+                SendWriteResult(EErrorCode::InternalError, errorMsg, std::move(response));
+
+                return false;
+            }
         }
 
         SetWriteId(*record.MutablePartitionRequest());
@@ -957,7 +975,7 @@ public:
     }
 
     // used for tests to validate correct opts
-    const TPartitionWriterOpts GetOpts() {
+    const TPartitionWriterOpts& GetOpts() const override {
         return Opts;
     }
 

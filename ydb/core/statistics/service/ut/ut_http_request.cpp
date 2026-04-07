@@ -17,9 +17,7 @@ TTableInfo PrepareDatabaseAndTable(TTestEnv& env, bool isServerless) {
     } else {
         CreateDatabase(env, "Database");
     }
-    auto info = PrepareColumnTable(env, "Database", "Table", 10);
-    InsertDataIntoTable(env, "Database", "Table", RowsWithFewDistinctValues(1000));
-    return info;
+    return PrepareColumnTable(env, "Database", "Table", 10);
 }
 
 void AnalyzeTest(bool isServerless) {

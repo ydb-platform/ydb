@@ -272,7 +272,7 @@ static TWeightLimitedYsonToYqlConverter CreateWeightLimitedYsonToYqlConverter(
 
 static void EnsureYsonItemTypeEqual(const TYsonItem& item, EYsonItemType type)
 {
-    if (Y_UNLIKELY(item.GetType() != type)) {
+    if (item.GetType() != type) [[unlikely]] {
         THROW_ERROR_EXCEPTION("YSON item type mismatch: expected %Qlv, got %Qlv",
             type,
             item.GetType());
@@ -281,7 +281,7 @@ static void EnsureYsonItemTypeEqual(const TYsonItem& item, EYsonItemType type)
 
 static void EnsureYsonItemTypeNotEqual(const TYsonItem& item, EYsonItemType type)
 {
-    if (Y_UNLIKELY(item.GetType() == type)) {
+    if (item.GetType() == type) [[unlikely]] {
         THROW_ERROR_EXCEPTION("Unexpected YSON item type %Qlv",
             type);
     }
@@ -295,7 +295,7 @@ public:
         : Config_(std::move(config))
     { }
 
-    void operator () (TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
+    void operator()(TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
     {
         auto getStringWeightLimit = [&] {
             auto bytesLeft = totalLimit - static_cast<i64>(consumer->GetWrittenByteCount());
@@ -386,7 +386,7 @@ public:
         , Scale_(scale)
     { }
 
-    void operator () (TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 /*totalLimit*/) const
+    void operator()(TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 /*totalLimit*/) const
     {
         const auto& item = cursor->GetCurrent();
         EnsureYsonItemTypeEqual(item, EYsonItemType::StringValue);
@@ -411,7 +411,7 @@ public:
         : ElementConverter_(CreateWeightLimitedYsonToYqlConverter(type.GetElement(), std::move(config)))
     { }
 
-    void operator() (TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
+    void operator()(TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
     {
         EnsureYsonItemTypeEqual(cursor->GetCurrent(), EYsonItemType::BeginList);
         cursor->Next();
@@ -485,7 +485,7 @@ public:
         }
     }
 
-    void operator() (TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
+    void operator()(TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
     {
         ConvertSequence(cursor, consumer, FieldConverters_, totalLimit);
     }
@@ -504,7 +504,7 @@ public:
         }
     }
 
-    void operator() (TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
+    void operator()(TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
     {
         ConvertSequence(cursor, consumer, ElementConverters_, totalLimit);
     }
@@ -521,7 +521,7 @@ public:
         , ElementConverter_(CreateWeightLimitedYsonToYqlConverter(type.GetElement(), std::move(config)))
     { }
 
-    void operator() (TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
+    void operator()(TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
     {
         if (cursor->GetCurrent().GetType() == EYsonItemType::EntityValue) {
             consumer->OnEntity();
@@ -566,13 +566,13 @@ public:
         }
     }
 
-    void operator() (TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
+    void operator()(TYsonPullParserCursor* cursor, TYqlJsonWriter* consumer, i64 totalLimit)
     {
         EnsureYsonItemTypeEqual(cursor->GetCurrent(), EYsonItemType::BeginList);
         cursor->Next();
         EnsureYsonItemTypeEqual(cursor->GetCurrent(), EYsonItemType::Int64Value);
         const auto alternativeIndex = cursor->GetCurrent().UncheckedAsInt64();
-        if (Y_UNLIKELY(!(0 <= alternativeIndex && alternativeIndex < std::ssize(ElementConverters_)))) {
+        if (!(0 <= alternativeIndex && alternativeIndex < std::ssize(ElementConverters_))) [[unlikely]] {
             THROW_ERROR_EXCEPTION("Alternative index is out of bounds: expected it to be in [%v, %v), got %v",
                 0,
                 ElementConverters_.size(),
@@ -646,7 +646,7 @@ template <EValueType Type, bool Required>
 class TSimpleUnversionedValueToYqlConverter
 {
 public:
-    void operator () (TUnversionedValue value, TYqlJsonWriter* consumer, i64 totalLimit)
+    void operator()(TUnversionedValue value, TYqlJsonWriter* consumer, i64 totalLimit)
     {
         if constexpr (!Required) {
             if (value.Type == EValueType::Null) {
@@ -656,7 +656,7 @@ public:
             consumer->OnBeginList();
         }
 
-        if (Y_UNLIKELY(Type != EValueType::Any && value.Type != Type)) {
+        if (Type != EValueType::Any && value.Type != Type) [[unlikely]] {
             THROW_ERROR_EXCEPTION("Bad value type: expected %Qlv, got %Qlv",
                 Type,
                 value.Type);
@@ -703,7 +703,7 @@ public:
         , IsNullable_(isNullable)
     { }
 
-    void operator () (TUnversionedValue value, TYqlJsonWriter* consumer, i64 /*totalLimit*/) const
+    void operator()(TUnversionedValue value, TYqlJsonWriter* consumer, i64 /*totalLimit*/) const
     {
         if (IsNullable_) {
             if (value.Type == EValueType::Null) {
@@ -738,10 +738,10 @@ public:
         , IsNullable_(logicalType->IsNullable())
     { }
 
-    void operator () (TUnversionedValue value, TYqlJsonWriter* consumer, i64 totalLimit)
+    void operator()(TUnversionedValue value, TYqlJsonWriter* consumer, i64 totalLimit)
     {
         if (value.Type == EValueType::Null) {
-            if (Y_UNLIKELY(!IsNullable_)) {
+            if (!IsNullable_) [[unlikely]] {
                 THROW_ERROR_EXCEPTION("Unexpected value type %Qlv for non-nullable type %Qv",
                     EValueType::Null,
                     NTableClient::ToString(*Type_));
@@ -749,7 +749,7 @@ public:
             consumer->OnEntity();
             return;
         }
-        if (Y_UNLIKELY(value.Type != EValueType::Composite)) {
+        if (value.Type != EValueType::Composite) [[unlikely]] {
             THROW_ERROR_EXCEPTION("Bad value type: expected %Qlv, got %Qlv",
                 EValueType::Composite,
                 value.Type);

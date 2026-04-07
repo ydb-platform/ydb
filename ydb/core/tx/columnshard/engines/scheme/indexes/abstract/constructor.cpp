@@ -19,6 +19,8 @@ NKikimr::TConclusionStatus IIndexMetaConstructor::DeserializeFromJson(const NJso
             return TConclusionStatus::Fail("incorrect inherit_portion_storage field in json index description (have to be boolean)");
         }
         InheritPortionStorage = jsonInfo["inherit_portion_storage"].GetBooleanSafe();
+    } else {
+        InheritPortionStorage = true;
     }
     return DoDeserializeFromJson(jsonInfo);
 }

@@ -8,7 +8,7 @@
 
 {% note info %}
 
-Импорт таблиц из S3-совместимого хранилища данных в других форматах возможен с использованием [внешних таблиц](../../../../concepts/federated_query/s3/external_table.md), подробнее см. в статье [{#T}](../../../../concepts/federated_query/import_and_export.md#import).
+Импорт таблиц из S3-совместимого хранилища данных в других форматах возможен с использованием [внешних таблиц](../../../../concepts/query_execution/federated_query/s3/external_table.md), подробнее см. в статье [{#T}](../../../../concepts/query_execution/federated_query/import_and_export.md#import).
 
 {% endnote %}
 

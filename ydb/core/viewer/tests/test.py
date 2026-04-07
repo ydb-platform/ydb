@@ -326,6 +326,10 @@ class TestViewer(object):
         print('Wait for cluster to be ready took %s seconds' % wait_time)
 
     @classmethod
+    def test_waiting_for_cluster_ready(cls):
+        return {}
+
+    @classmethod
     def test_whoami_root(cls):
         return cls.get_viewer_normalized("/viewer/whoami")
 
@@ -461,12 +465,15 @@ class TestViewer(object):
     @classmethod
     def normalize_result(cls, result):
         cls.delete_keys_recursively(result, {'Version',
+                                             'version',
                                              'MemoryUsed',
                                              'WriteThroughput',
                                              'ReadThroughput',
                                              'Read',
                                              'Write',
                                              'size_bytes',
+                                             'GrpcRequestBytes',
+                                             'GrpcResponseBytes',
                                              })
         result = cls.wipe_values_by_key(result, {'LatencyGetFast',
                                                  'LatencyPutTabletLog',
@@ -537,6 +544,7 @@ class TestViewer(object):
                                     'PathId',
                                     'PublicKeys',
                                     'OriginalUserToken',
+                                    'HashesInitParams',
                                     })
 
         # groups
@@ -604,6 +612,11 @@ class TestViewer(object):
     def normalize_result_healthcheck(cls, result):
         result = cls.replace_values_by_key_and_value(result, ['self_check_result'], ['GOOD', 'DEGRADED', 'MAINTENANCE_REQUIRED', 'EMERGENCY'])
         cls.delete_keys_recursively(result, {'issue_log'})
+        return result
+
+    @classmethod
+    def normalize_result_transfer_describe(cls, result):
+        cls.delete_keys_recursively(result, ['stats'])
         return result
 
     @classmethod
@@ -706,6 +719,14 @@ class TestViewer(object):
         ]
 
     @classmethod
+    def test_viewer_groups_with_invalid_database(cls):
+        # Test that the endpoint doesn't crash when provided with an invalid database
+        result = cls.call_viewer("/viewer/groups", {
+            'database': '/invalid_database_name_that_does_not_exist',
+        })
+        return result
+
+    @classmethod
     def test_viewer_sysinfo(cls):
         result = cls.get_viewer_normalized("/viewer/sysinfo")
         return result
@@ -752,11 +773,10 @@ class TestViewer(object):
 
     @classmethod
     def test_viewer_tenantinfo(cls):
-        return cls.get_viewer_normalized("/viewer/tenantinfo")
-
-    @classmethod
-    def test_viewer_tenantinfo_db(cls):
-        return cls.get_viewer_db_normalized("/viewer/tenantinfo")
+        result = cls.get_viewer_db_normalized("/viewer/tenantinfo")
+        for name in cls.databases_and_no_database:
+            result[name]['TenantInfo'].sort(key=lambda x: x['Name'])
+        return result
 
     @classmethod
     def test_viewer_healthcheck(cls):
@@ -812,8 +832,30 @@ class TestViewer(object):
             })]
 
     @classmethod
+    def test_viewer_acl_write_invalid(cls):
+        return cls.post_viewer("/viewer/acl", {
+            'database': cls.dedicated_db,
+            'path': cls.dedicated_db
+        }, headers={
+            'Cookie': 'ydb_session_id=XXX',
+        }, body={
+            'AddAccess': [{
+                'Subject': 'userX',
+                'AccessRights': ['Full']
+            }]
+        })
+
+    @classmethod
     def test_viewer_autocomplete(cls):
-        return cls.get_viewer_db("/viewer/autocomplete", {'prefix': ''})
+        result = {}
+        result['empty'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': ''})
+        result['root'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': '/Root'})
+        result['dedicated_db'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': 'dedicated_db'})
+        result['root_dedicated_db'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': '/Root/dedicated_db'})
+        result['tab'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': 'tab'})
+        result['table1'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': 'table1'})
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
 
     @classmethod
     def test_viewer_check_access(cls):
@@ -822,11 +864,15 @@ class TestViewer(object):
 
     @classmethod
     def test_viewer_query(cls):
-        return cls.get_viewer_db("/viewer/query", {'query': 'select 7*6', 'schema': 'multi'})
+        result = cls.get_viewer_db("/viewer/query", {'query': 'select 7*6', 'schema': 'multi'})
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
 
     @classmethod
     def test_viewer_query_from_table(cls):
-        return cls.get_viewer_db_not_domain("/viewer/query", {'query': 'select * from table1', 'schema': 'multi'})
+        result = cls.get_viewer_db_not_domain("/viewer/query", {'query': 'select * from table1', 'schema': 'multi'})
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
 
     @classmethod
     def test_viewer_query_from_table_different_schemas(cls):
@@ -837,21 +883,26 @@ class TestViewer(object):
                 'query': 'select * from table1',
                 'schema': schema
                 })
+        cls.delete_keys_recursively(result, {'Version', 'version'})
         return result
 
     @classmethod
     def test_viewer_query_issue_13757(cls):
-        return cls.get_viewer_db("/viewer/query", {
+        result = cls.get_viewer_db("/viewer/query", {
             'query': 'SELECT CAST(<|one:"8912", two:42|> AS Struct<two:Utf8, three:Date?>);',
             'schema': 'multi'
         })
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
 
     @classmethod
     def test_viewer_query_issue_13945(cls):
-        return cls.get_viewer_db("/viewer/query", {
+        result = cls.get_viewer_db("/viewer/query", {
             'query': 'SELECT AsList();',
             'schema': 'multi'
         })
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
 
     @classmethod
     def test_pqrb_tablet(cls):
@@ -870,8 +921,8 @@ class TestViewer(object):
             'response_create_topic': response_create_topic,
             'response_tablet_info': response_tablet_info,
         }
-        return cls.replace_values_by_key(result, ['version',
-                                                  'ResponseTime',
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return cls.replace_values_by_key(result, ['ResponseTime',
                                                   'ChangeTime',
                                                   'HiveId',
                                                   'NodeId',
@@ -1110,6 +1161,7 @@ class TestViewer(object):
 
         final_result = {"alter" : alter_response, "insert" : insert_response, "update" : update_response, "data" : data_response}
         logging.info("Results: {}".format(final_result))
+        cls.delete_keys_recursively(final_result, {'Version', 'version'})
         return final_result
 
     @classmethod
@@ -1176,6 +1228,8 @@ class TestViewer(object):
 
             time.sleep(1)
 
+        describe_result = cls.normalize_result_transfer_describe(describe_result)
+
         return {
             'topic_result': topic_result,
             'table_result': table_result,
@@ -1193,6 +1247,7 @@ class TestViewer(object):
                                                     'ProcessDuration',
                                                     'id',
                                                     ])
+        cls.delete_keys_recursively(result, {'Version', 'version'})
         return result
 
     @classmethod
@@ -1653,4 +1708,14 @@ class TestViewer(object):
     def test_viewer_peers(cls):
         result = cls.get_viewer_normalized("/viewer/peers")
         cls.delete_keys_recursively(result, {'ScopeId', 'PoolStats'})
+        return result
+
+    @classmethod
+    def test_viewer_domain_peers(cls):
+        result = cls.get_viewer_normalized("/viewer/nodes", {
+            'tablets': False,
+            'database': cls.domain_name,
+            'fields_required': 'ConnectStatus',
+            'filter_peer_role': 'database',
+        })
         return result

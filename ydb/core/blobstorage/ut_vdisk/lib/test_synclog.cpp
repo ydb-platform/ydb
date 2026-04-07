@@ -199,7 +199,7 @@ class TSyncLogTestWriteActor : public TActorBootstrapped<TSyncLogTestWriteActor>
                     Db->VCtx->VDiskCounters));
 
         // RecoveryLogCutter
-        TLogCutterCtx logCutterCtx = {VCtx, TestCtx->PDiskCtx, TestCtx->LsnMngr, VDiskConfig, TestCtx->LoggerId};
+        TLogCutterCtx logCutterCtx = {VCtx, TestCtx->PDiskCtx, TestCtx->LsnMngr, VDiskConfig, TestCtx->LoggerId, false};
         LogCutterId = ctx.Register(CreateRecoveryLogCutter(std::move(logCutterCtx)));
 
         // Repaired SyncLog State

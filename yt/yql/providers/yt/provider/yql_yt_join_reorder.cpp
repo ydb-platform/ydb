@@ -268,7 +268,7 @@ private:
         } else if (auto* leaf = dynamic_cast<TYtJoinNodeLeaf*>(node.Get())) {
             return OnLeaf(leaf, sizeInfo);
         } else {
-            YQL_ENSURE("Unknown node type");
+            YQL_ENSURE(false, "Unknown node type");
             return nullptr;
         }
     }
@@ -352,7 +352,7 @@ private:
         auto providerStats = std::make_unique<TYtProviderStatistic>();
         bool canUseDataWeight = true;
 
-        if (Y_UNLIKELY(!section.Settings().Empty()) && Y_UNLIKELY(section.Settings().Item(0).Name() == "Test")) {
+        if (!section.Settings().Empty() && section.Settings().Item(0).Name() == "Test") [[unlikely]] {
             for (const auto& setting : section.Settings()) {
                 if (setting.Name() == "Rows") {
                     stat->Nrows += FromString<ui64>(setting.Value().Ref().Content());

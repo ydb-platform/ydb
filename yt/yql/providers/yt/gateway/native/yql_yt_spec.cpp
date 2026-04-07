@@ -96,6 +96,11 @@ void FillSpec(NYT::TNode& spec,
         spec = std::move(tmpSpec);
     }
 
+    const auto supportRLSTables = settings->_EnableRLSTablesSupport.Get(cluster).GetOrElse(DEFAULT_ENABLE_RLS_TABLES_SUPPORT);
+    if (supportRLSTables && AnyOf(execCtx.InputTables_, [](const auto& input) { return input.RLS; })) {
+        spec["omit_inaccessible_rows"] = true;
+    }
+
     auto& sampling = execCtx.Sampling;
     auto maxRowWeight = settings->MaxRowWeight.Get(cluster);
     auto maxKeyWeight = settings->MaxKeyWeight.Get(cluster);
@@ -505,14 +510,14 @@ void FillSpec(NYT::TNode& spec,
     if (layerPaths.size()) {
         if (opProps.HasFlags(EYtOpProp::WithMapper)) {
             NYT::TNode& layersNode = spec["mapper"]["layer_paths"];
-            for (auto& path: layerPaths) {
-                layersNode.Add(path); // already snapshoted files, no prefix needed
+            for (auto it = layerPaths.rbegin(); it != layerPaths.rend(); ++it) {
+                layersNode.Add(*it); // already snapshoted files, no prefix needed
             }
         }
         if (opProps.HasFlags(EYtOpProp::WithReducer)) {
             NYT::TNode& layersNode = spec["reducer"]["layer_paths"];
-            for (auto& path: layerPaths) {
-                layersNode.Add(path); // already snapshoted files, no prefix needed
+            for (auto it = layerPaths.rbegin(); it != layerPaths.rend(); ++it) {
+                layersNode.Add(*it); // already snapshoted files, no prefix needed
             }
         }
     }
@@ -769,6 +774,9 @@ void FillOperationOptionsImpl(NYT::TOperationOptions& opOpts,
 {
     opOpts.UseTableFormats(true);
     opOpts.CreateOutputTables(false);
+    if (settings->_MinJobStateSizeToPassViaFile.Get().Defined()) {
+        opOpts.MinJobStateSizeToPassViaFile(*settings->_MinJobStateSizeToPassViaFile.Get());
+    }
     if (TString tmpFolder = settings->TmpFolder.Get(entry->Cluster).GetOrElse(TString())) {
         opOpts.FileStorage(tmpFolder);
 

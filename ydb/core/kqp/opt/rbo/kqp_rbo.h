@@ -20,7 +20,7 @@ enum ERuleProperties: ui32 {
  * Interface for transformation rule:
  *
  * The rule may contain various metadata such as its name and a list of properties it requires to be computed
- * And it currently has a MatchAndAppy method that checks if the rule can be applied and makes in-place modifications
+ * And it currently has a MatchAndApply method that checks if the rule can be applied and makes in-place modifications
  * to the plan.
  */
 class IRule {
@@ -28,7 +28,7 @@ class IRule {
     IRule(TString name) : RuleName(name) {}
     IRule(TString name, ui32 props, bool logRule = false) : RuleName(name), Props(props), LogRule(logRule) {}
 
-    virtual bool MatchAndAppy(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
     virtual ~IRule() = default;
 
@@ -39,25 +39,25 @@ class IRule {
 
 /**
  * A Simplified rule does not alter the original subplan that it matched, but instead returns a new
- * subplan that replaces the old one
+ * subplan that replaces the old one.
  */
 class ISimplifiedRule : public IRule {
   public:
     ISimplifiedRule(TString name) : IRule(name) {}
     ISimplifiedRule(TString name, ui32 props, bool logRule = false) : IRule(name, props, logRule) {}
 
-    virtual std::shared_ptr<IOperator> SimpleMatchAndAppy(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) = 0;
 
-    virtual bool MatchAndAppy(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
 
 /**
  * Stage Interface
  *
  * A Stage in a rule-based optimizer either applies a collection of rules, until there are no more matches
- * Or instead it runs a global stage
+ * Or instead it runs a global stage.
  */
-class IRBOStage {
+class IRBOStage : public NNonCopyable::TNonCopyable {
   public:
     IRBOStage(TString&& stageName) : StageName(std::move(stageName)) {}
     
@@ -69,63 +69,41 @@ class IRBOStage {
 };
 
 /**
- * Rule based stage is just a collection of rules
+ * Rule based stage is just a collection of rules.
  */
 class TRuleBasedStage : public IRBOStage {
   public:
-    TRuleBasedStage(TString&& stageName, TVector<std::shared_ptr<IRule>>&& rules);
+    TRuleBasedStage(TString&& stageName, TVector<std::unique_ptr<IRule>>&& rules);
     virtual void RunStage(TOpRoot &root, TRBOContext &ctx) override;
 
-    TVector<std::shared_ptr<IRule>> Rules;
+    TVector<std::unique_ptr<IRule>> Rules;
 };
 
 /**
- * A rule based optimizer is a collection of rule-based and global stages
+ * A rule based optimizer is a collection of rule-based and global stages.
  */
-class TRuleBasedOptimizer {
+class TRuleBasedOptimizer : public NNonCopyable::TNonCopyable {
 public:
-    TRuleBasedOptimizer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, TAutoPtr<IGraphTransformer> rboTypeAnnTransformer,
-                        TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peephole, const NMiniKQL::IFunctionRegistry& funcRegistry,
-                        TVector<std::shared_ptr<IRBOStage>> stages)
-        : KqpCtx(*kqpCtx)
-        , TypeCtx(typeCtx)
-        , RBOTypeAnnTransformer(rboTypeAnnTransformer)
-        , TypeAnnTransformer(typeAnnTransformer)
-        , PeepholeTransformer(peephole)
-        , FuncRegistry(funcRegistry)
-        , Stages(stages) {
-    }
+    TRuleBasedOptimizer() = default;
+    ~TRuleBasedOptimizer() = default;
 
-    TRuleBasedOptimizer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, TAutoPtr<IGraphTransformer> rboTypeAnnTransformer,
-                        TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peephole, const NMiniKQL::IFunctionRegistry& funcRegistry)
-        : KqpCtx(*kqpCtx)
-        , TypeCtx(typeCtx)
-        , RBOTypeAnnTransformer(rboTypeAnnTransformer)
-        , TypeAnnTransformer(typeAnnTransformer)
-        , PeepholeTransformer(peephole)
-        , FuncRegistry(funcRegistry) {
-    }
+    // This function applies RBO optimizations, translates given `root` to physical yql `callables`, applies lightweight (stage based) physical optimizations
+    // and returns a root of the physical program.
+    TExprNode::TPtr Optimize(TOpRoot& root, TRBOContext& rboCtx);
 
-    TExprNode::TPtr Optimize(TOpRoot& root, TExprContext& ctx);
-    void AddStage(std::shared_ptr<IRBOStage>&& stage) {
+    // Adds a RBO stage to the RBO pipeline.
+    void AddStage(std::unique_ptr<IRBOStage>&& stage) {
         Stages.push_back(std::move(stage));
     }
 
-    TKqpOptimizeContext& KqpCtx;
-    TTypeAnnotationContext& TypeCtx;
-    TAutoPtr<IGraphTransformer> RBOTypeAnnTransformer;
-    TAutoPtr<IGraphTransformer> TypeAnnTransformer;
-    TAutoPtr<IGraphTransformer> PeepholeTransformer;
-    const NMiniKQL::IFunctionRegistry& FuncRegistry;
-    TVector<std::shared_ptr<IRBOStage>> Stages;
+    TVector<std::unique_ptr<IRBOStage>> Stages;
 };
 
 /**
  * After the rule-based optimizer generates a final plan (logical plan with detailed physical properties)
- * we convert it into a final physical representation that directly correpsonds to the exection plan
+ * we convert it into a final physical representation that directly correpsonds to the execution plan.
  */
-TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& ctx, TAutoPtr<IGraphTransformer> typeAnnTransformer, 
-                                  TAutoPtr<IGraphTransformer> peepholeTransformer);
+TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& ctx);
 
 } // namespace NKqp
 } // namespace NKikimr

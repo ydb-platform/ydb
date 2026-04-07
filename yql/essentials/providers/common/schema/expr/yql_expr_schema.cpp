@@ -14,17 +14,18 @@
 #include <util/generic/map.h>
 #include <util/stream/str.h>
 
-namespace NYql {
-namespace NCommon {
+#include <utility>
+
+namespace NYql::NCommon {
 
 template <template <typename> class TSaver>
 class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
-    typedef TSaver<TExprTypeSaver<TSaver>> TBase;
+    using TBase = TSaver<TExprTypeSaver<TSaver>>;
 
     struct TStructAdaptor {
         const TStructExprType* Type;
 
-        TStructAdaptor(const TStructExprType* type)
+        explicit TStructAdaptor(const TStructExprType* type)
             : Type(type)
         {
         }
@@ -84,7 +85,7 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
     struct TTupleAdaptor {
         const TTupleExprType* Type;
 
-        TTupleAdaptor(const TTupleExprType* type)
+        explicit TTupleAdaptor(const TTupleExprType* type)
             : Type(type)
         {
         }
@@ -101,7 +102,7 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
     struct TCallableAdaptor {
         const TCallableExprType* Type;
 
-        TCallableAdaptor(const TCallableExprType* type)
+        explicit TCallableAdaptor(const TCallableExprType* type)
             : Type(type)
         {
         }
@@ -199,6 +200,12 @@ public:
             case ETypeAnnotationKind::Unit:
                 TBase::SaveUnitType();
                 break;
+            case ETypeAnnotationKind::Universal:
+                TBase::SaveUniversalType();
+                break;
+            case ETypeAnnotationKind::UniversalStruct:
+                TBase::SaveUniversalStructType();
+                break;
             case ETypeAnnotationKind::EmptyList:
                 TBase::SaveEmptyListType();
                 break;
@@ -279,14 +286,14 @@ TString WriteTypeToYson(const TTypeAnnotationNode* type, NYson::EYsonFormat form
 }
 
 struct TExprTypeLoader {
-    typedef const TTypeAnnotationNode* TType;
+    using TType = const TTypeAnnotationNode*;
 
     TExprContext& Ctx;
     TPosition Pos;
 
-    TExprTypeLoader(TExprContext& ctx, const TPosition& pos = TPosition())
+    explicit TExprTypeLoader(TExprContext& ctx, TPosition pos = TPosition())
         : Ctx(ctx)
-        , Pos(pos)
+        , Pos(std::move(pos))
     {
     }
     TMaybe<TType> LoadVoidType(ui32 /*level*/) {
@@ -297,6 +304,12 @@ struct TExprTypeLoader {
     }
     TMaybe<TType> LoadUnitType(ui32 /*level*/) {
         return Ctx.MakeType<TUnitExprType>();
+    }
+    TMaybe<TType> LoadUniversalType(ui32 /*level*/) {
+        return Ctx.MakeType<TUniversalExprType>();
+    }
+    TMaybe<TType> LoadUniversalStructType(ui32 /*level*/) {
+        return Ctx.MakeType<TUniversalStructExprType>();
     }
     TMaybe<TType> LoadGenericType(ui32 /*level*/) {
         return Ctx.MakeType<TGenericExprType>();
@@ -422,7 +435,7 @@ const TTypeAnnotationNode* ParseTypeFromYson(const NYT::TNode& node, TExprContex
 }
 
 struct TOrderAwareExprTypeLoader: public TExprTypeLoader {
-    typedef const TTypeAnnotationNode* TType;
+    using TType = const TTypeAnnotationNode*;
     TColumnOrder& TopLevelColumns;
 
     TOrderAwareExprTypeLoader(TExprContext& ctx, const TPosition& pos, TColumnOrder& topLevelColumns)
@@ -465,5 +478,4 @@ void WriteResOrPullType(NYson::TYsonConsumerBase& writer, const TTypeAnnotationN
     }
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

@@ -4,8 +4,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/regex/hyperscan/hyperscan.h>
 
-namespace NReWrapper {
-namespace NDispatcher {
+namespace NReWrapper::NDispatcher {
 
 Y_UNIT_TEST_SUITE(ReWrapperDispatcherTestHyperscan) {
 Y_UNIT_TEST(LegacySerialization) {
@@ -33,5 +32,4 @@ Y_UNIT_TEST(Serialization) {
 }
 } // Y_UNIT_TEST_SUITE(ReWrapperDispatcherTestHyperscan)
 
-} // namespace NDispatcher
-} // namespace NReWrapper
+} // namespace NReWrapper::NDispatcher

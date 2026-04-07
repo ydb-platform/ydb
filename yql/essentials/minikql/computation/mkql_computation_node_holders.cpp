@@ -15,8 +15,9 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/singleton.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <utility>
+
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -36,7 +37,7 @@ class TDirectListHolder: public TComputationValue<TDirectListHolder> {
 public:
     class TIterator: public TComputationValue<TIterator> {
     public:
-        TIterator(const TDirectListHolder* parent)
+        explicit TIterator(const TDirectListHolder* parent)
             : TComputationValue(parent->GetMemInfo())
             , Parent_(const_cast<TDirectListHolder*>(parent))
             , Iterator_(parent->Items_)
@@ -232,7 +233,11 @@ private:
     }
 
     const NUdf::TUnboxedValue* GetElements() const final {
+#ifdef YQL_EMULATE_LAZY_ITERABLES
+        return nullptr;
+#else  // YQL_EMULATE_LAZY_ITERABLES
         return Items_.GetItems();
+#endif // YQL_EMULATE_LAZY_ITERABLES
     }
 
     bool IsSortedDict() const override {
@@ -248,7 +253,7 @@ private:
     using TBaseValue = TComputationValue<TVectorHolderBase<TBaseVector>>;
 
 public:
-    TVectorHolderBase(TMemoryUsageInfo* memInfo)
+    explicit TVectorHolderBase(TMemoryUsageInfo* memInfo)
         : TBaseValue(memInfo)
     {
     }
@@ -258,7 +263,7 @@ public:
     {
     }
 
-    ~TVectorHolderBase() {
+    ~TVectorHolderBase() override {
     }
 
 private:
@@ -267,7 +272,7 @@ private:
         using TBase = TTemporaryComputationValue<TValuesIterator>;
 
     public:
-        TValuesIterator(const TVectorHolderBase* parent)
+        explicit TValuesIterator(const TVectorHolderBase* parent)
             : TBase(parent->GetMemInfo())
             , Size_(parent->size())
             , Parent_(const_cast<TVectorHolderBase*>(parent))
@@ -298,7 +303,7 @@ private:
         using TBase = TTemporaryComputationValue<TDictIterator>;
 
     public:
-        TDictIterator(const TVectorHolderBase* parent)
+        explicit TDictIterator(const TVectorHolderBase* parent)
             : TBase(parent->GetMemInfo())
             , Size_(parent->size())
             , Parent_(const_cast<TVectorHolderBase*>(parent))
@@ -427,7 +432,11 @@ private:
     }
 
     const NUdf::TUnboxedValue* GetElements() const final {
+#ifdef YQL_EMULATE_LAZY_ITERABLES
+        return nullptr;
+#else  // YQL_EMULATE_LAZY_ITERABLES
         return TBaseVector::data();
+#endif // YQL_EMULATE_LAZY_ITERABLES
     }
 
     bool IsSortedDict() const override {
@@ -453,7 +462,7 @@ public:
 
 class TEmptyContainerHolder: public TComputationValue<TEmptyContainerHolder> {
 public:
-    TEmptyContainerHolder(TMemoryUsageInfo* memInfo)
+    explicit TEmptyContainerHolder(TMemoryUsageInfo* memInfo)
         : TComputationValue(memInfo)
         , None_()
     {
@@ -555,7 +564,11 @@ private:
     }
 
     const NUdf::TUnboxedValue* GetElements() const override {
+#ifdef YQL_EMULATE_LAZY_ITERABLES
+        return nullptr;
+#else  // YQL_EMULATE_LAZY_ITERABLES
         return &None_;
+#endif // YQL_EMULATE_LAZY_ITERABLES
     }
 
     const NUdf::TUnboxedValue None_;
@@ -564,12 +577,12 @@ private:
 
 class TSortedSetHolder: public TComputationValue<TSortedSetHolder> {
 public:
-    typedef TUnboxedValueVector TItems;
+    using TItems = TUnboxedValueVector;
 
     template <bool NoSwap>
     class TIterator: public TComputationValue<TIterator<NoSwap>> {
     public:
-        TIterator(const TSortedSetHolder* parent)
+        explicit TIterator(const TSortedSetHolder* parent)
             : TComputationValue<TIterator<NoSwap>>(parent->GetMemInfo())
             , Parent_(const_cast<TSortedSetHolder*>(parent))
             , Iterator_(Parent_->Items_.begin())
@@ -630,7 +643,7 @@ public:
     TSortedSetHolder(
         TMemoryUsageInfo* memInfo,
         TSortedSetFiller filler,
-        const TKeyTypes& types,
+        TKeyTypes types,
         bool isTuple,
         EDictSortMode mode,
         bool eagerFill,
@@ -639,8 +652,8 @@ public:
         const NUdf::IEquate* equate,
         const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
-        , Filler_(filler)
-        , Types_(types)
+        , Filler_(std::move(filler))
+        , Types_(std::move(types))
         , IsTuple_(isTuple)
         , Mode_(mode)
         , Compare_(compare)
@@ -657,7 +670,7 @@ public:
         }
     }
 
-    ~TSortedSetHolder() {
+    ~TSortedSetHolder() override {
         MKQL_MEM_RETURN(GetMemInfo(), &Items_, Items_.capacity() * sizeof(TItems::value_type));
     }
 
@@ -778,12 +791,12 @@ private:
 
 class TSortedDictHolder: public TComputationValue<TSortedDictHolder> {
 public:
-    typedef TKeyPayloadPairVector TItems;
+    using TItems = TKeyPayloadPairVector;
 
     template <bool NoSwap>
     class TIterator: public TComputationValue<TIterator<NoSwap>> {
     public:
-        TIterator(const TSortedDictHolder* parent)
+        explicit TIterator(const TSortedDictHolder* parent)
             : TComputationValue<TIterator<NoSwap>>(parent->GetMemInfo())
             , Parent_(const_cast<TSortedDictHolder*>(parent))
             , Iterator_(Parent_->Items_.begin())
@@ -844,7 +857,7 @@ public:
     TSortedDictHolder(
         TMemoryUsageInfo* memInfo,
         TSortedDictFiller filler,
-        const TKeyTypes& types,
+        TKeyTypes types,
         bool isTuple,
         EDictSortMode mode,
         bool eagerFill,
@@ -853,8 +866,8 @@ public:
         const NUdf::IEquate* equate,
         const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
-        , Filler_(filler)
-        , Types_(types)
+        , Filler_(std::move(filler))
+        , Types_(std::move(types))
         , IsTuple_(isTuple)
         , Mode_(mode)
         , Compare_(compare)
@@ -871,7 +884,7 @@ public:
         }
     }
 
-    ~TSortedDictHolder() {
+    ~TSortedDictHolder() override {
         MKQL_MEM_RETURN(GetMemInfo(), &Items_, Items_.capacity() * sizeof(TItems::value_type));
     }
 
@@ -997,7 +1010,7 @@ class THashedSetHolder: public TComputationValue<THashedSetHolder> {
 public:
     class TIterator: public TComputationValue<TIterator> {
     public:
-        TIterator(const THashedSetHolder* parent)
+        explicit TIterator(const THashedSetHolder* parent)
             : TComputationValue(parent->GetMemInfo())
             , Parent_(const_cast<THashedSetHolder*>(parent))
             , Iterator_(Parent_->Set_.begin())
@@ -1049,11 +1062,11 @@ public:
     };
 
     THashedSetHolder(TMemoryUsageInfo* memInfo, THashedSetFiller filler,
-                     const TKeyTypes& types, bool isTuple, bool eagerFill, TType* encodedType,
+                     TKeyTypes types, bool isTuple, bool eagerFill, TType* encodedType,
                      const NUdf::IHash* hash, const NUdf::IEquate* equate, const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
-        , Filler_(filler)
-        , Types_(types)
+        , Filler_(std::move(filler))
+        , Types_(std::move(types))
         , Set_(0, TValueHasher(Types_, isTuple, hash), TValueEqual(Types_, isTuple, equate))
         , IsBuilt_(false)
         , HolderFactory_(holderFactory)
@@ -1159,7 +1172,7 @@ public:
             AtNull,
             Iterator
         };
-        TIterator(const THashedSingleFixedSetHolder* parent)
+        explicit TIterator(const THashedSingleFixedSetHolder* parent)
             : TComputationValue<TIterator>(parent->GetMemInfo())
             , Parent_(const_cast<THashedSingleFixedSetHolder*>(parent))
             , Iterator_(Parent_->Set_.begin())
@@ -1279,7 +1292,7 @@ public:
             AtNull,
             Iterator
         };
-        TIterator(const THashedSingleFixedCompactSetHolder* parent)
+        explicit TIterator(const THashedSingleFixedCompactSetHolder* parent)
             : TComputationValue<TIterator>(parent->GetMemInfo())
             , Parent_(const_cast<THashedSingleFixedCompactSetHolder*>(parent))
             , Iterator_(Parent_->Set_.Iterate())
@@ -1391,7 +1404,7 @@ public:
 
     class TIterator: public TComputationValue<TIterator> {
     public:
-        TIterator(const THashedCompactSetHolder* parent)
+        explicit TIterator(const THashedCompactSetHolder* parent)
             : TComputationValue(parent->GetMemInfo())
             , Parent_(const_cast<THashedCompactSetHolder*>(parent))
             , Iterator_(Parent_->Set_.Iterate())
@@ -1501,7 +1514,7 @@ public:
     template <bool NoSwap>
     class TIterator: public TComputationValue<TIterator<NoSwap>> {
     public:
-        TIterator(const THashedCompactMapHolder* parent)
+        explicit TIterator(const THashedCompactMapHolder* parent)
             : TComputationValue<TIterator<NoSwap>>(parent->GetMemInfo())
             , Parent_(const_cast<THashedCompactMapHolder*>(parent))
             , Iterator_(Parent_->Map_.Iterate())
@@ -1683,7 +1696,7 @@ public:
     template <bool NoSwap>
     class TIterator: public TComputationValue<TIterator<NoSwap>> {
     public:
-        TIterator(const THashedCompactMultiMapHolder* parent)
+        explicit TIterator(const THashedCompactMultiMapHolder* parent)
             : TComputationValue<TIterator<NoSwap>>(parent->GetMemInfo())
             , Parent_(const_cast<THashedCompactMultiMapHolder*>(parent))
             , Iterator_(parent->Map_.Iterate())
@@ -1795,7 +1808,7 @@ public:
     template <bool NoSwap>
     class TIterator: public TTemporaryComputationValue<TIterator<NoSwap>> {
     public:
-        TIterator(const THashedDictHolder* parent)
+        explicit TIterator(const THashedDictHolder* parent)
             : TTemporaryComputationValue<TIterator<NoSwap>>(parent->GetMemInfo())
             , Parent_(const_cast<THashedDictHolder*>(parent))
             , Iterator_(Parent_->Map_.begin())
@@ -1856,11 +1869,11 @@ public:
     };
 
     THashedDictHolder(TMemoryUsageInfo* memInfo, THashedDictFiller filler,
-                      const TKeyTypes& types, bool isTuple, bool eagerFill, TType* encodedType,
+                      TKeyTypes types, bool isTuple, bool eagerFill, TType* encodedType,
                       const NUdf::IHash* hash, const NUdf::IEquate* equate, const THolderFactory& holderFactory)
         : TComputationValue(memInfo)
-        , Filler_(filler)
-        , Types_(types)
+        , Filler_(std::move(filler))
+        , Types_(std::move(types))
         , Map_(0, TValueHasher(Types_, isTuple, hash), TValueEqual(Types_, isTuple, equate))
         , IsBuilt_(false)
         , HolderFactory_(holderFactory)
@@ -1961,7 +1974,7 @@ public:
             AtNull,
             Iterator
         };
-        TIterator(const THashedSingleFixedMapHolder* parent)
+        explicit TIterator(const THashedSingleFixedMapHolder* parent)
             : TComputationValue<TIterator<NoSwap>>(parent->GetMemInfo())
             , Parent_(const_cast<THashedSingleFixedMapHolder*>(parent))
             , Iterator_(Parent_->Map_.begin())
@@ -2096,7 +2109,7 @@ public:
             AtNull,
             Iterator
         };
-        TIterator(const THashedSingleFixedCompactMapHolder* parent)
+        explicit TIterator(const THashedSingleFixedCompactMapHolder* parent)
             : TComputationValue<TIterator<NoSwap>>(parent->GetMemInfo())
             , Parent_(const_cast<THashedSingleFixedCompactMapHolder*>(parent))
             , Iterator_(Parent_->Map_.Iterate())
@@ -2319,7 +2332,7 @@ public:
     public:
         class TIterator: public TComputationValue<TIterator> {
         public:
-            TIterator(const THashedSingleFixedCompactMultiMapHolder* parent)
+            explicit TIterator(const THashedSingleFixedCompactMultiMapHolder* parent)
                 : TComputationValue<TIterator>(parent->GetMemInfo())
                 , Parent_(const_cast<THashedSingleFixedCompactMultiMapHolder*>(parent))
                 , Iterator_(Parent_->NullPayloads_.cbegin())
@@ -2382,7 +2395,7 @@ public:
     template <bool NoSwap>
     class TIterator: public TComputationValue<TIterator<NoSwap>> {
     public:
-        TIterator(const THashedSingleFixedCompactMultiMapHolder* parent)
+        explicit TIterator(const THashedSingleFixedCompactMultiMapHolder* parent)
             : TComputationValue<TIterator<NoSwap>>(parent->GetMemInfo())
             , Parent_(const_cast<THashedSingleFixedCompactMultiMapHolder*>(parent))
             , Iterator_(parent->Map_.Iterate())
@@ -2646,7 +2659,7 @@ public:
 
     TLimitedList(TMemoryUsageInfo* memInfo, NUdf::TRefCountedPtr<NUdf::IBoxedValue> parent, TMaybe<ui64> skip, TMaybe<ui64> take)
         : TComputationValue(memInfo)
-        , Parent_(parent)
+        , Parent_(std::move(parent))
         , Skip_(skip)
         , Take_(take)
     {
@@ -2854,7 +2867,7 @@ class TDictValueBuilder: public NUdf::IDictValueBuilder {
 public:
     TDictValueBuilder(
         const THolderFactory& holderFactory,
-        const TKeyTypes& types,
+        TKeyTypes types,
         bool isTuple,
         ui32 dictFlags,
         TType* encodeType,
@@ -2862,7 +2875,7 @@ public:
         const NUdf::IEquate* equate,
         const NUdf::ICompare* compare)
         : HolderFactory_(holderFactory)
-        , Types_(types)
+        , Types_(std::move(types))
         , IsTuple_(isTuple)
         , DictFlags_(dictFlags)
         , EncodeType_(encodeType)
@@ -3710,5 +3723,4 @@ NUdf::TUnboxedValuePod TPlainContainerCache::NewArray(const THolderFactory& fact
     return static_cast<const NUdf::TUnboxedValuePod&>(Cached_[CacheIndex_]);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

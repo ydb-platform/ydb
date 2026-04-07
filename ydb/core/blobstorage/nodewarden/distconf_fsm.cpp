@@ -14,6 +14,13 @@ namespace NKikimr::NStorage {
                 connected.push_back(nodeId);
             }
 
+            ui32 numConnected = 0;
+            ui32 numDisconnected = 0;
+            for (const auto& [nodeId, node] : AllNodeIds) {
+                ++(AllBoundNodes.contains(node) ? numConnected : numDisconnected);
+            }
+            MajorityOfNodesConnected = numConnected > numDisconnected;
+
             // recalculate global and local pile quorums
             Y_ABORT_UNLESS(StorageConfig);
             GlobalQuorum = HasNodeQuorum(*StorageConfig, connected, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr, true);
@@ -168,7 +175,7 @@ namespace NKikimr::NStorage {
     }
 
     TDistributedConfigKeeper::TProcessCollectConfigsResult TDistributedConfigKeeper::ProcessCollectConfigs(
-            TEvGather::TCollectConfigs *res, std::optional<TStringBuf> selfAssemblyUUID) {
+            TEvGather::TCollectConfigs *res, std::optional<TStringBuf> selfAssemblyUUID, bool dryRun) {
         TStringStream err;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -364,7 +371,7 @@ namespace NKikimr::NStorage {
 
         NKikimrBlobStorage::TStorageConfig *proposedConfig = nullptr;
 
-        if (persistedConfig) { // we have a committed config, apply and spread it
+        if (persistedConfig && !dryRun) { // we have a committed config, apply and spread it
             ApplyCommittedStorageConfig(*persistedConfig);
         }
 
@@ -399,10 +406,16 @@ namespace NKikimr::NStorage {
                 baseConfig->GetSelfManagementConfig().GetAutomaticBootstrap();
             if (canBootstrapAutomatically || selfAssemblyUUID) {
                 if (!selfAssemblyUUID) {
-                    if (!CurrentSelfAssemblyUUID) {
-                        CurrentSelfAssemblyUUID.emplace(CreateGuidAsString());
+                    if (!dryRun) {
+                        if (!CurrentSelfAssemblyUUID) {
+                            CurrentSelfAssemblyUUID.emplace(CreateGuidAsString());
+                        }
+                        selfAssemblyUUID.emplace(CurrentSelfAssemblyUUID.value());
+                    } else {
+                        // in dry run mode, use a temporary UUID without modifying state
+                        const TString tempUUID = CreateGuidAsString();
+                        selfAssemblyUUID.emplace(tempUUID);
                     }
-                    selfAssemblyUUID.emplace(CurrentSelfAssemblyUUID.value());
                 }
                 propositionBase.emplace(*baseConfig);
                 if (auto error = GenerateFirstConfig(baseConfig, TString(*selfAssemblyUUID))) {

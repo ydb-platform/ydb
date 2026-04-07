@@ -15,7 +15,7 @@ public:
         std::shared_ptr<TUploadTypes>& types,
         std::shared_ptr<arrow::RecordBatch>& data,
         ui64 cookie)
-        : TUploadRowsBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>())
+        : TUploadRowsBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(), BUILTIN_ACL_NO_USER_SID)
         , Sender(sender)
         , Database(database)
         , Table(table)

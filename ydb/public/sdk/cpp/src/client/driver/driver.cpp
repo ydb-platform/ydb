@@ -40,10 +40,12 @@ public:
     EDiscoveryMode GetDiscoveryMode() const override { return DiscoveryMode; }
     size_t GetMaxQueuedRequests() const override { return MaxQueuedRequests; }
     TTcpKeepAliveSettings GetTcpKeepAliveSettings() const override { return TcpKeepAliveSettings; }
+    bool GetTcpNoDelay() const override { return TcpNoDelay; }
     bool GetDrinOnDtors() const override { return DrainOnDtors; }
     TBalancingPolicy::TImpl GetBalancingSettings() const override { return BalancingSettings; }
     TDuration GetGRpcKeepAliveTimeout() const override { return GRpcKeepAliveTimeout; }
     bool GetGRpcKeepAlivePermitWithoutCalls() const override { return GRpcKeepAlivePermitWithoutCalls; }
+    std::string GetGRpcLoadBalancingPolicy() const override { return GRpcLoadBalancingPolicy; }
     TDuration GetSocketIdleTimeout() const override { return SocketIdleTimeout; }
     uint64_t GetMemoryQuota() const override { return MemoryQuota; }
     uint64_t GetMaxInboundMessageSize() const override { return MaxInboundMessageSize; }
@@ -69,10 +71,12 @@ public:
             TCP_KEEPALIVE_COUNT,
             TCP_KEEPALIVE_INTERVAL
         };
+    bool TcpNoDelay = true;
     bool DrainOnDtors = true;
     TBalancingPolicy::TImpl BalancingSettings = TBalancingPolicy::TImpl::UsePreferableLocation(std::nullopt);
     TDuration GRpcKeepAliveTimeout = TDuration::Seconds(10);
     bool GRpcKeepAlivePermitWithoutCalls = true;
+    std::string GRpcLoadBalancingPolicy = "round_robin";
     TDuration SocketIdleTimeout = TDuration::Minutes(6);
     uint64_t MemoryQuota = 0;
     uint64_t MaxInboundMessageSize = 0;
@@ -95,6 +99,10 @@ TDriverConfig::TDriverConfig(const std::string& connectionString)
 TDriverConfig& TDriverConfig::SetEndpoint(const std::string& endpoint) {
     Impl_->Endpoint = endpoint;
     return *this;
+}
+
+const std::string& TDriverConfig::GetEndpoint() const {
+    return Impl_->Endpoint;
 }
 
 TDriverConfig& TDriverConfig::SetNetworkThreadsNum(size_t sz) {
@@ -166,6 +174,11 @@ TDriverConfig& TDriverConfig::SetTcpKeepAliveSettings(bool enable, size_t idle, 
     return *this;
 }
 
+TDriverConfig& TDriverConfig::SetTcpNoDelay(bool enable) {
+    Impl_->TcpNoDelay = enable;
+    return *this;
+}
+
 TDriverConfig& TDriverConfig::SetGrpcMemoryQuota(uint64_t bytes) {
     Impl_->MemoryQuota = bytes;
     return *this;
@@ -192,6 +205,11 @@ TDriverConfig& TDriverConfig::SetGRpcKeepAliveTimeout(TDuration timeout) {
 
 TDriverConfig& TDriverConfig::SetGRpcKeepAlivePermitWithoutCalls(bool permitWithoutCalls) {
     Impl_->GRpcKeepAlivePermitWithoutCalls = permitWithoutCalls;
+    return *this;
+}
+
+TDriverConfig& TDriverConfig::SetGRpcLoadBalancingPolicy(const std::string& policy) {
+    Impl_->GRpcLoadBalancingPolicy = policy;
     return *this;
 }
 
@@ -267,10 +285,12 @@ TDriverConfig TDriver::GetConfig() const {
         Impl_->TcpKeepAliveSettings_.Count,
         Impl_->TcpKeepAliveSettings_.Interval
     );
+    config.SetTcpNoDelay(Impl_->TcpNoDelay_);
     config.SetDrainOnDtors(Impl_->DrainOnDtors_);
     config.SetBalancingPolicy(std::make_unique<TBalancingPolicy::TImpl>(Impl_->BalancingSettings_));
     config.SetGRpcKeepAliveTimeout(std::chrono::duration_cast<std::chrono::microseconds>(Impl_->GRpcKeepAliveTimeout_));
     config.SetGRpcKeepAlivePermitWithoutCalls(Impl_->GRpcKeepAlivePermitWithoutCalls_);
+    config.SetGRpcLoadBalancingPolicy(Impl_->GRpcLoadBalancingPolicy_);
     config.SetSocketIdleTimeout(std::chrono::duration_cast<std::chrono::microseconds>(Impl_->SocketIdleTimeout_));
     config.SetMaxInboundMessageSize(Impl_->MaxInboundMessageSize_);
     config.SetMaxOutboundMessageSize(Impl_->MaxOutboundMessageSize_);

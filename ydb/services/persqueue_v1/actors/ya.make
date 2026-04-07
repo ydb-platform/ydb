@@ -8,7 +8,9 @@ PEERDIR(
     ydb/core/util
     ydb/core/base
     ydb/core/grpc_services
+    ydb/core/persqueue/common
     ydb/core/persqueue/events
+    ydb/core/persqueue/public
     ydb/core/persqueue/public/counters
     ydb/core/persqueue/public/cluster_tracker
     ydb/core/protos
@@ -32,6 +34,7 @@ SRCS(
     commit_offset_actor.cpp
     distributed_commit_helper.h
     distributed_commit_helper.cpp
+    distributed_commit_helper_sql.cpp
     events.h
     persqueue_utils.h
     persqueue_utils.cpp

@@ -2643,7 +2643,9 @@
   ],
   "schemaVersion": 36,
   "style": "dark",
-  "tags": [],
+  "tags": [
+    "ydb"
+  ],
   "templating": {
     "list": [
       {
@@ -2690,7 +2692,7 @@
   "timepicker": {},
   "timezone": "",
   "title": "TxProxy",
-  "uid": "txproxy",
+  "uid": "ydb-txproxy",
   "version": 1,
   "weekStart": ""
 }

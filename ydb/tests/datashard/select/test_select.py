@@ -1,7 +1,9 @@
 import pytest
+import binascii
 
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.datashard.lib.dml_operations import DMLOperations
+from ydb.tests.datashard.lib.test_pg_base import TestPgBase
 from ydb.tests.datashard.lib.types_of_variables import (
     cleanup_type_name,
     format_sql_value,
@@ -16,51 +18,56 @@ from ydb.tests.datashard.lib.types_of_variables import (
     index_three_sync_not_Bool,
     index_four_sync,
     index_zero_sync,
+    pk_pg_types_mixed,
+    pk_pg_types_no_bool_mixed,
+    non_pk_pg_types_mixed,
 )
 
-unsuppored_distinct_types = [
+unsupported_distinct_types = [
     "DyNumber",
     "UUID",  # https://github.com/ydb-platform/ydb/issues/17484
 ]
-uncomparable_types = ["Json", "JsonDocument", "Yson"]
+uncomparable_types = ["Json", "JsonDocument", "Yson", "pgjson", "pgjsonb"]
+text_types = ["String", "Utf8", "pgbytea", "pgtext", "pgvarchar"]
 
 
-def numeric_sort_key(s):
+def numeric_sort_key(s, type):
     if isinstance(s, bytes):
         s = s.decode('utf-8')
-    if isinstance(s, str):
-        if s.startswith('String') or s.startswith('Utf8'):
-            parts = s.split(' ', 1)
+    if type == 'pgbytea':
+        s = binascii.unhexlify(s[2:]).decode('utf-8')
+    if type in text_types:
+        parts = s.split(' ', 1)
+        if len(parts) == 2:
             return parts[0] + ' ' + ('%04d' % int(parts[1]))
+    if type in ("pgint2", "pgint4", "pgint8"):
+        return int(s)
+    if type in ("pgnumeric", "pgfloat4", "pgfloat8"):
+        return float(s)
     return s
 
 
-class TestDML(TestBase):
-    @pytest.mark.parametrize(
-        "table_name, pk_types, all_types, index, ttl, unique, sync",
-        [
-            ("table_index_4_UNIQUE_SYNC", pk_types, {}, index_four_sync, "", "UNIQUE", "SYNC"),
-            ("table_index_3_UNIQUE_SYNC", pk_types, {}, index_three_sync_not_Bool, "", "UNIQUE", "SYNC"),
-            ("table_index_2_UNIQUE_SYNC", pk_types, {}, index_second_sync, "", "UNIQUE", "SYNC"),
-            ("table_index_1_UNIQUE_SYNC", pk_types, {}, index_first_sync, "", "UNIQUE", "SYNC"),
-            ("table_index_0_UNIQUE_SYNC", pk_types, {}, index_zero_sync, "", "UNIQUE", "SYNC"),
-            ("table_index_4__SYNC", pk_types, {}, index_four_sync, "", "", "SYNC"),
-            ("table_index_3__SYNC", pk_types, {}, index_three_sync, "", "", "SYNC"),
-            ("table_index_2__SYNC", pk_types, {}, index_second_sync, "", "", "SYNC"),
-            ("table_index_1__SYNC", pk_types, {}, index_first_sync, "", "", "SYNC"),
-            ("table_index_0__SYNC", pk_types, {}, index_zero_sync, "", "", "SYNC"),
-            ("table_index_1__ASYNC", pk_types, {}, index_second, "", "", "ASYNC"),
-            ("table_index_0__ASYNC", pk_types, {}, index_first, "", "", "ASYNC"),
-            ("table_all_types", pk_types, {**pk_types, **non_pk_types}, {}, "", "", ""),
-            ("table_ttl_DyNumber", pk_types, {}, {}, "DyNumber", "", ""),
-            ("table_ttl_Uint32", pk_types, {}, {}, "Uint32", "", ""),
-            ("table_ttl_Uint64", pk_types, {}, {}, "Uint64", "", ""),
-            ("table_ttl_Datetime", pk_types, {}, {}, "Datetime", "", ""),
-            ("table_ttl_Timestamp", pk_types, {}, {}, "Timestamp", "", ""),
-            ("table_ttl_Date", pk_types, {}, {}, "Date", "", ""),
-        ],
-    )
-    def test_select(
+def assert_bool_types(type, rows):
+    errors = []
+    if len(rows) != 2:
+        errors.append(f"Expected 2 rows, got {len(rows)} for type {type}")
+    if type == "Bool":
+        if rows[0][0] is not False:
+            errors.append(f"Expected False at first row, got {rows[0][0]} for type {type}")
+        if rows[1][0] is not True:
+            errors.append(f"Expected True at second row, got {rows[1][0]} for type {type}")
+    elif type == "pgbool":
+        if rows[0][0] != 'f':
+            errors.append(f"Expected 'f' (False) at first row, got {rows[0][0]} for type {type}")
+        if rows[1][0] != 't':
+            errors.append(f"Expected 't' (True) at second row, got {rows[1][0]} for type {type}")
+    else:
+        errors.append(f"Unknown bool type: {type}")
+    assert not errors, "errors occured:\n{}".format("\n".join(errors))
+
+
+class TestSelectBase(TestBase):
+    def do_test_select(
         self,
         table_name: str,
         pk_types: dict[str, str],
@@ -99,19 +106,24 @@ class TestDML(TestBase):
             rows = self.query(f"select {", ".join(selected_columns)} from {table_name} limit 1 OFFSET {offset}")
             self.assert_type_after_select(offset + 1, rows[0], all_types, pk_types, index, ttl, dml)
 
-    def create_types_for_all_select(
+    def create_types_for_all_select_with_types(
         self, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str
     ):
         selected_columns = []
         for type in all_types.keys():
-            selected_columns.append(f"col_{cleanup_type_name(type)}")
+            selected_columns.append((f"col_{cleanup_type_name(type)}", type))
         for type in pk_types.keys():
-            selected_columns.append(f"pk_{cleanup_type_name(type)}")
+            selected_columns.append((f"pk_{cleanup_type_name(type)}", type))
         for type in index.keys():
-            selected_columns.append(f"col_index_{cleanup_type_name(type)}")
+            selected_columns.append((f"col_index_{cleanup_type_name(type)}", type))
         if ttl != "":
-            selected_columns.append(f"ttl_{cleanup_type_name(ttl)}")
+            selected_columns.append((f"ttl_{cleanup_type_name(ttl)}", ttl))
         return selected_columns
+
+    def create_types_for_all_select(
+        self, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str
+    ):
+        return [name for name, type in self.create_types_for_all_select_with_types(all_types, pk_types, index, ttl)]
 
     def assert_type_after_select(
         self,
@@ -163,28 +175,37 @@ class TestDML(TestBase):
     ):
         for type in all_types.keys():
             if (
-                type not in unsuppored_distinct_types
+                type not in unsupported_distinct_types
                 and type not in uncomparable_types
             ):
                 rows_distinct = self.query(f"SELECT DISTINCT col_{cleanup_type_name(type)} from {table_name}")
-                rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0]))
-                for i in range(len(rows_distinct)):
-                    dml.assert_type(all_types, type, i + 1, rows_distinct[i][0])
+                rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0], type))
+                if type in ("Bool", "pgbool"):
+                    assert_bool_types(type, rows_distinct)
+                else:
+                    for i in range(len(rows_distinct)):
+                        dml.assert_type(all_types, type, i + 1, rows_distinct[i][0])
         for type in pk_types.keys():
-            if type not in unsuppored_distinct_types:
+            if type not in unsupported_distinct_types:
                 rows_distinct = self.query(f"SELECT DISTINCT pk_{cleanup_type_name(type)} from {table_name}")
-                rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0]))
-                for i in range(len(rows_distinct)):
-                    dml.assert_type(pk_types, type, i + 1, rows_distinct[i][0])
+                rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0], type))
+                if type in ("Bool", "pgbool"):
+                    assert_bool_types(type, rows_distinct)
+                else:
+                    for i in range(len(rows_distinct)):
+                        dml.assert_type(pk_types, type, i + 1, rows_distinct[i][0])
         for type in index.keys():
-            if type not in unsuppored_distinct_types:
+            if type not in unsupported_distinct_types:
                 rows_distinct = self.query(f"SELECT DISTINCT col_index_{cleanup_type_name(type)} from {table_name}")
-                rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0]))
-                for i in range(len(rows_distinct)):
-                    dml.assert_type(index, type, i + 1, rows_distinct[i][0])
+                rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0], type))
+                if type in ("Bool", "pgbool"):
+                    assert_bool_types(type, rows_distinct)
+                else:
+                    for i in range(len(rows_distinct)):
+                        dml.assert_type(index, type, i + 1, rows_distinct[i][0])
         if ttl != "" and ttl != "DyNumber":
             rows_distinct = self.query(f"SELECT DISTINCT ttl_{cleanup_type_name(ttl)} from {table_name}")
-            rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0]))
+            rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0], ttl))
             for i in range(len(rows_distinct)):
                 dml.assert_type(ttl_types, ttl, i + 1, rows_distinct[i][0])
 
@@ -200,15 +221,15 @@ class TestDML(TestBase):
         selected_columns = []
         for type in all_types.keys():
             if (
-                type not in unsuppored_distinct_types
+                type not in unsupported_distinct_types
                 and type not in uncomparable_types
             ):
                 selected_columns.append(f"col_{cleanup_type_name(type)}")
         for type in pk_types.keys():
-            if type not in unsuppored_distinct_types:
+            if type not in unsupported_distinct_types:
                 selected_columns.append(f"pk_{cleanup_type_name(type)}")
         for type in index.keys():
-            if type not in unsuppored_distinct_types:
+            if type not in unsupported_distinct_types:
                 selected_columns.append(f"col_index_{cleanup_type_name(type)}")
         if ttl != "" and ttl != "DyNumber":
             selected_columns.append(f"ttl_{cleanup_type_name(ttl)}")
@@ -221,24 +242,24 @@ class TestDML(TestBase):
         )
         for type in all_types.keys():
             if (
-                type not in unsuppored_distinct_types
+                type not in unsupported_distinct_types
                 and type not in uncomparable_types
             ):
-                sorted_rows = sorted(rows, key=lambda t: numeric_sort_key(t[f"col_{cleanup_type_name(type)}"]))
+                sorted_rows = sorted(rows, key=lambda t: numeric_sort_key(t[f"col_{cleanup_type_name(type)}"], type))
                 for line in range(len(sorted_rows)):
                     dml.assert_type(all_types, type, line + 1, sorted_rows[line][f"col_{cleanup_type_name(type)}"])
         for type in pk_types.keys():
-            if type not in unsuppored_distinct_types:
-                sorted_rows = sorted(rows, key=lambda t: numeric_sort_key(t[f"pk_{cleanup_type_name(type)}"]))
+            if type not in unsupported_distinct_types:
+                sorted_rows = sorted(rows, key=lambda t: numeric_sort_key(t[f"pk_{cleanup_type_name(type)}"], type))
                 for line in range(len(sorted_rows)):
                     dml.assert_type(pk_types, type, line + 1, sorted_rows[line][f"pk_{cleanup_type_name(type)}"])
         for type in index.keys():
-            if type not in unsuppored_distinct_types:
-                sorted_rows = sorted(rows, key=lambda t: numeric_sort_key(t[f"col_index_{cleanup_type_name(type)}"]))
+            if type not in unsupported_distinct_types:
+                sorted_rows = sorted(rows, key=lambda t: numeric_sort_key(t[f"col_index_{cleanup_type_name(type)}"], type))
                 for line in range(len(sorted_rows)):
                     dml.assert_type(index, type, line + 1, sorted_rows[line][f"col_index_{cleanup_type_name(type)}"])
         if ttl != "" and ttl != "DyNumber":
-            sorted_rows = sorted(rows, key=lambda t: numeric_sort_key(t[f"ttl_{cleanup_type_name(ttl)}"]))
+            sorted_rows = sorted(rows, key=lambda t: numeric_sort_key(t[f"ttl_{cleanup_type_name(ttl)}"], ttl))
             for line in range(len(sorted_rows)):
                 dml.assert_type(ttl_types, ttl, line + 1, sorted_rows[line][f"ttl_{cleanup_type_name(ttl)}"])
 
@@ -301,19 +322,19 @@ class TestDML(TestBase):
         for i in range(1, 100):
             rows = self.query(f"select {", ".join(selected_columns)} from {table_name} TABLESAMPLE SYSTEM({i}.0)")
             for _, row in enumerate(rows):
-                numb = row["pk_Int64"]
+                numb = int(row["pk_pgint8"]) if "pk_pgint8" in row else row["pk_Int64"]
                 self.assert_type_after_select(numb, row, all_types, pk_types, index, ttl, dml)
 
             rows = self.query(
                 f"select {", ".join(selected_columns)} from {table_name} TABLESAMPLE BERNOULLI({i}.0) REPEATABLE({i})"
             )
             for _, row in enumerate(rows):
-                numb = row["pk_Int64"]
+                numb = int(row["pk_pgint8"]) if "pk_pgint8" in row else row["pk_Int64"]
                 self.assert_type_after_select(numb, row, all_types, pk_types, index, ttl, dml)
 
             rows = self.query(f"select {", ".join(selected_columns)} from {table_name} SAMPLE 1.0 / {i}")
             for _, row in enumerate(rows):
-                numb = row["pk_Int64"]
+                numb = int(row["pk_pgint8"]) if "pk_pgint8" in row else row["pk_Int64"]
                 self.assert_type_after_select(numb, row, all_types, pk_types, index, ttl, dml)
 
     def order_by(
@@ -328,32 +349,44 @@ class TestDML(TestBase):
         count_rows = len(all_types) + len(pk_types) + len(index)
         if ttl != "":
             count_rows += 1
-        string_order = [(pk_types["String"](i), i) for i in range(1, count_rows + 1)]
-        string_order = sorted(string_order)
-        selected_columns = self.create_types_for_all_select(all_types, pk_types, index, ttl)
-        for statement in selected_columns:
-            if "Json" not in statement and "JsonDocument" not in statement and "Yson" not in statement:
-                rows = self.query(f"select {", ".join(selected_columns)} from {table_name} ORDER BY {statement} ASC")
-                if "String" not in statement and "Utf8" not in statement:
-                    for i, row in enumerate(rows):
-                        self.assert_type_after_select(i + 1, row, all_types, pk_types, index, ttl, dml)
-                else:
-                    for i, row in enumerate(rows):
-                        self.assert_type_after_select(string_order[i][1], row, all_types, pk_types, index, ttl, dml)
 
-                rows = self.query(f"select {", ".join(selected_columns)} from {table_name} ORDER BY {statement} DESC")
-                string_order.reverse()
-                if "Bool" not in statement:
-                    if "String" not in statement and "Utf8" not in statement:
-                        for line, row in enumerate(rows):
-                            self.assert_type_after_select(len(rows) - line, row, all_types, pk_types, index, ttl, dml)
-                    else:
-                        for i, row in enumerate(rows):
-                            self.assert_type_after_select(string_order[i][1], row, all_types, pk_types, index, ttl, dml)
-                else:
-                    for i, row in enumerate(rows):
-                        self.assert_type_after_select(i + 1, row, all_types, pk_types, index, ttl, dml)
-                string_order.reverse()
+        text_ordering = dict()
+        for type_name, gen_value in pk_types.items():
+            if type_name in text_types and type_name not in text_ordering:
+                text_ordering[type_name] = (
+                    sorted(range(1, count_rows + 1), key=gen_value),
+                    sorted(range(1, count_rows + 1), key=gen_value, reverse=True),
+                )
+
+        selected_columns = self.create_types_for_all_select_with_types(all_types, pk_types, index, ttl)
+        column_names = ", ".join(column_name for column_name, _ in selected_columns)
+        for column_name, column_type in selected_columns:
+            if column_type in uncomparable_types:
+                continue
+
+            if column_type in ("Bool", "pgbool"):
+                # add second column for stable order
+                ordering_asc = f'{column_name} ASC, {"pk_pgint8" if "pgint8" in pk_types else "pk_Int64"} ASC'
+                ordering_desc = f'{column_name} DESC, {"pk_pgint8" if "pgint8" in pk_types else "pk_Int64"} DESC'
+            else:
+                ordering_asc = f'{column_name} ASC'
+                ordering_desc = f'{column_name} DESC'
+
+            rows = self.query(f"select {column_names} from {table_name} ORDER BY {ordering_asc}")
+            if column_type in text_types:
+                for i, row in enumerate(rows):
+                    self.assert_type_after_select(text_ordering[column_type][0][i], row, all_types, pk_types, index, ttl, dml)
+            else:
+                for i, row in enumerate(rows):
+                    self.assert_type_after_select(i + 1, row, all_types, pk_types, index, ttl, dml)
+
+            rows = self.query(f"select {column_names} from {table_name} ORDER BY {ordering_desc}")
+            if column_type in text_types:
+                for i, row in enumerate(rows):
+                    self.assert_type_after_select(text_ordering[column_type][1][i], row, all_types, pk_types, index, ttl, dml)
+            else:
+                for line, row in enumerate(rows):
+                    self.assert_type_after_select(len(rows) - line, row, all_types, pk_types, index, ttl, dml)
 
     def get_number_of_columns(self, pk_types, all_types, index, ttl):
         number_of_columns = len(pk_types) + len(all_types) + len(index)
@@ -362,9 +395,8 @@ class TestDML(TestBase):
             number_of_columns += 1
         return number_of_columns
 
-    def test_as_table(self):
+    def do_test_as_table(self, all_types):
         dml = DMLOperations(self)
-        all_types = {**pk_types, **non_pk_types}
         statements = []
         for type_name in all_types.keys():
             statements.append(
@@ -388,3 +420,74 @@ class TestDML(TestBase):
                 )
             else:
                 dml.assert_type(all_types, type_name, 1, rows[0][f"pk_{cleanup_type_name(type_name)}"])
+
+
+class TestSelect(TestSelectBase):
+    @pytest.mark.parametrize(
+        "table_name, pk_types, all_types, index, ttl, unique, sync",
+        [
+            ("table_index_4_UNIQUE_SYNC", pk_types, {}, index_four_sync, "", "UNIQUE", "SYNC"),
+            ("table_index_3_UNIQUE_SYNC", pk_types, {}, index_three_sync_not_Bool, "", "UNIQUE", "SYNC"),
+            ("table_index_2_UNIQUE_SYNC", pk_types, {}, index_second_sync, "", "UNIQUE", "SYNC"),
+            ("table_index_1_UNIQUE_SYNC", pk_types, {}, index_first_sync, "", "UNIQUE", "SYNC"),
+            ("table_index_0_UNIQUE_SYNC", pk_types, {}, index_zero_sync, "", "UNIQUE", "SYNC"),
+            ("table_index_4__SYNC", pk_types, {}, index_four_sync, "", "", "SYNC"),
+            ("table_index_3__SYNC", pk_types, {}, index_three_sync, "", "", "SYNC"),
+            ("table_index_2__SYNC", pk_types, {}, index_second_sync, "", "", "SYNC"),
+            ("table_index_1__SYNC", pk_types, {}, index_first_sync, "", "", "SYNC"),
+            ("table_index_0__SYNC", pk_types, {}, index_zero_sync, "", "", "SYNC"),
+            ("table_index_1__ASYNC", pk_types, {}, index_second, "", "", "ASYNC"),
+            ("table_index_0__ASYNC", pk_types, {}, index_first, "", "", "ASYNC"),
+            ("table_all_types", pk_types, {**pk_types, **non_pk_types}, {}, "", "", ""),
+            ("table_ttl_DyNumber", pk_types, {}, {}, "DyNumber", "", ""),
+            ("table_ttl_Uint32", pk_types, {}, {}, "Uint32", "", ""),
+            ("table_ttl_Uint64", pk_types, {}, {}, "Uint64", "", ""),
+            ("table_ttl_Datetime", pk_types, {}, {}, "Datetime", "", ""),
+            ("table_ttl_Timestamp", pk_types, {}, {}, "Timestamp", "", ""),
+            ("table_ttl_Date", pk_types, {}, {}, "Date", "", ""),
+        ],
+    )
+    def test_select(
+        self,
+        table_name: str,
+        pk_types: dict[str, str],
+        all_types: dict[str, str],
+        index: dict[str, str],
+        ttl: str,
+        unique: str,
+        sync: str,
+    ):
+        self.do_test_select(table_name, pk_types, all_types, index, ttl, unique, sync)
+
+    def test_as_table(self):
+        self.do_test_as_table({**pk_types, **non_pk_types})
+
+
+class TestPgSelect(TestPgBase, TestSelectBase):
+    @pytest.mark.parametrize(
+        "table_name, pk_types, all_types, index, ttl, unique, sync",
+        [
+            ("table_index_0_UNIQUE_SYNC", pk_pg_types_mixed, {}, pk_pg_types_no_bool_mixed, "", "UNIQUE", "SYNC"),
+            ("table_index_0__SYNC", pk_pg_types_mixed, {}, pk_pg_types_mixed, "", "", "SYNC"),
+            ("table_index_0__ASYNC", pk_pg_types_mixed, {}, pk_pg_types_mixed, "", "", "ASYNC"),
+            ("table_all_types", pk_pg_types_mixed, {**pk_pg_types_mixed, **non_pk_pg_types_mixed}, {}, "", "", ""),
+            ("table_ttl_pgint4", pk_pg_types_mixed, {}, {}, "pgint4", "", ""),
+            ("table_ttl_pgint8", pk_pg_types_mixed, {}, {}, "pgint8", "", ""),
+            ("table_ttl_pgdate", pk_pg_types_mixed, {}, {}, "pgdate", "", ""),
+            ("table_ttl_pgtimestamp", pk_pg_types_mixed, {}, {}, "pgtimestamp", "", ""),
+        ],
+    )
+    def test_select(
+        self,
+        table_name: str,
+        pk_types: dict[str, str],
+        all_types: dict[str, str],
+        index: dict[str, str],
+        ttl: str,
+        unique: str,
+        sync: str,
+    ):
+        self.do_test_select(table_name, pk_types, all_types, index, ttl, unique, sync)
+
+    def test_as_table(self):
+        self.do_test_as_table({**pk_pg_types_mixed, **non_pk_pg_types_mixed})

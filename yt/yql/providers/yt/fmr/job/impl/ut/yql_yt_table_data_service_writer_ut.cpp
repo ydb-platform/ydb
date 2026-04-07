@@ -8,12 +8,20 @@
 
 namespace NYql::NFmr {
 
-const std::vector<TString> TableYsonRows = {
+const std::vector<TString> TextTableYsonRows = {
     "{\"key\"=\"075\";\"subkey\"=\"1\";\"value\"=\"abc\"};\n",
     "{\"key\"=\"800\";\"subkey\"=\"2\";\"value\"=\"ddd\"};\n",
     "{\"key\"=\"020\";\"subkey\"=\"3\";\"value\"=\"q\"};\n",
     "{\"key\"=\"150\";\"subkey\"=\"4\";\"value\"=\"qzz\"};\n"
 };
+
+const std::vector<TString> TableYsonRows = [] {
+    std::vector<TString> result;
+    for (const auto& row : TextTableYsonRows) {
+        result.push_back(GetBinaryYson(row));
+    }
+    return result;
+}();
 
 TTableChunkStats WriteDataToTableDataSerice(
     ITableDataService::TPtr tableDataService,
@@ -55,21 +63,21 @@ Y_UNIT_TEST_SUITE(FmrWriterTests) {
         UNIT_ASSERT_VALUES_EQUAL(stats.PartId, "partId");
         std::vector<TChunkStats> gottenPartIdChunkStats = stats.PartIdChunkStats;
 
-        // Проверяем количество чанков
+        // checking chunks number
         UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats.size(), 2);
 
-        // Проверяем первый чанк
+        // checking first chunk
         UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[0].Rows, 2);
         UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[0].DataWeight, firstPartSize);
         UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[0].SortedChunkStats.IsSorted, false);
 
-        // Проверяем второй чанк
+        // checking second chunk
         UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[1].Rows, 2);
         UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[1].DataWeight, secPartSize);
         UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[1].SortedChunkStats.IsSorted, false);
 
-        TString expectedFirstChunkTableContent = JoinRange(TStringBuf(), TableYsonRows.begin(), TableYsonRows.begin() + 2);
-        TString expectedSecondChunkTableContent = JoinRange(TStringBuf(), TableYsonRows.begin() + 2, TableYsonRows.end());
+        TString expectedFirstChunkTableContent = JoinRange(TStringBuf(), TextTableYsonRows.begin(), TextTableYsonRows.begin() + 2);
+        TString expectedSecondChunkTableContent = JoinRange(TStringBuf(), TextTableYsonRows.begin() + 2, TextTableYsonRows.end());
 
         TString group = GetTableDataServiceGroup("tableId", "partId");
         auto firstChunkTableContent = tableDataService->Get(group, "0").GetValueSync();
@@ -137,14 +145,17 @@ Y_UNIT_TEST_SUITE(FmrWriterTests) {
         UNIT_ASSERT_VALUES_EQUAL(chunk1Stats.Rows, 2);
         UNIT_ASSERT(chunk1Stats.SortedChunkStats.IsSorted);
 
-        UNIT_ASSERT(chunk1Stats.SortedChunkStats.FirstRowKeys.IsMap());
+        UNIT_ASSERT(chunk1Stats.SortedChunkStats.FirstRowKeys.IsMap() && chunk1Stats.SortedChunkStats.LastRowKeys.IsMap());
         UNIT_ASSERT_VALUES_EQUAL(chunk1Stats.SortedChunkStats.FirstRowKeys["key"].AsInt64(), 20);
+        UNIT_ASSERT_VALUES_EQUAL(chunk1Stats.SortedChunkStats.LastRowKeys["key"].AsInt64(), 50);
+
 
         auto& chunk2Stats = stats.PartIdChunkStats[1];
         UNIT_ASSERT_VALUES_EQUAL(chunk2Stats.Rows, 2);
         UNIT_ASSERT(chunk2Stats.SortedChunkStats.IsSorted);
 
         UNIT_ASSERT_VALUES_EQUAL(chunk2Stats.SortedChunkStats.FirstRowKeys["key"].AsInt64(), 75);
+        UNIT_ASSERT_VALUES_EQUAL(chunk2Stats.SortedChunkStats.LastRowKeys["key"].AsInt64(), 150);
     }
 }
 

@@ -6,8 +6,7 @@
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 /**
  * Build type annotation transformer that is aware of type of the input rows.
  *
@@ -25,5 +24,4 @@ TAutoPtr<IGraphTransformer> MakeTypeAnnotationTransformer(
     TVector<const TStructExprType*>& rawInputStructs,
     EProcessorMode processorMode,
     const TString& nodeName = TString{PurecalcInputCallableName});
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

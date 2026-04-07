@@ -59,6 +59,13 @@ TYPathRequest::TYPathRequest(
     ypathExt->set_target_path(std::move(path));
 }
 
+TYPathRequest::TYPathRequest(const TYPathRequest& other)
+    : Tag_(other.Tag_)
+    , Attachments_(other.Attachments())
+{
+    Header_.CopyFrom(other.Header_);
+}
+
 TRequestId TYPathRequest::GetRequestId() const
 {
     return NullRequestId;
@@ -376,6 +383,8 @@ TFuture<TSharedRefArray> ExecuteVerb(
     NLogging::TLogger logger,
     NLogging::ELogLevel logLevel)
 {
+    NTracing::TChildTraceContextGuard traceContextGuard("YPathClient.ExecuteVerb");
+
     IYPathServicePtr suffixService;
     TYPath suffixPath;
     try {
@@ -462,7 +471,7 @@ TFuture<TYsonString> AsyncYPathGet(
         }));
 }
 
-TString SyncYPathGetKey(const IYPathServicePtr& service, const TYPath& path)
+std::string SyncYPathGetKey(const IYPathServicePtr& service, const TYPath& path)
 {
     auto request = TYPathProxy::GetKey(path);
     auto future = ExecuteVerb(service, request);
@@ -478,9 +487,7 @@ TYsonString SyncYPathGet(
     const IAttributeDictionaryPtr& options)
 {
     auto future = AsyncYPathGet(service, path, attributeFilter, options);
-    auto optionalResult = future.AsUnique().TryGet();
-    YT_VERIFY(optionalResult);
-    return optionalResult->ValueOrThrow();
+    return future.AsUnique().GetOrCrash().ValueOrThrow();
 }
 
 TFuture<bool> AsyncYPathExists(
@@ -499,9 +506,7 @@ bool SyncYPathExists(
     const TYPath& path)
 {
     auto future = AsyncYPathExists(service, path);
-    auto optionalResult = future.AsUnique().TryGet();
-    YT_VERIFY(optionalResult);
-    return optionalResult->ValueOrThrow();
+    return future.AsUnique().GetOrCrash().ValueOrThrow();
 }
 
 TFuture<void> AsyncYPathSet(
@@ -523,9 +528,7 @@ void SyncYPathSet(
     bool recursive)
 {
     auto future = AsyncYPathSet(service, path, value, recursive);
-    auto optionalResult = future.AsUnique().TryGet();
-    YT_VERIFY(optionalResult);
-    optionalResult->ThrowOnError();
+    future.AsUnique().GetOrCrash().ThrowOnError();
 }
 
 TFuture<void> AsyncYPathRemove(
@@ -547,23 +550,19 @@ void SyncYPathRemove(
     bool force)
 {
     auto future = AsyncYPathRemove(service, path, recursive, force);
-    auto optionalResult = future.AsUnique().TryGet();
-    YT_VERIFY(optionalResult);
-    optionalResult->ThrowOnError();
+    future.AsUnique().GetOrCrash().ThrowOnError();
 }
 
-std::vector<TString> SyncYPathList(
+std::vector<std::string> SyncYPathList(
     const IYPathServicePtr& service,
     const TYPath& path,
     std::optional<i64> limit)
 {
     auto future = AsyncYPathList(service, path, limit);
-    auto optionalResult = future.AsUnique().TryGet();
-    YT_VERIFY(optionalResult);
-    return optionalResult->ValueOrThrow();
+    return future.AsUnique().GetOrCrash().ValueOrThrow();
 }
 
-TFuture<std::vector<TString>> AsyncYPathList(
+TFuture<std::vector<std::string>> AsyncYPathList(
     const IYPathServicePtr& service,
     const TYPath& path,
     std::optional<i64> limit)
@@ -574,7 +573,7 @@ TFuture<std::vector<TString>> AsyncYPathList(
     }
     return ExecuteVerb(service, request)
         .Apply(BIND([] (TYPathProxy::TRspListPtr response) {
-            return ConvertTo<std::vector<TString>>(TYsonString(response->value()));
+            return ConvertTo<std::vector<std::string>>(TYsonString(response->value()));;
         }));
 }
 
@@ -934,11 +933,11 @@ bool AreNodesEqual(
 ////////////////////////////////////////////////////////////////////////////////
 
 TNodeWalkOptions GetNodeByYPathOptions {
-    .MissingAttributeHandler = [] (const TString& key) {
+    .MissingAttributeHandler = [] (const std::string& key) {
         ThrowNoSuchAttribute(key);
         return nullptr;
     },
-    .MissingChildKeyHandler = [] (const IMapNodePtr& node, const TString& key) {
+    .MissingChildKeyHandler = [] (const IMapNodePtr& node, const std::string& key) {
         ThrowNoSuchChildKey(node, key);
         return nullptr;
     },
@@ -953,10 +952,10 @@ TNodeWalkOptions GetNodeByYPathOptions {
 };
 
 TNodeWalkOptions FindNodeByYPathOptions {
-    .MissingAttributeHandler = [] (const TString& /*key*/) {
+    .MissingAttributeHandler = [] (const std::string& /*key*/) {
         return nullptr;
     },
-    .MissingChildKeyHandler = [] (const IMapNodePtr& /*node*/, const TString& /*key*/) {
+    .MissingChildKeyHandler = [] (const IMapNodePtr& /*node*/, const std::string& /*key*/) {
         return nullptr;
     },
     .MissingChildIndexHandler = [] (const IListNodePtr& /*node*/, int /*index*/) {
@@ -966,10 +965,10 @@ TNodeWalkOptions FindNodeByYPathOptions {
 };
 
 TNodeWalkOptions FindNodeByYPathNoThrowOptions {
-    .MissingAttributeHandler = [] (const TString& /*key*/) {
+    .MissingAttributeHandler = [] (const std::string& /*key*/) {
         return nullptr;
     },
-    .MissingChildKeyHandler = [] (const IMapNodePtr& /*node*/, const TString& /*key*/) {
+    .MissingChildKeyHandler = [] (const IMapNodePtr& /*node*/, const std::string& /*key*/) {
         return nullptr;
     },
     .MissingChildIndexHandler = [] (const IListNodePtr& /*node*/, int /*index*/) {

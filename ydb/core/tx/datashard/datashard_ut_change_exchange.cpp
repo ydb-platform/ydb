@@ -1,5 +1,8 @@
-#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+#include "defs.h"
+#include "datashard_distributed_erase.h"
 #include "datashard_ut_common_kqp.h"
+
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/change_exchange/change_sender.h>
@@ -837,16 +840,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetGrpcPort(PortManager.GetPort(2135))
                 .SetEnableChangefeedDynamoDBStreamsFormat(true)
                 .SetEnableChangefeedDebeziumJsonFormat(true)
-                .SetEnableTopicMessageMeta(true)
                 .SetEnableChangefeedInitialScan(true)
                 .SetEnableUuidAsPrimaryKey(true)
                 .SetEnableTablePgTypes(true)
                 .SetEnableTableDatetime64(true)
                 .SetEnableParameterizedDecimal(true)
-                .SetEnablePgSyntax(true)
-                .SetEnableTopicSplitMerge(true)
-                .SetEnablePQConfigTransactionsAtSchemeShard(true)
-                .SetEnableTopicAutopartitioningForCDC(true);
+                .SetEnablePgSyntax(true);
 
             Server = new TServer(settings);
             if (useRealThreads) {
@@ -864,7 +863,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
             WaitTxNotification(Server, EdgeActor, AsyncAlterAddStream(Server, database, tableName, streamDesc));
 
             if (useRealThreads) {
-                Client = TDerived::MakeClient(Server->GetDriver(), database);
+                TString endpoint = "localhost:" + ToString(settings.GrpcPort);
+                auto driverConfig = NYdb::TDriverConfig()
+                    .SetEndpoint(endpoint)
+                    .SetDatabase("/" + settings.DomainName);
+                auto driver = NYdb::TDriver(driverConfig);
+                Client = TDerived::MakeClient(driver, database);
             }
         }
 
@@ -929,11 +933,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
             });
     }
 
-    TCdcStream KeysOnly(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream") {
+    TCdcStream KeysOnly(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream", bool userSIDs = true) {
         return TCdcStream{
             .Name = name,
             .Mode = NKikimrSchemeOp::ECdcStreamModeKeysOnly,
             .Format = format,
+            .UserSIDs = userSIDs
         };
     }
 
@@ -945,11 +950,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
         };
     }
 
-    TCdcStream NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream") {
+    TCdcStream NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormat format, const TString& name = "Stream", bool userSIDs = true) {
         return TCdcStream{
             .Name = name,
             .Mode = NKikimrSchemeOp::ECdcStreamModeNewAndOldImages,
             .Format = format,
+            .UserSIDs = userSIDs,
         };
     }
 
@@ -1130,12 +1136,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     struct PqRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true)
+                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true, const TString& userSID = TString())
         {
             TTestPqEnv env(tableDesc, streamDesc);
 
             for (const auto& query : queries) {
-                ExecSQL(env.GetServer(), env.GetEdgeActor(), query);
+                ExecSQL(env.GetServer(), env.GetEdgeActor(), query, true, userSID);
             }
 
             auto& client = env.GetClient();
@@ -1217,12 +1223,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     struct YdsRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true)
+                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true, const TString& userSID = TString())
         {
             TTestYdsEnv env(tableDesc, streamDesc);
 
             for (const auto& query : queries) {
-                ExecSQL(env.GetServer(), env.GetEdgeActor(), query);
+                ExecSQL(env.GetServer(), env.GetEdgeActor(), query, true, userSID);
             }
 
             auto& client = env.GetClient();
@@ -1387,12 +1393,13 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
 
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<std::pair<TJsonString, TMessageMeta>>& records)
+                const TVector<TString>& queries, const TVector<std::pair<TJsonString, TMessageMeta>>& records,
+                const TString& userSID = TString())
         {
             TTestTopicEnv env(tableDesc, streamDesc);
 
             for (const auto& query : queries) {
-                ExecSQL(env.GetServer(), env.GetEdgeActor(), query);
+                ExecSQL(env.GetServer(), env.GetEdgeActor(), query, true, userSID);
             }
 
             auto& client = env.GetClient();
@@ -1422,7 +1429,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
 
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TJsonString>& records, bool checkKey = true)
+                const TVector<TString>& queries, const TVector<TJsonString>& records, bool checkKey = true,
+                const TString& userSID = TString())
         {
             Y_UNUSED(checkKey);
 
@@ -1431,7 +1439,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 recordsWithMetadata.emplace_back(record, TMessageMeta());
             }
 
-            Read(tableDesc, streamDesc, queries, recordsWithMetadata);
+            Read(tableDesc, streamDesc, queries, recordsWithMetadata, userSID);
         }
 
         static void Write(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc) {
@@ -1457,7 +1465,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     };
 
-    static TString DebeziumBody(const char* op, const char* before, const char* after, bool snapshot = false) {
+    static TString DebeziumBody(const char* op, const char* before, const char* after, bool snapshot = false, const TString& userSID = TString() ) {
         NJsonWriter::TBuf body;
         auto root = body.BeginObject();
         auto payload = root.WriteKey("payload").BeginObject();
@@ -1471,8 +1479,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     .WriteKey("step").WriteString("***")
                     .WriteKey("txId").WriteString("***")
                     .WriteKey("ts_ms").WriteString("***")
-                    .WriteKey("snapshot").WriteBool(snapshot)
-                .EndObject();
+                    .WriteKey("snapshot").WriteBool(snapshot);
+        if (!userSID.empty()) {
+            payload.WriteKey("user").WriteString(userSID);
+        }
+        payload.EndObject();
 
         if (before) {
             payload.WriteKey("before").UnsafeWriteValue(before);
@@ -1588,6 +1599,54 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    Y_UNIT_TEST_TRIPLET(NewAndOldImagesLogUser, PqRunner, YdsRunner, TopicRunner) {
+        TRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )", R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (2, 200),
+            (3, 300);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )"}, {
+            R"({"user":"user@test","update":{},"newImage":{"value":10},"key":[1]})",
+            R"({"user":"user@test","update":{},"newImage":{"value":20},"key":[2]})",
+            R"({"user":"user@test","update":{},"newImage":{"value":30},"key":[3]})",
+            R"({"user":"user@test","update":{},"newImage":{"value":100},"key":[1],"oldImage":{"value":10}})",
+            R"({"user":"user@test","update":{},"newImage":{"value":200},"key":[2],"oldImage":{"value":20}})",
+            R"({"user":"user@test","update":{},"newImage":{"value":300},"key":[3],"oldImage":{"value":30}})",
+            R"({"user":"user@test","erase":{},"key":[1],"oldImage":{"value":100}})",
+        }, true, "user@test");
+    }
+
+     Y_UNIT_TEST_TRIPLET(NewAndOldImagesLogUserDisabled, PqRunner, YdsRunner, TopicRunner) {
+        TRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatJson, "Stream", false), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )", R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (2, 200),
+            (3, 300);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )"}, {
+            R"({"update":{},"newImage":{"value":10},"key":[1]})",
+            R"({"update":{},"newImage":{"value":20},"key":[2]})",
+            R"({"update":{},"newImage":{"value":30},"key":[3]})",
+            R"({"update":{},"newImage":{"value":100},"key":[1],"oldImage":{"value":10}})",
+            R"({"update":{},"newImage":{"value":200},"key":[2],"oldImage":{"value":20}})",
+            R"({"update":{},"newImage":{"value":300},"key":[3],"oldImage":{"value":30}})",
+            R"({"erase":{},"key":[1],"oldImage":{"value":100}})",
+        }, true, "user@test");
+    }
+
     Y_UNIT_TEST(NewAndOldImagesLogDebezium) {
         TopicRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
@@ -1610,6 +1669,56 @@ Y_UNIT_TEST_SUITE(Cdc) {
             {DebeziumBody("u", R"({"key":3,"value":30})", R"({"key":3,"value":300})"), {{"__key", R"({"payload":{"key":3}})"}}},
             {DebeziumBody("d", R"({"key":1,"value":100})", nullptr), {{"__key", R"({"payload":{"key":1}})"}}},
         });
+    }
+
+    Y_UNIT_TEST(NewAndOldImagesLogDebeziumUser) {
+        const TString userSID{"user@test"};
+        TopicRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )", R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (2, 200),
+            (3, 300);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )"}, {
+            {DebeziumBody("c", nullptr, R"({"key":1,"value":10})", false, userSID), {{"__key", R"({"payload":{"key":1}})"}}},
+            {DebeziumBody("c", nullptr, R"({"key":2,"value":20})", false, userSID), {{"__key", R"({"payload":{"key":2}})"}}},
+            {DebeziumBody("c", nullptr, R"({"key":3,"value":30})", false, userSID), {{"__key", R"({"payload":{"key":3}})"}}},
+            {DebeziumBody("u", R"({"key":1,"value":10})", R"({"key":1,"value":100})", false, userSID), {{"__key", R"({"payload":{"key":1}})"}}},
+            {DebeziumBody("u", R"({"key":2,"value":20})", R"({"key":2,"value":200})", false, userSID), {{"__key", R"({"payload":{"key":2}})"}}},
+            {DebeziumBody("u", R"({"key":3,"value":30})", R"({"key":3,"value":300})", false, userSID), {{"__key", R"({"payload":{"key":3}})"}}},
+            {DebeziumBody("d", R"({"key":1,"value":100})", nullptr, false, userSID), {{"__key", R"({"payload":{"key":1}})"}}},
+        }, userSID);
+    }
+
+    Y_UNIT_TEST(NewAndOldImagesLogDebeziumUserDisabled) {
+        const TString userSID{"user@test"};
+        TopicRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatDebeziumJson, "Stream", false), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )", R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 100),
+            (2, 200),
+            (3, 300);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )"}, {
+            {DebeziumBody("c", nullptr, R"({"key":1,"value":10})", false), {{"__key", R"({"payload":{"key":1}})"}}},
+            {DebeziumBody("c", nullptr, R"({"key":2,"value":20})", false), {{"__key", R"({"payload":{"key":2}})"}}},
+            {DebeziumBody("c", nullptr, R"({"key":3,"value":30})", false), {{"__key", R"({"payload":{"key":3}})"}}},
+            {DebeziumBody("u", R"({"key":1,"value":10})", R"({"key":1,"value":100})", false), {{"__key", R"({"payload":{"key":1}})"}}},
+            {DebeziumBody("u", R"({"key":2,"value":20})", R"({"key":2,"value":200})", false), {{"__key", R"({"payload":{"key":2}})"}}},
+            {DebeziumBody("u", R"({"key":3,"value":30})", R"({"key":3,"value":300})", false), {{"__key", R"({"payload":{"key":3}})"}}},
+            {DebeziumBody("d", R"({"key":1,"value":100})", nullptr, false), {{"__key", R"({"payload":{"key":1}})"}}},
+        }, userSID);
     }
 
     Y_UNIT_TEST(OldImageLogDebezium) {
@@ -1799,6 +1908,62 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 {"eventVersion", "1.0"},
             }), false),
         }, false /* do not check key */);
+    }
+
+    Y_UNIT_TEST_TRIPLET(DocApiUser, PqRunner, YdsRunner, TopicRunner) {
+        const TString userSID{"user@test"};
+        TRunner::Read(DocApiTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson), {R"(
+            UPSERT INTO `/Root/Table` (__Hash, id_shard, id_sort, __RowData) VALUES (
+                1, "10", "100", JsonDocument('{"M":{"color":{"S":"pink"},"weight":{"N":"4.5"}}}')
+            );
+        )"}, {
+            WriteJson(NJson::TJsonMap({
+                {"awsRegion", ""},
+                {"dynamodb", NJson::TJsonMap({
+                    {"ApproximateCreationDateTime", "***"},
+                    {"Keys", NJson::TJsonMap({
+                        {"id_shard", NJson::TJsonMap({{"S", "10"}})},
+                        {"id_sort", NJson::TJsonMap({{"S", "100"}})},
+                    })},
+                    {"SequenceNumber", "000000000000000000001"},
+                    {"StreamViewType", "KEYS_ONLY"},
+                })},
+                {"eventID", "***"},
+                {"eventName", "MODIFY"},
+                {"eventSource", "ydb:document-table"},
+                {"eventVersion", "1.0"},
+                {"userIdentity", NJson::TJsonMap({
+                    {"type", "User"},
+                    {"principalId", userSID}})
+                },
+            }), false),
+        }, false /* do not check key */, userSID);
+    }
+
+    Y_UNIT_TEST_TRIPLET(DocApiUserDisabled, PqRunner, YdsRunner, TopicRunner) {
+        const TString userSID{"user@test"};
+        TRunner::Read(DocApiTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson, "Stream", false), {R"(
+            UPSERT INTO `/Root/Table` (__Hash, id_shard, id_sort, __RowData) VALUES (
+                1, "10", "100", JsonDocument('{"M":{"color":{"S":"pink"},"weight":{"N":"4.5"}}}')
+            );
+        )"}, {
+            WriteJson(NJson::TJsonMap({
+                {"awsRegion", ""},
+                {"dynamodb", NJson::TJsonMap({
+                    {"ApproximateCreationDateTime", "***"},
+                    {"Keys", NJson::TJsonMap({
+                        {"id_shard", NJson::TJsonMap({{"S", "10"}})},
+                        {"id_sort", NJson::TJsonMap({{"S", "100"}})},
+                    })},
+                    {"SequenceNumber", "000000000000000000001"},
+                    {"StreamViewType", "KEYS_ONLY"},
+                })},
+                {"eventID", "***"},
+                {"eventName", "MODIFY"},
+                {"eventSource", "ydb:document-table"},
+                {"eventVersion", "1.0"},
+            }), false),
+        }, false /* do not check key */, userSID);
     }
 
     Y_UNIT_TEST_TRIPLET(NaN, PqRunner, YdsRunner, TopicRunner) {
@@ -2470,7 +2635,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                     }
                 }
                 return TTestActorRuntime::EEventAction::PROCESS;
-            
+
             case NKikimr::NEvents::TDataEvents::EvWriteResult:
                 if (auto* msg = ev->Get<NKikimr::NEvents::TDataEvents::TEvWriteResult>()) {
                     if (msg->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
@@ -2910,15 +3075,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     }
 
-    void InitialScanTest(bool withTopicSchemeTx, bool topicAutoPartitioning) {
+    void InitialScanTest(bool topicAutoPartitioning) {
         TPortManager portManager;
         TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
             .SetUseRealThreads(false)
             .SetDomainName("Root")
             .SetEnableChangefeedInitialScan(true)
-            .SetEnablePQConfigTransactionsAtSchemeShard(withTopicSchemeTx)
-            .SetEnableTopicSplitMerge(topicAutoPartitioning)
-            .SetEnableTopicAutopartitioningForCDC(true)
         );
 
         auto& runtime = *server->GetRuntime();
@@ -2961,16 +3123,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
-    Y_UNIT_TEST(InitialScan) {
-        InitialScanTest(false, false);
-    }
-
     Y_UNIT_TEST(InitialScan_WithTopicSchemeTx) {
-        InitialScanTest(true, false);
+        InitialScanTest(false);
     }
 
     Y_UNIT_TEST(InitialScan_TopicAutoPartitioning) {
-        InitialScanTest(true, true);
+        InitialScanTest(true);
     }
 
     Y_UNIT_TEST(InitialScanDebezium) {
@@ -3785,7 +3943,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{"value":10},"key":[1]})",
             R"({"resolved":"***"})",
             R"({"update":{"value":50},"key":[5]})",
-            R"({"update":{"value":30},"key":[3]})",
+            R"({"user":"<anonymous>","update":{"value":30},"key":[3]})",
             R"({"resolved":"***"})",
         });
         WaitForContent(server, edgeActor, "/Root/Table2/Stream", {
@@ -3793,7 +3951,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{"value":20},"key":[2]})",
             R"({"resolved":"***"})",
             R"({"update":{"value":60},"key":[6]})",
-            R"({"update":{"value":40},"key":[4]})",
+            R"({"user":"<anonymous>","update":{"value":40},"key":[4]})",
             R"({"resolved":"***"})",
         });
     }
@@ -4224,7 +4382,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         auto records = WaitForContent(server, edgeActor, "/Root/Table/Stream", {
             R"({"resolved":"***"})",
-            R"({"update":{"value":10},"key":[1],"ts":"***"})",
+            R"({"user":"<anonymous>","update":{"value":10},"key":[1],"ts":"***"})",
             R"({"resolved":"***"})",
         });
 
@@ -4304,10 +4462,10 @@ Y_UNIT_TEST_SUITE(Cdc) {
         Cerr << "... checking the update is logged before the new resolved timestamp" << Endl;
         records = WaitForContent(server, edgeActor, "/Root/Table/Stream", {
             R"({"resolved":"***"})",
-            R"({"update":{"value":10},"key":[1],"ts":"***"})",
+            R"({"user":"<anonymous>","update":{"value":10},"key":[1],"ts":"***"})",
             R"({"resolved":"***"})",
-            R"({"update":{"value":20},"key":[2],"ts":"***"})",
-            R"({"update":{"value":30},"key":[3],"ts":"***"})",
+            R"({"user":"<anonymous>","update":{"value":20},"key":[2],"ts":"***"})",
+            R"({"user":"<anonymous>","update":{"value":30},"key":[3],"ts":"***"})",
             R"({"resolved":"***"})",
         });
 

@@ -86,7 +86,7 @@ private:
         TDuration Period;
         std::optional<TDuration> Grid;
 
-        bool operator == (const TCacheKey& other) const = default;
+        bool operator==(const TCacheKey& other) const = default;
 
         operator size_t () const;
     };

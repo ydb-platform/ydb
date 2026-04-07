@@ -1,0 +1,47 @@
+use plato;
+
+pragma OrderedColumns;
+pragma config.flags("NormalizeDependsOn");
+
+$src = select * from AsTable(ListMap(ListFromRange(0, 5), ($x) -> (AsStruct($x as x))));
+
+insert into @tmp with truncate
+select * from $src;
+
+commit;
+
+$savedSrc = (select * from @tmp);
+
+-- размножаем $src на несколько семплов, и в каждом семпле приписываем строкам случайное число
+$samplesWithRand = (
+    from (
+        select *
+        from (
+            from $savedSrc
+            select
+                ListFromRange(0, 2) as sampleId,
+                x
+        )
+        flatten by
+            sampleId
+    )
+    select
+        sampleId,
+        x,
+        RandomNumber(sampleId) as rand,
+);
+
+$ordered = (
+    from $samplesWithRand
+    select *
+    order by
+        sampleId,
+        x
+    limit 100
+);
+
+$rands = (select AGGREGATE_LIST(rand) as rands from $ordered);
+
+select
+    ListTake(rands, 5) = ListSkip(rands, 5) as are_equal
+from $rands

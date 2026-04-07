@@ -157,15 +157,17 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     , BalancingSettings_(params->GetBalancingSettings())
     , GRpcKeepAliveTimeout_(TDeadline::SafeDurationCast(params->GetGRpcKeepAliveTimeout()))
     , GRpcKeepAlivePermitWithoutCalls_(params->GetGRpcKeepAlivePermitWithoutCalls())
+    , GRpcLoadBalancingPolicy_(params->GetGRpcLoadBalancingPolicy())
     , MemoryQuota_(params->GetMemoryQuota())
     , MaxInboundMessageSize_(params->GetMaxInboundMessageSize())
     , MaxOutboundMessageSize_(params->GetMaxOutboundMessageSize())
     , MaxMessageSize_(params->GetMaxMessageSize())
     , QueuedRequests_(0)
     , TcpKeepAliveSettings_(params->GetTcpKeepAliveSettings())
+    , TcpNoDelay_(params->GetTcpNoDelay())
     , SocketIdleTimeout_(TDeadline::SafeDurationCast(params->GetSocketIdleTimeout()))
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
-    , ChannelPool_(TcpKeepAliveSettings_, params->GetSocketIdleTimeout())
+    , ChannelPool_(TcpKeepAliveSettings_, params->GetSocketIdleTimeout(), TcpNoDelay_)
 #endif
     , NetworkThreadsNum_(params->GetNetworkThreadsNum())
     , UsePerChannelTcpConnection_(params->GetUsePerChannelTcpConnection())

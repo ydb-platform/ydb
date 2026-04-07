@@ -1,8 +1,8 @@
 #include "type_ann_dict.h"
 #include "type_ann_types.h"
 
-namespace NYql {
-namespace NTypeAnnImpl {
+
+namespace NYql::NTypeAnnImpl {
 
 constexpr TStringBuf MutDictResourcePrefix = "_MutDict_";
 
@@ -59,6 +59,11 @@ IGraphTransformer::TStatus MutDictCreateWrapper(const TExprNode::TPtr& input, TE
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (auto status = EnsureTypeRewrite(input->HeadRef(), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
         return status;
     }
@@ -71,9 +76,15 @@ IGraphTransformer::TStatus MutDictCreateWrapper(const TExprNode::TPtr& input, TE
     }
 
     auto dictType = type->Cast<TDictExprType>();
-    auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 1);
+    bool isUniversal;
+    auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 1, 0, isUniversal);
     if (status != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     input->SetTypeAnn(ConvertDictTypeToMutDictType(dictType, ctx.Expr));
@@ -90,14 +101,25 @@ IGraphTransformer::TStatus ToMutDictWrapper(const TExprNode::TPtr& input, TExprN
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureDictType(input->Head(), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
     auto dictType = input->Head().GetTypeAnn()->Cast<TDictExprType>();
-    auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 1);
+    bool isUniversal;
+    auto status = EnsureDependsOnTailAndRewrite(input, output, ctx.Expr, ctx.Types, 1, 0, isUniversal);
     if (status != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     input->SetTypeAnn(ConvertDictTypeToMutDictType(dictType, ctx.Expr));
@@ -112,6 +134,11 @@ IGraphTransformer::TStatus FromMutDictWrapper(const TExprNode::TPtr& input, TExp
 
     if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Child(0)->GetTypeAnn() && input->Child(0)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Child(0)->GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
@@ -136,6 +163,11 @@ IGraphTransformer::TStatus MutDictBlindOpWrapper(const TExprNode::TPtr& input, T
 
     if (!EnsureArgsCount(*input, 2 + (WithPayload ? 1 : 0), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
@@ -173,6 +205,11 @@ IGraphTransformer::TStatus MutDictPopWrapper(const TExprNode::TPtr& input, TExpr
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -203,6 +240,11 @@ IGraphTransformer::TStatus MutDictContainsWrapper(const TExprNode::TPtr& input, 
 
     if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
@@ -237,6 +279,11 @@ IGraphTransformer::TStatus MutDictHasItemsWrapper(const TExprNode::TPtr& input, 
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -264,6 +311,11 @@ IGraphTransformer::TStatus MutDictLengthWrapper(const TExprNode::TPtr& input, TE
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -289,6 +341,11 @@ IGraphTransformer::TStatus MutDictItemsWrapper(const TExprNode::TPtr& input, TEx
 
     if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
@@ -324,6 +381,11 @@ IGraphTransformer::TStatus MutDictKeysWrapper(const TExprNode::TPtr& input, TExp
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -353,6 +415,11 @@ IGraphTransformer::TStatus MutDictPayloadsWrapper(const TExprNode::TPtr& input, 
 
     if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
     }
 
     if (!EnsureLinearType(*input->Child(0), ctx.Expr)) {
@@ -403,6 +470,11 @@ IGraphTransformer::TStatus DictBlindOpWrapper(const TExprNode::TPtr& input, TExp
         isOptional = true;
     }
 
+    if (type->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(type);
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     if (type->GetKind() != ETypeAnnotationKind::Dict) {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder()
             << "Expected dict or optional of dict, but got: " << *input->Head().GetTypeAnn()));
@@ -447,5 +519,5 @@ template IGraphTransformer::TStatus DictBlindOpWrapper<true>(const TExprNode::TP
 template IGraphTransformer::TStatus DictBlindOpWrapper<false>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
 
-} // namespace NTypeAnnImpl
-} // namespace NYql
+} // namespace NYql::NTypeAnnImpl
+

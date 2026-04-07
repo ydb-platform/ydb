@@ -26,16 +26,31 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
 
     NLogin::TLoginProvider::TLoginUserRequest GetLoginRequest() const {
         const auto& record(Request->Get()->Record);
-        return {
+        NLogin::TLoginProvider::TLoginUserRequest request {
             .User = record.GetUser(),
-            .Password = record.GetPassword(),
             .Options = {
                 .ExpiresAfter = record.HasExpiresAfterMs()
                     ? std::chrono::milliseconds(record.GetExpiresAfterMs())
                     : std::chrono::system_clock::duration::zero()
                 },
-            .ExternalAuth = record.GetExternalAuth(),
+        };
+
+        if (record.HasExternalAuth()) {
+            request.ExternalAuth = record.GetExternalAuth();
+        } else if (record.HasHashToValidate()) {
+            NLogin::TLoginProvider::THashToValidate hashToValidate {
+                .AuthMech = record.GetHashToValidate().GetAuthMech(),
+                .HashType = record.GetHashToValidate().GetHashType(),
+                .Hash = record.GetHashToValidate().GetHash(),
+                .AuthMessage = record.GetHashToValidate().GetAuthMessage(),
             };
+
+            request.HashToValidate = std::move(hashToValidate);
+        } else if (record.HasPassword()) { // for backward compatibility
+            request.Password = record.GetPassword();
+        }
+
+        return request;
     }
 
     void DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -49,7 +64,7 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
         }
 
         const auto& loginRequest = GetLoginRequest();
-        if (!loginRequest.ExternalAuth) {
+        if (!loginRequest.ExternalAuth.has_value()) {
             if (!AppData(ctx)->AuthConfig.GetEnableLoginAuthentication()) {
                 ErrMessage = "Login authentication is disabled";
             } else {
@@ -62,14 +77,19 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
             return;
         }
 
-        TString passwordHash;
-        if (Self->LoginProvider.NeedVerifyHash(loginRequest, &Response, &passwordHash)) {
-            ctx.Send(
-                Self->LoginHelper,
-                MakeHolder<TEvPrivate::TEvVerifyPassword>(loginRequest, Response, Request->Sender, passwordHash),
-                0,
-                Request->Cookie
-            );
+        TString hashValues;
+        if (Self->LoginProvider.NeedVerifyHash(loginRequest, &Response, &hashValues)) {
+            if (loginRequest.HashToValidate.has_value()) {
+                Self->LoginProvider.VerifyHashValues(loginRequest, &Response, hashValues);
+                SendFinalizeEvent = true;
+            } else if (loginRequest.Password.has_value()) { // for backward compatibility
+                ctx.Send(
+                    Self->LoginHelper,
+                    MakeHolder<TEvPrivate::TEvVerifyPassword>(loginRequest, Response, Request->Sender, hashValues),
+                    0,
+                    Request->Cookie
+                );
+            }
         } else {
             SendFinalizeEvent = true;
         }

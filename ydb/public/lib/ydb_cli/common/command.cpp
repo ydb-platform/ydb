@@ -5,8 +5,11 @@
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NLastGetoptPrivate {
+    TString& VersionString();
+}
+
+namespace NYdb::NConsoleClient {
 
 bool TClientCommand::TIME_REQUESTS = false; // measure time of requests
 bool TClientCommand::PROGRESS_REQUESTS = false; // display progress of long requests
@@ -19,9 +22,10 @@ namespace {
         throw TNeedToExitWithCode(EXIT_SUCCESS);
     }
 
-    void PrintSvnVersionAndThrowHelpPrinted(const NLastGetopt::TOptsParser* parser) {
-        parser->PrintUsage();
-        throw TNeedToExitWithCode(EXIT_SUCCESS);
+    void PrintSvnVersionAndThrowHelpPrinted(const NLastGetopt::TOptsParser*) {
+        const auto& version = ::NLastGetoptPrivate::VersionString();
+        Cout << (version ? version : "program version: not linked with library/cpp/getopt") << Endl;
+        throw TNeedToExitWithCode(version.empty() ? EXIT_FAILURE : EXIT_SUCCESS);
     }
 }
 
@@ -52,28 +56,6 @@ TClientCommand::TClientCommand(
     Opts.GetOpts().SetWrap(Max(Opts.GetOpts().Wrap_, static_cast<ui32>(lineLength)));
 }
 
-ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriority(ui32 lvl) {
-    switch (lvl) {
-        case 0:
-            return ELogPriority::TLOG_WARNING;
-        case 1:
-            return ELogPriority::TLOG_NOTICE;
-        case 2:
-            return ELogPriority::TLOG_INFO;
-        case 3:
-        default:
-            return ELogPriority::TLOG_DEBUG;
-    }
-}
-
-ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriorityChatty(ui32 lvl) {
-    switch (lvl) {
-        case 0:
-            return ELogPriority::TLOG_INFO;
-        default:
-            return ELogPriority::TLOG_DEBUG;
-    }
-}
 
 size_t TClientCommand::TConfig::ParseHelpCommandVerbosilty(int argc, char** argv) {
     size_t cnt = 0;
@@ -584,5 +566,4 @@ void TCommandWithTopicName::ParseTopicName(const TClientCommand::TConfig &config
     TopicName = config.ParseResult->GetFreeArgs()[argPos];
 }
 
-}
-}
+} // namespace NYdb::NConsoleClient

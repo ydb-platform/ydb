@@ -49,7 +49,6 @@ void CreateSampleTableWithData(T& t, TTestActorRuntime& runtime, bool& activeZon
 
 Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
     Y_UNIT_TEST_WITH_REBOOTS(BaseCase) {
-        T t;
         t.GetTestEnvOptions().EnableAddColumsWithDefaults(true);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -90,7 +89,6 @@ Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(Cancelling) {
-        T t;
         t.GetTestEnvOptions().EnableAddColumsWithDefaults(true);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -134,7 +132,6 @@ Y_UNIT_TEST_SUITE(ColumnBuildRebootsTest) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS(Rejecting) {
-        T t;
         t.GetTestEnvOptions().EnableAddColumsWithDefaults(true);
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {

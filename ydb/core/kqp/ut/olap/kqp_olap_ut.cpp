@@ -306,8 +306,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST(ConstantIfPushDown) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        // Disable constant folding.
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableConstantFolding(false);
         settings.AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
 
@@ -1672,7 +1670,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         )").GetValueSync();
         UNIT_ASSERT(res.IsSuccess());
 
-
         auto insertRes = session2.ExecuteQuery(R"(
             INSERT INTO `/Root/foo` (a, b)  VALUES (1, 1);
             INSERT INTO `/Root/foo` (a, b)  VALUES (2, 11);
@@ -1703,7 +1700,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST(PushdownFilterMultiConsumersRead) {
+    Y_UNIT_TEST(PushdownColumnTableAndJoinRawTable) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -1727,12 +1724,198 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         )").GetValueSync();
         UNIT_ASSERT(res.IsSuccess());
 
+        res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t2` (
+                c Int64	NOT NULL,
+                d Int32,
+                primary key(c)
+            )
+            PARTITION BY HASH(c)
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
         std::vector<TString> queries = {
+            R"(
+                SELECT result
+                FROM (
+                    SELECT coalesce(t1.b,0) as result from `/Root/t1` as t1
+                    LEFT JOIN `/Root/t2` as t2 on t1.a = t2.c
+                )
+                WHERE result > 0;
+            )"
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto query = queries[i];
+            auto result =
+                session2
+                    .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos, TStringBuilder() << "Olap filter not pushed down. Query: " << query);
+
+            result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+    }
+
+     Y_UNIT_TEST(DisableBlocksOnColumnsLimit) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        // Columns limit 2 for tests.
+        settings.AppConfig.MutableTableServiceConfig()->SetDisableOlapBlocksOnColumnsLimit(2);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session2 = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Uint32 NOT NULL,
+                b Uint32 NOT NULL,
+                c Uint32,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        auto insertRes = session2.ExecuteQuery(R"(
+            INSERT INTO `/Root/t1` (a, b, c) VALUES (1, 2, 3);
+            INSERT INTO `/Root/t1` (a, b, c) VALUES (2, 11, 3);
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT(insertRes.IsSuccess());
+
+        std::vector<TString> queries = {
+            R"(
+                select * from `/Root/t1` as t1 where t1.b > 10 limit 1;
+            )",
+            R"(
+                select b, c, a from `/Root/t1` as t1 where t1.b > 10 limit 1;
+            )",
+            R"(
+                select c, b from `/Root/t1` as t1 where t1.b > 10 limit 1;
+            )",
+        };
+
+        std::vector<TString> results = {
+            R"([[2u;11u;[3u]]])",
+            R"([[11u;[3u];2u]])",
+            R"([[[3u];11u]])"
+       };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto query = queries[i];
+            auto result =
+                session2
+                    .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast.find("BlocksAsStruct") == std::string::npos, TStringBuilder() << "Blocks not disabled. Query: " << query);
+
+            result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            TString output = FormatResultSetYson(result.GetResultSet(0));
+            CompareYson(output, results[i]);
+        }
+
+        queries = {
+            R"(
+                select a from `/Root/t1` as t1 where t1.b > 10 limit 1;
+            )",
+            R"(
+                select * from `/Root/t1` as t1 where t1.b > 10;
+            )",
+        };
+
+        results = {
+           R"([[2u]])",
+           R"([[2u;11u;[3u]]])"
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto query = queries[i];
+            auto result =
+                session2
+                    .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast.find("BlockAsStruct") != std::string::npos, TStringBuilder() << "Disabled blocks. Query: " << query);
+
+            result = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            TString output = FormatResultSetYson(result.GetResultSet(0));
+            CompareYson(output, results[i]);
+        }
+    }
+
+    Y_UNIT_TEST(PushdownFilterKnownIssuies) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session2 = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Uint64 NOT NULL,
+                b Uint32 NOT NULL,
+                c Timestamp NOT NULL,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        std::vector<TString> queries = {
+            R"(
+                $some_time = Timestamp("2000-01-10T08:00:00.000000Z");
+                SELECT
+                    *
+                FROM
+                    `/Root/t1`
+                WHERE
+                    (cast(c as Timestamp?) > $some_time)
+            )",
+            R"(
+                $some_time = Timestamp("2000-01-10T08:00:00.000000Z");
+                SELECT
+                    *
+                FROM
+                    `/Root/t1`
+                WHERE
+                    (just(c) > $some_time)
+            )",
             R"(
                 $sub = (select distinct (b) from `/Root/t1` where b > 10);
 
                 select count(*) from `/Root/t1` as t1
                 where t1.b = $sub;
+            )",
+            R"(
+                select a, res, count(*) as cnt
+                from `/Root/t1`
+                where (b % 128) == 0
+                group by a, cast(bitcast(Digest::IntHash64(a) as UInt32)/((Math::Pow(2, 32)/240) + 1) as UInt32) as res
+                order by cnt desc;
             )",
         };
 
@@ -1930,7 +2113,16 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                        CAST(JSON_VALUE(jsonDoc1, "$.\"b\"") as Double) as col3
                 FROM `/Root/foo`
                 ORDER BY col2;
-            )"
+            )",
+            R"(
+                PRAGMA kikimr.OptEnableOlapPushdownProjections="true";
+
+                SELECT a, JSON_VALUE(jsonDoc, "$.\"a.b.c\"") as result
+                FROM `/Root/foo`
+                WHERE timestamp = Timestamp("1970-01-01T00:00:03.000001Z")
+                ORDER BY a
+                LIMIT 1;
+            )",
         };
 
         std::vector<TString> results = {
@@ -1941,7 +2133,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"([[1;["a1"];["b1"];["c1"]];[2;["a2"];["b2"];["c2"]];[3;#;["b3"];["c3"]]])",
             R"([[#];[[1.1]];[[2.1]]])",
             R"([[#;#];[[%true];[1.1]];[[%false];[2.1]]])",
-            R"([[#;#;#];[[%true];[1.1];[1.2]];[[%false];[2.1];[2.2]]])"
+            R"([[#;#;#];[[%true];[1.1];[1.2]];[[%false];[2.1];[2.2]]])",
+            R"([[1;["a1"]]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -2371,7 +2564,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
 
                     auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
-                    for (auto& [shardId, nodeId]: msg->ShardNodes) {
+                    for (auto& [shardId, nodeId]: msg->ShardsToNodes) {
                         Cerr << "-- nodeId: " << nodeId << Endl;
                         nodeId = runtime->GetNodeId(num);
                         ++num;
@@ -2420,7 +2613,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         runtime->SetObserverFunc(captureEvents);
         auto streamSender = runtime->AllocateEdgeActor();
-        NDataShard::NKqpHelpers::SendRequest(*runtime, streamSender, NDataShard::NKqpHelpers::MakeStreamRequest(streamSender, "SELECT * FROM `/Root/selectStore/selectTable` LIMIT 1;", false));
+        NDataShard::NKqpHelpers::SendRequest(*runtime, streamSender,
+            NDataShard::NKqpHelpers::MakeStreamRequest(streamSender, R"(
+                pragma ydb.DqChannelVersion = "1";
+                SELECT * FROM `/Root/selectStore/selectTable` LIMIT 1;
+            )", false));
         auto ev = runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
         UNIT_ASSERT_VALUES_EQUAL(result, 1);
     }
@@ -2457,7 +2654,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
 
                     auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
-                    for (auto& [shardId, nodeId]: msg->ShardNodes) {
+                    for (auto& [shardId, nodeId]: msg->ShardsToNodes) {
                         Cerr << "-- nodeId: " << nodeId << Endl;
                         nodeId = runtime->GetNodeId(0);
                     }
@@ -2520,7 +2717,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
 
                     auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
-                    for (auto& [shardId, nodeId]: msg->ShardNodes) {
+                    for (auto& [shardId, nodeId]: msg->ShardsToNodes) {
                         Cerr << "-- nodeId: " << nodeId << Endl;
                         nodeId = runtime->GetNodeId(0);
                     }
@@ -2602,7 +2799,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 switch (ev->GetTypeRewrite()) {
                     case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
                         auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
-                        for (auto& [shardId, nodeId] : msg->ShardNodes) {
+                        for (auto& [shardId, nodeId] : msg->ShardsToNodes) {
                             Cerr << "-- nodeId: " << nodeId << Endl;
                             nodeId = runtime->GetNodeId(0);
                         }
@@ -3802,6 +3999,53 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         RunBlockChannelTest(NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_FORCE);
     }
 
+    Y_UNIT_TEST(DisableBlockExecutionPerQuery) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        auto client = kikimr.GetQueryClient();
+
+        {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 10, 1'000'000, 10);
+        }
+
+        const TString query = R"(
+            PRAGMA ydb.DisableBlockExecution;
+
+            SELECT timestamp, resource_id, uid, level
+            FROM `/Root/olapStore/olapTable`
+            WHERE level >= 1
+            ORDER BY level, resource_id
+            LIMIT 5
+        )";
+
+        {
+            auto res = StreamExplainQuery(query, client);
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+            auto plan = CollectStreamResult(res);
+            Cerr << plan.QueryStats->query_ast() << Endl;
+
+            UNIT_ASSERT_C(!plan.QueryStats->query_ast().Contains("BlockAsStruct"), plan.QueryStats->Getquery_ast());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(
+                query,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            CompareYson(StreamResultToYson(it), R"([
+                [1000001u;["11"];"uid_1000001";[1]];
+                [1000006u;["16"];"uid_1000006";[1]];
+                [1000002u;["12"];"uid_1000002";[2]];
+                [1000007u;["17"];"uid_1000007";[2]];
+                [1000003u;["13"];"uid_1000003";[3]]
+            ])");
+        }
+    }
+
     Y_UNIT_TEST(CompactionPlanner) {
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
@@ -4375,8 +4619,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             }
             if (AddNull) {
                 testHelper.BulkUpsert(testTable, rowsBuilder, Ydb::StatusIds::BAD_REQUEST,
-                    "Cannot write data into shard(Incorrect request: cannot prepare incoming batch: empty field for non-default column: "
-                    "'length')");
+                    "Bulk upsert to table '/Root/ttt' Received NULL value for not null column: length");
             } else {
                 testHelper.BulkUpsert(testTable, rowsBuilder);
             }

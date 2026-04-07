@@ -233,6 +233,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
     case TIndexBuildInfo::EState::CreateBuild:
     case TIndexBuildInfo::EState::LockBuild:
     case TIndexBuildInfo::EState::AlterSequence:
+    case TIndexBuildInfo::EState::PrepareValidation:
         index.SetState(Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA);
         index.SetProgress(indexInfo.CalcProgressPercent());
         break;
@@ -302,8 +303,14 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
             *index.mutable_global_vector_kmeans_tree_index() = Ydb::Table::GlobalVectorKMeansTreeIndex();
             break;
-        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext:
-            *index.mutable_global_fulltext_index() = Ydb::Table::GlobalFulltextIndex();
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain:
+            *index.mutable_global_fulltext_plain_index() = Ydb::Table::GlobalFulltextPlainIndex();
+            break;
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance:
+            *index.mutable_global_fulltext_relevance_index() = Ydb::Table::GlobalFulltextRelevanceIndex();
+            break;
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson:
+            *index.mutable_global_json_index() = Ydb::Table::GlobalJsonIndex();
             break;
         default:
             Y_ENSURE(false, InvalidIndexType(info.IndexType));
@@ -345,6 +352,17 @@ void TSchemeShard::TIndexBuilder::TTxBase::SendNotificationsIfFinished(TIndexBui
     }
 }
 
+void TSchemeShard::AddIndexBuild(const std::shared_ptr<TIndexBuildInfo>& buildInfo) {
+    Y_ASSERT(!IndexBuilds.contains(buildInfo->Id));
+    IndexBuilds[buildInfo->Id] = buildInfo;
+    IndexBuildsByTime.emplace(buildInfo->StartTime, buildInfo->Id);
+
+    if (buildInfo->Uid) {
+        Y_ASSERT(!IndexBuildsByUid.contains(buildInfo->Uid));
+        IndexBuildsByUid[buildInfo->Uid] = buildInfo;
+    }
+}
+
 void TSchemeShard::TIndexBuilder::TTxBase::EraseBuildInfo(const TIndexBuildInfo& indexBuildInfo) {
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.LockTxId);
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.InitiateTxId);
@@ -354,6 +372,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::EraseBuildInfo(const TIndexBuildInfo&
     Self->TxIdToIndexBuilds.erase(indexBuildInfo.DropColumnsTxId);
 
     Self->IndexBuildsByUid.erase(indexBuildInfo.Uid);
+    Self->IndexBuildsByTime.erase(std::make_pair(indexBuildInfo.StartTime, indexBuildInfo.Id));
     Self->IndexBuilds.erase(indexBuildInfo.Id);
 }
 

@@ -452,6 +452,10 @@ void IsTable(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     CheckPathType(record, NKikimrSchemeOp::EPathTypeTable);
 }
 
+void IsColumnTable(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeColumnTable);
+}
+
 void IsExternalTable(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     CheckPathType(record, NKikimrSchemeOp::EPathTypeExternalTable);
 }
@@ -486,6 +490,14 @@ void IsStreamingQuery(const NKikimrScheme::TEvDescribeSchemeResult& record) {
 
 void IsDirectory(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     CheckPathType(record, NKikimrSchemeOp::EPathTypeDir);
+}
+
+void IsReplication(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeReplication);
+}
+
+void IsTransfer(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeTransfer);
 }
 
 void CheckPathType(const NKikimrScheme::TEvDescribeSchemeResult& record, NKikimrSchemeOp::EPathType pathType) {
@@ -1011,6 +1023,12 @@ TCheckFunc StreamVirtualTimestamps(bool value) {
     };
 }
 
+TCheckFunc StreamUserSIDs(bool value) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetUserSIDs(), value);
+    };
+}
+
 TCheckFunc StreamResolvedTimestamps(const TDuration& value) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetResolvedTimestampsIntervalMs(), value.MilliSeconds());
@@ -1266,6 +1284,12 @@ TCheckFunc HasTtlDisabled() {
 TCheckFunc IsBackupTable(bool value) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(value, record.GetPathDescription().GetTable().GetIsBackup());
+    };
+}
+
+TCheckFunc IsRestoreTable(bool value) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(value, record.GetPathDescription().GetTable().GetIsRestore());
     };
 }
 

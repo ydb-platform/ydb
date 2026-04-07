@@ -103,7 +103,7 @@ private:
                 Invokers_.push_back(worker->GetInvoker());
 
                 worker->Suspend(/*immediately*/ true)
-                    .Get()
+                    .BlockingGet()
                     .ThrowOnError();
                 Workers_.push_back(std::move(worker));
             }

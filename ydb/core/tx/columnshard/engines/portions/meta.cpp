@@ -228,6 +228,18 @@ NArrow::TSimpleRow TPortionMeta::IndexKeyEnd() const {
     return LastPKRow.Build(PKSchema);
 }
 
+NArrow::TSimpleRowViewV0 TPortionMeta::IndexKeyViewStart() const {
+    return NArrow::TSimpleRowViewV0(FirstPKRow.GetData());
+}
+
+NArrow::TSimpleRowViewV0 TPortionMeta::IndexKeyViewEnd() const {
+    return NArrow::TSimpleRowViewV0(LastPKRow.GetData());
+}
+
+const std::shared_ptr<arrow::Schema>& TPortionMeta::GetPkSchema() const {
+    return PKSchema;
+}
+
 void TPortionMeta::ResetCompactionLevel(const ui32 level) {
     CompactionLevel = level;
 }

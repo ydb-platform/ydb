@@ -17,6 +17,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
+#include <yql/essentials/minikql/computation/mkql_external_node_invalidator.h>
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 
@@ -169,8 +170,26 @@ TWorkerGraph::TWorkerGraph(
 
     ComputationGraph = ComputationPattern->Clone(
         computationPatternOpts.ToComputationOptions(*RandomProvider, *TimeProvider));
-
     ComputationGraph->Prepare();
+    TVector<NKikimr::NMiniKQL::IComputationExternalNode*> externalNodes;
+    // Here is a problem, because invalidation of SelfNodes and Caches is not enough.
+    // We must invalidate all nodes that "depend" on SelfNodes.
+    // By "depend" we mean that these nodes somehow by some code flow can store values from SelfNodes.
+    // But now there is no way to do this.
+    //
+    // So here we invalidate all external nodes to prevent only small subset of problems that we found by tests.
+    for (const auto& node : ComputationGraph->GetNodes()) {
+        if (dynamic_cast<NKikimr::NMiniKQL::IComputationExternalNode*>(node.Get())) {
+            externalNodes.push_back(static_cast<NKikimr::NMiniKQL::IComputationExternalNode*>(node.Get()));
+        }
+    }
+    for (auto* selfNode : SelfNodes) {
+        if (selfNode) {
+            externalNodes.push_back(selfNode);
+        }
+    }
+
+    ExternalNodeInvalidator = NKikimr::NMiniKQL::TComputationExternalNodeInvalidator(externalNodes);
 
     // Scoped alloc acquires itself on construction. We need to release it before returning control to user.
     // Note that scoped alloc releases itself on destruction so it is no problem if the above code throws.
@@ -345,12 +364,20 @@ void TWorker<TBase>::Release() {
 template <typename TBase>
 void TWorker<TBase>::Invalidate() {
     auto& ctx = Graph_.ComputationGraph->GetContext();
-    for (const auto* selfNode : Graph_.SelfNodes) {
-        if (selfNode) {
-            selfNode->InvalidateValue(ctx);
-        }
-    }
+    Graph_.ExternalNodeInvalidator.InvalidateMutables(ctx);
     Graph_.ComputationGraph->InvalidateCaches();
+}
+
+template <typename TBase>
+void TWorker<TBase>::CheckState(bool finish) {
+    PrepareCheckState(finish);
+    if (finish) {
+        Graph_.ComputationGraph->Invalidate();
+    }
+
+    if (auto pos = Graph_.ComputationGraph->GetNotConsumedLinear()) {
+        UdfTerminate((TStringBuilder() << pos << " Linear value is not consumed").c_str());
+    }
 }
 
 TPullStreamWorker::~TPullStreamWorker() {
@@ -383,6 +410,7 @@ void TPullStreamWorker::SetInput(NKikimr::NUdf::TUnboxedValue&& value, ui32 inpu
     HasInput_[inputIndex] = true;
 
     if (CheckAllInputsSet()) {
+        NKikimr::NMiniKQL::TBindTerminator bind(Graph_.ComputationGraph->GetTerminator());
         Output_ = Graph_.ComputationGraph->GetValue();
     }
 }
@@ -393,6 +421,12 @@ NKikimr::NUdf::TUnboxedValue& TPullStreamWorker::GetOutput() {
     }
 
     return Output_;
+}
+
+void TPullStreamWorker::PrepareCheckState(bool finish) {
+    if (finish) {
+        Output_ = NKikimr::NUdf::TUnboxedValue::Invalid();
+    }
 }
 
 void TPullStreamWorker::Release() {
@@ -439,6 +473,7 @@ void TPullListWorker::SetInput(NKikimr::NUdf::TUnboxedValue&& value, ui32 inputI
     HasInput_[inputIndex] = true;
 
     if (CheckAllInputsSet()) {
+        NKikimr::NMiniKQL::TBindTerminator bind(Graph_.ComputationGraph->GetTerminator());
         Output_ = Graph_.ComputationGraph->GetValue();
         ResetOutputIterator();
     }
@@ -483,6 +518,13 @@ void TPullListWorker::Release() {
     TWorker<IPullListWorker>::Release();
 }
 
+void TPullListWorker::PrepareCheckState(bool finish) {
+    if (finish) {
+        Output_ = NKikimr::NUdf::TUnboxedValue::Invalid();
+        OutputIterator_ = NKikimr::NUdf::TUnboxedValue::Invalid();
+    }
+}
+
 namespace {
 class TPushStream final: public NKikimr::NMiniKQL::TCustomListValue {
 private:
@@ -525,6 +567,7 @@ public:
 } // namespace
 
 void TPushStreamWorker::FeedToConsumer() {
+    NKikimr::NMiniKQL::TBindTerminator bind(Graph_.ComputationGraph->GetTerminator());
     auto value = Graph_.ComputationGraph->GetValue();
 
     for (;;) {
@@ -611,12 +654,14 @@ void TPushStreamWorker::Release() {
     TWorker<IPushStreamWorker>::Release();
 }
 
-namespace NYql {
-namespace NPureCalc {
+void TPushStreamWorker::PrepareCheckState(bool finish) {
+    Y_UNUSED(finish);
+}
+
+namespace NYql::NPureCalc {
 template class TWorker<IPullStreamWorker>;
 
 template class TWorker<IPullListWorker>;
 
 template class TWorker<IPushStreamWorker>;
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

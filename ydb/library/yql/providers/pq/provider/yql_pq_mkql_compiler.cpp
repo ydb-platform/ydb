@@ -30,7 +30,7 @@ bool UseSharedReading(TExprNode::TPtr settings) {
 
 TRuntimeNode WrapSharedReading(const TDqSourceWrapBase &wrapper, NCommon::TMkqlBuildContext& ctx) {
     const auto input = MkqlBuildExpr(wrapper.Input().Ref(), ctx);
-    const auto flow = ctx.ProgramBuilder.ToFlow(input);
+    const auto flow = ctx.ProgramBuilder.ToFlow(input, {});
 
     const TStructExprType* rowType = wrapper.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
     const auto* finalItemStructType = static_cast<TStructType*>(NCommon::BuildType(wrapper.RowType().Ref(), *rowType, ctx.ProgramBuilder));
@@ -63,7 +63,7 @@ void RegisterDqPqMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                 }
 
                 const auto input = MkqlBuildExpr(wrapper.Input().Ref(), ctx);
-                auto flow = ctx.ProgramBuilder.ToFlow(input);
+                auto flow = ctx.ProgramBuilder.ToFlow(input, {});
                 return ctx.ProgramBuilder.ExpandMap(flow,
                     [&](TRuntimeNode item) -> TRuntimeNode::TList {
                         return {item};

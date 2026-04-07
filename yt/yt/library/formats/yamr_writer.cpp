@@ -52,7 +52,7 @@ public:
         } catch (const std::exception& ex) {
             auto error = TError("Failed to add columns to name table for YAMR format")
                 << ex;
-            RegisterError(error);
+            SetError(error);
         }
     }
 
@@ -137,10 +137,10 @@ private:
                 WriteInLenvalMode(*value);
             }
 
-            TryFlushBuffer(false);
+            MaybeFlushBuffer(/*force*/ false);
         }
 
-        TryFlushBuffer(true);
+        MaybeFlushBuffer(/*force*/ true);
     }
 
     void ValidateColumnType(const TUnversionedValue* value, TStringBuf columnName)

@@ -230,19 +230,17 @@ std::vector<TError>& ApplyWhitelist(std::vector<TError>& errors, const THashSet<
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TError::TErrorOr() = default;
+void TError::TImplDeleter::operator()(TImpl* impl) const
+{
+    delete impl;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 TError::~TErrorOr() = default;
 
 TError::TErrorOr(const TError& other)
-{
-    if (!other.IsOK()) {
-        Impl_ = std::make_unique<TImpl>(*other.Impl_);
-    }
-}
-
-TError::TErrorOr(TError&& other) noexcept
-    : Impl_(std::move(other.Impl_))
+    : Impl_(other.IsOK() ? nullptr : new TImpl(*other.Impl_))
 { }
 
 TError::TErrorOr(const TErrorException& errorEx) noexcept
@@ -254,7 +252,7 @@ TError::TErrorOr(const TErrorException& errorEx) noexcept
 
 TError::TErrorOr(const std::exception& ex)
 {
-    if (auto simpleException = dynamic_cast<const TSimpleException*>(&ex)) {
+    if (auto* simpleException = dynamic_cast<const TSimpleException*>(&ex)) {
         *this = TError(NYT::EErrorCode::Generic, TRuntimeFormat{simpleException->GetMessage()});
         // NB: clang-14 is incapable of capturing structured binding variables
         //  so we force materialize them via this function call.
@@ -284,30 +282,20 @@ TError::TErrorOr(const std::exception& ex)
 }
 
 TError::TErrorOr(std::string message, TDisableFormat)
-    : Impl_(std::make_unique<TImpl>(std::move(message)))
+    : TError(std::make_unique<TImpl>(std::move(message)))
 {
     Enrich();
 }
 
 TError::TErrorOr(TErrorCode code, std::string message, TDisableFormat)
-    : Impl_(std::make_unique<TImpl>(code, std::move(message)))
+    : TError(std::make_unique<TImpl>(code, std::move(message)))
 {
     Enrich();
 }
 
 TError& TError::operator = (const TError& other)
 {
-    if (other.IsOK()) {
-        Impl_.reset();
-    } else {
-        Impl_ = std::make_unique<TImpl>(*other.Impl_);
-    }
-    return *this;
-}
-
-TError& TError::operator = (TError&& other) noexcept
-{
-    Impl_ = std::move(other.Impl_);
+    *this = TError(other);
     return *this;
 }
 
@@ -674,13 +662,13 @@ void TError::RegisterFromExceptionEnricher(TFromExceptionEnricher enricher)
 }
 
 TError::TErrorOr(std::unique_ptr<TImpl> impl)
-    : Impl_(std::move(impl))
+    : Impl_(impl.release())
 { }
 
 void TError::MakeMutable()
 {
     if (!Impl_) {
-        Impl_ = std::make_unique<TImpl>();
+        Impl_.reset(new TImpl());
     }
 }
 

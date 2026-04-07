@@ -56,7 +56,7 @@ protected:
     virtual NUdf::TUnboxedValue GetCurrent(size_t tableIndex) = 0;
 
     void ReadNext() {
-        if (Y_LIKELY(IsValid_)) {
+        if (IsValid_) [[likely]] {
             Input_->Next();
             IsValid_ = Input_->IsValid();
             bool keySwitch = false;

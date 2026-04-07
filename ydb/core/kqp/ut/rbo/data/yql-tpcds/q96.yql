@@ -1,0 +1,27 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+/* custom error: Unknown alias: household_demographics */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    Count(*)
+FROM
+    `/Root/test/ds/store_sales` as store_sales
+,
+    `/Root/test/ds/household_demographics` as household_demographics
+,
+    `/Root/test/ds/time_dim` as time_dim
+,
+    `/Root/test/ds/store` as store
+WHERE
+    ss_sold_time_sk == time_dim.t_time_sk
+    AND ss_hdemo_sk == household_demographics.hd_demo_sk
+    AND ss_store_sk == s_store_sk
+    AND time_dim.t_hour == 8
+    AND time_dim.t_minute >= 30
+    AND household_demographics.hd_dep_count == 5
+    AND store.s_store_name == 'ese'
+ORDER BY
+    Count(*)
+LIMIT 100;

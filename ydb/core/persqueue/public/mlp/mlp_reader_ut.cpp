@@ -62,16 +62,22 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .WaitTime = TDuration::Seconds(3),
-            .VisibilityTimeout = TDuration::Seconds(30),
+            .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1,
             .UncompressMessages = true
         });
+
+        auto now = TInstant::Now().MilliSeconds() - 1; // -1 to avoid flakiness
 
         auto response = GetReadResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, 0);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-1");
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].ApproximateReceiveCount, 1);
+        UNIT_ASSERT(response->Messages[0].ApproximateFirstReceiveTimestamp.has_value());
+        UNIT_ASSERT_GE_C(response->Messages[0].ApproximateFirstReceiveTimestamp->MilliSeconds(), now,
+            "ApproximateFirstReceiveTimestamp=" << response->Messages[0].ApproximateFirstReceiveTimestamp->MilliSeconds() << " now=" << now);
     }
 
     Y_UNIT_TEST(TopicWithManyIterationsData) {
@@ -92,7 +98,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .TopicName = "/Root/topic1",
                 .Consumer = "mlp-consumer",
                 .WaitTime = TDuration::Seconds(1),
-                .VisibilityTimeout = TDuration::Seconds(2),
+                .ProcessingTimeout = TDuration::Seconds(2),
                 .MaxNumberOfMessage = 2,
                 .UncompressMessages = true
             });
@@ -100,7 +106,9 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             auto response = GetReadResponse(runtime);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-1");
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].ApproximateReceiveCount, 1);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages[1].Data, "msg-2");
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[1].ApproximateReceiveCount, 1);
         }
 
         {
@@ -109,7 +117,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .TopicName = "/Root/topic1",
                 .Consumer = "mlp-consumer",
                 .WaitTime = TDuration::Seconds(0),
-                .VisibilityTimeout = TDuration::Seconds(5),
+                .ProcessingTimeout = TDuration::Seconds(5),
                 .MaxNumberOfMessage = 10,
                 .UncompressMessages = true
             });
@@ -117,6 +125,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             auto response = GetReadResponse(runtime);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-3");
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].ApproximateReceiveCount, 1);
         }
 
         {
@@ -125,7 +134,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .TopicName = "/Root/topic1",
                 .Consumer = "mlp-consumer",
                 .WaitTime = TDuration::Seconds(0),
-                .VisibilityTimeout = TDuration::Seconds(2),
+                .ProcessingTimeout = TDuration::Seconds(2),
                 .MaxNumberOfMessage = 2,
                 .UncompressMessages = true
             });
@@ -142,7 +151,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .TopicName = "/Root/topic1",
                 .Consumer = "mlp-consumer",
                 .WaitTime = TDuration::Seconds(5),
-                .VisibilityTimeout = TDuration::Seconds(2),
+                .ProcessingTimeout = TDuration::Seconds(2),
                 .MaxNumberOfMessage = 2,
                 .UncompressMessages = true
             });
@@ -150,9 +159,10 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             auto response = GetReadResponse(runtime);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-1");
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].ApproximateReceiveCount, 2);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages[1].Data, "msg-2");
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[1].ApproximateReceiveCount, 2);
         }
-
     }
 
     Y_UNIT_TEST(TopicWithBigMessage) {
@@ -169,7 +179,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .WaitTime = TDuration::Seconds(3),
-            .VisibilityTimeout = TDuration::Seconds(30),
+            .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1,
             .UncompressMessages = true
         });
@@ -223,7 +233,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .WaitTime = TDuration::Seconds(3),
-            .VisibilityTimeout = TDuration::Seconds(30),
+            .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1,
             .UncompressMessages = true
         });
@@ -241,7 +251,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .WaitTime = TDuration::Seconds(3),
-            .VisibilityTimeout = TDuration::Seconds(30),
+            .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1,
             .UncompressMessages = true
         });

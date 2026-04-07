@@ -70,10 +70,17 @@ using TASessionClosedEvent = std::conditional_t<UseMigrationProtocol,
     NYdb::NPersQueue::TSessionClosedEvent,
     NYdb::NTopic::TSessionClosedEvent>;
 
+struct TMigrationPartitionStream: public NYdb::NPersQueue::TPartitionStream {
+    virtual void Commit(uint64_t startOffset, uint64_t endOffset) = 0;
+    virtual void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) = 0;
+    virtual void ConfirmDestroy() = 0;
+    virtual void ConfirmEnd(std::span<const uint32_t> childIds) = 0;
+};
+
 template <bool UseMigrationProtocol>
 using TAPartitionStream = std::conditional_t<UseMigrationProtocol,
-    NYdb::NPersQueue::TPartitionStream,
-    NYdb::NTopic::TPartitionSession>;
+    TMigrationPartitionStream,
+    NYdb::NTopic::TPartitionSessionControl>;
 
 template <bool UseMigrationProtocol>
 using TAReadSessionEvent = std::conditional_t<UseMigrationProtocol,
@@ -154,6 +161,7 @@ public:
     void DeferReconnection(TCallbackContextPtr<UseMigrationProtocol> cbContext, TPlainStatus&& status);
     void DeferStartSession(TCallbackContextPtr<UseMigrationProtocol> cbContext);
     void DeferSignalWaiter(TWaiter&& waiter);
+    void DeferOnUserRetrievedEvent(TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>&& accumulator);
     void DeferDestroyDecompressionInfos(std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>>&& infos);
 
 private:
@@ -168,6 +176,8 @@ private:
     void Reconnect();
     void SignalWaiters();
     void StartSessions();
+    void OnUserRetrievedEvent();
+    void DestroyDecompressionInfos();
 
 private:
     // Read.
@@ -211,6 +221,9 @@ private:
     // Contexts for sessions to start
     std::vector<TCallbackContextPtr<UseMigrationProtocol>> CbContexts;
 
+    // User retrieved events info accumulator.
+    std::vector<TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>> UserRetrievedEventsInfoAccumulator;
+
     std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>> DecompressionInfos;
 };
 
@@ -228,6 +241,8 @@ public:
         i64 serverBytesSize = 0 // to increment read request bytes size
     );
     ~TDataDecompressionInfo();
+
+    void Cleanup();
 
     i64 StartDecompressionTasks(const typename IExecutor::TPtr& executor,
                                 i64 availableMemory,
@@ -265,6 +280,10 @@ public:
         return ServerBytesSize;
     }
 
+    size_t GetNotStartedTasksCunt() const {
+        return Tasks.size();
+    }
+
     std::optional<std::pair<size_t, size_t>> GetReadyThreshold() const {
         size_t readyCount = 0;
         std::pair<size_t, size_t> ret;
@@ -295,17 +314,12 @@ public:
         return MessagesMeta[batchIndex][messageIndex];
     }
 
-    bool HasMoreData() const {
-        return CurrentReadingMessage.first < static_cast<size_t>(GetServerMessage().batches_size());
-    }
-
-    bool HasReadyUnreadData() const;
-
     void PutDecompressionError(std::exception_ptr error, size_t batch, size_t message);
     std::exception_ptr GetDecompressionError(size_t batch, size_t message);
 
     void OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount);
     void OnUserRetrievedEvent(i64 decompressedDataSize, size_t messagesCount);
+    void OnTaskCanceled(i64 sourceSize, size_t messagesCount);
 
 private:
     // Special struct for marking (batch/message) as ready.
@@ -313,6 +327,7 @@ private:
         size_t Batch = 0; // Last ready batch with message index.
         size_t Message = 0; // Last ready message index.
         std::atomic<bool> Ready = false;
+        std::atomic<bool> Abandoned = false; // Marked by true either when decompression is completed or message is not needed anymore
     };
 
     struct TDecompressionTask {
@@ -364,7 +379,6 @@ private:
     std::atomic<i64> SourceDataNotProcessed = 0;
     std::pair<size_t, size_t> CurrentDecompressingMessage = {0, 0}; // (Batch, Message)
     std::deque<TReadyMessageThreshold> ReadyThresholds;
-    std::pair<size_t, size_t> CurrentReadingMessage = {0, 0}; // (Batch, Message)
 
     // Decompression exceptions.
     // Optimization for rare using.
@@ -382,11 +396,12 @@ private:
 template <bool UseMigrationProtocol>
 class TDataDecompressionEvent {
 public:
-    TDataDecompressionEvent(size_t batch, size_t message, TDataDecompressionInfoPtr<UseMigrationProtocol> parent, std::atomic<bool>& ready) :
+    TDataDecompressionEvent(size_t batch, size_t message, TDataDecompressionInfoPtr<UseMigrationProtocol> parent, std::atomic<bool>& ready, std::atomic<bool>& abandoned) :
         Batch{batch},
         Message{message},
         Parent{std::move(parent)},
-        Ready{ready}
+        Ready{ready},
+        Abandoned{abandoned}
     {
     }
 
@@ -394,11 +409,22 @@ public:
         return Ready;
     }
 
+    bool SetAbandoned() {
+        if (bool expected = false; Abandoned.compare_exchange_strong(expected, true)) {
+            return true;
+        }
+
+        // If Ready=false, decompression task already successfully cancelled
+        return !Ready;
+    }
+
     void TakeData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
                   std::vector<typename TADataReceivedEvent<UseMigrationProtocol>::TMessage>& messages,
                   std::vector<typename TADataReceivedEvent<UseMigrationProtocol>::TCompressedMessage>& compressedMessages,
                   size_t& maxByteSize,
                   size_t& dataSize) const;
+
+    size_t GetDataSize() const;
 
     TDataDecompressionInfoPtr<UseMigrationProtocol> GetParent() const {
         return Parent;
@@ -409,6 +435,7 @@ private:
     size_t Message;
     TDataDecompressionInfoPtr<UseMigrationProtocol> Parent;
     std::atomic<bool>& Ready;
+    std::atomic<bool>& Abandoned;
 };
 
 template <bool UseMigrationProtocol>
@@ -473,12 +500,14 @@ struct TRawPartitionStreamEvent {
     TRawPartitionStreamEvent(size_t batch,
                              size_t message,
                              TDataDecompressionInfoPtr<UseMigrationProtocol> parent,
-                             std::atomic<bool> &ready)
+                             std::atomic<bool> &ready,
+                             std::atomic<bool>& abandoned)
         : Event(std::in_place_type_t<TDataDecompressionEvent<UseMigrationProtocol>>(),
                 batch,
                 message,
                 std::move(parent),
-                ready)
+                ready,
+                abandoned)
     {
     }
 
@@ -490,6 +519,11 @@ struct TRawPartitionStreamEvent {
 
     bool IsDataEvent() const {
         return std::holds_alternative<TDataDecompressionEvent<UseMigrationProtocol>>(Event);
+    }
+
+    TDataDecompressionEvent<UseMigrationProtocol>& GetDataEvent() {
+        Y_ASSERT(IsDataEvent());
+        return std::get<TDataDecompressionEvent<UseMigrationProtocol>>(Event);
     }
 
     const TDataDecompressionEvent<UseMigrationProtocol>& GetDataEvent() const {
@@ -555,6 +589,10 @@ public:
         (NotReady.empty() ? Ready : NotReady).pop_back();
     }
 
+    size_t size() const {
+        return NotReady.size() + Ready.size();
+    }
+
     void clear() noexcept {
         NotReady.clear();
         Ready.clear();
@@ -571,6 +609,10 @@ public:
                           std::vector<typename TADataReceivedEvent<UseMigrationProtocol>::TMessage>& messages,
                           std::vector<typename TADataReceivedEvent<UseMigrationProtocol>::TCompressedMessage>& compressedMessages,
                           TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator);
+
+    size_t GetReadyEventAmount() const {
+        return Ready.size();
+    }
 
 private:
     static void GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
@@ -684,12 +726,12 @@ public:
         TAPartitionStream<false>::LastDirectReadId = id;
     }
 
-    void Commit(ui64 startOffset, ui64 endOffset) /*override*/;
+    void Commit(uint64_t startOffset, uint64_t endOffset) override;
     void RequestStatus() override;
 
-    void ConfirmCreate(std::optional<ui64> readOffset, std::optional<ui64> commitOffset);
-    void ConfirmDestroy();
-    void ConfirmEnd(const std::vector<ui32>& childIds);
+    void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) override;
+    void ConfirmDestroy() override;
+    void ConfirmEnd(std::span<const uint32_t> childIds) override;
 
     void StopReading() /*override*/;
     void ResumeReading() /*override*/;
@@ -710,9 +752,10 @@ public:
     void InsertDataEvent(size_t batch,
                          size_t message,
                          TDataDecompressionInfoPtr<UseMigrationProtocol> parent,
-                         std::atomic<bool> &ready)
+                         std::atomic<bool>& ready,
+                         std::atomic<bool>& abandoned)
     {
-        EventsQueue.emplace_back(batch, message, std::move(parent), ready);
+        EventsQueue.emplace_back(batch, message, std::move(parent), ready, abandoned);
     }
 
     bool HasEvents() const {
@@ -818,6 +861,14 @@ public:
         return Lock;
     }
 
+    size_t GetEventAmount() const {
+        return EventsQueue.size();
+    }
+
+    size_t GetReadyEventAmount() const {
+        return EventsQueue.GetReadyEventAmount();
+    }
+
 private:
     const TKey Key;
     ui64 AssignId;
@@ -913,7 +964,8 @@ public:
                        size_t batch,
                        size_t message,
                        TDataDecompressionInfoPtr<UseMigrationProtocol> parent,
-                       std::atomic<bool> &ready);
+                       std::atomic<bool>& ready,
+                       std::atomic<bool>& abandoned);
 
     void SignalEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
                          TDeferredActions<UseMigrationProtocol>& deferred,
@@ -1078,6 +1130,10 @@ private:
         return visitor.Visit();
     }
 
+    void SelfCheck() final {
+        CbContext->LockShared()->SelfCheck();
+    }
+
 private:
     bool HasEventCallbacks;
     TCallbackContextPtr<UseMigrationProtocol> CbContext;
@@ -1125,6 +1181,7 @@ public:
 
     friend class TPartitionStreamImpl<UseMigrationProtocol>;
     friend class TDirectReadSessionControlCallbacks;
+    friend class TDataDecompressionInfo<UseMigrationProtocol>;
 
     TSingleClusterReadSessionImpl(
         const TAReadSessionSettings<UseMigrationProtocol>& settings,
@@ -1163,7 +1220,7 @@ public:
     void Start();
     void ConfirmPartitionStreamCreate(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, std::optional<ui64> readOffset, std::optional<ui64> commitOffset);
     void ConfirmPartitionStreamDestroy(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream);
-    void ConfirmPartitionStreamEnd(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, const std::vector<ui32>& childIds);
+    void ConfirmPartitionStreamEnd(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, std::span<const ui32> childIds);
     void RequestPartitionStreamStatus(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream);
     void Commit(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, ui64 startOffset, ui64 endOffset);
 
@@ -1176,6 +1233,7 @@ public:
                                         TDeferredActions<UseMigrationProtocol>& deferred);
 
     void OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount, i64 serverBytesSize = 0);
+    void OnDecompressionTaskCanceled(i64 sourceSize, size_t messagesCount, i64 serverBytesSize);
 
     TReadSessionEventsQueue<UseMigrationProtocol>* GetEventsQueue() {
         return EventsQueue.get();
@@ -1234,6 +1292,8 @@ public:
     void CollectOffsets(TTransactionBase& tx,
                         const TReadSessionEvent::TEvent& event,
                         std::shared_ptr<TTopicClient::TImpl> client);
+
+    void SelfCheck();
 
 private:
     void BreakConnectionAndReconnectImpl(TPlainStatus&& status, TDeferredActions<UseMigrationProtocol>& deferred);
@@ -1426,6 +1486,7 @@ private:
     typename IProcessor::TPtr Processor;
     typename IARetryPolicy<UseMigrationProtocol>::IRetryState::TPtr RetryState; // Current retry state (if now we are (re)connecting).
     size_t ConnectionAttemptsDone = 0;
+    TInstant LastActiveTime = TInstant::Now();
 
     // Memory usage.
     i64 CompressedDataSize = 0;

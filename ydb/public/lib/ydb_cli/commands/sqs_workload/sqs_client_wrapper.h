@@ -25,7 +25,8 @@ namespace NYdb::NConsoleClient {
             Aws::SQS::Model::DeleteMessageBatchOutcome DeleteMessageBatch(
                 const Aws::SQS::Model::DeleteMessageBatchRequest& request)
                 const override;
-        
+            Aws::SQS::Model::GetQueueUrlOutcome GetQueueUrl(
+                const Aws::SQS::Model::GetQueueUrlRequest& request) const override;
         private:
             std::shared_ptr<Aws::SQS::SQSClient> Client;
             std::shared_ptr<TSqsWorkloadStatsCollector> StatsCollector;

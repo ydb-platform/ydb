@@ -146,6 +146,9 @@ public:
     UNSUPPORTED_METHOD(TFuture<void>, AlterReplicationCard, (NChaosClient::TReplicationCardId, const TAlterReplicationCardOptions&));
     UNSUPPORTED_METHOD(TFuture<IPrerequisitePtr>, StartChaosLease, (const TChaosLeaseStartOptions&));
     UNSUPPORTED_METHOD(TFuture<IPrerequisitePtr>, AttachChaosLease, (NChaosClient::TChaosLeaseId, const TChaosLeaseAttachOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, SetUserBanned, (const std::string&, bool, const TSetUserBannedOptions&));
+    UNSUPPORTED_METHOD(TFuture<bool>, GetUserBanned, (const std::string&, const TGetUserBannedOptions&));
+    UNSUPPORTED_METHOD(TFuture<std::vector<std::string>>, ListBannedUsers, (const TListBannedUsersOptions&));
     UNSUPPORTED_METHOD(TFuture<std::vector<NTabletClient::TTableReplicaId>>, GetInSyncReplicas, (const TYPath&, const NTableClient::TNameTablePtr&, const TSharedRange<NTableClient::TUnversionedRow>&, const TGetInSyncReplicasOptions&));
     UNSUPPORTED_METHOD(TFuture<std::vector<NTabletClient::TTableReplicaId>>, GetInSyncReplicas, (const TYPath&, const TGetInSyncReplicasOptions&));
     UNSUPPORTED_METHOD(TFuture<std::vector<TTabletInfo>>, GetTabletInfos, (const TYPath&, const std::vector<int>&, const TGetTabletInfosOptions&));
@@ -194,6 +197,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<NYson::TYsonString>, GetJob, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AbandonJob, (NJobTrackerClient::TJobId, const TAbandonJobOptions&));
     UNSUPPORTED_METHOD(TFuture<TPollJobShellResponse>, PollJobShell, (NJobTrackerClient::TJobId, const std::optional<TString>&, const NYson::TYsonString&, const TPollJobShellOptions&));
+    UNSUPPORTED_METHOD(TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr>, RunJobShellCommand, (NJobTrackerClient::TJobId, const std::optional<std::string>&, const std::string&, const TRunJobShellCommandOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, AbortJob, (NJobTrackerClient::TJobId, const TAbortJobOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, DumpJobProxyLog, (NJobTrackerClient::TJobId, NJobTrackerClient::TOperationId, const NYPath::TYPath&, const TDumpJobProxyLogOptions&));
     UNSUPPORTED_METHOD(TFuture<TClusterMeta>, GetClusterMeta, (const TGetClusterMetaOptions&));
@@ -203,6 +207,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<TCellIdToConsistentStateMap>, GetMasterConsistentState, (const TGetMasterConsistentStateOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, ExitReadOnly, (NObjectClient::TCellId, const TExitReadOnlyOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, MasterExitReadOnly, (const TMasterExitReadOnlyOptions&));
+    UNSUPPORTED_METHOD(TFuture<void>, ResetDynamicallyPropagatedMasterCells, (const TResetDynamicallyPropagatedMasterCellsOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, DiscombobulateNonvotingPeers, (NObjectClient::TCellId, const TDiscombobulateNonvotingPeersOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, SwitchLeader, (NObjectClient::TCellId, const std::string&, const TSwitchLeaderOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, ResetStateHash, (NObjectClient::TCellId, const TResetStateHashOptions&));
@@ -253,7 +258,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<void>, PausePipeline, (const TYPath&, const TPausePipelineOptions&));
     UNSUPPORTED_METHOD(TFuture<TPipelineState>, GetPipelineState, (const TYPath&, const TGetPipelineStateOptions&));
     UNSUPPORTED_METHOD(TFuture<TGetFlowViewResult>, GetFlowView, (const NYPath::TYPath&, const NYPath::TYPath&, const TGetFlowViewOptions&));
-    UNSUPPORTED_METHOD(TFuture<TFlowExecuteResult>, FlowExecute, (const NYPath::TYPath&, const TString&, const NYson::TYsonString&, const TFlowExecuteOptions&));
+    UNSUPPORTED_METHOD(TFuture<TFlowExecuteResult>, FlowExecute, (const NYPath::TYPath&, const std::string&, const NYson::TYsonString&, const TFlowExecuteOptions&));
     UNSUPPORTED_METHOD(TFuture<TSignedShuffleHandlePtr>, StartShuffle, (const std::string&, int, NObjectClient::TTransactionId, const TStartShuffleOptions&));
     UNSUPPORTED_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (const TSignedShuffleHandlePtr&, int, std::optional<TIndexRange>, const TShuffleReaderOptions&));
     UNSUPPORTED_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (const TSignedShuffleHandlePtr&, const std::string&, std::optional<int>, const TShuffleWriterOptions&));

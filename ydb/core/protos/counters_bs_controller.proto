@@ -93,6 +93,13 @@ enum ECumulativeCounters {
     COUNTER_CONFIGCMD_CHANGE_GROUP_SIZE_IN_UNITS_USEC = 48 [(CounterOpts) = {Name: "ChangeGroupSizeInUnits"}];
 
     COUNTER_CONFIGCMD_RECONFIGURE_VIRTUAL_GROUP_USEC = 49 [(CounterOpts) = {Name: "ReconfigureVirtualGroup"}];
+
+    COUNTER_CONFIGCMD_RECOMMISSION_GROUPS_USEC = 50 [(CounterOpts) = {Name: "RecommissionGroups"}];
+
+    COUNTER_CONFIGCMD_DEFINE_DDISK_POOL_USEC = 51 [(CounterOpts) = {Name: "DefineDDiskPool"}];
+    COUNTER_CONFIGCMD_READ_DDISK_POOL_USEC = 52 [(CounterOpts) = {Name: "ReadDDiskPool"}];
+    COUNTER_CONFIGCMD_DELETE_DDISK_POOL_USEC = 53 [(CounterOpts) = {Name: "DeleteDDiskPool"}];
+    COUNTER_CONFIGCMD_MOVE_DDISK_USEC = 54 [(CounterOpts) = {Name: "MoveDDisk"}];
 }
 
 enum EPercentileCounters {
@@ -289,4 +296,5 @@ enum ETxTypes {
     TXTYPE_CHECK_UNSYNCED = 31 [(TxTypeOpts) = {Name: "TTxCheckUnsynced"}];
     TXTYPE_UPDATE_BRIDGE_GROUP_INFO = 32 [(TxTypeOpts) = {Name: "TTxUpdateBridgeGroupInfo"}];
     TXTYPE_UPDATE_BRIDGE_SYNC_STATE = 33 [(TxTypeOpts) = {Name: "TTxUpdateBridgeSyncState"}];
+    TXTYPE_ALLOCATE_DDISK_BLOCK_GROUP = 34 [(TxTypeOpts) = {Name: "TTxAllocateDDiskBlockGroup"}];
 }

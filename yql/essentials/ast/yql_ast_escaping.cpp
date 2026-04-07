@@ -4,14 +4,18 @@
 #include <util/stream/output.h>
 #include <util/string/hex.h>
 
+#include <array>
+
 namespace NYql {
 
-static char HexDigit(char c)
+namespace {
+
+char HexDigit(char c)
 {
     return (c < 10 ? '0' + c : 'A' + (c - 10));
 }
 
-static void EscapedPrintChar(ui8 c, IOutputStream* out)
+void EscapedPrintChar(ui8 c, IOutputStream* out)
 {
     switch (c) {
         case '\\':
@@ -45,16 +49,16 @@ static void EscapedPrintChar(ui8 c, IOutputStream* out)
             if (isprint(c)) {
                 out->Write(static_cast<char>(c));
             } else {
-                char buf[4] = {"\\x"};
+                std::array<char, 4> buf = {"\\x"};
                 buf[2] = HexDigit((c & 0xf0) >> 4);
                 buf[3] = HexDigit((c & 0x0f));
-                out->Write(buf, 4);
+                out->Write(buf.data(), 4);
             }
         }
     }
 }
 
-static void EscapedPrintUnicode(wchar32 rune, IOutputStream* out)
+void EscapedPrintUnicode(wchar32 rune, IOutputStream* out)
 {
     static const int MaxEscapeLen = 10;
 
@@ -62,7 +66,7 @@ static void EscapedPrintUnicode(wchar32 rune, IOutputStream* out)
         EscapedPrintChar(static_cast<ui8>(rune & 0xff), out);
     } else {
         int i = 0;
-        char buf[MaxEscapeLen];
+        std::array<char, MaxEscapeLen> buf;
 
         if (rune < 0x10000) {
             buf[i++] = '\\';
@@ -81,11 +85,11 @@ static void EscapedPrintUnicode(wchar32 rune, IOutputStream* out)
         buf[i++] = HexDigit((rune & 0x00f0) >> 4);
         buf[i++] = HexDigit((rune & 0x000f));
 
-        out->Write(buf, i);
+        out->Write(buf.data(), i);
     }
 }
 
-static bool TryParseOctal(const char*& p, const char* e, int maxlen, wchar32* value)
+bool TryParseOctal(const char*& p, const char* e, int maxlen, wchar32* value)
 {
     while (maxlen-- && p != e) {
         if (*value > 255) {
@@ -104,7 +108,7 @@ static bool TryParseOctal(const char*& p, const char* e, int maxlen, wchar32* va
     return (maxlen == -1);
 }
 
-static bool TryParseHex(const char*& p, const char* e, int maxlen, wchar32* value)
+bool TryParseHex(const char*& p, const char* e, int maxlen, wchar32* value)
 {
     while (maxlen-- > 0 && p != e) {
         char ch = *p++;
@@ -127,9 +131,11 @@ static bool TryParseHex(const char*& p, const char* e, int maxlen, wchar32* valu
     return (maxlen == -1);
 }
 
-static bool IsValidUtf8Rune(wchar32 value) {
+bool IsValidUtf8Rune(wchar32 value) {
     return value <= 0x10ffff && (value < 0xd800 || value > 0xdfff);
 }
+
+} // namespace
 
 TStringBuf UnescapeResultToString(EUnescapeResult result)
 {
@@ -240,9 +246,9 @@ EUnescapeResult UnescapeArbitraryAtom(
                         return EUnescapeResult::INVALID_UNICODE;
                     }
                     size_t written = 0;
-                    char buf[4];
-                    WideToUTF8(&value, 1, buf, written);
-                    out->Write(buf, written);
+                    std::array<char, 4> buf;
+                    WideToUTF8(&value, 1, buf.data(), written);
+                    out->Write(buf.data(), written);
                     continue;
                 }
                 default: {
@@ -277,8 +283,8 @@ EUnescapeResult UnescapeArbitraryAtom(
 
 void EscapeBinaryAtom(TStringBuf atom, char quoteChar, IOutputStream* out)
 {
-    char prefix[] = {'x', quoteChar};
-    out->Write(prefix, 2);
+    auto prefix = std::to_array<char>({'x', quoteChar});
+    out->Write(prefix.data(), 2);
     out->Write(HexEncode(atom.data(), atom.size()));
     out->Write(quoteChar);
 }

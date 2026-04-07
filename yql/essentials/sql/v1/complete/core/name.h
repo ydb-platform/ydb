@@ -36,7 +36,7 @@ struct TAliased: T {
     {
     }
 
-    TAliased(T value)
+    TAliased(T value) // NOLINT(google-explicit-constructor)
         : T(std::move(value))
     {
     }

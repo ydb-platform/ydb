@@ -29,9 +29,9 @@
 
 namespace {
 
-const TVector<NLogin::EHashType> HASHES_TO_COMPUTE = {
-    NLogin::EHashType::Argon,
-    NLogin::EHashType::ScramSha256,
+const TVector<NLoginProto::EHashType::HashType> HASHES_TO_COMPUTE = {
+    NLoginProto::EHashType::Argon,
+    NLoginProto::EHashType::ScramSha256,
 };
 
 }
@@ -265,9 +265,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpUpgradeSubDomainDecision:
             return *modifyScheme.MutableUpgradeSubDomain()->MutableName();
 
-        case NKikimrSchemeOp::ESchemeOpCreateSetConstraintInitiate:
-            return *modifyScheme.MutableSetColumnConstraintsInitiate()->MutableTableName();
-
         case NKikimrSchemeOp::ESchemeOpCreateColumnBuild:
             Y_ABORT("no implementation for ESchemeOpCreateColumnBuild");
 
@@ -303,6 +300,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable:
             Y_ABORT("no implementation for ESchemeOpInitiateBuildIndexImplTable");
+
+        case NKikimrSchemeOp::ESchemeOpPrepareIndexValidation:
+            Y_ABORT("no implementation for ESchemeOpPrepareIndexValidation");
 
         case NKikimrSchemeOp::ESchemeOpDropIndex:
             return *modifyScheme.MutableDropIndex()->MutableTableName();
@@ -481,6 +481,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpAlterStreamingQuery:
             return *modifyScheme.MutableCreateStreamingQuery()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpTruncateTable:
+            return *modifyScheme.MutableTruncateTable()->MutableTableName();
         }
         Y_UNREACHABLE();
     }
@@ -590,6 +593,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
             if (shardResult->HasPathDropTxId()) {
                 result->Record.SetPathDropTxId(shardResult->GetPathDropTxId());
+            }
+
+            if (shardResult->HasOperationId()) {
+                result->Record.SetSchemeShardOperationId(shardResult->GetOperationId());
             }
 
             for (const auto& issue : shardResult->GetIssues()) {
@@ -1127,10 +1134,16 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropSysView:
             return false;
         case NKikimrSchemeOp::ESchemeOpChangePathState: {
-        case NKikimrSchemeOp::ESchemeOpCreateSetConstraintInitiate:
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
             toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
+            ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpTruncateTable: {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
+            toResolve.RequireAccess = NACLib::EAccessRights::EraseRow;
             ResolveForACL.push_back(toResolve);
             break;
         }
@@ -1141,6 +1154,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropColumnBuild:
         case NKikimrSchemeOp::ESchemeOpCreateIndexBuild:
         case NKikimrSchemeOp::ESchemeOpInitiateBuildIndexMainTable:
+        case NKikimrSchemeOp::ESchemeOpPrepareIndexValidation:
         case NKikimrSchemeOp::ESchemeOpCreateLock:
         case NKikimrSchemeOp::ESchemeOpApplyIndexBuild:
         case NKikimrSchemeOp::ESchemeOpFinalizeBuildIndexMainTable:
@@ -1684,7 +1698,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                     } else {
                         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
                             "Unsupported format of hashed password");
-                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, nullptr, &issue, ctx);
+                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::PreconditionFailed, nullptr, &issue, ctx);
                         return Die(ctx);
                     }
                 } else {
@@ -1707,7 +1721,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                     } else {
                         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
                             "Unsupported format of hashed password");
-                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, nullptr, &issue, ctx);
+                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::PreconditionFailed, nullptr, &issue, ctx);
                         return Die(ctx);
                     }
                 } else if (targetUser.HasPassword()) {
@@ -1730,6 +1744,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         auto* computedHashes = ev->Get();
         if (!computedHashes->Error.empty()) {
             auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, std::move(computedHashes->Error));
+            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::PreconditionFailed, nullptr, &issue, ctx);
+            return Die(ctx);
         }
 
         auto& alterLogin = *GetModifyScheme().MutableAlterLogin();
@@ -1737,6 +1753,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::TAlterLogin::kCreateUser:
         {
             auto& targetUser = *alterLogin.MutableCreateUser();
+            targetUser.SetUser(std::move(computedHashes->PreparedUsername));
             targetUser.SetPassword(std::move(computedHashes->ArgonHash));
             targetUser.SetIsHashedPassword(true);
             targetUser.SetHashedPassword(std::move(computedHashes->Hashes));
@@ -1745,6 +1762,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::TAlterLogin::kModifyUser:
         {
             auto& targetUser = *alterLogin.MutableModifyUser();
+            targetUser.SetUser(std::move(computedHashes->PreparedUsername));
             targetUser.SetPassword(std::move(computedHashes->ArgonHash));
             targetUser.SetIsHashedPassword(true);
             targetUser.SetHashedPassword(std::move(computedHashes->Hashes));

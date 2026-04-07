@@ -11,13 +11,18 @@
 
 namespace NKikimr::NMiniKQL {
 
-static ui8 ZeroSizeObject alignas(ArrowAlignment)[0];
+namespace {
+
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
+ui8 ZeroSizeObject alignas(ArrowAlignment)[0];
+
+} // namespace
 
 constexpr ui64 ArrowSizeForArena = (TAllocState::POOL_PAGE_SIZE >> 2);
 
 Y_POD_THREAD(TAllocState*) TlsAllocState;
 
-TAllocPageHeader TAllocState::EmptyPageHeader = {0, 0, 0, 0, nullptr, nullptr};
+TAllocPageHeader TAllocState::EmptyPageHeader = {.Capacity = 0, .Offset = 0, .UseCount = 0, .Deallocated = 0, .MyAlloc = nullptr, .Link = nullptr};
 TAllocState::TCurrentPages TAllocState::EmptyCurrentPages = {&TAllocState::EmptyPageHeader, &TAllocState::EmptyPageHeader};
 
 void TAllocState::TListEntry::Link(TAllocState::TListEntry* root) noexcept {
@@ -151,7 +156,7 @@ void TAllocState::LockObject(::NKikimr::NUdf::TUnboxedValuePod value) {
         return;
     }
 
-    auto [it, isNew] = LockedObjectsRefs.emplace(obj, TLockInfo{0, 0});
+    auto [it, isNew] = LockedObjectsRefs.emplace(obj, TLockInfo{.OriginalRefs = 0, .Locks = 0});
     if (isNew) {
         it->second.OriginalRefs = value.LockRef();
     }
@@ -343,6 +348,7 @@ void* MKQLArrowAllocateImpl(ui64 size) {
         Y_ENSURE(pool);
         uint8_t* res;
         if (!pool->Allocate(fullSize, &res).ok()) {
+            // NOLINTNEXTLINE(hicpp-exception-baseclass)
             throw TMemoryLimitExceededException();
         }
         Y_ENSURE(res);

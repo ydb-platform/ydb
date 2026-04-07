@@ -1,11 +1,12 @@
 --- contrib/python/Jinja2/py3/jinja2/loaders.py	(index)
 +++ contrib/python/Jinja2/py3/jinja2/loaders.py	(working tree)
-@@ -5,6 +5,8 @@ sources.
+@@ -5,6 +5,9 @@ sources.
  import os
  import posixpath
  import sys
 +import pkgutil
 +import importlib.resources
++import importlib.resources.abc
  import typing as t
  import weakref
  import zipimport
@@ -42,7 +43,7 @@
 +            try:
 +                if package_path:
 +                    importlib.resources.files(package_name).joinpath(package_path)
-+            except FileNotFoundError:
++            except (FileNotFoundError, importlib.resources.abc.TraversalError):
 +                if self._check_templates:
 +                    raise ValueError(
 +                        f"PackageLoader could not find a {package_path!r} directory"

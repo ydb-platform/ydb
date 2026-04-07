@@ -28,14 +28,17 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 using namespace NYql;
 using namespace NYql::NPureCalc;
 using namespace NKikimr::NMiniKQL;
 using namespace NYql::NUdf;
 
+// TODO(YQL-20095): Explore real problem to fix this.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 struct TPickleInputSpec: public TInputSpecBase {
-    TPickleInputSpec(const TVector<NYT::TNode>& schemas)
+    explicit TPickleInputSpec(const TVector<NYT::TNode>& schemas)
         : Schemas(schemas)
     {
     }
@@ -122,9 +125,11 @@ struct TInputSpecTraits<TPickleInputSpec> {
     }
 };
 
+// TODO(YQL-20095): Explore real problem to fix this.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 struct TPickleOutputSpec: public TOutputSpecBase {
-    TPickleOutputSpec(const NYT::TNode& schema)
-        : Schema(schema)
+    explicit TPickleOutputSpec(NYT::TNode schema)
+        : Schema(std::move(schema))
     {
     }
 
@@ -144,7 +149,7 @@ public:
 
 class TPickleOutputHandle final: public TStreamOutputHandle {
 public:
-    TPickleOutputHandle(TWorkerHolder<IPullListWorker> worker)
+    explicit TPickleOutputHandle(TWorkerHolder<IPullListWorker> worker)
         : Worker_(std::move(worker))
         , Packer_(false, Worker_->GetOutputType())
     {
@@ -194,9 +199,11 @@ struct TOutputSpecTraits<TPickleOutputSpec> {
     }
 };
 
+// TODO(YQL-20095): Explore real problem to fix this.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 struct TPrintOutputSpec: public TOutputSpecBase {
-    TPrintOutputSpec(const NYT::TNode& schema)
-        : Schema(schema)
+    explicit TPrintOutputSpec(NYT::TNode schema)
+        : Schema(std::move(schema))
     {
     }
 
@@ -209,7 +216,7 @@ struct TPrintOutputSpec: public TOutputSpecBase {
 
 class TPrintOutputHandle final: public TStreamOutputHandle {
 public:
-    TPrintOutputHandle(TWorkerHolder<IPullListWorker> worker)
+    explicit TPrintOutputHandle(TWorkerHolder<IPullListWorker> worker)
         : Worker_(std::move(worker))
     {
     }
@@ -359,7 +366,7 @@ double RunBenchmarks(
     return std::exp(sum / times.size());
 }
 
-int Main(int argc, const char* argv[])
+int Main(int argc, const char** argv)
 {
     Y_UNUSED(NUdf::GetStaticSymbols());
     using namespace NLastGetopt;
@@ -372,6 +379,7 @@ int Main(int argc, const char* argv[])
     TString LLVMSettings;
     TString blockEngineSettings;
     TString exprFile;
+    TLangVersion langVer = NYql::GetMaxReleasedLangVersion();
     opts.AddHelpOption();
     opts.AddLongOption("ndebug", "should be at first argument, do not show debug info in error output").NoArgument();
     opts.AddLongOption('b', "blocks-engine", "Block engine settings").StoreResult(&blockEngineSettings).DefaultValue("disable");
@@ -386,6 +394,13 @@ int Main(int argc, const char* argv[])
     opts.AddLongOption("llvm-settings", "LLVM settings").StoreResult(&LLVMSettings).DefaultValue("");
     opts.AddLongOption("print-expr", "print rebuild AST before execution").NoArgument();
     opts.AddLongOption("expr-file", "print AST to that file instead of stdout").StoreResult(&exprFile);
+    opts.AddLongOption("langver", "Set current language version").RequiredArgument("VER").Handler1T<TString>([&langVer](const TString& str) {
+        if (str == "unknown") {
+            langVer = UnknownLangVersion;
+        } else if (!ParseLangVersion(str, langVer)) {
+            throw yexception() << "Failed to parse language version: " << str;
+        }
+    });
     opts.SetFreeArgsMax(0);
     TOptsParseResult res(&opts, argc, argv);
 
@@ -393,6 +408,7 @@ int Main(int argc, const char* argv[])
     factoryOptions.SetUDFsDir(udfsDir);
     factoryOptions.SetLLVMSettings(LLVMSettings);
     factoryOptions.SetBlockEngineSettings(blockEngineSettings);
+    factoryOptions.SetLanguageVersion(langVer);
 
     IOutputStream* exprOut = nullptr;
     THolder<TFixedBufferFileOutput> exprFileHolder;
@@ -453,7 +469,9 @@ int Main(int argc, const char* argv[])
             });
     } else {
         auto inputGenSpec = TPickleInputSpec(inputGenSchema);
-        auto outputGenSpec = TArrowOutputSpec({NYT::TNode::CreateEntity()});
+        // XXX: Untrack the datums, produced by "gen sql", so they can be
+        // preserved for later multiply usage in "test sql".
+        auto outputGenSpec = TArrowOutputSpec({NYT::TNode::CreateEntity()}, true);
         // XXX: <RunGenSql> cannot be used for this case, since all buffers
         // from the Datums in the obtained batches are owned by the worker's
         // allocator. Hence, the program (i.e. worker) object should be created
@@ -501,7 +519,7 @@ int Main(int argc, const char* argv[])
     return 0;
 }
 
-int main(int argc, const char* argv[]) {
+int main(int argc, const char** argv) {
     if (argc > 1 && TString(argv[1]) != TStringBuf("--ndebug")) {
         Cerr << "purebench ABI version: " << NKikimr::NUdf::CurrentAbiVersionStr() << Endl;
     }

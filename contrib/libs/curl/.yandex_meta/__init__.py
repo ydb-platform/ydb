@@ -14,11 +14,10 @@ def post_install(self):
 """,
     )
     with open(curl_config, "a") as config:
-        config.write(
-            """
+        config.write("""
 // Do not misrepresent host on Android and iOS.
-#undef OS
-#define OS "arcadia"
+#undef CURL_OS
+#define CURL_OS "arcadia"
 
 // c-ares resolver is known to be buggy.
 //
@@ -50,8 +49,7 @@ def post_install(self):
 #else
     #error "No dns resolver is specified or resolver specification is wrong"
 #endif
-"""
-        )
+""")
 
     # curl uses SIZEOF_ macros to test current platform bitness in compile-time
     # As we only control curl_config-linux.h during yamaker installation,
@@ -76,7 +74,7 @@ def post_install(self):
         m.before("CFLAGS", "DEFAULT(ARCADIA_CURL_DNS_RESOLVER ARES)")
         m.CFLAGS = [
             GLOBAL("-DCURL_STATICLIB"),
-            "-DBUILDING_LIBCURL",
+            GLOBAL("-DBUILDING_LIBCURL"),
             "-DHAVE_CONFIG_H",
             "-DARCADIA_CURL_DNS_RESOLVER_${ARCADIA_CURL_DNS_RESOLVER}",
         ]
@@ -141,16 +139,23 @@ curl = GNUMakeNixProject(
         "Library curl": ".",
         "Program curl": "bin",
     },
+    ignore_targets=[
+        "curltool",
+        "curlu",
+        "curlinfo",
+    ],
     copy_sources=[
         "include/curl/stdcheaders.h",
         "lib/curl_sspi.h",
         "lib/setup-win32.h",
     ],
     disable_includes=[
+        "../curl_gssapi.h",
         "afunix.h",
         "amitcp/",
         "bsdsocket/socketbasetags.h",
         "cipher.mih",
+        "cipher_suite.h",
         "config-*",
         "curl_gssapi.h",
         "curlmsg_vms.h",
@@ -161,6 +166,7 @@ curl = GNUMakeNixProject(
         "floss.h",
         "gnutls/",
         "gss.h",
+        "gssapi/",
         "idn2.h",
         "lber.h",
         "ldap.h",
@@ -177,17 +183,23 @@ curl = GNUMakeNixProject(
         "nettle/",
         "ngtcp2/ngtcp2_crypto_boringssl.h",
         "ngtcp2/ngtcp2_crypto_gnutls.h",
+        "ngtcp2/ngtcp2_crypto_ossl.h",
         "ngtcp2/ngtcp2_crypto_wolfssl.h",
         "nwconio.h",
         # NB: openssl/core_names.h appeared in OpenSSL 3.0, while we have only 1.1.1l at the time
         "openssl/core_names.h",
+        "openssl/ech.h",
+        "openssl/provider.h",
         "plarenas.h",
+        "psa/",
         "proto/",
         "quiche.h",
         "setup-os400.h",
         "setup-vms.h",
         "stabs.h",
         "subauth.h",
+        "unicode/uidna.h",
+        "uv.h",
         "vquic/msh3.h",
         "vquic/ngtcp2.h",
         "vquic/quiche.h",
@@ -198,6 +210,7 @@ curl = GNUMakeNixProject(
         "descrip",
         "iodef",
         "starlet",
+        "x509asn1.h",
         # Disable system includes of these headers, yet allow including lib/vtls/{rustls,bearssl}.h
         "<rustls.h>",
         "<bearssl.h>",

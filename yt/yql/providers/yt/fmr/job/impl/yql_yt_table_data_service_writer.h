@@ -8,13 +8,7 @@ class TFmrTableDataServiceWriter: public TFmrTableDataServiceBaseWriter {
 public:
     using TPtr = TIntrusivePtr<TFmrTableDataServiceWriter>;
 
-    TFmrTableDataServiceWriter(
-        const TString& tableId,
-        const TString& partId,
-        ITableDataService::TPtr tableDataService,
-        const TString& columnGroupSpec = TString(),
-        const TFmrWriterSettings& settings = TFmrWriterSettings()
-    );
+    using TFmrTableDataServiceBaseWriter::TFmrTableDataServiceBaseWriter;
 
 protected:
     void PutRows() override;

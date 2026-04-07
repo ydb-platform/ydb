@@ -1,5 +1,7 @@
 #pragma once
 
+#include "dq_block_hash_join_settings.h"
+
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
 namespace NKikimr {
@@ -19,7 +21,8 @@ class TDqProgramBuilder : public TProgramBuilder {
     TRuntimeNode DqBlockHashJoin(TRuntimeNode leftStream, TRuntimeNode rightStream, EJoinKind joinKind,
                                  const TArrayRef<const ui32>& leftKeyColumns,
                                  const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& leftRenames,
-                                 const TArrayRef<const ui32>& rightRenames, TType* returnType);
+                                 const TArrayRef<const ui32>& rightRenames, TType* returnType,
+                                 TBlockHashJoinSettings settings = {});
 
     TRuntimeNode DqScalarHashJoin(TRuntimeNode leftFlow, TRuntimeNode rightFlow, EJoinKind joinKind,
                                   const TArrayRef<const ui32>& leftKeyColumns,

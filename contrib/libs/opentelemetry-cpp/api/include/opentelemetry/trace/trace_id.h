@@ -20,7 +20,7 @@ class TraceId final
 {
 public:
   // The size in bytes of the TraceId.
-  static constexpr int kSize = 16;
+  static constexpr size_t kSize = 16;
 
   // An invalid TraceId (all zeros).
   TraceId() noexcept : rep_{0} {}
@@ -35,7 +35,7 @@ public:
   void ToLowerBase16(nostd::span<char, 2 * kSize> buffer) const noexcept
   {
     constexpr char kHex[] = "0123456789abcdef";
-    for (int i = 0; i < kSize; ++i)
+    for (size_t i = 0; i < kSize; ++i)
     {
       buffer[i * 2 + 0] = kHex[(rep_[i] >> 4) & 0xF];
       buffer[i * 2 + 1] = kHex[(rep_[i] >> 0) & 0xF];

@@ -20,7 +20,6 @@ Y_UNIT_TEST_SUITE(KqpFail) {
     Y_UNIT_TEST(Immediate) {
         TKikimrSettings settings;
         settings.SetUseRealThreads(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetQueryClient();
@@ -104,7 +103,6 @@ Y_UNIT_TEST_SUITE(KqpFail) {
     Y_UNIT_TEST(OnPrepare) {
         TKikimrSettings settings;
         settings.SetUseRealThreads(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetQueryClient();
@@ -190,7 +188,6 @@ Y_UNIT_TEST_SUITE(KqpFail) {
     Y_UNIT_TEST(OnCommit) {
         TKikimrSettings settings;
         settings.SetUseRealThreads(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetQueryClient();

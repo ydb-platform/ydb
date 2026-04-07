@@ -1,7 +1,9 @@
 #include <Python.h>
 #include <errcode.h>
 
-#include "tokenizer.h"
+#include "pycore_pyerrors.h"      // _PyErr_ProgramDecodedTextObject()
+#include "lexer/state.h"
+#include "lexer/lexer.h"
 #include "pegen.h"
 
 // TOKENIZER ERRORS
@@ -33,7 +35,7 @@ _PyPegen_raise_tokenizer_init_error(PyObject *filename)
 
     tuple = PyTuple_Pack(2, errstr, tmp);
     Py_DECREF(tmp);
-    if (!value) {
+    if (!tuple) {
         goto error;
     }
     PyErr_SetObject(PyExc_SyntaxError, tuple);
@@ -402,7 +404,7 @@ error:
 
 void
 _Pypegen_set_syntax_error(Parser* p, Token* last_token) {
-    // Existing sintax error
+    // Existing syntax error
     if (PyErr_Occurred()) {
         // Prioritize tokenizer errors to custom syntax errors raised
         // on the second phase only if the errors come from the parser.

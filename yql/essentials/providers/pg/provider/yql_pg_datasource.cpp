@@ -14,7 +14,7 @@ using namespace NNodes;
 
 class TPgDataSourceImpl: public TDataProviderBase {
 public:
-    TPgDataSourceImpl(TPgState::TPtr state)
+    explicit TPgDataSourceImpl(TPgState::TPtr state)
         : State_(state)
         , TypeAnnotationTransformer_(CreatePgDataSourceTypeAnnotationTransformer(state))
         , DqIntegration_(CreatePgDqIntegration(State_))

@@ -11,9 +11,9 @@
 
 #include <functional>
 #include <iterator>
+#include <utility>
 
-namespace NYql {
-namespace NNodes {
+namespace NYql::NNodes {
 
 template <typename TNode>
 class TMaybeNode {};
@@ -89,17 +89,23 @@ private:
 template <>
 class TMaybeNode<TExprBase> {
 public:
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode* node = nullptr)
         : Raw_(node)
     {
     }
 
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode::TPtr& node)
         : Raw_(node.Get())
         , Node_(node)
     {
     }
 
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprBase& node)
         : Raw_(node.Raw())
         , Node_(node.Ptr())
@@ -164,7 +170,7 @@ public:
         CurIt_ = EndIt_ = {};
     }
 
-    TChildIterator(const TExprBase& node, size_t startIndex = 0)
+    explicit TChildIterator(const TExprBase& node, size_t startIndex = 0)
         : CurIt_(node.Ref().Children().begin() + startIndex)
         , EndIt_(node.Ref().Children().end())
     {
@@ -215,13 +221,13 @@ private:
 template <typename TItem>
 class TListBase: public TExprBase {
 public:
-    TListBase(const TExprNode* node)
+    explicit TListBase(const TExprNode* node)
         : TExprBase(node)
     {
         YQL_ENSURE(Match(node));
     }
 
-    TListBase(const TExprNode::TPtr& node)
+    explicit TListBase(const TExprNode::TPtr& node)
         : TExprBase(node)
     {
         YQL_ENSURE(Match(node.Get()));
@@ -253,10 +259,14 @@ public:
 template <typename TItem>
 class TMaybeNode<TListBase<TItem>>: public TMaybeNode<TExprBase> {
 public:
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode* node)
         : TMaybeNode<TExprBase>(node && TListBase<TItem>::Match(node) ? node : nullptr) {
     }
 
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode::TPtr& node)
         : TMaybeNode<TExprBase>(node && TListBase<TItem>::Match(node.Get()) ? node : TExprNode::TPtr()) {
     }
@@ -307,14 +317,20 @@ public:
 template <>
 class TMaybeNode<TCallable>: public TMaybeNode<TExprBase> {
 public:
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode* node = nullptr)
         : TMaybeNode<TExprBase>(node && TCallable::Match(node) ? node : nullptr) {
     }
 
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode::TPtr& node)
         : TMaybeNode<TExprBase>(node && TCallable::Match(node.Get()) ? node : TExprNode::TPtr()) {
     }
 
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TCallable& node)
         : TMaybeNode(node.Ptr())
     {
@@ -360,10 +376,14 @@ public:
 template <typename TItem>
 class TMaybeNode<TVarArgCallable<TItem>>: public TMaybeNode<TExprBase> {
 public:
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode* node)
         : TMaybeNode<TExprBase>(node && TVarArgCallable<TItem>::Match(node) ? node : nullptr) {
     }
 
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode::TPtr& node)
         : TMaybeNode<TExprBase>(node && TVarArgCallable<TItem>::Match(node.Get()) ? node : TExprNode::TPtr()) {
     }
@@ -389,8 +409,8 @@ public:
 
 class TArgs {
 public:
-    TArgs(const TExprBase& node, size_t startIndex)
-        : Node_(node)
+    TArgs(TExprBase node, size_t startIndex)
+        : Node_(std::move(node))
         , StartIndex_(startIndex)
     {
     }
@@ -447,14 +467,20 @@ public:
 template <const size_t FixedArgsCount>
 class TMaybeNode<TFreeArgCallable<FixedArgsCount>>: public TMaybeNode<TExprBase> {
 public:
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode* node)
         : TMaybeNode<TExprBase>(node && TFreeArgCallable<FixedArgsCount>::Match(node) ? node : nullptr) {
     }
 
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprNode::TPtr& node)
         : TMaybeNode<TExprBase>(node && TFreeArgCallable<FixedArgsCount>::Match(node.Get()) ? node : TExprNode::TPtr()) {
     }
 
+    // Implicit item to Maybe lifting is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TMaybeNode(const TExprBase& node)
         : TMaybeNode(node)
     {
@@ -471,12 +497,12 @@ class TNodeBuilder {};
 
 class TNodeBuilderBase {
 protected:
-    typedef std::function<TExprBase(const TStringBuf& arg)> GetArgFuncType;
+    using GetArgFuncType = std::function<TExprBase(const TStringBuf& arg)>;
 
     TNodeBuilderBase(TExprContext& ctx, TPositionHandle pos, GetArgFuncType getArgFunc)
         : Ctx_(ctx)
         , Pos_(pos)
-        , GetArgFunc_(getArgFunc)
+        , GetArgFunc_(std::move(getArgFunc))
     {
     }
 
@@ -489,11 +515,11 @@ protected:
 template <typename TParent, typename TDerived, typename TItem>
 class TListBuilderBase: public TNodeBuilderBase {
 protected:
-    typedef std::function<TParent&(const TDerived&)> BuildFuncType;
+    using BuildFuncType = std::function<TParent&(const TDerived&)>;
 
     TListBuilderBase(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, GetArgFuncType getArgFunc)
         : TNodeBuilderBase(ctx, pos, getArgFunc)
-        , BuildFunc_(buildFunc)
+        , BuildFunc_(std::move(buildFunc))
     {
     }
 
@@ -501,7 +527,7 @@ protected:
     BuildFuncType BuildFunc_;
 
 public:
-    typedef TDerived ResultType;
+    using ResultType = TDerived;
 
     TParent& Build() {
         TDerived node = static_cast<TNodeBuilder<TParent, TDerived>*>(this)->DoBuild();
@@ -579,7 +605,7 @@ public:
 template <typename TParent>
 class TNodeBuilder<TParent, TVector<TExprBase>>: public TListBuilderBase<TParent, TVector<TExprBase>, TExprBase> {
 public:
-    typedef std::function<TParent&(const TVector<TExprBase>&)> BuildFuncType;
+    using BuildFuncType = std::function<TParent&(const TVector<TExprBase>&)>;
 
     TNodeBuilder<TParent, TVector<TExprBase>>(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc,
                                               TNodeBuilderBase::GetArgFuncType getArgFunc)
@@ -615,7 +641,7 @@ public:
 template <typename TNode>
 class TBuildValueHolder {
 public:
-    typedef TNode ResultType;
+    using ResultType = TNode;
 
     void SetValue(const TNode& node) {
         Node_ = node.template Maybe<TNode>();
@@ -647,5 +673,4 @@ TNodeBuilder<TBuildValueHolder<TNode>, TNode> Build(TExprContext& ctx, TPosition
     return builder;
 }
 
-} // namespace NNodes
-} // namespace NYql
+} // namespace NYql::NNodes

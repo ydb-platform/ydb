@@ -1,6 +1,3 @@
-/* dqfile can not */
-/* hybridfile can not - missing langver support */
-/* custom error: :43:5: Error: No such column: supp_nation */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
@@ -14,7 +11,7 @@ FROM (
         n1.n_name AS supp_nation,
         n2.n_name AS cust_nation,
         DateTime::GetYear(CAST(l_shipdate AS Timestamp)) AS l_year,
-        l_extendedprice * (1 - l_discount) AS volume
+        l_extendedprice * ($to_decimal(1) - l_discount) AS volume
     FROM
         `/Root/supplier` as supplier
     ,

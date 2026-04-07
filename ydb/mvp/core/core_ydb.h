@@ -1,6 +1,10 @@
 #pragma once
 
+#include "grpc_log.h"
+
 #include <ydb/mvp/security/simple/security.h>
+#include <ydb/core/viewer/json/json.h>
+#include <ydb/library/actors/http/http.h>
 #include <contrib/libs/yaml-cpp/include/yaml-cpp/yaml.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
@@ -11,14 +15,13 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
-#include <ydb/core/viewer/json/json.h>
-#include <ydb/library/actors/http/http.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
+
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
+
 #include <util/generic/strbuf.h>
-#include <library/cpp/deprecated/atomic/atomic.h>
-#include "grpc_log.h"
 
 template <typename T>
 class TAtomicSingleton {
@@ -319,38 +322,6 @@ struct TYdbLocation {
     NYdb::NScripting::TScriptingClient GetScriptingClient(const TRequest& request) const;
     std::unique_ptr<NYdb::NScripting::TScriptingClient> GetScriptingClientPtr(TStringBuf endpoint, TStringBuf scheme, const NYdb::TCommonClientSettings& settings = NYdb::TCommonClientSettings()) const;
     std::unique_ptr<NYdb::NQuery::TQueryClient> GetQueryClientPtr(TStringBuf endpoint, TStringBuf scheme, const NYdb::NQuery::TClientSettings& settings = NYdb::NQuery::TClientSettings()) const;
-
-    TString GetPath(const TRequest& request) const {
-        TString path = request.Parameters["path"];
-        if (!path.StartsWith('/')) {
-            path.insert(path.begin(), '/');
-        }
-        TString database = request.Parameters["database"];
-        if (!database.empty()) {
-            path = RootDomain + '/' + database + path;
-        } else {
-            path = RootDomain + path;
-        }
-        if (path.EndsWith('/')) {
-            path.resize(path.size() - 1);
-        }
-        if (path.find_first_of("]") != TString::npos) {
-            return TString();
-        }
-        return path;
-    }
-
-    TString GetName(const TRequest& request) const {
-        TString name = request.Parameters["name"];
-        if (!name.StartsWith('/')) {
-            name.insert(name.begin(), '/');
-        }
-        name = RootDomain + name;
-        if (name.find_first_of("]") != TString::npos) {
-            return TString();
-        }
-        return name;
-    }
 
     TString GetDatabaseName(const TRequest& request) const;
     TString GetServerlessProxyUrl(const TString& database) const;

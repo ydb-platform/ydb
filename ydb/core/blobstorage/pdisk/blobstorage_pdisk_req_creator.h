@@ -195,17 +195,19 @@ public:
             (Sender, sender.LocalId()),
             (ReqId, AtomicGet(LastReqId)));
         auto req = MakeHolder<TReq>(ev, PCtx->PDiskId, AtomicIncrement(LastReqId));
+        req->SetCookie(ev->Cookie);
         NewRequest(req.Get(), burstMs);
         return req.Release();
     }
 
     template<typename TReq, typename TEv>
-    [[nodiscard]] TReq* CreateFromEv(TEv &&ev, const TActorId &sender, double *burstMs = nullptr) {
+    [[nodiscard]] TReq* CreateFromEv(TEv &&ev, const TActorId &sender, ui64 cookie = 0, double *burstMs = nullptr) {
         P_LOG(PRI_DEBUG, BPD01, "CreateReqFromEv with sender",
             (ev, ToString(ev)),
             (Sender, sender.LocalId()),
             (ReqId, AtomicGet(LastReqId)));
         auto req = MakeHolder<TReq>(std::forward<TEv>(ev), sender, AtomicIncrement(LastReqId));
+        req->SetCookie(cookie);
         NewRequest(req.Get(), burstMs);
         return req.Release();
     }
@@ -263,6 +265,13 @@ public:
         return NewRequest(read, &burstMs);
     }
 
+    [[nodiscard]] TChunkReadRaw *CreateChunkReadRaw(TEventHandle<TEvChunkReadRaw>& ev) {
+        NWilson::TSpan span(TWilson::PDiskTopLevel, std::move(ev.TraceId), "PDisk.ChunkReadRaw", NWilson::EFlags::AUTO_END,
+            PCtx->ActorSystem);
+        span.Attribute("pdisk_id", PCtx->PDiskId);
+        return NewRequest(new TChunkReadRaw(*ev.Get(), ev.Sender, ev.Cookie, AtomicIncrement(LastReqId), std::move(span)));
+    }
+
     [[nodiscard]] TChunkWrite* CreateChunkWrite(const NPDisk::TEvChunkWrite &ev, const TActorId &sender, double& burstMs,
             NWilson::TTraceId traceId) {
         NWilson::TSpan span(TWilson::PDiskTopLevel, std::move(traceId), "PDisk.ChunkWrite", NWilson::EFlags::AUTO_END, PCtx->ActorSystem);
@@ -280,6 +289,14 @@ public:
         Mon->GetWriteCounter(ev.PriorityClass)->CountRequest(size);
         return NewRequest(new TChunkWrite(ev, sender, reqId, std::move(span)), &burstMs);
     }
+
+    [[nodiscard]] TChunkWriteRaw *CreateChunkWriteRaw(TEventHandle<TEvChunkWriteRaw>& ev) {
+        NWilson::TSpan span(TWilson::PDiskTopLevel, std::move(ev.TraceId), "PDisk.ChunkWriteRaw", NWilson::EFlags::AUTO_END,
+            PCtx->ActorSystem);
+        span.Attribute("pdisk_id", PCtx->PDiskId);
+        return NewRequest(new TChunkWriteRaw(*ev.Get(), ev.Sender, ev.Cookie, AtomicIncrement(LastReqId), std::move(span)));
+    }
+
 };
 
 } // namespace NKikimr::NPDisk {

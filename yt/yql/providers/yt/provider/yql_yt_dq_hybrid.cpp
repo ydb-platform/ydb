@@ -151,6 +151,10 @@ private:
                 PushSkipStat("DynamicStoreRead", nodeName);
                 return false;
             }
+            if (tableInfo->Meta->HasRLS) {
+                PushSkipStat("RLSTable", nodeName);
+                return false;
+            }
             if (NYql::HasSetting(tableInfo->Settings.Ref(), EYtSettingType::WithQB)) {
                 PushSkipStat("WithQB", nodeName);
                 return false;
@@ -728,6 +732,7 @@ private:
     }
 
     void PushSkipStat(const TStringBuf& statName, const TStringBuf& nodeName) const {
+        State_->FullHybridExecution = false;
         PushHybridStat(statName, nodeName, "SkipReasons");
         PushHybridStat("Skip", nodeName);
     }

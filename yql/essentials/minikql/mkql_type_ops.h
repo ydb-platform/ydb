@@ -5,10 +5,11 @@
 #include <yql/essentials/public/udf/udf_type_ops.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
 
+#include <library/cpp/type_info/tz/tz.h>
+
 #include <util/stream/output.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 // TODO remove
 TStringBuf AdaptLegacyYqlType(const TStringBuf& type);
@@ -66,7 +67,9 @@ bool EnrichDate(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIs
 bool GetTimezoneShift(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec, ui16 tzId, i32& value);
 
 ui16 InitTimezones();
-bool IsValidTimezoneId(ui16 id);
+inline bool IsValidTimezoneId(ui16 id) {
+    return NTi::IsValidTimezoneIndex(id);
+}
 TMaybe<ui16> FindTimezoneId(TStringBuf ianaName);
 ui16 GetTimezoneId(TStringBuf ianaName);
 TMaybe<TStringBuf> FindTimezoneIANAName(ui16 id);
@@ -86,5 +89,4 @@ void SerializeTzTimestamp64(i64 timestamp, ui16 tzId, IOutputStream& out);
 bool DeserializeTzDate32(TStringBuf buf, i32& date, ui16& tzId);
 bool DeserializeTzDatetime64(TStringBuf buf, i64& datetime, ui16& tzId);
 bool DeserializeTzTimestamp64(TStringBuf buf, i64& timestamp, ui16& tzId);
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

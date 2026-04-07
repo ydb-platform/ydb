@@ -40,7 +40,7 @@ class TFakeBlockStoreVolume : public TActor<TFakeBlockStoreVolume>, public NTabl
 public:
     TFakeBlockStoreVolume(const TActorId& tablet, TTabletStorageInfo* info)
         : TActor(&TThis::StateInit)
-          , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
+        , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
     {}
 
     void DefaultSignalTabletActive(const TActorContext&) override {
@@ -82,6 +82,41 @@ private:
         response->Record.SetOrigin(TabletID());
         response->Record.SetStatus(NKikimrBlockStore::OK);
         ctx.Send(ev->Sender, response.Release());
+    }
+};
+
+// BlockStorePartitionDirect mock for testing schemeshard
+class TFakeBlockStorePartitionDirect : public TActor<TFakeBlockStorePartitionDirect>, public NTabletFlatExecutor::TTabletExecutedFlat {
+public:
+    TFakeBlockStorePartitionDirect(const TActorId& tablet, TTabletStorageInfo* info)
+        : TActor(&TThis::StateInit)
+        , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
+    {}
+
+    void DefaultSignalTabletActive(const TActorContext&) override {
+        // must be empty
+    }
+
+    void OnActivateExecutor(const TActorContext& ctx) override {
+        Become(&TThis::StateWork);
+        SignalTabletActive(ctx);
+    }
+
+    void OnDetach(const TActorContext& ctx) override {
+        Die(ctx);
+    }
+
+    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) override {
+        Y_UNUSED(ev);
+        Die(ctx);
+    }
+
+    STFUNC(StateInit) {
+        StateInitImpl(ev, SelfId());
+    }
+
+    STFUNC(StateWork) {
+        HandleDefaultEvents(ev, SelfId());
     }
 };
 
@@ -552,10 +587,12 @@ void SetupKqpProxy(TTestActorRuntime& runtime, ui32 nodeIdx) {
     NKikimrConfig::TQueryServiceConfig queryServiceConfig;
     auto federatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
 
+    NKikimrConfig::TTliConfig tliConfig;
     IActor* kqpProxyService = NKqp::CreateKqpProxyService(
         logConfig,
         tableServiceConfig,
         queryServiceConfig,
+        tliConfig,
         {}, // kqp settings
         nullptr, // query replay factory
         nullptr, // kqp proxy shared resources
@@ -592,8 +629,8 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableBorrowedSplitCompaction(opts.EnableBorrowedSplitCompaction_);
     app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
     app.FeatureFlags.SetEnableTableDatetime64(true);
-    app.FeatureFlags.SetEnableVectorIndex(true);
     app.FeatureFlags.SetEnableAddUniqueIndex(true);
+    app.FeatureFlags.SetEnableOnlineAddUniqueIndex(true);
     app.FeatureFlags.SetEnableFulltextIndex(true);
     app.FeatureFlags.SetEnableColumnStore(true);
     app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);
@@ -602,8 +639,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableNotNullDataColumns(opts.EnableNotNullDataColumns_);
     app.SetEnableAlterDatabaseCreateHiveFirst(opts.EnableAlterDatabaseCreateHiveFirst_);
     app.SetEnableTopicDiskSubDomainQuota(opts.EnableTopicDiskSubDomainQuota_);
-    app.SetEnablePQConfigTransactionsAtSchemeShard(opts.EnablePQConfigTransactionsAtSchemeShard_);
-    app.SetEnableTopicSplitMerge(opts.EnableTopicSplitMerge_);
+    app.FeatureFlags.SetEnableTopicMessageLevelParallelism(opts.EnableTopicMessageLevelParallelism_.value_or(false));
     app.SetEnableChangefeedDynamoDBStreamsFormat(opts.EnableChangefeedDynamoDBStreamsFormat_);
     app.SetEnableChangefeedDebeziumJsonFormat(opts.EnableChangefeedDebeziumJsonFormat_);
     app.SetEnableTablePgTypes(opts.EnableTablePgTypes_);
@@ -613,11 +649,9 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableChangefeedsOnIndexTables(opts.EnableChangefeedsOnIndexTables_);
     app.SetEnableTieringInColumnShard(opts.EnableTieringInColumnShard_);
     app.SetEnableParameterizedDecimal(opts.EnableParameterizedDecimal_);
-    app.SetEnableTopicAutopartitioningForCDC(opts.EnableTopicAutopartitioningForCDC_);
     app.SetEnableBackupService(opts.EnableBackupService_);
     app.SetEnableChecksumsExport(opts.EnableChecksumsExport_);
     app.SetEnableReplication(opts.EnableReplication_);
-    app.SetEnableTopicTransfer(opts.EnableTopicTransfer_);
     app.SetEnablePermissionsExport(opts.EnablePermissionsExport_);
     app.SetEnableLocalDBBtreeIndex(opts.EnableLocalDBBtreeIndex_);
     app.SetEnableSystemNamesProtection(opts.EnableSystemNamesProtection_);
@@ -636,6 +670,18 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     if (opts.DisableStatsBatching_.value_or(false)) {
         app.SchemeShardConfig.SetStatsMaxBatchSize(0);
         app.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
+    }
+
+    app.FeatureFlags.SetEnableDataShardSplitHistogramSorting(opts.EnableDataShardSplitHistogramSorting_);
+    app.FeatureFlags.SetEnableDataShardSplitKeySelection(opts.EnableDataShardSplitKeySelection_);
+    app.FeatureFlags.SetEnableDataShardSplitHistogramOmission(opts.EnableDataShardSplitHistogramOmission_);
+
+    app.FeatureFlags.SetEnableConditionalEraseResponseBatching(opts.EnableConditionalEraseResponseBatching_);
+    if (opts.CondEraseResponseBatchSize_) {
+        app.SchemeShardConfig.SetCondEraseResponseBatchSize(*opts.CondEraseResponseBatchSize_);
+    }
+    if (opts.CondEraseResponseBatchMaxTimeMs_) {
+        app.SchemeShardConfig.SetCondEraseResponseBatchMaxTimeMs(*opts.CondEraseResponseBatchMaxTimeMs_);
     }
 
     // graph settings
@@ -997,8 +1043,13 @@ void NSchemeShardUT_Private::TTestEnv::SimulateSleep(NActors::TTestActorRuntime 
 std::function<NActors::IActor *(const NActors::TActorId &, NKikimr::TTabletStorageInfo *)> NSchemeShardUT_Private::TTestEnv::GetTabletCreationFunc(ui32 type) {
     switch (type) {
     case TTabletTypes::BlockStoreVolume:
+    case TTabletTypes::BlockStoreVolumeDirect:
         return [](const TActorId& tablet, TTabletStorageInfo* info) {
             return new TFakeBlockStoreVolume(tablet, info);
+        };
+    case TTabletTypes::BlockStorePartitionDirect:
+        return [](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TFakeBlockStorePartitionDirect(tablet, info);
         };
     case TTabletTypes::FileStore:
         return [](const TActorId& tablet, TTabletStorageInfo* info) {
@@ -1216,7 +1267,10 @@ void NSchemeShardUT_Private::TTestWithReboots::RunWithPipeResets(std::function<v
 
             activeZone = true;
             testScenario(*Runtime, activeZone);
-        }
+        },
+        Max<ui32>(),
+        Bucket,
+        TotalBuckets
     );
 }
 
@@ -1242,7 +1296,7 @@ NSchemeShardUT_Private::TTestEnv* NSchemeShardUT_Private::TTestWithReboots::Crea
 
 
 void NSchemeShardUT_Private::TTestWithReboots::Prepare(const TString &dispatchName, std::function<void (TTestActorRuntime &)> setup, bool &outActiveZone) {
-    Cdbg << Endl << "=========== RUN: "<< dispatchName << " ===========" << Endl;
+    Cdbg << Endl << "======" << TInstant::Now() << "===== RUN: "<< dispatchName << " ===========" << Endl;
 
     outActiveZone = false;
 

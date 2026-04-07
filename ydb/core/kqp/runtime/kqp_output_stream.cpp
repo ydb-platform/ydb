@@ -70,6 +70,20 @@ public:
         }
     }
 
+    void Flush() final {
+        for (auto& output : Outputs) {
+            output->Flush();
+        }
+    }
+
+    bool IsFinished() const final {
+        return Aggregator->IsFinished();
+    }
+
+    bool IsEarlyFinished() const final {
+        return Aggregator->IsEarlyFinished();
+    }
+
 private:
     const TTypeEnvironment& TypeEnv;
     TVector<NYql::NDq::IDqOutput::TPtr> Outputs;

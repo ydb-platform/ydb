@@ -1,10 +1,11 @@
 UNITTEST()
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(300)
 
-REQUIREMENTS(ram:32 cpu:2)
+REQUIREMENTS(ram:32 cpu:4)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
@@ -41,6 +42,7 @@ SRCS(
     multiget.cpp
     patch.cpp
     recovery.cpp
+    retro_tracing.cpp
     sanitize_groups.cpp
     scrub_fast.cpp
     self_heal.cpp
@@ -51,6 +53,7 @@ SRCS(
     validation.cpp
     vdisk_malfunction.cpp
     group_size_in_units.cpp
+    pdisk_status_flags.cpp
 )
 
 PEERDIR(
@@ -71,6 +74,7 @@ RECURSE_FOR_TESTS(
     ut_bridge
     ut_check_integrity
     ut_comp_defrag
+    ut_ddisk
     ut_donor
     ut_group_reconfiguration
     ut_huge
@@ -86,4 +90,5 @@ RECURSE_FOR_TESTS(
     ut_stop_pdisk
     ut_cluster_balancing
     ut_move_pdisk
+    ut_vdisk_internals
 )

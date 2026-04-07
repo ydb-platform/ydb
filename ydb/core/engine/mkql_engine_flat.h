@@ -266,12 +266,14 @@ namespace NMiniKQL {
         bool EvaluateResultType = true;
         bool EvaluateResultValue = true;
         bool LlvmRuntime = false;
+        const TString UserSID;
 
         TEngineFlatSettings(
                 IEngineFlat::EProtocol protocol,
                 const IFunctionRegistry* functionRegistry,
                 IRandomProvider& randomProvider,
                 ITimeProvider& timeProvider,
+                const TString& userSID = TString(),
                 IEngineFlatHost* host = nullptr,
                 const TAlignedPagePoolCounters& allocCounters = TAlignedPagePoolCounters()
                 )
@@ -282,6 +284,7 @@ namespace NMiniKQL {
             , Host(host)
             , AllocCounters(allocCounters)
             , ForceOnline(false)
+            , UserSID(userSID)
         {
             Y_ABORT_UNLESS(FunctionRegistry);
         }

@@ -138,8 +138,14 @@ items:
       href: workload-tpch.md
     - name: TPC-DS load
       href: workload-tpcds.md
+    - name: Query load
+      href: workload-query.md
   - name: Managing configuration
     href: configs.md
     include:
       mode: link
       path: commands/configuration/toc_p.yaml
+  - name: Bridge cluster management
+    include:
+      mode: link
+      path: commands/bridge/toc_p.yaml

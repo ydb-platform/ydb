@@ -103,6 +103,7 @@ message TDqInputChannelStats {
 
     TDqAsyncBufferStats Push = 13;
     TDqAsyncBufferStats Pop = 14;
+    uint64 LocalBytes = 15;
 
     // profile stats
     uint64 DeserializationTimeUs = 6;
@@ -112,15 +113,14 @@ message TDqInputChannelStats {
 
     google.protobuf.Any Extra = 100;
 
-    // deprecated
-    uint64 Chunks_Deprecated = 2;
-    uint64 Bytes_Deprecated = 3;
-    uint64 RowsIn_Deprecated = 4;
-    uint64 RowsOut_Deprecated = 5;
-    uint64 IdleTimeUs_Deprecated = 11;
-    uint64 WaitTimeUs_Deprecated = 10;
-    uint64 FirstMessageMs_Deprecated = 30;
-    uint64 LastMessageMs_Deprecated = 31;
+    reserved 2;
+    reserved 3;
+    reserved 4;
+    reserved 5;
+    reserved 11;
+    reserved 10;
+    reserved 30;
+    reserved 31;
 }
 
 message TDqAsyncOutputBufferStats {
@@ -151,6 +151,7 @@ message TDqOutputChannelStats {
 
     TDqAsyncBufferStats Push = 16;
     TDqAsyncBufferStats Pop = 17;
+    uint64 LocalBytes = 18;
 
     // profile stats
     uint64 SerializationTimeUs = 6;
@@ -164,15 +165,14 @@ message TDqOutputChannelStats {
 
     google.protobuf.Any Extra = 100;
 
-    // deprecated
-    uint64 Chunks_Deprecated = 2;
-    uint64 Bytes_Deprecated = 3;
-    uint64 RowsIn_Deprecated = 4;
-    uint64 RowsOut_Deprecated = 5;
-    uint32 BlockedByCapacity_Deprecated = 7;
-    uint64 BlockedTimeUs_Deprecated = 15;
-    uint64 FirstMessageMs_Deprecated = 30;
-    uint64 LastMessageMs_Deprecated = 31;
+    reserved 2;
+    reserved 3;
+    reserved 4;
+    reserved 5;
+    reserved 7;
+    reserved 15;
+    reserved 30;
+    reserved 31;
 }
 
 message TDqTableStats {
@@ -360,6 +360,7 @@ message TDqAsyncBufferStatsAggr {
     TDqAsyncStatsAggr Push    = 2;
     TDqAsyncStatsAggr Pop     = 3;
     TDqAsyncStatsAggr Egress  = 4; // for Egress only
+    uint64 LocalBytes = 6;
 }
 
 message TDqTableAggrStats {

@@ -93,7 +93,7 @@ class TestSchemeDescribe:
                 database_path,
                 ["scheme", "describe", "--format", "proto-json-base64", external_table],
             )
-            description = json.loads(output.splitlines()[1])
+            description = json.loads(output)
             source = description["data_source_path"]
             expected_source = database_path.rstrip("/") + "/" + external_data_source
             assert source == expected_source
@@ -103,7 +103,7 @@ class TestSchemeDescribe:
                 database_path,
                 ["scheme", "describe", "--format", "proto-json-base64", external_data_source],
             )
-            description = json.loads(output.splitlines()[1])
+            description = json.loads(output)
             print(description)
             references = json.loads(description["properties"]["REFERENCES"])
             expected_reference = database_path.rstrip("/") + "/" + external_table

@@ -12,12 +12,14 @@
 #include <ydb/core/kqp/runtime/kqp_vector_actor.h>
 #include <ydb/core/kqp/runtime/kqp_write_actor.h>
 #include <ydb/core/kqp/runtime/kqp_full_text_source.h>
+#include <ydb/core/kqp/runtime/kqp_sys_view_source.h>
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
 #include <ydb/library/yql/dq/actors/input_transforms/dq_input_transform_lookup_factory.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_info_aggregation_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_read_actor.h>
@@ -75,6 +77,10 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
                 return WrapDqHashCombine(callable, ctx);
             }
 
+            if (name == "DqHashAggregate"sv) {
+                return WrapDqHashAggregate(callable, ctx);
+            }
+
             if (name == "FulltextAnalyze"sv) {
                 return WrapFulltextAnalyze(callable, ctx);
             }
@@ -98,6 +104,7 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
     RegisterSequencerActorFactory(*factory, counters);
     RegisterKqpVectorResolveActor(*factory, counters);
     RegisterKqpFullTextSource(*factory, counters);
+    RegisterKqpSysViewSource(*factory, counters);
     NYql::NDq::RegisterDqInputTransformLookupActorFactory(*factory);
 
     if (federatedQuerySetup) {
@@ -110,10 +117,19 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
         }
 
         NYql::NDq::RegisterDQSolomonReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory);
-        NYql::NDq::RegisterDQSolomonWriteActorFactory(*factory, federatedQuerySetup->CredentialsFactory);
         bool enableStreamingQueriesCounters = NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters();
-        NYql::NDq::RegisterDqPqReadActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->PqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSourceTracker"), {}, enableStreamingQueriesCounters);
-        NYql::NDq::RegisterDqPqWriteActorFactory(*factory, *federatedQuerySetup->Driver, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->PqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSinkTracker"), enableStreamingQueriesCounters);
+        NYql::NDq::RegisterDQSolomonWriteActorFactory(*factory, federatedQuerySetup->CredentialsFactory, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSinkTracker"), enableStreamingQueriesCounters);
+
+        const auto& pqGatewayFactory = federatedQuerySetup->PqGatewayFactory;
+        Y_VALIDATE(pqGatewayFactory, "Missing PQ gateway factory in federated query setup");
+        const NYql::IPqStaticGateway::TPtr pqGateway = pqGatewayFactory->CreatePqGateway();
+
+        const auto& driver = federatedQuerySetup->Driver;
+        Y_VALIDATE(driver, "Missing YDB driver in federated query setup");
+
+        NYql::NDq::RegisterDqPqReadActorFactory(*factory, *driver, federatedQuerySetup->CredentialsFactory, pqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSourceTracker"), {}, enableStreamingQueriesCounters);
+        NYql::NDq::RegisterDqPqWriteActorFactory(*factory, *driver, federatedQuerySetup->CredentialsFactory, pqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSinkTracker"), enableStreamingQueriesCounters, NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesPqSinkDeduplication());
+        NYql::NDq::RegisterDqPqInfoAggregationActorFactory(*factory);
     }
 
     return factory;
@@ -146,11 +162,11 @@ void TShardsScanningPolicy::FillRequestScanFeatures(const NKikimrTxDataShard::TK
     if (enableShardsSequentialScan) {
         maxInFlight = 1;
     } else if (hasGroupByWithFields) {
-        maxInFlight = ProtoConfig.GetAggregationGroupByLimit();
+        maxInFlight = AggregationGroupByLimit;
     } else if (hasGroupByWithNoFields) {
-        maxInFlight = ProtoConfig.GetAggregationNoGroupLimit();
+        maxInFlight = AggregationNoGroupLimit;
     } else {
-        maxInFlight = ProtoConfig.GetScanLimit();
+        maxInFlight = ScanLimit;
     }
 }
 

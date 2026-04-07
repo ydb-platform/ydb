@@ -2,6 +2,7 @@
 
 #include "transaction.h"
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/producer.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
 
 #define INCLUDE_YDB_INTERNAL_H
@@ -87,6 +88,9 @@ public:
         }
         if (settings.SetRetentionPeriod_) {
             request.mutable_set_retention_period()->set_seconds(settings.SetRetentionPeriod_->Seconds());
+        }
+        if (settings.SetContentBasedDeduplication_) {
+            request.set_set_content_based_deduplication(*settings.SetContentBasedDeduplication_);
         }
         if (settings.SetSupportedCodecs_) {
             for (const auto& codec : *settings.SetSupportedCodecs_) {
@@ -316,6 +320,14 @@ public:
     // Runtime API.
     std::shared_ptr<IReadSession> CreateReadSession(const TReadSessionSettings& settings);
     std::shared_ptr<ISimpleBlockingWriteSession> CreateSimpleWriteSession(const TWriteSessionSettings& settings);
+    std::shared_ptr<IProducer> CreateProducer(const TProducerSettings& settings);
+
+    template<typename T>
+    std::shared_ptr<TTypedProducer<T>> CreateTypedProducer(const TProducerSettings& settings) {
+        auto producer = CreateProducer(settings);
+        return std::make_shared<TTypedProducer<T>>(producer);
+    }
+
     std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings& settings);
 
     using IReadSessionConnectionProcessorFactory =

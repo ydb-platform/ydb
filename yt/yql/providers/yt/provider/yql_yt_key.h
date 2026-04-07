@@ -30,7 +30,7 @@ public:
         TString Suffix;
         bool IsStrict = true;
 
-        friend bool operator ==(const TRange& left, const TRange& right) {
+        friend bool operator==(const TRange& left, const TRange& right) {
             return left.Prefix == right.Prefix
                 && left.Filter == right.Filter
                 && left.Suffix == right.Suffix
@@ -42,7 +42,7 @@ public:
         TString Prefix;
         TVector<TString> Attributes;
 
-        friend bool operator ==(const TFolderList& left, const TFolderList& right) {
+        friend bool operator==(const TFolderList& left, const TFolderList& right) {
             return left.Prefix == right.Prefix
                 && left.Attributes == right.Attributes;
         }

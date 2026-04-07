@@ -371,8 +371,28 @@ public:
         YT_ASSERT(ReplyBus_);
         YT_ASSERT(Service_);
         YT_ASSERT(RuntimeInfo_);
+    }
 
-        Initialize();
+    void InitializeRefCounted()
+    {
+        // COMPAT(danilalexeev): legacy RPC codecs
+        RequestCodec_ = RequestHeader_->has_request_codec()
+            ? FromProto<NCompression::ECodec>(RequestHeader_->request_codec())
+            : NCompression::ECodec::None;
+        ResponseCodec_ = RequestHeader_->has_response_codec()
+            ? FromProto<NCompression::ECodec>(RequestHeader_->response_codec())
+            : NCompression::ECodec::None;
+
+        Service_->IncrementActiveRequestCount();
+        ActiveRequestCountIncremented_ = true;
+
+        BuildGlobalRequestInfo();
+
+        Cancelable_ = RuntimeInfo_->Descriptor.Cancelable && !RequestHeader_->uncancelable();
+
+        if (IsRegistrable()) {
+            Service_->RegisterRequest(this);
+        }
     }
 
     ~TServiceContext()
@@ -753,28 +773,6 @@ private:
         return false;
     }
 
-    void Initialize()
-    {
-        // COMPAT(danilalexeev): legacy RPC codecs
-        RequestCodec_ = RequestHeader_->has_request_codec()
-            ? FromProto<NCompression::ECodec>(RequestHeader_->request_codec())
-            : NCompression::ECodec::None;
-        ResponseCodec_ = RequestHeader_->has_response_codec()
-            ? FromProto<NCompression::ECodec>(RequestHeader_->response_codec())
-            : NCompression::ECodec::None;
-
-        Service_->IncrementActiveRequestCount();
-        ActiveRequestCountIncremented_ = true;
-
-        BuildGlobalRequestInfo();
-
-        Cancelable_ = RuntimeInfo_->Descriptor.Cancelable && !RequestHeader_->uncancelable();
-
-        if (IsRegistrable()) {
-            Service_->RegisterRequest(this);
-        }
-    }
-
     void BuildGlobalRequestInfo()
     {
         TStringBuilder builder;
@@ -934,8 +932,7 @@ private:
 
         if (Cancelable_) {
             // TODO(lukyan): Wrap in CancelableExecution.
-            auto fiberCanceler = GetCurrentFiberCanceler();
-            if (fiberCanceler) {
+            if (auto fiberCanceler = GetCurrentFiberCanceler()) {
                 auto cancelationHandler = BIND([fiberCanceler = std::move(fiberCanceler)] (const TError& error) {
                     fiberCanceler(error);
                 });
@@ -1445,7 +1442,7 @@ int TRequestQueue::GetQueueSize() const
 std::optional<int> TRequestQueue::GetQueueSizeLimit() const
 {
     auto queueSizeLimit = QueueSizeLimit_.load(std::memory_order::relaxed);
-    return queueSizeLimit != -1 ? std::optional(queueSizeLimit) : std::nullopt;
+    return queueSizeLimit >= 0 ? std::optional(queueSizeLimit) : std::nullopt;
 }
 
 i64 TRequestQueue::GetQueueByteSize() const
@@ -1733,6 +1730,8 @@ TServiceBase::TServiceBase(
     });
 }
 
+TServiceBase::~TServiceBase() = default;
+
 const TServiceId& TServiceBase::GetServiceId() const
 {
     return ServiceId_;
@@ -1868,7 +1867,7 @@ void TServiceBase::DoHandleRequest(TIncomingRequest&& incomingRequest)
     if (Authenticator_->CanAuthenticate(authenticationContext)) {
         auto asyncAuthResult = Authenticator_->AsyncAuthenticate(authenticationContext);
         if (asyncAuthResult.IsSet()) {
-            OnRequestAuthenticated(timer, std::move(incomingRequest), asyncAuthResult.Get());
+            OnRequestAuthenticated(timer, std::move(incomingRequest), asyncAuthResult.GetOrCrash());
         } else {
             asyncAuthResult.Subscribe(
                 BIND(&TServiceBase::OnRequestAuthenticated, MakeStrong(this), timer, Passed(std::move(incomingRequest))));
@@ -1970,9 +1969,10 @@ void TServiceBase::OnRequestAuthenticated(
 
 bool TServiceBase::IsAuthenticationNeeded(const TIncomingRequest& incomingRequest)
 {
+    // incomingRequest.RuntimeInfo is null if unknown method is called.
     return
         Authenticator_.operator bool() &&
-        !incomingRequest.RuntimeInfo->Descriptor.System;
+        !(incomingRequest.RuntimeInfo && incomingRequest.RuntimeInfo->Descriptor.System);
 }
 
 void TServiceBase::HandleAuthenticatedRequest(TIncomingRequest&& incomingRequest)
@@ -2009,10 +2009,17 @@ TRequestQueue* TServiceBase::GetRequestQueue(
         auto profiler = runtimeInfo->Profiler.WithSparse();
         if (runtimeInfo->Descriptor.RequestQueueProvider) {
             profiler = profiler.WithTag("queue", requestQueue->GetName());
+
+            // If there is no request queue provider, then total metrics reported
+            // by method profilers are enough.
+            profiler.AddFuncGauge("/request_queue_size", MakeStrong(this), [=] {
+                return requestQueue->GetQueueSize();
+            });
+            profiler.AddFuncGauge("/request_queue_size_limit", MakeStrong(this), [=] {
+                // Reporting 0 for a sparse metric effectively hides it.
+                return requestQueue->GetQueueSizeLimit().value_or(0);
+            });
         }
-        profiler.AddFuncGauge("/request_queue_size", MakeStrong(this), [=] {
-            return requestQueue->GetQueueSize();
-        });
         profiler.AddFuncGauge("/request_queue_byte_size", MakeStrong(this), [=] {
             return requestQueue->GetQueueByteSize();
         });
@@ -2194,10 +2201,10 @@ void TServiceBase::OnRequestTimeout(TRequestId requestId, ERequestProcessingStag
     context->HandleTimeout(stage);
 }
 
-void TServiceBase::OnReplyBusTerminated(const NYT::TWeakPtr<NYT::NBus::IBus>& busWeak, const TError& error)
+void TServiceBase::OnReplyBusTerminated(const TWeakPtr<NYT::NBus::IBus>& weakbus, const TError& error)
 {
     std::vector<TServiceContextPtr> contexts;
-    if (auto bus = busWeak.Lock()) {
+    if (auto bus = weakbus.Lock()) {
         auto* bucket = GetReplyBusBucket(bus);
         auto guard = Guard(bucket->Lock);
         auto it = bucket->ReplyBusToData.find(bus);
@@ -2205,9 +2212,8 @@ void TServiceBase::OnReplyBusTerminated(const NYT::TWeakPtr<NYT::NBus::IBus>& bu
             return;
         }
 
-        for (auto* rawContext : it->second.Contexts) {
-            auto context = DangerousGetPtr(rawContext);
-            if (context) {
+        for (const auto& weakContext : it->second.Contexts) {
+            if (auto context = weakContext.Lock()) {
                 contexts.push_back(context);
             }
         }
@@ -2244,7 +2250,7 @@ void TServiceBase::RegisterRequest(TServiceContext* context)
         auto* bucket = GetRequestBucket(requestId);
         auto guard = Guard(bucket->Lock);
         // NB: We're OK with duplicate request ids.
-        bucket->RequestIdToContext.emplace(requestId, context);
+        bucket->RequestIdToContext.emplace(requestId, MakeWeak(context));
     }
 
     const auto& replyBus = context->GetReplyBus();
@@ -2253,7 +2259,7 @@ void TServiceBase::RegisterRequest(TServiceContext* context)
         auto guard = Guard(bucket->Lock);
         auto [it, inserted] = bucket->ReplyBusToData.try_emplace(replyBus);
         auto& replyBusData = it->second;
-        replyBusData.Contexts.insert(context);
+        replyBusData.Contexts.insert(MakeWeak(context));
         if (inserted) {
             replyBusData.BusTerminationHandler =
                 BIND_NO_PROPAGATE(
@@ -2290,14 +2296,16 @@ void TServiceBase::UnregisterRequest(TServiceContext* context)
     {
         auto* bucket = GetReplyBusBucket(replyBus);
         auto guard = Guard(bucket->Lock);
-        auto it = bucket->ReplyBusToData.find(replyBus);
+        auto dataIt = bucket->ReplyBusToData.find(replyBus);
         // Missing replyBus in ReplyBusToData is OK; see OnReplyBusTerminated.
-        if (it != bucket->ReplyBusToData.end()) {
-            auto& replyBusData = it->second;
-            replyBusData.Contexts.erase(context);
-            if (replyBusData.Contexts.empty()) {
-                replyBus->UnsubscribeTerminated(replyBusData.BusTerminationHandler);
-                bucket->ReplyBusToData.erase(it);
+        if (dataIt != bucket->ReplyBusToData.end()) {
+            auto& replyBusData = dataIt->second;
+            if (auto contextIt = replyBusData.Contexts.find(context); contextIt != replyBusData.Contexts.end()) {
+                replyBusData.Contexts.erase(contextIt);
+                if (replyBusData.Contexts.empty()) {
+                    replyBus->UnsubscribeTerminated(replyBusData.BusTerminationHandler);
+                    bucket->ReplyBusToData.erase(dataIt);
+                }
             }
         }
     }
@@ -2313,7 +2321,7 @@ TServiceBase::TServiceContextPtr TServiceBase::FindRequest(TRequestId requestId)
 TServiceBase::TServiceContextPtr TServiceBase::DoFindRequest(TRequestBucket* bucket, TRequestId requestId)
 {
     auto it = bucket->RequestIdToContext.find(requestId);
-    return it == bucket->RequestIdToContext.end() ? nullptr : DangerousGetPtr(it->second);
+    return it == bucket->RequestIdToContext.end() ? nullptr : it->second.Lock();
 }
 
 void TServiceBase::RegisterQueuedReply(TRequestId requestId, TFuture<void> reply)
@@ -2670,7 +2678,12 @@ TServiceBase::TRuntimeMethodInfoPtr TServiceBase::RegisterMethod(const TMethodDe
     // Failure here means that such method is already registered.
     YT_VERIFY(MethodMap_.emplace(descriptor.Method, runtimeInfo).second);
 
-    auto& profiler = runtimeInfo->Profiler;
+    auto profiler = runtimeInfo->Profiler
+        .WithSparse()
+        .WithTag("queue", "Aggr");
+    profiler.AddFuncGauge("/request_queue_size", MakeStrong(this), [=] {
+        return runtimeInfo->QueueSize.load(std::memory_order::relaxed);
+    });
     profiler.AddFuncGauge("/request_queue_size_limit", MakeStrong(this), [=] {
         return runtimeInfo->QueueSizeLimit.load(std::memory_order::relaxed);
     });

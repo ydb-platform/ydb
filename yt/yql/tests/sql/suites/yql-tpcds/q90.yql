@@ -1,0 +1,49 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+/* custom error: Unknown alias: household_demographics */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    CAST(amc AS Decimal (15, 4)) / CAST(pmc AS Decimal (15, 4)) AS am_pm_ratio
+FROM (
+    SELECT
+        Count(*) AS amc
+    FROM
+        plato.web_sales
+    ,
+        plato.household_demographics
+    ,
+        plato.time_dim
+    ,
+        plato.web_page
+    WHERE
+        ws_sold_time_sk == time_dim.t_time_sk
+        AND ws_ship_hdemo_sk == household_demographics.hd_demo_sk
+        AND ws_web_page_sk == web_page.wp_web_page_sk
+        AND time_dim.t_hour BETWEEN 6 AND 6 + 1
+        AND household_demographics.hd_dep_count == 8
+        AND web_page.wp_char_count BETWEEN 5000 AND 5200
+) AS at
+, (
+    SELECT
+        1 + Count(*) AS pmc
+    FROM
+        plato.web_sales
+    ,
+        plato.household_demographics
+    ,
+        plato.time_dim
+    ,
+        plato.web_page
+    WHERE
+        ws_sold_time_sk == time_dim.t_time_sk
+        AND ws_ship_hdemo_sk == household_demographics.hd_demo_sk
+        AND ws_web_page_sk == web_page.wp_web_page_sk
+        AND time_dim.t_hour BETWEEN 14 AND 14 + 1
+        AND household_demographics.hd_dep_count == 8
+        AND web_page.wp_char_count BETWEEN 5000 AND 5200
+) AS pt
+ORDER BY
+    am_pm_ratio
+LIMIT 100;

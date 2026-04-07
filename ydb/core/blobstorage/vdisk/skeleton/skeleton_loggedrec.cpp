@@ -260,7 +260,7 @@ namespace NKikimr {
 #else
         hull.AddSyncDataCmd(ctx, OrigEv->Get()->Data, Seg, replySender);
 #endif
-        Span.EndOk();        
+        Span.EndOk();
         SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie, vCtx, {});
         TActivationContext::Send(std::unique_ptr<IEventHandle>(OrigEv->Forward(SyncLogActorId).Release()));
     }

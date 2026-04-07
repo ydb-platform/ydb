@@ -661,7 +661,7 @@ void TWriteSessionImpl::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t co
             } else {
                 processResult = ProcessServerMessageImpl();
                 needSetValue = !InitSeqNoSetDone && processResult.InitSeqNo.has_value() && (InitSeqNoSetDone = true);
-                if (errorStatus.Ok() && processResult.Ok) {
+                if (errorStatus.Ok() && processResult.Ok && !processResult.HandleResult.DoRestart) {
                     doRead = true;
                 }
             }
@@ -672,10 +672,8 @@ void TWriteSessionImpl::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t co
 
     {
         std::lock_guard guard(Lock);
-        if (!errorStatus.Ok()) {
-            if (processResult.Ok) { // Otherwise, OnError was already called
-                processResult.HandleResult = RestartImpl(errorStatus);
-            }
+        if ((!errorStatus.Ok() && processResult.Ok) || processResult.HandleResult.DoRestart) { // Otherwise, OnError was already called
+            processResult.HandleResult = RestartImpl(errorStatus);
         }
         if (processResult.HandleResult.DoStop) {
             CloseImpl(std::move(errorStatus));
@@ -785,8 +783,12 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                     writeStat,
                 });
 
-                if (CleanupOnAcknowledged(GetIdImpl(sequenceNumber))) {
+                if (CleanupOnAcknowledged(GetIdImpl(sequenceNumber), result)) {
                     result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
+                }
+
+                if (result.HandleResult.DoRestart) {
+                    return result;
                 }
             }
             //EventsQueue->PushEvent(std::move(acksEvent));
@@ -803,16 +805,17 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
     return result;
 }
 
-bool TWriteSessionImpl::CleanupOnAcknowledged(ui64 id) {
+bool TWriteSessionImpl::CleanupOnAcknowledged(ui64 id, TProcessSrvMessageResult& processResult) {
     bool result = false;
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: acknoledged message " << id);
     UpdateTimedCountersImpl();
     if (SentOriginalMessages.empty() || SentOriginalMessages.front().Id != id){
-        std::cerr << "State before restart was:\n" << StateStr << "\n\n";
+        LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "State before restart was: " << StateStr);
         DumpState();
-        std::cerr << "State on ack with id " << id << " is:\n";
-        std::cerr << StateStr << "\n\n";
-        Y_ABORT("got unknown ack");
+        LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "State on ack with id " << id << " is:\n" << StateStr);
+        LOG_LAZY(DbDriverState->Log, TLOG_ERR, LogPrefix() << "Write session: got unknown ack " << id);
+        processResult.HandleResult.DoRestart = true;
+        return false;
     }
 
     const auto& sentFront = SentOriginalMessages.front();

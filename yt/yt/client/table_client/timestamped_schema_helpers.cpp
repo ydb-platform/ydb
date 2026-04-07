@@ -32,7 +32,9 @@ TColumnFilter ToLatestTimestampColumnFilter(
     const TTimestampReadOptions& timestampReadOptions,
     int columnCount)
 {
-    YT_ASSERT(!timestampReadOptions.TimestampColumnMapping.empty());
+    if (timestampReadOptions.TimestampColumnMapping.empty()) {
+        return columnFilter;
+    }
 
     TColumnFilter::TIndexes indexes;
 

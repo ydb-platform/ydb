@@ -206,34 +206,92 @@ ui64 TPartitionBlobEncoder::GetHeadGapSize() const
 ui64 TPartitionBlobEncoder::GetSizeLag(i64 offset) const
 {
     ui64 sizeLag = 0;
-    if (!DataKeysBody.empty() && PositionInBody(offset, 0)) { // there will be something in body
+    bool offsetInBody = false;
+
+    if (!DataKeysBody.empty()) {
+        const auto& lastInBody = DataKeysBody.back();
+        const i64 offsetAfterBody = lastInBody.Key.GetOffset() + lastInBody.Key.GetCount();
+
+        if (offset < offsetAfterBody) {
+            offsetInBody = true;
+        } else if ((offset == offsetAfterBody) && !HeadKeys.empty()) {
+            const auto& firstInHead = HeadKeys.front();
+            if (((i64)firstInHead.Key.GetOffset() == offset) && (firstInHead.Key.GetPartNo() > 0)) {
+                offsetInBody = true;
+            }
+        }
+    }
+
+    if (offsetInBody) {
         auto it = std::upper_bound(DataKeysBody.begin(), DataKeysBody.end(), std::make_pair(offset, 0),
                 [](const std::pair<ui64, ui16>& offsetAndPartNo, const TDataKey& p) { return offsetAndPartNo.first < p.Key.GetOffset() || offsetAndPartNo.first == p.Key.GetOffset() && offsetAndPartNo.second < p.Key.GetPartNo();});
         if (it != DataKeysBody.begin())
             --it; //point to blob with this offset
         AFL_ENSURE(it != DataKeysBody.end());
-        sizeLag = it->Size + DataKeysBody.back().CumulativeSize - it->CumulativeSize;
+        sizeLag = DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size - it->CumulativeSize;
         AFL_ENSURE(BodySize == DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size - DataKeysBody.front().CumulativeSize)
             ("BodySize", BodySize)
             ("DataKeysBody.back().CumulativeSize", DataKeysBody.back().CumulativeSize)
             ("DataKeysBody.back().Size", DataKeysBody.back().Size)
             ("DataKeysBody.front().CumulativeSize", DataKeysBody.front().CumulativeSize);
     }
-    for (const auto& b : HeadKeys) {
-        if ((i64)b.Key.GetOffset() >= offset)
-            sizeLag += b.Size;
+
+    if (HeadKeys.empty()) {
+        return sizeLag;
     }
+
+    bool nextBlobHasPartNo = false;
+    for (int i = HeadKeys.size() - 1; i >= 0; --i) {
+        const auto& b = HeadKeys[i];
+        if ((i64)b.Key.GetOffset() >= offset) {
+            sizeLag += b.Size;
+        } else {
+            // b.Key.GetOffset < offset
+            const i64 offsetAfterBlob = b.Key.GetOffset() + b.Key.GetCount();
+            if ((offsetAfterBlob > offset) || ((offsetAfterBlob == offset) && nextBlobHasPartNo)) {
+                // offset где-то внутри блоба
+                sizeLag += b.Size;
+            }
+            // мы идём от конца к началу. нет смысла проверять остальные блобы
+            break;
+        }
+        nextBlobHasPartNo = b.Key.GetPartNo();
+    }
+
     return sizeLag;
 }
 
 bool TPartitionBlobEncoder::PositionInBody(ui64 offset, ui32 partNo) const
 {
-    return offset < Head.Offset || ((Head.Offset == offset) && (partNo < Head.PartNo));
+    if (HeadKeys.empty()) {
+        if (DataKeysBody.empty()) {
+            return false;
+        }
+
+        const auto required = std::make_pair(offset, partNo);
+        const auto& firstKey = DataKeysBody.front().Key;
+        auto pos = std::make_pair(firstKey.GetOffset(), firstKey.GetPartNo());
+
+        if (required < pos) {
+            return false;
+        }
+
+        const auto& lastKey = DataKeysBody.back().Key;
+        pos = std::make_pair(lastKey.GetOffset() + lastKey.GetCount(), 0);
+
+        return required <= pos;
+    }
+
+    return (offset < Head.Offset) || ((Head.Offset == offset) && (partNo < Head.PartNo));
 }
 
 bool TPartitionBlobEncoder::PositionInHead(ui64 offset, ui32 partNo) const
 {
-    return Head.Offset < offset || ((Head.Offset == offset) && (Head.PartNo < partNo));
+    if (HeadKeys.empty()) {
+        return false;
+    }
+
+    return Head.Offset < offset || ((Head.Offset == offset) && (Head.PartNo <= partNo));
 }
 
 bool TPartitionBlobEncoder::IsEmpty() const

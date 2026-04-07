@@ -80,7 +80,7 @@ sequenceDiagram
 
 ## См. также
 
-- [Концепция спиллинга](../concepts/spilling.md)
+- [Концепция спиллинга](../concepts/query_execution/spilling.md)
 - [Конфигурация спиллинга](../reference/configuration/table_service_config.md)
 - [Мониторинг {{ ydb-short-name }}](../devops/observability/monitoring.md)
 - [Диагностика производительности](../troubleshooting/performance/index.md)

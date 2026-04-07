@@ -16,13 +16,14 @@
 namespace NKikimr::NMiniKQL {
 
 class TBlockTrimmerBase: public IBlockTrimmer {
+public:
+    TBlockTrimmerBase() = delete;
+
 protected:
-    TBlockTrimmerBase(arrow::MemoryPool* pool)
+    explicit TBlockTrimmerBase(arrow::MemoryPool* pool)
         : Pool_(pool)
     {
     }
-
-    TBlockTrimmerBase() = delete;
 
     std::shared_ptr<arrow::Buffer> TrimNullBitmap(const std::shared_ptr<arrow::ArrayData>& array) {
         auto& nullBitmapBuffer = array->buffers[0];
@@ -52,7 +53,7 @@ protected:
 template <typename TLayout, bool Nullable>
 class TFixedSizeBlockTrimmer: public TBlockTrimmerBase {
 public:
-    TFixedSizeBlockTrimmer(arrow::MemoryPool* pool)
+    explicit TFixedSizeBlockTrimmer(arrow::MemoryPool* pool)
         : TBlockTrimmerBase(pool)
     {
     }
@@ -83,7 +84,7 @@ public:
 template <bool Nullable>
 class TResourceBlockTrimmer: public TBlockTrimmerBase {
 public:
-    TResourceBlockTrimmer(arrow::MemoryPool* pool)
+    explicit TResourceBlockTrimmer(arrow::MemoryPool* pool)
         : TBlockTrimmerBase(pool)
     {
     }
@@ -116,7 +117,7 @@ public:
 
 class TSingularBlockTrimmer: public TBlockTrimmerBase {
 public:
-    TSingularBlockTrimmer(arrow::MemoryPool* pool)
+    explicit TSingularBlockTrimmer(arrow::MemoryPool* pool)
         : TBlockTrimmerBase(pool)
     {
     }
@@ -131,7 +132,7 @@ class TStringBlockTrimmer: public TBlockTrimmerBase {
     using TOffset = typename TStringType::offset_type;
 
 public:
-    TStringBlockTrimmer(arrow::MemoryPool* pool)
+    explicit TStringBlockTrimmer(arrow::MemoryPool* pool)
         : TBlockTrimmerBase(pool)
     {
     }
@@ -197,7 +198,7 @@ public:
     }
 
 protected:
-    TTupleBlockTrimmer(arrow::MemoryPool* pool)
+    explicit TTupleBlockTrimmer(arrow::MemoryPool* pool)
         : TBlockTrimmerBase(pool)
     {
     }
@@ -212,7 +213,7 @@ class TTzDateBlockTrimmer: public TTupleBlockTrimmer<Nullable> {
     using TDateLayout = typename NUdf::TDataType<TDate>::TLayout;
 
 public:
-    TTzDateBlockTrimmer(arrow::MemoryPool* pool)
+    explicit TTzDateBlockTrimmer(arrow::MemoryPool* pool)
         : TBase(pool)
     {
         this->Children_.push_back(std::make_unique<TFixedSizeBlockTrimmer<TDateLayout, false>>(pool));

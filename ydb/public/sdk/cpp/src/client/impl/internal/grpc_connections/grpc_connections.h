@@ -100,7 +100,7 @@ public:
             clientConfig.MaxOutboundMessageSize = MaxOutboundMessageSize_;
         }
 
-        clientConfig.LoadBalancingPolicy = "round_robin";
+        clientConfig.LoadBalancingPolicy = GRpcLoadBalancingPolicy_;
 
         if (dbState->DiscoveryMode != EDiscoveryMode::Off) {
             if (std::is_same<TService,Ydb::Discovery::V1::DiscoveryService>()
@@ -698,6 +698,7 @@ private:
     const TBalancingPolicy::TImpl BalancingSettings_;
     const TDeadline::Duration GRpcKeepAliveTimeout_;
     const bool GRpcKeepAlivePermitWithoutCalls_;
+    const std::string GRpcLoadBalancingPolicy_;
     const std::uint64_t MemoryQuota_;
     const std::uint64_t MaxInboundMessageSize_;
     const std::uint64_t MaxOutboundMessageSize_;
@@ -705,6 +706,7 @@ private:
 
     std::atomic_int64_t QueuedRequests_;
     const NYdbGrpc::TTcpKeepAliveSettings TcpKeepAliveSettings_;
+    const bool TcpNoDelay_;
     const TDeadline::Duration SocketIdleTimeout_;
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
     NYdbGrpc::TChannelPool ChannelPool_;

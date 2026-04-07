@@ -14,7 +14,7 @@ namespace NYql {
 
 class TUserDataStorage : public TThrRefBase {
 public:
-    typedef TIntrusivePtr<TUserDataStorage> TPtr;
+    using TPtr = TIntrusivePtr<TUserDataStorage>;
 
 public:
     TUserDataStorage(TFileStoragePtr fileStorage, TUserDataTable data, IUdfResolver::TPtr udfResolver, TUdfIndex::TPtr udfIndex);

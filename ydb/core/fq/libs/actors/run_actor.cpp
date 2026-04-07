@@ -42,7 +42,6 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
-#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
 #include <ydb/library/yql/providers/pq/task_meta/task_meta.h>
@@ -2078,7 +2077,6 @@ private:
         NSQLTranslation::TTranslationSettings sqlSettings;
         sqlSettings.ClusterMapping = clusters;
         sqlSettings.SyntaxVersion = 1;
-        sqlSettings.Antlr4Parser = true;
         sqlSettings.PgParser = (Params.QuerySyntax == FederatedQuery::QueryContent::PG);
         sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
         sqlSettings.Flags.insert({ "DqEngineEnable", "DqEngineForce", "DisableAnsiOptionalAs", "FlexibleTypes", "AnsiInForEmptyOrNullableItemsCollections" });

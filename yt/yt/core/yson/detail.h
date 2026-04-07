@@ -285,7 +285,7 @@ public:
         return TPositionBase::GetErrorAttributes(TBlockStream::Begin(), TBlockStream::Current());
     }
 
-    friend TError operator << (const TError& error, const TCharStream<TBlockStream, TPositionBase>& stream)
+    friend TError operator<<(const TError& error, const TCharStream<TBlockStream, TPositionBase>& stream)
     {
         return error << stream.GetErrorAttributes();
     }

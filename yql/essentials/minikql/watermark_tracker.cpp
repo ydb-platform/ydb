@@ -2,8 +2,7 @@
 
 #include <util/system/yassert.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 TWatermarkTracker::TWatermarkTracker(
     ui64 delay,
@@ -35,5 +34,4 @@ std::optional<ui64> TWatermarkTracker::CalcLastWatermark() {
     return NextEventWithWatermark_ - Delay_ - Granularity_;
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

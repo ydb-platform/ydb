@@ -5,42 +5,9 @@
 #include <string>
 #include <charconv>
 
-namespace NYql {
-namespace NDecimal {
+namespace NYql::NDecimal {
 
-static const TUint128 Ten(10U);
-
-TUint128 GetDivider(ui8 scale) {
-    if (scale > MaxPrecision) {
-        return Inf();
-    }
-
-    TUint128 d(1U);
-    while (scale--) {
-        d *= Ten;
-    }
-    return d;
-}
-
-bool IsError(TInt128 v) {
-    return v > Nan() || v < -Inf();
-}
-
-bool IsNan(TInt128 v) {
-    return v == Nan();
-}
-
-bool IsInf(TInt128 v) {
-    return v == Inf() || v == -Inf();
-}
-
-bool IsNormal(TInt128 v) {
-    return v < Inf() && v > -Inf();
-}
-
-bool IsComparable(TInt128 v) {
-    return v <= Inf() && v >= -Inf();
-}
+static constexpr TUint128 Ten(10U);
 
 const char* ToString(TInt128 val, ui8 precision, ui8 scale) {
     if (!precision || precision > MaxPrecision || scale > precision) {
@@ -70,7 +37,7 @@ const char* ToString(TInt128 val, ui8 precision, ui8 scale) {
 
     // log_{10}(2^120) ~= 36.12, 37 decimal places
     // plus dot, zero before dot, sign and zero byte at the end
-    static thread_local char Str[40];
+    static thread_local char Str[40]; // NOLINT(modernize-avoid-c-arrays)
     auto end = Str + sizeof(Str);
     *--end = 0;
 
@@ -411,10 +378,10 @@ TInt256 WidenMul(const TInt128& lhs, const TInt128& rhs) {
     const TUint128 l = nl ? -lhs : +lhs;
     const TUint128 r = nr ? -rhs : +rhs;
 
-    const TUint128 lh[] = {GetLowerHalf(l), GetUpperHalf(l)};
-    const TUint128 rh[] = {GetLowerHalf(r), GetUpperHalf(r)};
+    const auto lh = std::to_array<TUint128>({GetLowerHalf(l), GetUpperHalf(l)});
+    const auto rh = std::to_array<TUint128>({GetLowerHalf(r), GetUpperHalf(r)});
 
-    const TUint128 prods[] = {lh[0] * rh[0], lh[0] * rh[1], lh[1] * rh[0], lh[1] * rh[1]};
+    const auto prods = std::to_array<TUint128>({lh[0] * rh[0], lh[0] * rh[1], lh[1] * rh[0], lh[1] * rh[1]});
 
     const TUint128 fourthQ = GetLowerHalf(prods[0]);
     const TUint128 thirdQ = GetUpperHalf(prods[0]) + GetLowerHalf(prods[1]) + GetLowerHalf(prods[2]);
@@ -507,5 +474,4 @@ TInt128 MulAndDivNormalDivider(TInt128 a, TInt128 b, TInt128 c) {
     return Normalize(Div<false>(WidenMul(a, b), TInt256(c)));
 }
 
-} // namespace NDecimal
-} // namespace NYql
+} // namespace NYql::NDecimal

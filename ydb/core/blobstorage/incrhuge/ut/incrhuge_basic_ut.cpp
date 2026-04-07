@@ -60,8 +60,10 @@ public:
             PDiskGuid = Now().GetValue();
             PDiskKey = 1;
             MainKey = NPDisk::TMainKey{ .Keys = { 1 }, .IsInitialized = true };
-            FormatPDisk(Path, DiskSize, 4096, ChunkSize, PDiskGuid, PDiskKey, PDiskKey, PDiskKey, MainKey.Keys.back(), "incrhuge",
-                false, false, nullptr, false);
+            TFormatOptions options;
+            options.EnableSmallDiskOptimization = false;
+            FormatPDisk(Path, DiskSize, 4096, ChunkSize, PDiskGuid, PDiskKey, PDiskKey, PDiskKey,
+                MainKey.Keys.back(), "incrhuge", options);
         }
 
         PDiskId = MakeBlobStoragePDiskID(1, 1);

@@ -196,3 +196,32 @@ TEST(TConcurrentHashTest, TGetBucketTest) {
         EXPECT_EQ(&bucket1, &bucket2);
     }
 }
+
+TEST(TConcurrentHashTest, TRetainTest) {
+    TConcurrentHashMap<ui32, ui32> h;
+
+    for (ui32 i = 0; i < 100; ++i) {
+        h.InsertIfAbsent(i, i);
+    }
+
+    h.Retain([](const auto& item) {
+        return item.second == 77;
+    });
+
+    for (ui32 i = 0; i < 100; ++i) {
+        EXPECT_EQ(h.Has(i), i == 77);
+    }
+}
+
+TEST(TConcurrentHashTest, TApproximateSize) {
+    TConcurrentHashMap<ui32, ui32> h;
+    EXPECT_EQ(h.ApproximateSize(), 0);
+    h.InsertIfAbsent(1, 1);
+    EXPECT_EQ(h.ApproximateSize(), 1);
+    h.InsertIfAbsent(2, 2);
+    EXPECT_EQ(h.ApproximateSize(), 2);
+    h.Remove(1);
+    EXPECT_EQ(h.ApproximateSize(), 1);
+    h.Remove(2);
+    EXPECT_EQ(h.ApproximateSize(), 0);
+}

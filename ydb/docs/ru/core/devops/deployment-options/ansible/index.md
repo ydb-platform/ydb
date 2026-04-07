@@ -4,7 +4,7 @@
 
 Ключевые статьи для начала работы с этим разделом:
 
-* [{#T}](initial-deployment.md)
+* [{#T}](./initial-deployment/index.md)
 * [{#T}](preparing-vms-with-terraform.md)
 * [{#T}](restart.md)
 * Наблюдаемость:

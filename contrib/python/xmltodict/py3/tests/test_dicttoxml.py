@@ -178,6 +178,29 @@ def test_unparse_with_multiple_top_level_comments():
     assert xml == "<!--t1--><!--t2--><a>1</a>"
 
 
+def test_unparse_with_bytes_comment_uses_output_encoding():
+    obj = {"#comment": b"caf\xe9", "a": "1"}
+    xml = _strip(unparse(obj, full_document=True, encoding="iso-8859-1"))
+    assert xml == "<!--caf\xe9--><a>1</a>"
+
+
+def test_unparse_invalid_bytes_comment_replaced_by_default():
+    obj = {"#comment": b"\xff", "a": "1"}
+    xml = _strip(unparse(obj, full_document=True, encoding="utf-8"))
+    assert xml == "<!--\ufffd--><a>1</a>"
+
+
+def test_unparse_rejects_invalid_bytes_comment_for_encoding_with_strict():
+    obj = {"#comment": b"\xff", "a": "1"}
+    with pytest.raises(UnicodeDecodeError, match="'utf-8' codec can't decode byte 0xff"):
+        unparse(
+            obj,
+            full_document=True,
+            encoding="utf-8",
+            bytes_errors="strict",
+        )
+
+
 def test_unparse_rejects_comment_with_double_hyphen():
     obj = {"#comment": "bad--comment", "a": "1"}
     with pytest.raises(ValueError, match="cannot contain '--'"):
@@ -298,6 +321,39 @@ xmlns:b="http://b.com/"><x a:attr="val">1</x><a:y>2</a:y><b:z>3</b:z></root>'''
     assert xml == expected_xml
 
 
+def test_xmlns_values_use_consistent_boolean_coercion():
+    xml = unparse({"root": {"@xmlns": {"a": True}}}, full_document=False)
+    assert xml == '<root xmlns:a="true"></root>'
+
+
+def test_xmlns_values_decode_bytes_with_output_encoding():
+    xml = unparse(
+        {"root": {"@xmlns": {"a": b"http://ex\xe9.com/"}}},
+        full_document=False,
+        encoding="iso-8859-1",
+    )
+    assert xml == '<root xmlns:a="http://ex\xe9.com/"></root>'
+
+
+def test_xmlns_values_replace_invalid_bytes_by_default():
+    xml = unparse(
+        {"root": {"@xmlns": {"a": b"\xff"}}},
+        full_document=False,
+        encoding="utf-8",
+    )
+    assert xml == '<root xmlns:a="\ufffd"></root>'
+
+
+def test_xmlns_values_reject_invalid_bytes_with_strict():
+    with pytest.raises(UnicodeDecodeError, match="'utf-8' codec can't decode byte 0xff"):
+        unparse(
+            {"root": {"@xmlns": {"a": b"\xff"}}},
+            full_document=False,
+            encoding="utf-8",
+            bytes_errors="strict",
+        )
+
+
 def test_boolean_unparse():
     expected_xml = '<?xml version="1.0" encoding="utf-8"?>\n<x>true</x>'
     xml = unparse(dict(x=True))
@@ -306,6 +362,56 @@ def test_boolean_unparse():
     expected_xml = '<?xml version="1.0" encoding="utf-8"?>\n<x>false</x>'
     xml = unparse(dict(x=False))
     assert xml == expected_xml
+
+    expected_xml = '<?xml version="1.0" encoding="utf-8"?>\n<x attr="true"></x>'
+    xml = unparse({'x': {'@attr': True}})
+    assert xml == expected_xml
+
+    expected_xml = '<?xml version="1.0" encoding="utf-8"?>\n<x attr="false"></x>'
+    xml = unparse({'x': {'@attr': False}})
+    assert xml == expected_xml
+
+
+def test_unparse_bytes_in_attributes_and_cdata_use_output_encoding():
+    xml = unparse({"x": {"@attr": b"caf\xe9", "#text": b"caf\xe9"}}, full_document=False, encoding="iso-8859-1")
+    assert xml == '<x attr="caf\xe9">caf\xe9</x>'
+
+
+def test_unparse_bytes_text_node_uses_output_encoding():
+    xml = unparse({"x": b"caf\xe9"}, full_document=False, encoding="iso-8859-1")
+    assert xml == "<x>caf\xe9</x>"
+
+
+def test_unparse_bytes_text_node_with_expand_iter_uses_output_encoding():
+    xml = unparse({"x": b"caf\xe9"}, full_document=False, encoding="iso-8859-1", expand_iter="item")
+    assert xml == "<x>caf\xe9</x>"
+
+
+def test_unparse_invalid_bytes_in_attributes_and_cdata_replaced_by_default():
+    xml = unparse({"x": {"@attr": b"\xff", "#text": b"\xff"}}, full_document=False, encoding="utf-8")
+    assert xml == '<x attr="\ufffd">\ufffd</x>'
+
+
+def test_unparse_invalid_bytes_text_node_replaced_by_default():
+    xml = unparse({"x": b"\xff"}, full_document=False, encoding="utf-8")
+    assert xml == "<x>\ufffd</x>"
+
+
+def test_unparse_rejects_invalid_bytes_in_attributes_and_cdata_for_encoding_with_strict():
+    with pytest.raises(UnicodeDecodeError, match="'utf-8' codec can't decode byte 0xff"):
+        unparse({"x": {"@attr": b"\xff"}}, full_document=False, encoding="utf-8", bytes_errors="strict")
+    with pytest.raises(UnicodeDecodeError, match="'utf-8' codec can't decode byte 0xff"):
+        unparse({"x": {"#text": b"\xff"}}, full_document=False, encoding="utf-8", bytes_errors="strict")
+
+
+def test_unparse_rejects_invalid_bytes_text_node_for_encoding_with_strict():
+    with pytest.raises(UnicodeDecodeError, match="'utf-8' codec can't decode byte 0xff"):
+        unparse({"x": b"\xff"}, full_document=False, encoding="utf-8", bytes_errors="strict")
+
+
+def test_unparse_rejects_invalid_bytes_errors_handler():
+    with pytest.raises(ValueError, match="Invalid bytes_errors handler: nope"):
+        unparse({"x": {"@attr": b"\xff"}}, full_document=False, bytes_errors="nope")
 
 
 def test_rejects_tag_name_with_angle_brackets():
@@ -573,7 +679,7 @@ def test_non_string_text_with_attributes():
 
     assert unparse({"a": {"@param": "flag", "#text": True}}, full_document=False) == '<a param="flag">true</a>'
 
-    assert unparse({"a": {"@param": "test", "#text": None}}, full_document=False) == '<a param="test">None</a>'
+    assert unparse({"a": {"@param": "test", "#text": None}}, full_document=False) == '<a param="test"></a>'
 
     assert unparse({"a": {"@param": "test", "#text": "string"}}, full_document=False) == '<a param="test">string</a>'
 
@@ -594,3 +700,13 @@ def test_non_string_text_with_attributes():
     assert unparse({"a": True}, full_document=False) == unparse({"a": {"#text": True}}, full_document=False)
 
     assert unparse({"a": "hello"}, full_document=False) == unparse({"a": {"#text": "hello"}}, full_document=False)
+    assert unparse({"a": None}, full_document=False) == unparse({"a": {"#text": None}}, full_document=False)
+
+
+def test_none_text_with_short_empty_elements_and_attributes():
+    obj = {"x": {"#text": None, "@pro": None}, "y": None}
+    assert unparse(obj, short_empty_elements=True, full_document=False) == '<x pro=""/><y/>'
+
+
+def test_none_attribute_serializes_as_empty_string():
+    assert unparse({"x": {"@pro": None}}, full_document=False) == '<x pro=""></x>'

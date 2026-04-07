@@ -222,7 +222,7 @@ public:
         : TDataRef(data.data(), data.size())
     {
     }
-    
+
      /// Copy and take ownership of a small piece of data (<= 16b).
     TDataRef(const char* data, size_t size, bool)
         : ShortSize_(size)

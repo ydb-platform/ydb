@@ -323,6 +323,7 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
                 ToProto(req->mutable_transaction_id(), GetId());
                 ToProto(req->mutable_additional_participant_cell_ids(), AdditionalParticipantCellIds_);
                 ToProto(req->mutable_prerequisite_options(), options);
+                ToProto(req->mutable_mutating_options(), options);
                 req->set_max_allowed_commit_timestamp(options.MaxAllowedCommitTimestamp);
                 return req->Invoke();
             }))
@@ -1239,7 +1240,7 @@ TFuture<void> TTransaction::InvokeBatchModifyRowsRequest()
     TApiServiceProxy::TReqBatchModifyRowsPtr batchRequest;
     batchRequest.Swap(BatchModifyRowsRequest_);
     if (batchRequest->part_counts_size() == 0) {
-        return VoidFuture;
+        return OKFuture;
     }
 
     YT_LOG_DEBUG("Invoking a batch modify rows request (Subrequests: %v)",

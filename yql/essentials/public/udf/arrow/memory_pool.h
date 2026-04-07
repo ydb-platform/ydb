@@ -3,8 +3,7 @@
 
 #include <arrow/memory_pool.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 constexpr size_t ArrowMemoryAlignment = 64;
 static_assert((ArrowMemoryAlignment & (ArrowMemoryAlignment - 1)) == 0, "ArrowMemoryAlignment should be power of 2");
@@ -17,5 +16,4 @@ inline arrow::MemoryPool* GetYqlMemoryPool() {
 }
 #endif
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

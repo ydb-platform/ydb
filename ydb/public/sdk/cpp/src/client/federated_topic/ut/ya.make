@@ -1,8 +1,9 @@
 UNITTEST()
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -33,6 +34,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     basic_usage_ut.cpp
+    simple_blocking_write_session_ut.cpp
 )
 
 END()

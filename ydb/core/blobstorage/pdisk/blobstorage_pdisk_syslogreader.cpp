@@ -67,13 +67,11 @@ TSysLogReader::TSysLogReader(TPDisk *pDisk, TActorSystem *const actorSystem, con
     , ReqId(reqId)
     , Result(new TEvReadLogResult(NKikimrProto::ERROR, TLogPosition{0, 0}, TLogPosition::Invalid(),
                 true, 0, "", 0))
-    , Cypher(pDisk->Cfg->EnableSectorEncryption)
     , SizeToRead(PDisk->Format.SysLogSectorCount * ReplicationFactor * PDisk->Format.SectorSize)
     , Data(SizeToRead)
 {
     Y_VERIFY_S(actorSystem == PCtx->ActorSystem, PCtx->PDiskLogPrefix);
     Y_VERIFY_S(replyTo == PCtx->PDiskActor, PCtx->PDiskLogPrefix);
-    Cypher.SetKey(PDisk->Format.SysLogKey);
     AtomicIncrement(PDisk->InFlightLogRead);
 
     TDiskFormat &format = PDisk->Format;
@@ -159,7 +157,7 @@ void TSysLogReader::RestoreSectorSets() {
         const ui64 magic = format.MagicSysLogChunk;
         const bool isErasureEncode = format.IsErasureEncodeSysLog();
         TSectorRestorator restorator(true, LogErasureDataParts, isErasureEncode, format,
-            PCtx.get(), &PDisk->Mon, PDisk->BufferPool.Get());
+            PCtx.get(), &PDisk->Mon, PDisk->BufferPool.Get(), {});
         restorator.Restore(sectorSetData, sectorIdx * format.SectorSize, magic, 0, 0);
 
         if (!restorator.GoodSectorFlags) {
@@ -177,9 +175,10 @@ void TSysLogReader::RestoreSectorSets() {
         sectorSetInfo.GoodSectorFlags = restorator.GoodSectorFlags;
         sectorSetInfo.IsIdeal = (restorator.LastBadIdx == (ui32)-1);
 
-        // Decrypt data
-        Cypher.StartMessage(sectorFooter->Nonce);
-        Cypher.InplaceEncrypt(rawSector, format.SectorSize - ui32(sizeof(TDataSectorFooter)));
+        TPDiskStreamCypher cypher(sectorFooter->IsEncrypted());
+        cypher.SetKey(PDisk->Format.SysLogKey);
+        cypher.StartMessage(sectorFooter->Nonce);
+        cypher.InplaceEncrypt(rawSector, format.SectorSize - ui32(sizeof(TDataSectorFooter)));
         PDisk->CheckLogCanary(rawSector, 0, sectorIdx + sectorsToSkip);
 
         TLogPageHeader *pageHeader = (TLogPageHeader*)rawSector;

@@ -157,8 +157,9 @@ TRuntimeNode BuildParseCall(
     const auto* finalItemStructType = static_cast<TStructType*>(finalItemType);
 
     if (useBlocks) {
-        return ctx.ProgramBuilder.BlockExpandChunked(ctx.ProgramBuilder.ExpandMap(
-            ctx.ProgramBuilder.ToFlow(input), [&](TRuntimeNode item) {
+        return ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.BlockExpandChunked(
+            ctx.ProgramBuilder.FromFlow(ctx.ProgramBuilder.ExpandMap(
+            ctx.ProgramBuilder.ToFlow(input, {}), [&](TRuntimeNode item) {
                 auto parsedData = (extraColumnsByPathIndex || !metadataColumns.empty())
                                       ? ctx.ProgramBuilder.Nth(item, 0)
                                       : item;
@@ -203,7 +204,7 @@ TRuntimeNode BuildParseCall(
 
                 fields.push_back(blockLengthName);
                 return fields;
-            }));
+            }))), {});
     }
 
     if (!compression.empty()) {
@@ -233,7 +234,7 @@ TRuntimeNode BuildParseCall(
             return ctx.ProgramBuilder.NewStruct(parseItemType, {{parseItemStructType->GetMemberName(0), converted }});
         };
 
-        input = ctx.ProgramBuilder.Map(ctx.ProgramBuilder.ToFlow(input),
+        input = ctx.ProgramBuilder.Map(ctx.ProgramBuilder.ToFlow(input, {}),
             [&](TRuntimeNode item) {
                 std::vector<TRuntimeNode> res;
 
@@ -268,7 +269,7 @@ TRuntimeNode BuildParseCall(
                 {dom});
         };
 
-        input = ctx.ProgramBuilder.FlatMap(ctx.ProgramBuilder.ToFlow(input),
+        input = ctx.ProgramBuilder.FlatMap(ctx.ProgramBuilder.ToFlow(input, {}),
             [&](TRuntimeNode blob) {
                 TRuntimeNode parsedList;
                 if (extraColumnsByPathIndex || !metadataColumns.empty()) {
@@ -331,8 +332,8 @@ TRuntimeNode BuildParseCall(
             ctx.ProgramBuilder.NewStructType({}),
             userOutputType});
         input = TType::EKind::Resource == inputDataType->GetKind() ?
-            ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseBlocks", {}, userType), {input})):
-            ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseFormat", {}, userType, format + settingsAsJson), {input}));
+            ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseBlocks", {}, userType), {input}), {}):
+            ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseFormat", {}, userType, format + settingsAsJson), {input}), {});
     }
 
     return ctx.ProgramBuilder.ExpandMap(input,
@@ -452,7 +453,7 @@ TMaybe<TRuntimeNode> TryWrapWithParserForArrowIPCStreaming(const TDqSourceWrapBa
 
     const auto* finalItemStructType = static_cast<TStructType*>(finalItemType);
 
-    return ctx.ProgramBuilder.ExpandMap(ctx.ProgramBuilder.ToFlow(input), [&](TRuntimeNode item) {
+    return ctx.ProgramBuilder.ExpandMap(ctx.ProgramBuilder.ToFlow(input, {}), [&](TRuntimeNode item) {
         // MKQL_ENSURE(!extraColumnsByPathIndex && metadataColumns.empty(), "TODO");
 
         TRuntimeNode::TList fields;

@@ -778,6 +778,20 @@ BELONGS ya.make
         include/boost/math/distributions/skew_normal.hpp [1:1]
         include/boost/math/special_functions/owens_t.hpp [1:1]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 576551ad75666d61be2adb050e443450
+BELONGS ya.make
+    License text:
+        // Copyright Matt Borland 2025.
+        // Use, modification and distribution are subject to the
+        // Boost Software License, Version 1.0.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/math/special_functions/logistic_sigmoid.hpp [1:3]
+        include/boost/math/special_functions/logit.hpp [1:3]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 5a7084ad99eb75a57c65496d37f86647
 BELONGS ya.make
     License text:
@@ -1305,6 +1319,31 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/math/tools/polynomial.hpp [1:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9bbd45cfd32c5d8dd302590302c5be7a
+BELONGS ya.make
+    License text:
+        //           Copyright Maksym Zhelyenzyakov 2025-2026.
+        // Distributed under the Boost Software License, Version 1.0.
+        //      (See accompanying file LICENSE_1_0.txt or copy at
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/math/differentiation/autodiff_reverse.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_basic_operator_expressions.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_basic_ops_et.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_basic_ops_no_et.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_comparison_operator_overloads.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_erf_overloads.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_expression_template_base.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_helper_functions.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_memory_management.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_stl_et.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_stl_expressions.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_stl_no_et.hpp [1:3]
+        include/boost/math/differentiation/detail/reverse_mode_autodiff_utilities.hpp [1:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 9d9d2bd1a142ef82341cdd0a9e7fa8ca
 BELONGS ya.make

@@ -31,7 +31,7 @@ public:
         : PartitionSession(partitionSession)
         , ReadSourceDatabase(std::move(db))
         , TopicOriginDatabase(originDb ? std::move(originDb) : ReadSourceDatabase)
-        , TopicOriginPath(!originPath.empty() ? std::move(originPath) : PartitionSession->GetTopicPath())
+        , TopicOriginPath(!originPath.empty() ? originPath : PartitionSession->GetTopicPath())
         {
             Y_ABORT_UNLESS(ReadSourceDatabase);
         }
@@ -517,7 +517,7 @@ public:
     std::shared_ptr<IFederatedReadSession> CreateReadSession(const TFederatedReadSessionSettings& settings);
 
     //! Create write session.
-    // std::shared_ptr<NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TFederatedWriteSessionSettings& settings);
+    std::shared_ptr<NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TFederatedWriteSessionSettings& settings);
     std::shared_ptr<NTopic::IWriteSession> CreateWriteSession(const TFederatedWriteSessionSettings& settings);
 
     struct TClusterInfo {

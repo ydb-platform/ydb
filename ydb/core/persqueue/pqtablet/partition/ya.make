@@ -1,8 +1,8 @@
 LIBRARY()
 
 SRCS(
-    account_read_quoter.cpp
     autopartitioning_manager.cpp
+    partitioning_keys_manager.cpp
     consumer_offset_tracker.cpp
     message_id_deduplicator.cpp
     offload_actor.cpp
@@ -17,28 +17,36 @@ SRCS(
     partition_read.cpp
     partition_sourcemanager.cpp
     partition_write.cpp
-    quota_tracker.cpp
-    read_quoter.cpp
     sourceid.cpp
     subscriber.cpp
     user_info.cpp
-    write_quoter.cpp
 )
 
 
 
 PEERDIR(
     library/cpp/containers/absl_flat_hash
+    library/cpp/sliding_window
     ydb/core/backup/impl
-    ydb/core/persqueue/events
+    ydb/core/base
+    ydb/core/jaeger_tracing
+    ydb/core/keyvalue
     ydb/core/persqueue/common
-    ydb/core/persqueue/public/counters
-    ydb/core/persqueue/public/write_meta
+    ydb/core/persqueue/events
     ydb/core/persqueue/pqtablet/blob
     ydb/core/persqueue/pqtablet/cache
     ydb/core/persqueue/pqtablet/common
     ydb/core/persqueue/pqtablet/partition/mirrorer
     ydb/core/persqueue/pqtablet/partition/mlp
+    ydb/core/persqueue/pqtablet/quota
+    ydb/core/persqueue/public
+    ydb/core/persqueue/public/counters
+    ydb/core/persqueue/public/write_meta
+    ydb/core/protos
+    ydb/library/actors/core
+    ydb/library/kll_median
+    ydb/library/persqueue/counter_time_keeper
+    ydb/library/persqueue/topic_parser
 )
 
 END()

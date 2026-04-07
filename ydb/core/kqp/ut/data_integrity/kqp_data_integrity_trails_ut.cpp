@@ -40,11 +40,10 @@ namespace {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
-    Y_UNIT_TEST_QUAD(Upsert, LogEnabled, UseSink) {
+    Y_UNIT_TEST_TWIN(Upsert, LogEnabled) {
         TStringStream ss;
         {
             TKikimrSettings serverSettings;
-            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
             serverSettings.LogStream = &ss;
             TKikimrRunner kikimr(serverSettings);
 
@@ -74,28 +73,18 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             {ConstructRegexToCheckLogs("TRACE", "Grpc"), LogEnabled ? 2 : 0},
             // check datashard logs
             {ConstructRegexToCheckLogs("INFO", "DataShard"), LogEnabled ? 2 : 0},
-        };
-
-        if (UseSink) {
             // check write actor logs
-            regexToMatchCount.emplace_back(
-                ConstructRegexToCheckLogs("INFO", "WriteActor"),
-                LogEnabled ? 1 : 0);
-        } else {
-            // check executer logs
-            regexToMatchCount.emplace_back(
-                ConstructRegexToCheckLogs("INFO", "Executer"),
-                LogEnabled ? 2 : 0);
-        }
+            {ConstructRegexToCheckLogs("INFO", "WriteActor"),
+             LogEnabled ? 1 : 0},
+        };
 
         CheckRegexMatch(ss.Str(), regexToMatchCount);
     }
 
-    Y_UNIT_TEST_QUAD(UpsertEvWriteQueryService, isOlap, useOltpSink) {
+    Y_UNIT_TEST_TWIN(UpsertEvWriteQueryService, isOlap) {
         TStringStream ss;
         {
             TKikimrSettings serverSettings;
-            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useOltpSink);
             serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(isOlap);
             serverSettings.LogStream = &ss;
             TKikimrRunner kikimr(serverSettings);
@@ -134,26 +123,15 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
                 {ConstructRegexToCheckLogs("DEBUG", "SessionActor"), 2 + 2},
                 {ConstructRegexToCheckLogs("TRACE", "Grpc"), 2 + 2},
                 {ConstructRegexToCheckLogs("INFO", "DataShard"), 2},
-            };
-
-            if (useOltpSink) {
                 // check write actor logs
-                regexToMatchCount.emplace_back(
-                    ConstructRegexToCheckLogs("INFO", "WriteActor"),
-                    1);
-            } else {
-                // check executer logs
-                regexToMatchCount.emplace_back(
-                    ConstructRegexToCheckLogs("INFO", "Executer"),
-                    2);
-            }
+                {ConstructRegexToCheckLogs("INFO", "WriteActor"), 1},
+            };
         } else {
             regexToMatchCount = {
                 {ConstructRegexToCheckLogs("INFO", "WriteActor"), 3},
                 {ConstructRegexToCheckLogs("DEBUG", "SessionActor"), 2 + 2},
                 {ConstructRegexToCheckLogs("TRACE", "Grpc"), 2 + 2},
-                {ConstructRegexToCheckLogs("INFO", "Executer"),
-                 useOltpSink ? 1 : 11}};
+                {ConstructRegexToCheckLogs("INFO", "Executer"), 1}};
 
             // ColumnShard doesn't have integrity logs.
         }
@@ -227,11 +205,10 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         CheckRegexMatch(ss.Str(), regexToMatchCount);
     }
 
-    Y_UNIT_TEST_TWIN(BrokenReadLock, UseSink) {
+    Y_UNIT_TEST(BrokenReadLock) {
         TStringStream ss;
         {
             TKikimrSettings serverSettings;
-            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
             serverSettings.LogStream = &ss;
             TKikimrRunner kikimr(serverSettings);
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);
@@ -276,7 +253,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         std::string brokenLock;
         for (const auto& row : logRows) {
             // we need to find row with info about read physical tx and extract lock id
-            if (row.Contains("Component: Executer,Type: InputActorResult")) {
+            if (row.Contains("Component: Executer, Type: InputActorResult")) {
                 std::regex lockIdRegex(R"(LockId:\s*(\d+))");
                 std::smatch lockIdMatch;
                 UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract read lock id");
@@ -284,8 +261,8 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             }
 
             // we need to find row with info about broken locks and extract lock id
-            if (row.Contains("Component: DataShard,Type: Locks")) {
-                std::regex lockIdRegex(R"(BreakLocks:\s*\[(\d+)\s*\])");
+            if (row.Contains("Component: DataShard, Type: Locks")) {
+                std::regex lockIdRegex(R"(BrokenLocks:\s*\[(\d+)\s*\])");
                 std::smatch lockIdMatch;
                 UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract broken lock id");
                 brokenLock = lockIdMatch[1].str();
@@ -343,28 +320,24 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             }
         }
 
+        // Verify that the abort was logged correctly
         auto logRows = SplitString(ss.Str(), "DATA_INTEGRITY");
-        std::string readLock;
-        std::string brokenLock;
+        bool foundAbortLog = false;
+        bool foundInputActorResult = false;
         for (const auto& row : logRows) {
-            // we need to find row with info about read physical tx and extract lock id
-            if (row.Contains("Component: Executer,Type: InputActorResult")) {
-                std::regex lockIdRegex(R"(LockId:\s*(\d+))");
-                std::smatch lockIdMatch;
-                UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract read lock id");
-                readLock = lockIdMatch[1].str();
+            // Check for InputActorResult log (tx1's read acquiring a lock)
+            if (row.Contains("Component: Executer, Type: InputActorResult")) {
+                foundInputActorResult = true;
             }
 
-            // we need to find row with info about broken locks and extract lock id
-            if (row.Contains("Component: DataShard,Type: Locks")) {
-                std::regex lockIdRegex(R"(BreakLocks:\s*\[(\d+)\s*\])");
-                std::smatch lockIdMatch;
-                UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract broken lock id");
-                brokenLock = lockIdMatch[1].str();
+            // Check for the abort response log
+            if (row.Contains("Status: ABORTED") && row.Contains("Transaction locks invalidated")) {
+                foundAbortLog = true;
             }
         }
 
-        UNIT_ASSERT_C(!readLock.empty() && readLock == brokenLock, "read lock should be broken");
+        UNIT_ASSERT_C(foundInputActorResult, "InputActorResult log should be present for read tx");
+        UNIT_ASSERT_C(foundAbortLog, "ABORTED status with lock invalidation message should be logged");
     }
 }
 

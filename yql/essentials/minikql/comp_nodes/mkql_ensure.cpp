@@ -46,11 +46,8 @@ public:
         BranchInst::Create(good, kill, pass, block);
 
         block = kill;
-        const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TEnsureWrapper::Throw>());
         const auto doFuncArg = ConstantInt::get(Type::getInt64Ty(context), (ui64)this);
-        const auto doFuncType = FunctionType::get(Type::getVoidTy(context), {Type::getInt64Ty(context), ctx.Ctx->getType()}, false);
-        const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(doFuncType), "thrower", block);
-        CallInst::Create(doFuncType, doFuncPtr, {doFuncArg, ctx.Ctx}, "", block)->setTailCall();
+        EmitFunctionCall<&TEnsureWrapper::Throw>(Type::getVoidTy(context), {doFuncArg, ctx.Ctx}, ctx, block);
         new UnreachableInst(context, block);
 
         block = good;

@@ -338,7 +338,7 @@ NTable::TBulkUpsertResult LoadCustomers(
     auto valueBuilder = TValueBuilder(&arena);
     valueBuilder.BeginList();
 
-    for (int customerId = 1; customerId <= CUSTOMERS_PER_DISTRICT; ++customerId) {
+    for (int customerId = C_FIRST_CUSTOMER_ID; customerId <= CUSTOMERS_PER_DISTRICT; ++customerId) {
         TString last;
         if (customerId <= 1000) {
             last = GetLastName(customerId - 1);
@@ -402,7 +402,7 @@ NTable::TBulkUpsertResult LoadCustomerHistory(
 
     TInstant date = TInstant::Now();
 
-    for (int customerId = 1; customerId <= CUSTOMERS_PER_DISTRICT; ++customerId) {
+    for (int customerId = C_FIRST_CUSTOMER_ID; customerId <= CUSTOMERS_PER_DISTRICT; ++customerId) {
         valueBuilder.AddListItem()
             .BeginStruct()
             .AddMember("H_C_W_ID").Int32(wh)
@@ -597,7 +597,7 @@ void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, google::p
             || status == EStatus::UNAUTHORIZED || status == EStatus::SCHEME_ERROR;
         if (shouldFail) {
             LOG_E(operationName << " failed: " << result.GetIssues().ToOneLineString());
-            RequestStop();
+            RequestStopWithError();
             return;
         }
 
@@ -609,7 +609,7 @@ void ExecuteWithRetry(const TString& operationName, LoadFunc loadFunc, google::p
         } else {
             LOG_E(operationName << " failed after " << UPSERT_MAX_RETRIES << " retries: "
                     << result.GetIssues().ToOneLineString());
-            RequestStop();
+            RequestStopWithError();
             return;
         }
     }
@@ -743,13 +743,20 @@ void LoadRange(
 
 //-----------------------------------------------------------------------------
 
-TOperation::TOperationId CreateIndex(
+bool IsOperationStarted(TStatus operationStatus) {
+    return operationStatus.IsSuccess() || operationStatus.GetStatus() == EStatus::STATUS_UNDEFINED;
+}
+
+//-----------------------------------------------------------------------------
+
+TOperation::TOperationId CreateAlterTableOperation(
     NTable::TTableClient& client,
     const TString& path,
     const char* table,
-    const char* indexName,
-    const std::vector<std::string>& columns,
-    TLog* Log)
+    TLog* Log,
+    const TString& operationName,
+    const TOperation::TOperationId::EKind operationKind, 
+    const NTable::TAlterTableSettings& settings)
 {
     TString tablePath;
     if (!path.empty()) {
@@ -758,27 +765,42 @@ TOperation::TOperationId CreateIndex(
         tablePath = table;
     }
 
-    auto settings = NTable::TAlterTableSettings()
-        .AppendAddIndexes({NTable::TIndexDescription(indexName, NTable::EIndexType::GlobalSync, columns)});
-
     TOperation::TOperationId operationId;
     auto result = client.RetryOperationSync([&](NTable::TSession session) {
         auto opResult = session.AlterTableLong(tablePath, settings).GetValueSync();
-        if (opResult.Ready() && !opResult.Status().IsSuccess()) {
-            LOG_W("Failed to create index " << indexName << " for " << tablePath << ": "
-                << opResult.ToString() << ", retrying");
+        if (IsOperationStarted(opResult.Status())) {
+            operationId = opResult.Id();
+            LOG_I("Started to " << operationName << ": " << operationId.ToString());
+            if (operationId.GetKind() == operationKind || opResult.Status().GetStatus() == EStatus::STATUS_UNDEFINED) {
+                return TStatus(EStatus::SUCCESS, NIssue::TIssues(opResult.Status().GetIssues()));
+            }
             return opResult.Status();
         } else {
-            operationId = opResult.Id();
+            LOG_W("Failed to " << operationName << " for " << tablePath << ": "
+                << opResult.ToString() << ", retrying");
+            return opResult.Status();
         }
-        return TStatus(EStatus::SUCCESS, NIssue::TIssues());
     });
 
     if (operationId.GetKind() == TOperation::TOperationId::UNUSED) {
-        LOG_E("Failed to create index " << indexName << " for " << tablePath);
+        LOG_E("Failed to " << operationName << " for " << tablePath);
     }
 
     return operationId;
+}
+
+TOperation::TOperationId CreateIndex(
+    NTable::TTableClient& client,
+    const TString& path,
+    const char* table,
+    const char* indexName,
+    const std::vector<std::string>& columns,
+    TLog* Log)
+{
+    return CreateAlterTableOperation(client, path, table, Log, TStringBuilder() << "create index " << indexName,
+        TOperation::TOperationId::BUILD_INDEX, NTable::TAlterTableSettings()
+            .AppendAddIndexes({NTable::TIndexDescription(indexName, NTable::EIndexType::GlobalSync, columns)})
+    );
 }
 
 TIndexBuildState CreateCustomerIndex(NTable::TTableClient& client, const TString& path, TLog* Log) {
@@ -806,8 +828,30 @@ void CreateIndices(TDriver& driver, const TString& path, TImportState& loadState
 
 //-----------------------------------------------------------------------------
 
+void CompactTable(
+    TDriver& driver,
+    TImportState& loadState,
+    const TRunConfig& config,
+    const char* table,
+    TLog* Log)
+{
+    NTable::TTableClient client(driver);
+    auto id = CreateAlterTableOperation(client, config.Path, table, Log, TStringBuilder() << "compact table " << table,
+        TOperation::TOperationId::COMPACTION, NTable::TAlterTableSettings()
+            .Compact(NTable::TCompact(false, 1000))
+    );
+    LOG_T("Compacting table " << table << ": " << id.ToString());
+    loadState.CompactionStates.emplace_back(id, table, table);
+    if (id.GetKind() == TOperation::TOperationId::UNUSED) {
+        GetGlobalInterruptSource().request_stop();
+    }
+}
+
+//-----------------------------------------------------------------------------
+
 // returns either progress (100 – done) or string with error
-std::expected<double, std::string> GetIndexProgress(
+template<class TOperationClass, class TState>
+std::expected<double, std::string> GetOperationProgress(
     NOperation::TOperationClient& client,
     const TOperation::TOperationId& id,
     TLog* Log) noexcept
@@ -819,30 +863,30 @@ std::expected<double, std::string> GetIndexProgress(
         }
 
         try {
-            auto operation = client.Get<NTable::TBuildIndexOperation>(id).GetValueSync();
+            auto operation = client.Get<TOperationClass>(id).GetValueSync();
             lastStatus = operation.Status();
             if (operation.Ready()) {
-                if (lastStatus.IsSuccess() && operation.Metadata().State == NTable::EBuildIndexState::Done) {
+                if (lastStatus.IsSuccess() && operation.Metadata().State == TState::Done) {
                     return 100;
                 } else {
                     if (lastStatus.GetStatus() == EStatus::CANCELLED) {
                         TStringStream ss;
-                        ss << "Index operation id " << id.ToString() << ", externally cancelled";
+                        ss << "Operation id " << id.ToString() << ", externally cancelled";
                         return std::unexpected(ss.Str());
                     }
                     // we don't check which kind of failure is in status,
                     // because we expect only retryable errors here
-                    LOG_D("Failed to check index operation id: " << lastStatus);
+                    LOG_D("Failed to check operation id: " << lastStatus);
                 }
             } else {
                 return operation.Metadata().Progress;
             }
         } catch (const std::exception& ex) {
             if (i + 1 < INDEX_CHECK_MAX_RETRIES) {
-                LOG_W("Failed to check index operation " << id.ToString() << ": " << ex.what() << ", retrying");
+                LOG_W("Failed to check operation " << id.ToString() << ": " << ex.what() << ", retrying");
             } else {
                 TStringStream ss;
-                ss << "Failed to check index operation id " << id.ToString() << ", exception: " << ex.what();
+                ss << "Failed to check operation id " << id.ToString() << ", exception: " << ex.what();
                 return std::unexpected(ss.Str());
             }
         }
@@ -852,7 +896,7 @@ std::expected<double, std::string> GetIndexProgress(
     }
 
     TStringStream ss;
-    ss << "Failed to check index operation id " << id.ToString()
+    ss << "Failed to check operation id " << id.ToString()
        << ", after " << INDEX_CHECK_MAX_RETRIES << " retries. "
        << "Last status: " << lastStatus;
 
@@ -1048,10 +1092,10 @@ public:
                 // update progress of all indices and advance LoadState.CurrentIndex
                 for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
                     auto& indexState = LoadState.IndexBuildStates[i];
-                    auto progress = GetIndexProgress(operationClient, indexState.Id, Log.get());
+                    auto progress = GetOperationProgress<NTable::TBuildIndexOperation, NTable::EBuildIndexState>(operationClient, indexState.Id, Log.get());
                     if (!progress) {
                         LOG_E("Failed to build index " << indexState.Name <<  ": " << progress.error());
-                        RequestStop();
+                        RequestStopWithError();
                         break;
                     }
                     indexState.Progress = *progress;
@@ -1059,12 +1103,55 @@ public:
                         ++LoadState.CurrentIndex;
                     }
                 }
+
+                if (LoadState.State == TImportState::EWAIT_INDICES &&
+                    LoadState.CurrentIndex >= LoadState.IndexBuildStates.size()
+                ) {
+                    LOG_I("Indices created successfully");
+                    if (Config.Compact) {
+                        for (const auto& table: TPCC_TABLES) {
+                            CompactTable(drivers.front(), LoadState, Config, table, Log.get());
+                        }
+                        for (const auto& indexState: LoadState.IndexBuildStates) {
+                            TStringBuilder indexImplTable;
+                            indexImplTable << indexState.Table << "/" << indexState.Name << "/indexImplTable";
+                            CompactTable(drivers.front(), LoadState, Config, indexImplTable.c_str(), Log.get());
+                        }
+                        LoadState.State = TImportState::EWAIT_COMPACTION;
+                    } else {
+                        LoadState.State = TImportState::ESUCCESS;
+                    }
+                    continue;
+                }
+                break;
+            }
+            case TImportState::EWAIT_COMPACTION: {
+                auto timeSinceLastCheck = now - lastIndexProgressCheck;
+                if (timeSinceLastCheck < INDEX_PROGRESS_CHECK_INTERVAL) {
+                    break;
+                }
+                lastIndexProgressCheck = now;
+
+                for (size_t i = 0; i < LoadState.CompactionStates.size(); ++i) {
+                    auto& compactionState = LoadState.CompactionStates[i];
+                    auto progress = GetOperationProgress<NTable::TCompactionOperation, NTable::ECompactState>(operationClient, compactionState.Id, Log.get());
+                    if (!progress) {
+                        LOG_E("Failed to compact table " << compactionState.Table <<  ": " << progress.error());
+                        RequestStopWithError();
+                        break;
+                    }
+                    compactionState.Progress = *progress;
+                    if (i == LoadState.CurrentCompaction && compactionState.Progress == 100.0) {
+                        ++LoadState.CurrentCompaction;
+                    }
+                }
                 if (GetGlobalInterruptSource().stop_requested()) {
                     break;
                 }
-
-                if (LoadState.State == TImportState::EWAIT_INDICES && LoadState.CurrentIndex >= LoadState.IndexBuildStates.size()) {
-                    LOG_I("Indices created successfully");
+                if (LoadState.State == TImportState::EWAIT_COMPACTION &&
+                    LoadState.CurrentCompaction >= LoadState.CompactionStates.size()
+                ) {
+                    LOG_I("Tables compacted successfully");
                     LoadState.State = TImportState::ESUCCESS;
                     continue;
                 }
@@ -1139,6 +1226,8 @@ public:
 
             LOG_I("TPC-C data import completed successfully in " << duration.ToString()
                   << " (avg: " << avgSpeedMiBsStr << " MiB/s)");
+        } else {
+            ythrow yexception() << "either there was a critical error or user cancelled the import. See the logs.";
         }
     }
 
@@ -1165,8 +1254,9 @@ private:
         // Calculate all status data
         TImportDisplayData displayData(LoadState);
 
-        displayData.StatusData.IsWaitingForIndices =
-            !LoadState.IndexBuildStates.empty() && LoadState.State == TImportState::EWAIT_INDICES;
+        displayData.StatusData.IsWaitingForPostLoadOps =
+            !LoadState.IndexBuildStates.empty() && LoadState.State == TImportState::EWAIT_INDICES ||
+            !LoadState.CompactionStates.empty() && LoadState.State == TImportState::EWAIT_COMPACTION;
 
             displayData.StatusData.IsLoadingTablesAndBuildingIndices =
                 LoadState.State == TImportState::ELOAD_TABLES_BUILD_INDICES;
@@ -1175,7 +1265,7 @@ private:
         displayData.StatusData.ElapsedMinutes = static_cast<int>(totalElapsed / 60);
         displayData.StatusData.ElapsedSeconds = static_cast<int>(totalElapsed) % 60;
 
-        if (!displayData.StatusData.IsWaitingForIndices) {
+        if (!displayData.StatusData.IsWaitingForPostLoadOps) {
             displayData.StatusData.CurrentDataSizeLoaded = LoadState.DataSizeLoaded.load(std::memory_order_relaxed);
 
             displayData.StatusData.PercentLoaded = LoadState.ApproximateDataSize > 0 ?
@@ -1205,9 +1295,11 @@ private:
             displayData.StatusData.PercentLoaded = 100;
 
             double remainingSeconds = 0;
-            for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
-                const auto& indexState = LoadState.IndexBuildStates[i];
+            for (const auto& indexState: LoadState.IndexBuildStates) {
                 remainingSeconds = std::max(remainingSeconds, indexState.GetRemainingSeconds());
+            }
+            for (const auto& compactionState: LoadState.CompactionStates) {
+                remainingSeconds = std::max(remainingSeconds, compactionState.GetRemainingSeconds());
             }
             displayData.StatusData.EstimatedTimeLeftMinutes = static_cast<int>(remainingSeconds / 60);
             displayData.StatusData.EstimatedTimeLeftSeconds = static_cast<int>(remainingSeconds) % 60;
@@ -1227,16 +1319,20 @@ private:
         LastDisplayUpdate = now;
     }
 
-    void UpdateDisplayTextMode(const TImportStatusData& data) {
-        if (!data.IsWaitingForIndices) {
-            std::stringstream ss;
+    void AddTimeText(std::ostream& ss, const TImportStatusData& data) const {
+        ss << "elapsed: " << data.ElapsedMinutes << ":" << std::setfill('0') << std::setw(2) << data.ElapsedSeconds << " "
+            << "ETA: " << data.EstimatedTimeLeftMinutes << ":"
+            << std::setfill('0') << std::setw(2) << data.EstimatedTimeLeftSeconds;
+    }
+
+    void UpdateDisplayTextMode(const TImportStatusData& data) const {
+        std::stringstream ss;
+        if (!data.IsWaitingForPostLoadOps) {
             ss << std::fixed << std::setprecision(1) << "Progress: " << data.PercentLoaded << "% "
                 << "(" << GetFormattedSize(data.CurrentDataSizeLoaded) << ") "
                 << std::setprecision(1) << data.InstantSpeedMiBs << " MiB/s "
-                << "(avg: " << data.AvgSpeedMiBs << " MiB/s) "
-                << "elapsed: " << data.ElapsedMinutes << ":" << std::setfill('0') << std::setw(2) << data.ElapsedSeconds << " "
-                << "ETA: " << data.EstimatedTimeLeftMinutes << ":"
-                << std::setfill('0') << std::setw(2) << data.EstimatedTimeLeftSeconds;
+                << "(avg: " << data.AvgSpeedMiBs << " MiB/s) ";
+            AddTimeText(ss, data);
 
             if (data.IsLoadingTablesAndBuildingIndices) {
                 ss << " | ";
@@ -1245,22 +1341,30 @@ private:
                     if (i > 0) ss << ", ";
                     ss << "index " << (i + 1) << ": " << std::fixed << std::setprecision(1) << indexState.Progress << "%";
                 }
+                for (const auto& compactionState: LoadState.CompactionStates) {
+                    ss << ", compaction " << compactionState.Table << ": " << std::fixed << std::setprecision(1) << compactionState.Progress << "%";
+                }
             }
-
-            LOG_I(ss.str());
         } else {
             // waiting for indices
             if (LoadState.CurrentIndex < LoadState.IndexBuildStates.size()) {
-                std::stringstream ss;
                 ss << "Waiting for indices ";
+                AddTimeText(ss, data);
                 for (size_t i = 0; i < LoadState.IndexBuildStates.size(); ++i) {
                     const auto& indexState = LoadState.IndexBuildStates[i];
                     if (i > 0) ss << ", ";
                     ss << "index " << (i + 1) << ": " << std::fixed << std::setprecision(1) << indexState.Progress << "%";
                 }
-                LOG_I(ss.str());
+            } else if (LoadState.CurrentCompaction < LoadState.CompactionStates.size()) {
+                // waiting for compactions
+                ss << "Waiting for compactions ";
+                AddTimeText(ss, data);
+                for (const auto& compactionState: LoadState.CompactionStates) {
+                    ss << ", " << compactionState.Table << ": " << std::fixed << std::setprecision(1) << compactionState.Progress << "%";
+                }
             }
         }
+        LOG_I(ss.str());
     }
 
     void ExitTuiMode() {

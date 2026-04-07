@@ -1,0 +1,211 @@
+{
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "name" = "cs_sold_date_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "cs_sold_time_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "cs_ship_date_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "cs_bill_customer_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "cs_bill_cdemo_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "cs_bill_hdemo_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "cs_bill_addr_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "cs_ship_customer_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "cs_ship_cdemo_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "cs_ship_hdemo_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "cs_ship_addr_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "cs_call_center_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "cs_catalog_page_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "cs_ship_mode_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "cs_warehouse_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "cs_item_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "cs_promo_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "cs_order_number";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "cs_quantity";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "cs_wholesale_cost";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "cs_list_price";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "cs_sales_price";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "cs_ext_discount_amt";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "cs_ext_sales_price";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "cs_ext_wholesale_cost";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "cs_ext_list_price";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "cs_ext_tax";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "cs_coupon_amt";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "cs_ext_ship_cost";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "cs_net_paid";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "cs_net_paid_inc_tax";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "cs_net_paid_inc_ship";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "cs_net_paid_inc_ship_tax";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "cs_net_profit";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+    ];
+}

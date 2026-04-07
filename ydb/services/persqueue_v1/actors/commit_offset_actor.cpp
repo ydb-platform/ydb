@@ -29,32 +29,8 @@ TCommitOffsetActor::TCommitOffsetActor(
     Y_ASSERT(request);
 }
 
-TCommitOffsetActor::TCommitOffsetActor(
-        NKikimr::NGRpcService::IRequestOpCtx * ctx, const NPersQueue::TTopicsListController& topicsHandler,
-        const TActorId& schemeCache, const TActorId& newSchemeCache,
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
-)
-    : TBase(ctx)
-    , SchemeCache(schemeCache)
-    , NewSchemeCache(newSchemeCache)
-    , AuthInitActor()
-    , Counters(counters)
-    , TopicsHandler(std::make_unique<NPersQueue::TTopicsListController>(topicsHandler))
-{
-    Y_ASSERT(ctx);
-}
-
 TCommitOffsetActor::TCommitOffsetActor(NKikimr::NGRpcService::IRequestOpCtx * ctx)
     : TBase(ctx)
-    , SchemeCache(NMsgBusProxy::CreatePersQueueMetaCacheV2Id())
-    , NewSchemeCache(MakeSchemeCacheID())
-    , AuthInitActor()
-    , Counters(nullptr)
-{
-}
-
-TCommitOffsetActor::TCommitOffsetActor(NGRpcService::TEvCommitOffsetRequest* request)
-    : TBase(request)
     , SchemeCache(NMsgBusProxy::CreatePersQueueMetaCacheV2Id())
     , NewSchemeCache(MakeSchemeCacheID())
     , AuthInitActor()
@@ -145,7 +121,7 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
         return;
     }
     AFL_ENSURE(TopicAndTablets.size() == 1);
-    auto& [topic, topicInitInfo] = *TopicAndTablets.begin();
+    auto& [_, topicInitInfo] = *TopicAndTablets.begin();
 
     if (topicInitInfo.Partitions.find(PartitionId) == topicInitInfo.Partitions.end()) {
         AnswerError("partition id not found in topic", PersQueue::ErrorCode::WRONG_PARTITION_NUMBER, ctx);
@@ -164,6 +140,7 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
         const TString& readSessionId = commitRequest->read_session_id();
 
         std::vector<TDistributedCommitHelper::TCommitInfo> commits;
+        const auto& topicPath = topicInitInfo.TopicNameConverter->GetPrimaryPath();
 
         for (auto& parent: partitionNode->AllParents) {
             TDistributedCommitHelper::TCommitInfo commit {
@@ -171,7 +148,8 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
                 .Offset = Max<i64>(),
                 .KillReadSession = killReadSession,
                 .OnlyCheckCommitedToFinish = false,
-                .ReadSessionId = readSessionId
+                .ReadSessionId = readSessionId,
+                .TopicPath = topicPath
             };
             commits.push_back(commit);
         }
@@ -182,7 +160,8 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
                     .PartitionId = child->Id,
                     .Offset = 0,
                     .KillReadSession = true,
-                    .OnlyCheckCommitedToFinish = false
+                    .OnlyCheckCommitedToFinish = false,
+                    .TopicPath = topicPath
                 };
                 commits.push_back(commit);
             }
@@ -193,11 +172,15 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
             .Offset = commitRequest->offset(),
             .KillReadSession = killReadSession,
             .OnlyCheckCommitedToFinish = false,
-            .ReadSessionId = readSessionId
+            .ReadSessionId = readSessionId,
+            .TopicPath = topicPath
         };
         commits.push_back(commit);
 
-        Kqp = std::make_unique<TDistributedCommitHelper>(Request().GetDatabaseName().GetOrElse(TString()), ClientId, topic, commits);
+        Kqp = std::make_unique<TDistributedCommitHelper>(
+            Request().GetDatabaseName().GetOrElse(TString()),
+            ClientId,
+            commits);
         Kqp->SendCreateSessionRequest(ctx);
     }
 }
@@ -220,7 +203,6 @@ void TCommitOffsetActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const 
     }
 
     auto step = Kqp->Handle(ev, ctx);
-
     if (step == TDistributedCommitHelper::ECurrentStep::DONE) {
         Ydb::Topic::CommitOffsetResult result;
         Request().SendResult(result, Ydb::StatusIds::SUCCESS);

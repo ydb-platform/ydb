@@ -7,6 +7,7 @@
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -490,7 +491,8 @@ private:
                 i64 write_ts = static_cast<i64>(r.GetWriteTimestampMS());
                 AFL_ENSURE(write_ts >= 0);
                 *currentBatch->mutable_written_at() = ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(write_ts);
-                currentBatch->set_producer_id(std::move(sourceId));
+                // Use shared helper to properly encode non-UTF-8 source IDs
+                NGRpcProxy::V1::SetBatchSourceId(currentBatch, std::move(sourceId));
                 batchCodec = GetDataChunkCodec(proto);
                 currentBatch->set_codec(batchCodec);
 

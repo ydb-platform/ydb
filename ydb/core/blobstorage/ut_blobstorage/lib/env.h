@@ -9,6 +9,8 @@
 #include <ydb/core/base/blobstorage_common.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
+#include <ydb/library/actors/retro_tracing/retro_collector.h>
 
 static auto& Cconf = Cnull;
 
@@ -31,6 +33,8 @@ struct TEnvironmentSetup {
 
     static const std::initializer_list<ui32> DebugLogComponents;
     std::unordered_map<TIcbControlKey, TControlWrapper> IcbControls;
+
+    std::unordered_map<ui32, NWilson::TFakeWilsonUploader*> FakeWilsonUploaders;
 
     struct TSettings {
         const ui32 NodeCount = 9;
@@ -67,8 +71,11 @@ struct TEnvironmentSetup {
         const bool AutomaticBootstrap = false;
         const std::function<TIntrusivePtr<TStateStorageInfo>(std::function<TActorId(ui32, ui32)>, ui32)> StateStorageInfoGenerator = nullptr;
         const bool EnablePhantomFlagStorage = false;
+        const ui64 PhantomFlagStorageLimitPerVDiskBytes = 10'000'000; // 10_MB
         const bool TinySyncLog = false;
         const TDuration MaxPutTimeoutDSProxy = TDuration::Seconds(60);
+        const bool StartFakeWilsonCollectors = false;
+        const bool EnableChunkKeeper = true;
     };
 
     const TSettings Settings;
@@ -526,8 +533,13 @@ config:
                     auto& icbControl = icb.ICB_CONTROL_PATH;                                \
                     TControlWrapper control(defaultVal, minVal, maxVal);                    \
                     TControlBoard::RegisterSharedControl(control, icbControl);              \
-                    control = currentValue;                                                 \
-                    IcbControls.insert({{nodeId, #ICB_CONTROL_PATH}, std::move(control)});  \
+                    TIcbControlKey key{nodeId, #ICB_CONTROL_PATH};                          \
+                    if (IcbControls.contains(key)) {                                        \
+                        control = (i64)IcbControls[key];                                    \
+                    } else {                                                                \
+                        control = currentValue;                                             \
+                    }                                                                       \
+                    IcbControls[key] = std::move(control);                                  \
                 }
 
                 if (Settings.BurstThresholdNs) {
@@ -556,9 +568,12 @@ config:
                 ADD_ICB_CONTROL(VDiskControls.DefragThrottlerBytesRate, 0, 0, 10'000'000'000, 0);
                 ADD_ICB_CONTROL(VDiskControls.MaxChunksToDefragInflight, 10, 1, 50, 10);
                 ADD_ICB_CONTROL(VDiskControls.DefaultHugeGarbagePerMille, 300, 0, 1000, 300);
+                ADD_ICB_CONTROL(PDiskControls.MaxActiveCompactionsPerPDisk, 0, 0, 1'000'000, 0);
                 ADD_ICB_CONTROL(VDiskControls.GarbageThresholdToRunFullCompactionPerMille, 0, 0, 300, 0);
-                ADD_ICB_CONTROL(VDiskControls.EnablePhantomFlagStorage, false, false, true, Settings.EnablePhantomFlagStorage);
-                
+                ADD_ICB_CONTROL(VDiskControls.EnablePhantomFlagStorage, true, false, true, Settings.EnablePhantomFlagStorage);
+                ADD_ICB_CONTROL(VDiskControls.PhantomFlagStorageLimitPerVDiskBytes, 10'000'000, 0, 100'000'000'000, Settings.PhantomFlagStorageLimitPerVDiskBytes);
+                ADD_ICB_CONTROL(VDiskControls.EnableChunkKeeper, true, false, true, Settings.EnableChunkKeeper);
+
 #undef ADD_ICB_CONTROL
 
                 {
@@ -577,6 +592,13 @@ config:
             if (Settings.UseFakeConfigDispatcher) {
                 Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(nodeId), Runtime->Register(new TFakeConfigDispatcher(), nodeId));
             }
+            if (Settings.StartFakeWilsonCollectors) {
+                NWilson::TFakeWilsonUploader* fakeUploader = new NWilson::TFakeWilsonUploader;
+                FakeWilsonUploaders[nodeId] = fakeUploader;
+                Runtime->RegisterService(NWilson::MakeWilsonUploaderId(), Runtime->Register(fakeUploader, nodeId));
+            }
+            Runtime->RegisterService(NRetroTracing::MakeRetroCollectorId(),
+                    Runtime->Register(NRetroTracing::CreateRetroCollector(), nodeId));
         }
     }
 
@@ -1246,5 +1268,11 @@ config:
             Y_ABORT_UNLESS(it != IcbControls.end());
             it->second = value;
         }
+    }
+
+    void SetPDiskStatusFlags(ui32 nodeId, ui32 pdiskId, NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+        auto it = PDiskMockStates.find({nodeId, pdiskId});
+        UNIT_ASSERT_C(it != PDiskMockStates.end(), "PDisk not found: nodeId# " << nodeId << " pdiskId# " << pdiskId);
+        it->second->SetStatusFlags(color);
     }
 };

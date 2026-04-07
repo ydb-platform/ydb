@@ -2,6 +2,9 @@
 
 Implements the Distutils 'install' command."""
 
+from __future__ import annotations
+
+import collections
 import contextlib
 import itertools
 import os
@@ -9,8 +12,7 @@ import sys
 import sysconfig
 from distutils._log import log
 from site import USER_BASE, USER_SITE
-
-import jaraco.collections
+from typing import ClassVar
 
 from ..core import Command
 from ..debug import DEBUG
@@ -142,7 +144,7 @@ def _resolve_scheme(name):
     try:
         resolved = sysconfig.get_preferred_scheme(key)
     except Exception:
-        resolved = fw.scheme(_pypy_hack(name))
+        resolved = fw.scheme(name)
     return resolved
 
 
@@ -159,7 +161,7 @@ def _inject_headers(name, scheme):
     """
     # Bypass the preferred scheme, which may not
     # have defined headers.
-    fallback = _load_scheme(_pypy_hack(name))
+    fallback = _load_scheme(name)
     scheme.setdefault('headers', fallback['headers'])
     return scheme
 
@@ -167,14 +169,6 @@ def _inject_headers(name, scheme):
 def _scheme_attrs(scheme):
     """Resolve install directories by applying the install schemes."""
     return {f'install_{key}': scheme[key] for key in SCHEME_KEYS}
-
-
-def _pypy_hack(name):
-    PY37 = sys.version_info < (3, 8)
-    old_pypy = hasattr(sys, 'pypy_version_info') and PY37
-    prefix = not name.endswith(('_user', '_home'))
-    pypy_name = 'pypy' + '_nt' * (os.name == 'nt')
-    return pypy_name if old_pypy and prefix else name
 
 
 class install(Command):
@@ -238,7 +232,7 @@ class install(Command):
         ('record=', None, "filename in which to record list of installed files"),
     ]
 
-    boolean_options = ['compile', 'force', 'skip-build']
+    boolean_options: ClassVar[list[str]] = ['compile', 'force', 'skip-build']
 
     if HAS_USER_SITE:
         user_options.append((
@@ -248,15 +242,15 @@ class install(Command):
         ))
         boolean_options.append('user')
 
-    negative_opt = {'no-compile': 'compile'}
+    negative_opt: ClassVar[dict[str, str]] = {'no-compile': 'compile'}
 
-    def initialize_options(self):
+    def initialize_options(self) -> None:
         """Initializes options."""
         # High-level options: these select both an installation base
         # and scheme.
-        self.prefix = None
-        self.exec_prefix = None
-        self.home = None
+        self.prefix: str | None = None
+        self.exec_prefix: str | None = None
+        self.home: str | None = None
         self.user = False
 
         # These select only the installation base; it's up to the user to
@@ -264,7 +258,7 @@ class install(Command):
         # the --install-{platlib,purelib,scripts,data} options).
         self.install_base = None
         self.install_platbase = None
-        self.root = None
+        self.root: str | None = None
 
         # These options are the actual installation directories; if not
         # supplied by the user, they are filled in using the installation
@@ -273,7 +267,7 @@ class install(Command):
         self.install_purelib = None  # for pure module distributions
         self.install_platlib = None  # non-pure (dists w/ extensions)
         self.install_headers = None  # for C/C++ headers
-        self.install_lib = None  # set to either purelib or platlib
+        self.install_lib: str | None = None  # set to either purelib or platlib
         self.install_scripts = None
         self.install_data = None
         self.install_userbase = USER_BASE
@@ -327,7 +321,7 @@ class install(Command):
     # party Python modules on various platforms given a wide
     # array of user input is decided.  Yes, it's quite complex!)
 
-    def finalize_options(self):  # noqa: C901
+    def finalize_options(self) -> None:  # noqa: C901
         """Finalizes options."""
         # This method (and its helpers, like 'finalize_unix()',
         # 'finalize_other()', and 'select_scheme()') is where the default
@@ -429,12 +423,12 @@ class install(Command):
             local_vars['userbase'] = self.install_userbase
             local_vars['usersite'] = self.install_usersite
 
-        self.config_vars = jaraco.collections.DictStack([
-            fw.vars(),
-            compat_vars,
-            sysconfig.get_config_vars(),
+        self.config_vars = collections.ChainMap(
             local_vars,
-        ])
+            sysconfig.get_config_vars(),
+            compat_vars,
+            fw.vars(),
+        )
 
         self.expand_basedirs()
 
@@ -510,7 +504,7 @@ class install(Command):
         # Punt on doc directories for now -- after all, we're punting on
         # documentation completely!
 
-    def dump_dirs(self, msg):
+    def dump_dirs(self, msg) -> None:
         """Dumps the list of user options."""
         if not DEBUG:
             return
@@ -530,7 +524,7 @@ class install(Command):
                 val = getattr(self, opt_name)
             log.debug("  %s: %s", opt_name, val)
 
-    def finalize_unix(self):
+    def finalize_unix(self) -> None:
         """Finalizes options for posix platforms."""
         if self.install_base is not None or self.install_platbase is not None:
             incomplete_scheme = (
@@ -579,7 +573,7 @@ class install(Command):
             self.install_platbase = self.exec_prefix
             self.select_scheme("posix_prefix")
 
-    def finalize_other(self):
+    def finalize_other(self) -> None:
         """Finalizes options for non-posix platforms"""
         if self.user:
             if self.install_userbase is None:
@@ -601,7 +595,7 @@ class install(Command):
                     f"I don't know how to install stuff on '{os.name}'"
                 )
 
-    def select_scheme(self, name):
+    def select_scheme(self, name) -> None:
         _select_scheme(self, name)
 
     def _expand_attrs(self, attrs):
@@ -613,12 +607,12 @@ class install(Command):
                 val = subst_vars(val, self.config_vars)
                 setattr(self, attr, val)
 
-    def expand_basedirs(self):
+    def expand_basedirs(self) -> None:
         """Calls `os.path.expanduser` on install_base, install_platbase and
         root."""
         self._expand_attrs(['install_base', 'install_platbase', 'root'])
 
-    def expand_dirs(self):
+    def expand_dirs(self) -> None:
         """Calls `os.path.expanduser` on install dirs."""
         self._expand_attrs([
             'install_purelib',
@@ -629,13 +623,13 @@ class install(Command):
             'install_data',
         ])
 
-    def convert_paths(self, *names):
+    def convert_paths(self, *names) -> None:
         """Call `convert_path` over `names`."""
         for name in names:
             attr = "install_" + name
             setattr(self, attr, convert_path(getattr(self, attr)))
 
-    def handle_extra_path(self):
+    def handle_extra_path(self) -> None:
         """Set `path_file` and `extra_dirs` using `extra_path`."""
         if self.extra_path is None:
             self.extra_path = self.distribution.extra_path
@@ -670,13 +664,13 @@ class install(Command):
         self.path_file = path_file
         self.extra_dirs = extra_dirs
 
-    def change_roots(self, *names):
+    def change_roots(self, *names) -> None:
         """Change the install directories pointed by name using root."""
         for name in names:
             attr = "install_" + name
             setattr(self, attr, change_root(self.root, getattr(self, attr)))
 
-    def create_home_path(self):
+    def create_home_path(self) -> None:
         """Create directories under ~."""
         if not self.user:
             return

@@ -12,12 +12,12 @@
 
 namespace NKikimr::NArrow {
 
-class TBatchSplitttingContext {
+class TBatchSplittingContext {
 private:
     YDB_ACCESSOR(ui64, SizeLimit, 6 * 1024 * 1024);
     YDB_ACCESSOR_DEF(std::vector<TString>, FieldsForSpecialKeys);
 public:
-    explicit TBatchSplitttingContext(const ui64 size)
+    explicit TBatchSplittingContext(const ui64 size)
         : SizeLimit(size)
     {
 
@@ -61,9 +61,9 @@ public:
 
     TString DebugString() const;
 
-    static TConclusion<std::vector<TSerializedBatch>> BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context);
-    static TConclusionStatus BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR);
-    static TSerializedBatch Build(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplitttingContext& context);
+    static TConclusion<std::vector<TSerializedBatch>> BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplittingContext& context);
+    static TConclusionStatus BuildWithLimit(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplittingContext& context, std::optional<TSerializedBatch>& sbL, std::optional<TSerializedBatch>& sbR);
+    static TSerializedBatch Build(std::shared_ptr<arrow::RecordBatch> batch, const TBatchSplittingContext& context);
 
     TSerializedBatch(TString&& data, const ui32 rowsCount, const ui32 rawBytes,
         const std::optional<TString>& specialKeysPayload, const std::optional<TString>& specialKeysFull)
@@ -76,6 +76,6 @@ public:
     }
 };
 
-TConclusion<std::vector<TSerializedBatch>> SplitByBlobSize(const std::shared_ptr<arrow::RecordBatch>& batch, const TBatchSplitttingContext& context);
+TConclusion<std::vector<TSerializedBatch>> SplitByBlobSize(const std::shared_ptr<arrow::RecordBatch>& batch, const TBatchSplittingContext& context);
 
 }

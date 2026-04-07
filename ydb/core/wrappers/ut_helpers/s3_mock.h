@@ -1,5 +1,7 @@
 #pragma once
 
+#include "backup_mock.h"
+
 #include <library/cpp/http/server/http.h>
 #include <library/cpp/cgiparam/cgiparam.h>
 
@@ -11,7 +13,7 @@ namespace NKikimr {
 namespace NWrappers {
 namespace NTestHelpers {
 
-class TS3Mock: public THttpServer::ICallBack {
+class TS3Mock: public TBackupMock, public THttpServer::ICallBack {
 public:
     struct TSettings {
         THttpServer::TOptions HttpOptions;
@@ -66,12 +68,12 @@ public:
     explicit TS3Mock(THashMap<TString, TString>&& data, const TSettings& settings = {});
     explicit TS3Mock(const THashMap<TString, TString>& data, const TSettings& settings = {});
 
-    TClientRequest* CreateClient();
+    TClientRequest* CreateClient() override;
     bool Start();
     const char* GetError();
 
-    const THashMap<TString, TString>& GetData() const { return Data; }
-    THashMap<TString, TString>& GetData() { return Data; }
+    const THashMap<TString, TString>& GetData() const override { return Data; }
+    THashMap<TString, TString>& GetData() override { return Data; }
 
 private:
     const TSettings Settings;

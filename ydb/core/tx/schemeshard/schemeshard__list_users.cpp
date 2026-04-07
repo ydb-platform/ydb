@@ -47,7 +47,7 @@ struct TSchemeShard::TTxListUsers : TTransactionBase<TSchemeShard> {
                 user->SetLastFailedAttemptAt(ToMicroSeconds(sid.LastFailedLogin));
             }
             user->SetFailedAttemptCount(sid.FailedLoginAttemptCount);
-            user->SetPasswordHash(sid.PasswordHash);
+            user->SetPasswordHashes(sid.PasswordHashes);
         }
 
         return true;

@@ -50,7 +50,7 @@ EExecutionStatus TBuildDataTxOutRSUnit::Execute(TOperation::TPtr op,
     DataShard.ReleaseCache(*tx);
 
     if (tx->IsTxDataReleased()) {
-        switch (Pipeline.RestoreDataTx(tx, txc, ctx)) {
+        switch (Pipeline.RestoreDataTx(tx, txc, ctx, tx->GetUserSID())) {
             case ERestoreDataStatus::Ok:
                 break;
             case ERestoreDataStatus::Restart:

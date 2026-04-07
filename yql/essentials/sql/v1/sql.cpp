@@ -4,6 +4,8 @@
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
 
+#include <utility>
+
 namespace NSQLTranslationV1 {
 
 using namespace NSQLv1Generated;
@@ -50,7 +52,7 @@ void SqlASTToYqlImpl(NYql::TAstParseResult& res, const google::protobuf::Message
             ctx.IncrementMonCounter("sql_errors", "AstToYqlError");
         } else {
             ctx.IncrementMonCounter("sql_errors", "AstToYqlSilentError");
-            ctx.Error() << "Error occurred on parse SQL query, but no error is collected" << ", please send this request over bug report into YQL interface or write on yql@ maillist";
+            ctx.Fatal() << "Error occurred on parse SQL query, but no error is collected";
         }
     } else {
         ctx.WarnUnusedHints();
@@ -65,7 +67,7 @@ void SqlASTsToYqlsImpl(NYql::TAstParseResult& res, const std::vector<::NSQLv1Gen
             ctx.IncrementMonCounter("sql_errors", "AstToYqlError");
         } else {
             ctx.IncrementMonCounter("sql_errors", "AstToYqlSilentError");
-            ctx.Error() << "Error occurred on parse SQL query, but no error is collected" << ", please send this request over bug report into YQL interface or write on yql@ maillist";
+            ctx.Fatal() << "Error occurred on parse SQL query, but no error is collected";
         }
     } else {
         ctx.WarnUnusedHints();
@@ -78,7 +80,6 @@ NYql::TAstParseResult SqlASTToYql(const TLexers& lexers, const TParsers& parsers
                                   const NSQLTranslation::TSQLHints& hints,
                                   const NSQLTranslation::TTranslationSettings& settings)
 {
-    YQL_ENSURE(IsQueryMode(settings.Mode));
     TAstParseResult res;
     TContext ctx(lexers, parsers, settings, hints, res.Issues, query);
     SqlASTToYqlImpl(res, protoAst, ctx);
@@ -189,7 +190,7 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore69: // truncate table
             return false;
         case TRule_sql_stmt_core::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 }
 
@@ -283,9 +284,9 @@ bool SplitQueryToStatements(const TLexers& lexers, const TParsers& parsers, cons
 
 class TTranslator: public NSQLTranslation::ITranslator {
 public:
-    TTranslator(const TLexers& lexers, const TParsers& parsers)
-        : Lexers_(lexers)
-        , Parsers_(parsers)
+    TTranslator(TLexers lexers, TParsers parsers)
+        : Lexers_(std::move(lexers))
+        , Parsers_(std::move(parsers))
     {
     }
 

@@ -832,19 +832,27 @@ inline bool is_dir_info_class_not_supported(DWORD error)
     // GetFileInformationByHandleEx(FileIdExtdDirectoryRestartInfo) return ERROR_INVALID_PARAMETER,
     // even though in general the operation is supported by the kernel. SMBv1 returns a special error
     // code ERROR_INVALID_LEVEL in this case.
+    //
     // Some other filesystems also don't implement other info classes and return ERROR_INVALID_PARAMETER
     // (e.g. see https://github.com/boostorg/filesystem/issues/266), ERROR_GEN_FAILURE, ERROR_INVALID_FUNCTION
     // or ERROR_INTERNAL_ERROR (https://github.com/boostorg/filesystem/issues/286). Treat these error codes
     // as "non-permanent", even though ERROR_INVALID_PARAMETER is also returned if GetFileInformationByHandleEx
     // in general does not support a certain info class. Worst case, we will make extra syscalls on directory
     // iterator construction.
+    //
     // Also note that Wine returns ERROR_CALL_NOT_IMPLEMENTED for unimplemented info classes, and
     // up until 7.21 it didn't implement FileIdExtdDirectoryRestartInfo and FileFullDirectoryRestartInfo.
     // (https://bugs.winehq.org/show_bug.cgi?id=53590)
+    //
+    // NTE_BAD_SIGNATURE (0x80090006) is returned from GetFileInformationByHandleEx(FileIdExtdDirectoryInformation)
+    // for a Samba 3.0.2 share, when RequireSecuritySignature is set to 1 on the Windows Server 2019 client
+    // (https://github.com/boostorg/filesystem/issues/334). FileBothDirectoryInformation succeeds in this case.
+    // This doesn't reproduce with Samba 4.19 server and Windows 10 client, so this may be a bug in either
+    // the client or the server.
     return error == ERROR_NOT_SUPPORTED || error == ERROR_INVALID_PARAMETER ||
         error == ERROR_INVALID_LEVEL || error == ERROR_CALL_NOT_IMPLEMENTED ||
         error == ERROR_GEN_FAILURE || error == ERROR_INVALID_FUNCTION ||
-        error == ERROR_INTERNAL_ERROR;
+        error == ERROR_INTERNAL_ERROR || error == NTE_BAD_SIGNATURE;
 }
 
 system::error_code dir_itr_create(boost::intrusive_ptr< detail::dir_itr_imp >& imp, fs::path const& dir, directory_options opts, directory_iterator_params* params, fs::path& first_filename, fs::file_status& sf, fs::file_status& symlink_sf)

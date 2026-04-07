@@ -88,6 +88,12 @@ enum class EConvertDynamicTablesToStatic {
     All             /* "all" */,
 };
 
+enum class EFuseMapToMapReduceMode {
+    Disable  /* "disable" */,
+    Normal   /* "normal" */,
+    Late     /* "late" */,
+};
+
 struct TYtSettings {
 private:
     static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
@@ -118,6 +124,7 @@ public:
     NCommon::TConfSetting<TString, StaticPerCluster> _QueryDumpFolder;
     NCommon::TConfSetting<TString, StaticPerCluster> _QueryDumpAccount;
     NCommon::TConfSetting<bool, StaticPerCluster> _EnableDynamicTablesWrite;
+    NCommon::TConfSetting<bool, StaticPerCluster> _EnableRLSTablesSupport;
 
     // static global
     NCommon::TConfSetting<TString, Static> Auth;
@@ -139,6 +146,7 @@ public:
     NCommon::TConfSetting<TDuration, Static> QueryCacheTtl;
     NCommon::TConfSetting<bool, Static> QueryCacheUseExpirationTimeout;
     NCommon::TConfSetting<bool, Static> QueryCacheUseForCalc;
+    NCommon::TConfSetting<bool, Static> QueryCacheCombineChunksReplace;
     NCommon::TConfSetting<ui32, Static> DefaultMaxJobFails;
     NCommon::TConfSetting<TString, Static> DefaultCluster;
     NCommon::TConfSetting<TDuration, Static> BinaryExpirationInterval;
@@ -163,6 +171,8 @@ public:
     NCommon::TConfSetting<ui32, Static> _QueryDumpFileCountPerOperationLimit;
     NCommon::TConfSetting<bool, Static> KeepWorldDepForFillOp;
     NCommon::TConfSetting<ui32, Static> CostBasedOptimizerPartial;
+    NCommon::TConfSetting<bool, Static> OmitInaccessibleRows;
+    NCommon::TConfSetting<NSize::TSize, Static> _MinJobStateSizeToPassViaFile;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;
@@ -291,7 +301,8 @@ public:
     NCommon::TConfSetting<ui32, Static> MaxInputTablesForSortedMerge;
     NCommon::TConfSetting<ui32, Static> MaxOutputTables;
     NCommon::TConfSetting<bool, Static> DisableFuseOperations;
-    NCommon::TConfSetting<bool, Static> EnableFuseMapToMapReduce;
+    NCommon::TConfSetting<bool, Static> EnableFuseMapToMapReduce; // Deprecated. Use FuseMapToMapReduceMode
+    NCommon::TConfSetting<EFuseMapToMapReduceMode, Static> FuseMapToMapReduce;
     NCommon::TConfSetting<NSize::TSize, Static> MaxExtraJobMemoryToFuseOperations;
     NCommon::TConfSetting<double, Static> MaxReplicationFactorToFuseOperations;
     NCommon::TConfSetting<ui32, Static> MaxOperationFiles;
@@ -318,6 +329,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseNativeDescSort;
     NCommon::TConfSetting<bool, Static> UseIntermediateSchema;
     NCommon::TConfSetting<bool, Static> UseIntermediateStreams;
+    NCommon::TConfSetting<bool, Static> PassSqlFlagsForViewTranslation;
     NCommon::TConfSetting<bool, Static> UseFlow;
     NCommon::TConfSetting<ui16, Static> WideFlowLimit;
     NCommon::TConfSetting<bool, Static> UseSystemColumns;
@@ -442,7 +454,7 @@ private:
     std::unordered_map<ui64, size_t> NodeIdToVer;
 };
 
-bool ValidateCompressionCodecValue(const TStringBuf& codec);
+bool ValidateCompressionCodecValue(const TString& codec);
 void MediaValidator(const NYT::TNode& value);
 
 } // NYql

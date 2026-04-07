@@ -1,4 +1,4 @@
-IF (NOT SANITIZER_TYPE AND NOT WITH_VALGRIND)
+IF (NOT SANITIZER_TYPE)
 PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_ERASURE=mirror_3_dc)
@@ -22,7 +22,6 @@ DEPENDS(
 PEERDIR(
     ydb/tests/library
 )
-
 
 END()
 

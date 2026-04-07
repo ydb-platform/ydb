@@ -3,6 +3,7 @@
 #include "actors_factory.h"
 #include "coordinator.h"
 #include "leader_election.h"
+#include "local_leader_election.h"
 #include "probes.h"
 
 #include <ydb/core/base/appdata_fwd.h>
@@ -223,23 +224,36 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         }
     };
 
-     struct TNodesTracker{
-         class TRetryState {
-            public:
-                TDuration GetNextDelay() {
-                    constexpr TDuration MaxDelay = TDuration::Seconds(10);
-                    constexpr TDuration MinDelay = TDuration::MilliSeconds(100); // from second retry
-                    TDuration ret = Delay; // The first delay is zero
-                    Delay = ClampVal(Delay * 2, MinDelay, MaxDelay);
-                    return ret ? RandomizeDelay(ret) : ret;
-                }
-            private:
-                static TDuration RandomizeDelay(TDuration baseDelay) {
-                    const TDuration::TValue half = baseDelay.GetValue() / 2;
-                    return TDuration::FromValue(half + RandomNumber<TDuration::TValue>(half));
-                }
-            private:
-                TDuration Delay; // The first time retry will be done instantly.
+     struct TNodesTracker {
+        explicit TNodesTracker(TDuration timeout)
+            : Timeout(timeout)
+        {}
+
+        class TRetryState {
+        public:
+            explicit TRetryState(TDuration timeout)
+                : Timeout(timeout)
+            {}
+            TDuration GetNextDelay() {
+                constexpr TDuration MaxDelay = TDuration::Seconds(10);
+                constexpr TDuration MinDelay = TDuration::MilliSeconds(100); // from second retry
+                TDuration ret = Delay; // The first delay is zero
+                Delay = ClampVal(Delay * 2, MinDelay, MaxDelay);
+                return ret ? RandomizeDelay(ret) : ret;
+            }
+
+            bool IsTimeout() const {
+                return TInstant::Now() - DisconnectedTime > Timeout;
+            }
+        private:
+            static TDuration RandomizeDelay(TDuration baseDelay) {
+                const TDuration::TValue half = baseDelay.GetValue() / 2;
+                return TDuration::FromValue(half + RandomNumber<TDuration::TValue>(half));
+            }
+        private:
+            TDuration Delay; // The first time retry will be done instantly.
+            TInstant DisconnectedTime = TInstant::Now();
+            TDuration Timeout;
         };
 
         struct TCounters {
@@ -292,20 +306,26 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
             state.Counters.Connected++;
         }
 
-        void HandleNodeDisconnected(ui32 nodeId) {
+        bool HandleNodeDisconnected(ui32 nodeId) {
             auto& state = Nodes[nodeId];
             state.Connected = false;
             state.Counters.Disconnected++;
             if (state.RetryScheduled) {
-                return;
+                return false;
             }
             state.RetryScheduled = true;
             if (!state.RetryState) {
-                state.RetryState.ConstructInPlace();
+                state.RetryState.ConstructInPlace(Timeout);
             }
+
+            if (state.RetryState->IsTimeout()) {
+                return true;
+            }
+
             auto ev = MakeHolder<TEvPrivate::TEvTryConnect>(nodeId);
             auto delay = state.RetryState->GetNextDelay();
             NActors::TActivationContext::Schedule(delay, new NActors::IEventHandle(SelfId, SelfId, ev.Release()));
+            return false;
         }
 
         void PrintInternalState(TStringStream& stream) const {
@@ -320,6 +340,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         TMap<ui32, TNodeState> Nodes;
         NActors::TActorId SelfId;
         TString LogPrefix = "RowDispatcher: ";
+        TDuration Timeout;
     };
 
     struct TAggregatedStats{
@@ -343,7 +364,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     const ::NMonitoring::TDynamicCounterPtr CountersRoot;
     TRowDispatcherMetrics Metrics;
     TUserPoolMetrics UserPoolMetrics;
-    NYql::IPqGateway::TPtr PqGateway;
+    NYql::IPqStaticGateway::TPtr PqGateway;
     NYdb::TDriver Driver;
     NActors::TMon* Monitoring;
     TNodesTracker NodesTracker;
@@ -351,6 +372,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     TAggregatedStats AggrStats; 
     ui64 LastCpuTime = 0;
     NActors::TActorId NodesManagerId;
+    TInstant LastUpdateMetricsTime = TInstant::Now();
 
     struct TConsumerCounters {
         ui64 NewDataArrived = 0;
@@ -429,7 +451,7 @@ public:
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-        const NYql::IPqGateway::TPtr& pqGateway,
+        const NYql::IPqStaticGateway::TPtr& pqGateway,
         NYdb::TDriver driver,
         NActors::TMon* monitoring = nullptr,
         NActors::TActorId nodesManagerId = {},
@@ -514,7 +536,7 @@ TRowDispatcher::TRowDispatcher(
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-    const NYql::IPqGateway::TPtr& pqGateway,
+    const NYql::IPqStaticGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
     NActors::TMon* monitoring,
     NActors::TActorId nodesManagerId,
@@ -533,6 +555,7 @@ TRowDispatcher::TRowDispatcher(
     , PqGateway(pqGateway)
     , Driver(driver)
     , Monitoring(monitoring)
+    , NodesTracker(Config.GetCoordinator().GetRebalancingTimeout() ? Config.GetCoordinator().GetRebalancingTimeout() : TDuration::Seconds(DefaultRebalancingTimeoutSec))
     , NodesManagerId(nodesManagerId)
     , EnableStreamingQueriesCounters(enableStreamingQueriesCounters)
 {
@@ -545,7 +568,10 @@ void TRowDispatcher::Bootstrap() {
 
     const auto& config = Config.GetCoordinator();
     auto coordinatorId = Register(NewCoordinator(SelfId(), config, Tenant, Counters, NodesManagerId).release());
-    Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, Driver, Tenant, Counters).release());
+    auto leaderElection = !config.GetCoordinationNodePath().empty()
+        ? NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, Driver, Tenant, Counters)
+        : NewLocalLeaderElection(SelfId(), coordinatorId, Counters);
+    Register(leaderElection.release());
 
     CompileServiceActorId = Register(NRowDispatcher::CreatePurecalcCompileService(Config.GetCompileService(), Counters));
 
@@ -596,9 +622,22 @@ void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TP
     LWPROBE(NodeDisconnected, ev->Sender.ToString(), ev->Get()->NodeId);
     LOG_ROW_DISPATCHER_DEBUG("TEvNodeDisconnected, node id " << ev->Get()->NodeId);
     Metrics.NodesReconnect->Inc();
-    NodesTracker.HandleNodeDisconnected(ev->Get()->NodeId);
+    bool isTimeout = NodesTracker.HandleNodeDisconnected(ev->Get()->NodeId);
     for (auto& [actorId, consumer] : Consumers) {
         consumer->EventsQueue.HandleNodeDisconnected(ev->Get()->NodeId);
+    }
+    TVector<TActorId> toDelete;
+    if (isTimeout) {
+        LOG_ROW_DISPATCHER_DEBUG("Node disconnected, node id " << ev->Get()->NodeId << " is timeout");
+        for (auto& [actorId, consumer] : Consumers) {
+            if (actorId.NodeId() != ev->Get()->NodeId) {
+                continue;
+            }
+            toDelete.push_back(actorId);
+        }   
+    }
+    for (auto& actorId : toDelete) {
+        DeleteConsumer(actorId);
     }
 }
 
@@ -645,7 +684,6 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscrib
 }
 
 void TRowDispatcher::UpdateMetrics() {
-    static TInstant LastUpdateMetricsTime = TInstant::Now();
     auto now = TInstant::Now();
     AggrStats.LastUpdateMetricsPeriod = now - LastUpdateMetricsTime;
     LastUpdateMetricsTime = now;
@@ -955,7 +993,8 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {
     auto it = Consumers.find(ev->Sender);
     if (it == Consumers.end()) {
-        LOG_ROW_DISPATCHER_WARN("Wrong consumer, sender " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId());
+        LOG_ROW_DISPATCHER_WARN("Consumer not found, sender " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId() << ", sending TEvNoSession");
+        Send(ev->Sender, new NFq::TEvRowDispatcher::TEvNoSession(), 0, ev->Cookie);
         return;
     }
     LWPROBE(Heartbeat, ev->Sender.ToString(), ev->Get()->Record.GetPartitionId(), it->second->QueryId, ev->Get()->Record.ByteSizeLong());
@@ -1313,7 +1352,7 @@ std::unique_ptr<NActors::IActor> NewRowDispatcher(
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
-    const NYql::IPqGateway::TPtr& pqGateway,
+    const NYql::IPqStaticGateway::TPtr& pqGateway,
     NYdb::TDriver driver,
     NActors::TMon* monitoring,
     NActors::TActorId nodesManagerId,

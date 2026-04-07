@@ -4,12 +4,11 @@
 #include <util/generic/vector.h>
 #include <util/system/unaligned_mem.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 class TInputBuffer {
 public:
-    TInputBuffer(TStringBuf buf)
+    explicit TInputBuffer(TStringBuf buf)
         : Buf_(buf)
     {
     }
@@ -110,5 +109,4 @@ private:
     TVector<char> Vec_;
 };
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

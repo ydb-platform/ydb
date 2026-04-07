@@ -21,6 +21,21 @@ void TPartitionWriterCacheActor::Bootstrap(const TActorContext& ctx)
     this->Become(&TPartitionWriterCacheActor::StateWork);
 }
 
+bool TPartitionWriterCacheActor::OnUnhandledException(const std::exception& exc) {
+    auto ctx = *NActors::TlsActivationContext;
+    LOG_CRIT_S(ctx, NKikimrServices::PQ_WRITE_PROXY,
+        TStringBuilder() << " unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
+            << TBackTrace::FromCurrentException().PrintToString());
+
+    for (auto& [k, w] : Writers) {
+        ReplyError(k.first, k.second, EErrorCode::InternalError, "Internal error", 0, ctx.AsActorContext());
+    }
+
+    this->Become(&TPartitionWriterCacheActor::StateBroken);
+
+    return true;
+}
+
 void TPartitionWriterCacheActor::RegisterPartitionWriter(const TString& sessionId, const TString& txId,
                                                          const TActorContext& ctx)
 {
@@ -69,7 +84,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvTxWriteReque
 
     if (auto* writer = GetPartitionWriter(event.SessionId, event.TxId, ctx); writer) {
         if (PendingWriteAccepted.Expected == Max<ui64>()) {
-            Y_ABORT_UNLESS(PendingWriteResponse.Expected == Max<ui64>());
+            AFL_ENSURE(PendingWriteResponse.Expected == Max<ui64>());
 
             PendingWriteAccepted.Expected = event.Request->GetCookie();
             PendingWriteResponse.Expected = event.Request->GetCookie();
@@ -102,7 +117,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvInitResult::
 
     auto key = std::make_pair(result.SessionId, result.TxId);
     auto p = Writers.find(key);
-    Y_ABORT_UNLESS(p != Writers.end());
+    AFL_ENSURE(p != Writers.end());
 
     if (result.IsSuccess()) {
         p->second->OnEvInitResult(ev);
@@ -123,7 +138,7 @@ void TPartitionWriterCacheActor::TryForwardToOwner(TEvent* event, TEventQueue<TE
                                                    ui64 cookie,
                                                    const TActorContext& ctx)
 {
-    Y_ABORT_UNLESS(queue.Expected != Max<ui64>());
+    AFL_ENSURE(queue.Expected != Max<ui64>());
 
     if (queue.Expected == cookie) {
         ctx.Send(Owner, event);
@@ -147,7 +162,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteAccepte
 
     auto key = std::make_pair(result.SessionId, result.TxId);
     auto p = Writers.find(key);
-    Y_ABORT_UNLESS(p != Writers.end());
+    AFL_ENSURE(p != Writers.end());
 
     if (result.Cookie == p->second->SentRequests.front().Cookie) {
         p->second->OnWriteAccepted(result, ctx);
@@ -170,7 +185,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteRespons
 
     auto key = std::make_pair(result.SessionId, result.TxId);
     auto p = Writers.find(key);
-    Y_ABORT_UNLESS(p != Writers.end());
+    AFL_ENSURE(p != Writers.end());
 
     if (result.IsSuccess()) {
         ui64 cookie = result.Record.GetPartitionResponse().GetCookie();
@@ -227,14 +242,14 @@ auto TPartitionWriterCacheActor::GetPartitionWriter(const TString& sessionId, co
     RegisterPartitionWriter(sessionId, txId, ctx);
 
     p = Writers.find(key);
-    Y_ABORT_UNLESS(p != Writers.end());
+    AFL_ENSURE(p != Writers.end());
 
     return p->second.get();
 }
 
 bool TPartitionWriterCacheActor::TryDeleteOldestWriter(const TActorContext& ctx)
 {
-    Y_ABORT_UNLESS(!Writers.empty());
+    AFL_ENSURE(!Writers.empty());
 
     auto minLastActivity = TInstant::Max();
     auto oldest = Writers.end();

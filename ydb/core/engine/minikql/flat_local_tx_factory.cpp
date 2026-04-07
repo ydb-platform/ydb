@@ -14,7 +14,8 @@ TAutoPtr<ITransaction> TMiniKQLFactory::Make(TEvTablet::TEvLocalMKQL::TPtr &ev)
 {
     TLocalMiniKQLProgram program(*ev->Get());
 
-    return new TFlatLocalMiniKQL(ev->Sender, program, this);
+    auto userSID = ev->Get()->Record.GetUserSID();
+    return new TFlatLocalMiniKQL(ev->Sender, program, this, userSID);
 }
 
 TAutoPtr<ITransaction> TMiniKQLFactory::Make(TEvTablet::TEvLocalSchemeTx::TPtr &ev)

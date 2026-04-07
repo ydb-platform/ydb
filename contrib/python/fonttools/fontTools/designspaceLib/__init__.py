@@ -878,16 +878,19 @@ def tagForAxisName(name):
 
 
 class AbstractAxisDescriptor(SimpleDescriptor):
+    name: str | None
+    map: list[tuple[float, float]]
+
     flavor = "axis"
 
     def __init__(
         self,
         *,
         tag=None,
-        name=None,
+        name: str | None = None,
         labelNames=None,
         hidden=False,
-        map=None,
+        map: list[tuple[float, float]] | None = None,
         axisOrdering=None,
         axisLabels=None,
     ):
@@ -977,13 +980,13 @@ class AxisDescriptor(AbstractAxisDescriptor):
         self,
         *,
         tag=None,
-        name=None,
+        name: str | None = None,
         labelNames=None,
         minimum=None,
         default=None,
         maximum=None,
         hidden=False,
-        map=None,
+        map: list[tuple[float, float]] | None = None,
         axisOrdering=None,
         axisLabels=None,
     ):
@@ -1084,12 +1087,12 @@ class DiscreteAxisDescriptor(AbstractAxisDescriptor):
         self,
         *,
         tag=None,
-        name=None,
+        name: str | None = None,
         labelNames=None,
         values=None,
         default=None,
         hidden=False,
-        map=None,
+        map: list[tuple[float, float]] | None = None,
         axisOrdering=None,
         axisLabels=None,
     ):
@@ -1559,7 +1562,6 @@ class BaseDocWriter(object):
         return ("%f" % num).rstrip("0").rstrip(".")
 
     def _addRule(self, ruleObject):
-        # if none of the conditions have minimum or maximum values, do not add the rule.
         ruleElement = ET.Element("rule")
         if ruleObject.name is not None:
             ruleElement.attrib["name"] = ruleObject.name
@@ -1580,8 +1582,9 @@ class BaseDocWriter(object):
                         cond.get("maximum")
                     )
                 conditionsetElement.append(conditionElement)
-            if len(conditionsetElement):
-                ruleElement.append(conditionsetElement)
+            # Serialize the conditionset even if it is empty, as this is the
+            # canonical way of defining a rule that is always true.
+            ruleElement.append(conditionsetElement)
         for sub in ruleObject.subs:
             subElement = ET.Element("sub")
             subElement.attrib["name"] = sub[0]

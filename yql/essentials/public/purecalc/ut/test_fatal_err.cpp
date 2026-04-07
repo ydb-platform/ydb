@@ -16,7 +16,7 @@ Y_UNIT_TEST(TestFailType) {
         factory->MakePullListProgram(
             TProtobufInputSpec<NPureCalcProto::TStringMessage>(),
             TProtobufOutputSpec<NPureCalcProto::TStringMessage>(),
-            "pragma warning(\"disable\",\"4510\");select unwrap(cast(Yql::FailMe(AsAtom('type')) as Utf8)) as X;",
+            R"(pragma warning("disable","4510");select unwrap(cast(Yql::FailMe(AsAtom('type')) as Utf8)) as X;)",
             ETranslationMode::SQL);
         UNIT_FAIL("Exception is expected");
     } catch (const TCompileError& e) {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
@@ -44,12 +45,16 @@ public:
     }
 
     bool OnUnhandledException(const std::exception& exc) override {
-        DoLogUnhandledException(Service, NPQ_LOG_PREFIX, exc);
+        if (AppData()->FeatureFlags.GetEnableTabletRestartOnUnhandledExceptions()) {
+            DoLogUnhandledException(Service, NPQ_LOG_PREFIX, exc);
 
-        NPrivate::IncrementUnhandledExceptionCounter(this->ActorContext());
-        this->PassAway();
+            NPrivate::IncrementUnhandledExceptionCounter(this->ActorContext());
+            this->PassAway();
 
-        return true;
+            return true;
+        }
+
+        return false;
     }
 
     TStringBuilder LogBuilder() const {
@@ -83,10 +88,13 @@ public:
     }
 
     bool OnUnhandledException(const std::exception& exc) override  {
+        RestartTablet();
+        return TBase::OnUnhandledException(exc);
+    }
+
+    void RestartTablet() {
         TDerived& self = static_cast<TDerived&>(*this);
         self.Send(TabletActorId, new NActors::TEvents::TEvPoison());
-
-        return TBase::OnUnhandledException(exc);
     }
 
     TStringBuilder LogBuilder() const {

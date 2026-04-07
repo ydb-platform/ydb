@@ -103,7 +103,7 @@ Type* GetSourcePosType(LLVMContext &context);
 class DISubprogramAnnotator;
 
 struct TCodegenContext {
-    TCodegenContext(NYql::NCodegen::ICodegen& codegen) : Codegen(codegen) {}
+    explicit TCodegenContext(NYql::NCodegen::ICodegen& codegen) : Codegen(codegen) {}
 
     NYql::NCodegen::ICodegen& Codegen;
     Function* Func = nullptr;
@@ -180,7 +180,28 @@ public:
 
 Value* CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Type* returnType, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block);
 
+Value* CallBoxedValueFetch(Value* value, const TCodegenContext& ctx, BasicBlock*& block, Value* outputPtr);
+
+Value* CallBoxedValueNext(Value* value, const TCodegenContext& ctx, BasicBlock*& block, Value* outputPtr);
+
+// Helper: creates ref via codegenItem, calls elementGetter(itemPtr), invalidates, returns {elementGetter result, itemPtr}.
+std::pair<Value*, Value*> RefValueWithCallResult(ICodegeneratorExternalNode* codegenItem, const TCodegenContext& ctx, BasicBlock*& block, std::function<Value*(Value* itemPtr)> elementGetter);
+
+Value* CallBoxedValueWideFetch(Value* value, const TCodegenContext& ctx, BasicBlock*& block, Value* outputPtr, ui32 width);
+
+Value* CallBoxedValueNextPair(Value* value, const TCodegenContext& ctx, BasicBlock*& block, Value* keyPtr, Value* payPtr);
+
 template<NUdf::TBoxedValueAccessor::EMethod Method>
+concept IsMethodAllowedDirectVirtualCall = (
+    Method != NUdf::TBoxedValueAccessor::EMethod::Fetch &&
+    Method != NUdf::TBoxedValueAccessor::EMethod::Next &&
+    Method != NUdf::TBoxedValueAccessor::EMethod::NextPair &&
+    Method != NUdf::TBoxedValueAccessor::EMethod::WideFetch &&
+    Method != NUdf::TBoxedValueAccessor::EMethod::Load2
+);
+
+template<NUdf::TBoxedValueAccessor::EMethod Method>
+    requires IsMethodAllowedDirectVirtualCall<Method>
 Value* CallBoxedValueVirtualMethod(Type* returnType, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block) {
     return CallBoxedValueVirtualMethodImpl(NUdf::TBoxedValueAccessor::GetMethodPtr<Method>(), returnType, value, codegen, block);
 }
@@ -188,6 +209,7 @@ Value* CallBoxedValueVirtualMethod(Type* returnType, Value* value, NYql::NCodege
 void CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Value* output, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block);
 
 template<NUdf::TBoxedValueAccessor::EMethod Method>
+    requires IsMethodAllowedDirectVirtualCall<Method>
 void CallBoxedValueVirtualMethod(Value* output, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block) {
     CallBoxedValueVirtualMethodImpl(NUdf::TBoxedValueAccessor::GetMethodPtr<Method>(), output, value, codegen, block);
 }
@@ -195,6 +217,7 @@ void CallBoxedValueVirtualMethod(Value* output, Value* value, NYql::NCodegen::IC
 void CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Value* output, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block, Value* argument);
 
 template<NUdf::TBoxedValueAccessor::EMethod Method>
+    requires IsMethodAllowedDirectVirtualCall<Method>
 void CallBoxedValueVirtualMethod(Value* output, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block, Value* argument) {
     CallBoxedValueVirtualMethodImpl(NUdf::TBoxedValueAccessor::GetMethodPtr<Method>(), output, value, codegen, block, argument);
 }
@@ -202,6 +225,7 @@ void CallBoxedValueVirtualMethod(Value* output, Value* value, NYql::NCodegen::IC
 Value* CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Type* returnType, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block, Value* argument);
 
 template<NUdf::TBoxedValueAccessor::EMethod Method>
+    requires IsMethodAllowedDirectVirtualCall<Method>
 Value* CallBoxedValueVirtualMethod(Type* returnType, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block, Value* argument) {
     return CallBoxedValueVirtualMethodImpl(NUdf::TBoxedValueAccessor::GetMethodPtr<Method>(), returnType, value, codegen, block, argument);
 }
@@ -209,6 +233,7 @@ Value* CallBoxedValueVirtualMethod(Type* returnType, Value* value, NYql::NCodege
 void CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Value* output, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block, Value* arg1, Value* arg2);
 
 template<NUdf::TBoxedValueAccessor::EMethod Method>
+    requires IsMethodAllowedDirectVirtualCall<Method>
 void CallBoxedValueVirtualMethod(Value* output, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block, Value* arg1, Value* arg2) {
     CallBoxedValueVirtualMethodImpl(NUdf::TBoxedValueAccessor::GetMethodPtr<Method>(), output, value, codegen, block, arg1, arg2);
 }
@@ -216,22 +241,34 @@ void CallBoxedValueVirtualMethod(Value* output, Value* value, NYql::NCodegen::IC
 Value* CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Type* returnType, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block, Value* arg1, Value* arg2);
 
 template<NUdf::TBoxedValueAccessor::EMethod Method>
+    requires IsMethodAllowedDirectVirtualCall<Method>
 Value* CallBoxedValueVirtualMethod(Type* returnType, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block, Value* arg1, Value* arg2) {
     return CallBoxedValueVirtualMethodImpl(NUdf::TBoxedValueAccessor::GetMethodPtr<Method>(), returnType, value, codegen, block, arg1, arg2);
 }
 
-Value* CallUnaryUnboxedValueFunctionImpl(uintptr_t methodPtr, Type* result, Value* arg, NYql::NCodegen::ICodegen& codegen, BasicBlock* block);
+template <size_t Argc>
+class CallArgs {
+    std::array<Value*, Argc> args;
+
+public:
+    template <typename... Args>
+        requires (sizeof...(Args) == Argc)
+    constexpr CallArgs(Args... args) : args{args...} {}
+
+    template <typename... Args>
+        requires (sizeof...(Args) != Argc)
+    CallArgs(Args...) = delete;
+
+    auto begin() const { return std::begin(args); }
+    auto end()   const { return std::end(args); }
+};
+
+Value* EmitFunctionCallImpl(uintptr_t methodPtr, Type* result, std::vector<Value*>&& args, const TCodegenContext& ctx, BasicBlock* block);
 
 template<auto Method>
-Value* CallUnaryUnboxedValueFunction(Type* result, Value* arg, NYql::NCodegen::ICodegen& codegen, BasicBlock* block) {
-    return CallUnaryUnboxedValueFunctionImpl(GetMethodPtr<Method>(), result, arg, codegen, block);
-}
-
-Value* CallBinaryUnboxedValueFunctionImpl(uintptr_t methodPtr, Type* result, Value* left, Value* right, NYql::NCodegen::ICodegen& codegen, BasicBlock* block);
-
-template<auto Method>
-Value* CallBinaryUnboxedValueFunction(Type* result, Value* left, Value* right, NYql::NCodegen::ICodegen& codegen, BasicBlock* block) {
-    return CallBinaryUnboxedValueFunctionImpl(GetMethodPtr<Method>(), result, left, right, codegen, block);
+Value* EmitFunctionCall(Type* result, CallArgs<arity_v<decltype(Method)>> args, const TCodegenContext& ctx, BasicBlock* block) {
+    std::vector<Value*> argVec(std::begin(args), std::end(args));
+    return EmitFunctionCallImpl(GetMethodPtr<Method>(), result, std::move(argVec), ctx, block);
 }
 
 void AddRefBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block);
@@ -791,6 +828,32 @@ protected:
     TStateType State;
 };
 
+template <typename TState = NUdf::TUnboxedValue>
+class TCodegenStableStatefulIterator : public TComputationValue<TCodegenStableStatefulIterator<TState>> {
+public:
+    using TStateType = TState;
+    using TNextPtr = bool (*)(TComputationContext*, NUdf::TUnboxedValuePod, TStateType&, TStateType&, NUdf::TUnboxedValuePod&);
+
+    TCodegenStableStatefulIterator(TMemoryUsageInfo* memInfo, TNextPtr next, TComputationContext* ctx, NUdf::TUnboxedValue&& iterator, const TStateType& init = TStateType())
+        : TComputationValue<TCodegenStableStatefulIterator>(memInfo)
+        , Ctx(ctx)
+        , NextFunc(next)
+        , Iterator(std::move(iterator))
+        , Init(init)
+    {}
+
+protected:
+    bool Next(NUdf::TUnboxedValue& value) override {
+        return NextFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Iterator), Init, State, value);
+    }
+
+    TComputationContext* const Ctx;
+    const TNextPtr NextFunc;
+    const NUdf::TUnboxedValue Iterator;
+    TStateType Init;
+    TStateType State;
+};
+
 class TCustomListCodegenValue : public TCustomListValue {
 public:
     using TIterator = TCodegenIterator;
@@ -875,7 +938,7 @@ private:
 
 class TCodegenIteratorOne : public TComputationValue<TCodegenIteratorOne> {
 public:
-    using TNextPtr = bool (*)(TComputationContext*, NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod&);
+    using TNextPtr = bool (*)(TComputationContext*, NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod&, NUdf::TUnboxedValuePod&);
 
     TCodegenIteratorOne(TMemoryUsageInfo* memInfo, TNextPtr nextOne, TNextPtr nextTwo, TComputationContext* ctx, NUdf::TUnboxedValue&& iterator)
         : TComputationValue<TCodegenIteratorOne>(memInfo)
@@ -889,9 +952,9 @@ private:
     bool Next(NUdf::TUnboxedValue& value) override {
         if (FirstCall) {
             FirstCall = false;
-            return NextFuncOne(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Iterator), value);
+            return NextFuncOne(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Iterator), State, value);
         } else {
-            return NextFuncTwo(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Iterator), value);
+            return NextFuncTwo(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Iterator), State, value);
         }
     }
 
@@ -900,6 +963,7 @@ private:
     TComputationContext* const Ctx;
     const NUdf::TUnboxedValue Iterator;
     bool FirstCall = true;
+    NUdf::TUnboxedValue State;
 };
 
 class TListCodegenValueOne : public TComputationValue<TListCodegenValueOne> {

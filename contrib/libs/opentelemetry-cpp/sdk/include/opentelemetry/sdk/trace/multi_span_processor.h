@@ -40,6 +40,11 @@ public:
     }
   }
 
+  MultiSpanProcessor(const MultiSpanProcessor &)            = delete;
+  MultiSpanProcessor(MultiSpanProcessor &&)                 = delete;
+  MultiSpanProcessor &operator=(const MultiSpanProcessor &) = delete;
+  MultiSpanProcessor &operator=(MultiSpanProcessor &&)      = delete;
+
   void AddProcessor(std::unique_ptr<SpanProcessor> &&processor)
   {
     // Add preocessor to end of the list.
@@ -73,8 +78,8 @@ public:
     return recordable;
   }
 
-  virtual void OnStart(Recordable &span,
-                       const opentelemetry::trace::SpanContext &parent_context) noexcept override
+  void OnStart(Recordable &span,
+               const opentelemetry::trace::SpanContext &parent_context) noexcept override
   {
     auto multi_recordable = static_cast<MultiRecordable *>(&span);
     ProcessorNode *node   = head_;
@@ -90,7 +95,7 @@ public:
     }
   }
 
-  virtual void OnEnd(std::unique_ptr<Recordable> &&span) noexcept override
+  void OnEnd(std::unique_ptr<Recordable> &&span) noexcept override
   {
     auto multi_recordable = static_cast<MultiRecordable *>(span.release());
     ProcessorNode *node   = head_;

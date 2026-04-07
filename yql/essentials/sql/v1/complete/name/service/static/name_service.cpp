@@ -52,6 +52,8 @@ void NameIndexScan(
 class IRankingNameService: public INameService {
 private:
     auto Ranking(const TNameRequest& request) const {
+        // TODO(YQL-20095): Explore real problem to fix this.
+        // NOLINTNEXTLINE(bugprone-exception-escape)
         return [request, this](auto f) {
             TNameResponse response = f.ExtractValue();
             Ranking_->CropToSortedPrefix(

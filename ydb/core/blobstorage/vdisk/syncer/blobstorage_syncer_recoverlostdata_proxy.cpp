@@ -57,13 +57,13 @@ namespace NKikimr {
         void CreateAndRunTask(const TActorContext &ctx) {
             TActorId sstWriterId;
 #ifdef USE_NEW_FULL_SYNC_SCHEME
-            auto sstWriterActor = std::make_unique<TIndexSstWriterActor>(
+            auto* sstWriterActor = new TIndexSstWriterActor(
                 SyncerCtx->VCtx,
                 SyncerCtx->PDiskCtx,
                 SyncerCtx->LevelIndexLogoBlob,
                 SyncerCtx->LevelIndexBlock,
                 SyncerCtx->LevelIndexBarrier);
-            sstWriterId = ctx.Register(sstWriterActor.get());
+            sstWriterId = ctx.Register(sstWriterActor);
             ActiveActors.Insert(sstWriterId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
 #endif
             // create task

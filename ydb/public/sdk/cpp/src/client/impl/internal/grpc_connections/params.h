@@ -25,10 +25,12 @@ public:
     virtual EDiscoveryMode GetDiscoveryMode() const = 0;
     virtual size_t GetMaxQueuedRequests() const = 0;
     virtual NYdbGrpc::TTcpKeepAliveSettings GetTcpKeepAliveSettings() const = 0;
+    virtual bool GetTcpNoDelay() const = 0;
     virtual bool GetDrinOnDtors() const = 0;
     virtual TBalancingPolicy::TImpl GetBalancingSettings() const = 0;
     virtual TDuration GetGRpcKeepAliveTimeout() const = 0;
     virtual bool GetGRpcKeepAlivePermitWithoutCalls() const = 0;
+    virtual std::string GetGRpcLoadBalancingPolicy() const = 0;
     virtual TDuration GetSocketIdleTimeout() const = 0;
     virtual const TLog& GetLog() const = 0;
     virtual uint64_t GetMemoryQuota() const = 0;

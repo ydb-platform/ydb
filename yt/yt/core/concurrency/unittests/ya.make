@@ -42,6 +42,12 @@ SRCS(
     two_level_fair_share_thread_pool_ut.cpp
 )
 
+IF (OS_LINUX)
+    SRCS(
+        fair_throttler_ipc_ut.cpp
+    )
+ENDIF()
+
 INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 
 PEERDIR(

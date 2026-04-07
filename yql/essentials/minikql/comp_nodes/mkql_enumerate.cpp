@@ -131,14 +131,10 @@ public:
         const auto start = GetterFor<ui64>(startv, context, block);
         const auto step = GetterFor<ui64>(stepv, context, block);
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TEnumerateWrapper::WrapList>());
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
 
-        const auto signature = FunctionType::get(list->getType(), {self->getType(), ctx.Ctx->getType(), list->getType(), start->getType(), step->getType()}, false);
-        const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
-        const auto output = CallInst::Create(signature, creator, {self, ctx.Ctx, list, start, step}, "output", block);
-        return output;
+        return EmitFunctionCall<&TEnumerateWrapper::WrapList>(list->getType(), {self, ctx.Ctx, list, start, step}, ctx, block);
     }
 #endif
 private:

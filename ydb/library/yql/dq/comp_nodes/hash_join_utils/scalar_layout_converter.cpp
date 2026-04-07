@@ -16,7 +16,7 @@
 #include <util/generic/vector.h>
 #include <util/stream/str.h>
 #include <util/system/unaligned_mem.h>
-
+#include "better_mkql_ensure.h"
 namespace NKikimr::NMiniKQL {
 
 namespace {

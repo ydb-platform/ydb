@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package NKikimrBlobStorage.NDDisk.NInternal;
+
+// SignatureDDiskChunkMap; when it is an entrypoint, it contains a full snapshot; otherwise just increments
+
+message TChunkMapLogRecord {
+    message TTabletRecord {
+        message TChunkRef {
+            uint64 VChunkIndex = 1; // in tablet's namespace
+            uint32 ChunkIdx = 2; // in local PDisk coordinates
+        }
+
+        uint64 TabletId = 1;
+        repeated TChunkRef ChunkRefs = 2;
+    }
+
+    message TSnapshot {
+        repeated TTabletRecord TabletRecords = 1;
+    }
+
+    message TIncrement {
+        uint64 TabletId = 1;
+        uint64 VChunkIndex = 2;
+        uint32 ChunkIdx = 3;
+    }
+
+    TSnapshot Snapshot = 1;
+    TIncrement Increment = 2;
+}
+
+// SignaturePersistentBufferChunkMap; always contains full snapshot
+
+message TPersistentBufferChunkMapLogRecord {
+    repeated uint32 ChunkIdxs = 1;
+}

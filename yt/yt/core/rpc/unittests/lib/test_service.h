@@ -74,7 +74,8 @@ ITestServicePtr CreateTestService(
     IInvokerPtr invoker,
     bool secure,
     TTestCreateChannelCallback createChannel,
-    IMemoryUsageTrackerPtr memoryUsageTracker);
+    IMemoryUsageTrackerPtr memoryUsageTracker,
+    bool useAuthenticator);
 
 ////////////////////////////////////////////////////////////////////////////////
 

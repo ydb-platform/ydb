@@ -18,7 +18,6 @@ class TestBatchOperations(RollingUpgradeAndDowngradeFixture):
             pytest.skip("Only available since 25-1, because of enable_batch_updates flag")
 
         yield from self.setup_cluster(table_service_config={
-            "enable_oltp_sink": True,
             "enable_batch_updates": True,
         })
 

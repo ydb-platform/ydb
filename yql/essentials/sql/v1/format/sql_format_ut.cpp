@@ -1,14 +1,18 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include "sql_format.h"
+
 #include <yql/essentials/sql/v1/lexer/antlr3/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr3_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr3/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr3_ansi/proto_parser.h>
+#include <yql/essentials/utils/string/trim_indent.h>
 
 #include <google/protobuf/arena.h>
 #include <util/string/subst.h>
 #include <util/string/join.h>
+
+using NYql::TrimIndent;
 
 namespace {
 

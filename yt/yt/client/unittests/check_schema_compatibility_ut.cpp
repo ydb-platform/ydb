@@ -5,17 +5,23 @@
 #include <yt/yt/client/table_client/schema.h>
 #include <yt/yt/client/table_client/check_schema_compatibility.h>
 
-namespace NYT::NTableClient {
+#include <yt/yt/library/logical_type_shortcuts/logical_type_shortcuts.h>
 
-static void PrintTo(ESchemaCompatibility typeCompatibility, std::ostream* stream)
+namespace NYT::NTableClient {
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+using namespace NLogicalTypeShortcuts;
+using namespace NYson;
+using namespace NYTree;
+
+////////////////////////////////////////////////////////////////////////////////
+
+[[maybe_unused]] void PrintTo(ESchemaCompatibility typeCompatibility, std::ostream* stream)
 {
     (*stream) << "ESchemaCompatibility::" << ToString(typeCompatibility).c_str();
 }
-
-namespace {
-
-using namespace NYson;
-using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -96,10 +102,10 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
         ESchemaCompatibility::FullyCompatible,
         CheckTableSchemaCompatibility(
             TTableSchema({
-                TColumnSchema("foo", SimpleLogicalType(ESimpleLogicalValueType::Int64)),
+                TColumnSchema("foo", Int64()),
             }),
             TTableSchema({
-                TColumnSchema("foo", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64))),
+                TColumnSchema("foo", Optional(Int64())),
             }),
         {.IgnoreSortOrder = true}).first);
 
@@ -107,10 +113,10 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
         ESchemaCompatibility::RequireValidation,
         CheckTableSchemaCompatibility(
             TTableSchema({
-                TColumnSchema("foo", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64))),
+                TColumnSchema("foo", Optional(Int64())),
             }),
             TTableSchema({
-                TColumnSchema("foo", SimpleLogicalType(ESimpleLogicalValueType::Int64)),
+                TColumnSchema("foo", Int64()),
             }),
             {.IgnoreSortOrder = true}).first);
 
@@ -120,7 +126,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
         CheckTableSchemaCompatibility(
             TTableSchema({}, /*strict*/ true),
             TTableSchema({
-                TColumnSchema("foo", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64))),
+                TColumnSchema("foo", Optional(Int64())),
             }),
         {.IgnoreSortOrder = true}).first);
 
@@ -130,7 +136,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
         CheckTableSchemaCompatibility(
             TTableSchema({}, /*strict*/ false),
             TTableSchema({
-                TColumnSchema("foo", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int64))),
+                TColumnSchema("foo", Optional(Int64())),
             }),
             {.IgnoreSortOrder = true}).first);
 
@@ -148,7 +154,7 @@ TEST_F(TTableSchemaCompatibilityTest, CheckTableSchemaCompatibilityTest)
         ESchemaCompatibility::Incompatible,
         CheckTableSchemaCompatibility(
             TTableSchema({
-                TColumnSchema("a", ListLogicalType(SimpleLogicalType((ESimpleLogicalValueType::Int64)))),
+                TColumnSchema("a", List(Int64())),
                 TColumnSchema("b", ESimpleLogicalValueType::Int64),
             }, /*strict*/ true),
             TTableSchema({

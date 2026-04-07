@@ -1,14 +1,15 @@
 #include "service_counters.h"
 
-namespace NYql {
-namespace NCommon {
+#include <utility>
+
+namespace NYql::NCommon {
 
 TServiceCounters::TServiceCounters(
-    const ::NMonitoring::TDynamicCounterPtr& rootCounters,
-    const ::NMonitoring::TDynamicCounterPtr& publicCounters,
+    ::NMonitoring::TDynamicCounterPtr rootCounters,
+    ::NMonitoring::TDynamicCounterPtr publicCounters,
     const TString& subsystemName)
-    : RootCounters(rootCounters)
-    , PublicCounters(publicCounters)
+    : RootCounters(std::move(rootCounters))
+    , PublicCounters(std::move(publicCounters))
     , Counters(subsystemName ? RootCounters->GetSubgroup("subsystem", subsystemName) : RootCounters)
 {
 }
@@ -44,5 +45,4 @@ void TServiceCounters::SetUptimePublicAndServiceCounter(i64 val) const {
     UptimeRootCounter->Set(val);
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

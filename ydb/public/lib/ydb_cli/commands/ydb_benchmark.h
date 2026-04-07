@@ -1,5 +1,6 @@
 #pragma once
 
+#include "tx_mode.h"
 #include "ydb_workload.h"
 
 namespace NYdb::NConsoleClient {
@@ -23,12 +24,13 @@ private:
 
     int RunBench(NYdbWorkload::IWorkloadQueryGenerator& workloadGen);
     void SavePlans(const BenchmarkUtils::TQueryBenchmarkResult& res, TStringBuf queryName, const TStringBuf name) const;
-    void PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out, const std::string& expected) const;
+    void PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out) const;
     BenchmarkUtils::TQueryBenchmarkSettings GetBenchmarkSettings(bool withProgress) const;
 
 private:
     class TIterationExecution;
     TString OutFilePath;
+    ETxMode TxMode = ETxMode::SerializableRW;
     ui32 IterationsCount;
     TString JsonReportFileName;
     TString CsvReportFileName;

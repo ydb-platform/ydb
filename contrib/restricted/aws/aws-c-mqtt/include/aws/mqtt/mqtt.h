@@ -111,6 +111,24 @@ enum aws_mqtt_log_subject {
 /** Function called on cleanup of a userdata. */
 typedef void(aws_mqtt_userdata_cleanup_fn)(void *userdata);
 
+/**
+ * Metadata entry for IoT SDK metrics
+ */
+struct aws_mqtt_metadata_entry {
+    struct aws_byte_cursor key;
+    struct aws_byte_cursor value;
+};
+
+/**
+ * IoT SDK metrics configuration structure
+ */
+struct aws_mqtt_iot_metrics {
+    /**
+     * Library name string (SDK attribute)
+     */
+    struct aws_byte_cursor library_name;
+};
+
 AWS_EXTERN_C_BEGIN
 
 AWS_MQTT_API

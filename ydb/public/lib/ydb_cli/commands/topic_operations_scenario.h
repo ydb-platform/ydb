@@ -48,6 +48,8 @@ public:
 
     ui32 GetTopicMaxPartitionCount() const;
 
+    void ConfigMetadataMonitoringOptions(TClientCommand::TConfig& config);
+
     TDuration TotalSec;
     TDuration WindowSec;
     TDuration WarmupSec;
@@ -87,7 +89,15 @@ public:
     ui32 KeyCount = 0;
     bool CleanupPolicyCompact = false;
     std::optional<size_t> ConsumerMaxMemoryUsageBytes;
+    size_t PartitionMaxInflightBytes = 0; // zero means no limit
+    bool DirectRead = false;
     std::optional<size_t> ProducerMaxMemoryUsageBytes;
+    size_t ProducerKeysCount = 0;
+    bool KeyedWrites = false;
+    size_t ConfigConsumerCount = 0;
+    bool NeedDescribeTopic = false;
+    TString DescribeConsumerName;
+    TMaybe<ui32> PartitionsPerTablet;
 
 protected:
     void CreateTopic(const TString& database,
@@ -114,6 +124,10 @@ protected:
                               ui32 partitionCount,
                               ui32 partitionSeed,
                               const std::vector<TString>& generatedMessages,
+                              const TString& database);
+    void StartConfiguratorThread(std::vector<std::future<void>>& threads,
+                                 const TString& database);
+    void StartDescriberThread(std::vector<std::future<void>>& threads,
                               const TString& database);
     void JoinThreads(const std::vector<std::future<void>>& threads);
 

@@ -86,7 +86,7 @@ namespace {
 
 void EnsureInitialized()
 {
-    [[unlikely]] if (!GlobalToken.IsInitialized()) {
+    if (!GlobalToken.IsInitialized()) [[unlikely]] {
         *GlobalToken = TNullToken{};
     }
 }

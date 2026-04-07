@@ -36,12 +36,14 @@ RECURSE(
     kqp
     load_test
     local_pgwire
+    local_proxy
     log_backend
     metering
     mind
     mon
     mon_alloc
     memory_controller
+    nbs
     node_whiteboard
     persqueue
     pgproxy

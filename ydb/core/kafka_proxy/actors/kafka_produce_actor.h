@@ -195,6 +195,8 @@ private:
     std::pair<TKafkaProduceActor::ETopicStatus, TActorId> GetOrCreateNonTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TActorContext& ctx);
     std::pair<TKafkaProduceActor::ETopicStatus, TActorId> GetOrCreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TString& transactionalId, const TActorContext& ctx);
     std::pair<TKafkaProduceActor::ETopicStatus, TActorId> CreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TString& transactionalId, const TActorContext& ctx);
+
+    bool ProcessingRequests = false;
 };
 
 }

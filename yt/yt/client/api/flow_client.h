@@ -138,7 +138,7 @@ struct IFlowClient
 
     virtual TFuture<TFlowExecuteResult> FlowExecute(
         const NYPath::TYPath& pipelinePath,
-        const TString& command,
+        const std::string& command,
         const NYson::TYsonString& argument,
         const TFlowExecuteOptions& options = {}) = 0;
 };

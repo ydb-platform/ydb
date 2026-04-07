@@ -118,7 +118,7 @@ class YAMLError(Exception):
 
 
 class MarkedYAMLError(YAMLError):
-    def __init__(
+    def __init__(  # NOQA
         self,
         context: Any = None,
         context_mark: Any = None,
@@ -174,7 +174,7 @@ class YAMLWarning(Warning):
 
 
 class MarkedYAMLWarning(YAMLWarning):
-    def __init__(
+    def __init__(  # NOQA
         self,
         context: Any = None,
         context_mark: Any = None,
@@ -246,7 +246,7 @@ warnings.simplefilter('once', UnsafeLoaderWarning)
 
 
 class MantissaNoDotYAML1_1Warning(YAMLWarning):
-    def __init__(self, node: Any, flt_str: Any) -> None:
+    def __init__(self, node: Any, flt_str: Any) -> None:  # NOQA
         self.node = node
         self.flt = flt_str
 
@@ -276,7 +276,7 @@ class YAMLFutureWarning(Warning):
 
 
 class MarkedYAMLFutureWarning(YAMLFutureWarning):
-    def __init__(
+    def __init__(  # NOQA
         self,
         context: Any = None,
         context_mark: Any = None,

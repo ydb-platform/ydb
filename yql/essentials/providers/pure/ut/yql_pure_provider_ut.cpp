@@ -156,12 +156,12 @@ void Sql1RowImpl(const TString& query) {
 }
 
 Y_UNIT_TEST(Sql1Row_LLVM_On) {
-    const auto s = "pragma config.flags(\"LLVM\",\"--dump-stats\");select 1 as x";
+    const auto s = R"(pragma config.flags("LLVM","--dump-stats");select 1 as x)";
     Sql1RowImpl(s);
 }
 
 Y_UNIT_TEST(Sql1Row_LLVM_Off) {
-    const auto s = "pragma config.flags(\"LLVM\",\"OFF\");select 1 as x";
+    const auto s = R"(pragma config.flags("LLVM","OFF");select 1 as x)";
     Sql1RowImpl(s);
 }
 

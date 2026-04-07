@@ -1,0 +1,151 @@
+{
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "name" = "wr_returned_date_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "wr_returned_time_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "wr_item_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "wr_refunded_customer_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "wr_refunded_cdemo_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "wr_refunded_hdemo_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "wr_refunded_addr_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "wr_returning_customer_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "wr_returning_cdemo_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "wr_returning_hdemo_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "wr_returning_addr_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "wr_web_page_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "wr_reason_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "wr_order_number";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "wr_return_quantity";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "wr_return_amt";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "wr_return_tax";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "wr_return_amt_inc_tax";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "wr_fee";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "wr_return_ship_cost";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "wr_refunded_cash";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "wr_reversed_charge";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "wr_account_credit";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "wr_net_loss";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+    ];
+}

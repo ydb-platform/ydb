@@ -39,7 +39,7 @@ public:
         std::optional<TInstant> lastSeenTime = {});
 
     TNodeDescriptor& operator=(const TNodeDescriptor& other) = default;
-    TNodeDescriptor& operator=(TNodeDescriptor&& other) = default;
+    TNodeDescriptor& operator=(TNodeDescriptor&& other) noexcept = default;
 
     bool IsNull() const;
 
@@ -87,8 +87,8 @@ const TNodeDescriptor& NullNodeDescriptor();
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator == (const TNodeDescriptor& lhs, const TNodeDescriptor& rhs);
-bool operator == (const TNodeDescriptor& lhs, const NProto::TNodeDescriptor& rhs);
+bool operator==(const TNodeDescriptor& lhs, const TNodeDescriptor& rhs);
+bool operator==(const TNodeDescriptor& lhs, const NProto::TNodeDescriptor& rhs);
 
 void FormatValue(TStringBuilderBase* builder, const TNodeDescriptor& descriptor, TStringBuf spec);
 

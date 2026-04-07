@@ -37,7 +37,7 @@ namespace NActors {
         }
         virtual ui32 Type() const = 0;
         virtual bool SerializeToArcadiaStream(TChunkSerializer*) const = 0;
-        virtual std::optional<TRope> SerializeToRope(NInterconnect::NRdma::IMemPool*) const {
+        virtual std::optional<TRope> SerializeToRope(IRcBufAllocator*) const {
             return std::nullopt;
         }
         virtual bool IsSerializable() const = 0;
@@ -141,6 +141,7 @@ namespace NActors {
             FlagGenerateUnsureUndelivered = 1 << 4,
             FlagExtendedFormat = 1 << 5,
             FlagDebugTrackReceive = 1 << 6,
+            FlagFailFastWhenDisconnected = 1 << 7,
         };
         using TEventFlags = ui32;
 

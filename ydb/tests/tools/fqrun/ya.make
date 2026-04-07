@@ -14,6 +14,7 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/lfalloc/alloc_profiler
     ydb/core/blob_depot
+    ydb/library/testlib/common
     ydb/library/yql/providers/pq/gateway/dummy
     ydb/tests/tools/fqrun/src
     ydb/tests/tools/kqprun/runlib

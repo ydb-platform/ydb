@@ -8,6 +8,7 @@
 #include <util/ysaveload.h>
 
 #include <functional>
+#include <utility>
 
 using namespace NKikimr;
 using namespace NUdf;
@@ -179,15 +180,15 @@ bool SkipElements(IBoxedValue& iter, ui64 skip) {
     return true;
 }
 
-typedef std::function<void(const TString& message)> TTerminateFunc;
+using TTerminateFunc = std::function<void(const TString& message)>;
 
 class TStreamMeta: public TThrRefBase {
 public:
-    typedef TBuffered<TUnbufferedFileInput> TStream;
-    typedef TIntrusivePtr<TStreamMeta> TPtr;
+    using TStream = TBuffered<TUnbufferedFileInput>;
+    using TPtr = TIntrusivePtr<TStreamMeta>;
 
-    TStreamMeta(TString filePath)
-        : FilePath_(filePath)
+    explicit TStreamMeta(TString filePath)
+        : FilePath_(std::move(filePath))
     {
         // work in greedy mode to catch error on creation
         Cached_ = DoCreateStream();
@@ -247,8 +248,8 @@ private:
     }
 
 public:
-    TEmptyIter(TTerminateFunc terminateFunc)
-        : TerminateFunc_(terminateFunc)
+    explicit TEmptyIter(TTerminateFunc terminateFunc)
+        : TerminateFunc_(std::move(terminateFunc))
     {
     }
 
@@ -260,11 +261,11 @@ template <class TUserType>
 class TLineByLineBoxedValueIterator: public TBoxedValue {
 public:
     TLineByLineBoxedValueIterator(TStreamMeta::TPtr metaPtr, std::unique_ptr<TStreamMeta::TStream>&& stream, const IValueBuilder& valueBuilder, TTerminateFunc terminateFunc)
-        : MetaPtr_(metaPtr)
+        : MetaPtr_(std::move(metaPtr))
         , ValueBuilder_(valueBuilder)
         , Stream_(std::move(stream))
         , Splitter_(*Stream_)
-        , TerminateFunc_(terminateFunc)
+        , TerminateFunc_(std::move(terminateFunc))
     {
     }
 
@@ -319,9 +320,9 @@ template <class TUserType>
 class TListByLineBoxedValue: public TBoxedValue {
 public:
     TListByLineBoxedValue(TStreamMeta::TPtr metaPtr, const IValueBuilder& valueBuilder, TTerminateFunc terminateFunc, ui64 skip = 0ULL, ui64 take = TAKE_UNLIM)
-        : MetaPtr_(metaPtr)
+        : MetaPtr_(std::move(metaPtr))
         , ValueBuilder_(valueBuilder)
-        , TerminateFunc_(terminateFunc)
+        , TerminateFunc_(std::move(terminateFunc))
         , Skip_(skip)
         , Take_(take)
     {
@@ -391,7 +392,7 @@ class TByLinesFunc: public TBoxedValue {
 private:
     TSourcePosition Pos_;
 
-    TByLinesFunc(TSourcePosition pos)
+    explicit TByLinesFunc(TSourcePosition pos)
         : Pos_(pos)
     {
     }

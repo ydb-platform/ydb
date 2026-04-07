@@ -9,6 +9,8 @@ ELSE()
         s3_wrapper.cpp
         s3_storage.cpp
         s3_storage_config.cpp
+        fs_storage.cpp
+        fs_storage_config.cpp
         abstract.cpp
         fake_storage.cpp
         fake_storage_config.cpp
@@ -18,6 +20,7 @@ ELSE()
     PEERDIR(
         contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3
         contrib/libs/curl
+        library/cpp/monlib/dynamic_counters
         ydb/library/actors/core
         ydb/core/base
         ydb/core/protos

@@ -23,6 +23,7 @@ public:
         : PortManager(portManager.GetOrElse(MakeSimpleShared<TPortManager>()))
         , Port(PortManager->GetPort(2134))
         , GrpcPort(PortManager->GetPort(2135))
+        , Endpoint("localhost:" + ToString(GrpcPort))
         , ServerSettings(settings)
         , GrpcServerOptions(NYdbGrpc::TServerOptions().SetHost("[::1]").SetPort(GrpcPort))
     {
@@ -44,6 +45,14 @@ public:
     {
     }
 
+    TTestServer(TTestServer&&) = default;
+    TTestServer& operator=(TTestServer&&) = default;
+
+    ~TTestServer() {
+        ShutdownGRpc();
+        ShutdownServer();
+    }
+
     void StartServer(bool doClientInit = true, TMaybe<TString> databaseName = Nothing()) {
         Log.SetFormatter([](ELogPriority priority, TStringBuf message) {
             return TStringBuilder() << TInstant::Now() << " " << priority << ": " << message << Endl;
@@ -53,6 +62,11 @@ public:
 
         CleverServer = MakeHolder<NKikimr::Tests::TServer>(ServerSettings);
         CleverServer->EnableGRpc(GrpcServerOptions);
+
+        auto driverConfig = NYdb::TDriverConfig()
+            .SetEndpoint(Endpoint)
+            .SetDatabase("/" + ServerSettings.DomainName);
+        Driver = MakeHolder<NYdb::TDriver>(driverConfig);
 
         Log << TLOG_INFO << "TTestServer started on Port " << Port << " GrpcPort " << GrpcPort;
 
@@ -64,7 +78,9 @@ public:
     }
 
     void ShutdownGRpc() {
-        CleverServer->ShutdownGRpc();
+        if (CleverServer) {
+            CleverServer->ShutdownGRpc();
+        }
     }
 
     void EnableGRpc() {
@@ -111,7 +127,7 @@ public:
     }
 
     const NYdb::TDriver& GetDriver() const {
-        return CleverServer->GetDriver();
+        return *Driver;
     }
 
     void KillTopicPqrbTablet(const TString& topicPath) {
@@ -154,6 +170,7 @@ public:
     TSimpleSharedPtr<TPortManager> PortManager;
     ui16 Port;
     ui16 GrpcPort;
+    TString Endpoint;
 
     THolder<NKikimr::Tests::TServer> CleverServer;
     NKikimr::Tests::TServerSettings ServerSettings;
@@ -166,6 +183,8 @@ public:
 
 
     static const TVector<NKikimrServices::EServiceKikimr> LOGGED_SERVICES;
+private:
+    THolder<NYdb::TDriver> Driver;
 };
 
 } // namespace NPersQueue

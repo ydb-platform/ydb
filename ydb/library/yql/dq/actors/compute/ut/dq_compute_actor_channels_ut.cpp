@@ -42,7 +42,7 @@ struct TActorSystem: NActors::TTestActorRuntimeBase
         AppendToLogSettings(
                 NKikimrServices::EServiceKikimr_MIN,
                 NKikimrServices::EServiceKikimr_MAX,
-                NKikimrServices::EServiceKikimr_Name<NLog::EComponent>
+                NKikimrServices::EServiceKikimr_Name<NActors::NLog::EComponent>
                 );
 
         if (TESTS_VERBOSE) {

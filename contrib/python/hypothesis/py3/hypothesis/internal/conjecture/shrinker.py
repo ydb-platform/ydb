@@ -490,6 +490,17 @@ class Shrinker:
             ):
                 continue
 
+            # Skip slices that are subsets of already-explained slices.
+            # If a larger slice can vary freely, so can its sub-slices.
+            # Note: (0, 0) is a special marker for the "together" comment that
+            # applies to the whole test, not a specific slice, so we exclude it.
+            if any(
+                s <= start and end <= e
+                for s, e in self.shrink_target.slice_comments
+                if (s, e) != (0, 0)
+            ):
+                continue
+
             # Run our experiments
             n_same_failures = 0
             note = "or any other generated value"
@@ -569,7 +580,10 @@ class Shrinker:
         if len(self.shrink_target.slice_comments) <= 1:
             return
         n_same_failures_together = 0
-        chunks_by_start_index = sorted(chunks.items())
+        # Only include slices that were actually added to slice_comments
+        chunks_by_start_index = sorted(
+            (k, v) for k, v in chunks.items() if k in self.shrink_target.slice_comments
+        )
         for _ in range(500):  # pragma: no branch
             # no-branch here because we don't coverage-test the abort-at-500 logic.
             new_choices: list[ChoiceT] = []
@@ -1130,7 +1144,7 @@ class Shrinker:
             # case of this function of preserving from the right instead of
             # preserving from the left. see test_can_shrink_variable_string_draws.
 
-            (index, attempt_choice_type, attempt_constraints, _attempt_forced) = (
+            index, attempt_choice_type, attempt_constraints, _attempt_forced = (
                 attempt.misaligned_at
             )
             node = self.nodes[index]
@@ -1277,7 +1291,7 @@ class Shrinker:
 
         # Because we run in a random order we will often find ourselves in the middle
         # of a region where we could run the node program. We thus start by moving
-        # left to the beginning of that region if possible in order to to start from
+        # left to the beginning of that region if possible in order to start from
         # the beginning of that region.
         def offset_left(k):
             return i - k * n

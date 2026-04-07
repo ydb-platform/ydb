@@ -22,7 +22,8 @@ from ydb.tests.library.stability.utils.remote_execution import execute_command
 
 
 class StressRunExecutor:
-    def __init__(self, ignore_stderr_content, event_process_mode):
+    def __init__(self, ignore_stderr_content, event_process_mode, database):
+        self.database = database
         self._ignore_stderr_content = ignore_stderr_content
         self.event_process_mode = event_process_mode
         self.run_counter_lock = threading.Lock()
@@ -43,6 +44,7 @@ class StressRunExecutor:
         - {thread_id} - thread ID (usually node host)
         - {run_id} - unique run ID
         - {timestamp} - run timestamp
+        - {database} - run database without leading '/'
         - {uuid} - short UUID
 
         Args:
@@ -58,6 +60,7 @@ class StressRunExecutor:
         node_host = target_node.host
         iteration_num = run_config.get("iteration_num", 1)
         thread_id = run_config.get("thread_id", node_host)
+        database = run_config.get("database", 'Root/db1')
         timestamp = int(time_module.time())
         short_uuid = uuid.uuid4().hex[:8]
 
@@ -67,6 +70,7 @@ class StressRunExecutor:
         # Substitution dictionary
         substitutions = {
             "{node_host}": node_host,
+            "{database}": database,
             "{iteration_num}": str(iteration_num),
             "{thread_id}": str(thread_id),
             "{run_id}": run_id,
@@ -172,7 +176,7 @@ class StressRunExecutor:
                         while time_module.time() < planned_end_time:
                             with self.run_counter_lock:
                                 self.run_counter += 1
-                            
+
                             # Use iter_N format without adding iter_ prefix in _execute_single_workload_run
                             # since it will be added there
                             run_name = f"{stress_name}_{node_host}_iter_{current_iteration}"
@@ -183,6 +187,7 @@ class StressRunExecutor:
                             run_config_copy["node_host"] = node_host
                             run_config_copy["duration"] = round(run_duration)
                             run_config_copy["node_role"] = node['node'].role
+                            run_config_copy["database"] = self.database
                             run_config_copy["thread_id"] = (
                                 node_host  # Thread identifier - node host
                             )
@@ -216,13 +221,18 @@ class StressRunExecutor:
 
                             # Update node statistics
                             node_result.total_execution_time += execution_time
+                            sleep_between_runs = 240
                             if success:
                                 logging.info(
                                     f"Run {current_iteration} on {node_host} completed successfully"
                                 )
+                                remaining_time = planned_end_time - time_module.time()
+                                if remaining_time > 0:
+                                    time_module.sleep(min(sleep_between_runs, remaining_time))
                             else:
                                 logging.warning(
-                                    f"Run {current_iteration} on {node_host} failed")
+                                    f"Run {current_iteration} on {node_host} failed. Continuing after {sleep_between_runs}s delay")
+                                time_module.sleep(sleep_between_runs)
                             current_iteration += 1
                             run_duration = planned_end_time - time_module.time()
 
@@ -352,7 +362,7 @@ class StressRunExecutor:
             if self.event_process_mode is not None:
                 event_prefix = f'export YDB_STRESS_UTIL_EVENT_PROCESS_MODE={self.event_process_mode};'
             cmd = f"{event_prefix}stdbuf -o0 -e0 {deployed_binary_path} {command_args}"
-
+            run_config['run_command'] = cmd
             run_timeout = (
                 run_config["duration"] + 600
             )  # Add buffer for completion

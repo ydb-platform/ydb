@@ -16,7 +16,7 @@ using namespace NUdf;
 namespace {
 class TPireUdfBase: public TBoxedValue {
 protected:
-    TPireUdfBase(TSourcePosition pos)
+    explicit TPireUdfBase(TSourcePosition pos)
         : Pos_(pos)
     {
     }
@@ -176,7 +176,7 @@ class TPireCapture: public TPireUdfBase {
 public:
     class TFactory: public TPireUdfBase {
     public:
-        TFactory(TSourcePosition pos)
+        explicit TFactory(TSourcePosition pos)
             : TPireUdfBase(pos)
         {
         }
@@ -231,7 +231,7 @@ class TPireReplace: public TPireUdfBase {
 public:
     class TFactory: public TPireUdfBase {
     public:
-        TFactory(TSourcePosition pos)
+        explicit TFactory(TSourcePosition pos)
             : TPireUdfBase(pos)
         {
         }

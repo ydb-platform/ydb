@@ -368,7 +368,7 @@ private:
                 .Query = TStringBuilder() << "SELECT * FROM `.sys/streaming_queries` WHERE Path = \"" << fullQueryName << "\"",
                 .Action = NKikimrKqp::QUERY_ACTION_EXECUTE,
                 .TraceId = "streaming-control::fetch",
-                .UserSID = userSID,
+                .UserSID = BUILTIN_ACL_METADATA,
                 .Database = StreamingMeta_.Database,
             }, meta, resultSets, nullptr);
 

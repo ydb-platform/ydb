@@ -33,8 +33,12 @@ public:
         Server->EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_METACACHE });
 
 
-        Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc2--account--topic1", 1, true, false, std::nullopt, {"user", "test-consumer"});
-        Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--account--topic1", 1, true, true, std::nullopt, {"user", "test-consumer"});
+        Server->AnnoyingClient->CreateTopicNoLegacy(
+            "/Root/LbCommunal/account/topic1-mirrored-from-dc2", 1, true, false, {}, {"user", "test-consumer"}, "account"
+        );
+        Server->AnnoyingClient->CreateTopicNoLegacy(
+            "/Root/LbCommunal/account/topic1", 1, true, true, {}, {"user", "test-consumer"}, "account"
+        );
         Server->WaitInit("account/topic1");
 
         Server->AnnoyingClient->MkDir("/Root", "LbCommunal");
@@ -256,6 +260,24 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
             UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::SUCCESS);
         }
 
+	{
+            grpc::ClientContext rcontext;
+
+            rcontext.AddMetadata("x-ydb-database", "/Root");
+
+            Ydb::Topic::CommitOffsetRequest req;
+            Ydb::Topic::CommitOffsetResponse resp;
+
+            req.set_path("account/topic2");
+            req.set_consumer("user");
+            req.set_offset(0);
+
+            auto status = TopicStubP_->CommitOffset(&rcontext, req, &resp);
+
+            Cerr << resp << "\n";
+            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::SUCCESS);
+        }
     }
 
     Y_UNIT_TEST(LongProducerAndLongMessageGroupId) {

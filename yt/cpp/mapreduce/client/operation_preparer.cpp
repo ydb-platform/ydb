@@ -5,6 +5,7 @@
 #include "operation.h"
 #include "operation_helpers.h"
 #include "operation_tracker.h"
+#include "pack_jobstate.h"
 #include "transaction.h"
 #include "transaction_pinger.h"
 #include "yt_poller.h"
@@ -196,7 +197,7 @@ TOperationId TOperationPreparer::StartOperation(
     YT_LOG_INFO("Operation %v started (%v): %v",
         operationId,
         type,
-        GetOperationWebInterfaceUrl(GetContext().ServerName, operationId));
+        GetOperationWebInterfaceUrl(GetContext().ServerName, operationId, GetClient()));
 
     TOperationExecutionTimeTracker::Get()->Start(operationId);
 
@@ -210,22 +211,19 @@ TRichYPath TOperationPreparer::LockFile(const TRichYPath& path)
 {
     CheckValidity();
 
-    auto lockRequest = Client_->GetRawClient()->CreateRawBatchRequest();
-    auto lockIdFuture = lockRequest->Lock(
+    auto fileTx = Client_->AttachTransaction(
         FileTransaction_->GetId(),
-        path.Path_,
-        ELockMode::LM_SNAPSHOT,
-        TLockOptions().Waitable(true));
+        TAttachTransactionOptions()
+            .AbortOnTermination(false)
+            .AutoPingable(false));
 
-    lockRequest->ExecuteBatch();
+    auto lock = fileTx->Lock(path.Path_, ELockMode::LM_SNAPSHOT);
 
-    auto nodeIdFuture = Client_->GetRawClient()->Get(
-        FileTransaction_->GetId(),
-        ::TStringBuilder() << '#' << GetGuidAsString(lockIdFuture.GetValue()) << "/@node_id");
+    auto nodeId = lock->GetLockedNodeId();
 
     auto result = path;
     result.OriginalPath(path.Path_);
-    result.Path("#" + nodeIdFuture.AsString());
+    result.Path("#" + nodeId.AsGuidString());
 
     YT_LOG_DEBUG("Locked file %v, new path is %v",
         *result.OriginalPath_,
@@ -352,7 +350,7 @@ static const TString& GetPersistentExecPathMd5()
     return md5;
 }
 
-static TMaybe<TSmallJobFile> GetJobState(const IJob& job)
+static TMaybe<TString> GetJobState(const IJob& job)
 {
     TString result;
     {
@@ -363,7 +361,7 @@ static TMaybe<TSmallJobFile> GetJobState(const IJob& job)
     if (result.empty()) {
         return Nothing();
     } else {
-        return TSmallJobFile{"jobstate", result};
+        return result;
     }
 }
 
@@ -380,8 +378,7 @@ const TVector<TRichYPath>& TJobPreparer::TEagerLockingFileCache::GetFiles() cons
 
 void TJobPreparer::TEagerLockingFileCache::InsertFile(const TRichYPath& path)
 {
-    LockedFiles_.emplace_back(
-        OperationPreparer_.LockFile(path));
+    LockedFiles_.emplace_back(OperationPreparer_.LockFile(path));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -410,9 +407,13 @@ TJobPreparer::TJobPreparer(
     for (const auto& localFile : spec.GetLocalFiles()) {
         UploadLocalFile(std::get<0>(localFile), std::get<1>(localFile));
     }
-    auto jobStateSmallFile = GetJobState(job);
-    if (jobStateSmallFile) {
-        UploadSmallFile(*jobStateSmallFile);
+    auto jobState = GetJobState(job);
+    if (jobState) {
+        if (static_cast<i64>(jobState->size()) >= options.MinJobStateSizeToPassViaFile_) {
+            UploadSmallFile({"jobstate", *jobState});
+        } else {
+            Spec_.AddEnvironment("YT_JOB_STATE", PackJobState(*jobState));
+        }
     }
     for (const auto& smallFile : smallFileList) {
         UploadSmallFile(smallFile);
@@ -423,7 +424,7 @@ TJobPreparer::TJobPreparer(
         ClassName_ = TJobFactory::Get()->GetJobName(&job);
         Command_ = commandJob->GetCommand();
     } else {
-        PrepareJobBinary(job, outputTableCount, jobStateSmallFile.Defined());
+        PrepareJobBinary(job, outputTableCount, jobState.Defined());
     }
 }
 
@@ -510,8 +511,17 @@ int TJobPreparer::GetFileCacheReplicationFactor() const
     if (IsLocalMode()) {
         return 1;
     } else {
-        return OperationPreparer_.GetContext().Config->FileCacheReplicationFactor;
+        return OperationPreparer_.GetContext().Config->FileCacheReplicationFactor.Get(OperationPreparer_.GetClient());
     }
+}
+
+TFileWriterOptions TJobPreparer::GetFileCacheWriterOptions() const
+{
+    auto replicationFactor = GetFileCacheReplicationFactor();
+    return TFileWriterOptions()
+        .ComputeMD5(true)
+        .WriterOptions(TWriterOptions()
+            .UploadReplicationFactor(replicationFactor));
 }
 
 void TJobPreparer::CreateFileInCypress(const TString& path) const
@@ -616,7 +626,7 @@ TString TJobPreparer::UploadToRandomPath(const IItemToUpload& itemToUpload) cons
             OperationPreparer_.GetClient()->GetTransactionPinger(),
             OperationPreparer_.GetContext(),
             Options_.FileStorageTransactionId_,
-            TFileWriterOptions().ComputeMD5(true));
+            GetFileCacheWriterOptions());
         itemToUpload.CreateInputStream()->ReadAll(writer);
         writer.Finish();
     }
@@ -682,7 +692,7 @@ TMaybe<TString> TJobPreparer::TryUploadWithDeduplication(const IItemToUpload& it
         OperationPreparer_.GetPreparationId());
 
     {
-        auto writer = uploadTx->CreateFileWriter(cypressPath, TFileWriterOptions().ComputeMD5(true));
+        auto writer = uploadTx->CreateFileWriter(cypressPath, GetFileCacheWriterOptions());
         YT_VERIFY(writer);
         itemToUpload.CreateInputStream()->ReadAll(*writer);
         writer->Finish();

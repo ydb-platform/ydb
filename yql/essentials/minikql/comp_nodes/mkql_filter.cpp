@@ -192,7 +192,9 @@ protected:
 
         private:
             bool Next(NUdf::TUnboxedValue& value) final {
-                while (Iter.Next(Item->RefValue(CompCtx))) {
+                NYql::NUdf::TUnboxedValue fetchResult;
+                while (Iter.Next(fetchResult)) {
+                    Item->SetValue(CompCtx, std::move(fetchResult));
                     if (Predicate->GetValue(CompCtx).template Get<bool>()) {
                         value = Item->GetValue(CompCtx);
                         return true;
@@ -260,11 +262,13 @@ protected:
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
             for (;;) {
-                const auto status = Stream.Fetch(Item->RefValue(CompCtx));
+                NYql::NUdf::TUnboxedValue fetchResult;
+                const auto status = Stream.Fetch(fetchResult);
                 if (NUdf::EFetchStatus::Ok != status) {
                     return status;
                 }
 
+                Item->SetValue(CompCtx, std::move(fetchResult));
                 if (Predicate->GetValue(CompCtx).template Get<bool>()) {
                     result = Item->GetValue(CompCtx);
                     return NUdf::EFetchStatus::Ok;
@@ -330,8 +334,9 @@ protected:
         BranchInst::Create(loop, block);
         block = loop;
 
-        const auto itemPtr = codegenItem->CreateRefValue(ctx, block);
-        const auto status = IsStream ? CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, itemPtr) : CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(statusType, container, codegen, block, itemPtr);
+        const auto [status, itemPtr] = RefValueWithCallResult(codegenItem, ctx, block, [&](Value* itemPtr) {
+            return IsStream ? CallBoxedValueFetch(container, ctx, block, itemPtr) : CallBoxedValueNext(container, ctx, block, itemPtr);
+        });
 
         const auto icmp = IsStream ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block) : status;
 
@@ -391,7 +396,9 @@ protected:
                 if (!Limit) {
                     return false;
                 }
-                while (Iter.Next(Item->RefValue(CompCtx))) {
+                NYql::NUdf::TUnboxedValue fetchResult;
+                while (Iter.Next(fetchResult)) {
+                    Item->SetValue(CompCtx, std::move(fetchResult));
                     if (Predicate->GetValue(CompCtx).template Get<bool>()) {
                         value = Item->GetValue(CompCtx);
                         --Limit;
@@ -468,10 +475,12 @@ protected:
             }
 
             for (;;) {
-                const auto status = Stream.Fetch(Item->RefValue(CompCtx));
+                NYql::NUdf::TUnboxedValue fetchResult;
+                const auto status = Stream.Fetch(fetchResult);
                 if (NUdf::EFetchStatus::Ok != status) {
                     return status;
                 }
+                Item->SetValue(CompCtx, std::move(fetchResult));
 
                 if (Predicate->GetValue(CompCtx).template Get<bool>()) {
                     result = Item->GetValue(CompCtx);
@@ -553,8 +562,9 @@ protected:
         BranchInst::Create(loop, block);
         block = loop;
 
-        const auto itemPtr = codegenItem->CreateRefValue(ctx, block);
-        const auto status = IsStream ? CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, itemPtr) : CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(statusType, container, codegen, block, itemPtr);
+        const auto [status, itemPtr] = RefValueWithCallResult(codegenItem, ctx, block, [&](Value* itemPtr) {
+            return IsStream ? CallBoxedValueFetch(container, ctx, block, itemPtr) : CallBoxedValueNext(container, ctx, block, itemPtr);
+        });
 
         const auto icmp = IsStream ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block) : status;
 
@@ -1003,12 +1013,9 @@ public:
         {
             block = lazy;
 
-            const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TListFilterWrapper::MakeLazyList>());
             const auto ptrType = PointerType::getUnqual(StructType::get(context));
             const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-            const auto funType = FunctionType::get(list->getType(), {self->getType(), ctx.Ctx->getType(), list->getType()}, false);
-            const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
-            const auto value = CallInst::Create(funType, doFuncPtr, {self, ctx.Ctx, list}, "value", block);
+            const auto value = EmitFunctionCall<&TListFilterWrapper::MakeLazyList>(list->getType(), {self, ctx.Ctx, list}, ctx, block);
             out->addIncoming(value, block);
             BranchInst::Create(done, block);
         }
@@ -1363,12 +1370,9 @@ public:
         {
             block = lazy;
 
-            const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TListFilterWithLimitWrapper::MakeLazyList>());
             const auto ptrType = PointerType::getUnqual(StructType::get(context));
             const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-            const auto funType = FunctionType::get(list->getType(), {self->getType(), ctx.Ctx->getType(), list->getType(), limit->getType()}, false);
-            const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
-            const auto value = CallInst::Create(funType, doFuncPtr, {self, ctx.Ctx, list, limit}, "value", block);
+            const auto value = EmitFunctionCall<&TListFilterWithLimitWrapper::MakeLazyList>(list->getType(), {self, ctx.Ctx, list, limit}, ctx, block);
             out->addIncoming(value, block);
             BranchInst::Create(done, block);
         }

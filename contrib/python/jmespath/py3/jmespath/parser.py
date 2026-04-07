@@ -25,8 +25,6 @@ A few notes on the implementation.
   consuming from the token iterator one token at a time.
 
 """
-import random
-
 from jmespath import lexer
 from jmespath.compat import with_repr_method
 from jmespath import ast
@@ -73,7 +71,7 @@ class Parser(object):
     # The _MAX_SIZE most recent expressions are cached in
     # _CACHE dict.
     _CACHE = {}
-    _MAX_SIZE = 128
+    _MAX_SIZE = 512
 
     def __init__(self, lookahead=2):
         self.tokenizer = None
@@ -82,13 +80,26 @@ class Parser(object):
         self._index = 0
 
     def parse(self, expression):
-        cached = self._CACHE.get(expression)
-        if cached is not None:
-            return cached
+        try:
+            return self._CACHE[expression]
+        except KeyError:
+            pass
         parsed_result = self._do_parse(expression)
+        if len(self._CACHE) >= self._MAX_SIZE:
+            try:
+                del self._CACHE[next(iter(self._CACHE))]
+            except (KeyError, StopIteration, RuntimeError):
+                # KeyError - Another thread else already deleted the key.
+                # RuntimeError - Another modified the cache.
+                # StopIteration - (Unlikely) Cache is empty.
+                #
+                # If we encounter an error we should NOT be adding to the
+                # cache.  To ensure we do not exceed self._MAX_SIZE, we
+                # can only add to the cache if we successfully removed
+                # an element from the cache, otherwise this can grow
+                # unbounded.
+                return parsed_result
         self._CACHE[expression] = parsed_result
-        if len(self._CACHE) > self._MAX_SIZE:
-            self._free_cache_entries()
         return parsed_result
 
     def _do_parse(self, expression):
@@ -487,10 +498,6 @@ class Parser(object):
                                               actual_type)
         raise exceptions.ParseError(
             lex_position, actual_value, actual_type, message)
-
-    def _free_cache_entries(self):
-        for key in random.sample(list(self._CACHE.keys()), int(self._MAX_SIZE / 2)):
-            self._CACHE.pop(key, None)
 
     @classmethod
     def purge(cls):

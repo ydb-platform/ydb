@@ -82,7 +82,7 @@ namespace NKikimr {
                     " waiting# " << WaitQueue.size());
                 return;
             }
-            
+
             TWaitSync sync{vDiskActorId, {actorId}};
             WaitQueue.emplace_back(std::move(sync));
 

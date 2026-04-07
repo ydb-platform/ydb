@@ -1,0 +1,15 @@
+ModifyScheme {
+  WorkingDir: "/"
+  OperationType: ESchemeOpAlterSubDomain
+  SubDomain {
+    Name: "Root"
+    StoragePools {
+      Name: "/Root:ssd"
+      Kind: "ssd"
+    }
+    StoragePools {
+      Name: "/Root:rot"
+      Kind: "rot"
+    }
+  }
+}

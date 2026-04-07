@@ -1,9 +1,10 @@
 UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
-    IF (SANITIZER_TYPE OR WITH_VALGRIND)
-        FORK_SUBTESTS()
+    FORK_SUBTESTS()
+
+    IF (SANITIZER_TYPE)
         SIZE(LARGE)
-        TAG(ya:fat)
+        INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     ELSE()
         SIZE(MEDIUM)
     ENDIF()

@@ -126,7 +126,7 @@ message TRlPath {
 }
 
 message TComputeRuntimeSettings {
-    optional uint32 TimeoutMs = 1;
+    optional uint64 TimeoutMs = 1;
 
     enum EExecType {
         UNSPECIFIED = 0;
@@ -137,11 +137,13 @@ message TComputeRuntimeSettings {
 
     reserved 3; //optional NKqpProto.EKqpStatsMode LegacyStatsMode = 3;
     optional EDqStatsMode StatsMode = 8;
-    optional bool UseLLVM_DeprecatedForCompatibility = 4[default = false];
+    optional bool UseLLVM_DeprecatedForCompatibility = 4 [default = false];
     optional bool UseSpilling = 6;
     optional uint32 TasksOnNodeCount = 5; // approx
     optional TRlPath RlPath = 7;
     optional bool WithProgressStats = 9 [default = false];
+    optional uint64 MinStatsSendIntervalMs = 10; // Min interval between stats messages
+    optional uint64 MaxStatsSendIntervalMs = 11; // Max interval to sent stats in case of no activity
 }
 
 message TEvNewCheckpointCoordinator {
@@ -222,6 +224,8 @@ message TMessageTransportMeta {
 
 message TEvChannelDiscoveryV2 {
     optional uint64 GenMajor = 1;
+    optional uint64 GenMinor = 2;
+    optional uint64 SeqNo = 3;
 }
 
 message TEvChannelDataV2 {
@@ -255,6 +259,7 @@ message TEvChannelAckV2 {
         OK     = 0;      // Confirmed
         RESEND = 1;      // Ask to resend missed msgs
         ERROR  = 2;      // Fail Channel
+        FAIL   = 3;      // Fail Session and request Reconcilitatiom
     }
 
     // Service level
@@ -274,6 +279,10 @@ message TEvChannelAckV2 {
 
     optional bool EarlyFinished = 8;
     optional uint64 PopBytes = 9;
+
+    // Only if ERROR
+
+    optional string Message = 10;
 };
 
 message TEvChannelUpdateV2 {

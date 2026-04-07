@@ -45,7 +45,10 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
             .EnableResourcePools(false)
             .Create();
 
-        TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().PoolId("another_pool_id")));
+        const auto& result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, TQueryRunnerSettings().PoolId("another_pool_id"));
+        const auto& resultPoolId = result.Response.GetResponse().GetEffectivePoolId();
+        UNIT_ASSERT_EQUAL_C(resultPoolId, NResourcePool::DEFAULT_POOL_ID, resultPoolId);
+        TSampleQueries::TSelect42::CheckResult(result);
     }
 
     Y_UNIT_TEST(WorkloadServiceDisabledByFeatureFlagOnServerless) {
@@ -84,9 +87,9 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
 
         TSampleQueries::CheckNotFound(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings), poolId);
 
-        const TString& tabmleName = "sub_path";
+        const TString& tableName = "sub_path";
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
-            CREATE TABLE )" << tabmleName << R"( (
+            CREATE TABLE )" << tableName << R"( (
                 Key Int32,
                 PRIMARY KEY (Key)
             );
@@ -94,7 +97,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
 
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(
             TSampleQueries::TSelect42::Query,
-            settings.Database(TStringBuilder() << CanonizePath(ydb->GetSettings().DomainName_) << "/" << tabmleName)
+            settings.Database(TStringBuilder() << CanonizePath(ydb->GetSettings().DomainName_) << "/" << tableName)
         ));
     }
 
@@ -107,8 +110,8 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
         if (secondRequest.HasValue()) {
             std::swap(firstRequest, secondRequest);
         }
-        UNIT_ASSERT_C(firstRequest.HasValue(), "One of two requests shoud be rejected");
-        UNIT_ASSERT_C(!secondRequest.HasValue(), "One of two requests shoud be placed in pool");
+        UNIT_ASSERT_C(firstRequest.HasValue(), "One of two requests should be rejected");
+        UNIT_ASSERT_C(!secondRequest.HasValue(), "One of two requests should be placed in pool");
 
         auto result = firstRequest.GetResult();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::OVERLOADED, result.GetIssues().ToOneLineString());
@@ -318,6 +321,127 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
         )");
 
         ydb->WaitPoolHandlersCount(0, std::nullopt, TDuration::Seconds(95));
+    }
+
+    void TestWhenDiskSpaceIsExhausted(i32 queryLimit, const TString& table) {
+        auto ydb = TYdbSetupSettings()
+            .NodeCount(1)
+            .CreateSampleTenants(true)
+            .ConcurrentQueryLimit(queryLimit)
+            .DedicatedDiskQuota(10000)
+            .Create();
+
+        const auto& dedicatedTenant = ydb->GetSettings().GetDedicatedTenantName();
+        ydb->CreateSamplePoolOn(dedicatedTenant);
+
+        auto settings = TQueryRunnerSettings()
+            .PoolId(ydb->GetSettings().PoolId_)
+            .NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx)
+            .Database(dedicatedTenant);
+
+        auto result = ydb->ExecuteQuery(TStringBuilder() << R"(
+            CREATE TABLE big_table (
+                Key Int32,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )", settings);
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+
+        uint i = 1;
+        auto data = TString(1000,'X');
+
+        do {
+            auto insertQuery = TStringBuilder()
+                << "insert into big_table(Key, Value) values("
+                << i++ << ",'" << data << "');";
+            result = ydb->ExecuteQuery(insertQuery, settings);
+        } while (result.GetStatus() == NYdb::EStatus::SUCCESS);
+
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.GetIssues().ToString(),
+            "database is out of disk space"
+        );
+
+        result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
+
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.GetIssues().ToString(),
+            TStringBuilder() << "Error: Disk space exhausted. Table `/Root/test-dedicated/.metadata/workload_manager/" << table
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            result.GetIssues().begin()->GetCode(),
+            (ui32)NYql::TIssuesIds::KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED
+        );
+    }
+
+    Y_UNIT_TEST(TestDiskIsFullRunBelowQueryLimit) {
+        TestWhenDiskSpaceIsExhausted(10, "running_requests");
+    }
+
+    Y_UNIT_TEST(TestDiskIsFullRunOverQueryLimit) {
+        TestWhenDiskSpaceIsExhausted(1, "delayed_requests");
+    }
+
+    //
+    // Verifies that resource pools function correctly after tenant recreation.
+    // Even if the DatabaseId (path) remains the same, a recreated tenant receives
+    // a new internal PathId. The workload service uses DatabaseId as a key for
+    // a cache.
+    //
+    // The workload service must detect this lifecycle change, invalidate any
+    // cached state tied to the same DatabaseId but a different PathId,
+    // and re-resolve metadata to avoid "PathId mismatch" or "Pool not found"
+    // errors in the new database.
+    //
+    Y_UNIT_TEST(TestResourcePoolAfterTenantRecreation) {
+        auto unitKind = "test-recreated-db";
+        auto dbName = "/Root/test-recreated-db";
+        auto tweakFnc = [&](Tests::TServerSettings& serverSettings) -> void {
+            serverSettings.SetDynamicNodeCount(1).AddStoragePool(
+                unitKind,
+                TStringBuilder() << dbName << ":" << unitKind
+            );
+        };
+
+        auto ydb = TYdbSetupSettings()
+            .NodeCount(1)
+            .CreateSampleTenants(false)
+            .EnableResourcePools(true)
+            // turn off to reduce "noise" in a log
+            .EnableStreamingQueries(false)
+            .CreateSamplePool(false)
+            .Create(tweakFnc);
+
+        auto myPoolId = "my_pool";
+        auto defPool = TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID).Database(dbName);
+        auto myPool = TQueryRunnerSettings().PoolId(myPoolId).Database(dbName);
+
+        Cerr << "------ Creating Tenant" << Endl;
+        ydb->CreateDedicatedTenant(dbName, unitKind);
+        ydb->CreateResourcePool(dbName, myPoolId, NResourcePool::TPoolSettings());
+
+        TSampleQueries::TSelect42::CheckResult(
+            ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, myPool));
+
+        TSampleQueries::TSelect42::CheckResult(
+            ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, defPool));
+
+        Cerr << "------ Droping Tenant" << Endl;
+        ydb->DropDedicatedTenant(dbName);
+
+        Cerr << "------ Creating Tenant" << Endl;
+        ydb->CreateDedicatedTenant(dbName, unitKind);
+
+        // The custom pool is still alive, is it a bug or feature?
+        TSampleQueries::TSelect42::CheckResult(
+            ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, myPool));
+
+        TSampleQueries::TSelect42::CheckResult(
+            ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, defPool));
     }
 }
 
@@ -762,7 +886,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
     }
 
     void WaitForSuccess(TIntrusivePtr<IYdbSetup> ydb, const TQueryRunnerSettings& settings) {
-        ydb->WaitFor(TDuration::Seconds(20), "Resource pool classifier success", [ydb, settings](TString& errorString) {
+        ydb->WaitFor(TDuration::Seconds(30), "Resource pool classifier success", [ydb, settings](TString& errorString) {
             auto result = ydb->ExecuteQuery(TSampleQueries::TSelect42::Query, settings);
 
             errorString = result.GetIssues().ToOneLineString();

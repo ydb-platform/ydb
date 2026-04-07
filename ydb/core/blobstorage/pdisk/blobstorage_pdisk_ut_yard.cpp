@@ -166,7 +166,7 @@ YARD_UNIT_TEST(TestChunkReadRandomOffset) {
         TTestContext tc(true);
         constexpr ui32 sectorPayload = 4064;
         NPDisk::TDiskFormat format;
-        format.Clear();
+        format.Clear(true);
         UNIT_ASSERT(sectorPayload == format.SectorPayloadSize());
         constexpr ui32 sizeWithHalfOfBlockSize = sectorPayload * 512 - sectorPayload / 2;
         Run<TTestChunkReadRandomOffset<sizeWithHalfOfBlockSize, 217, 20>>(&tc, 1, 8 << 20, false);
@@ -878,6 +878,20 @@ YARD_UNIT_TEST(TestStartingPointReboots) {
     for (ui32 i = 0; i < 32; ++i) {
         Run<TTestStartingPointRebootsIteration>(&tc, 1, chunkSize);
     }
+}
+
+YARD_UNIT_TEST(TestRawReadsAndWrites) {
+    TTestContext tc(true);
+    ui32 chunkSize = MIN_CHUNK_SIZE;
+    TString dataPath;
+    if (tc.TempDir) {
+        TString databaseDirectory = MakeDatabasePath((*tc.TempDir)().c_str());
+        dataPath = MakePDiskPath((*tc.TempDir)().c_str());
+        MakeDirIfNotExist(databaseDirectory.c_str());
+    }
+    SafeEntropyPoolRead(&tc.PDiskGuid, sizeof(tc.PDiskGuid));
+    FormatPDiskForTest(dataPath, tc.PDiskGuid, chunkSize, 1 << 30, false, tc.SectorMap);
+    Run<TTestRawReadsAndWrites>(&tc, 1, chunkSize);
 }
 
 YARD_UNIT_TEST(TestRestartAtNonceJump) {

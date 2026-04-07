@@ -7,6 +7,7 @@
 
 #include <yt/yt/core/actions/invoker_util.h>
 #include <yt/yt/core/concurrency/scheduler_api.h>
+#include <yt/yt/core/concurrency/pollable_detail.h>
 
 #include <library/cpp/yt/system/handle_eintr.h>
 #include <library/cpp/yt/system/exit.h>
@@ -51,30 +52,32 @@ namespace {
 
 YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "FS");
 
-[[maybe_unused]] void ThrowNotSupported()
+[[noreturn]] [[maybe_unused]]
+void ThrowNotSupported()
 {
     THROW_ERROR_EXCEPTION("Unsupported platform");
 }
 
 } // namespace
 
-bool Exists(const TString& path)
+bool Exists(const std::string& path)
 {
 #ifdef _win32_
-    return GetFileAttributesA(path.data()) != 0xFFFFFFFF;
+    return GetFileAttributesA(path.c_str()) != 0xFFFFFFFF;
 #else
-    return access(path.data(), F_OK) == 0;
+    return access(path.c_str(), F_OK) == 0;
 #endif
 }
 
-bool IsDirEmpty(const TString& path)
+bool IsDirEmpty(const std::string& path)
 {
-    if (!IsDir(path)) {
+    TString path_(path);
+    if (!IsDir(path_)) {
         THROW_ERROR_EXCEPTION("%v is not a directory",
             path);
     }
 
-    TDirIterator dir(path, TDirIterator::TOptions(FTS_NOSTAT));
+    TDirIterator dir(path_, TDirIterator::TOptions(FTS_NOSTAT));
     for (auto it = dir.begin(); it != dir.end(); ++it) {
         switch (it->fts_info) {
             case FTS_F:
@@ -90,19 +93,19 @@ bool IsDirEmpty(const TString& path)
     return true;
 }
 
-void Remove(const TString& path)
+void Remove(const std::string& path)
 {
     bool ok;
 #ifdef _win_
-    ok = DeleteFileA(path.data());
+    ok = DeleteFileA(path.c_str());
 #else
     struct stat sb;
-    ok = lstat(path.data(), &sb) == 0;
+    ok = lstat(path.c_str(), &sb) == 0;
     if (ok) {
         if (S_ISDIR(sb.st_mode)) {
-            ok = rmdir(path.data()) == 0;
+            ok = rmdir(path.c_str()) == 0;
         } else {
-            ok = remove(path.data()) == 0;
+            ok = remove(path.c_str()) == 0;
         }
     }
 #endif
@@ -113,7 +116,7 @@ void Remove(const TString& path)
     }
 }
 
-void Replace(const TString& source, const TString& destination)
+void Replace(const std::string& source, const std::string& destination)
 {
     if (NFS::Exists(destination)) {
         NFS::Remove(destination);
@@ -121,18 +124,18 @@ void Replace(const TString& source, const TString& destination)
     NFS::Rename(source, destination);
 }
 
-void RemoveRecursive(const TString& path)
+void RemoveRecursive(const std::string& path)
 {
-    RemoveDirWithContents(path);
+    RemoveDirWithContents(TString(path));
 }
 
-void Rename(const TString& source, const TString& destination)
+void Rename(const std::string& source, const std::string& destination)
 {
     bool ok;
 #if defined(_win_)
-    ok = MoveFileEx(source.data(), destination.data(), MOVEFILE_REPLACE_EXISTING) != 0;
+    ok = MoveFileEx(source.c_str(), destination.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
 #else
-    ok = rename(source.data(), destination.data()) == 0;
+    ok = rename(source.c_str(), destination.c_str()) == 0;
 #endif
     if (!ok) {
         THROW_ERROR_EXCEPTION("Cannot rename %v to %v",
@@ -142,28 +145,28 @@ void Rename(const TString& source, const TString& destination)
     }
 }
 
-TString GetFileName(std::string_view path)
+std::string GetFileName(const std::string& path)
 {
     size_t slashPosition = path.find_last_of(LOCSLASH_C);
     if (slashPosition == TString::npos) {
-        return TString(path);
+        return path;
     }
-    return TString(path.substr(slashPosition + 1));
+    return path.substr(slashPosition + 1);
 }
 
-TString GetDirectoryName(std::string_view path)
+std::string GetDirectoryName(const std::string& path)
 {
     auto absPath = CombinePaths(NFs::CurrentWorkingDirectory(), path);
     size_t slashPosition = absPath.find_last_of(LOCSLASH_C);
     if (slashPosition == 0) {
         // Root.
-        return TString(1, LOCSLASH_C);
+        return LOCSLASH_S;
     } else {
         return absPath.substr(0, slashPosition);
     }
 }
 
-TString GetRealPath(std::string_view path)
+std::string GetRealPath(const std::string& path)
 {
     auto curPath = CombinePaths(NFs::CurrentWorkingDirectory(), path);
     std::vector<std::string> parts;
@@ -172,7 +175,7 @@ TString GetRealPath(std::string_view path)
         if (filename == ".") {
             // Do nothing.
         } else if (filename == ".." || parts.empty() || parts.back() != "..") {
-            parts.push_back(filename);
+            parts.emplace_back(filename);
         } else {
             parts.pop_back();
         }
@@ -182,7 +185,7 @@ TString GetRealPath(std::string_view path)
         }
     }
     if (!curPath.empty()) {
-        parts.push_back(RealPath(curPath));
+        parts.push_back(RealPath(TString(curPath)));
     } else {
         parts.push_back(LOCSLASH_S);
     }
@@ -191,10 +194,10 @@ TString GetRealPath(std::string_view path)
     return CombinePaths(parts);
 }
 
-bool IsPathRelativeAndInvolvesNoTraversal(std::string_view path)
+bool IsPathRelativeAndInvolvesNoTraversal(const std::string& path)
 {
     auto normalizedPath = NormalizePathSeparators(path);
-    if (normalizedPath.StartsWith(LOCSLASH_C)) {
+    if (normalizedPath.starts_with(LOCSLASH_C)) {
         return false;
     }
 
@@ -225,7 +228,7 @@ bool IsPathRelativeAndInvolvesNoTraversal(std::string_view path)
     return true;
 }
 
-TString GetFileExtension(std::string_view path)
+std::string GetFileExtension(const std::string& path)
 {
     size_t dotPosition = path.find_last_of('.');
     if (dotPosition == TString::npos) {
@@ -235,10 +238,10 @@ TString GetFileExtension(std::string_view path)
     if (slashPosition != TString::npos && dotPosition < slashPosition) {
         return "";
     }
-    return TString(path.substr(dotPosition + 1));
+    return path.substr(dotPosition + 1);
 }
 
-TString GetFileNameWithoutExtension(std::string_view path)
+std::string GetFileNameWithoutExtension(const std::string& path)
 {
     auto fileName = GetFileName(path);
     size_t dotPosition = fileName.find_last_of('.');
@@ -248,14 +251,14 @@ TString GetFileNameWithoutExtension(std::string_view path)
     return fileName.substr(0, dotPosition);
 }
 
-void CleanTempFiles(const TString& path)
+void CleanTempFiles(const std::string& path)
 {
     YT_LOG_INFO("Cleaning temp files in %v", path);
 
     // TODO(ignat): specify suffix in EnumerateFiles.
     auto entries = EnumerateFiles(path, std::numeric_limits<int>::max());
     for (const auto& entry : entries) {
-        if (entry.EndsWith(TempFileSuffix)) {
+        if (entry.ends_with(TempFileSuffix)) {
             auto fileName = NFS::CombinePaths(path, entry);
             YT_LOG_DEBUG("Removing file (FileName: %v)",
                 fileName);
@@ -264,12 +267,12 @@ void CleanTempFiles(const TString& path)
     }
 }
 
-std::vector<TString> EnumerateFiles(const TString& path, int depth, bool sortByName)
+std::vector<std::string> EnumerateFiles(const std::string& path, int depth, bool sortByName)
 {
-    std::vector<TString> result;
+    std::vector<std::string> result;
     if (NFS::Exists(path)) {
         TFileList list;
-        list.Fill(path, TStringBuf(), TStringBuf(), depth, sortByName);
+        list.Fill(TString(path), TStringBuf(), TStringBuf(), depth, sortByName);
         int size = list.Size();
         for (int i = 0; i < size; ++i) {
             result.push_back(list.Next());
@@ -278,12 +281,12 @@ std::vector<TString> EnumerateFiles(const TString& path, int depth, bool sortByN
     return result;
 }
 
-std::vector<TString> EnumerateDirectories(const TString& path, int depth)
+std::vector<std::string> EnumerateDirectories(const std::string& path, int depth)
 {
-    std::vector<TString> result;
+    std::vector<std::string> result;
     if (NFS::Exists(path)) {
         TDirsList list;
-        list.Fill(path, TStringBuf(), TStringBuf(), depth);
+        list.Fill(TString(path), TStringBuf(), TStringBuf(), depth);
         int size = list.Size();
         for (int i = 0; i < size; ++i) {
             result.push_back(list.Next());
@@ -292,11 +295,11 @@ std::vector<TString> EnumerateDirectories(const TString& path, int depth)
     return result;
 }
 
-TString GetRelativePath(std::string_view from, std::string_view to)
+std::string GetRelativePath(const std::string& from, const std::string& to)
 {
-    std::vector<TString> tokensFrom;
+    std::vector<std::string> tokensFrom;
     StringSplitter(GetRealPath(from)).Split(LOCSLASH_C).Collect(&tokensFrom);
-    std::vector<TString> tokensTo;
+    std::vector<std::string> tokensTo;
     StringSplitter(GetRealPath(to)).Split(LOCSLASH_C).Collect(&tokensTo);
 
     int commonPrefixLength = 0;
@@ -322,12 +325,12 @@ TString GetRelativePath(std::string_view from, std::string_view to)
     return CombinePaths(relativePathTokens);
 }
 
-TString GetRelativePath(std::string_view path)
+std::string GetRelativePath(const std::string& path)
 {
     return GetRelativePath(NFs::CurrentWorkingDirectory(), path);
 }
 
-TString GetShortestPath(std::string_view path)
+std::string GetShortestPath(const std::string& path)
 {
     auto absolutePath = GetRealPath(path);
     auto relativePath = GetRelativePath(path);
@@ -338,19 +341,19 @@ TString GetShortestPath(std::string_view path)
     }
 }
 
-TDiskSpaceStatistics GetDiskSpaceStatistics(const TString& path)
+TDiskSpaceStatistics GetDiskSpaceStatistics(const std::string& path)
 {
     TDiskSpaceStatistics result;
     bool ok;
 #ifdef _win_
     ok = GetDiskFreeSpaceEx(
-        path.data(),
+        path.c_str(),
         (PULARGE_INTEGER) &result.AvailableSpace,
         (PULARGE_INTEGER) &result.TotalSpace,
         (PULARGE_INTEGER) &result.FreeSpace) != 0;
 #else
     struct statfs fsData;
-    ok = statfs(path.data(), &fsData) == 0;
+    ok = statfs(path.c_str(), &fsData) == 0;
     result.TotalSpace = (i64) fsData.f_blocks * fsData.f_bsize;
     result.AvailableSpace = (i64) fsData.f_bavail * fsData.f_bsize;
     result.FreeSpace = (i64) fsData.f_bfree * fsData.f_bsize;
@@ -365,18 +368,18 @@ TDiskSpaceStatistics GetDiskSpaceStatistics(const TString& path)
     return result;
 }
 
-void MakeDirRecursive(const TString& path, int mode)
+void MakeDirRecursive(const std::string& path, int mode)
 {
-    MakePathIfNotExist(path.data(), mode);
+    MakePathIfNotExist(path.c_str(), mode);
 }
 
-TPathStatistics GetPathStatistics(const TString& path)
+TPathStatistics GetPathStatistics(const std::string& path)
 {
 #ifdef _unix_
     TPathStatistics statistics;
 
     struct stat fileStat;
-    int result = ::stat(path.data(), &fileStat);
+    int result = ::stat(path.c_str(), &fileStat);
 
     if (result == -1) {
         THROW_ERROR_EXCEPTION("Failed to get statistics for %v",
@@ -393,13 +396,20 @@ TPathStatistics GetPathStatistics(const TString& path)
     return statistics;
 #else
     ThrowNotSupported();
-    // Suppress clang's error about reaching end of non-void function without return.
-    Y_UNREACHABLE();
 #endif
 }
 
-i64 GetDirectorySize(const TString& path, bool ignoreUnavailableFiles, bool deduplicateByINodes, bool checkDeviceId)
+i64 GetDirectorySize(const std::string& path, bool ignoreUnavailableFiles, bool deduplicateByINodes, bool checkDeviceId)
 {
+    return GetDirectoriesSize({path}, ignoreUnavailableFiles, deduplicateByINodes, checkDeviceId);
+}
+
+i64 GetDirectoriesSize(const std::vector<std::string>& paths, bool ignoreUnavailableFiles, bool deduplicateByINodes, bool checkDeviceId)
+{
+    if (paths.empty()) {
+        return 0;
+    }
+
     auto wrapNoEntryError = [&] (std::function<void()> func) {
         try {
             func();
@@ -418,19 +428,29 @@ i64 GetDirectorySize(const TString& path, bool ignoreUnavailableFiles, bool dedu
         }
     };
 
-    std::queue<TString> directories;
-    directories.push(path);
-
-    TPathStatistics rootDirStatistics;
-    wrapNoEntryError([&] {
-        rootDirStatistics = GetPathStatistics(path);
-    });
+    std::optional<TDeviceId> deviceId;
+    std::queue<std::string> directories;
+    for (const auto& path: paths) {
+        if (checkDeviceId) {
+            // Make sure that seed directories reside on the same device.
+            wrapNoEntryError([&] {
+                if (!deviceId) {
+                    deviceId = GetPathStatistics(path).DeviceId;
+                } else if (*deviceId != GetPathStatistics(path).DeviceId) {
+                    THROW_ERROR_EXCEPTION("Seed directories reside on different devices")
+                        << TErrorAttribute("path", path)
+                        << TErrorAttribute("device_id", ToString(GetPathStatistics(path).DeviceId))
+                        << TErrorAttribute("other_path", paths.front())
+                        << TErrorAttribute("other_device_id", ToString(*deviceId));
+                }
+            });
+        }
+        directories.push(path);
+    }
 
     THashSet<ui64> visitedInodes;
 
     i64 size = 0;
-
-
     while (!directories.empty()) {
         const auto& directory = directories.front();
 
@@ -441,7 +461,7 @@ i64 GetDirectorySize(const TString& path, bool ignoreUnavailableFiles, bool dedu
             }
         });
 
-        std::vector<TString> files;
+        std::vector<std::string> files;
         wrapNoEntryError([&] {
             files = EnumerateFiles(directory);
         });
@@ -455,7 +475,7 @@ i64 GetDirectorySize(const TString& path, bool ignoreUnavailableFiles, bool dedu
                         return;
                     }
                 }
-                if (checkDeviceId && fileStatistics.DeviceId != rootDirStatistics.DeviceId) {
+                if (deviceId && fileStatistics.DeviceId != *deviceId) {
                     return;
                 }
                 if (fileStatistics.Size > 0) {
@@ -470,10 +490,10 @@ i64 GetDirectorySize(const TString& path, bool ignoreUnavailableFiles, bool dedu
     return size;
 }
 
-void Touch(const TString& path)
+void Touch(const std::string& path)
 {
 #ifdef _unix_
-    int result = ::utimes(path.data(), nullptr);
+    int result = ::utimes(path.c_str(), nullptr);
     if (result != 0) {
         THROW_ERROR_EXCEPTION("Failed to touch %v",
             path)
@@ -494,7 +514,7 @@ namespace {
     const char PATH_DELIM2 = 0;
 #endif
 
-bool IsAbsolutePath(std::string_view path)
+bool IsAbsolutePath(const std::string& path)
 {
     if (path.empty())
         return false;
@@ -511,12 +531,12 @@ bool IsAbsolutePath(std::string_view path)
 
 } // namespace
 
-TString CombinePaths(std::string_view path1, std::string_view path2)
+std::string CombinePaths(const std::string& path1, const std::string& path2)
 {
     return IsAbsolutePath(path2) ? NormalizePathSeparators(path2) : JoinPaths(path1, path2);
 }
 
-TString CombinePaths(const std::vector<std::string>& paths)
+std::string CombinePaths(const std::vector<std::string>& paths)
 {
     YT_VERIFY(!paths.empty());
     if (paths.size() == 1) {
@@ -529,14 +549,14 @@ TString CombinePaths(const std::vector<std::string>& paths)
     return result;
 }
 
-TString JoinPaths(std::string_view path1, std::string_view path2)
+std::string JoinPaths(const std::string& path1, const std::string& path2)
 {
     if (path1.empty())
-        return TString(path2);
+        return std::string(path2);
     if (path2.empty())
-        return TString(path1);
+        return std::string(path1);
 
-    TString path(path1);
+    std::string path(path1);
     int delim = 0;
     if (path1.back() == PATH_DELIM || path1.back() == PATH_DELIM2)
         ++delim;
@@ -544,35 +564,36 @@ TString JoinPaths(std::string_view path1, std::string_view path2)
         ++delim;
     if (delim == 0)
         path.append(1, PATH_DELIM);
-    path.append(path2, delim == 2 ? 1 : 0, TString::npos);
+    path.append(path2, delim == 2 ? 1 : 0, std::string::npos);
     return NormalizePathSeparators(path);
 }
 
-TString NormalizePathSeparators(std::string_view path)
+std::string NormalizePathSeparators(const std::string& path)
 {
 #ifdef _unix_
-    constexpr char platformPathSeparator = '/';
-    constexpr char foreignPathSeparator = '\\';
+    // NB(pavook): normalizing path separators can yield unexpected (or even insecure) behavior on filenames
+    // containing foreign separators, so we avoid doing it on the common unix platforms.
+    return path;
 #else
     constexpr char platformPathSeparator = '\\';
     constexpr char foreignPathSeparator = '/';
-#endif
-    TString result;
+    std::string result;
     result.reserve(path.length());
     for (int i = 0; i < std::ssize(path); ++i) {
         if (path[i] == foreignPathSeparator) {
-            result.append(platformPathSeparator);
+            result.push_back(platformPathSeparator);
         } else {
-            result.append(path[i]);
+            result.push_back(path[i]);
         }
     }
     return result;
+#endif
 }
 
-void SetPermissions(const TString& path, int permissions)
+void SetPermissions(const std::string& path, int permissions)
 {
 #ifdef _linux_
-    auto res = HandleEintr(::chmod, path.data(), permissions);
+    auto res = HandleEintr(::chmod, path.c_str(), permissions);
     if (res == -1) {
         THROW_ERROR_EXCEPTION("Failed to set permissions for descriptor")
             << TErrorAttribute("path", path)
@@ -590,14 +611,14 @@ void SetPermissions(int fd, int permissions)
     SetPermissions(procPath, permissions);
 }
 
-void MakeSymbolicLink(const TString& filePath, const TString& linkPath)
+void MakeSymbolicLink(const std::string& filePath, const std::string& linkPath)
 {
 #ifdef _win_
     // From MSDN: If the function succeeds, the return value is nonzero.
     // If the function fails, the return value is zero. To get extended error information, call GetLastError.
-    bool ok = CreateSymbolicLink(linkPath.data(), filePath.data(), 0) != 0;
+    bool ok = CreateSymbolicLink(linkPath.c_str(), filePath.c_str(), 0) != 0;
 #else
-    bool ok = symlink(filePath.data(), linkPath.data()) == 0;
+    bool ok = symlink(filePath.c_str(), linkPath.c_str()) == 0;
 #endif
 
     if (!ok) {
@@ -609,11 +630,11 @@ void MakeSymbolicLink(const TString& filePath, const TString& linkPath)
     }
 }
 
-bool AreInodesIdentical(const TString& lhsPath, const TString& rhsPath)
+bool AreInodesIdentical(const std::string& lhsPath, const std::string& rhsPath)
 {
 #ifdef _unix_
-    auto checkedStat = [] (const TString& path, struct stat* buffer) {
-        auto result = stat(path.data(), buffer);
+    auto checkedStat = [] (const std::string& path, struct stat* buffer) {
+        auto result = stat(path.c_str(), buffer);
         if (result) {
             THROW_ERROR_EXCEPTION(
                 "Failed to check for identical inodes: stat failed for %v",
@@ -634,21 +655,21 @@ bool AreInodesIdentical(const TString& lhsPath, const TString& rhsPath)
 #endif
 }
 
-TString GetHomePath()
+std::string GetHomePath()
 {
 #ifdef _win_
     std::array<char, 1024> buffer;
     SHGetSpecialFolderPath(0, buffer.data(), CSIDL_PROFILE, 0);
-    return TString(buffer.data());
+    return buffer.data();
 #else
     return std::getenv("HOME");
 #endif
 }
 
-void FlushDirectory(const TString& path)
+void FlushDirectory(const std::string& path)
 {
 #ifdef _unix_
-    int fd = ::open(path.data(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    int fd = ::open(path.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (fd < 0) {
         THROW_ERROR_EXCEPTION("Failed to open directory %v", path)
             << TError::FromSystem();
@@ -667,10 +688,10 @@ void FlushDirectory(const TString& path)
 #endif
 }
 
-std::vector<TMountPoint> GetMountPoints(const TString& mountsFile)
+std::vector<TMountPoint> GetMountPoints(const std::string& mountsFile)
 {
 #ifdef _linux_
-    std::unique_ptr<FILE, decltype(&endmntent)> file(::setmntent(mountsFile.data(), "r"), endmntent);
+    std::unique_ptr<FILE, decltype(&endmntent)> file(::setmntent(mountsFile.c_str(), "r"), endmntent);
 
     if (!file.get()) {
         THROW_ERROR_EXCEPTION("Failed to open mounts file %v", mountsFile);
@@ -690,15 +711,14 @@ std::vector<TMountPoint> GetMountPoints(const TString& mountsFile)
 #else
     Y_UNUSED(mountsFile);
     ThrowNotSupported();
-    YT_ABORT();
 #endif
 }
 
-void MountTmpfs(const TString& path, int userId, i64 size)
+void MountTmpfs(const std::string& path, int userId, i64 size)
 {
 #ifdef _linux_
     auto opts = Format("mode=0777,uid=%v,size=%v", userId, size);
-    int result = ::mount("none", path.data(), "tmpfs", 0, opts.data());
+    int result = ::mount("none", path.c_str(), "tmpfs", 0, opts.c_str());
     if (result < 0) {
         THROW_ERROR_EXCEPTION("Failed to mount tmpfs at %v", path)
             << TErrorAttribute("user_id", userId)
@@ -708,18 +728,17 @@ void MountTmpfs(const TString& path, int userId, i64 size)
 #else
     Y_UNUSED(path, userId, size);
     ThrowNotSupported();
-    YT_ABORT();
 #endif
 }
 
-void Umount(const TString& path, bool detach)
+void Umount(const std::string& path, bool detach)
 {
 #ifdef _linux_
     int flags = 0;
     if (detach) {
         flags |= MNT_DETACH;
     }
-    int result = ::umount2(path.data(), flags);
+    int result = ::umount2(path.c_str(), flags);
     // EINVAL for ::umount means that nothing mounted at this point.
     // ENOENT means 'No such file or directory'.
     if (result < 0 && LastSystemError() != EINVAL && LastSystemError() != ENOENT) {
@@ -738,10 +757,10 @@ void Umount(const TString& path, bool detach)
 #endif
 }
 
-struct stat Stat(TStringBuf path)
+struct stat Stat(const std::string& path)
 {
     struct stat statInfo;
-    int result = ::stat(path.data(), &statInfo);
+    int result = ::stat(path.c_str(), &statInfo);
     if (result != 0) {
         THROW_ERROR_EXCEPTION("Failed to execute ::stat for %v", path)
             << TError::FromSystem();
@@ -749,18 +768,17 @@ struct stat Stat(TStringBuf path)
     return statInfo;
 }
 
-i64 GetBlockSize(TStringBuf device)
+i64 GetBlockSize(const std::string& device)
 {
 #ifdef _unix_
     struct stat statInfo = Stat(device);
     return static_cast<i64>(statInfo.st_blksize);
 #else
     ThrowNotSupported();
-    Y_UNREACHABLE();
 #endif
 }
 
-TString GetFilesystemName(TStringBuf path)
+std::string GetFilesystemName(const std::string& path)
 {
     struct stat statInfo = Stat(path);
     auto dev = statInfo.st_dev;
@@ -781,7 +799,7 @@ TString GetFilesystemName(TStringBuf path)
 
 void SetQuota(
     int userId,
-    TStringBuf path,
+    const std::string& path,
     std::optional<i64> diskSpaceLimit,
     std::optional<i64> inodeLimit)
 {
@@ -854,10 +872,10 @@ void WrapIOErrors(std::function<void()> func)
     }
 }
 
-void Chmod(const TString& path, int mode)
+void Chmod(const std::string& path, int mode)
 {
 #ifdef _linux_
-    int result = ::Chmod(path.data(), mode);
+    int result = ::Chmod(path.c_str(), mode);
     if (result < 0) {
         THROW_ERROR_EXCEPTION("Failed to change mode of %v", path)
             << TErrorAttribute("mode", Format("%04o", mode))
@@ -870,14 +888,14 @@ void Chmod(const TString& path, int mode)
 }
 
 void SendfileChunkedCopy(
-    const TString& existingPath,
-    const TString& newPath,
+    const std::string& existingPath,
+    const std::string& newPath,
     i64 chunkSize)
 {
 #ifdef _linux_
     try {
-        TFile src(existingPath, OpenExisting | RdOnly | Seq | CloseOnExec);
-        TFile dst(newPath, CreateAlways | WrOnly | Seq | CloseOnExec);
+        TFile src(TString(existingPath), OpenExisting | RdOnly | Seq | CloseOnExec);
+        TFile dst(TString(newPath), CreateAlways | WrOnly | Seq | CloseOnExec);
         dst.Flock(LOCK_EX);
         SendfileChunkedCopy(src, dst, chunkSize);
     } catch (const std::exception& ex) {
@@ -939,165 +957,6 @@ void SendfileChunkedCopy(
 #endif
 }
 
-TFuture<void> ReadBuffer(
-    int fromFd,
-    int toFd,
-    std::vector<ui8> buffer,
-    int bufferSize)
-{
-    YT_VERIFY(bufferSize);
-
-    auto readSize = read(fromFd, buffer.data(), bufferSize);
-
-    if (readSize == -1) {
-        THROW_ERROR_EXCEPTION("Error while doing read")
-            << TError::FromSystem();
-    }
-
-    if (readSize == 0) {
-        return VoidFuture;
-    }
-
-    return BIND(&WriteBuffer)
-        .AsyncVia(GetCurrentInvoker())
-        .Run(fromFd, toFd, std::move(buffer), bufferSize, readSize);
-}
-
-TFuture<void> WriteBuffer(
-    int fromFd,
-    int toFd,
-    std::vector<ui8> buffer,
-    int bufferSize,
-    int readSize)
-{
-    YT_VERIFY(readSize);
-    YT_VERIFY(bufferSize);
-
-    auto size = write(toFd, buffer.data(), readSize);
-
-    if (size == -1) {
-        THROW_ERROR_EXCEPTION("Error while doing write")
-            << TError::FromSystem();
-    }
-
-    return BIND(&ReadBuffer)
-        .AsyncVia(GetCurrentInvoker())
-        .Run(fromFd, toFd, std::move(buffer), bufferSize);
-}
-
-TFuture<void> ReadWriteCopyAsync(
-    const TString& existingPath,
-    const TString& newPath,
-    i64 chunkSize)
-{
-#ifdef _linux_
-    try {
-        TFile src(existingPath, OpenExisting | RdOnly | Seq | CloseOnExec);
-        TFile dst(newPath, CreateAlways | WrOnly | Seq | CloseOnExec);
-        dst.Flock(LOCK_EX);
-        return ReadWriteCopyAsync(src, dst, chunkSize);
-    } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION("Failed to copy %v to %v",
-            existingPath,
-            newPath)
-            << ex;
-    }
-#else
-    Y_UNUSED(existingPath, newPath, chunkSize);
-    ThrowNotSupported();
-    return VoidFuture;
-#endif
-}
-
-TFuture<void> ReadWriteCopyAsync(
-    const TFile& source,
-    const TFile& destination,
-    i64 chunkSize)
-{
-#ifdef _linux_
-    int srcFd = source.GetHandle();
-    int dstFd = destination.GetHandle();
-    std::vector<ui8> buffer(chunkSize);
-
-    return ReadBuffer(srcFd, dstFd, std::move(buffer), chunkSize)
-        .Apply(BIND([=] (const TErrorOr<void>& result) {
-            THROW_ERROR_EXCEPTION_IF_FAILED(result,
-                TError("Failed to copy %v to %v",
-                    source.GetName(),
-                    destination.GetName()));
-        }));
-#else
-    Y_UNUSED(source, destination, chunkSize);
-    ThrowNotSupported();
-    return VoidFuture;
-#endif
-}
-
-void ReadWriteCopySync(
-    const TString& existingPath,
-    const TString& newPath,
-    i64 chunkSize)
-{
-#ifdef _linux_
-    try {
-        TFile src(existingPath, OpenExisting | RdOnly | Seq | CloseOnExec);
-        TFile dst(newPath, CreateAlways | WrOnly | Seq | CloseOnExec);
-        dst.Flock(LOCK_EX);
-        ReadWriteCopySync(src, dst, chunkSize);
-    } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION("Failed to copy %v to %v",
-            existingPath,
-            newPath)
-            << ex;
-    }
-#else
-    Y_UNUSED(existingPath, newPath, chunkSize);
-    ThrowNotSupported();
-#endif
-}
-
-void ReadWriteCopySync(
-    const TFile& source,
-    const TFile& destination,
-    i64 chunkSize)
-{
-#ifdef _linux_
-    int srcFd = source.GetHandle();
-    int dstFd = destination.GetHandle();
-    std::vector<ui8> buffer(chunkSize);
-
-    while (true) {
-        auto readByteCount = read(srcFd, buffer.data(), chunkSize);
-
-        if (readByteCount == -1) {
-            THROW_ERROR_EXCEPTION("Error while doing read")
-                << TError::FromSystem();
-        }
-
-        if (readByteCount == 0) {
-            return;
-        }
-
-        for (int writtenByteCount = 0; writtenByteCount < readByteCount;) {
-            auto byteCount = write(
-                dstFd,
-                buffer.data() + writtenByteCount,
-                readByteCount - writtenByteCount);
-
-            if (byteCount == -1) {
-                THROW_ERROR_EXCEPTION("Error while doing write")
-                    << TError::FromSystem();
-            }
-
-            writtenByteCount += byteCount;
-        }
-    }
-#else
-    Y_UNUSED(source, destination, chunkSize);
-    ThrowNotSupported();
-#endif
-}
-
 void Splice(
     const TFile& source,
     const TFile& destination,
@@ -1143,9 +1002,111 @@ void Splice(
 #endif
 }
 
-TError AttachLsofOutput(TError error, const TString& path)
+TFuture<TSpliceResult> SpliceAsync(
+    const TFile& src,
+    const TFile& dst,
+    bool pipeIsSrc,
+    const IInvokerPtr& ioInvoker,
+    const NConcurrency::IPollerPtr& poller,
+    i64 chunkSize)
 {
-    auto lsofOutput = TShellCommand("lsof", {path})
+#ifdef _linux_
+    YT_VERIFY(src.GetHandle() >= 0 && dst.GetHandle() >= 0);
+    YT_VERIFY(chunkSize > 0);
+
+    static constexpr auto isPipe = [] (int fd) -> bool {
+        struct stat statBuf;
+        YT_VERIFY(::fstat(fd, &statBuf) != -1);
+        return (statBuf.st_mode & S_IFMT) == S_IFIFO;
+    };
+
+    static constexpr auto isNonblocking = [] (int fd) -> bool {
+        int flags = ::fcntl(fd, F_GETFL);
+        YT_VERIFY(flags != -1);
+        return flags & O_NONBLOCK;
+    };
+
+    auto fdPipe = (pipeIsSrc ? src : dst).GetHandle();
+    YT_ASSERT(isPipe(fdPipe));
+
+    auto fdOther = (pipeIsSrc ? dst : src).GetHandle();
+    YT_ASSERT(!isNonblocking(fdOther));
+    YT_ASSERT(!isPipe(fdOther));
+
+    auto control = NConcurrency::EPollControl::EdgeTriggered | (
+        pipeIsSrc
+            ? NConcurrency::EPollControl::Read
+            : NConcurrency::EPollControl::Write);
+
+    auto completionPromise = NewPromise<void>();
+    auto bytesSpliced = std::make_shared<i64>();
+
+    // NB: it is important that src and dst are captured by value here (instead of,
+    // say, simply their handles) so that they don't get destroyed prematurely.
+    auto doSplice = [=] () {
+        while (true) {
+            if (completionPromise.IsCanceled()) {
+                return;
+            }
+
+            auto result = ::splice(
+                src.GetHandle(),
+                nullptr,
+                dst.GetHandle(),
+                nullptr,
+                chunkSize,
+                SPLICE_F_MOVE | SPLICE_F_NONBLOCK);
+
+            if (result > 0) {
+                *bytesSpliced += result;
+                continue;
+            } else if (result == 0) {
+                completionPromise.TrySet();
+            } else if (errno != EAGAIN) {
+                completionPromise.TrySet(
+                    TError("Error while doing splice")
+                        << TErrorAttribute("source_path", src.GetName())
+                        << TErrorAttribute("destination_path", dst.GetName())
+                        << TError::FromSystem());
+            }
+            return;
+        }
+    };
+
+    auto pollable = NConcurrency::MakeSimplePollable(
+        [=] (NConcurrency::IPollable&, NConcurrency::EPollControl) {
+            NConcurrency::WaitFor(
+                BIND(doSplice)
+                    .AsyncVia(ioInvoker)
+                    .Run())
+                .ThrowOnError();
+        },
+        "SimplePollable");
+
+    bool registered = poller->TryRegister(pollable);
+    THROW_ERROR_EXCEPTION_UNLESS(registered, "Failed to register pollable");
+
+    poller->Arm(fdPipe, pollable, control);
+
+    return completionPromise.ToFuture().Apply(BIND([=] (const TError& result) {
+        poller->Unarm(fdPipe, pollable);
+        return poller->Unregister(pollable).ToUncancelable().Apply(BIND([=] (const TError& inner) {
+            YT_VERIFY(inner.IsOK());
+            return TSpliceResult{
+                .BytesSpliced = *bytesSpliced,
+                .Error = result,
+            };
+        }));
+    }));
+#else
+    Y_UNUSED(src, dst, pipeIsSrc, ioInvoker, poller, chunkSize);
+    ThrowNotSupported();
+#endif
+}
+
+TError AttachLsofOutput(TError error, const std::string& path)
+{
+    auto lsofOutput = TShellCommand("lsof", {TString(path)})
         .Run()
         .Wait()
         .GetOutput();
@@ -1153,9 +1114,9 @@ TError AttachLsofOutput(TError error, const TString& path)
         << TErrorAttribute("lsof_output", lsofOutput);
 }
 
-TError AttachFindOutput(TError error, const TString& path)
+TError AttachFindOutput(TError error, const std::string& path)
 {
-    auto findOutput = TShellCommand("find", {path, "-name", "*"})
+    auto findOutput = TShellCommand("find", {TString(path), "-name", "*"})
         .Run()
         .Wait()
         .GetOutput();
@@ -1163,7 +1124,7 @@ TError AttachFindOutput(TError error, const TString& path)
         << TErrorAttribute("find_output", findOutput);
 }
 
-TDeviceId GetDeviceId(const TString& path)
+TDeviceId GetDeviceId(const std::string& path)
 {
 #ifdef _linux_
     auto deviceId = Stat(path).st_dev;
@@ -1174,9 +1135,9 @@ TDeviceId GetDeviceId(const TString& path)
 #endif
 }
 
-std::optional<TString> FindBinaryPath(const TString& binary)
+std::optional<std::string> FindBinaryPath(const std::string& binary)
 {
-    if (NFs::Exists(binary)) {
+    if (NFs::Exists(TString(binary))) {
         return (TFsPath(NFs::CurrentWorkingDirectory()) / binary).GetPath();
     }
 
@@ -1206,7 +1167,7 @@ std::optional<TString> FindBinaryPath(const TString& binary)
         buffer[index] = 0;
 
         if (NFs::Exists(buffer.data())) {
-            return TString(buffer.data(), index);
+            return std::string(buffer.data(), index);
         }
     }
 

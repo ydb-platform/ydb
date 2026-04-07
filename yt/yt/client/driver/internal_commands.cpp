@@ -262,4 +262,24 @@ void TGetOrderedTabletSafeTrimRowCount::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TGetConnectionOrchidValue::Register(TRegistrar registrar)
+{
+    registrar.ParameterWithUniversalAccessor<TYPath>("path", [] (TGetConnectionOrchidValue* command) -> auto& {
+        return command->Options.Path;
+    })
+        .Optional(/*init*/ false);
+}
+
+void TGetConnectionOrchidValue::DoExecute(ICommandContextPtr context)
+{
+    auto internalClient = context->GetInternalClientOrThrow();
+
+    auto response = WaitFor(internalClient->GetConnectionOrchidValue(Options))
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(response);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NDriver

@@ -167,6 +167,7 @@ public:
             TString owner = permissionRowset.GetValue<Schema::Permission::Owner>();
             TString actionStr = permissionRowset.GetValue<Schema::Permission::Action>();
             ui64 deadline = permissionRowset.GetValue<Schema::Permission::Deadline>();
+            i32 priority = permissionRowset.GetValue<Schema::Permission::Priority>();
 
             TPermissionInfo permission;
             permission.PermissionId = id;
@@ -174,6 +175,7 @@ public:
             permission.Owner = owner;
             ParseFromStringSafe(actionStr, &permission.Action);
             permission.Deadline = TInstant::MicroSeconds(deadline);
+            permission.Priority = priority;
 
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Loaded permission %s owned by %s valid until %s: %s",
                       id.data(), owner.data(), TInstant::MicroSeconds(deadline).ToStringLocalUpToSeconds().data(), actionStr.data());

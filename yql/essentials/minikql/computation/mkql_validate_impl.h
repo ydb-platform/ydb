@@ -1,8 +1,7 @@
 #pragma once
 #include <util/string/cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 struct TValidateErrorPolicyNone {
 };
@@ -47,5 +46,4 @@ struct TValidate<TValidateErrorPolicyNone, TValidateMode> {
     }
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

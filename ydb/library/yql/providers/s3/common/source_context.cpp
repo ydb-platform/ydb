@@ -49,7 +49,7 @@ bool TSourceContext::Add(ui64 delta, NActors::TActorId producer, bool paused) {
     if (TaskQueueDataSize) {
         TaskQueueDataSize->Add(delta);
     }
-    if ((Value.load() + delta / 2) >= Limit) {
+    if (Value.load() + delta / 2 >= Limit) {
         if (!paused) {
             {
                 std::lock_guard<std::mutex> guard(Mutex);

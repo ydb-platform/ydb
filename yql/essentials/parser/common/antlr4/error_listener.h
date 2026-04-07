@@ -14,7 +14,7 @@ class ANTLR4CPP_PUBLIC YqlErrorListener: public BaseErrorListener {
 public:
     YqlErrorListener(NAST::IErrorCollector* errors, bool* error, bool isAmbiguityError = false);
 
-    virtual void syntaxError(
+    void syntaxError(
         Recognizer* recognizer, Token* offendingSymbol,
         size_t line, size_t charPositionInLine,
         const std::string& msg, std::exception_ptr e) override;

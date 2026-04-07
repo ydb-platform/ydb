@@ -28,17 +28,17 @@ public:
             return true;
         }
 
-        const auto& v = Request->Get()->Record.GetGroupIDs();
-        TSet<ui32> groupIDsToRead(v.begin(), v.end());
+        TSet<TGroupId> groupIDsToRead;
+        auto& node = Self->GetNode(NodeId);
+        for (const ui32 groupIdProto : Request->Get()->Record.GetGroupIDs()) {
+            auto groupId = TGroupId::FromValue(groupIdProto);
+            groupIDsToRead.insert(groupId);
+            node.GroupsRequested.insert(groupId);
+            Self->GroupToNode.emplace(groupId, NodeId);
+        }
 
         Response = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(NKikimrProto::OK, NodeId);
         Self->ReadGroups(groupIDsToRead, true, Response.get(), NodeId);
-
-        auto& node = Self->GetNode(NodeId);
-        for (ui32 groupId : v) {
-            node.GroupsRequested.insert(TGroupId::FromValue(groupId));
-            Self->GroupToNode.emplace(TGroupId::FromValue(groupId), NodeId);
-        }
 
         return true;
     }

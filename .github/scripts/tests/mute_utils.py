@@ -1,6 +1,12 @@
+from __future__ import annotations
+from typing import Set, Tuple
 import operator
 import re
 import xml.etree.ElementTree as ET
+import sys
+import yaml
+import json
+
 from junit_utils import add_junit_property
 
 
@@ -126,3 +132,68 @@ def recalc_suite_info(suite):
     suite.set("failures", str(failures))
     suite.set("skipped", str(skipped))
     suite.set("time", str(elapsed))
+
+
+def _split(s: str, sep: str) -> tuple[str, str]:
+    p = s.find(sep)
+    if p < 0:
+        return s, ''
+    else:
+        return s[:p], s[p + 1 :]
+
+def get_previously_skipped_tests(report_json_path: str) -> Set[Tuple[str, str]]:
+    result = set()
+    if report_json_path:
+        with open(report_json_path, 'r') as f:
+            report = json.load(f)
+        for test in report.get('results', []):
+            if test.get('status', '') not in {'SKIPPED'}:
+                continue
+            path = test.get('path', '')
+            name = test.get('name', '')
+            sub_name = test.get('subtest_name', '')
+            if name and sub_name:
+                result.add((path, f'{name}.{sub_name}'))
+            elif name:
+                result.add((path, name))
+            elif sub_name:
+                result.add((path, sub_name))
+    return result
+
+def convert_muted_txt_to_yaml(muted_txt_path: str, report_json_path: str) -> None:
+    with open(muted_txt_path) as file:
+        muted_tests = file.readlines()
+    previously_skipped = get_previously_skipped_tests(report_json_path)
+    filter_by_suite: dict[tuple[str, str], list[str]] = {}
+    for test_line in [l.strip() for l in muted_tests]:
+        if not test_line:
+            continue
+        path, filter = _split(test_line, ' ')
+        if filter.endswith('chunk'):
+            continue
+        if (path, filter) in previously_skipped:
+            continue
+        suite_type = ''
+        filter = filter.replace('.', '::').replace('::py::', '.py::')
+
+        filter_by_suite.setdefault((path, suite_type), [])
+        filter_by_suite[(path, suite_type)].append(filter)
+
+    result = []
+    for (path, suite_type), filter in filter_by_suite.items():
+        result.append({})
+        if path:
+            result[-1]['path'] = path
+        if suite_type:
+            result[-1]['suite_type'] = suite_type
+        if filter and '' not in filter:
+            if len(filter) == 1:
+                result[-1]['test_filter'] = filter[0]
+            else:
+                result[-1]['test_filter'] = filter
+    print(yaml.dump(result))
+
+
+if __name__ == "__main__":
+    args = sys.argv
+    globals()[args[1]](*args[2:])

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
+
 #include <util/folder/path.h>
 #include <util/stream/file.h>
 #include <util/string/builder.h>
@@ -12,8 +14,7 @@
 #include <util/system/env.h>
 #endif
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 #if defined(_darwin_)
     const TString HomeDir = GetHomeDir();
@@ -58,5 +59,6 @@ TString ReadFromFile(const TString& filePath, const TString& fileName, bool allo
 TFsPath GetExistingFsPath(TString& filePath, const TString& fileName);
 TString InputPassword();
 
-}
-}
+bool ThrowOnErrorAndCheckEOS(NYdb::TStreamPartStatus status);
+
+} // namespace NYdb::NConsoleClient

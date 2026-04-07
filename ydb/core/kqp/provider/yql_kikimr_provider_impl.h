@@ -273,20 +273,35 @@ struct TWriteBackupCollectionSettings {
 };
 
 struct TWriteSecretSettings {
+public:
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TMaybeNode<NNodes::TCoAtom> Value;
+    NNodes::TMaybeNode<NNodes::TCoAtom> ValueParamName;
     NNodes::TMaybeNode<NNodes::TCoAtom> InheritPermissions;
+    bool HasError = false;
 
+public:
     TWriteSecretSettings(
         NNodes::TMaybeNode<NNodes::TCoAtom>&& mode,
         NNodes::TMaybeNode<NNodes::TCoAtom>&& value,
+        NNodes::TMaybeNode<NNodes::TCoAtom>&& valueParamName,
         NNodes::TMaybeNode<NNodes::TCoAtom>&& inheritPermissions
     )
         : Mode(std::move(mode))
         , Value(std::move(value))
+        , ValueParamName(std::move(valueParamName))
         , InheritPermissions(std::move(inheritPermissions))
     {
     }
+
+    static TWriteSecretSettings CreateWithError() {
+        TWriteSecretSettings result;
+        result.HasError = true;
+        return result;
+    }
+
+private:
+    TWriteSecretSettings() = default;
 };
 
 TAutoPtr<IGraphTransformer> CreateKiSourceTypeAnnotationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
@@ -339,9 +354,7 @@ Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(st
 bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral);
 std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TTypeAnnotationNode* valueType, Ydb::TypedValue& proto);
 void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto);
-// todo gvit switch to ydb typed value.
-void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKqpProto::TKqpPhyLiteralValue& proto);
-void FillLiteralProto(const NNodes::TCoPgConst& literal, NKqpProto::TKqpPhyLiteralValue& proto);
+void FillLiteralProto(const NNodes::TCoPgConst& literal, Ydb::TypedValue& proto);
 
 // Optimizer rules
 TExprNode::TPtr KiBuildQuery(NNodes::TExprBase node, TExprContext& ctx, TStringBuf database, TIntrusivePtr<TKikimrTablesData> tablesData,

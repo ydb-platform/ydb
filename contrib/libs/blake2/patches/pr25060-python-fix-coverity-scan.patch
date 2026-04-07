@@ -1,0 +1,67 @@
+https://github.com/python/cpython/pull/25060
+https://github.com/BLAKE2/libb2/issues/43
+
+From 02c7e77bf98e8082e2200fb0198238ba617aed49 Mon Sep 17 00:00:00 2001
+From: Inada Naoki <songofacandy@gmail.com>
+Date: Mon, 29 Mar 2021 12:22:07 +0900
+Subject: [PATCH] blake2: Fix Coverity scan
+
+---
+ src/blake2b-ref.c | 2 +-
+ src/blake2b.c     | 2 +-
+ src/blake2s-ref.c | 2 +-
+ src/blake2s.c     | 2 +-
+ 4 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/blake2b-ref.c b/src/blake2b-ref.c
+index 699f1a1da1de..e58c43659d9c 100644
+--- a/src/blake2b-ref.c
++++ b/src/blake2b-ref.c
+@@ -333,7 +333,7 @@ int blake2b_final( blake2b_state *S, uint8_t *out, size_t outlen )
+     blake2b_increment_counter( S, BLAKE2B_BLOCKBYTES );
+     blake2b_compress( S, S->buf );
+     S->buflen -= BLAKE2B_BLOCKBYTES;
+-    memcpy( S->buf, S->buf + BLAKE2B_BLOCKBYTES, S->buflen );
++    memmove( S->buf, S->buf + BLAKE2B_BLOCKBYTES, S->buflen );
+   }
+ 
+   blake2b_increment_counter( S, S->buflen );
+diff --git a/src/blake2b.c b/src/blake2b.c
+index 3d3e46506f2e..c1068e864054 100644
+--- a/src/blake2b.c
++++ b/src/blake2b.c
+@@ -388,7 +388,7 @@ int blake2b_final( blake2b_state *S, uint8_t *out, size_t outlen )
+     blake2b_increment_counter( S, BLAKE2B_BLOCKBYTES );
+     blake2b_compress( S, S->buf );
+     S->buflen -= BLAKE2B_BLOCKBYTES;
+-    memcpy( S->buf, S->buf + BLAKE2B_BLOCKBYTES, S->buflen );
++    memmove( S->buf, S->buf + BLAKE2B_BLOCKBYTES, S->buflen );
+   }
+ 
+   blake2b_increment_counter( S, S->buflen );
+diff --git a/src/blake2s-ref.c b/src/blake2s-ref.c
+index baf0b58351ae..ab86cc1b34e6 100644
+--- a/src/blake2s-ref.c
++++ b/src/blake2s-ref.c
+@@ -323,7 +323,7 @@ int blake2s_final( blake2s_state *S, uint8_t *out, size_t outlen )
+     blake2s_increment_counter( S, BLAKE2S_BLOCKBYTES );
+     blake2s_compress( S, S->buf );
+     S->buflen -= BLAKE2S_BLOCKBYTES;
+-    memcpy( S->buf, S->buf + BLAKE2S_BLOCKBYTES, S->buflen );
++    memmove( S->buf, S->buf + BLAKE2S_BLOCKBYTES, S->buflen );
+   }
+ 
+   blake2s_increment_counter( S, ( uint32_t )S->buflen );
+diff --git a/src/blake2s.c b/src/blake2s.c
+index 3a04328ab8a4..47514685b8f3 100644
+--- a/src/blake2s.c
++++ b/src/blake2s.c
+@@ -363,7 +363,7 @@ int blake2s_final( blake2s_state *S, uint8_t *out, size_t outlen )
+     blake2s_increment_counter( S, BLAKE2S_BLOCKBYTES );
+     blake2s_compress( S, S->buf );
+     S->buflen -= BLAKE2S_BLOCKBYTES;
+-    memcpy( S->buf, S->buf + BLAKE2S_BLOCKBYTES, S->buflen );
++    memmove( S->buf, S->buf + BLAKE2S_BLOCKBYTES, S->buflen );
+   }
+ 
+   blake2s_increment_counter( S, ( uint32_t )S->buflen );

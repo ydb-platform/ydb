@@ -1,8 +1,9 @@
 #include "yql_yt_settings.h"
 
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
-#include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/json/json_reader.h>
@@ -27,8 +28,8 @@ const TRegExMatch CODECS("none|snappy|zlib_[1-9]|lz4(_high_compression)?|quick_l
 
 } // namespace
 
-bool ValidateCompressionCodecValue(const TStringBuf& codec) {
-    return CODECS.Match(codec.data());
+bool ValidateCompressionCodecValue(const TString& codec) {
+    return CODECS.Match(codec.c_str());
 }
 
 void MediaValidator(const NYT::TNode& value) {
@@ -56,7 +57,7 @@ void MediaValidator(const NYT::TNode& value) {
 }
 
 TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQContext& qContext)
-    : NCommon::TSettingDispatcher(qContext)
+    : NCommon::TSettingDispatcher(YtProviderName, qContext)
 {
     const auto codecValidator = [] (const TString&, TString str) {
         if (!ValidateCompressionCodecValue(str)) {
@@ -121,6 +122,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, QueryCacheTtl);
     REGISTER_SETTING(*this, QueryCacheUseForCalc);
     REGISTER_SETTING(*this, QueryCacheUseExpirationTimeout);
+    REGISTER_SETTING(*this, QueryCacheCombineChunksReplace);
 
     REGISTER_SETTING(*this, DefaultMemoryLimit);
     REGISTER_SETTING(*this, DefaultMemoryReserveFactor).Lower(0.0).Upper(1.0);
@@ -362,7 +364,13 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, MaxOutputTables).Lower(1).Upper(100); // https://ml.yandex-team.ru/thread/yt/166633186212752141/
     REGISTER_SETTING(*this, MaxInputTablesForSortedMerge).Lower(2).Upper(1000); // https://st.yandex-team.ru/YTADMINREQ-16742
     REGISTER_SETTING(*this, DisableFuseOperations);
-    REGISTER_SETTING(*this, EnableFuseMapToMapReduce);
+    REGISTER_SETTING(*this, EnableFuseMapToMapReduce)
+        .ValueSetter([this](const TString& arg, bool value) {
+            Y_UNUSED(arg);
+            FuseMapToMapReduce = value ? EFuseMapToMapReduceMode::Normal : EFuseMapToMapReduceMode::Disable;
+        })
+        .Deprecated("Pragma EnableFuseMapToMapReduce is deprected. Use FuseMapToMapReduce instead");
+    REGISTER_SETTING(*this, FuseMapToMapReduce).Parser([](const TString& v) { return FromString<EFuseMapToMapReduceMode>(v); });
     REGISTER_SETTING(*this, MaxExtraJobMemoryToFuseOperations);
     REGISTER_SETTING(*this, MaxReplicationFactorToFuseOperations).Lower(1.0);
     REGISTER_SETTING(*this, MaxOperationFiles).Lower(2).Upper(1000);
@@ -444,6 +452,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, LLVMMemSize);
     REGISTER_SETTING(*this, LLVMPerNodeMemSize);
     REGISTER_SETTING(*this, LLVMNodeCountLimit);
+    REGISTER_SETTING(*this, OmitInaccessibleRows);
+    REGISTER_SETTING(*this, _EnableRLSTablesSupport);
     REGISTER_SETTING(*this, SamplingIoBlockSize);
     REGISTER_SETTING(*this, BinaryTmpFolder).IgnoreInFullReplay();
     REGISTER_SETTING(*this, _BinaryCacheFolder);
@@ -621,6 +631,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, _QueryDumpFileCountPerOperationLimit);
     REGISTER_SETTING(*this, KeepWorldDepForFillOp);
     REGISTER_SETTING(*this, CostBasedOptimizerPartial);
+    REGISTER_SETTING(*this, _MinJobStateSizeToPassViaFile);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {
@@ -655,7 +666,7 @@ void TYtVersionedConfiguration::CopyNodeVer(const TExprNode& from, const TExprNo
 }
 
 void TYtVersionedConfiguration::FreezeZeroVersion() {
-    if (Y_UNLIKELY(FrozenSettings.empty())) {
+    if (FrozenSettings.empty()) [[unlikely]] {
         FrozenSettings.push_back(Snapshot());
     }
 }

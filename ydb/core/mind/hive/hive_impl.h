@@ -110,15 +110,6 @@ inline IOutputStream& operator <<(IOutputStream& out, NKikimr::NHive::TSequencer
     return out << sq.Next << "@[" << sq.Begin << ".." << sq.End << ')';
 }
 
-namespace std {
-    template <>
-    struct hash<NKikimr::TSubDomainKey> {
-        std::size_t operator()(const NKikimr::TSubDomainKey& key) const {
-            return key.Hash();
-        }
-    };
-}
-
 namespace NKikimr {
 namespace NHive {
 
@@ -179,6 +170,7 @@ protected:
     friend class THiveStorageBalancer;;
     friend struct TNodeInfo;
     friend struct TLeaderTabletInfo;
+    friend class TReassignTabletsActor;
 
     friend class TTxInitScheme;
     friend class TTxDeleteBase;
@@ -248,6 +240,8 @@ protected:
     friend class TTxMonEvent_StopDomain;
     friend class TTxUpdatePiles;
     friend class TTxSetDown;
+    friend class TTxProcessTabletMetrics;
+    friend class TTxUpdateLastReassign;
 
     friend class TDeleteTabletActor;
 
@@ -259,6 +253,8 @@ protected:
     THiveDrain* StartHiveDrain(TDrainTarget target, TDrainSettings settings);
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     void StartHiveStorageBalancer(TStorageBalancerSettings settings);
+    void StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description);
+    void StartReassignActor(std::vector<TReassignOperation> operations);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     NJson::TJsonValue GetBalancerProgressJson();
     ITransaction* CreateDeleteTablet(TEvHive::TEvDeleteTablet::TPtr& ev);
@@ -318,6 +314,7 @@ protected:
     ITransaction* CreateConfigureScaleRecommender(TEvHive::TEvConfigureScaleRecommender::TPtr event);
     ITransaction* CreateUpdatePiles();
     ITransaction* CreateSetDown(TEvHive::TEvSetDown::TPtr& event);
+    ITransaction* CreateProcessTabletMetrics();
 
 public:
     TDomainsView DomainsView;
@@ -336,6 +333,7 @@ protected:
     TPipeTracker PipeTracker;
     NTabletPipe::TClientRetryPolicy PipeRetryPolicy;
     std::unordered_map<TNodeId, TNodeInfo> Nodes;
+    std::unordered_map<TSegmentId, TIntrusiveList<TNodeInfo, TSegmentNodesTag>> NodeSegments;
     std::unordered_map<TTabletId, TLeaderTabletInfo> Tablets;
     std::unordered_map<TOwnerIdxType::TValueType, TTabletId> OwnerToTablet;
     std::unordered_map<TTabletCategoryId, TTabletCategoryInfo> TabletCategories;
@@ -420,6 +418,7 @@ protected:
     bool LogTabletMovesScheduled = false;
     bool ProcessStorageBalancerScheduled = false;
     bool ProcessFollowerUpdatesScheduled = false;
+    bool ProcessTabletMetricsScheduled = false;
     TResourceRawValues TotalRawResourceValues = {};
     TResourceNormalizedValues TotalNormalizedResourceValues = {};
     TInstant LastResourceChangeReaction;
@@ -441,6 +440,7 @@ protected:
     std::queue<TTabletId> StopTenantTabletsQueue;
     std::queue<TTabletId> ResumeTenantTabletsQueue;
     bool NotEnoughResources = false;
+    std::queue<TFullTabletId> ProcessTabletMetricsQueue;
 
     struct TPendingCreateTablet {
         NKikimrHive::TEvCreateTablet CreateTablet;
@@ -476,6 +476,8 @@ protected:
     std::unordered_map<TTabletTypes::EType, NKikimrHive::TDataCentersPreference> DefaultDataCentersPreference;
     std::unordered_map<TDataCenterId, TDataCenterInfo> DataCenters;
     std::unordered_set<TNodeId> ConnectedNodes;
+    TString LastReassignStatus;
+    ui32 ReassignsRunning = 0;
 
     // normalized to be sorted list of unique values
     std::vector<TTabletTypes::EType> BalancerIgnoreTabletTypes; // built from CurrentConfig
@@ -615,6 +617,7 @@ protected:
     void Handle(TEvPrivate::TEvUpdateBalanceCounters::TPtr& ev);
     void Handle(TEvHive::TEvRequestDrainInfo::TPtr& ev);
     void Handle(TEvHive::TEvSetDown::TPtr& ev);
+    void Handle(TEvPrivate::TEvProcessTabletMetrics::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
@@ -1045,6 +1048,10 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
         return static_cast<i64>(CurrentConfig.GetMaxDeleteTabletInProgress());
     }
 
+    TDuration GetDataCenterChangeReactionPeriod() const {
+        return TDuration::Seconds(CurrentConfig.GetDataCenterChangeReactionPeriod());
+    }
+
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);
     static ui64 GetRestartsPerPeriod(const google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);
     static bool IsSystemTablet(TTabletTypes::EType type);
@@ -1091,6 +1098,9 @@ protected:
     THiveStats GetStats() const;
     template<std::forward_iterator TIter>
     THiveStats GetStats(TIter begin, TIter end) const;
+    void RemoveNodeFromSegments(TNodeInfo* node);
+    void RemoveNodeFromSegments(TNodeId nodeId);
+    void UpdateNodeSegments(TNodeInfo* node);
     void RemoveSubActor(ISubActor* subActor);
     bool StopSubActor(TSubActorId subActorId);
     void WaitToMoveTablets(TActorId actor);

@@ -838,6 +838,47 @@ Y_UNIT_TEST_LLVM(TestOverListAndIndependentWideFlows) {
     UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
     UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
 }
+
+template <bool LLVM>
+void TestRecursiveFlatMapOverLazyZip(bool WithCollect) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto itemType = pb.NewDataType(NUdf::TDataType<double>::Id);
+    const auto l1 = pb.NewList(itemType, {pb.NewDataLiteral(1.0), pb.NewDataLiteral(2.0), pb.NewDataLiteral(3.0)});
+    const auto l2 = pb.NewList(itemType, {pb.NewDataLiteral(4.0), pb.NewDataLiteral(5.0), pb.NewDataLiteral(6.0)});
+    const auto l3 = pb.NewList(itemType, {pb.NewDataLiteral(7.0), pb.NewDataLiteral(8.0), pb.NewDataLiteral(9.0)});
+    const auto list = pb.NewList(pb.NewListType(itemType), {l1, l2, l3});
+
+    const auto init = pb.Replicate(pb.NewDataLiteral(0.0), pb.NewDataLiteral<ui64>(3), __FILE__, __LINE__, 0);
+    const auto pgmReturn = pb.Fold(list, WithCollect ? pb.Collect(init) : init,
+                                   [&pb](TRuntimeNode item, TRuntimeNode state) {
+                                       return pb.OrderedFlatMap(pb.Zip({item, state}),
+                                                                [&pb](TRuntimeNode item) {
+                                                                    return pb.NewOptional(pb.Add(pb.Nth(item, 0), pb.Nth(item, 1)));
+                                                                });
+                                   });
+
+    const auto graph = setup.BuildGraph(pgmReturn);
+    const auto iterator = graph->GetValue().GetListIterator();
+
+    NUdf::TUnboxedValue item;
+    UNIT_ASSERT(iterator.Next(item));
+    UNIT_ASSERT_VALUES_EQUAL(item.Get<double>(), 12.0);
+    UNIT_ASSERT(iterator.Next(item));
+    UNIT_ASSERT_VALUES_EQUAL(item.Get<double>(), 15.0);
+    UNIT_ASSERT(iterator.Next(item));
+    UNIT_ASSERT_VALUES_EQUAL(item.Get<double>(), 18.0);
+    UNIT_ASSERT(!iterator.Next(item));
+    UNIT_ASSERT(!iterator.Next(item));
+}
+
+Y_UNIT_TEST_LLVM(TestRecursiveFlatMapOverLazyZipWithCollect) {
+    TestRecursiveFlatMapOverLazyZip<LLVM>(true);
+}
+Y_UNIT_TEST_LLVM(TestRecursiveFlatMapOverLazyZipWithoutCollect) {
+    TestRecursiveFlatMapOverLazyZip<LLVM>(false);
+}
 } // Y_UNIT_TEST_SUITE(TMiniKQLFlatMapTest)
 
 } // namespace NMiniKQL

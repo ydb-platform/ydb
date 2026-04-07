@@ -21,12 +21,12 @@ public:
     constexpr explicit TSize(TUnderlying value);
 
     TSize(const TSize&) = default;
-    TSize(TSize&&) = default;
+    TSize(TSize&&) noexcept = default;
 
     static TSize FromString(TStringBuf serializedValue);
 
     TSize& operator=(const TSize&) = default;
-    TSize& operator=(TSize&&) = default;
+    TSize& operator=(TSize&&) noexcept = default;
 
     constexpr operator const TUnderlying&() const;
     constexpr operator TUnderlying&();

@@ -21,6 +21,7 @@ using namespace NActors;
 class TNode {
     THolder<TActorSystem> ActorSystem;
     TString CaPath;
+    TInterconnectProxyCommon::TPtr Common;
 
 public:
     static constexpr ui32 DefaultInflight() { return 512 * 1024; }
@@ -31,7 +32,9 @@ public:
           TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr, ui32 inflight = DefaultInflight(),
           ESocketSendOptimization sendOpt = ESocketSendOptimization::DISABLED,
           bool withTls = false, std::function<IActor*(ui32)> checkerFactory = {},
-          NInterconnect::NRdma::ECqMode rdmaCqMode = NInterconnect::NRdma::ECqMode::EVENT) {
+          NInterconnect::NRdma::ECqMode rdmaCqMode = NInterconnect::NRdma::ECqMode::EVENT,
+          bool withRdma = true,
+          std::function<void(ui32, TInterconnectSettings&)> settingsCustomizer = {}) {
         TActorSystemSetup setup;
         setup.NodeId = nodeId;
         setup.ExecutorsCount = 2;
@@ -41,7 +44,8 @@ public:
         setup.Scheduler.Reset(new TBasicSchedulerThread());
         const ui32 interconnectPoolId = 0;
 
-        auto common = MakeIntrusive<TInterconnectProxyCommon>();
+        Common = MakeIntrusive<TInterconnectProxyCommon>();
+        auto& common = Common;
         common->NameserviceId = GetNameserviceActorId();
         common->MonCounters = counters->GetSubgroup("nodeId", ToString(nodeId));
         common->ChannelsConfig = channelsSettings;
@@ -56,9 +60,17 @@ public:
         common->Settings.TCPSocketBufferSize = 2048 * 1024;
         common->Settings.SocketSendOptimization = sendOpt;
         common->OutgoingHandshakeInflightLimit = 3;
+        if (settingsCustomizer) {
+            settingsCustomizer(nodeId, common->Settings);
+        }
+        setup.InterconnectCollectSubscriptionStackTrace = common->Settings.CollectSubscriptionStackTrace;
 
         #if !defined(_msan_enabled_)
-        common->RdmaMemPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
+        if (withRdma) {
+            common->RdmaMemPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
+        }
+        #else
+            Y_UNUSED(withRdma);
         #endif
 
         if (withTls) {
@@ -93,7 +105,7 @@ public:
         setup.LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(),
             TMailboxType::ReadAsFilled, 0));
         setup.LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
-            TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(-1, 32, rdmaCqMode, nullptr),
+            TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(-1, 1024, rdmaCqMode, nullptr),
             TMailboxType::ReadAsFilled, 0));
 
         const TActorId loggerActorId = loggerSettings ? loggerSettings->LoggerActorId : TActorId(0, "logger");
@@ -177,5 +189,9 @@ public:
 
     TActorSystem *GetActorSystem() const {
         return ActorSystem.Get();
+    }
+
+    TInterconnectSettings& MutableInterconnectSettings() {
+        return Common->Settings;
     }
 };

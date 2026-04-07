@@ -75,9 +75,20 @@ public:
 
     void SetUp(NUnitTest::TTestContext&) override;
 
-    void InitAll(bool yandexCloudMode = true, bool enableMetering = false, bool extendedQueueUrl = false);
+    struct TInitParameters {
+        bool YandexCloudMode : 1 = true;
+        bool EnableMetering : 1 = false;
+        bool EnableSqsTopic : 1 = false;
+        bool EnforceUserTokenRequirement : 1 = false;
+        bool EnableTopicPartitionSplitBasedOnKllSketch : 1 = false;
+    };
 
-    static TString FormAuthorizationStr(const TString& region);
+    void InitAll(const TInitParameters initParameters);
+
+    TString FormAuthorizationStr(const TString& region) const;
+
+    void EnableAuthorization();
+    void DisableAuthorization();
 
     static NJson::TJsonValue CreateCreateStreamRequest();
 
@@ -132,12 +143,23 @@ public:
         NJson::TJsonMap json;
         UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
         if (expectedHttpCode == 200) {
-            UNIT_ASSERT(GetByPath<TString>(json, "QueueUrl").EndsWith(GetByPath<TString>(request, "QueueName")));
+            const TString url = GetByPath<TString>(json, "QueueUrl");
+            const TString queue = GetByPath<TString>(request, "QueueName");
+            if (SqsTopicMode) {
+                TStringBuf topic, consumer;
+                TStringBuf{queue}.RSplit('@', topic, consumer);
+                UNIT_ASSERT_C(url.contains(topic), LabeledOutput(url, queue, topic));
+                UNIT_ASSERT_C(url.contains(consumer), LabeledOutput(url, queue, consumer));
+            } else {
+                UNIT_ASSERT_C(url.EndsWith(queue), LabeledOutput(url, queue));
+            }
         }
         return json;
     }
 
     NJson::TJsonMap SendJsonRequest(TString method, NJson::TJsonMap request, ui32 expectedHttpCode = 200);
+
+    NJson::TJsonMap SendJsonRequestWithRetries(TString method, NJson::TJsonMap request, ui32 expectedHttpCode, ui32 retries = 10);
 
     NJson::TJsonMap DeleteQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("DeleteQueue", request, expectedHttpCode);
@@ -153,6 +175,10 @@ public:
             UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
         }
         return json;
+    }
+
+    NJson::TJsonMap SendMessageWithRetries(NJson::TJsonMap request, ui32 expectedHttpCode = 200, ui32 retries = 20) {
+        return SendJsonRequestWithRetries("SendMessage", request, expectedHttpCode, retries);
     }
 
     NJson::TJsonMap SendMessageBatch(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
@@ -214,7 +240,7 @@ public:
 private:
     TMaybe<NYdb::TResultSet> RunYqlDataQuery(TString query);
 
-    void InitKikimr(bool yandexCloudMode, bool enableMetering);
+    void InitKikimr(const TInitParameters& initParameters);
 
     void InitAccessServiceService();
 
@@ -241,22 +267,52 @@ public:
     ui16 DatabaseServicePort = 0;
     ui16 MonPort = 0;
     ui16 KikimrGrpcPort = 0;
+    bool SqsTopicMode = false;
+    bool SendAuthorizationStr = true;
 };
 
 class THttpProxyTestMockForSQS : public THttpProxyTestMock {
+    public:
     void SetUp(NUnitTest::TTestContext&) override {
-        InitAll(false);
+        InitAll(TInitParameters{
+            .YandexCloudMode = false,
+        });
     }
 };
 
 class THttpProxyTestMockWithMetering : public THttpProxyTestMock {
+    public:
     void SetUp(NUnitTest::TTestContext&) override {
-        InitAll(true, true);
+        InitAll(TInitParameters{
+            .EnableMetering = true,
+        });
     }
 };
 
 class THttpProxyTestMockForSQSTopic : public THttpProxyTestMock {
+    public:
     void SetUp(NUnitTest::TTestContext&) override {
-        InitAll(true, false, true);
+        InitAll(TInitParameters{
+            .EnableSqsTopic = true,
+        });
+    }
+};
+
+class THttpProxyTestMockForSQSTopicWithKllAutosplit : public THttpProxyTestMock {
+public:
+    void SetUp(NUnitTest::TTestContext&) override {
+        InitAll(TInitParameters{
+            .EnableSqsTopic = true,
+            .EnableTopicPartitionSplitBasedOnKllSketch = true,
+        });
+    }
+};
+
+class THttpProxyTestMockForKinesisWithKllAutosplit : public THttpProxyTestMock {
+public:
+    void SetUp(NUnitTest::TTestContext&) override {
+        InitAll(TInitParameters{
+            .EnableTopicPartitionSplitBasedOnKllSketch = true,
+        });
     }
 };

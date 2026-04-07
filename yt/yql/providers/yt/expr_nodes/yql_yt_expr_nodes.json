@@ -396,12 +396,18 @@
         {
             "Name": "TYtDropTable",
             "Base": "TYtIsolatedOpBase",
-            "Match": {"Type": "Callable", "Name": "YtDropTable!"}
+            "Match": {"Type": "Callable", "Name": "YtDropTable!"},
+            "Children": [
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
         },
         {
             "Name": "TYtDropView",
             "Base": "TYtIsolatedOpBase",
-            "Match": {"Type": "Callable", "Name": "YtDropView!"}
+            "Match": {"Type": "Callable", "Name": "YtDropView!"},
+            "Children": [
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
         },
         {
             "Name": "TYtCreateTable",

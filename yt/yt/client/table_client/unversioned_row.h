@@ -162,7 +162,7 @@ static_assert(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline size_t GetDataWeight(EValueType type)
+inline i64 GetDataWeight(EValueType type)
 {
     switch (type) {
         case EValueType::Null:
@@ -188,7 +188,7 @@ inline size_t GetDataWeight(EValueType type)
     }
 }
 
-inline size_t GetDataWeight(const TUnversionedValue& value)
+inline i64 GetDataWeight(const TUnversionedValue& value)
 {
     if (IsStringLikeType(value.Type)) {
         return value.Length;
@@ -211,10 +211,10 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
 
 //! Derived comparison operators.
 //! Note that these ignore flags.
-bool operator == (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
-bool operator <= (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
+bool operator==(const TUnversionedValue& lhs, const TUnversionedValue& rhs);
+bool operator<=(const TUnversionedValue& lhs, const TUnversionedValue& rhs);
 bool operator <  (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
-bool operator >= (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
+bool operator>=(const TUnversionedValue& lhs, const TUnversionedValue& rhs);
 bool operator >  (const TUnversionedValue& lhs, const TUnversionedValue& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -235,10 +235,10 @@ int CompareRows(
 
 //! Derived comparison operators.
 //! Note that these ignore aggregate flags.
-bool operator == (TUnversionedRow lhs, TUnversionedRow rhs);
-bool operator <= (TUnversionedRow lhs, TUnversionedRow rhs);
+bool operator==(TUnversionedRow lhs, TUnversionedRow rhs);
+bool operator<=(TUnversionedRow lhs, TUnversionedRow rhs);
 bool operator <  (TUnversionedRow lhs, TUnversionedRow rhs);
-bool operator >= (TUnversionedRow lhs, TUnversionedRow rhs);
+bool operator>=(TUnversionedRow lhs, TUnversionedRow rhs);
 bool operator >  (TUnversionedRow lhs, TUnversionedRow rhs);
 
 //! Computes FarmHash forever-fixed fingerprint for a range of values.
@@ -251,9 +251,10 @@ TFingerprint GetFarmFingerprint(TUnversionedRow row);
 size_t GetUnversionedRowByteSize(ui32 valueCount);
 
 //! Returns the storage-invariant data weight of a given row.
-size_t GetDataWeight(TUnversionedRow row);
+i64 GetDataWeight(TUnversionedRow row);
 
-size_t GetDataWeight(TRange<TUnversionedRow> rows);
+//! Returns the sum of data weights of rows.
+i64 GetDataWeight(TRange<TUnversionedRow> rows);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -317,7 +318,7 @@ public:
         return {Begin(), Begin() + count};
     }
 
-    const TUnversionedValue& operator[] (int index) const
+    const TUnversionedValue& operator[](int index) const
     {
         YT_ASSERT(index >= 0 && static_cast<ui32>(index) < GetCount());
         return Begin()[index];
@@ -640,7 +641,7 @@ public:
         Begin()[count] = value;
     }
 
-    TUnversionedValue& operator[] (ui32 index)
+    TUnversionedValue& operator[](ui32 index)
     {
         YT_ASSERT(index < GetHeader()->Count);
         return Begin()[index];
@@ -693,15 +694,9 @@ public:
         }
     }
 
-    TUnversionedOwningRow(const TUnversionedOwningRow& other)
-        : RowData_(other.RowData_)
-        , StringData_(other.StringData_)
-    { }
+    TUnversionedOwningRow(const TUnversionedOwningRow& other) noexcept = default;
 
-    TUnversionedOwningRow(TUnversionedOwningRow&& other)
-        : RowData_(std::move(other.RowData_))
-        , StringData_(std::move(other.StringData_))
-    { }
+    TUnversionedOwningRow(TUnversionedOwningRow&& other) noexcept = default;
 
     explicit operator bool() const
     {
@@ -740,7 +735,7 @@ public:
         return {Begin(), Begin() + count};
     }
 
-    const TUnversionedValue& operator[] (int index) const
+    const TUnversionedValue& operator[](int index) const
     {
         YT_ASSERT(index >= 0 && index < GetCount());
         return Begin()[index];
@@ -779,7 +774,7 @@ public:
         return *this;
     }
 
-    TUnversionedOwningRow& operator=(TUnversionedOwningRow&& other)
+    TUnversionedOwningRow& operator=(TUnversionedOwningRow&& other) noexcept
     {
         RowData_ = std::move(other.RowData_);
         StringData_ = std::move(other.StringData_);

@@ -4,6 +4,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.in
 
 TEST_SRCS(
     test_streaming.py
+    test_watermarks.py
 )
 
 IF (OS_LINUX)
@@ -17,12 +18,15 @@ PY_SRCS(
     conftest.py
 )
 
+
+REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:20)
 ELSE()
     SIZE(MEDIUM)
+    FORK_SUBTESTS()
 ENDIF()
 
 PEERDIR(

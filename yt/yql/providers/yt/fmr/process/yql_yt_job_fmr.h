@@ -5,29 +5,32 @@
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_raw_table_queue_reader.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_raw_table_queue_writer.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_reader.h>
+#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_base_writer.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/client/impl/yql_yt_table_data_service_client_impl.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/discovery/file/yql_yt_file_service_discovery.h>
 #include <yt/yql/providers/yt/fmr/yt_job_service/impl/yql_yt_job_service_impl.h>
 #include <yt/yql/providers/yt/fmr/yt_job_service/file/yql_yt_file_yt_job_service.h>
 #include <yt/yql/providers/yt/job/yql_job_user_base.h>
+#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_queue_writer_with_lock.h>
+#include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 
 namespace NYql::NFmr {
 
 struct TFmrUserJobOptions {
-    bool WriteStatsToFile;
+    bool WriteStatsToFile = false;
 };
+
 
 class TFmrUserJob: public TYqlUserJobBase {
 public:
-    TFmrUserJob()
-        : TYqlUserJobBase()
-    {
-    }
+    TFmrUserJob();
 
     virtual ~TFmrUserJob() {
         CancelFlag_->store(true);
-        ThreadPool_->Stop();
+        if (ThreadPool_) {
+            ThreadPool_->Stop();
+        }
     }
 
     void SetTaskInputTables(const TTaskTableInputRef& taskInputTables) {
@@ -54,6 +57,18 @@ public:
         TableDataServiceDiscoveryFilePath_ = tableDataServiceDiscoveryFilePath;
     }
 
+    void SetIsOrdered(bool isOrdered) {
+        IsOrdered_ = isOrdered;
+    }
+
+    void SetSettings(const TFmrUserJobSettings& settings) {
+        Settings_ = settings;
+    }
+
+    void SetTvmSettings(const TMaybe<TFmrTvmJobSettings>& tvmSettings) {
+        TvmSettings_ = tvmSettings;
+    }
+
     void Save(IOutputStream& s) const override;
     void Load(IInputStream& s) override;
 
@@ -65,7 +80,9 @@ protected:
     TIntrusivePtr<NYT::IReaderImplBase> MakeMkqlJobReader() override;
 
 private:
-    void FillQueueFromInputTables();
+    void FillQueueFromSingleInputTable(ui64 tableIndex);
+    void FillQueueFromInputTablesUnordered();
+    void FillQueueFromInputTablesOrdered();
 
     void InitializeFmrUserJob();
 
@@ -77,14 +94,17 @@ private:
     std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections_;
     TString TableDataServiceDiscoveryFilePath_;
     TString YtJobServiceType_; // file or native
+    bool IsOrdered_ = false;
+    TFmrUserJobSettings Settings_ = TFmrUserJobSettings();
+    TMaybe<TFmrTvmJobSettings> TvmSettings_ = Nothing();
     // End of serializable part
 
     TFmrRawTableQueue::TPtr UnionInputTablesQueue_; // Queue which represents union of all input streams
     TFmrRawTableQueueReader::TPtr QueueReader_;
-    TVector<TFmrTableDataServiceWriter::TPtr> TableDataServiceWriters_;
+    TVector<TFmrTableDataServiceBaseWriter::TPtr> TableDataServiceWriters_;
     ITableDataService::TPtr TableDataService_;
     IYtJobService::TPtr YtJobService_;
-    THolder<IThreadPool> ThreadPool_ = CreateThreadPool(3, 100, TThreadPool::TParams().SetBlocking(true).SetCatching(true));
+    THolder<IThreadPool> ThreadPool_;
     std::shared_ptr<std::atomic<bool>> CancelFlag_ = std::make_shared<std::atomic<bool>>(false);
     // TODO - pass settings for various classes here.
 };

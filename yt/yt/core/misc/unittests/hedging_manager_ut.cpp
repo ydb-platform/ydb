@@ -12,11 +12,11 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool AreDurationsEqual(TDuration lhs, TDuration rhs)
+bool AreDurationsEqual(TDuration lhs, TDuration rhs, TDuration eps = TDuration::MicroSeconds(10))
 {
     return lhs > rhs
-        ? (lhs - rhs) < TDuration::MicroSeconds(10)
-        : (rhs - lhs) < TDuration::MicroSeconds(10);
+        ? (lhs - rhs) < eps
+        : (rhs - lhs) < eps;
 }
 
 bool AreStatisticsEqual(const TAdaptiveHedgingManagerStatistics& lhs, const TAdaptiveHedgingManagerStatistics& rhs)
@@ -36,10 +36,6 @@ DECLARE_REFCOUNTED_CLASS(TTestSecondaryRequestGenerator)
 class TTestSecondaryRequestGenerator final
 {
 public:
-    TTestSecondaryRequestGenerator()
-        : CreationTime_(TInstant::Now())
-    { }
-
     void GenerateSecondaryRequest()
     {
         HedgingWaitTime_.Set(TInstant::Now() - CreationTime_);
@@ -51,9 +47,9 @@ public:
     }
 
 private:
-    const TInstant CreationTime_;
+    const TInstant CreationTime_ = TInstant::Now();
 
-    TPromise<TDuration> HedgingWaitTime_ = NewPromise<TDuration>();
+    const TPromise<TDuration> HedgingWaitTime_ = NewPromise<TDuration>();
 };
 
 DEFINE_REFCOUNTED_TYPE(TTestSecondaryRequestGenerator)
@@ -171,7 +167,7 @@ TEST_F(TAdaptiveHedgingManagerTest, ThrottledHedging)
 
 TEST_F(TAdaptiveHedgingManagerTest, DelayTuned)
 {
-    auto hedgingDelay = TDuration::MilliSeconds(100);;
+    auto hedgingDelay = TDuration::MilliSeconds(100);
 
     Config_->MaxTokenCount = 1;
     Config_->MaxHedgingDelay = hedgingDelay;
@@ -200,7 +196,6 @@ TEST_F(TAdaptiveHedgingManagerTest, DelayTuned)
     hedgingDelay /= Config_->HedgingDelayTuneFactor;
     EXPECT_TRUE(AreDurationsEqual(HedgingManager_->CollectStatistics().HedgingDelay, hedgingDelay));
 
-
     auto promise3 = NewPromise<void>();
     auto secondaryRequestGenerator3 = New<TTestSecondaryRequestGenerator>();
     HedgingManager_->RegisterRequest(promise3.ToFuture(), BIND([=] () {
@@ -209,8 +204,7 @@ TEST_F(TAdaptiveHedgingManagerTest, DelayTuned)
     Y_UNUSED(WaitFor(secondaryRequestGenerator3->GetHedgingWaitTimeFuture())
         .ValueOrThrow());
 
-    hedgingDelay *= Config_->HedgingDelayTuneFactor;
-    hedgingDelay /= *Config_->SecondaryRequestRatio;
+    hedgingDelay *= std::pow(Config_->HedgingDelayTuneFactor, 1. / *Config_->SecondaryRequestRatio - 1);
     EXPECT_TRUE(AreDurationsEqual(HedgingManager_->CollectStatistics().HedgingDelay, hedgingDelay));
 
     auto promise4 = NewPromise<void>();
@@ -221,15 +215,53 @@ TEST_F(TAdaptiveHedgingManagerTest, DelayTuned)
     TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(200));
     ASSERT_FALSE(secondaryRequestGenerator4->GetHedgingWaitTimeFuture().IsSet());
 
-    hedgingDelay = Config_->MaxHedgingDelay;
+    hedgingDelay *= std::pow(Config_->HedgingDelayTuneFactor, 1. / *Config_->SecondaryRequestRatio - 1);
     EXPECT_TRUE(AreDurationsEqual(HedgingManager_->CollectStatistics().HedgingDelay, hedgingDelay));
+}
+
+TEST_F(TAdaptiveHedgingManagerTest, DelayConvergesToRatio)
+{
+    auto hedgingDelay = TDuration::MilliSeconds(50);
+
+    Config_->MaxTokenCount = 100;
+    Config_->MaxHedgingDelay = hedgingDelay;
+    Config_->SecondaryRequestRatio = 0.33;
+    Config_->HedgingDelayTuneFactor = 1.03;
+    CreateHedgingManager();
+
+    for (int iteration = 0; iteration < 30; ++iteration) {
+        for (int fastRequestIndex = 0; fastRequestIndex < 2; ++fastRequestIndex) {
+            auto secondaryRequestGenerator = New<TTestSecondaryRequestGenerator>();
+            HedgingManager_->RegisterRequest(OKFuture, BIND([] () {
+                YT_ABORT();
+            }));
+        }
+
+        auto promise = NewPromise<void>();
+        auto secondaryRequestGenerator = New<TTestSecondaryRequestGenerator>();
+        HedgingManager_->RegisterRequest(promise.ToFuture(), BIND([=] () {
+            secondaryRequestGenerator->GenerateSecondaryRequest();
+        }));
+
+        TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(10));
+        promise.Set();
+
+        TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(100));
+    }
+
+    // NB: One third of all requests shall be hedged according to the ratio parameter.
+    // Check that the actual delay corresponds to the biggest delay that provides such a ratio (which is ~10ms).
+    EXPECT_TRUE(AreDurationsEqual(
+        HedgingManager_->CollectStatistics().HedgingDelay,
+        TDuration::MilliSeconds(10),
+        /*eps*/ TDuration::MilliSeconds(1)));
 }
 
 TEST_F(TAdaptiveHedgingManagerTest, IncrementToken)
 {
     Config_->MaxTokenCount = 1;
     Config_->SecondaryRequestRatio = 0.5;
-    Config_->MaxHedgingDelay = TDuration::MilliSeconds(100);;
+    Config_->MaxHedgingDelay = TDuration::MilliSeconds(100);
     CreateHedgingManager();
 
     auto promise1 = NewPromise<void>();
@@ -285,11 +317,11 @@ TEST_F(TAdaptiveHedgingManagerTest, Stress)
             , SlowPrimaryResponse(index % 2 == 0)
         { }
 
-        TPromise<void> Promise = NewPromise<void>();
-        TTestSecondaryRequestGeneratorPtr Generator = New<TTestSecondaryRequestGenerator>();
+        const TPromise<void> Promise = NewPromise<void>();
+        const TTestSecondaryRequestGeneratorPtr Generator = New<TTestSecondaryRequestGenerator>();
 
-        bool Immediate;
-        bool SlowPrimaryResponse;
+        const bool Immediate;
+        const bool SlowPrimaryResponse;
     };
 
     std::vector<TTestHedgedRequest> requests;

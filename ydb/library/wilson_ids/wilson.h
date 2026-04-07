@@ -27,6 +27,7 @@ namespace NKikimr {
         DEFINE_TRACING_LEVELS(TTablet, 3, 8, 12, 14, 15)
         DEFINE_TRACING_LEVELS(TDistributedStorage, 4, 9, 13, 14, 15)
         DEFINE_TRACING_LEVELS(TTopic, 4, 9, 13, 14, 15)
+        DEFINE_TRACING_LEVELS(TNbs, 4, 9, 13, 14, 15)
 
 #undef DEFINE_TRACING_LEVELS
 
@@ -42,12 +43,18 @@ namespace NKikimr {
     struct TWilson {
         enum {
             BlobStorage = TComponentTracingLevels::TDistributedStorage::TopLevel,
-            DsProxyInternals = TComponentTracingLevels::TDistributedStorage::Detailed,
-            VDiskTopLevel = TComponentTracingLevels::TDistributedStorage::Basic,
-            VDiskInternals = TComponentTracingLevels::TDistributedStorage::Detailed,
-            PDiskTopLevel = TComponentTracingLevels::TDistributedStorage::Basic,
-            PDiskBasic = TComponentTracingLevels::TDistributedStorage::Detailed,
-            PDiskDetailed = TComponentTracingLevels::TDistributedStorage::Diagnostic,
+
+                    DsProxyInternals = TComponentTracingLevels::TDistributedStorage::Detailed,
+
+                VDiskTopLevel = TComponentTracingLevels::TDistributedStorage::Basic,
+                    VDiskInternals = TComponentTracingLevels::TDistributedStorage::Detailed,
+
+                DDiskTopLevel = TComponentTracingLevels::TDistributedStorage::Basic,
+                    DDiskInternals = TComponentTracingLevels::TDistributedStorage::Detailed,
+
+                PDiskTopLevel = TComponentTracingLevels::TDistributedStorage::Basic,
+                    PDiskBasic = TComponentTracingLevels::TDistributedStorage::Detailed,
+                        PDiskDetailed = TComponentTracingLevels::TDistributedStorage::Diagnostic,
         };
     };
 
@@ -71,6 +78,7 @@ namespace NKikimr {
                     ScanExecuterRunTasks = TComponentTracingLevels::TQueryProcessor::Detailed,
 
                 KqpNodeSendTasks = TComponentTracingLevels::TQueryProcessor::Basic,
+                KqpNodeCreateTasks = TComponentTracingLevels::TQueryProcessor::Basic,
 
                 ProposeTransaction = TComponentTracingLevels::TQueryProcessor::Basic,
 
@@ -116,6 +124,15 @@ namespace NKikimr {
             TopicBasic = TComponentTracingLevels::TTopic::Basic,
             TopicDetailed = TComponentTracingLevels::TTopic::Detailed,
             TopicTrace = TComponentTracingLevels::TTopic::Trace,
+        };
+    };
+
+    struct TWilsonNbs {
+        enum {
+            NbsTopLevel = TComponentTracingLevels::TNbs::TopLevel,
+            NbsBasic = TComponentTracingLevels::TNbs::Basic,
+            NbsDetailed = TComponentTracingLevels::TNbs::Detailed,
+            NbsTrace = TComponentTracingLevels::TNbs::Trace,
         };
     };
 

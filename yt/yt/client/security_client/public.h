@@ -96,10 +96,12 @@ DEFINE_ENUM(EAccessControlObject,
     (GetMasterConsistentState)
     (ExitReadOnly)
     (MasterExitReadOnly)
+    (ResetDynamicallyPropagatedMasterCells)
     (DiscombobulateNonvotingPeers)
     (SwitchLeader)
     (RequestRestart)
     (CollectCoverage)
+    (SetUserBanned)
 );
 
 DEFINE_ENUM(EInapplicableRowAccessPredicateMode,

@@ -26,7 +26,7 @@ struct TTestSetup {
         UNIT_ASSERT(resp);
         UNIT_ASSERT(resp->Error != status);
         return resp;
-    } 
+    }
 };
 
 Y_UNIT_TEST(TestPublishAndForget) {
@@ -111,7 +111,7 @@ Y_UNIT_TEST(TestWrongSessionOrGeneration) {
             setup.ProxyId, TActorId{},
             new TEvPQ::TEvPublishDirectRead({"session1", 1, 1}, 2)
     );
-    
+
     // Session with old id, shold not have any effect
     runtime->Send(
             setup.ProxyId, TActorId{},
@@ -127,7 +127,7 @@ Y_UNIT_TEST(TestWrongSessionOrGeneration) {
             setup.ProxyId, TActorId{},
             new TEvPQ::TEvPublishDirectRead({"session1", 1, 1}, 1)
     );
-    
+
     auto resp = setup.SendRequest(new TEvPQ::TEvGetFullDirectReadData({"session1", 1}, 1));
     UNIT_ASSERT_VALUES_EQUAL(resp->Data.size(), 0);
 
@@ -136,7 +136,7 @@ Y_UNIT_TEST(TestWrongSessionOrGeneration) {
         setup.ProxyId, TActorId{},
         new TEvPQ::TEvForgetDirectRead({"session1", 1, 1}, 1)
     );
-    
+
     resp = setup.SendRequest(new TEvPQ::TEvGetFullDirectReadData({"session1", 1}, 2));
     UNIT_ASSERT_VALUES_EQUAL(resp->Data.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(resp->Data[0].second.Reads.size(), 1);
@@ -162,7 +162,7 @@ Y_UNIT_TEST(OutdatedSession) {
             setup.ProxyId, TActorId{},
             new TEvPQ::TEvPublishDirectRead({"session1", 1, 1}, 1)
     );
-    
+
     runtime->Send(
             setup.ProxyId, TActorId{},
             new TEvPQ::TEvRegisterDirectReadSession({"session1", 1}, 2)
@@ -200,7 +200,7 @@ Y_UNIT_TEST(MultipleSessions) {
             setup.ProxyId, TActorId{},
             new TEvPQ::TEvPublishDirectRead({"session1", 1, 2}, 1)
     );
-    
+
     runtime->Send(
             setup.ProxyId, TActorId{},
             new TEvPQ::TEvRegisterDirectReadSession({"session2", 1}, 2)
@@ -229,7 +229,7 @@ Y_UNIT_TEST(MultipleSessions) {
             UNIT_ASSERT_VALUES_EQUAL(data.Generation, 2);
             UNIT_ASSERT_VALUES_EQUAL(data.Reads.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(data.Reads.begin()->first, 3);
-        } 
+        }
     }
 }
 } // Test suite

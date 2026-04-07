@@ -353,10 +353,12 @@ TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithTag(const std::string& name, co
 }
 
 template <bool UseWeakPtr>
-void TProfiler<UseWeakPtr>::RenameDynamicTag(const TDynamicTagPtr& tag, const std::string& name, const std::string& value) const
+void TProfiler<UseWeakPtr>::RenameDynamicTag(const TDynamicTagPtr& dynamicTag, const std::string& name, const std::string& value) const
 {
+    dynamicTag->Tag.Exchange(std::pair{name, value});
+
     if (const auto& impl = GetRegistry()) {
-        impl->RenameDynamicTag(tag, name, value);
+        impl->RenameDynamicTag(dynamicTag, name, value);
     }
 }
 

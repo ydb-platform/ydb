@@ -13,6 +13,7 @@
 #include <yt/yt/core/yson/string.h>
 
 #include <library/cpp/yt/compact_containers/compact_flat_map.h>
+#include <library/cpp/yt/compact_containers/compact_flat_set.h>
 #include <library/cpp/yt/compact_containers/compact_set.h>
 #include <library/cpp/yt/compact_containers/compact_vector.h>
 
@@ -266,7 +267,7 @@ inline std::vector<TSharedRef> UnpackRefs(const TSharedRef& packedRef)
 
 Y_FORCE_INLINE void TSaveContextStream::Write(const void* buf, size_t len)
 {
-    if (Y_LIKELY(BufferRemaining_ >= len)) {
+    if (BufferRemaining_ >= len) [[likely]] {
         ::memcpy(BufferPtr_, buf, len);
         BufferPtr_ += len;
         BufferRemaining_ -= len;
@@ -291,7 +292,7 @@ Y_FORCE_INLINE int TStreamSaveContext::GetVersion() const
 
 Y_FORCE_INLINE size_t TLoadContextStream::Load(void* buf, size_t len)
 {
-    if (Y_LIKELY(BufferRemaining_ >= len)) {
+    if (BufferRemaining_ >= len) [[likely]] {
         ::memcpy(buf, BufferPtr_, len);
         BufferPtr_ += len;
         BufferRemaining_ -= len;
@@ -1010,18 +1011,18 @@ public:
             , Index_(index)
         { }
 
-        const typename T::value_type& operator * ()
+        const typename T::value_type& operator*()
         {
             return *((*Iterators_)[Index_]);
         }
 
-        TIteratorWrapper& operator ++ ()
+        TIteratorWrapper& operator++()
         {
             ++Index_;
             return *this;
         }
 
-        bool operator == (const TIteratorWrapper& other) const
+        bool operator==(const TIteratorWrapper& other) const
         {
             return Index_ == other.Index_;
         }

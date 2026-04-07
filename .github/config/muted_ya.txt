@@ -1,6 +1,4 @@
-ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
 ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroup
-ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.mirror3of4
@@ -48,7 +46,6 @@ ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboot
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlap[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlap[TabletRebootsBucket2]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.PrefixedOverlap[TabletRebootsBucket3]
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Prefixed[PipeResets]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Prefixed[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.Prefixed[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
@@ -63,14 +60,15 @@ ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Write_Only_Big_Messages_In_Wide_Transactions_Query
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
-ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/1
 ydb/services/persqueue_v1/ut TPersQueueTest.Cache
 ydb/services/persqueue_v1/ut TPersQueueTest.SchemeOperationsTest
 ydb/services/persqueue_v1/ut/describes_ut TTopicApiDescribes.DescribeConsumer
+ydb/services/persqueue_v1/ut/describes_ut TTopicApiDescribes.DescribeTopic
 ydb/services/ydb/backup_ut BackupRestore.TestReplaceRestoreOptionOnNonExistingSchemeObjects
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/compatibility py3test.[test_kafka_topic.py */*] chunk
 ydb/tests/compatibility py3test.[test_statistics.py */*] chunk
+ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_simple[restart_current_to_prestable-25-3-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_current_to_prestable-25-3-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_prestable-25-3_to_current-row]
 ydb/tests/compatibility test_compatibility.py.TestCompatibility.test_tpch1[restart_prestable-25-3_to_prestable-25-3-row]
@@ -82,7 +80,7 @@ ydb/tests/compatibility test_statistics.py.TestBaseStatisticsRollingUpdate.test[
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_current_and_prestable-25-3-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-25-3-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-25-3_and_stable-25-2-1-row]
-ydb/tests/compatibility test_topic.py.TestTopicRollingUpdate.test_write_and_read[rolling_stable-25-2-1_to_prestable-25-3]
+ydb/tests/compatibility test_transfer.py.TestTransferRestartToAnotherVersion.test_transfer[restart_current_to_prestable-25-3-row-True]
 ydb/tests/compatibility test_workload_manager.py.TestWorkloadManagerRestartToAnotherVersion.test_workload_manager_version_upgrade[restart_stable-25-2-1_to_prestable-25-3]
 ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.test_rename_table[rolling_prestable-25-3_to_current]
 ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.test_rename_table[rolling_stable-25-2-1_to_prestable-25-3]
@@ -96,6 +94,7 @@ ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_update_piles
 ydb/tests/functional/config test_config_with_metadata.py.TestKiKiMRStoreConfigDir.test_config_stored_in_config_store
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_essential
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
+ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/statistics test_restarts.py.test_basic
 ydb/tests/olap py3test.[*/*] chunk
 ydb/tests/olap upgrade_to_internal_path_id.py.TestUpgradeToInternalPathId.test

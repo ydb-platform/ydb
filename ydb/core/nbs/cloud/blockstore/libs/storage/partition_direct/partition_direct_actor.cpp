@@ -374,13 +374,15 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
     // TODO: fill with tablet id
     request->Record.SetTabletId(TabletID());
 
-    for (size_t i = 0; i < 32; i++) {
+    const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
+    const ui64 regionsCount =
+        AlignUp(blockCount * VolumeConfig.GetBlockSize(), RegionSize) /
+        RegionSize;
+
+    for (size_t i = 0; i < NumDirectBlockGroups; i++) {
         auto* query = request->Record.AddQueries();
         query->SetDirectBlockGroupId(i);
-
-        // TODO: fill with target num v chunks. vchunk is 128MB. let us use 1
-        // vchunk since disk size will be 128MB.
-        query->SetTargetNumVChunks(1);
+        query->SetTargetNumVChunks(regionsCount);
     }
 
     NTabletPipe::SendData(ctx, BSControllerPipeClient, request.release());
@@ -392,13 +394,6 @@ void TPartitionActor::Start(
 {
     LOG_INFO(ctx, NKikimrServices::NBS_PARTITION, "starting partition_direct");
 
-    DiskId = VolumeConfig.GetDiskId();
-    BlockSize = VolumeConfig.GetBlockSize();
-    BlockCount = 0;
-    for (const auto& p: VolumeConfig.GetPartitions()) {
-        BlockCount += p.GetBlockCount();
-    }
-
     auto directBlockGroups = CreateDirectBlockGroups(std::move(ids));
 
     auto nbsService = GetNbsService();
@@ -406,12 +401,13 @@ void TPartitionActor::Start(
     Y_ABORT_UNLESS(nbsService->Scheduler);
     Y_ABORT_UNLESS(nbsService->Timer);
 
+    const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
     auto fastPathService = std::make_shared<TFastPathService>(
         TActivationContext::ActorSystem(),
         TabletID(),
-        DiskId,
-        BlockCount,
-        BlockSize,
+        VolumeConfig.GetDiskId(),
+        blockCount,
+        VolumeConfig.GetBlockSize(),
         std::move(directBlockGroups),
         StorageConfig,
         nbsService->Scheduler,
@@ -423,13 +419,13 @@ void TPartitionActor::Start(
     {
         auto service = GetNbsService();
 
-        TString socketPath = "/tmp/" + DiskId + ".sock";
+        TString socketPath = "/tmp/" + VolumeConfig.GetDiskId() + ".sock";
         NVhost::TStorageOptions options{
-            .DiskId = DiskId,
+            .DiskId = VolumeConfig.GetDiskId(),
             .ClientId = "client-1",
-            .BlockSize = BlockSize,
+            .BlockSize = VolumeConfig.GetBlockSize(),
             .StripeSize = StorageConfig->GetStripeSize(),
-            .BlocksCount = BlockCount,
+            .BlocksCount = blockCount,
             .VhostQueuesCount = 1};
         service->VhostServer->StartEndpoint(
             std::move(socketPath),
@@ -466,7 +462,6 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
         for (size_t i = 0; i < NumDirectBlockGroups; i++) {
             const auto& response = msg->Record.GetResponses()[i];
             Y_ABORT_UNLESS(response.GetDirectBlockGroupId() == i);
-            Y_ABORT_UNLESS(response.GetActualNumVChunks() == 1);
 
             TVector<NBsController::TDDiskId>& ddiskIds = ids[i].DdiskIds;
             TVector<NBsController::TDDiskId>& persistentBufferDDiskIds =
@@ -535,6 +530,7 @@ void TPartitionActor::HandleUpdateVolumeConfig(
 
     // Store volume config
     VolumeConfig.CopyFrom(msg->Record.GetVolumeConfig());
+    Y_ABORT_UNLESS(VolumeConfig.PartitionsSize() == 1);
 
     // Send response back to volume
     auto response = std::make_unique<

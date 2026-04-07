@@ -87,6 +87,20 @@ TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TV
     , Limit(limit) {
 }
 
+TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
+                 const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const ESortDir sortDir,
+                 const TPhysicalOpProps& props, TPositionHandle pos)
+    : IOperator(EOperator::Source, pos, props)
+    , Alias(alias)
+    , Columns(columns)
+    , OutputIUs(outputIUs)
+    , StorageType(storageType)
+    , TableCallable(tableCallable)
+    , OlapFilterLambda(olapFilterLambda)
+    , Limit(limit)
+    , SortDir(sortDir) {
+}
+
 TVector<TInfoUnit> TOpRead::GetOutputIUs() {
     return OutputIUs;
 }
@@ -133,6 +147,10 @@ TString TOpRead::ToString(TExprContext& ctx) {
     res << " (StorageType: " << storageType << ")";
     if (OlapFilterLambda) {
         res << " OlapFilter: (" << PrintRBOExpression(OlapFilterLambda, ctx) << ")";
+    }
+    if (SortDir != ESortDir::None) {
+        res << " Sort direction: (" << ((SortDir == ESortDir::Asc) ? "ASC" : "DESC");
+        res << ")";
     }
     return res;
 }

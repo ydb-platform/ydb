@@ -1,5 +1,21 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.30.0 {#2-30-0}
+
+Released on April 7, 2026. To update to version **2.30.0**, select the [Downloads](downloads/ydb-cli.md) section.
+
+### Features
+
+* Added the `{{ ydb-cli }} config completion` command to generate shell completion scripts for bash and zsh.
+* Added the `{{ ydb-cli }} export nfs` and `{{ ydb-cli }} import nfs` commands, allowing users to create and restore backups directly to/from a shared NFS directory mounted on every host in the cluster.
+* Added the `--compact` option to the `{{ ydb-cli }} workload tpcc import` [command](./reference/ydb-cli/workload-tpcc.md).
+* Added the `--tx-mode` option to the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload/index.md), allowing to set the transaction mode (e.g., `no-tx`, `serializable-rw`, `snapshot-rw`).
+* Added support for the new [compaction](./concepts/glossary.md#compaction) operation in the `{{ ydb-cli }} operation` [subcommands](./reference/ydb-cli/operation-list.md).
+
+### Improvements
+
+* When a [profile](./reference/ydb-cli/profile/index.md) is explicitly specified with the `-p`/`--profile` option, the active profile is no longer used: all options are taken only from the specified profile, environment variables, and command line. This avoids confusion when the chosen profile was unexpectedly supplemented with settings from the active profile.
+
 ## Version 2.29.0 {#2-29-0}
 
 Released on February 11, 2026. To update to version **2.29.0**, select the [Downloads](downloads/ydb-cli.md) section.

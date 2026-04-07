@@ -6,12 +6,15 @@ namespace NKqp {
 namespace {
 
 bool IsValidLimit(const TExpression& expression) {
-    return !!TMaybeNode<TCoUint64>(expression.Node->ChildPtr(1));
+    return expression.Node && !!TMaybeNode<TCoUint64>(expression.Node->ChildPtr(1));
 }
 
 bool CanPushLimitToSource(const TIntrusivePtr<TOpLimit>& limit, const TIntrusivePtr<IOperator>& input) {
-    return input->GetKind() == EOperator::Source && CastOperator<TOpRead>(input)->GetTableStorageType() == NYql::EStorageType::ColumnStorage &&
-           IsValidLimit(limit->GetLimitCond());
+    if (input->GetKind() != EOperator::Source) {
+        return false;
+    }
+    const auto read = CastOperator<TOpRead>(input);
+    return !read->Limit && read->GetTableStorageType() == NYql::EStorageType::ColumnStorage && IsValidLimit(limit->GetLimitCond());
 }
 
 bool CanPushLimitOverInput(const TIntrusivePtr<IOperator>& input) {

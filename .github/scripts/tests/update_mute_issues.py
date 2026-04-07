@@ -758,7 +758,8 @@ def close_unmuted_issues(muted_tests_set, do_not_close_issues=False):
     
     # First, group tests by issue ID
     tests_by_issue = {}
-    for test_name, issue_data_list in issues.items():
+    for key, issue_data_list in issues.items():
+        test_name = key[0] if isinstance(key, tuple) else key
         for issue_data in issue_data_list:
             issue_id = issue_data['id']
             if issue_id not in tests_by_issue:

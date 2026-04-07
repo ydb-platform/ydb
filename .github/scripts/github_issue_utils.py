@@ -13,6 +13,7 @@ from typing import Dict, List, Optional, Tuple
 
 
 DEFAULT_BUILD_TYPE = 'relwithdebinfo'
+DEFAULT_BRANCH = 'main'
 
 
 def scan_to_utc_date(val) -> Optional[dt.date]:

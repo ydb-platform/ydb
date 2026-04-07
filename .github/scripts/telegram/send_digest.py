@@ -262,7 +262,7 @@ def run_digest(
         muted_stats   = None
         all_team_data = None
         try:
-            all_team_data = get_all_team_data(build_type=profile["build_type"])
+            all_team_data = get_all_team_data(build_type=profile["build_type"], branch=profile["branch"])
             if all_team_data:
                 muted_stats = {t: d["stats"] for t, d in all_team_data.items()}
         except Exception as exc:

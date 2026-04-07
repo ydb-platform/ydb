@@ -21,7 +21,7 @@ from send_telegram_message import send_telegram_message
 # Add analytics directory to path for ydb_wrapper import
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from github_issue_utils import DEFAULT_BUILD_TYPE
+from github_issue_utils import DEFAULT_BUILD_TYPE, DEFAULT_BRANCH
 try:
     from ydb_wrapper import YDBWrapper
     YDB_AVAILABLE = True
@@ -92,7 +92,7 @@ def _sql_build_type_clause(build_type) -> str:
     return f"\n    AND build_type = '{escaped}'"
 
 
-def get_all_team_data(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE):
+def get_all_team_data(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, branch=DEFAULT_BRANCH):
     """
     Get all team data (stats + trends) from YDB in one optimized query.
 
@@ -140,7 +140,7 @@ def get_all_team_data(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE):
     WHERE date_window >= Date('{start_date.strftime('%Y-%m-%d')}')
     AND date_window <= Date('{target_date.strftime('%Y-%m-%d')}')
     AND is_muted = 1
-    AND branch = 'main'{bt_clause}
+    AND branch = '{branch}'{bt_clause}
     AND is_test_chunk = 0
     AND resolution != 'Skipped'
     GROUP BY owner, date_window
@@ -221,7 +221,7 @@ def get_all_team_data(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE):
     return team_data
 
 
-def get_muted_tests_stats(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE):
+def get_muted_tests_stats(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, branch=DEFAULT_BRANCH):
     """
     Get statistics about muted tests from YDB by team.
     
@@ -233,7 +233,7 @@ def get_muted_tests_stats(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE):
     """
     
     # Use the optimized function to get all data
-    all_data = get_all_team_data(use_yesterday, build_type=build_type)
+    all_data = get_all_team_data(use_yesterday, build_type=build_type, branch=branch)
     if all_data is None:
         return None
     
@@ -246,7 +246,7 @@ def get_muted_tests_stats(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE):
     return team_stats
 
 
-def get_monthly_trend_data(team_name=None, use_yesterday=False, build_type=DEFAULT_BUILD_TYPE):
+def get_monthly_trend_data(team_name=None, use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, branch=DEFAULT_BRANCH):
     """
     Get monthly trend data for a specific team.
     
@@ -257,7 +257,7 @@ def get_monthly_trend_data(team_name=None, use_yesterday=False, build_type=DEFAU
     Returns:
         dict: Dictionary with dates as keys and counts as values, or None if error
     """
-    all_data = get_all_team_data(use_yesterday, build_type=build_type)
+    all_data = get_all_team_data(use_yesterday, build_type=build_type, branch=branch)
     if all_data is None:
         return None
     
@@ -926,6 +926,7 @@ def send_period_updates(period, bot_token, team_channels, ydb_config, delay=2, m
     all_team_data = get_all_team_data(
         use_yesterday=ydb_config.get('use_yesterday', False),
         build_type=ydb_config.get('build_type', DEFAULT_BUILD_TYPE),
+        branch=ydb_config.get('branch', DEFAULT_BRANCH),
     )
 
     if not all_team_data:
@@ -1169,6 +1170,12 @@ def main():
         dest='build_type',
         help='test_muted_monitor_mart filter; use "all" to include every build_type (default: relwithdebinfo)',
     )
+    parser.add_argument(
+        '--branch',
+        default=DEFAULT_BRANCH,
+        dest='branch',
+        help=f'Branch filter for YDB queries (default: {DEFAULT_BRANCH})',
+    )
 
     args = parser.parse_args()
     
@@ -1198,6 +1205,7 @@ def main():
         ydb_config = {
             'use_yesterday': args.use_yesterday,
             'build_type': args.build_type,
+            'branch': args.branch,
         }
 
         if not args.dry_run:
@@ -1322,12 +1330,14 @@ def main():
         ydb_config = {
             'use_yesterday': args.use_yesterday,
             'build_type': args.build_type,
+            'branch': args.branch,
         }
 
         print("📊 Fetching all team data in one optimized query...")
         all_team_data = get_all_team_data(
             use_yesterday=args.use_yesterday,
             build_type=args.build_type,
+            branch=args.branch,
         )
         
         if all_team_data:

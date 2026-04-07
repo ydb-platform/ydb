@@ -97,8 +97,10 @@ void PathLink(IOutputStream& str, const TPathId& pathId) {
     Link(str, path, pathId);
 }
 
-void ActorLink(IOutputStream& str, ui64 tabletId, const TPathId& pathId, const TMaybe<ui64>& partitionId) {
-    auto path = TStringBuilder() << "app"
+void ActorLink(IOutputStream& str, ui64 tabletId, const TPathId& pathId, const TMaybe<ui64>& partitionId,
+    TStringBuf tabletAppRelPath)
+{
+    auto path = TStringBuilder() << tabletAppRelPath
         << "?TabletID=" << tabletId
         << "&page=" << "change-sender"
         << "&pathId=" << pathId.OwnerId << ":" << pathId.LocalPathId;

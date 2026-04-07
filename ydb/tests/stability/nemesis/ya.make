@@ -19,6 +19,7 @@ PY_SRCS(
     internal/nemesis/runners/cluster_disk.py
     internal/nemesis/runners/cluster_hive.py
     internal/nemesis/runners/cluster_node.py
+    internal/nemesis/runners/cluster_host.py
     internal/nemesis/runners/cluster_tablets.py
     internal/nemesis/runners/datacenter.py
     internal/nemesis/runners/bridge_pile.py

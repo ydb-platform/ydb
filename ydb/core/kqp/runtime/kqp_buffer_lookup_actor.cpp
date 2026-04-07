@@ -559,9 +559,9 @@ public:
 
         {
             const auto guard = Settings.TypeEnv.BindAllocator();
-            lookupState.Worker->AddResult(TKqpStreamLookupWorker::TShardReadResult{
-                shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())
-            });
+            lookupState.Worker->AddResult(TStreamLookupShardReadResult(
+                shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()), &guard.GetMutex()->Ref()
+            ));
         }
 
         Settings.Callbacks->OnLookupTaskFinished();

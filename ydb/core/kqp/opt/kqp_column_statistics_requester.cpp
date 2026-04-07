@@ -70,11 +70,104 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
         }
     );
 
-    TVector<NThreading::TFuture<TColumnStatisticsResponse>> futures;
-    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypesCtx, NStat::EStatType::COUNT_MIN_SKETCH, CMColumnsByTableName,
-                   [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; });
-    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypesCtx, NStat::EStatType::EQ_WIDTH_HISTOGRAM, HistColumnsByTableName,
-                   [](const NYql::TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
+    std::vector<TFuture<TColumnStatisticsResponse>> futures;
+
+    auto addStatRequest = [&](
+            NStat::EStatType type,
+            const THashMap<TString, THashSet<TString>>& columnsByTableName,
+            auto alreadyHasStatistics) {
+        struct TTableMeta {
+            TString TableName;
+            THashMap<ui32, TString> ColumnNameByTag;
+        };
+
+        THashMap<TPathId, TTableMeta> tableMetaByPathId;
+        std::vector<NKikimr::NStat::TRequest> statRequests;
+        for (const auto& [table, columns]: columnsByTableName) {
+            auto tableMeta = Tables.GetTable(Cluster, table).Metadata;
+            auto& columnsMeta = tableMeta->Columns;
+
+            auto pathId = TPathId(tableMeta->PathId.OwnerId(), tableMeta->PathId.TableId());
+
+            auto statsTableIt = TypesCtx.ColumnStatisticsByTableName.find(table);
+            for (const auto& column: columns) {
+                if (statsTableIt != TypesCtx.ColumnStatisticsByTableName.end()) {
+                    auto statsColumnIt = statsTableIt->second->Data.find(column);
+                    if (statsColumnIt != statsTableIt->second->Data.end()) {
+                        if (alreadyHasStatistics(statsColumnIt->second)) {
+                            continue;
+                        }
+                    }
+                }
+
+                if (!columnsMeta.contains(column)) {
+                    YQL_CLOG(DEBUG, ProviderKikimr) << "Table: " + table + " doesn't contain " + column + " to request for column statistics";
+                    continue;
+                }
+
+                YQL_CLOG(TRACE, CoreDq) << "Requesting statistics for table: " << table << ", column: " << column;
+
+                NKikimr::NStat::TRequest req;
+                req.ColumnTag = columnsMeta[column].Id;
+                req.PathId = pathId;
+                statRequests.push_back(req);
+
+                tableMetaByPathId[pathId].TableName = table;
+                tableMetaByPathId[pathId].ColumnNameByTag[req.ColumnTag.value()] = column;
+            }
+        }
+
+        if (statRequests.empty()) {
+            return;
+        }
+
+        auto request = MakeHolder<NStat::TEvStatistics::TEvGetStatistics>();
+        request->Database = Database;
+        request->StatType = type;
+        request->StatRequests = std::move(statRequests);
+
+        auto callback = [tableMetaByPathId = std::move(tableMetaByPathId)]
+    (TPromise<TColumnStatisticsResponse> promise, NStat::TEvStatistics::TEvGetStatisticsResult&& response) mutable {
+            if (!response.Success) {
+                promise.SetValue(NYql::NCommon::ResultFromError<TColumnStatisticsResponse>("can't get column statistics!"));
+                return;
+            }
+
+            THashMap<TString, TOptimizerStatistics::TColumnStatMap> columnStatisticsByTableName;
+
+            for (auto&& stat: response.StatResponses) {
+                auto meta = tableMetaByPathId[stat.Req.PathId];
+                auto columnName = meta.ColumnNameByTag[stat.Req.ColumnTag.value()];
+                auto& columnStatistics = columnStatisticsByTableName[meta.TableName].Data[columnName];
+                if (stat.CountMinSketch.CountMin) {
+                    columnStatistics.CountMinSketch = std::move(stat.CountMinSketch.CountMin);
+                }
+                if (stat.EqWidthHistogram.Data) {
+                    columnStatistics.EqWidthHistogramEstimator = std::make_shared<NKikimr::TEqWidthHistogramEstimator>(stat.EqWidthHistogram.Data);
+                }
+            }
+
+            promise.SetValue(TColumnStatisticsResponse{.ColumnStatisticsByTableName = std::move(columnStatisticsByTableName)});
+        };
+
+        using TRequest = NStat::TEvStatistics::TEvGetStatistics;
+        using TResponse = NStat::TEvStatistics::TEvGetStatisticsResult;
+
+        auto promise = NewPromise<TColumnStatisticsResponse>();
+
+        auto statServiceId = NStat::MakeStatServiceID(ActorSystem->NodeId);
+        IActor* requestHandler = new TActorRequestHandler<TRequest, TResponse, TColumnStatisticsResponse>(statServiceId, request.Release(), promise, callback);
+        ActorSystem->Register(requestHandler, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
+
+        futures.push_back(promise.GetFuture());
+    };
+
+    addStatRequest(
+        NStat::EStatType::COUNT_MIN_SKETCH, CMColumnsByTableName,
+        [](const TColumnStatistics& stats) { return !!stats.CountMinSketch; });
+    addStatRequest(
+        NStat::EStatType::EQ_WIDTH_HISTOGRAM, HistColumnsByTableName,
+        [](const TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
 
     if (futures.empty()) {
         return IGraphTransformer::TStatus::Ok;
@@ -174,12 +267,82 @@ TMaybe<std::pair<TString, TString>> TKqpColumnStatisticsRequester::GetTableAndCo
     return std::pair{std::move(table), std::move(column)};
 }
 
+TVector<std::pair<TString, TString>> TKqpColumnStatisticsRequester::GetEquiJoinConditions(const TCoEquiJoin& equiJoin) {
+    if (equiJoin.ArgCount() < 3) {
+        return {};
+    }
+
+    THashMap<TString, TExprNode::TPtr> joinArgMap;
+
+    for (size_t i = 0; i < equiJoin.ArgCount() - 2; ++i) {
+        auto input = equiJoin.Arg(i).Cast<TCoEquiJoinInput>();
+        auto joinArg = input.List().Ptr()->ChildPtr(0);
+
+        auto scope = input.Scope();
+        if (!scope.Maybe<TCoAtom>()){
+            return {};
+        }
+
+        joinArgMap.insert({scope.Cast<TCoAtom>().StringValue(), joinArg});
+    }
+
+    TVector<std::pair<TString, TString>> result;
+    auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
+    GetEquiJoinConditions(joinTuple, joinArgMap, result);
+
+    return result;
+}
+
+void TKqpColumnStatisticsRequester::GetEquiJoinConditions(const TCoEquiJoinTuple& joinTuple, 
+        THashMap<TString, TExprNode::TPtr> & joinArgMap,
+        TVector<std::pair<TString, TString>> & result) {
+
+    if (auto left = joinTuple.LeftScope().Maybe<TCoEquiJoinTuple>()) {
+        GetEquiJoinConditions(left.Cast(), joinArgMap, result);
+    }
+    if (auto right = joinTuple.RightScope().Maybe<TCoEquiJoinTuple>()) {
+        GetEquiJoinConditions(right.Cast(), joinArgMap, result);  
+    }
+
+    size_t joinKeysCount = joinTuple.LeftKeys().Size() / 2;
+
+    for (size_t i = 0; i < joinKeysCount; ++i) {
+        size_t keyIndex = i * 2;
+
+        auto leftScope = joinTuple.LeftKeys().Item(keyIndex).StringValue();
+        auto leftColumn = joinTuple.LeftKeys().Item(keyIndex + 1).StringValue();
+
+        auto rightScope = joinTuple.RightKeys().Item(keyIndex).StringValue();
+        auto rightColumn = joinTuple.RightKeys().Item(keyIndex + 1).StringValue();
+
+        auto leftArg = joinArgMap.at(leftScope);
+        auto rightArg = joinArgMap.at(rightScope);
+
+        YQL_CLOG(TRACE, CoreDq) << "Trying to add join stats";
+
+
+        if (!KqpTableByExprNode.contains(leftArg.Get()) || KqpTableByExprNode.at(leftArg.Get()) == nullptr) {
+            continue;
+        }
+        if (!KqpTableByExprNode.contains(rightArg.Get()) || KqpTableByExprNode.at(rightArg.Get()) == nullptr) {
+            continue;
+        }
+
+        auto leftTable = TExprBase(KqpTableByExprNode.at(leftArg.Get())).Cast<TKqpTable>().Path().StringValue();
+        auto rightTable = TExprBase(KqpTableByExprNode.at(rightArg.Get())).Cast<TKqpTable>().Path().StringValue();
+
+        result.push_back(std::make_pair(leftTable, leftColumn));
+        result.push_back(std::make_pair(rightTable, rightColumn));
+    }
+}
+
 bool TKqpColumnStatisticsRequester::AfterLambdas(const TExprNode::TPtr& input) {
     bool matched = true;
 
     if (
         TCoFilterBase::Match(input.Get()) ||
-        TCoFlatMapBase::Match(input.Get()) && IsPredicateFlatMap(TExprBase(input).Cast<TCoFlatMapBase>().Lambda().Body().Ref())
+        (TCoFlatMapBase::Match(input.Get()) && IsPredicateFlatMap(TExprBase(input).Cast<TCoFlatMapBase>().Lambda().Body().Ref())) ||
+        TCoEquiJoin::Match(input.Get())
     ) {
         std::shared_ptr<TOptimizerStatistics> dummyStats = nullptr;
         auto computer = TPredicateSelectivityComputer(dummyStats, true);
@@ -188,6 +351,14 @@ bool TKqpColumnStatisticsRequester::AfterLambdas(const TExprNode::TPtr& input) {
             computer.Compute(TExprBase(input).Cast<TCoFilterBase>().Lambda().Body());
         } else if (TCoFlatMapBase::Match(input.Get())) {
             computer.Compute(TExprBase(input).Cast<TCoFlatMapBase>().Lambda().Body());
+        } else if (TCoEquiJoin::Match(input.Get())) {
+            YQL_CLOG(TRACE, CoreDq) << "Fetching join stats";
+
+            auto joinColumns = GetEquiJoinConditions(TCoEquiJoin(input));
+            for (auto & [table, column] : joinColumns) {
+                YQL_CLOG(TRACE, CoreDq) << "Adding join stats for table: " << table << ", column: " << column;
+                HistColumnsByTableName[table].insert(std::move(column));
+            }
         } else {
             Y_ENSURE(false);
         }

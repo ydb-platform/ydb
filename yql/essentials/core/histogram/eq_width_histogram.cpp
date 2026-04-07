@@ -72,6 +72,7 @@ TString TEqWidthHistogram::Serialize() const {
     TString result = TString::Uninitialized(binarySize);
 
     char* out = result.Detach();
+
     // 1 byte - version number.
     WriteUnaligned<ui8>(out, VersionNumber_);
     ui64 offset = sizeof(VersionNumber_);

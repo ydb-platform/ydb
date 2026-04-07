@@ -181,53 +181,6 @@ def process_test_group(name, group, last_day_lookup, default_start_date):
     }
 
 
-def determine_state(row):
-    history_class = row['history_class']
-    is_muted = row['is_muted']
-
-    if is_muted == 1:
-        if 'mute' in history_class or 'failure' in history_class:
-            return 'Muted Flaky'
-        elif 'pass' in history_class and not 'failure' in history_class and not 'mute' in history_class :
-            return 'Muted Stable'
-        elif 'skipped' in history_class:
-            return 'Skipped'
-        else:
-            return 'no_runs'
-    else:
-        if 'failure' in history_class and 'mute' not in history_class:
-            return 'Flaky'
-        elif 'mute' in history_class:
-            return 'Muted'
-        elif 'pass' in history_class:
-            return 'Passed'
-        elif 'skipped' in history_class:
-            return 'Skipped'
-        else:
-            return 'no_runs'
-
-
-def calculate_success_rate(row):
-    total_count = row['pass_count'] + row['mute_count'] + row['fail_count']
-    if total_count == 0:
-        return 0.0
-    else:
-        return (row['pass_count'] / total_count) * 100
-
-
-def calculate_summary(row):
-    return (
-        'Pass:'
-        + str(row['pass_count'])
-        + ' Fail:'
-        + str(row['fail_count'])
-        + ' Mute:'
-        + str(row['mute_count'])
-        + ' Skip:'
-        + str(row['skip_count'])
-    )
-
-
 def _utf8_cell(val):
     if val is None:
         return None

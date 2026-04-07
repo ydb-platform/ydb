@@ -283,7 +283,14 @@ def is_system_object(object):
 class BaseTestBackupInFiles(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = KiKiMR(KikimrConfigGenerator(extra_feature_flags=["enable_resource_pools"]))
+        cls.cluster = KiKiMR(
+            KikimrConfigGenerator(
+                extra_feature_flags=[
+                    "enable_resource_pools",
+                    "enable_topic_message_level_parallelism",
+                ],
+            )
+        )
         cls.cluster.start()
         cls.root_dir = "/Root"
         driver_config = ydb.DriverConfig(
@@ -631,11 +638,46 @@ class TestTopicBackupRestore(BaseTestBackupInFiles):
         src_topic = "/Root/folder/" + topic_name
 
         self.driver.scheme_client.make_directory("/Root/folder")
-        # TODO: add shared consumers when Python SDK supports it
         self.driver.topic_client.create_topic(
             src_topic,
             consumers=["consumer_a"],
             min_active_partitions=2,
+        )
+        shared_consumer_name = "consumer_shared_cli"
+        yatest.common.execute(
+            [
+                backup_bin(),
+                "--verbose",
+                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+                "--database", "/Root",
+                "topic",
+                "consumer",
+                "add",
+                src_topic,
+                "--consumer",
+                shared_consumer_name,
+                "--type",
+                "shared",
+                "--starting-message-timestamp",
+                "1000000000",
+                "--availability-period",
+                "48h",
+                "--supported-codecs",
+                "raw",
+                "--default-processing-timeout",
+                "35m",
+                "--receive-message-wait-time",
+                "18s",
+                "--receive-message-delay",
+                "4s",
+                "--max-processing-attempts",
+                "9",
+            ]
+        )
+        src_desc = self.driver.topic_client.describe_topic(src_topic, include_stats=False)
+        assert_that(
+            sorted(c.name for c in src_desc.consumers),
+            is_(sorted(["consumer_a", shared_consumer_name])),
         )
 
         backup_files_dir = output_path(self.test_name, "topic_backup_files_dir")

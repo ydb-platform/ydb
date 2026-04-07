@@ -13,7 +13,6 @@ feature_flags:
 | Флаг          | Функция |
 |---------------------------| ----------------------------------------------------|
 | `enable_vector_index`                                    | [Векторный индекс](../../dev/vector-indexes.md) для приближённого векторного поиска |
-| `enable_batch_updates`                                   | Поддержка запросов `BATCH UPDATE` и `BATCH DELETE` |
 | `enable_kafka_native_balancing`                          | Клиентская балансировка партиций при чтении по [протоколу Kafka](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) |
 | `enable_topic_autopartitioning_for_cdc`                  | [Автопартиционирование топиков](../../concepts/cdc.md#topic-partitions) в CDC для строковых таблиц |
 | `enable_access_to_index_impl_tables`                     | Возможность [указания числа реплик](../../yql/reference/syntax/alter_table/indexes.md) для вторичного индекса |

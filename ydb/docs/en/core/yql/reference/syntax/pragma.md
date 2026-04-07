@@ -435,11 +435,11 @@ SELECT $foo;
 
 ### `ydb.CostBasedOptimization` {#costbasedoptimization}
 
-| Value | Optimizer behavior |
+|  Value | Description |
 | ------- | ---------------------- |
-| on | Cost-based optimizer is disabled for the current query |
-| off | Cost-based optimizer is disabled for the current query |
-| auto | Cost-based optimizer works in accordance with the current [CostBasedOptimizationLevel](#costbasedoptimizationlevel) level |
+| on | Cost optimizer is enabled for the current query |
+| off | Cost optimizer is disabled for the current query |
+| auto | The cost optimizer works in accordance with the current [CostBasedOptimizationLevel](#costbasedoptimizationlevel) level |
 
 ### `ydb.CostBasedOptimizationLevel` {#costbasedoptimizationlevel}
 

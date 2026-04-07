@@ -48,9 +48,6 @@ namespace NLongTxService {
                 // DataCenterCount
                 1
             };
-            for (ui32 i = 0; i < nodeCount; ++i) {
-                res.Nodes.push_back({MakeDefaultTenantPoolConfig()});
-            }
             return res;
         }
 

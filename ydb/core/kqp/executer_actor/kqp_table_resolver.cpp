@@ -380,7 +380,7 @@ private:
                             }
 
                             auto addRequest = [&](auto&& shardKey) {
-                                auto& entry = request->ResultSet.emplace_back(std::move(shardKey));
+                                auto& entry = request->ResultSet.emplace_back(shardKey);
                                 entry.UserData = EncodeStageInfo(stageInfo);
                                 switch (operation) {
                                     case TKeyDesc::ERowOperation::Read:

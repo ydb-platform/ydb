@@ -454,12 +454,9 @@ void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
     ActorRuntime->SetLogPriority(NActorsServices::EServiceCommon::HTTP, NLog::PRI_DEBUG);
     ActorRuntime->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
     ActorRuntime->SetLogPriority(NKikimrServices::SQS, NLog::PRI_TRACE);
-<<<<<<< HEAD
-=======
     ActorRuntime->SetLogPriority(NKikimrServices::PQ_MLP_CONSUMER, NLog::PRI_DEBUG);
     ActorRuntime->SetLogPriority(NKikimrServices::PQ_MLP_WRITER, NLog::PRI_DEBUG);
     ActorRuntime->SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, NLog::PRI_DEBUG);
->>>>>>> 02a3b601aad (LOGBROKER-10309 New partition split strategy (#36567))
 
     if (initParameters.EnableMetering) {
         ActorRuntime->RegisterService(

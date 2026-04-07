@@ -185,6 +185,7 @@ namespace NKikimr::NDDisk {
                     .Size = header->Size,
                     .PartsCount = 0,
                     .VChunkIndex = header->VChunkIndex,
+                    .Timestamp = TInstant::Now()
                 };
                 ui32 sectorsCnt = header->Size / SectorSize;
                 pr.Sectors.reserve(sectorsCnt + 1);
@@ -326,6 +327,7 @@ namespace NKikimr::NDDisk {
                             .Sectors = std::move(inflight.Sectors),
                             .PartsCount = 1,
                             .VChunkIndex = inflight.VChunkIdx,
+                            .Timestamp = TInstant::Now()
                         };
                         pr.DataParts.emplace(0, std::move(inflight.Data));
                         PersistentBufferInMemoryCacheSize += pr.Size;
@@ -737,6 +739,30 @@ namespace NKikimr::NDDisk {
         }
 
         ErasePersistentBuffer(*ev, creds, erases);
+    }
+
+    void TDDiskActor::Handle(TEvGetPersistentBufferInfo::TPtr ev) {
+        if (!PersistentBufferReady) {
+            PendingPersistentBufferEvents.emplace(ev, "WaitingGetPersistentBufferInfo");
+            return;
+        }
+        auto reply = std::make_unique<TEvPersistentBufferInfo>();
+        auto& rr = reply->Record;
+        rr.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+        rr.SetStartedAt(StartedAt.TimeT());
+        rr.SetAllocatedChunks(PersistentBufferChunks.size());
+        rr.SetChunkSize(DiskFormat->ChunkSize);
+        rr.SetFreeSectors(PersistentBufferSpaceAllocator.GetFreeSpace());
+        for (auto [k, v] : PersistentBuffers) {
+            auto *ti = rr.AddTabletInfos();
+            ti->SetTabletId(std::get<0>(k));
+            ti->SetGeneration(std::get<1>(k));
+            ti->SetFirstLsn(v.Records.begin()->first);
+            ti->SetLastLsn(v.Records.rbegin()->first);
+            ti->SetFirstLsnTimestamp(v.Records.begin()->second.Timestamp.TimeT());
+            ti->SetLastLsnTimestamp(v.Records.rbegin()->second.Timestamp.TimeT());
+        }
+        SendReply(*ev, std::move(reply));
     }
 
     void TDDiskActor::Handle(TEvListPersistentBuffer::TPtr ev) {

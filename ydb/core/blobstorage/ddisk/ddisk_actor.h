@@ -632,6 +632,7 @@ namespace NKikimr::NDDisk {
                 std::map<ui64, TRope> DataParts;
                 ui32 PartsCount;
                 ui64 VChunkIndex;
+                TInstant Timestamp;
 
                 TRope JoinData(ui32 sectorSize);
             };
@@ -641,6 +642,7 @@ namespace NKikimr::NDDisk {
 
         std::map<std::tuple<ui64, ui32>, TPersistentBuffer> PersistentBuffers;
         ui64 PersistentBufferInMemoryCacheSize = 0;
+        TInstant StartedAt;
 
         ui64 CalcPersistentBufferInMemoryCacheSize();
         TString PersistentBufferToString();
@@ -735,6 +737,7 @@ namespace NKikimr::NDDisk {
         void Handle(TEvents::TEvUndelivered::TPtr ev);
         void Handle(TEvListPersistentBuffer::TPtr ev);
         void Handle(TEvPrivate::TEvIssuePersistentBufferChunkAllocation::TPtr ev);
+        void Handle(TEvGetPersistentBufferInfo::TPtr ev);
 
         void Handle(TEvWritePersistentBuffers::TPtr ev);
 

@@ -261,6 +261,28 @@ message TEvListPersistentBufferResult {
     repeated TPersistentBufferRecord Records = 3;
 }
 
+message TEvGetPersistentBufferInfo {
+}
+
+message TEvPersistentBufferInfo {
+    message TPersistentBufferTabletInfo {
+        uint64 TabletId = 1;
+        uint32 Generation = 2;
+        uint64 FirstLsn = 3;
+        uint64 LastLsn = 4;
+        uint64 FirstLsnTimestamp = 5;
+        uint64 LastLsnTimestamp = 6;
+    }
+
+    TReplyStatus.E Status = 1;
+    optional string ErrorReason = 2;
+    repeated TPersistentBufferTabletInfo TabletInfos = 3;
+    uint32 AllocatedChunks = 4;
+    uint32 ChunkSize = 5;
+    uint32 FreeSectors = 6;
+    uint64 StartedAt = 7;
+}
+
 message TDirectBlockGroupAllocation {
     message TDDiskRecord {
         TDDiskId DDiskId = 1; // if not set, then this item is empty

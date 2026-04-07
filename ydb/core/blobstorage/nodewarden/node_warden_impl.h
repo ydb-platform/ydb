@@ -813,6 +813,9 @@ namespace NKikimr::NStorage {
 
         void Handle(TEvInterpilePut::TPtr ev);
         void Handle(TEvBlobStorage::TEvPutResult::TPtr ev);
+
+        void Handle(TEvNodeWardenListLocalDDisks::TPtr ev);
+
     };
 
     bool DeriveStorageConfig(const NKikimrConfig::TAppConfig& appConfig, NKikimrBlobStorage::TStorageConfig *config,

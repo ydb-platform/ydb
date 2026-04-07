@@ -37,6 +37,8 @@ namespace NKikimr::NDDisk {
             EvWritePersistentBuffers,
             EvWritePersistentBuffersResult,
             EvReadThenWritePersistentBuffers,
+            EvGetPersistentBufferInfo,
+            EvPersistentBufferInfo,
         };
     };
 
@@ -199,6 +201,8 @@ struct TPersistentBufferFormat {
     struct TEvListPersistentBuffer;
     struct TEvListPersistentBufferResult;
     struct TEvReadThenWritePersistentBuffers;
+    struct TEvGetPersistentBufferInfo;
+    struct TEvPersistentBufferInfo;
 
     DECLARE_DDISK_EVENT(Connect) {
         using TResult = TEvConnectResult;
@@ -469,6 +473,17 @@ struct TPersistentBufferFormat {
             Record.SetFreeSpace(freeSpace);
             Record.SetPDiskNormalizedOccupancy(normalizedOccupancy);
         }
+    };
+
+    DECLARE_DDISK_EVENT(PersistentBufferInfo) {
+
+        TEvPersistentBufferInfo() = default;
+    };
+
+    DECLARE_DDISK_EVENT(GetPersistentBufferInfo) {
+        using TResult = TEvPersistentBufferInfo;
+
+        TEvGetPersistentBufferInfo() = default;
     };
 
     DECLARE_DDISK_EVENT(ListPersistentBuffer) {

@@ -7,8 +7,6 @@
 #include <ydb/library/formats/arrow/scalar/serialization.h>
 
 #include <cstring>
-#define AFL_VERIFY_UNREACHABLE(...) AFL_VERIFY(false)("error", "unreachable")
-
 
 namespace NKikimr::NOlap::NIndexes::NMinMax {
 using namespace NArrow::NAccessor::NArrowCompare;
@@ -35,6 +33,7 @@ TConclusionStatus TIndexMeta::DoCheckModificationCompatibility(const IIndexMeta&
     Y_UNUSED(newMeta);
     return TConclusionStatus::Fail("minmax index is not modifiable");
 }
+
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
     TChunkedBatchReader& reader, const ui32 recordsCount) const {
     TChunkedColumnReader cReader = *reader.begin();
@@ -63,6 +62,7 @@ bool TIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescrip
     }
     return true;
 }
+
 bool TIndexMeta::DoCheckValue(const TString& data, const std::optional<ui64> cat,
     const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const {
     AFL_VERIFY(!cat.has_value())("error", "category shouldn't be passed to minmax index");
@@ -88,16 +88,16 @@ bool TIndexMeta::Skip(NArrow::NAccessor::TMinMax chunkValue, const std::shared_p
             case NArrow::NSSA::TIndexCheckOperation::EOperation::GreaterOrEqual:
                 return requestValue > chunkValue.Max();
             default:
-                AFL_VERIFY_UNREACHABLE();
+                AFL_VERIFY(false)("error", "unreachable");
         }
     }
 }
+
 NJson::TJsonValue TIndexMeta::DoSerializeDataToJson(const TString& data, const TIndexInfo& indexInfo) const {
     auto gotType = indexInfo.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type();
-    auto minmax = NArrow::NAccessor::TMinMax::FromBinaryString(data, gotType);
-    
-    return minmax.Json();
+    return NArrow::NAccessor::TMinMax::FromBinaryString(data, gotType).Json();
 }
+
 void TIndexMeta::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const {
     auto* filterProto = proto.MutableMinMaxIndex();
     filterProto->SetColumnId(GetColumnId());

@@ -334,11 +334,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         auto init_approved = csController->GetIndexesApprovedOnSelect().Val();
 
-
         CompareYson(runDMLQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_nulls` WHERE `null_value` < "Value_500000";
         )"), "[[0u]]");
-        Cerr << "not built indexes: " << csController->GetIndexesSkippedNoData().Val() << '\n';
 
         UNIT_ASSERT_VALUES_EQUAL(csController->GetIndexesApprovedOnSelect().Val(), init_approved);
 
@@ -347,8 +345,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         )"), "[[0u]]");
 
         UNIT_ASSERT_VALUES_EQUAL(csController->GetIndexesApprovedOnSelect().Val(), init_approved);
-
-
 
     }
 

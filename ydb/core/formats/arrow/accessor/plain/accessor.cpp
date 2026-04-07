@@ -15,7 +15,7 @@ std::optional<ui64> TTrivialArray::DoGetRawSize() const {
 
 
 TMinMax TTrivialArray::DoGetMinMaxScalars() const {
-    return TMinMax::FromArray(Array);
+    return TMinMax::Compute(Array);
 }
 
 ui32 TTrivialArray::DoGetValueRawBytes() const {
@@ -92,7 +92,7 @@ std::optional<ui64> TTrivialChunkedArray::DoGetRawSize() const {
 }
 
 TMinMax TTrivialChunkedArray::DoGetMinMaxScalars() const {
-    return TMinMax::FromArray(Array);
+    return TMinMax::Compute(Array);
 }
 
 

@@ -151,7 +151,7 @@ ui32 TDictionaryArray::GetIndexImpl(const ui32 index) const {
 
 
 TMinMax TDictionaryArray::DoGetMinMaxScalars() const {
-    return TMinMax::FromArray(ArrayDictionary);
+    return TMinMax::Compute(ArrayDictionary);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

@@ -7,7 +7,8 @@ namespace NKikimr::NArrow::NAccessor {
 struct TMinMax {
     arrow::StructScalar MinMax;
     TMinMax(arrow::StructScalar minmax)
-        : MinMax(minmax) {
+        : MinMax(minmax) 
+    {
     }
     static TMinMax MakeNull(std::shared_ptr<arrow::DataType> type) {
         return *arrow::StructScalar::Make({ arrow::MakeNullScalar(type), arrow::MakeNullScalar(type) }, { "min", "max" }).ValueOrDie();
@@ -36,14 +37,16 @@ struct TMinMax {
 
     static TMinMax FromBinaryString(std::string_view string, const std::shared_ptr<arrow::DataType>& fieldType);
 
-    static TMinMax FromArray(std::shared_ptr<arrow::Array> arr);
-    static TMinMax FromArray(std::shared_ptr<arrow::ChunkedArray> arr);
+    static TMinMax Compute(std::shared_ptr<arrow::Array> arr);
+    static TMinMax Compute(std::shared_ptr<arrow::ChunkedArray> arr);
 
     std::string ToBinaryString() const;
 
     NJson::TJsonValue Json() const;
 };
-namespace NArrowCompare{
+
+namespace NArrowCompare {
+
 bool operator<(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right);
 
 bool operator>(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right);
@@ -51,6 +54,7 @@ bool operator>(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr
 bool operator<=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right);
 
 bool operator>=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right);
-}
+
+}   // namespace NArrowCompare
 
 }   // namespace NKikimr::NArrow::NAccessor

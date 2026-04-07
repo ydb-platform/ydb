@@ -1,21 +1,22 @@
 #include "minmax.h"
 
-#include <ydb/library/actors/core/log.h>
-#include <ydb/library/formats/arrow/scalar/serialization.h>
-#include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/core/formats/arrow/program/functions.h>
 
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/arrow_kernels/operations.h>
+#include <ydb/library/formats/arrow/scalar/serialization.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/c/bridge.h>   //order matters
+#include <contrib/libs/apache/arrow/cpp/src/arrow/c/bridge.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/chunked_array.h>
-#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/util.h>   // Для MakeArrayFromScalar
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_aggregate.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/array/util.h>
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/c/bridge.h>
 #include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_aggregate.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_aggregate.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
-TMinMax TMinMax::FromArray(std::shared_ptr<arrow::Array> arr) {
+TMinMax TMinMax::Compute(std::shared_ptr<arrow::Array> arr) {
     struct ArrowArray c_array;
     struct ArrowSchema c_schema;
     namespace arrow5 = arrow;
@@ -34,13 +35,12 @@ TMinMax TMinMax::FromArray(std::shared_ptr<arrow::Array> arr) {
 
     auto import_result5 = arrow5::ImportArray(&c_array, &c_schema).ValueOrDie();
 
-    // --- ШАГ 3: Извлекаем скаляр из массива (старая версия) ---
     return *dynamic_cast<arrow5::StructScalar*>(import_result5->GetScalar(0).ValueOrDie().get());
 }
-TMinMax TMinMax::FromArray(std::shared_ptr<arrow::ChunkedArray> arr) {
+TMinMax TMinMax::Compute(std::shared_ptr<arrow::ChunkedArray> arr) {
     auto res = TMinMax::MakeNull(arr->type());
     for (auto& chunk : arr->chunks()) {
-        res.UniteWith(FromArray(chunk));
+        res.UniteWith(Compute(chunk));
     }
     return res;
 }
@@ -117,11 +117,11 @@ void TMinMax::UniteWith(TMinMax other) {
         }
     }
 }
-namespace NArrowCompare{
+namespace NArrowCompare {
 
 bool cmp(NKikimr::NKernels::EOperation op, const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
-    arrow::Datum res =
-        NKikimr::NArrow::TStatusValidator::GetValid(arrow::compute::CallFunction(NKikimr::NArrow::NSSA::TSimpleFunction::GetFunctionName(op), { left, right }));
+    arrow::Datum res = NKikimr::NArrow::TStatusValidator::GetValid(
+        arrow::compute::CallFunction(NKikimr::NArrow::NSSA::TSimpleFunction::GetFunctionName(op), { left, right }));
     return res.scalar_as<arrow::BooleanScalar>().value;
 }
 
@@ -140,6 +140,6 @@ bool operator<=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_pt
 bool operator>=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
     return cmp(NKernels::EOperation::GreaterEqual, left, right);
 }
-}
+}   // namespace NArrowCompare
 
 }   // namespace NKikimr::NArrow::NAccessor

@@ -66,7 +66,6 @@ protected:
         return 0;
     }
 
-
     virtual TMinMax DoGetMinMaxScalars() const override {
         AFL_VERIFY(false);
     }

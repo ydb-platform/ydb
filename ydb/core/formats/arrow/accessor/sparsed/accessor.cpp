@@ -69,7 +69,6 @@ std::shared_ptr<TSparsedArray> TSparsedArray::Make(const IChunkedArray& defaultA
     return std::shared_ptr<TSparsedArray>(new TSparsedArray(std::move(chunk), defaultValue, defaultArray.GetDataType()));
 }
 
-
 TMinMax TSparsedArray::DoGetMinMaxScalars() const {
     return Record.GetMinMaxScalars();
 }
@@ -202,7 +201,7 @@ ui32 TSparsedArrayChunk::GetFirstIndexNotDefault() const {
 }
 
 TMinMax TSparsedArrayChunk::GetMinMaxScalars() const {
-    TMinMax value = TMinMax::FromArray(ColValue);
+    TMinMax value = TMinMax::Compute(ColValue);
     if (value.IsNull() && DefaultValue) {
         value.Min() = DefaultValue;
         value.Max() = DefaultValue;

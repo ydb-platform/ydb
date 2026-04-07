@@ -8,6 +8,13 @@
 
 namespace {
 
+    using NKikimr::NAutoConfigInitializer::EPoolKind;
+    using NKikimr::NAutoConfigInitializer::MaxPreparedCpuCount;
+    using NKikimr::NAutoConfigInitializer::PoolKindsCount;
+    using NKikimr::NAutoConfigInitializer::TAutoConfigOptions;
+    using NKikimr::NAutoConfigInitializer::TCpuTable;
+    using NKikimr::NAutoConfigInitializer::TPoolConfig;
+
     i16 GetCpuCount() {
         TAffinity affinity;
         affinity.Current();
@@ -18,20 +25,6 @@ namespace {
         return NSystemInfo::CachedNumberOfCpus();
     }
 
-    enum class EPoolKind : i8 {
-        System = 0,
-        User = 1,
-        Batch = 2,
-        IO = 3,
-        IC = 4,
-    };
-
-    struct TShortPoolCfg {
-        i16 ThreadCount;
-        i16 MaxThreadCount;
-    };
-
-    constexpr i16 MaxPreparedCpuCount = 30;
     constexpr i16 GRpcWorkerCountInMaxPreparedCpuCase = 4;
     constexpr i16 GrpcProxyCountInMaxPreparedCpuCase = 4;
     constexpr i16 CpuCountForEachGRpcWorker = MaxPreparedCpuCount / GRpcWorkerCountInMaxPreparedCpuCase;
@@ -44,129 +37,161 @@ namespace {
     constexpr ::arc_ui64 SchedulerDefaultResolution = 64;
     constexpr ::arc_ui64 SchedulerTinyResolution = 1024;
 
-    TShortPoolCfg ComputeCpuTable[MaxPreparedCpuCount + 1][5] {
-        {  {0, 0},  {0, 0},   {0, 0}, {0, 0}, {0, 0} },     // 0
-        {  {1, 1},  {0, 1},   {0, 1}, {0, 0}, {0, 0} },     // 1
-        {  {1, 2},  {0, 2},   {1, 1}, {0, 0}, {0, 1} },     // 2
-        {  {1, 3},  {0, 3},   {1, 1}, {0, 0}, {1, 1} },     // 3
-        {  {1, 3},  {1, 4},   {1, 1}, {0, 0}, {1, 2} },     // 4
-        {  {1, 3},  {2, 5},   {1, 1}, {0, 0}, {1, 2} },     // 5
-        {  {1, 3},  {3, 6},   {1, 1}, {0, 0}, {1, 3} },     // 6
-        {  {2, 4},  {3, 7},   {1, 2}, {0, 0}, {1, 3} },     // 7
-        {  {2, 4},  {4, 8},   {1, 2}, {0, 0}, {1, 4} },     // 8
-        {  {2, 5},  {4, 9},   {2, 3}, {0, 0}, {1, 4} },     // 9
-        {  {2, 5},  {5, 10},  {2, 3}, {0, 0}, {1, 5} },     // 10
-        {  {2, 6},  {5, 11},  {2, 3}, {0, 0}, {2, 5} },     // 11
-        {  {2, 6},  {6, 12},  {2, 3}, {0, 0}, {2, 6} },     // 12
-        {  {3, 7},  {6, 13},  {2, 3}, {0, 0}, {2, 6} },     // 13
-        {  {3, 7},  {6, 14},  {2, 3}, {0, 0}, {3, 7} },     // 14
-        {  {3, 8},  {7, 15},  {2, 4}, {0, 0}, {3, 7} },     // 15
-        {  {3, 8},  {8, 16},  {2, 4}, {0, 0}, {3, 8} },     // 16
-        {  {3, 9},  {9, 17},  {2, 4}, {0, 0}, {3, 8} },     // 17
-        {  {3, 9},  {9, 18},  {3, 5}, {0, 0}, {3, 9} },     // 18
-        {  {3, 10}, {9, 19},  {3, 5}, {0, 0}, {4, 9} },     // 19
-        {  {4, 10}, {9, 20},  {3, 5}, {0, 0}, {4, 10} },    // 20
-        {  {4, 11}, {10, 21}, {3, 5}, {0, 0}, {4, 10} },    // 21
-        {  {4, 11}, {11, 22}, {3, 5}, {0, 0}, {4, 11} },    // 22
-        {  {4, 12}, {12, 23}, {3, 6}, {0, 0}, {4, 11} },    // 23
-        {  {4, 12}, {12, 24}, {3, 6}, {0, 0}, {5, 12} },    // 24
-        {  {5, 13}, {12, 25}, {3, 6}, {0, 0}, {5, 12} },    // 25
-        {  {5, 13}, {12, 26}, {4, 7}, {0, 0}, {5, 13} },    // 26
-        {  {5, 14}, {13, 27}, {4, 7}, {0, 0}, {5, 13} },    // 27
-        {  {5, 14}, {14, 28}, {4, 7}, {0, 0}, {5, 14} },    // 28
-        {  {5, 15}, {14, 29}, {4, 8}, {0, 0}, {6, 14} },    // 29
-        {  {5, 15}, {15, 30}, {4, 8}, {0, 0}, {6, 15} },    // 30
-    };
+    const TCpuTable ComputeCpuTable {{
+        {{{0, 0},  {0, 0},   {0, 0}, {0, 0}, {0, 0}}},     // 0
+        {{{1, 1},  {0, 1},   {0, 1}, {0, 0}, {0, 0}}},     // 1
+        {{{1, 2},  {0, 2},   {1, 1}, {0, 0}, {0, 1}}},     // 2
+        {{{1, 3},  {0, 3},   {1, 1}, {0, 0}, {1, 1}}},     // 3
+        {{{1, 3},  {1, 4},   {1, 1}, {0, 0}, {1, 2}}},     // 4
+        {{{1, 3},  {2, 5},   {1, 1}, {0, 0}, {1, 2}}},     // 5
+        {{{1, 3},  {3, 6},   {1, 1}, {0, 0}, {1, 3}}},     // 6
+        {{{2, 4},  {3, 7},   {1, 2}, {0, 0}, {1, 3}}},     // 7
+        {{{2, 4},  {4, 8},   {1, 2}, {0, 0}, {1, 4}}},     // 8
+        {{{2, 5},  {4, 9},   {2, 3}, {0, 0}, {1, 4}}},     // 9
+        {{{2, 5},  {5, 10},  {2, 3}, {0, 0}, {1, 5}}},     // 10
+        {{{2, 6},  {5, 11},  {2, 3}, {0, 0}, {2, 5}}},     // 11
+        {{{2, 6},  {6, 12},  {2, 3}, {0, 0}, {2, 6}}},     // 12
+        {{{3, 7},  {6, 13},  {2, 3}, {0, 0}, {2, 6}}},     // 13
+        {{{3, 7},  {6, 14},  {2, 3}, {0, 0}, {3, 7}}},     // 14
+        {{{3, 8},  {7, 15},  {2, 4}, {0, 0}, {3, 7}}},     // 15
+        {{{3, 8},  {8, 16},  {2, 4}, {0, 0}, {3, 8}}},     // 16
+        {{{3, 9},  {9, 17},  {2, 4}, {0, 0}, {3, 8}}},     // 17
+        {{{3, 9},  {9, 18},  {3, 5}, {0, 0}, {3, 9}}},     // 18
+        {{{3, 10}, {9, 19},  {3, 5}, {0, 0}, {4, 9}}},     // 19
+        {{{4, 10}, {9, 20},  {3, 5}, {0, 0}, {4, 10}}},    // 20
+        {{{4, 11}, {10, 21}, {3, 5}, {0, 0}, {4, 10}}},    // 21
+        {{{4, 11}, {11, 22}, {3, 5}, {0, 0}, {4, 11}}},    // 22
+        {{{4, 12}, {12, 23}, {3, 6}, {0, 0}, {4, 11}}},    // 23
+        {{{4, 12}, {12, 24}, {3, 6}, {0, 0}, {5, 12}}},    // 24
+        {{{5, 13}, {12, 25}, {3, 6}, {0, 0}, {5, 12}}},    // 25
+        {{{5, 13}, {12, 26}, {4, 7}, {0, 0}, {5, 13}}},    // 26
+        {{{5, 14}, {13, 27}, {4, 7}, {0, 0}, {5, 13}}},    // 27
+        {{{5, 14}, {14, 28}, {4, 7}, {0, 0}, {5, 14}}},    // 28
+        {{{5, 15}, {14, 29}, {4, 8}, {0, 0}, {6, 14}}},    // 29
+        {{{5, 15}, {15, 30}, {4, 8}, {0, 0}, {6, 15}}},    // 30
+    }};
 
-    TShortPoolCfg HybridCpuTable[MaxPreparedCpuCount + 1][5] {
-        {  {0, 0},   {0, 0},   {0, 0}, {0, 0}, {0, 0} },     // 0
-        {  {1, 1},   {0, 1},   {0, 1}, {0, 0}, {0, 0} },     // 1
-        {  {1, 2},   {0, 2},   {1, 1}, {0, 0}, {0, 1} },     // 2
-        {  {1, 3},   {0, 3},   {1, 1}, {0, 0}, {1, 1} },     // 3
-        {  {1, 3},   {1, 4},   {1, 1}, {0, 0}, {1, 2} },     // 4
-        {  {1, 3},   {2, 5},   {1, 1}, {0, 0}, {1, 2} },     // 5
-        {  {1, 3},   {2, 6},   {1, 1}, {0, 0}, {2, 3} },     // 6
-        {  {2, 3},   {2, 7},   {1, 2}, {0, 0}, {2, 3} },     // 7
-        {  {2, 3},   {3, 8},   {1, 2}, {0, 0}, {2, 4} },     // 8
-        {  {2, 4},   {3, 9},   {1, 2}, {0, 0}, {3, 4} },     // 9
-        {  {3, 4},   {3, 10},  {1, 2}, {0, 0}, {3, 5} },     // 10
-        {  {3, 5},   {4, 11},  {1, 2}, {0, 0}, {3, 5} },     // 11
-        {  {3, 5},   {4, 12},  {1, 3}, {0, 0}, {4, 6} },     // 12
-        {  {4, 6},   {4, 13},  {1, 3}, {0, 0}, {4, 6} },     // 13
-        {  {4, 6},   {5, 14},  {1, 3}, {0, 0}, {4, 7} },     // 14
-        {  {4, 7},   {5, 15},  {1, 3}, {0, 0}, {5, 7} },     // 15
-        {  {5, 7},   {5, 16},  {1, 3}, {0, 0}, {5, 8} },     // 16
-        {  {5, 8},   {6, 17},  {1, 4}, {0, 0}, {5, 8} },     // 17
-        {  {5, 8},   {6, 18},  {1, 4}, {0, 0}, {6, 9} },     // 18
-        {  {6, 9},   {6, 19},  {1, 4}, {0, 0}, {6, 9} },     // 19
-        {  {6, 9},   {7, 20},  {1, 4}, {0, 0}, {6, 10} },    // 20
-        {  {6, 10},  {7, 21},  {1, 4}, {0, 0}, {7, 10} },    // 21
-        {  {7, 10},  {7, 22},  {1, 5}, {0, 0}, {7, 11} },    // 22
-        {  {7, 11},  {8, 23},  {1, 5}, {0, 0}, {7, 11} },    // 23
-        {  {7, 11},  {8, 24},  {1, 5}, {0, 0}, {8, 12} },    // 24
-        {  {8, 12},  {8, 25},  {1, 5}, {0, 0}, {8, 12} },    // 25
-        {  {8, 12},  {9, 26},  {1, 5}, {0, 0}, {8, 13} },    // 26
-        {  {8, 13},  {9, 27},  {1, 6}, {0, 0}, {9, 13} },    // 27
-        {  {9, 13},  {9, 28},  {1, 6}, {0, 0}, {9, 14} },    // 28
-        {  {9, 14},  {10, 29}, {1, 6}, {0, 0}, {9, 14} },    // 29
-        {  {9, 14},  {10, 30}, {1, 6}, {0, 0}, {10, 15} },   // 30
-    };
+    const TCpuTable HybridCpuTable {{
+        {{{0, 0},   {0, 0},   {0, 0}, {0, 0}, {0, 0}}},     // 0
+        {{{1, 1},   {0, 1},   {0, 1}, {0, 0}, {0, 0}}},     // 1
+        {{{1, 2},   {0, 2},   {1, 1}, {0, 0}, {0, 1}}},     // 2
+        {{{1, 3},   {0, 3},   {1, 1}, {0, 0}, {1, 1}}},     // 3
+        {{{1, 3},   {1, 4},   {1, 1}, {0, 0}, {1, 2}}},     // 4
+        {{{1, 3},   {2, 5},   {1, 1}, {0, 0}, {1, 2}}},     // 5
+        {{{1, 3},   {2, 6},   {1, 1}, {0, 0}, {2, 3}}},     // 6
+        {{{2, 3},   {2, 7},   {1, 2}, {0, 0}, {2, 3}}},     // 7
+        {{{2, 3},   {3, 8},   {1, 2}, {0, 0}, {2, 4}}},     // 8
+        {{{2, 4},   {3, 9},   {1, 2}, {0, 0}, {3, 4}}},     // 9
+        {{{3, 4},   {3, 10},  {1, 2}, {0, 0}, {3, 5}}},     // 10
+        {{{3, 5},   {4, 11},  {1, 2}, {0, 0}, {3, 5}}},     // 11
+        {{{3, 5},   {4, 12},  {1, 3}, {0, 0}, {4, 6}}},     // 12
+        {{{4, 6},   {4, 13},  {1, 3}, {0, 0}, {4, 6}}},     // 13
+        {{{4, 6},   {5, 14},  {1, 3}, {0, 0}, {4, 7}}},     // 14
+        {{{4, 7},   {5, 15},  {1, 3}, {0, 0}, {5, 7}}},     // 15
+        {{{5, 7},   {5, 16},  {1, 3}, {0, 0}, {5, 8}}},     // 16
+        {{{5, 8},   {6, 17},  {1, 4}, {0, 0}, {5, 8}}},     // 17
+        {{{5, 8},   {6, 18},  {1, 4}, {0, 0}, {6, 9}}},     // 18
+        {{{6, 9},   {6, 19},  {1, 4}, {0, 0}, {6, 9}}},     // 19
+        {{{6, 9},   {7, 20},  {1, 4}, {0, 0}, {6, 10}}},    // 20
+        {{{6, 10},  {7, 21},  {1, 4}, {0, 0}, {7, 10}}},    // 21
+        {{{7, 10},  {7, 22},  {1, 5}, {0, 0}, {7, 11}}},    // 22
+        {{{7, 11},  {8, 23},  {1, 5}, {0, 0}, {7, 11}}},    // 23
+        {{{7, 11},  {8, 24},  {1, 5}, {0, 0}, {8, 12}}},    // 24
+        {{{8, 12},  {8, 25},  {1, 5}, {0, 0}, {8, 12}}},    // 25
+        {{{8, 12},  {9, 26},  {1, 5}, {0, 0}, {8, 13}}},    // 26
+        {{{8, 13},  {9, 27},  {1, 6}, {0, 0}, {9, 13}}},    // 27
+        {{{9, 13},  {9, 28},  {1, 6}, {0, 0}, {9, 14}}},    // 28
+        {{{9, 14},  {10, 29}, {1, 6}, {0, 0}, {9, 14}}},    // 29
+        {{{9, 14},  {10, 30}, {1, 6}, {0, 0}, {10, 15}}},   // 30
+    }};
 
-    TShortPoolCfg StorageCpuTable[MaxPreparedCpuCount + 1][5] {
-        {  {0, 0},   {0, 0},  {0, 0}, {0, 0}, {0, 0} },     // 0
-        {  {1, 1},   {0, 1},  {0, 1}, {0, 0}, {0, 0} },     // 1
-        {  {1, 2},   {0, 2},  {1, 1}, {0, 0}, {0, 1} },     // 2
-        {  {1, 3},   {0, 3},  {1, 1}, {0, 0}, {1, 1} },     // 3
-        {  {1, 4},   {1, 4},  {1, 1}, {0, 0}, {1, 2} },     // 4
-        {  {2, 5},   {1, 5},  {1, 1}, {0, 0}, {1, 2} },     // 5
-        {  {3, 6},   {1, 6},  {1, 1}, {0, 0}, {1, 3} },     // 6
-        {  {4, 7},   {1, 7},  {1, 2}, {0, 0}, {1, 3} },     // 7
-        {  {5, 8},   {1, 8},  {1, 2}, {0, 0}, {1, 4} },     // 8
-        {  {5, 9},   {1, 9},  {1, 2}, {0, 0}, {2, 4} },     // 9
-        {  {6, 10},  {1, 10}, {1, 2}, {0, 0}, {2, 5} },     // 10
-        {  {6, 11},  {1, 11}, {2, 3}, {0, 0}, {2, 5} },     // 11
-        {  {7, 12},  {1, 12}, {2, 3}, {0, 0}, {2, 6} },     // 12
-        {  {8, 13},  {1, 13}, {2, 3}, {0, 0}, {2, 6} },     // 13
-        {  {8, 14},  {1, 14}, {2, 3}, {0, 0}, {3, 7} },     // 14
-        {  {9, 15},  {1, 15}, {2, 4}, {0, 0}, {3, 7} },     // 15
-        {  {10, 16}, {1, 16}, {2, 4}, {0, 0}, {3, 8} },     // 16
-        {  {11, 17}, {1, 17}, {2, 4}, {0, 0}, {3, 8} },     // 17
-        {  {11, 18}, {1, 18}, {3, 5}, {0, 0}, {3, 9} },     // 18
-        {  {11, 19}, {1, 19}, {3, 5}, {0, 0}, {4, 9} },     // 19
-        {  {12, 20}, {1, 20}, {3, 5}, {0, 0}, {4, 10} },    // 20
-        {  {13, 21}, {1, 21}, {3, 5}, {0, 0}, {4, 10} },    // 21
-        {  {14, 22}, {1, 22}, {3, 6}, {0, 0}, {4, 11} },    // 22
-        {  {15, 23}, {1, 23}, {3, 6}, {0, 0}, {4, 11} },    // 23
-        {  {15, 24}, {1, 24}, {3, 6}, {0, 0}, {5, 12} },    // 24
-        {  {16, 25}, {1, 25}, {3, 6}, {0, 0}, {5, 12} },    // 25
-        {  {16, 26}, {1, 26}, {4, 7}, {0, 0}, {5, 13} },    // 26
-        {  {17, 27}, {1, 27}, {4, 7}, {0, 0}, {5, 13} },    // 27
-        {  {18, 28}, {1, 28}, {4, 7}, {0, 0}, {5, 14} },    // 28
-        {  {18, 29}, {1, 29}, {4, 7}, {0, 0}, {6, 14} },    // 29
-        {  {19, 30}, {1, 30}, {4, 8}, {0, 0}, {6, 15} },    // 30
-    };
+    const TCpuTable StorageCpuTable {{
+        {{{0, 0},   {0, 0},  {0, 0}, {0, 0}, {0, 0}}},     // 0
+        {{{1, 1},   {0, 1},  {0, 1}, {0, 0}, {0, 0}}},     // 1
+        {{{1, 2},   {0, 2},  {1, 1}, {0, 0}, {0, 1}}},     // 2
+        {{{1, 3},   {0, 3},  {1, 1}, {0, 0}, {1, 1}}},     // 3
+        {{{1, 4},   {1, 4},  {1, 1}, {0, 0}, {1, 2}}},     // 4
+        {{{2, 5},   {1, 5},  {1, 1}, {0, 0}, {1, 2}}},     // 5
+        {{{3, 6},   {1, 6},  {1, 1}, {0, 0}, {1, 3}}},     // 6
+        {{{4, 7},   {1, 7},  {1, 2}, {0, 0}, {1, 3}}},     // 7
+        {{{5, 8},   {1, 8},  {1, 2}, {0, 0}, {1, 4}}},     // 8
+        {{{5, 9},   {1, 9},  {1, 2}, {0, 0}, {2, 4}}},     // 9
+        {{{6, 10},  {1, 10}, {1, 2}, {0, 0}, {2, 5}}},     // 10
+        {{{6, 11},  {1, 11}, {2, 3}, {0, 0}, {2, 5}}},     // 11
+        {{{7, 12},  {1, 12}, {2, 3}, {0, 0}, {2, 6}}},     // 12
+        {{{8, 13},  {1, 13}, {2, 3}, {0, 0}, {2, 6}}},     // 13
+        {{{8, 14},  {1, 14}, {2, 3}, {0, 0}, {3, 7}}},     // 14
+        {{{9, 15},  {1, 15}, {2, 4}, {0, 0}, {3, 7}}},     // 15
+        {{{10, 16}, {1, 16}, {2, 4}, {0, 0}, {3, 8}}},     // 16
+        {{{11, 17}, {1, 17}, {2, 4}, {0, 0}, {3, 8}}},     // 17
+        {{{11, 18}, {1, 18}, {3, 5}, {0, 0}, {3, 9}}},     // 18
+        {{{11, 19}, {1, 19}, {3, 5}, {0, 0}, {4, 9}}},     // 19
+        {{{12, 20}, {1, 20}, {3, 5}, {0, 0}, {4, 10}}},    // 20
+        {{{13, 21}, {1, 21}, {3, 5}, {0, 0}, {4, 10}}},    // 21
+        {{{14, 22}, {1, 22}, {3, 6}, {0, 0}, {4, 11}}},    // 22
+        {{{15, 23}, {1, 23}, {3, 6}, {0, 0}, {4, 11}}},    // 23
+        {{{15, 24}, {1, 24}, {3, 6}, {0, 0}, {5, 12}}},    // 24
+        {{{16, 25}, {1, 25}, {3, 6}, {0, 0}, {5, 12}}},    // 25
+        {{{16, 26}, {1, 26}, {4, 7}, {0, 0}, {5, 13}}},    // 26
+        {{{17, 27}, {1, 27}, {4, 7}, {0, 0}, {5, 13}}},    // 27
+        {{{18, 28}, {1, 28}, {4, 7}, {0, 0}, {5, 14}}},    // 28
+        {{{18, 29}, {1, 29}, {4, 7}, {0, 0}, {6, 14}}},    // 29
+        {{{19, 30}, {1, 30}, {4, 8}, {0, 0}, {6, 15}}},    // 30
+    }};
 
     i16 GetIOThreadCount(i16 cpuCount) {
         return (cpuCount - 1) / (MaxPreparedCpuCount * 2) + 1;
     }
 
-    TShortPoolCfg GetShortPoolChg(EPoolKind pool, i16 cpuCount, TShortPoolCfg cpuTable[][5]) {
+    size_t GetPoolIdx(EPoolKind pool) {
+        return static_cast<size_t>(pool);
+    }
+
+    template <typename TCpuTableType>
+    TPoolConfig GetPoolCfg(EPoolKind pool, i16 cpuCount, const TCpuTableType& cpuTable) {
         i16 k = cpuCount / MaxPreparedCpuCount;
         i16 mod = cpuCount % MaxPreparedCpuCount;
-        ui8 poolIdx = static_cast<i8>(pool);
+        size_t poolIdx = GetPoolIdx(pool);
         if (!k) {
             return cpuTable[cpuCount][poolIdx];
         }
 
-        TShortPoolCfg result = cpuTable[MaxPreparedCpuCount][poolIdx];
+        TPoolConfig result = cpuTable[MaxPreparedCpuCount][poolIdx];
         result.ThreadCount *= k;
         result.MaxThreadCount *= k;
         if (mod) {
-            TShortPoolCfg additional = cpuTable[mod][poolIdx];
+            TPoolConfig additional = cpuTable[mod][poolIdx];
             result.ThreadCount += additional.ThreadCount;
             result.MaxThreadCount += additional.MaxThreadCount;
         }
         return result;
+    }
+
+    const TCpuTable& GetDefaultCpuTable(NKikimrConfig::TActorSystemConfig::ENodeType nodeType) {
+        switch (nodeType) {
+            case NKikimrConfig::TActorSystemConfig::STORAGE:
+                return StorageCpuTable;
+            case NKikimrConfig::TActorSystemConfig::COMPUTE:
+                return ComputeCpuTable;
+            case NKikimrConfig::TActorSystemConfig::HYBRID:
+                return HybridCpuTable;
+        }
+        Y_ABORT("Unexpected actor system node type: %d", static_cast<int>(nodeType));
+    }
+
+    template <typename TCpuTableType>
+    void ValidateCpuTable(const TCpuTableType& cpuTable, i16 cpuCount) {
+        i16 cpuSum = 0;
+        for (auto poolKind : {EPoolKind::System, EPoolKind::User, EPoolKind::Batch, EPoolKind::IC}) {
+            const TPoolConfig cfg = GetPoolCfg(poolKind, cpuCount, cpuTable);
+            Y_VERIFY_S(cfg.ThreadCount >= 0, "pool# " << static_cast<int>(poolKind) << " threadCount# " << cfg.ThreadCount);
+            Y_VERIFY_S(cfg.MaxThreadCount >= cfg.ThreadCount,
+                "pool# " << static_cast<int>(poolKind)
+                << " threadCount# " << cfg.ThreadCount
+                << " maxThreadCount# " << cfg.MaxThreadCount);
+            cpuSum += cfg.ThreadCount;
+        }
+        Y_VERIFY_S(cpuSum == cpuCount, "cpuSum# " << cpuSum << " cpuCount# " << cpuCount);
     }
 
 } // anonymous
@@ -232,7 +257,7 @@ namespace NKikimr::NAutoConfigInitializer {
         return servicePools;
     }
 
-    void ApplyAutoConfig(NKikimrConfig::TActorSystemConfig *config, bool isDynamicNode, bool tinyMode) {
+    void ApplyAutoConfig(NKikimrConfig::TActorSystemConfig *config, const TAutoConfigOptions& options) {
         config->SetUseAutoConfig(true);
         config->ClearExecutor();
 
@@ -246,7 +271,7 @@ namespace NKikimr::NAutoConfigInitializer {
         if (!config->HasScheduler()) {
             auto *scheduler = config->MutableScheduler();
 
-            bool useTiny = tinyMode || (cpuCount >= 1 && cpuCount <= SchedulerTinyCoresThreshold);
+            bool useTiny = options.UseTinySchedulerConfig || (cpuCount >= 1 && cpuCount <= SchedulerTinyCoresThreshold);
             scheduler->SetResolution(useTiny ? SchedulerTinyResolution : SchedulerDefaultResolution);
 
             scheduler->SetSpinThreshold(0);
@@ -256,7 +281,7 @@ namespace NKikimr::NAutoConfigInitializer {
         auto *serviceExecutor = config->AddServiceExecutor();
         serviceExecutor->SetServiceName("Interconnect");
 
-        if (useSharedThreads && cpuCount >= 1 && cpuCount <= 3) {
+        if (options.EnableTinyConfiguration && useSharedThreads && cpuCount >= 1 && cpuCount <= 3) {
             config->SetUserExecutor(0);
             config->SetSysExecutor(1);
             config->SetBatchExecutor(2);
@@ -333,20 +358,20 @@ namespace NKikimr::NAutoConfigInitializer {
         }
 
         if (!config->HasNodeType()) {
-            config->SetNodeType(isDynamicNode ? NKikimrConfig::TActorSystemConfig::COMPUTE : NKikimrConfig::TActorSystemConfig::STORAGE);
+            config->SetNodeType(options.IsDynamicNode ? NKikimrConfig::TActorSystemConfig::COMPUTE : NKikimrConfig::TActorSystemConfig::STORAGE);
         }
 
-        auto &cpuTable = (config->GetNodeType() == NKikimrConfig::TActorSystemConfig::STORAGE ? StorageCpuTable :
-                          config->GetNodeType() == NKikimrConfig::TActorSystemConfig::COMPUTE ? ComputeCpuTable :
-                          HybridCpuTable );
-
-        // check cpu table
-        i16 cpuSum = 0;
-        for (auto poolKind : {EPoolKind::System, EPoolKind::User, EPoolKind::Batch, EPoolKind::IC}) {
-            TShortPoolCfg cfg = GetShortPoolChg(poolKind, cpuCount, cpuTable);
-            cpuSum += cfg.ThreadCount;
+        if (options.CpuTable) {
+            ValidateCpuTable(*options.CpuTable, cpuCount);
+        } else {
+            ValidateCpuTable(GetDefaultCpuTable(config->GetNodeType()), cpuCount);
         }
-        Y_VERIFY_S(cpuSum == cpuCount, "cpuSum# " << cpuSum << " cpuCount# " << cpuCount);
+
+        const auto getPoolCfg = [&](EPoolKind poolKind) {
+            return options.CpuTable
+                ? GetPoolCfg(poolKind, cpuCount, *options.CpuTable)
+                : GetPoolCfg(poolKind, cpuCount, GetDefaultCpuTable(config->GetNodeType()));
+        };
 
         for (ui32 poolIdx = 0; poolIdx < poolCount; ++poolIdx) {
             auto *executor = executors[poolIdx];
@@ -368,7 +393,7 @@ namespace NKikimr::NAutoConfigInitializer {
             } else if (names[poolIdx] == TASPools::ICPoolName) {
                 poolKind = EPoolKind::IC;
             }
-            TShortPoolCfg cfg = GetShortPoolChg(poolKind, cpuCount, cpuTable);
+            TPoolConfig cfg = getPoolCfg(poolKind);
             i16 threadsCount = cfg.ThreadCount;
             if (poolCount == 2) {
                 threadsCount = cpuCount;

@@ -64,7 +64,7 @@ public:
     }
 
     TString BuildLogPrefix() const override {
-        return TStringBuilder() << "[DeduplicationQueue][" << PartitionId << "][" << TopicName << "] ";
+        return TStringBuilder() << "[DeduplicationQueue][" << TopicName << "][" << PartitionId << "] ";
     }
 
     size_t GetRecentPartitionsCount() const {
@@ -204,7 +204,7 @@ private:
             auto [deduplicationInfoIt, newDeduplicationId] = DeduplicationInfo.try_emplace(messageDeduplicationId);
             auto& deduplicationInfo = deduplicationInfoIt->second;
             if (newDeduplicationId) {
-                SendRequests(deduplicationInfoIt);
+                SendRequests(messageDeduplicationId, deduplicationInfo);
             }
             for (auto index : indices) {
                 deduplicationInfo.RequestsInQueue.push_back(TWriteRequestMessageIndex{
@@ -226,9 +226,7 @@ private:
     }
 
 
-    void SendRequests(const TDeduplicationInfoMap::iterator it) {
-        auto& [messageDeduplicationId, info] = *it;
-
+    void SendRequests(const TString messageDeduplicationId, TDeduplicationInfo& info) {
         for (auto& parentPartition : ParentPartitions) {
             const ui64 tabletId = parentPartition.TabletId;
             auto& tabletInfo = TabletInfo[tabletId];

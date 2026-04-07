@@ -122,61 +122,91 @@ TQueryCollector::TQueryCollector(const TJsonPathPtr path, ECallableType callable
 }
 
 TResult TQueryCollector::Collect() {
-    return Collect(Reader.ReadFirst(), ECollectMode::None);
+    return Collect(Reader.ReadFirst(), EMode::Context);
 }
 
-TResult TQueryCollector::Collect(const TJsonPathItem& item, ECollectMode collectMode) {
+TResult TQueryCollector::Collect(const TJsonPathItem& item, EMode mode) {
+    if (mode == EMode::Literal) {
+        switch (item.Type) {
+            case EJsonPathItemType::NullLiteral:
+            case EJsonPathItemType::BooleanLiteral:
+            case EJsonPathItemType::NumberLiteral:
+            case EJsonPathItemType::StringLiteral:
+                break;
+            default:
+                return TResult(TIssue("Expected a literal expression"));
+        }
+    }
+
+    if (mode == EMode::Predicate) {
+        switch (item.Type) {
+            case EJsonPathItemType::BinaryLess:
+            case EJsonPathItemType::BinaryLessEqual:
+            case EJsonPathItemType::BinaryGreater:
+            case EJsonPathItemType::BinaryGreaterEqual:
+            case EJsonPathItemType::BinaryEqual:
+            case EJsonPathItemType::BinaryNotEqual:
+            case EJsonPathItemType::StartsWithPredicate:
+            case EJsonPathItemType::LikeRegexPredicate:
+            case EJsonPathItemType::IsUnknownPredicate:
+            case EJsonPathItemType::ExistsPredicate:
+                return TResult(TIssue("Predicates are not allowed in this context"));
+            default:
+                break;
+        }
+    }
+
     switch (item.Type) {
         case EJsonPathItemType::MemberAccess:
-            return MemberAccess(item, collectMode);
+            return MemberAccess(item, mode);
         case EJsonPathItemType::WildcardMemberAccess:
-            return WildcardMemberAccess(item, collectMode);
+            return WildcardMemberAccess(item, mode);
         case EJsonPathItemType::ContextObject:
-            return ContextObject();
+            return ContextObject(mode);
         case EJsonPathItemType::Variable:
-            return Variable(item);
+            return Variable(item, mode);
         case EJsonPathItemType::ArrayAccess:
-            return ArrayAccess(item, collectMode);
+            return ArrayAccess(item, mode);
         case EJsonPathItemType::WildcardArrayAccess:
-            return WildcardArrayAccess(item, collectMode);
+            return WildcardArrayAccess(item, mode);
         case EJsonPathItemType::LastArrayIndex:
-            return LastArrayIndex(item, collectMode);
+            return LastArrayIndex(item, mode);
         case EJsonPathItemType::UnaryMinus:
         case EJsonPathItemType::UnaryPlus:
-            return UnaryArithmeticOp(item, collectMode);
+            return UnaryArithmeticOp(item, mode);
         case EJsonPathItemType::BinaryAdd:
         case EJsonPathItemType::BinarySubstract:
         case EJsonPathItemType::BinaryMultiply:
         case EJsonPathItemType::BinaryDivide:
         case EJsonPathItemType::BinaryModulo:
-            return BinaryArithmeticOp(item, collectMode);
+            return BinaryArithmeticOp(item, mode);
         case EJsonPathItemType::BinaryAnd:
-            return BinaryAnd(item);
+            return BinaryAnd(item, mode);
         case EJsonPathItemType::BinaryOr:
-            return BinaryOr(item);
+            return BinaryOr(item, mode);
         case EJsonPathItemType::UnaryNot:
-            return UnaryNot(item);
+            return UnaryNot(item, mode);
         case EJsonPathItemType::NumberLiteral:
         case EJsonPathItemType::BooleanLiteral:
         case EJsonPathItemType::NullLiteral:
         case EJsonPathItemType::StringLiteral:
-            return EvaluateLiteral(item, collectMode);
+            return Literal(item, mode);
         case EJsonPathItemType::FilterObject:
-            return FilterObject(item);
+            return FilterObject(item, mode);
         case EJsonPathItemType::FilterPredicate:
-            return FilterPredicate(item);
+            return FilterPredicate(item, mode);
         case EJsonPathItemType::BinaryLess:
-            return BinaryLess(item);
+            return BinaryLess(item, mode);
         case EJsonPathItemType::BinaryLessEqual:
-            return BinaryLessEqual(item);
+            return BinaryLessEqual(item, mode);
         case EJsonPathItemType::BinaryGreater:
-            return BinaryGreater(item);
+            return BinaryGreater(item, mode);
         case EJsonPathItemType::BinaryGreaterEqual:
-            return BinaryGreaterEqual(item);
+            return BinaryGreaterEqual(item, mode);
         case EJsonPathItemType::BinaryEqual:
-            return BinaryEqual(item, collectMode);
+            return BinaryEqual(item, mode);
         case EJsonPathItemType::BinaryNotEqual:
-            return BinaryNotEqual(item);
+            return BinaryNotEqual(item, mode);
         case EJsonPathItemType::AbsMethod:
         case EJsonPathItemType::FloorMethod:
         case EJsonPathItemType::CeilingMethod:
@@ -184,18 +214,18 @@ TResult TQueryCollector::Collect(const TJsonPathItem& item, ECollectMode collect
         case EJsonPathItemType::TypeMethod:
         case EJsonPathItemType::SizeMethod:
         case EJsonPathItemType::KeyValueMethod:
-            return Methods(item, collectMode);
+            return Methods(item, mode);
         case EJsonPathItemType::StartsWithPredicate:
         case EJsonPathItemType::LikeRegexPredicate:
         case EJsonPathItemType::IsUnknownPredicate:
         case EJsonPathItemType::ExistsPredicate:
-            return Predicates(item, collectMode);
+            return Predicates(item, mode);
     }
 }
 
-TResult TQueryCollector::EvaluateLiteral(const TJsonPathItem& item, ECollectMode collectMode) {
-    if (collectMode == ECollectMode::None) {
-        return {};
+TResult TQueryCollector::Literal(const TJsonPathItem& item, EMode mode) {
+    if (mode != EMode::Literal) {
+        return TResult(TIssue("Literal expressions are not allowed in this context"));
     }
 
     TString value;
@@ -218,23 +248,24 @@ TResult TQueryCollector::EvaluateLiteral(const TJsonPathItem& item, ECollectMode
         case EJsonPathItemType::NullLiteral:
             break;
         default:
-            return TResult(std::move(TIssue("Expected a literal expression")));
+            return TResult(TIssue("Expected a literal expression"));
     }
 
     return TResult(std::move(value));
 }
 
-TResult TQueryCollector::ContextObject() {
+TResult TQueryCollector::ContextObject(EMode mode) {
+    Y_UNUSED(mode);
     return TResult("");
 }
 
-TResult TQueryCollector::MemberAccess(const TJsonPathItem& item, ECollectMode collectMode) {
-    auto results = Collect(Reader.ReadInput(item), collectMode);
-    if (!results.CanCollect()) {
-        return results;
+TResult TQueryCollector::MemberAccess(const TJsonPathItem& item, EMode mode) {
+    auto result = Collect(Reader.ReadInput(item), mode);
+    if (!result.CanCollect()) {
+        return result;
     }
 
-    auto& tokens = results.GetTokens();
+    auto& tokens = result.GetTokens();
     Y_ENSURE(tokens.size() <= 1, "Expected at most one result, but got " << tokens.size());
 
     // There is no context or filter object, so we can't collect any more
@@ -244,82 +275,95 @@ TResult TQueryCollector::MemberAccess(const TJsonPathItem& item, ECollectMode co
 
     auto& token = tokens.front();
     AppendKey(token, item.GetString());
-    return results;
+    return result;
 }
 
-TResult TQueryCollector::WildcardMemberAccess(const TJsonPathItem& item, ECollectMode collectMode) {
-    auto results = Collect(Reader.ReadInput(item), collectMode);
-    results.Finish();
-    return results;
-}
-
-TResult TQueryCollector::ArrayAccess(const TJsonPathItem& item, ECollectMode collectMode) {
-    auto results = Collect(Reader.ReadInput(item), collectMode);
-    if (!results.IsError()) {
-        Y_ENSURE(results.GetTokens().size() <= 1, "Expected at most one result, but got " << results.GetTokens().size());
+TResult TQueryCollector::WildcardMemberAccess(const TJsonPathItem& item, EMode mode) {
+    auto result = Collect(Reader.ReadInput(item), mode);
+    result.Finish();
+    if (!result.IsError() && result.GetTokens().size() > 1) {
+        return TResult(TIssue("Expected at most one result, but got " + std::to_string(result.GetTokens().size())));
     }
-    return results;
+    return result;
 }
 
-TResult TQueryCollector::WildcardArrayAccess(const TJsonPathItem& item, ECollectMode collectMode) {
-    auto results = Collect(Reader.ReadInput(item), collectMode);
-    if (!results.IsError()) {
-        Y_ENSURE(results.GetTokens().size() <= 1, "Expected at most one result, but got " << results.GetTokens().size());
+TResult TQueryCollector::ArrayAccess(const TJsonPathItem& item, EMode mode) {
+    auto result = Collect(Reader.ReadInput(item), mode);
+    if (!result.IsError() && result.GetTokens().size() > 1) {
+        return TResult(TIssue("Expected at most one result, but got " + std::to_string(result.GetTokens().size())));
     }
-    return results;
+    return result;
 }
 
-TResult TQueryCollector::LastArrayIndex(const TJsonPathItem& item, ECollectMode collectMode) {
-    auto results = Collect(Reader.ReadInput(item), collectMode);
-    if (!results.IsError()) {
-        Y_ENSURE(results.GetTokens().size() <= 1, "Expected at most one result, but got " << results.GetTokens().size());
+TResult TQueryCollector::WildcardArrayAccess(const TJsonPathItem& item, EMode mode) {
+    auto result = Collect(Reader.ReadInput(item), mode);
+    if (!result.IsError() && result.GetTokens().size() > 1) {
+        return TResult(TIssue("Expected at most one result, but got " + std::to_string(result.GetTokens().size())));
     }
-    return results;
+    return result;
 }
 
-TResult TQueryCollector::UnaryArithmeticOp(const TJsonPathItem& item, ECollectMode collectMode) {
-    auto results = Collect(Reader.ReadInput(item), collectMode);
-    results.Finish();
-    return results;
+TResult TQueryCollector::LastArrayIndex(const TJsonPathItem& item, EMode mode) {
+    auto result = Collect(Reader.ReadInput(item), mode);
+    if (!result.IsError() && result.GetTokens().size() > 1) {
+        return TResult(TIssue("Expected at most one result, but got " + std::to_string(result.GetTokens().size())));
+    }
+    return result;
 }
 
-TResult TQueryCollector::BinaryArithmeticOp(const TJsonPathItem& item, ECollectMode collectMode) {
-    auto leftResults = Collect(Reader.ReadLeftOperand(item), collectMode);
-    if (leftResults.IsError()) {
-        return leftResults;
+TResult TQueryCollector::UnaryArithmeticOp(const TJsonPathItem& item, EMode mode) {
+    auto result = Collect(Reader.ReadInput(item), mode);
+    result.Finish();
+    return result;
+}
+
+TResult TQueryCollector::BinaryArithmeticOp(const TJsonPathItem& item, EMode mode) {
+    const auto& leftItem = Reader.ReadLeftOperand(item);
+    const auto& rightItem = Reader.ReadRightOperand(item);
+
+    auto leftResult = CollectArithmeticOperand(leftItem, mode);
+    if (leftResult.IsError()) {
+        return leftResult;
     }
 
-    auto rightResults = Collect(Reader.ReadRightOperand(item), collectMode);
-    if (rightResults.IsError()) {
-        return rightResults;
+    auto rightResult = CollectArithmeticOperand(rightItem, mode);
+    if (rightResult.IsError()) {
+        return rightResult;
     }
 
-    auto& leftTokens = leftResults.GetTokens();
-    auto& rightTokens = rightResults.GetTokens();
+    auto& leftTokens = leftResult.GetTokens();
+    auto& rightTokens = rightResult.GetTokens();
     leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
-    leftResults.Finish();
-    return leftResults;
+    leftResult.Finish();
+    return leftResult;
 }
 
-TResult TQueryCollector::BinaryAnd(const TJsonPathItem& item) {
+TResult TQueryCollector::BinaryAnd(const TJsonPathItem& item, EMode mode) {
     // TODO: Implement
     Y_UNUSED(item);
+    Y_UNUSED(mode);
     return TResult(TIssue("Not implemented"));
 }
 
-TResult TQueryCollector::BinaryOr(const TJsonPathItem& item) {
+TResult TQueryCollector::BinaryOr(const TJsonPathItem& item, EMode mode) {
     // TODO: Implement
     Y_UNUSED(item);
+    Y_UNUSED(mode);
     return TResult(TIssue("Not implemented"));
 }
 
-TResult TQueryCollector::UnaryNot(const TJsonPathItem& item) {
-    // TODO: Implement
+TResult TQueryCollector::UnaryNot(const TJsonPathItem& item, EMode mode) {
     Y_UNUSED(item);
-    return TResult(TIssue("Not implemented"));
+    Y_UNUSED(mode);
+    // Unary not breaks the path, so we can't collect anymore: !($.a == 10) -> "1a|10"
+    return TResult(TIssue("Unary not is not supported"));
 }
 
-TResult TQueryCollector::BinaryEqual(const TJsonPathItem& item, ECollectMode collectMode) {
+TResult TQueryCollector::BinaryEqual(const TJsonPathItem& item, EMode mode) {
+    if (!ArePredicatesAllowed(mode)) {
+        return TResult(TIssue("Predicates are not allowed in this context"));
+    }
+
     const auto& leftItem = Reader.ReadLeftOperand(item);
     const auto& rightItem = Reader.ReadRightOperand(item);
 
@@ -327,92 +371,95 @@ TResult TQueryCollector::BinaryEqual(const TJsonPathItem& item, ECollectMode col
     const bool rightIsLiteral = IsLiteralType(rightItem.Type);
 
     if (!leftIsLiteral && rightIsLiteral) {
-        return CollectEqualOperands(leftItem, rightItem, collectMode);
+        return CollectEqualOperands(leftItem, rightItem);
     }
 
     if (leftIsLiteral && !rightIsLiteral) {
-        return CollectEqualOperands(rightItem, leftItem, collectMode);
+        return CollectEqualOperands(rightItem, leftItem);
     }
 
     return TResult(TIssue("Comparison requires exactly one path and one literal operand"));
 }
 
-TResult TQueryCollector::BinaryLess(const TJsonPathItem& item) {
+TResult TQueryCollector::BinaryLess(const TJsonPathItem& item, EMode mode) {
     // TODO: Implement
     Y_UNUSED(item);
+    Y_UNUSED(mode);
     return TResult(TIssue("Not implemented"));
 }
 
-TResult TQueryCollector::BinaryLessEqual(const TJsonPathItem& item) {
+TResult TQueryCollector::BinaryLessEqual(const TJsonPathItem& item, EMode mode) {
     // TODO: Implement
     Y_UNUSED(item);
+    Y_UNUSED(mode);
     return TResult(TIssue("Not implemented"));
 }
 
-TResult TQueryCollector::BinaryGreater(const TJsonPathItem& item) {
+TResult TQueryCollector::BinaryGreater(const TJsonPathItem& item, EMode mode) {
     // TODO: Implement
     Y_UNUSED(item);
+    Y_UNUSED(mode);
     return TResult(TIssue("Not implemented"));
 }
 
-TResult TQueryCollector::BinaryGreaterEqual(const TJsonPathItem& item) {
+TResult TQueryCollector::BinaryGreaterEqual(const TJsonPathItem& item, EMode mode) {
     // TODO: Implement
     Y_UNUSED(item);
+    Y_UNUSED(mode);
     return TResult(TIssue("Not implemented"));
 }
 
-TResult TQueryCollector::BinaryNotEqual(const TJsonPathItem& item) {
+TResult TQueryCollector::BinaryNotEqual(const TJsonPathItem& item, EMode mode) {
     // TODO: Implement
     Y_UNUSED(item);
+    Y_UNUSED(mode);
     return TResult(TIssue("Not implemented"));
 }
 
-TResult TQueryCollector::FilterObject(const TJsonPathItem& item) {
+TResult TQueryCollector::FilterObject(const TJsonPathItem& item, EMode mode) {
     // TODO: Implement
     Y_UNUSED(item);
+    Y_UNUSED(mode);
     return TResult(TIssue("Not implemented"));
 }
 
-TResult TQueryCollector::FilterPredicate(const TJsonPathItem& item) {
+TResult TQueryCollector::FilterPredicate(const TJsonPathItem& item, EMode mode) {
     // TODO: Implement
     Y_UNUSED(item);
+    Y_UNUSED(mode);
     return TResult(TIssue("Not implemented"));
 }
 
-TResult TQueryCollector::Methods(const TJsonPathItem& item, ECollectMode collectMode) {
-    auto results = Collect(Reader.ReadInput(item), collectMode);
-    results.Finish();
-    return results;
+TResult TQueryCollector::Methods(const TJsonPathItem& item, EMode mode) {
+    auto result = Collect(Reader.ReadInput(item), mode);
+    result.Finish();
+    if (!result.IsError() && result.GetTokens().size() > 1) {
+        return TResult(TIssue("Expected at most one result, but got " + std::to_string(result.GetTokens().size())));
+    }
+    return result;
 }
 
-TResult TQueryCollector::Predicates(const TJsonPathItem& item, ECollectMode collectMode) {
-    auto result = Collect(Reader.ReadInput(item), collectMode);
-    if (result.IsError()) {
-        return result;
+TResult TQueryCollector::Predicates(const TJsonPathItem& item, EMode mode) {
+    if (!ArePredicatesAllowed(mode)) {
+        return TResult(TIssue("Predicates are not allowed in this context"));
     }
 
-    // JSON_EXISTS returns true for any non-empty result, including a single
-    // boolean false from the predicate with the context object
-    auto jsonExistsWithContext = CallableType == ECallableType::JsonExists && collectMode == ECollectMode::None;
-    // IsUnknown predicate does not guarantee that the path exists (($.k.v == 0) is unknown != "1k1v|0")
-    auto isUnknownPredicate = item.Type == EJsonPathItemType::IsUnknownPredicate;
-
-    if (jsonExistsWithContext || isUnknownPredicate) {
-        result.GetTokens().clear();
-        result.GetTokens().emplace_back();
+    auto result = Collect(Reader.ReadInput(item), EMode::Predicate);
+    if (result.IsError()) {
+        return result;
     }
 
     result.Finish();
     return result;
 }
 
-TResult TQueryCollector::CollectEqualOperands(const TJsonPathItem& leftItem, const TJsonPathItem& rightItem, ECollectMode collectMode) {
-    auto pathResult = Collect(leftItem, collectMode);
+TResult TQueryCollector::CollectEqualOperands(const TJsonPathItem& leftItem, const TJsonPathItem& rightItem) {
+    auto pathResult = Collect(leftItem, EMode::Predicate);
     if (pathResult.IsError()) {
         return pathResult;
     }
 
-    auto literalResult = Collect(rightItem, ECollectMode::Context);
+    auto literalResult = Collect(rightItem, EMode::Literal);
     if (literalResult.IsError()) {
         return literalResult;
     }
@@ -425,10 +472,34 @@ TResult TQueryCollector::CollectEqualOperands(const TJsonPathItem& leftItem, con
 
     pathResult.Finish();
     return pathResult;
-};
+}
 
-TResult TQueryCollector::Variable(const TJsonPathItem&) {
+TResult TQueryCollector::CollectArithmeticOperand(const TJsonPathItem& item, EMode mode) {
+    if (IsLiteralType(item.Type)) {
+        return TResult(TResult::TTokens{});
+    }
+    return Collect(item, mode);
+}
+
+TResult TQueryCollector::Variable(const TJsonPathItem& item, EMode mode) {
+    Y_UNUSED(item);
+    Y_UNUSED(mode);
     return TResult(TIssue("Variables are not supported at the moment"));
+}
+
+bool TQueryCollector::ArePredicatesAllowed(EMode mode) const {
+    switch (mode) {
+        case EMode::Context:
+            // JSON_EXISTS returns true for any non-empty result, including a single
+            // boolean false from the predicate with a context object.
+            // There is a context object if the tokens are not empty
+            return CallableType != ECallableType::JsonExists;
+        case EMode::Filter:
+            return true;
+        case EMode::Predicate:
+        case EMode::Literal:
+            return false;
+    }
 }
 
 TVector<TString> BuildSearchTerms(const TString& jsonPathStr) {

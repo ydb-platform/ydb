@@ -42,9 +42,11 @@ private:
 };
 
 class TQueryCollector {
-    enum class ECollectMode {
-        None = 0,
-        Context = 1,
+    enum class EMode {
+        Context = 0,
+        Filter = 1,
+        Predicate = 2,
+        Literal = 3
     };
 
 public:
@@ -60,41 +62,45 @@ public:
     TResult Collect();
 
 private:
-    TResult Collect(const NYql::NJsonPath::TJsonPathItem& item, ECollectMode collectMode);
+    TResult Collect(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
 
     TResult CollectEqualOperands(const NYql::NJsonPath::TJsonPathItem& leftItem,
-        const NYql::NJsonPath::TJsonPathItem& rightItem, ECollectMode collectMode);
+        const NYql::NJsonPath::TJsonPathItem& rightItem);
 
-    TResult ContextObject();
+    TResult CollectArithmeticOperand(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
 
-    TResult MemberAccess(const NYql::NJsonPath::TJsonPathItem& item, ECollectMode collectMode);
-    TResult WildcardMemberAccess(const NYql::NJsonPath::TJsonPathItem& item, ECollectMode collectMode);
+    TResult ContextObject(EMode mode);
 
-    TResult ArrayAccess(const NYql::NJsonPath::TJsonPathItem& item, ECollectMode collectMode);
-    TResult WildcardArrayAccess(const NYql::NJsonPath::TJsonPathItem& item, ECollectMode collectMode);
-    TResult LastArrayIndex(const NYql::NJsonPath::TJsonPathItem& item, ECollectMode collectMode);
+    TResult MemberAccess(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
+    TResult WildcardMemberAccess(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
 
-    TResult UnaryArithmeticOp(const NYql::NJsonPath::TJsonPathItem& item, ECollectMode collectMode);
-    TResult BinaryArithmeticOp(const NYql::NJsonPath::TJsonPathItem& item, ECollectMode collectMode);
+    TResult ArrayAccess(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
+    TResult WildcardArrayAccess(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
+    TResult LastArrayIndex(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
 
-    TResult UnaryNot(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult BinaryAnd(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult BinaryOr(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult BinaryLess(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult BinaryLessEqual(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult BinaryGreater(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult BinaryGreaterEqual(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult BinaryEqual(const NYql::NJsonPath::TJsonPathItem& item, ECollectMode collectMode);
-    TResult BinaryNotEqual(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult UnaryArithmeticOp(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
+    TResult BinaryArithmeticOp(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
 
-    TResult Methods(const NYql::NJsonPath::TJsonPathItem& item, ECollectMode collectMode);
-    TResult Predicates(const NYql::NJsonPath::TJsonPathItem& item, ECollectMode collectMode);
+    TResult UnaryNot(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
+    TResult BinaryAnd(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
+    TResult BinaryOr(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
+    TResult BinaryLess(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
+    TResult BinaryLessEqual(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
+    TResult BinaryGreater(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
+    TResult BinaryGreaterEqual(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
+    TResult BinaryEqual(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
+    TResult BinaryNotEqual(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
 
-    TResult FilterObject(const NYql::NJsonPath::TJsonPathItem& item);
-    TResult FilterPredicate(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult Methods(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
+    TResult Predicates(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
 
-    TResult EvaluateLiteral(const NYql::NJsonPath::TJsonPathItem& item, ECollectMode collectMode);
-    TResult Variable(const NYql::NJsonPath::TJsonPathItem& item);
+    TResult FilterObject(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
+    TResult FilterPredicate(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
+
+    TResult Literal(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
+    TResult Variable(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
+
+    bool ArePredicatesAllowed(EMode mode) const;
 
 private:
     NYql::NJsonPath::TJsonPathReader Reader;

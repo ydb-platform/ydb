@@ -9,9 +9,9 @@ using namespace NYql::NJsonPath;
 
 namespace {
 
-using TCallableType = TQueryCollector::ECallableType;
+using ECallableType = TQueryCollector::ECallableType;
 
-TVector<TString> ParseAndCollect(const TString& jsonPath, TCallableType callableType = TCallableType::JsonExists) {
+TVector<TString> ParseAndCollect(const TString& jsonPath, ECallableType callableType = ECallableType::JsonExists) {
     NYql::TIssues issues;
     const TJsonPathPtr path = NYql::NJsonPath::ParseJsonPath(jsonPath, issues, 1);
     UNIT_ASSERT_C(issues.Empty(), "Parse errors found for path: " + jsonPath + ": " + issues.ToOneLineString());
@@ -26,13 +26,13 @@ template <bool ParserError = false>
 void ValidateError(
     const TString& jsonPath,
     const TString& errorMessage,
-    TCallableType callableType = TCallableType::JsonExists)
+    ECallableType callableType = ECallableType::JsonExists)
 {
     NYql::TIssues issues;
     const TJsonPathPtr path = NYql::NJsonPath::ParseJsonPath(jsonPath, issues, 1);
 
     if constexpr (ParserError) {
-        UNIT_ASSERT_STRING_CONTAINS_C(issues.ToOneLineString(), errorMessage, "Expected error message not found: " + errorMessage);
+        UNIT_ASSERT_STRING_CONTAINS_C(issues.ToOneLineString(), errorMessage, "for path = " << jsonPath);
     } else {
         UNIT_ASSERT_C(issues.Empty(), "Parse errors found for path: " + jsonPath + ": " + issues.ToOneLineString());
 
@@ -40,21 +40,31 @@ void ValidateError(
         auto result = collector.Collect();
         UNIT_ASSERT_C(result.IsError(), "Expected error for path: " + jsonPath + ": " + errorMessage);
 
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetError().GetMessage(), errorMessage, "Expected error message not found: " + errorMessage);
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetError().GetMessage(), errorMessage, "for path = " << jsonPath);
     }
 }
 
 void ValidateQueries(
     const TString& jsonPath,
     const TVector<TString>& expectedQueries,
-    TCallableType callableType = TCallableType::JsonExists)
+    ECallableType callableType = ECallableType::JsonExists)
 {
     UNIT_ASSERT_VALUES_EQUAL(ParseAndCollect(jsonPath, callableType), expectedQueries);
 }
 
-}  // namespace
+void ValidateJsonExists(const TString& jsonPath, const TVector<TString>& expectedQueries) {
+    ValidateQueries(jsonPath, expectedQueries, ECallableType::JsonExists);
+}
 
-using TCallableType = TQueryCollector::ECallableType;
+void ValidateJsonValue(const TString& jsonPath, const TVector<TString>& expectedQueries) {
+    ValidateQueries(jsonPath, expectedQueries, ECallableType::JsonValue);
+}
+
+// void ValidateJsonQuery(const TString& jsonPath, const TVector<TString>& expectedQueries) {
+//     ValidateQueries(jsonPath, expectedQueries, ECallableType::JsonQuery);
+// }
+
+}  // namespace
 
 Y_UNIT_TEST_SUITE(NJsonIndex) {
 
@@ -64,134 +74,151 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
     }
 
     Y_UNIT_TEST(CollectPath_ContextObject) {
-        ValidateQueries("$", {""});
+        ValidateJsonExists("$", {""});
     }
 
     Y_UNIT_TEST(CollectPath_MemberAccess) {
-        ValidateQueries("$.a", {"\1a"});
-        ValidateQueries("$.a.b.c", {"\1a\1b\1c"});
-        ValidateQueries("$.aba.\"caba\"", {"\3aba\4caba"});
-        ValidateQueries("$.\"\".abc", {TString("\0\3abc", 5)});
-        ValidateQueries("$.*", {""});
-        ValidateQueries("$.a.*", {"\1a"});
-        ValidateQueries("$.a.*.c", {"\1a"});
+        ValidateJsonExists("$.a", {"\1a"});
+        ValidateJsonExists("$.a.b.c", {"\1a\1b\1c"});
+        ValidateJsonExists("$.aba.\"caba\"", {"\3aba\4caba"});
+        ValidateJsonExists("$.\"\".abc", {TString("\0\3abc", 5)});
+        ValidateJsonExists("$.*", {""});
+        ValidateJsonExists("$.a.*", {"\1a"});
+        ValidateJsonExists("$.a.*.c", {"\1a"});
     }
 
     Y_UNIT_TEST(CollectPath_ArrayAccess) {
-        ValidateQueries("$[0]", {""});
-        ValidateQueries("$[1, 2, 3]", {""});
-        ValidateQueries("$[1 to 3]", {""});
-        ValidateQueries("$[last]", {""});
-        ValidateQueries("$[0, 2 to last]", {""});
-        ValidateQueries("$[0 to 1].key", {"\3key"});
-        ValidateQueries("$.key[0]", {"\3key"});
-        ValidateQueries("$.key1[last].key2", {"\4key1\4key2"});
-        ValidateQueries("$.arr[2 to last]", {"\3arr"});
-        ValidateQueries("$.*[2 to last].key", {""});
-        ValidateQueries("$.key[0].*", {"\3key"});
+        ValidateJsonExists("$[0]", {""});
+        ValidateJsonExists("$[1, 2, 3]", {""});
+        ValidateJsonExists("$[1 to 3]", {""});
+        ValidateJsonExists("$[last]", {""});
+        ValidateJsonExists("$[0, 2 to last]", {""});
+        ValidateJsonExists("$[0 to 1].key", {"\3key"});
+        ValidateJsonExists("$.key[0]", {"\3key"});
+        ValidateJsonExists("$.key1[last].key2", {"\4key1\4key2"});
+        ValidateJsonExists("$.arr[2 to last]", {"\3arr"});
+        ValidateJsonExists("$.*[2 to last].key", {""});
+        ValidateJsonExists("$.key[0].*", {"\3key"});
     }
 
     // Methods stop further path extraction: operand path only
     Y_UNIT_TEST(CollectPath_Methods) {
-        ValidateQueries("$.abs()", {""});
-        ValidateQueries("$.*.floor()", {""});
-        ValidateQueries("$[1, 2, 3].ceiling()", {""});
-        ValidateQueries("$.key.abs()", {"\3key"});
-        ValidateQueries("$.key.floor()", {"\3key"});
-        ValidateQueries("$.key.ceiling()", {"\3key"});
-        ValidateQueries("$.key.double()", {"\3key"});
-        ValidateQueries("$.key.type()", {"\3key"});
-        ValidateQueries("$.key.size()", {"\3key"});
-        ValidateQueries("$.key.keyvalue()", {"\3key"});
-        ValidateQueries("$.*.keyvalue()", {""});
-        ValidateQueries("$.key[1, 2, 3].value.size().floor()", {"\3key\5value"});
-        ValidateQueries("$.key.keyvalue().name", {"\3key"});
+        ValidateJsonExists("$.abs()", {""});
+        ValidateJsonExists("$.*.floor()", {""});
+        ValidateJsonExists("$[1, 2, 3].ceiling()", {""});
+        ValidateJsonExists("$.key.abs()", {"\3key"});
+        ValidateJsonExists("$.key.floor()", {"\3key"});
+        ValidateJsonExists("$.key.ceiling()", {"\3key"});
+        ValidateJsonExists("$.key.double()", {"\3key"});
+        ValidateJsonExists("$.key.type()", {"\3key"});
+        ValidateJsonExists("$.key.size()", {"\3key"});
+        ValidateJsonExists("$.key.keyvalue()", {"\3key"});
+        ValidateJsonExists("$.*.keyvalue()", {""});
+        ValidateJsonExists("$.key[1, 2, 3].value.size().floor()", {"\3key\5value"});
+        ValidateJsonExists("$.key.keyvalue().name", {"\3key"});
     }
 
-    // Predicates return an empty query because they always return a boolean/null value
-    // For JSON_EXISTS, the result is always true even if the path does not exist
+    // StartsWith predicates stop further path extraction: operand path only
     Y_UNIT_TEST(CollectPath_StartsWithPredicate) {
-        ValidateQueries("$ starts with \"lol\"", {""});
-        ValidateQueries("$[1 to last] starts with \"lol\"", {""});
-        ValidateQueries("$[*] starts with \"lol\"", {""});
-        ValidateQueries("$.key starts with \"abc\"", {""});
-        ValidateQueries("$.a.b.c[1, 2, 3] starts with \"abc\"", {""});
-        ValidateQueries("$.key.type().name starts with \"abc\"", {""});
-        ValidateQueries("$.* starts with \"abc\"", {""});
-        ValidateQueries("$.a.*.c[1, 2, 3] starts with \"abc\"", {""});
+        ValidateJsonValue("$ starts with \"lol\"", {""});
+        ValidateJsonValue("$[1 to last] starts with \"lol\"", {""});
+        ValidateJsonValue("$[*] starts with \"lol\"", {""});
+        ValidateJsonValue("$.key starts with \"abc\"", {"\3key"});
+        ValidateJsonValue("$.a.b.c[1, 2, 3] starts with \"abc\"", {"\1a\1b\1c"});
+        ValidateJsonValue("$.key.type().name starts with \"abc\"", {"\3key"});
+        ValidateJsonValue("$.* starts with \"abc\"", {""});
+        ValidateJsonValue("$.a.*.c[1, 2, 3] starts with \"abc\"", {"\1a"});
+
+        // For JSON_EXISTS, the result is always true even if the path does not exist
+        ValidateError("$.key starts with \"lol\"", "Predicates are not allowed in this context", ECallableType::JsonExists);
     }
 
-    // Predicates return an empty query because they always return a boolean/null value
-    // For JSON_EXISTS, the result is always true even if the path does not exist
+    // LikeRegex predicates stop further path extraction: operand path only
     Y_UNIT_TEST(CollectPath_LikeRegexPredicate) {
-        ValidateQueries("$ like_regex \"abc\"", {""});
-        ValidateQueries("$[1 to 2] like_regex \"abc\"", {""});
-        ValidateQueries("$[*] like_regex \"abc\"", {""});
-        ValidateQueries("$.key like_regex \"abc\"", {""});
-        ValidateQueries("$.* like_regex \"abc\"", {""});
-        ValidateQueries("$.key[1, 2, 3] like_regex \"abc\"", {""});
-        ValidateQueries("$.key.keyvalue() like_regex \"abc\"", {""});
-        ValidateQueries("$.key like_regex \"a.c\"", {""});
-        ValidateQueries("$.key like_regex \".*\"", {""});
+        ValidateJsonValue("$ like_regex \"abc\"", {""});
+        ValidateJsonValue("$[1 to 2] like_regex \"abc\"", {""});
+        ValidateJsonValue("$[*] like_regex \"abc\"", {""});
+        ValidateJsonValue("$.key like_regex \"abc\"", {"\3key"});
+        ValidateJsonValue("$.* like_regex \"abc\"", {""});
+        ValidateJsonValue("$.key[1, 2, 3] like_regex \"abc\"", {"\3key"});
+        ValidateJsonValue("$.key.keyvalue() like_regex \"abc\"", {"\3key"});
+        ValidateJsonValue("$.key like_regex \"a.c\"", {"\3key"});
+        ValidateJsonValue("$.key like_regex \".*\"", {"\3key"});
+
+        // For JSON_EXISTS, the result is always true even if the path does not exist
+        ValidateError("$.key like_regex \"abc\"", "Predicates are not allowed in this context", ECallableType::JsonExists);
     }
 
-    // Predicates return an empty query because they always return a boolean/null value
-    // For JSON_EXISTS, the result is always true even if the path does not exist
+    // Exists predicates stop further path extraction: operand path only
     Y_UNIT_TEST(CollectPath_ExistsPredicate) {
-        ValidateQueries("exists($)", {""});
-        ValidateQueries("exists($.key)", {""});
-        ValidateQueries("exists($.key[1, 2, 3])", {""});
-        ValidateQueries("exists($[*].size())", {""});
-        ValidateQueries("exists($.key.keyvalue().name)", {""});
-        ValidateQueries("exists($.key.keyvalue().name starts with \"abc\")", {""});
+        ValidateJsonValue("exists($)", {""});
+        ValidateJsonValue("exists($.key)", {"\3key"});
+        ValidateJsonValue("exists($.key[1, 2, 3])", {"\3key"});
+        ValidateJsonValue("exists($[*].size())", {""});
+        ValidateJsonValue("exists($.key.keyvalue().name)", {"\3key"});
+
+        // For JSON_EXISTS, the result is always true even if the path does not exist
+        ValidateError("exists($)", "Predicates are not allowed in this context", ECallableType::JsonExists);
     }
 
-    // Predicates return an empty query because they always return a boolean/null value
-    // For JSON_EXISTS, the result is always true even if the path does not exist
+    // IsUnknown predicates return error because their argument must be a predicate (-> nested predicates are not allowed)
     Y_UNIT_TEST(CollectPath_IsUnknownPredicate) {
-        ValidateQueries("($ starts with \"abc\") is unknown", {""});
+        ValidateError("($ starts with \"abc\") is unknown", "Predicates are not allowed in this context", ECallableType::JsonValue);
+        ValidateError("($ like_regex \"abc\") is unknown", "Predicates are not allowed in this context", ECallableType::JsonValue);
+        ValidateError("(exists($.key)) is unknown", "Predicates are not allowed in this context", ECallableType::JsonValue);
+
+        // For JSON_EXISTS, the result is always true even if the path does not exist
+        ValidateError("($ starts with \"abc\") is unknown", "Predicates are not allowed in this context", ECallableType::JsonExists);
     }
 
     // Unary +/- stop further path extraction (same as methods): operand path only
     Y_UNIT_TEST(CollectPath_UnaryPlusMinus) {
-        ValidateQueries("-$.key", {"\3key"});
-        ValidateQueries("+$.key", {"\3key"});
+        ValidateJsonExists("-$.key", {"\3key"});
+        ValidateJsonExists("+$.key", {"\3key"});
 
-        ValidateQueries("-$", {""});
-        ValidateQueries("+$", {""});
+        ValidateJsonExists("-$", {""});
+        ValidateJsonExists("+$", {""});
 
-        ValidateQueries("-$.a.b.c", {"\1a\1b\1c"});
-        ValidateQueries("+$.a.b.c", {"\1a\1b\1c"});
+        ValidateJsonExists("-$.a.b.c", {"\1a\1b\1c"});
+        ValidateJsonExists("+$.a.b.c", {"\1a\1b\1c"});
 
-        ValidateQueries("-$.*", {""});
-        ValidateQueries("+$.*", {""});
-        ValidateQueries("-$.a.*", {"\1a"});
-        ValidateQueries("+$.a.*", {"\1a"});
+        ValidateJsonExists("-$.*", {""});
+        ValidateJsonExists("+$.*", {""});
+        ValidateJsonExists("-$.a.*", {"\1a"});
+        ValidateJsonExists("+$.a.*", {"\1a"});
 
-        ValidateQueries("-$.key[0]", {"\3key"});
-        ValidateQueries("+$.key[last]", {"\3key"});
+        ValidateJsonExists("-$.key[0]", {"\3key"});
+        ValidateJsonExists("+$.key[last]", {"\3key"});
 
-        ValidateQueries("-$.key.abs()", {"\3key"});
-        ValidateQueries("+$.key.type()", {"\3key"});
+        ValidateJsonExists("-$.key.abs()", {"\3key"});
+        ValidateJsonExists("+$.key.type()", {"\3key"});
 
-        ValidateQueries("-(-$.key)", {"\3key"});
-        ValidateQueries("-(+$.key)", {"\3key"});
-        ValidateQueries("+(-$.key)", {"\3key"});
-        ValidateQueries("+(+$.key)", {"\3key"});
+        ValidateJsonExists("-(-$.key)", {"\3key"});
+        ValidateJsonExists("-(+$.key)", {"\3key"});
+        ValidateJsonExists("+(-$.key)", {"\3key"});
+        ValidateJsonExists("+(+$.key)", {"\3key"});
+
+        ValidateJsonValue("exists(-$.a.b)", {"\1a\1b"});
+        ValidateJsonValue("exists(+$.a.b)", {"\1a\1b"});
+
+        ValidateJsonValue("-($.double())", {""});
+        ValidateJsonValue("+($.double())", {""});
     }
 
     // Literals are not supported without a preceding ContextObject
     Y_UNIT_TEST(CollectPath_Literals) {
-        ValidateQueries("1", {});
-        ValidateQueries("1.2345", {});
-        ValidateQueries("true", {});
-        ValidateQueries("false", {});
-        ValidateQueries("null", {});
-        ValidateQueries("\"string\"", {});
+        ValidateError("1", "Literal expressions are not allowed in this context");
+        ValidateError("1.2345", "Literal expressions are not allowed in this context");
+        ValidateError("true", "Literal expressions are not allowed in this context");
+        ValidateError("false", "Literal expressions are not allowed in this context");
+        ValidateError("null", "Literal expressions are not allowed in this context");
+        ValidateError("\"string\"", "Literal expressions are not allowed in this context");
     }
 
     // Binary arithmetic operators extract tokens from both operands and finish
     Y_UNIT_TEST(CollectPath_BinaryArithmetic) {
+        const TString varError = "Variables are not supported at the moment";
+
         // Path on the left, literal on the right - only left token
         ValidateQueries("$.key + 1", {"\3key"});
         ValidateQueries("$.key - 1", {"\3key"});
@@ -229,6 +256,39 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         // Both operands are literals - no path to collect
         ValidateQueries("1 + 2", {});
         ValidateQueries("1.5 * 2.0", {});
+
+        // Wildcard on left, path on right - both collected
+        ValidateJsonExists("$.a.* + $.b", {"\1a", "\1b"});
+        ValidateJsonExists("$.* + $.b", {"", "\1b"});
+        ValidateJsonExists("$.* - $.a.b", {"", "\1a\1b"});
+
+        // Path on left, wildcard on right
+        ValidateJsonExists("$.a + $.*", {"\1a", ""});
+        ValidateJsonExists("$.a.b + $.*", {"\1a\1b", ""});
+
+        // Wildcard on both sides - two wildcard tokens collected
+        ValidateJsonExists("$.* + $.*", {"", ""});
+        ValidateJsonExists("$.a.* + $.*", {"\1a", ""});
+        ValidateJsonExists("$.* + $.a.*", {"", "\1a"});
+        ValidateJsonExists("$.a.b.*.c + $.a.b.*.d", {"\1a\1b", "\1a\1b"});
+
+        // Error on left - propagated immediately, right not collected
+        ValidateError("$var + $.b", varError);
+        ValidateError("$var - $.b", varError);
+        ValidateError("$var * $.b", varError);
+        ValidateError("$var / $.b", varError);
+        ValidateError("$var % $.b", varError);
+
+        // Error on right - left tokens lost, error propagated
+        ValidateError("$.a + $var", varError);
+        ValidateError("$.a - $var", varError);
+        ValidateError("$.a * $var", varError);
+
+        // Both sides error
+        ValidateError("$var + $var", varError);
+
+        // Error propagates through chained binary: ($.a + $var) + $.c
+        ValidateError("$.a + $var + $.c", varError);
     }
 
     // Non-trivial combinations of unary and binary arithmetic operators
@@ -265,6 +325,7 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
 
         // Longer paths on both sides
         ValidateQueries("$.a.b.c + $.x.y.z", {"\1a\1b\1c", "\1x\1y\1z"});
+        ValidateQueries("-($.a.*.c) + $.x.y.*", {"\1a", "\1x\1y"});
         ValidateQueries("$.a.b.c * 3.14", {"\1a\1b\1c"});
 
         // Method result used as operand of binary - method finishes, but token still collected
@@ -275,7 +336,8 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
 
     Y_UNIT_TEST(CollectPath_EqualityOperator) {
         const TString compError = "Comparison requires exactly one path and one literal operand";
-        const TString varError  = "Variables are not supported at the moment";
+        const TString predError = "Predicates are not allowed in this context";
+        const TString varError = "Variables are not supported at the moment";
 
         auto strSuffix = [](const TStringBuf s) -> TString {
             return TString("\0\3", 2) + s;
@@ -289,153 +351,114 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             return s;
         };
 
-        const TString boolTrueSuffix  = TString("\0\1", 2);
+        const TString boolTrueSuffix = TString("\0\1", 2);
         const TString boolFalseSuffix = TString("\0\0", 2);
-        const TString nullSuffix      = TString("\0\2", 2);
+        const TString nullSuffix = TString("\0\2", 2);
 
         // Path == literal, all literal types
-        ValidateQueries("$.key == \"hello\"", {"\3key" + strSuffix("hello")});
-        ValidateQueries("$.key == \"\"", {"\3key" + strSuffix("")});
-        ValidateQueries("$.key == 42", {"\3key" + numSuffix(42)});
-        ValidateQueries("$.key == 0", {"\3key" + numSuffix(0)});
-        ValidateQueries("$.key == 3.14", {"\3key" + numSuffix(3.14)});
-        ValidateQueries("$.key == true", {"\3key" + boolTrueSuffix});
-        ValidateQueries("$.key == false", {"\3key" + boolFalseSuffix});
-        ValidateQueries("$.key == null", {"\3key" + nullSuffix});
+        ValidateJsonValue("$.key == \"hello\"", {"\3key" + strSuffix("hello")});
+        ValidateJsonValue("$.key == \"\"", {"\3key" + strSuffix("")});
+        ValidateJsonValue("$.key == 42", {"\3key" + numSuffix(42)});
+        ValidateJsonValue("$.key == 0", {"\3key" + numSuffix(0)});
+        ValidateJsonValue("$.key == 3.14", {"\3key" + numSuffix(3.14)});
+        ValidateJsonValue("$.key == true", {"\3key" + boolTrueSuffix});
+        ValidateJsonValue("$.key == false", {"\3key" + boolFalseSuffix});
+        ValidateJsonValue("$.key == null", {"\3key" + nullSuffix});
 
         // Reversed order: literal == path (identical result)
-        ValidateQueries("\"hello\" == $.key", {"\3key" + strSuffix("hello")});
-        ValidateQueries("42 == $.key", {"\3key" + numSuffix(42)});
-        ValidateQueries("true == $.key", {"\3key" + boolTrueSuffix});
-        ValidateQueries("null == $.key", {"\3key" + nullSuffix});
+        ValidateJsonValue("\"hello\" == $.key", {"\3key" + strSuffix("hello")});
+        ValidateJsonValue("42 == $.key", {"\3key" + numSuffix(42)});
+        ValidateJsonValue("true == $.key", {"\3key" + boolTrueSuffix});
+        ValidateJsonValue("null == $.key", {"\3key" + nullSuffix});
 
         // Context object as path (empty prefix)
-        ValidateQueries("$ == \"hello\"", {strSuffix("hello")});
-        ValidateQueries("$ == 42", {numSuffix(42)});
-        ValidateQueries("$ == true", {boolTrueSuffix});
-        ValidateQueries("$ == null", {nullSuffix});
-        ValidateQueries("\"hello\" == $", {strSuffix("hello")});
+        ValidateJsonValue("$ == \"hello\"", {strSuffix("hello")});
+        ValidateJsonValue("$ == 42", {numSuffix(42)});
+        ValidateJsonValue("$ == true", {boolTrueSuffix});
+        ValidateJsonValue("$ == null", {nullSuffix});
+        ValidateJsonValue("\"hello\" == $", {strSuffix("hello")});
 
         // Deeper paths
-        ValidateQueries("$.a.b == \"x\"", {"\1a\1b" + strSuffix("x")});
-        ValidateQueries("$.a.b.c == null", {"\1a\1b\1c" + nullSuffix});
-        ValidateQueries("\"x\" == $.a.b.c", {"\1a\1b\1c" + strSuffix("x")});
-        ValidateQueries("$.aba.\"caba\" == true", {"\3aba\4caba" + boolTrueSuffix});
-        ValidateQueries("$.a.b.c.d == 0", {"\1a\1b\1c\1d" + numSuffix(0)});
-        ValidateQueries("$.\"\".\"\" == 0", {TString("\0\0", 2) + numSuffix(0)});
+        ValidateJsonValue("$.a.b == \"x\"", {"\1a\1b" + strSuffix("x")});
+        ValidateJsonValue("$.a.b.c == null", {"\1a\1b\1c" + nullSuffix});
+        ValidateJsonValue("\"x\" == $.a.b.c", {"\1a\1b\1c" + strSuffix("x")});
+        ValidateJsonValue("$.aba.\"caba\" == true", {"\3aba\4caba" + boolTrueSuffix});
+        ValidateJsonValue("$.a.b.c.d == 0", {"\1a\1b\1c\1d" + numSuffix(0)});
+        ValidateJsonValue("$.\"\".\"\" == 0", {TString("\0\0", 2) + numSuffix(0)});
 
         // Array subscript
-        ValidateQueries("$.key[0] == \"x\"", {"\3key" + strSuffix("x")});
-        ValidateQueries("$.key[last] == true", {"\3key" + boolTrueSuffix});
-        ValidateQueries("$.key[1, 2, 3] == null", {"\3key" + nullSuffix});
-        ValidateQueries("$.key[0 to last] == 42", {"\3key" + numSuffix(42)});
-        ValidateQueries("$.key[0].sub == \"x\"", {"\3key\3sub" + strSuffix("x")});
-        ValidateQueries("$.a.b[0].c == \"x\"", {"\1a\1b\1c" + strSuffix("x")});
-        ValidateQueries("$.key[*] == \"x\"", {"\3key" + strSuffix("x")});
+        ValidateJsonValue("$.key[0] == \"x\"", {"\3key" + strSuffix("x")});
+        ValidateJsonValue("$.key[last] == true", {"\3key" + boolTrueSuffix});
+        ValidateJsonValue("$.key[1, 2, 3] == null", {"\3key" + nullSuffix});
+        ValidateJsonValue("$.key[0 to last] == 42", {"\3key" + numSuffix(42)});
+        ValidateJsonValue("$.key[0].sub == \"x\"", {"\3key\3sub" + strSuffix("x")});
+        ValidateJsonValue("$.a.b[0].c == \"x\"", {"\1a\1b\1c" + strSuffix("x")});
+        ValidateJsonValue("$.key[*] == \"x\"", {"\3key" + strSuffix("x")});
 
         // Wildcard member access finishes the path
-        ValidateQueries("$.* == \"x\"", {""});
-        ValidateQueries("$.a.* == \"x\"", {"\1a"});
-        ValidateQueries("$.a.b.* == \"x\"", {"\1a\1b"});
-        ValidateQueries("\"x\" == $.*", {""});
-        ValidateQueries("\"x\" == $.a.*", {"\1a"});
+        ValidateJsonValue("$.* == \"x\"", {""});
+        ValidateJsonValue("$.a.* == \"x\"", {"\1a"});
+        ValidateJsonValue("$.a.b.* == \"x\"", {"\1a\1b"});
+        ValidateJsonValue("\"x\" == $.*", {""});
+        ValidateJsonValue("\"x\" == $.a.*", {"\1a"});
 
         // Methods finish the path
-        ValidateQueries("$.key.size() == 3", {"\3key"});
-        ValidateQueries("$.key.abs() == 1", {"\3key"});
-        ValidateQueries("$.key.type() == \"number\"", {"\3key"});
-        ValidateQueries("$.a.b.floor() == 0", {"\1a\1b"});
-        ValidateQueries("$.key.keyvalue().name == \"x\"", {"\3key"});
+        ValidateJsonValue("$.key.size() == 3", {"\3key"});
+        ValidateJsonValue("$.key.abs() == 1", {"\3key"});
+        ValidateJsonValue("$.key.type() == \"number\"", {"\3key"});
+        ValidateJsonValue("$.a.b.floor() == 0", {"\1a\1b"});
+        ValidateJsonValue("$.key.keyvalue().name == \"x\"", {"\3key"});
 
         // Unary arithmetic on path finishes the path
-        ValidateQueries("-$.key == 1", {"\3key"});
-        ValidateQueries("+$.key == 1", {"\3key"});
-        ValidateQueries("-$.a.b == null", {"\1a\1b"});
-
-        // Predicates finish the path - the inner path token is returned (except IsUnknownPredicate)
-        ValidateQueries("exists($.key) == true", {"\3key"}, TCallableType::JsonValue);
-        ValidateQueries("($.key starts with \"a\") == true", {"\3key"}, TCallableType::JsonValue);
-        ValidateQueries("($.key like_regex \"a.*\") == true", {"\3key"}, TCallableType::JsonValue);
-        ValidateQueries("($.a.b starts with \"x\") == false", {"\1a\1b"}, TCallableType::JsonValue);
-        ValidateQueries("($.key == 10) is unknown", {""}, TCallableType::JsonValue);
-
-        ValidateQueries("exists($.key) == true", {""});
-        ValidateQueries("($.key starts with \"a\") == true", {""});
-        ValidateQueries("($.key like_regex \"a.*\") == true", {""});
-        ValidateQueries("($.a.b starts with \"x\") == false", {""});
-        ValidateQueries("($.key == 10) is unknown", {""});
-
-        // Both operands are paths
-        ValidateError("$.a == $.b", compError);
-        ValidateError("$.key == $", compError);
-        ValidateError("$ == $", compError);
-        ValidateError("$.a.b == $.c.d", compError);
-
-        // Literals only
-        ValidateError("\"x\" == \"y\"", compError);
-        ValidateError("1 == 2", compError);
-        ValidateError("true == false", compError);
-        ValidateError("null == null", compError);
-        ValidateError("1 == \"x\"", compError);
-
-        // Without context object
-        ValidateError("1 == 1", compError);
-
-        // Variables
-        ValidateError("$var == \"x\"", varError);
-        ValidateError("\"x\" == $var", varError);
-        ValidateError("$var == $var", compError);
-        ValidateError("$ == $var", compError);
+        ValidateJsonValue("-$.key == 1", {"\3key"});
+        ValidateJsonValue("+$.key == 1", {"\3key"});
+        ValidateJsonValue("-$.a.b == null", {"\1a\1b"});
 
         // Arithmetic produces multiple tokens
-        ValidateQueries("($.a + $.b) == \"x\"", {"\1a", "\1b"});
-        ValidateQueries("\"x\" == ($.a + $.b)", {"\1a", "\1b"});
-        ValidateQueries("$.key + 1 == \"x\"", {"\3key"});
-        ValidateQueries("1 + $.key == \"x\"", {"\3key"});
+        ValidateJsonValue("($.a + $.b) == \"x\"", {"\1a", "\1b"});
+        ValidateJsonValue("\"x\" == ($.a + $.b)", {"\1a", "\1b"});
+        ValidateJsonValue("$.key + 1 == \"x\"", {"\3key"});
+        ValidateJsonValue("1 + $.key == \"x\"", {"\3key"});
 
         // Parenthesized path - no effect
-        ValidateQueries("($.a.b) == \"x\"", {"\1a\1b" + strSuffix("x")});
-        ValidateQueries("\"x\" == ($.a.b)", {"\1a\1b" + strSuffix("x")});
-        ValidateQueries("(((((($).a).b))) == (\"x\"))", {"\1a\1b" + strSuffix("x")});
-    }
+        ValidateJsonValue("($.a.b) == \"x\"", {"\1a\1b" + strSuffix("x")});
+        ValidateJsonValue("\"x\" == ($.a.b)", {"\1a\1b" + strSuffix("x")});
+        ValidateJsonValue("(((((($).a).b))) == (\"x\"))", {"\1a\1b" + strSuffix("x")});
 
-    Y_UNIT_TEST(CollectPath_BinaryArithmeticWildcard) {
-        // Wildcard on left, path on right - both collected
-        ValidateQueries("$.a.* + $.b", {"\1a", "\1b"});
-        ValidateQueries("$.* + $.b", {"", "\1b"});
-        ValidateQueries("$.* - $.a.b", {"", "\1a\1b"});
+        // Predicates with equality operator -> nested predicates are not allowed
+        ValidateError("exists($.key) == true", predError, ECallableType::JsonValue);
+        ValidateError("($.key starts with \"a\") == true", predError, ECallableType::JsonValue);
+        ValidateError("($.key like_regex \"a.*\") == true", predError, ECallableType::JsonValue);
+        ValidateError("($.a.b starts with \"x\") == false", predError, ECallableType::JsonValue);
+        ValidateError("($.key == 10) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("($.key == 10) == false", predError, ECallableType::JsonValue);
+        ValidateError("false == ($.key == 10)", predError, ECallableType::JsonValue);
 
-        // Path on left, wildcard on right
-        ValidateQueries("$.a + $.*", {"\1a", ""});
-        ValidateQueries("$.a.b + $.*", {"\1a\1b", ""});
+        // For JSON_EXISTS, the result is always true even if the path does not exist
+        ValidateError("$.key == 10", "Predicates are not allowed in this context", ECallableType::JsonExists);
+        ValidateError("false == ($.key == 10)", "Predicates are not allowed in this context", ECallableType::JsonExists);
 
-        // Wildcard on both sides - two wildcard tokens collected
-        ValidateQueries("$.* + $.*", {"", ""});
-        ValidateQueries("$.a.* + $.*", {"\1a", ""});
-        ValidateQueries("$.* + $.a.*", {"", "\1a"});
-        ValidateQueries("$.a.b.*.c + $.a.b.*.d", {"\1a\1b", "\1a\1b"});
-    }
+        // Both operands are paths
+        ValidateError("$.a == $.b", compError, ECallableType::JsonValue);
+        ValidateError("$.key == $", compError, ECallableType::JsonValue);
+        ValidateError("$ == $", compError, ECallableType::JsonValue);
+        ValidateError("$.a.b == $.c.d", compError, ECallableType::JsonValue);
 
-    Y_UNIT_TEST(CollectPath_BinaryArithmeticErrors) {
-        const TString varError = "Variables are not supported at the moment";
+        // Literals only
+        ValidateError("\"x\" == \"y\"", compError, ECallableType::JsonValue);
+        ValidateError("1 == 2", compError, ECallableType::JsonValue);
+        ValidateError("true == false", compError, ECallableType::JsonValue);
+        ValidateError("null == null", compError, ECallableType::JsonValue);
+        ValidateError("1 == \"x\"", compError, ECallableType::JsonValue);
 
-        // Error on left - propagated immediately, right not collected
-        ValidateError("$var + $.b", varError);
-        ValidateError("$var - $.b", varError);
-        ValidateError("$var * $.b", varError);
-        ValidateError("$var / $.b", varError);
-        ValidateError("$var % $.b", varError);
+        // Without context object
+        ValidateError("1 == 1", compError, ECallableType::JsonValue);
 
-        // Error on right - left tokens lost, error propagated
-        ValidateError("$.a + $var", varError);
-        ValidateError("$.a - $var", varError);
-        ValidateError("$.a * $var", varError);
-
-        // Both sides error
-        ValidateError("$var + $var", varError);
-
-        // Error propagates through chained binary: ($.a + $var) + $.c
-        ValidateError("$.a + $var + $.c", varError);
+        // Variables
+        ValidateError("$var == \"x\"", varError, ECallableType::JsonValue);
+        ValidateError("\"x\" == $var", varError, ECallableType::JsonValue);
+        ValidateError("$var == $var", compError, ECallableType::JsonValue);
+        ValidateError("$ == $var", compError, ECallableType::JsonValue);
     }
 
     // Variables are not supported now

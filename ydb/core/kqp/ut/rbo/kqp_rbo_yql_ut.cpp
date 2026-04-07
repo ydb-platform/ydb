@@ -23,6 +23,12 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 using namespace NStat;
 
+std::pair<ui32, ui32> GetNewRBOCompileCounters(TKikimrRunner& kikimr) {
+    auto counters = TKqpCounters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+    return {counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Success")->Val(),
+            counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Failed")->Val()};
+}
+
 double TimeQuery(NKikimr::NKqp::TKikimrRunner& kikimr, TString query, int nIterations) {
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1180,15 +1186,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         std::vector<std::string> queries = {
             R"(
-                PRAGMA YqlSelect = 'force';
                 SELECT bar.id FROM `/Root/bar` as bar where bar.id == (SELECT max(foo.id) FROM `/Root/foo` as foo WHERE foo.id == bar.id AND foo.name == lastname AND foo.id==1);
             )",
              R"(
-                PRAGMA YqlSelect = 'force';
                 SELECT bar.id FROM `/Root/bar` as bar where EXISTS (SELECT foo.id FROM `/Root/foo` as foo WHERE foo.id == bar.id AND foo.name == lastname AND foo.id==1);
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 SELECT bar.id FROM `/Root/bar` as bar where bar.lastname IN (SELECT foo.name FROM `/Root/foo` as foo WHERE foo.id == bar.id AND foo.id==1);
             )",
         };
@@ -1719,11 +1722,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         std::vector<std::string> queries = {
             R"(
-                PRAGMA YqlSelect = 'force';
                 SELECT id, b FROM `/Root/foo` WHERE b not in [1, 2] order by b;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 SELECT * FROM `/Root/foo` WHERE name = '3_name' order by id;
             )",
         };
@@ -2203,6 +2204,84 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                          .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
+    }
+
+     void CreateSimpleTable(TKikimrRunner &kikimr) {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+	            b Int64,
+                c Int64,
+                primary key(a)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    void TestFallbackToYql(bool fallbackToYqlEnabled, const std::vector<std::string>& queries,
+                           const std::vector<std::pair<ui32, ui32>>& expectedCompileCounters, const std::vector<bool>& expectedResult) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(fallbackToYqlEnabled);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        CreateSimpleTable(kikimr);
+
+        std::pair<ui32, ui32> intermediateResult{0, 0};
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            auto queryClient = kikimr.GetQueryClient();
+            const auto& query = queries[i];
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.IsSuccess(), expectedResult[i], result.GetIssues().ToString());
+            intermediateResult.first += expectedCompileCounters[i].first;
+            intermediateResult.second += expectedCompileCounters[i].second;
+            UNIT_ASSERT_VALUES_EQUAL(GetNewRBOCompileCounters(kikimr), intermediateResult);
+        }
+    }
+
+    std::vector<std::string> GetQueriesToTestFallbackToYql() {
+        std::vector<std::string> queries = {
+            // Insert is not supported.
+            R"(
+                INSERT INTO `/Root/t1` (a, b, c) VALUES (1, 2, 3);
+            )",
+            // Simple supported query in new RBO.
+            R"(
+                select t1.a from `/Root/t1` as t1;
+            )",
+        };
+
+        return queries;
+    }
+
+    std::vector<std::pair<ui32, ui32>> GetCompileCountersToTestFallbackToYql() {
+        // Represents the number of successes and fails for each query with new RBO compiler pipeline.
+        std::vector<std::pair<ui32, ui32>> expectedCompileCounters = {
+            {0, 1},
+            {1, 0}
+        };
+
+        return expectedCompileCounters;
+    }
+
+    Y_UNIT_TEST(FallbackToYqlEnabled) {
+        // All queries should succeded because fallback to yql is enabled.
+        const std::vector<bool> expectedResult{true, true};
+        TestFallbackToYql(/*fallbackToYqlEnabled=*/true, GetQueriesToTestFallbackToYql(), GetCompileCountersToTestFallbackToYql(),
+                          expectedResult);
+    }
+
+    Y_UNIT_TEST(FallbackToYqlDisabled) {
+        // First 2 queries should fail because fallback to yql is disabled.
+        const std::vector<bool> expectedResult{false, true};
+        TestFallbackToYql(/*fallbackToYqlEnabled=*/false, GetQueriesToTestFallbackToYql(), GetCompileCountersToTestFallbackToYql(),
+                          expectedResult);
     }
 
     /*

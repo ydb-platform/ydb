@@ -1,6 +1,8 @@
 #include "shard_impl.h"
 #include "log.h"
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/monlib/service/pages/mon_page.h>
+#include <ydb/core/base/tablet_mon_admin_path.h>
 
 namespace NKikimr {
 namespace NGraph {
@@ -158,6 +160,14 @@ void TGraphShard::ExecuteTxMonitoring(NMon::TEvRemoteHttpInfo::TPtr ev) {
         if (ev->Get()->Cgi().Get("action") == "change_backend") {
             ui64 backend = FromStringWithDefault(ev->Get()->Cgi().Get("backend"), 0);
             if (backend >= 0 && backend <= 2) {
+                if (!IsTabletAppSecureMonPath(ev->Get()->PathInfo())) {
+                    Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+                    return;
+                }
+                if (!TabletMonRequestIsAdministrator(ActorContext(), ev->Get())) {
+                    Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+                    return;
+                }
                 ExecuteTxChangeBackend(static_cast<EBackendType>(backend));
                 Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("<html><p>ok</p></html>"));
                 return;

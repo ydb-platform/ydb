@@ -36,11 +36,12 @@ TConclusionStatus TIndexMeta::DoCheckModificationCompatibility(const IIndexMeta&
 
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
     TChunkedBatchReader& reader, const ui32 recordsCount) const {
+    reader.Start();
     TChunkedColumnReader cReader = *reader.begin();
     auto thisChunkIndex = NArrow::NAccessor::TMinMax::MakeNull(cReader.GetCurrentChunk()->GetDataType());
     AFL_VERIFY(reader.GetColumnsCount() == 1)("got_count", reader.GetColumnsCount());
     {
-        for (reader.Start(); cReader.IsCorrect(); cReader.ReadNextChunk()) {
+        for (; cReader.IsCorrect(); cReader.ReadNextChunk()) {
             NArrow::NAccessor::TMinMax currentScalar = cReader.GetCurrentChunk()->GetMinMaxScalars();
             thisChunkIndex.UniteWith(currentScalar);
         }

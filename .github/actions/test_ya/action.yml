@@ -254,7 +254,7 @@ runs:
           --stat -DCONSISTENT_DEBUG --no-dir-outputs
           --test-failure-code 0 --build-all
           --cache-size 2TB --force-build-depends
-          --memory-limit=25%
+          --memory-limit=100GB
         )
 
         echo "inputs.custom_branch_name = ${{ inputs.custom_branch_name }}"
@@ -406,12 +406,17 @@ runs:
           mkdir $TEST_META_INFO
 
           CURRENT_MESSAGE="ya make is running..."
+          PREV_REPORT="$CURRENT_REPORT"
+          CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
+
           if [ $IS_RETRY = 0 ]; then
             CURRENT_MESSAGE="$CURRENT_MESSAGE"
             RERUN_FAILED_OPT=""
           else
             CURRENT_MESSAGE="$CURRENT_MESSAGE (failed tests rerun, try $RETRY)"
             if [ -z "$GRAPH_PATH" ]; then
+              MUTED_YAML_PATH="$CURRENT_PUBLIC_DIR/muted_tests.yaml"
+              python3 .github/scripts/tests/mute_utils.py convert_muted_txt_to_yaml .github/config/muted_ya.txt "$PREV_REPORT" > $MUTED_YAML_PATH
               RERUN_FAILED_OPT="-X --build-only-test-deps --test-blacklist-path $MUTED_YAML_PATH"
             else
               RERUN_FAILED_OPT=""
@@ -419,8 +424,6 @@ runs:
           fi
 
           echo $CURRENT_MESSAGE | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
-
-          CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
 
           monitor_memory() {
               set +x

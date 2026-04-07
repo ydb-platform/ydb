@@ -258,6 +258,8 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
 
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
             TActivationContext::ActorSystem(),
+            GetNbsService()->Scheduler,
+            GetNbsService()->Timer,
             executors[i],
             TabletID(),
             1,   // generation

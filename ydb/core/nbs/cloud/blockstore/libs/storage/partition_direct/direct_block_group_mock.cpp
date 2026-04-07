@@ -11,6 +11,11 @@ TExecutorPtr TDirectBlockGroupMock::GetExecutor()
     return Executor;
 }
 
+void TDirectBlockGroupMock::Schedule(TDuration delay, TCallback callback)
+{
+    ScheduleHandler(delay, std::move(callback));
+}
+
 void TDirectBlockGroupMock::EstablishConnections()
 {}
 
@@ -88,7 +93,7 @@ TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
     std::vector<ui8> hostIndexes,
     ui64 lsn,
     TBlockRange64 range,
-    ui32 replyTimeoutMicroseconds,
+    TDuration replyTimeout,
     const TGuardedSgList& guardedSglist,
     NWilson::TTraceId traceId)
 {
@@ -97,7 +102,7 @@ TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
         hostIndexes,
         lsn,
         range,
-        replyTimeoutMicroseconds,
+        replyTimeout,
         guardedSglist,
         std::move(traceId));
 }

@@ -35,7 +35,7 @@ private:
     TVolumeCounters Counters;
     TVolumeConfigPtr VolumeConfig;
     const EWriteMode WriteMode;
-    ui32 PBufferReplyTimeoutMicroseconds{};
+    TDuration PBufferReplyTimeout;
 
 public:
     TFastPathService(

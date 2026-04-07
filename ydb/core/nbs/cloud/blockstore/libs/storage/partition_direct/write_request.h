@@ -39,8 +39,6 @@ public:
 
     TWriteRequestExecutor(
         NActors::TActorSystem* actorSystem,
-        TExecutorPtr executor,
-        IPartitionDirectService* partitionDirectService,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         TBlockRange64 vChunkRange,
@@ -48,17 +46,17 @@ public:
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         ui64 lsn,
         NWilson::TTraceId traceId,
-        TDuration writeHandoffDelay);
+        TDuration hedgingDelay);
 
     ~TWriteRequestExecutor();
 
-    void Run(EWriteMode writeMode, ui32 pbufferReplyTimeoutMicroseconds);
+    void Run(EWriteMode writeMode, TDuration pbufferReplyTimeout);
 
     NThreading::TFuture<TResponse> GetFuture() const;
 
 private:
     void SendWriteRequest(ELocation location);
-    void SendWriteRequestToManyPBuffers(ui32 pbufferReplyTimeoutMicroseconds);
+    void SendWriteRequestToManyPBuffers(TDuration pbufferReplyTimeout);
     void SendWriteRequestsToHandoffPBuffers();
     void OnWriteResponse(
         ELocation location,
@@ -70,8 +68,6 @@ private:
     void Reply(NProto::TError error);
 
     NActors::TActorSystem* ActorSystem;
-    const TExecutorPtr Executor;
-    IPartitionDirectService* const PartitionDirectService;
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
     const TBlockRange64 VChunkRange;
@@ -79,8 +75,7 @@ private:
     const std::shared_ptr<TWriteBlocksLocalRequest> Request;
     const NWilson::TTraceId TraceId;
     const ui64 Lsn;
-
-    const TDuration WriteHandoffDelay;
+    const TDuration HedgingDelay;
 
     NThreading::TPromise<TResponse> Promise =
         NThreading::NewPromise<TResponse>();

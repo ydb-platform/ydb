@@ -4,6 +4,7 @@ SRCS(
     base_test_fixture.cpp
     ddisk_data_copier_ut.cpp
     read_request_ut.cpp
+    write_request_ut.cpp
 )
 
 PEERDIR(

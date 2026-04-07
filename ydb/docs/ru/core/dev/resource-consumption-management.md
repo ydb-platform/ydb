@@ -231,7 +231,7 @@ ydb -p <profile_name> sql -s 'select 1' --stats full --format json-unicode
 
 ### Статус выполняющегося запроса
 
-Информацию о том, как обрабатывается запрос в Workload Manager, можно получить на основе системного представления `.sys/query_sessions`. В этом представлении есть следующие поля:
+Информацию о том, как обрабатывается запрос в Workload Manager, можно получить на основе системного представления [`.sys/query_sessions`](system-views.md#query-sessions). В этом представлении есть следующие поля:
 - `WmPoolId` `(Utf8)` - Идентификатор пула, в котором выполняется запрос.
 - `WmState` `(Utf8)` - Статус запроса в WM.
 - `WmEnterTime` `(Timestamp)` - Время, когда запрос перешел в статус PENDING или DELAYED.

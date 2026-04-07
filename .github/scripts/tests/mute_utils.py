@@ -1,8 +1,11 @@
+from __future__ import annotations
+from typing import Set, Tuple
 import operator
 import re
 import xml.etree.ElementTree as ET
 import sys
 import yaml
+import json
 
 from junit_utils import add_junit_property
 
@@ -138,16 +141,37 @@ def _split(s: str, sep: str) -> tuple[str, str]:
     else:
         return s[:p], s[p + 1 :]
 
+def get_previously_skipped_tests(report_json_path: str) -> Set[Tuple[str, str]]:
+    result = set()
+    if report_json_path:
+        with open(report_json_path, 'r') as f:
+            report = json.load(f)
+        for test in report.get('results', []):
+            if test.get('status', '') not in {'SKIPPED'}:
+                continue
+            path = test.get('path', '')
+            name = test.get('name', '')
+            sub_name = test.get('subtest_name', '')
+            if name and sub_name:
+                result.add((path, f'{name}.{sub_name}'))
+            elif name:
+                result.add((path, name))
+            elif sub_name:
+                result.add((path, sub_name))
+    return result
 
-def convert_muted_txt_to_yaml(muted_txt_path: str):
+def convert_muted_txt_to_yaml(muted_txt_path: str, report_json_path: str) -> None:
     with open(muted_txt_path) as file:
         muted_tests = file.readlines()
+    previously_skipped = get_previously_skipped_tests(report_json_path)
     filter_by_suite: dict[tuple[str, str], list[str]] = {}
     for test_line in [l.strip() for l in muted_tests]:
         if not test_line:
             continue
         path, filter = _split(test_line, ' ')
         if filter.endswith('chunk'):
+            continue
+        if (path, filter) in previously_skipped:
             continue
         suite_type = ''
         filter = filter.replace('.', '::').replace('::py::', '.py::')

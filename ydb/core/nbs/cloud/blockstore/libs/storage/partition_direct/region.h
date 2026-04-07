@@ -33,7 +33,7 @@ public:
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         EWriteMode writeMode,
-        ui32 pbufferReplyTimeoutMicroseconds,
+        TDuration pbufferReplyTimeout,
         ui64 lsn,
         const NWilson::TTraceId& traceId);
 

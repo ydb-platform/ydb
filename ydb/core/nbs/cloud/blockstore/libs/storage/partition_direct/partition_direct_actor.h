@@ -5,11 +5,11 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/tablet.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/executor_pool.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/region.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_pool.h>
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blockstore/core/blockstore.h>
@@ -49,11 +49,6 @@ private:
     TExecutorPool ExecutorPool{32};
     std::shared_ptr<NYdb::NBS::NStorage::TStorageConfig> StorageConfig;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
-
-    TString DiskId;
-    ui32 BlockSize;
-    ui64 BlockCount;
-
     NActors::TActorId BSControllerPipeClient;
 
     NActors::TActorId LoadActorAdapter;

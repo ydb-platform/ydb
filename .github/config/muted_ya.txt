@@ -4,10 +4,13 @@ ydb/core/blobstorage/ut_blobstorage GroupLayoutSanitizer.StressBlock4Plus2
 ydb/core/blobstorage/ut_blobstorage VDiskAssimilation.Test
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeGet.PartRestorationAcrossBridgeOnDiscover
-ydb/core/blobstorage/ut_blobstorage/ut_osiris Osiris.block42
-ydb/core/blobstorage/ut_blobstorage/ut_osiris unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeGet.PartRestorationAcrossBridgeOnRange
+ydb/core/external_sources/s3/ut S3AwsCredentials.TestInsertEscaping
 ydb/core/external_sources/s3/ut S3AwsCredentials.TieringInvalidSecrets
 ydb/core/external_sources/s3/ut S3AwsCredentials.TieringInvalidSecretsFixViaDropCreateCheck
+ydb/core/external_sources/s3/ut S3AwsCredentials.TieringSecretMigration
+ydb/core/external_sources/s3/ut S3AwsCredentials.TieringSecretMigrationViaDropCreate
+ydb/core/external_sources/s3/ut unittest.[*/*] chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.PartitionSplit_AutosplitByLoad_KllSketchBasedSplit_MessageGroupId
 ydb/core/http_proxy/ut/sqs_topic_ut unittest.[*/*] chunk
@@ -18,6 +21,11 @@ ydb/core/kqp/ut/tli KqpTli.ManyUpsertsStandaloneCommit2Node
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/mind/hive/ut THiveTestWithTenants.TestSetDown
 ydb/core/mind/hive/ut unittest.[*/*] chunk
+ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TPartitionDirectTest.BasicWriteReadDirectPBufferFilling
+ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TPartitionDirectTest.RandomWritesDirectPBufferFilling
+ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TPartitionDirectTest.ShouldWriteAndReadBlocksInDifferentRegionsDirectPBufferFilling
+ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TPartitionDirectTest.ShouldWriteAndReadFromHandoffPersistentBuffers
+ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut unittest.[*/*] chunk
 ydb/core/persqueue/public/mlp/ut TMLPReaderTests.TopicWithData
 ydb/core/persqueue/ut/ut_with_sdk unittest.[*/*] chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
@@ -34,9 +42,8 @@ ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
+ydb/core/viewer/tests test.py.TestViewer.test_storage_stats
 ydb/core/viewer/ut Viewer.CommitOffsetTest
-ydb/core/wrappers/ut TS3WrapperTests.AbortUnknownUpload
-ydb/core/wrappers/ut TS3WrapperTests.CopyPartUpload
 ydb/library/actors/http/ut HttpProxy.StreamingCompressedFatRandomResponse1
 ydb/library/actors/interconnect/rdma/ut TRdmaLow/TCqMode.ReadInOneProcessWithQpInterruption/EVENT
 ydb/services/ydb/ut TGRpcLdapAuthentication.CanAuthWithValidCredentialsUseSaslExternal
@@ -53,10 +60,14 @@ ydb/tests/compatibility test_topic.py.TestTopicRollingUpdate.test_write_and_read
 ydb/tests/compatibility/distconf test_compatibility_distconf.py.TestCompatibilityDistConf.test_v2_to_v1_migration[restart_stable-25-4-1_to_stable-26-1-1]
 ydb/tests/compatibility/distconf test_compatibility_distconf.py.TestCompatibilityDistConf.test_v2_to_v1_migration[restart_stable-26-1-1_to_prestable-26-2]
 ydb/tests/compatibility/federated_queries py3test.[test_external_data_source_secret.py */*] chunk
+ydb/tests/compatibility/olap test_bloom_index.py.TestBloomIndex.test_bloom_index[rolling_stable-25-4-1_to_stable-26-1-1]
+ydb/tests/compatibility/olap test_bloom_index.py.TestBloomIndex.test_bloom_index[rolling_stable-26-1-1_to_prestable-26-2]
 ydb/tests/compatibility/olap test_encoding.py.TestEncoding.test_encoding[rolling_stable-25-4-1_to_stable-26-1-1]
 ydb/tests/compatibility/olap test_encoding.py.TestEncoding.test_encoding[rolling_stable-26-1-1_to_prestable-26-2]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrage[rolling_stable-25-4-1_to_stable-26-1-1]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrage[rolling_stable-26-1-1_to_prestable-26-2]
+ydb/tests/fq/s3 test_formats.py.TestS3Formats.test_invalid_format[v1-client0]
+ydb/tests/fq/s3 test_formats.py.TestS3Formats.test_invalid_format[v2-client0]
 ydb/tests/fq/yds test_recovery_mz.py.TestRecovery.test_recovery[v1]
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_restart_compute_node
 ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenario
@@ -70,13 +81,11 @@ ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_a
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write_then_read
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupStress.test_warmup_stress
-ydb/tests/functional/replication Replication.TopicAutopartitioning
 ydb/tests/functional/serverless py3test.[test_serverless.py */*] chunk
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[fifo]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[std]
 ydb/tests/functional/tenants py3test.[*/*] chunk
-ydb/tests/functional/tpc/medium py3test.[test_workload_manager.py] chunk
-ydb/tests/functional/tpc/medium test_workload_manager.py.TestWMOltpAdHoc.test
+ydb/tests/functional/tpc/medium/tpch py3test.[test_duplicates.py] chunk
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test

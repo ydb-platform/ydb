@@ -80,6 +80,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/protos
     ydb/core/mon
+    ydb/core/util/struct_log
     library/cpp/deprecated/atomic
     ydb/library/yverify_stream
 )

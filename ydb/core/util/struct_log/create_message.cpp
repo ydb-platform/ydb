@@ -1,0 +1,24 @@
+#include "create_message.h"
+
+namespace NKikimr::NStructLog {
+
+namespace {
+    thread_local std::vector<TStructuredMessage> BuildMessageStack;
+}
+
+TStructuredMessage& TCreateMessageArg::PushBuildMessage() {
+    BuildMessageStack.push_back(TStructuredMessage());
+    return GetBuildMessage();
+}
+
+TStructuredMessage& TCreateMessageArg::GetBuildMessage() {
+    return BuildMessageStack.back();
+}
+
+TStructuredMessage TCreateMessageArg::PopBuildMessage() {
+    auto result = GetBuildMessage();
+    BuildMessageStack.pop_back();
+    return result;
+}
+
+}

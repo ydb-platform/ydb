@@ -235,7 +235,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
     # }
 
     # --- topology-conditional (datacenter / bridge pile) --------------------
-    # out.update(_topology_conditional_entries())
+    out.update(_topology_conditional_entries())
     return out
 
 
@@ -251,23 +251,24 @@ def _topology_conditional_entries() -> dict[str, dict[str, Any]]:
     extra: dict[str, dict[str, Any]] = {}
 
     if yaml_has_multi_datacenter(path):
-        from ydb.tests.stability.nemesis.internal.nemesis.runners import (
-            ClusterDataCenterIptablesBlockPortsNemesis,
-            ClusterDataCenterRouteUnreachableNemesis,
-            ClusterDataCenterStopNodesNemesis,
-        )
+        pass
+        # from ydb.tests.stability.nemesis.internal.nemesis.runners import (
+        #     ClusterDataCenterIptablesBlockPortsNemesis,
+        #     ClusterDataCenterRouteUnreachableNemesis,
+        #     ClusterDataCenterStopNodesNemesis,
+        # )
 
-        for wire, cls, sched in (
-            ("DataCenterStopNodesNemesis", ClusterDataCenterStopNodesNemesis, 600),
-            ("DataCenterRouteUnreachableNemesis", ClusterDataCenterRouteUnreachableNemesis, 600),
-            ("DataCenterIptablesBlockPortsNemesis", ClusterDataCenterIptablesBlockPortsNemesis, 600),
-        ):
-            extra[wire] = {
-                "runner": cls(),
-                "schedule": sched,
-                "ui_group": _DATACENTER_UI_GROUP,
-                "planner_factory": _dc_fanout_planner_factory,
-            }
+        # for wire, cls, sched in (
+        #     ("DataCenterStopNodesNemesis", ClusterDataCenterStopNodesNemesis, 600),
+        #     ("DataCenterRouteUnreachableNemesis", ClusterDataCenterRouteUnreachableNemesis, 600),
+        #     ("DataCenterIptablesBlockPortsNemesis", ClusterDataCenterIptablesBlockPortsNemesis, 600),
+        # ):
+        #     extra[wire] = {
+        #         "runner": cls(),
+        #         "schedule": sched,
+        #         "ui_group": _DATACENTER_UI_GROUP,
+        #         "planner_factory": _dc_fanout_planner_factory,
+        #     }
 
     if yaml_has_bridge_piles_section(path):
         from ydb.tests.stability.nemesis.internal.nemesis.runners import (

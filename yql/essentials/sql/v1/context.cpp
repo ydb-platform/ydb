@@ -1,5 +1,7 @@
 #include "context.h"
 
+#include <yql/essentials/sql/v1/proto_parser/reflection.h>
+
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/utils/yql_paths.h>
@@ -816,15 +818,6 @@ bool TTranslation::WarnUnusedNodes() const {
     }
 
     return true;
-}
-
-TString GetDescription(const google::protobuf::Message& node, const google::protobuf::FieldDescriptor* d) {
-    const auto& field = node.GetReflection()->GetMessage(node, d);
-    return field.GetReflection()->GetString(field, d->message_type()->FindFieldByName("Descr"));
-}
-
-TString TTranslation::AltDescription(const google::protobuf::Message& node, ui32 altCase, const google::protobuf::Descriptor* descr) const {
-    return GetDescription(node, descr->FindFieldByNumber(altCase));
 }
 
 void TTranslation::AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr) {

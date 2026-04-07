@@ -11,6 +11,7 @@
 #include "antlr_token.h"
 #include "secret_settings.h"
 
+#include <yql/essentials/sql/v1/proto_parser/statement.h>
 #include <yql/essentials/sql/v1/proto_parser/token.h>
 
 #include <yql/essentials/utils/yql_paths.h>
@@ -295,20 +296,19 @@ bool TransferSettings(std::map<TString, TNodePtr>& out,
 } // namespace
 
 bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core, size_t statementNumber) {
-    TString internalStatementName;
-    TString humanStatementName;
-    ParseStatementName(core, internalStatementName, humanStatementName);
+    TStatementName statementName = TStatementName::From(core);
+
     const auto& altCase = core.Alt_case();
     if (Mode_ == NSQLTranslation::ESqlMode::LIMITED_VIEW && (altCase >= TRule_sql_stmt_core::kAltSqlStmtCore4 &&
                                                              altCase != TRule_sql_stmt_core::kAltSqlStmtCore13 && altCase != TRule_sql_stmt_core::kAltSqlStmtCore18)) {
-        Error() << humanStatementName << " statement is not supported in limited views";
+        Error() << statementName.Human << " statement is not supported in limited views";
         return false;
     }
 
     if (Mode_ == NSQLTranslation::ESqlMode::SUBQUERY && (altCase >= TRule_sql_stmt_core::kAltSqlStmtCore4 &&
                                                          altCase != TRule_sql_stmt_core::kAltSqlStmtCore13 && altCase != TRule_sql_stmt_core::kAltSqlStmtCore6 &&
                                                          altCase != TRule_sql_stmt_core::kAltSqlStmtCore18)) {
-        Error() << humanStatementName << " statement is not supported in subqueries";
+        Error() << statementName.Human << " statement is not supported in subqueries";
         return false;
     }
 
@@ -330,7 +330,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore2: {
             if (Ctx_.ParallelModeCount > 0) {
-                Error() << humanStatementName << " statement is not supported in parallel mode";
+                Error() << statementName.Human << " statement is not supported in parallel mode";
                 return false;
             }
 
@@ -587,7 +587,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore8: {
             if (Ctx_.ParallelModeCount > 0) {
-                Error() << humanStatementName << " statement is not supported in parallel mode";
+                Error() << statementName.Human << " statement is not supported in parallel mode";
                 return false;
             }
 
@@ -617,7 +617,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore11: {
             if (Ctx_.ParallelModeCount > 0) {
-                Error() << humanStatementName << " statement is not supported in parallel mode";
+                Error() << statementName.Human << " statement is not supported in parallel mode";
                 return false;
             }
 
@@ -750,7 +750,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore21: {
             if (Ctx_.ParallelModeCount > 0) {
-                Error() << humanStatementName << " statement is not supported in parallel mode";
+                Error() << statementName.Human << " statement is not supported in parallel mode";
                 return false;
             }
 
@@ -2411,7 +2411,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             YQL_ENSURE(false, "Unreachable");
     }
 
-    Ctx_.IncrementMonCounter("sql_features", internalStatementName);
+    Ctx_.IncrementMonCounter("sql_features", statementName.Internal);
     return !Ctx_.HasPendingErrors;
 }
 

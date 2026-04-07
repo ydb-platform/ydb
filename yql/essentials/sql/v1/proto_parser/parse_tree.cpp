@@ -2,7 +2,29 @@
 
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <util/generic/vector.h>
+
 namespace NSQLTranslationV1 {
+
+TVector<const TRule_sql_stmt_core*> Statements(const TRule_sql_stmt_list& rule) {
+    TVector<const TRule_sql_stmt_core*> statements(Reserve(1 + rule.GetBlock3().size()));
+    statements.emplace_back(&rule.GetRule_sql_stmt2().GetRule_sql_stmt_core2());
+    for (const auto& block : rule.GetBlock3()) {
+        statements.emplace_back(&block.GetRule_sql_stmt2().GetRule_sql_stmt_core2());
+    }
+    return statements;
+}
+
+TVector<const TRule_sql_stmt_core*> Statements(const TRule_sql_query& rule) {
+    switch (rule.GetAltCase()) {
+        case NSQLv1Generated::TRule_sql_query::kAltSqlQuery1:
+            return Statements(rule.GetAlt_sql_query1().GetRule_sql_stmt_list1());
+        case NSQLv1Generated::TRule_sql_query::kAltSqlQuery2:
+            return {};
+        case NSQLv1Generated::TRule_sql_query::ALT_NOT_SET:
+            Y_UNREACHABLE();
+    }
+}
 
 const TRule_select_or_expr* GetSelectOrExpr(const TRule_smart_parenthesis& msg) {
     if (!msg.GetBlock2().HasAlt1()) {

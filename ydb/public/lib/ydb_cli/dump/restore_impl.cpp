@@ -2183,33 +2183,41 @@ TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const T
         return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
     }
 
-    return RestoreConsumers(Join("/", dbPath, fsPath.GetName()), topicDesc.GetConsumers());;
+    const auto topicPath = Join("/", dbPath, fsPath.GetName());
+    return RestoreConsumers(topicPath, topicDesc.GetConsumers());
 }
 
 TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const std::vector<TConsumer>& consumers) {
     for (const auto& consumer : consumers) {
         const auto& dlp = consumer.GetDeadLetterPolicy();
-        auto consumerSettings = TAlterTopicSettings()
-            .BeginAddConsumer()
-                .ConsumerName(consumer.GetConsumerName())
-                .Important(consumer.GetImportant())
-                .AvailabilityPeriod(consumer.GetAvailabilityPeriod())
-                .Attributes(consumer.GetAttributes())
-                .KeepMessagesOrder(consumer.GetKeepMessagesOrder())
-                .DefaultProcessingTimeout(consumer.GetDefaultProcessingTimeout())
-                .ReceiveMessageDelay(consumer.GetReceiveMessageDelay())
-                .ReceiveMessageWaitTime(consumer.GetReceiveMessageWaitTime())
-                .BeginDeadLetterPolicy()
-                    .Enabled(dlp.GetEnabled())
-                    .BeginCondition()
-                        .MaxProcessingAttempts(dlp.GetCondition().GetMaxProcessingAttempts())
-                    .EndCondition();
-        (dlp.GetAction() == EDeadLetterAction::Move
-            ? consumerSettings.MoveAction(dlp.GetDeadLetterQueue())
-            : consumerSettings.DeleteAction());
-        auto result = TopicClient.AlterTopic(topicPath,
-            consumerSettings.EndDeadLetterPolicy().EndAddConsumer()
-        ).GetValueSync();
+        TAlterTopicSettings settings;
+        auto& addConsumer = settings.BeginAddConsumer(consumer.GetConsumerType());
+        addConsumer.ConsumerName(consumer.GetConsumerName())
+            .Important(consumer.GetImportant())
+            .AvailabilityPeriod(consumer.GetAvailabilityPeriod())
+            .Attributes(consumer.GetAttributes())
+            .KeepMessagesOrder(consumer.GetKeepMessagesOrder())
+            .DefaultProcessingTimeout(consumer.GetDefaultProcessingTimeout())
+            .ReceiveMessageDelay(consumer.GetReceiveMessageDelay())
+            .ReceiveMessageWaitTime(consumer.GetReceiveMessageWaitTime());
+
+        auto deadLetterPolicy = addConsumer
+            .BeginDeadLetterPolicy()
+                .Enabled(dlp.GetEnabled())
+                .BeginCondition()
+                    .MaxProcessingAttempts(dlp.GetCondition().GetMaxProcessingAttempts())
+                .EndCondition();
+
+        if (dlp.GetAction() == EDeadLetterAction::Move) {
+            deadLetterPolicy.MoveAction(dlp.GetDeadLetterQueue());
+        } else {
+            deadLetterPolicy.DeleteAction();
+        }
+
+        auto result = TopicClient.AlterTopic(
+            topicPath,
+            deadLetterPolicy.EndDeadLetterPolicy().EndAddConsumer()
+        ).ExtractValueSync();
         if (result.IsSuccess()) {
             LOG_D("Created consumer " << TString{consumer.GetConsumerName()}.Quote() << " for " << topicPath.Quote());
         } else {

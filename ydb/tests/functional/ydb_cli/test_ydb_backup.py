@@ -191,6 +191,69 @@ def are_permissions_the_same_for_two_paths(scheme_client, path_left, path_right)
     return are_permissions_the_same(path_left_permissions, path_left_desc.owner, path_right_permsissions, path_right_desc.owner)
 
 
+def _topic_codec_sort_key(codec):
+    return int(codec)
+
+
+def topic_description_compare_key(desc):
+    user_attrs = tuple(sorted((k, v) for k, v in desc.attributes.items() if not k.startswith("_")))
+    consumers = tuple(
+        sorted(
+            (
+                c.name,
+                c.important,
+                c.read_from,
+                tuple(sorted(_topic_codec_sort_key(x) for x in c.supported_codecs)),
+                tuple(sorted(c.attributes.items())),
+            )
+            for c in desc.consumers
+        )
+    )
+    partitions = tuple(
+        sorted(
+            (
+                p.partition_id,
+                p.active,
+                tuple(sorted(p.child_partition_ids)),
+                tuple(sorted(p.parent_partition_ids)),
+            )
+            for p in desc.partitions
+        )
+    )
+    ap = desc.auto_partitioning_settings
+    ap_key = None
+    if ap is not None:
+        ap_key = (
+            ap.strategy,
+            ap.stabilization_window,
+            ap.down_utilization_percent,
+            ap.up_utilization_percent,
+        )
+    mm = desc.metering_mode
+    mm_key = int(mm) if mm is not None else None
+    return (
+        desc.min_active_partitions,
+        desc.max_active_partitions,
+        desc.partition_count_limit,
+        desc.retention_period,
+        desc.retention_storage_mb,
+        tuple(sorted(_topic_codec_sort_key(c) for c in desc.supported_codecs)),
+        desc.partition_write_speed_bytes_per_second,
+        desc.partition_write_burst_bytes,
+        user_attrs,
+        consumers,
+        partitions,
+        mm_key,
+        ap_key,
+    )
+
+
+def are_topic_descriptions_equivalent(driver, path_left, path_right):
+    left = driver.topic_client.describe_topic(path_left, include_stats=False)
+    right = driver.topic_client.describe_topic(path_right, include_stats=False)
+    return topic_description_compare_key(left) == topic_description_compare_key(right)
+
+
 @enum.unique
 class ListMode(enum.IntEnum):
     DIRS = 0,
@@ -560,6 +623,70 @@ class TestSingleBackupRestore(BaseTestBackupInFiles):
         )
         session.drop_table("/Root/restored" + postfix + "/table")
         self.driver.scheme_client.remove_directory("/Root/restored" + postfix)
+
+
+class TestTopicBackupRestore(BaseTestBackupInFiles):
+    def test_topic_backup_restore(self):
+        topic_name = "cli_backup_topic"
+        src_topic = "/Root/folder/" + topic_name
+
+        self.driver.scheme_client.make_directory("/Root/folder")
+        # TODO: add shared consumers when Python SDK supports it
+        self.driver.topic_client.create_topic(
+            src_topic,
+            consumers=["consumer_a"],
+            min_active_partitions=2,
+        )
+
+        backup_files_dir = output_path(self.test_name, "topic_backup_files_dir")
+        yatest.common.execute(
+            [
+                backup_bin(),
+                "--verbose",
+                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+                "--database", "/Root",
+                "tools", "dump",
+                "--path", "/Root/folder",
+                "--output", backup_files_dir,
+            ]
+        )
+        assert_that(os.listdir(backup_files_dir), is_([topic_name]))
+        assert_that(
+            sorted(os.listdir(os.path.join(backup_files_dir, topic_name))),
+            is_(sorted(["create_topic.pb", "permissions.pb"])),
+        )
+
+        restored = "/Root/restored_topic"
+        yatest.common.execute(
+            [
+                backup_bin(),
+                "--verbose",
+                "--endpoint", "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
+                "--database", "/Root",
+                "tools", "restore",
+                "--path", restored,
+                "--input", backup_files_dir,
+            ]
+        )
+        dst_topic = restored + "/" + topic_name
+        assert_that(
+            self.scheme_listdir("/Root"),
+            contains_inanyorder("folder", "restored_topic"),
+        )
+        assert_that(self.scheme_listdir(restored), is_([topic_name]))
+        assert_that(
+            are_permissions_the_same_for_two_paths(self.driver.scheme_client, src_topic, dst_topic),
+            is_(True),
+        )
+        assert_that(
+            are_topic_descriptions_equivalent(self.driver, src_topic, dst_topic),
+            is_(True),
+        )
+
+        self.driver.topic_client.drop_topic(dst_topic)
+        self.driver.scheme_client.remove_directory(restored)
+        self.driver.topic_client.drop_topic(src_topic)
+        self.driver.scheme_client.remove_directory("/Root/folder")
 
 
 class TestBackupRestoreInRoot(BaseTestBackupInFiles):

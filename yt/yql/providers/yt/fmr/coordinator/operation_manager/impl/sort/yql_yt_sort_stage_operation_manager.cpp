@@ -137,6 +137,8 @@ private:
         ui64 maxAllowedTables = GetMaxAllowedTablesForMerge(context.FmrOperationSpec);
 
         if (context.PartitionResult.TaskInputs.size() > maxAllowedTables) {
+            YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT: too many tables for sort operation to merge ("
+                << context.PartitionResult.TaskInputs.size() << " > " << maxAllowedTables << ")";
             TFmrError error = {
                 .Component = EFmrComponent::Coordinator,
                 .Reason = EFmrErrorReason::FallbackOperation,

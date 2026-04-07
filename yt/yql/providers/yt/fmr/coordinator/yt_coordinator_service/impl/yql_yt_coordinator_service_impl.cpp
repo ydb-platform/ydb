@@ -35,6 +35,10 @@ public:
                 richPaths.emplace_back(richPath);
             }
             try {
+                for (size_t i = 0; i < richPaths.size(); ++i) {
+                    YQL_CLOG(TRACE, FastMapReduce) << "GetTablePartitions richPath[" << i << "]: "
+                        << NYT::NodeToYsonString(NYT::PathToNode(richPaths[i]));
+                }
                 YQL_CLOG(TRACE, FastMapReduce) << "Calling YT API GetTablePartitions with DataWeightPerPartition="
                 << settings.MaxDataWeightPerPart << ", MaxParts=" << settings.MaxParts
                 << ", AdjustDataWeightPerPartition=false";

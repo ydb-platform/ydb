@@ -34,9 +34,12 @@ TMinMax TMinMax::Compute(std::shared_ptr<arrow::Array> arr) {
     AFL_VERIFY(export_status20.ok())("error", export_status20.ToString());
 
     auto import_result5 = arrow5::ImportArray(&c_array, &c_schema).ValueOrDie();
-
-    return *dynamic_cast<arrow5::StructScalar*>(import_result5->GetScalar(0).ValueOrDie().get());
+    auto res= *dynamic_cast<arrow5::StructScalar*>(import_result5->GetScalar(0).ValueOrDie().get());
+    AFL_VERIFY(res.type->field(0)->name() == "min");
+    AFL_VERIFY(res.type->field(1)->name() == "max");
+    return res;
 }
+
 TMinMax TMinMax::Compute(std::shared_ptr<arrow::ChunkedArray> arr) {
     auto res = TMinMax::MakeNull(arr->type());
     for (auto& chunk : arr->chunks()) {
@@ -44,6 +47,7 @@ TMinMax TMinMax::Compute(std::shared_ptr<arrow::ChunkedArray> arr) {
     }
     return res;
 }
+
 using TSizeType = ui32;
 constexpr char NullTMinMaxFlag = '0';
 
@@ -102,6 +106,11 @@ NJson::TJsonValue TMinMax::ToJson() const {
     return json;
 }
 
+bool TMinMax::IsNull() const {
+    AFL_VERIFY(Min()->is_valid == Max()->is_valid)("details", "inconsistent state");
+    return !Min()->is_valid;
+}
+
 void TMinMax::UniteWith(TMinMax other) {
     if (!other.IsNull()) {
         if (IsNull()) {
@@ -140,6 +149,7 @@ bool operator<=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_pt
 bool operator>=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
     return cmp(NKernels::EOperation::GreaterEqual, left, right);
 }
+
 }   // namespace NArrowCompare
 
 }   // namespace NKikimr::NArrow::NAccessor

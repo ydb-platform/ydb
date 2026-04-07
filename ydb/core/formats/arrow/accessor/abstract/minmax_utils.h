@@ -10,44 +10,27 @@ struct TMinMax {
         : MinMax(minmax) 
     {
     }
+    
     static TMinMax MakeNull(std::shared_ptr<arrow::DataType> type) {
         return *arrow::StructScalar::Make({ arrow::MakeNullScalar(type), arrow::MakeNullScalar(type) }, { "min", "max" }).ValueOrDie();
     }
-    bool IsNull() const {
-        return !Min()->is_valid;
-    }
+
+    bool IsNull() const;
 
     std::shared_ptr<arrow::Scalar>& Min() {
-        if (MinMax.type->fields()[0]->name() == "min"){
-            return MinMax.value[0];
-        } else {
-            return MinMax.value[1];
-        }
-        
+        return MinMax.value[0];
     }
 
     const std::shared_ptr<arrow::Scalar>& Min() const {
-        if (MinMax.type->fields()[0]->name() == "min"){
-            return MinMax.value[0];
-        } else {
-            return MinMax.value[1];
-        }
+        return MinMax.value[0];
     }
 
     std::shared_ptr<arrow::Scalar>& Max() {
-        if (MinMax.type->fields()[0]->name() == "max"){
-            return MinMax.value[0];
-        } else {
-            return MinMax.value[1];
-        }
+        return MinMax.value[1];
     }
 
     const std::shared_ptr<arrow::Scalar>& Max() const {
-        if (MinMax.type->fields()[0]->name() == "max"){
-            return MinMax.value[0];
-        } else {
-            return MinMax.value[1];
-        }
+        return MinMax.value[1];
     }
 
     void UniteWith(TMinMax other);

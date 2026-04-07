@@ -568,10 +568,10 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
 
     for (auto& task : TasksGraph.GetTasks()) {
         switch (task.Meta.Type) {
-            case TTaskMeta::TTaskType::Compute:
+            case TTaskMeta::ETaskType::Compute:
                 ComputeTasks.emplace_back(task.Id);
                 break;
-            case TTaskMeta::TTaskType::Scan:
+            case TTaskMeta::ETaskType::Scan:
                 TasksPerNode[task.Meta.NodeId].emplace_back(task.Id);
                 nScanTasks++;
                 break;

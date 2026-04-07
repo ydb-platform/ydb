@@ -53,6 +53,7 @@ from ydb.tests.stability.nemesis.internal.nemesis.runners.network import (
     NetworkNemesis,
     TimeSkewNemesis,
 )
+from ydb.tests.stability.nemesis.internal.nemesis.runners.cluster_host import ClusterHardRebootHostNemesis
 from ydb.tests.stability.nemesis.internal.nemesis.runners.node_local import KillNodeNemesis
 
 __all__ = [
@@ -97,6 +98,8 @@ __all__ = [
     # network
     "NetworkNemesis",
     "TimeSkewNemesis",
+    # cluster_host
+    "ClusterHardRebootHostNemesis",
     # node_local
     "KillNodeNemesis",
 ]

@@ -183,7 +183,7 @@ class ClusterChangeTabletGroupNemesis(MonitoredAgentActor):
 class ClusterBulkChangeTabletGroupNemesis(MonitoredAgentActor):
     """change_tablet_group_by_tablet_type."""
 
-    def __init__(self, tablet_type: TabletTypes, *, percent: Optional[int] = 10, channels: tuple = ()) -> None:
+    def __init__(self, tablet_type: TabletTypes, *, percent: Optional[int] = None, channels: tuple = ()) -> None:
         super().__init__(scope="tablets")
         self._tablet_type = tablet_type
         self._percent = percent

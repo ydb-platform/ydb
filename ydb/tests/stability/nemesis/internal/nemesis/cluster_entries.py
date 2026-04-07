@@ -41,6 +41,7 @@ from ydb.tests.stability.nemesis.internal.nemesis.runners import (
     ClusterSerialKillSlotsNemesis,
     ClusterStopStartNodeNemesis,
     ClusterSuspendNodeNemesis,
+    # ClusterHardRebootHostNemesis,
     KillNodeNemesis,
     NetworkNemesis,
     TimeSkewNemesis,
@@ -179,7 +180,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
             "ui_group": _TABLET_UI_GROUP,
         }
         out[f"BulkChangeTabletGroup_{tt.name}"] = {
-            "runner": ClusterBulkChangeTabletGroupNemesis(tt, percent=10, channels=()),
+            "runner": ClusterBulkChangeTabletGroupNemesis(tt, percent=None, channels=()),
             "schedule": 180,
             "ui_group": _TABLET_UI_GROUP,
         }
@@ -224,6 +225,14 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
             "ui_group": _UI_GROUP,
             "planner_factory": _pinned_planner_factory,
         }
+
+    # --- host reboot --------------------------------------------------------
+    # out["HardRebootHostNemesis"] = {
+    #     "runner": ClusterHardRebootHostNemesis(),
+    #     "schedule": 700,
+    #     "ui_group": _UI_GROUP,
+    #     "planner_factory": _pinned_planner_factory,
+    # }
 
     # --- topology-conditional (datacenter / bridge pile) --------------------
     # out.update(_topology_conditional_entries())

@@ -1,0 +1,8 @@
+{%- if solomon_checkstyle -%}
+{# empty line #}
+checkstyle {
+    toolVersion = "{{ ver_checkstyle_tool }}"
+    configFile = File("$arcadia_root/solomon/checkstyle.xml")
+}
+{# empty line #}
+{%- endif -%}

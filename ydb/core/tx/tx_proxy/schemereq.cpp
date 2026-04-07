@@ -64,7 +64,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     struct TPathToResolve {
         const NKikimrSchemeOp::TModifyScheme& ModifyScheme;
         ui32 RequireAccess = NACLib::EAccessRights::NoAccess;
-        bool IsTierExternalDataSource = false;
 
         // Params for NSchemeCache::TSchemeCacheNavigate::TEntry
         TVector<TString> Path;
@@ -77,12 +76,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     };
 
     TVector<TPathToResolve> ResolveForACL;
-    enum class EAclResolveStage {
-        Primary,
-        TierSecrets
-    };
-
-    EAclResolveStage AclResolveStage = EAclResolveStage::Primary;
+    THashSet<TString> TierExternalDataSourcePathsForACL;
+    TVector<TPathToResolve> TierSecretResolveForACL;
+    bool WaitingTierSecretACL = false;
 
     std::optional<NACLib::TUserToken> UserToken;
     bool CheckAdministrator = false;
@@ -820,8 +816,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = std::move(path);
             toResolve.RequireAccess = NACLib::EAccessRights::DescribeSchema;
-            toResolve.IsTierExternalDataSource = true;
             ResolveForACL.push_back(std::move(toResolve));
+            TierExternalDataSourcePathsForACL.emplace(canonicalPath);
         }
     }
 
@@ -850,13 +846,14 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         }
     }
 
-    TVector<TPathToResolve> BuildTierSecretResolveTasks(const NKikimrSchemeOp::TModifyScheme& pbModifyScheme, const NSchemeCache::TSchemeCacheNavigate::TResultSet& resolvedEntries) const {
+    TVector<TPathToResolve> BuildTierSecretResolveTasks(const NKikimrSchemeOp::TModifyScheme& pbModifyScheme, const TVector<TPathToResolve>& resolveTasks, const NSchemeCache::TSchemeCacheNavigate::TResultSet& resolvedEntries) const {
         THashSet<TString> uniqueSecrets;
         TVector<TString> secretNames;
-        const size_t size = std::min(ResolveForACL.size(), resolvedEntries.size());
+        const size_t size = std::min(resolveTasks.size(), resolvedEntries.size());
         for (size_t i = 0; i < size; ++i) {
-            const auto& request = ResolveForACL[i];
-            if (!request.IsTierExternalDataSource) {
+            const auto& request = resolveTasks[i];
+            const TString canonicalPath = CanonizePath(JoinPath(request.Path));
+            if (!TierExternalDataSourcePathsForACL.contains(canonicalPath)) {
                 continue;
             }
 
@@ -1320,11 +1317,15 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     }
 
     THolder<NSchemeCache::TSchemeCacheNavigate> ResolveRequestForACL() {
-        if (!ResolveForACL) {
+        return ResolveRequestForACL(ResolveForACL);
+    }
+
+    THolder<NSchemeCache::TSchemeCacheNavigate> ResolveRequestForACL(const TVector<TPathToResolve>& resolveTasks) {
+        if (!resolveTasks) {
             return {};
         }
 
-        for(auto& toReq: ResolveForACL) {
+        for (auto&& toReq: resolveTasks) {
             if (toReq.Path.empty()) {
                 return {};
             }
@@ -1333,7 +1334,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
         request->DatabaseName = GetRequestProto().GetDatabaseName();
 
-        for(auto& toReq: ResolveForACL) {
+        for (auto&& toReq: resolveTasks) {
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
             entry.Path = toReq.Path;
@@ -1445,13 +1446,17 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     }
 
     bool CheckAccess(const NSchemeCache::TSchemeCacheNavigate::TResultSet& resolveSet, const TActorContext &ctx) {
+        return CheckAccess(resolveSet, ResolveForACL, ctx);
+    }
+
+    bool CheckAccess(const NSchemeCache::TSchemeCacheNavigate::TResultSet& resolveSet, const TVector<TPathToResolve>& resolveTasks, const TActorContext &ctx) {
         const bool checkAdmin = (CheckAdministrator || CheckDatabaseAdministrator);
         const bool isAdmin = (IsClusterAdministrator || IsDatabaseAdministrator);
 
         auto resolveIt = resolveSet.begin();
-        auto requestIt = ResolveForACL.begin();
+        auto requestIt = resolveTasks.begin();
 
-        while (resolveIt != resolveSet.end() && requestIt != ResolveForACL.end()) {
+        while (resolveIt != resolveSet.end() && requestIt != resolveTasks.end()) {
             const NSchemeCache::TSchemeCacheNavigate::TEntry& entry = *resolveIt;
             const TPathToResolve& request = *requestIt;
             const auto& modifyScheme = request.ModifyScheme;
@@ -1787,21 +1792,22 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return Die(ctx);
         }
 
+        const auto& activeResolveTasks = WaitingTierSecretACL ? TierSecretResolveForACL : ResolveForACL;
         Y_ABORT_UNLESS(!navigate->ResultSet.empty());
-        Y_ABORT_UNLESS(navigate->ResultSet.size() == ResolveForACL.size());
+        Y_ABORT_UNLESS(navigate->ResultSet.size() == activeResolveTasks.size());
 
-        if (AclResolveStage == EAclResolveStage::Primary) {
+        if (!WaitingTierSecretACL) {
             SchemeshardIdToRequest = GetShardToRequest(*navigate->ResultSet.begin(), *ResolveForACL.begin());
         }
 
         // Check user access level, permissions on scheme objects and other restrictions/permissions
         if (UserToken) {
-            if (!CheckAccess(navigate->ResultSet, ctx)) {
+            if (!CheckAccess(navigate->ResultSet, activeResolveTasks, ctx)) {
                 return Die(ctx);
             }
         }
 
-        if (AclResolveStage == EAclResolveStage::Primary) {
+        if (!WaitingTierSecretACL) {
             if (IsDocApiRestricted(SchemeRequest->Ev->Get()->Record)) {
                 if (!CheckDocApi(navigate->ResultSet, ctx)) {
                     return Die(ctx);
@@ -1809,17 +1815,20 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             }
 
             if (GetRequestEv().HasModifyScheme()) {
-                auto secretResolveTasks = BuildTierSecretResolveTasks(GetModifyScheme(), navigate->ResultSet);
+                auto secretResolveTasks = BuildTierSecretResolveTasks(GetModifyScheme(), ResolveForACL, navigate->ResultSet);
                 if (!secretResolveTasks.empty()) {
-                    ResolveForACL = std::move(secretResolveTasks);
-                    auto resolveRequest = ResolveRequestForACL();
+                    TierSecretResolveForACL = std::move(secretResolveTasks);
+                    auto resolveRequest = ResolveRequestForACL(TierSecretResolveForACL);
                     if (resolveRequest) {
-                        AclResolveStage = EAclResolveStage::TierSecrets;
+                        WaitingTierSecretACL = true;
                         ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(resolveRequest.Release()));
                         return;
                     }
                 }
             }
+        } else {
+            WaitingTierSecretACL = false;
+            TierSecretResolveForACL.clear();
         }
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,

@@ -61,6 +61,11 @@ public:
         return TGetNewPartIdsForTaskResult{};
     }
 
+    std::vector<TString> GetExpectedOutputTableIds(const TOperationParams& params) const override {
+        const auto& sortParams = std::get<TSortOperationParams>(params);
+        return {sortParams.Output.FmrTableId.Id};
+    }
+
     std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& context) override {
         std::vector<TPartIdInfo> groupsToClear;
         if (auto* localSortTaskParams = std::get_if<TLocalSortTaskParams>(&context.Task->TaskParams)) {

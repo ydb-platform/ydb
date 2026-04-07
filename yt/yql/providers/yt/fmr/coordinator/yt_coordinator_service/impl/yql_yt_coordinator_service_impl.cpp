@@ -43,7 +43,6 @@ public:
                 YQL_CLOG(TRACE, FastMapReduce) << "YT API returned " << partitions.Partitions.size()
                 << " partitions for DataWeightPerPartition=" << settings.MaxDataWeightPerPart;
 
-
                 for (const auto& partition : partitions.Partitions) {
                     TYtTableTaskRef ytTableTaskRef{};
                     for (const auto& richPath : partition.TableRanges) {

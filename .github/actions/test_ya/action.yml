@@ -254,7 +254,7 @@ runs:
           --stat -DCONSISTENT_DEBUG --no-dir-outputs
           --test-failure-code 0 --build-all
           --cache-size 2TB --force-build-depends
-          --memory-limit=95%
+          --memory-limit=75%
         )
 
         echo "inputs.custom_branch_name = ${{ inputs.custom_branch_name }}"

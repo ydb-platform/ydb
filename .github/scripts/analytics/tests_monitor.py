@@ -572,6 +572,10 @@ def main():
             'is_muted': [],
         }
 
+        thirty_days_ago_ts = (
+            datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
+        ).strftime('%Y-%m-%dT%H:%M:%SZ')
+
         print(f'Getting aggregated history for {len(date_list)} day(s): {date_list[0]} .. {date_list[-1]}')
         for date in sorted(date_list):
             query_get_history = f"""
@@ -587,7 +591,6 @@ def main():
                     hist.mute_count AS mute_count,
                     owners_t.owners AS owners,
                     hist.pass_count AS pass_count,
-                    owners_t.run_timestamp_last AS run_timestamp_last,
                     owners_t.is_muted AS is_muted,
                     hist.skip_count AS skip_count,
                     hist.suite_folder AS suite_folder,
@@ -605,7 +608,6 @@ def main():
                         test_name,
                         suite_folder,
                         owners,
-                        run_timestamp_last,
                         is_muted,
                         date
                     FROM 
@@ -613,6 +615,7 @@ def main():
                     WHERE 
                         branch = '{branch}'
                         AND date = Date('{date}')
+                        AND run_timestamp_last >= Timestamp('{thirty_days_ago_ts}')
                 ) AS owners_t
                 ON 
                     hist.test_name = owners_t.test_name
@@ -908,7 +911,7 @@ def main():
         # Create table and bulk upsert using ydb_wrapper
         create_tables(ydb_wrapper, write_table_path)
 
-        chunk_size = 40000
+        chunk_size = 1000
 
         # Prepare column_types once
         column_types = (

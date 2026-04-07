@@ -71,15 +71,16 @@ SELECT
     tm.previous_state_filtered AS previous_state_filtered,
     tm.state_change_date_filtered AS state_change_date_filtered,
     tm.days_in_state_filtered AS days_in_state_filtered,
-    CASE
+    CAST(CASE
         WHEN (tm.state = 'Skipped' AND tm.days_in_state > 14) THEN 'Skipped'
         WHEN tm.days_in_mute_state >= 30 THEN 'MUTED: delete candidate'
-        ELSE 'MUTED: in sla'
-    END AS resolution,
-    Coalesce(
+        ELSE 'MUTED: in sla' 
+    END
+    as String) AS resolution,
+    CAST(Coalesce(
         tm.effective_owner_team,
         Unicode::ToLower(Cast(Coalesce(String::ReplaceAll(tm.owner, 'TEAM:@ydb-platform/', ''), '') AS Utf8))
-    ) AS owner_team,
+    ) AS String) AS owner_team,
     Coalesce(tm.effective_area, $normalize(Coalesce(af.area, 'area/-'))) AS area,
     tm.previous_effective_owner_team AS previous_effective_owner_team,
     tm.effective_owner_team_changed_date AS effective_owner_team_changed_date,
@@ -102,6 +103,6 @@ LEFT JOIN $gim_latest AS gim
     ON tm.full_name = gim.full_name
     AND tm.branch = gim.branch
     AND tm.build_type = gim.build_type
-WHERE tm.date_window >= CurrentUtcDate() - 2 * Interval("P1D")
+WHERE tm.date_window >= CurrentUtcDate() - 1 * Interval("P1D")
     AND (tm.branch = 'main' OR tm.branch LIKE 'stable-%' OR tm.branch LIKE 'stream-nb-25%')
     AND tm.is_test_chunk = 0;

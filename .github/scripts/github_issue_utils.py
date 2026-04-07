@@ -16,7 +16,14 @@ DEFAULT_BUILD_TYPE = 'relwithdebinfo'
 
 
 def scan_to_utc_date(val) -> Optional[dt.date]:
-    """YDB scan value → UTC calendar date (TableClient native_date_in_result_sets)."""
+    """YDB scan value → UTC calendar date.
+
+    Handles both native_date_in_result_sets=True (returns dt.date / dt.datetime)
+    and native_date_in_result_sets=False (returns int):
+      - Date      → uint32 days since 1970-01-01         (< 100_000)
+      - Datetime  → uint32 seconds since 1970-01-01      (< 10_000_000_000)
+      - Timestamp → uint64 microseconds since 1970-01-01 (larger)
+    """
     if val is None:
         return None
     if isinstance(val, dt.datetime):
@@ -25,6 +32,15 @@ def scan_to_utc_date(val) -> Optional[dt.date]:
         return val.date()
     if isinstance(val, dt.date):
         return val
+    if isinstance(val, int):
+        if val < 100_000:
+            # YDB Date: days since Unix epoch
+            return dt.date(1970, 1, 1) + dt.timedelta(days=val)
+        if val < 10_000_000_000:
+            # YDB Datetime: seconds since Unix epoch
+            return dt.datetime.fromtimestamp(val, tz=dt.timezone.utc).date()
+        # YDB Timestamp: microseconds since Unix epoch
+        return dt.datetime.fromtimestamp(val / 1_000_000, tz=dt.timezone.utc).date()
     return None
 
 

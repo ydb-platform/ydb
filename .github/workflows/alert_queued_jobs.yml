@@ -1,7 +1,7 @@
 name: Alert Queued Jobs
 
-# Digest schedule is driven by telegram_notification_config.json (schedule_utc_hours).
-# send_digest.py checks the current hour itself — no need to duplicate hours here.
+# Digest schedule: telegram_notification_config.json (schedule_utc_hours + schedule_weekdays).
+# send_digest.py checks UTC hour and ISO weekday (1=Mon … 7=Sun) — defaults to Mon–Fri if weekdays omitted.
 
 on:
   schedule:

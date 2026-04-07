@@ -13,8 +13,10 @@ There are no timing assumptions, no cursors, no historical-data floods.
 The queue is the single source of truth for "what still needs to be sent".
 
 Reads profiles from .github/config/telegram_notification_config.json
-and runs only those whose schedule_utc_hours contains the current UTC hour
-(unless --force is passed).
+and runs only those whose ``schedule_utc_hours`` contains the current UTC hour
+and whose ``schedule_weekdays`` contains the current ISO weekday (1=Mon … 7=Sun).
+Omitted ``schedule_weekdays`` defaults to Mon–Fri ``[1,2,3,4,5]``.
+``--force`` skips both checks.
 
 Usage:
   python send_digest.py [--config PATH] [--dry-run] [--force] [--profile ID]
@@ -30,6 +32,21 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from github_issue_utils import make_profile_id
+
+# ISO weekday: Monday=1 … Sunday=7 (datetime.isoweekday())
+_DEFAULT_SCHEDULE_WEEKDAYS = frozenset((1, 2, 3, 4, 5))
+
+
+def _profile_schedule_weekdays(profile: dict) -> frozenset:
+    raw = profile.get("schedule_weekdays")
+    if raw is None:
+        return _DEFAULT_SCHEDULE_WEEKDAYS
+    if not isinstance(raw, list) or not raw:
+        return _DEFAULT_SCHEDULE_WEEKDAYS
+    try:
+        return frozenset(int(x) for x in raw)
+    except (TypeError, ValueError):
+        return _DEFAULT_SCHEDULE_WEEKDAYS
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "analytics"))
 from ydb_wrapper import YDBWrapper
@@ -304,7 +321,9 @@ def main() -> None:
     config = json.loads(config_path.read_text())
     profiles: list = config.get("profiles", [])
 
-    current_hour_utc = datetime.now(tz=timezone.utc).hour
+    now_utc = datetime.now(tz=timezone.utc)
+    current_hour_utc = now_utc.hour
+    current_weekday = now_utc.isoweekday()
 
     bot_token = args.bot_token or os.environ.get("TELEGRAM_BOT_TOKEN")
     if not bot_token and not args.dry_run:
@@ -317,15 +336,22 @@ def main() -> None:
         print("Error: --team-channels or TG_TEAM_CHANNELS env var is required")
         sys.exit(1)
 
-    active = [
-        p
-        for p in profiles
-        if (not args.profile or make_profile_id(p["branch"], p["build_type"]) == args.profile)
-        and (args.force or current_hour_utc in p.get("schedule_utc_hours", []))
-    ]
+    active = []
+    for p in profiles:
+        if args.profile and make_profile_id(p["branch"], p["build_type"]) != args.profile:
+            continue
+        if args.force:
+            active.append(p)
+            continue
+        hours = p.get("schedule_utc_hours") or []
+        weekdays = _profile_schedule_weekdays(p)
+        if current_hour_utc in hours and current_weekday in weekdays:
+            active.append(p)
 
     if not active:
-        print(f"No profiles active for UTC hour {current_hour_utc} — nothing to do")
+        print(
+            f"No profiles active for UTC weekday {current_weekday}, hour {current_hour_utc} — nothing to do"
+        )
         sys.exit(0)
 
     print(f"Active profiles: {[make_profile_id(p['branch'], p['build_type']) for p in active]}")

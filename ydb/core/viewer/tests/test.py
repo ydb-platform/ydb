@@ -462,6 +462,7 @@ class TestViewer(object):
     @classmethod
     def normalize_result(cls, result):
         cls.delete_keys_recursively(result, {'Version',
+                                             'version',
                                              'MemoryUsed',
                                              'WriteThroughput',
                                              'ReadThroughput',
@@ -823,7 +824,19 @@ class TestViewer(object):
 
     @classmethod
     def test_viewer_autocomplete(cls):
+<<<<<<< HEAD
         return cls.get_viewer_db("/viewer/autocomplete", {'prefix': ''})
+=======
+        result = {}
+        result['empty'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': ''})
+        result['root'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': '/Root'})
+        result['dedicated_db'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': 'dedicated_db'})
+        result['root_dedicated_db'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': '/Root/dedicated_db'})
+        result['tab'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': 'tab'})
+        result['table1'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': 'table1'})
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
 
     @classmethod
     def test_viewer_check_access(cls):
@@ -832,11 +845,15 @@ class TestViewer(object):
 
     @classmethod
     def test_viewer_query(cls):
-        return cls.get_viewer_db("/viewer/query", {'query': 'select 7*6', 'schema': 'multi'})
+        result = cls.get_viewer_db("/viewer/query", {'query': 'select 7*6', 'schema': 'multi'})
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
 
     @classmethod
     def test_viewer_query_from_table(cls):
-        return cls.get_viewer_db_not_domain("/viewer/query", {'query': 'select * from table1', 'schema': 'multi'})
+        result = cls.get_viewer_db_not_domain("/viewer/query", {'query': 'select * from table1', 'schema': 'multi'})
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
 
     @classmethod
     def test_viewer_query_from_table_different_schemas(cls):
@@ -847,21 +864,26 @@ class TestViewer(object):
                 'query': 'select * from table1',
                 'schema': schema
                 })
+        cls.delete_keys_recursively(result, {'Version', 'version'})
         return result
 
     @classmethod
     def test_viewer_query_issue_13757(cls):
-        return cls.get_viewer_db("/viewer/query", {
+        result = cls.get_viewer_db("/viewer/query", {
             'query': 'SELECT CAST(<|one:"8912", two:42|> AS Struct<two:Utf8, three:Date?>);',
             'schema': 'multi'
         })
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
 
     @classmethod
     def test_viewer_query_issue_13945(cls):
-        return cls.get_viewer_db("/viewer/query", {
+        result = cls.get_viewer_db("/viewer/query", {
             'query': 'SELECT AsList();',
             'schema': 'multi'
         })
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
 
     @classmethod
     def test_pqrb_tablet(cls):
@@ -880,8 +902,8 @@ class TestViewer(object):
             'response_create_topic': response_create_topic,
             'response_tablet_info': response_tablet_info,
         }
-        return cls.replace_values_by_key(result, ['version',
-                                                  'ResponseTime',
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return cls.replace_values_by_key(result, ['ResponseTime',
                                                   'ChangeTime',
                                                   'HiveId',
                                                   'NodeId',
@@ -1120,6 +1142,7 @@ class TestViewer(object):
 
         final_result = {"alter" : alter_response, "insert" : insert_response, "update" : update_response, "data" : data_response}
         logging.info("Results: {}".format(final_result))
+        cls.delete_keys_recursively(final_result, {'Version', 'version'})
         return final_result
 
     @classmethod
@@ -1203,6 +1226,7 @@ class TestViewer(object):
                                                     'ProcessDuration',
                                                     'id',
                                                     ])
+        cls.delete_keys_recursively(result, {'Version', 'version'})
         return result
 
     @classmethod

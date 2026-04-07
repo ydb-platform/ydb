@@ -1,8 +1,12 @@
 {
     "test.TestViewer.test_async_replication_describe": {
         "create_result": {
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         },
         "describe_result": {
             "connection_params": {
@@ -116,8 +120,7 @@
     },
     "test.TestViewer.test_pqrb_tablet": {
         "response_create_topic": {
-            "status": "SUCCESS",
-            "version": "not-zero-number"
+            "status": "SUCCESS"
         },
         "response_tablet_info": {
             "ResponseTime": "not-zero-number-text",
@@ -1617,12 +1620,19 @@
             "Truncated": false
         },
         "insert": {
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
         },
         "update": {
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+        },
+        "update": {
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         }
     },
     "test.TestViewer.test_transfer_describe": {
@@ -1719,6 +1729,7 @@
             "transformation_lambda": "$__ydb_transfer_lambda = ($x) -> { return [<| id: $x._offset, message: $x._data |>]; };\n"
         },
         "table_result": {
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
         },
@@ -1729,6 +1740,15 @@
         "transfer_result": {
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+        },
+        "topic_result": {
+            "status": "SUCCESS"
+        },
+        "transfer_result": {
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         }
     },
     "test.TestViewer.test_viewer_acl": {
@@ -3086,6 +3106,7 @@
         }
     ],
     "test.TestViewer.test_viewer_autocomplete": {
+<<<<<<< HEAD
         "/Root": {
             "Result": {
                 "Entities": [
@@ -3194,6 +3215,579 @@
             },
             "Success": true,
             "Version": 2
+=======
+        "dedicated_db": {
+            "/Root": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "serverless_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 5
+                },
+                "Success": true
+            },
+            "/Root/dedicated_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true
+            },
+            "/Root/serverless_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 2
+                },
+                "Success": true
+            },
+            "/Root/shared_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true
+            },
+            "no-database": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "/Root/dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true
+            }
+        },
+        "empty": {
+            "/Root": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 5
+                },
+                "Success": true
+            },
+            "/Root/dedicated_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true
+            },
+            "/Root/serverless_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        }
+                    ],
+                    "Total": 2
+                },
+                "Success": true
+            },
+            "/Root/shared_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true
+            },
+            "no-database": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "/Root/shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true
+            }
+        },
+        "root": {
+            "/Root": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 5
+                },
+                "Success": true
+            },
+            "/Root/dedicated_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true
+            },
+            "/Root/serverless_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        }
+                    ],
+                    "Total": 2
+                },
+                "Success": true
+            },
+            "/Root/shared_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true
+            },
+            "no-database": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "/Root/shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true
+            }
+        },
+        "root_dedicated_db": {
+            "/Root": {
+                "Error": [
+                    "Failed to collect information from CacheResult"
+                ]
+            },
+            "/Root/dedicated_db": {
+                "Error": [
+                    "Failed to collect information from CacheResult"
+                ]
+            },
+            "/Root/serverless_db": {
+                "Error": [
+                    "Failed to collect information from CacheResult"
+                ]
+            },
+            "/Root/shared_db": {
+                "Error": [
+                    "Failed to collect information from CacheResult"
+                ]
+            },
+            "no-database": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "/Root/dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true
+            }
+        },
+        "tab": {
+            "/Root": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 5
+                },
+                "Success": true
+            },
+            "/Root/dedicated_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true
+            },
+            "/Root/serverless_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 2
+                },
+                "Success": true
+            },
+            "/Root/shared_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true
+            },
+            "no-database": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "/Root/shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true
+            }
+        },
+        "table1": {
+            "/Root": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": "shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "dedicated_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "serverless_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 5
+                },
+                "Success": true
+            },
+            "/Root/dedicated_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true
+            },
+            "/Root/serverless_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 2
+                },
+                "Success": true
+            },
+            "/Root/shared_db": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "table1",
+                            "Type": "table"
+                        },
+                        {
+                            "Name": ".sys",
+                            "Type": "dir"
+                        },
+                        {
+                            "Name": ".metadata",
+                            "Type": "dir"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true
+            },
+            "no-database": {
+                "Result": {
+                    "Entities": [
+                        {
+                            "Name": "/Root/shared_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/serverless_db",
+                            "Type": "ext_sub_domain"
+                        },
+                        {
+                            "Name": "/Root/dedicated_db",
+                            "Type": "ext_sub_domain"
+                        }
+                    ],
+                    "Total": 3
+                },
+                "Success": true
+            }
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         }
     },
     "test.TestViewer.test_viewer_bsgroupinfo": {
@@ -7345,8 +7939,12 @@
                     ]
                 }
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         },
         "/Root/dedicated_db": {
             "result": [
@@ -7364,8 +7962,12 @@
                     ]
                 }
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         },
         "/Root/serverless_db": {
             "result": [
@@ -7383,8 +7985,12 @@
                     ]
                 }
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         },
         "/Root/shared_db": {
             "result": [
@@ -7402,8 +8008,12 @@
                     ]
                 }
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         },
         "no-database": {
             "result": [
@@ -7421,8 +8031,12 @@
                     ]
                 }
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         }
     },
     "test.TestViewer.test_viewer_query_event_stream": {
@@ -7434,8 +8048,12 @@
                         "node_id": "not-zero-number",
                         "query_id": "text",
                         "session_id": "text"
+<<<<<<< HEAD
                     },
                     "version": 10
+=======
+                    }
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
                 },
                 "event": "SessionCreated"
             },
@@ -7513,8 +8131,12 @@
                     ]
                 }
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         },
         "/Root/serverless_db": {
             "result": [
@@ -7545,8 +8167,12 @@
                     ]
                 }
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         },
         "/Root/shared_db": {
             "result": [
@@ -7577,8 +8203,12 @@
                     ]
                 }
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         }
     },
     "test.TestViewer.test_viewer_query_from_table_different_schemas": {
@@ -7621,8 +8251,12 @@
                     "three"
                 ]
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         },
         "multi": {
             "result": [
@@ -7653,8 +8287,12 @@
                     ]
                 }
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         },
         "ydb": {
             "result": [
@@ -7671,8 +8309,12 @@
                     "name": "three"
                 }
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         },
         "ydb2": {
             "result": [
@@ -7703,8 +8345,12 @@
                     ]
                 }
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         }
     },
     "test.TestViewer.test_viewer_query_issue_13757": {
@@ -7727,8 +8373,12 @@
                     ]
                 }
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         },
         "/Root/dedicated_db": {
             "result": [
@@ -7749,8 +8399,12 @@
                     ]
                 }
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         },
         "/Root/serverless_db": {
             "result": [
@@ -7771,8 +8425,12 @@
                     ]
                 }
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         },
         "/Root/shared_db": {
             "result": [
@@ -7793,8 +8451,12 @@
                     ]
                 }
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         },
         "no-database": {
             "result": [
@@ -7815,8 +8477,12 @@
                     ]
                 }
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         }
     },
     "test.TestViewer.test_viewer_query_issue_13945": {
@@ -7836,8 +8502,12 @@
                     ]
                 }
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         },
         "/Root/dedicated_db": {
             "result": [
@@ -7855,8 +8525,12 @@
                     ]
                 }
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         },
         "/Root/serverless_db": {
             "result": [
@@ -7874,8 +8548,12 @@
                     ]
                 }
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         },
         "/Root/shared_db": {
             "result": [
@@ -7893,8 +8571,12 @@
                     ]
                 }
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         },
         "no-database": {
             "result": [
@@ -7912,8 +8594,12 @@
                     ]
                 }
             ],
+<<<<<<< HEAD
             "status": "SUCCESS",
             "version": 10
+=======
+            "status": "SUCCESS"
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         }
     },
     "test.TestViewer.test_viewer_query_long": {
@@ -7947,8 +8633,12 @@
                         ]
                     ]
                 }
+<<<<<<< HEAD
             ],
             "version": 10
+=======
+            ]
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         },
         "fetch_by_execution_id": {
             "execution_id": "text",
@@ -7979,8 +8669,12 @@
                         ]
                     ]
                 }
+<<<<<<< HEAD
             ],
             "version": 10
+=======
+            ]
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         },
         "fetch_by_operation_id": {
             "execution_id": "text",
@@ -8012,8 +8706,12 @@
                         ]
                     ]
                 }
+<<<<<<< HEAD
             ],
             "version": 10
+=======
+            ]
+>>>>>>> 499c324d2e7 (Remove 'version' and 'Version' keys from result normalization (#37501))
         },
         "fetch_error_no_id": {
             "status_code": 400,

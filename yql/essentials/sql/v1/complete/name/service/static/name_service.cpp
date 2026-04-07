@@ -8,7 +8,7 @@
 
 namespace NSQLComplete {
 
-const TVector<TStringBuf> FilteredByPrefix(
+TVector<TStringBuf> FilteredByPrefix(
     const TString& prefix,
     const TVector<TString>& sorted Y_LIFETIME_BOUND) {
     auto [first, last] = EqualRange(

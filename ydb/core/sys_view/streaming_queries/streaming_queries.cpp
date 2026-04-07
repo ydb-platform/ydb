@@ -7,6 +7,7 @@
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
 #include <ydb/library/query_actor/query_actor.h>
+#include <ydb/library/security/util.h>
 
 #include <contrib/libs/fmt/include/fmt/format.h>
 
@@ -723,7 +724,7 @@ public:
             QueriesBatch[query.Path] = {
                 .State = query.State,
                 .Status = StatusToString(query.State.GetStatus()),
-                .Text = info.QueryText,
+                .Text = NKikimr::ProtectQueryForLoggingIfSensitive(info.QueryText),
                 .Run = info.Run,
                 .ResourcePool = info.ResourcePool,
                 .LastExecutionId = query.State.GetCurrentExecutionId(),

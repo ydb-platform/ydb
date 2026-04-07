@@ -420,7 +420,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                                                 const ui64 endOffset,
                                                 const ui64 sizeLag,
                                                 const TActorId& tablet,
-                                                ui64 realReadOffset,
+                                                const ui64 realReadOffset,
                                                 NKikimrClient::TCmdReadResult* readResult,
                                                 THolder<TEvPQ::TEvProxyResponse>& answer,
                                                 bool& needStop,
@@ -430,18 +430,17 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
     AFL_ENSURE(begin <= end);
     AFL_ENSURE(end <= blobs.size());
 
-    for (ui32 pos = begin; pos < end; ++pos) {
-        AFL_ENSURE(Blobs[pos].Offset == blobs[pos].Offset)("l", Blobs[pos].Offset)("r", blobs[pos].Offset);
-        AFL_ENSURE(Blobs[pos].Count == blobs[pos].Count)("l", Blobs[pos].Count)("r", blobs[pos].Count);
+    for (ui32 blobIdx = begin; blobIdx < end; ++blobIdx) {
+        AFL_ENSURE(Blobs[blobIdx].Offset == blobs[blobIdx].Offset)("l", Blobs[blobIdx].Offset)("r", blobs[blobIdx].Offset);
+        AFL_ENSURE(Blobs[blobIdx].Count == blobs[blobIdx].Count)("l", Blobs[blobIdx].Count)("r", blobs[blobIdx].Count);
 
-        ui64 offset = blobs[pos].Offset;
-        ui32 count = blobs[pos].Count;
-        ui16 partNo = blobs[pos].PartNo;
-        ui16 internalPartsCount = blobs[pos].InternalPartsCount;
+        ui64 offset = blobs[blobIdx].Offset;
+        const ui32 count = blobs[blobIdx].Count;
+        const ui16 partNo = blobs[blobIdx].PartNo;
 
-        if (blobs[pos].Empty()) { // this is ok. Means that someone requested too much data or retention race
+        if (blobs[blobIdx].Empty()) { // this is ok. Means that someone requested too much data or retention race
             PQ_LOG_D("Not full answer here!");
-            ui64 answerSize = answer->Response->ByteSize();
+            const ui64 answerSize = answer->Response->ByteSize();
             if (userInfo && Destination != 0) {
                 userInfo->ReadDone(ctx, ctx.Now(), answerSize, cnt, ClientDC,
                         tablet, IsExternalRead, endOffset);
@@ -462,48 +461,47 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
             };
         }
 
-        AFL_ENSURE(blobs[pos].RawValue.size() <= blobs[pos].Size)("value for offset", offset)("count", count)
-            ("size must be",  blobs[pos].Size)("got", blobs[pos].RawValue.size());
+        AFL_ENSURE(blobs[blobIdx].RawValue.size() <= blobs[blobIdx].Size)("value for offset", offset)("count", count)
+            ("size must be",  blobs[blobIdx].Size)("got", blobs[blobIdx].RawValue.size());
 
-        auto blobBatches = blobs[pos].GetBatches();
+        const auto blobBatches = blobs[blobIdx].GetBatches();
         if (offset > Offset || (offset == Offset && partNo > PartNo)) { // got gap
             Offset = offset;
             PartNo = partNo;
         }
         AFL_ENSURE(offset <= Offset);
         AFL_ENSURE(offset < Offset || partNo <= PartNo);
-        auto key = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId(0), offset, partNo, count, internalPartsCount);
-        ui64 firstHeaderOffset = blobBatches->front().GetOffset();
+        const ui64 firstHeaderOffset = blobBatches->front().GetOffset();
 
-        for (auto& batch : *blobBatches) {
+        for (const auto& batch : *blobBatches) {
             if (needStop) {
                 break;
             }
 
-            auto& header = batch.Header;
-            ui64 trueOffset = blobs[pos].Key.GetOffset() + (header.GetOffset() - firstHeaderOffset);
+            const auto& header = batch.Header;
+            const ui64 trueOffset = blobs[blobIdx].Key.GetOffset() + (header.GetOffset() - firstHeaderOffset);
 
-            ui32 pos = 0;
-            if (trueOffset > Offset || trueOffset == Offset && header.GetPartNo() >= PartNo) {
-                pos = 0;
+            ui32 batchStartIdx = 0;
+            if (trueOffset > Offset || (trueOffset == Offset && header.GetPartNo() >= PartNo)) {
+                batchStartIdx = 0;
             } else {
-                ui64 trueSearchOffset = Offset - blobs[pos].Key.GetOffset() + firstHeaderOffset;
-                pos = batch.FindPos(trueSearchOffset, PartNo);
+                const ui64 trueSearchOffset = Offset - blobs[blobIdx].Key.GetOffset() + firstHeaderOffset;
+                batchStartIdx = batch.FindPos(trueSearchOffset, PartNo);
             }
             offset += header.GetCount();
 
-            if (pos == Max<ui32>()) // this batch does not contain data to read, skip it
+            if (batchStartIdx == Max<ui32>()) { // this batch does not contain data to read, skip it
                 continue;
-
+            }
 
             PQ_LOG_D("FormAnswer processing batch offset " << (offset - header.GetCount()) <<  " totakecount " << count << " count " << header.GetCount()
-                    << " size " << header.GetPayloadSize() << " from pos " << pos << " cbcount " << batch.Blobs.size());
+                    << " size " << header.GetPayloadSize() << " from batchStartIdx " << batchStartIdx << " cbcount " << batch.Blobs.size());
 
-            for (size_t i = pos; i < batch.Blobs.size(); ++i) {
-                TClientBlob &res = batch.Blobs[i];
+            for (size_t i = batchStartIdx; i < batch.Blobs.size(); ++i) {
+                const TClientBlob &res = batch.Blobs[i];
                 VERIFY_RESULT_BLOB(res, i);
 
-                AFL_ENSURE(PartNo == res.GetPartNo())("pos", pos)("i", i)("Offset", Offset)("PartNo", PartNo)("offset", offset)("partNo", res.GetPartNo());
+                AFL_ENSURE(PartNo == res.GetPartNo())("batchStartIdx", batchStartIdx)("i", i)("Offset", Offset)("PartNo", PartNo)("offset", offset)("partNo", res.GetPartNo());
 
                 if (userInfo) {
                     userInfo->AddTimestampToCache(
@@ -517,7 +515,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                 if (res.IsLastPart()) {
                     PartNo = 0;
                     ++Offset;
-                    if (LastOffset && Offset >= LastOffset) {
+                    if (ReachedLastOffset()) {
                         needStop = true;
                         break;
                     }
@@ -659,7 +657,7 @@ TReadAnswer TReadInfo::FormAnswer(
             if (updateUsage(writeBlob)) {
                 break;
             }
-            if (LastOffset && Offset >= LastOffset) {
+            if (ReachedLastOffset()) {
                 break;
             }
         }

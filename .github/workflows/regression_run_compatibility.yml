@@ -40,7 +40,6 @@ jobs:
       branches: ${{ inputs.pull_request_input && format('pull/{0}', inputs.pull_request_input) || github.ref_name }}
       build_preset: ${{ matrix.build_preset }}
       additional_ya_make_args: >-
-        ' --test-tag ya:manual'${{
-          inputs.initial_version_ref != '' && format(' -DYDB_COMPAT_INIT_REF={0} ', inputs.initial_version_ref) || ''}}${{
+       ${{inputs.initial_version_ref != '' && format(' -DYDB_COMPAT_INIT_REF={0} ', inputs.initial_version_ref) || ''}}${{
           inputs.inter_version_ref != '' && format(' -DYDB_COMPAT_INTER_REF={0} ', inputs.inter_version_ref) || ''}}${{
           inputs.target_version_ref != '' && format(' -DYDB_COMPAT_TARGET_REF={0}', inputs.target_version_ref) || ''}}

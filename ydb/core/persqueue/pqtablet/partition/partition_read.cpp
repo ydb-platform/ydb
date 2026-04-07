@@ -430,16 +430,20 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
     AFL_ENSURE(begin <= end);
     AFL_ENSURE(end <= blobs.size());
 
-    for (ui32 pos = begin; pos < end; ++pos) {
-        AFL_ENSURE(Blobs[pos].Offset == blobs[pos].Offset)("l", Blobs[pos].Offset)("r", blobs[pos].Offset);
-        AFL_ENSURE(Blobs[pos].Count == blobs[pos].Count)("l", Blobs[pos].Count)("r", blobs[pos].Count);
+    for (ui32 blobIdx = begin; blobIdx < end; ++blobIdx) {
+        if (blobIdx != begin && needStop && cnt < Count && !(LastOffset && Offset >= LastOffset)) {
+            needStop = false;
+        }
 
-        ui64 offset = blobs[pos].Offset;
-        ui32 count = blobs[pos].Count;
-        ui16 partNo = blobs[pos].PartNo;
-        ui16 internalPartsCount = blobs[pos].InternalPartsCount;
+        AFL_ENSURE(Blobs[blobIdx].Offset == blobs[blobIdx].Offset)("l", Blobs[blobIdx].Offset)("r", blobs[blobIdx].Offset);
+        AFL_ENSURE(Blobs[blobIdx].Count == blobs[blobIdx].Count)("l", Blobs[blobIdx].Count)("r", blobs[blobIdx].Count);
 
-        if (blobs[pos].Empty()) { // this is ok. Means that someone requested too much data or retention race
+        ui64 offset = blobs[blobIdx].Offset;
+        ui32 count = blobs[blobIdx].Count;
+        ui16 partNo = blobs[blobIdx].PartNo;
+        ui16 internalPartsCount = blobs[blobIdx].InternalPartsCount;
+
+        if (blobs[blobIdx].Empty()) { // this is ok. Means that someone requested too much data or retention race
             PQ_LOG_D("Not full answer here!");
             ui64 answerSize = answer->Response->ByteSize();
             if (userInfo && Destination != 0) {
@@ -462,10 +466,10 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
             };
         }
 
-        AFL_ENSURE(blobs[pos].RawValue.size() <= blobs[pos].Size)("value for offset", offset)("count", count)
-            ("size must be",  blobs[pos].Size)("got", blobs[pos].RawValue.size());
+        AFL_ENSURE(blobs[blobIdx].RawValue.size() <= blobs[blobIdx].Size)("value for offset", offset)("count", count)
+            ("size must be",  blobs[blobIdx].Size)("got", blobs[blobIdx].RawValue.size());
 
-        auto blobBatches = blobs[pos].GetBatches();
+        auto blobBatches = blobs[blobIdx].GetBatches();
         if (offset > Offset || (offset == Offset && partNo > PartNo)) { // got gap
             Offset = offset;
             PartNo = partNo;
@@ -481,29 +485,29 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
             }
 
             auto& header = batch.Header;
-            ui64 trueOffset = blobs[pos].Key.GetOffset() + (header.GetOffset() - firstHeaderOffset);
+            ui64 trueOffset = blobs[blobIdx].Key.GetOffset() + (header.GetOffset() - firstHeaderOffset);
 
-            ui32 pos = 0;
-            if (trueOffset > Offset || trueOffset == Offset && header.GetPartNo() >= PartNo) {
-                pos = 0;
+            ui32 batchStartIdx = 0;
+            if (trueOffset > Offset || (trueOffset == Offset && header.GetPartNo() >= PartNo)) {
+                batchStartIdx = 0;
             } else {
-                ui64 trueSearchOffset = Offset - blobs[pos].Key.GetOffset() + firstHeaderOffset;
-                pos = batch.FindPos(trueSearchOffset, PartNo);
+                ui64 trueSearchOffset = Offset - blobs[blobIdx].Key.GetOffset() + firstHeaderOffset;
+                batchStartIdx = batch.FindPos(trueSearchOffset, PartNo);
             }
             offset += header.GetCount();
 
-            if (pos == Max<ui32>()) // this batch does not contain data to read, skip it
+            if (batchStartIdx == Max<ui32>()) // this batch does not contain data to read, skip it
                 continue;
 
 
             PQ_LOG_D("FormAnswer processing batch offset " << (offset - header.GetCount()) <<  " totakecount " << count << " count " << header.GetCount()
-                    << " size " << header.GetPayloadSize() << " from pos " << pos << " cbcount " << batch.Blobs.size());
+                    << " size " << header.GetPayloadSize() << " from batchStartIdx " << batchStartIdx << " cbcount " << batch.Blobs.size());
 
-            for (size_t i = pos; i < batch.Blobs.size(); ++i) {
+            for (size_t i = batchStartIdx; i < batch.Blobs.size(); ++i) {
                 TClientBlob &res = batch.Blobs[i];
                 VERIFY_RESULT_BLOB(res, i);
 
-                AFL_ENSURE(PartNo == res.GetPartNo())("pos", pos)("i", i)("Offset", Offset)("PartNo", PartNo)("offset", offset)("partNo", res.GetPartNo());
+                AFL_ENSURE(PartNo == res.GetPartNo())("batchStartIdx", batchStartIdx)("i", i)("Offset", Offset)("PartNo", PartNo)("offset", offset)("partNo", res.GetPartNo());
 
                 if (userInfo) {
                     userInfo->AddTimestampToCache(

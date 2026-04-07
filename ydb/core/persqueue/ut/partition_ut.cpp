@@ -11,9 +11,12 @@
 #include <ydb/public/lib/base/msgbus_status.h>
 #include <ydb/core/jaeger_tracing/sampling_throttling_configurator.h>
 
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/event.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <deque>
 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
@@ -3994,6 +3997,177 @@ Y_UNIT_TEST_F(GetPartitionWriteInfoWithoutSrcIdInfo, TPartitionFixture) {
 
         UNIT_ASSERT(event->BodyKeys.begin()->Key.ToString().StartsWith("D0000100001_"));
     }
+}
+
+namespace {
+
+// обычное сообщение
+TClientBlob MakeSinglePartBodyReadBlob(ui64 seqNo, char fill) {
+    TString data(24, fill);
+    const ui32 sz = data.size();
+    return {
+        TString("src"),
+        seqNo,
+        std::move(data),
+        TMaybe<TPartData>(),
+        TInstant::MilliSeconds(1),
+        TInstant::MilliSeconds(1),
+        sz,
+        TString(),
+        TString()
+    };
+}
+
+// часть большого сообщения. номер partNo, всего totalParts частей
+TClientBlob MakeMultipartBodyReadBlob(ui64 seqNo, ui16 partNo, ui16 totalParts, ui32 bytesPerPart, char fill) {
+    const ui32 totalSize = bytesPerPart * totalParts;
+    TString data(bytesPerPart, fill);
+    TMaybe<TPartData> partData = TPartData(partNo, totalParts, totalSize);
+    return {
+        TString("src"),
+        seqNo,
+        std::move(data),
+        std::move(partData),
+        TInstant::MilliSeconds(1),
+        TInstant::MilliSeconds(1),
+        bytesPerPart,
+        TString(),
+        TString()
+    };
+}
+
+TString SerializePackedBatchForReadBodyTest(TBatch batch) {
+    batch.Pack();
+    TString raw;
+    batch.SerializeTo(raw);
+    return raw;
+}
+
+// актор помогает вызвать функцию внутри акторной системы. функции PersQueue ожидают ссылку на AppData в TLS
+class TAddBlobsFromBodyReadTestActor : public TActorBootstrapped<TAddBlobsFromBodyReadTestActor> {
+public:
+    TAddBlobsFromBodyReadTestActor(TActorId edge, std::function<void(const TActorContext&)> body)
+        : Edge(edge)
+        , Body(std::move(body))
+    {}
+
+    void Bootstrap(const TActorContext& ctx) {
+        Body(ctx);
+        Send(Edge, new NActors::TEvents::TEvWakeup());
+        PassAway();
+    }
+
+private:
+    TActorId Edge;
+    std::function<void(const TActorContext&)> Body;
+};
+
+}
+
+Y_UNIT_TEST_F(AddBlobsFromBodyUsesKeyOfCurrentBlob, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    const TPartitionId partitionId(1);
+
+    std::deque<TClientBlob> dq0;
+    dq0.push_back(MakeSinglePartBodyReadBlob(1, 'a'));
+    dq0.push_back(MakeSinglePartBodyReadBlob(2, 'b'));
+    dq0.push_back(MakeSinglePartBodyReadBlob(3, 'b'));
+
+    const TKey key0 = TKey::ForBody(TKeyPrefix::TypeData, partitionId, 10, 0, 3, 0);
+    TString raw0 = SerializePackedBatchForReadBodyTest(TBatch::FromBlobs(10, std::move(dq0)));
+    TRequestedBlob blob0(10,
+                         0,
+                         3,
+                         0,
+                         raw0.size(),
+                         raw0,
+                         key0,
+                         TInstant::Now().Seconds());
+
+    std::deque<TClientBlob> dq1;
+    dq1.push_back(MakeSinglePartBodyReadBlob(4, 'c'));
+    dq1.push_back(MakeMultipartBodyReadBlob(5, 0, 2, 20, 'd'));
+    dq1.push_back(MakeMultipartBodyReadBlob(5, 1, 2, 20, 'e'));
+
+    const TKey key1 = TKey::ForBody(TKeyPrefix::TypeData, partitionId, 12, 0, 2, 1);
+    TString raw1 = SerializePackedBatchForReadBodyTest(TBatch::FromBlobs(12, std::move(dq1)));
+    TRequestedBlob blob1(12,
+                         0,
+                         2,
+                         1,
+                         raw1.size(),
+                         raw1,
+                         key1,
+                         TInstant::Now().Seconds());
+
+    TVector<TRequestedBlob> blobs;
+    blobs.push_back(std::move(blob0));
+    blobs.push_back(std::move(blob1));
+
+    auto probe = [&](const TActorContext& ctx) {
+        Y_UNUSED(ctx);
+
+        constexpr ui32 kReadMaxMessages = 100;
+        constexpr ui32 kReadMaxBytes = static_cast<ui32>(1_MB);
+
+        TReadInfo info(TString("user"),
+                       TString("dc"),
+                       ui64{10},
+                       ui64{0},
+                       ui16{0},
+                       ui64{kReadMaxMessages},
+                       kReadMaxBytes,
+                       ui64{0},
+                       ui64{0},
+                       TDuration::Zero(),
+                       false,
+                       Ctx->Edge,
+                       false,
+                       Ctx->Edge);
+        info.Blobs = blobs;
+        info.CompactedBlobsCount = 2;
+        info.Count = kReadMaxMessages;
+        info.Size = kReadMaxBytes;
+
+        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        NKikimrClient::TResponse& res = *answer->Response;
+        auto* readResult = res.MutablePartitionResponse()->MutableCmdReadResult();
+
+        bool needStop = false;
+        ui32 cnt = 0;
+        ui32 size = 0;
+        ui32 lastBlobSize = 0;
+        const ui64 realReadOffset = 10;
+
+        TMaybe<TReadAnswer> early = info.AddBlobsFromBody(blobs,
+                                                          0,
+                                                          2,
+                                                          nullptr,
+                                                          10,
+                                                          100,
+                                                          1_MB,
+                                                          Ctx->Edge,
+                                                          realReadOffset,
+                                                          readResult,
+                                                          answer,
+                                                          needStop,
+                                                          cnt,
+                                                          size,
+                                                          lastBlobSize,
+                                                          ctx);
+
+        UNIT_ASSERT(!early.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(readResult->ResultSize(), 5u);
+    };
+
+    Ctx->Runtime->Register(new TAddBlobsFromBodyReadTestActor(Ctx->Edge, std::move(probe)));
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
 }
 
 } // End of suite

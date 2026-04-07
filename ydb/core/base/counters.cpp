@@ -51,7 +51,7 @@ static const THashSet<TString> DATABASE_SERVICES
 static const THashSet<TString> DATABASE_ATTRIBUTE_SERVICES
     = {{ TString("ydb"), TString("datastreams") }};
 
-static const THashSet<TString> DATABASE_ATTRIBUTE_LABELS
+static const TVector<TString> DATABASE_ATTRIBUTE_LABELS
     = {{ TString("cloud_id"),
          TString("folder_id"),
          TString("database_id")
@@ -77,26 +77,20 @@ const THashSet<TString> &GetDatabaseAttributeSensorServices()
     return DATABASE_ATTRIBUTE_SERVICES;
 }
 
-const THashSet<TString> &GetDatabaseAttributeLabels()
+const TVector<TString> &GetDatabaseAttributeLabels()
 {
     return DATABASE_ATTRIBUTE_LABELS;
 }
 
 static TIntrusivePtr<TDynamicCounters> SkipLabels(TIntrusivePtr<TDynamicCounters> counters,
-                                                  const THashSet<TString> &labels)
+                                                  const TVector<TString> &labels)
 {
-    TString name, value;
-    do {
-        name = "";
-        counters->EnumerateSubgroups([&name, &value, &labels](const TString &n, const TString &v) {
-                if (labels.contains(n)) {
-                    name = n;
-                    value = v;
-                }
-            });
-        if (name)
-            counters = counters->GetSubgroup(name, value);
-    } while (name);
+    for (const TString& label : labels) {
+        auto next = counters->FindSubgroup(label);
+        if (next) {
+            counters = next;
+        }
+    }
 
     return counters;
 }
@@ -122,17 +116,32 @@ TIntrusivePtr<TDynamicCounters> GetServiceCountersRoot(TIntrusivePtr<TDynamicCou
     return root->GetSubgroup("counters", pair.first);
 }
 
-static THashSet<TString> MakeServiceCountersExtraLabels() {
-    THashSet<TString> extraLabels;
-    extraLabels.insert(DATABASE_LABEL);
-    extraLabels.insert(SLOT_LABEL);
-    extraLabels.insert(HOST_LABEL);
-    extraLabels.insert(DATABASE_ATTRIBUTE_LABELS.begin(),
-                       DATABASE_ATTRIBUTE_LABELS.end());
+static TVector<TString> MakeServiceCountersExtraLabels() {
+    // NOTE: order of labels should match labels maintainer order for efficiency
+    TVector<TString> extraLabels;
+    extraLabels.push_back(DATABASE_LABEL);
+    extraLabels.push_back(SLOT_LABEL);
+    extraLabels.push_back(HOST_LABEL);
+    extraLabels.insert(extraLabels.end(),
+        DATABASE_ATTRIBUTE_LABELS.begin(),
+        DATABASE_ATTRIBUTE_LABELS.end());
     return extraLabels;
 }
 
-static const THashSet<TString> SERVICE_COUNTERS_EXTRA_LABELS = MakeServiceCountersExtraLabels();
+static const TVector<TString> SERVICE_COUNTERS_EXTRA_LABELS = MakeServiceCountersExtraLabels();
+
+static TIntrusivePtr<TDynamicCounters> SkipExtraLabels(TIntrusivePtr<TDynamicCounters> counters) {
+    for (;;) {
+        // Keep trying as long as there is something to skip
+        auto next = SkipLabels(counters, SERVICE_COUNTERS_EXTRA_LABELS);
+        if (next == counters) {
+            break;
+        }
+        counters = next;
+    }
+
+    return counters;
+}
 
 TIntrusivePtr<TDynamicCounters> GetServiceCounters(TIntrusivePtr<TDynamicCounters> root,
                                                    const TString &service, bool skipAddedLabels)
@@ -145,10 +154,10 @@ TIntrusivePtr<TDynamicCounters> GetServiceCounters(TIntrusivePtr<TDynamicCounter
     if (!skipAddedLabels)
         return res;
 
-    res = SkipLabels(res, SERVICE_COUNTERS_EXTRA_LABELS);
+    res = SkipExtraLabels(res);
 
     auto utils = root->GetSubgroup("counters", "utils");
-    utils = SkipLabels(utils, SERVICE_COUNTERS_EXTRA_LABELS);
+    utils = SkipExtraLabels(utils);
     auto lookupCounter = utils->GetSubgroup("component", service)->GetCounter("CounterLookups", true);
     res->SetLookupCounter(lookupCounter);
     res->SetOnLookup(OnCounterLookup);

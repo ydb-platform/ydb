@@ -78,6 +78,22 @@ namespace NInterconnect {
                 }
             }
 
+            TString XdcFlagsToString(const ui8 xdcFlags) {
+                TString res;
+                if (xdcFlags & TInterconnectProxyTCP::TProxyStats::XDCFlags::MSG_ZERO_COPY_SEND) {
+                    res.append("MSG_ZC_SEND|");
+                }
+                if (xdcFlags & TInterconnectProxyTCP::TProxyStats::XDCFlags::RDMA_READ) {
+                    res.append("RDMA_READ|");
+                }
+                if (res.empty()) {
+                    res.append("_");
+                } else {
+                    res.pop_back();
+                }
+                return res;
+            }
+
             TString GenerateHtml() {
                 TStringStream str;
                 HTML(str) {
@@ -131,7 +147,7 @@ namespace NInterconnect {
                                     TABLED() { str << kv.second.TotalOutputQueueSize; }
                                     TABLED() { str << (kv.second.Connected ? "yes" : "<strong>no</strong>"); }
                                     TABLED() { str << (kv.second.ExternalDataChannel ? "yes" : "no")
-                                        << " (" << (kv.second.XDCFlags & TInterconnectProxyTCP::TProxyStats::XDCFlags::MSG_ZERO_COPY_SEND ? "MSG_ZC_SEND" : "_")  << ")"; }
+                                        << " (" << XdcFlagsToString(kv.second.XDCFlags) << ")"; }
                                     TABLED() { str << kv.second.Host; }
                                     TABLED() { str << kv.second.Port; }
                                     TABLED() {

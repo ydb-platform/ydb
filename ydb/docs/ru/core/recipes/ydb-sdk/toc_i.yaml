@@ -29,6 +29,8 @@ items:
     href: balancing-prefer-local.md
   - name: Предпочитать конкретную зону доступности
     href: balancing-prefer-location.md
+  - name: Предпочитать пайл c конкретным состоянием
+    href: balancing-prefer-pile.md
 - name: Выполнение повторных запросов
   href: retry.md
 - name: Установить размер пула сессий
@@ -63,3 +65,5 @@ items:
     href: debug-prometheus.md
   - name: Подключить трассировку в Jaeger
     href: debug-jaeger.md
+  - name: Подключить трассировку в OpenTelemetry
+    href: debug-otel.md

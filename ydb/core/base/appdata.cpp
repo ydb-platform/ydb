@@ -22,19 +22,21 @@
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/data_integrity_trails.pb.h>
+#include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/key.pb.h>
 #include <ydb/core/protos/memory_controller_config.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/recoveryshard_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/shared_cache.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
 #include <ydb/library/pdisk_io/aio.h>
 
-#include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/core/monotonic_provider.h>
 #include <ydb/library/actors/util/should_continue.h>
 #include <library/cpp/random_provider/random_provider.h>
@@ -65,6 +67,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TDomainsConfig DomainsConfig;
     NKikimrConfig::TBootstrap BootstrapConfig;
     NKikimrConfig::TAwsCompatibilityConfig AwsCompatibilityConfig;
+    NKikimrConfig::TAwsClientConfig AwsClientConfig;
     NKikimrConfig::TS3ProxyResolverConfig S3ProxyResolverConfig;
     NKikimrConfig::TBackgroundCleaningConfig BackgroundCleaningConfig;
     NKikimrConfig::TGraphConfig GraphConfig;
@@ -81,6 +84,8 @@ struct TAppData::TImpl {
     NKikimrConfig::TStatisticsConfig StatisticsConfig;
     TMetricsConfig MetricsConfig;
     NKikimrConfig::TSystemTabletBackupConfig SystemTabletBackupConfig;
+    NKikimrConfig::TRecoveryShardConfig RecoveryShardConfig;
+    NKikimrConfig::TClusterDiagnosticsConfig ClusterDiagnosticsConfig;
 };
 
 TAppData::TAppData(
@@ -107,7 +112,8 @@ TAppData::TAppData(
     , CompilerSchemeCacheTables(Max<ui64>() / 4)
     , Mon(nullptr)
     , Icb(new TControlBoard())
-    , InFlightLimiterRegistry(new NGRpcService::TInFlightLimiterRegistry(Icb))
+    , Dcb(new TDynamicControlBoard())
+    , InFlightLimiterRegistry(new NGRpcService::TInFlightLimiterRegistry())
     , SharedCachePages(new NSharedCache::TSharedCachePages())
     , StreamingConfig(Impl->StreamingConfig)
     , PQConfig(Impl->PQConfig)
@@ -130,6 +136,7 @@ TAppData::TAppData(
     , DomainsConfig(Impl->DomainsConfig)
     , BootstrapConfig(Impl->BootstrapConfig)
     , AwsCompatibilityConfig(Impl->AwsCompatibilityConfig)
+    , AwsClientConfig(Impl->AwsClientConfig)
     , S3ProxyResolverConfig(Impl->S3ProxyResolverConfig)
     , BackgroundCleaningConfig(Impl->BackgroundCleaningConfig)
     , GraphConfig(Impl->GraphConfig)
@@ -146,6 +153,8 @@ TAppData::TAppData(
     , StatisticsConfig(Impl->StatisticsConfig)
     , MetricsConfig(Impl->MetricsConfig)
     , SystemTabletBackupConfig(Impl->SystemTabletBackupConfig)
+    , RecoveryShardConfig(Impl->RecoveryShardConfig)
+    , ClusterDiagnosticsConfig(Impl->ClusterDiagnosticsConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}

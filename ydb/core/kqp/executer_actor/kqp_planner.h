@@ -66,13 +66,13 @@ public:
         const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
         const TMaybe<ui8> ArrayBufferMinFillPercentage;
         const TMaybe<size_t> BufferPageAllocSize;
-        const bool VerboseMemoryLimitException;
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
         const TActorId& CheckpointCoordinator;
+        const bool EnableWatermarks;
     };
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
-    bool SendStartKqpTasksRequest(ui32 requestId, const TActorId& target);
+    bool SendStartKqpTasksRequest(ui32 requestId, const TActorId& target, bool isShutdown = false);
     std::unique_ptr<IEventHandle> PlanExecution();
     std::unique_ptr<IEventHandle> AssignTasksToNodes();
     bool AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::NDqProto::TEvComputeActorState* state);
@@ -86,6 +86,7 @@ public:
 
     const THashMap<TActorId, TProgressStat>& GetPendingComputeActors();
     const THashSet<ui64>& GetPendingComputeTasks();
+    TMaybe<ui64> GetActualNodeIdForTask(ui64 taskId) const;
 
     ui32 GetnScanTasks();
     ui32 GetnComputeTasks();
@@ -111,7 +112,7 @@ private:
     const ui64 TxId;
     const TActorId ExecuterId;
     TVector<ui64> ComputeTasks;
-    THashMap<ui64, TVector<ui64>> TasksPerNode;
+    THashMap<ui64 /* shardId */, TVector<ui64 /* taskId */>> TasksPerNode;
     TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TInstant Deadline;
@@ -146,12 +147,13 @@ private:
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const TMaybe<ui8> ArrayBufferMinFillPercentage;
     const TMaybe<size_t> BufferPageAllocSize;
-    const bool VerboseMemoryLimitException;
     NScheduler::NHdrf::NDynamic::TQueryPtr Query;
     TActorId CheckpointCoordinatorId;
+    const bool EnableWatermarks;
     bool CheckpointsReadyStateSent = false;
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error
+    THashMap<ui32, TActorId> ResultChannels;
 };
 
 std::unique_ptr<TKqpPlanner> CreateKqpPlanner(TKqpPlanner::TArgs args);

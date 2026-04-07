@@ -6,6 +6,10 @@
 #include <yt/cpp/mapreduce/interface/client_method_options.h>
 #include <yt/cpp/mapreduce/interface/raw_client.h>
 
+#include <yt/yt/core/http/public.h>
+
+#include <mutex>
+
 namespace NYT::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -199,8 +203,9 @@ public:
         const TJobId& jobId,
         const TGetJobStderrOptions& options = {}) override;
 
-    std::vector<TJobTraceEvent> GetJobTrace(
+    IFileReaderPtr GetJobTrace(
         const TOperationId& operationId,
+        const TJobId& jobId,
         const TGetJobTraceOptions& options = {}) override;
 
     // Files
@@ -288,12 +293,12 @@ public:
     std::unique_ptr<IInputStream> ReadTable(
         const TTransactionId& transactionId,
         const TRichYPath& path,
-        const TMaybe<TFormat>& format,
+        const TFormat& format,
         const TTableReaderOptions& options = {}) override;
 
     std::unique_ptr<IInputStream> ReadTablePartition(
         const TString& cookie,
-        const TMaybe<TFormat>& format,
+        const TFormat& format,
         const TTablePartitionReaderOptions& options = {}) override;
 
     std::unique_ptr<IInputStream> ReadBlobTable(
@@ -325,6 +330,51 @@ public:
     void UnfreezeTable(
         const TYPath& path,
         const TUnfreezeTableOptions& options = {}) override;
+
+    // Distributed API
+
+    TDistributedWriteTableSessionWithCookies StartDistributedWriteTableSession(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        const TRichYPath& richPath,
+        i64 cookieCount,
+        const TStartDistributedWriteTableOptions& options = {}) override;
+
+    void PingDistributedWriteTableSession(
+        const TDistributedWriteTableSession& session,
+        const TPingDistributedWriteTableOptions& options = {}) override;
+
+    void FinishDistributedWriteTableSession(
+        TMutationId& mutationId,
+        const TDistributedWriteTableSession& session,
+        const TVector<TWriteTableFragmentResult>& results,
+        const TFinishDistributedWriteTableOptions& options = {}) override;
+
+    std::unique_ptr<IOutputStreamWithResponse> WriteTableFragment(
+        const TDistributedWriteTableCookie& cookie,
+        const TMaybe<TFormat>& format,
+        const TTableFragmentWriterOptions& options = {}) override;
+
+    TDistributedWriteFileSessionWithCookies StartDistributedWriteFileSession(
+        TMutationId& mutationId,
+        const TTransactionId& transactionId,
+        const TRichYPath& richPath,
+        i64 cookieCount,
+        const TStartDistributedWriteFileOptions& options = {}) override;
+
+    void PingDistributedWriteFileSession(
+        const TDistributedWriteFileSession& session,
+        const TPingDistributedWriteFileOptions& options = {}) override;
+
+    void FinishDistributedWriteFileSession(
+        TMutationId& mutationId,
+        const TDistributedWriteFileSession& session,
+        const TVector<TWriteFileFragmentResult>& results,
+        const TFinishDistributedWriteFileOptions& options = {}) override;
+
+    std::unique_ptr<IOutputStreamWithResponse> WriteFileFragment(
+        const TDistributedWriteFileCookie& cookie,
+        const TFileFragmentWriterOptions& options = {}) override;
 
     // Misc
 
@@ -358,7 +408,12 @@ public:
     IRawClientPtr Clone(const TClientContext& context) override;
 
 private:
+    void InitPingClient();
+
+private:
     const TClientContext Context_;
+    NHttp::IClientPtr PingHttpClient_;
+    std::once_flag PingClientInitOnceFlag_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

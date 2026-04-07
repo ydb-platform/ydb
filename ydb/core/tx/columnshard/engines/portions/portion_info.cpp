@@ -38,8 +38,8 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
     sb << "column_size:" << GetColumnBlobBytes() << ";"
        << "index_size:" << GetIndexBlobBytes() << ";"
        << "meta:(" << Meta.DebugString() << ");";
-    if (RemoveSnapshot.Valid()) {
-        sb << "remove_snapshot:(" << RemoveSnapshot.DebugString() << ");";
+    if (HasRemoveSnapshot()) {
+        sb << "remove_snapshot:(" << RemoveSnapshot.Get().DebugString() << ");";
     }
     return sb << ")";
 }
@@ -56,8 +56,8 @@ void TPortionInfo::SerializeToProto(const std::vector<TUnifiedBlobId>& blobIds, 
     PathId.ToProto(proto);
     proto.SetPortionId(PortionId);
     proto.SetSchemaVersion(GetSchemaVersionVerified());
-    if (!RemoveSnapshot.IsZero()) {
-        *proto.MutableRemoveSnapshot() = RemoveSnapshot.SerializeToProto();
+    if (HasRemoveSnapshot()) {
+        *proto.MutableRemoveSnapshot() = RemoveSnapshot.Get().SerializeToProto();
     }
 
     *proto.MutableMeta() = Meta.SerializeToProto(blobIds, GetProduced());
@@ -71,11 +71,15 @@ TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDat
         return TConclusionStatus::Fail("portion's schema version cannot been equals to zero");
     }
     if (proto.HasRemoveSnapshot()) {
-        auto parse = RemoveSnapshot.DeserializeFromProto(proto.GetRemoveSnapshot());
+        TSnapshot tmp = TSnapshot::Zero();
+        auto parse = tmp.DeserializeFromProto(proto.GetRemoveSnapshot());
         if (!parse) {
             return parse;
         }
+
+        RemoveSnapshot.Set(std::move(tmp));
     }
+
     return TConclusionStatus::Success();
 }
 

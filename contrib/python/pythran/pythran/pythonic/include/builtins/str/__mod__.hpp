@@ -16,8 +16,7 @@ namespace builtins
     template <class... Ts>
     types::str __mod__(types::str const &, std::tuple<Ts...> const &args);
     template <size_t N, class T>
-    types::str __mod__(types::str const &,
-                       types::array_tuple<T, N> const &args);
+    types::str __mod__(types::str const &, types::array_tuple<T, N> const &args);
 
     DEFINE_FUNCTOR(pythonic::builtins::str, __mod__);
   } // namespace str

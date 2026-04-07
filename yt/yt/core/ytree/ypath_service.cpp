@@ -51,7 +51,7 @@ struct TCacheKey
         , RequestBodyHash(GetChecksum(RequestBody))
     { }
 
-    bool operator == (const TCacheKey& other) const
+    bool operator==(const TCacheKey& other) const
     {
         return
             Path == other.Path &&
@@ -603,7 +603,6 @@ private:
     const IYPathServicePtr UnderlyingService_;
     const IInvokerPtr Invoker_;
 
-
     bool DoInvoke(const IYPathServiceContextPtr& context) override
     {
         Invoker_->Invoke(BIND([=, this, this_ = MakeStrong(this)] {
@@ -912,7 +911,7 @@ public:
         TPermissionValidator validator)
         : UnderlyingService_(std::move(underlyingService))
         , Validator_(std::move(validator))
-        , CachingPermissionValidator_(this, EPermissionCheckScope::This)
+        , CachingAdHocPermissionValidator_(this)
     { }
 
     TResolveResult Resolve(
@@ -931,7 +930,7 @@ private:
     const IYPathServicePtr UnderlyingService_;
     const TPermissionValidator Validator_;
 
-    TCachingPermissionValidator CachingPermissionValidator_;
+    TCachingAdHocPermissionValidator CachingAdHocPermissionValidator_;
 
     void ValidatePermission(
         EPermissionCheckScope /*scope*/,
@@ -944,7 +943,9 @@ private:
     bool DoInvoke(const IYPathServiceContextPtr& context) override
     {
         // TODO(max42): choose permission depending on method.
-        CachingPermissionValidator_.Validate(EPermission::Read, context->GetAuthenticationIdentity().User);
+        CachingAdHocPermissionValidator_.Validate(
+            EPermission::Read,
+            context->GetAuthenticationIdentity().User);
         ExecuteVerb(UnderlyingService_, context);
         return true;
     }

@@ -132,7 +132,7 @@ template <class TMap, class TKey>
 const typename TMap::mapped_type& GetOrDefaultReference(
     const TMap& map,
     const TKey& key,
-    const typename TMap::mapped_type& defaultValue Y_LIFETIME_BOUND = {})
+    const typename TMap::mapped_type& defaultValue Y_LIFETIME_BOUND = typename TMap::mapped_type{})
     requires (!TIsDefaultMap<TMap>::Value);
 
 template <class TMap, class TKey, class TCtor>
@@ -171,6 +171,9 @@ const T& VectorAtOr(const std::vector<T>& vector, ssize_t index, const T& defaul
 
 template <class T>
 i64 GetVectorMemoryUsage(const std::vector<T>& vector);
+
+template <class TRange, class T>
+bool Contains(TRange&& range, const T& value);
 
 ////////////////////////////////////////////////////////////////////////////////
 

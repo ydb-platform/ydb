@@ -7,6 +7,8 @@ SRCS(
     partition_scale_manager_graph_cmp.cpp
     read_balancer__balancing_app.cpp
     read_balancer__balancing.cpp
+    read_balancer__metrics.cpp
+    read_balancer__mlp_balancing.cpp
     read_balancer_app.cpp
     read_balancer.cpp
 )
@@ -18,7 +20,6 @@ PEERDIR(
     ydb/core/engine/minikql
     ydb/core/persqueue/events
     ydb/core/persqueue/common
-    ydb/core/persqueue/partition_key_range
 )
 
 END()

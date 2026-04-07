@@ -37,7 +37,7 @@ NAN = float("NaN")
 @cython.cfunc
 @cython.inline
 @cython.returns(cython.double)
-@cython.locals(v1=cython.complex, v2=cython.complex)
+@cython.locals(v1=cython.complex, v2=cython.complex, result=cython.double)
 def dot(v1, v2):
     """Return the dot product of two vectors.
 
@@ -48,7 +48,33 @@ def dot(v1, v2):
     Returns:
         double: Dot product.
     """
-    return (v1 * v2.conjugate()).real
+    result = (v1 * v2.conjugate()).real
+    # When vectors are perpendicular (i.e. dot product is 0), the above expression may
+    # yield slightly different results when running in pure Python vs C/Cython,
+    # both of which are correct within IEEE-754 floating-point precision.
+    # It's probably due to the different order of operations and roundings in each
+    # implementation. Because we are using the result in a denominator and catching
+    # ZeroDivisionError (see `calc_intersect`), it's best to normalize the result here.
+    if abs(result) < 1e-15:
+        result = 0.0
+    return result
+
+
+@cython.cfunc
+@cython.locals(z=cython.complex, den=cython.double)
+@cython.locals(zr=cython.double, zi=cython.double)
+def _complex_div_by_real(z, den):
+    """Divide complex by real using Python's method (two separate divisions).
+
+    This ensures bit-exact compatibility with Python's complex division,
+    avoiding C's multiply-by-reciprocal optimization that can cause 1 ULP differences
+    on some platforms/compilers (e.g. clang on macOS arm64).
+
+    https://github.com/fonttools/fonttools/issues/3928
+    """
+    zr = z.real
+    zi = z.imag
+    return complex(zr / den, zi / den)
 
 
 @cython.cfunc
@@ -59,8 +85,8 @@ def dot(v1, v2):
 )
 def calc_cubic_points(a, b, c, d):
     _1 = d
-    _2 = (c / 3.0) + d
-    _3 = (b + c) / 3.0 + _2
+    _2 = _complex_div_by_real(c, 3.0) + d
+    _3 = _complex_div_by_real(b + c, 3.0) + _2
     _4 = a + d + c + b
     return _1, _2, _3, _4
 
@@ -273,6 +299,12 @@ def calc_intersect(a, b, c, d):
     try:
         h = dot(p, a - c) / dot(p, cd)
     except ZeroDivisionError:
+        # if 3 or 4 points are equal, we do have an intersection despite the zero-div:
+        # return one of the off-curves so that the algorithm can attempt a one-curve
+        # solution if it's within tolerance:
+        # https://github.com/linebender/kurbo/pull/484
+        if b == c and (a == b or c == d):
+            return b
         return complex(NAN, NAN)
     return c + cd * h
 
@@ -448,13 +480,15 @@ def curve_to_quadratic(curve, max_err, all_quadratic=True):
             curve or a single cubic curve.
 
     Returns:
-        If all_quadratic is True: A list of 2D tuples, representing
-        control points of the quadratic spline if it fits within the
-        given tolerance, or ``None`` if no suitable spline could be
-        calculated.
+        If all_quadratic is True: A list of 2D tuples representing
+        control points of the quadratic spline.
 
         If all_quadratic is False: Either a quadratic curve (if length
         of output is 3), or a cubic curve (if length of output is 4).
+
+    Raises:
+        fontTools.cu2qu.errors.ApproxNotFoundError: if no suitable
+        approximation can be found with the given parameters.
     """
 
     curve = [complex(*p) for p in curve]
@@ -497,18 +531,22 @@ def curves_to_quadratic(curves, max_errors, all_quadratic=True):
 
     Returns:
         If all_quadratic is True, a list of splines, each spline being a list
-        of 2D tuples.
+        of 2D tuples. If ``curves`` is empty, returns an empty list.
 
         If all_quadratic is False, a list of curves, each curve being a quadratic
         (length 3), or cubic (length 4).
 
     Raises:
-        fontTools.cu2qu.Errors.ApproxNotFoundError: if no suitable approximation
+        ValueError: if ``max_errors`` does not match the number of curves.
+        fontTools.cu2qu.errors.ApproxNotFoundError: if no suitable approximation
         can be found for all curves with the given parameters.
     """
 
     curves = [[complex(*p) for p in curve] for curve in curves]
-    assert len(max_errors) == len(curves)
+    if len(max_errors) != len(curves):
+        raise ValueError("max_errors must match the number of curves")
+    if not curves:
+        return []
 
     l = len(curves)
     splines = [None] * l

@@ -11,12 +11,14 @@ from ydb.tests.datashard.lib.types_of_variables import (
     index_first,
     index_second,
     ttl_types,
+    ttl_int_types,
     index_first_sync,
     index_second_sync,
     index_three_sync,
     index_three_sync_not_Bool,
     index_four_sync,
     index_zero_sync,
+    string_to_ydb_type,
 )
 
 # https://github.com/ydb-platform/ydb/issues/17178
@@ -29,36 +31,6 @@ unsupported_types = [
 
 def filter_unsupported(type_map):
     return {k: v for k, v in type_map.items() if k not in unsupported_types}
-
-
-primitive_type = {
-    "Int64": ydb.PrimitiveType.Int64,
-    "Uint64": ydb.PrimitiveType.Uint64,
-    "Int32": ydb.PrimitiveType.Int32,
-    "Uint32": ydb.PrimitiveType.Uint32,
-    "Int16": ydb.PrimitiveType.Int16,
-    "Uint16": ydb.PrimitiveType.Uint16,
-    "Int8": ydb.PrimitiveType.Int8,
-    "Uint8": ydb.PrimitiveType.Uint8,
-    "Bool": ydb.PrimitiveType.Bool,
-    "DyNumber": ydb.PrimitiveType.DyNumber,
-    "String": ydb.PrimitiveType.String,
-    "Utf8": ydb.PrimitiveType.Utf8,
-    "UUID": ydb.PrimitiveType.UUID,
-    "Date": ydb.PrimitiveType.Date,
-    "Datetime": ydb.PrimitiveType.Datetime,
-    "Timestamp": ydb.PrimitiveType.Timestamp,
-    "Interval": ydb.PrimitiveType.Interval,
-    "Float": ydb.PrimitiveType.Float,
-    "Double": ydb.PrimitiveType.Double,
-    "Json": ydb.PrimitiveType.Json,
-    "JsonDocument": ydb.PrimitiveType.JsonDocument,
-    "Yson": ydb.PrimitiveType.Yson,
-    "Date32": ydb.PrimitiveType.Date32,
-    "Datetime64": ydb.PrimitiveType.Datetime64,
-    "Timestamp64": ydb.PrimitiveType.Timestamp64,
-    "Interval64": ydb.PrimitiveType.Interval64,
-}
 
 
 class TestParametrizedQueries(TestBase):
@@ -223,7 +195,7 @@ class TestParametrizedQueries(TestBase):
             sql_ttl = create_ttl_sql_request(
                 f"ttl_{cleanup_type_name(ttl)}",
                 {"P18262D": ""},
-                "SECONDS" if ttl == "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "",
+                "SECONDS" if ttl in ttl_int_types else "",
                 table_name,
             )
             self.query(sql_ttl)
@@ -332,9 +304,9 @@ class TestParametrizedQueries(TestBase):
         if "Decimal" in type_name:
             return key[type_name](value)
         if type_name == "String" or type_name == "Yson":
-            return ydb.TypedValue(key[type_name](value).encode(), primitive_type[type_name])
+            return ydb.TypedValue(key[type_name](value).encode(), string_to_ydb_type[type_name])
         if type_name == "DyNumber":
-            return ydb.TypedValue(str(key[type_name](value)), primitive_type[type_name])
+            return ydb.TypedValue(str(key[type_name](value)), string_to_ydb_type[type_name])
         if type_name == "Datetime64" or type_name == "Datetime":
-            return ydb.TypedValue(int(datetime.timestamp(key[type_name](value))), primitive_type[type_name])
-        return ydb.TypedValue(key[type_name](value), primitive_type[type_name])
+            return ydb.TypedValue(int(datetime.timestamp(key[type_name](value))), string_to_ydb_type[type_name])
+        return ydb.TypedValue(key[type_name](value), string_to_ydb_type[type_name])

@@ -15,7 +15,7 @@
 
 Для выполнения примеров из этой статьи понадобятся:
 
-* Установленная БД {{ ydb-short-name }} с включённой поддержкой [векторных индексов](../../dev/vector-indexes.md). Об установке простого одноузлового кластера {{ ydb-short-name }} можно прочитать [здесь](../../quickstart.md). Рекомендации по развёртыванию {{ ydb-short-name }} для промышленного использования см. [здесь](../../devops/deployment-options/index.md?version=main).
+* Установленная БД {{ ydb-short-name }} с включённой поддержкой [векторных индексов](../../dev/vector-indexes.md). Об установке простого одноузлового кластера {{ ydb-short-name }} можно прочитать [здесь](../../quickstart.md). Рекомендации по развёртыванию {{ ydb-short-name }} для промышленного использования см. [здесь](../../devops/deployment-options/index.md).
 
 * На рабочей машине:
     * Утилита [{{ ydb-short-name }} CLI](../../reference/ydb-cli/);
@@ -85,7 +85,7 @@ ydb -e <endpoint> -d <database> -v import file csv --path wikipedia --header wik
 
 В данном примере тестовый сервер {{ ydb-short-name }} был поднят без авторизации, поэтому при вызове {{ ydb-short-name }} CLI не понадобилось передавать данные о пользователе. Об аутентификации с помощью {{ ydb-short-name }} CLI см. [здесь](../../reference/ydb-cli/connect).
 
-Размер файла `wikipedia_embeddings_train.csv` — 6,26 Гб, поэтому его загрузка может занять некоторое время. По окончании загрузки можно убедиться, что все строки загружены в таблицу `wikipedia`, созданную на [Шаге 1](#step1), следующим запросом:
+Размер файла `wikipedia_embeddings_train.csv` — 6,26 ГБ, поэтому его загрузка может занять некоторое время. По окончании загрузки можно убедиться, что все строки загружены в таблицу `wikipedia`, созданную на [Шаге 1](#step1), следующим запросом:
 
 ```yql
 SELECT COUNT(*) AS row_count FROM wikipedia
@@ -118,10 +118,10 @@ ADD INDEX idx_vector
 GLOBAL USING vector_kmeans_tree
 ON (embedding)
 WITH (
-  distance=cosine, 
-  vector_type="float", 
-  vector_dimension=768, 
-  levels=1, 
+  distance=cosine,
+  vector_type="float",
+  vector_dimension=768,
+  levels=1,
   clusters=200);
 ```
 

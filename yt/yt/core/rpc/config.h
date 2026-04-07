@@ -142,6 +142,18 @@ DEFINE_REFCOUNTED_TYPE(TServiceConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TMethodTestingConfig
+    : public NYTree::TYsonStructLite
+{
+    std::optional<TDuration> RandomDelay;
+
+    REGISTER_YSON_STRUCT_LITE(TMethodTestingConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TMethodConfig
     : public NYTree::TYsonStruct
 {
@@ -158,6 +170,8 @@ struct TMethodConfig
     NConcurrency::TThroughputThrottlerConfigPtr LoggingSuppressionFailedRequestThrottler;
     std::optional<ERequestTracingMode> TracingMode;
     std::optional<bool> Pooled;
+
+    TMethodTestingConfig Testing;
 
     REGISTER_YSON_STRUCT(TMethodConfig);
 
@@ -238,9 +252,6 @@ struct TViablePeerRegistryConfig
     //! For sticky mode: number of consistent hash tokens to assign to each peer.
     int HashesPerPeer;
 
-    //! Configures how random channels are selected.
-    EPeerPriorityStrategy PeerPriorityStrategy;
-
     //! If set to a positive value, this number of active peers with the smallest priority will be required
     //! for priority to be taken into account when choosing a random peer according to the peer priority strategy.
     //! If it is not satisfied, peers will be chosen randomly from the whole pool of active peers.
@@ -249,7 +260,8 @@ struct TViablePeerRegistryConfig
     //! MinPeerCountForPriorityAwareness active local peers, otherwise peers will be chosen uniformly from the whole set of active peers.
     //!
     //! NB: Please note that MaxPeerCount respects priorities, e.g. given EPeerPriorityStrategy::PreferLocal and
-    //! MaxPeerCount = 100, if there are 200 available local and 400 available non-local peers, all active peers will be local.
+    //! MaxPeerCount = 100, if there are 200 available peers with priority 0 and 400 available peers with priority 1,
+    //! all active peers will be chosen among peers with priority 0.
     //! This means that setting MinPeerCountForPriorityAwareness close to MaxPeerCount is practically useless.
     //! If you want to set bigger values, you must also increase MaxPeerCount to accommodate more peers.
     int MinPeerCountForPriorityAwareness;
@@ -281,6 +293,9 @@ struct TDynamicChannelPoolConfig
     TDuration PeerPollingRequestTimeout;
 
     TDuration DiscoverySessionTimeout;
+
+    //! Configures how random channels are selected.
+    EPeerPriorityStrategy PeerPriorityStrategy;
 
     REGISTER_YSON_STRUCT(TDynamicChannelPoolConfig);
 
@@ -463,20 +478,22 @@ DEFINE_REFCOUNTED_TYPE(TDispatcherDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TServiceMethod
+struct TOverloadTrackedServiceMethod
     : public NYTree::TYsonStructLite
 {
     std::string Service;
     std::string Method;
 
-    REGISTER_YSON_STRUCT_LITE(TServiceMethod);
+    int MaxWindow;
+
+    REGISTER_YSON_STRUCT_LITE(TOverloadTrackedServiceMethod);
 
     static void Register(TRegistrar registrar);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TServiceMethodConfig
+struct TOverloadTrackedServiceMethodConfig
     : public NYTree::TYsonStruct
 {
     std::string Service;
@@ -485,19 +502,19 @@ struct TServiceMethodConfig
     int MaxWindow;
     double WaitingTimeoutFraction;
 
-    REGISTER_YSON_STRUCT(TServiceMethodConfig);
+    REGISTER_YSON_STRUCT(TOverloadTrackedServiceMethodConfig);
 
     static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(TServiceMethodConfig)
+DEFINE_REFCOUNTED_TYPE(TOverloadTrackedServiceMethodConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TOverloadTrackerConfigBase
     : public NYTree::TYsonStruct
 {
-    std::vector<TServiceMethod> MethodsToThrottle;
+    std::vector<TOverloadTrackedServiceMethod> MethodsToThrottle;
 
     REGISTER_YSON_STRUCT(TOverloadTrackerConfigBase);
 
@@ -540,7 +557,7 @@ DEFINE_ENUM(EOverloadTrackerConfigType,
     (BacklogQueueFillFraction)
 );
 
-DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(OverloadTrackerConfig, EOverloadTrackerConfigType, MeanWaitTime,
+DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(OverloadTrackerConfig, EOverloadTrackerConfigType, MeanWaitTime, TOverloadTrackerConfigBase,
     ((Base)                     (TOverloadTrackerConfigBase))
     ((MeanWaitTime)             (TOverloadTrackerMeanWaitTimeConfig))
     ((BacklogQueueFillFraction) (TOverloadTrackerBacklogQueueFillFractionConfig))
@@ -553,7 +570,7 @@ struct TOverloadControllerConfig
 {
     bool Enabled;
     THashMap<std::string, TOverloadTrackerConfig> Trackers;
-    std::vector<TServiceMethodConfigPtr> Methods;
+    std::vector<TOverloadTrackedServiceMethodConfigPtr> Methods;
     TDuration LoadAdjustingPeriod;
 
     REGISTER_YSON_STRUCT(TOverloadControllerConfig);

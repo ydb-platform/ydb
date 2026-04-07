@@ -48,6 +48,7 @@ class CompletionFinder(object):
         append_space=None,
     ):
         self._parser = argument_parser
+        self._formatter = None
         self.always_complete_options = always_complete_options
         self.exclude = exclude
         if validator is None:
@@ -283,6 +284,15 @@ class CompletionFinder(object):
 
         return self.active_parsers
 
+    def _get_action_help(self, action):
+        if action.help is None:
+            return ""
+        if "%" not in action.help:
+            return action.help
+        if self._formatter is None:
+            self._formatter = self._parser.formatter_class(prog=self._parser.prog)
+        return self._formatter._expand_help(action)
+
     def _get_subparser_completions(self, parser, cword_prefix):
         aliases_by_parser: Dict[argparse.ArgumentParser, List[str]] = {}
         for key in parser.choices.keys():
@@ -292,7 +302,7 @@ class CompletionFinder(object):
         for action in parser._get_subactions():
             for alias in aliases_by_parser[parser.choices[action.dest]]:
                 if alias.startswith(cword_prefix):
-                    self._display_completions[alias] = action.help or ""
+                    self._display_completions[alias] = self._get_action_help(action)
 
         completions = [subcmd for subcmd in parser.choices.keys() if subcmd.startswith(cword_prefix)]
         return completions
@@ -313,7 +323,7 @@ class CompletionFinder(object):
             if action.option_strings:
                 for option_string in action.option_strings:
                     if option_string.startswith(cword_prefix):
-                        self._display_completions[option_string] = action.help or ""
+                        self._display_completions[option_string] = self._get_action_help(action)
 
         option_completions = []
         for action in parser._actions:
@@ -405,7 +415,7 @@ class CompletionFinder(object):
                             if self.validator(completion, cword_prefix):
                                 completions.append(completion)
                                 if isinstance(completer, ChoicesCompleter):
-                                    self._display_completions[completion] = active_action.help or ""
+                                    self._display_completions[completion] = self._get_action_help(active_action)
                                 else:
                                     self._display_completions[completion] = ""
                 else:

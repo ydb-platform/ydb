@@ -10,6 +10,8 @@
 #include <ydb/library/yql/providers/common/pushdown/settings.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
+#include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 
 #include <yql/essentials/utils/log/log.h>
@@ -32,6 +34,7 @@ struct TWatermarkPushdownSettings: public NPushdown::TSettings {
             EFlag::StringTypes |
             EFlag::TimestampCtor |
             EFlag::IntervalCtor |
+            EFlag::DateCtor |
             EFlag::ImplicitConversionToInt64 |
             EFlag::DoNotCheckCompareArgumentsTypes |
 
@@ -39,9 +42,14 @@ struct TWatermarkPushdownSettings: public NPushdown::TSettings {
             EFlag::ArithmeticalExpressions |
             EFlag::CastExpression |
             EFlag::DivisionExpressions |
+            EFlag::ExpressionAsPredicate |
             EFlag::JustPassthroughOperators |
             EFlag::UnaryOperators |
             EFlag::MinMax |
+            EFlag::IsDistinctOperator |
+            EFlag::ToBytesFromStringExpressions |
+            EFlag::ToStringFromStringExpressions |
+            EFlag::FlatMapOverOptionals |
             EFlag::NonDeterministic
         );
     }
@@ -173,6 +181,7 @@ public:
         const auto columns = input->Child(TPqReadTopic::idx_Columns);
         const auto format = input->Child(TPqReadTopic::idx_Format);
         const auto compression = input->Child(TPqReadTopic::idx_Compression);
+        const auto settings = input->Child(TPqReadTopic::idx_Settings);
 
         if (!EnsureWorldType(*world, ctx)) {
             return TStatus::Error;
@@ -205,13 +214,27 @@ public:
         if (!State_->IsRtmrMode() && !NCommon::ValidateFormatForInput(      // Rtmr has 3 field (key/subkey/value).
             format->Content(),
             schema->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(),
-            [](TStringBuf fieldName) {return FindPqMetaFieldDescriptorBySysColumn(TString(fieldName)); },
+            [](TStringBuf fieldName) {return FindPqMetaFieldDescriptorBySysColumn(TString(fieldName)).has_value(); },
             ctx)) {
             return TStatus::Error;
         }
 
         if (!NCommon::ValidateCompressionForInput(format->Content(), compression->Content(), ctx)) {
             return TStatus::Error;
+        }
+
+        if (!EnsureTuple(*settings, ctx)) {
+            return TStatus::Error;
+        }
+
+        for (const auto& setting : settings->Children()) {
+            if (!EnsureTupleMinSize(*setting, 1, ctx)) {
+                return TStatus::Error;
+            }
+
+            if (!EnsureAtom(setting->Head(), ctx)) {
+                return TStatus::Error;
+            }
         }
 
         if (TPqReadTopic::idx_Watermark < input->ChildrenSize()) {
@@ -226,7 +249,7 @@ public:
             if (!watermark->GetTypeAnn()) {
                 return TStatus::Repeat;
             }
-            if (!EnsureSpecificDataType(*watermark, EDataSlot::Timestamp, ctx, false)) {
+            if (!EnsureSpecificDataType(*watermark, EDataSlot::Timestamp, ctx, true)) {
                 return TStatus::Error;
             }
 
@@ -234,8 +257,15 @@ public:
             const auto lambdaArg = TExprBase(lambda.Args().Arg(0).Ptr());
             const auto lambdaBody = lambda.Body();
             if (!TestExprForPushdown(ctx, lambdaArg, lambdaBody, TWatermarkPushdownSettings())) {
-                ctx.AddError(TIssue(ctx.GetPosition(watermark->Pos()), TStringBuilder()
-                    << "Bad watermark expression"));
+                TStringBuilder err;
+                err << "Bad watermark expression: ";
+                NYql::NConnector::NApi::TExpression watermarkExprProto;
+                // SerializeWatermarkExpr is for more sensible error message
+                if (NYql::SerializeWatermarkExpr(ctx, lambda, &watermarkExprProto, err)) {
+                    // SerializeWatermarkExpr unexpectedly succeed
+                    err << "[unspecified error, please report to support]";
+                }
+                ctx.AddError(TIssue(ctx.GetPosition(watermark->Pos()), err));
                 return TStatus::Error;
             }
         }
@@ -253,7 +283,7 @@ public:
     }
 
     TStatus HandleDqTopicSource(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureMinMaxArgsCount(*input, 7, 8, ctx)) {
+        if (!EnsureMinMaxArgsCount(*input, 7, 9, ctx)) {
             return TStatus::Error;
         }
 
@@ -291,9 +321,39 @@ public:
             return TStatus::Error;
         }
 
-        if (TDqPqTopicSource::idx_Watermark < input->ChildrenSize()) {
-            const auto watermark = input->Child(TDqPqTopicSource::idx_Watermark);
-            if (!EnsureAtom(*watermark, ctx)) {
+        if (TDqPqTopicSource::idx_WatermarkExpr < input->ChildrenSize()) {
+            auto& watermarkExpr = input->ChildRef(TDqPqTopicSource::idx_WatermarkExpr);
+            const auto status = ConvertToLambda(watermarkExpr, ctx, 1, 1);
+            if (status != TStatus::Ok) {
+                return status;
+            }
+            if (!UpdateLambdaAllArgumentsTypes(watermarkExpr, {rowType->GetTypeAnn()->Cast<TTypeExprType>()->GetType()}, ctx)) {
+                return TStatus::Error;
+            }
+            if (!watermarkExpr->GetTypeAnn()) {
+                return TStatus::Repeat;
+            }
+            if (!EnsureSpecificDataType(*watermarkExpr, EDataSlot::Timestamp, ctx, true)) {
+                return TStatus::Error;
+            }
+        }
+
+        if (TDqPqTopicSource::idx_WatermarkSerialized < input->ChildrenSize()) {
+            const auto watermarkSerialized = input->Child(TDqPqTopicSource::idx_WatermarkSerialized);
+            if (!EnsureAtom(*watermarkSerialized, ctx)) {
+                return TStatus::Error;
+            }
+        }
+
+        if (const auto maybeSkipJsonErrorsSetting = FindSetting(settings, SkipJsonErrors)) {
+            const auto value = maybeSkipJsonErrorsSetting.Cast().Ptr();
+            if (!EnsureAtom(*value, ctx)) {
+                return TStatus::Error;
+            }
+            bool skipJsonErrorsSetting;
+            if (!TryFromString<bool>(value->Content(), skipJsonErrorsSetting)) {
+                ctx.AddError(TIssue(ctx.GetPosition(settings->Pos()), TStringBuilder()
+                    << "Expected bool, but got: " << value->Content()));
                 return TStatus::Error;
             }
         }
@@ -394,7 +454,7 @@ public:
         }
 
         const auto metadataKey = TString(key->TailPtr()->Content());
-        const auto descriptor = FindPqMetaFieldDescriptorByKey(metadataKey);
+        const auto descriptor = FindPqMetaFieldDescriptorByKey(metadataKey, State_->AllowTransparentSystemColumns);
         if (!descriptor) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
                 << "Metadata key " << metadataKey << " wasn't found"));
@@ -467,7 +527,7 @@ private:
     TPqState::TPtr State_;
 };
 
-}
+} // anonymous namespace
 
 THolder<TVisitorTransformerBase> CreatePqDataSourceTypeAnnotationTransformer(TPqState::TPtr state) {
     return MakeHolder<TPqDataSourceTypeAnnotationTransformer>(state);

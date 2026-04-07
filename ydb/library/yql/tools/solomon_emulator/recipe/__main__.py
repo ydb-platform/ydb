@@ -4,7 +4,7 @@ import os
 import signal
 
 from library.python.testing.recipe import declare_recipe, set_env
-from yatest.common.network import PortManager
+import library.python.port_manager
 import yatest.common as ya_common
 
 PID_FILENAME = "solomon_recipe.pid"
@@ -28,7 +28,7 @@ def parse_args(argv):
 def start(argv):
     logger.debug("Starting Solomon recipe")
     args = parse_args(argv)
-    pm = PortManager()
+    pm = library.python.port_manager.PortManager()
     http_port = pm.get_port()
     grpc_port = pm.get_port()
     binary_path = ya_common.binary_path("ydb/library/yql/tools/solomon_emulator/bin/solomon_emulator")
@@ -58,6 +58,7 @@ def start(argv):
     http_endpoint = f"localhost:{http_port}"
     grpc_endpoint = f"localhost:{grpc_port}"
     set_env("SOLOMON_HOST", "localhost")
+    set_env("SOLOMON_HTTP_URL", "http://" + http_endpoint)
     set_env("SOLOMON_HTTP_ENDPOINT", http_endpoint)
     set_env("SOLOMON_GRPC_ENDPOINT", grpc_endpoint)
     set_env("SOLOMON_HTTP_PORT", str(http_port))

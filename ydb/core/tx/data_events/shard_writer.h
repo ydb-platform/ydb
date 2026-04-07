@@ -9,6 +9,7 @@
 #include <ydb/library/signals/owner.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -46,6 +47,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr FailsCount;
     NMonitoring::TDynamicCounters::TCounterPtr GlobalTimeoutCount;
     NMonitoring::TDynamicCounters::TCounterPtr RetryTimeoutCount;
+    NMonitoring::TDynamicCounters::TCounterPtr RetryBySubscribeOnOverloadCount;
+    NMonitoring::TDynamicCounters::TCounterPtr RetryBySubscribeOnOverloadLimitExceededCount;
 
 public:
     TCSUploadCounters()
@@ -62,6 +65,8 @@ public:
         , FailsCount(TBase::GetDeriviative("Fails"))
         , GlobalTimeoutCount(TBase::GetDeriviative("GlobalTimeouts"))
         , RetryTimeoutCount(TBase::GetDeriviative("RetryTimeouts"))
+        , RetryBySubscribeOnOverloadCount(TBase::GetDeriviative("RetryBySubscribeOnOverload"))
+        , RetryBySubscribeOnOverloadLimitExceededCount(TBase::GetDeriviative("RetryBySubscribeOnOverloadLimitExceeded"))
     {
     }
 
@@ -71,6 +76,14 @@ public:
 
     void OnRetryTimeout() const {
         RetryTimeoutCount->Inc();
+    }
+
+    void OnRetryBySubscribeOnOverload() const {
+        RetryBySubscribeOnOverloadCount->Inc();
+    }
+
+    void OnRetryBySubscribeOnOverloadLimitExceeded() const {
+        RetryBySubscribeOnOverloadLimitExceededCount->Inc();
     }
 
     void OnRequest(const ui64 rows, const ui64 bytes) const {
@@ -175,10 +188,12 @@ private:
     const std::optional<TDuration> Timeout;
     const bool RetryBySubscription;
     ui64 LastOverloadSeqNo = 0;
+    const TString UserSID;
 
     void SendWriteRequest();
     static TDuration OverloadTimeout() {
-        return TDuration::MilliSeconds(OverloadedDelayMs);
+        ui32 overloadedDelayMs = std::min(AppData() ? AppData()->ColumnShardConfig.GetProxyOverloadedDelayMs() : OverloadedDelayMs, ui32(TDuration::Hours(1).MilliSeconds()));
+        return TDuration::MilliSeconds(overloadedDelayMs + RandomNumber<ui32>(overloadedDelayMs));
     }
     void SendToTablet(THolder<IEventBase> event) {
         Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), ShardId, true), IEventHandle::FlagTrackDelivery, 0,
@@ -188,7 +203,8 @@ private:
 public:
     TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
         const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx,
-        const std::optional<TDuration> timeout = std::nullopt);
+        const std::optional<TDuration> timeout = std::nullopt,
+        const TString& userSID = TString());
 
     STFUNC(StateMain) {
         switch (ev->GetTypeRewrite()) {
@@ -207,11 +223,11 @@ public:
     void Handle(TEvColumnShard::TEvOverloadReady::TPtr& ev);
 
 protected:
-    void Die(const NActors::TActorContext& ctx) override;
     void PassAway() override;
 
 private:
     bool RetryWriteRequest(const bool delayed = true);
     bool IsMaxRetriesReached() const;
+    ui32 GetMaxRetriesPerShard() const;
 };
 }   // namespace NKikimr::NEvWrite

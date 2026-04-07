@@ -4,13 +4,14 @@ RECURSE(
     dml
     dump_restore
     copy_table
+    knn
     lib
     partitioning
     parametrized_queries
     select
-    split_merge
     secondary_index
     s3
-    vector_index
+    truncate
     ttl
+    vector_index
 )

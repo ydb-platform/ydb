@@ -1,6 +1,6 @@
 #include "yql_generic_base_actor.h"
+#include "yql_generic_credentials_provider.h"
 #include "yql_generic_read_actor.h"
-#include "yql_generic_token_provider.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -44,10 +44,11 @@ namespace NYql::NDq {
             ui64 inputIndex,
             TCollectStatsLevel statsLevel,
             NConnector::IClient::TPtr client,
-            TGenericTokenProvider::TPtr tokenProvider,
+            TGenericCredentialsProvider::TPtr tokenProvider,
             Generic::TSource&& source,
             const NActors::TActorId& computeActorId,
             const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+            std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
             TVector<Generic::TPartition>&& partitions)
             : InputIndex_(inputIndex)
             , ComputeActorId_(computeActorId)
@@ -55,9 +56,17 @@ namespace NYql::NDq {
             , TokenProvider_(std::move(tokenProvider))
             , Partitions_(std::move(partitions))
             , HolderFactory_(holderFactory)
+            , Alloc_(std::move(alloc))
             , Source_(std::move(source))
         {
             IngressStats_.Level = statsLevel;
+        }
+
+        ~TGenericReadActor() {
+            if (Alloc_) {
+                TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(*Alloc_);
+                ClearMkqlData();
+            }
         }
 
         void Bootstrap() {
@@ -114,7 +123,7 @@ namespace NYql::NDq {
                     dstSplit->set_description(srcSplit.description());
 
                     // Assign actual IAM token to a split
-                    auto error = TokenProvider_->MaybeFillToken(*dstSplit->mutable_select()->mutable_data_source_instance());
+                    auto error = TokenProvider_->FillCredentials(*dstSplit->mutable_select()->mutable_data_source_instance());
                     if (error) {
                         return TIssue(std::move(error));
                     }
@@ -331,10 +340,6 @@ namespace NYql::NDq {
             // freeSpace -= size;
             LastReadSplitsResponse_ = std::nullopt;
 
-            // TODO: check it, because in S3 the generic cache clearing happens only when LastFileWasProcessed:
-            // https://a.yandex-team.ru/arcadia/ydb/library/yql/providers/s3/actors/yql_s3_read_actor.cpp?rev=r11543410#L2497
-            ArrowRowContainerCache_.Clear();
-
             // Request server for the next data block
             AwaitNextStreamItem<NConnector::IReadSplitsStreamIterator,
                                 TEvReadSplitsPart,
@@ -352,6 +357,7 @@ namespace NYql::NDq {
                                             << ": bytes " << IngressStats_.Bytes
                                             << ", rows " << IngressStats_.Rows
                                             << ", chunks " << IngressStats_.Chunks;
+            ClearMkqlData();
             TActorBootstrapped<TGenericReadActor>::PassAway();
         }
 
@@ -372,13 +378,18 @@ namespace NYql::NDq {
             return IngressStats_;
         }
 
+        // Should be called with bound MKQL alloc
+        void ClearMkqlData() {
+            ArrowRowContainerCache_.Clear();
+        }
+
     private:
         const ui64 InputIndex_;
         TDqAsyncStats IngressStats_;
         const NActors::TActorId ComputeActorId_;
 
         NConnector::IClient::TPtr Client_;
-        TGenericTokenProvider::TPtr TokenProvider_;
+        TGenericCredentialsProvider::TPtr TokenProvider_;
 
         TVector<Generic::TPartition> Partitions_;
 
@@ -388,6 +399,7 @@ namespace NYql::NDq {
 
         NKikimr::NMiniKQL::TPlainContainerCache ArrowRowContainerCache_;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory_;
+        const std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc_;
         Generic::TSource Source_;
     };
 
@@ -426,13 +438,14 @@ namespace NYql::NDq {
                            Generic::TSource&& source,
                            ui64 inputIndex,
                            TCollectStatsLevel statsLevel,
-                           const THashMap<TString, TString>& /*secureParams*/,
+                           const THashMap<TString, TString>& secureParams,
                            ui64 taskId,
                            const THashMap<TString, TString>& taskParams,
                            const TVector<TString>& readRanges,
                            const NActors::TActorId& computeActorId,
                            ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-                           const NKikimr::NMiniKQL::THolderFactory& holderFactory)
+                           const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+                           std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
     {
         TVector<Generic::TPartition> partitions;
         ExtractPartitionsFromParams(partitions, taskParams, readRanges);
@@ -447,21 +460,8 @@ namespace NYql::NDq {
                                         << ", task_id=" << taskId
                                         << ", partitions_count=" << partitions.size();
 
-        // FIXME: strange piece of logic - authToken is created but not used:
-        // https://a.yandex-team.ru/arcadia/ydb/library/yql/providers/clickhouse/actors/yql_ch_read_actor.cpp?rev=r11550199#L140
-        /*
-        const auto token = secureParams.Value(params.token(), TString{});
-        const auto credentialsProviderFactory =
-            CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
-        const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
-        const auto one = token.find('#'), two = token.rfind('#');
-        YQL_ENSURE(one != TString::npos && two != TString::npos && one < two, "Bad token format:" << token);
-        */
-
-        auto tokenProvider = CreateGenericTokenProvider(
-            source.GetToken(),
-            source.GetServiceAccountId(),
-            source.GetServiceAccountIdSignature(),
+        auto tokenProvider = CreateGenericCredentialsProvider(
+            secureParams.Value(source.GetTokenName(), ""),
             credentialsFactory);
 
         const auto actor = new TGenericReadActor(
@@ -472,6 +472,7 @@ namespace NYql::NDq {
             std::move(source),
             computeActorId,
             holderFactory,
+            std::move(alloc),
             std::move(partitions));
 
         return {actor, actor};

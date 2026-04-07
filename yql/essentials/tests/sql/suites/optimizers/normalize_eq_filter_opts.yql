@@ -1,0 +1,10 @@
+PRAGMA config.flags("OptimizerFlags", "NormalizeEqualityFilterOverJoin");
+
+$left = [<|x:Just(1), y:2|>, <|x:2, y:3|>, <|x:3, y:4|>];
+$right = [<|a:2, b:3|>, <|a:3, b:4|>, <|a:4, b:5|>];
+
+select * from (
+select * from as_table($left) as l
+left join as_table($right) as r on l.y = r.b
+)
+where ((x > 0) ?? false) = ((a > 0) ?? false);

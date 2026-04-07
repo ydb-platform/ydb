@@ -1,5 +1,6 @@
 #include "test_client.h"
 
+#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/appdata.h>
@@ -105,6 +106,7 @@
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 
@@ -131,6 +133,7 @@
 #include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
+#include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 
@@ -535,11 +538,48 @@ namespace Tests {
         Runtime->AddAppDataInit([this](ui32 nodeIdx, NKikimr::TAppData& appData) {
             Y_UNUSED(nodeIdx);
 
-            appData.AuthConfig.MergeFrom(Settings->AuthConfig);
-            appData.PQConfig.MergeFrom(Settings->PQConfig);
-            appData.PQClusterDiscoveryConfig.MergeFrom(Settings->PQClusterDiscoveryConfig);
-            appData.NetClassifierConfig.MergeFrom(Settings->NetClassifierConfig);
-            appData.StreamingConfig.MergeFrom(Settings->AppConfig->GetGRpcConfig().GetStreamingConfig());
+#define MERGE_APP_CFG_FROM(cfg, src) appData.cfg.MergeFrom(src)
+#define MERGE_CFG_FROM_APP_CFG(cfg) MERGE_APP_CFG_FROM(cfg, Settings->AppConfig->Get ## cfg())
+#define MERGE_CFG_FROM_SETTINGS(cfg) MERGE_APP_CFG_FROM(cfg, Settings->cfg)
+            MERGE_CFG_FROM_SETTINGS(AuthConfig);
+            MERGE_APP_CFG_FROM(StreamingConfig, Settings->AppConfig->GetGRpcConfig().GetStreamingConfig());
+            MERGE_CFG_FROM_APP_CFG(PQConfig);
+            MERGE_CFG_FROM_SETTINGS(PQConfig);
+            MERGE_CFG_FROM_APP_CFG(PQClusterDiscoveryConfig);
+            MERGE_CFG_FROM_SETTINGS(PQClusterDiscoveryConfig);
+            MERGE_CFG_FROM_APP_CFG(KafkaProxyConfig);
+            MERGE_CFG_FROM_APP_CFG(NetClassifierConfig);
+            MERGE_CFG_FROM_SETTINGS(NetClassifierConfig);
+            MERGE_CFG_FROM_APP_CFG(NetClassifierDistributableConfig);
+            MERGE_CFG_FROM_APP_CFG(SqsConfig);
+            MERGE_CFG_FROM_APP_CFG(AuthConfig);
+            MERGE_CFG_FROM_APP_CFG(KeyConfig);
+            MERGE_CFG_FROM_APP_CFG(PDiskKeyConfig);
+            MERGE_CFG_FROM_APP_CFG(FeatureFlags);
+            MERGE_CFG_FROM_APP_CFG(HiveConfig);
+            MERGE_CFG_FROM_APP_CFG(DataShardConfig);
+            MERGE_CFG_FROM_APP_CFG(ColumnShardConfig);
+            MERGE_CFG_FROM_APP_CFG(SchemeShardConfig);
+            MERGE_CFG_FROM_APP_CFG(MeteringConfig);
+            MERGE_CFG_FROM_APP_CFG(CompactionConfig);
+            MERGE_CFG_FROM_APP_CFG(DomainsConfig);
+            MERGE_CFG_FROM_APP_CFG(AwsCompatibilityConfig);
+            MERGE_CFG_FROM_APP_CFG(S3ProxyResolverConfig);
+            MERGE_CFG_FROM_APP_CFG(BackgroundCleaningConfig);
+            MERGE_CFG_FROM_APP_CFG(GraphConfig);
+            MERGE_CFG_FROM_APP_CFG(SharedCacheConfig);
+            MERGE_CFG_FROM_APP_CFG(MetadataCacheConfig);
+            MERGE_CFG_FROM_APP_CFG(MemoryControllerConfig);
+            MERGE_CFG_FROM_APP_CFG(HealthCheckConfig);
+            MERGE_CFG_FROM_APP_CFG(WorkloadManagerConfig);
+            MERGE_CFG_FROM_APP_CFG(QueryServiceConfig);
+            MERGE_CFG_FROM_APP_CFG(BridgeConfig);
+            MERGE_CFG_FROM_SETTINGS(BridgeConfig);
+            MERGE_CFG_FROM_APP_CFG(StatisticsConfig);
+            MERGE_CFG_FROM_APP_CFG(SystemTabletBackupConfig);
+#undef MERGE_APP_CFG_FROM
+#undef MERGE_CFG_FROM_APP_CFG
+
             auto& securityConfig = Settings->AppConfig->GetDomainsConfig().GetSecurityConfig();
             appData.EnforceUserTokenRequirement = securityConfig.GetEnforceUserTokenRequirement();
             appData.EnforceUserTokenCheckRequirement = securityConfig.GetEnforceUserTokenCheckRequirement();
@@ -547,23 +587,13 @@ namespace Tests {
             appData.AdministrationAllowedSIDs = std::move(administrationAllowedSIDs);
             TVector<TString> registerDynamicNodeAllowedSIDs(securityConfig.GetRegisterDynamicNodeAllowedSIDs().cbegin(), securityConfig.GetRegisterDynamicNodeAllowedSIDs().cend());
             appData.RegisterDynamicNodeAllowedSIDs = std::move(registerDynamicNodeAllowedSIDs);
-            appData.DomainsConfig.MergeFrom(Settings->AppConfig->GetDomainsConfig());
-            appData.ColumnShardConfig.MergeFrom(Settings->AppConfig->GetColumnShardConfig());
             appData.PersQueueGetReadSessionsInfoWorkerFactory = Settings->PersQueueGetReadSessionsInfoWorkerFactory.get();
             appData.DataStreamsAuthFactory = Settings->DataStreamsAuthFactory.get();
             appData.PersQueueMirrorReaderFactory = Settings->PersQueueMirrorReaderFactory.get();
-            appData.HiveConfig.MergeFrom(Settings->AppConfig->GetHiveConfig());
-            appData.GraphConfig.MergeFrom(Settings->AppConfig->GetGraphConfig());
-            appData.SqsConfig.MergeFrom(Settings->AppConfig->GetSqsConfig());
-            appData.SharedCacheConfig.MergeFrom(Settings->AppConfig->GetSharedCacheConfig());
             appData.TransferWriterFactory = Settings->TransferWriterFactory;
-            appData.WorkloadManagerConfig.MergeFrom(Settings->AppConfig->GetWorkloadManagerConfig());
-            appData.QueryServiceConfig.MergeFrom(Settings->AppConfig->GetQueryServiceConfig());
-            appData.BridgeConfig.MergeFrom(Settings->BridgeConfig);
             if (appData.BridgeConfig.PilesSize() > 0) {
                 appData.BridgeModeEnabled = true;
             }
-            appData.StatisticsConfig.MergeFrom(Settings->AppConfig->GetStatisticsConfig());
 
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;
@@ -635,7 +665,7 @@ namespace Tests {
         auto actorSystemConfig = Settings->AppConfig->GetActorSystemConfig();
         const bool useAutoConfig = actorSystemConfig.GetUseAutoConfig();
         if (useAutoConfig) {
-            NAutoConfigInitializer::ApplyAutoConfig(&actorSystemConfig, false);
+            NAutoConfigInitializer::ApplyAutoConfig(&actorSystemConfig, false, false);
         }
 
         TCpuManagerConfig cpuManager;
@@ -668,6 +698,8 @@ namespace Tests {
 
     void TServer::EnableGRpc(const NYdbGrpc::TServerOptions& options, ui32 grpcServiceNodeId, const std::optional<TString>& tenant) {
         auto* grpcInfo = &TenantsGRpc[tenant ? *tenant : Settings->DomainName][grpcServiceNodeId];
+        grpcInfo->Shutdown();
+
         grpcInfo->GRpcServerRootCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         auto& counters = grpcInfo->GRpcServerRootCounters;
 
@@ -933,45 +965,23 @@ namespace Tests {
         TAutoPtr<IEventHandle> handleNodesInfo;
         auto nodesInfo = Runtime->GrabEdgeEventRethrow<TEvInterconnect::TEvNodesInfo>(handleNodesInfo);
 
-        auto bsConfigureRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
-
-        NKikimrBlobStorage::TDefineBox boxConfig;
-        boxConfig.SetBoxId(Settings->BOX_ID);
-        boxConfig.SetItemConfigGeneration(Settings->StorageGeneration);
-
         ui32 nodeId = Runtime->GetNodeId(0);
         Y_ABORT_UNLESS(nodesInfo->Nodes[0].NodeId == nodeId);
         auto& nodeInfo = nodesInfo->Nodes[0];
 
-        NKikimrBlobStorage::TDefineHostConfig hostConfig;
-        hostConfig.SetHostConfigId(nodeId);
-        hostConfig.SetItemConfigGeneration(Settings->StorageGeneration);
-        TString path;
-        if (Settings->UseSectorMap) {
-            path ="SectorMap:test-client[:2000]";
-        } else {
-            TString diskPath = Settings->CustomDiskParams.DiskPath;
-            path = TStringBuilder() << (diskPath ? diskPath : Runtime->GetTempDir()) << "pdisk_1.dat";
-        }
-        hostConfig.AddDrive()->SetPath(path);
-        if (Settings->Verbose) {
-            Cerr << "test_client.cpp: SetPath # " << path << Endl;
-        }
-        bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineHostConfig()->CopyFrom(hostConfig);
-
-        auto& host = *boxConfig.AddHost();
-        host.MutableKey()->SetFqdn(nodeInfo.Host);
-        host.MutableKey()->SetIcPort(nodeInfo.Port);
-        host.SetHostConfigId(hostConfig.GetHostConfigId());
-        bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineBox()->CopyFrom(boxConfig);
-
+        ui64 boxConfigGeneration = Settings->StorageGeneration;
+        ui64 hostConfigGeneration = Settings->StorageGeneration;
         std::unordered_map<TString, ui64> poolsConfigGenerations;
-        if (Settings->FetchPoolsGeneration) {
+        if (Settings->FetchActualGeneration) {
             auto bsDescribeRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
-            auto& describeCommand = *bsDescribeRequest->Record.MutableRequest()->AddCommand()->MutableReadStoragePool();
-            describeCommand.SetBoxId(Settings->BOX_ID);
+
+            auto& request = *bsDescribeRequest->Record.MutableRequest();
+            request.AddCommand()->MutableReadBox();
+            request.AddCommand()->MutableReadHostConfig();
+            auto& describePoolCommand = *request.AddCommand()->MutableReadStoragePool();
+            describePoolCommand.SetBoxId(Settings->BOX_ID);
             for (const auto& [_, storagePool] : Settings->StoragePoolTypes) {
-                describeCommand.AddName(storagePool.GetName());
+                describePoolCommand.AddName(storagePool.GetName());
             }
 
             Runtime->SendToPipe(MakeBSControllerID(), sender, bsDescribeRequest.Release(), 0, pipeConfig);
@@ -983,14 +993,53 @@ namespace Tests {
                 Cerr << "\n\n descResponse is #" << descResponse->Record.DebugString() << "\n\n";
             }
             UNIT_ASSERT(descResponse->Record.GetResponse().GetSuccess());
-            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
-            const auto& status = response.GetStatus(0);
+            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 3);
 
-            poolsConfigGenerations.reserve(status.StoragePoolSize());
-            for (const auto& storagePool : status.GetStoragePool()) {
+            for (const auto& boxInfo : response.GetStatus(0).GetBox()) {
+                if (boxInfo.GetBoxId() == Settings->BOX_ID) {
+                    boxConfigGeneration = boxInfo.GetItemConfigGeneration();
+                    break;
+                }
+            }
+
+            for (const auto& hostInfo : response.GetStatus(1).GetHostConfig()) {
+                if (hostInfo.GetHostConfigId() == nodeId) {
+                    hostConfigGeneration = hostInfo.GetItemConfigGeneration();
+                    break;
+                }
+            }
+
+            const auto& poolsInfo = response.GetStatus(2).GetStoragePool();
+            poolsConfigGenerations.reserve(poolsInfo.size());
+            for (const auto& storagePool : poolsInfo) {
                 UNIT_ASSERT(poolsConfigGenerations.emplace(storagePool.GetName(), storagePool.GetItemConfigGeneration()).second);
             }
         }
+
+        auto bsConfigureRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+
+        auto& hostConfig = *bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineHostConfig();
+        hostConfig.SetHostConfigId(nodeId);
+        hostConfig.SetItemConfigGeneration(hostConfigGeneration);
+        TString path;
+        if (Settings->UseSectorMap) {
+            path ="SectorMap:test-client[:2000]";
+        } else {
+            TString diskPath = Settings->CustomDiskParams.DiskPath;
+            path = TStringBuilder() << (diskPath ? diskPath : Runtime->GetTempDir()) << "pdisk_1.dat";
+        }
+        hostConfig.AddDrive()->SetPath(path);
+        if (Settings->Verbose) {
+            Cerr << "test_client.cpp: SetPath for PDisk # " << path << Endl;
+        }
+
+        auto& boxConfig = *bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineBox();
+        boxConfig.SetBoxId(Settings->BOX_ID);
+        boxConfig.SetItemConfigGeneration(boxConfigGeneration);
+        auto& host = *boxConfig.AddHost();
+        host.MutableKey()->SetFqdn(nodeInfo.Host);
+        host.MutableKey()->SetIcPort(nodeInfo.Port);
+        host.SetHostConfigId(hostConfig.GetHostConfigId());
 
         for (const auto& [poolKind, storagePool] : Settings->StoragePoolTypes) {
             if (storagePool.GetNumGroups() > 0) {
@@ -1221,6 +1270,11 @@ namespace Tests {
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConveyorComposite::TServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
+        {
+            auto actor = NColumnShard::NOverload::TOverloadManagerServiceOperator::CreateService(appData.Counters);
+            const auto aid = Runtime->Register(actor.release(), nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
+            Runtime->RegisterService(NColumnShard::NOverload::TOverloadManagerServiceOperator::MakeServiceId(), aid, nodeIdx);
+        }
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 
         auto sysViewService = NSysView::CreateSysViewServiceForTests();
@@ -1283,12 +1337,21 @@ namespace Tests {
             Runtime->RegisterService(MakeDatabaseMetadataCacheId(Runtime->GetNodeId(nodeIdx)), metadataCacheId, nodeIdx);
         }
         {
+            IActor* describeSchemaSecretsService = Settings->DescribeSchemaSecretsServiceFactory->CreateService();
+            TActorId describeSchemaSecretsServiceId = Runtime->Register(describeSchemaSecretsService, nodeIdx, userPoolId);
+            Runtime->RegisterService(NKqp::MakeKqpDescribeSchemaSecretServiceId(Runtime->GetNodeId(nodeIdx)), describeSchemaSecretsServiceId, nodeIdx);
+        }
+        {
             auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
-            IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(
-                Settings->AppConfig->GetTableServiceConfig().GetResourceManager(), nullptr, {}, kqpProxySharedResources, Runtime->GetNodeId(nodeIdx));
+            const auto& rmConfig = Settings->AppConfig->GetTableServiceConfig().GetResourceManager();
+            IActor* kqpRmService = NKqp::CreateKqpResourceManagerActor(rmConfig, nullptr, {}, kqpProxySharedResources, Runtime->GetNodeId(nodeIdx));
             TActorId kqpRmServiceId = Runtime->Register(kqpRmService, nodeIdx, userPoolId);
             Runtime->RegisterService(NKqp::MakeKqpRmServiceID(Runtime->GetNodeId(nodeIdx)), kqpRmServiceId, nodeIdx);
+
+            if (Settings->KqpLoggerScope) {
+                KqpLoggerScope = Settings->KqpLoggerScope;
+            }
 
             if (!KqpLoggerScope) {
                 // We need to keep YqlLoggerScope alive longer than the actor system
@@ -1334,8 +1397,17 @@ namespace Tests {
 
                 auto actorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
                 actorSystemPtr->store(Runtime->GetActorSystem(nodeIdx));
-                auto driver = std::make_shared<NYdb::TDriver>(NYdb::TDriverConfig()
-                    .SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(actorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK)));
+
+                if (FederatedQuerySetupDriver_) {
+                    FederatedQuerySetupDriver_.reset();
+                }
+
+                auto uniqueDriver = NKqp::MakeYdbDriver(actorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
+                FederatedQuerySetupDriver_ = NKqp::MakeSharedYdbDriverWithStop(std::move(uniqueDriver));
+                auto pqGatewayFactory = NKqp::MakePqGatewayFactory(FederatedQuerySetupDriver_, NKqp::TLocalTopicClientSettings{
+                    .ActorSystem = Runtime->GetActorSystem(nodeIdx),
+                    .ChannelBufferSize = rmConfig.GetChannelBufferSize(),
+                });
 
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
                     NKqp::MakeHttpGateway(queryServiceConfig.GetHttpGateway(), Runtime->GetAppData(nodeIdx).Counters),
@@ -1347,14 +1419,13 @@ namespace Tests {
                     queryServiceConfig.GetYt(),
                     Settings->YtGateway ? Settings->YtGateway : NKqp::MakeYtGateway(GetFunctionRegistry(), queryServiceConfig),
                     queryServiceConfig.GetSolomon(),
-                    Settings->SolomonGateway ? Settings->SolomonGateway : NYql::CreateSolomonGateway(queryServiceConfig.GetSolomon()),
                     Settings->ComputationFactory,
                     NYql::NDq::CreateReadActorFactoryConfig(queryServiceConfig.GetS3()),
                     Settings->DqTaskTransformFactory,
                     NYql::TPqGatewayConfig{},
-                    Settings->PqGateway ? Settings->PqGateway : NKqp::MakePqGateway(driver, NYql::TPqGatewayConfig{}),
+                    Settings->PqGateway ? NYql::CreatePqFileGatewayFactory(Settings->PqGateway) : pqGatewayFactory,
                     actorSystemPtr,
-                    driver);
+                    FederatedQuerySetupDriver_);
             }
 
             const auto& allExternalSourcesTypes = NYql::GetAllExternalDataSourceTypes();
@@ -1367,6 +1438,7 @@ namespace Tests {
             IActor* kqpProxyService = NKqp::CreateKqpProxyService(Settings->AppConfig->GetLogConfig(),
                                                                   Settings->AppConfig->GetTableServiceConfig(),
                                                                   Settings->AppConfig->GetQueryServiceConfig(),
+                                                                  Settings->AppConfig->GetTliConfig(),
                                                                   TVector<NKikimrKqp::TKqpSetting>(Settings->KqpSettings),
                                                                   nullptr, std::move(kqpProxySharedResources),
                                                                   federatedQuerySetupFactory, Settings->S3ActorsFactory);
@@ -1377,7 +1449,8 @@ namespace Tests {
                 Settings->AppConfig->GetQueryServiceConfig(),
                 federatedQuerySetupFactory,
                 Settings->S3ActorsFactory,
-                Settings->EnableScriptExecutionBackgroundChecks
+                Settings->EnableScriptExecutionBackgroundChecks,
+                TDuration::Zero()
             );
             TActorId scriptFinalizeServiceId = Runtime->Register(scriptFinalizeService, nodeIdx, userPoolId);
             Runtime->RegisterService(NKqp::MakeKqpFinalizeScriptServiceId(Runtime->GetNodeId(nodeIdx)), scriptFinalizeServiceId, nodeIdx);
@@ -1420,7 +1493,10 @@ namespace Tests {
             Runtime->RegisterService(NIcNodeCache::CreateICNodesInfoCacheServiceId(), icCacheId, nodeIdx);
         }
         {
-            auto driverConfig = NYdb::TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << Settings->GrpcPort);
+            TString endpoint = "localhost:" + ToString(Settings->GrpcPort);
+            auto driverConfig = NYdb::TDriverConfig()
+                .SetEndpoint(endpoint);
+
             if (!Driver) {
                 Driver.Reset(new NYdb::TDriver(driverConfig));
             }
@@ -1441,7 +1517,7 @@ namespace Tests {
         {
             if (Settings->PQConfig.GetEnabled() == true) {
                 IActor *pqMetaCache = NMsgBusProxy::NPqMetaCacheV2::CreatePQMetaCache(
-                        new ::NMonitoring::TDynamicCounters(), TDuration::Seconds(1)
+                        new ::NMonitoring::TDynamicCounters()
                 );
 
                 TActorId pqMetaCacheId = Runtime->Register(pqMetaCache, nodeIdx, userPoolId);
@@ -1505,27 +1581,6 @@ namespace Tests {
             IActor* netClassifier = NNetClassifier::CreateNetClassifier();
             TActorId netClassifierId = Runtime->Register(netClassifier, nodeIdx, userPoolId);
             Runtime->RegisterService(NNetClassifier::MakeNetClassifierID(), netClassifierId, nodeIdx);
-        }
-
-        if (Settings->EnableStorageProxy) {
-            auto config = Settings->AppConfig->GetQueryServiceConfig().GetCheckpointsConfig();
-            NFq::NConfig::TConfig protoConfig;
-            const auto ydbCredFactory = NKikimr::CreateYdbCredentialsProviderFactory;
-            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-            auto yqSharedResources = NFq::CreateYqSharedResources(protoConfig, ydbCredFactory, counters);
-
-            const auto& externalStorage = config.GetExternalStorage();
-            config.MutableExternalStorage()->SetEndpoint(externalStorage.HasEndpoint() ? externalStorage.GetEndpoint() : GetEnv("YDB_ENDPOINT"));
-            config.MutableExternalStorage()->SetDatabase(externalStorage.HasDatabase() ? externalStorage.GetDatabase() : GetEnv("YDB_DATABASE"));
-
-            auto actor = NFq::NewCheckpointStorageService(
-                config,
-                "ut",
-                ydbCredFactory,
-                NFq::TYqSharedResources::Cast(yqSharedResources),
-                counters);
-            TActorId actorId = Runtime->Register(actor.release(), nodeIdx, userPoolId);
-            Runtime->RegisterService(NYql::NDq::MakeCheckpointStorageID(), actorId, nodeIdx);
         }
 
         {
@@ -1736,7 +1791,7 @@ namespace Tests {
     }
 
     void TServer::AddSysViewsRosterUpdateObserver() {
-        if (Runtime && !Runtime->IsRealThreads()) {
+        if (Runtime && !Runtime->IsRealThreads() && Settings->EnableStorage) {
             SysViewsRosterUpdateFinished = false;
             SysViewsRosterUpdateObserver = Runtime->AddObserver<NSysView::TEvSysView::TEvRosterUpdateFinished>([this](auto&) {
                 SysViewsRosterUpdateFinished = true;
@@ -1745,7 +1800,7 @@ namespace Tests {
     }
 
     void TServer::WaitForSysViewsRosterUpdate() {
-        if (Runtime && !Runtime->IsRealThreads()) {
+        if (Runtime && !Runtime->IsRealThreads() && Settings->EnableStorage) {
             Runtime->WaitFor("SysViewsRoster update finished", [this] {
                 return SysViewsRosterUpdateFinished;
             });
@@ -1775,11 +1830,6 @@ namespace Tests {
 
     const NMiniKQL::IFunctionRegistry* TServer::GetFunctionRegistry() {
         return Runtime->GetAppData().FunctionRegistry;
-    }
-
-    const NYdb::TDriver& TServer::GetDriver() const {
-        Y_ABORT_UNLESS(Driver);
-        return *Driver;
     }
 
     const NYdbGrpc::TGRpcServer& TServer::GetGRpcServer() const {
@@ -1814,15 +1864,31 @@ namespace Tests {
             YqSharedResources->Stop();
         }
 
+        if (Settings->FederatedQuerySetupFactory) {
+            Settings->FederatedQuerySetupFactory->Cleanup();
+        }
+
         if (Runtime) {
             WaitFinalization();
             SysViewsRosterUpdateObserver.Remove();
             Runtime.Destroy();
         }
 
+        if (FederatedQuerySetupDriver_) {
+            // Stop is inside a destruction proccess
+            // see MakeSharedYdbDriverWithStop
+            FederatedQuerySetupDriver_.reset();
+        }
+
         if (Bus) {
             Bus->Stop();
             Bus.Drop();
+        }
+
+        if (Driver) {
+            // Stop requests and wait for their completion
+            Driver->Stop(true);
+            Driver.Reset();
         }
     }
 
@@ -2127,8 +2193,11 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::AlterUserAttributes(const TString &parent, const TString &name, const TVector<std::pair<TString, TString>>& addAttrs, const TVector<TString>& dropAttrs, const TApplyIf& applyIf) {
+    NMsgBusProxy::EResponseStatus TClient::AlterUserAttributes(const TString &parent, const TString &name, const TVector<std::pair<TString, TString>>& addAttrs, const TVector<TString>& dropAttrs, const TApplyIf& applyIf, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        if (!userToken.empty()) {
+            request->Record.SetSecurityToken(userToken);
+        }
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetWorkingDir(parent);
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes);
@@ -2346,8 +2415,11 @@ namespace Tests {
         return event->Record;
     }
 
-    NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout) {
+    NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        if (!userToken.empty()) {
+            request->Record.SetSecurityToken(userToken);
+        }
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
         op->SetWorkingDir(parent);
@@ -2435,11 +2507,11 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const TString& scheme, TDuration timeout) {
+    NMsgBusProxy::EResponseStatus TClient::CreateTable(const TString& parent, const TString& scheme, TDuration timeout, const TString& userToken) {
         NKikimrSchemeOp::TTableDescription table;
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &table);
         UNIT_ASSERT(parseOk);
-        return CreateTable(parent, table, timeout);
+        return CreateTable(parent, table, timeout, userToken);
     }
 
     NMsgBusProxy::EResponseStatus TClient::CreateKesus(const TString& parent, const TString& name) {
@@ -2738,8 +2810,11 @@ namespace Tests {
         Y_ABORT_UNLESS(ev);
     }
 
-    NMsgBusProxy::EResponseStatus TClient::ModifyOwner(const TString& parent, const TString& name, const TString& owner) {
+    NMsgBusProxy::EResponseStatus TClient::ModifyOwner(const TString& parent, const TString& name, const TString& owner, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        if (!userToken.empty()) {
+            request->Record.SetSecurityToken(userToken);
+        }
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
         op->SetWorkingDir(parent);
@@ -2756,8 +2831,11 @@ namespace Tests {
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
-    NMsgBusProxy::EResponseStatus TClient::ModifyACL(const TString& parent, const TString& name, const TString& acl) {
+    NMsgBusProxy::EResponseStatus TClient::ModifyACL(const TString& parent, const TString& name, const TString& acl, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        if (!userToken.empty()) {
+            request->Record.SetSecurityToken(userToken);
+        }
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
         op->SetWorkingDir(parent);
@@ -3076,13 +3154,24 @@ namespace Tests {
         return FlatQuery(runtime, mkql, opts, result);
     }
 
-    TString TClient::SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TString query) {
+    template <typename... TArgs>
+    TString TClient::SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TArgs&&... args) {
         TActorId sender = runtime->AllocateEdgeActor(0);
-        ForwardToTablet(*runtime, tabletId, sender, new NActors::NMon::TEvRemoteHttpInfo(query), 0);
+        ForwardToTablet(*runtime, tabletId, sender, new NActors::NMon::TEvRemoteHttpInfo(args...), 0);
         TAutoPtr<IEventHandle> handle;
         // Timeout for DEBUG purposes only
-        runtime->GrabEdgeEvent<NMon::TEvRemoteJsonInfoRes>(handle);
-        TString res = handle->Get<NMon::TEvRemoteJsonInfoRes>()->Json;
+        runtime->GrabEdgeEvents<NMon::TEvRemoteJsonInfoRes, NMon::TEvRemoteBinaryInfoRes>(handle);
+        TString res;
+        switch (handle->GetTypeRewrite()) {
+            case NMon::RemoteJsonInfoRes:
+                res = handle->Get<NMon::TEvRemoteJsonInfoRes>()->Json;
+                break;
+            case NMon::RemoteBinaryInfoRes:
+                res = handle->Get<NMon::TEvRemoteBinaryInfoRes>()->Blob;
+                break;
+            default:
+                Y_FAIL("unreachable");
+        }
         Cerr << res << Endl;
         return res;
     }
@@ -3092,7 +3181,7 @@ namespace Tests {
         ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
         TInstant deadline = TInstant::Now() + TIMEOUT;
         while (TInstant::Now() <= deadline) {
-            TString res = SendTabletMonQuery(runtime, hive, TString("/app?page=SetDown&node=") + ToString(nodeId) + "&down=" + (up ? "0" : "1"));
+            TString res = SendTabletMonQuery(runtime, hive, TString("/app?page=SetDown&node=") + ToString(nodeId) + "&down=" + (up ? "0" : "1"), HTTP_METHOD_POST);
             if (!res.empty() && !res.Contains("Error"))
                 return res;
 
@@ -3104,7 +3193,7 @@ namespace Tests {
     TString TClient::KickNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx) {
         ui32 nodeId = runtime->GetNodeId(nodeIdx);
         ui64 hive = ChangeStateStorage(Tests::Hive, Domain);
-        return SendTabletMonQuery(runtime, hive, TString("/app?page=KickNode&node=") + ToString(nodeId));
+        return SendTabletMonQuery(runtime, hive, TString("/app?page=KickNode&node=") + ToString(nodeId), HTTP_METHOD_POST);
     }
 
     bool TClient::WaitForTabletAlive(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout) {
@@ -3458,6 +3547,75 @@ namespace Tests {
             Sleep(TDuration::MilliSeconds(100));
         }
         ythrow yexception() << "Waiting tenant status RUNNING timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout << ". Last tenant description:\n" << getTenantResult.DebugString();
+    }
+
+    void TTenants::RemoveTenant(Ydb::Cms::RemoveDatabaseRequest request, TDuration timeout) {
+        const TString path = request.path();
+        auto& runtime = *Server->GetRuntime();
+
+        // Check if serverless
+        bool isServerless = false;
+        {
+            auto getStatusRequest = std::make_unique<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
+            getStatusRequest->Record.MutableRequest()->set_path(path);
+            const TActorId edgeActor = runtime.AllocateEdgeActor();
+
+            runtime.SendToPipe(MakeConsoleID(), edgeActor, getStatusRequest.release(), 0, GetPipeConfigWithRetries());
+            auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvGetTenantStatusResponse>(edgeActor, timeout);
+
+            if (response && response->Get()->Record.GetResponse().operation().status() == Ydb::StatusIds::SUCCESS) {
+                Ydb::Cms::GetDatabaseStatusResult status;
+                response->Get()->Record.GetResponse().operation().result().UnpackTo(&status);
+                // Serverless if serverless_resources is set
+                isServerless = status.has_serverless_resources();
+            }
+        }
+
+        // Stop dedicated nodes
+        if (!isServerless) {
+            Stop(path);
+        }
+
+        // Remove
+        const auto result = NKikimr::NRpcService::DoLocalRpc<
+            NKikimr::NGRpcService::TGrpcRequestOperationCall<Ydb::Cms::RemoveDatabaseRequest, Ydb::Cms::RemoveDatabaseResponse>
+        >(std::move(request), "", "", runtime.GetActorSystem(0), true).ExtractValueSync();
+
+        if (result.operation().status() != Ydb::StatusIds::SUCCESS) {
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(result.operation().issues(), issues);
+            ythrow yexception() << "Failed to remove tenant " << path
+                << ", status: " << result.operation().status()
+                << ", reason:\n" << issues.ToString();
+        }
+
+        // Wait for NOT_FOUND
+        const TActorId edgeActor = runtime.AllocateEdgeActor();
+        const TInstant start = TInstant::Now();
+
+        while (TInstant::Now() - start <= timeout) {
+            auto getStatusRequest = std::make_unique<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
+            getStatusRequest->Record.MutableRequest()->set_path(path);
+
+            runtime.SendToPipe(MakeConsoleID(), edgeActor, getStatusRequest.release(), 0, GetPipeConfigWithRetries());
+
+            auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvGetTenantStatusResponse>(edgeActor, timeout);
+            if (response) {
+                auto status = response->Get()->Record.GetResponse().operation().status();
+                if (status == Ydb::StatusIds::NOT_FOUND) {
+                    return;
+                }
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+
+        ythrow yexception() << "Waiting tenant removal timeout for " << path;
+    }
+
+    void TTenants::RemoveTenant(const TString& path, TDuration timeout) {
+        Ydb::Cms::RemoveDatabaseRequest request;
+        request.set_path(path);
+        RemoveTenant(std::move(request), timeout);
     }
 
     TVector<ui32> &TTenants::Nodes(const TString &name) {

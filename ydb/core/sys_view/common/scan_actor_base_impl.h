@@ -29,10 +29,11 @@ public:
     using TBase = TActorBootstrapped<TDerived>;
 
     TScanActorBase(const NActors::TActorId& ownerId, ui32 scanId,
-        const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
         : OwnerActorId(ownerId)
         , ScanId(scanId)
+        , DatabaseName(database)
         , SysViewInfo(sysViewInfo)
         , TableRange(tableRange)
         , Columns(columns.begin(), columns.end())
@@ -89,16 +90,20 @@ protected:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, const TString& message) {
+        ReplyErrorAndDie(status, {NYql::TIssue(message)});
+    }
+
+    void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
         LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
             "Scan error, actor: " << TBase::SelfId()
                 << ", owner: " << OwnerActorId
                 << ", scan id: " << ScanId
                 << ", sys view info: " << SysViewInfo.ShortDebugString()
-                << ", error: " << message);
+                << ", issues: " << issues.ToOneLineString());
 
         auto error = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>();
         error->Record.SetStatus(status);
-        IssueToMessage(NYql::TIssue(message), error->Record.MutableIssues()->Add());
+        IssuesToMessage(issues, error->Record.MutableIssues());
 
         TBase::Send(OwnerActorId, error.Release());
 
@@ -227,7 +232,7 @@ private:
         ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "System view: tenant nodes lookup failed");
     }
 
-    void HandleScanAck(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr&) {
+    void HandleScanAck(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
         switch (FailState) {
             case LIMITER_FAILED:
                 ReplyLimiterFailedAndDie();
@@ -237,6 +242,7 @@ private:
                 break;
             default:
                 AckReceived = true;
+                FreeSpace = ev->Get()->FreeSpace;
                 break;
         }
     }
@@ -257,9 +263,10 @@ private:
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
         auto request = MakeHolder<TNavigate>();
+        request->DatabaseName = DatabaseName;
         request->ResultSet.push_back({});
-        auto& entry = request->ResultSet.back();
 
+        auto& entry = request->ResultSet.back();
         entry.TableId = TPathId::FromProto(SysViewInfo.GetSourceObject());
         entry.Operation = TNavigate::EOp::OpPath;
         entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
@@ -295,9 +302,9 @@ private:
             HiveId = AppData()->DomainsInfo->GetHive();
         }
 
+        TenantName = CanonizePath(entry.Path);
         DomainKey = entry.DomainInfo->DomainKey;
 
-        TenantName = CanonizePath(entry.Path);
         DatabaseOwner = entry.Self->Info.GetOwner();
         Y_ABORT_UNLESS(entry.Self->Info.GetOwner() == entry.SecurityObject->GetOwnerSID());
 
@@ -328,6 +335,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScanAck);
             hFunc(TEvSysView::TEvGetScanLimiterResult, HandleLimiter);
+            hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, this->PassAway);
             default:
@@ -367,7 +375,10 @@ protected:
 
     const NActors::TActorId OwnerActorId;
     const ui32 ScanId;
+
+    const TString DatabaseName;
     const NKikimrSysView::TSysViewDescription SysViewInfo;
+
     TSerializedTableRange TableRange;
     TSmallVec<NMiniKQL::TKqpComputeContextBase::TColumn> Columns;
 
@@ -380,6 +391,7 @@ protected:
     ui64 SysViewProcessorId = 0;
 
     bool AckReceived = false;
+    ui64 FreeSpace = 0;
 
     bool BatchRequestInFlight = false;
     bool DoPipeCacheUnlink = false;
@@ -394,6 +406,40 @@ protected:
     } FailState = OK;
 };
 
+template <typename TDerived>
+class TScanActorWithoutBackPressure : public TScanActorBase<TDerived> {
+    using TBase = TScanActorBase<TDerived>;
+
+public:
+    using TBase::TBase;
+
+protected:
+    // Should scan all data inside call
+    virtual void StartScan() = 0;
+
+    void HandleAck() {
+        TBase::AckReceived = true;
+        DoScan();
+    }
+
+    void ProceedToScan() final {
+        TBase::Become(&TDerived::StateScan);
+        if (TBase::AckReceived) {
+            DoScan();
+        }
+    }
+
+private:
+    void DoScan() {
+        if (!ScanStarted) {
+            ScanStarted = true;
+            StartScan();
+        }
+    }
+
+private:
+    bool ScanStarted = false;
+};
 
 } // NSysView
 } // NKikimr

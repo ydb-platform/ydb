@@ -160,7 +160,8 @@ TString TTxMonitoring::RenderMainPage() {
         }
     }
 
-    html << "<h3><a href=\"app?Compaction=true&TabletID=" << cgi.Get("TabletID") << "\"> Compaction </a></h3>";
+    html << "<h3><a href=\"app?page=compaction&TabletID=" << cgi.Get("TabletID") << "\"> Compaction </a></h3>";
+    html << "<h3><a href=\"app?page=scan&TabletID=" << cgi.Get("TabletID") << "\"> Scan </a></h3>";
 
     html << "<h3>Tiering Errors</h3>";
     auto readErrors = Self->Counters.GetEvictionCounters().TieringErrors->GetAllReadErrors();
@@ -193,7 +194,7 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
     auto path = HttpInfoEvent->Get()->PathInfo();
     TString htmlResult;
 
-    if (cgi.Has("Compaction") && cgi.Get("Compaction") == "true") {
+    if (cgi.Has("page") && cgi.Get("page") == "compaction") {
         htmlResult = RenderCompactionPage();
     } else {
         htmlResult = RenderMainPage();
@@ -207,6 +208,12 @@ bool TColumnShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
     }
 
     if (!ev) {
+        return true;
+    }
+
+    auto cgi = ev->Get()->Cgi();
+    if (cgi.Has("page") && cgi.Get("page") == "scan") {
+        Send(ev->Forward(ScanDiagnosticsActorId));
         return true;
     }
 

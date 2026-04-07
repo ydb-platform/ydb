@@ -9,9 +9,11 @@ SRCS(
     kqp_opt_phase.cpp
     kqp_opt_phy_check.cpp
     kqp_opt_phy_finalize.cpp
+    kqp_opt_sink_precompute.cpp
     kqp_query_blocks_transformer.cpp
     kqp_query_plan.cpp
     kqp_statistics_transformer.cpp
+    kqp_column_statistics_utils.cpp
     kqp_column_statistics_requester.cpp
     kqp_constant_folding_transformer.cpp
     kqp_opt_hash_func_propagate_transformer.cpp
@@ -20,6 +22,8 @@ SRCS(
 
 PEERDIR(
     ydb/core/kqp/common
+    ydb/core/kqp/opt/cbo
+    ydb/core/kqp/opt/cbo/solver
     ydb/core/kqp/opt/logical
     ydb/core/kqp/opt/peephole
     ydb/core/kqp/opt/physical
@@ -39,3 +43,7 @@ YQL_LAST_ABI_VERSION()
 GENERATE_ENUM_SERIALIZATION(kqp_query_plan.h)
 
 END()
+
+RECURSE(
+    cbo
+)

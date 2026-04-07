@@ -420,7 +420,7 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvVCheckReadiness::TPtr& ev, const TActorContext& ctx) {
-        ctx.Send(ev->Sender, new TEvBlobStorage::TEvVCheckReadinessResult(NKikimrProto::OK), 0, ev->Cookie);
+        ctx.Send(ev->Sender, new TEvBlobStorage::TEvVCheckReadinessResult(NKikimrProto::OK, false), 0, ev->Cookie);
     }
 
     void Handle(TEvVMockCtlRequest::TPtr& ev, const TActorContext& ctx) {

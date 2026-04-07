@@ -185,7 +185,7 @@ class PaginatorModel:
 
 
 class PageIterator:
-    """An iterable object to pagiante API results.
+    """An iterable object to paginate API results.
     Please note it is NOT a python iterator.
     Use ``iter`` to wrap this as a generator.
     """

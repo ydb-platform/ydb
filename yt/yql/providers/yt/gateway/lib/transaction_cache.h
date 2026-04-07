@@ -39,6 +39,7 @@ public:
         NYT::ITransactionPtr ExternalTx;
         NYT::IClientBasePtr CacheTx;
         NYT::TTransactionId CacheTxId;
+        NYT::ITransactionPtr DumpTx;
         TDuration CacheTtl;
         THashMap<NYT::TTransactionId, NYT::ITransactionPtr> SnapshotTxs;
         THashMap<NYT::TTransactionId, NYT::ITransactionPtr> WriteTxs;
@@ -51,10 +52,13 @@ public:
         NYT::TNode TransactionSpec;
         THashMap<TString, TString> BinarySnapshots; // remote path -> snapshot path
         NYT::ITransactionPtr BinarySnapshotTx;
+        NYT::ITransactionPtr LayersSnapshotTx;
         THashMap<TString, NYT::ITransactionPtr> CheckpointTxs;
         TString DefaultTmpFolder;
         THashMap<std::tuple<TString, TString, TString>, std::vector<NYT::TRichYPath>> RangeCache;
         THashMap<TString, std::pair<std::vector<TString>, std::vector<std::exception_ptr>>> PartialRangeCache;
+
+        THashMap<TString, NYT::TNode> SchemasBySchemaId;
 
         using TFolderCache = THashMap<TString, std::vector<std::tuple<TString, TString, NYT::TNode>>>;
         TFolderCache FolderCache;
@@ -83,7 +87,7 @@ public:
         }
 
         void RemoveInternal(const TString& table);
-        void Finalize(const TString& clusterName);
+        void Finalize(const TString& clusterName, bool commitDumpTx = false);
 
         template<typename T>
         T AssumeAsDeletedAtFinalize(const T& range) {
@@ -136,6 +140,8 @@ public:
 
         std::pair<TString, NYT::TTransactionId> GetBinarySnapshot(TString remoteTmpFolder, const TString& md5, const TString& localPath, TDuration expirationInterval);
         TMaybe<std::pair<TString, NYT::TTransactionId>> GetBinarySnapshotFromCache(TString binaryCacheFolder, const TString& md5, const TString& fileName);
+        TVector<std::pair<TString, ui64>> GetLayersSnapshot(const TVector<TString>& paths);
+
 
         enum class ECacheStatus {
             Hit,
@@ -167,11 +173,11 @@ public:
     TTransactionCache(const TString& userName);
 
     TEntry::TPtr GetEntry(const TString& server);
-    TEntry::TPtr GetOrCreateEntry(const TString& cluster, const TString& server, const TString& token, const TMaybe<TString>& impersonationUser, const TSpecProvider& specProvider, const TYtSettings::TConstPtr& config, IMetricsRegistryPtr metrics);
+    TEntry::TPtr GetOrCreateEntry(const TString& cluster, const TString& server, const TString& token, const TMaybe<TString>& impersonationUser, const TSpecProvider& specProvider, const TYtSettings::TConstPtr& config, IMetricsRegistryPtr metrics, bool createDumpTx = false);
     TEntry::TPtr TryGetEntry(const TString& server);
 
     void Commit(const TString& server);
-    void Finalize();
+    void Finalize(bool commitDumpTxs = false);
     void AbortAll();
     void DetachSnapshotTxs();
 

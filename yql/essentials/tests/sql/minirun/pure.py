@@ -6,7 +6,7 @@ import yql_utils
 
 import yatest.common
 from yql_utils import execute, get_tables, get_files, get_http_files, \
-    KSV_ATTR, yql_binary_path, is_xfail, is_canonize_peephole, is_peephole_use_blocks, is_canonize_lineage, \
+    KSV_ATTR, yql_binary_path, is_xfail, is_xsqlfail, is_canonize_peephole, is_peephole_use_blocks, is_canonize_lineage, \
     is_skip_forceblocks, get_param, normalize_source_code_path, replace_vals, get_gateway_cfg_suffix, \
     do_custom_query_check, stable_result_file, stable_table_file, is_with_final_result_issues, \
     normalize_result, get_langver
@@ -28,6 +28,9 @@ def mode_expander(lst):
         res.append((suite, case, cfg, 'Debug'))
         res.append((suite, case, cfg, 'RunOnOpt'))
         res.append((suite, case, cfg, 'LLVM'))
+        res.append((suite, case, cfg, 'PartialTypeCheck'))
+        # TODO(YQL-20436): Enable when it is working well
+        # res.append((suite, case, cfg, 'AutoYqlSelect'))
         if suite == 'blocks':
             res.append((suite, case, cfg, 'Blocks'))
             res.append((suite, case, cfg, 'Peephole'))
@@ -44,11 +47,15 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if langver is None:
         langver = DEFAULT_LANG_VER
 
-    xfail = is_xfail(config)
+    program_sql = get_case_file(DATA_PATH, suite, case)
+
+    if is_xsqlfail(config, program_sql):
+        pytest.skip('xsqlfail is not supported in this mode')
+
+    xfail = is_xfail(config, program_sql)
     if xfail and what != 'Results':
         pytest.skip('xfail is not supported in this mode')
 
-    program_sql = get_case_file(DATA_PATH, suite, case)
     with codecs.open(program_sql, encoding='utf-8') as program_file_descr:
         sql_query = program_file_descr.read()
 
@@ -57,7 +64,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
         extra_final_args += ['--with-final-issues']
     (res, tables_res) = run_file('pure', suite, case, cfg, config, yql_http_file_server, MINIRUN_PATH,
                                  extra_args=extra_final_args, allow_llvm=False, data_path=DATA_PATH,
-                                 langver=langver)
+                                 langver=langver, fuzz_universal=True)
 
     to_canonize = []
     assert xfail or os.path.exists(res.results_file)
@@ -92,10 +99,12 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if what == 'Debug':
         to_canonize = [yatest.common.canonical_file(res.opt_file, diff_tool=ASTDIFF_PATH)]
 
-    if what == 'RunOnOpt' or what == 'LLVM' or what == 'Blocks':
+    if what == 'RunOnOpt' or what == 'LLVM' or what == 'Blocks' or what == 'AutoYqlSelect' or what == 'PartialTypeCheck':
         is_on_opt = (what == 'RunOnOpt')
         is_llvm = (what == 'LLVM')
         is_blocks = (what == 'Blocks')
+        is_yql_select = (what == 'AutoYqlSelect')
+        is_typecheck = (what == 'PartialTypeCheck')
         files = get_files(suite, config, DATA_PATH)
         http_files = get_http_files(suite, config, DATA_PATH)
         http_files_urls = yql_http_file_server.register_files({}, http_files)
@@ -105,10 +114,17 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
         yqlrun = YQLRun(
             prov='pure',
             keep_temp=False,
-            gateway_config=get_gateways_config(http_files, yql_http_file_server, allow_llvm=is_llvm, force_blocks=is_blocks),
+            gateway_config=get_gateways_config(
+                http_files,
+                yql_http_file_server,
+                allow_llvm=is_llvm,
+                force_blocks=is_blocks,
+                is_yql_select=is_yql_select,
+            ),
             udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps'),
             binary=MINIRUN_PATH,
-            langver=langver
+            langver=langver,
+            extra_args=["--compile-only","--test-partial-typecheck"] if is_typecheck else []
         )
 
         opt_res, opt_tables_res = execute(
@@ -120,6 +136,9 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
             check_error=True,
             verbose=True,
             parameters=parameters)
+
+        if is_typecheck:
+            return None
 
         assert os.path.exists(opt_res.results_file)
         assert not opt_tables_res

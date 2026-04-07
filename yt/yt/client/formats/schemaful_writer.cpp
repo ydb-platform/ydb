@@ -106,7 +106,7 @@ bool TSchemafulWriter::Write(TRange<TUnversionedRow> rows)
     Consumer_->Flush();
     auto buffer = Buffer_.Flush();
     Result_ = Stream_->Write(buffer);
-    return Result_.IsSet() && Result_.Get().IsOK();
+    return Result_.IsSet() && Result_.GetOrCrash().IsOK();
 }
 
 TFuture<void> TSchemafulWriter::GetReadyEvent()
@@ -114,7 +114,7 @@ TFuture<void> TSchemafulWriter::GetReadyEvent()
     return Result_;
 }
 
-std::optional<TMD5Hash> TSchemafulWriter::GetDigest() const
+std::optional<TRowsDigest> TSchemafulWriter::GetDigest() const
 {
     return std::nullopt;
 }

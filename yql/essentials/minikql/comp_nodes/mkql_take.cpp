@@ -1,6 +1,6 @@
 #include "mkql_take.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
@@ -8,12 +8,16 @@ namespace NMiniKQL {
 
 namespace {
 
-class TTakeFlowWrapper : public TStatefulFlowCodegeneratorNode<TTakeFlowWrapper> {
-using TBaseComputation = TStatefulFlowCodegeneratorNode<TTakeFlowWrapper>;
+class TTakeFlowWrapper: public TStatefulFlowCodegeneratorNode<TTakeFlowWrapper> {
+    using TBaseComputation = TStatefulFlowCodegeneratorNode<TTakeFlowWrapper>;
+
 public:
-     TTakeFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* flow, IComputationNode* count)
-        : TBaseComputation(mutables, flow, kind, EValueRepresentation::Embedded), Flow(flow), Count(count)
-    {}
+    TTakeFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* flow, IComputationNode* count)
+        : TBaseComputation(mutables, flow, kind, EValueRepresentation::Embedded)
+        , Flow(flow)
+        , Count(count)
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsInvalid()) {
@@ -87,22 +91,27 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOn(Flow))
+        if (const auto flow = FlowDependsOn(Flow)) {
             DependsOn(flow, Count);
+        }
     }
 
     IComputationNode* const Flow;
     IComputationNode* const Count;
 };
 
-class TWideTakeWrapper : public TStatefulWideFlowCodegeneratorNode<TWideTakeWrapper> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideTakeWrapper>;
-public:
-     TWideTakeWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded), Flow(flow), Count(count)
-    {}
+class TWideTakeWrapper: public TStatefulWideFlowCodegeneratorNode<TWideTakeWrapper> {
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideTakeWrapper>;
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+public:
+    TWideTakeWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
+        , Flow(flow)
+        , Count(count)
+    {
+    }
+
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (state.IsInvalid()) {
             state = Count->GetValue(ctx);
         }
@@ -175,18 +184,20 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOn(Flow))
+        if (const auto flow = FlowDependsOn(Flow)) {
             DependsOn(flow, Count);
+        }
     }
 
     IComputationWideFlowNode* const Flow;
     IComputationNode* const Count;
 };
 
-class TTakeStreamWrapper : public TMutableComputationNode<TTakeStreamWrapper> {
+class TTakeStreamWrapper: public TMutableComputationNode<TTakeStreamWrapper> {
     typedef TMutableComputationNode<TTakeStreamWrapper> TBaseComputation;
+
 public:
-    class TStreamValue : public TComputationValue<TStreamValue> {
+    class TStreamValue: public TComputationValue<TStreamValue> {
     public:
         using TBase = TComputationValue<TStreamValue>;
 
@@ -195,7 +206,8 @@ public:
             , Input_(std::move(input))
             , Count_(count)
             , Index_(0)
-        {}
+        {
+        }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
@@ -238,8 +250,9 @@ private:
     IComputationNode* const Count;
 };
 
-class TTakeWrapper : public TMutableCodegeneratorNode<TTakeWrapper> {
+class TTakeWrapper: public TMutableCodegeneratorNode<TTakeWrapper> {
     typedef TMutableCodegeneratorNode<TTakeWrapper> TBaseComputation;
+
 public:
     TTakeWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationNode* count)
         : TBaseComputation(mutables, list->GetRepresentation())
@@ -259,16 +272,11 @@ public:
         const auto factory = ctx.GetFactory();
         const auto builder = ctx.GetBuilder();
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::TakeList>());
-
         const auto list = GetNodeValue(List, ctx, block);
         const auto cnt = GetNodeValue(Count, ctx, block);
         const auto count = GetterFor<ui64>(cnt, context, block);
 
-        const auto funType = FunctionType::get(list->getType(), {factory->getType(), builder->getType(), list->getType(), count->getType()}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-        const auto result = CallInst::Create(funType, funcPtr, {factory, builder, list, count}, "result", block);
-        return result;
+        return EmitFunctionCall<&THolderFactory::TakeList>(list->getType(), {factory, builder, list, count}, ctx, block);
     }
 #endif
 private:
@@ -281,7 +289,7 @@ private:
     IComputationNode* const Count;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapTake(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
@@ -290,10 +298,11 @@ IComputationNode* WrapTake(TCallable& callable, const TComputationNodeFactoryCon
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0);
     const auto count = LocateNode(ctx.NodeLocator, callable, 1);
     if (type->IsFlow()) {
-        if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow))
+        if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
             return new TWideTakeWrapper(ctx.Mutables, wide, count);
-        else
+        } else {
             return new TTakeFlowWrapper(ctx.Mutables, GetValueRepresentation(type), flow, count);
+        }
     } else if (type->IsStream()) {
         return new TTakeStreamWrapper(ctx.Mutables, flow, count);
     } else if (type->IsList()) {
@@ -303,5 +312,5 @@ IComputationNode* WrapTake(TCallable& callable, const TComputationNodeFactoryCon
     THROW yexception() << "Expected flow, list or stream.";
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

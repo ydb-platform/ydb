@@ -183,7 +183,7 @@ private:
                                    keyTo,
                                    valueColumns,
                                    0,
-                                   RowsLimit, BytesLimit);
+                                   RowsLimit, BytesLimit).Ready;
         return ready;
     }
 

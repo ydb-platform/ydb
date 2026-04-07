@@ -13,15 +13,14 @@ class TReadContext;
 
 class TPartialSourceAddress {
 private:
-    YDB_READONLY(ui32, SourceId, 0);
     YDB_READONLY(ui32, SourceIdx, 0);
     YDB_READONLY(ui32, SyncPointIndex, 0);
 
 public:
-    TPartialSourceAddress(const ui32 sourceId, const ui32 sourceIdx, const ui32 syncPointIndex)
-        : SourceId(sourceId)
-        , SourceIdx(sourceIdx)
-        , SyncPointIndex(syncPointIndex) {
+    TPartialSourceAddress(const ui32 sourceIdx, const ui32 syncPointIndex)
+        : SourceIdx(sourceIdx)
+        , SyncPointIndex(syncPointIndex)
+    {
     }
 };
 

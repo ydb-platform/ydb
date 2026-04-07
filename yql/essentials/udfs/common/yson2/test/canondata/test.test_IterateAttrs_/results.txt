@@ -1,0 +1,177 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "ListType";
+                                    [
+                                        "TupleType";
+                                        [
+                                            [
+                                                "DataType";
+                                                "Utf8"
+                                            ];
+                                            [
+                                                "OptionalType";
+                                                [
+                                                    "DataType";
+                                                    "String"
+                                                ]
+                                            ];
+                                            [
+                                                "OptionalType";
+                                                [
+                                                    "DataType";
+                                                    "Yson"
+                                                ]
+                                            ];
+                                            [
+                                                "OptionalType";
+                                                [
+                                                    "DataType";
+                                                    "Yson"
+                                                ]
+                                            ];
+                                            [
+                                                "OptionalType";
+                                                [
+                                                    "DataType";
+                                                    "Yson"
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            [
+                                "PreValue";
+                                #;
+                                [
+                                    {
+                                        "$attributes" = {
+                                            "a" = {
+                                                "$type" = "int64";
+                                                "$value" = "1"
+                                            };
+                                            "b" = {
+                                                "$type" = "double";
+                                                "$value" = "3"
+                                            }
+                                        };
+                                        "$type" = "string";
+                                        "$value" = "foo"
+                                    }
+                                ];
+                                #;
+                                #
+                            ];
+                            [
+                                "BeginAttributes";
+                                #;
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "Key";
+                                [
+                                    "a"
+                                ];
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "Value";
+                                #;
+                                #;
+                                [
+                                    {
+                                        "$type" = "int64";
+                                        "$value" = "1"
+                                    }
+                                ];
+                                #
+                            ];
+                            [
+                                "Key";
+                                [
+                                    "b"
+                                ];
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "Value";
+                                #;
+                                #;
+                                [
+                                    {
+                                        "$type" = "double";
+                                        "$value" = "3"
+                                    }
+                                ];
+                                #
+                            ];
+                            [
+                                "EndAttributes";
+                                #;
+                                #;
+                                #;
+                                #
+                            ];
+                            [
+                                "Value";
+                                #;
+                                #;
+                                [
+                                    {
+                                        "$type" = "string";
+                                        "$value" = "foo"
+                                    }
+                                ];
+                                #
+                            ];
+                            [
+                                "PostValue";
+                                #;
+                                #;
+                                #;
+                                [
+                                    {
+                                        "$attributes" = {
+                                            "a" = {
+                                                "$type" = "int64";
+                                                "$value" = "1"
+                                            };
+                                            "b" = {
+                                                "$type" = "double";
+                                                "$value" = "3"
+                                            }
+                                        };
+                                        "$type" = "string";
+                                        "$value" = "foo"
+                                    }
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

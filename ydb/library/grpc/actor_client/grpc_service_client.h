@@ -86,7 +86,7 @@ public:
 
         const TRequestType& request = ev->Get()->Request;
         NYdbGrpc::TCallMeta meta;
-        meta.Timeout = Config.Timeout;
+        meta.Timeout = Config.Timeout ? NYdb::TDeadline::SafeDurationCast(Config.Timeout) : NYdb::TDeadline::Duration::max();
         if (auto token = ev->Get()->Token) {
             if (!AsciiHasPrefixIgnoreCase(token, "Bearer "sv)) {
                 token = "Bearer " + token;
@@ -133,6 +133,9 @@ public:
         config.IntChannelParams[GRPC_ARG_HTTP2_MAX_PINGS_WITHOUT_DATA] = 0;
         config.IntChannelParams[GRPC_ARG_HTTP2_MIN_SENT_PING_INTERVAL_WITHOUT_DATA_MS] = settings.GrpcKeepAlivePingInterval;
         config.IntChannelParams[GRPC_ARG_HTTP2_MIN_RECV_PING_INTERVAL_WITHOUT_DATA_MS] = settings.GrpcKeepAlivePingInterval;
+        if (!settings.SslTargetNameOverride.empty()) {
+            config.SslTargetNameOverride = settings.SslTargetNameOverride;
+        }
         return config;
     }
 

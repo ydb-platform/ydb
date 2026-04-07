@@ -18,6 +18,7 @@ struct TEvKafka {
     enum EEv {
         EvRequest = EventSpaceBegin(NKikimr::TKikimrEvents::TKikimrEvents::ES_KAFKA),
         EvProduceRequest,
+        EvAuthRequest,
         EvAuthResult,
         EvHandshakeResult,
         EvWakeup,
@@ -40,6 +41,12 @@ struct TEvKafka {
         EvTxnOffsetCommitRequest,
         EvEndTxnRequest,
         EvTransactionActorDied,
+        EvGetCountersRequest,
+        EvGetCountersResponse,
+        EvFetchRequest,
+        EvFetchActorStateRequest,
+        EvFetchActorStateResponse,
+        EvMtlsAuthRequest,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -100,6 +107,29 @@ struct TEvKafka {
         const TMessagePtr<THeartbeatRequestData> Request;
     };
 
+    struct TEvFetchRequest : public TEventLocal<TEvFetchRequest, EvFetchRequest> {
+        TEvFetchRequest(const ui64 correlationId, const TMessagePtr<TFetchRequestData>& request)
+        : CorrelationId(correlationId)
+        , Request(request)
+        {}
+
+        ui64 CorrelationId;
+        const TMessagePtr<TFetchRequestData> Request;
+    };
+
+    // For tests only
+    struct TEvFetchActorStateRequest : public TEventLocal<TEvFetchActorStateRequest, EvFetchActorStateRequest> {
+    };
+
+    // For tests only
+    struct TEvFetchActorStateResponse : public TEventLocal<TEvFetchActorStateResponse, EvFetchActorStateResponse> {
+        TEvFetchActorStateResponse(std::unordered_map<TActorId, size_t> topicIndexes)
+        : TopicIndexes(std::move(topicIndexes))
+        {}
+
+        std::unordered_map<TActorId, size_t> TopicIndexes;
+    };
+
     struct TEvResponse : public TEventLocal<TEvResponse, EvResponse> {
         TEvResponse(const ui64 correlationId, const TApiMessage::TPtr response, EKafkaErrors errorCode)
             : CorrelationId(correlationId)
@@ -110,6 +140,26 @@ struct TEvKafka {
         const ui64 CorrelationId;
         const TApiMessage::TPtr Response;
         const EKafkaErrors ErrorCode;
+    };
+
+    struct TEvAuthRequest : public TEventLocal<TEvAuthRequest, EvAuthRequest> {
+        TEvAuthRequest(const ui64 correlationId, const TMessagePtr<TSaslAuthenticateRequestData>& request)
+            : CorrelationId(correlationId)
+            , Request(request)
+        {
+        }
+
+        ui64 CorrelationId;
+        const TMessagePtr<TSaslAuthenticateRequestData> Request;
+    };
+
+    struct TEvMtlsAuthRequest : public TEventLocal<TEvMtlsAuthRequest, EvMtlsAuthRequest> {
+        TEvMtlsAuthRequest(const TString& clientCertificate)
+            : ClientCertificate(clientCertificate)
+        {
+        }
+
+        const TString ClientCertificate;
     };
 
     struct TEvAuthResult : public TEventLocal<TEvAuthResult, EvAuthResult> {
@@ -388,7 +438,7 @@ struct TEvSaveTxnProducerResponse : public NActors::TEventLocal<TEvSaveTxnProduc
 
     TEvSaveTxnProducerResponse(EStatus status, const TString& message) :
         Status(status),
-        Message(std::move(message))
+        Message(message)
     {}
 
     EStatus Status;
@@ -404,6 +454,20 @@ struct TEvTransactionActorDied : public NActors::TEventLocal<TEvTransactionActor
     const TString TransactionalId;
     const TProducerInstanceId ProducerState;
 };
+
+// Only for tests
+struct TEvGetCountersRequest : public NActors::TEventLocal<TEvGetCountersRequest, EvGetCountersRequest> {
+};
+
+// Only for tests
+struct TEvGetCountersResponse : public NActors::TEventLocal<TEvGetCountersResponse, EvGetCountersResponse> {
+    TEvGetCountersResponse(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) :
+        Counters(counters)
+    {}
+
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
+};
+
 }; // struct TEvKafka
 
 } // namespace NKafka

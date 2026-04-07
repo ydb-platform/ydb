@@ -3,6 +3,7 @@
 #include "datashard_s3_download.h"
 #include "datashard_s3_upload.h"
 
+#include <ydb/core/tablet_flat/util_basics.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/message_seqno.h>
@@ -135,8 +136,10 @@ namespace NDataShard {
             // Operation was blocked and is waiting for explicit unblock
             BlockFailPointWaiting = 1ULL << 48,
             BlockFailPointUnblocked = 1ULL << 49,
+            // Operation sent a TEvProposeTransactionRestart notification
+            RestartNotificationSent = 1ULL << 50,
 
-            LastFlag = BlockFailPointUnblocked,
+            LastFlag = RestartNotificationSent,
 
             PrivateFlagsMask = 0xFFFFFFFFFFFF0000ULL,
             PreservedPrivateFlagsMask = ReadOnly | ProposeBlocker | NeedDiagnostics | GlobalReader
@@ -151,7 +154,6 @@ namespace NDataShard {
 
     // NOTE: this switch should be modified only in tests !!!
     extern bool gAllowLogBatchingDefaultValue;
-    extern TDuration gDbStatsReportInterval;
     extern ui64 gDbStatsDataSizeResolution;
     extern ui64 gDbStatsRowCountResolution;
     extern ui32 gDbStatsHistogramBucketsCount;
@@ -355,6 +357,9 @@ namespace TEvDataShard {
         EvPrefixKMeansRequest,
         EvPrefixKMeansResponse,
 
+        EvFilterKMeansRequest,
+        EvFilterKMeansResponse,
+
         EvRecomputeKMeansRequest,
         EvRecomputeKMeansResponse,
 
@@ -364,6 +369,17 @@ namespace TEvDataShard {
         EvValidateUniqueIndexResponse,
 
         EvIncrementalRestoreResponse,
+
+        EvBuildFulltextIndexRequest,
+        EvBuildFulltextIndexResponse,
+
+        EvAsyncJobComplete,
+
+        EvBuildFulltextDictRequest,
+        EvBuildFulltextDictResponse,
+
+        EvValidateRowConditionRequest,
+        EvValidateRowConditionResponse,
 
         EvEnd
     };
@@ -904,6 +920,10 @@ namespace TEvDataShard {
                                                         TEvDataShard::EvUploadRowsRequest,
                                                         16*1024, 32*1024> {
         TEvUploadRowsRequest() = default;
+
+        TString GetUserSID() const {
+            return Record.GetUserSID();
+        }
     };
 
     struct TEvUploadRowsResponse : public TEventPB<TEvUploadRowsResponse,
@@ -914,6 +934,15 @@ namespace TEvDataShard {
         explicit TEvUploadRowsResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) {
             Record.SetTabletID(tabletId);
             Record.SetStatus(status);
+        }
+
+        bool IsRetriableError() const {
+            Y_ASSERT(Record.GetStatus() != NKikimrTxDataShard::TError::OK);
+            return
+                Record.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE // = Ydb::StatusIds::OVERLOADED
+                || Record.GetStatus() == NKikimrTxDataShard::TError::SHARD_IS_BLOCKED // = Ydb::StatusIds::OVERLOADED
+                || Record.GetStatus() == NKikimrTxDataShard::TError::SCHEME_CHANGED // Ydb::StatusIds::GENERIC_ERROR
+            ;
         }
     };
 
@@ -1031,22 +1060,14 @@ namespace TEvDataShard {
         // CellVec (TODO: add schema?)
 
         TConstArrayRef<TCell> GetCells(size_t row) const {
-            if (Rows.empty() && Batch.Empty() && RowsSerialized.empty())
+            if (Batch.Empty() && RowsSerialized.empty())
                 return {};
-
-            if (!Rows.empty()) {
-                return Rows[row];
-            }
 
             if (!Batch.Empty()) {
                 return Batch[row];
             }
 
             return RowsSerialized[row].GetCells();
-        }
-
-        void SetRows(TVector<TOwnedCellVec>&& rows) {
-            Rows = std::move(rows);
         }
 
         void SetBatch(TOwnedCellVecBatch&& batch) {
@@ -1062,10 +1083,9 @@ namespace TEvDataShard {
         std::shared_ptr<arrow::RecordBatch> GetArrowBatch();
         std::shared_ptr<arrow::RecordBatch> GetArrowBatch() const;
 
-    private:
-        // for local events
-        TVector<TOwnedCellVec> Rows;
+        size_t GetDataSizeEstimate() const;
 
+    private:
         // batch for local events
         TOwnedCellVecBatch Batch;
 
@@ -1410,6 +1430,10 @@ namespace TEvDataShard {
             Y_ENSURE(Info.DataETag);
         }
 
+        TString GetUserSID() const {
+            return ""; // S3 import doesn't generates CDC at all (see TTxS3UploadRows constructor)
+        }
+
         TString ToString() const override {
             return TStringBuilder() << ToStringHeader() << " {"
                 << " TxId: " << TxId
@@ -1429,12 +1453,28 @@ namespace TEvDataShard {
             Record.SetStatus(status);
         }
 
+        TEvS3UploadRowsResponse() {}
+
+        bool IsRetriableError() const {
+            return TEvUploadRowsResponse(Record.GetTabletID(), Record.GetStatus())
+                .IsRetriableError();
+        }
+
         TString ToString() const override {
             return TStringBuilder() << ToStringHeader() << " {"
                 << " Record: " << Record.ShortDebugString()
                 << " Info: " << Info
             << " }";
         }
+    };
+
+    struct TEvAsyncJobComplete : public TEventLocal<TEvAsyncJobComplete, TEvDataShard::EvAsyncJobComplete> {
+        explicit TEvAsyncJobComplete(TAutoPtr<IDestructable> prod)
+            : Prod(prod)
+        {
+        }
+
+        TAutoPtr<IDestructable> Prod;
     };
 
     struct TEvObjectStorageListingRequest
@@ -1558,13 +1598,49 @@ namespace TEvDataShard {
                           TEvDataShard::EvPrefixKMeansResponse> {
     };
 
+    struct TEvFilterKMeansRequest
+        : public TEventPB<TEvFilterKMeansRequest,
+                          NKikimrTxDataShard::TEvFilterKMeansRequest,
+                          TEvDataShard::EvFilterKMeansRequest> {
+    };
+
+    struct TEvFilterKMeansResponse
+        : public TEventPB<TEvFilterKMeansResponse,
+                          NKikimrTxDataShard::TEvFilterKMeansResponse,
+                          TEvDataShard::EvFilterKMeansResponse> {
+    };
+
+    struct TEvBuildFulltextIndexRequest
+        : public TEventPB<TEvBuildFulltextIndexRequest,
+                          NKikimrTxDataShard::TEvBuildFulltextIndexRequest,
+                          TEvDataShard::EvBuildFulltextIndexRequest> {
+    };
+
+    struct TEvBuildFulltextIndexResponse
+        : public TEventPB<TEvBuildFulltextIndexResponse,
+                          NKikimrTxDataShard::TEvBuildFulltextIndexResponse,
+                          TEvDataShard::EvBuildFulltextIndexResponse> {
+    };
+
+    struct TEvBuildFulltextDictRequest
+        : public TEventPB<TEvBuildFulltextDictRequest,
+                          NKikimrTxDataShard::TEvBuildFulltextDictRequest,
+                          TEvDataShard::EvBuildFulltextDictRequest> {
+    };
+
+    struct TEvBuildFulltextDictResponse
+        : public TEventPB<TEvBuildFulltextDictResponse,
+                          NKikimrTxDataShard::TEvBuildFulltextDictResponse,
+                          TEvDataShard::EvBuildFulltextDictResponse> {
+    };
+
     struct TEvIncrementalRestoreResponse
         : public TEventPB<TEvIncrementalRestoreResponse,
                           NKikimrTxDataShard::TEvIncrementalRestoreResponse,
                           TEvDataShard::EvIncrementalRestoreResponse> {
         TEvIncrementalRestoreResponse() = default;
-        
-        TEvIncrementalRestoreResponse(ui64 txId, ui64 tableId, ui64 operationId, ui32 incrementalIdx, 
+
+        TEvIncrementalRestoreResponse(ui64 txId, ui64 tableId, ui64 operationId, ui32 incrementalIdx,
                                      NKikimrTxDataShard::TEvIncrementalRestoreResponse::Status status, const TString& errorMessage = "") {
             Record.SetTxId(txId);
             Record.SetTableId(tableId);
@@ -1575,8 +1651,8 @@ namespace TEvDataShard {
                 Record.SetErrorMessage(errorMessage);
             }
         }
-        
-        TEvIncrementalRestoreResponse(ui64 txId, ui64 tableId, ui64 operationId, ui32 incrementalIdx, 
+
+        TEvIncrementalRestoreResponse(ui64 txId, ui64 tableId, ui64 operationId, ui32 incrementalIdx,
                                      NKikimrTxDataShard::TEvIncrementalRestoreResponse::Status status, ui64 processedRows, ui64 processedBytes,
                                      const TString& lastProcessedKey = "", const TString& errorMessage = "") {
             Record.SetTxId(txId);
@@ -1912,6 +1988,20 @@ namespace TEvDataShard {
         : public TEventPB<TEvValidateUniqueIndexResponse,
                           NKikimrTxDataShard::TEvValidateUniqueIndexResponse,
                           TEvDataShard::EvValidateUniqueIndexResponse>
+    {
+    };
+
+    struct TEvValidateRowConditionRequest
+        : public TEventPB<TEvValidateRowConditionRequest,
+                          NKikimrTxDataShard::TEvValidateRowConditionRequest,
+                          TEvDataShard::EvValidateRowConditionRequest>
+    {
+    };
+
+    struct TEvValidateRowConditionResponse
+        : public TEventPB<TEvValidateRowConditionResponse,
+                          NKikimrTxDataShard::TEvValidateRowConditionResponse,
+                          TEvDataShard::EvValidateRowConditionResponse>
     {
     };
 };

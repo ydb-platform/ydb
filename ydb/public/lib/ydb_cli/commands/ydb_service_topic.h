@@ -3,7 +3,7 @@
 #include "ydb_command.h"
 #include "ydb_common.h"
 
-#include <ydb/public/lib/ydb_cli/common/interruptible.h>
+#include <ydb/public/lib/ydb_cli/common/interruptable.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_read.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
@@ -14,6 +14,7 @@ namespace NYdb::NConsoleClient {
     TVector<NTopic::ECodec> InitAllowedCodecs();
     const TVector<NTopic::ECodec> AllowedCodecs = InitAllowedCodecs();
     std::function<void(const TString& opt)> TimestampOptionHandler(TMaybe<TInstant>* destination); // parses timestamp in the following formats: unix time, ISO-8601
+    ui32 ParsePartitionPerTabletValue(TStringBuf s);
 
     class TCommandWithSupportedCodecs {
     protected:
@@ -36,6 +37,15 @@ namespace NYdb::NConsoleClient {
     private:
         TString MeteringModeStr_;
         NTopic::EMeteringMode MeteringMode_ = NTopic::EMeteringMode::Unspecified;
+    };
+
+    class TCommandWithMetricsLevel {
+    protected:
+        void AddMetricsLevels(TClientCommand::TConfig& config);
+        TMaybe<NTopic::EMetricsLevel> GetMetricsLevel() const;
+
+    private:
+        TMaybe<NTopic::EMetricsLevel> MetricsLevel_;
     };
 
     class TCommandWithAutoPartitioning {
@@ -61,7 +71,12 @@ namespace NYdb::NConsoleClient {
         TCommandTopic();
     };
 
-    class TCommandTopicCreate: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs, public TCommandWithMeteringMode, public TCommandWithAutoPartitioning {
+    class TCommandTopicCreate: public TYdbCommand,
+                               public TCommandWithTopicName,
+                               public TCommandWithSupportedCodecs,
+                               public TCommandWithMeteringMode,
+                               public TCommandWithAutoPartitioning,
+                               public TCommandWithMetricsLevel {
     public:
         TCommandTopicCreate();
         void Config(TConfig& config) override;
@@ -69,15 +84,21 @@ namespace NYdb::NConsoleClient {
         int Run(TConfig& config) override;
 
     private:
-        ui64 RetentionPeriodHours_;
+        TDuration RetentionPeriod_ = TDuration::Hours(24);
         ui64 RetentionStorageMb_;
         ui32 MinActivePartitions_;
         TMaybe<ui32> MaxActivePartitions_;
         ui32 PartitionWriteSpeedKbps_;
         TMaybe<ui32> PartitionsPerTablet_;
+        TMaybe<NTopic::EMetricsLevel> MetricsLevel_;
     };
 
-    class TCommandTopicAlter: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs, public TCommandWithMeteringMode, public TCommandWithAutoPartitioning {
+    class TCommandTopicAlter: public TYdbCommand,
+                              public TCommandWithTopicName,
+                              public TCommandWithSupportedCodecs,
+                              public TCommandWithMeteringMode,
+                              public TCommandWithAutoPartitioning,
+                              public TCommandWithMetricsLevel {
     public:
         TCommandTopicAlter();
         void Config(TConfig& config) override;
@@ -85,13 +106,17 @@ namespace NYdb::NConsoleClient {
         int Run(TConfig& config) override;
 
     private:
-        TMaybe<ui64> RetentionPeriodHours_;
+        TMaybe<TDuration> RetentionPeriod_;
         TMaybe<ui64> RetentionStorageMb_;
         TMaybe<ui32> MinActivePartitions_;
         TMaybe<ui32> MaxActivePartitions_;
-
-
         TMaybe<ui32> PartitionWriteSpeedKbps_;
+        TMaybe<bool> KeepMessagesOrder_;
+        TMaybe<TDuration> DefaultProcessingTimeout_;
+        TMaybe<ui32> DlqMaxProcessingAttempts_;
+        TMaybe<bool> DlqEnabled_;
+        TMaybe<TString> DlqQueueName_;
+        bool ContentBasedDeduplication_ = false;
 
         NYdb::NTopic::TAlterTopicSettings PrepareAlterSettings(NYdb::NTopic::TDescribeTopicResult& describeResult);
     };
@@ -122,9 +147,19 @@ namespace NYdb::NConsoleClient {
         int Run(TConfig& config) override;
 
     private:
+        void ValidateConsumerOptions(const TMaybe<NTopic::EConsumerType>& consumerType);
+
         TString ConsumerName_;
         bool IsImportant_;
+        TMaybe<TDuration> AvailabilityPeriod_;
         TMaybe<TInstant> StartingMessageTimestamp_;
+        TString ConsumerType_;
+        TMaybe<bool> KeepMessagesOrder_;
+        TMaybe<TDuration> DefaultProcessingTimeout_;
+        TMaybe<ui32> MaxProcessingAttempts_;
+        TMaybe<TString> DlqQueueName_;
+        TMaybe<TDuration> ReceiveMessageWaitTime_;
+        TMaybe<TDuration> ReceiveMessageDelay_;
     };
 
     class TCommandTopicConsumerDrop: public TYdbCommand, public TCommandWithTopicName {
@@ -180,7 +215,7 @@ namespace NYdb::NConsoleClient {
 
     class TCommandTopicRead: public TYdbCommand,
                              public TCommandWithMessagingFormat,
-                             public TInterruptibleCommand,
+                             public TInterruptableCommand,
                              public TCommandWithTopicName,
                              public TCommandWithTransformBody {
     public:
@@ -192,7 +227,7 @@ namespace NYdb::NConsoleClient {
     private:
         TString Consumer_ = "";
         TVector<ui64> PartitionIds_;
-        TMaybe<uint32_t> Offset_;
+        TMaybe<uint64_t> Offset_;
         TMaybe<uint32_t> Partition_;
         TMaybe<TInstant> Timestamp_;
         TMaybe<TString> File_;
@@ -238,7 +273,7 @@ namespace NYdb::NConsoleClient {
 
     class TCommandTopicWrite: public TYdbCommand,
                               public TCommandWithMessagingFormat,
-                              public TInterruptibleCommand,
+                              public TInterruptableCommand,
                               public TCommandWithTopicName,
                               public TCommandWithCodec,
                               public TCommandWithTransformBody {
@@ -258,6 +293,7 @@ namespace NYdb::NConsoleClient {
         TMaybe<ui64> BatchSize_;
         TMaybe<ui64> BatchMessagesCount_;
         TMaybe<TString> MessageGroupId_;
+        TMaybe<ui32> PartitionId_;
         TMaybe<TDuration> MessagesWaitTimeout_;
 
         ui64 MessageSizeLimit_ = 0;

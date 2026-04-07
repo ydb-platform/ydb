@@ -88,7 +88,7 @@ SELECT 0.0 / 0.0;
 
 ### Comparison operators {#comparison-operators}
 
-The operators `=`, `==`, `!=`, `<>`, `>`, `<` are defined for:
+The operators `=`, `==`, `!=`, `<>`, `>`, `<`, `>=`, `<=` are defined for:
 
 * Primitive data types except Yson and Json.
 * Tuples and structures with the same set of fields. No order is defined for structures, but you can check for (non-)equality. Tuples are compared element-by-element left to right.
@@ -395,7 +395,6 @@ An attempt to reference an anonymous named expression results in an error:
 ```yql
 $_ = 1;
 select $_; --- error: Unable to reference anonymous name $_
-export $_; --- An error: Can not export anonymous name $_
 ```
 
 {% if feature_mapreduce %}

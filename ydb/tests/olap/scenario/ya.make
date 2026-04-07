@@ -7,7 +7,6 @@ PY3TEST()
     FORK_TESTS()
 
     TEST_SRCS(
-        test_alter_compression.py
         test_alter_tiering.py
         test_insert.py
         test_read_update_write_load.py
@@ -15,7 +14,7 @@ PY3TEST()
         test_simple.py
     )
 
-    INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
     DEPENDS(
         )
 
@@ -27,6 +26,7 @@ PY3TEST()
         contrib/python/boto3
         contrib/python/moto
         contrib/python/requests
+        library/python/port_manager
         library/python/testing/yatest_common
         library/recipes/common
         ydb/public/sdk/python
@@ -38,5 +38,10 @@ PY3TEST()
     )
 
     SIZE(MEDIUM)
+    IF (SANITIZER_TYPE)
+        REQUIREMENTS(cpu:4)
+    ELSE()
+        REQUIREMENTS(cpu:2)
+    ENDIF()
 
 END()

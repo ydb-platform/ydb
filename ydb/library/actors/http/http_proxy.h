@@ -1,12 +1,13 @@
 #pragma once
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/actors/interconnect/poller_actor.h>
+#include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <library/cpp/dns/cache.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <util/generic/variant.h>
@@ -15,6 +16,8 @@
 #include "http_proxy_ssl.h"
 
 namespace NHttp {
+
+using namespace NActors;
 
 const ui32 DEFAULT_MAX_RECYCLED_REQUESTS_COUNT = 1000;
 
@@ -58,6 +61,7 @@ struct TEvHttpProxy {
         EvHttpOutgoingDataChunk,
         EvSubscribeForCancel,
         EvRequestCancelled,
+        EvHttpOutgoingResponseProgress,
         EvEnd
     };
 
@@ -71,6 +75,7 @@ struct TEvHttpProxy {
         TString CertificateFile;
         TString PrivateKeyFile;
         TString SslCertificatePem;
+        TString CaFile;
         std::vector<TString> CompressContentTypes;
         ui32 MaxRequestsPerSecond = 0;
         ui32 MaxRecycledRequestsCount = DEFAULT_MAX_RECYCLED_REQUESTS_COUNT;
@@ -178,9 +183,14 @@ struct TEvHttpProxy {
             , Response(std::move(response))
         {}
     };
-
+    
     struct TEvHttpOutgoingResponse : NActors::TEventLocal<TEvHttpOutgoingResponse, EvHttpOutgoingResponse> {
         THttpOutgoingResponsePtr Response;
+        ui64 ProgressNotificationBytes = 0;
+        // If set to a non-zero value, enables progress notifications.
+        // Progress notifications will be sent approximately every N bytes (where N is this value).
+        // Notifications are sent to the sender of the TEvHttpOutgoingResponse event with the original cookie.
+        // The field value of 0 (default) disables progress notifications.
 
         TEvHttpOutgoingResponse(THttpOutgoingResponsePtr response)
             : Response(std::move(response))
@@ -197,6 +207,16 @@ struct TEvHttpProxy {
 
         TEvHttpOutgoingDataChunk(const TString& error)
             : Error(error)
+        {}
+    };
+
+    struct TEvHttpOutgoingResponseProgress : NActors::TEventLocal<TEvHttpOutgoingResponseProgress, EvHttpOutgoingResponseProgress> {
+        ui64 Bytes = 0;
+        ui64 DataChunks = 0;
+
+        TEvHttpOutgoingResponseProgress(ui64 bytes, ui64 dataChunks)
+            : Bytes(bytes)
+            , DataChunks(dataChunks)
         {}
     };
 

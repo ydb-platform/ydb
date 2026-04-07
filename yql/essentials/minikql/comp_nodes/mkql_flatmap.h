@@ -8,6 +8,5 @@ IComputationNode* WrapFlatMap(TCallable& callable, const TComputationNodeFactory
 
 IComputationNode* WrapNarrowFlatMap(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

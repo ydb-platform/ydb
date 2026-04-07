@@ -146,7 +146,7 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvPut::TPtr &ev) {
-        if (IsLimitedKeyless) {
+        if (IsLimitedKeyless && !ev->Get()->AlreadyEncrypted) {
             ErrorDescription = "Created as LIMITED without keys. It happens when tenant keys are missing on the node.";
             HandleError(ev);
             return;
@@ -206,18 +206,19 @@ namespace NKikimr {
                 !BatchedPutIds.contains(ev->Get()->Id)) {
             NKikimrBlobStorage::EPutHandleClass handleClass = ev->Get()->HandleClass;
             TEvBlobStorage::TEvPut::ETactic tactic = ev->Get()->Tactic;
+            const bool reduceInterpileTraffic = ev->Get()->ReduceInterpileTraffic;
             Y_ABORT_UNLESS((ui64)handleClass <= PutHandleClassCount);
             Y_ABORT_UNLESS(tactic <= PutTacticCount);
 
-            TBatchedPutQueue &batchedPuts = BatchedPuts[handleClass][tactic];
+            TBatchedPutQueue &batchedPuts = BatchedPuts[handleClass][tactic][reduceInterpileTraffic];
             if (batchedPuts.Queue.empty()) {
-                PutBatchedBucketQueue.emplace_back(handleClass, tactic);
+                PutBatchedBucketQueue.emplace_back(handleClass, tactic, reduceInterpileTraffic);
             }
 
             if (batchedPuts.Queue.size() == MaxBatchedPutRequests || batchedPuts.Bytes + partSize > MaxBatchedPutSize) {
                 *Mon->PutsSentViaPutBatching += batchedPuts.Queue.size();
                 ++*Mon->PutBatchesSent;
-                ProcessBatchedPutRequests(batchedPuts, handleClass, tactic);
+                ProcessBatchedPutRequests(batchedPuts, handleClass, tactic, reduceInterpileTraffic);
             }
 
             BatchedPutIds.insert(ev->Get()->Id);
@@ -245,12 +246,14 @@ namespace NKikimr {
                         .ExecutionRelay = ev->Get()->ExecutionRelay,
                         .LatencyQueueKind = kind,
                         .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
+                        .ExternalRelevanceWatcher = ev->Get()->ExternalRelevanceWatcher,
                     },
                     .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
                     .Stats = PerDiskStats,
                     .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
                     .AccelerationParams = GetAccelerationParams(),
                     .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(now)),
+                    .MaxTimeout = TDuration::Seconds(Controls.MaxPutTimeoutSeconds.Update(now)),
                 }),
                 ev->Get()->Deadline
             );
@@ -502,7 +505,7 @@ namespace NKikimr {
                     .ForceGroupGeneration = ev->Get()->ForceGroupGeneration,
                 }
             }),
-            TInstant::Max()
+            ev->Get()->Deadline
         );
     }
 
@@ -551,7 +554,8 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::ProcessBatchedPutRequests(TBatchedPutQueue &batchedPuts,
-            NKikimrBlobStorage::EPutHandleClass handleClass, TEvBlobStorage::TEvPut::ETactic tactic) {
+            NKikimrBlobStorage::EPutHandleClass handleClass, TEvBlobStorage::TEvPut::ETactic tactic,
+            bool reduceInterpileTraffic) {
         TMaybe<TGroupStat::EKind> kind = PutHandleClassToGroupStatKind(handleClass);
 
         for (auto& ev : batchedPuts.Queue) {
@@ -563,6 +567,7 @@ namespace NKikimr {
             if (CurrentStateFunc() == &TThis::StateWork) {
                 TAppData *app = NKikimr::AppData(TActivationContext::AsActorContext());
                 bool enableRequestMod3x3ForMinLatency = app->FeatureFlags.GetEnable3x3RequestsForMirror3DCMinLatencyPut();
+                TInstant now = TActivationContext::Now();
                 // TODO(alexvru): MinLatency support
                 auto process = [&](std::optional<ui32> forceGroupGeneration, TBatchedPutQueue& batch) {
                     if (batch.Queue.size() == 1) {
@@ -583,12 +588,14 @@ namespace NKikimr {
                                     .ExecutionRelay = ev->Get()->ExecutionRelay,
                                     .LatencyQueueKind = kind,
                                     .ForceGroupGeneration = forceGroupGeneration,
+                                    .ExternalRelevanceWatcher = ev->Get()->ExternalRelevanceWatcher,
                                 },
                                 .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
                                 .Stats = PerDiskStats,
                                 .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
                                 .AccelerationParams = GetAccelerationParams(),
-                                .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(TActivationContext::Now())),
+                                .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(now)),
+                                .MaxTimeout = TDuration::Seconds(Controls.MaxPutTimeoutSeconds.Update(now)),
                             }),
                             ev->Get()->Deadline
                         );
@@ -612,7 +619,9 @@ namespace NKikimr {
                                 .Tactic = tactic,
                                 .EnableRequestMod3x3ForMinLatency = enableRequestMod3x3ForMinLatency,
                                 .AccelerationParams = GetAccelerationParams(),
-                                .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(TActivationContext::Now())),
+                                .LongRequestThreshold = TDuration::MilliSeconds(Controls.LongRequestThresholdMs.Update(now)),
+                                .MaxTimeout = TDuration::Seconds(Controls.MaxPutTimeoutSeconds.Update(now)),
+                                .ReduceInterpileTraffic = reduceInterpileTraffic,
                             }),
                             TInstant::Max()
                         );
@@ -664,11 +673,11 @@ namespace NKikimr {
     void TBlobStorageGroupProxy::Handle(TEvStopBatchingPutRequests::TPtr& ev) {
         StopPutBatchingEvent = ev;
         for (auto &bucket : PutBatchedBucketQueue) {
-            auto &batchedPuts = BatchedPuts[bucket.HandleClass][bucket.Tactic];
+            auto &batchedPuts = BatchedPuts[bucket.HandleClass][bucket.Tactic][bucket.ReduceInterpileTraffic];
             Y_ABORT_UNLESS(!batchedPuts.Queue.empty());
             *Mon->PutsSentViaPutBatching += batchedPuts.Queue.size();
             ++*Mon->PutBatchesSent;
-            ProcessBatchedPutRequests(batchedPuts, bucket.HandleClass, bucket.Tactic);
+            ProcessBatchedPutRequests(batchedPuts, bucket.HandleClass, bucket.Tactic, bucket.ReduceInterpileTraffic);
         }
         PutBatchedBucketQueue.clear();
         ++*Mon->EventStopPutBatching;
@@ -918,7 +927,13 @@ namespace NKikimr {
         // ensure that we are dying for the first time
         Y_ABORT_UNLESS(!std::exchange(Dead, true));
         GetActiveCounter()->Dec();
-        SendToProxy(std::make_unique<TEvDeathNote>(Responsiveness));
+        if (DoSendDeathNote) {
+            SendToProxy(std::make_unique<TEvDeathNote>(Responsiveness));
+        }
+        for (auto& [nodeId, sessionId] : NodeSubscriptions) {
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0,
+                sessionId ?: TActivationContext::InterconnectProxy(nodeId), SelfId(), nullptr, 0));
+        }
         TActor::PassAway();
     }
 
@@ -1058,7 +1073,7 @@ namespace NKikimr {
 
             if constexpr (!std::is_same_v<T, TEvBlobStorage::TEvVStatus> &&
                     !std::is_same_v<T, TEvBlobStorage::TEvVAssimilate>) {
-                ev.MessageRelevanceTracker = MessageRelevanceTracker;
+                ev.MessageRelevanceTracker = TMessageRelevance(RelevanceOwner, ExternalRelevanceWatcher);
                 ui64 cost;
                 if constexpr (std::is_same_v<T, TEvBlobStorage::TEvVMultiPut>) {
                     bool internalQueue;
@@ -1122,6 +1137,14 @@ namespace NKikimr {
         return true;
     }
 
+    bool TBlobStorageGroupRequestActor::CheckForExternalCancellation() {
+        if (ExternalRelevanceWatcher && ExternalRelevanceWatcher->expired()) {
+            ReplyAndDie(NKikimrProto::ERROR);
+            return true;
+        }
+        return false;
+    }
+
     void TBlobStorageGroupProxy::Handle(TEvGetQueuesInfo::TPtr ev) {
         ui32 groupSize = Info->GetTotalVDisksNum();
         std::unique_ptr<TEvQueuesInfo> res = std::make_unique<TEvQueuesInfo>(groupSize);
@@ -1135,6 +1158,11 @@ namespace NKikimr {
             }
         }
         TActivationContext::Send(ev->Sender, std::move(res));
+    }
+
+    void TBlobStorageGroupProxy::Handle(TEvExplicitMultiPut::TPtr ev) {
+        IActor *reqActor = CreateBlobStorageGroupPutRequest(std::move(ev->Get()->Parameters));
+        TActivationContext::Register(reqActor);
     }
 
 } // NKikimr

@@ -1,7 +1,22 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+
+#include <util/generic/hash_set.h>
 #include <util/system/compiler.h>
 
 Y_UNIT_TEST_SUITE(SelfHeal) {
+    void ChangeDiskStatus(TEnvironmentSetup& env, TPDiskId pdiskId, NKikimrBlobStorage::EDriveStatus status,
+            NKikimrBlobStorage::TMaintenanceStatus::E maintenanceStatus) {
+        NKikimrBlobStorage::TConfigRequest request;
+        auto* cmd = request.AddCommand()->MutableUpdateDriveStatus();
+        cmd->MutableHostKey()->SetNodeId(pdiskId.NodeId);
+        cmd->SetPDiskId(pdiskId.PDiskId);
+        cmd->SetStatus(status);
+        cmd->SetMaintenanceStatus(maintenanceStatus);
+        auto res = env.Invoke(request);
+        UNIT_ASSERT_C(res.GetSuccess(), res.GetErrorDescription());
+        UNIT_ASSERT_C(res.GetStatus(0).GetSuccess(), res.GetStatus(0).GetErrorDescription());
+    }
+
     void TestReassignThrottling() {
         const TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureMirror3dc;
         const ui32 groupsCount = 32;
@@ -11,7 +26,7 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
             .Erasure = erasure,
         });
 
-        // create 2 pdisks per node to allow self-healings and 
+        // create 2 pdisks per node to allow self-healings and
         // allocate groups
         env.CreateBoxAndPool(2, groupsCount);
         env.Sim(TDuration::Minutes(1));
@@ -23,7 +38,7 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
 
         std::set<TActorId> reassignersInFlight;
 
-        auto catchReassigns = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) { 
+        auto catchReassigns = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
                 const auto& request = ev->Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record.GetRequest();
                 for (const auto& command : request.GetCommand()) {
@@ -46,16 +61,8 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
 
         auto pdisk = base.GetPDisk(0);
         // set FAULTY status on the chosen PDisk
-        {
-            NKikimrBlobStorage::TConfigRequest request;
-            auto* cmd = request.AddCommand()->MutableUpdateDriveStatus();
-            cmd->MutableHostKey()->SetNodeId(pdisk.GetNodeId());
-            cmd->SetPDiskId(pdisk.GetPDiskId());
-            cmd->SetStatus(NKikimrBlobStorage::FAULTY);
-            auto res = env.Invoke(request);
-            UNIT_ASSERT_C(res.GetSuccess(), res.GetErrorDescription());
-            UNIT_ASSERT_C(res.GetStatus(0).GetSuccess(), res.GetStatus(0).GetErrorDescription());
-        }
+        ChangeDiskStatus(env, { pdisk.GetNodeId(), pdisk.GetPDiskId() }, NKikimrBlobStorage::EDriveStatus::FAULTY,
+            NKikimrBlobStorage::TMaintenanceStatus::NOT_SET);
 
         env.Sim(TDuration::Minutes(15));
 
@@ -141,19 +148,11 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
                 orderNumberToPDiskId[orderNumber] = pdiskId;
                 pdiskIdToOrderNumber[pdiskId] = orderNumber;
             }
-    
+
             for (ui32 orderNumber = 0; orderNumber < groupSize; ++orderNumber) {
                 TPDiskId pdiskId = orderNumberToPDiskId[orderNumber];
                 TPDiskStatus pdiskStatus = pdisks[orderNumber];
-                NKikimrBlobStorage::TConfigRequest request;
-                auto* cmd = request.AddCommand()->MutableUpdateDriveStatus();
-                cmd->MutableHostKey()->SetNodeId(pdiskId.NodeId);
-                cmd->SetPDiskId(pdiskId.PDiskId);
-                cmd->SetStatus(pdiskStatus.DriveStatus);
-                cmd->SetMaintenanceStatus(pdiskStatus.MaintenanceStatus);
-                auto res = env.Invoke(request);
-                UNIT_ASSERT_C(res.GetSuccess(), res.GetErrorDescription());
-                UNIT_ASSERT_C(res.GetStatus(0).GetSuccess(), res.GetStatus(0).GetErrorDescription());
+                ChangeDiskStatus(env, pdiskId, pdiskStatus.DriveStatus, pdiskStatus.MaintenanceStatus);
             }
         };
 
@@ -176,7 +175,7 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
         }
 
         env.UpdateSettings(true, true, false); // enable self-heal
-        env.Sim(TDuration::Minutes(180));
+        env.Sim(TDuration::Seconds(180));
 
         base = env.FetchBaseConfig();
         updateMapping(base);
@@ -232,5 +231,264 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
             UNIT_ASSERT_C(maintenanceStatus == NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST,
                     "Got MaintenanceStatus# " << NKikimrBlobStorage::TMaintenanceStatus::E_Name(maintenanceStatus));
         }
+    }
+
+    Y_UNIT_TEST(MaintenanceStatusNoNewAllocations) {
+        const TBlobStorageGroupType erasure = TBlobStorageGroupType::Erasure4Plus2Block;
+        TEnvironmentSetup env({
+            .NodeCount = erasure.BlobSubgroupSize() + 1,
+            .Erasure = erasure,
+        });
+
+        env.CreateBoxAndPool(1, 1);
+
+        env.UpdateSettings(false, true, false); // disable self-heal
+
+        // set PDisk (9,1000) to ACTIVE + NO_NEW_VDISKS
+        ChangeDiskStatus(env, { 9, 1000 }, NKikimrBlobStorage::EDriveStatus::ACTIVE, NKikimrBlobStorage::TMaintenanceStatus::NO_NEW_VDISKS);
+
+        // set PDisk (1,1000) to ACTIVE + LONG_TERM_MAINTENANCE_PLANNED
+        ChangeDiskStatus(env, { 1, 1000 }, NKikimrBlobStorage::EDriveStatus::ACTIVE, NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED);
+
+        TActorId reassigner;
+        bool reassignSeen = false;
+        bool seenReassignFailure = false;
+
+        auto catchReassigns = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (seenReassignFailure) {
+                return true;
+            }
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
+                const auto& request = ev->Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record.GetRequest();
+                for (const auto& command : request.GetCommand()) {
+                    if (command.GetCommandCase() == NKikimrBlobStorage::TConfigRequest::TCommand::kReassignGroupDisk) {
+                        reassignSeen = true;
+                        reassigner = ev->Sender;
+                    }
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigResponse::EventType) {
+                if (ev->Recipient != reassigner) {
+                    return true;
+                }
+                const auto& response = ev->Get<TEvBlobStorage::TEvControllerConfigResponse>()->Record.GetResponse();
+                auto& status = response.GetStatus(0);
+                bool succeeded = status.GetSuccess();
+                UNIT_ASSERT_C(!succeeded, "Reassign was expected to fail");
+                seenReassignFailure = true;
+            }
+            return true;
+        };
+
+        auto prevFn = env.Runtime->FilterFunction;
+        env.Runtime->FilterFunction = catchReassigns;
+
+        env.UpdateSettings(true, true, false); // enable self-heal
+        env.Sim(TDuration::Seconds(30));
+
+        {
+            auto base = env.FetchBaseConfig();
+            UNIT_ASSERT_VALUES_EQUAL(base.GroupSize(), 1);
+
+            auto& group = base.GetGroup(0);
+
+            bool diskNotMoved = false;
+
+            for (auto& slot : group.GetVSlotId()) {
+                TPDiskId pdiskId = { slot.GetNodeId(), slot.GetPDiskId() };
+                if (pdiskId == TPDiskId{9, 1000}) {
+                    UNIT_ASSERT_C(false, "Expected PDisk (9,1000) to be excluded from group");
+                }
+                if (pdiskId == TPDiskId{1, 1000}) {
+                    diskNotMoved = true;
+                }
+            }
+            UNIT_ASSERT_C(reassignSeen, "Expected to see reassign request");
+            UNIT_ASSERT_C(seenReassignFailure, "Expected to see reassign failure");
+            UNIT_ASSERT_C(diskNotMoved, "Expected PDisk (1,1000) to not be excluded from group");
+        }
+
+        env.Runtime->FilterFunction = prevFn;
+
+        // set PDisk (9,1000) to ACTIVE + NO_REQUEST
+        ChangeDiskStatus(env, { 9, 1000 }, NKikimrBlobStorage::EDriveStatus::ACTIVE, NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST);
+
+        env.Sim(TDuration::Seconds(30));
+
+        {
+            auto base = env.FetchBaseConfig();
+            UNIT_ASSERT_VALUES_EQUAL(base.GroupSize(), 1);
+
+            auto& group = base.GetGroup(0);
+
+            bool diskMoved = false;
+
+            for (auto& slot : group.GetVSlotId()) {
+                TPDiskId pdiskId = { slot.GetNodeId(), slot.GetPDiskId() };
+                if (pdiskId == TPDiskId{9, 1000}) {
+                    diskMoved = true;
+                    break;
+                }
+            }
+
+            UNIT_ASSERT_C(diskMoved, "Expected PDisk (9,1000) to be included into group");
+        }
+    }
+
+    Y_UNIT_TEST(SelfHealParameters) {
+        const TBlobStorageGroupType erasure = TBlobStorageGroupType::Erasure4Plus2Block;
+        TEnvironmentSetup env({
+            .NodeCount = erasure.BlobSubgroupSize() + 1,
+            .Erasure = erasure,
+            .ConfigPreprocessor = [](ui32, TNodeWardenConfig& conf) {
+                auto* bscSettings = conf.BlobStorageConfig.MutableBscSettings();
+                auto* selfHealSettings = bscSettings->MutableSelfHealSettings();
+
+                selfHealSettings->SetPreferLessOccupiedRack(true);
+                selfHealSettings->SetWithAttentionToReplication(true);
+            },
+        });
+
+        env.CreateBoxAndPool(1, 1);
+
+        env.UpdateSettings(false, true, false); // disable self-heal
+
+        ChangeDiskStatus(env, { 1, 1000 }, NKikimrBlobStorage::EDriveStatus::ACTIVE, NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED);
+
+        bool seenParameters = false;
+
+        auto catchReassigns = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
+                const auto& request = ev->Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record.GetRequest();
+                for (const auto& command : request.GetCommand()) {
+                    if (command.GetCommandCase() == NKikimrBlobStorage::TConfigRequest::TCommand::kReassignGroupDisk) {
+                        auto& reassignCommand = command.GetReassignGroupDisk();
+                        if (reassignCommand.GetPreferLessOccupiedRack() && reassignCommand.GetWithAttentionToReplication()) {
+                            seenParameters = true;
+                        }
+                    }
+                }
+            }
+            return true;
+        };
+
+        env.Runtime->FilterFunction = catchReassigns;
+
+        env.UpdateSettings(true, true, false); // enable self-heal
+        env.Sim(TDuration::Seconds(30));
+
+        UNIT_ASSERT(seenParameters);
+    }
+
+    TPDiskId GetPDiskIdByVDisk(TEnvironmentSetup& env, ui32 groupId, ui32 ring, ui32 domain, ui32 vdisk) {
+        auto base = env.FetchBaseConfig();
+        UNIT_ASSERT_VALUES_EQUAL(base.GroupSize(), 1);
+
+        for (const auto& slot : base.GetVSlot()) {
+            if (slot.GetGroupId() != groupId) {
+                continue;
+            }
+            ui32 curRing = slot.GetFailRealmIdx();
+            ui32 curDomain = slot.GetFailDomainIdx();
+            ui32 curVDisk = slot.GetVDiskIdx();
+            if (curRing == ring && curDomain == domain && curVDisk == vdisk) {
+                return { slot.GetVSlotId().GetNodeId(), slot.GetVSlotId().GetPDiskId() };
+            }
+        }
+
+        UNIT_FAIL("PDisk for VDisk not found");
+        return {};
+    }
+
+    auto MakeCatchDiskStatuses = [](ui32 groupId, const THashSet<ui32>& phantomOnlyDomains,
+                                    const THashSet<ui32>& faultyDomains) {
+        return [=](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerUpdateDiskStatus::EventType) {
+                auto* vdiskStatuses = ev->Get<TEvBlobStorage::TEvControllerUpdateDiskStatus>()->Record.MutableVDiskStatus();
+
+                for (auto& status : *vdiskStatuses) {
+                    auto& vdiskId = status.GetVDiskId();
+
+                    if (vdiskId.GetGroupID() != groupId) {
+                        continue;
+                    }
+
+                    const ui32 ring = vdiskId.GetRing();
+                    const ui32 domain = vdiskId.GetDomain();
+                    const ui32 vdisk = vdiskId.GetVDisk();
+
+                    if (ring != 0 || vdisk != 0) {
+                        continue;
+                    }
+
+                    if (phantomOnlyDomains.contains(domain)) {
+                        // this VDisk is REPLICATING with only phantom blobs remaining
+                        status.SetOnlyPhantomsRemain(true);
+                        status.SetStatus(NKikimrBlobStorage::EVDiskStatus::REPLICATING);
+                    } else if (faultyDomains.contains(domain)) {
+                        // this VDisk's PDisk is FAULTY, so it doesn't report its status
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+    };
+
+    Y_UNIT_TEST(SelfHealOnlyPhantom) {
+        const TBlobStorageGroupType erasure = TBlobStorageGroupType::Erasure4Plus2Block;
+        TEnvironmentSetup env({
+            .NodeCount = erasure.BlobSubgroupSize() + 1,
+            .Erasure = erasure,
+        });
+
+        env.CreateBoxAndPool(1, 1);
+
+        env.UpdateSettings(false, true, false); // disable self-heal
+
+        const ui32 groupId = env.GetGroups().at(0);
+
+        TPDiskId originalPDiskId = GetPDiskIdByVDisk(env, groupId, 0, 1, 0);
+
+        ChangeDiskStatus(env, originalPDiskId, NKikimrBlobStorage::EDriveStatus::FAULTY, NKikimrBlobStorage::TMaintenanceStatus::NOT_SET);
+
+        env.Runtime->FilterFunction = MakeCatchDiskStatuses(groupId, /*phantomOnlyDomains=*/{0}, /*faultyDomains=*/{1});
+
+        env.UpdateSettings(true, true, false); // enable self-heal
+        env.Sim(TDuration::Seconds(30));
+
+        TPDiskId newPDiskId = GetPDiskIdByVDisk(env, groupId, 0, 1, 0);
+
+        UNIT_ASSERT_C(newPDiskId != originalPDiskId, "Expected VDisk (0, 1, 0) to be moved");
+    }
+
+    Y_UNIT_TEST(SelfHealWithTwoFailedDisksAndOnePhantomOnly) {
+        const TBlobStorageGroupType erasure = TBlobStorageGroupType::Erasure4Plus2Block;
+        TEnvironmentSetup env({
+            .NodeCount = erasure.BlobSubgroupSize() + 1,
+            .Erasure = erasure,
+        });
+
+        env.CreateBoxAndPool(1, 1);
+
+        env.UpdateSettings(false, true, false); // disable self-heal
+
+        const ui32 groupId = env.GetGroups().at(0);
+
+        TPDiskId originalPDiskId1 = GetPDiskIdByVDisk(env, groupId, 0, 1, 0);
+        TPDiskId originalPDiskId2 = GetPDiskIdByVDisk(env, groupId, 0, 2, 0);
+
+        ChangeDiskStatus(env, originalPDiskId1, NKikimrBlobStorage::EDriveStatus::FAULTY, NKikimrBlobStorage::TMaintenanceStatus::NOT_SET);
+        ChangeDiskStatus(env, originalPDiskId2, NKikimrBlobStorage::EDriveStatus::FAULTY, NKikimrBlobStorage::TMaintenanceStatus::NOT_SET);
+
+        env.Runtime->FilterFunction = MakeCatchDiskStatuses(groupId, /*phantomOnlyDomains=*/{0}, /*faultyDomains=*/{1, 2});
+
+        env.UpdateSettings(true, true, false); // enable self-heal
+        env.Sim(TDuration::Seconds(30));
+
+        TPDiskId newPDiskId1 = GetPDiskIdByVDisk(env, groupId, 0, 1, 0);
+        TPDiskId newPDiskId2 = GetPDiskIdByVDisk(env, groupId, 0, 2, 0);
+
+        UNIT_ASSERT_C(newPDiskId1 == originalPDiskId1, "Expected VDisk (0, 1, 0) not to be moved");
+        UNIT_ASSERT_C(newPDiskId2 == originalPDiskId2, "Expected VDisk (0, 2, 0) not to be moved");
     }
 }

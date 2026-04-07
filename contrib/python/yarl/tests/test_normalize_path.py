@@ -8,6 +8,7 @@ PATHS = [
     ("/", "/"),
     ("//", "//"),
     ("///", "///"),
+    ("path", "path"),
     # Single-dot
     ("path/to", "path/to"),
     ("././path/to", "path/to"),
@@ -15,6 +16,7 @@ PATHS = [
     ("path/././to", "path/to"),
     ("path/to/.", "path/to/"),
     ("path/to/./.", "path/to/"),
+    ("/path/to/.", "/path/to/"),
     # Double-dots
     ("../path/to", "path/to"),
     ("path/../to", "to"),

@@ -2,8 +2,11 @@
 
 #include "fwd.h"
 #include "common.h"
+#include "patchable_field.h"
 
 #include <library/cpp/yt/misc/enum.h>
+
+#include <library/cpp/yt/yson_string/public.h>
 
 #include <library/cpp/yson/node/node.h>
 
@@ -15,6 +18,20 @@
 #include <util/datetime/base.h>
 
 namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NYson {
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct IYsonConsumer;
+
+enum class EYsonFormat : int;
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYson
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -192,7 +209,7 @@ struct TConfig
 
     /// Defines replication factor that is used for files that are uploaded to YT
     /// to use them in operations.
-    int FileCacheReplicationFactor = 10;
+    TPatchableField<i64> FileCacheReplicationFactor = TPatchableField<i64>("file_cache_replication_factor", 10);
 
     /// @brief Used when waiting for other process which uploads the same file to the file cache.
     ///
@@ -256,6 +273,12 @@ struct TConfig
     /// Append job and operation IDs as shell command options.
     bool EnableDebugCommandLineArguments = true;
 
+    /// Path to document node with cluster config for |IClient::GetDynamicConfiguration|.
+    TString ConfigRemotePatchPath = "//sys/client_config";
+
+    /// Pattern for generating operation web link in |GetOperationWebInterfaceUrl|.
+    TPatchableField<TString> OperationLinkPattern = TPatchableField<TString>("operation_link_pattern", "https://yt.yandex-team.ru/{cluster_ui_host}/operations/{operation_id}");
+
     static bool GetBool(const char* var, bool defaultValue = false);
     static int GetInt(const char* var, int defaultValue);
     static TDuration GetDuration(const char* var, TDuration defaultValue);
@@ -282,6 +305,18 @@ struct TConfig
 
     static TConfigPtr Get();
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer);
+
+void Deserialize(TConfig& config, const TNode& node);
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString ConfigToYsonString(const TConfig& config, NYson::EYsonFormat format = NYson::EYsonFormat::Pretty);
+
+TConfig ConfigFromYsonString(TString serializedConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

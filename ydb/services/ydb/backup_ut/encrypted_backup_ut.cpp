@@ -1,12 +1,17 @@
 #include "s3_backup_test_base.h"
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/wrappers/ut_helpers/fs_mock.h>
 
 #include <library/cpp/streams/zstd/zstd.h>
 
+#include <util/folder/tempdir.h>
 #include <util/generic/scope.h>
 #include <util/generic/size_literals.h>
 #include <util/stream/buffer.h>
 #include <util/stream/str.h>
+
+#include <contrib/libs/fmt/include/fmt/format.h>
+#include <ydb/library/testlib/helpers.h>
 
 using namespace NYdb;
 
@@ -16,21 +21,27 @@ public:
     TBackupEncryptionParamsValidationTestFixture() = default;
 
     void SetUp(NUnitTest::TTestContext& /* context */) override {
+        using namespace fmt::literals;
+        const bool isOlap = TStringBuf{Name_}.EndsWith("+IsOlap");
         Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableEncryptedExport(encryptionEnabled);
 
-        auto res = YdbQueryClient().ExecuteQuery(R"sql(
+        auto res = YdbQueryClient().ExecuteQuery(fmt::format(R"sql(
             CREATE TABLE `/Root/ExportParamsValidation/dir1/Table1` (
                 Key Uint32 NOT NULL,
                 PRIMARY KEY (Key)
+            ) WITH (
+                STORE = {store}
+                {partition_count}
             );
-        )sql", NQuery::TTxControl::NoTx()).GetValueSync();
+        )sql", "store"_a = isOlap ? "COLUMN" : "ROW"
+        , "partition_count"_a = isOlap ? ", PARTITION_COUNT = 1" : ""), NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
     }
 
     void MakeFullExport(bool encrypted = false) {
         NExport::TExportToS3Settings settings = MakeExportSettings("", "Prefix");
         if (encrypted) {
-            settings.SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+            settings.SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
         }
         auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
         WaitOpSuccess(res);
@@ -42,7 +53,7 @@ public:
 
 Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParamsValidationTestFixture<true>)
 {
-    Y_UNIT_TEST(BadSourcePath) {
+    Y_UNIT_TEST_TWIN(BadSourcePath, IsOlap) {
         NExport::TExportToS3Settings settings = MakeExportSettings("", "");
 
         settings.SourcePath("unknown").DestinationPrefix("dest");
@@ -59,7 +70,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
         }
     }
 
-    Y_UNIT_TEST(NoDestination) {
+    Y_UNIT_TEST_TWIN(NoDestination, IsOlap) {
         NExport::TExportToS3Settings settings = MakeExportSettings("", "");
         auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
         UNIT_ASSERT_C(!res.Status().IsSuccess(), "Status: " << res.Status().GetStatus() << Endl << res.Status().GetIssues().ToString());
@@ -74,7 +85,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
         }
     }
 
-    Y_UNIT_TEST(NoItemDestination) {
+    Y_UNIT_TEST_TWIN(NoItemDestination, IsOlap) {
         NExport::TExportToS3Settings settings = MakeExportSettings("", "");
         settings.AppendItem({"/Root/ExportParamsValidation/dir1/Table1", ""});
         auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
@@ -98,7 +109,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
         }
     }
 
-    Y_UNIT_TEST(NoCommonDestination) {
+    Y_UNIT_TEST_TWIN(NoCommonDestination, IsOlap) {
         NExport::TExportToS3Settings settings = MakeExportSettings("", "");
         settings.AppendItem({"/Root/ExportParamsValidation/dir1/Table1", "dest"});
         settings.SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
@@ -115,7 +126,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
         }
     }
 
-    Y_UNIT_TEST(IncorrectKeyLengthExport) {
+    Y_UNIT_TEST_TWIN(IncorrectKeyLengthExport, IsOlap) {
         NExport::TExportToS3Settings settings = MakeExportSettings("", "");
         settings.DestinationPrefix("encrypted_export");
         settings.SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::CHACHA_20_POLY_1305, "123");
@@ -132,7 +143,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
         }
     }
 
-    Y_UNIT_TEST(NoSourcePrefix) {
+    Y_UNIT_TEST_TWIN(NoSourcePrefix, IsOlap) {
         MakeFullExport();
 
         NImport::TImportFromS3Settings settings = MakeImportSettings("", "");
@@ -160,7 +171,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
         }
     }
 
-    Y_UNIT_TEST(EmptyImportItem) {
+    Y_UNIT_TEST_TWIN(EmptyImportItem, IsOlap) {
         MakeFullExport();
 
         NImport::TImportFromS3Settings settings = MakeImportSettings("Prefix", "/Root/RestorePrefix");
@@ -182,7 +193,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
         }
     }
 
-    Y_UNIT_TEST(IncorrectKeyImport) {
+    Y_UNIT_TEST_TWIN(IncorrectKeyImport, IsOlap) {
         MakeFullExport(true);
 
         NImport::TImportFromS3Settings settings = MakeImportSettings("Prefix", "Root//RestorePrefix/");
@@ -202,7 +213,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
         }
     }
 
-    Y_UNIT_TEST(EncryptionSettingsWithoutKeyImport) {
+    Y_UNIT_TEST_TWIN(EncryptionSettingsWithoutKeyImport, IsOlap) {
         MakeFullExport(true);
 
         NImport::TImportFromS3Settings settings = MakeImportSettings("Prefix", "Root//RestorePrefix/");
@@ -224,7 +235,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
         }
     }
 
-    Y_UNIT_TEST(NoSourcePrefixEncrypted) {
+    Y_UNIT_TEST_TWIN(NoSourcePrefixEncrypted, IsOlap) {
         MakeFullExport(true);
 
         NImport::TImportFromS3Settings settings = MakeImportSettings("", "/Root/RestorePath");
@@ -247,7 +258,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTest, TBackupEncryptionParams
 }
 
 Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTestFeatureDisabled, TBackupEncryptionParamsValidationTestFixture<false>) {
-    Y_UNIT_TEST(EncryptionParamsSpecifiedExport) {
+    Y_UNIT_TEST_TWIN(EncryptionParamsSpecifiedExport, IsOlap) {
         NExport::TExportToS3Settings settings = MakeExportSettings("", "");
         settings
             .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
@@ -258,7 +269,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTestFeatureDisabled, TBackupE
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), "Export encryption is not supported in current configuration", res.Status().GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(CommonSourcePathSpecified) {
+    Y_UNIT_TEST_TWIN(CommonSourcePathSpecified, IsOlap) {
         NExport::TExportToS3Settings settings = MakeExportSettings("/Root/ExportParamsValidation", "");
 
         auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
@@ -267,7 +278,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTestFeatureDisabled, TBackupE
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), "Source path is not supported in current configuration", res.Status().GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(CommonDestPrefixSpecified) {
+    Y_UNIT_TEST_TWIN(CommonDestPrefixSpecified, IsOlap) {
         NExport::TExportToS3Settings settings = MakeExportSettings("", "Prefix");
 
         auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
@@ -276,7 +287,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTestFeatureDisabled, TBackupE
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), "Destination prefix is not supported in current configuration", res.Status().GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(EncryptionParamsSpecifiedImport) {
+    Y_UNIT_TEST_TWIN(EncryptionParamsSpecifiedImport, IsOlap) {
         NImport::TImportFromS3Settings settings = MakeImportSettings("", "");
         settings
             .SymmetricKey("Cool random key!");
@@ -287,7 +298,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTestFeatureDisabled, TBackupE
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), "Export encryption is not supported in current configuration", res.Status().GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(CommonSourcePrefixSpecified) {
+    Y_UNIT_TEST_TWIN(CommonSourcePrefixSpecified, IsOlap) {
         NImport::TImportFromS3Settings settings = MakeImportSettings("Prefix", "");
 
         auto res = YdbImportClient().ImportFromS3(settings).GetValueSync();
@@ -296,7 +307,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTestFeatureDisabled, TBackupE
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), "Source prefix is not supported in current configuration", res.Status().GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(CommonDestPathSpecified) {
+    Y_UNIT_TEST_TWIN(CommonDestPathSpecified, IsOlap) {
         NImport::TImportFromS3Settings settings = MakeImportSettings("", "/Root/DestPath");
 
         auto res = YdbImportClient().ImportFromS3(settings).GetValueSync();
@@ -305,7 +316,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTestFeatureDisabled, TBackupE
         UNIT_ASSERT_STRING_CONTAINS_C(res.Status().GetIssues().ToString(), "Destination path is not supported in current configuration", res.Status().GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(SrcPrefixAndSrcPathSpecified) {
+    Y_UNIT_TEST_TWIN(SrcPrefixAndSrcPathSpecified, IsOlap) {
         NImport::TImportFromS3Settings settings = MakeImportSettings("", "");
         settings.AppendItem({.Src = "Prefix/Table1", .Dst = "/Root/Table", .SrcPath = "/src/path"});
 
@@ -315,13 +326,19 @@ Y_UNIT_TEST_SUITE_F(EncryptedBackupParamsValidationTestFeatureDisabled, TBackupE
 
 class TBackupEncryptionTestFixture : public TS3BackupTestFixture {
     void SetUp(NUnitTest::TTestContext& /* context */) override {
-        auto res = YdbQueryClient().ExecuteQuery(R"sql(
+        using namespace fmt::literals;
+        const bool isOlap = TStringBuf{Name_}.EndsWith("+IsOlap");
+        auto res = YdbQueryClient().ExecuteQuery(fmt::format(R"sql(
             CREATE TABLE `/Root/EncryptedExportAndImport/dir1/dir2/EncryptedExportAndImportTable` (
                 Key Uint32 NOT NULL,
                 Value Text,
                 PRIMARY KEY (Key)
+            ) WITH (
+                STORE = {store}
+                {partition_count}
             );
-        )sql", NQuery::TTxControl::NoTx()).GetValueSync();
+        )sql", "store"_a = isOlap ? "COLUMN" : "ROW"
+        , "partition_count"_a = isOlap ? ", PARTITION_COUNT = 1" : ""), NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
         InsertData();
@@ -355,7 +372,7 @@ protected:
 };
 
 Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
-    Y_UNIT_TEST(EncryptedExportAndImport)
+    Y_UNIT_TEST_TWIN(EncryptedExportAndImport, IsOlap)
     {
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/EncryptedExportAndImport/dir1", "EncryptedExport");
@@ -367,11 +384,19 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
 
             ValidateS3FileList({
                 "/test_bucket/EncryptedExport/001/data_00.csv.enc",
+                "/test_bucket/EncryptedExport/001/data_00.csv.sha256",
                 "/test_bucket/EncryptedExport/001/metadata.json.enc",
+                "/test_bucket/EncryptedExport/001/metadata.json.sha256",
                 "/test_bucket/EncryptedExport/001/scheme.pb.enc",
+                "/test_bucket/EncryptedExport/001/scheme.pb.sha256",
+                "/test_bucket/EncryptedExport/001/permissions.pb.enc",
+                "/test_bucket/EncryptedExport/001/permissions.pb.sha256",
                 "/test_bucket/EncryptedExport/SchemaMapping/mapping.json.enc",
+                "/test_bucket/EncryptedExport/SchemaMapping/mapping.json.sha256",
                 "/test_bucket/EncryptedExport/SchemaMapping/metadata.json.enc",
+                "/test_bucket/EncryptedExport/SchemaMapping/metadata.json.sha256",
                 "/test_bucket/EncryptedExport/metadata.json",
+                "/test_bucket/EncryptedExport/metadata.json.sha256",
             });
         }
 
@@ -387,7 +412,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         }
     }
 
-    Y_UNIT_TEST(EncryptionAndCompression) {
+    Y_UNIT_TEST_TWIN(EncryptionAndCompression, IsOlap) {
         {
             NExport::TExportToS3Settings settings = MakeExportSettings("/Root/EncryptedExportAndImport/dir1/dir2", "Prefix");
             settings
@@ -399,11 +424,19 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
 
             ValidateS3FileList({
                 "/test_bucket/Prefix/metadata.json",
+                "/test_bucket/Prefix/metadata.json.sha256",
                 "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
                 "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
                 "/test_bucket/Prefix/001/metadata.json.enc",
+                "/test_bucket/Prefix/001/metadata.json.sha256",
                 "/test_bucket/Prefix/001/scheme.pb.enc",
+                "/test_bucket/Prefix/001/scheme.pb.sha256",
+                "/test_bucket/Prefix/001/permissions.pb.enc",
+                "/test_bucket/Prefix/001/permissions.pb.sha256",
                 "/test_bucket/Prefix/001/data_00.csv.zst.enc",
+                "/test_bucket/Prefix/001/data_00.csv.sha256",
             });
         }
 
@@ -419,7 +452,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         }
     }
 
-    Y_UNIT_TEST(EncryptionAndChecksum) {
+    Y_UNIT_TEST_TWIN(EncryptionAndChecksum, IsOlap) {
         Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
 
         {
@@ -443,6 +476,8 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
                 "/test_bucket/Prefix/001/scheme.pb.sha256",
                 "/test_bucket/Prefix/001/data_00.csv.enc",
                 "/test_bucket/Prefix/001/data_00.csv.sha256",
+                "/test_bucket/Prefix/001/permissions.pb.enc",
+                "/test_bucket/Prefix/001/permissions.pb.sha256",
             });
         }
 
@@ -467,7 +502,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         }
     }
 
-    Y_UNIT_TEST(EncryptionChecksumAndCompression) {
+    Y_UNIT_TEST_TWIN(EncryptionChecksumAndCompression, IsOlap) {
         Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
 
         {
@@ -492,6 +527,8 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
                 "/test_bucket/Prefix/001/scheme.pb.sha256",
                 "/test_bucket/Prefix/001/data_00.csv.zst.enc",
                 "/test_bucket/Prefix/001/data_00.csv.sha256",
+                "/test_bucket/Prefix/001/permissions.pb.enc",
+                "/test_bucket/Prefix/001/permissions.pb.sha256",
             });
         }
 
@@ -553,6 +590,8 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
                 "/test_bucket/Prefix/001/metadata.json.sha256",
                 "/test_bucket/Prefix/001/scheme.pb.enc",
                 "/test_bucket/Prefix/001/scheme.pb.sha256",
+                "/test_bucket/Prefix/001/permissions.pb.enc",
+                "/test_bucket/Prefix/001/permissions.pb.sha256",
                 "/test_bucket/Prefix/001/data_00.csv.enc",
                 "/test_bucket/Prefix/001/data_00.csv.sha256",
                 "/test_bucket/Prefix/001/001/changefeed_description.pb.enc",
@@ -583,88 +622,196 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
     }
 
     Y_UNIT_TEST(TopicEncryption) {
-        auto res = YdbQueryClient().ExecuteQuery(R"sql(
+        TString query = R"sql(
             CREATE TOPIC `/Root/EncryptedExportAndImport/dir1/dir2/dir3/Topic` (
                 CONSUMER Consumer
             );
-        )sql", NQuery::TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        )sql";
 
-        {
-            NExport::TExportToS3Settings settings = MakeExportSettings("/Root/EncryptedExportAndImport/dir1/dir2/dir3", "Prefix");
-            settings
-                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+        TSet<TString> s3FileList = {
+            "/test_bucket/Prefix/metadata.json",
+            "/test_bucket/Prefix/metadata.json.sha256",
+            "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
+            "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+            "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
+            "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+            "/test_bucket/Prefix/001/create_topic.pb.enc",
+            "/test_bucket/Prefix/001/create_topic.pb.sha256",
+            "/test_bucket/Prefix/001/metadata.json.enc",
+            "/test_bucket/Prefix/001/metadata.json.sha256",
+            "/test_bucket/Prefix/001/permissions.pb.enc",
+            "/test_bucket/Prefix/001/permissions.pb.sha256",
+        };
 
-            auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
-            WaitOpSuccess(res);
-
-            ValidateS3FileList({
-                "/test_bucket/Prefix/metadata.json",
-                "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
-                "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
-                "/test_bucket/Prefix/001/create_topic.pb.enc",
-                "/test_bucket/Prefix/001/metadata.json.enc",
-            });
-        }
-
-        {
-            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/Restored");
-            importSettings
-                .SymmetricKey("Cool random key!");
-
-            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
-            WaitOpSuccess(res);
-        }
-
-        auto topicDescribe = YdbSchemeClient().DescribePath("/Root/Restored/Topic").GetValueSync();
-        UNIT_ASSERT_C(topicDescribe.IsSuccess(), topicDescribe.GetIssues().ToString());
+        TestSchemeObjectEncryptedExportImport(query, "Topic", s3FileList);
     }
 
-    Y_UNIT_TEST(ViewEncryption) {
-        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
-        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableViewExport(true);
-        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnablePermissionsExport(true);
-
-        auto res = YdbQueryClient().ExecuteQuery(R"sql(
-            CREATE VIEW `/Root/EncryptedExportAndImport/dir1/dir2/dir3/EncryptedExportAndImportView`
+    Y_UNIT_TEST_TWIN(ViewEncryption, IsOlap) {
+        TString query = R"sql(
+            CREATE VIEW `/Root/EncryptedExportAndImport/dir1/dir2/dir3/View`
                 WITH (security_invoker = TRUE) AS
                     SELECT Value FROM `/Root/EncryptedExportAndImport/dir1/dir2/EncryptedExportAndImportTable`
                         WHERE Key = 42;
-        )sql", NQuery::TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        )sql";
 
-        {
-            NExport::TExportToS3Settings settings = MakeExportSettings("/Root/EncryptedExportAndImport/dir1/dir2/dir3", "Prefix");
-            settings
-                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+        TSet<TString> s3FileList = {
+            "/test_bucket/Prefix/metadata.json",
+            "/test_bucket/Prefix/metadata.json.sha256",
+            "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
+            "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+            "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
+            "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+            "/test_bucket/Prefix/001/create_view.sql.enc",
+            "/test_bucket/Prefix/001/create_view.sql.sha256",
+            "/test_bucket/Prefix/001/metadata.json.enc",
+            "/test_bucket/Prefix/001/metadata.json.sha256",
+            "/test_bucket/Prefix/001/permissions.pb.enc",
+            "/test_bucket/Prefix/001/permissions.pb.sha256",
+        };
 
-            auto res = YdbExportClient().ExportToS3(settings).GetValueSync();
-            WaitOpSuccess(res);
+        TestSchemeObjectEncryptedExportImport(query, "View", s3FileList);
+    }
 
-            ValidateS3FileList({
-                "/test_bucket/Prefix/metadata.json",
-                "/test_bucket/Prefix/metadata.json.sha256",
-                "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
-                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
-                "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
-                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
-                "/test_bucket/Prefix/001/create_view.sql.enc",
-                "/test_bucket/Prefix/001/metadata.json.enc",
-                "/test_bucket/Prefix/001/permissions.pb.enc",
-            });
-        }
+    Y_UNIT_TEST_TWIN(ReplicationEncryption, IsOlap) {
+        TString query = Sprintf(R"sql(
+            CREATE ASYNC REPLICATION `/Root/EncryptedExportAndImport/dir1/dir2/dir3/Replication`
+            FOR `/Root/EncryptedExportAndImport/dir1/dir2/EncryptedExportAndImportTable` AS `/Root/EncryptedExportAndImport/dir1/dir2/EncryptedExportAndImportTableReplica`
+            WITH (
+                CONNECTION_STRING = 'grpc://localhost:%u/?database=/Root/EncryptedExportAndImport'
+            );
+        )sql", Server().GetPort());
 
-        {
-            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/Restored");
-            importSettings
-                .SymmetricKey("Cool random key!");
+        TSet<TString> s3FileList = {
+            "/test_bucket/Prefix/001/create_async_replication.sql.enc",
+            "/test_bucket/Prefix/001/create_async_replication.sql.sha256",
+            "/test_bucket/Prefix/001/metadata.json.enc",
+            "/test_bucket/Prefix/001/metadata.json.sha256",
+            "/test_bucket/Prefix/001/permissions.pb.enc",
+            "/test_bucket/Prefix/001/permissions.pb.sha256",
+            "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
+            "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+            "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
+            "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+            "/test_bucket/Prefix/metadata.json",
+            "/test_bucket/Prefix/metadata.json.sha256"
+        };
 
-            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
-            WaitOpSuccess(res);
-        }
+        TestSchemeObjectEncryptedExportImport(query, "Replication", s3FileList);
+    }
 
-        auto viewDescribe = YdbSchemeClient().DescribePath("/Root/Restored/EncryptedExportAndImportView").GetValueSync();
-        UNIT_ASSERT_C(viewDescribe.IsSuccess(), viewDescribe.GetIssues().ToString());
+    Y_UNIT_TEST_TWIN(TransferEncryption, IsOlap) {
+        auto query = Sprintf(R"sql(
+            CREATE TOPIC `/Root/EncryptedExportAndImport/dir1/dir2/dir3/Topic`;
+
+            $transformation_lambda = ($msg) -> {
+                return [
+                    <|
+                        partition: $msg._partition,
+                        offset: $msg._offset,
+                        message: CAST($msg._data AS Utf8)
+                    |>
+                ];
+            };
+
+            CREATE TRANSFER `/Root/EncryptedExportAndImport/dir1/dir2/dir3/Transfer`
+                FROM `/Root/EncryptedExportAndImport/dir1/dir2/dir3/Topic` TO `/Root/EncryptedExportAndImport/dir1/dir2/EncryptedExportAndImportTable` USING $transformation_lambda
+            WITH (
+                CONNECTION_STRING = 'grpc://localhost:%u/?database=/Root/EncryptedExportAndImport'
+            );
+        )sql", Server().GetPort());
+
+        TSet<TString> s3FileList = {
+            "/test_bucket/Prefix/001/create_transfer.sql.enc",
+            "/test_bucket/Prefix/001/create_transfer.sql.sha256",
+            "/test_bucket/Prefix/001/metadata.json.enc",
+            "/test_bucket/Prefix/001/metadata.json.sha256",
+            "/test_bucket/Prefix/001/permissions.pb.enc",
+            "/test_bucket/Prefix/001/permissions.pb.sha256",
+            "/test_bucket/Prefix/002/create_topic.pb.enc",
+            "/test_bucket/Prefix/002/create_topic.pb.sha256",
+            "/test_bucket/Prefix/002/metadata.json.enc",
+            "/test_bucket/Prefix/002/metadata.json.sha256",
+            "/test_bucket/Prefix/002/permissions.pb.enc",
+            "/test_bucket/Prefix/002/permissions.pb.sha256",
+            "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
+            "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+            "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
+            "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+            "/test_bucket/Prefix/metadata.json",
+            "/test_bucket/Prefix/metadata.json.sha256"
+        };
+
+        TestSchemeObjectEncryptedExportImport(query, "Transfer", s3FileList);
+    }
+
+    Y_UNIT_TEST_TWIN(ExternalDataSourceEncryption, IsOlap) {
+        auto query = R"sql(
+            CREATE EXTERNAL DATA SOURCE `/Root/EncryptedExportAndImport/dir1/dir2/dir3/ExternalDataSource` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="https://object_storage_domain/bucket/",
+                AUTH_METHOD="NONE"
+            );
+        )sql";
+
+        TSet<TString> s3FileList = {
+            "/test_bucket/Prefix/001/create_external_data_source.sql.enc",
+            "/test_bucket/Prefix/001/create_external_data_source.sql.sha256",
+            "/test_bucket/Prefix/001/metadata.json.enc",
+            "/test_bucket/Prefix/001/metadata.json.sha256",
+            "/test_bucket/Prefix/001/permissions.pb.enc",
+            "/test_bucket/Prefix/001/permissions.pb.sha256",
+            "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
+            "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+            "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
+            "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+            "/test_bucket/Prefix/metadata.json",
+            "/test_bucket/Prefix/metadata.json.sha256"
+        };
+
+        TestSchemeObjectEncryptedExportImport(query, "ExternalDataSource", s3FileList);
+    }
+
+    Y_UNIT_TEST_TWIN(ExternalTableEncryption, IsOlap) {
+        auto query = R"sql(
+            CREATE EXTERNAL DATA SOURCE `/Root/EncryptedExportAndImport/dir1/dir2/dir3/ExternalDataSource` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="https://object_storage_domain/bucket/",
+                AUTH_METHOD="NONE"
+            );
+
+            CREATE EXTERNAL TABLE `/Root/EncryptedExportAndImport/dir1/dir2/dir3/ExternalTable` (
+                key Utf8 NOT NULL,
+                value Utf8 NOT NULL
+            ) WITH (
+                DATA_SOURCE="/Root/EncryptedExportAndImport/dir1/dir2/dir3/ExternalDataSource",
+                LOCATION="folder",
+                FORMAT="csv_with_names",
+                COMPRESSION="gzip"
+            );
+        )sql";
+
+        TSet<TString> s3FileList = {
+            "/test_bucket/Prefix/001/create_external_data_source.sql.enc",
+            "/test_bucket/Prefix/001/create_external_data_source.sql.sha256",
+            "/test_bucket/Prefix/001/metadata.json.enc",
+            "/test_bucket/Prefix/001/metadata.json.sha256",
+            "/test_bucket/Prefix/001/permissions.pb.enc",
+            "/test_bucket/Prefix/001/permissions.pb.sha256",
+            "/test_bucket/Prefix/002/create_external_table.sql.enc",
+            "/test_bucket/Prefix/002/create_external_table.sql.sha256",
+            "/test_bucket/Prefix/002/metadata.json.enc",
+            "/test_bucket/Prefix/002/metadata.json.sha256",
+            "/test_bucket/Prefix/002/permissions.pb.enc",
+            "/test_bucket/Prefix/002/permissions.pb.sha256",
+            "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
+            "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+            "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
+            "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+            "/test_bucket/Prefix/metadata.json",
+            "/test_bucket/Prefix/metadata.json.sha256"
+        };
+
+        TestSchemeObjectEncryptedExportImport(query, "ExternalTable", s3FileList);
     }
 }
 
@@ -697,8 +844,8 @@ class TBackupEncryptionCommonRequirementsTestFixture : public TS3BackupTestFixtu
     }
 
 protected:
-    bool NotEncryptedFileName(const TString& key) {
-        return key.EndsWith(".sha256") || key == "/test_bucket/Prefix/metadata.json";
+    bool NotEncryptedFileName(const TString& key, const TString& metadataPrefix) {
+        return key.EndsWith(".sha256") || key == metadataPrefix + "metadata.json";
     }
 
     TString ReencryptWithDifferentIV(const TString& source, NBackup::TEncryptionKey& encryptionKey, const std::string& algorithm) {
@@ -712,106 +859,124 @@ protected:
             TStringBuf(content.Data(), content.Size()));
         return TString(encrypted.Data(), encrypted.Size());
     }
-};
 
-Y_UNIT_TEST_SUITE_F(CommonEncryptionRequirementsTest, TBackupEncryptionCommonRequirementsTestFixture) {
-    Y_UNIT_TEST(CommonEncryptionRequirements) {
+    void TestCommonEncryptionRequirements(bool useSchemaSecrets, bool isFsBackup = false) {
+        using namespace ::fmt::literals;
+
+        THolder<TTempDir> tempDirHolder;
+        TString basePath;
+        if (isFsBackup) {
+            tempDirHolder = MakeHolder<TTempDir>();
+            basePath = tempDirHolder->Path();
+            Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        }
         // Create different objects with names that are expected to be hidden (anonymized) in encrypted exports
         // Create two object of each type in order to verify that we don't duplicate IVs
         {
-            auto res = YdbQueryClient().ExecuteQuery(R"sql(
-                CREATE TABLE `/Root/Anonymized_Dir/Anonymized_Table` (
-                    Key Uint32 NOT NULL,
-                    Value String NOT NULL,
-                    Value2 String NOT NULL,
-                    PRIMARY KEY (Key),
-                    INDEX `Anonymized_Index` GLOBAL ON (`Value`),
-                    INDEX `Anonymized_Index2` GLOBAL ON (`Value2`)
-                )
-                WITH (
-                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
-                    PARTITION_AT_KEYS = (42)
-                );
+            auto res = YdbQueryClient().ExecuteQuery(
+                fmt::format(
+                    R"sql(
+                        CREATE TABLE `/Root/Anonymized_Dir/Anonymized_Table` (
+                            Key Uint32 NOT NULL,
+                            Value String NOT NULL,
+                            Value2 String NOT NULL,
+                            PRIMARY KEY (Key),
+                            INDEX `Anonymized_Index` GLOBAL ON (`Value`),
+                            INDEX `Anonymized_Index2` GLOBAL ON (`Value2`)
+                        )
+                        WITH (
+                            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
+                            PARTITION_AT_KEYS = (42)
+                        );
 
-                CREATE TABLE `/Root/Anonymized_Dir/Anonymized_Table2` (
-                    Key Uint32 NOT NULL,
-                    Value String NOT NULL,
-                    Value2 String NOT NULL,
-                    PRIMARY KEY (Key),
-                    INDEX `Anonymized_Index` GLOBAL ON (`Value`),
-                    INDEX `Anonymized_Index2` GLOBAL ON (`Value2`)
-                );
+                        CREATE TABLE `/Root/Anonymized_Dir/Anonymized_Table2` (
+                            Key Uint32 NOT NULL,
+                            Value String NOT NULL,
+                            Value2 String NOT NULL,
+                            PRIMARY KEY (Key),
+                            INDEX `Anonymized_Index` GLOBAL ON (`Value`),
+                            INDEX `Anonymized_Index2` GLOBAL ON (`Value2`)
+                        );
 
-                ALTER TABLE `/Root/Anonymized_Dir/Anonymized_Table`
-                    ADD CHANGEFEED Anonymized_Changefeed WITH (format="JSON", mode="UPDATES");
+                        ALTER TABLE `/Root/Anonymized_Dir/Anonymized_Table`
+                            ADD CHANGEFEED Anonymized_Changefeed WITH (format="JSON", mode="UPDATES");
 
-                ALTER TABLE `/Root/Anonymized_Dir/Anonymized_Table`
-                    ADD CHANGEFEED Anonymized_Changefeed2 WITH (format="JSON", mode="UPDATES");
+                        ALTER TABLE `/Root/Anonymized_Dir/Anonymized_Table`
+                            ADD CHANGEFEED Anonymized_Changefeed2 WITH (format="JSON", mode="UPDATES");
 
-                CREATE VIEW `/Root/Anonymized_Dir/Anonymized_View`
-                    WITH (security_invoker = TRUE) AS
-                        SELECT Value FROM `/Root/Anonymized_Dir/Anonymized_Table`
-                            WHERE Key = 42;
+                        CREATE VIEW `/Root/Anonymized_Dir/Anonymized_View`
+                            WITH (security_invoker = TRUE) AS
+                                SELECT Value FROM `/Root/Anonymized_Dir/Anonymized_Table`
+                                    WHERE Key = 42;
 
-                CREATE VIEW `/Root/Anonymized_Dir/Anonymized_View2`
-                    WITH (security_invoker = TRUE) AS
-                        SELECT Value FROM `/Root/Anonymized_Dir/Anonymized_Table`
-                            WHERE Key = 42;
+                        CREATE VIEW `/Root/Anonymized_Dir/Anonymized_View2`
+                            WITH (security_invoker = TRUE) AS
+                                SELECT Value FROM `/Root/Anonymized_Dir/Anonymized_Table`
+                                    WHERE Key = 42;
 
-                CREATE TOPIC `/Root/Anonymized_Dir/Anonymized_Topic` (
-                    CONSUMER Anonymized_Consumer,
-                    CONSUMER Anonymized_Consumer2
-                );
+                        CREATE TOPIC `/Root/Anonymized_Dir/Anonymized_Topic` (
+                            CONSUMER Anonymized_Consumer,
+                            CONSUMER Anonymized_Consumer2
+                        );
 
-                CREATE TOPIC `/Root/Anonymized_Dir/Anonymized_Topic2` (
-                    CONSUMER Anonymized_Consumer,
-                    CONSUMER Anonymized_Consumer2
-                );
+                        CREATE TOPIC `/Root/Anonymized_Dir/Anonymized_Topic2` (
+                            CONSUMER Anonymized_Consumer,
+                            CONSUMER Anonymized_Consumer2
+                        );
 
-                CREATE USER anonymizeduser;
-                CREATE USER anonymizeduser2;
+                        CREATE USER anonymizeduser;
+                        CREATE USER anonymizeduser2;
 
-                CREATE GROUP anonymizedgroup WITH USER anonymizeduser, anonymizeduser2;
-                CREATE GROUP anonymizedgroup2 WITH USER anonymizeduser, anonymizeduser2;
+                        CREATE GROUP anonymizedgroup WITH USER anonymizeduser, anonymizeduser2;
+                        CREATE GROUP anonymizedgroup2 WITH USER anonymizeduser, anonymizeduser2;
 
-                CREATE OBJECT id (TYPE SECRET) WITH (value=`test_id`);
-                CREATE OBJECT key (TYPE SECRET) WITH (value=`test_key`);
-                CREATE EXTERNAL DATA SOURCE `/Root/Anonymized_Dir/Anonymized_DataSource` WITH (
-                    SOURCE_TYPE="ObjectStorage",
-                    LOCATION="localhost:42",
-                    AUTH_METHOD="AWS",
-                    AWS_ACCESS_KEY_ID_SECRET_NAME="id",
-                    AWS_SECRET_ACCESS_KEY_SECRET_NAME="key",
-                    AWS_REGION="test-central-1"
-                );
+                        CREATE OBJECT id (TYPE SECRET) WITH (value=`test_id`);
+                        CREATE OBJECT key (TYPE SECRET) WITH (value=`test_key`);
+                        CREATE SECRET id WITH (value="test_id");
+                        CREATE SECRET key WITH (value="test_key");
+                        CREATE EXTERNAL DATA SOURCE `/Root/Anonymized_Dir/Anonymized_DataSource` WITH (
+                            SOURCE_TYPE="ObjectStorage",
+                            LOCATION="localhost:42",
+                            AUTH_METHOD="AWS",
+                            {secret_param_name_1}="id",
+                            {secret_param_name_2}="key",
+                            AWS_REGION="test-central-1"
+                        );
 
-                CREATE OBJECT id2 (TYPE SECRET) WITH (value=`test_id`);
-                CREATE OBJECT key2 (TYPE SECRET) WITH (value=`test_key`);
-                CREATE EXTERNAL DATA SOURCE `/Root/Anonymized_Dir/Anonymized_DataSource2` WITH (
-                    SOURCE_TYPE="ObjectStorage",
-                    LOCATION="localhost:42",
-                    AUTH_METHOD="AWS",
-                    AWS_ACCESS_KEY_ID_SECRET_NAME="id2",
-                    AWS_SECRET_ACCESS_KEY_SECRET_NAME="key2",
-                    AWS_REGION="test-central-2"
-                );
+                        CREATE OBJECT id2 (TYPE SECRET) WITH (value=`test_id`);
+                        CREATE OBJECT key2 (TYPE SECRET) WITH (value=`test_key`);
+                        CREATE SECRET id2 WITH (value="test_id");
+                        CREATE SECRET key2 WITH (value="test_key");
+                        CREATE EXTERNAL DATA SOURCE `/Root/Anonymized_Dir/Anonymized_DataSource2` WITH (
+                            SOURCE_TYPE="ObjectStorage",
+                            LOCATION="localhost:42",
+                            AUTH_METHOD="AWS",
+                            {secret_param_name_1}="id2",
+                            {secret_param_name_2}="key2",
+                            AWS_REGION="test-central-2"
+                        );
 
-                CREATE EXTERNAL TABLE `/Root/Anonymized_Dir/Anonymized_ExternalTable` (
-                    Key Uint64,
-                    Value String
-                ) WITH (
-                    DATA_SOURCE="/Root/Anonymized_Dir/Anonymized_DataSource",
-                    LOCATION="/"
-                );
+                        CREATE EXTERNAL TABLE `/Root/Anonymized_Dir/Anonymized_ExternalTable` (
+                            Key Uint64,
+                            Value String
+                        ) WITH (
+                            DATA_SOURCE="/Root/Anonymized_Dir/Anonymized_DataSource",
+                            LOCATION="/"
+                        );
 
-                CREATE EXTERNAL TABLE `/Root/Anonymized_Dir/Anonymized_ExternalTable2` (
-                    Key Uint64,
-                    Value String
-                ) WITH (
-                    DATA_SOURCE="/Root/Anonymized_Dir/Anonymized_DataSource2",
-                    LOCATION="/"
-                );
-            )sql", NQuery::TTxControl::NoTx()).GetValueSync();
+                        CREATE EXTERNAL TABLE `/Root/Anonymized_Dir/Anonymized_ExternalTable2` (
+                            Key Uint64,
+                            Value String
+                        ) WITH (
+                            DATA_SOURCE="/Root/Anonymized_Dir/Anonymized_DataSource2",
+                            LOCATION="/"
+                        );
+                    )sql",
+                    "secret_param_name_1"_a = useSchemaSecrets ? "AWS_ACCESS_KEY_ID_SECRET_PATH" : "AWS_ACCESS_KEY_ID_SECRET_NAME",
+                    "secret_param_name_2"_a = useSchemaSecrets ? "AWS_SECRET_ACCESS_KEY_SECRET_PATH" : "AWS_SECRET_ACCESS_KEY_SECRET_NAME"
+                ),
+                NQuery::TTxControl::NoTx()
+            ).GetValueSync();
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
             auto res2 = YdbQueryClient().ExecuteQuery(R"sql(
@@ -847,7 +1012,15 @@ Y_UNIT_TEST_SUITE_F(CommonEncryptionRequirementsTest, TBackupEncryptionCommonReq
         }
 
         // Create recursive export
-        {
+        if (isFsBackup) {
+            NExport::TExportToFsSettings settings;
+            settings
+                .BasePath(basePath)
+                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+
+            auto res = YdbExportClient().ExportToFs(settings).GetValueSync();
+            WaitOpSuccess(res);
+        } else {
             NExport::TExportToS3Settings settings = MakeExportSettings("", "Prefix");
             settings
                 .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
@@ -856,17 +1029,26 @@ Y_UNIT_TEST_SUITE_F(CommonEncryptionRequirementsTest, TBackupEncryptionCommonReq
             WaitOpSuccess(res);
         }
 
-        Cerr << "Export files:\n";
-        for (const auto& [key, _] : S3Mock().GetData()) {
-            Cerr << key << Endl;
-        }
-
         NBackup::TEncryptionKey encryptionKey("Cool random key!");
         THashSet<TString> ivs;
         THashSet<TString> allKeyNames;
-        for (const auto& [key, content] : S3Mock().GetData()) {
-            // Nonencrypted keys
-            if (NotEncryptedFileName(key)) {
+
+        THolder<NKikimr::NWrappers::NTestHelpers::TFsMock> fsMockOwner;
+        if (isFsBackup) {
+            fsMockOwner = MakeHolder<NKikimr::NWrappers::NTestHelpers::TFsMock>(basePath);
+            fsMockOwner->Refresh();
+        }
+        auto& mock = isFsBackup
+            ? static_cast<NKikimr::NWrappers::NTestHelpers::TBackupMock&>(*fsMockOwner)
+            : static_cast<NKikimr::NWrappers::NTestHelpers::TBackupMock&>(S3Mock());
+
+        const TString metadataPrefix = isFsBackup ? "" : "/test_bucket/Prefix/";
+
+        Cerr << "Export files:\n";
+        for (const auto& [key, content] : mock.GetData()) {
+            Cerr << key << Endl;
+
+            if (NotEncryptedFileName(key, metadataPrefix)) {
                 continue;
             }
 
@@ -891,6 +1073,12 @@ Y_UNIT_TEST_SUITE_F(CommonEncryptionRequirementsTest, TBackupEncryptionCommonReq
             UNIT_ASSERT_C(key.find("anonymized") == TString::npos, key); // user/group
         }
 
+        if (isFsBackup) {
+            // TODO: FS import with encryption and recursive mode is not yet fully implemented
+            // Skip import tests for FS backups for now
+            Cerr << "Skipping import tests for FS backup (not yet fully implemented)" << Endl;
+            return;
+        }
 
         NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/Restored");
         importSettings
@@ -939,198 +1127,22 @@ Y_UNIT_TEST_SUITE_F(CommonEncryptionRequirementsTest, TBackupEncryptionCommonReq
             checkImportFails(TStringBuilder() << "Change IV of " << key);
         }
     }
-}
+};
 
-Y_UNIT_TEST_SUITE_F(ImportBigEncryptedFileTest, TS3BackupTestFixture) {
-    Y_UNIT_TEST(ImportBigEncryptedFile) {
-        const bool debug = false;
-        // It is a big test, so turn logging off if it is not needed
-        if (!debug) {
-            auto& runtime = *Server().GetRuntime();
-            runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::EPriority::PRI_NOTICE);
-            runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::EPriority::PRI_NOTICE);
-            runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::EPriority::PRI_NOTICE);
-            runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::EPriority::PRI_NOTICE);
-        }
-        TString key = "Cool very very secret rand key!!";
+Y_UNIT_TEST_SUITE_F(CommonEncryptionRequirementsTest, TBackupEncryptionCommonRequirementsTestFixture) {
+    Y_UNIT_TEST(CommonEncryptionRequirements) {
+        TestCommonEncryptionRequirements(/* useSchemaSecrets */ false);
+    }
 
-        {
-            auto res = YdbQueryClient().ExecuteQuery(R"sql(
-                CREATE TABLE `/Root/TestTable` (
-                    Key Uint64 NOT NULL,
-                    Value Text,
-                    PRIMARY KEY (Key)
-                );
-            )sql", NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
-        }
+    Y_UNIT_TEST(CommonEncryptionRequirementsWithSchemaSecrets) {
+        TestCommonEncryptionRequirements(/* useSchemaSecrets */ true);
+    }
 
-        auto makeExport = [&](const TString& exportPath, bool compressed) {
-            NExport::TExportToS3Settings exportSettings = MakeExportSettings("", exportPath);
-            exportSettings
-                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::CHACHA_20_POLY_1305, key);
+    Y_UNIT_TEST(CommonEncryptionRequirementsFs) {
+        TestCommonEncryptionRequirements(/* useSchemaSecrets */ false, /* isFsBackup */ true);
+    }
 
-            if (compressed) {
-                exportSettings
-                    .Compression("zstd");
-            }
-
-            auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
-            WaitOpSuccess(res);
-        };
-
-        makeExport("EncryptedExport", false);
-        makeExport("EncryptedCompressedExport", true);
-
-        NBackup::TEncryptionKey encryptionKey(key);
-
-        auto getIV = [&](const TString& path) {
-            auto it = S3Mock().GetData().find(path);
-            UNIT_ASSERT(it != S3Mock().GetData().end());
-            const TString& srcData = it->second;
-            auto [_, iv] = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
-                encryptionKey,
-                TBuffer(srcData.data(), srcData.size()));
-            return iv;
-        };
-
-        const TString& dataFilePath = "/test_bucket/EncryptedExport/001/data_00.csv.enc";
-        const TString& compressedDataFilePath = "/test_bucket/EncryptedCompressedExport/001/data_00.csv.zst.enc";
-
-        NBackup::TEncryptionIV iv = getIV(dataFilePath);
-        NBackup::TEncryptionIV ivCompressed = getIV(compressedDataFilePath);
-
-        auto addToResult = [&](TStringBuf data, bool last, NBackup::TEncryptedFileSerializer& serializer, TString& resultEncryptedData) {
-            TBuffer block = serializer.AddBlock(data, last);
-            resultEncryptedData.append(block.Data(), block.Size());
-        };
-
-        TString bigStr = "X"; // in order not to import too many lines
-        bigStr *= 200;
-
-        auto patchData = [&](size_t encryptedBlockSize, size_t resultFileSize, bool compressed, const TString& path) {
-            Cerr << "Patch import file. EncryptedBlockSize: " << encryptedBlockSize
-                << ", ResultFileSize: " << resultFileSize
-                << ", Compressed: " << compressed
-                << ", Path: " << path << Endl;
-
-            TString resultData;
-            TStringOutput output(resultData);
-            IOutputStream* outputStream = &output;
-            std::optional<TZstdCompress> zstd;
-            if (compressed) {
-                zstd.emplace(&output);
-                outputStream = &*zstd;
-            }
-            TString resultEncryptedData;
-            ui64 line = 0;
-            NBackup::TEncryptedFileSerializer serializer("ChaCha20-Poly1305", encryptionKey, compressed ? ivCompressed : iv);
-            size_t previousSerializePos = 0;
-            while (resultData.size() < resultFileSize) {
-                outputStream->Write(TStringBuilder() << ++line << ",\"Encrypted+hello+world+line+" << bigStr << line << "\"\n");
-
-                if (resultData.size() - previousSerializePos >= encryptedBlockSize) {
-                    zstd.reset(); // finalize zstd frame (if any)
-                    addToResult(TStringBuf(resultData.data() + previousSerializePos, resultData.size() - previousSerializePos),
-                        false,
-                        serializer,
-                        resultEncryptedData);
-                    previousSerializePos = resultData.size();
-
-                    if (compressed) {
-                        zstd.emplace(&output);
-                        outputStream = &*zstd;
-                    }
-                }
-            }
-            zstd.reset();
-            addToResult(TStringBuf(resultData.data() + previousSerializePos, resultData.size() - previousSerializePos),
-                true,
-                serializer,
-                resultEncryptedData);
-            S3Mock().GetData()[path] = resultEncryptedData;
-
-            constexpr bool additionalCheck = false;
-            if (additionalCheck) {
-                // Check that we encoded correctly
-                auto [decodedData, decodedIV] = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
-                    encryptionKey,
-                    TBuffer(resultEncryptedData.data(), resultEncryptedData.size()));
-
-                TBufferInput input(decodedData);
-                IInputStream* inputStream = &input;
-                std::optional<TZstdDecompress> zstdDecompressor;
-                if (compressed) {
-                    zstdDecompressor.emplace(&input);
-                    inputStream = &*zstdDecompressor;
-                }
-                size_t decodedLines = 0;
-                try {
-                    while (true) {
-                        inputStream->ReadLine();
-                        ++decodedLines;
-                    }
-                } catch (const std::exception&) { // end of line
-                }
-                UNIT_ASSERT_VALUES_EQUAL(decodedLines, line);
-            }
-            return line;
-        };
-
-        size_t destPathCounter = 0;
-
-        auto checkImport = [&](const TString& sourcePath, ui64 linesCount) {
-            const TString destinationPath = TStringBuilder() << "/Root/Restored_" << ++destPathCounter;
-            Cerr << "Test import from patched file. SourcePath: " << sourcePath
-                << ", LinesCount: " << linesCount
-                << ", DestinationPath: " << destinationPath << Endl;
-
-            NImport::TImportFromS3Settings importSettings = MakeImportSettings(sourcePath, destinationPath);
-            importSettings
-                .SymmetricKey(key);
-
-            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
-            WaitOpSuccess(res, TStringBuilder() << "Import from S3 " << destinationPath, TDuration::Minutes(3));
-
-            TStringBuilder sql;
-            sql << "SELECT MAX(Key), COUNT(*) FROM `" << destinationPath << "/TestTable`";
-            auto result = YdbQueryClient().ExecuteQuery(sql, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetStatus() << ": " << result.GetIssues().ToString());
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            auto resultSet = result.GetResultSetParser(0);
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
-            UNIT_ASSERT(resultSet.TryNextRow());
-            UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser(0).GetOptionalUint64(), linesCount);
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUint64(), linesCount);
-
-            // Free resources
-            auto session = YdbTableClient().GetSession().GetValueSync().GetSession();
-            auto dropResult = session.DropTable(TStringBuilder() << destinationPath << "/TestTable").GetValueSync();
-            UNIT_ASSERT_C(dropResult.IsSuccess(), dropResult.GetIssues().ToString());
-        };
-
-        // Patch data and test that datashard can work with any configuration.
-        // Data is read by datashard by 8 MB parts.
-        // Also it can be splitted into blocks in encrypted file.
-
-        ui64 linesCount;
-
-        // Read big parts (8 MB), decode small parts
-        linesCount = patchData(315_KB, 10_MB, false, dataFilePath);
-        checkImport("EncryptedExport", linesCount);
-
-        // Read big parts (8 MB), decode bigger parts
-        linesCount = patchData(9_MB, 20_MB, false, dataFilePath);
-        checkImport("EncryptedExport", linesCount);
-
-        // Read big parts (8 MB), decode small parts
-        linesCount = patchData(555_KB, 10_MB, true, compressedDataFilePath);
-        checkImport("EncryptedCompressedExport", linesCount);
-
-        // Read big parts (8 MB), decode bigger parts
-        linesCount = patchData(9_MB, 20_MB, true, compressedDataFilePath);
-        checkImport("EncryptedCompressedExport", linesCount);
+    Y_UNIT_TEST(CommonEncryptionRequirementsFsWithSchemaSecrets) {
+        TestCommonEncryptionRequirements(/* useSchemaSecrets */ true, /* isFsBackup */ true);
     }
 }

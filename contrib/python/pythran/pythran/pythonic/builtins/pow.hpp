@@ -30,8 +30,7 @@ namespace builtins
   }
 
   template <class... Types>
-  auto pow(Types &&...args)
-      -> decltype(numpy::functor::power{}(std::forward<Types>(args)...))
+  auto pow(Types &&...args) -> decltype(numpy::functor::power{}(std::forward<Types>(args)...))
   {
     return numpy::functor::power{}(std::forward<Types>(args)...);
   }

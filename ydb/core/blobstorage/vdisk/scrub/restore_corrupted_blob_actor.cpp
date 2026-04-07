@@ -9,6 +9,7 @@ namespace NKikimr {
         const TIntrusivePtr<TVDiskContext> VCtx;
         const TString& LogPrefix;
         const TPDiskCtxPtr PDiskCtx;
+        const TIntrusivePtr<TVDiskConfig> VCfg;
         const TInstant Deadline;
         std::vector<TEvRecoverBlobResult::TItem> Items;
         const bool WriteRestoredParts;
@@ -29,11 +30,14 @@ namespace NKikimr {
             TDiskPart Location;
             TEvRestoreCorruptedBlobResult::TItem *Item;
             NMatrix::TVectorType Parts;
+            TLogoBlobID HugeBlobId;
 
-            TReadCmd(TDiskPart location, TEvRestoreCorruptedBlobResult::TItem *item, NMatrix::TVectorType parts)
+            TReadCmd(TDiskPart location, TEvRestoreCorruptedBlobResult::TItem *item, NMatrix::TVectorType parts,
+                    TLogoBlobID hugeBlobId)
                 : Location(location)
                 , Item(item)
                 , Parts(parts)
+                , HugeBlobId(hugeBlobId)
             {}
         };
 
@@ -50,7 +54,7 @@ namespace NKikimr {
                 Item = item;
             }
 
-            void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& /*key*/,
+            void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key,
                     ui64 /*circaLsn*/, const void* /*sst*/) {
                 const NMatrix::TVectorType local = memRec.GetLocalParts(GType);
                 if ((local & Item->Needed).Empty()) {
@@ -61,13 +65,15 @@ namespace NKikimr {
                 switch (extr.BlobType) {
                     case TBlobType::DiskBlob:
                     case TBlobType::HugeBlob:
-                        ReadQ.emplace_back(extr.SwearOne(), Item, local);
+                        ReadQ.emplace_back(extr.SwearOne(), Item, local, TLogoBlobID());
                         break;
 
                     case TBlobType::ManyHugeBlobs:
                         for (ui32 i = local.FirstPosition(); i != local.GetSize(); i = local.NextPosition(i), ++extr.Begin) {
                             if (Item->Needed.Get(i)) {
-                                ReadQ.emplace_back(*extr.Begin, Item, NMatrix::TVectorType::MakeOneHot(i, local.GetSize()));
+                                const TLogoBlobID partId(key.LogoBlobID(), i + 1);
+                                ReadQ.emplace_back(*extr.Begin, Item, NMatrix::TVectorType::MakeOneHot(i,
+                                    local.GetSize()), partId);
                             }
                         }
                         break;
@@ -96,12 +102,13 @@ namespace NKikimr {
     public:
         TRestoreCorruptedBlobActor(TActorId skeletonId, TEvRestoreCorruptedBlob::TPtr& ev,
                 TIntrusivePtr<TBlobStorageGroupInfo> info, TIntrusivePtr<TVDiskContext> vctx,
-                TPDiskCtxPtr pdiskCtx)
+                TPDiskCtxPtr pdiskCtx, TIntrusivePtr<TVDiskConfig> vcfg)
             : SkeletonId(skeletonId)
             , Info(std::move(info))
             , VCtx(std::move(vctx))
             , LogPrefix(VCtx->VDiskLogPrefix)
             , PDiskCtx(std::move(pdiskCtx))
+            , VCfg(std::move(vcfg))
             , Deadline(ev->Get()->Deadline)
             , WriteRestoredParts(ev->Get()->WriteRestoredParts)
             , ReportNonrestoredParts(ev->Get()->ReportNonrestoredParts)
@@ -159,6 +166,7 @@ namespace NKikimr {
                         (SelfId, SelfId()), (Location, cmd.Location), (BlobId, cmd.Item->BlobId), (Parts, cmd.Parts));
                     auto msg = std::make_unique<NPDisk::TEvChunkRead>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
                         cmd.Location.ChunkIdx, cmd.Location.Offset, cmd.Location.Size, NPriRead::HullLow, &cmd);
+                    msg->BlobId = cmd.HugeBlobId;
                     Send(PDiskCtx->PDiskId, msg.release());
                     ++ReadsPending;
                 }
@@ -259,7 +267,7 @@ namespace NKikimr {
                 Y_VERIFY_S(buffer.size() == Info->Type.PartSize(blobId), VCtx->VDiskLogPrefix);
                 Y_VERIFY_S(WriteRestoredParts, VCtx->VDiskLogPrefix);
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(blobId, buffer, vdiskId, true, &index, Deadline,
-                    NKikimrBlobStorage::EPutHandleClass::AsyncBlob);
+                    NKikimrBlobStorage::EPutHandleClass::AsyncBlob, VCfg->BlobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER);
                 ev->RewriteBlob = true;
                 Send(SkeletonId, ev.release());
                 ++WritesPending;
@@ -343,8 +351,9 @@ namespace NKikimr {
 
     IActor *CreateRestoreCorruptedBlobActor(TActorId skeletonId, TEvRestoreCorruptedBlob::TPtr& ev,
             TIntrusivePtr<TBlobStorageGroupInfo> info, TIntrusivePtr<TVDiskContext> vctx,
-            TPDiskCtxPtr pdiskCtx) {
-        return new TRestoreCorruptedBlobActor(skeletonId, ev, std::move(info), std::move(vctx), std::move(pdiskCtx));
+            TPDiskCtxPtr pdiskCtx, TIntrusivePtr<TVDiskConfig> vcfg) {
+        return new TRestoreCorruptedBlobActor(skeletonId, ev, std::move(info), std::move(vctx), std::move(pdiskCtx),
+            std::move(vcfg));
     }
 
 } // NKikimr

@@ -18,8 +18,8 @@ public:
 
     void PushBack(T value);
 
-    T& operator [] (size_t index);
-    const T& operator [] (size_t index) const;
+    T& operator[](size_t index);
+    const T& operator[](size_t index) const;
 
 private:
     struct TDeepChunk

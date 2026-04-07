@@ -48,12 +48,7 @@ struct TSchemeCacheConfig : public TThrRefBase {
 
 struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     using TPtr = TIntrusivePtr<TDomainInfo>;
-
-    struct TUser {
-        TString Sid;
-
-        TString ToString() const;
-    };
+    using THashInitParams = std::unordered_map<NLoginProto::EHashType::HashType, std::string>;
 
     struct TGroup {
         TString Sid;
@@ -69,12 +64,12 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     {}
 
     explicit TDomainInfo(const NKikimrSubDomains::TDomainDescription& descr)
-        : DomainKey(GetDomainKey(descr.GetDomainKey()))
+        : DomainKey(TPathId::FromDomainKey(descr.GetDomainKey()))
         , Params(descr.GetProcessingParams())
         , Coordinators(descr.GetProcessingParams())
     {
         if (descr.HasResourcesDomainKey()) {
-            ResourcesDomainKey = GetDomainKey(descr.GetResourcesDomainKey());
+            ResourcesDomainKey = TPathId::FromDomainKey(descr.GetResourcesDomainKey());
         } else {
             ResourcesDomainKey = DomainKey;
         }
@@ -90,9 +85,15 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
         if (descr.HasSecurityState()) {
             for (const auto& sid : descr.GetSecurityState().GetSids()) {
                 switch (sid.GetType()) {
-                case NLoginProto::ESidType_SidType_USER:
-                    Users.emplace_back(sid.GetName());
+                case NLoginProto::ESidType_SidType_USER: {
+                    THashInitParams userHashesInitParams;
+                    userHashesInitParams.reserve(sid.HashesInitParamsSize());
+                    for (const auto& hashInitParams : sid.GetHashesInitParams()) {
+                        userHashesInitParams.emplace(hashInitParams.GetHashType(), hashInitParams.GetInitParams());
+                    }
+                    Users.emplace(sid.GetName(), std::move(userHashesInitParams));
                     break;
+                }
                 case NLoginProto::ESidType_SidType_GROUP: {
                     TVector<TString> members(sid.GetMembers().begin(), sid.GetMembers().end());
                     Groups.emplace_back(sid.GetName(), std::move(members));
@@ -139,15 +140,10 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
     TCoordinators Coordinators;
     TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
     ui64 SharedHiveId = 0;
-    TVector<TUser> Users;
+    std::unordered_map<std::string, THashInitParams> Users;
     TVector<TGroup> Groups;
 
     TString ToString() const;
-
-private:
-    inline static TPathId GetDomainKey(const NKikimrSubDomains::TDomainKey& protoKey) {
-        return TPathId(protoKey.GetSchemeShard(), protoKey.GetPathId());
-    }
 
 }; // TDomainInfo
 
@@ -157,6 +153,8 @@ enum class ETableKind {
     KindSyncIndexTable = 2,
     KindAsyncIndexTable = 3,
     KindVectorIndexTable = 4,
+    KindFulltextIndexTable = 5,
+    KindJsonIndexTable = 6,
 };
 
 struct TSchemeCacheNavigate {

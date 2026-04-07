@@ -9,6 +9,36 @@
 
 namespace NKikimr::NPDisk {
 
+void InitializeKeeperLogParams(TKeeperParams& params, const TIntrusivePtr<TPDiskConfig>& cfg, const TDiskFormat& format) {
+    if (cfg->FeatureFlags.GetEnablePDiskLogForSmallDisks()) {
+        params.SeparateCommonLog = true;
+        if (format.DiskSize > SmallDiskSizeLogBoundary) {
+            params.MaxCommonLogChunks = cfg->MaxCommonLogChunks;
+            params.CommonStaticLogChunks = cfg->CommonStaticLogChunks;
+        } else if (format.DiskSize < TinyDiskSizeLogBoundary) {
+            params.MaxCommonLogChunks = TinyDiskMaxCommonLogChunks;
+            params.CommonStaticLogChunks = TinyDiskCommonStaticLogChunks;
+        } else {
+            params.MaxCommonLogChunks = TinyDiskMaxCommonLogChunks +
+                double(format.DiskSize - TinyDiskSizeLogBoundary) *
+                (cfg->MaxCommonLogChunks - TinyDiskMaxCommonLogChunks) /
+                (SmallDiskSizeLogBoundary - TinyDiskSizeLogBoundary);
+            params.CommonStaticLogChunks = TinyDiskCommonStaticLogChunks +
+                double(format.DiskSize - TinyDiskSizeLogBoundary) *
+                (cfg->CommonStaticLogChunks - TinyDiskCommonStaticLogChunks) /
+                (SmallDiskSizeLogBoundary - TinyDiskSizeLogBoundary);
+        }
+    } else {
+        if (format.IsDiskSmall() && cfg->FeatureFlags.GetEnableSmallDiskOptimization()) {
+            params.SeparateCommonLog = false;
+        } else {
+            params.SeparateCommonLog = true;
+        }
+        params.MaxCommonLogChunks = cfg->MaxCommonLogChunks;
+        params.CommonStaticLogChunks = cfg->CommonStaticLogChunks;
+    }
+}
+
 class TLogFlushCompletionAction : public TCompletionAction {
     const ui32 EndChunkIdx;
     const ui32 EndSectorIdx;
@@ -57,7 +87,7 @@ void TPDisk::InitSysLogger() {
     SysLogger.Reset(new TSysLogWriter(Mon, *BlockDevice.Get(), Format,
         SysLogRecord.Nonces.Value[NonceSysLog], Format.SysLogKey, BufferPool.Get(),
         beginSectorIdx, endSectorIdx, Format.MagicSysLogChunk, 0, nullptr, writeSectorIdx, nullptr, PCtx,
-        &DriveModel, Cfg->EnableSectorEncryption));
+        &DriveModel, Cfg->FeatureFlags.GetEnablePDiskDataEncryption(), {}));
 }
 
 bool TPDisk::InitCommonLogger() {
@@ -76,7 +106,7 @@ bool TPDisk::InitCommonLogger() {
     CommonLogger.Reset(new TLogWriter(Mon, *BlockDevice.Get(), Format,
             SysLogRecord.Nonces.Value[NonceLog], Format.LogKey, BufferPool.Get(), 0, UsableSectorsPerLogChunk(),
             Format.MagicLogChunk, chunkIdx, info, std::min(sectorIdx, UsableSectorsPerLogChunk()),
-            InitialTailBuffer, PCtx, &DriveModel, Cfg->EnableSectorEncryption));
+            InitialTailBuffer, PCtx, &DriveModel, Cfg->FeatureFlags.GetEnablePDiskDataEncryption(), {}));
     InitialTailBuffer = nullptr;
     if (sectorIdx >= UsableSectorsPerLogChunk()) {
         if (!AllocateLogChunks(1, 0, OwnerSystem, 0, EOwnerGroupType::Static, true)) {
@@ -409,7 +439,7 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
             ui64 minSize = noneSize + sizeof(TSysLogFirstNoncesToKeep);
             Y_VERIFY_S(lastSysLogRecord.size() >= minSize, PCtx->PDiskLogPrefix
                     << "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
-            memcpy(&SysLogFirstNoncesToKeep, firstNoncesToKeep, sizeof(TSysLogFirstNoncesToKeep));
+            memcpy(&SysLogFirstNoncesToKeep, (const ui8*)firstNoncesToKeep, sizeof(TSysLogFirstNoncesToKeep));
         }
     }
 
@@ -1492,7 +1522,7 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
         ui32 dataChunkSizeSectors = Format.ChunkSize / Format.SectorSize;
         TLogWriter writer(Mon, *BlockDevice.Get(), Format, nonce, Format.LogKey, BufferPool.Get(), desiredSectorIdx,
                 dataChunkSizeSectors, Format.MagicLogChunk, req.GapStart->ChunkIdx, nullptr, desiredSectorIdx,
-                nullptr, PCtx, &DriveModel, Cfg->EnableSectorEncryption);
+                nullptr, PCtx, &DriveModel, Cfg->FeatureFlags.GetEnablePDiskDataEncryption(), {});
 
         Y_VERIFY_S(req.GapEnd->DesiredPrevChunkLastNonce, PCtx->PDiskLogPrefix
             << "Zero GapEnd->DesiredPrevChunkLastNonce, chunkInfo# " << *req.GapEnd);
@@ -1648,15 +1678,18 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                 params.TotalChunks = Format.DiskSizeChunks();
                 params.ExpectedOwnerCount = Cfg->ExpectedSlotCount;
                 params.SysLogSize = Format.SystemChunkCount; // sysLogSize = chunk 0 + additional SysLog chunks
-                if (Format.IsDiskSmall() && Cfg->FeatureFlags.GetEnableSmallDiskOptimization()) {
-                    params.SeparateCommonLog = false;
-                } else {
-                    params.SeparateCommonLog = true;
-                }
                 params.CommonLogSize = LogChunks.size();
-                params.MaxCommonLogChunks = Cfg->MaxCommonLogChunks;
-                params.SpaceColorBorder = Cfg->SpaceColorBorder;
-                params.ChunkBaseLimit = Cfg->ChunkBaseLimit;
+
+                InitializeKeeperLogParams(params, Cfg, Format);
+
+                params.SpaceColorBorder = GetColorBorderIcb();
+                ui64 chunkBaseLimitIcb = ChunkBaseLimitPerMille;
+                if (chunkBaseLimitIcb) {
+                    params.ChunkBaseLimit = std::clamp(chunkBaseLimitIcb,
+                            static_cast<ui64>(13), static_cast<ui64>(130));
+                } else {
+                    params.ChunkBaseLimit = Cfg->ChunkBaseLimit;
+                }
                 for (ui32 ownerId = OwnerBeginUser; ownerId < OwnerEndUser; ++ownerId) {
                     if (OwnerData[ownerId].VDiskId != TVDiskID::InvalidId) {
                         params.OwnersInfo[ownerId] = {
@@ -1683,11 +1716,22 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                 }
             }
 
-            // Increase Nonces to prevent collisions
-            NPrivate::TMersenne64 randGen(Seed());
             do {
+                // chances that after restart we get the same random number are very low,
+                // but not zero. We don't want to restart PDisk many times and test
+                // this part and the rest with some probability, so we force seed to get
+                // the same random number (and hence nonces) between PDisk restarts
+                ui64 randNum;
+                if (!Cfg->NonceRandNum.has_value()) {
+                    NPrivate::TMersenne64 randGen(Seed());
+                    randNum = randGen.GenRand();
+                } else {
+                    randNum = *Cfg->NonceRandNum;
+                }
+
+                // Increase Nonces to prevent collisions
                 for (ui32 i = 0; i < NonceCount; ++i) {
-                    SysLogRecord.Nonces.Value[i] += ForceLogNonceDiff.Value[i] + 1 + randGen.GenRand() % ForceLogNonceDiff.Value[i];
+                    SysLogRecord.Nonces.Value[i] += ForceLogNonceDiff.Value[i] + 1 + randNum % ForceLogNonceDiff.Value[i];
                 }
             } while (SysLogRecord.Nonces.Value[NonceLog] <= InitialPreviousNonce);
             InitSysLogger();

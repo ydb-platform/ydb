@@ -12,147 +12,147 @@
 
 namespace NSQLComplete {
 
-    struct TIdentifier {
-        TString Identifier;
+struct TIdentifier {
+    TString Identifier;
+};
+
+struct TNamespaced {
+    TString Namespace;
+};
+
+struct TDescribed {
+    TMaybe<TString> Description;
+};
+
+struct TKeyword {
+    TString Content;
+};
+
+struct TPragmaName: TIdentifier {
+    struct TConstraints: TNamespaced {};
+};
+
+struct TTypeName: TIdentifier, TDescribed {
+    struct TConstraints {};
+
+    enum class EKind {
+        Simple,
+        Container,
+        Parameterized,
     };
 
-    struct TNamespaced {
-        TString Namespace;
+    EKind Kind = EKind::Simple;
+};
+
+struct TFunctionName: TIdentifier, TDescribed {
+    struct TConstraints: TNamespaced {
+        ENodeKind ReturnType;
     };
+};
 
-    struct TDescribed {
-        TMaybe<TString> Description;
+struct THintName: TIdentifier {
+    struct TConstraints {
+        EStatementKind Statement;
     };
+};
 
-    struct TKeyword {
-        TString Content;
-    };
+struct TObjectNameConstraints {
+    TString Provider;
+    TString Cluster;
+    THashSet<EObjectKind> Kinds;
+};
 
-    struct TPragmaName: TIdentifier {
-        struct TConstraints: TNamespaced {};
-    };
+struct TFolderName: TIdentifier {
+};
 
-    struct TTypeName: TIdentifier, TDescribed {
-        struct TConstraints {};
+struct TTableName: TIdentifier {
+};
 
-        enum class EKind {
-            Simple,
-            Container,
-            Parameterized,
-        };
+struct TClusterName: TIdentifier {
+    struct TConstraints: TNamespaced {};
+};
 
-        EKind Kind = EKind::Simple;
-    };
-
-    struct TFunctionName: TIdentifier, TDescribed {
-        struct TConstraints: TNamespaced {
-            ENodeKind ReturnType;
-        };
-    };
-
-    struct THintName: TIdentifier {
-        struct TConstraints {
-            EStatementKind Statement;
-        };
-    };
-
-    struct TObjectNameConstraints {
-        TString Provider;
-        TString Cluster;
-        THashSet<EObjectKind> Kinds;
-    };
-
-    struct TFolderName: TIdentifier {
-    };
-
-    struct TTableName: TIdentifier {
-    };
-
-    struct TClusterName: TIdentifier {
-        struct TConstraints: TNamespaced {};
-    };
-
-    struct TColumnName: TIdentifier {
-        struct TConstraints {
-            TString TableAlias;
-            TVector<TAliased<TTableId>> Tables;
-            THashMap<TString, THashSet<TString>> WithoutByTableAlias;
-        };
-
+struct TColumnName: TIdentifier {
+    struct TConstraints {
         TString TableAlias;
+        TVector<TAliased<TTableId>> Tables;
+        THashMap<TString, THashSet<TString>> WithoutByTableAlias;
     };
 
-    struct TBindingName: TIdentifier {
-    };
+    TString TableAlias;
+};
 
-    struct TUnknownName {
-        TString Content;
-        TString Type;
-    };
+struct TBindingName: TIdentifier {
+};
 
-    using TGenericName = std::variant<
-        TKeyword,
-        TPragmaName,
-        TTypeName,
-        TFunctionName,
-        THintName,
-        TFolderName,
-        TTableName,
-        TClusterName,
-        TColumnName,
-        TBindingName,
-        TUnknownName>;
+struct TUnknownName {
+    TString Content;
+    TString Type;
+};
 
-    struct TNameConstraints {
-        TMaybe<TPragmaName::TConstraints> Pragma;
-        TMaybe<TTypeName::TConstraints> Type;
-        TMaybe<TFunctionName::TConstraints> Function;
-        TMaybe<THintName::TConstraints> Hint;
-        TMaybe<TObjectNameConstraints> Object;
-        TMaybe<TClusterName::TConstraints> Cluster;
-        TMaybe<TColumnName::TConstraints> Column;
+using TGenericName = std::variant<
+    TKeyword,
+    TPragmaName,
+    TTypeName,
+    TFunctionName,
+    THintName,
+    TFolderName,
+    TTableName,
+    TClusterName,
+    TColumnName,
+    TBindingName,
+    TUnknownName>;
 
-        bool IsEmpty() const {
-            return !Pragma &&
-                   !Type &&
-                   !Function &&
-                   !Hint &&
-                   !Object &&
-                   !Cluster &&
-                   !Column;
-        }
+struct TNameConstraints {
+    TMaybe<TPragmaName::TConstraints> Pragma;
+    TMaybe<TTypeName::TConstraints> Type;
+    TMaybe<TFunctionName::TConstraints> Function;
+    TMaybe<THintName::TConstraints> Hint;
+    TMaybe<TObjectNameConstraints> Object;
+    TMaybe<TClusterName::TConstraints> Cluster;
+    TMaybe<TColumnName::TConstraints> Column;
 
-        TGenericName Qualified(TGenericName unqualified) const;
-        TGenericName Unqualified(TGenericName qualified) const;
-        TVector<TGenericName> Qualified(TVector<TGenericName> unqualified) const;
-        TVector<TGenericName> Unqualified(TVector<TGenericName> qualified) const;
-    };
+    bool IsEmpty() const {
+        return !Pragma &&
+               !Type &&
+               !Function &&
+               !Hint &&
+               !Object &&
+               !Cluster &&
+               !Column;
+    }
 
-    struct TNameRequest {
-        TVector<TString> Keywords;
-        TNameConstraints Constraints;
-        TString Prefix = "";
-        size_t Limit = 128;
+    TGenericName Qualified(TGenericName unqualified) const;
+    TGenericName Unqualified(TGenericName qualified) const;
+    TVector<TGenericName> Qualified(TVector<TGenericName> unqualified) const;
+    TVector<TGenericName> Unqualified(TVector<TGenericName> qualified) const;
+};
 
-        bool IsEmpty() const {
-            return Keywords.empty() && Constraints.IsEmpty();
-        }
-    };
+struct TNameRequest {
+    TVector<TString> Keywords;
+    TNameConstraints Constraints;
+    TString Prefix = "";
+    size_t Limit = 128;
 
-    struct TNameResponse {
-        TVector<TGenericName> RankedNames;
-        TMaybe<size_t> NameHintLength = Nothing();
+    bool IsEmpty() const {
+        return Keywords.empty() && Constraints.IsEmpty();
+    }
+};
 
-        bool IsEmpty() const {
-            return RankedNames.empty();
-        }
-    };
+struct TNameResponse {
+    TVector<TGenericName> RankedNames;
+    TMaybe<size_t> NameHintLength = Nothing();
 
-    class INameService: public TThrRefBase {
-    public:
-        using TPtr = TIntrusivePtr<INameService>;
+    bool IsEmpty() const {
+        return RankedNames.empty();
+    }
+};
 
-        virtual NThreading::TFuture<TNameResponse> Lookup(const TNameRequest& request) const = 0;
-    };
+class INameService: public TThrRefBase {
+public:
+    using TPtr = TIntrusivePtr<INameService>;
+
+    virtual NThreading::TFuture<TNameResponse> Lookup(const TNameRequest& request) const = 0;
+};
 
 } // namespace NSQLComplete

@@ -74,6 +74,7 @@ def main():
         p = subprocess.Popen(cmd, stderr=subprocess.PIPE)
         _, err = p.communicate()
         rc = p.wait()
+        err = err.decode()
 
         if opts.remove_notes:
             err = remove_notes(err)

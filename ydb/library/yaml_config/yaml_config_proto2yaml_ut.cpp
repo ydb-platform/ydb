@@ -1,5 +1,6 @@
-#include <ydb/library/yaml_config/yaml_config_parser.cpp>
+#include <ydb/library/yaml_config/yaml_config_parser.h>
 
+#include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 

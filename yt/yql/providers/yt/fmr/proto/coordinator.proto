@@ -17,25 +17,43 @@ message THeartbeatResponse {
     bool NeedToRestart = 3;
 }
 
+message TPrepareOperationRequest {
+    EOperationType OperationType = 1;
+    TOperationParams OperationParams = 2;
+    map<string, TClusterConnection> ClusterConnections = 3;
+    optional string FmrOperationSpec = 4;
+}
+
+message TPrepareOperationResponse {
+    string PartitionId = 1;
+    uint64 TasksNum = 2;
+    repeated TFmrError ErrorMessages = 3;
+}
+
 message TStartOperationRequest {
-    ETaskType TaskType = 1;
+    EOperationType OperationType = 1;
     TOperationParams OperationParams = 2;
     string SessionId = 3;
     optional string IdempotencyKey = 4;
     uint32 NumRetries = 5;
     map<string, TClusterConnection> ClusterConnections = 6;
     optional string FmrOperationSpec = 7;
+    repeated TFileInfo Files = 8;
+    repeated TYtResourceInfo YtResources = 9;
+    repeated TFmrResourceOperationInfo FmrResources = 10;
 }
 
 message TStartOperationResponse {
     EOperationStatus Status = 1;
     string OperationId = 2;
+    repeated TFmrError ErrorMessages = 3;
 }
 
 message TGetOperationResponse {
     EOperationStatus Status = 1;
     repeated TFmrError ErrorMessages = 2;
     repeated TTableStats TableStats = 3;
+    repeated string OperationResultsYson = 4;
 }
 
 message TDeleteOperationResponse {
@@ -44,6 +62,7 @@ message TDeleteOperationResponse {
 
 message TGetFmrTableInfoRequest {
     string TableId = 1;
+    string SessionId = 2;
 }
 
 message TGetFmrTableInfoResponse {
@@ -58,3 +77,33 @@ message TClearSessionRequest {
 message TClearSessionResponse {
     EOperationStatus Status = 1;
 };
+
+message TDropTablesRequest {
+    repeated string TableIds = 1;
+    string SessionId = 2;
+}
+
+message TDropTablesResponse {
+}
+
+message TOpenSessionRequest {
+    string SessionId = 1;
+}
+
+message TOpenSessionResponse {
+}
+
+message TPingSessionRequest {
+    string SessionId = 1;
+}
+
+message TPingSessionResponse {
+    bool Success = 1;
+}
+
+message TListSessionsRequest {
+}
+
+message TListSessionsResponse {
+    repeated string SessionIds = 1;
+}

@@ -8,7 +8,11 @@
 #include <ydb/library/formats/arrow/replace_key.h>
 #include <ydb/services/bg_tasks/abstract/interface.h>
 
+#include <functional>
+
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
+
+using TMayUsePortion = std::function<bool(const TPortionInfo::TConstPtr&)>;
 
 class TOrderedPortion {
 private:
@@ -94,8 +98,8 @@ public:
 class TPortionsChain {
 private:
     std::vector<TPortionInfo::TConstPtr> Portions;
-
     TPortionInfo::TConstPtr NotIncludedNextPortion;
+    bool ConsistBlockedPortions;
 
 public:
     const std::vector<TPortionInfo::TConstPtr>& GetPortions() const {
@@ -104,6 +108,10 @@ public:
 
     const TPortionInfo::TConstPtr& GetNotIncludedNextPortion() const {
         return NotIncludedNextPortion;
+    }
+
+    bool HasBlockedPortions() const {
+        return ConsistBlockedPortions;
     }
 
     TChainAddress GetAddress() const {
@@ -116,15 +124,24 @@ public:
         }
     }
 
-    TPortionsChain(const std::vector<TPortionInfo::TConstPtr>& portions, const TPortionInfo::TConstPtr& notIncludedNextPortion)
-        : Portions(portions)
-        , NotIncludedNextPortion(notIncludedNextPortion) {
-        AFL_VERIFY(Portions.size() || !!NotIncludedNextPortion);
+    TPortionsChain(
+        const std::vector<TPortionInfo::TConstPtr>& portions, 
+        const TPortionInfo::TConstPtr& notIncludedNextPortion,
+        const bool consistBlockedPortions
+    ): 
+        Portions(portions), 
+        NotIncludedNextPortion(notIncludedNextPortion),
+        ConsistBlockedPortions(consistBlockedPortions)
+    {
+        AFL_VERIFY(Portions.size() || !!NotIncludedNextPortion || ConsistBlockedPortions);
     }
 };
 
 class TCompactionTaskData {
 private:
+    static constexpr ui64 DefaultMemoryUsageLimit = ((ui64)512) << 20;
+    static constexpr ui64 DefaultPortionsCountLimit = 10000;
+
     YDB_ACCESSOR_DEF(std::vector<TPortionInfo::TConstPtr>, Portions);
     const TPositiveControlInteger TargetCompactionLevel;
     std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges::IMemoryPredictor> Predictor =
@@ -141,10 +158,13 @@ private:
     THashSet<ui64> CurrentLevelPortionIds;
     std::vector<TPortionsChain> Chains;
     std::optional<NArrow::TSimpleRow> StopSeparation;
+    std::optional<ui64> ExpectedPortionSize;
+    ui64 MemoryUsageLimit = DefaultMemoryUsageLimit;
+    ui64 PortionsCountLimit = DefaultPortionsCountLimit;
 
 public:
     ui64 GetTargetCompactionLevel() const {
-        if (MemoryUsage > ((ui64)1 << 30)) {
+        if (MemoryUsage > ((ui64)1 << 30) || MemoryUsage < ExpectedPortionSize.value_or(0)) {
             return TargetCompactionLevel.GetDec();
         } else {
             return TargetCompactionLevel;
@@ -173,13 +193,6 @@ public:
         } else {
             return Portions;
         }
-        auto moveIds = GetMovePortionIds();
-        for (auto&& i : Portions) {
-            if (!moveIds.contains(i->GetPortionId())) {
-                result.emplace_back(i);
-            }
-        }
-        return result;
     }
 
     std::vector<TPortionInfo::TConstPtr> GetMovePortions() const {
@@ -270,18 +283,23 @@ public:
         if (Portions.size() <= 1) {
             return true;
         }
-        return MemoryUsage < (((ui64)512) << 20) && CurrentLevelPortionsInfo.GetCount() + TargetLevelPortionsInfo.GetCount() < 10000 &&
-               Portions.size() < 10000;
+        return MemoryUsage < MemoryUsageLimit && CurrentLevelPortionsInfo.GetCount() + TargetLevelPortionsInfo.GetCount() < PortionsCountLimit &&
+               Portions.size() < PortionsCountLimit;
     }
 
-    TCompactionTaskData(const ui64 targetCompactionLevel)
-        : TargetCompactionLevel(targetCompactionLevel) {
+    TCompactionTaskData(const ui64 targetCompactionLevel,  std::optional<ui64> compactionTaskMemoryLimit = std::nullopt, std::optional<ui64> compactionTaskPortionsCountLimit = std::nullopt, const std::optional<ui64> expectedPortionSize = std::nullopt)
+        : TargetCompactionLevel(targetCompactionLevel)
+        , ExpectedPortionSize(expectedPortionSize)
+        , MemoryUsageLimit(compactionTaskMemoryLimit.value_or(DefaultMemoryUsageLimit))
+        , PortionsCountLimit(compactionTaskPortionsCountLimit.value_or(DefaultPortionsCountLimit)) {
     }
 };
 
 class IOverloadChecker {
 private:
     virtual bool DoIsOverloaded(const TSimplePortionsGroupInfo& portionsData) const = 0;
+    
+    virtual bool DoIsHighPriority(const TSimplePortionsGroupInfo& portionsData) const = 0;
 
 public:
     virtual ~IOverloadChecker() = default;
@@ -289,11 +307,19 @@ public:
     bool IsOverloaded(const TSimplePortionsGroupInfo& portionsData) const {
         return DoIsOverloaded(portionsData);
     }
+    
+    bool IsHighPriority(const TSimplePortionsGroupInfo& portionsData) const {
+        return DoIsHighPriority(portionsData);
+    }
 };
 
 class TNoOverloadChecker: public IOverloadChecker {
 private:
     virtual bool DoIsOverloaded(const TSimplePortionsGroupInfo& /*portionsData*/) const override {
+        return false;
+    }
+    
+    virtual bool DoIsHighPriority(const TSimplePortionsGroupInfo& /* portionsData */) const override {
         return false;
     }
 };
@@ -304,9 +330,23 @@ private:
     const std::optional<ui64> PortionBlobsSizeLimit;
     virtual bool DoIsOverloaded(const TSimplePortionsGroupInfo& portionsData) const override {
         if (PortionsCountLimit && *PortionsCountLimit < (ui64)portionsData.GetCount()) {
+           AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
+                   ("error", "overload: portions count limit")("value", (ui64)portionsData.GetCount())("limit", *PortionsCountLimit);
             return true;
         }
         if (PortionBlobsSizeLimit && *PortionBlobsSizeLimit < (ui64)portionsData.GetBlobBytes()) {
+           AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
+                   ("error", "overload: portion blobs size limit")("value", (ui64)portionsData.GetBlobBytes())("limit", *PortionBlobsSizeLimit);
+            return true;
+        }
+        return false;
+    }
+    
+    virtual bool DoIsHighPriority(const TSimplePortionsGroupInfo& portionsData) const override {
+        if (PortionsCountLimit && 0.7 * *PortionsCountLimit < (ui64)portionsData.GetCount()) {
+            return true;
+        }
+        if (PortionBlobsSizeLimit && 0.7 * *PortionBlobsSizeLimit < (ui64)portionsData.GetBlobBytes()) {
             return true;
         }
         return false;
@@ -326,8 +366,9 @@ private:
     virtual ui64 DoGetWeight(bool highPriority) const = 0;
     virtual TInstant DoGetWeightExpirationInstant() const = 0;
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& pkSchema) const = 0;
-    virtual TCompactionTaskData DoGetOptimizationTask() const = 0;
-    virtual std::optional<TPortionsChain> DoGetAffectedPortions(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const = 0;
+    virtual std::vector<TCompactionTaskData> DoGetOptimizationTasks(const TMayUsePortion& mayUsePortion) const = 0;
+    virtual std::optional<TPortionsChain> DoGetAffectedPortions(
+        const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to, const TMayUsePortion& mayUsePortion) const = 0;
     virtual ui64 DoGetAffectedPortionBytes(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const = 0;
 
     virtual NJson::TJsonValue DoSerializeToJson() const {
@@ -374,6 +415,10 @@ public:
 
     bool IsOverloaded() const {
         return NextLevel && OverloadChecker->IsOverloaded(GetPortionsInfo());
+    }
+    
+    bool IsHighPriority() const {
+        return NextLevel && OverloadChecker->IsHighPriority(GetPortionsInfo());
     }
 
     bool HasData() const {
@@ -445,8 +490,9 @@ public:
         return DoDebugString();
     }
 
-    std::optional<TPortionsChain> GetAffectedPortions(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const {
-        return DoGetAffectedPortions(from, to);
+    std::optional<TPortionsChain> GetAffectedPortions(
+        const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to, const TMayUsePortion& mayUsePortion) const {
+        return DoGetAffectedPortions(from, to, mayUsePortion);
     }
 
     ui64 GetAffectedPortionBytes(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const {
@@ -497,10 +543,9 @@ public:
         return DoGetBucketPositions(pkSchema);
     }
 
-    TCompactionTaskData GetOptimizationTask() const {
+    std::vector<TCompactionTaskData> GetOptimizationTasks(const TMayUsePortion& mayUsePortion) const {
         AFL_VERIFY(NextLevel);
-        TCompactionTaskData result = DoGetOptimizationTask();
-        AFL_VERIFY(!result.IsEmpty());
+        std::vector<TCompactionTaskData> result = DoGetOptimizationTasks(mayUsePortion);
         return result;
     }
 };

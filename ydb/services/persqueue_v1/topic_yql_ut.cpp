@@ -25,7 +25,6 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
     Y_UNIT_TEST(CreateTopicYqlBackCompatibility) {
         NKikimrConfig::TFeatureFlags ff;
-        ff.SetEnableTopicSplitMerge(true);
         auto settings = NKikimr::NPersQueueTests::PQSettings();
         settings.SetFeatureFlags(ff);
 
@@ -55,7 +54,6 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
     Y_UNIT_TEST(CreateAndAlterTopicYql) {
         NKikimrConfig::TFeatureFlags ff;
-        ff.SetEnableTopicSplitMerge(true);
         auto settings = NKikimr::NPersQueueTests::PQSettings();
         settings.SetFeatureFlags(ff);
 
@@ -69,7 +67,8 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         const char *query = R"__(
             CREATE TOPIC `/Root/PQ/rt3.dc1--legacy--topic1` (
                 CONSUMER c1,
-                CONSUMER c2 WITH (important = true, read_from = 100, supported_codecs = 'RAW, LZOP, GZIP')
+                CONSUMER c2 WITH (important = true, read_from = 100, supported_codecs = 'RAW, LZOP, GZIP'),
+                CONSUMER c4 WITH (availability_period = Interval('PT9H'))
             ) WITH (min_active_partitions = 2,
                     max_active_partitions = 5,
                     auto_partitioning_stabilization_window = Interval('PT1M'),
@@ -104,7 +103,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
             UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(describe.GetPartitionStrategy().GetPartitionStrategyType()), static_cast<int>(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT));
             UNIT_ASSERT_VALUES_EQUAL(pqGroup.GetTotalGroupCount(), 2);
 
-            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumers().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumers().size(), 3);
 
             auto& consumer0 = describe.GetConsumers()[0];
             UNIT_ASSERT_VALUES_EQUAL(consumer0.GetName(), "c1");
@@ -115,6 +114,11 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
             UNIT_ASSERT_VALUES_EQUAL(consumer1.GetImportant(), true);
             UNIT_ASSERT_VALUES_EQUAL(consumer1.GetCodec().IdsSize(), 3);
             UNIT_ASSERT_VALUES_EQUAL(consumer1.GetReadFromTimestampsMs(), 100 * 1000);
+
+            auto& consumer4 = describe.GetConsumers()[2];
+            UNIT_ASSERT_VALUES_EQUAL(consumer4.GetName(), "c4");
+            UNIT_ASSERT_VALUES_EQUAL(consumer4.GetImportant(), false);
+            UNIT_ASSERT_VALUES_EQUAL(consumer4.GetAvailabilityPeriodMs(), TDuration::Hours(9).MilliSeconds());
         }
         auto expectedDescr = pqGroup.GetPQTabletConfig();
         {
@@ -125,11 +129,13 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
             expectedDescr.MutablePartitionStrategy()->SetMinPartitionCount(3);
             expectedDescr.MutableConsumers(1)->SetReadFromTimestampsMs(1609462861000);
+            expectedDescr.MutableConsumers(2)->SetAvailabilityPeriodMs(TDuration::Hours(48).MilliSeconds());
         }
 
         const char *query2 = R"__(
         ALTER TOPIC `/Root/PQ/rt3.dc1--legacy--topic1`
             ALTER CONSUMER c2 SET (read_from = Timestamp('2021-01-01T01:01:01Z')),
+            ALTER CONSUMER c4 SET (availability_period = Interval('PT48H')),
             SET (min_active_partitions = 3,
                  retention_period = Interval('PT2H'),
                  retention_storage_mb = 10,
@@ -138,6 +144,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
                  partition_write_speed_bytes_per_second = 9001
             );
         )__";
+        Cerr << "\nRun query: \n" << query2 << Endl;
         server.AnnoyingClient->RunYqlSchemeQuery(query2);
         auto pqGroup2 = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--legacy--topic1")->Record.GetPathDescription()
                                                                                              .GetPersQueueGroup();
@@ -153,9 +160,10 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
             DROP CONSUMER c1,
             ALTER CONSUMER c2 SET (important = false, read_from = Datetime('2021-01-01T01:01:01Z'), supported_codecs = 'RAW, GZIP'),
             ADD CONSUMER c3 WITH (important = true),
+            ALTER CONSUMER c4 RESET (availability_period),
             SET (supported_codecs = 'RAW');
         )__";
-        Cerr << "\nRun query: \n" << query2 << Endl;
+        Cerr << "\nRun query: \n" << query3 << Endl;
         server.AnnoyingClient->RunYqlSchemeQuery(query3);
 
         pqGroup2 = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--legacy--topic1")->Record.GetPathDescription()
@@ -169,7 +177,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
             UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitionConfig().GetBurstSize(), 100501);
             UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(), 9001);
 
-            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumers().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumers().size(), 3);
 
             auto& consumer1 = describe.GetConsumers(0);
             UNIT_ASSERT_VALUES_EQUAL(consumer1.GetName(), "c2");
@@ -177,7 +185,12 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
             UNIT_ASSERT_VALUES_EQUAL(consumer1.GetReadFromTimestampsMs(), 1609462861000);
             UNIT_ASSERT_VALUES_EQUAL(consumer1.GetCodec().IdsSize(), 2);
 
-            auto& consumer2 = describe.GetConsumers(1);
+            auto& consumer4 = describe.GetConsumers(1);
+            UNIT_ASSERT_VALUES_EQUAL(consumer4.GetName(), "c4");
+            UNIT_ASSERT_VALUES_EQUAL(consumer4.GetImportant(), false);
+            UNIT_ASSERT_VALUES_EQUAL(consumer4.HasAvailabilityPeriodMs(), false);
+
+            auto& consumer2 = describe.GetConsumers(2);
             UNIT_ASSERT_VALUES_EQUAL(consumer2.GetName(), "c3");
             UNIT_ASSERT_VALUES_EQUAL(consumer2.GetImportant(), true);
             UNIT_ASSERT_VALUES_EQUAL(consumer2.GetCodec().IdsSize(), 0);
@@ -188,7 +201,6 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
     Y_UNIT_TEST(AlterAutopartitioning) {
         NKikimrConfig::TFeatureFlags ff;
-        ff.SetEnableTopicSplitMerge(true);
         auto settings = NKikimr::NPersQueueTests::PQSettings();
         settings.SetFeatureFlags(ff);
 
@@ -234,6 +246,119 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
         }
     }
 
+    Y_UNIT_TEST(CreateSharedConsumer) {
+        NKikimrConfig::TFeatureFlags ff;
+        ff.SetEnableTopicMessageLevelParallelism(true);
+        auto settings = NKikimr::NPersQueueTests::PQSettings();
+        settings.SetFeatureFlags(ff);
+
+        NPersQueue::TTestServer server(settings);
+
+        {
+            const char *query = R"(
+                CREATE TOPIC `/Root/PQ/rt3.dc1--topic_with_shared_consumer`
+                    (CONSUMER c1 WITH (
+                          type = 'shared'
+                        , keep_messages_order = true
+                        , default_processing_timeout = Interval('PT31S')
+                        , max_processing_attempts = 67
+                        , dead_letter_policy = 'move'
+                        , dead_letter_queue = 'dead_letter_queue_97'
+                    ))
+            )";
+
+            server.AnnoyingClient->RunYqlSchemeQuery(query);
+        }
+
+        {
+            auto pqGroup = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--topic_with_shared_consumer")->Record.GetPathDescription().GetPersQueueGroup();
+            const auto& describe = pqGroup.GetPQTabletConfig();
+
+            Cerr <<"=== PATH DESCRIPTION: \n" << pqGroup.DebugString();
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumers().size(), 1);
+            auto c = describe.GetConsumers(0);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetName(), "c1");
+            UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EConsumerType_Name(c.GetType()),
+                ::NKikimrPQ::TPQTabletConfig::EConsumerType_Name(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP));
+            UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessageOrder(), true);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeoutSeconds(), 31);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetMaxProcessingAttempts(), 67);
+            UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(c.GetDeadLetterPolicy()),
+                ::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name( ::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE));
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterQueue(), "dead_letter_queue_97");
+        }
+    }
+
+    Y_UNIT_TEST(AlterSharedConsumer) {
+        NKikimrConfig::TFeatureFlags ff;
+        ff.SetEnableTopicMessageLevelParallelism(true);
+        auto settings = NKikimr::NPersQueueTests::PQSettings();
+        settings.SetFeatureFlags(ff);
+
+        NPersQueue::TTestServer server(settings);
+
+        {
+            const char *query = R"(
+                CREATE TOPIC `/Root/PQ/rt3.dc1--topic_with_shared_consumer`
+                    (CONSUMER c1 WITH (
+                          type = 'shared'
+                    ))
+            )";
+
+            server.AnnoyingClient->RunYqlSchemeQuery(query);
+        }
+
+        {
+            auto pqGroup = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--topic_with_shared_consumer")->Record.GetPathDescription().GetPersQueueGroup();
+            const auto& describe = pqGroup.GetPQTabletConfig();
+
+            Cerr <<"=== PATH DESCRIPTION: \n" << pqGroup.DebugString();
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumers().size(), 1);
+            auto c = describe.GetConsumers(0);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetName(), "c1");
+            UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EConsumerType_Name(c.GetType()),
+                ::NKikimrPQ::TPQTabletConfig::EConsumerType_Name(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP));
+            UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessageOrder(), false);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeoutSeconds(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetMaxProcessingAttempts(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(c.GetDeadLetterPolicy()),
+                ::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name( ::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED));
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterQueue(), "");
+        }
+
+        {
+            const char *query = R"(
+                ALTER TOPIC `/Root/PQ/rt3.dc1--topic_with_shared_consumer`
+                    ALTER CONSUMER c1 SET (
+                          default_processing_timeout = Interval('PT31S')
+                        , max_processing_attempts = 67
+                        , dead_letter_policy = 'move'
+                        , dead_letter_queue = 'dead_letter_queue_97'
+                    )
+            )";
+
+            server.AnnoyingClient->RunYqlSchemeQuery(query);
+        }
+
+        {
+            auto pqGroup = server.AnnoyingClient->Ls("/Root/PQ/rt3.dc1--topic_with_shared_consumer")->Record.GetPathDescription().GetPersQueueGroup();
+            const auto& describe = pqGroup.GetPQTabletConfig();
+
+            Cerr <<"=== PATH DESCRIPTION: \n" << pqGroup.DebugString();
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumers().size(), 1);
+            auto c = describe.GetConsumers(0);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetName(), "c1");
+            UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EConsumerType_Name(c.GetType()),
+                ::NKikimrPQ::TPQTabletConfig::EConsumerType_Name(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP));
+            UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessageOrder(), false);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeoutSeconds(), 31);
+            UNIT_ASSERT_VALUES_EQUAL(c.GetMaxProcessingAttempts(), 67);
+            UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(c.GetDeadLetterPolicy()),
+                ::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name( ::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE));
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterQueue(), "dead_letter_queue_97");
+        }
+    }
+
     Y_UNIT_TEST(BadRequests) {
         NPersQueue::TTestServer server;
         {
@@ -271,7 +396,20 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
             )__";
             server.AnnoyingClient->RunYqlSchemeQuery(query, false);
         }
-
+        {
+            const char *query = R"__(
+                ALTER TOPIC `/Root/PQ/rt3.dc1--legacy--topic1`
+                    ADD CONSUMER c4 WITH (availability_period = true);
+            )__";
+            server.AnnoyingClient->RunYqlSchemeQuery(query, false);
+        }
+        {
+            const char *query = R"__(
+                ALTER TOPIC `/Root/PQ/rt3.dc1--legacy--topic1`
+                    ADD CONSUMER c4 WITH (availability_period = Interval('PT9H'), important = true);
+            )__";
+            server.AnnoyingClient->RunYqlSchemeQuery(query, false);
+        }
     }
 };
 

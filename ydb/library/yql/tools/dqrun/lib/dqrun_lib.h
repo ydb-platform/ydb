@@ -12,16 +12,16 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/utils/log/log_level.h>
 
-#include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
-#include <ydb/library/yql/providers/dq/interface/yql_dq_task_preprocessor.h>
-#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
-#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/library/actors/core/log_iface.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
+#include <ydb/library/yql/providers/dq/interface/yql_dq_task_preprocessor.h>
+#include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
 #include <ydb/library/yql/utils/actor_system/manager.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
@@ -55,7 +55,6 @@ protected:
     NYql::IDatabaseAsyncResolver::TPtr GetDbResolver();
     NConnector::IClient::TPtr GetGenericClient();
     IPqGateway::TPtr GetPqGateway();
-    TVector<std::pair<TActorId, TActorSetupCmd>> GetFqServices();
     NKikimr::NMiniKQL::TComputationNodeFactory CreateCompNodeFactory();
     NYql::TTaskTransformFactory CreateDqTaskTransformFactory();
     NYql::TDqTaskPreprocessorFactoryCollection CreateDqTaskPreprocessorFactories();

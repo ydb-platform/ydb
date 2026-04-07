@@ -24,10 +24,6 @@ using namespace NKikimrClient;
 // Requests are processed in parallel, but it is guaranteed that the recording order will be preserved.
 // The order of responses to requests is also guaranteed.
 //
-// When the request begins to be processed, the actor enters the Accepting state. In this state, responses
-// are expected from all TPartitionWriters confirming acceptance of the request (TEvWriteAccepted). After that,
-// the actor switches back to the Work state. This guarantees the order of writing to each partition.
-//
 class TKafkaProduceActor: public NActors::TActorBootstrapped<TKafkaProduceActor> {
     struct TPendingRequest;
 
@@ -52,9 +48,14 @@ private:
 
     // Handlers for many StateFunc
     void Handle(TEvKafka::TEvWakeup::TPtr request, const TActorContext& ctx);
+
+    void Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr request, const TActorContext& ctx);
     void Handle(TEvPartitionWriter::TEvWriteResponse::TPtr request, const TActorContext& ctx);
     void Handle(TEvPartitionWriter::TEvInitResult::TPtr request, const TActorContext& ctx);
+    void Handle(TEvPartitionWriter::TEvDisconnected::TPtr request, const TActorContext& ctx);
+
     void EnqueueRequest(TEvKafka::TEvProduceRequest::TPtr request, const TActorContext& ctx);
+
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
 
@@ -67,8 +68,11 @@ private:
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleInit);
 
             HFunc(TEvKafka::TEvProduceRequest, EnqueueRequest);
+
             HFunc(TEvPartitionWriter::TEvInitResult, Handle);
+            HFunc(TEvPartitionWriter::TEvWriteAccepted, Handle);
             HFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
+            HFunc(TEvPartitionWriter::TEvDisconnected, Handle);
 
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
@@ -85,8 +89,11 @@ private:
         LogEvent(*ev.Get());
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvKafka::TEvProduceRequest, Handle);
+
             HFunc(TEvPartitionWriter::TEvInitResult, Handle);
+            HFunc(TEvPartitionWriter::TEvWriteAccepted, Handle);
             HFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
+            HFunc(TEvPartitionWriter::TEvDisconnected, Handle);
 
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
             HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
@@ -95,28 +102,6 @@ private:
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
-
-    // StateAccepting - enqueue ProduceRequest parts to PartitionWriters
-    // This guarantees the order of responses according order of request
-    void HandleAccepting(TEvPartitionWriter::TEvWriteAccepted::TPtr request, const TActorContext& ctx);
-
-    STATEFN(StateAccepting) {
-        LogEvent(*ev.Get());
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPartitionWriter::TEvWriteAccepted, HandleAccepting);
-
-            HFunc(TEvKafka::TEvProduceRequest, EnqueueRequest);
-            HFunc(TEvPartitionWriter::TEvInitResult, Handle);
-            HFunc(TEvPartitionWriter::TEvWriteResponse, Handle);
-
-            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
-            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-
-            HFunc(TEvKafka::TEvWakeup, Handle);
-            sFunc(TEvents::TEvPoison, PassAway);
-        }
-    }
-
 
     // Logic
     void ProcessRequests(const TActorContext& ctx);
@@ -129,6 +114,7 @@ private:
     void CleanTopics(const TActorContext& ctx);
     void CleanWriters(const TActorContext& ctx);
     std::pair<ETopicStatus, TActorId> PartitionWriter(const TTopicPartition& topicPartition, const TProducerInstanceId& producerInstanceId, const TMaybe<TString>& transactionalId, const TActorContext& ctx);
+    bool WriterDied(const TActorId& writerId, EKafkaErrors errorCode, TStringBuf errorMessage);
 
     TString LogPrefix();
     void LogEvent(IEventHandle& ev);
@@ -209,6 +195,8 @@ private:
     std::pair<TKafkaProduceActor::ETopicStatus, TActorId> GetOrCreateNonTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TActorContext& ctx);
     std::pair<TKafkaProduceActor::ETopicStatus, TActorId> GetOrCreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TString& transactionalId, const TActorContext& ctx);
     std::pair<TKafkaProduceActor::ETopicStatus, TActorId> CreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TString& transactionalId, const TActorContext& ctx);
+
+    bool ProcessingRequests = false;
 };
 
 }

@@ -106,10 +106,21 @@ public:
     TControlWrapper ForsetiMinLogCostNsControl;
     TControlWrapper ForsetiMilliBatchSize;
     TControlWrapper ForsetiMaxLogBatchNs;
-    TControlWrapper ForsetiOpPieceSizeSsd;
-    TControlWrapper ForsetiOpPieceSizeRot;
+    TControlWrapper ForsetiOpPieceSize;
     TControlWrapper UseNoopSchedulerSSD;
     TControlWrapper UseNoopSchedulerHDD;
+    TControlWrapper ChunkBaseLimitPerMille;
+    TControlWrapper SemiStrictSpaceIsolation;
+    i64 SemiStrictSpaceIsolationCached = 0;
+    TControlWrapper ForcedPDiskSpaceColor;
+    NKikimrBlobStorage::TPDiskSpaceColor::E GetColorBorderIcb() {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        switch (SemiStrictSpaceIsolation) {
+            case 1: return TColor::LIGHT_YELLOW;
+            case 2: return TColor::YELLOW;
+            default: return Cfg->SpaceColorBorder;
+        }
+    }
     bool UseNoopSchedulerCached = false;
 
     // SectorMap Controls
@@ -121,6 +132,10 @@ public:
     // used to store valid value in ICB if SectorMapFirstSector*Rate < SectorMapLastSector*Rate
     TString LastSectorReadRateControlName;
     TString LastSectorWriteRateControlName;
+    TControlWrapper SectorMapWriteErrorProbability;
+    TControlWrapper SectorMapReadErrorProbability;
+    TControlWrapper SectorMapSilentWriteFailProbability;
+    TControlWrapper SectorMapReadReplayProbability;
 
     ui64 ForsetiMinLogCostNs = 2000000ull;
     i64 ForsetiMaxLogBatchNsCached;
@@ -213,7 +228,7 @@ public:
     ui32 LastInitialChunkIdx;
     ui64 LastInitialSectorIdx;
 
-    ui64 ExpectedSlotCount = 0; // Number of slots to use for space limit calculation.
+    ui32 ExpectedSlotCount = 0; // Number of slots to use for space limit calculation.
 
     TAtomic TotalOwners = 0; // number of registered owners
 
@@ -358,7 +373,7 @@ public:
     void WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes, const ui64 &diskGuid,
             const TKey &chunkKey, const TKey &logKey, const TKey &sysLogKey, const TKey &mainKey,
             TString textMessage, const bool isErasureEncodeUserLog, const bool trimEntireDevice,
-            std::optional<TRcBuf> metadata, bool plainDataChunks);
+            std::optional<TRcBuf> metadata, bool plainDataChunks, std::optional<bool> forceRandomizeMagic);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Owner initialization
     void ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str, NKikimrProto::EReplyStatus status = NKikimrProto::ERROR);
@@ -367,10 +382,11 @@ public:
     void YardInitFinish(TYardInit &evYardInit);
     bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner);
     void YardResize(TYardResize &evYardResize);
+    void ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request);
 
     // Scheduler weight configuration
     void ConfigureCbs(ui32 ownerId, EGate gate, ui64 weight);
-    void SchedulerConfigure(const TConfigureScheduler &conf);
+    void SchedulerConfigure(const TPDiskSchedulerConfig& cfg, ui32 ownerId);
     void SendCutLog(TAskForCutLog &reqest);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Free space check
@@ -427,13 +443,13 @@ public:
 
     void DropAllMetadataRequests();
 
-    TRcBuf CreateMetadataPayload(TRcBuf& metadata, size_t offset, size_t payloadSize, ui32 sectorSize, bool encryption,
+    TRcBuf CreateMetadataPayload(TRcBuf& metadata, size_t offset, size_t payloadSize, ui32 sectorSize,
         const TKey& key, ui64 sequenceNumber, ui32 recordIndex, ui32 totalRecords, const ui64 *magic);
     bool WriteMetadataSync(TRcBuf&& metadata, const TDiskFormat& format);
 
     static std::optional<TMetadataFormatSector> CheckMetadataFormatSector(const ui8 *data, size_t len,
-        const TMainKey& mainKey, const TString& logPrefix);
-    static void MakeMetadataFormatSector(ui8 *data, const TMainKey& mainKey, const TMetadataFormatSector& format);
+        const TMainKey& mainKey, const TString& logPrefix, bool encryption);
+    static void MakeMetadataFormatSector(ui8 *data, const TMainKey& mainKey, const TMetadataFormatSector& format, bool encryption);
 
     NMeta::TFormatted& GetFormattedMeta();
     NMeta::TUnformatted& GetUnformattedMeta();
@@ -478,6 +494,8 @@ void ParsePayloadFromSectorOffset(const TDiskFormat& format, ui64 firstSector, u
 
 bool ParseSectorOffset(const TDiskFormat& format, TActorSystem *actorSystem, ui32 pDiskId, ui64 offset, ui64 size,
         ui64 &outSectorIdx, ui64 &outLastSectorIdx, ui64 &outSectorOffset, const TString& logPrefix);
+
+void InitializeKeeperLogParams(TKeeperParams& params, const TIntrusivePtr<TPDiskConfig>& cfg, const TDiskFormat& format);
 
 } // NPDisk
 } // NKikimr

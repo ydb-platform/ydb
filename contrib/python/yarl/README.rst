@@ -185,9 +185,6 @@ Please file an issue on the `bug tracker
 <https://github.com/aio-libs/yarl/issues>`_ if you have found a bug
 or have some suggestion in order to improve the library.
 
-The library uses `Azure Pipelines <https://dev.azure.com/aio-libs/yarl>`_ for
-Continuous Integration.
-
 Discussion list
 ---------------
 

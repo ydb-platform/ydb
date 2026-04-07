@@ -7,5 +7,5 @@ namespace NMiniKQL {
 IComputationNode* WrapHead(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapLast(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

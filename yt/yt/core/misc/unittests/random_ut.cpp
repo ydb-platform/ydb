@@ -33,5 +33,51 @@ TEST(TRandomGeneratorTest, Many)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TEST(TGenerateRandomIndexesTest, None)
+{
+    auto result = GetRandomIndexes(10, 0);
+    EXPECT_TRUE(result.empty());
+}
+
+TEST(TGenerateRandomIndexesTest, One)
+{
+    auto result = GetRandomIndexes(10, 1);
+    EXPECT_EQ(std::ssize(result), 1);
+    EXPECT_GE(result[0], 0ul);
+    EXPECT_LT(result[0], 10ul);
+}
+
+TEST(TGenerateRandomIndexesTest, AlmostCompleteSet)
+{
+    auto result = GetRandomIndexes(5, 4);
+    EXPECT_EQ(std::ssize(result), 4);
+    std::sort(result.begin(), result.end());
+    EXPECT_GE(result.front(), 0ull);
+    EXPECT_LT(result.back(), 5ull);
+    EXPECT_EQ(std::unique(result.begin(), result.end()), result.end());
+}
+
+TEST(TGenerateRandomIndexesTest, CompleteSet)
+{
+    auto result = GetRandomIndexes(5, 10);
+    EXPECT_EQ(std::ssize(result), 5);
+    std::sort(result.begin(), result.end());
+    EXPECT_EQ(result.front(), 0ull);
+    EXPECT_EQ(result.back(), 4ull);
+    EXPECT_EQ(std::unique(result.begin(), result.end()), result.end());
+}
+
+TEST(TGenerateRandomIndexesTest, SmallSubset)
+{
+    auto result = GetRandomIndexes(10, 2);
+    EXPECT_EQ(std::ssize(result), 2);
+    std::sort(result.begin(), result.end());
+    EXPECT_GE(result.front(), 0ull);
+    EXPECT_LT(result.back(), 10ull);
+    EXPECT_EQ(std::unique(result.begin(), result.end()), result.end());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
 } // namespace NYT

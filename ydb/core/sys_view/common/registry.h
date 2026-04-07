@@ -78,17 +78,6 @@ void FillSchema(ISystemViewResolver::TSchema& schema) {
     TSchemaFiller<Schema>::Fill(schema);
 }
 
-constexpr TStringBuf StorePrimaryIndexStatsName = "store_primary_index_stats";
-constexpr TStringBuf StorePrimaryIndexSchemaStatsName = "store_primary_index_schema_stats";
-constexpr TStringBuf StorePrimaryIndexPortionStatsName = "store_primary_index_portion_stats";
-constexpr TStringBuf StorePrimaryIndexGranuleStatsName = "store_primary_index_granule_stats";
-constexpr TStringBuf StorePrimaryIndexOptimizerStatsName = "store_primary_index_optimizer_stats";
-constexpr TStringBuf TablePrimaryIndexStatsName = "primary_index_stats";
-constexpr TStringBuf TablePrimaryIndexSchemaStatsName = "primary_index_schema_stats";
-constexpr TStringBuf TablePrimaryIndexPortionStatsName = "primary_index_portion_stats";
-constexpr TStringBuf TablePrimaryIndexGranuleStatsName = "primary_index_granule_stats";
-constexpr TStringBuf TablePrimaryIndexOptimizerStatsName = "primary_index_optimizer_stats";
-
 constexpr TStringBuf PgTablesName = "pg_tables";
 constexpr TStringBuf InformationSchemaTablesName = "tables";
 constexpr TStringBuf PgClassName = "pg_class";
@@ -125,6 +114,7 @@ struct Schema : NIceDb::Schema {
         struct LocksAcquired            : Column<28, NScheme::NTypeIds::Uint64> {};
         struct LocksWholeShard          : Column<29, NScheme::NTypeIds::Uint64> {};
         struct LocksBroken              : Column<30, NScheme::NTypeIds::Uint64> {};
+        struct TxCompleteLag            : Column<31, NScheme::NTypeIds::Interval> {};
 
         using TKey = TableKey<OwnerId, PathId, PartIdx, FollowerId>;
         using TColumns = TableColumns<
@@ -157,7 +147,8 @@ struct Schema : NIceDb::Schema {
             FollowerId,
             LocksAcquired,
             LocksWholeShard,
-            LocksBroken
+            LocksBroken,
+            TxCompleteLag
             >;
     };
 
@@ -269,7 +260,8 @@ struct Schema : NIceDb::Schema {
         struct DecommitStatus                  : Column<17, NScheme::NTypeIds::Utf8> {};
         struct State                           : Column<18, NScheme::NTypeIds::Utf8> {};
         struct SlotSizeInUnits                 : Column<19, NScheme::NTypeIds::Uint32> {};
-        struct InferPDiskSlotCountFromUnitSize : Column<20, NScheme::NTypeIds::Uint64> {};
+        // struct InferPDiskSlotCountFromUnitSize : Column<20, NScheme::NTypeIds::Uint64> {};
+        struct MaintenanceStatus               : Column<21, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<NodeId, PDiskId>;
         using TColumns = TableColumns<
@@ -291,7 +283,7 @@ struct Schema : NIceDb::Schema {
             NumActiveSlots,
             DecommitStatus,
             SlotSizeInUnits,
-            InferPDiskSlotCountFromUnitSize>;
+            MaintenanceStatus>;
     };
 
     struct VSlots : Table<5> {
@@ -312,7 +304,7 @@ struct Schema : NIceDb::Schema {
         struct FailRealm       : Column<15, NScheme::NTypeIds::Uint32> {};
         struct Replicated      : Column<16, NScheme::NTypeIds::Bool> {};
         struct DiskSpace       : Column<17, NScheme::NTypeIds::Utf8> {};
-        struct State           : Column <18, NScheme::NTypeIds::Utf8> {};
+        struct State           : Column<18, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<NodeId, PDiskId, VSlotId>;
         using TColumns = TableColumns<
@@ -454,34 +446,36 @@ struct Schema : NIceDb::Schema {
     };
 
     struct QueryMetrics : Table<9> {
-        struct IntervalEnd     : Column<1, NScheme::NTypeIds::Timestamp> {};
-        struct Rank            : Column<2, NScheme::NTypeIds::Uint32> {};
-        struct QueryText       : Column<3, NScheme::NTypeIds::Utf8> {};
-        struct Count           : Column<4, NScheme::NTypeIds::Uint64> {};
-        struct SumCPUTime      : Column<5, NScheme::NTypeIds::Uint64> {};
-        struct MinCPUTime      : Column<6, NScheme::NTypeIds::Uint64> {};
-        struct MaxCPUTime      : Column<7, NScheme::NTypeIds::Uint64> {};
-        struct SumDuration     : Column<8, NScheme::NTypeIds::Interval> {};
-        struct MinDuration     : Column<9, NScheme::NTypeIds::Interval> {};
-        struct MaxDuration     : Column<10, NScheme::NTypeIds::Interval> {};
-        struct MinReadRows     : Column<11, NScheme::NTypeIds::Uint64> {};
-        struct MaxReadRows     : Column<12, NScheme::NTypeIds::Uint64> {};
-        struct SumReadRows     : Column<13, NScheme::NTypeIds::Uint64> {};
-        struct MinReadBytes    : Column<14, NScheme::NTypeIds::Uint64> {};
-        struct MaxReadBytes    : Column<15, NScheme::NTypeIds::Uint64> {};
-        struct SumReadBytes    : Column<16, NScheme::NTypeIds::Uint64> {};
-        struct MinUpdateRows   : Column<17, NScheme::NTypeIds::Uint64> {};
-        struct MaxUpdateRows   : Column<18, NScheme::NTypeIds::Uint64> {};
-        struct SumUpdateRows   : Column<19, NScheme::NTypeIds::Uint64> {};
-        struct MinUpdateBytes  : Column<20, NScheme::NTypeIds::Uint64> {};
-        struct MaxUpdateBytes  : Column<21, NScheme::NTypeIds::Uint64> {};
-        struct SumUpdateBytes  : Column<22, NScheme::NTypeIds::Uint64> {};
-        struct MinDeleteRows   : Column<23, NScheme::NTypeIds::Uint64> {};
-        struct MaxDeleteRows   : Column<24, NScheme::NTypeIds::Uint64> {};
-        struct SumDeleteRows   : Column<25, NScheme::NTypeIds::Uint64> {};
-        struct MinRequestUnits : Column<26, NScheme::NTypeIds::Uint64> {};
-        struct MaxRequestUnits : Column<27, NScheme::NTypeIds::Uint64> {};
-        struct SumRequestUnits : Column<28, NScheme::NTypeIds::Uint64> {};
+        struct IntervalEnd          : Column<1, NScheme::NTypeIds::Timestamp> {};
+        struct Rank                 : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct QueryText            : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct Count                : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct SumCPUTime           : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct MinCPUTime           : Column<6, NScheme::NTypeIds::Uint64> {};
+        struct MaxCPUTime           : Column<7, NScheme::NTypeIds::Uint64> {};
+        struct SumDuration          : Column<8, NScheme::NTypeIds::Interval> {};
+        struct MinDuration          : Column<9, NScheme::NTypeIds::Interval> {};
+        struct MaxDuration          : Column<10, NScheme::NTypeIds::Interval> {};
+        struct MinReadRows          : Column<11, NScheme::NTypeIds::Uint64> {};
+        struct MaxReadRows          : Column<12, NScheme::NTypeIds::Uint64> {};
+        struct SumReadRows          : Column<13, NScheme::NTypeIds::Uint64> {};
+        struct MinReadBytes         : Column<14, NScheme::NTypeIds::Uint64> {};
+        struct MaxReadBytes         : Column<15, NScheme::NTypeIds::Uint64> {};
+        struct SumReadBytes         : Column<16, NScheme::NTypeIds::Uint64> {};
+        struct MinUpdateRows        : Column<17, NScheme::NTypeIds::Uint64> {};
+        struct MaxUpdateRows        : Column<18, NScheme::NTypeIds::Uint64> {};
+        struct SumUpdateRows        : Column<19, NScheme::NTypeIds::Uint64> {};
+        struct MinUpdateBytes       : Column<20, NScheme::NTypeIds::Uint64> {};
+        struct MaxUpdateBytes       : Column<21, NScheme::NTypeIds::Uint64> {};
+        struct SumUpdateBytes       : Column<22, NScheme::NTypeIds::Uint64> {};
+        struct MinDeleteRows        : Column<23, NScheme::NTypeIds::Uint64> {};
+        struct MaxDeleteRows        : Column<24, NScheme::NTypeIds::Uint64> {};
+        struct SumDeleteRows        : Column<25, NScheme::NTypeIds::Uint64> {};
+        struct MinRequestUnits      : Column<26, NScheme::NTypeIds::Uint64> {};
+        struct MaxRequestUnits      : Column<27, NScheme::NTypeIds::Uint64> {};
+        struct SumRequestUnits      : Column<28, NScheme::NTypeIds::Uint64> {};
+        struct LocksBrokenAsBreaker : Column<29, NScheme::NTypeIds::Uint64> {};
+        struct LocksBrokenAsVictim  : Column<30, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<IntervalEnd, Rank>;
         using TColumns = TableColumns<
@@ -496,26 +490,27 @@ struct Schema : NIceDb::Schema {
             SumUpdateRows, MinUpdateRows, MaxUpdateRows,
             SumUpdateBytes, MinUpdateBytes, MaxUpdateBytes,
             SumDeleteRows, MinDeleteRows, MaxDeleteRows,
-            SumRequestUnits, MinRequestUnits, MaxRequestUnits>;
+            SumRequestUnits, MinRequestUnits, MaxRequestUnits,
+            LocksBrokenAsBreaker, LocksBrokenAsVictim>;
     };
 
     struct PrimaryIndexStats : Table<10> {
-        struct PathId   : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct Kind     : Column<2, NScheme::NTypeIds::Utf8> {};
-        struct TabletId : Column<3, NScheme::NTypeIds::Uint64> {};
-        struct Rows     : Column<4, NScheme::NTypeIds::Uint64> {};
-        struct RawBytes : Column<5, NScheme::NTypeIds::Uint64> {};
-        struct PortionId: Column<6, NScheme::NTypeIds::Uint64> {};
-        struct ChunkIdx : Column<7, NScheme::NTypeIds::Uint64> {};
-        struct EntityName: Column<8, NScheme::NTypeIds::Utf8> {};
+        struct PathId           : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Kind             : Column<2, NScheme::NTypeIds::Utf8> {};
+        struct TabletId         : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Rows             : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct RawBytes         : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct PortionId        : Column<6, NScheme::NTypeIds::Uint64> {};
+        struct ChunkIdx         : Column<7, NScheme::NTypeIds::Uint64> {};
+        struct EntityName       : Column<8, NScheme::NTypeIds::Utf8> {};
         struct InternalEntityId : Column<9, NScheme::NTypeIds::Uint32> {};
-        struct BlobId : Column<10, NScheme::NTypeIds::Utf8> {};
-        struct BlobRangeOffset : Column<11, NScheme::NTypeIds::Uint64> {};
-        struct BlobRangeSize : Column<12, NScheme::NTypeIds::Uint64> {};
-        struct Activity : Column<13, NScheme::NTypeIds::Uint8> {};
-        struct TierName: Column<14, NScheme::NTypeIds::Utf8> {};
-        struct EntityType : Column<15, NScheme::NTypeIds::Utf8> {};
-        struct ChunkDetails : Column<16, NScheme::NTypeIds::Utf8> {};
+        struct BlobId           : Column<10, NScheme::NTypeIds::Utf8> {};
+        struct BlobRangeOffset  : Column<11, NScheme::NTypeIds::Uint64> {};
+        struct BlobRangeSize    : Column<12, NScheme::NTypeIds::Uint64> {};
+        struct Activity         : Column<13, NScheme::NTypeIds::Uint8> {};
+        struct TierName         : Column<14, NScheme::NTypeIds::Utf8> {};
+        struct EntityType       : Column<15, NScheme::NTypeIds::Utf8> {};
+        struct ChunkDetails     : Column<16, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<PathId, TabletId, PortionId, InternalEntityId, ChunkIdx>;
         using TColumns = TableColumns<
@@ -534,8 +529,7 @@ struct Schema : NIceDb::Schema {
             Activity,
             TierName,
             EntityType,
-            ChunkDetails
-            >;
+            ChunkDetails>;
     };
 
     struct StorageStats : Table<11> {
@@ -597,6 +591,10 @@ struct Schema : NIceDb::Schema {
         struct QueryStartAt       : Column<12, NScheme::NTypeIds::Timestamp> {};
         struct StateChangeAt      : Column<13, NScheme::NTypeIds::Timestamp> {};
         struct UserSID            : Column<14, NScheme::NTypeIds::Utf8> {};
+        struct WmPoolId           : Column<17, NScheme::NTypeIds::Utf8> {};
+        struct WmState            : Column<18, NScheme::NTypeIds::Utf8> {};
+        struct WmEnterTime        : Column<19, NScheme::NTypeIds::Timestamp> {};
+        struct WmExitTime         : Column<20, NScheme::NTypeIds::Timestamp> {};
 
         using TKey = TableKey<SessionId>;
         using TColumns = TableColumns<
@@ -613,25 +611,29 @@ struct Schema : NIceDb::Schema {
             SessionStartAt,
             QueryStartAt,
             StateChangeAt,
-            UserSID>;
+            UserSID,
+            WmPoolId,
+            WmState,
+            WmEnterTime,
+            WmExitTime>;
     };
 
-    struct PrimaryIndexPortionStats: Table<14> {
-        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
-        struct Kind: Column<2, NScheme::NTypeIds::Utf8> {};
-        struct TabletId: Column<3, NScheme::NTypeIds::Uint64> {};
-        struct Rows: Column<4, NScheme::NTypeIds::Uint64> {};
-        struct ColumnRawBytes: Column<5, NScheme::NTypeIds::Uint64> {};
-        struct IndexRawBytes: Column<6, NScheme::NTypeIds::Uint64> {};
-        struct ColumnBlobBytes: Column<7, NScheme::NTypeIds::Uint64> {};
-        struct IndexBlobBytes: Column<8, NScheme::NTypeIds::Uint64> {};
-        struct PortionId: Column<9, NScheme::NTypeIds::Uint64> {};
-        struct Activity: Column<10, NScheme::NTypeIds::Uint8> {};
-        struct TierName: Column<11, NScheme::NTypeIds::Utf8> {};
-        struct Stats: Column<12, NScheme::NTypeIds::Utf8> {};
-        struct Optimized: Column<13, NScheme::NTypeIds::Uint8> {};
-        struct CompactionLevel: Column<14, NScheme::NTypeIds::Uint64> {};
-        struct Details: Column<15, NScheme::NTypeIds::Utf8> {};
+    struct PrimaryIndexPortionStats : Table<14> {
+        struct PathId          : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Kind            : Column<2, NScheme::NTypeIds::Utf8> {};
+        struct TabletId        : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct Rows            : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct ColumnRawBytes  : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct IndexRawBytes   : Column<6, NScheme::NTypeIds::Uint64> {};
+        struct ColumnBlobBytes : Column<7, NScheme::NTypeIds::Uint64> {};
+        struct IndexBlobBytes  : Column<8, NScheme::NTypeIds::Uint64> {};
+        struct PortionId       : Column<9, NScheme::NTypeIds::Uint64> {};
+        struct Activity        : Column<10, NScheme::NTypeIds::Uint8> {};
+        struct TierName        : Column<11, NScheme::NTypeIds::Utf8> {};
+        struct Stats           : Column<12, NScheme::NTypeIds::Utf8> {};
+        struct Optimized       : Column<13, NScheme::NTypeIds::Uint8> {};
+        struct CompactionLevel : Column<14, NScheme::NTypeIds::Uint64> {};
+        struct Details         : Column<15, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<PathId, TabletId, PortionId>;
         using TColumns = TableColumns<
@@ -649,17 +651,16 @@ struct Schema : NIceDb::Schema {
             Stats,
             Optimized,
             CompactionLevel,
-            Details
-        >;
+            Details>;
     };
 
-    struct PrimaryIndexGranuleStats: Table<14> {
-        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
-        struct TabletId: Column<2, NScheme::NTypeIds::Uint64> {};
-        struct PortionsCount: Column<3, NScheme::NTypeIds::Uint64> {};
-        struct HostName: Column<4, NScheme::NTypeIds::Utf8> {};
-        struct NodeId: Column<5, NScheme::NTypeIds::Uint64> {};
-        struct InternalPathId: Column<6, NScheme::NTypeIds::Uint64> {};
+    struct PrimaryIndexGranuleStats : Table<14> {
+        struct PathId         : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TabletId       : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct PortionsCount  : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct HostName       : Column<4, NScheme::NTypeIds::Utf8> {};
+        struct NodeId         : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct InternalPathId : Column<6, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<PathId, TabletId>;
         using TColumns = TableColumns<
@@ -668,21 +669,20 @@ struct Schema : NIceDb::Schema {
             PortionsCount,
             HostName,
             NodeId,
-            InternalPathId
-        >;
+            InternalPathId>;
     };
 
-    struct PrimaryIndexOptimizerStats: Table<14> {
-        struct PathId: Column<1, NScheme::NTypeIds::Uint64> {};
-        struct TabletId: Column<2, NScheme::NTypeIds::Uint64> {};
-        struct TaskId: Column<3, NScheme::NTypeIds::Uint64> {};
-        struct HostName: Column<4, NScheme::NTypeIds::Utf8> {};
-        struct NodeId: Column<5, NScheme::NTypeIds::Uint64> {};
-        struct Start: Column<6, NScheme::NTypeIds::Utf8> {};
-        struct Finish: Column<7, NScheme::NTypeIds::Utf8> {};
-        struct Details: Column<8, NScheme::NTypeIds::Utf8> {};
-        struct Category: Column<9, NScheme::NTypeIds::Uint64> {};
-        struct Weight: Column<10, NScheme::NTypeIds::Int64> {};
+    struct PrimaryIndexOptimizerStats : Table<14> {
+        struct PathId   : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TabletId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct TaskId   : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct HostName : Column<4, NScheme::NTypeIds::Utf8> {};
+        struct NodeId   : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct Start    : Column<6, NScheme::NTypeIds::Utf8> {};
+        struct Finish   : Column<7, NScheme::NTypeIds::Utf8> {};
+        struct Details  : Column<8, NScheme::NTypeIds::Utf8> {};
+        struct Category : Column<9, NScheme::NTypeIds::Uint64> {};
+        struct Weight   : Column<10, NScheme::NTypeIds::Int64> {};
 
         using TKey = TableKey<PathId, TabletId, TaskId>;
         using TColumns = TableColumns<
@@ -695,8 +695,7 @@ struct Schema : NIceDb::Schema {
             Finish,
             Details,
             Category,
-            Weight
-        >;
+            Weight>;
     };
 
     struct AuthUsers : Table<15> {
@@ -861,12 +860,12 @@ struct Schema : NIceDb::Schema {
     };
 
     struct PrimaryIndexSchemaStats : Table<24> {
-        struct TabletId : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct PresetId : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct SchemaVersion : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct TabletId               : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PresetId               : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct SchemaVersion          : Column<3, NScheme::NTypeIds::Uint64> {};
         struct SchemaSnapshotPlanStep : Column<4, NScheme::NTypeIds::Uint64> {};
-        struct SchemaSnapshotTxId : Column<5, NScheme::NTypeIds::Uint64> {};
-        struct SchemaDetails : Column<6, NScheme::NTypeIds::Utf8> {};
+        struct SchemaSnapshotTxId     : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct SchemaDetails          : Column<6, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<TabletId, PresetId, SchemaVersion>;
         using TColumns = TableColumns<
@@ -875,26 +874,71 @@ struct Schema : NIceDb::Schema {
             SchemaVersion,
             SchemaSnapshotPlanStep,
             SchemaSnapshotTxId,
-            SchemaDetails
-        >;
+            SchemaDetails>;
     };
 
     struct CompileCacheQueries : Table<25> {
-        struct QueryId : Column<1, NScheme::NTypeIds::Utf8> {};
-        struct NodeId : Column<2, NScheme::NTypeIds::Uint32> {};
-        struct Query : Column<3, NScheme::NTypeIds::Utf8> {};
-        struct AccessCount : Column<4, NScheme::NTypeIds::Uint64> {};
-        struct CompiledQueryAt : Column<5, NScheme::NTypeIds::Timestamp> {};
-        struct UserSID : Column<6, NScheme::NTypeIds::Utf8> {};
+        struct NodeId                : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct QueryId               : Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Query                 : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct AccessCount           : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct CompiledAt            : Column<5, NScheme::NTypeIds::Timestamp> {};
+        struct UserSID               : Column<6, NScheme::NTypeIds::Utf8> {};
+        struct LastAccessedAt        : Column<7, NScheme::NTypeIds::Timestamp> {};
+        struct CompilationDurationMs : Column<8, NScheme::NTypeIds::Uint64> {};
+        struct Warnings              : Column<9, NScheme::NTypeIds::Utf8> {};
+        struct Metadata              : Column<10, NScheme::NTypeIds::Utf8> {};
+        struct IsTruncated           : Column<11, NScheme::NTypeIds::Bool> {};
+        struct QueryType             : Column<12, NScheme::NTypeIds::Utf8> {};
+        struct Syntax                : Column<13, NScheme::NTypeIds::Utf8> {};
 
-        using TKey = TableKey<QueryId>;
+        using TKey = TableKey<NodeId, QueryId>;
         using TColumns = TableColumns<
-            QueryId,
             NodeId,
+            QueryId,
             Query,
             AccessCount,
-            CompiledQueryAt,
-            UserSID>;
+            CompiledAt,
+            UserSID,
+            LastAccessedAt,
+            CompilationDurationMs,
+            Warnings,
+            Metadata,
+            IsTruncated,
+            QueryType,
+            Syntax>;
+    };
+
+    struct StreamingQueries : Table<26> {
+        struct Path                 : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Status               : Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Issues               : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct Plan                 : Column<4, NScheme::NTypeIds::Utf8> {};
+        struct Ast                  : Column<5, NScheme::NTypeIds::Utf8> {};
+        struct Text                 : Column<6, NScheme::NTypeIds::Utf8> {};
+        struct Run                  : Column<7, NScheme::NTypeIds::Bool> {};
+        struct ResourcePool         : Column<8, NScheme::NTypeIds::Utf8> {};
+        struct RetryCount           : Column<9, NScheme::NTypeIds::Uint64> {};
+        struct LastFailAt           : Column<10, NScheme::NTypeIds::Timestamp> {};
+        struct SuspendedUntil       : Column<11, NScheme::NTypeIds::Timestamp> {};
+        struct LastExecutionId      : Column<12, NScheme::NTypeIds::Utf8> {};
+        struct PreviousExecutionIds : Column<13, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Path>;
+        using TColumns = TableColumns<
+            Path,
+            Status,
+            Issues,
+            Plan,
+            Ast,
+            Text,
+            Run,
+            ResourcePool,
+            RetryCount,
+            LastFailAt,
+            SuspendedUntil,
+            LastExecutionId,
+            PreviousExecutionIds>;
     };
 };
 

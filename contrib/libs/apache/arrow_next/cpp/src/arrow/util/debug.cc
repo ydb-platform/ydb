@@ -15,12 +15,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/util/debug.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/debug.h"
 
 #include <csignal>
 #include <cstdlib>
 
-#include "arrow/vendored/portable-snippets/debug-trap.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/vendored/portable-snippets/debug-trap.h"
 
 namespace arrow20 {
 namespace internal {

@@ -1,54 +1,59 @@
 #include "ut_helpers.h"
 
+#include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
+
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <thread>
-
 namespace NYql::NDq {
 
 using namespace NKikimr::NMiniKQL;
+using namespace NTestUtils;
 
 constexpr TDuration WaitTimeout = TDuration::Seconds(10);
 
 namespace {
-  void TestWriteBigBatch(bool isCloud) {
+
+void TestWriteBigBatch(bool isCloud) {
     const int batchSize = 7500;
-    CleanupSolomon("cloudId1", "folderId1", "custom", isCloud);
+    const TSolomonLocation location = {.ProjectId = "cloudId1", .FolderId = "folderId1", .Service = "custom", .IsCloud = isCloud};
+    CleanupSolomon(location);
 
     TFakeCASetup setup;
     InitAsyncOutput(setup, BuildSolomonShardSettings(isCloud));
 
-    auto issue = setup.AsyncOutputPromises.Issue.GetFuture();
+    auto issue = setup.AsyncOutputPromises->Issue.GetFuture();
     setup.AsyncOutputWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
         TUnboxedValueBatch res;
         for (int i = 0; i < batchSize; i++) {
-          res.emplace_back(CreateStruct(holderFactory, {
-            NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TTimestamp>::TLayout>(i + 200000)),
-            NKikimr::NMiniKQL::MakeString(std::to_string(i)),
-            NUdf::TUnboxedValuePod(678)
-          }));
+            res.emplace_back(CreateStruct(holderFactory, {
+                NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TTimestamp>::TLayout>(i + 200000)),
+                NKikimr::NMiniKQL::MakeString(std::to_string(i)),
+                NUdf::TUnboxedValuePod(678)
+            }));
         }
 
         return res;
     });
     UNIT_ASSERT_C(!issue.Wait(WaitTimeout), issue.GetValue().ToString());
 
-    const auto metrics = GetSolomonMetrics("folderId1", "custom");
-    UNIT_ASSERT_EQUAL(GetMetricsCount(metrics), batchSize);
-  }
+    const auto metrics = GetSolomonMetrics(location);
+    UNIT_ASSERT_VALUES_EQUAL(GetMetricsCount(metrics), batchSize);
 }
+
+} // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
     Y_UNIT_TEST(TestWriteFormat) {
-        CleanupSolomon("cloudId1", "folderId1", "custom", true);
+        const TSolomonLocation location = {.ProjectId = "cloudId1", .FolderId = "folderId1", .Service = "custom", .IsCloud = true};
+        CleanupSolomon(location);
 
         TFakeCASetup setup;
         InitAsyncOutput(setup, BuildSolomonShardSettings(true));
 
-        auto issue = setup.AsyncOutputPromises.Issue.GetFuture();
+        auto issue = setup.AsyncOutputPromises->Issue.GetFuture();
         setup.AsyncOutputWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
             TUnboxedValueBatch res;
             res.emplace_back(CreateStruct(holderFactory, {
@@ -60,7 +65,7 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
         });
         UNIT_ASSERT_C(!issue.Wait(WaitTimeout), issue.GetValue().ToString());
 
-        const auto metrics = GetSolomonMetrics("folderId1", "custom");
+        const auto metrics = GetSolomonMetrics(location);
         const auto expected = R"([
   {
     "labels": [
@@ -81,76 +86,77 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
     }
 
     Y_UNIT_TEST(TestWriteBigBatchMonitoring) {
-      TestWriteBigBatch(true);
+        TestWriteBigBatch(true);
     }
 
     Y_UNIT_TEST(TestWriteBigBatchSolomon) {
-      //TestWriteBigBatch(false);
+        TestWriteBigBatch(false);
     }
 
     Y_UNIT_TEST(TestWriteWithTimeseries) {
-      const int batchSize = 10;
-      CleanupSolomon("cloudId1", "folderId1", "custom", true);
+        const int batchSize = 10;
+        const TSolomonLocation location = {.ProjectId = "cloudId1", .FolderId = "folderId1", .Service = "custom", .IsCloud = true};
+        CleanupSolomon(location);
 
-      TFakeCASetup setup;
-      InitAsyncOutput(setup, BuildSolomonShardSettings(true));
-
-      auto issue = setup.AsyncOutputPromises.Issue.GetFuture();
-      setup.AsyncOutputWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
-          TUnboxedValueBatch res;
-
-          for (int i = 0; i < batchSize; i++) {
-            res.emplace_back(CreateStruct(holderFactory, {
-              NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TTimestamp>::TLayout>(i + 200000)),
-              NKikimr::NMiniKQL::MakeString("123"),
-              NUdf::TUnboxedValuePod(678)
-            }));
-          }
-
-          return res;
-      });
-      UNIT_ASSERT_C(!issue.Wait(WaitTimeout), issue.GetValue().ToString());
-
-      const auto metrics = GetSolomonMetrics("folderId1", "custom");
-      UNIT_ASSERT_EQUAL(GetMetricsCount(metrics), batchSize);
-    }
-
-    Y_UNIT_TEST(TestCheckpoints) {
-      const int batchSize = 2400;
-
-      {
         TFakeCASetup setup;
-        CleanupSolomon("cloudId1", "folderId1", "custom", true);
         InitAsyncOutput(setup, BuildSolomonShardSettings(true));
 
-        auto stateSaved = setup.AsyncOutputPromises.StateSaved.GetFuture();
+        auto issue = setup.AsyncOutputPromises->Issue.GetFuture();
         setup.AsyncOutputWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
             TUnboxedValueBatch res;
 
             for (int i = 0; i < batchSize; i++) {
-              res.emplace_back(CreateStruct(holderFactory, {
-                NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TTimestamp>::TLayout>(i + 200000)),
-                NKikimr::NMiniKQL::MakeString(std::to_string(i)),
-                NUdf::TUnboxedValuePod(678)
-              }));
+                res.emplace_back(CreateStruct(holderFactory, {
+                    NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TTimestamp>::TLayout>(i + 200000)),
+                    NKikimr::NMiniKQL::MakeString("123"),
+                    NUdf::TUnboxedValuePod(678)
+                }));
+            }
+
+            return res;
+        });
+        UNIT_ASSERT_C(!issue.Wait(WaitTimeout), issue.GetValue().ToString());
+
+        const auto metrics = GetSolomonMetrics(location);
+        UNIT_ASSERT_VALUES_EQUAL(GetMetricsCount(metrics), batchSize);
+    }
+
+    Y_UNIT_TEST(TestCheckpoints) {
+        const int batchSize = 2400;
+        TFakeCASetup setup;
+
+        const TSolomonLocation location = {.ProjectId = "cloudId1", .FolderId = "folderId1", .Service = "custom", .IsCloud = true};
+        CleanupSolomon(location);
+        InitAsyncOutput(setup, BuildSolomonShardSettings(true));
+
+        auto stateSaved = setup.AsyncOutputPromises->StateSaved.GetFuture();
+        setup.AsyncOutputWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
+            TUnboxedValueBatch res;
+
+            for (int i = 0; i < batchSize; i++) {
+                res.emplace_back(CreateStruct(holderFactory, {
+                    NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TTimestamp>::TLayout>(i + 200000)),
+                    NKikimr::NMiniKQL::MakeString(std::to_string(i)),
+                    NUdf::TUnboxedValuePod(678)
+                }));
             }
 
             return res;
         }, CreateCheckpoint(1));
         UNIT_ASSERT(stateSaved.Wait(WaitTimeout));
 
-        const auto metrics = GetSolomonMetrics("folderId1", "custom");
-        UNIT_ASSERT_EQUAL(GetMetricsCount(metrics), batchSize);
-      }
+        const auto metrics = GetSolomonMetrics(location);
+        UNIT_ASSERT_VALUES_EQUAL(GetMetricsCount(metrics), batchSize);
     }
 
     Y_UNIT_TEST(TestShouldReturnAfterCheckpoint) {
-      {
         TFakeCASetup setup;
-        CleanupSolomon("cloudId1", "folderId1", "custom", true);
+
+        const TSolomonLocation location = {.ProjectId = "cloudId1", .FolderId = "folderId1", .Service = "custom", .IsCloud = true};
+        CleanupSolomon(location);
         InitAsyncOutput(setup, BuildSolomonShardSettings(true));
 
-        auto stateSaved = setup.AsyncOutputPromises.StateSaved.GetFuture();
+        auto stateSaved = setup.AsyncOutputPromises->StateSaved.GetFuture();
         setup.AsyncOutputWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
             TUnboxedValueBatch res;
             res.emplace_back(CreateStruct(holderFactory, {
@@ -162,21 +168,20 @@ Y_UNIT_TEST_SUITE(TDqSolomonWriteActorTest) {
         }, CreateCheckpoint(1));
         UNIT_ASSERT(stateSaved.Wait(WaitTimeout));
 
-        auto issue = setup.AsyncOutputPromises.Issue.GetFuture();
+        auto issue = setup.AsyncOutputPromises->Issue.GetFuture();
         setup.AsyncOutputWrite([](NKikimr::NMiniKQL::THolderFactory& holderFactory){
             TUnboxedValueBatch res;
             res.emplace_back(CreateStruct(holderFactory, {
                 NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TTimestamp>::TLayout>(200001)),
                 NKikimr::NMiniKQL::MakeString("cba"),
                 NUdf::TUnboxedValuePod(678)
-              }));
-              return res;
+                }));
+                return res;
         });
         UNIT_ASSERT_C(!issue.Wait(WaitTimeout), issue.GetValue().ToString());
 
-        const auto metrics = GetSolomonMetrics("folderId1", "custom");
-        UNIT_ASSERT_EQUAL(GetMetricsCount(metrics), 2);
-      }
+        const auto metrics = GetSolomonMetrics(location);
+        UNIT_ASSERT_VALUES_EQUAL(GetMetricsCount(metrics), 2);
     }
 }
 

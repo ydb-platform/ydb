@@ -37,10 +37,12 @@ PEERDIR(
     ydb/core/tx/coordinator
     ydb/core/tx/scheme_board
     ydb/core/util
+    ydb/core/util/actorsys_test
     yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
-    ydb/core/util/actorsys_test
+    yt/yql/providers/yt/comp_nodes/dq/llvm16
+    yt/yql/providers/yt/comp_nodes/llvm16
 )
 
 END()

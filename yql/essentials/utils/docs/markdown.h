@@ -7,23 +7,23 @@
 
 namespace NYql::NDocs {
 
-    struct TMarkdownHeader {
-        TString Content;
-        TMaybe<TString> Anchor;
-    };
+struct TMarkdownHeader {
+    TString Content;
+    TMaybe<TString> Anchor;
+};
 
-    struct TMarkdownSection {
-        TMarkdownHeader Header;
-        TString Body;
-    };
+struct TMarkdownSection {
+    TMarkdownHeader Header;
+    TString Body;
+};
 
-    struct TMarkdownPage {
-        TString Text;
-        THashMap<TString, TMarkdownSection> SectionsByAnchor;
-    };
+struct TMarkdownPage {
+    TString Text;
+    THashMap<TString, TMarkdownSection> SectionsByAnchor;
+};
 
-    using TMarkdownCallback = std::function<void(TMarkdownSection&&)>;
+using TMarkdownCallback = std::function<void(TMarkdownSection&&)>;
 
-    TMarkdownPage ParseMarkdownPage(TString markdown);
+TMarkdownPage ParseMarkdownPage(TString markdown);
 
 } // namespace NYql::NDocs

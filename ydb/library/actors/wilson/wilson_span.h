@@ -1,11 +1,9 @@
 #pragma once
 
-#include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <contrib/libs/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.pb.h>
 #include <util/generic/flags.h>
 #include <util/generic/hash.h>
-#include <util/generic/overloaded.h>
 #include <util/datetime/cputimer.h>
 
 #include "wilson_trace.h"
@@ -58,6 +56,7 @@ namespace NWilson {
             int UncaughtExceptions = std::uncaught_exceptions();
             bool Sent = false;
             bool Ignored = false;
+            bool EndAsIs = false; // don't update any data on End()
             NActors::TActorSystem* ActorSystem;
 
             TData(TInstant startTime, ui64 startCycles, TTraceId traceId, TFlags flags, NActors::TActorSystem* actorSystem);
@@ -80,6 +79,10 @@ namespace NWilson {
 
         TSpan& operator =(const TSpan&) = delete;
         TSpan& operator=(TSpan&& other);
+
+        static TSpan ConstructTerminated(const TTraceId& parentId, const TTraceId& spanId,
+                TInstant startTs, TInstant endTs, NTraceProto::Status::StatusCode statusCode,
+                const TString& name);
 
         explicit operator bool() const {
             return Data && !Data->Sent && !Data->Ignored;

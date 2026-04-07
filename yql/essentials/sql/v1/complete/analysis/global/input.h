@@ -6,11 +6,11 @@
 
 namespace NSQLComplete {
 
-    struct TParsedInput {
-        TCompletionInput Original;
-        antlr4::CommonTokenStream* Tokens;
-        SQLv1* Parser;
-        SQLv1::Sql_queryContext* SqlQuery;
-    };
+struct TParsedInput {
+    TCompletionInput Original;
+    antlr4::CommonTokenStream* Tokens;
+    SQLv1* Parser;
+    SQLv1::Sql_queryContext* SqlQuery;
+};
 
 } // namespace NSQLComplete

@@ -2,8 +2,6 @@
 
 #include "config.h"
 
-#include <yt/yt/core/misc/utf8_decoder.h>
-
 #include <yt/yt/core/yson/public.h>
 
 namespace NYT::NJson {

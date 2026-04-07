@@ -50,6 +50,7 @@ NKikimrConfig::TAppConfig TransformConfig(const std::vector<TString>& args) {
     TKikimrScopeId scopeId;
     TString tenantName;
     TBasicKikimrServicesMask servicesMask;
+    bool tinyMode;
     TString clusterName;
     NConfig::TConfigsDispatcherInitInfo configsDispatcherInitInfo;
 
@@ -59,8 +60,11 @@ NKikimrConfig::TAppConfig TransformConfig(const std::vector<TString>& args) {
         scopeId,
         tenantName,
         servicesMask,
+        tinyMode,
         clusterName,
         configsDispatcherInitInfo);
+
+    Y_UNUSED(tinyMode);
 
     return appConfig;
 }

@@ -50,13 +50,13 @@ TEST(TSpinLockCountTest, RWSpinLock)
 {
     EXPECT_EQ(GetActiveSpinLockCount(), 0);
     TReaderWriterSpinLock lock;
-    auto readerGuard1 = ReaderGuard(lock);
+    auto readerGuard = ReaderGuard(lock);
     EXPECT_EQ(GetActiveSpinLockCount(), 1);
-    auto readerGuard2 = ReaderGuard(lock);
-    EXPECT_EQ(GetActiveSpinLockCount(), 2);
-    readerGuard1.Release();
+    readerGuard.Release();
+    EXPECT_EQ(GetActiveSpinLockCount(), 0);
+    auto writerGuard = WriterGuard(lock);
     EXPECT_EQ(GetActiveSpinLockCount(), 1);
-    readerGuard2.Release();
+    writerGuard.Release();
     EXPECT_EQ(GetActiveSpinLockCount(), 0);
 }
 

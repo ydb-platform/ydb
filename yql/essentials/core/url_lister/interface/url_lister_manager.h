@@ -8,7 +8,9 @@
 #include <yql/essentials/core/url_preprocessing/interface/url_preprocessing.h>
 
 #include <util/generic/ptr.h>
+#include <util/generic/string.h>
 
+#include <functional>
 
 namespace NYql {
 
@@ -21,10 +23,11 @@ public:
     virtual TIntrusivePtr<IUrlListerManager> Clone() const = 0;
 
     virtual void SetCredentials(TCredentials::TPtr credentials) = 0;
+    virtual void SetTokenResolver(std::function<TString(const TString&, const TString&)> tokenResolver) = 0;
     virtual void SetUrlPreprocessing(IUrlPreprocessing::TPtr urlPreprocessing) = 0;
     virtual void SetParameters(const NYT::TNode& parameters) = 0;
 };
 
 using IUrlListerManagerPtr = TIntrusivePtr<IUrlListerManager>;
 
-}
+} // namespace NYql

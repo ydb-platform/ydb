@@ -9,6 +9,7 @@
 #include <yt/yt/core/ypath/public.h>
 
 #include <yt/yt/core/ytree/public.h>
+#include <yt/yt/core/ytree/yson_schema_options.h>
 
 #include <library/cpp/yt/misc/variant.h>
 
@@ -144,9 +145,6 @@ const TElementType& GetProtobufElementOrThrow(const TProtobufElement& element);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr int UnknownYsonFieldNumber = 3005;
-
-
 //! Creates a YSON consumer that converts IYsonConsumer calls into
 //! a byte sequence in protobuf wire format.
 /*!
@@ -229,10 +227,14 @@ void RegisterCustomProtobufConverter(
     const TProtobufMessageConverter& converter);
 
 #define REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION(ProtoType, Type) \
-    YT_STATIC_INITIALIZER(::NYT::NYson::DoRegisterIntermediateProtoInteropRepresentation<ProtoType, Type, false>());
+    YT_STATIC_INITIALIZER({ \
+        ::NYT::NYson::DoRegisterIntermediateProtoInteropRepresentation<ProtoType, Type, false>(); \
+    })
 
 #define REGISTER_INTERMEDIATE_PROTO_INTEROP_REPRESENTATION_WITH_OPTIONS(ProtoType, Type) \
-    YT_STATIC_INITIALIZER(::NYT::NYson::DoRegisterIntermediateProtoInteropRepresentation<ProtoType, Type, true>());
+    YT_STATIC_INITIALIZER({ \
+        ::NYT::NYson::DoRegisterIntermediateProtoInteropRepresentation<ProtoType, Type, true>(); \
+    })
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -249,7 +251,7 @@ void RegisterCustomProtobufBytesFieldConverter(
     const TProtobufMessageBytesFieldConverter& converter);
 
 #define REGISTER_INTERMEDIATE_PROTO_INTEROP_BYTES_FIELD_REPRESENTATION(ProtoType, FieldNumber, Type)             \
-    YT_STATIC_INITIALIZER(                                                                                       \
+    YT_STATIC_INITIALIZER({                                                                                      \
         ::NYT::NYson::AddProtobufConverterRegisterAction([] {                                                    \
             const auto* descriptor = ProtoType::default_instance().GetDescriptor();                              \
             ::NYT::NYson::TProtobufMessageBytesFieldConverter converter;                                         \
@@ -264,7 +266,8 @@ void RegisterCustomProtobufBytesFieldConverter(
                 ToBytes(bytes, value);                                                                           \
             };                                                                                                   \
             ::NYT::NYson::RegisterCustomProtobufBytesFieldConverter(descriptor, FieldNumber, converter);         \
-        }));
+        });                                                                                                      \
+    })
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -287,7 +290,7 @@ void SetProtobufInteropConfig(TProtobufInteropConfigPtr config);
 
 //! Returns type v3 schema for protobuf message type.
 //! Note: Recursive types (message has field with self type) are not supported.
-void WriteSchema(const TProtobufMessageType* type, IYsonConsumer* consumer);
+void WriteSchema(const TProtobufMessageType* type, IYsonConsumer* consumer, const NYTree::TYsonStructWriteSchemaOptions& options = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

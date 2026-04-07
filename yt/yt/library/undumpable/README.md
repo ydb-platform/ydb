@@ -1,9 +1,9 @@
 # undumpable
 
-Библиотека undumpable позволяет исключить из core-dump-а некоторые участки памяти.
+The undumpable library allows excluding certain memory regions from the core dump.
 
-Линукс позволяет исключать память из coredump с помощью системного вызова madvice(DONTNEED). 
-Но этот системный вызов слишком дорог, чтобы делать его на каждую аллокацию.
+Linux allows excluding memory from core dumps using the `madvise(DONTNEED)` system call.
+But this system call is too expensive to use on every allocation.
 
-Вместо этого, мы поддерживаем в памяти список undumpable участков, и размечаем их через madvise(DONTNEED)
-в момент креша, из обработчика сигнала.
+Instead, we maintain a list of undumpable regions in memory, and mark them with `madvise(DONTNEED)`
+at crash time, from the signal handler.

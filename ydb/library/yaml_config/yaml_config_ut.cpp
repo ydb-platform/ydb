@@ -403,7 +403,16 @@ config:
 allowed_labels:
   tenant:
     type: string
-
+incompatibility_overrides:
+  disable_rules:
+    - builtin_branch_must_have_value
+    - builtin_configuration_version_must_have_value
+    - builtin_dynamic_must_have_value
+    - builtin_node_host_must_have_value
+    - builtin_node_id_must_have_value
+    - builtin_rev_must_have_value
+    - builtin_node_type_must_be_defined
+    - builtin_tenant_must_be_defined
 selector_config:
 - description: 1
   selector:
@@ -441,7 +450,16 @@ config:
 allowed_labels:
   tenant:
     type: string
-
+incompatibility_overrides:
+  disable_rules:
+    - builtin_branch_must_have_value
+    - builtin_configuration_version_must_have_value
+    - builtin_dynamic_must_have_value
+    - builtin_node_host_must_have_value
+    - builtin_node_id_must_have_value
+    - builtin_rev_must_have_value
+    - builtin_node_type_must_be_defined
+    - builtin_tenant_must_be_defined
 selector_config:
 - description: 1
   selector:
@@ -486,7 +504,16 @@ config:
 allowed_labels:
   tenant:
     type: string
-
+incompatibility_overrides:
+  disable_rules:
+    - builtin_branch_must_have_value
+    - builtin_configuration_version_must_have_value
+    - builtin_dynamic_must_have_value
+    - builtin_node_host_must_have_value
+    - builtin_node_id_must_have_value
+    - builtin_rev_must_have_value
+    - builtin_node_type_must_be_defined
+    - builtin_tenant_must_be_defined
 selector_config:
 - description: 1
   selector:
@@ -524,6 +551,16 @@ version: 12.1
 config:
   num:
     ? 0
+incompatibility_overrides:
+  disable_rules:
+    - builtin_branch_must_have_value
+    - builtin_configuration_version_must_have_value
+    - builtin_dynamic_must_have_value
+    - builtin_node_host_must_have_value
+    - builtin_node_id_must_have_value
+    - builtin_rev_must_have_value
+    - builtin_node_type_must_be_defined
+    - builtin_tenant_must_be_defined
 allowed_labels:
   tenant:
     type: string
@@ -776,7 +813,16 @@ config:
 allowed_labels:
   tenant:
     type: string
-
+incompatibility_overrides:
+  disable_rules:
+    - builtin_branch_must_have_value
+    - builtin_configuration_version_must_have_value
+    - builtin_dynamic_must_have_value
+    - builtin_node_host_must_have_value
+    - builtin_node_id_must_have_value
+    - builtin_rev_must_have_value
+    - builtin_node_type_must_be_defined
+    - builtin_tenant_must_be_defined
 selector_config:
 - description: 1
   selector:
@@ -1801,4 +1847,262 @@ obj: {value: 2} # comment2
             UNIT_ASSERT_VALUES_EQUAL(res, exp);
         }
     }
+
+Y_UNIT_TEST(FuseConfigs_ConsoleWins) {
+    // Console has key, base has same key -> console wins
+    const char* base = R"(
+actor_system_config:
+  threads: 4
+log_config:
+  level: INFO
+)";
+    const char* console = R"(
+metadata:
+  kind: MainConfig
+  version: 1
+config:
+  actor_system_config:
+    threads: 8
+allowed_labels:
+  tenant:
+    type: string
+selector_config: []
+)";
+    auto result = NYamlConfig::FuseConfigs(base, console);
+    auto root = result.Root().Map();
+
+    // Console value preserved
+    UNIT_ASSERT_VALUES_EQUAL(root.at("config").Map().at("actor_system_config").Map().at("threads").Scalar(), "8");
+    // Base value added (missing in console)
+    UNIT_ASSERT(root.at("config").Map().Has("log_config"));
+    // Metadata from console
+    UNIT_ASSERT(root.Has("metadata"));
+    // Selectors preserved
+    UNIT_ASSERT(root.Has("selector_config"));
+    // Allowed labels preserved
+    UNIT_ASSERT(root.Has("allowed_labels"));
+}
+
+Y_UNIT_TEST(FuseConfigs_BaseFillsGaps) {
+    // Base has key not in console -> base value added
+    const char* base = R"(
+log_config:
+  level: DEBUG
+feature_flags:
+  enable_x: true
+)";
+    const char* console = R"(
+metadata:
+  kind: MainConfig
+config:
+  log_config:
+    level: INFO
+)";
+    auto result = NYamlConfig::FuseConfigs(base, console);
+    auto configMap = result.Root().Map().at("config").Map();
+
+    // Console value wins for existing key
+    UNIT_ASSERT_VALUES_EQUAL(configMap.at("log_config").Map().at("level").Scalar(), "INFO");
+    // Base fills gap for missing key
+    UNIT_ASSERT(configMap.Has("feature_flags"));
+    UNIT_ASSERT_VALUES_EQUAL(configMap.at("feature_flags").Map().at("enable_x").Scalar(), "true");
+}
+
+Y_UNIT_TEST(FuseConfigs_EmptyBase) {
+    // Empty base config
+    const char* base = R"()";
+    const char* console = R"(
+metadata:
+  kind: MainConfig
+config:
+  log_config:
+    level: INFO
+)";
+    auto result = NYamlConfig::FuseConfigs(base, console);
+    auto configMap = result.Root().Map().at("config").Map();
+
+    // Console config preserved
+    UNIT_ASSERT(configMap.Has("log_config"));
+    UNIT_ASSERT_VALUES_EQUAL(configMap.at("log_config").Map().at("level").Scalar(), "INFO");
+}
+
+Y_UNIT_TEST(FuseConfigs_EmptyConsoleConfig) {
+    // Console has empty config section
+    const char* base = R"(
+log_config:
+  level: DEBUG
+)";
+    const char* console = R"(
+metadata:
+  kind: MainConfig
+config: {}
+)";
+    auto result = NYamlConfig::FuseConfigs(base, console);
+    auto configMap = result.Root().Map().at("config").Map();
+
+    // Base fills all gaps
+    UNIT_ASSERT(configMap.Has("log_config"));
+    UNIT_ASSERT_VALUES_EQUAL(configMap.at("log_config").Map().at("level").Scalar(), "DEBUG");
+}
+
+Y_UNIT_TEST(FuseConfigs_ExcludesStorageOnlyKeys) {
+    // Storage-only keys from base should be excluded
+    const char* base = R"(
+log_config:
+  level: DEBUG
+hosts:
+  - host: node1
+    port: 19001
+host_configs:
+  - host_config_id: 1
+blob_storage_config:
+  service_set: {}
+nameservice_config:
+  node:
+    - node_id: 1
+static_erasure: mirror-3-dc
+feature_flags:
+  enable_x: true
+)";
+    const char* console = R"(
+metadata:
+  kind: MainConfig
+config:
+  log_config:
+    level: INFO
+)";
+    auto result = NYamlConfig::FuseConfigs(base, console);
+    auto configMap = result.Root().Map().at("config").Map();
+
+    // Console value wins
+    UNIT_ASSERT_VALUES_EQUAL(configMap.at("log_config").Map().at("level").Scalar(), "INFO");
+    // Non-storage key from base is included
+    UNIT_ASSERT(configMap.Has("feature_flags"));
+    // Storage-only keys are excluded
+    UNIT_ASSERT(!configMap.Has("hosts"));
+    UNIT_ASSERT(!configMap.Has("host_configs"));
+    UNIT_ASSERT(!configMap.Has("blob_storage_config"));
+    UNIT_ASSERT(!configMap.Has("nameservice_config"));
+    UNIT_ASSERT(!configMap.Has("static_erasure"));
+}
+}
+
+Y_UNIT_TEST_SUITE(YamlConfigResolveUnique) {
+
+Y_UNIT_TEST(NotUniqueSelectors) {
+    const char* configWithNotUniqueSelectors = R"(---
+allowed_labels:
+  label1:
+    type: enum
+    values:
+      ? a
+      ? b
+  label2:
+    type: enum
+    values:
+      ? x
+      ? y
+      ? z
+  label3:
+    type: enum
+    values:
+      ? p
+      ? q
+      ? r
+config:
+  value: base
+selector_config:
+- description: "selector1"
+  selector:
+    label1: a
+  config:
+    value: config_a
+- description: "selector2"
+  selector:
+    label1: b
+  config:
+    value: config_b
+- description: "selector3"
+  selector:
+    label2: x
+  config: {}
+- description: "selector4"
+  selector:
+    label3: p
+  config: {}
+)";
+
+    auto docAll = NFyaml::TDocument::Parse(configWithNotUniqueSelectors);
+    auto resolvedAll = NYamlConfig::ResolveAll(docAll);
+
+    auto docUniq = NFyaml::TDocument::Parse(configWithNotUniqueSelectors);
+    TVector<NYamlConfig::TDocumentConfig> resolvedUniq;
+    NYamlConfig::ResolveUniqueDocs(
+        docUniq,
+        [&](NYamlConfig::TDocumentConfig&& cfg) {
+            resolvedUniq.push_back(std::move(cfg));
+        });
+
+    UNIT_ASSERT(resolvedUniq.size() < resolvedAll.Configs.size());
+}
+
+Y_UNIT_TEST(AllTestConfigs) {
+    auto testConfig = [](const char* config, const char* name) {
+        auto docAll = NFyaml::TDocument::Parse(config);
+        auto resolvedAll = NYamlConfig::ResolveAll(docAll);
+
+        auto docUniq = NFyaml::TDocument::Parse(config);
+        TVector<NYamlConfig::TDocumentConfig> resolvedUniq;
+        NYamlConfig::ResolveUniqueDocs(
+            docUniq,
+            [&](NYamlConfig::TDocumentConfig&& cfg) {
+                resolvedUniq.push_back(std::move(cfg));
+            });
+
+        auto toStr = [](const NFyaml::TNodeRef& node) {
+            TStringStream ss;
+            ss << node;
+            return ss.Str();
+        };
+
+        TSet<TString> allDocs;
+        for (auto& [_, cfg] : resolvedAll.Configs) {
+            auto doc = cfg.first.Clone();
+            for (auto it = doc.begin(); it != doc.end(); ++it) {
+                it->RemoveTag();
+            }
+            auto cleanConfig = doc.Root().Map().at("config");
+            allDocs.insert(toStr(cleanConfig));
+        }
+
+        TSet<TString> uniqDocs;
+        for (auto& cfg : resolvedUniq) {
+            uniqDocs.insert(toStr(cfg.second));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(uniqDocs.size(), resolvedUniq.size(), 
+            TString("Config: ") + name + ", ResolveUniqueDocs has duplicates");
+
+        for (const auto& s : uniqDocs) {
+            UNIT_ASSERT_C(allDocs.contains(s), 
+                TString("Config: ") + name + ", ResolveUniqueDocs has extra doc not in ResolveAll");
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(allDocs.size(), uniqDocs.size(), 
+            TString("Config: ") + name + ", size mismatch");
+
+        for (const auto& s : allDocs) {
+            UNIT_ASSERT_C(uniqDocs.contains(s), 
+                TString("Config: ") + name + ", ResolveUniqueDocs missing doc from ResolveAll");
+        }
+    };
+
+    testConfig(WholeConfig, "WholeConfig");
+    testConfig(UnresolvedAllConfig, "UnresolvedAllConfig");
+    testConfig(UnresolvedSimpleConfig1, "UnresolvedSimpleConfig1");
+    testConfig(UnresolvedSimpleConfig2, "UnresolvedSimpleConfig2");
+    testConfig(UnresolvedSimpleConfig3, "UnresolvedSimpleConfig3");
+    testConfig(UnresolvedSimpleConfigAppend, "UnresolvedSimpleConfigAppend");
+}
+
 }

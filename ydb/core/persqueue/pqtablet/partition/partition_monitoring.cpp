@@ -16,6 +16,7 @@
 #include <ydb/library/protobuf_printer/security_printer.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <library/cpp/html/pcdata/pcdata.h>
+#include <library/cpp/html/escape/escape.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <util/folder/path.h>
@@ -29,10 +30,14 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
         if (CurrentStateFunc() == &TThis::StateInit) {
             return "Init";
         } else if (CurrentStateFunc() == &TThis::StateIdle) {
-            return "Idle";
+            return KVWriteInProgress ? "Write" : "Idle";
         } else {
-            Y_ABORT("");
+            return "Unknown";
         }
+    };
+    static constexpr std::pair<TStringBuf, const TPartitionBlobEncoder TPartition::*> encoders[2]{
+        {"Compacted"sv, &TPartition::CompactionBlobEncoder},
+        {"FastWrite"sv, &TPartition::BlobEncoder},
     };
 
     TStringStream out;
@@ -55,12 +60,17 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
 
                     PROPERTIES("Information") {
                         PROPERTY("Total partition size, bytes", Size());
-                        PROPERTY("Total message count", (BlobEncoder.Head.GetNextOffset() - BlobEncoder.StartOffset));
-                        PROPERTY("StartOffset", BlobEncoder.StartOffset);
-                        PROPERTY("EndOffset", BlobEncoder.EndOffset);
-                        PROPERTY("LastOffset", BlobEncoder.Head.GetNextOffset());
+                        PROPERTY("Total message count", (GetEndOffset() - GetStartOffset()));
+                        PROPERTY("StartOffset", GetStartOffset());
+                        PROPERTY("EndOffset", GetEndOffset());
                         PROPERTY("Last message WriteTimestamp", EndWriteTimestamp.ToRfc822String());
                         PROPERTY("HeadOffset", BlobEncoder.Head.Offset << ", count: " << BlobEncoder.Head.GetCount());
+                    }
+
+                    PROPERTIES("Transactions") {
+                        PROPERTY("Step", PlanStep);
+                        PROPERTY("TxId", TxId);
+                        PROPERTY("Inflight", TransactionsInflight.size());
                     }
 
                     if (Compacter) {
@@ -121,20 +131,53 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                         PROPERTY("Owners", Owners.size());
                         PROPERTY("Currently writing", Responses.size());
                         PROPERTY("MaxCurrently writing", BlobEncoder.MaxWriteResponsesSize);
-                        PROPERTY("DataKeysBody size", BlobEncoder.DataKeysBody.size());
+                        for (const auto& [encoderName, encoderPtr] : encoders) {
+                            const TPartitionBlobEncoder& encoder = this->*encoderPtr;
+                            PROPERTY(TString::Join(encoderName, " DataKeysBody size"), encoder.DataKeysBody.size());
+                        }
                     }
 
-                    PROPERTIES("DataKeysHead size") {
-                        for (ui32 i = 0; i < BlobEncoder.DataKeysHead.size(); ++i) {
-                            PROPERTY(TStringBuilder() << i, BlobEncoder.DataKeysHead[i].KeysCount() << " sum: " << BlobEncoder.DataKeysHead[i].Sum()
-                                << " border: " << BlobEncoder.DataKeysHead[i].Border() << " recs: " << BlobEncoder.DataKeysHead[i].RecsCount()
-                                << " intCount: " << BlobEncoder.DataKeysHead[i].InternalPartsCount());
+
+                    for (const auto& [encoderName, encoderPtr] : encoders) {
+                        const TPartitionBlobEncoder& encoder = this->*encoderPtr;
+                        PROPERTIES(TString::Join(encoderName, " DataKeysHead size")) {
+                            for (ui32 i = 0; i < encoder.DataKeysHead.size(); ++i) {
+                                PROPERTY(TStringBuilder() << i, encoder.DataKeysHead[i].KeysCount() << " sum: " << encoder.DataKeysHead[i].Sum()
+                                    << " border: " << encoder.DataKeysHead[i].Border() << " recs: " << encoder.DataKeysHead[i].RecsCount()
+                                    << " intCount: " << encoder.DataKeysHead[i].InternalPartsCount());
+                            }
                         }
                     }
 
                     PROPERTIES("AvgWriteSize, bytes") {
                         for (auto& avg : AvgWriteBytes) {
                             PROPERTY(avg.GetDuration().ToString(), avg.GetValue());
+                        }
+                    }
+                }
+            }
+
+            if (!Partition.IsSupportivePartition()) {
+                LAYOUT_ROW() {
+                    LAYOUT_COLUMN() {
+                        TABLE_CLASS("table") {
+                            CAPTION() {out << "MLP consumers";}
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() {out << "Consumer";}
+                                }
+                            }
+                            TABLEBODY() {
+                                for (auto& [consumerName, _] : MLPConsumers) {
+                                    TABLER() {
+                                        TABLED() {
+                                            HREF(TStringBuilder() << "app?TabletID=" << TabletId << "&consumer=" << NHtml::EscapeAttributeValue(consumerName) << "&partitionId=" << Partition.OriginalPartitionId) {
+                                                out <<  EncodeHtmlPcdata(consumerName);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -163,33 +206,37 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                         }
                         TABLEBODY() {
                             ui32 i = 0;
-                            for (const auto& d : BlobEncoder.DataKeysBody) {
-                                TABLER() {
-                                    TABLED() {out << "DataBody";}
-                                    TABLED() {out << i++;}
-                                    TABLED() {out << ToStringLocalTimeUpToSeconds(d.Timestamp);}
-                                    TABLED() {out << d.Key.GetOffset();}
-                                    TABLED() {out << d.Key.GetPartNo();}
-                                    TABLED() {out << d.Key.GetCount();}
-                                    TABLED() {out << d.Key.GetInternalPartsCount();}
-                                    TABLED() {out << d.Size;}
+                            for (const auto& [encoderName, encoderPtr] : encoders) {
+                                const TPartitionBlobEncoder& encoder = this->*encoderPtr;
+                                for (const auto& d : encoder.DataKeysBody) {
+                                    TABLER() {
+                                        TABLED() {out << encoderName << "DataBody";}
+                                        TABLED() {out << i++;}
+                                        TABLED() {out << ToStringLocalTimeUpToSeconds(d.Timestamp);}
+                                        TABLED() {out << d.Key.GetOffset();}
+                                        TABLED() {out << d.Key.GetPartNo();}
+                                        TABLED() {out << d.Key.GetCount();}
+                                        TABLED() {out << d.Key.GetInternalPartsCount();}
+                                        TABLED() {out << d.Size;}
+                                    }
                                 }
-                            }
-                            ui32 currentLevel = 0;
-                            for (ui32 p = 0; p < BlobEncoder.HeadKeys.size(); ++p) {
-                                ui32 size  = BlobEncoder.HeadKeys[p].Size;
-                                while (currentLevel + 1 < TotalLevels && size < CompactLevelBorder[currentLevel + 1])
-                                    ++currentLevel;
-                                Y_ABORT_UNLESS(size < CompactLevelBorder[currentLevel]);
-                                TABLER() {
-                                    TABLED() {out << "DataHead[" << currentLevel << "]";}
-                                    TABLED() {out << i++;}
-                                    TABLED() {out << ToStringLocalTimeUpToSeconds(BlobEncoder.HeadKeys[p].Timestamp);}
-                                    TABLED() {out << BlobEncoder.HeadKeys[p].Key.GetOffset();}
-                                    TABLED() {out << BlobEncoder.HeadKeys[p].Key.GetPartNo();}
-                                    TABLED() {out << BlobEncoder.HeadKeys[p].Key.GetCount();}
-                                    TABLED() {out << BlobEncoder.HeadKeys[p].Key.GetInternalPartsCount();}
-                                    TABLED() {out << size;}
+                                ui32 currentLevel = 0;
+                                const auto& headKeys = encoder.HeadKeys;
+                                for (ui32 p = 0; p < headKeys.size(); ++p) {
+                                    ui32 size  = headKeys[p].Size;
+                                    while (currentLevel + 1 < TotalLevels && size < CompactLevelBorder[currentLevel + 1])
+                                        ++currentLevel;
+                                    PQ_ENSURE(size < CompactLevelBorder[currentLevel]);
+                                    TABLER() {
+                                        TABLED() {out << encoderName << "DataHead[" << currentLevel << "]";}
+                                        TABLED() {out << i++;}
+                                        TABLED() {out << ToStringLocalTimeUpToSeconds(headKeys[p].Timestamp);}
+                                        TABLED() {out << headKeys[p].Key.GetOffset();}
+                                        TABLED() {out << headKeys[p].Key.GetPartNo();}
+                                        TABLED() {out << headKeys[p].Key.GetCount();}
+                                        TABLED() {out << headKeys[p].Key.GetInternalPartsCount();}
+                                        TABLED() {out << size;}
+                                    }
                                 }
                             }
                         }
@@ -215,14 +262,16 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                                     TABLED() {out << (i++);}
                                 }
                             }
-                            if (!BlobEncoder.DataKeysBody.empty() && BlobEncoder.DataKeysBody.back().Key.GetOffset() + BlobEncoder.DataKeysBody.back().Key.GetCount() < BlobEncoder.Head.Offset) {
-                                TABLER() {
-                                    TABLED() {out << (BlobEncoder.DataKeysBody.back().Key.GetOffset() + BlobEncoder.DataKeysBody.back().Key.GetCount());}
-                                    TABLED() {out << BlobEncoder.Head.Offset;}
-                                    TABLED() {out << (BlobEncoder.Head.Offset - (BlobEncoder.DataKeysBody.back().Key.GetOffset() + BlobEncoder.DataKeysBody.back().Key.GetCount()));}
-                                    TABLED() {out << (i++);}
+                            for (const auto& [encoderName, encoderPtr] : encoders) {
+                                const TPartitionBlobEncoder& encoder = this->*encoderPtr;
+                                if (!encoder.DataKeysBody.empty() && encoder.DataKeysBody.back().Key.GetOffset() + encoder.DataKeysBody.back().Key.GetCount() < encoder.Head.Offset) {
+                                    TABLER() {
+                                        TABLED() {out << (encoder.DataKeysBody.back().Key.GetOffset() + encoder.DataKeysBody.back().Key.GetCount());}
+                                        TABLED() {out << encoder.Head.Offset;}
+                                        TABLED() {out << (encoder.Head.Offset - (encoder.DataKeysBody.back().Key.GetOffset() + encoder.DataKeysBody.back().Key.GetCount()));}
+                                        TABLED() {out << (i++);}
+                                    }
                                 }
-
                             }
                         }
                     }
@@ -280,12 +329,12 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                             }
                         }
                         TABLEBODY() {
-                            for (auto& [user, userInfo]: UsersInfoStorage->GetAll()) {
+                            for (auto&& [user, userInfo]: UsersInfoStorage->GetAll()) {
                                 auto snapshot = CreateSnapshot(userInfo);
                                 TABLER() {
                                     TABLED() {out << EncodeHtmlPcdata(user);}
                                     TABLED() {out << userInfo.Offset;}
-                                    TABLED() {out << (BlobEncoder.EndOffset - userInfo.Offset);}
+                                    TABLED() {out << (GetEndOffset() - userInfo.Offset);}
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(userInfo.ReadFromTimestamp);}
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(snapshot.LastCommittedMessage.WriteTimestamp);}
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(snapshot.LastCommittedMessage.WriteTimestamp);}
@@ -305,6 +354,18 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
     }
 
     ctx.Send(ev->Sender, new TEvPQ::TEvMonResponse(Partition, out.Str()));
+}
+
+void TPartition::Handle(TEvPQ::TEvMLPConsumerMonRequest::TPtr& ev) {
+    auto& consumerName = ev->Get()->Consumer;
+
+    auto it = MLPConsumers.find(consumerName);
+    if (it == MLPConsumers.end()) {
+        Send(ev->Get()->ReplyTo, new NMon::TEvRemoteHttpInfoRes(TStringBuilder() <<"MLP consumer '" << consumerName << "' not found"));
+        return;
+    }
+    auto& consumerInfo = it->second;
+    Forward(ev, consumerInfo.ActorId);
 }
 
 } // namespace NKikimr::NPQ

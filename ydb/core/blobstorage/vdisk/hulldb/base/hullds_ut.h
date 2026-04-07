@@ -11,7 +11,7 @@ namespace NKikimr {
         TTestContexts(ui32 chunkSize = 135249920, ui64 compWorthReadSize = (2ul << 20ul))
             : ChunkSize(chunkSize)
             , CompWorthReadSize(compWorthReadSize)
-            , GroupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4)
+            , GroupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4)
             , VCfg(TVDiskConfig::TBaseInfo::SampleForTests())
             , VCtx(new TVDiskContext(TActorId(), GroupInfo.PickTopology(), new ::NMonitoring::TDynamicCounters(),
                         TVDiskID(), nullptr, NPDisk::DEVICE_TYPE_UNKNOWN))
@@ -31,9 +31,8 @@ namespace NKikimr {
                         0.5,
                         TDuration::Minutes(5),
                         TDuration::Seconds(1),
-                        true,
                         8u,
-                        8u)) // AddHeader
+                        8u))
             , LevelIndexSettings(
                 HullCtx,
                 8u,                         // Level0MaxSstsAtOnce

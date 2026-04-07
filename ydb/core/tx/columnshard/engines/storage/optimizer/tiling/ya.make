@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     GLOBAL tiling.cpp
+    counters.cpp
 )
 
 PEERDIR(

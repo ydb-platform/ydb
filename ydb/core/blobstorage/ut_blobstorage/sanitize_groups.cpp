@@ -244,7 +244,9 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
     }
 
     void StressTest(TBlobStorageGroupType groupType, ui32 dcs, ui32 racks, ui32 units) {
+        const TDuration timeLimit = TDuration::Seconds(60);
         const ui32 steps = 100;
+        THPTimer timer;
         std::vector<TNodeLocation> locations;
 
         MakeLocations(locations, dcs, racks, units, LocationGenerator);
@@ -310,7 +312,7 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
             DISABLE_SELF_HEAL,
         };
         TWeightedRandom<EActions> act;
-    
+
         act.AddValue(EActions::SHUFFLE_LOCATIONS, 1);
         act.AddValue(EActions::UPDATE_STATUS, 5);
         act.AddValue(EActions::ENABLE_SANITIZER, 1);
@@ -322,6 +324,9 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
         bool groupLayoutSanitizer = false;
 
         for (ui32 i = 0; i < steps; ++i) {
+            if (TDuration::Seconds(timer.Passed()) > timeLimit) {
+                Cerr << "Test terminated prematurely due to timeout, steps processed# " << i << Endl;
+            }
             switch (act.GetRandom()) {
                 case EActions::SHUFFLE_LOCATIONS:
                     shuffleLocations();

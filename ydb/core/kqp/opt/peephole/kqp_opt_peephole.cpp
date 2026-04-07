@@ -22,6 +22,20 @@
 
 namespace NKikimr::NKqp::NOpt {
 
+std::unordered_set<std::string_view> GetNonDeterministicFunctions() {
+    static const std::unordered_set<std::string_view> nonDeterministicFunctions = {
+        "RandomNumber",
+        "Random",
+        "RandomUuid",
+        "Now",
+        "CurrentUtcDate",
+        "CurrentUtcDatetime",
+        "CurrentUtcTimestamp"
+    };
+
+    return nonDeterministicFunctions;
+}
+
 namespace {
 
 using namespace NYql;
@@ -33,16 +47,6 @@ using TStatus = IGraphTransformer::TStatus;
 TStatus ReplaceNonDetFunctionsWithParams(TExprNode::TPtr& input, TExprContext& ctx,
     THashMap<TString, TKqpParamBinding>* paramBindings)
 {
-    static const std::unordered_set<std::string_view> nonDeterministicFunctions = {
-        "RandomNumber",
-        "Random",
-        "RandomUuid",
-        "Now",
-        "CurrentUtcDate",
-        "CurrentUtcDatetime",
-        "CurrentUtcTimestamp"
-    };
-
     TOptimizeExprSettings settings(nullptr);
     settings.VisitChanges = true;
 
@@ -50,7 +54,7 @@ TStatus ReplaceNonDetFunctionsWithParams(TExprNode::TPtr& input, TExprContext& c
     auto status = OptimizeExpr(input, output, [paramBindings](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (auto maybeCallable = TMaybeNode<TCallable>(node)) {
             auto callable = maybeCallable.Cast();
-            if (nonDeterministicFunctions.contains(callable.CallableName()) && callable.Ref().ChildrenSize() == 0) {
+            if (GetNonDeterministicFunctions().contains(callable.CallableName()) && callable.Ref().ChildrenSize() == 0) {
                 const auto paramName = TStringBuilder() << ParamNamePrefix
                     << NNaming::CamelToSnakeCase(TString(callable.CallableName()));
 
@@ -102,6 +106,7 @@ public:
         AddHandler(0, TOptimizeTransformerBase::Any(), HNDL(BuildWideReadTable));
         AddHandler(0, &TDqPhyLength::Match, HNDL(RewriteLength));
         AddHandler(0, &TKqpWriteConstraint::Match, HNDL(RewriteKqpWriteConstraint));
+        AddHandler(0, &TCoWideMap::Match, HNDL(EliminateWideMapForLargeOlapTable));
 #undef HNDL
     }
 
@@ -139,6 +144,12 @@ protected:
     TMaybeNode<TExprBase> RewritePureJoin(TExprBase node, TExprContext& ctx) {
         TExprBase output = DqPeepholeRewritePureJoin(node, ctx);
         DumpAppliedRule("RewritePureJoin", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> EliminateWideMapForLargeOlapTable(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpEliminateWideMapForLargeOlapTable(node, ctx, *GetTypes());
+        DumpAppliedRule("EliminateWideMapForLargeOlapTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
@@ -195,16 +206,47 @@ class TKqpPeepholeNewOperatorTransformer : public TOptimizeTransformerBase {
 public:
     TKqpPeepholeNewOperatorTransformer(TTypeAnnotationContext& ctx, TKikimrConfiguration::TPtr config)
         : TOptimizeTransformerBase(&ctx, NYql::NLog::EComponent::ProviderKqp, {})
+        , DqHashOperatorsUseBlocks(config->GetDqHashOperatorsUseBlocks())
     {
 #define HNDL(name) "KqpPeepholeNewOperator-"#name, Hndl(&TKqpPeepholeNewOperatorTransformer::name)
-        if (config->UseDqHashCombine.Get().GetOrElse(false)) {
+        if (config->GetUseDqHashCombine()) {
             AddHandler(0, &TCoWideCombiner::Match, HNDL(RewriteWideCombinerToDqHashCombiner));
+        }
+        if (config->GetUseDqHashAggregate()) {
+            AddHandler(0, &TCoWideCombiner::Match, HNDL(RewriteWideCombinerToDqHashAggregator));
         }
 #undef HNDL
     }
 
     TMaybeNode<TExprBase> RewriteWideCombinerToDqHashCombiner(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqPeepholeRewriteWideCombiner(node, ctx);
+        TExprBase output = DqPeepholeRewriteWideCombinerToDqHashCombiner(node, ctx, DqHashOperatorsUseBlocks);
+        DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteWideCombinerToDqHashAggregator(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeRewriteWideCombinerToDqHashAggregator(node, ctx, DqHashOperatorsUseBlocks);
+        DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+private:
+    bool DqHashOperatorsUseBlocks;
+};
+
+class TKqpPeepholeBlockPackUnpackTransformer : public TOptimizeTransformerBase {
+public:
+    TKqpPeepholeBlockPackUnpackTransformer(TTypeAnnotationContext& ctx)
+        : TOptimizeTransformerBase(&ctx, NYql::NLog::EComponent::ProviderKqp, {})
+    {
+#define HNDL(name) "KqpPeepholeBlockPackUnpack-"#name, Hndl(&TKqpPeepholeBlockPackUnpackTransformer::name)
+        AddHandler(0, &TCoWideMap::Match, HNDL(EliminateWideMapPackUnpack));
+#undef HNDL
+    }
+
+private:
+    TMaybeNode<TExprBase> EliminateWideMapPackUnpack(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpEliminateWideMapPackUnpack(node, ctx, *GetTypes());
         DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -233,8 +275,9 @@ private:
 };
 
 struct TKqpPeepholePipelineFinalConfigurator : IPipelineConfigurator {
-    TKqpPeepholePipelineFinalConfigurator(TKikimrConfiguration::TPtr config)
+    TKqpPeepholePipelineFinalConfigurator(TKikimrConfiguration::TPtr config, const bool withFinalStageRules)
         : Config(config)
+        , WithFinalStageRules(withFinalStageRules)
     {}
 
     void AfterCreate(TTransformationPipeline*) const override {}
@@ -244,10 +287,15 @@ struct TKqpPeepholePipelineFinalConfigurator : IPipelineConfigurator {
     }
 
     void AfterOptimize(TTransformationPipeline* pipeline) const override {
-        pipeline->Add(new TKqpPeepholeNewOperatorTransformer(*pipeline->GetTypeAnnotationContext(), Config), "KqpPeepholeNewOperator");
+        if (WithFinalStageRules) {
+            pipeline->Add(new TKqpPeepholeNewOperatorTransformer(*pipeline->GetTypeAnnotationContext(), Config), "KqpPeepholeNewOperator");
+        }
+        pipeline->Add(new TKqpPeepholeBlockPackUnpackTransformer(*pipeline->GetTypeAnnotationContext()), "KqpPeepholeBlockPackUnpack");
     }
+
 private:
     const TKikimrConfiguration::TPtr Config;
+    const bool WithFinalStageRules;
 };
 
 // Sort stages in topological order by their inputs, so that we optimize the ones without inputs first.
@@ -357,20 +405,23 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
         // Propagate "WideFromBlock" through connections.
         // TODO(ilezhankin): this peephole optimization should be implemented instead as
         //       the original whole-graph transformer |CreateDqBuildWideBlockChannelsTransformer|.
-        if (config->BlockChannelsMode == NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO) {
+        if (config->GetBlockChannelsMode() == NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO) {
             TNodeOnNodeOwnedMap argsMap;
 
             YQL_ENSURE(stage.Inputs().Size() == stage.Program().Args().Size());
 
-            // TODO(#23895): workaround for https://github.com/ydb-platform/ydb/issues/20440
-            //      do not mix scalar and block HashShuffle connections,
+            // Workaround to mitigate https://github.com/ydb-platform/ydb/issues/20440
+            //      do not mix scalar and block HashShuffle HashV1 connections,
             //      if we find any scalar connection then don't propagate blocks through other connections.
             ui32 scalarHashShuffleCount = 0;
             for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
                 auto connection = stage.Inputs().Item(i).Maybe<TDqCnHashShuffle>();
-                if (connection && connection.Cast().HashFunc().IsValid()) {
-                    auto hashFuncType = FromString<NDq::EHashShuffleFuncType>(connection.Cast().HashFunc().Cast().StringValue());
-                    scalarHashShuffleCount += (hashFuncType == NDq::EHashShuffleFuncType::HashV1) || (hashFuncType == NDq::EHashShuffleFuncType::HashV2);
+                if (connection) {
+                    auto hashFuncType = config->GetDqDefaultHashShuffleFuncType();
+                    if (connection.Cast().HashFunc().IsValid()) {
+                        hashFuncType = FromString<NDq::EHashShuffleFuncType>(connection.Cast().HashFunc().Cast().StringValue());
+                    }
+                    scalarHashShuffleCount += (hashFuncType == NDq::EHashShuffleFuncType::HashV1);
                 }
             }
 
@@ -642,7 +693,7 @@ TStatus PeepHoleOptimize(const TExprBase& program, TExprNode::TPtr& newProgram, 
     bool allowNonDeterministicFunctions, bool withFinalStageRules, TSet<TString> disabledOpts)
 {
     TKqpPeepholePipelineConfigurator kqpPeephole(config, disabledOpts);
-    TKqpPeepholePipelineFinalConfigurator kqpPeepholeFinal(config);
+    TKqpPeepholePipelineFinalConfigurator kqpPeepholeFinal(config, withFinalStageRules);
     TPeepholeSettings peepholeSettings;
     peepholeSettings.CommonConfig = &kqpPeephole;
     peepholeSettings.FinalConfig = &kqpPeepholeFinal;

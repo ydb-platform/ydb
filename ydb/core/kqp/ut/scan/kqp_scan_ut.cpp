@@ -1,5 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/base/hive.h>
+
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -1524,13 +1526,15 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT 42
-            UNION ALL
-            (SELECT Key FROM `/Root/EightShard` ORDER BY Key LIMIT 1);
+            SELECT * FROM (
+                SELECT 42
+                UNION ALL
+                (SELECT Key FROM `/Root/EightShard` ORDER BY Key LIMIT 1)
+            ) ORDER BY Key;
         )").GetValueSync();
         auto res = StreamResultToYson(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        CompareYson(R"([[[42];#];[#;[101u]]])", res);
+        CompareYson(R"([[#;[42]];[[101u];#]])", res);
     }
 
     Y_UNIT_TEST(UnionThree) {
@@ -1570,11 +1574,12 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT COUNT(*) FROM `/Root/KeyValue`
+            SELECT COUNT(*) as C FROM `/Root/KeyValue`
             UNION ALL
-            SELECT COUNT(*) FROM `/Root/EightShard`
+            SELECT COUNT(*) as C FROM `/Root/EightShard`
             UNION ALL
-            SELECT SUM(Amount) FROM `/Root/Test`;
+            SELECT SUM(Amount) as C FROM `/Root/Test`
+            ORDER BY C;
         )").GetValueSync();
         auto res = StreamResultToYson(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -1720,23 +1725,133 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         }
     }
 
-    // TODO: #22459
-    /*
     Y_UNIT_TEST(EmptySet_2) {
         auto kikimr = DefaultKikimrRunner({}, AppCfg());
         auto db = kikimr.GetQueryClient();
 
+        auto settings = NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full);
+        auto params = NYdb::TParamsBuilder()
+            .AddParam("$key")
+                .Uint64(202)
+                .Build()
+            .Build();
         auto response = db.ExecuteQuery(R"(
-            SELECT Key FROM `/Root/EightShard` WHERE 1 = 2;
-        )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            declare $key as Uint64;
+            SELECT Key FROM `/Root/EightShard` WHERE 1 = $key;
+        )", NQuery::TTxControl::BeginTx().CommitTx(), params, settings).GetValueSync();
         UNIT_ASSERT_C(response.IsSuccess(), response.GetIssues().ToString());
+        Cerr << response.GetStats()->GetAst() << Endl;
 
         UNIT_ASSERT_VALUES_UNEQUAL(response.GetResultSets().size(), 0);
         for (const auto& resultSet : response.GetResultSets()) {
             UNIT_ASSERT_EQUAL(resultSet.RowsCount(), 0);
         }
     }
-    */
+
+    Y_UNIT_TEST(EmptySet_3) {
+        auto kikimr = DefaultKikimrRunner({}, AppCfg());
+        auto db = kikimr.GetQueryClient();
+
+        auto settings = NQuery::TExecuteQuerySettings().StatsMode(NYdb::NQuery::EStatsMode::Full);
+        auto params = NYdb::TParamsBuilder()
+            .AddParam("$key")
+                .Uint64(202)
+                .Build()
+            .Build();
+        auto response = db.ExecuteQuery(R"(
+            declare $key as Uint64;
+            SELECT Key FROM `/Root/EightShard` WHERE 1 = $key;
+            SELECT Key FROM `/Root/EightShard` WHERE 1 = 2;
+        )", NQuery::TTxControl::BeginTx().CommitTx(), params, settings).GetValueSync();
+        UNIT_ASSERT_C(response.IsSuccess(), response.GetIssues().ToString());
+        Cerr << response.GetStats()->GetAst() << Endl;
+
+        UNIT_ASSERT_VALUES_UNEQUAL(response.GetResultSets().size(), 0);
+        for (const auto& resultSet : response.GetResultSets()) {
+            UNIT_ASSERT_EQUAL(resultSet.RowsCount(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(EmptyTableLimitMultiNode) {
+        auto appCfg = AppCfg();
+        auto settings = TKikimrSettings(appCfg)
+            .SetNodeCount(2)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto status = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/EmptyTable` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+        )").GetValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+        // Drain node 1 so the shard moves to node 2.
+        // gRPC/session is pinned to node 1, so executer runs on node 1
+        // while the datashard leader is on node 2.
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+        auto firstNodeId = runtime->GetFirstNodeId();
+
+        {
+            auto sender = runtime->AllocateEdgeActor();
+            runtime->SendToPipe(runtime->GetAppData().DomainsInfo->GetHive(), sender,
+                new TEvHive::TEvDrainNode(firstNodeId), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            runtime->GrabEdgeEventRethrow<TEvHive::TEvDrainNodeResult>(handle, TDuration::Seconds(30));
+        }
+
+        // Wait until the shard leader is on node 2
+        {
+            TDescribeTableSettings describeSettings =
+                TDescribeTableSettings()
+                    .WithTableStatistics(true)
+                    .WithPartitionStatistics(true)
+                    .WithShardNodesInfo(true);
+
+            bool done = false;
+            for (int i = 0; i < 10; i++) {
+                auto res = session.DescribeTable("Root/EmptyTable", describeSettings).ExtractValueSync();
+                UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
+                const auto& stats = res.GetTableDescription().GetPartitionStats();
+                if (stats.size() == 1 && stats[0].LeaderNodeId == firstNodeId + 1) {
+                    done = true;
+                    break;
+                }
+                Sleep(TDuration::Seconds(5));
+            }
+            UNIT_ASSERT_C(done, "shard did not move to node 2");
+        }
+
+        // Scan query: SELECT * FROM EmptyTable LIMIT 1
+        {
+            TStreamExecScanQuerySettings scanSettings;
+            scanSettings.ClientTimeout(TDuration::Seconds(30));
+
+            auto it = tableClient.StreamExecuteScanQuery(R"(
+                SELECT * FROM `/Root/EmptyTable` LIMIT 1
+            )", scanSettings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(R"([])", StreamResultToYson(it));
+        }
+
+        // Query service: SELECT * FROM EmptyTable LIMIT 1
+        {
+            auto db = kikimr.GetQueryClient();
+            NQuery::TExecuteQuerySettings querySettings;
+            querySettings.ClientTimeout(TDuration::Seconds(30));
+            auto response = db.ExecuteQuery(R"(
+                SELECT * FROM `/Root/EmptyTable` LIMIT 1
+            )", NQuery::TTxControl::BeginTx().CommitTx(), querySettings).GetValueSync();
+            UNIT_ASSERT_C(response.IsSuccess(), response.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(response.GetResultSets().size(), 1);
+            UNIT_ASSERT_EQUAL(response.GetResultSets()[0].RowsCount(), 0);
+        }
+    }
 
     Y_UNIT_TEST(RestrictSqlV0) {
         auto kikimr = DefaultKikimrRunner({}, AppCfg());
@@ -2147,11 +2262,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST(YqlTableSample) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_KqpYqlSyntaxVersion");
-        setting.SetValue("1");
-
-        auto kikimr = DefaultKikimrRunner({setting});
+        auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();
 
         const TString query(R"(SELECT * FROM `/Root/Test` TABLESAMPLE SYSTEM(1.0);)");
@@ -2550,7 +2661,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetUnsertaintyRatio(0.5);
         appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMultiplier(2.0);
         appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxTotalRetries(100);
-
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxRowsProcessingStreamLookup(500);
+        appConfig.MutableTableServiceConfig()->MutableIteratorReadsRetrySettings()->SetMaxTotalBytesQuotaStreamLookup(100);
 
         TPortManager tp;
         ui16 mbusport = tp.GetPort(2134);
@@ -2673,6 +2785,54 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             JOIN `/Root/Table1` b
             ON a.Key = b.Key;
         )");
+    }
+
+    Y_UNIT_TEST(DecimalColumnCsvBulkUpsertScan) {
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+        settings.SetEnableArrowFormatAtDatashard(true);
+        settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
+
+        TKikimrRunner kikimr(settings);
+
+        TTableClient client{kikimr.GetDriver()};
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        auto partitions = TExplicitPartitions()
+            .AppendSplitPoints(TValueBuilder()
+                .BeginTuple().AddElement().BeginOptional().Uint64(2).EndOptional().EndTuple()
+                .Build());
+
+        auto ret = session.CreateTable("/Root/DecimalCsvScanTest",
+                TTableBuilder()
+                    .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                    .AddNullableColumn("GroupId", EPrimitiveType::Uint32)
+                    .AddNullableColumn("Value", TDecimalType(22, 9))
+                    .SetPrimaryKeyColumns({"Key"})
+                    .SetPartitionAtKeys(partitions)
+                    .Build()).GetValueSync();
+        UNIT_ASSERT_C(ret.IsSuccess(), ret.GetIssues().ToString());
+
+        TStringBuilder csv;
+        csv << "1,1,10.123456789\n";
+        csv << "2,1,20.987654321\n";
+        csv << "3,2,30.123456789\n";
+
+        auto upsert = client.BulkUpsert("/Root/DecimalCsvScanTest", EDataFormat::CSV, csv).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        auto it = client.StreamExecuteScanQuery(R"(
+            SELECT GroupId, MAX(Value) AS Value
+            FROM `/Root/DecimalCsvScanTest`
+            GROUP BY GroupId
+            ORDER BY GroupId
+        )").GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1u];["20.987654321"]];
+            [[2u];["30.123456789"]]
+        ])", StreamResultToYson(it));
     }
 }
 

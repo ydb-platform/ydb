@@ -6,13 +6,11 @@ namespace NKikimr::NPQ {
 
 struct TPartitionInfo {
     TPartitionInfo(const TActorId& actor,
-                   TMaybe<TPartitionKeyRange>&& keyRange,
-                   const TTabletCountersBase& baseline)
+                   TMaybe<TPartitionKeyRange>&& keyRange)
         : Actor(actor)
         , KeyRange(std::move(keyRange))
         , InitDone(false)
     {
-        Baseline.Populate(baseline);
     }
 
     TPartitionInfo(const TPartitionInfo& info)
@@ -21,14 +19,13 @@ struct TPartitionInfo {
         , InitDone(info.InitDone)
         , PendingRequests(info.PendingRequests)
     {
-        Baseline.Populate(info.Baseline);
     }
 
     TActorId Actor;
     TMaybe<TPartitionKeyRange> KeyRange;
     bool InitDone;
-    TTabletCountersBase Baseline;
     THashMap<TString, TTabletLabeledCountersBase> LabeledCounters;
+    size_t ReservedBytes = 0;
 
     struct TPendingRequest {
         TPendingRequest(ui64 cookie,

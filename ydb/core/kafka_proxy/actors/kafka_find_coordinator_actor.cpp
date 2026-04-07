@@ -27,8 +27,7 @@ void TKafkaFindCoordinatorActor::Bootstrap(const NActors::TActorContext& ctx) {
         return;
     }
 
-    Send(NKikimr::NIcNodeCache::CreateICNodesInfoCacheServiceId(), new NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoRequest());
-    Become(&TKafkaFindCoordinatorActor::StateWork); 
+    SendResponseOkAndDie(Context->Config.GetPublicHost(), Context->Config.GetListeningPort(), ctx.SelfID.NodeId(), ctx);
 }
 
 void TKafkaFindCoordinatorActor::SendResponseOkAndDie(const TString& host, i32 port, ui64 nodeId, const NActors::TActorContext& ctx) {
@@ -73,21 +72,8 @@ void TKafkaFindCoordinatorActor::SendResponseFailAndDie(EKafkaErrors error, cons
     }
 
     response->ErrorCode = error;
- 
+
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, static_cast<EKafkaErrors>(response->ErrorCode)));
     Die(ctx);
 }
-
-void TKafkaFindCoordinatorActor::Handle(NKikimr::NIcNodeCache::TEvICNodesInfoCache::TEvGetAllNodesInfoResponse::TPtr& ev, const NActors::TActorContext& ctx) {
-    auto iter = ev->Get()->NodeIdsMapping->find(ctx.SelfID.NodeId());
-    Y_ABORT_UNLESS(!iter.IsEnd());
-    
-	auto host = (*ev->Get()->Nodes)[iter->second].Host;
-    if (host.StartsWith(UnderlayPrefix)) {
-        host = host.substr(sizeof(UnderlayPrefix) - 1);
-    }
-    KAFKA_LOG_D("FIND_COORDINATOR incoming TEvGetAllNodesInfoResponse. Host#: " << host);
-    SendResponseOkAndDie(host, Context->Config.GetListeningPort(), ctx.SelfID.NodeId(), ctx);
-}
-
 } // NKafka

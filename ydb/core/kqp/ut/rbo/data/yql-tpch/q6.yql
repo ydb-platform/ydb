@@ -1,0 +1,12 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    Sum(l_extendedprice * l_discount) AS revenue
+FROM
+    `/Root/lineitem` as lineitem
+WHERE
+    l_shipdate >= Date('1994-01-01')
+    AND l_shipdate < DateTime::MakeDate(DateTime::ShiftYears(Date('1994-01-01'), 1))
+    AND l_discount BETWEEN (Decimal("0.06", 12, 2) - Decimal("0.01", 12, 2)) AND (Decimal("0.06", 12, 2) + Decimal("0.01", 12, 2))
+    AND l_quantity < $to_decimal(24)
+;

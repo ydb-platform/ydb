@@ -4,6 +4,7 @@
 #include "pq_l2_service.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
 
@@ -107,7 +108,7 @@ namespace NKikimr::NPQ {
         {
             auto request = MakeHolder<TEvKeyValue::TEvRequest>();
             for (auto& blob : Blobs) {
-                if (blob.Value.empty()) {
+                if (blob.Empty()) {
                     // add reading command
                     const auto& key = blob.Key;
                     auto read = request->Record.AddCmdRead();
@@ -125,13 +126,11 @@ namespace NKikimr::NPQ {
             ui64 size = 0;
             ui32 cropped = 0;
             for (ui32 i = 0; i < Blobs.size(); ++i) {
-                TRequestedBlob& blob = Blobs[i];
-                if (blob.Value.size())
-                    Verify(blob);
-                size += blob.Value.size();
+                auto& blob = Blobs[i];
+                size += blob.RawValue.size();
                 if (size > MAX_RESPONSE_SIZE) {
                     ++cropped;
-                    blob.Value.clear();
+                    blob.Clear();
                 }
             }
 
@@ -142,13 +141,6 @@ namespace NKikimr::NPQ {
             }
 
             return MakeHolder<TEvPQ::TEvBlobResponse>(CookiePQ, std::move(Blobs), error);
-        }
-
-        void Verify(const TRequestedBlob& blob) const {
-            Y_ABORT_UNLESS(blob.Value.size() <= blob.Size,
-                           "\nblob.Value.size=%" PRISZT ", blob.Size=%" PRIu64 "\nblob.Key=%s",
-                           blob.Value.size(), blob.Size, blob.Key.ToString().data());
-            TClientBlob::CheckBlob(blob.Key, blob.Value);
         }
     };
 
@@ -305,8 +297,8 @@ namespace NKikimr::NPQ {
                     reqData.RemovedBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount, reqBlob.Key.GetSuffix(), nullptr);
                 }
 
-                auto cached = std::make_shared<TCacheValue>(reqBlob.Value, ctx.SelfID, TAppData::TimeProvider->Now());
-                TValueL1 valL1(cached, cached->DataSize(), TValueL1::SourceHead);
+                auto cached = std::make_shared<TCacheValue>(reqBlob.Key, reqBlob.RawValue, ctx.SelfID, TAppData::TimeProvider->Now());
+                TValueL1 valL1(cached, cached->GetDataSize(), TValueL1::SourceHead);
                 Cache[blob] = valL1; // weak
                 Counters.Inc(valL1);
                 if (L1Strategy)
@@ -316,7 +308,7 @@ namespace NKikimr::NPQ {
 
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Caching head blob in L1. Partition "
                     << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
-                    << " size " << reqBlob.Value.size() << " actorID " << ctx.SelfID);
+                    << " size " << reqBlob.RawValue.size() << " actorID " << ctx.SelfID);
             }
         }
 
@@ -375,7 +367,7 @@ namespace NKikimr::NPQ {
 
         void SavePrefetchBlobs(const TActorContext& ctx, const TKvRequest& kvReq, const TVector<bool>& store)
         {
-            Y_ABORT_UNLESS(store.size() == kvReq.Blobs.size());
+            AFL_ENSURE(store.size() == kvReq.Blobs.size());
 
             auto reqData = MakeHolder<TCacheL2Request>(TabletId);
 
@@ -389,21 +381,21 @@ namespace NKikimr::NPQ {
                 {
                     TValueL1 value;
                     if (CheckExists(ctx, blob, value)) {
-                        Y_ABORT_UNLESS(value.Source == TValueL1::SourceHead);
+                        AFL_ENSURE(value.Source == TValueL1::SourceHead);
                         continue;
                     }
                 }
 
-                TCacheValue::TPtr cached(new TCacheValue(reqBlob.Value, ctx.SelfID, TAppData::TimeProvider->Now()));
-                TValueL1 valL1(cached, cached->DataSize(), TValueL1::SourcePrefetch);
-                Cache[blob] = valL1; // weak
+                TCacheValue::TPtr cached(new TCacheValue(reqBlob.Key, reqBlob.RawValue, ctx.SelfID, TAppData::TimeProvider->Now()));
+                TValueL1 valL1(cached, cached->GetDataSize(), TValueL1::SourcePrefetch);
+                Cache[blob] = valL1;
                 Counters.Inc(valL1);
 
                 reqData->StoredBlobs.emplace_back(kvReq.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount, reqBlob.Key.GetSuffix(), cached);
 
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Prefetched blob in L1. Partition "
                     << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
-                    << " size " << reqBlob.Value.size()  << " actorID " << ctx.SelfID);
+                    << " size " << reqBlob.RawValue.size()  << " actorID " << ctx.SelfID);
                 haveSome = true;
             }
 
@@ -418,7 +410,7 @@ namespace NKikimr::NPQ {
             auto it = Cache.find(blob);
             if (it == Cache.end()) {
                 LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Can't evict. No such blob in L1. Partition "
-                    << blob.Partition << " offset " << blob.Offset << " size " << value->DataSize()
+                    << blob.Partition << " offset " << blob.Offset << " size " << value->GetDataSize()
                     << " cause it's been evicted from L2. Actual L1 size: " << Cache.size());
                 return;
             }
@@ -426,13 +418,13 @@ namespace NKikimr::NPQ {
             auto sp = it->second.GetBlob();
             if (sp.get() != value.get()) {
                 LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE, "Evicting strange blob. Partition " << blob.Partition.InternalPartitionId
-                           << "offset " << blob.Offset << " partNo " << blob.PartNo << " size " << value->DataSize()
+                           << "offset " << blob.Offset << " partNo " << blob.PartNo << " size " << value->GetDataSize()
                            << " L1 ptr " << ((void*)sp.get()) << " vs L2 ptr " << ((void*)value.get()));
             }
             RemoveBlob(it);
 
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Erasing blob in L1. Partition "
-                << blob.Partition << " offset " << blob.Offset << " size " << value->DataSize()
+                << blob.Partition << " offset " << blob.Offset << " size " << value->GetDataSize()
                 << " cause it's been evicted from L2. Actual L1 size: " << Cache.size());
         }
 
@@ -483,13 +475,15 @@ namespace NKikimr::NPQ {
                 return nullptr;
             }
 
-            Y_ABORT_UNLESS(data->DataSize() == it->second.DataSize, "Mismatch L1-L2 blob sizes");
+            AFL_ENSURE(data->GetDataSize() == it->second.DataSize)
+                ("data->GetDataSize()", data->GetDataSize())
+                ("it->second.DataSize", it->second.DataSize);
 
             const TBlobId& blob = it->first;
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Got data from cache. Partition "
                 << blob.Partition << " offset " << blob.Offset <<
                 " partno " << blob.PartNo << " count " << blob.Count << " parts_count " << blob.InternalPartsCount
-                << " source " << (ui32)it->second.Source << " size " << data->DataSize()
+                << " source " << (ui32)it->second.Source << " size " << data->GetDataSize()
                 << " accessed " << data->GetAccessCount() << " times before, last time " << data->GetAccessTime());
 
             return data;
@@ -507,9 +501,9 @@ namespace NKikimr::NPQ {
                 TCacheValue::TPtr cached = GetValue(ctx, blobId);
                 if (cached) {
                     ++numCached;
-                    blob.Value = cached->GetValue();
+                    blob.Batches = cached->GetValue();
                     blob.Cached = true;
-                    Y_ABORT_UNLESS(blob.Value.size(), "Got empty blob from cache");
+                    AFL_ENSURE(cached->GetDataSize())("d", "Got empty blob from cache");
                 }
             }
             return numCached;
@@ -546,7 +540,7 @@ namespace NKikimr::NPQ {
             auto it = Cache.find(blob);
             if (it != Cache.end()) {
                 out = it->second;
-                Y_ABORT_UNLESS(out.GetBlob(), "Duplicate blob in L1 with no data");
+                AFL_ENSURE(out.GetBlob())("d", "Duplicate blob in L1 with no data");
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Duplicate blob in L1. "
                     << "Partition " << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
                     << " size " << out.DataSize << " actorID " << ctx.SelfID

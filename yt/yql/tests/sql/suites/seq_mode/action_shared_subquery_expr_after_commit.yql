@@ -1,6 +1,7 @@
 pragma SeqMode;
+pragma config.flags("DisableEarlyExpandSeq");
 use plato;
-define action $a() as 
+define action $a() as
     insert into @tmp
     select 1;
     commit;

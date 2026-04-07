@@ -7,8 +7,7 @@
 #include <util/generic/maybe.h>
 #include <util/generic/yexception.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 const TString ALL_CLUSTERS = "$all";
 
@@ -22,7 +21,7 @@ template <typename TType, EConfSettingType SettingType = EConfSettingType::Dynam
 class TConfSetting {
 public:
     TConfSetting() = default;
-    TConfSetting(const TType& value) {
+    explicit TConfSetting(const TType& value) {
         PerClusterValue_[ALL_CLUSTERS] = value;
     }
     TConfSetting(const TConfSetting&) = default;
@@ -43,18 +42,18 @@ public:
         }
         return PerClusterValue_[cluster];
     }
-    TConfSetting& operator =(const TType& value) {
+    TConfSetting& operator=(const TType& value) {
         PerClusterValue_.clear();
         PerClusterValue_[ALL_CLUSTERS] = value;
         return *this;
     }
-    TConfSetting& operator =(const TConfSetting&) = default;
-    TConfSetting& operator =(TConfSetting&&) = default;
+    TConfSetting& operator=(const TConfSetting&) = default;
+    TConfSetting& operator=(TConfSetting&&) = default;
 
     template <typename TFunc>
     void UpdateAll(TFunc func) {
         PerClusterValue_[ALL_CLUSTERS]; // insert record for all clusters if it is not present
-        for (auto& it: PerClusterValue_) {
+        for (auto& it : PerClusterValue_) {
             func(it.first, it.second);
         }
     }
@@ -93,7 +92,7 @@ template <typename TType>
 class TConfSetting<TType, EConfSettingType::Static> {
 public:
     TConfSetting() = default;
-    TConfSetting(const TType& value)
+    explicit TConfSetting(const TType& value)
         : Value_(value)
     {
     }
@@ -116,12 +115,12 @@ public:
         Value_.ConstructInPlace();
         return Value_.GetRef();
     }
-    TConfSetting& operator =(const TType& value) {
+    TConfSetting& operator=(const TType& value) {
         Value_ = value;
         return *this;
     }
-    TConfSetting& operator =(const TConfSetting&) = default;
-    TConfSetting& operator =(TConfSetting&&) = default;
+    TConfSetting& operator=(const TConfSetting&) = default;
+    TConfSetting& operator=(TConfSetting&&) = default;
 
     TMaybe<TType> Get() const {
         return Value_;
@@ -139,5 +138,4 @@ private:
     TMaybe<TType> Value_;
 };
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

@@ -26,6 +26,7 @@ protected:
         TStringBuilder sb;
         sb << SpecialReadContext->DebugString() << ";";
         if (verbose) {
+            sb << "profile=" << SpecialReadContext->ProfileDebugString();
             sb << "intervals_schema=" << Scanner->DebugString();
         }
         return sb;

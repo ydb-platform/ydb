@@ -2,9 +2,9 @@ LIBRARY()
 
 SRCS(
     audit_log_item_builder.h
-    audit_log.h
     audit_log_service.h
     audit_log_impl.cpp
+    login_op.cpp
 )
 
 PEERDIR(
@@ -18,6 +18,7 @@ END()
 
 RECURSE(
     audit_config
+    heartbeat_actor
 )
 
 RECURSE_FOR_TESTS(

@@ -15,6 +15,7 @@
 """
 import unittest
 
+from zope.interface.interface import InterfaceClass
 from __tests__.tests import MissingSomeAttrs
 from __tests__.tests import OptimizationTestMixin
 from __tests__.tests import SubclassableMixin
@@ -24,6 +25,25 @@ from __tests__.tests.test_interface import \
 
 # pylint:disable=inherit-non-class,too-many-lines,protected-access
 # pylint:disable=blacklisted-name,attribute-defined-outside-init
+
+IBar = InterfaceClass('IBar')
+IFoo = InterfaceClass('IFoo')
+
+
+class Foo:
+    pass
+
+
+class FooImplementedNone:
+    __implemented__ = None
+
+
+class FooNoCall:
+    __implemented__ = None
+
+    def __call__(self):
+        raise NotImplementedError()
+
 
 class _Py3ClassAdvice:
 
@@ -152,7 +172,6 @@ class DeclarationTests(EmptyDeclarationTests):
         self.assertEqual(list(decl.__bases__), [])
 
     def test_ctor_w_interface_in_bases(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
         decl = self._makeOne(IFoo)
         self.assertEqual(list(decl.__bases__), [IFoo])
@@ -173,39 +192,33 @@ class DeclarationTests(EmptyDeclarationTests):
         self.assertNotIn(decl, decl)
 
     def test___contains__w_unrelated_iface(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
         decl = self._makeOne()
         self.assertNotIn(IFoo, decl)
 
     def test___contains__w_base_interface(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
         decl = self._makeOne(IFoo)
         self.assertIn(IFoo, decl)
 
     def test___iter___single_base(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
         decl = self._makeOne(IFoo)
         self.assertEqual(list(decl), [IFoo])
 
     def test___iter___multiple_bases(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
         IBar = InterfaceClass('IBar')
         decl = self._makeOne(IFoo, IBar)
         self.assertEqual(list(decl), [IFoo, IBar])
 
     def test___iter___inheritance(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
         IBar = InterfaceClass('IBar', (IFoo,))
         decl = self._makeOne(IBar)
         self.assertEqual(list(decl), [IBar])  # IBar.interfaces() omits bases
 
     def test___iter___w_nested_sequence_overlap(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
         IBar = InterfaceClass('IBar')
         decl = self._makeOne(IBar, (IFoo, IBar))
@@ -213,14 +226,12 @@ class DeclarationTests(EmptyDeclarationTests):
 
     def test_flattened_single_base(self):
         from zope.interface.interface import Interface
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
         decl = self._makeOne(IFoo)
         self.assertEqual(list(decl.flattened()), [IFoo, Interface])
 
     def test_flattened_multiple_bases(self):
         from zope.interface.interface import Interface
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
         IBar = InterfaceClass('IBar')
         decl = self._makeOne(IFoo, IBar)
@@ -228,7 +239,6 @@ class DeclarationTests(EmptyDeclarationTests):
 
     def test_flattened_inheritance(self):
         from zope.interface.interface import Interface
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
         IBar = InterfaceClass('IBar', (IFoo,))
         decl = self._makeOne(IBar)
@@ -236,7 +246,6 @@ class DeclarationTests(EmptyDeclarationTests):
 
     def test_flattened_w_nested_sequence_overlap(self):
         from zope.interface.interface import Interface
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
         IBar = InterfaceClass('IBar')
         # This is the same as calling ``Declaration(IBar, IFoo, IBar)``
@@ -248,7 +257,6 @@ class DeclarationTests(EmptyDeclarationTests):
         self.assertEqual(list(decl.flattened()), [IBar, IFoo, Interface])
 
     def test___sub___unrelated_interface(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
         IBar = InterfaceClass('IBar')
         before = self._makeOne(IFoo)
@@ -257,14 +265,12 @@ class DeclarationTests(EmptyDeclarationTests):
         self.assertEqual(list(after), [IFoo])
 
     def test___sub___related_interface(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
         before = self._makeOne(IFoo)
         after = before - IFoo
         self.assertEqual(list(after), [])
 
     def test___sub___related_interface_by_inheritance(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
         IBar = InterfaceClass('IBar', (IFoo,))
         before = self._makeOne(IBar)
@@ -272,7 +278,6 @@ class DeclarationTests(EmptyDeclarationTests):
         self.assertEqual(list(after), [])
 
     def test___add___unrelated_interface(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
         IBar = InterfaceClass('IBar')
         before = self._makeOne(IFoo)
@@ -281,7 +286,6 @@ class DeclarationTests(EmptyDeclarationTests):
         self.assertEqual(list(after), [IFoo, IBar])
 
     def test___add___related_interface(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
         IBar = InterfaceClass('IBar')
         IBaz = InterfaceClass('IBaz')
@@ -298,7 +302,6 @@ class DeclarationTests(EmptyDeclarationTests):
         # the other way).
         from zope.interface import Interface
         from zope.interface import ro
-        from zope.interface.interface import InterfaceClass
         from __tests__.tests.test_ro import C3Setting
 
         IBase = InterfaceClass('IBase')
@@ -445,7 +448,6 @@ class TestImplements(NameAndModuleComparisonTestsMixin,
 
     def test_sort(self):
         from zope.interface.declarations import implementedBy
-        from zope.interface.interface import InterfaceClass
 
         class A:
             pass
@@ -597,7 +599,6 @@ class Test_implementedByFallback(unittest.TestCase):
         self.assertIs(self._callFUT(foo), impl)
 
     def test_dictless_w_existing_not_Implements(self):
-        from zope.interface.interface import InterfaceClass
 
         class Foo:
             __slots__ = ('__implemented__',)
@@ -669,14 +670,9 @@ class Test_implementedByFallback(unittest.TestCase):
 
     def test_w_None_no_bases_w_factory(self):
         from zope.interface.declarations import objectSpecificationDescriptor
+        from __tests__.tests.test_declarations import FooNoCall
 
-        class Foo:
-            __implemented__ = None
-
-            def __call__(self):
-                raise NotImplementedError()
-
-        foo = Foo()
+        foo = FooNoCall()
         foo.__name__ = 'foo'
         spec = self._callFUT(foo)
         self.assertEqual(spec.__name__,
@@ -690,23 +686,22 @@ class Test_implementedByFallback(unittest.TestCase):
 
     def test_w_None_no_bases_w_class(self):
         from zope.interface.declarations import ClassProvides
+        from __tests__.tests.test_declarations import FooImplementedNone
 
-        class Foo:
-            __implemented__ = None
-
-        spec = self._callFUT(Foo)
-        self.assertEqual(spec.__name__,
-                         '__tests__.tests.test_declarations.Foo')
-        self.assertIs(spec.inherit, Foo)
-        self.assertIs(Foo.__implemented__, spec)
+        spec = self._callFUT(FooImplementedNone)
+        self.assertEqual(
+            spec.__name__,
+            '__tests__.tests.test_declarations.FooImplementedNone')
+        self.assertIs(spec.inherit, FooImplementedNone)
+        self.assertIs(FooImplementedNone.__implemented__, spec)
         self.assertIsInstance(
-            Foo.__providedBy__, ClassProvides
+            FooImplementedNone.__providedBy__, ClassProvides
         )  # pylint:disable=no-member
         self.assertIsInstance(
-            Foo.__provides__, ClassProvides
+            FooImplementedNone.__provides__, ClassProvides
         )  # pylint:disable=no-member
         self.assertEqual(
-            Foo.__provides__, Foo.__providedBy__
+            FooImplementedNone.__provides__, FooImplementedNone.__providedBy__
         )  # pylint:disable=no-member
 
     def test_w_existing_Implements(self):
@@ -913,7 +908,6 @@ class _ImplementsTestMixin:
                            spec_name=__name__ + '.Foo',
                            inherit="not given"):
         from zope.interface.declarations import ClassProvides
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
 
         returned = self._callFUT(Foo, IFoo)
@@ -953,7 +947,6 @@ class Test_classImplementsOnly(_ImplementsTestMixin, unittest.TestCase):
 
     def test_w_existing_Implements(self):
         from zope.interface.declarations import Implements
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
         IBar = InterfaceClass('IBar')
         impl = Implements(IFoo)
@@ -971,7 +964,6 @@ class Test_classImplementsOnly(_ImplementsTestMixin, unittest.TestCase):
 
     def test_class(self):
         from zope.interface.declarations import Implements
-        from zope.interface.interface import InterfaceClass
         IBar = InterfaceClass('IBar')
         old_spec = Implements(IBar)
 
@@ -1053,7 +1045,6 @@ class Test_classImplements(_ImplementsTestMixin, unittest.TestCase):
 
     def test_w_existing_Implements(self):
         from zope.interface.declarations import Implements
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
         IBar = InterfaceClass('IBar')
         impl = Implements(IFoo)
@@ -1072,7 +1063,6 @@ class Test_classImplements(_ImplementsTestMixin, unittest.TestCase):
 
     def test_w_existing_Implements_w_bases(self):
         from zope.interface.declarations import Implements
-        from zope.interface.interface import InterfaceClass
         IRoot = InterfaceClass('IRoot')
         ISecondRoot = InterfaceClass('ISecondRoot')
         IExtendsRoot = InterfaceClass('IExtendsRoot', (IRoot,))
@@ -1129,7 +1119,6 @@ class Test__implements_advice(unittest.TestCase):
     def test_no_existing_implements(self):
         from zope.interface.declarations import Implements
         from zope.interface.declarations import classImplements
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
 
         class Foo:
@@ -1159,18 +1148,13 @@ class Test_implementer(Test_classImplements):
         return decorator(cls)
 
     def test_nonclass_cannot_assign_attr(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
         decorator = self._makeOne(IFoo)
         self.assertRaises(TypeError, decorator, object())
 
     def test_nonclass_can_assign_attr(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
-
-        class Foo:
-            pass
-
+        from __tests__.tests.test_declarations import Foo
         foo = Foo()
         decorator = self._makeOne(IFoo)
         returned = decorator(foo)
@@ -1190,7 +1174,6 @@ class Test_implementer(Test_classImplements):
         # https://github.com/zopefoundation/zope.interface/issues/216
         import gc
 
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
 
         begin_count = len(gc.get_objects())
@@ -1227,7 +1210,6 @@ class Test_implementer_only(Test_classImplementsOnly):
         return decorator(cls)
 
     def test_function(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
         decorator = self._makeOne(IFoo)
 
@@ -1237,7 +1219,6 @@ class Test_implementer_only(Test_classImplementsOnly):
         self.assertRaises(ValueError, decorator, _function)
 
     def test_method(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass('IFoo')
         decorator = self._makeOne(IFoo)
 
@@ -1258,7 +1239,6 @@ class ProvidesClassTests(unittest.TestCase):
         return self._getTargetClass()(*args, **kw)
 
     def test_simple_class_one_interface(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         class Foo:
@@ -1269,7 +1249,6 @@ class ProvidesClassTests(unittest.TestCase):
 
     def test___reduce__(self):
         from zope.interface.declarations import Provides  # the function
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         class Foo:
@@ -1281,7 +1260,6 @@ class ProvidesClassTests(unittest.TestCase):
         self.assertEqual(args, (Foo, IFoo))
 
     def test___get___class(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         class Foo:
@@ -1292,7 +1270,6 @@ class ProvidesClassTests(unittest.TestCase):
         self.assertIs(Foo.__provides__, spec)
 
     def test___get___instance(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         class Foo:
@@ -1356,7 +1333,6 @@ class TestProvidesClassRepr(unittest.TestCase):
         return self._getTargetClass()(*args, **kw)
 
     def test__repr__(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
         assert IFoo.__name__ == 'IFoo'
         assert IFoo.__module__ == __name__
@@ -1373,7 +1349,7 @@ class TestProvidesClassRepr(unittest.TestCase):
     def test__repr__module_provides_typical_use(self):
         # as created through a ``moduleProvides()`` statement
         # in a module body
-        from . import dummy
+        from __tests__.tests import dummy
         provides = dummy.__provides__  # pylint:disable=no-member
         self.assertEqual(
             repr(provides),
@@ -1397,11 +1373,9 @@ class TestProvidesClassRepr(unittest.TestCase):
 
         from zope.interface.declarations import alsoProvides
         from zope.interface.declarations import directlyProvides
-        from zope.interface.interface import InterfaceClass
         from __tests__.tests import dummy
-
-        IFoo = InterfaceClass('IFoo')
-        IBar = InterfaceClass('IBar')
+        from __tests__.tests.test_declarations import IBar
+        from __tests__.tests.test_declarations import IFoo
 
         orig_provides = dummy.__provides__  # pylint:disable=no-member
         del dummy.__provides__  # pylint:disable=no-member
@@ -1427,7 +1401,7 @@ class TestProvidesClassRepr(unittest.TestCase):
 
         # If we make this module also provide IFoo and IBar, then the repr
         # lists both names.
-        my_module = sys.modules[__name__]
+        from __tests__.tests import test_declarations as my_module
         assert not hasattr(my_module, '__provides__')
 
         directlyProvides(my_module, IFoo, IBar)
@@ -1442,7 +1416,6 @@ class TestProvidesClassRepr(unittest.TestCase):
 
     def test__repr__module_provides_cached_shared(self):
         from zope.interface.declarations import ModuleType
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         inst = self._makeOne(ModuleType, IFoo)
@@ -1454,7 +1427,6 @@ class TestProvidesClassRepr(unittest.TestCase):
         )
 
     def test__repr__duplicate_names(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo", __module__='mod1')
         IFoo2 = InterfaceClass("IFoo", __module__='mod2')
         IBaz = InterfaceClass("IBaz")
@@ -1513,7 +1485,6 @@ class TestProvidesClassRepr(unittest.TestCase):
     def test__repr__providedBy_from_class(self):
         from zope.interface.declarations import implementer
         from zope.interface.declarations import providedBy
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         @implementer(IFoo)
@@ -1530,7 +1501,6 @@ class TestProvidesClassRepr(unittest.TestCase):
         from zope.interface.declarations import alsoProvides
         from zope.interface.declarations import implementer
         from zope.interface.declarations import providedBy
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
         IBar = InterfaceClass("IBar")
 
@@ -1556,7 +1526,6 @@ class Test_Provides(unittest.TestCase):
 
     def test_no_cached_spec(self):
         from zope.interface import declarations
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
         cache = {}
 
@@ -1570,7 +1539,6 @@ class Test_Provides(unittest.TestCase):
 
     def test_w_cached_spec(self):
         from zope.interface import declarations
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
         prior = object()
 
@@ -1591,7 +1559,6 @@ class Test_directlyProvides(unittest.TestCase):
 
     def test_w_normal_object(self):
         from zope.interface.declarations import ProvidesClass
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         class Foo:
@@ -1608,7 +1575,6 @@ class Test_directlyProvides(unittest.TestCase):
 
     def test_w_class(self):
         from zope.interface.declarations import ClassProvides
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         class Foo:
@@ -1624,7 +1590,6 @@ class Test_directlyProvides(unittest.TestCase):
 
     def test_w_classless_object(self):
         from zope.interface.declarations import ProvidesClass
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
         the_dict = {}
 
@@ -1652,7 +1617,6 @@ class Test_alsoProvides(unittest.TestCase):
 
     def test_wo_existing_provides(self):
         from zope.interface.declarations import ProvidesClass
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         class Foo:
@@ -1670,7 +1634,6 @@ class Test_alsoProvides(unittest.TestCase):
     def test_w_existing_provides(self):
         from zope.interface.declarations import ProvidesClass
         from zope.interface.declarations import directlyProvides
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
         IBar = InterfaceClass("IBar")
 
@@ -1695,7 +1658,6 @@ class Test_noLongerProvides(unittest.TestCase):
         return noLongerProvides(*args, **kw)
 
     def test_wo_existing_provides(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         class Foo:
@@ -1709,7 +1671,6 @@ class Test_noLongerProvides(unittest.TestCase):
 
     def test_w_existing_provides_hit(self):
         from zope.interface.declarations import directlyProvides
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         class Foo:
@@ -1724,7 +1685,6 @@ class Test_noLongerProvides(unittest.TestCase):
 
     def test_w_existing_provides_miss(self):
         from zope.interface.declarations import directlyProvides
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
         IBar = InterfaceClass("IBar")
 
@@ -1740,7 +1700,6 @@ class Test_noLongerProvides(unittest.TestCase):
 
     def test_w_iface_implemented_by_class(self):
         from zope.interface.declarations import implementer
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         @implementer(IFoo)
@@ -1770,7 +1729,6 @@ class ClassProvidesBaseFallbackTests(unittest.TestCase):
         return Derived(klass, implements)
 
     def test_w_same_class_via_class(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         class Foo:
@@ -1780,7 +1738,6 @@ class ClassProvidesBaseFallbackTests(unittest.TestCase):
         self.assertIs(Foo.__provides__, cpbp)
 
     def test_w_same_class_via_instance(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         class Foo:
@@ -1791,7 +1748,6 @@ class ClassProvidesBaseFallbackTests(unittest.TestCase):
         self.assertIs(foo.__provides__, IFoo)
 
     def test_w_different_class(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         class Foo:
@@ -1834,7 +1790,6 @@ class ClassProvidesTests(unittest.TestCase):
 
     def test_w_simple_metaclass(self):
         from zope.interface.declarations import implementer
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
         IBar = InterfaceClass("IBar")
 
@@ -1848,7 +1803,6 @@ class ClassProvidesTests(unittest.TestCase):
 
     def test___reduce__(self):
         from zope.interface.declarations import implementer
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
         IBar = InterfaceClass("IBar")
 
@@ -1935,7 +1889,6 @@ class TestClassProvidesRepr(unittest.TestCase):
         )
 
     def test__repr__duplicate_names(self):
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo", __module__='mod1')
         IFoo2 = InterfaceClass("IFoo", __module__='mod2')
         IBaz = InterfaceClass("IBaz")
@@ -1949,7 +1902,6 @@ class TestClassProvidesRepr(unittest.TestCase):
     def test__repr__implementedBy(self):
         from zope.interface.declarations import implementedBy
         from zope.interface.declarations import implementer
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         @implementer(IFoo)
@@ -2002,7 +1954,6 @@ class Test_directlyProvidedBy(unittest.TestCase):
 
     def test_w_declarations_in_class_but_not_instance(self):
         from zope.interface.declarations import implementer
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         @implementer(IFoo)
@@ -2014,7 +1965,6 @@ class Test_directlyProvidedBy(unittest.TestCase):
 
     def test_w_declarations_in_instance_but_not_class(self):
         from zope.interface.declarations import directlyProvides
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         class Foo:
@@ -2027,7 +1977,6 @@ class Test_directlyProvidedBy(unittest.TestCase):
     def test_w_declarations_in_instance_and_class(self):
         from zope.interface.declarations import directlyProvides
         from zope.interface.declarations import implementer
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
         IBar = InterfaceClass("IBar")
 
@@ -2051,7 +2000,6 @@ class Test_provider(unittest.TestCase):
 
     def test_w_class(self):
         from zope.interface.declarations import ClassProvides
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         @self._makeOne(IFoo)
@@ -2071,9 +2019,8 @@ class Test_moduleProvides(unittest.TestCase):
 
     def test_called_from_function(self):
         from zope.interface.declarations import moduleProvides
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
-        globs = {'__name__': '__tests__.tests.tests.foo',
+        globs = {'__name__': '__tests__.tests.foo',
                  'moduleProvides': moduleProvides, 'IFoo': IFoo}
         locs = {}
         CODE = "\n".join([
@@ -2086,9 +2033,8 @@ class Test_moduleProvides(unittest.TestCase):
 
     def test_called_from_class(self):
         from zope.interface.declarations import moduleProvides
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
-        globs = {'__name__': 'zope.interface.tests.foo',
+        globs = {'__name__': '__tests__.tests.foo',
                  'moduleProvides': moduleProvides, 'IFoo': IFoo}
         locs = {}
         CODE = "\n".join([
@@ -2100,9 +2046,8 @@ class Test_moduleProvides(unittest.TestCase):
 
     def test_called_once_from_module_scope(self):
         from zope.interface.declarations import moduleProvides
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
-        globs = {'__name__': '__tests__.tests.tests.foo',
+        globs = {'__name__': '__tests__.tests.foo',
                  'moduleProvides': moduleProvides, 'IFoo': IFoo}
         CODE = "\n".join([
             'moduleProvides(IFoo)',
@@ -2113,7 +2058,6 @@ class Test_moduleProvides(unittest.TestCase):
 
     def test_called_twice_from_module_scope(self):
         from zope.interface.declarations import moduleProvides
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
         globs = {'__name__': '__tests__.tests.tests.foo',
                  'moduleProvides': moduleProvides, 'IFoo': IFoo}
@@ -2160,7 +2104,6 @@ class Test_getObjectSpecificationFallback(unittest.TestCase):
 
     def test_existing_provides_is_spec(self):
         from zope.interface.declarations import directlyProvides
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         def foo():
@@ -2181,7 +2124,6 @@ class Test_getObjectSpecificationFallback(unittest.TestCase):
 
     def test_existing_provides(self):
         from zope.interface.declarations import directlyProvides
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         class Foo:
@@ -2194,7 +2136,6 @@ class Test_getObjectSpecificationFallback(unittest.TestCase):
 
     def test_wo_provides_on_class_w_implements(self):
         from zope.interface.declarations import implementer
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         @implementer(IFoo)
@@ -2281,7 +2222,6 @@ class Test_providedByFallback(unittest.TestCase):
 
     def test_w_providedBy_valid_spec(self):
         from zope.interface.declarations import Provides
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         class Foo:
@@ -2304,7 +2244,6 @@ class Test_providedByFallback(unittest.TestCase):
 
     def test_w_providedBy_invalid_spec_class_w_implements(self):
         from zope.interface.declarations import implementer
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         @implementer(IFoo)
@@ -2341,7 +2280,6 @@ class Test_providedByFallback(unittest.TestCase):
 
     def test_w_providedBy_invalid_spec_w_provides_same_provides_on_class(self):
         from zope.interface.declarations import implementer
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         @implementer(IFoo)
@@ -2539,7 +2477,6 @@ class ObjectSpecificationDescriptorFallbackTests(unittest.TestCase):
 
     def test_accessed_via_class(self):
         from zope.interface.declarations import Provides
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
 
         class Foo:
@@ -2552,7 +2489,6 @@ class ObjectSpecificationDescriptorFallbackTests(unittest.TestCase):
     def test_accessed_via_inst_wo_provides(self):
         from zope.interface.declarations import Provides
         from zope.interface.declarations import implementer
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
         IBar = InterfaceClass("IBar")
 
@@ -2569,7 +2505,6 @@ class ObjectSpecificationDescriptorFallbackTests(unittest.TestCase):
         from zope.interface.declarations import Provides
         from zope.interface.declarations import directlyProvides
         from zope.interface.declarations import implementer
-        from zope.interface.interface import InterfaceClass
         IFoo = InterfaceClass("IFoo")
         IBar = InterfaceClass("IBar")
         IBaz = InterfaceClass("IBaz")

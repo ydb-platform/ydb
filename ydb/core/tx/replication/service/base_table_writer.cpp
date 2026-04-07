@@ -301,6 +301,8 @@ class TLocalTableWriter
         Resolving = true;
 
         auto request = MakeHolder<TNavigate>();
+        request->DatabaseName = Database;
+
         request->ResultSet.emplace_back(MakeNavigateEntry(TablePathId, TNavigate::OpTable));
         Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
     }
@@ -376,6 +378,7 @@ class TLocalTableWriter
 
     void ResolveKeys() {
         auto request = MakeHolder<TResolve>();
+        request->DatabaseName = Database;
         request->ResultSet.emplace_back(std::move(KeyDesc));
         Send(MakeSchemeCacheID(), new TEvResolve(request.Release()));
     }
@@ -486,10 +489,10 @@ class TLocalTableWriter
         }
     }
 
-    void Handle(TEvWorker::TEvDataEnd::TPtr& ev) {
+    void Handle(TEvWorker::TEvTerminateWriter::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
-        NoMoreData = true;
+        Terminating = true;
         if (IsAllSendersReadyOrUninit()) {
             Leave(TEvWorker::TEvGone::DONE);
         }
@@ -596,7 +599,7 @@ class TLocalTableWriter
         LOG_D("Handle " << ev->Get()->ToString());
         OnReady(ev->Get()->PartitionId);
 
-        if (NoMoreData && IsAllSendersReadyOrUninit()) {
+        if (Terminating && IsAllSendersReadyOrUninit()) {
             Leave(TEvWorker::TEvGone::DONE);
         }
     }
@@ -635,6 +638,7 @@ public:
 
     explicit TLocalTableWriter(
             EWriteMode mode,
+            const TString& database,
             const TPathId& tablePathId,
             THolder<IChangeRecordParser>&& parser,
             THolder<IChangeRecordSerializer>&& serializer,
@@ -642,6 +646,7 @@ public:
         : TActor(&TThis::StateWork)
         , TChangeSender(this, this, this, this, TActorId())
         , Mode(mode)
+        , Database(database)
         , TablePathId(tablePathId)
         , Parser(std::move(parser))
         , Serializer(std::move(serializer))
@@ -657,7 +662,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWorker::TEvHandshake, Handle);
             hFunc(TEvWorker::TEvData, Handle);
-            hFunc(TEvWorker::TEvDataEnd, Handle);
+            hFunc(TEvWorker::TEvTerminateWriter, Handle);
             hFunc(TEvService::TEvTxIdResult, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRequestRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRemoveRecords, Handle);
@@ -673,6 +678,7 @@ public:
 private:
     mutable TMaybe<TString> LogPrefix;
     const EWriteMode Mode;
+    const TString Database;
     const TPathId TablePathId;
     THolder<IChangeRecordParser> Parser;
     THolder<IChangeRecordSerializer> Serializer;
@@ -684,7 +690,7 @@ private:
     TLightweightSchema::TCPtr Schema;
     bool Resolving = false;
     bool Initialized = false;
-    bool NoMoreData = false;
+    bool Terminating = false;
 
     THashMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
     TMap<TRowVersion, ui64> TxIds; // key is non-inclusive right hand edge
@@ -695,13 +701,14 @@ private:
 }; // TLocalTableWriter
 
 IActor* CreateLocalTableWriter(
+        const TString& database,
         const TPathId& tablePathId,
         THolder<IChangeRecordParser>&& parser,
         THolder<IChangeRecordSerializer>&& serializer,
         std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn,
         EWriteMode mode)
 {
-    return new TLocalTableWriter(mode, tablePathId, std::move(parser), std::move(serializer), std::move(createResolverFn));
+    return new TLocalTableWriter(mode, database, tablePathId, std::move(parser), std::move(serializer), std::move(createResolverFn));
 }
 
 } // namespace NKikimr::NReplication::NService

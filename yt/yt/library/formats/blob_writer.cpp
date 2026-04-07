@@ -23,6 +23,7 @@ public:
         bool enableContextSaving,
         TControlAttributesConfigPtr controlAttributesConfig,
         TBlobFormatConfigPtr config);
+
 private:
     const TBlobFormatConfigPtr Config_;
     const std::string DataColumnName_;
@@ -62,7 +63,7 @@ TBlobWriter::TBlobWriter(
     , PartIndexColumnName_(Config_->PartIndexColumnName.value_or(TBlobTableSchema::PartIndexColumn))
     , DataColumnId_(NameTable_->GetIdOrRegisterName(DataColumnName_))
     , PartIndexColumnId_(NameTable_->GetIdOrRegisterName(PartIndexColumnName_))
-    { }
+{ }
 
 void TBlobWriter::DoWrite(TRange<TUnversionedRow> rows)
 {
@@ -76,9 +77,9 @@ void TBlobWriter::DoWrite(TRange<TUnversionedRow> rows)
         auto dataValue = GetTypedValue(row, DataColumnId_, DataColumnName_, EValueType::String);
         output->Write(dataValue.AsStringBuf());
 
-        TryFlushBuffer(false);
+        MaybeFlushBuffer(/*force*/ false);
     }
-    TryFlushBuffer(true);
+    MaybeFlushBuffer(/*force*/ true);
 }
 
 TUnversionedValue TBlobWriter::GetTypedValue(

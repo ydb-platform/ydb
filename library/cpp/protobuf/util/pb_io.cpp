@@ -103,9 +103,9 @@ namespace {
         void PrintErrorMessage(IOutputStream* out, TStringBuf errorLevel, int line, int column, const TProtoStringType& message) {
             (*out) << errorLevel << " parsing text-format ";
             if (line >= 0) {
-                (*out) << TypeName_ << ": " << (line + 1) << ":" << (column + 1) << ": " << message;
+                (*out) << TypeName_ << ": " << (line + 1) << ":" << (column + 1) << ": " << message << '\n';
             } else {
-                (*out) << TypeName_ << ": " << message;
+                (*out) << TypeName_ << ": " << message << '\n';
             }
             out->Flush();
         }
@@ -133,7 +133,7 @@ int operator&(NProtoBuf::Message& m, IBinSaver& f) {
 void SerializeToTextFormat(const NProtoBuf::Message& m, IOutputStream& out) {
     NProtoBuf::io::TCopyingOutputStreamAdaptor adaptor(&out);
 
-    if (!NProtoBuf::TextFormat::Print(m, &adaptor)) {
+    if (!NProtoBuf::TextFormat::Print(m, &adaptor) || !adaptor.Flush()) {
         ythrow yexception() << "SerializeToTextFormat failed on Print";
     }
 }
@@ -150,7 +150,7 @@ void SerializeToTextFormatWithEnumId(const NProtoBuf::Message& m, IOutputStream&
     printer.SetDefaultFieldValuePrinter(new NProtoBuf::TEnumIdValuePrinter());
     NProtoBuf::io::TCopyingOutputStreamAdaptor adaptor(&out);
 
-    if (!printer.Print(m, &adaptor)) {
+    if (!printer.Print(m, &adaptor) || !adaptor.Flush()) {
          ythrow yexception() << "SerializeToTextFormatWithEnumId failed on Print";
     }
 }
@@ -162,7 +162,7 @@ void SerializeToTextFormatPretty(const NProtoBuf::Message& m, IOutputStream& out
 
     NProtoBuf::io::TCopyingOutputStreamAdaptor adaptor(&out);
 
-    if (!printer.Print(m, &adaptor)) {
+    if (!printer.Print(m, &adaptor) || !adaptor.Flush()) {
          ythrow yexception() << "SerializeToTextFormatPretty failed on Print";
     }
 }

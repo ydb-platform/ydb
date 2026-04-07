@@ -16,6 +16,7 @@
 #include "flat_executor_compaction_logic.h"
 #include "flat_executor_gclogic.h"
 #include "flat_executor_vacuum_logic.h"
+#include "flat_executor_backup.h"
 #include "flat_bio_events.h"
 #include "flat_bio_stats.h"
 #include "flat_fwd_sieve.h"
@@ -357,6 +358,14 @@ class TExecutor
         LowPriority,
     };
 
+    enum class EBrokenReason {
+        Storage,
+        Exception,
+        Transaction,
+    };
+
+    static const TString& BrokenAlertName(EBrokenReason);
+
     const TIntrusivePtr<ITimeProvider> Time = nullptr;
     NFlatExecutorSetup::ITablet * Owner;
     const TActorId OwnerActorId;
@@ -476,7 +485,7 @@ class TExecutor
     ui64 TransactionUniqCounter = 0;
 
     bool LogBatchFlushScheduled = false;
-    bool NeedFollowerSnapshot = false;
+    bool NeedLogSnapshot = false;
 
     mutable bool HadRejectProbabilityByTxInFly = false;
     mutable bool HadRejectProbabilityByOverload = false;
@@ -494,18 +503,19 @@ class TExecutor
     ui64 UsedTabletMemory = 0;
     ui64 TransactionPagesMemory = 0;
 
+    bool BackupSnapshotInProgress = false;
+
     TActorContext SelfCtx() const;
     TActorContext OwnerCtx() const;
 
     TControlWrapper LogFlushDelayOverrideUsec;
     TControlWrapper MaxCommitRedoMB;
-
-    TActorId BackupWriter;
+    TControlWrapper MaxTxInFly;
 
     ui64 Stamp() const noexcept;
     void Registered(TActorSystem*, const TActorId&) override;
     void PassAway() override;
-    void Broken();
+    void Broken(EBrokenReason reason);
     void Active(const TActorContext &ctx);
     void ActivateFollower(const TActorContext &ctx);
     void RecreatePrivateCache();
@@ -548,7 +558,9 @@ class TExecutor
     void AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCollection> &pageCollection);
     void DropPartStorePageCollections(const NTable::TPart &part);
     void DropPageCollection(const TLogoBlobID& pageCollectionId);
-    void StartBackup();
+    void StartNewBackup();
+    void FailBackup(const TString& error);
+    void ScheduleRetryBackup() const;
 
     void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
     void UpdateCachePagesForDatabase(bool pendingOnly = false);
@@ -576,6 +588,7 @@ class TExecutor
     void Handle(TEvPrivate::TEvLeaseExtend::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvTablet::TEvConfirmLeaderResult::TPtr &ev);
     void Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvTablet::TEvSnapshotConfirmed::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvActivateExecution::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvActivateLowExecution::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvBrokenTransaction::TPtr &ev, const TActorContext &ctx);
@@ -602,9 +615,14 @@ class TExecutor
     void Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled);
     void Handle(TEvBlobStorage::TEvGetResult::TPtr&, const TActorContext&);
     void Handle(TEvTablet::TEvGcForStepAckResponse::TPtr &ev);
+    void Handle(NBackup::TEvSnapshotCompleted::TPtr &ev);
+    void Handle(NBackup::TEvChangelogFailed::TPtr &ev);
+    void Handle(NBackup::TEvWriteChangelogAck::TPtr &ev);
+    void Handle(NBackup::TEvStartNewBackup::TPtr &ev);
 
     void UpdateUsedTabletMemory();
     void UpdateCounters(const TActorContext &ctx);
+    void ForceSendCounters();
     void UpdateYellow();
     void UpdateCompactions();
     void Handle(TEvTablet::TEvCheckBlobstorageStatusResult::TPtr &ev);
@@ -637,6 +655,11 @@ class TExecutor
             TCompactionChangesCtx& ctx,
             const NTable::TCompactionChanges& changes,
             NKikimrCompaction::ECompactionStrategy strategy);
+
+    void RenderHtmlCounters(TStringStream& str) const;
+    void RenderJsonCounters(TStringStream& str) const;
+
+    float CalcRejectProbability() const;
 
 public:
     void Describe(IOutputStream &out) const override

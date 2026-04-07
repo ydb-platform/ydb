@@ -6,7 +6,6 @@
 
 #include <signal.h>
 
-
 namespace NYql {
 
 #ifdef _win_

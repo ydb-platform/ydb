@@ -109,7 +109,7 @@ void CheckNoIndexExists(TDriver& driver, const TString& path, const TString& tab
     const std::vector<NTable::TIndexDescription>& indexes = desc.GetIndexDescriptions();
     if (!indexes.empty()) {
         Cerr << "Table '" << fullPath
-             << "' already has index/indices. Are you importing to the existing data?" << Endl;
+             << "' already has index/indices. Are you importing to the already imported data?" << Endl;
         std::exit(1);
     }
 }
@@ -119,7 +119,7 @@ void CheckIndexExistsAndReady(TDriver& driver, const TString& path, const TStrin
     auto desc = DescribeTable(driver, path, tableName);
     const std::vector<NTable::TIndexDescription>& indexes = desc.GetIndexDescriptions();
     if (indexes.empty()) {
-        Cerr << "Table '" << fullPath << "' has no index" << Endl;
+        Cerr << "Table '" << fullPath << "' has no index, did you forget to run 'tpcc import'?" << Endl;
         std::exit(1);
     }
 
@@ -208,7 +208,8 @@ void CheckPathForImport(
 
     int whCount = GetWarehouseCount(driver, path);
     if (whCount != 0) {
-        Cerr << path << " already has " << whCount << " warehouses. Are you importing to the existing data?" << Endl;
+        Cerr << path << " already has " << whCount
+            << " warehouses. Are you importing to the already imported data?" << Endl;
         std::exit(1);
     }
 
@@ -240,7 +241,7 @@ void CheckPathForRun(
     int whCount = GetWarehouseCount(driver, path);
     if (whCount != expectedWhCount) {
         if (whCount == 0) {
-            Cerr << "Empty warehouse table (and maybe missing other TPC-C data), run import first" << Endl;
+            Cerr << "Empty warehouse table (and maybe missing other TPC-C data), run 'tpcc import' first" << Endl;
             std::exit(1);
         }
         if (whCount < expectedWhCount) {

@@ -16,48 +16,81 @@ TPool* TTreeElement::GetParent() const {
 // TQuery
 ///////////////////////////////////////////////////////////////////////////////
 
-TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, const TStaticAttributes& attrs)
+TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, bool allowMinFairShare, const TStaticAttributes& attrs)
     : NHdrf::TTreeElementBase<ETreeType::DYNAMIC>(id, attrs)
     , TTreeElement(id, attrs)
     , NHdrf::TQuery<ETreeType::DYNAMIC>(id, attrs)
     , DelayParams(delayParams)
+    , AllowMinFairShare(allowMinFairShare)
 {
 }
 
 NSnapshot::TQuery* TQuery::TakeSnapshot() {
     auto* newQuery = new NSnapshot::TQuery(std::get<TQueryId>(GetId()), shared_from_this());
-    newQuery->Demand = Demand.load();
+
+    // Take the average of original demand and actual demand, but keep at least 1 if original demand not zero.
+    const auto demand = Demand.load();
+    newQuery->Demand = (demand + ActualDemand.load()) >> 1;
+    if (newQuery->Demand == 0 && demand > 0) {
+        newQuery->Demand = 1;
+    }
+    ActualDemand = 0;
+
+    // Update previous burst values and pass difference to new snapshot - to calculate adjusted satisfaction
+    const auto burstUsage = BurstUsage.load();
+    const auto burstUsageResume = BurstUsageResume.load();
+    const auto burstUsageExtra = BurstUsageExtra.load();
+    const auto burstThrottle = BurstThrottle.load();
+    newQuery->BurstUsage += burstUsage - PrevBurstUsage;
+    newQuery->BurstUsage += burstUsageResume - PrevBurstUsageResume;
+    newQuery->BurstUsage += burstUsageExtra - PrevBurstUsageExtra;
+    newQuery->BurstThrottle = burstThrottle - PrevBurstThrottle;
+    PrevBurstUsage = burstUsage;
+    PrevBurstUsageResume = burstUsageResume;
+    PrevBurstUsageExtra = burstUsageExtra;
+    PrevBurstThrottle = burstThrottle;
+
     newQuery->Usage = Usage.load();
     return newQuery;
 }
 
 TSchedulableTaskList::iterator TQuery::AddTask(const TSchedulableTaskPtr& task) {
-    TWriteGuard lock(TasksMutex);
+    TGuard lock(TasksMutex);
     return SchedulableTasks.emplace(SchedulableTasks.end(), task, false);
 }
 
-void TQuery::RemoveTask(const TSchedulableTaskList::iterator& it) {
-    TWriteGuard lock(TasksMutex);
-    SchedulableTasks.erase(it);
-}
-
 ui32 TQuery::ResumeTasks(ui32 count) {
-    TReadGuard lock(TasksMutex);
+    TTryGuard lock(TasksMutex);
     ui32 run = 0;
+
+    if (!lock) {
+        // Either tasks are resumed somewhere else - which is ok, or we're adding new task - which is infrequent event.
+        return run;
+    }
 
     count = std::min<ui32>(count, SchedulableTasks.size());
     count = std::min<ui32>(count, Throttle);
 
-    for (auto it = SchedulableTasks.begin(); run < count && it != SchedulableTasks.end(); ++it) {
-        if (it->second) {
-            if (auto task = it->first.lock()) {
+    for (auto it = SchedulableTasks.begin(); run < count && it != SchedulableTasks.end();) {
+        if (auto task = it->first.lock()) {
+            if (it->second) {
                 task->Resume();
                 ++run;
             }
+            ++it;
+        } else {
+            // Lazy removal is acceptable since the query initially has constant number of tasks.
+            it = SchedulableTasks.erase(it);
         }
     }
 
     return run;
+}
+
+void TQuery::UpdateActualDemand() {
+    auto demand = Usage + Throttle + 1;
+    auto actualDemand = ActualDemand.load();
+    while (actualDemand < demand && !ActualDemand.compare_exchange_weak(actualDemand, demand)) {}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -73,7 +106,7 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
         return;
     }
 
-    auto group = counters->GetKqpCounters()->GetSubgroup("scheduler/pool", id);
+    auto group = counters->GetKqpCounters()->GetSubgroup("schedulerPool", id);
 
     // TODO: since counters don't support float-point values, then use CPU * 1'000'000 to account with microsecond precision
 
@@ -84,6 +117,7 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
     Counters->Demand       = group->GetCounter("Demand",       false); // snapshot
     Counters->InFlight     = group->GetCounter("InFlight",     false);
     Counters->Waiting      = group->GetCounter("Waiting",      false);
+    Counters->Queries      = group->GetCounter("Queries",      false);
     Counters->Usage        = group->GetCounter("Usage",        true);
     Counters->UsageResume  = group->GetCounter("UsageResume",  true);
     Counters->Throttle     = group->GetCounter("Throttle",     true);
@@ -94,6 +128,8 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
 
     Counters->Delay = group->GetHistogram("Delay",
         NMonitoring::ExplicitHistogram({10, 10e2, 10e3, 10e4, 10e5, 10e6, 10e7}), true); // TODO: make from MinDelay to MaxDelay.
+
+    Counters->AdjustedSatisfaction = group->GetCounter("AdjustedSatisfaction", true); // snapshot
 }
 
 NSnapshot::TPool* TPool::TakeSnapshot() {
@@ -113,6 +149,9 @@ NSnapshot::TPool* TPool::TakeSnapshot() {
     }
 
     if (IsLeaf()) {
+        if (Counters) {
+            Counters->Queries->Set(ChildrenSize());
+        }
         ForEachChild<TQuery>([&](TQuery* query, size_t) {
             newPool->AddQuery(NSnapshot::TQueryPtr(query->TakeSnapshot()));
         });

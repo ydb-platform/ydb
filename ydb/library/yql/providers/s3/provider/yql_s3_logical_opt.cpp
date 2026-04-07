@@ -1,19 +1,20 @@
 #include "yql_s3_provider_impl.h"
 
+#include <ydb/library/yql/providers/common/pushdown/collection.h>
+#include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
+#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
+#include <ydb/library/yql/providers/s3/provider/yql_s3_settings.h>
+#include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
+
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/pushdown/collection.h>
-#include <ydb/library/yql/providers/common/pushdown/predicate_node.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
-#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
-#include <ydb/library/yql/providers/s3/provider/yql_s3_settings.h>
-#include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <util/generic/size_literals.h>
@@ -191,7 +192,7 @@ public:
     }
 
     TMaybeNode<TExprBase> PushFilterToS3ReadObject(TExprBase node, TExprContext& ctx) const {
-        if (!State_->Configuration->UsePredicatePushdown.Get().GetOrElse(false)) {
+        if (!State_->Configuration->UsePredicatePushdown.GetOrDefault()) {
             return node;
         }
 
@@ -229,7 +230,7 @@ public:
     }
 
     TMaybeNode<TExprBase> PushFilterToDqSourceWrap(TExprBase node, TExprContext& ctx) const {
-        if (!State_->Configuration->UsePredicatePushdown.Get().GetOrElse(false)) {
+        if (!State_->Configuration->UsePredicatePushdown.GetOrDefault()) {
             return node;
         }
 
@@ -865,7 +866,7 @@ private:
     const TS3State::TPtr State_;
 };
 
-}
+} // anonymous namespace
 
 THolder<IGraphTransformer> CreateS3LogicalOptProposalTransformer(TS3State::TPtr state) {
     return MakeHolder<TS3LogicalOptProposalTransformer>(state);

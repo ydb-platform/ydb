@@ -15,7 +15,7 @@ void DecommitGroup(TBlobDepotTestEnvironment& tenv, ui32 groupId) {
 
     auto *cmd = request.AddCommand()->MutableDecommitGroups();
     cmd->AddGroupIds(groupId);
-    cmd->SetHiveId(tenv.Env->Runtime->GetDomainsInfo()->GetHive());
+    cmd->SetDatabase(TStringBuilder() << '/' << tenv.Env->Runtime->GetDomainsInfo()->GetDomain()->Name);
     auto *prof = cmd->AddChannelProfiles();
     prof->SetStoragePoolName(blobDepotPool);
     prof->SetCount(2);
@@ -710,7 +710,7 @@ void TestLoadPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 grou
         RESTART_BLOB_DEPOT,
         __COUNT__,
     };
-    
+
     TWeightedRandom<ui32> act(tenv.RandomSeed + 0xABCD);
     Y_ABORT_UNLESS(probabilities.size() == EActions::__COUNT__);
     for (ui32 i = 0; i < probabilities.size(); ++i) {

@@ -22,18 +22,15 @@ constinit const auto Logger = ApiLogger;
 
 TFuture<std::optional<std::string>> TClusterAwareClientBase::GetClusterName(bool fetchIfNull)
 {
-    {
-        auto guard = ReaderGuard(SpinLock_);
-        if (ClusterName_) {
-            return MakeFuture(ClusterName_);
-        }
+    auto clusterName = ClusterName_.Load();
+    if (clusterName) {
+        return MakeFuture(clusterName);
     }
 
-    auto clusterName = GetConnection()->GetClusterName();
+    clusterName = GetConnection()->GetClusterName();
     if (clusterName) {
-        auto guard = WriterGuard(SpinLock_);
-        ClusterName_ = clusterName;
-        return MakeFuture(ClusterName_);
+        ClusterName_.Store(clusterName);
+        return MakeFuture(clusterName);
     }
 
     if (!fetchIfNull) {
@@ -42,9 +39,8 @@ TFuture<std::optional<std::string>> TClusterAwareClientBase::GetClusterName(bool
 
     return FetchClusterNameFromMasterCache().Apply(
         BIND([this, this_ = MakeStrong(this)] (const std::optional<std::string>& clusterName) -> std::optional<std::string> {
-            auto guard = WriterGuard(SpinLock_);
-            ClusterName_ = clusterName;
-            return ClusterName_;
+            ClusterName_.Store(clusterName);
+            return clusterName;
         }));
 }
 

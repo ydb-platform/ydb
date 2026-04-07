@@ -11,21 +11,21 @@ namespace NKikimr::NWrappers {
 
 namespace NExternalStorage {
 
-class TS3Wrapper: public TActor<TS3Wrapper> {
+class TStorageWrapper: public TActor<TStorageWrapper> {
     template <typename T>
     void Handle(T& ev) {
         StorageOperator->Execute(ev);
     }
 
 public:
-    explicit TS3Wrapper(IExternalStorageOperator::TPtr storageOperator)
+    explicit TStorageWrapper(IExternalStorageOperator::TPtr storageOperator)
         : TActor(&TThis::StateWork)
         , StorageOperator(storageOperator)
     {
         Y_ABORT_UNLESS(!!StorageOperator, "not initialized operator. incorrect config.");
     }
 
-    virtual ~TS3Wrapper() = default;
+    virtual ~TStorageWrapper() = default;
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
@@ -53,8 +53,8 @@ private:
 
 } // NExternalStorage
 
-IActor* CreateS3Wrapper(NExternalStorage::IExternalStorageOperator::TPtr storage) {
-    return new NExternalStorage::TS3Wrapper(storage);
+IActor* CreateStorageWrapper(NExternalStorage::IExternalStorageOperator::TPtr storage) {
+    return new NExternalStorage::TStorageWrapper(storage);
 }
 
 } // NKikimr::NWrappers

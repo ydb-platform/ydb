@@ -12,6 +12,9 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 namespace NKikimr {
+
+extern const char* GetZeroDataAddrForTestOnly();
+
 namespace NDSProxyPutTest {
 
 Y_UNIT_TEST_SUITE(TDSProxyPutTest) {
@@ -25,7 +28,50 @@ TString AlphaData(ui32 size) {
     return data;
 }
 
-void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) {
+class TRcBufCustomBackend : public IContiguousChunk {
+    TString Buffer;
+public:
+    TRcBufCustomBackend(size_t sz)
+    {
+        Buffer.resize(sz);
+    }
+
+    TContiguousSpan GetData() const override {
+        return {Buffer.data(), Buffer.size()};
+    }
+
+    TMutableContiguousSpan UnsafeGetDataMut() override {
+        return {const_cast<char*>(Buffer.data()), Buffer.size()};
+    }
+
+    size_t GetOccupiedMemorySize() const override {
+        return Buffer.capacity();
+    }
+
+    IContiguousChunk::TPtr Clone() override {
+        return this;
+    }
+
+    EInnerType GetInnerType() const noexcept override {
+        return RDMA_MEM_REG;
+    }
+};
+
+class TRcBufTestAllocator final : public IRcBufAllocator {
+public:
+    TRcBuf AllocRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept {
+        auto region = MakeIntrusive<TRcBufCustomBackend>(size + headRoom + tailRoom);
+        return TRcBuf(IContiguousChunk::TPtr(region));
+    }
+
+    TRcBuf AllocPageAlignedRcBuf(size_t size, size_t tailRoom) noexcept {
+        return AllocRcBuf(size, 0, tailRoom);
+    }
+};
+
+void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies, bool zeroPages) {
+    TRcBufTestAllocator rcBufAllocator;
+
     TActorSystemStub actorSystemStub;
     i32 size = 786;
     TLogoBlobID blobId(72075186224047637, 1, 863, 1, size, 24576);
@@ -55,15 +101,20 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
     TBlobStorageGroupInfo::TVDiskIds vDisksId;
     group.GetInfo()->PickSubgroup(hash, &vDisksId, &vDisksSvc);
 
-    TString encryptedData = data;
-    char *dataBytes = encryptedData.Detach();
+    TRcBuf encryptedData = rcBufAllocator.AllocRcBuf(data.size(), 0, 0);
+    UNIT_ASSERT_VALUES_EQUAL(encryptedData.GetContiguousSpanMut().size(), data.size());
+    UNIT_ASSERT_VALUES_EQUAL(encryptedData.GetContiguousSpanMut().size(), encryptedData.size());
+
+    memcpy(encryptedData.GetContiguousSpanMut().data(), data.data(), data.size());
+    char *dataBytes = encryptedData.GetContiguousSpanMut().data();
     Encrypt(dataBytes, dataBytes, 0, encryptedData.size(), blobId, *group.GetInfo());
 
     TBatchedVec<TStackVec<TRope, TypicalPartsInBlob>> partSetSingleton(1);
     partSetSingleton[0].resize(totalParts);
-    ErasureSplit((TErasureType::ECrcMode)blobId.CrcMode(), group.GetInfo()->Type, TRope(encryptedData), partSetSingleton[0]);
+    ErasureSplit((TErasureType::ECrcMode)blobId.CrcMode(), group.GetInfo()->Type, TRope(encryptedData), partSetSingleton[0], nullptr,
+        zeroPages ? GetDefaultRcBufAllocator() : &rcBufAllocator);
 
-    TEvBlobStorage::TEvPut ev(blobId, data, TInstant::Max(), NKikimrBlobStorage::TabletLog,
+    TEvBlobStorage::TEvPut ev(blobId, std::move(data), TInstant::Max(), NKikimrBlobStorage::TabletLog,
             TEvBlobStorage::TEvPut::TacticDefault);
 
     TPutImpl putImpl(group.GetInfo(), groupQueues, &ev, mon, false, TActorId(), 0, NWilson::TTraceId(), TAccelerationParams{});
@@ -82,11 +133,32 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
 
     TVector<ui32> diskSequence = {0, 7, 7, 7, 7, 6, 3, 4, 5, 1, 2};
     TVector<ui32> slowDiskSequence = {3, 4, 5, 6, 1, 2};
+    const char* const zero = GetZeroDataAddrForTestOnly();
+    ui32 zeroPageCount = 0;
 
     for (ui32 vPutIdx = 0; vPutIdx < vPuts.size(); ++vPutIdx) {
         ui32 nextVPut = vPutIdx;
         ui32 diskPos = (ui32)-1;
         for (ui32 i = vPutIdx; i < vPuts.size(); ++i) {
+            auto rope = std::get<0>(vPuts[i])->GetBuffer();
+            if (!zeroPages) {
+                for (auto it = rope.Begin(); it != rope.End(); ++it) {
+                    const TRcBuf& chunk = it.GetChunk();
+                    UNIT_ASSERT(chunk.data() != zero);
+                    std::optional<IContiguousChunk::TPtr> underlying = chunk.ExtractFullUnderlyingContainer<IContiguousChunk::TPtr>();
+                    UNIT_ASSERT(underlying);
+                    UNIT_ASSERT(*underlying);
+                    UNIT_ASSERT(underlying->Get()->GetInnerType() == IContiguousChunk::EInnerType::RDMA_MEM_REG);
+                }
+            } else {
+                for (auto it = rope.Begin(); it != rope.End(); ++it) {
+                    const TRcBuf& chunk = it.GetChunk();
+                    const char* data = chunk.Data();
+                    if (data == zero) {
+                        zeroPageCount++;
+                    }
+                }
+            }
             auto& record = std::get<0>(vPuts[i])->Record;
             TVDiskID vDiskId = VDiskIDFromVDiskID(record.GetVDiskID());
             ui32 diskIdx = group.VDiskIdx(vDiskId);
@@ -98,6 +170,9 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
                     diskPos = pos;
                 }
             }
+        }
+        if (zeroPages) {
+            UNIT_ASSERT(zeroPageCount > 0);
         }
         CTEST << "vdisk exp# " << (diskSequence.size() ? diskSequence.front() : -1) << " get# " << group.VDiskIdx(VDiskIDFromVDiskID(std::get<0>(vPuts[nextVPut])->Record.GetVDiskID())) << Endl;
         if (diskPos != (ui32)-1) {
@@ -136,7 +211,11 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
 }
 
 Y_UNIT_TEST(TestBlock42MaxPartCountOnHandoff) {
-    TestPutMaxPartCountOnHandoff(TErasureType::Erasure4Plus2Block);
+    TestPutMaxPartCountOnHandoff(TErasureType::Erasure4Plus2Block, false);
+}
+
+Y_UNIT_TEST(TestBlock42MaxPartCountOnHandoffWithZeropages) {
+    TestPutMaxPartCountOnHandoff(TErasureType::Erasure4Plus2Block, true);
 }
 
 enum ETestPutAllOkMode {
@@ -204,7 +283,8 @@ struct TTestPutAllOk {
             Encrypt(dataBytes, dataBytes, 0, encryptedData.size(), blobId, *Group.GetInfo());
 
             PartSets[blobIdx].resize(totalParts);
-            ErasureSplit((TErasureType::ECrcMode)blobId.CrcMode(), Group.GetInfo()->Type, TRope(encryptedData), PartSets[blobIdx]);
+            ErasureSplit((TErasureType::ECrcMode)blobId.CrcMode(), Group.GetInfo()->Type, TRope(encryptedData), PartSets[blobIdx],
+                nullptr, GetDefaultRcBufAllocator());
         }
     }
 
@@ -365,7 +445,8 @@ Y_UNIT_TEST(TestMirror3dcWith3x3MinLatencyMod) {
     TString encryptedData = data;
     char *dataBytes = encryptedData.Detach();
     Encrypt(dataBytes, dataBytes, 0, encryptedData.size(), blobId, *env.Info);
-    ErasureSplit((TErasureType::ECrcMode)blobId.CrcMode(), env.Info->Type, TRope(encryptedData), partSetSingleton[0]);
+    ErasureSplit((TErasureType::ECrcMode)blobId.CrcMode(), env.Info->Type, TRope(encryptedData), partSetSingleton[0],
+        nullptr, GetDefaultRcBufAllocator());
     putImpl.GenerateInitialRequests(logCtx, partSetSingleton);
     TPutImpl::TPutResultVec putResults;
     putImpl.Step(logCtx, putResults, &env.Info->GetTopology(), false);

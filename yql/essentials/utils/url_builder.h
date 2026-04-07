@@ -10,17 +10,19 @@ class TUrlBuilder {
         TString Name;
         TString Value;
     };
+
 public:
-    explicit TUrlBuilder(const TString& uri);
+    explicit TUrlBuilder(TString uri);
 
     // Assuming name is already escaped, do not use strings from user input
     TUrlBuilder& AddUrlParam(const TString& name, const TString& value = "");
     TUrlBuilder& AddPathComponent(const TString& value);
 
     TString Build() const;
+
 private:
     std::vector<TParam> Params_;
     TString MainUri_;
 };
 
-} // NYql
+} // namespace NYql

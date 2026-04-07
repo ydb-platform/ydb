@@ -62,7 +62,10 @@ public:
         , State_(std::move(state))
     {
 #define HNDL(name) "PhysicalOptimizer-"#name, Hndl(&TSoPhysicalOptProposalTransformer::name)
-        AddHandler(0, &TSoWriteToShard::Match, HNDL(SoWriteToShard));
+        if (!State_->WriteThroughDqIntegration) {
+            AddHandler(0, &TSoWriteToShard::Match, HNDL(SoWriteToShard));
+        }
+        AddHandler(0, &TSoInsert::Match, HNDL(SoInsert));
         AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
 #undef HNDL
 
@@ -80,42 +83,59 @@ public:
         return TExprBase(maybeRead.Cast().World().Ptr());
     }
 
-    TMaybeNode<TExprBase> SoWriteToShard(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
-        if (State_->IsRtmrMode()) {
-            return node;
-        }
-
-        auto write = node.Cast<TSoWriteToShard>();
-        if (!TDqCnUnionAll::Match(write.Input().Raw())) {
-            // If input is not DqCnUnionAll, it means not all dq optimizations are done yet
-            return node;
-        }
-
-        const TParentsMap* parentsMap = getParents();
-        auto dqUnion = write.Input().Cast<TDqCnUnionAll>();
-        if (!NDq::IsSingleConsumerConnection(dqUnion, *parentsMap)) {
-            return node;
-        }
-
-        YQL_CLOG(INFO, ProviderSolomon) << "Optimize SoWriteToShard";
-
-        const auto solomonCluster = TString(write.DataSink().Cluster().Value());
-        auto* typeAnn = write.Input().Ref().GetTypeAnn();
+    TMaybe<TDqStage> BuildSinkStage(TPositionHandle writePos, TSoDataSink dataSink, TCoAtom writeShard, TExprBase input, TExprContext& ctx, const TGetParents& getParents, bool allowPureStage) const {
+        const auto typeAnn = input.Ref().GetTypeAnn();
         const TTypeAnnotationNode* inputItemType = nullptr;
-        if (!EnsureNewSeqType<false, true, false>(write.Input().Pos(), *typeAnn, ctx, &inputItemType)) {
+        if (!EnsureNewSeqType<false, true, false>(input.Pos(), *typeAnn, ctx, &inputItemType)) {
             return {};
         }
 
-        auto rowTypeNode = ExpandType(write.Pos(), *inputItemType, ctx);
-        auto shard = BuildSolomonShard(write.Shard().Cast<TCoAtom>(), TExprBase(rowTypeNode), ctx, solomonCluster);
+        const TExprBase rowTypeNode(ExpandType(writePos, *inputItemType, ctx));
+        const TString solomonCluster(dataSink.Cluster());
+        auto dqSinkBuilder = Build<TDqSink>(ctx, writePos)
+            .DataSink(dataSink)
+            .Settings(BuildSolomonShard(writeShard, rowTypeNode, ctx, solomonCluster));
 
-        auto dqSink = Build<TDqSink>(ctx, write.Pos())
-            .DataSink(write.DataSink())
-            .Settings(shard)
+        if (allowPureStage && IsDqPureExpr(input)) {
+            YQL_CLOG(INFO, ProviderSolomon) << "Optimize insert into solomon (SoWriteToShard / SoInsert), build pure stage with sink";
+
+            const auto dqSink = dqSinkBuilder
+                .Index().Build(0)
+                .Done();
+
+            return Build<TDqStage>(ctx, writePos)
+                .Inputs().Build()
+                .Program<TCoLambda>()
+                    .Args({})
+                    .Body<TCoToFlow>()
+                        .Input(input)
+                        .Build()
+                    .Build()
+                .Outputs()
+                    .Add(dqSink)
+                    .Build()
+                .Settings().Build()
+                .Done();
+        }
+        
+        const auto maybeDqUnion = input.Maybe<TDqCnUnionAll>();
+        if (!maybeDqUnion) {
+            // If input is not DqCnUnionAll, it means not all dq optimizations are done yet
+            return {};
+        }
+
+        const auto dqUnion = maybeDqUnion.Cast();
+        if (!NDq::IsSingleConsumerConnection(dqUnion, *getParents())) {
+            return {};
+        }
+
+        YQL_CLOG(INFO, ProviderSolomon) << "Optimize insert into solomon (SoWriteToShard / SoInsert), push into existing stage";
+
+        const auto dqSink = dqSinkBuilder
             .Index(dqUnion.Output().Index())
             .Done();
 
-        TDqStage inputStage = dqUnion.Output().Stage().Cast<TDqStage>();
+        const auto inputStage = dqUnion.Output().Stage().Cast<TDqStage>();
 
         auto sinksBuilder = Build<TDqStageOutputsList>(ctx, inputStage.Pos());
         if (inputStage.Outputs()) {
@@ -123,18 +143,61 @@ public:
         }
         sinksBuilder.Add(dqSink);
 
-        auto dqStageWithSink = Build<TDqStage>(ctx, inputStage.Pos())
+        return Build<TDqStage>(ctx, inputStage.Pos())
             .InitFrom(inputStage)
             .Outputs(sinksBuilder.Done())
             .Done();
+    }
 
-        auto dqQueryBuilder = Build<TDqQuery>(ctx, write.Pos());
-        dqQueryBuilder.World(write.World());
-        dqQueryBuilder.SinkStages().Add(dqStageWithSink).Build();
+    TMaybeNode<TExprBase> SoWriteToShard(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
+        if (State_->IsRtmrMode()) {
+            return node;
+        }
 
-        optCtx.RemapNode(inputStage.Ref(), dqStageWithSink.Ptr());
+        const auto write = node.Cast<TSoWriteToShard>();
+        const auto stage = BuildSinkStage(write.Pos(), write.DataSink(), write.Shard(), write.Input(), ctx, getParents, /* allowPureStage */ false);
+        if (!stage) {
+            return node;
+        }
 
-        return dqQueryBuilder.Done();
+        return Build<TDqQuery>(ctx, write.Pos())
+            .World(write.World())
+            .SinkStages()
+                .Add(*stage)
+                .Build()
+            .Done();
+    }
+
+    TMaybeNode<TExprBase> SoInsert(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) const {
+        const auto insert = node.Cast<TSoInsert>();
+        const auto input = insert.Input();
+        const auto maybeStage = BuildSinkStage(insert.Pos(), insert.DataSink(), insert.Shard(), input, ctx, getParents, /* allowPureStage */ true);
+        if (!maybeStage) {
+            return node;
+        }
+
+        const auto newStage = *maybeStage;
+        YQL_ENSURE(newStage.Outputs());
+        const auto outputsCount = newStage.Outputs().Cast().Size();
+        if (outputsCount > 1) {
+            YQL_ENSURE(newStage.Program().Body().Maybe<TDqReplicate>(), "Can not push multiple async outputs into stage without TDqReplicate");
+        }
+
+        const auto maybeDqUnion = input.Maybe<TDqCnUnionAll>();
+        if (!maybeDqUnion) {
+            YQL_ENSURE(outputsCount == 1, "Expected only one sink for pure stage");
+            return newStage;
+        }
+
+        const auto dqUnionOutput = maybeDqUnion.Cast().Output();
+        optCtx.RemapNode(dqUnionOutput.Stage().Ref(), newStage.Ptr());
+
+        const auto dqResult = Build<TCoNth>(ctx, newStage.Pos())
+            .Tuple(newStage)
+            .Index(dqUnionOutput.Index())
+            .Done();
+
+        return ctx.NewList(dqResult.Pos(), {dqResult.Ptr()});
     }
 
 private:
@@ -169,7 +232,7 @@ private:
     TSolomonState::TPtr State_;
 };
 
-} // namespace
+} // anonymous namespace
 
 THolder<IGraphTransformer> CreateSoPhysicalOptProposalTransformer(TSolomonState::TPtr state) {
     return MakeHolder<TSoPhysicalOptProposalTransformer>(std::move(state));

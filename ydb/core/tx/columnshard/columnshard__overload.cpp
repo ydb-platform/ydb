@@ -1,75 +1,48 @@
 #include "columnshard_impl.h"
-#include <ydb/core/kqp/query_data/kqp_predictor.h>
 
 namespace NKikimr::NColumnShard {
 
-namespace {
-
-std::atomic_uint64_t DEFAULT_WRITES_IN_FLY_LIMIT{0};
-std::atomic_uint64_t DEFAULT_WRITES_SIZE_IN_FLY_LIMIT{0};
-
-} // namespace
-
-void TColumnShard::OnYellowChannelsChanged() {
-    if (!IsAnyChannelYellowStop()) {
-        OverloadSubscribers.NotifyOverloadSubscribers(NOverload::ERejectReason::YellowChannels, SelfId(), TabletID());
+TColumnShard::TOverloadStatus TColumnShard::ResourcesStatusToOverloadStatus(const NOverload::EResourcesStatus status) const {
+    switch (status) {
+        case NOverload::EResourcesStatus::Ok:
+            return TOverloadStatus{EOverloadStatus::None, {}};
+        case NOverload::EResourcesStatus::WritesInFlyLimitReached:
+            return TOverloadStatus{EOverloadStatus::ShardWritesInFly, "The limit on the number of in-flight write requests to a shard has been exceeded. Please add more resources or reduce the database load."};
+        case NOverload::EResourcesStatus::WritesSizeInFlyLimitReached:
+            return TOverloadStatus{EOverloadStatus::ShardWritesSizeInFly, "The limit on the total size of in-flight write requests to the shard has been exceeded. Please add more resources or reduce the database load."};
     }
 }
 
-ui64 TColumnShard::GetShardWritesInFlyLimit() const {
-    if (DEFAULT_WRITES_IN_FLY_LIMIT.load() == 0) {
-        ui64 oldValue = 0;
-        const ui64 newValue = std::max(NKqp::TStagePredictor::GetUsableThreads() * 200, ui32(1000));
-        DEFAULT_WRITES_IN_FLY_LIMIT.compare_exchange_strong(oldValue, newValue);
-    }
-    return HasAppData() ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestsCountLimit() : DEFAULT_WRITES_IN_FLY_LIMIT.load();
-}
-
-ui64 TColumnShard::GetShardWritesSizeInFlyLimit() const {
-    if (DEFAULT_WRITES_SIZE_IN_FLY_LIMIT.load() == 0) {
-        ui64 oldValue = 0;
-        const ui64 newValue = NKqp::TStagePredictor::GetUsableThreads() * 20_MB;
-        DEFAULT_WRITES_SIZE_IN_FLY_LIMIT.compare_exchange_strong(oldValue, newValue);
-    }
-    return HasAppData() ? AppDataVerified().ColumnShardConfig.GetWritingInFlightRequestBytesLimit() : DEFAULT_WRITES_SIZE_IN_FLY_LIMIT.load();
-}
-
-TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedImmediate(const TInternalPathId /* pathId */) const {
+TColumnShard::TOverloadStatus TColumnShard::CheckOverloadedImmediate(const TInternalPathId /* pathId */) const {
     if (IsAnyChannelYellowStop()) {
-        return EOverloadStatus::Disk;
+        return TOverloadStatus{EOverloadStatus::Disk, "Channels are overloaded (yellow), please rebalance groups or add new ones"};
     }
     const ui64 txLimit = Settings.OverloadTxInFlight;
-    const ui64 writesLimit = GetShardWritesInFlyLimit();
-    const ui64 writesSizeLimit = GetShardWritesSizeInFlyLimit();
+
     if (txLimit && Executor()->GetStats().TxInFly > txLimit) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "shard_overload")("reason", "tx_in_fly")("sum", Executor()->GetStats().TxInFly)(
             "limit", txLimit);
-        return EOverloadStatus::ShardTxInFly;
+        return TOverloadStatus{EOverloadStatus::ShardTxInFly, TStringBuilder{} << "The local transaction limit has been exceeded " << Executor()->GetStats().TxInFly << " of " << txLimit << ". Please add more resources or reduce the database load."};
     }
-    if (writesLimit && Counters.GetWritesMonitor()->GetWritesInFlight() > writesLimit) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "shard_overload")("reason", "writes_in_fly")(
-            "sum", Counters.GetWritesMonitor()->GetWritesInFlight())("limit", writesLimit);
-        return EOverloadStatus::ShardWritesInFly;
-    }
-    if (writesSizeLimit && Counters.GetWritesMonitor()->GetWritesSizeInFlight() > writesSizeLimit) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "shard_overload")("reason", "writes_size_in_fly")(
-            "sum", Counters.GetWritesMonitor()->GetWritesSizeInFlight())("limit", writesSizeLimit);
-        return EOverloadStatus::ShardWritesSizeInFly;
-    }
-    return EOverloadStatus::None;
-}
 
-void TColumnShard::UpdateOverloadsStatus() {
-    if (Counters.GetWritesMonitor()->GetWritesInFlight() < GetShardWritesInFlyLimit()) {
-        OverloadSubscribers.NotifyOverloadSubscribers(NOverload::ERejectReason::OverloadByShardWritesInFly, SelfId(), TabletID());
+    if (AppData()->FeatureFlags.GetEnableOlapRejectProbability()) {
+        const float rejectProbabilty = Executor()->GetRejectProbability();
+        if (rejectProbabilty > 0) {
+            const float rnd = TAppData::RandomProvider->GenRandReal2();
+            if (rnd < rejectProbabilty) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "shard_overload")("reason", "reject_probality")("RP", rejectProbabilty);
+                return TOverloadStatus{EOverloadStatus::RejectProbability, "The local database is overloaded. Please add more resources or reduce the database load."};
+            }
+        }
     }
-    if (Counters.GetWritesMonitor()->GetWritesSizeInFlight() < GetShardWritesSizeInFlyLimit()) {
-        OverloadSubscribers.NotifyOverloadSubscribers(NOverload::ERejectReason::OverloadByShardWritesSizeInFly, SelfId(), TabletID());
-    }
+
+    return TOverloadStatus{EOverloadStatus::None, {}};
 }
 
 void TColumnShard::Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext&) {
-    OverloadSubscribers.RemoveOverloadSubscriber(ev->Get()->Record.GetSeqNo(), ev->Recipient, ev->Sender);
+    Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
+        std::make_unique<NOverload::TEvOverloadUnsubscribe>(NOverload::TColumnShardInfo{.ColumnShardId = SelfId(), .TabletId = TabletID()},
+            NOverload::TOverloadSubscriberInfo{.PipeServerId = ev->Recipient, .OverloadSubscriberId = ev->Sender, .SeqNo = ev->Get()->Record.GetSeqNo()}));
 }
 
 } // namespace NKikimr::NColumnShard

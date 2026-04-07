@@ -494,6 +494,7 @@ void TBusSessionImpl::Listen(const TVector<TBindResult>& bindTo, TBusMessageQueu
     for (const TBindResult& br : bindTo) {
         if (actualPort == -1) {
             actualPort = br.Addr.GetPort();
+            Config.ListenPort = actualPort;
         } else {
             Y_ABORT_UNLESS(actualPort == br.Addr.GetPort(), "state check");
         }
@@ -506,8 +507,6 @@ void TBusSessionImpl::Listen(const TVector<TBindResult>& bindTo, TBusMessageQueu
         TConnectionsGuard guard(ConnectionsLock);
         InsertAcceptorLockAcquired(acceptor.Get());
     }
-
-    Config.ListenPort = actualPort;
 }
 
 void TBusSessionImpl::SendSnapshotToStatusActor() {

@@ -164,7 +164,7 @@ public:
             const ITransactionMapPtr& visible = nullptr,
             const ITransactionObserverPtr& observer = nullptr) const;
 
-    EReady Precharge(TRawVals minKey, TRawVals maxKey, TTagsRef tags,
+    TPrechargeResult Precharge(TRawVals minKey, TRawVals maxKey, TTagsRef tags,
                      IPages* env, ui64 flg,
                      ui64 itemsLimit, ui64 bytesLimit,
                      EDirection direction, TRowVersion snapshot, TSelectStats& stats) const;
@@ -172,6 +172,7 @@ public:
     void Update(ERowOp, TRawVals key, TOpsRef, TArrayRef<const TMemGlob> apart, TRowVersion rowVersion);
 
     void UpdateTx(ERowOp, TRawVals key, TOpsRef, TArrayRef<const TMemGlob> apart, ui64 txId);
+    void LockRowTx(ELockMode, TRawVals key, ui64 txId);
     void CommitTx(ui64 txId, TRowVersion rowVersion);
     void RemoveTx(ui64 txId);
 

@@ -244,6 +244,10 @@ private:
             }
         }
 
+        if (++NextPeer >= Peers.size()) {
+            NextPeer = 0;
+        }
+
         response->Record.ClearError();
         auto& group = *response->Record.MutableNodes();
         group.SetResourceId(resourceId);
@@ -297,7 +301,7 @@ private:
     }
 
     void Handle(NFq::TEvNodesManager::TEvGetNodesRequest::TPtr& ev) {
-        LOG_D("TNodesManagerActor::TEvGetNodesRequest");
+        LOG_T("Received TNodesManagerActor::TEvGetNodesRequest");
         auto response = MakeHolder<NFq::TEvNodesManager::TEvGetNodesResponse>();
         response->NodeIds.reserve(Peers.size());
         for (const auto& info : Peers) {

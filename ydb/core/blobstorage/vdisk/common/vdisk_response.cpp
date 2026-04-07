@@ -29,7 +29,7 @@ void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEve
                 ReportResponse(event->Record, handleClass, vCtx); \
                 break;                                            \
             }
-                
+
                 HANDLE_EVENT(TEvBlobStorage::TEvVPutResult)
                 HANDLE_EVENT(TEvBlobStorage::TEvVMultiPutResult)
                 HANDLE_EVENT(TEvBlobStorage::TEvVGetResult)
@@ -39,7 +39,7 @@ void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEve
         }
     }
 
-    switch (const ui32 type = ev->Type()) {
+    switch (ev->Type()) {
 #define HANDLE_EVENT(T) \
         case TEvBlobStorage::T::EventType: { \
             TEvBlobStorage::T *event = static_cast<TEvBlobStorage::T *>(ev); \

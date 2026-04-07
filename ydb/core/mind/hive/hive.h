@@ -57,6 +57,7 @@ using TResourceNormalizedValues = std::tuple<double, double, double, double>;
 using TOwnerIdxType = NScheme::TPairUi64Ui64;
 using TSubActorId = ui64; // = LocalId part of TActorId
 using TDataCenterPriority = std::unordered_map<TDataCenterId, i32>;
+using TSegmentId = std::tuple<TSubDomainKey, TBridgePileId>;
 
 static constexpr std::size_t MAX_TABLET_CHANNELS = 256;
 
@@ -246,6 +247,8 @@ extern const std::unordered_map<TString, TTabletTypes::EType> TABLET_TYPE_BY_SHO
 
 class THive;
 
+class THiveDrain;
+
 struct THiveSharedSettings {
     NKikimrConfig::THiveConfig CurrentConfig;
 
@@ -327,6 +330,7 @@ struct TNodeFilter {
     TVector<TDataCenterId> AllowedDataCenters;
     TSubDomainKey ObjectDomain;
     TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
+    bool MustBePrimaryPile = true;
 
     const THive* Hive;
 
@@ -378,6 +382,47 @@ struct TFollowerUpdates {
     }
 };
 
+// same as NKikimrTabletBase::TMetrics, except not a protobuf - for lighter operations
+struct TMetrics {
+    ui64 CPU = 0;
+    ui64 Memory = 0;
+    ui64 Network = 0;
+    ui64 Counter = 0;
+    ui64 Storage = 0;
+    TVector<NKikimrTabletBase::TThroughputRecord> GroupReadThroughput;
+    TVector<NKikimrTabletBase::TThroughputRecord> GroupWriteThroughput;
+    ui64 ReadThroughput = 0;
+    ui64 WriteThroughput = 0;
+    TVector<NKikimrTabletBase::TIopsRecord> GroupReadIops;
+    TVector<NKikimrTabletBase::TIopsRecord> GroupWriteIops;
+    ui64 ReadIops = 0;
+    ui64 WriteIops = 0;
+
+    TMetrics& operator+=(const TMetrics& other);
+
+    void ToProto(NKikimrTabletBase::TMetrics* proto) const;
+};
+
+struct TReassignOperation {
+    TTabletId TabletId;
+    TVector<ui32> TabletChannels;
+    TVector<ui32> ForcedGroups;
+    bool Async;
+
+    TReassignOperation(TTabletId tablet,
+                       const TVector<ui32>& channels = {},
+                       const TVector<ui32>& groups = {},
+                       bool async = false)
+        : TabletId(tablet)
+        , TabletChannels(channels)
+        , ForcedGroups(groups)
+        , Async(async)
+    {}
+
+    auto* ToEvent() const {
+        return new TEvHive::TEvReassignTablet(TabletId, TabletChannels, ForcedGroups, Async);
+    }
+};
 
 } // NHive
 } // NKikimr

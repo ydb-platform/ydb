@@ -2,6 +2,7 @@
 #include "table_description.h"
 #include "table_settings.h"
 
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/follower_group.pb.h>
 
 #include <ydb/library/conclusion/status.h>
@@ -242,6 +243,58 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
     return true;
 }
 
+bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TColumnTableDescription& tableDesc,
+    const Ydb::Table::CreateTableRequest& proto,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    auto& hashSharding = *tableDesc.MutableSharding()->MutableHashSharding();
+    
+    // NOTICE: public Ydb::Table::CreateTableRequest doesn't have sharding setting
+    hashSharding.SetFunction(NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CONSISTENCY_64);
+
+    if (proto.has_partitioning_settings()) {
+        auto& partitioningSettings = proto.partitioning_settings();
+        hashSharding.MutableColumns()->CopyFrom(partitioningSettings.partition_by());
+        if (partitioningSettings.min_partitions_count()) {
+            tableDesc.SetColumnShardCount(partitioningSettings.min_partitions_count());
+        }
+    }
+    
+    if (proto.partitions_case() != Ydb::Table::CreateTableRequest::PARTITIONS_NOT_SET) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Partitions are not supported";
+        return false;
+    }
+
+    if (proto.key_bloom_filter() != Ydb::FeatureFlag::STATUS_UNSPECIFIED) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Key bloom filter settings are not supported";
+        return false;
+    }
+    
+    if (proto.has_read_replicas_settings()) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Read replicas settings are not supported";
+        return false;
+    }
+
+    if (proto.has_ttl_settings()) {
+        if (!FillTtlSettings(*tableDesc.MutableTtlSettings()->MutableEnabled(), proto.ttl_settings(), code, error)) {
+            return false;
+        }
+    }
+    
+    if (proto.has_storage_settings()) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "Storage settings are not supported";
+        return false;
+    }
+    
+    tableDesc.SetTemporary(proto.temporary());
+
+    return true;
+}
+
 bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
     const Ydb::Table::AlterTableRequest& proto,
     Ydb::StatusIds::StatusCode& code, TString& error, bool changed)
@@ -401,8 +454,7 @@ bool FillIndexTablePartitioning(
     const Ydb::Table::TableIndex& index,
     Ydb::StatusIds::StatusCode& code, TString& error
 ) {
-    auto fillIndexPartitioning = [&](const Ydb::Table::GlobalIndexSettings& settings, std::vector<NKikimrSchemeOp::TTableDescription>& indexImplTableDescriptions) {
-        auto& indexImplTableDescription = indexImplTableDescriptions.emplace_back();
+    auto fillIndexPartitioning = [&](const Ydb::Table::GlobalIndexSettings& settings, NKikimrSchemeOp::TTableDescription& indexImplTableDescription) {
         auto& partitionConfig = *indexImplTableDescription.MutablePartitionConfig();
 
         if (settings.has_partitioning_settings()) {
@@ -444,38 +496,76 @@ bool FillIndexTablePartitioning(
 
     switch (index.type_case()) {
     case Ydb::Table::TableIndex::kGlobalIndex:
-        if (!fillIndexPartitioning(index.global_index().settings(), indexImplTableDescriptions)) {
+        indexImplTableDescriptions.resize(1);
+        if (!fillIndexPartitioning(index.global_index().settings(), indexImplTableDescriptions[0])) {
             return false;
         }
         break;
 
     case Ydb::Table::TableIndex::kGlobalAsyncIndex:
-        if (!fillIndexPartitioning(index.global_async_index().settings(), indexImplTableDescriptions)) {
+        indexImplTableDescriptions.resize(1);
+        if (!fillIndexPartitioning(index.global_async_index().settings(), indexImplTableDescriptions[0])) {
             return false;
         }
         break;
 
     case Ydb::Table::TableIndex::kGlobalUniqueIndex:
-        if (!fillIndexPartitioning(index.global_unique_index().settings(), indexImplTableDescriptions)) {
+        indexImplTableDescriptions.resize(1);
+        if (!fillIndexPartitioning(index.global_unique_index().settings(), indexImplTableDescriptions[0])) {
             return false;
         }
         break;
 
     case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
-        if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().level_table_settings(), indexImplTableDescriptions)) {
-            return false;
-        }
-        if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().posting_table_settings(), indexImplTableDescriptions)) {
-            return false;
-        }
         const bool prefixVectorIndex = index.index_columns().size() > 1;
+        indexImplTableDescriptions.resize(prefixVectorIndex ? 3 : 2);
+        if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().level_table_settings(), indexImplTableDescriptions[NTableIndex::NKMeans::LevelTablePosition])) {
+            return false;
+        }
+        if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().posting_table_settings(), indexImplTableDescriptions[NTableIndex::NKMeans::PostingTablePosition])) {
+            return false;
+        }
         if (prefixVectorIndex) {
-            if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().prefix_table_settings(), indexImplTableDescriptions)) {
+            if (!fillIndexPartitioning(index.global_vector_kmeans_tree_index().prefix_table_settings(), indexImplTableDescriptions[NTableIndex::NKMeans::PrefixTablePosition])) {
                 return false;
             }
         }
         break;
     }
+    case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
+        indexImplTableDescriptions.resize(1);
+        if (!fillIndexPartitioning(index.global_fulltext_plain_index().settings(), indexImplTableDescriptions[0])) {
+            return false;
+        }
+        break;
+
+    case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
+        indexImplTableDescriptions.resize(4);
+        if (!fillIndexPartitioning(index.global_fulltext_relevance_index().dict_table_settings(), indexImplTableDescriptions[NTableIndex::NFulltext::DictTablePosition])) {
+            return false;
+        }
+        if (!fillIndexPartitioning(index.global_fulltext_relevance_index().docs_table_settings(), indexImplTableDescriptions[NTableIndex::NFulltext::DocsTablePosition])) {
+            return false;
+        }
+        if (!fillIndexPartitioning(index.global_fulltext_relevance_index().stats_table_settings(), indexImplTableDescriptions[NTableIndex::NFulltext::StatsTablePosition])) {
+            return false;
+        }
+        if (!fillIndexPartitioning(index.global_fulltext_relevance_index().posting_table_settings(), indexImplTableDescriptions[NTableIndex::NFulltext::PostingTablePosition])) {
+            return false;
+        }
+        break;
+
+    case Ydb::Table::TableIndex::kGlobalJsonIndex:
+        indexImplTableDescriptions.resize(1);
+        if (!fillIndexPartitioning(index.global_json_index().settings(), indexImplTableDescriptions[0])) {
+            return false;
+        }
+        break;
+
+    case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
+    case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
+        break;
+
     case Ydb::Table::TableIndex::TYPE_NOT_SET:
         break;
     }

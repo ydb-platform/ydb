@@ -1,0 +1,7 @@
+$p = 'http_test://' || 'foo.txt';
+pragma file('foo.txt',$p);
+
+$e1 = EvaluateExpr(FileContent('foo.txt'));
+$e2 = EvaluateExpr($e1);
+
+select $e1, $e2;

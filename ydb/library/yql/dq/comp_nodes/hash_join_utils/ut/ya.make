@@ -1,25 +1,35 @@
 UNITTEST_FOR(ydb/library/yql/dq/comp_nodes/hash_join_utils)
 
 IF (SANITIZER_TYPE OR NOT OPENSOURCE)
-    REQUIREMENTS(ram:32)
+    REQUIREMENTS(ram:32 cpu:4)
 ENDIF()
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-
+IF (ARCH_X86_64 AND OS_LINUX)
 SRCS(
+    accumulator_ut.cpp
+    scalar_layout_converter_ut.cpp
+    block_layout_converter_ut.cpp
+    block_layout_converter_sliced_blocks_ut.cpp
+    hash_table_ut.cpp
     packed_tuple_ut.cpp
+    deep_copy_ut.cpp
 )
 
 PEERDIR(
     yql/essentials/public/udf
     yql/essentials/public/udf/arrow
     yql/essentials/public/udf/service/exception_policy
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/minikql/comp_nodes/no_llvm
+    yql/essentials/minikql/computation
+    yql/essentials/minikql/invoke_builtins
     yql/essentials/sql/pg_dummy
 )
 
@@ -27,6 +37,8 @@ CFLAGS(
     -mavx2
     -mprfchw
 )
+
+ENDIF()
 
 YQL_LAST_ABI_VERSION()
 

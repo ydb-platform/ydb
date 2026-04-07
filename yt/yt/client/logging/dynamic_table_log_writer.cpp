@@ -100,6 +100,9 @@ public:
         , DroppedEventsCounter_(Profiler_.Counter("/dropped_events"))
         , FlushedEventsCounter_(Profiler_.Counter("/flushed_events"))
         , FlushedBytesCounter_(Profiler_.Counter("/flushed_bytes"))
+    { }
+
+    void InitializeRefCounted()
     {
         FlushExecutor_->Start();
 
@@ -412,10 +415,11 @@ IDynamicTableLogWriterFactoryPtr GetDynamicTableLogWriterFactory()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_STATIC_INITIALIZER(
+YT_STATIC_INITIALIZER({
     TLogManager::Get()->RegisterWriterFactory(
         TString(TDynamicTableLogWriterConfig::WriterType),
-        GetDynamicTableLogWriterFactory()));
+        GetDynamicTableLogWriterFactory());
+});
 
 ////////////////////////////////////////////////////////////////////////////////
 

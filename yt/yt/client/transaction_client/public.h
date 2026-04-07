@@ -54,6 +54,8 @@ YT_DEFINE_ERROR_ENUM(
     ((ClockClusterTagMismatch)          (11015))
     ((ChaosCoordinatorsAreNotAvailable) (11016))
     ((NeedLockDynamicTablesBeforeCommit)(11017))
+    ((AtomicTransactionCommitFailure)   (11018))
+    ((NativeTransactionCommitFailure)   (11019))
 );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -105,6 +107,7 @@ constexpr TTimestamp NotPreparedTimestamp         = 0x3fffffffffffffffULL;
 
 DECLARE_REFCOUNTED_STRUCT(ITimestampProvider)
 DECLARE_REFCOUNTED_STRUCT(TRemoteTimestampProviderConfig)
+DECLARE_REFCOUNTED_STRUCT(TRemoteTimestampProviderDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

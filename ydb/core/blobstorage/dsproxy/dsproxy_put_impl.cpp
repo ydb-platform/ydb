@@ -4,6 +4,7 @@
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
@@ -39,13 +40,13 @@ void TPutImpl::RunStrategy(TLogContext &logCtx, const IStrategy& strategy, TPutR
     TBatchedVec<TBlackboard::TFinishedBlob> finished;
     const EStrategyOutcome outcome = Blackboard.RunStrategy(logCtx, strategy, AccelerationParams, &finished, &expired);
     for (const TBlackboard::TFinishedBlob& item : finished) {
-        Y_ABORT_UNLESS(item.BlobIdx < Blobs.size());
-        Y_ABORT_UNLESS(!IsDone[item.BlobIdx]);
+        Y_VERIFY_S(item.BlobIdx < Blobs.size(), "State# " << DumpFullState() << " BlobIdx# " << item.BlobIdx);
+        Y_VERIFY_S(!IsDone[item.BlobIdx], "State# " << DumpFullState() << " BlobIdx# " << item.BlobIdx);
         PrepareOneReply(item.Status, item.BlobIdx, logCtx, item.ErrorReason, outPutResults);
-        Y_VERIFY_S(IsDone[item.BlobIdx], "State# " << DumpFullState());
+        Y_VERIFY_S(IsDone[item.BlobIdx], "State# " << DumpFullState() << " BlobIdx# " << item.BlobIdx);
     }
     if (outcome == EStrategyOutcome::DONE) {
-        for (const auto& done : IsDone) {
+        for (const bool done : IsDone) {
             Y_VERIFY_S(done, "finished.size# " << finished.size() << " State# " << DumpFullState());
         }
     }
@@ -62,6 +63,52 @@ NLog::EPriority GetPriorityForReply(TAtomicLogPriorityMuteChecker<NLog::PRI_ERRO
     }
 }
 
+void TPutImpl::FillInterpilePut(TEvInterpilePut& ev) {
+    Info->GroupID.CopyToProto(&ev.Record, &NKikimrBlobStorage::TEvInterpilePut::SetGroupId);
+    ev.Record.SetGroupGeneration(Info->GroupGeneration);
+    ev.Record.SetHandleClass(Blackboard.PutHandleClass);
+    ev.Record.SetTactic(Tactic);
+
+    for (const auto& item : Blobs) {
+        auto *pb = ev.Record.AddItems();
+        LogoBlobIDFromLogoBlobID(item.BlobId, pb->MutableBlobId());
+        if (item.Deadline != TInstant::Max()) {
+            pb->SetDeadline(item.Deadline.GetValue());
+        }
+        if (item.IssueKeepFlag) {
+            pb->SetIssueKeepFlag(item.IssueKeepFlag);
+        }
+        if (item.IgnoreBlock) {
+            pb->SetIgnoreBlock(item.IgnoreBlock);
+        }
+        if (item.AlreadyEncrypted) {
+            pb->SetAlreadyEncrypted(item.AlreadyEncrypted);
+        }
+        for (const auto& [tabletId, generation] : item.ExtraBlockChecks) {
+            auto *check = pb->AddExtraBlockChecks();
+            check->SetTabletId(tabletId);
+            check->SetGeneration(generation);
+        }
+        ev.AddPayload(TRope(item.Buffer));
+        if (item.Span) {
+            item.Span.GetTraceId().Serialize(pb->MutableTraceId());
+        }
+    }
+}
+
+void TPutImpl::ProcessInterpilePutResult(TEvInterpilePutResult& ev, TLogContext& logCtx,
+        TPutResultVec& outPutResults) {
+    Y_DEBUG_ABORT_UNLESS(ev.Record.ItemsSize() == Blobs.size());
+    if (ev.Record.ItemsSize() != Blobs.size()) {
+        return PrepareReply(NKikimrProto::ERROR, logCtx, "incorrect TEvInterpilePutResult", outPutResults);
+    }
+
+    for (size_t i = 0; i < Blobs.size(); ++i) {
+        auto& item = ev.Record.GetItems(i);
+        PrepareOneReply(item.GetStatus(), i, logCtx, item.GetErrorReason(), outPutResults);
+    }
+}
+
 void TPutImpl::PrepareOneReply(NKikimrProto::EReplyStatus status, size_t blobIdx, TLogContext &logCtx,
         TString errorReason, TPutResultVec &outPutResults) {
     if (!std::exchange(IsDone[blobIdx], true)) {
@@ -70,6 +117,7 @@ void TPutImpl::PrepareOneReply(NKikimrProto::EReplyStatus status, size_t blobIdx
         ev->ErrorReason = std::move(errorReason);
         const NLog::EPriority priority = GetPriorityForReply(Info->PutErrorMuteChecker, status);
         DSP_LOG_LOG_SX(logCtx, priority, "BPP12", "Result# " << ev->Print(false) << " GroupId# " << Info->GroupID);
+        ResultPriority = std::min(ResultPriority, PriorityForStatusResult(status));
         outPutResults.emplace_back(blobIdx, std::move(ev));
     }
 }

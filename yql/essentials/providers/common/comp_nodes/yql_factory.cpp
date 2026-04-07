@@ -11,11 +11,10 @@
 #include "yql_typehandle.h"
 #include "yql_typekind.h"
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
-typedef IComputationNode* (*TYqlCallableComputationNodeBuilderFunc)(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
-typedef THashMap<TString, TYqlCallableComputationNodeBuilderFunc> TYqlCallableComputationNodeBuilderFuncMap;
+using TYqlCallableComputationNodeBuilderFunc = IComputationNode* (*)(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
+using TYqlCallableComputationNodeBuilderFuncMap = THashMap<TString, TYqlCallableComputationNodeBuilderFunc>;
 
 struct TYqlCallableComputationNodeBuilderFuncMapFiller {
     TYqlCallableComputationNodeBuilderFuncMap Map;
@@ -32,6 +31,9 @@ struct TYqlCallableComputationNodeBuilderFuncMapFiller {
         Map["DataTypeHandle"] = &WrapMakeType<NYql::ETypeAnnotationKind::Data>;
         Map["OptionalItemType"] = &WrapSplitType<NYql::ETypeAnnotationKind::Optional>;
         Map["OptionalTypeHandle"] = &WrapMakeType<NYql::ETypeAnnotationKind::Optional>;
+        Map["LinearItemType"] = &WrapSplitType<NYql::ETypeAnnotationKind::Linear>;
+        Map["LinearTypeHandle"] = &WrapMakeType<NYql::ETypeAnnotationKind::Linear>;
+        Map["DynamicLinearTypeHandle"] = &WrapMakeType<NYql::ETypeAnnotationKind::DynamicLinear>;
         Map["ListItemType"] = &WrapSplitType<NYql::ETypeAnnotationKind::List>;
         Map["ListTypeHandle"] = &WrapMakeType<NYql::ETypeAnnotationKind::List>;
         Map["StreamItemType"] = &WrapSplitType<NYql::ETypeAnnotationKind::Stream>;
@@ -72,8 +74,9 @@ TComputationNodeFactory GetYqlFactory(ui32 exprCtxMutableIndex) {
     return [exprCtxMutableIndex](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
         const auto& map = Singleton<TYqlCallableComputationNodeBuilderFuncMapFiller>()->Map;
         auto it = map.find(callable.GetType()->GetName());
-        if (it == map.end())
+        if (it == map.end()) {
             return nullptr;
+        }
 
         return it->second(callable, ctx, exprCtxMutableIndex);
     };
@@ -81,14 +84,12 @@ TComputationNodeFactory GetYqlFactory(ui32 exprCtxMutableIndex) {
 
 TComputationNodeFactory GetYqlFactory() {
     TComputationNodeFactory yqlFactory;
-    return [yqlFactory]
-        (TCallable& callable, const TComputationNodeFactoryContext& ctx) mutable -> IComputationNode* {
-            if (!yqlFactory) {
-                yqlFactory = GetYqlFactory(ctx.Mutables.CurValueIndex++);
-            }
-            return yqlFactory(callable, ctx);
-        };
+    return [yqlFactory](TCallable& callable, const TComputationNodeFactoryContext& ctx) mutable -> IComputationNode* {
+        if (!yqlFactory) {
+            yqlFactory = GetYqlFactory(ctx.Mutables.CurValueIndex++);
+        }
+        return yqlFactory(callable, ctx);
+    };
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

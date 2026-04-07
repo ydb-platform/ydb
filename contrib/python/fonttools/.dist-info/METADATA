@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: fonttools
-Version: 4.59.1
+Version: 4.62.1
 Summary: Tools to manipulate font files
 Home-page: http://github.com/fonttools/fonttools
 Author: Just van Rossum
@@ -17,16 +17,16 @@ Classifier: Intended Audience :: End Users/Desktop
 Classifier: Natural Language :: English
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python
-Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Programming Language :: Python :: 3
 Classifier: Topic :: Text Processing :: Fonts
 Classifier: Topic :: Multimedia :: Graphics
 Classifier: Topic :: Multimedia :: Graphics :: Graphics Conversion
-Requires-Python: >=3.9
+Requires-Python: >=3.10
 Description-Content-Type: text/x-rst
 License-File: LICENSE
 License-File: LICENSE.external
@@ -38,7 +38,7 @@ Requires-Dist: brotli>=1.0.1; platform_python_implementation == "CPython" and ex
 Requires-Dist: brotlicffi>=0.8.0; platform_python_implementation != "CPython" and extra == "woff"
 Requires-Dist: zopfli>=0.1.4; extra == "woff"
 Provides-Extra: unicode
-Requires-Dist: unicodedata2>=15.1.0; python_version <= "3.12" and extra == "unicode"
+Requires-Dist: unicodedata2>=17.0.0; python_version <= "3.14" and extra == "unicode"
 Provides-Extra: graphite
 Requires-Dist: lz4>=1.7.4.2; extra == "graphite"
 Provides-Extra: interpolatable
@@ -54,13 +54,13 @@ Requires-Dist: xattr; sys_platform == "darwin" and extra == "type1"
 Provides-Extra: pathops
 Requires-Dist: skia-pathops>=0.5.0; extra == "pathops"
 Provides-Extra: repacker
-Requires-Dist: uharfbuzz>=0.23.0; extra == "repacker"
+Requires-Dist: uharfbuzz>=0.45.0; extra == "repacker"
 Provides-Extra: all
 Requires-Dist: lxml>=4.0; extra == "all"
 Requires-Dist: brotli>=1.0.1; platform_python_implementation == "CPython" and extra == "all"
 Requires-Dist: brotlicffi>=0.8.0; platform_python_implementation != "CPython" and extra == "all"
 Requires-Dist: zopfli>=0.1.4; extra == "all"
-Requires-Dist: unicodedata2>=15.1.0; python_version <= "3.12" and extra == "all"
+Requires-Dist: unicodedata2>=17.0.0; python_version <= "3.14" and extra == "all"
 Requires-Dist: lz4>=1.7.4.2; extra == "all"
 Requires-Dist: scipy; platform_python_implementation != "PyPy" and extra == "all"
 Requires-Dist: munkres; platform_python_implementation == "PyPy" and extra == "all"
@@ -69,7 +69,7 @@ Requires-Dist: matplotlib; extra == "all"
 Requires-Dist: sympy; extra == "all"
 Requires-Dist: xattr; sys_platform == "darwin" and extra == "all"
 Requires-Dist: skia-pathops>=0.5.0; extra == "all"
-Requires-Dist: uharfbuzz>=0.23.0; extra == "all"
+Requires-Dist: uharfbuzz>=0.45.0; extra == "all"
 Dynamic: author
 Dynamic: author-email
 Dynamic: classifier
@@ -105,7 +105,7 @@ are available at `Read the Docs <https://fonttools.readthedocs.io/>`_.
 Installation
 ~~~~~~~~~~~~
 
-FontTools requires `Python <http://www.python.org/download/>`__ 3.9
+FontTools requires `Python <http://www.python.org/download/>`__ 3.10
 or later. We try to follow the same schedule of minimum Python version support as
 NumPy (see `NEP 29 <https://numpy.org/neps/nep-0029-deprecation_policy.html>`__).
 
@@ -196,7 +196,7 @@ are required to unlock the extra features named "ufo", etc.
 
   * `unicodedata2 <https://pypi.python.org/pypi/unicodedata2>`__:
     ``unicodedata`` backport for Python 3.x updated to the latest Unicode
-    version 15.0.
+    version 17.0.
 
   *Extra:* ``unicode``
 
@@ -211,7 +211,11 @@ are required to unlock the extra features named "ufo", etc.
     for Python, which internally uses `NumPy <https://pypi.python.org/pypi/numpy>`__
     arrays and hence is very fast;
   * `munkres <https://pypi.python.org/pypi/munkres>`__: a pure-Python
-    module that implements the Hungarian or Kuhn-Munkres algorithm.
+    module that implements the Hungarian or Kuhn-Munkres algorithm. Slower than
+    SciPy, but useful for minimalistic systems where adding SciPy is undesirable.
+
+  This ensures both performance (via SciPy) and minimal footprint (via Munkres)
+  are possible.
 
   To plot the results to a PDF or HTML format, you also need to install:
 
@@ -254,7 +258,7 @@ are required to unlock the extra features named "ufo", etc.
 
   Simplify TrueType glyphs by merging overlapping contours and components.
 
-  * `skia-pathops <https://pypi.python.org/pypy/skia-pathops>`__: Python
+  * `skia-pathops <https://pypi.python.org/pypi/skia-pathops>`__: Python
     bindings for the Skia library's PathOps module, performing boolean
     operations on paths (union, intersection, etc.).
 
@@ -387,6 +391,143 @@ Have fun!
 
 Changelog
 ~~~~~~~~~
+
+4.62.1 (released 2026-03-13)
+----------------------------
+
+- [feaLib] Extend contextual rule merging to all rule types: single subst, GSUB/GPOS
+  named lookups, ignore rules, and chained alternate subst (#4061).
+
+4.62.0 (released 2026-03-09)
+----------------------------
+
+- [diff] Add new ``fonttools diff`` command for comparing font files, imported from the
+  ``fdiff`` project and heavily reworked (#1190, #4007, #4009, #4011, #4013, #4019).
+- [feaLib] Fix ``VariableScalar`` interpolation bug with non-linear avar mappings. Also
+  decouple ``VariableScalar`` from compiled fonts, allowing it to work with designspace data
+  before compilation (#3938, #4054).
+- [feaLib] Fix ``VariableScalar`` axis ordering and iterative delta rounding to match fontc
+  behavior (#4053).
+- [feaLib] Merge chained multi subst rules with same context into a single subtable instead of
+  emitting one subtable per glyph (#4016, #4058).
+- [feaLib] Pass location to ``ConditionsetStatement`` to fix glyphsLib round-tripping
+  (fontra/fontra-glyphs#130, #4057).
+- [feaLib] Write ``0xFFFF`` instead of ``0`` for missing nameIDs in ``cv`` feature params
+  (#4010, #4012).
+- [cmap] Fix ``CmapSubtable.__lt__()`` ``TypeError`` on Python 3 when subtables share the
+  same encoding record, and add compile-time validation for unique encoding records (#4035,
+  #4055).
+- [svgLib] Skip non-element XML nodes (comments, processing instructions) when drawing SVG
+  paths (#4042, #4043).
+- [glifLib] Fix regression reading glyph outlines when ``glyphObject=None`` (#4030, #4031).
+- [pointPen] Fix ``SegmentToPointPen`` edge case: only remove a duplicate final point on
+  ``closePath()`` if it is an on-curve point (#4014, #4015).
+- [cffLib] **SECURITY** Replace ``eval()`` with ``safeEval()`` in ``parseBlendList()`` to
+  prevent arbitrary code execution from crafted TTX files (#4039, #4040).
+- [ttLib] Remove defunct Adobe SING Glyphlet tables (``META``, ``SING``, ``GMAP``, ``GPKG``)
+  (#4044).
+- [varLib.interpolatable] Various bugfixes: fix swapped nodeTypes assignment, duplicate
+  kink-detector condition, typos, CFF2 vsindex parsing, glyph existence check, and plot
+  helpers (#4046).
+- [varLib.models] Fix ``getSubModel`` not forwarding ``extrapolate``/``axisRanges``; check
+  location uniqueness after stripping zeros (#4047).
+- [varLib] Fix ``--variable-fonts`` filter in ``build_many``; remove dead code and fix
+  comments (#4048).
+- [avar] Preserve existing name table in build; keep ``unbuild`` return types consistent;
+  validate ``map`` CLI coordinates (#4051).
+- [cu2qu/qu2cu] Add input validation: reject non-positive tolerances, validate curve inputs
+  and list lengths (#4052).
+- [colorLib] Raise a clear ``ColorLibError`` when base glyphs are missing from glyphMap,
+  instead of a confusing ``KeyError`` (#4041).
+- [glyf] Remove unnecessary ``fvar`` table dependency (#4017).
+- [fvar/trak] Remove unnecessary ``name`` table dependency (#4018).
+- [ufoLib] Relax guideline validation to follow the updated spec (#3537, #3553).
+- [ttFont] Fix ``saveXML`` regression with empty table lists, clarify docstring (#4025, #4026,
+  #4056).
+- [setup.py] Link ``libm`` for Cython extensions using math functions (#4028, #4029).
+- Add typing annotations for ``DSIG``, ``DefaultTable``, ``ttProgram`` (#4033).
+
+4.61.1 (released 2025-12-12)
+----------------------------
+
+- [otlLib] buildCoverage: return empty Coverage instead of None (#4003, #4004).
+- [instancer] bug fix in ``avar2`` full instancing (#4002).
+- [designspaceLib] Preserve empty conditionsets when serializing to XML (#4001).
+- [fontBu ilder] Fix FontBuilder ``setupOS2()`` default params globally polluted (#3996, #3997).
+- [ttFont] Add more typing annotations to ttFont, xmlWriter, sfnt, varLib.models and others (#3952, #3826).
+- Explicitly test and declare support for Python 3.14, even though we were already shipping pre-built wheels for it (#3990).
+
+4.60.2 (released 2025-12-09)
+----------------------------
+
+- **Backport release** Same as 4.61.0 but without "Drop support for EOL Python 3.9" change to allow
+  downstream projects still on Python 3.9 to avail of the security fix for CVE-2025-66034 (#3994, #3999).
+
+4.61.0 (released 2025-11-28)
+----------------------------
+
+- [varLib.main]: **SECURITY** Only use basename(vf.filename) to prevent path traversal attacks when
+  running ``fonttools varLib`` command, or code which invokes ``fonttools.varLib.main()``.
+  Fixes CVE-2025-66034, see:
+  https://github.com/fonttools/fonttools/security/advisories/GHSA-768j-98cg-p3fv.
+- [feaLib] Sort BaseLangSysRecords by tag (#3986).
+- Drop support for EOL Python 3.9 (#3982).
+- [instancer] Support --remove-overlaps for fonts with CFF2 table (#3975).
+- [CFF2ToCFF] Add --remove-overlaps option (#3976).
+- [feaLib] Raise an error for rsub with NULL target (#3979).
+- [bezierTools] Fix logic bug in curveCurveIntersections (#3963).
+- [feaLib] Error when condition sets have the same name (#3958).
+- [cu2qu.ufo] skip processing empty glyphs to support sparse kerning masters (#3956).
+- [unicodedata] Update to Unicode 17. Require ``unicodedata2 >= 17.0.0`` when installed with 'unicode' extra.
+
+4.60.1 (released 2025-09-29)
+----------------------------
+
+- [ufoLib] Reverted accidental method name change in ``UFOReader.getKerningGroupConversionRenameMaps``
+  that broke compatibility with downstream projects like defcon (#3948, #3947, robotools/defcon#478).
+- [ufoLib] Added test coverage for ``getKerningGroupConversionRenameMaps`` method (#3950).
+- [subset] Don't try to subset BASE table; pass it through by default instead (#3949).
+- [subset] Remove empty BaseRecord entries in MarkBasePos lookups (#3897, #3892).
+- [subset] Add pruning for MarkLigPos and MarkMarkPos lookups (#3946).
+- [subset] Remove duplicate features when subsetting (#3945).
+- [Docs] Added documentation for the visitor module (#3944).
+
+4.60.0 (released 2025-09-17)
+----------------------------
+
+- [pointPen] Allow ``reverseFlipped`` parameter of ``DecomposingPointPen`` to take a ``ReverseFlipped``
+  enum value to control whether/how to reverse contour direction of flipped components, in addition to
+  the existing True/False. This allows to set ``ReverseFlipped.ON_CURVE_FIRST`` to ensure that
+  the decomposed outline starts with an on-curve point before being reversed, for better consistency
+  with other segment-oriented contour transformations. The change is backward compatible, and the
+  default behavior hasn't changed (#3934).
+- [filterPen] Added ``ContourFilterPointPen``, base pen for buffered contour operations, and
+  ``OnCurveStartPointPen`` filter to ensure contours start with an on-curve point (#3934).
+- [cu2qu] Fixed difference in cython vs pure-python complex division by real number (#3930).
+- [varLib.avar] Refactored and added some new sub-modules and scripts (#3926).
+  * ``varLib.avar.build`` module to build avar (and a missing fvar) binaries into a possibly empty TTFont,
+  * ``varLib.avar.unbuild`` module to print a .designspace snippet that would generate the same avar binary,
+  * ``varLib.avar.map`` module to take TTFont and do the mapping, in user/normalized space,
+  * ``varLib.avar.plan`` module moved from ``varLib.avarPlanner``.
+  The bare ``fonttools varLib.avar`` script is deprecated, in favour of ``fonttools varLib.avar.build`` (or ``unbuild``).
+- [interpolatable] Clarify ``linear_sum_assignment`` backend options and minimal dependency
+  usage (#3927).
+- [post] Speed up ``build_psNameMapping`` (#3923).
+- [ufoLib] Added typing annotations to fontTools.ufoLib (#3875).
+
+4.59.2 (released 2025-08-27)
+----------------------------
+
+- [varLib] Clear ``USE_MY_METRICS`` component flags when inconsistent across masters (#3912).
+- [varLib.instancer] Avoid negative advance width/height values when instatiating HVAR/VVAR,
+  (unlikely in well-behaved fonts) (#3918).
+- [subset] Fix shaping behaviour when pruning empty mark sets (#3915, harfbuzz/harfbuzz#5499).
+- [cu2qu] Fixed ``dot()`` product of perpendicular vectors not always returning exactly 0.0
+  in all Python implementations (#3911)
+- [varLib.instancer] Implemented fully-instantiating ``avar2`` fonts (#3909).
+- [feaLib] Allow float values in ``VariableScalar``'s axis locations (#3906, #3907).
+- [cu2qu] Handle special case in ``calc_intersect`` for degenerate cubic curves where 3 to 4
+  control points are equal (#3904).
 
 4.59.1 (released 2025-08-14)
 ----------------------------

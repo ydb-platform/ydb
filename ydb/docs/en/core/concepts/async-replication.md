@@ -68,7 +68,7 @@ Replicas are created under the user account that was used to create the asynchro
 
 ### Initial Table Scan {#initial-scan}
 
-During the [initial table scan](cdc.md#initial-scan) the source data is exported to changefeeds. The target runs [consumers](topic.md#consumer) that read the source data from the changefeeds and write it to replicas.
+During the [initial table scan](cdc.md#initial-scan) the source data is exported to changefeeds. The target runs [consumers](datamodel/topic.md#consumer) that read the source data from the changefeeds and write it to replicas.
 
 You can get the progress of the initial table scan from the [description](../reference/ydb-cli/commands/scheme-describe.md) of the asynchronous replication instance.
 
@@ -162,5 +162,11 @@ When you drop an asynchronous replication instance:
 * The source tables are unlocked, and you can add and delete columns again.
 * Optionally, all replicas are deleted.
 * Asynchronous replication instance is deleted.
+
+{% note warning %}
+
+If asynchronous replication is dropped without prior [completion](#done) and replica objects are not deleted, they will remain available only for reading.
+
+{% endnote %}
 
 To drop an asynchronous replication instance, use the [DROP ASYNC REPLICATION](../yql/reference/syntax/drop-async-replication.md) YQL expression.

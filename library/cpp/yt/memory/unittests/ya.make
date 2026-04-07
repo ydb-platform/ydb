@@ -3,6 +3,7 @@ GTEST(unittester-library-memory)
 INCLUDE(${ARCADIA_ROOT}/library/cpp/yt/ya_cpp.make.inc)
 
 SRCS(
+    atomic_ut.cpp
     atomic_intrusive_ptr_ut.cpp
     chunked_memory_pool_ut.cpp
     chunked_memory_pool_allocator_ut.cpp
@@ -30,6 +31,7 @@ PEERDIR(
     library/cpp/int128
     library/cpp/yt/misc
     library/cpp/yt/memory
+    library/cpp/yt/threading
 )
 
 END()

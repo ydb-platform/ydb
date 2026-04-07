@@ -2,7 +2,7 @@
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
  *
- * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 1998-2026 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -313,7 +313,7 @@ ber_decode_int( const struct berval *bv, ber_int_t *num )
 
 		/* shift in the bytes */
 		for( i = 1; i < len; i++ ) {
-			netnum = (netnum << 8 ) | buf[i];
+			netnum = ((unsigned)netnum << 8 ) | buf[i];
 		}
 
 		*num = netnum;

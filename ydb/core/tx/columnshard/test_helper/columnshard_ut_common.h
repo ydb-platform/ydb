@@ -392,6 +392,16 @@ struct TTestSchema {
         return out;
     }
 
+    static TString CopyTableTxBody(ui64 srcPathId, ui64 dstPathId, ui32 version) {
+        NKikimrTxColumnShard::TSchemaTxBody tx;
+        tx.MutableCopyTable()->SetSrcPathId(srcPathId);
+        tx.MutableCopyTable()->SetDstPathId(dstPathId);
+        tx.MutableSeqNo()->SetRound(version);
+        TString out;
+        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
+        return out;
+    }
+
     static THashMap<TString, NColumnShard::NTiers::TTierConfig> BuildSnapshot(const TTableSpecials& specials);
 
     static TString CommitTxBody(ui64, const std::vector<ui64>& writeIds) {
@@ -547,6 +557,13 @@ public:
                     }
                 }
 
+                if constexpr (std::is_same<TData, NYdb::TUuidValue>::value) {
+                    if constexpr (std::is_same<T, arrow::FixedSizeBinaryType>::value) {
+                        Y_ABORT_UNLESS(typedBuilder.Append(data.Buf_.Bytes).ok());
+                        return true;
+                    }
+                }
+
                 Y_ABORT("Unknown type combination");
                 return false;
             }));
@@ -611,4 +628,59 @@ struct TestTableDescription {
 
 std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(
     TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema);
+    
+    
+template <class ArrowType>
+std::shared_ptr<arrow::Array> MakeArray(
+    const std::vector<typename arrow::TypeTraits<ArrowType>::CType>& values)
+{
+    using BuilderT = typename arrow::TypeTraits<ArrowType>::BuilderType;
+
+    BuilderT builder;
+    for (auto v : values) {
+        Y_ABORT_UNLESS(builder.Append(v).ok());
+    }
+
+    std::shared_ptr<arrow::Array> out;
+    Y_ABORT_UNLESS(builder.Finish(&out).ok());
+    return out;
+}
+
+template <class... ArrowTypes, size_t... Is>
+std::vector<std::shared_ptr<arrow::Field>> MakeFieldsImpl(
+    const std::array<std::string, sizeof...(ArrowTypes)>& names,
+    std::index_sequence<Is...>)
+{
+    return {
+        arrow::field(names[Is], arrow::TypeTraits<ArrowTypes>::type_singleton())...
+    };
+}
+
+template <class... ArrowTypes>
+std::vector<std::shared_ptr<arrow::Field>> MakeFields(
+    const std::array<std::string, sizeof...(ArrowTypes)>& names)
+{
+    return MakeFieldsImpl<ArrowTypes...>(names, std::index_sequence_for<ArrowTypes...>{});
+}
+
+template <class... ArrowTypes, class... Vecs>
+std::shared_ptr<arrow::RecordBatch> MakeTestBatch(
+    const std::array<std::string, sizeof...(ArrowTypes)>& names,
+    const Vecs&... cols)
+{
+    static_assert(sizeof...(ArrowTypes) == sizeof...(Vecs),
+                "Number of ArrowTypes must match number of columns");
+
+    std::vector<std::shared_ptr<arrow::Array>> arrays = {
+        MakeArray<ArrowTypes>(cols)...
+    };
+
+    const int64_t nrows = static_cast<int64_t>(std::get<0>(std::tuple<const Vecs&...>(cols...)).size());
+
+    auto fields = MakeFields<ArrowTypes...>(names);
+    auto schema = arrow::schema(std::move(fields));
+
+    return arrow::RecordBatch::Make(std::move(schema), nrows, std::move(arrays));
+}
+
 }   // namespace NKikimr::NColumnShard

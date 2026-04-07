@@ -4,6 +4,7 @@
 #include <util/digest/numeric.h>
 #include <util/generic/string.h>
 #include <memory>
+#include <utility>
 
 namespace NYql {
 
@@ -22,8 +23,7 @@ struct TQItemKey {
     size_t Hash() const {
         return CombineHashes(
             THash<TString>()(Component),
-            THash<TString>()(Label)
-        );
+            THash<TString>()(Label));
     }
 };
 
@@ -93,24 +93,39 @@ public:
 
 using IQStoragePtr = std::shared_ptr<IQStorage>;
 
+enum class EQPlayerCaptureMode {
+    None /* "none" */,
+    MetaOnly /* "meta" */,
+    Full /* "full" */,
+};
+
 class TQContext {
 public:
     TQContext()
-    {}
+    {
+    }
 
-    TQContext(IQReaderPtr reader)
-        : Reader_(reader)
-    {}
+    explicit TQContext(IQReaderPtr reader, EQPlayerCaptureMode captureMode = EQPlayerCaptureMode::MetaOnly)
+        : CaptureMode_(captureMode)
+        , Reader_(std::move(reader))
+    {
+    }
 
-    TQContext(IQWriterPtr writer)
-        : Writer_(writer)
-    {}
+    explicit TQContext(IQWriterPtr writer, EQPlayerCaptureMode captureMode = EQPlayerCaptureMode::MetaOnly)
+        : CaptureMode_(captureMode)
+        , Writer_(std::move(writer))
+    {
+    }
 
     TQContext(const TQContext&) = default;
     TQContext& operator=(const TQContext&) = default;
 
-    operator bool() const {
+    explicit operator bool() const {
         return CanRead() || CanWrite();
+    }
+
+    EQPlayerCaptureMode CaptureMode() const {
+        return CaptureMode_;
     }
 
     bool CanRead() const {
@@ -130,12 +145,14 @@ public:
     }
 
 private:
+    EQPlayerCaptureMode CaptureMode_ = EQPlayerCaptureMode::None;
+
     IQReaderPtr Reader_;
     IQWriterPtr Writer_;
 };
 
 IQWriterPtr MakeCloseAwareWriterDecorator(IQWriterPtr&& rhs);
-}
+} // namespace NYql
 
 template <>
 struct THash<NYql::TQItemKey> {

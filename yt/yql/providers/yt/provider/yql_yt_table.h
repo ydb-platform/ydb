@@ -83,6 +83,7 @@ struct TYtTableMetaInfo: public TThrRefBase {
     bool YqlCompatibleScheme = false;
     bool InferredScheme = false;
     bool IsDynamic = false;
+    bool HasRLS = false;
     TString SqlView;
     ui16 SqlViewSyntaxVersion = 1;
 
@@ -158,6 +159,7 @@ struct TYtOutTableInfo: public TYtTableBaseInfo {
         IsTemp = true;
     }
     TYtOutTableInfo(const TStructExprType* type, ui64 nativeYtTypeFlags, const TMaybe<TColumnOrder>& columnOrder = {});
+    TYtOutTableInfo(const TYqlRowSpecInfo::TPtr& rowSpec);
     TYtOutTableInfo(NNodes::TExprBase node) {
         Parse(node);
         IsTemp = true;
@@ -317,6 +319,7 @@ struct TYtPathInfo: public TThrRefBase {
     }
 
     static bool Validate(const TExprNode& node, TExprContext& ctx);
+    static bool RewriteWithQLFilter(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
     void Parse(NNodes::TExprBase node);
     NNodes::TExprBase ToExprNode(TExprContext& ctx, const TPositionHandle& pos, NNodes::TExprBase table) const;
     void FillRichYPath(NYT::TRichYPath& path) const;
@@ -346,6 +349,7 @@ struct TYtPathInfo: public TThrRefBase {
     TYtColumnsInfo::TPtr Columns;
     TYtRangesInfo::TPtr Ranges;
     TYtTableStatInfo::TPtr Stat;
+    TExprNode::TPtr QLFilter;
     TMaybe<TString> AdditionalAttributes;
 private:
     const NCommon::TStructMemberMapper& GetColumnMapper();

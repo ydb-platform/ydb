@@ -1,8 +1,9 @@
 #include "service_actor.h"
+#include "util.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/control/lib/dynamic_control_board_impl.h>
 #include <ydb/core/control/lib/immediate_control_board_wrapper.h>
-#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -18,13 +19,6 @@ class TPDiskReaderLoadTestActor : public TActorBootstrapped<TPDiskReaderLoadTest
         ui32 NumSlots;
         ui32 SlotSizeBlocks;
         ui32 Weight;
-        ui64 AccumWeight;
-
-        struct TFindByWeight {
-            bool operator ()(ui64 left, const TChunkInfo& right) const {
-                return left < right.AccumWeight;
-            }
-        };
     };
 
     struct TParts : public NPDisk::TEvChunkWrite::IParts {
@@ -74,6 +68,7 @@ class TPDiskReaderLoadTestActor : public TActorBootstrapped<TPDiskReaderLoadTest
     const TActorId Parent;
     ui64 Tag;
     ui32 DurationSeconds;
+    TDuration DelayBeforeMeasurements;
     ui32 IntervalMsMin = 0;
     ui32 IntervalMsMax = 0;
     TControlWrapper MaxInFlight;
@@ -90,6 +85,7 @@ class TPDiskReaderLoadTestActor : public TActorBootstrapped<TPDiskReaderLoadTest
     ui64 PDiskGuid;
     TIntrusivePtr<TPDiskParams> PDiskParams;
     TVector<TChunkInfo> Chunks;
+    TWeightedIndices ChunksByWeight;
     TReallyFastRng32 Rng;
     TString DataBuffer;
     ui64 Lsn = 1;
@@ -136,6 +132,7 @@ public:
 
         VERIFY_PARAM(DurationSeconds);
         DurationSeconds = cmd.GetDurationSeconds();
+        DelayBeforeMeasurements = TDuration::Seconds(cmd.GetDelayBeforeMeasurementsSeconds());
         Y_ASSERT(DurationSeconds > DelayBeforeMeasurements.Seconds());
         Report->Duration = TDuration::Seconds(DurationSeconds);
 
@@ -167,8 +164,8 @@ public:
                     chunk.GetSlots(),
                     0,
                     chunk.GetWeight(),
-                    0,
                 });
+            ChunksByWeight.AddWeight(chunk.GetWeight());
         }
 
         // Monitoring initialization
@@ -199,9 +196,8 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         Become(&TPDiskReaderLoadTestActor::StateFunc);
-        ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill());
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
-        AppData(ctx)->Icb->RegisterLocalControl(MaxInFlight, Sprintf("PDiskReadLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
+        AppData(ctx)->Dcb->RegisterLocalControl(MaxInFlight, Sprintf("PDiskReadLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
         if (IsWardenlessTest) {
             ErrorReason = "Still waiting for YardInitResult";
             SendRequest(ctx, std::make_unique<NPDisk::TEvYardInit>(OwnerRound, VDiskId, PDiskGuid));
@@ -290,6 +286,7 @@ public:
         if (ChunkWrite_OK == Chunks.size()) {
             TestStartTime = TAppData::TimeProvider->Now();
             MeasurementStartTime = TestStartTime + DelayBeforeMeasurements;
+            ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill());
 
             SendReadRequests(ctx);
         }
@@ -385,19 +382,10 @@ public:
                 IntervalMs = 0; // To enforce regeneration of new random interval
             }
 
-            // Prepare to send request
-            ui64 accumWeight = 0;
-            for (TChunkInfo& chunkInfo : Chunks) {
-                chunkInfo.AccumWeight = accumWeight;
-                accumWeight += chunkInfo.Weight;
-            }
-            if (!accumWeight) {
-                break;
-            }
-
-            ui64 w = (ui64(Rng()) << 32 | Rng()) % accumWeight;
-            auto it = std::prev(std::upper_bound(Chunks.begin(), Chunks.end(), w, TChunkInfo::TFindByWeight()));
-            TChunkInfo& chunkInfo = *it;
+            Y_ABORT_UNLESS(!ChunksByWeight.Empty());
+            const ui32 selectedChunkIdx = ChunksByWeight.GetRandomIndex();
+            Y_ABORT_UNLESS(selectedChunkIdx < Chunks.size());
+            TChunkInfo& chunkInfo = Chunks[selectedChunkIdx];
 
             TChunkIdx chunkIdx = chunkInfo.Idx;
             if (Sequential) {

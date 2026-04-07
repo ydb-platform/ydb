@@ -14,7 +14,7 @@ TOperationIdOrAlias::TOperationIdOrAlias(TString alias)
     : Payload(std::move(alias))
 { }
 
-bool TOperationIdOrAlias::operator ==(const TOperationIdOrAlias& other) const
+bool TOperationIdOrAlias::operator==(const TOperationIdOrAlias& other) const
 {
     return Payload == other.Payload;
 }

@@ -2,6 +2,7 @@
 #include <ydb/core/tablet_flat/flat_scan_spent.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_coroutine.h>
+#include <ydb/core/split/split.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tablet_flat/flat_stat_table.h>
 #include <ydb/core/tablet_flat/flat_bio_stats.h>
@@ -35,7 +36,7 @@ struct TTableStatsCoroBuilderArgs {
 
 class TTableStatsCoroBuilder : public TActorCoroImpl, private IPages, TTableStatsCoroBuilderArgs {
 private:
-    using ECode = TDataShard::TEvPrivate::TEvTableStatsError::ECode;
+    using ECode = TDataShard::TEvPrivate::TEvBuildTableStatsError::ECode;
 
     static constexpr TDuration MaxCoroutineExecutionTime = TDuration::MilliSeconds(5);
 
@@ -47,10 +48,6 @@ private:
         TExTableStatsError(ECode code, const TString& msg)
             : Code(code)
             , Message(msg)
-        {}
-
-        TExTableStatsError(ECode code)
-            : TExTableStatsError(code, "")
         {}
 
         ECode Code;
@@ -69,11 +66,9 @@ public:
         } catch (const TDtorException&) {
             return; // coroutine terminated
         } catch (const TExTableStatsError& ex) {
-            Send(ReplyTo, new TDataShard::TEvPrivate::TEvTableStatsError(TableId, ex.Code, ex.Message));
-        } catch (...) {
-            Send(ReplyTo, new TDataShard::TEvPrivate::TEvTableStatsError(TableId, ECode::UNKNOWN));
-
-            Y_DEBUG_ABORT("unhandled exception");
+            Send(ReplyTo, new TDataShard::TEvPrivate::TEvBuildTableStatsError(TableId, ex.Code, ex.Message));
+        } catch (const std::exception& exc) {
+            Send(ReplyTo, new TDataShard::TEvPrivate::TEvBuildTableStatsError(TableId, std::current_exception(), exc.what()));
         }
 
         Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvNotifyActorDied);
@@ -105,22 +100,16 @@ public:
         PagesSize += info->GetPageSize(pageId);
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(NSharedCache::EPriority::Bkgr, info->PageCollection, { pageId }));
 
-        Spent->Alter(false); // pause measurement
-        ReleaseResources();
-
+        Interrupt();
         auto ev = WaitForSpecificEvent<NSharedCache::TEvResult>(&TTableStatsCoroBuilder::ProcessUnexpectedEvent);
-        auto msg = ev->Get();
-
-        if (msg->Status != NKikimrProto::OK) {
+        if (auto status = ev->Get()->Status; status != NKikimrProto::OK) {
             LOG_ERROR_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Failed to build at datashard "
-                << TabletId << ", for tableId " << TableId << " requested pages but got " << msg->Status);
-            throw TExTableStatsError(ECode::FETCH_PAGE_FAILED, NKikimrProto::EReplyStatus_Name(msg->Status));
+                << TabletId << ", for tableId " << TableId << " requested pages but got " << status);
+            throw TExTableStatsError(ECode::FETCH_PAGE_FAILED, NKikimrProto::EReplyStatus_Name(status));
         }
+        Resume();
 
-        ObtainResources();
-        Spent->Alter(true); // resume measurement
-        
-        for (auto& loaded : msg->Pages) {
+        for (auto& loaded : ev->Get()->Pages) {
             partPages.emplace(pageId, TPinnedPageRef(loaded.Page).GetData());
             PageRefs.emplace_back(std::move(loaded.Page));
         }
@@ -135,7 +124,7 @@ private:
     void RunImpl() {
         ObtainResources();
 
-        auto ev = MakeHolder<TDataShard::TEvPrivate::TEvAsyncTableStats>();
+        auto ev = MakeHolder<TDataShard::TEvPrivate::TEvBuildTableStatsResult>();
         ev->TableId = TableId;
         ev->StatsUpdateTime = StatsUpdateTime;
         ev->PartCount = Subset->Flatten.size() + Subset->ColdParts.size();
@@ -148,25 +137,23 @@ private:
 
         Subset->ColdParts.clear(); // stats won't include cold parts, if any
         Spent = new TSpent(TAppData::TimeProvider.Get());
+        CoroutineDeadline = GetCycleCountFast() + DurationToCycles(MaxCoroutineExecutionTime);
 
         BuildStats(*Subset, ev->Stats, RowCountResolution, DataSizeResolution, HistogramBucketsCount, this, [this](){
             const auto now = GetCycleCountFast();
-    
+
             if (now > CoroutineDeadline) {
-                Spent->Alter(false); // pause measurement
-                ReleaseResources();
-
                 Send(new IEventHandle(EvResume, 0, SelfActorId, {}, nullptr, 0));
-                WaitForSpecificEvent([](IEventHandle& ev) { 
-                    return ev.Type == EvResume; 
-                }, &TTableStatsCoroBuilder::ProcessUnexpectedEvent);
 
-                ObtainResources();
-                Spent->Alter(true); // resume measurement
+                Interrupt();
+                WaitForSpecificEvent([](IEventHandle& ev) {
+                    return ev.Type == EvResume;
+                }, &TTableStatsCoroBuilder::ProcessUnexpectedEvent);
+                Resume();
             }
         }, TStringBuilder() << "Building stats at datashard " << TabletId << ", for tableId " << TableId << ": ");
-        
-        Y_DEBUG_ABORT_UNLESS(IndexSize == ev->Stats.IndexSize.Size);
+
+        Y_ASSERT(IndexSize == ev->Stats.IndexSize.Size);
 
         LOG_INFO_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Stats at datashard " << TabletId << ", for tableId " << TableId << ": "
             << ev->Stats.ToString()
@@ -174,25 +161,15 @@ private:
             << (ev->PartOwners.size() > 1 || ev->PartOwners.size() == 1 && *ev->PartOwners.begin() != TabletId ? ", with borrowed parts" : "")
             << (ev->HasSchemaChanges ? ", with schema changes" : "")
             << ", LoadedSize " << PagesSize << ", " << NFmt::Do(*Spent));
-        
-        if (const auto& stats = ev->Stats; stats.DataSize.Size > 10_MB && stats.RowCount > 100
-            && Min(stats.RowCountHistogram.size(), stats.DataSizeHistogram.size()) < HistogramBucketsCount / 2)
-        {
-            LOG_ERROR_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Stats at datashard " << TabletId << ", for tableId " << TableId
-                << " don't have enough keys: "
-                << ev->Stats.ToString());
-        }
 
         Send(ReplyTo, ev.Release());
-
-        ReleaseResources();
     }
 
     void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) {
         switch (ev->GetTypeRewrite()) {
             case TEvResourceBroker::EvTaskOperationError: {
                 const auto* msg = ev->CastAsLocal<TEvResourceBroker::TEvTaskOperationError>();
-                LOG_ERROR_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Failed to allocate resource" 
+                LOG_ERROR_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Failed to allocate resource"
                     << " error '" << msg->Status.Message << "'"
                     << " at datashard " << TabletId << ", for tableId " << TableId);
                 throw TExTableStatsError(ECode::RESOURCE_ALLOCATION_FAILED, msg->Status.Message);
@@ -209,12 +186,11 @@ private:
                 break;
 
             case TEvents::TSystem::Poison:
-                throw TExTableStatsError(ECode::ACTOR_DIED);
+                throw TExTableStatsError(ECode::ACTOR_DIED, "Poisoned");
 
-            default: {
-                const auto typeName = ev->GetTypeName();
-                Y_DEBUG_ABORT("unexpected event Type: %s", typeName.c_str());
-            }
+            default:
+                throw TExTableStatsError(ECode::UNHANDLED_EVENT, TStringBuilder() <<
+                    "Unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
         }
     }
 
@@ -232,12 +208,15 @@ private:
         auto msg = ev->Get();
         Y_ENSURE(!msg->Cookie.Get(), "Unexpected cookie in TEvResourceAllocated");
         Y_ENSURE(msg->TaskId == 1, "Unexpected task id in TEvResourceAllocated");
-
-        CoroutineDeadline = GetCycleCountFast() + DurationToCycles(MaxCoroutineExecutionTime);
     }
 
-    void ReleaseResources() {
-        Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvFinishTask(/* task id */ 1, /* cancelled */ false));
+    void Interrupt() {
+        Spent->Alter(false); // pause measurement
+    }
+
+    void Resume() {
+        Spent->Alter(true); // resume measurement
+        CoroutineDeadline = GetCycleCountFast() + DurationToCycles(MaxCoroutineExecutionTime);
     }
 
     THashMap<const TPart*, THashMap<TPageId, TSharedData>> Pages;
@@ -266,15 +245,74 @@ public:
         ui64 tableId = Ev->Get()->Record.GetTableId();
 
         Result = new TEvDataShard::TEvGetTableStatsResult(Self->TabletID(), Self->PathOwnerId, tableId);
+        Result->Record.SetFollowerId(Self->FollowerId());
 
-        if (!Self->TableInfos.contains(tableId))
+        const auto appData = AppData(ctx);
+        const bool dropHistogram = appData->FeatureFlags.GetEnableDataShardSplitHistogramOmission();
+        const bool selectSplitKey = dropHistogram || appData->FeatureFlags.GetEnableDataShardSplitKeySelection();
+        const bool sortHistogram = selectSplitKey || appData->FeatureFlags.GetEnableDataShardSplitHistogramSorting();
+
+        // Set split protocol version before anything else.
+        // Follower wouldn't know what table it serves until the first read.
+        FillSplitProtocolVersion(Result->Record.MutableTableStats(), sortHistogram, selectSplitKey, dropHistogram);
+
+        const auto tableInfoIt = Self->TableInfos.find(tableId);
+
+        if (tableInfoIt == Self->TableInfos.end()) {
             return true;
-
-        if (Ev->Get()->Record.GetCollectKeySample()) {
-            Self->EnableKeyAccessSampling(ctx, AppData(ctx)->TimeProvider->Now() + TDuration::Seconds(60));
         }
 
-        const TUserTable& tableInfo = *Self->TableInfos[tableId];
+        const TUserTable& tableInfo = *(tableInfoIt->second);
+
+        // Return the key access sample if it has been collected no more
+        // than 30 seconds ago or it has been active for at least 5 seconds
+        //
+        // NOTE: This must be done before calling EnableKeyAccessSampling()
+        //       because this function resets StopKeyAccessSamplingAt and clears
+        //       the current key access data (if available)
+        const auto currentTime = appData->TimeProvider->Now();
+
+        const TDuration sampleMinCollection = TDuration::Seconds(
+            appData->DataShardConfig.GetKeyAccessSampleCollectionMinIntervalSeconds()
+        );
+
+        const TDuration sampleMaxCollection = TDuration::Seconds(
+            appData->DataShardConfig.GetKeyAccessSampleCollectionMaxIntervalSeconds()
+        );
+
+        const TDuration sampleValidity = TDuration::Seconds(
+            appData->DataShardConfig.GetKeyAccessSampleValidityIntervalSeconds()
+        );
+
+        bool returnKeyAccessSample = false;
+
+        if (Self->CurrentKeySampler == Self->EnabledKeySampler) {
+            // Key access collection is active
+            if (Self->StartedKeyAccessSamplingAt + sampleMinCollection <= currentTime) {
+                // The key collection has been active for at least the min required time
+                returnKeyAccessSample = true;
+            }
+        } else {
+            // Key access collection is not active
+            if (Self->StopKeyAccessSamplingAt + sampleValidity >= currentTime) {
+                // There is a valid key access data not older than some min age
+                returnKeyAccessSample = true;
+            }
+        }
+
+        if (returnKeyAccessSample) {
+            // NOTE: It is important to return the key access data even if the caller
+            //       did not set the collectKeySample flag. SchemeShard may initiate
+            //       the split-by-load operation (and use the key access data)
+            //       even if it did not want to do the split-by-load when sending
+            //       the EvGetTableStats message
+            FillSplitByLoad(Result->Record.MutableTableStats(), tableInfo, sortHistogram, selectSplitKey, dropHistogram);
+        }
+
+        // Start collecting key samples or extend the duration of the active collection
+        if (Ev->Get()->Record.GetCollectKeySample()) {
+            Self->EnableKeyAccessSampling(ctx, currentTime + sampleMaxCollection);
+        }
 
         // Fill stats with current mem table size:
         auto memSize = txc.DB.GetTableMemSize(tableInfo.LocalTid);
@@ -292,38 +330,42 @@ public:
         tableInfo.Stats.RowCountResolution = Ev->Get()->Record.GetRowCountResolution();
         tableInfo.Stats.HistogramBucketsCount = Ev->Get()->Record.GetHistogramBucketsCount();
 
-        // Check if first stats update has been completed:
+        // Check if first stats update has been completed (happens only for leaders)
         bool ready = (tableInfo.Stats.StatsUpdateTime != TInstant());
         Result->Record.SetFullStatsReady(ready);
-        if (!ready) {
-            return true;
+
+        if (ready) {
+            const TStats& stats = tableInfo.Stats.DataStats;
+            const auto totalDataSize = stats.DataSize.Size + memSize;
+            Result->Record.MutableTableStats()->SetIndexSize(stats.IndexSize.Size);
+            Result->Record.MutableTableStats()->SetByKeyFilterSize(stats.ByKeyFilterSize);
+            Result->Record.MutableTableStats()->SetDataSize(totalDataSize);
+            Result->Record.MutableTableStats()->SetRowCount(stats.RowCount + memRowCount);
+            FillHistogram(stats.RowCountHistogram, *Result->Record.MutableTableStats()->MutableRowCountHistogram());
+
+            FillSplitBySize(Result->Record.MutableTableStats(), tableInfo, totalDataSize, selectSplitKey, dropHistogram);
+
+            Result->Record.MutableTableStats()->SetPartCount(tableInfo.Stats.PartCount);
+            Result->Record.MutableTableStats()->SetSearchHeight(tableInfo.Stats.SearchHeight);
+            Result->Record.MutableTableStats()->SetHasSchemaChanges(tableInfo.Stats.HasSchemaChanges);
+            Result->Record.MutableTableStats()->SetLastFullCompactionTs(tableInfo.Stats.LastFullCompaction.Seconds());
+            Result->Record.MutableTableStats()->SetHasLoanedParts(Self->Executor()->HasLoanedParts());
+
+            Result->Record.SetShardState(Self->State);
+            for (const auto& pi : tableInfo.Stats.PartOwners) {
+                Result->Record.AddUserTablePartOwners(pi);
+            }
+
+            for (const auto& pi : Self->SysTablesPartOwners) {
+                Result->Record.AddSysTablesPartOwners(pi);
+            }
         }
 
-        const TStats& stats = tableInfo.Stats.DataStats;
-        Result->Record.MutableTableStats()->SetIndexSize(stats.IndexSize.Size);
-        Result->Record.MutableTableStats()->SetByKeyFilterSize(stats.ByKeyFilterSize);
-        Result->Record.MutableTableStats()->SetDataSize(stats.DataSize.Size + memSize);
-        Result->Record.MutableTableStats()->SetRowCount(stats.RowCount + memRowCount);
-        FillHistogram(stats.DataSizeHistogram, *Result->Record.MutableTableStats()->MutableDataSizeHistogram());
-        FillHistogram(stats.RowCountHistogram, *Result->Record.MutableTableStats()->MutableRowCountHistogram());
-        // Fill key access sample if it was collected not too long ago:
-        if (Self->StopKeyAccessSamplingAt + TDuration::Seconds(30) >= AppData(ctx)->TimeProvider->Now()) {
-            FillKeyAccessSample(tableInfo.Stats.AccessStats, *Result->Record.MutableTableStats()->MutableKeyAccessSample());
-        }
+        // Also return back the CPU usage data
+        auto* resourceMetrics = Self->Executor()->GetResourceMetrics();
 
-        Result->Record.MutableTableStats()->SetPartCount(tableInfo.Stats.PartCount);
-        Result->Record.MutableTableStats()->SetSearchHeight(tableInfo.Stats.SearchHeight);
-        Result->Record.MutableTableStats()->SetHasSchemaChanges(tableInfo.Stats.HasSchemaChanges);
-        Result->Record.MutableTableStats()->SetLastFullCompactionTs(tableInfo.Stats.LastFullCompaction.Seconds());
-        Result->Record.MutableTableStats()->SetHasLoanedParts(Self->Executor()->HasLoanedParts());
-
-        Result->Record.SetShardState(Self->State);
-        for (const auto& pi : tableInfo.Stats.PartOwners) {
-            Result->Record.AddUserTablePartOwners(pi);
-        }
-
-        for (const auto& pi : Self->SysTablesPartOwners) {
-            Result->Record.AddSysTablesPartOwners(pi);
+        if (resourceMetrics != nullptr) {
+            resourceMetrics->Fill(*(Result->Record.MutableTabletMetrics()));
         }
 
         return true;
@@ -342,11 +384,73 @@ private:
         }
     }
 
-    static void FillKeyAccessSample(const TKeyAccessSample& s, NKikimrTableStats::THistogram& pb) {
-        for (const auto& k : s.GetSample()) {
-            auto bucket = pb.AddBuckets();
-            bucket->SetKey(k.first);
-            bucket->SetValue(1);
+    static void FillSplitProtocolVersion(NKikimrTableStats::TTableStats* pb, bool sortHistogram, bool selectSplitKey, bool dropHistogram) {
+        const ui32 protocolVersion = [&]() {
+            if (dropHistogram) {
+                return 3;
+            } else if (selectSplitKey) {
+                return 2;
+            } else if (sortHistogram) {
+                return 1;
+            } else {
+                return 0;
+            }
+        }();
+        pb->SetSplitProtocolVersion(protocolVersion);
+    }
+
+    static void FillSplitBySize(NKikimrTableStats::TTableStats* pb, const TUserTable& tableInfo, ui64 totalDataSize, bool selectSplitKey, bool dropHistogram) {
+        // Fill SplitBySizeSuggestedKey.
+        if (selectSplitKey) {
+            const auto& dataSizeHist = tableInfo.Stats.DataStats.DataSizeHistogram;
+            const auto splitBoundary = NSplitMerge::SelectShortestMedianKeyPrefix(dataSizeHist, totalDataSize, tableInfo.KeyColumnTypes);
+            pb->SetSplitBySizeSuggestedKey(TSerializedCellVec::Serialize(splitBoundary.GetCells()));
+        }
+        // Fill DataSizeHistogram.
+        if (!dropHistogram) {
+            const auto& dataSizeHist = tableInfo.Stats.DataStats.DataSizeHistogram;
+            FillHistogram(dataSizeHist, *pb->MutableDataSizeHistogram());
+        }
+    }
+
+    static void FillSplitByLoad(NKikimrTableStats::TTableStats* pb, const TUserTable& tableInfo, bool sortHistogram, bool selectSplitKey, bool dropHistogram) {
+        const auto& sample = tableInfo.Stats.AccessStats.GetSample();
+
+        // Fill nothing if there is no sample yet
+        if (sample.empty()) {
+            return;
+        }
+
+        NSplitMerge::TKeyAccessHistogram keysHist;
+        keysHist.reserve(sample.size());
+        for (const auto& [key, _] : sample) {
+            keysHist.emplace_back(std::make_pair(TSerializedCellVec(key), 1));
+        }
+
+        // Convert sample to a histogram with sorted, deduplicated entries with accumulated weights.
+        // Selection of split boundary also requires this, regardless of sortHistogram.
+        if (sortHistogram || selectSplitKey) {
+            NSplitMerge::MakeKeyAccessHistogram(keysHist, tableInfo.KeyColumnTypes);
+        }
+
+        // Fill KeyAccessSample
+        // NOTE: fill it before keyHist is converted to cumulative histogram
+        if (!dropHistogram) {
+            auto* keyAccessSample = pb->MutableKeyAccessSample();
+            for (const auto& [key, value] : keysHist) {
+                auto bucket = keyAccessSample->AddBuckets();
+                bucket->SetKey(TSerializedCellVec::Serialize(key.GetCells()));
+                bucket->SetValue(value);
+            }
+        }
+
+        // Select split boundary (key prefix) on top of that.
+        // Fill SplitByLoadSuggestedKey.
+        if (selectSplitKey) {
+            NSplitMerge::ConvertToCumulativeHistogram(keysHist);
+            const auto splitBoundary = NSplitMerge::SelectShortestMedianKeyPrefix(keysHist, tableInfo.KeyColumnTypes);
+            // NOTE: Field will be set to empty cellvec if split boundary cannot be found
+            pb->SetSplitByLoadSuggestedKey(TSerializedCellVec::Serialize(splitBoundary.GetCells()));
         }
     }
 };
@@ -365,7 +469,7 @@ void ListTableNames(const TTables& tables, TStringBuilder& names) {
     }
 }
 
-void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvPrivate::TEvBuildTableStatsResult::TPtr& ev, const TActorContext& ctx) {
     Actors.erase(ev->Sender);
 
     ui64 tableId = ev->Get()->TableId;
@@ -416,14 +520,18 @@ void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorCo
     }
 }
 
-void TDataShard::Handle(TEvPrivate::TEvTableStatsError::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvPrivate::TEvBuildTableStatsError::TPtr& ev, const TActorContext& ctx) {
     Actors.erase(ev->Sender);
 
     auto msg = ev->Get();
 
-    LOG_ERROR_S(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Stats rebuilt error '" << msg->Message 
-        << "', code: " << ui32(msg->Code) 
+    LOG_ERROR_S(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Stats rebuilt error '" << msg->Message
+        << "', code: " << ui32(msg->Code)
         << " at datashard " << TabletID() << ", for tableId " << msg->TableId);
+
+    if (msg->Exception) {
+        std::rethrow_exception(msg->Exception);
+    }
 
     auto it = TableInfos.find(msg->TableId);
     if (it != TableInfos.end()) {
@@ -435,7 +543,6 @@ void TDataShard::Handle(TEvPrivate::TEvTableStatsError::TPtr& ev, const TActorCo
 class TDataShard::TTxInitiateStatsUpdate : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvGetTableStats::TPtr Ev;
-    TAutoPtr<TEvDataShard::TEvGetTableStatsResult> Result;
 
 public:
     TTxInitiateStatsUpdate(TDataShard* ds)
@@ -596,13 +703,31 @@ public:
     }
 };
 
+TDuration TDataShard::GetStatsReportInterval(const TAppData& appData) const {
+    const auto& userTables = GetUserTables();
+    const bool isBackup = !userTables.empty() && std::all_of(userTables.begin(), userTables.end(),
+        [](const auto& kv) { return kv.second->IsBackup; });
+
+    if (isBackup) {
+        // Clamp the interval for backup tables to the value for ordinary tables, as it
+        // makes no sense for the latter to be longer than the former.
+        auto interval = std::max(
+            appData.DataShardConfig.GetBackupTableStatsReportIntervalSeconds(),
+            appData.DataShardConfig.GetStatsReportIntervalSeconds());
+        return TDuration::Seconds(interval);
+    } else {
+        return TDuration::Seconds(appData.DataShardConfig.GetStatsReportIntervalSeconds());
+    }
+}
+
 void TDataShard::UpdateTableStats(const TActorContext &ctx) {
     if (StatisticsDisabled)
         return;
 
-    TInstant now = AppData(ctx)->TimeProvider->Now();
+    auto* appData = AppData(ctx);
+    TInstant now = appData->TimeProvider->Now();
 
-    if (LastDbStatsUpdateTime + gDbStatsReportInterval > now)
+    if (LastDbStatsUpdateTime + GetStatsReportInterval(*appData) > now)
         return;
 
     if (State != TShardState::Ready && State != TShardState::Readonly)

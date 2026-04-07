@@ -230,7 +230,7 @@ JsonEnum2Field(const NJson::NOrderedJson::TJsonValue& json,
         const auto value = json.GetInteger();
         enumFieldValue = enumField->FindValueByNumber(value);
         if (!enumFieldValue) {
-            ythrow yexception() << "Invalid integer value of JSON enum field: " << value << ".";
+            ythrow yexception() << "Invalid integer value of JSON enum field: " << value;
         }
     } else if (json.IsString()) {
         const auto& value = json.GetString();
@@ -246,7 +246,7 @@ JsonEnum2Field(const NJson::NOrderedJson::TJsonValue& json,
             }
         }
         if (!enumFieldValue) {
-            ythrow yexception() << "Invalid string value of JSON enum field: " << TStringBuf(value).Head(100) << ".";
+            ythrow yexception() << "Invalid string value of JSON enum field: " << TStringBuf(value).Head(100);
         }
     } else {
         ythrow yexception() << "Invalid type of JSON enum field: not an integer/string.";
@@ -280,7 +280,7 @@ Json2SingleField(const NJson::NOrderedJson::TJsonValue& json,
         if (auto fieldJsonType = fieldJson.GetType(); fieldJsonType == NJson::NOrderedJson::JSON_UNDEFINED || fieldJsonType == NJson::NOrderedJson::JSON_NULL) {
             if (field.is_required() && !field.has_default_value() && !reflection->HasField(proto, &field) && config.CheckRequiredFields) {
                 ythrow yexception() << "JSON has no field for required field "
-                                    << name << ".";
+                                    << name;
             }
             return;
         }
@@ -419,7 +419,7 @@ Json2RepeatedFieldValue(const NJson::NOrderedJson::TJsonValue& jsonValue,
 
         default:
             ythrow yexception() << "Unknown protobuf field type: "
-                                << static_cast<int>(field.cpp_type()) << ".";
+                                << static_cast<int>(field.cpp_type());
     }
 }
 

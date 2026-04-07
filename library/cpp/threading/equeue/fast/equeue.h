@@ -34,6 +34,8 @@ public:
 
         Queue_.Reset(new NThreading::TBoundedQueue<IObjectInQueue*>(FastClp2(maxQueueSize + threadCount))); //threadCount is for stop events
         MaxQueueSize_ = maxQueueSize;
+        CurrentMaxQueueSize_ = maxQueueSize;
+        ActiveThreadCount_ = threadCount;
 
         try {
             for (size_t i = 0; i < threadCount; ++i) {
@@ -48,8 +50,8 @@ public:
     }
 
     size_t ObjectCount() const {
-        //GuardCount_ can be temporary incremented above real object count in queue
-        return Min(GuardCount_.load(), MaxQueueSize_);
+        //May return extra +1 for real object count if near CurrentMaxQueueSize_
+        return GuardCount_.load();
     }
 
     bool Add(IObjectInQueue* obj) override Y_WARN_UNUSED_RESULT {
@@ -57,7 +59,7 @@ public:
             return false;
         }
 
-        if (GuardCount_.fetch_add(1) >= MaxQueueSize_) {
+        if (GuardCount_.fetch_add(1) >= CurrentMaxQueueSize_) {
             GuardCount_.fetch_sub(1);
             return false;
         }
@@ -66,7 +68,7 @@ public:
 
         if (!Queue_->Enqueue(obj)) {
             //Simultaneous Dequeue calls can return not in exact fifo order of items,
-            //so there can be GuardCount_ < MaxQueueSize_ but Enqueue will fail because of
+            //so there can be GuardCount_ < CurrentMaxQueueSize_ but Enqueue will fail because of
             //the oldest enqueued item is not actually dequeued and ring buffer can't proceed.
             GuardCount_.fetch_sub(1);
             QueueSize_.fetch_sub(1);
@@ -104,9 +106,14 @@ public:
 
     void DoExecute() override {
         TThread::SetCurrentThreadName(Params.ThreadName_.c_str());
+        const size_t thisThreadId = ThreadCount_++;
 
         while (true) {
             IObjectInQueue* job = nullptr;
+
+            while (thisThreadId >= ActiveThreadCount_ && !Stopped_) {
+                Sleep(TDuration::Seconds(1));
+            }
 
             Event_.Await([&]() {
                 return Queue_->Dequeue(job);
@@ -137,9 +144,22 @@ public:
             }
         }
     }
+
+    void SetCurrentMaxQueueSize(size_t v) {
+        Y_ENSURE(v <= MaxQueueSize_);
+        CurrentMaxQueueSize_ = v;
+    }
+
+    void SetActiveThreadCount(size_t v) {
+        Y_ENSURE(v <= ThreadCount_);
+        ActiveThreadCount_ = v;
+    }
 private:
     std::atomic<bool> Stopped_ = false;
     size_t MaxQueueSize_ = 0;
+    std::atomic<size_t> CurrentMaxQueueSize_ = 0;
+    std::atomic<size_t> ThreadCount_ = 0;
+    std::atomic<size_t> ActiveThreadCount_ = 0;
 
     alignas(64) std::atomic<size_t> GuardCount_ = 0;
     alignas(64) std::atomic<size_t> QueueSize_ = 0;

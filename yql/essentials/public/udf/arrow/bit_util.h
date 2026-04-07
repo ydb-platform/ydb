@@ -5,8 +5,7 @@
 
 #include <array>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 inline ui8* CompressAsSparseBitmap(const ui8* src, size_t srcOffset, const ui8* sparseBitmap, ui8* dst, size_t count) {
     while (count--) {
@@ -48,7 +47,7 @@ inline ui8* DecompressToSparseBitmap(ui8* dstSparse, const ui8* src, size_t srcO
     return dstSparse;
 }
 
-template<bool Negate>
+template <bool Negate>
 inline void CompressSparseImpl(ui8* dst, const ui8* srcSparse, size_t len) {
     while (len >= 8) {
         ui8 result = 0;
@@ -88,7 +87,7 @@ inline void CompressSparseBitmapNegate(ui8* dst, const ui8* srcSparse, size_t le
     return CompressSparseImpl<true>(dst, srcSparse, len);
 }
 
-template<typename T>
+template <typename T>
 inline T* CompressArray(const T* src, const ui8* sparseBitmap, T* dst, size_t count) {
     while (count--) {
         *dst = *src++;
@@ -206,5 +205,4 @@ Y_FORCE_INLINE std::array<ui64, 8> BitToByteExpand(ui8 x) {
     return output;
 }
 
-} // namespace NUdf
-}
+} // namespace NYql::NUdf

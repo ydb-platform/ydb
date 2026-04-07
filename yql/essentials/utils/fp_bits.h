@@ -98,13 +98,13 @@ struct TCanonizeFpBitsImpl<T, false> {
         using TNumTraits = std::numeric_limits<T>;
         const T value = *(T*)buffer;
         switch (std::fpclassify(value)) {
-        case FP_NAN:
-            static_assert(TNumTraits::has_quiet_NaN, "no QNAN");
-            *(T*)buffer = TNumTraits::quiet_NaN();
-            break;
-        case FP_ZERO:
-            *(T*)buffer = T(0);
-            break;
+            case FP_NAN:
+                static_assert(TNumTraits::has_quiet_NaN, "no QNAN");
+                *(T*)buffer = TNumTraits::quiet_NaN();
+                break;
+            case FP_ZERO:
+                *(T*)buffer = T(0);
+                break;
         }
     }
 };
@@ -119,4 +119,4 @@ void CanonizeFpBits(void* buffer) {
     return TCanonizeFpBitsImpl<T, TFpTraits<T>::Supported>::Do(buffer);
 }
 
-}
+} // namespace NYql

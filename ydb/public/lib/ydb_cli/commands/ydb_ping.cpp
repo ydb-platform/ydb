@@ -2,13 +2,17 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/debug/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
+#include <library/cpp/getopt/small/completer.h>
+#include <library/cpp/threading/future/wait/wait.h>
 #include <library/cpp/time_provider/monotonic.h>
 
 namespace NYdb::NConsoleClient {
 
 namespace {
 
+constexpr int WARMUP_PING_COUNT = 100;
 constexpr int DEFAULT_COUNT = 100;
 constexpr int DEFAULT_INTERVAL_MS = 100;
 constexpr TCommandPing::EPingKind DEFAULT_PING_KIND = TCommandPing::EPingKind::Select1;
@@ -61,7 +65,7 @@ TCommandPing::TCommandPing()
 void TCommandPing::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     TStringStream pingKindsDescription;
     pingKindsDescription << "Ping kind, available options:";
     for (size_t i = 0; i < PingKindDescriptions.size(); ++i) {
@@ -81,9 +85,15 @@ void TCommandPing::Config(TConfig& config) {
         'i', "interval", TStringBuilder() << "<interval> ms between pings, default " << DEFAULT_INTERVAL_MS)
             .RequiredArgument("INTERVAL").StoreResult(&IntervalMs);
 
+    TVector<NLastGetopt::NComp::TChoice> kindChoices;
+    for (size_t i = 0; i < PingKindDescriptions.size(); ++i) {
+        EPingKind kind = static_cast<EPingKind>(i);
+        kindChoices.emplace_back(ToString(kind), PingKindDescriptions[i]);
+    }
     config.Opts->AddLongOption(
         'k', "kind", pingKindsDescription.Str())
-            .OptionalArgument("STRING").StoreResult(&PingKind);
+            .RequiredArgument("STRING").StoreResult(&PingKind)
+            .Completer(NLastGetopt::NComp::Choice(std::move(kindChoices)));
 }
 
 void TCommandPing::Parse(TConfig& config) {
@@ -109,10 +119,30 @@ int TCommandPing::RunCommand(TConfig& config) {
     if (PingKind == EPingKind::PlainGrpc) {
         durationsTillGrpc.reserve(Count);
         durationsAfterGrpc.reserve(Count);
-
     }
 
     const TString query = "SELECT 1;";
+
+    try {
+        // here we also want the request to be compiled and cached before we
+        // measure the latency. Note, current query client impl will reuse
+        // opened session and it's enough to make a single warming request
+        if (PingKind == EPingKind::Select1) {
+            PingKqpSelect1(queryClient, query);
+        } else {
+            // in case of TLS first pings might be expensive,
+            // also we want to have connection pool "hot" before measurements
+            std::vector<NDebug::TAsyncPlainGrpcPingResult> warmupPings;
+            warmupPings.reserve(WARMUP_PING_COUNT);
+            for (int i = 0; i < WARMUP_PING_COUNT; ++i) {
+                warmupPings.emplace_back(pingClient.PingPlainGrpc(NDebug::TPlainGrpcPingSettings()));
+            }
+            NThreading::WaitAll(warmupPings).GetValueSync();
+        }
+    } catch (const std::exception& ex) {
+        std::cerr << "Warmup failed: " << ex.what() << std::endl;
+        // still try to continue and most probably display failed pings
+    }
 
     for (int i = 0; i < Count && !IsInterrupted(); ++i) {
         bool isOk;
@@ -255,17 +285,27 @@ bool TCommandPing::PingKqpSelect1(NQuery::TQueryClient& client, const TString& q
 
     settings.Syntax(NQuery::ESyntax::YqlV1);
 
+    auto sessionResult = client.GetSession(NQuery::TCreateSessionSettings()).GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(sessionResult);
+    auto session = sessionResult.GetSession();
+
     // Execute query without parameters
-    auto asyncResult = client.StreamExecuteQuery(
+    auto asyncResult = session.StreamExecuteQuery(
         query,
         NQuery::TTxControl::NoTx(),
         settings
     );
 
     auto result = asyncResult.GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     while (!IsInterrupted()) {
         auto streamPart = result.ReadNext().GetValueSync();
         if (!streamPart.IsSuccess()) {
+            TStringStream ss;
+            ss << "Select1 error: ";
+            streamPart.Out(ss);
+            ss << Endl;
+            Cerr << ss.Str();
             if (streamPart.EOS()) {
                 return false;
             }

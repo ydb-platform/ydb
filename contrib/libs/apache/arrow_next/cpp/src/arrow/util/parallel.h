@@ -21,10 +21,10 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/status.h"
-#include "arrow/util/functional.h"
-#include "arrow/util/thread_pool.h"
-#include "arrow/util/vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/functional.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/thread_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/vector.h"
 
 namespace arrow20 {
 namespace internal {

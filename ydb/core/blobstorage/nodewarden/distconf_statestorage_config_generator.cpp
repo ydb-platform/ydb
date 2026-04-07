@@ -9,17 +9,24 @@
 #include <library/cpp/streams/zstd/zstd.h>
 
 namespace NKikimr::NStorage {
+    constexpr ui32 defaultReplicasSpecificVolume = 200;
 
     TStateStoragePerPileGenerator::TStateStoragePerPileGenerator(THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>& nodes
         , const std::unordered_map<ui32, ui32>& selfHealNodesState
         , TBridgePileId pileId
         , std::unordered_set<ui32>& usedNodes
         , const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig
+        , ui32 overrideReplicasInRingCount
+        , ui32 overrideRingsCount
+        , ui32 replicasSpecificVolume
     )
         : PileId(pileId)
         , SelfHealNodesState(selfHealNodesState)
         , UsedNodes(usedNodes)
         , OldConfig(oldConfig)
+        , OverrideReplicasInRingCount(overrideReplicasInRingCount)
+        , OverrideRingsCount(overrideRingsCount)
+        , ReplicasSpecificVolume(replicasSpecificVolume == 0 ? defaultReplicasSpecificVolume : replicasSpecificVolume)
     {
         FillNodeGroups(nodes);
         CalculateRingsParameters();
@@ -56,25 +63,29 @@ namespace NKikimr::NStorage {
     void TStateStoragePerPileGenerator::CalculateRingsParameters() {
         ui32 minNodesInGroup = NodeGroups[0].Nodes.size();
         if (NodeGroups.size() == 1) {
-            if (minNodesInGroup < 5) {
-                RingsInGroupCount = minNodesInGroup;
-                NToSelect = minNodesInGroup < 3 ? 1 : 3;
-            } else {
+            RingsInGroupCount = OverrideRingsCount;
+            if (RingsInGroupCount == 0)
                 RingsInGroupCount = minNodesInGroup < 8 ? minNodesInGroup : 8;
-                NToSelect = 5;
+            if (RingsInGroupCount > minNodesInGroup) {
+                RingsInGroupCount = minNodesInGroup;
             }
-            ReplicasInRingCount = 1 + minNodesInGroup / 1000;
+            NToSelect = RingsInGroupCount < 3 ? 1 : (RingsInGroupCount < 5 ? 3 : 5);
+            ReplicasInRingCount = OverrideReplicasInRingCount > 0 ? OverrideReplicasInRingCount : (1 + minNodesInGroup / ReplicasSpecificVolume);
         } else {
-            RingsInGroupCount = minNodesInGroup < 3 ? 1 : 3;
+            if (OverrideRingsCount == 3 || OverrideRingsCount == 9) {
+                RingsInGroupCount = OverrideRingsCount / 3;
+            } else {
+                RingsInGroupCount = minNodesInGroup < 3 ? 1 : 3;
+            }
             NToSelect = RingsInGroupCount < 3 ? 3 : 9;
             ui32 nodesCnt = 0;
             for (auto& n : NodeGroups) {
                 nodesCnt += n.Nodes.size();
             }
-            ReplicasInRingCount = 1 + nodesCnt / 1000;
-            if (ReplicasInRingCount * RingsInGroupCount > minNodesInGroup) {
-                ReplicasInRingCount = 1;
-            }
+            ReplicasInRingCount = OverrideReplicasInRingCount > 0 ? OverrideReplicasInRingCount : (1 + nodesCnt / ReplicasSpecificVolume);
+        }
+        if (ReplicasInRingCount * RingsInGroupCount > minNodesInGroup) {
+            ReplicasInRingCount = 1;
         }
     }
 

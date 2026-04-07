@@ -95,7 +95,7 @@ namespace NKikimr::NBsController {
                 if (!NKikimr::IsDynamicGroup(TGroupId::FromValue(group.GetGroupId()))) {
                     continue;
                 }
-                
+
                 bool isHealthy = true;
 
                 for (const auto& vslotId : group.GetVSlotId()) {
@@ -148,7 +148,7 @@ namespace NKikimr::NBsController {
         }
 
         static void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) {
-            switch (const ui32 type = ev->GetTypeRewrite()) {
+            switch (ev->GetTypeRewrite()) {
                 case TEvents::TSystem::Poison:
                    throw TPoison();
                 default:
@@ -177,6 +177,8 @@ namespace NKikimr::NBsController {
             cmd->SetFailDomainIdx(vslot->GetFailDomainIdx());
             cmd->SetVDiskIdx(vslot->GetVDiskIdx());
             cmd->SetOnlyToLessOccupiedPDisk(true);
+            cmd->SetPreferLessOccupiedRack(Settings.PreferLessOccupiedRack);
+            cmd->SetWithAttentionToReplication(Settings.WithAttentionToReplication);
 
             return ev;
         }
@@ -297,8 +299,8 @@ namespace NKikimr::NBsController {
             auto groupSlotsOrdered = OrderVSlotsByPDiskUsage(candidateVSlots, storageInfo);
 
             // Reading the config also increments the config transaction sequence number.
-            // We need to increment it again to get the next one. Reassignment check 
-            // and actual reassignment will use this sequence number. 
+            // We need to increment it again to get the next one. Reassignment check
+            // and actual reassignment will use this sequence number.
             // Reassignment check doesn't increment the sequence number because this transaction
             // rolls back.
             ui64 expectedConfigTxSeqNo = configResponse.GetConfigTxSeqNo();
@@ -330,7 +332,7 @@ namespace NKikimr::NBsController {
             try {
                 while (true) {
                     RunBalancing();
-                    
+
                     Yield(TDuration::MilliSeconds(Settings.IterationIntervalMs));
                 }
             } catch (const TDtorException&) {
@@ -365,7 +367,7 @@ namespace NKikimr::NBsController {
         const auto& clusterBalancingSettings = bscSettings.GetClusterBalancingSettings();
 
         if (clusterBalancingSettings.HasEnable()) {
-            settings.Enable = clusterBalancingSettings.GetEnable();   
+            settings.Enable = clusterBalancingSettings.GetEnable();
         }
         if (clusterBalancingSettings.HasIterationIntervalMs()) {
             settings.IterationIntervalMs = clusterBalancingSettings.GetIterationIntervalMs();
@@ -375,6 +377,12 @@ namespace NKikimr::NBsController {
         }
         if (clusterBalancingSettings.HasMaxReplicatingVDisks()) {
             settings.MaxReplicatingVDisks = clusterBalancingSettings.GetMaxReplicatingVDisks();
+        }
+        if (clusterBalancingSettings.HasPreferLessOccupiedRack()) {
+            settings.PreferLessOccupiedRack = clusterBalancingSettings.GetPreferLessOccupiedRack();
+        }
+        if (clusterBalancingSettings.HasWithAttentionToReplication()) {
+            settings.WithAttentionToReplication = clusterBalancingSettings.GetWithAttentionToReplication();
         }
 
         return settings;

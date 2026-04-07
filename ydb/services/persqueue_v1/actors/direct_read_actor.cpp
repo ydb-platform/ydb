@@ -4,6 +4,8 @@
 #include "read_init_auth_actor.h"
 #include "read_session_actor.h"
 
+#include <ydb/core/persqueue/common/actor.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 
@@ -38,6 +40,7 @@ TDirectReadSessionActor::TDirectReadSessionActor(
     , SchemeCache(schemeCache)
     , NewSchemeCache(newSchemeCache)
     , InitDone(false)
+    , ReadWithoutConsumer(false)
     , ForceACLCheck(false)
     , LastACLCheckTimestamp(TInstant::Zero())
     , Counters(counters)
@@ -141,6 +144,13 @@ void TDirectReadSessionActor::Handle(typename IContext::TEvWriteFinished::TPtr& 
     }
 }
 
+bool TDirectReadSessionActor::OnUnhandledException(const std::exception& exc) {
+    NPQ::DoLogUnhandledException(NKikimrServices::PQ_READ_PROXY, "", exc);
+
+    this->Die(ActorContext());
+
+    return true;
+}
 
 void TDirectReadSessionActor::Die(const TActorContext& ctx) {
     if (AuthInitActor) {
@@ -223,15 +233,18 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "no topics in init request");
     }
 
-    if (init.consumer().empty()) {
-        return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "no consumer in init request");
-    }
+    ReadWithoutConsumer = init.consumer().empty();
 
-    ClientId = NPersQueue::ConvertNewConsumerName(init.consumer(), ctx);
-    if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        ClientPath = init.consumer();
+    if (ReadWithoutConsumer) {
+        ClientId = NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER;
+        ClientPath = "";
     } else {
-        ClientPath = NPersQueue::StripLeadSlash(NPersQueue::MakeConsumerPath(init.consumer()));
+        ClientId = NPersQueue::ConvertNewConsumerName(init.consumer(), ctx);
+        if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+            ClientPath = init.consumer();
+        } else {
+            ClientPath = NPersQueue::StripLeadSlash(NPersQueue::MakeConsumerPath(init.consumer()));
+        }
     }
 
     Session = init.session_id();
@@ -257,7 +270,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
                 "unauthenticated access is forbidden, please provide credentials");
         }
     } else {
-        Y_ABORT_UNLESS(Request->GetYdbToken());
+        AFL_ENSURE(Request->GetYdbToken());
         Auth = *(Request->GetYdbToken());
         Token = new NACLib::TUserToken(Request->GetSerializedToken());
     }
@@ -320,7 +333,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, cons
         }
 
         if (IsQuotaRequired()) {
-            Y_ABORT_UNLESS(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx));
+            AFL_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx));
         } else {
             InitSession(ctx);
         }
@@ -435,7 +448,7 @@ void TDirectReadSessionActor::Handle(TEvents::TEvWakeup::TPtr& ev, const TActorC
             }
             if (PendingQuota) {
                 auto res = MaybeRequestQuota(PendingQuota->RequiredQuota, EWakeupTag::RlAllowed, ctx);
-                Y_ABORT_UNLESS(res);
+                AFL_ENSURE(res);
             }
 
             break;
@@ -444,7 +457,7 @@ void TDirectReadSessionActor::Handle(TEvents::TEvWakeup::TPtr& ev, const TActorC
         case EWakeupTag::RlInitNoResource:
             if (PendingQuota) {
                 auto res = MaybeRequestQuota(PendingQuota->RequiredQuota, EWakeupTag::RlAllowed, ctx);
-                Y_ABORT_UNLESS(res);
+                AFL_ENSURE(res);
             } else {
                 return CloseSession(PersQueue::ErrorCode::OVERLOAD, "throughput limit exceeded");
             }
@@ -470,13 +483,16 @@ void TDirectReadSessionActor::RecheckACL(const TActorContext& ctx) {
 
 
 void TDirectReadSessionActor::RunAuthActor(const TActorContext& ctx) {
-    Y_ABORT_UNLESS(!AuthInitActor);
+    AFL_ENSURE(!AuthInitActor);
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
         ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token, TopicsList,
-        TopicsHandler.GetLocalCluster()));
+        TopicsHandler.GetLocalCluster(), ReadWithoutConsumer));
 }
 
 void TDirectReadSessionActor::HandleDestroyPartitionSession(TEvPQProxy::TEvDirectReadDestroyPartitionSession::TPtr& ev) {
+    const auto& ctx = ActorContext();
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " got EvDirectReadDestroyPartitionSession, assignId: " << ev->Get()->ReadKey.PartitionSessionId);
+
     TServerMessage result;
     result.set_status(Ydb::StatusIds::SUCCESS);
     auto* stop = result.mutable_stop_direct_read_partition_session();
@@ -492,6 +508,8 @@ void TDirectReadSessionActor::HandleSessionKilled(TEvPQProxy::TEvDirectReadClose
 }
 
 void TDirectReadSessionActor::HandleGotData(TEvPQProxy::TEvDirectReadSendClientData::TPtr& ev) {
+    const auto& ctx = ActorContext();
+    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " got direct read data, message size: " << ev->Get()->Message->ByteSizeLong());
     auto formedResponse = MakeIntrusive<TFormedDirectReadResponse>();
     formedResponse->Response = std::move(ev->Get()->Message);
     ProcessAnswer(formedResponse, ActorContext());

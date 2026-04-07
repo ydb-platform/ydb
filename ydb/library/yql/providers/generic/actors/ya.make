@@ -1,10 +1,10 @@
 LIBRARY()
 
 SRCS(
-    yql_generic_read_actor.cpp
+    yql_generic_credentials_provider.cpp
     yql_generic_lookup_actor.cpp
     yql_generic_provider_factories.cpp
-    yql_generic_token_provider.cpp
+    yql_generic_read_actor.cpp
 )
 
 PEERDIR(

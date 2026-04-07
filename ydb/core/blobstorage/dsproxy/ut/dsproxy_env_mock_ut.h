@@ -147,6 +147,10 @@ struct TDSProxyEnv {
                     .TimeStatsEnabled = Mon->TimeStats.IsEnabled(),
                     .Stats = PerDiskStatsPtr,
                     .EnableRequestMod3x3ForMinLatency = false,
+                    .AccelerationParams = {
+                        // disable slow disk logic to avoid inconsistent accelerations
+                        .SlowDiskThreshold = 1'000'000'000,
+                    },
                     .LongRequestThreshold = TDuration::Seconds(1),
                 }));
     }
@@ -237,7 +241,7 @@ inline void SetupRuntime(TTestActorRuntime& runtime) {
     runtime.SetEventFilter([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
         if (ev->GetTypeRewrite() == TEvBlobStorage::EvVCheckReadiness) {
             runtime.Send(new IEventHandle(
-                    ev->Sender, ev->Recipient, new TEvBlobStorage::TEvVCheckReadinessResult(NKikimrProto::OK), 0,
+                    ev->Sender, ev->Recipient, new TEvBlobStorage::TEvVCheckReadinessResult(NKikimrProto::OK, false), 0,
                     ev->Cookie), 0, true);
             return true;
         }

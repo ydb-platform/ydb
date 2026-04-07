@@ -15,9 +15,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/xxhasher.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/xxhasher.h"
 
-#include <xxhash.h>
+
+#include "contrib/libs/xxhash/xxhash.h"
 
 namespace parquet20 {
 

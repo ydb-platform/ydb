@@ -1,11 +1,6 @@
 #include "write.h"
 
-#include <contrib/libs/simdjson/include/simdjson/dom/array-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/document-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/element-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/object-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/parser-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/ondemand.h>
+#include <contrib/libs/simdjson/include/simdjson.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 #include <library/cpp/json/json_reader.h>
 #include <util/generic/algorithm.h>
@@ -45,7 +40,7 @@ using namespace NYql::NDom;
 namespace {
 
 struct TContainer {
-    TContainer(EContainerType type)
+    explicit TContainer(EContainerType type)
         : Type(type)
     {
     }
@@ -184,7 +179,7 @@ struct TPODWriter {
  */
 class TBinaryJsonSerializer {
 public:
-    TBinaryJsonSerializer(TJsonIndex&& json)
+    explicit TBinaryJsonSerializer(TJsonIndex&& json)
         : Json_(std::move(json))
     {
     }
@@ -415,10 +410,12 @@ private:
 /**
  * @brief Callbacks for textual JSON parser. Essentially wrapper around TJsonIndex methods
  */
-class TBinaryJsonCallbacks : public TJsonCallbacks {
+class TBinaryJsonCallbacks: public TJsonCallbacks {
 public:
     TBinaryJsonCallbacks(bool throwException, bool allowInf)
-        : TJsonCallbacks(/* throwException */ throwException), AllowInf_(allowInf) {
+        : TJsonCallbacks(/* throwException */ throwException)
+        , AllowInf_(allowInf)
+    {
     }
 
     bool OnNull() override {
@@ -646,6 +643,8 @@ template <typename TOnDemandValue>
             callbacks.OnCloseMap();
             break;
         }
+        case simdjson::ondemand::json_type::unknown:
+            return simdjson::UNEXPECTED_ERROR;
     }
 
     return simdjson::SUCCESS;
@@ -723,7 +722,62 @@ template <typename TOnDemandValue>
     return simdjson::SUCCESS;
 #undef RETURN_IF_NOT_SUCCESS
 }
+
+void SerializeEntryCursorToBinaryJson(TBinaryJsonCallbacks& callbacks, const NBinaryJson::TEntryCursor& value) {
+    switch (value.GetType()) {
+        case NBinaryJson::EEntryType::BoolFalse:
+            callbacks.OnBoolean(false);
+            break;
+        case NBinaryJson::EEntryType::BoolTrue:
+            callbacks.OnBoolean(true);
+            break;
+        case NBinaryJson::EEntryType::Null:
+            callbacks.OnNull();
+            break;
+        case NBinaryJson::EEntryType::String:
+            callbacks.OnString(value.GetString());
+            break;
+        case NBinaryJson::EEntryType::Number:
+            callbacks.OnDouble(value.GetNumber());
+            break;
+        case NBinaryJson::EEntryType::Container: {
+            auto container = value.GetContainer();
+            if (container.GetType() == NBinaryJson::EContainerType::Array) {
+                callbacks.OnOpenArray();
+
+                auto it = container.GetArrayIterator();
+                while (it.HasNext()) {
+                    auto value = it.Next();
+                    SerializeEntryCursorToBinaryJson(callbacks, value);
+                }
+
+                callbacks.OnCloseArray();
+
+            } else if (container.GetType() == NBinaryJson::EContainerType::Object) {
+                callbacks.OnOpenMap();
+
+                auto it = container.GetObjectIterator();
+                while (it.HasNext()) {
+                    auto [key, value] = it.Next();
+                    if (key.GetType() != NBinaryJson::EEntryType::String) {
+                        throw yexception() << "Unexpected non-string key: " << key.GetType();
+                    }
+
+                    callbacks.OnMapKey(key.GetString());
+                    SerializeEntryCursorToBinaryJson(callbacks, value);
+                }
+
+                callbacks.OnCloseMap();
+            } else {
+                throw yexception() << "Unexpected type in container iterator: " << container.GetType();
+            }
+            break;
+        }
+        default:
+            throw yexception() << "Unexpected entry type: " << value.GetType();
+    }
 }
+} // namespace
 
 std::variant<TBinaryJson, TString> SerializeToBinaryJsonImpl(const TStringBuf json, bool allowInf) {
     std::variant<TBinaryJson, TString> res;
@@ -760,5 +814,17 @@ TBinaryJson SerializeToBinaryJson(const NUdf::TUnboxedValue& value) {
     return std::move(serializer).Serialize();
 }
 
+std::variant<TBinaryJson, TString> SerializeToBinaryJson(const NBinaryJson::TEntryCursor& value) {
+    TBinaryJsonCallbacks callbacks(/* throwException */ true, /* allowInf */ false);
+
+    try {
+        SerializeEntryCursorToBinaryJson(callbacks, value);
+    } catch (const yexception& ex) {
+        return TString(ex.what());
+    }
+
+    TBinaryJsonSerializer serializer(std::move(callbacks).GetResult());
+    return std::move(serializer).Serialize();
 }
 
+} // namespace NKikimr::NBinaryJson

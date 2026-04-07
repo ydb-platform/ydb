@@ -577,7 +577,8 @@ TOperation::TPtr TPipeline::GetVolatileOp(ui64 txId)
 
 bool TPipeline::LoadTxDetails(TTransactionContext &txc,
                               const TActorContext &ctx,
-                              TActiveTransaction::TPtr tx)
+                              TActiveTransaction::TPtr tx, 
+                              const TString& userSID)
 {
     auto it = DataTxCache.find(tx->GetTxId());
     if (it != DataTxCache.end()) {
@@ -596,7 +597,7 @@ bool TPipeline::LoadTxDetails(TTransactionContext &txc,
     } else if (tx->HasVolatilePrepareFlag()) {
         // Since transaction is volatile it was never stored on disk, and it
         // shouldn't have any artifacts yet.
-        tx->FillVolatileTxData(Self, txc, ctx);
+        tx->FillVolatileTxData(Self, txc, ctx, userSID);
 
         ui32 keysCount = 0;
         keysCount = tx->ExtractKeys();
@@ -622,7 +623,7 @@ bool TPipeline::LoadTxDetails(TTransactionContext &txc,
             return false;
 
         tx->FillTxData(Self, txc, ctx, target, txBody,
-                       std::move(locks), artifactFlags);
+                       std::move(locks), artifactFlags, userSID);
 
         ui32 keysCount = 0;
         //if (Config.LimitActiveTx > 1)
@@ -729,7 +730,7 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
     }
 
     if (step <= OutdatedReadSetStep()) {
-        LOG_NOTICE(ctx, NKikimrServices::TX_DATASHARD,
+        LOG_INFO(ctx, NKikimrServices::TX_DATASHARD,
                    "Outdated readset for %" PRIu64 ":%" PRIu64 " at %" PRIu64,
                    step, txId, Self->TabletID());
         return true;
@@ -744,7 +745,7 @@ bool TPipeline::SaveInReadSet(const TEvTxProcessing::TEvReadSet &rs,
     // is not finished yet (e.g. due to out-of-order). In this case we should
     // store ack and send it after its step become outdated.
     if (!Self->TransQueue.Has(txId)) {
-        LOG_NOTICE(ctx, NKikimrServices::TX_DATASHARD,
+        LOG_INFO(ctx, NKikimrServices::TX_DATASHARD,
                    "Unexpected readset in state %" PRIu32 " for %" PRIu64 ":%" PRIu64 " at %" PRIu64,
                    Self->State, step, txId, Self->TabletID());
         if (ack) {
@@ -1184,6 +1185,19 @@ ui64 TPipeline::OutdatedCleanupStep() const
     return LastPlannedTx.Step;
 }
 
+ui64 TPipeline::AllowedDataStep() const
+{
+    ui64 latestStep = 0;
+    if (Self->MediatorTimeCastEntry) {
+        // This could be zero when still initializing
+        latestStep = Self->MediatorTimeCastEntry->GetLatestStep();
+    }
+
+    return Max(
+        LastPlannedTx.Step + 1,
+        latestStep ? latestStep + 1 : TAppData::TimeProvider->Now().MilliSeconds());
+}
+
 ui64 TPipeline::GetTxCompleteLag(EOperationKind kind, ui64 timecastStep) const
 {
     auto &plan = Self->TransQueue.GetPlan(kind);
@@ -1438,7 +1452,8 @@ void TPipeline::ForgetTx(ui64 txId) {
 TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::TPtr &ev,
                                            TInstant receivedAt, ui64 tieBreakerIndex,
                                            NTabletFlatExecutor::TTransactionContext &txc,
-                                           const TActorContext &ctx, NWilson::TSpan &&operationSpan)
+                                           const TActorContext &ctx, NWilson::TSpan &&operationSpan,
+                                           const TString& userSID)
 {
     auto &rec = ev->Get()->Record;
     Y_ENSURE(!(rec.GetFlags() & TTxFlags::PrivateFlagsMask));
@@ -1555,7 +1570,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         tx->SetGlobalWriterFlag();
     } else {
         Y_ENSURE(tx->IsReadTable() || tx->IsDataTx());
-        auto dataTx = tx->BuildDataTx(Self, txc, ctx, true);
+        auto dataTx = tx->BuildDataTx(Self, txc, ctx, userSID, true);
         if (dataTx->Ready() && (dataTx->ProgramSize() || dataTx->IsKqpDataTx()))
             dataTx->ExtractKeys(true);
 
@@ -1702,10 +1717,15 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
         LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, error);
     };
 
-    if (rec.GetLockMode() != NKikimrDataEvents::OPTIMISTIC) {
-        badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
-            "Only OPTIMISTIC lock mode is currently implemented");
-        return writeOp;
+    switch (rec.GetLockMode()) {
+        case NKikimrDataEvents::OPTIMISTIC:
+        case NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION:
+            break;
+
+        default:
+            badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+                "Only OPTIMISTIC and OPTIMISTIC_SNAPSHOT_ISOLATION lock modes are currently implemented");
+            return writeOp;
     }
 
     if (!writeTx->Ready()) {
@@ -1748,9 +1768,9 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
     return writeOp;
 }
 
-void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, const TActorContext &ctx)
+void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, const TActorContext &ctx, const TString& userSID)
 {
-    auto dataTx = tx->BuildDataTx(Self, txc, ctx);
+    auto dataTx = tx->BuildDataTx(Self, txc, ctx, userSID);
     Y_ENSURE(dataTx->Ready());
     // TODO: we should have no requirement to have keys
     // for restarted immediate tx.
@@ -2033,7 +2053,9 @@ bool TPipeline::CheckInflightLimit() const {
         Self->TxInFly() +
         Self->ImmediateInFly() +
         Self->ReadIteratorsInFly() +
+        Self->LockRowsRequests.size() +
         Self->MediatorStateWaitingMsgs.size() +
+        // Note: we don't include awaiting coroutines here, they must be part of inflight requests
         Self->ProposeQueue.Size() +
         Self->TxWaiting());
 
@@ -2085,13 +2107,79 @@ bool TPipeline::AddWaitingTxOp(NEvents::TDataEvents::TEvWrite::TPtr& ev, const T
     return true;
 }
 
+class TPipeline::TWaitForSnapshotAwaiter
+    : public TPipeline::TWaitingCoroutine
+    , public TAsyncAwaiterBase
+{
+public:
+    TWaitForSnapshotAwaiter(TPipeline& pipeline, const TRowVersion& snapshot)
+        : TWaitingCoroutine(snapshot)
+        , Pipeline(pipeline)
+    {}
+
+    ~TWaitForSnapshotAwaiter() {
+        if (HeapIndex != (size_t)-1) {
+            // Coroutine is unwinding without cancellation, possible shutdown
+            Pipeline.WaitingCoroutines.Remove(this);
+        }
+    }
+
+    void await_suspend(std::coroutine_handle<> h) {
+        Pipeline.WaitingCoroutines.Add(this);
+        Pipeline.Self->UpdateProposeQueueSize();
+        TAsyncAwaiterBase::Suspend(h);
+    }
+
+    std::coroutine_handle<> await_cancel(std::coroutine_handle<> h) {
+        if (HeapIndex != (size_t)-1) {
+            Pipeline.WaitingCoroutines.Remove(this);
+            Pipeline.Self->UpdateProposeQueueSize();
+        }
+        // Note: we cancel even when resume is scheduled already
+        TAsyncAwaiterBase::Cancel();
+        return h;
+    }
+
+    void Resume() override {
+        Y_ASSERT(HeapIndex == (size_t)-1);
+        Y_ASSERT(Suspended());
+        TAsyncAwaiterBase::Resume();
+    }
+
+private:
+    TPipeline& Pipeline;
+};
+
+async<bool> TPipeline::WaitForSnapshot(const TRowVersion& snapshot) {
+    TRowVersion unreadableEdge = GetUnreadableEdge();
+    if (snapshot < unreadableEdge) {
+        co_return true;
+    }
+
+    if (!CheckInflightLimit()) {
+        co_return false;
+    }
+
+    const ui64 waitStep = snapshot.Step;
+    if (!Self->WaitPlanStep(waitStep) && snapshot < (unreadableEdge = GetUnreadableEdge())) {
+        // Async MediatorTimeCastEntry update, active current queue and return
+        ActivateWaitingTxOps(unreadableEdge, Self->ActorContext());
+        co_return true;
+    }
+
+    co_await TWaitForSnapshotAwaiter(*this, snapshot);
+    co_return true;
+}
+
 void TPipeline::ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ActivateWaitingTxOps for version# " << edge
         << ", txOps: " << (WaitingDataTxOps.empty() ? "empty" : ToString(WaitingDataTxOps.begin()->first.Step))
         << ", readIterators: "
-        << (WaitingDataReadIterators.empty() ? "empty" : ToString(WaitingDataReadIterators.begin()->first.Step)));
+        << (WaitingDataReadIterators.empty() ? "empty" : ToString(WaitingDataReadIterators.begin()->first.Step))
+        << ", coroutines: "
+        << (WaitingCoroutines.Empty() ? "empty" : ToString(WaitingCoroutines.Top()->Snapshot.Step)));
 
-    bool isEmpty = WaitingDataTxOps.empty() && WaitingDataReadIterators.empty();
+    bool isEmpty = WaitingDataTxOps.empty() && WaitingDataReadIterators.empty() && WaitingCoroutines.Empty();
     if (isEmpty)
         return;
 
@@ -2121,6 +2209,17 @@ void TPipeline::ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx)
             activated = true;
         }
 
+        while (WaitingCoroutines) {
+            auto* top = WaitingCoroutines.Top();
+            if (top->Snapshot > TRowVersion::Min() && top->Snapshot >= edge) {
+                minWait = Min(minWait, top->Snapshot);
+                break;
+            }
+            WaitingCoroutines.Remove(top);
+            top->Resume();
+            activated = true;
+        }
+
         if (minWait == TRowVersion::Max() ||
             Self->WaitPlanStep(minWait.Step) ||
             minWait >= (edge = GetUnreadableEdge()))
@@ -2137,7 +2236,7 @@ void TPipeline::ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx)
 }
 
 void TPipeline::ActivateWaitingTxOps(const TActorContext& ctx) {
-    bool isEmpty = WaitingDataTxOps.empty() && WaitingDataReadIterators.empty();
+    bool isEmpty = WaitingDataTxOps.empty() && WaitingDataReadIterators.empty() && WaitingCoroutines.Empty();
     if (isEmpty)
         return;
 

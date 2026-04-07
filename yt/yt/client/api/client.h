@@ -2,10 +2,12 @@
 
 #include "accounting_client.h"
 #include "admin_client.h"
+#include "ban_client.h"
 #include "connection.h"
 #include "chaos_client.h"
 #include "cypress_client.h"
 #include "distributed_table_client.h"
+#include "distributed_file_client.h"
 #include "etc_client.h"
 #include "file_client.h"
 #include "flow_client.h"
@@ -20,6 +22,8 @@
 #include "transaction_client.h"
 
 #include <yt/yt/client/bundle_controller_client/bundle_controller_client.h>
+
+#include <library/cpp/yt/threading/atomic_object.h>
 
 namespace NYT::NApi {
 
@@ -42,6 +46,7 @@ struct IClientBase
     , public IQueueClientBase
     , public IEtcClientBase
     , public IDistributedTableClientBase
+    , public IDistributedFileClientBase
 {
     virtual IConnectionPtr GetConnection() = 0;
 };
@@ -78,7 +83,9 @@ struct IClient
     , public NBundleControllerClient::IBundleControllerClient
     , public IFlowClient
     , public IDistributedTableClient
+    , public IDistributedFileClient
     , public IShuffleClient
+    , public IBanClient
 {
     //! Terminates all channels.
     //! Aborts all pending uncommitted transactions.
@@ -89,6 +96,8 @@ struct IClient
     virtual const NTransactionClient::ITimestampProviderPtr& GetTimestampProvider() = 0;
 
     virtual TFuture<std::optional<std::string>> GetClusterName(bool fetchIfNull = true) = 0;
+
+    virtual const TClientOptions& GetOptions() = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IClient)
@@ -110,8 +119,7 @@ public:
     TFuture<std::optional<std::string>> GetClusterName(bool fetchIfNull) override;
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
-    std::optional<std::string> ClusterName_;
+    NThreading::TAtomicObject<std::optional<std::string>> ClusterName_;
 
     TFuture<std::optional<std::string>> FetchClusterNameFromMasterCache();
 };

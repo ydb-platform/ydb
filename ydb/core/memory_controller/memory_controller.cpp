@@ -215,12 +215,7 @@ private:
         ui64 targetConsumersConsumption = SafeDiff(targetUtilizationBytes, otherConsumption + externalConsumption);
 
         // want to find maximum possible coefficient in range [0..1] so that
-        // Sum(
-        //     Max(
-        //         consumers[i].Consumption,
-        //         consumers[i].MinBytes + coefficient * (consumers[i].MaxBytes - consumers[i].MinBytes
-        //        )
-        //    ) <= targetConsumersConsumption
+        // Sum(consumers[i].MinBytes + coefficient * (consumers[i].MaxBytes - consumers[i].MinBytes)) <= targetConsumersConsumption
         auto coefficient = BinarySearchCoefficient(consumers, targetConsumersConsumption);
 
         ui64 resultingConsumersConsumption = 0;
@@ -349,7 +344,7 @@ private:
 
             ui64 value = 0;
             for (const auto& consumer : consumers) {
-                value += GetResultingConsumption(consumer, middle);
+                value += GetTargetConsumption(consumer, middle);
             }
 
             if (value > availableMemory) {
@@ -360,6 +355,23 @@ private:
         }
 
         return left;
+    }
+
+    ui64 GetTargetConsumption(const TConsumerState& consumer, const double coefficient) const {
+        switch (consumer.Kind) {
+            case EMemoryConsumerKind::MemTable:
+            case EMemoryConsumerKind::SharedCache:
+                return consumer.GetLimit(coefficient);
+            // column tables memory limits are not flexible for now, use only their consumption:
+            case EMemoryConsumerKind::ColumnTablesBlobCache:
+            case EMemoryConsumerKind::ColumnTablesDataAccessorCache:
+            case EMemoryConsumerKind::ColumnTablesColumnDataCache:
+            case EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache:
+            case EMemoryConsumerKind::ColumnTablesScanGroupedMemory:
+            case EMemoryConsumerKind::ColumnTablesCompGroupedMemory:
+            case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory:
+                return consumer.Consumption;
+        }
     }
 
     ui64 GetResultingConsumption(const TConsumerState& consumer, const double coefficient) const {

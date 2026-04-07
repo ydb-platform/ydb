@@ -40,6 +40,8 @@ private:
 
     NNodes::TMaybeNode<NNodes::TExprBase> YtDqProcessWrite(NNodes::TExprBase node, TExprContext& ctx) const;
 
+    NNodes::TMaybeNode<NNodes::TExprBase> Create(NNodes::TExprBase node, TExprContext& ctx) const;
+
     NNodes::TMaybeNode<NNodes::TExprBase> Write(NNodes::TExprBase node, TExprContext& ctx) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> Fill(NNodes::TExprBase node, TExprContext& ctx) const;
@@ -106,7 +108,13 @@ private:
 
     NNodes::TMaybeNode<NNodes::TExprBase> EquiJoin(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
 
+    template <class TNodeType>
+    NNodes::TMaybeNode<NNodes::TExprBase> ConvertSpecificTablesToStatic(NNodes::TExprBase node, TExprContext& ctx, std::function<bool(const TYtTableMetaInfo::TPtr&)> tableChecker) const;
+
+    template <class TNodeType>
     NNodes::TMaybeNode<NNodes::TExprBase> ConvertDynamicTablesToStatic(NNodes::TExprBase node, TExprContext& ctx) const;
+
+    NNodes::TMaybeNode<NNodes::TExprBase> ConvertRLSTablesToStatic(NNodes::TExprBase node, TExprContext& ctx) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> EarlyMergeJoin(NNodes::TExprBase node, TExprContext& ctx) const;
 
@@ -167,8 +175,6 @@ private:
     NNodes::TMaybeNode<TExpr> CleanupWorld(TExpr node, TExprContext& ctx) const {
         return NNodes::TMaybeNode<TExpr>(YtCleanupWorld(node.Ptr(), ctx, State_));
     }
-
-    TMaybe<bool> CanFuseLambdas(const NNodes::TCoLambda& innerLambda, const NNodes::TCoLambda& outerLambda, TExprContext& ctx) const;
 
     NNodes::TExprBase RebuildKeyFilterAfterPushDown(NNodes::TExprBase filter, size_t usedKeysCount, TExprContext& ctx) const;
 

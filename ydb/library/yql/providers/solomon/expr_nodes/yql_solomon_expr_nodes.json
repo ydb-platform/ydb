@@ -105,6 +105,17 @@
             ]
         },
         {
+            "Name": "TSoInsert",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "SoInsert"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TSoDataSink"},
+                {"Index": 2, "Name": "Shard", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Input", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TSoShard",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "SoShard"},

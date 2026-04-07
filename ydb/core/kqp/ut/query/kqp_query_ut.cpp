@@ -6,13 +6,17 @@
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/iterator/functools.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -33,6 +37,16 @@ static void CheckStatusAfterTimeout(TSession& session, const TString& query, con
         // Do not fire too much CPU
         Sleep(TDuration::MilliSeconds(10));
     }
+}
+
+static auto ExecuteQueryAndCheckResultSets(NYdb::NQuery::TQueryClient& db, const TString& query, ui32 expectedResultSetsCount, const TString& testCaseName = "")
+{
+    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    TString prefix = testCaseName.empty() ? "" : testCaseName + ": ";
+    UNIT_ASSERT_C(result.IsSuccess(), prefix << "Query failed: " << result.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), expectedResultSetsCount,
+        prefix << "Expected " << expectedResultSetsCount << " result sets, got " << result.GetResultSets().size());
+    return result;
 }
 
 Y_UNIT_TEST_SUITE(KqpQuery) {
@@ -72,6 +86,254 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
         UNIT_ASSERT_VALUES_EQUAL(counters.RecompileRequestGet()->Val(), 1);
+    }
+
+    Y_UNIT_TEST_TWIN(ExtendedTimeOutOfBounds, BulkUpsert) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            const std::string query = R"(
+                CREATE TABLE `/Root/TimeTable` (
+                    Key UInt32 NOT NULL,
+                    V_Date32 Date32,
+                    V_Datetime64 Datetime64,
+                    V_Timestamp64 Timestamp64,
+                    V_Interval64 Interval64,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto fUpsertAndCheck = [&]<typename T>(ui32 key, T value, bool success) {
+            std::string colName;
+            if (BulkUpsert) {
+                TValueBuilder rows;
+                rows.BeginList();
+                rows.AddListItem().BeginStruct().AddMember("Key").Uint32(key);
+                if constexpr (std::is_same_v<T, TWideDays>) {
+                    rows.AddMember("V_Date32").Date32(std::chrono::sys_time<TWideDays>(TWideDays(value)));
+                    colName = "V_Date32";
+                } else if constexpr (std::is_same_v<T, TWideSeconds>) {
+                    rows.AddMember("V_Datetime64").Datetime64(std::chrono::sys_time<TWideSeconds>(TWideSeconds(value)));
+                    colName = "V_Datetime64";
+                } else if constexpr (std::is_same_v<T, TWideMicroseconds>) {
+                    rows.AddMember("V_Timestamp64").Timestamp64(std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(value)));
+                    colName = "V_Timestamp64";
+                } else if constexpr (std::is_same_v<T, i64>) {
+                    rows.AddMember("V_Interval64").Interval64(TWideMicroseconds(value));
+                    colName = "V_Interval64";
+                } else {
+                    UNIT_ASSERT_C(false, "Unsupported type");
+                }
+                rows.EndStruct().EndList();
+
+                auto result = tableClient.BulkUpsert("/Root/TimeTable", rows.Build()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.IsSuccess(), success, result.GetIssues().ToString());
+            } else {
+                auto params = std::move(TParamsBuilder().AddParam("$key").Uint32(key).Build());
+                if constexpr (std::is_same_v<T, TWideDays>) {
+                    params.AddParam("$param").Date32(std::chrono::sys_time<TWideDays>(TWideDays(value))).Build();
+                    colName = "V_Date32";
+                } else if constexpr (std::is_same_v<T, TWideSeconds>) {
+                    params.AddParam("$param").Datetime64(std::chrono::sys_time<TWideSeconds>(TWideSeconds(value))).Build();
+                    colName = "V_Datetime64";
+                } else if constexpr (std::is_same_v<T, TWideMicroseconds>) {
+                    params.AddParam("$param").Timestamp64(std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(value))).Build();
+                    colName = "V_Timestamp64";
+                } else if constexpr (std::is_same_v<T, i64>) {
+                    params.AddParam("$param").Interval64(TWideMicroseconds(value)).Build();
+                    colName = "V_Interval64";
+                } else {
+                    UNIT_ASSERT_C(false, "Unsupported type");
+                }
+
+                auto result = queryClient.ExecuteQuery(Sprintf(R"(
+                    UPSERT INTO `/Root/TimeTable` (Key, %s) VALUES ($key, $param);
+                )", colName.c_str()), NQuery::TTxControl::NoTx(), params.Build()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.IsSuccess(), success, result.GetIssues().ToString());
+            }
+        };
+
+        {
+            // Date32
+            fUpsertAndCheck(1, TWideDays(0), /* success */ true); // Basic
+            fUpsertAndCheck(2, TWideDays(NYql::NUdf::MIN_DATE32), /* success */ true); // Min is inclusive
+            fUpsertAndCheck(3, TWideDays(NYql::NUdf::MAX_DATE32), /* success */ true); // Max is inclusive
+            fUpsertAndCheck(4, TWideDays(NYql::NUdf::MIN_DATE32 - 1), /* success */ false); // Out of bounds
+            fUpsertAndCheck(5, TWideDays(NYql::NUdf::MAX_DATE32 + 1), /* success */ false); // Out of bounds
+        }
+
+        {
+            // Datetime64
+            fUpsertAndCheck(11, TWideSeconds(0), /* success */ true); // Basic
+            fUpsertAndCheck(12, TWideSeconds(NYql::NUdf::MIN_DATETIME64), /* success */ true); // Min is inclusive
+            fUpsertAndCheck(13, TWideSeconds(NYql::NUdf::MAX_DATETIME64), /* success */ true); // Max is inclusive
+            fUpsertAndCheck(14, TWideSeconds(NYql::NUdf::MIN_DATETIME64 - 1), /* success */ false); // Out of bounds
+            fUpsertAndCheck(15, TWideSeconds(NYql::NUdf::MAX_DATETIME64 + 1), /* success */ false); // Out of bounds
+        }
+
+        {
+            // Timestamp64
+            fUpsertAndCheck(21, TWideMicroseconds(0), /* success */ true); // Basic
+            fUpsertAndCheck(22, TWideMicroseconds(NYql::NUdf::MIN_TIMESTAMP64), /* success */ true); // Min is inclusive
+            fUpsertAndCheck(23, TWideMicroseconds(NYql::NUdf::MAX_TIMESTAMP64), /* success */ true); // Max is inclusive
+            fUpsertAndCheck(24, TWideMicroseconds(NYql::NUdf::MIN_TIMESTAMP64 - 1), /* success */ false); // Out of bounds
+            fUpsertAndCheck(25, TWideMicroseconds(NYql::NUdf::MAX_TIMESTAMP64 + 1), /* success */ false); // Out of bounds
+        }
+
+        {
+            // Interval64
+            fUpsertAndCheck(31, static_cast<i64>(0), /* success */ true); // Basic
+            fUpsertAndCheck(32, NYql::NUdf::MAX_INTERVAL64, /* success */ true); // Max is inclusive
+            fUpsertAndCheck(33, -NYql::NUdf::MAX_INTERVAL64, /* success */ true); // -Max is inclusive
+            fUpsertAndCheck(34, NYql::NUdf::MAX_INTERVAL64 + 1, /* success */ false); // Out of bounds
+            fUpsertAndCheck(35, -(NYql::NUdf::MAX_INTERVAL64 + 1), /* success */ false); // Out of bounds
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(DecimalOutOfPrecisionBulk, EnableParameterizedDecimal) {
+        TKikimrSettings serverSettings;
+        serverSettings.FeatureFlags.SetEnableParameterizedDecimal(EnableParameterizedDecimal);
+        serverSettings.WithSampleTables = false;
+
+        TKikimrRunner kikimr(serverSettings);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto ddlResult = client.ExecuteQuery(R"(
+                CREATE TABLE DecTest (
+                    Key Int32 NOT NULL,
+                    Value Decimal(22, 9) NOT NULL,
+                    PRIMARY KEY (Key)
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(ddlResult.IsSuccess(), ddlResult.GetIssues().ToString());
+        }
+
+        // 10000000000000 in Decimal(35, 9), invalid for Decimal(22, 9)
+        Ydb::Value value;
+        value.set_low_128(1864712049423024128);
+        value.set_high_128(542);
+        auto invalidValue = TDecimalValue(value, NYdb::TDecimalType(22, 9));
+
+        {
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("Key").Int32(1)
+                .AddMember("Value").Decimal(TDecimalValue("10", 22, 9))
+                .EndStruct();
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("Key").Int32(2)
+                .AddMember("Value").Decimal(invalidValue)
+                .EndStruct();
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("Key").Int32(3)
+                .AddMember("Value").Decimal(TDecimalValue("10000000000000", 22, 9))
+                .EndStruct();
+            rows.EndList();
+
+            auto resultUpsert = db.BulkUpsert("/Root/DecTest", rows.Build()).GetValueSync();
+            // TODO: Plan A, upsert should fail as provided value is invalid for given type.
+            UNIT_ASSERT_C(!resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+            auto tableYson = ReadTableToYson(session, "/Root/DecTest");
+            // TODO: Plan B, value for key 2 should be inf, as provided value is out of range
+            // for given type.
+            CompareYson(R"([])", tableYson);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(DecimalOutOfPrecision, EnableParameterizedDecimal) {
+        TKikimrSettings serverSettings;
+        serverSettings.FeatureFlags.SetEnableParameterizedDecimal(EnableParameterizedDecimal);
+        serverSettings.WithSampleTables = false;
+
+        TKikimrRunner kikimr(serverSettings);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto ddlResult = client.ExecuteQuery(Sprintf(R"(
+                CREATE TABLE DecTest (
+                    Key Int32 NOT NULL,
+                    Value Decimal(22, 9),
+                   %s
+                    PRIMARY KEY (Key)
+                );
+            )", EnableParameterizedDecimal ? " ValueLarge Decimal(35, 9), " : ""), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(ddlResult.IsSuccess(), ddlResult.GetIssues().ToString());
+        }
+
+        // 10000000000000 in Decimal(35, 9), invalid for Decimal(22, 9)
+        Ydb::Value value;
+        value.set_low_128(1864712049423024128);
+        value.set_high_128(542);
+        auto invalidValue = TDecimalValue(value, NYdb::TDecimalType(22, 9));
+
+        auto validValue = TDecimalValue(value, NYdb::TDecimalType(35, 9));
+
+        {
+            auto params = TParamsBuilder()
+                .AddParam("$value").Decimal(invalidValue).Build()
+                .Build();
+
+            auto writeResult = client.ExecuteQuery(R"(
+                UPSERT INTO DecTest (Key, Value) VALUES
+                    (1, CAST(10 AS Decimal(22,9))),
+                    (2, $value),
+                    (3, $value - CAST(1 AS Decimal(22,9)));
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+
+            // TODO: Plan A, query should fail as provided value is invalid for given type.
+            UNIT_ASSERT_C(!writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+            UNIT_ASSERT_EQUAL_C(writeResult.GetStatus(), EStatus::BAD_REQUEST, writeResult.GetIssues().ToString());
+
+            // TODO: Plan B, value for key 2 should be inf, as provided value is out of range
+            // for given type.
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            auto tableYson = ReadTableToYson(session, "/Root/DecTest");
+            CompareYson(R"([])", tableYson);
+
+            if (EnableParameterizedDecimal)
+            {
+                auto paramsValid = TParamsBuilder()
+                    .AddParam("$value").Decimal(validValue).Build()
+                    .Build();
+                auto writeResult = client.ExecuteQuery(R"(
+                    UPSERT INTO DecTest (Key, ValueLarge) VALUES
+                        (2, $value);
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), paramsValid).ExtractValueSync();
+
+                // TODO: Plan A, query should fail as provided value is invalid for given type.
+                UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+                UNIT_ASSERT_EQUAL_C(writeResult.GetStatus(), EStatus::SUCCESS, writeResult.GetIssues().ToString());
+
+                auto tableYson = ReadTableToYson(session, "/Root/DecTest");
+                CompareYson(R"([[[2];#;["10000000000000"]]])", tableYson);
+            }
+
+            if (EnableParameterizedDecimal)
+            {
+                auto writeResult = client.ExecuteQuery(R"(
+                    UPSERT INTO DecTest (Key, Value) SELECT Key, ValueLarge as Value FROM DecTest;
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                // TODO: Plan A, query should fail as provided value is invalid for given type.
+                UNIT_ASSERT_C(!writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+                UNIT_ASSERT_EQUAL_C(writeResult.GetStatus(), EStatus::GENERIC_ERROR, writeResult.GetIssues().ToString());
+            }
+        }
     }
 
     Y_UNIT_TEST(QueryCache) {
@@ -294,6 +556,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 const std::optional<TString> expectedIssue = std::nullopt) {
             auto driverConfig = TDriverConfig()
                 .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
             auto db = NYdb::NTable::TTableClient(driver);
@@ -775,11 +1038,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     }
 
     Y_UNIT_TEST(YqlTableSample) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_KqpYqlSyntaxVersion");
-        setting.SetValue("1");
-
-        TKikimrRunner kikimr({setting});
+        TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1034,9 +1293,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(QueryStats, UseSink) {
+    Y_UNIT_TEST(QueryStats) {
         TKikimrSettings serverSettings;
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1075,51 +1333,22 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT(compile.cpu_time_us() > 0);
         totalCpuTimeUs += compile.cpu_time_us();
 
-        if (UseSink) {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
-            auto& phase0 = stats.query_phases(0);
-            UNIT_ASSERT(phase0.duration_us() > 0);
-            UNIT_ASSERT(phase0.cpu_time_us() > 0);
-            totalCpuTimeUs += phase0.cpu_time_us();
-            UNIT_ASSERT_VALUES_EQUAL(phase0.table_access().size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(0).name(), "/Root/EightShard");
-            UNIT_ASSERT(!phase0.table_access(0).has_reads());
-            UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(0).updates().rows(), 3);
-            UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(1).reads().rows(), 3);
-            UNIT_ASSERT(phase0.table_access(0).updates().bytes() > 0);
-            UNIT_ASSERT(phase0.table_access(1).reads().bytes() > 0);
-            UNIT_ASSERT(!phase0.table_access(0).has_deletes());
+        auto& phase0 = stats.query_phases(0);
+        UNIT_ASSERT(phase0.duration_us() > 0);
+        UNIT_ASSERT(phase0.cpu_time_us() > 0);
+        totalCpuTimeUs += phase0.cpu_time_us();
+        UNIT_ASSERT_VALUES_EQUAL(phase0.table_access().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(0).name(), "/Root/EightShard");
+        UNIT_ASSERT(!phase0.table_access(0).has_reads());
+        UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(0).updates().rows(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(1).reads().rows(), 3);
+        UNIT_ASSERT(phase0.table_access(0).updates().bytes() > 0);
+        UNIT_ASSERT(phase0.table_access(1).reads().bytes() > 0);
+        UNIT_ASSERT(!phase0.table_access(0).has_deletes());
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(), totalCpuTimeUs);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-
-            auto& phase0 = stats.query_phases(0);
-            UNIT_ASSERT(phase0.duration_us() > 0);
-            UNIT_ASSERT(phase0.cpu_time_us() > 0);
-            totalCpuTimeUs += phase0.cpu_time_us();
-
-            UNIT_ASSERT_VALUES_EQUAL(phase0.table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(0).name(), "/Root/TwoShard");
-            UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(0).reads().rows(), 3);
-            UNIT_ASSERT(phase0.table_access(0).reads().bytes() > 0);
-            UNIT_ASSERT(!phase0.table_access(0).has_updates());
-            UNIT_ASSERT(!phase0.table_access(0).has_deletes());
-
-            auto& phase1 = stats.query_phases(1);
-            UNIT_ASSERT(phase1.duration_us() > 0);
-            UNIT_ASSERT(phase1.cpu_time_us() > 0);
-            totalCpuTimeUs += phase1.cpu_time_us();
-            UNIT_ASSERT_VALUES_EQUAL(phase1.table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(phase1.table_access(0).name(), "/Root/EightShard");
-            UNIT_ASSERT(!phase1.table_access(0).has_reads());
-            UNIT_ASSERT_VALUES_EQUAL(phase1.table_access(0).updates().rows(), 3);
-            UNIT_ASSERT(phase1.table_access(0).updates().bytes() > 0);
-            UNIT_ASSERT(!phase1.table_access(0).has_deletes());
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(), totalCpuTimeUs);
-        }
+        UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(), totalCpuTimeUs);
     }
 
     Y_UNIT_TEST(RowsLimit) {
@@ -1725,14 +1954,14 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     Y_UNIT_TEST(OltpCreateAsSelect_Simple) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true).SetAuthToken("user0@builtin");
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
 
         {
             auto driverConfig = TDriverConfig()
-            .SetEndpoint(kikimr.GetEndpoint())
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("root@builtin");
             auto driver = TDriver(driverConfig);
             auto schemeClient = NYdb::NScheme::TSchemeClient(driver);
@@ -1977,11 +2206,154 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
     }
 
+    Y_UNIT_TEST(OlapCreateAsSelect_JaffleShop) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableMoveColumnTable(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        TKikimrRunner kikimr(settings);
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/jaffle_shop/stg_customers` (
+                    customer_id Int32 NOT NULL,
+                    first_name Utf8,
+                    last_name Utf8,
+                    PRIMARY KEY (customer_id)
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/jaffle_shop/stg_orders` (
+                    order_id Int32 NOT NULL,
+                    customer_id Int32,
+                    order_date Date,
+                    PRIMARY KEY (order_id)
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/jaffle_shop/stg_payments` (
+                    payment_id Int32 NOT NULL,
+                    order_id Int32,
+                    amount Int64,
+                    PRIMARY KEY (payment_id)
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/jaffle_shop/stg_customers` (customer_id, first_name, last_name) VALUES
+                    (1, 'Alice', 'Anderson'),
+                    (2, 'Bob', 'Brown'),
+                    (3, 'Carol', 'Clark');
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/jaffle_shop/stg_orders` (order_id, customer_id, order_date) VALUES
+                    (1, 1, Date("2024-01-15")),
+                    (2, 1, Date("2024-03-20")),
+                    (3, 2, Date("2024-02-10"));
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                REPLACE INTO `/Root/jaffle_shop/stg_payments` (payment_id, order_id, amount) VALUES
+                    (1, 1, 100),
+                    (2, 2, 200),
+                    (3, 3, 50);
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE
+                    `/Root/jaffle_shop/customers__dbt_tmp`
+                (PRIMARY KEY (customer_id))
+
+                WITH (
+                    STORE = column)
+                AS
+
+                SELECT
+                    customers.customer_id AS customer_id,
+                    customers.first_name AS first_name,
+                    customers.last_name AS last_name,
+                    customer_orders.first_order AS first_order,
+                    customer_orders.most_recent_order AS most_recent_order,
+                    customer_orders.number_of_orders AS number_of_orders,
+                    customer_payments.total_amount AS customer_lifetime_value
+
+                FROM `/Root/jaffle_shop/stg_customers` AS customers
+
+                LEFT JOIN (
+                    SELECT
+                        customer_id,
+
+                        min(order_date) AS first_order,
+                        max(order_date) AS most_recent_order,
+                        count(order_id) AS number_of_orders
+                    FROM `/Root/jaffle_shop/stg_orders`
+
+                    GROUP BY customer_id
+                ) AS customer_orders
+                    ON customers.customer_id = customer_orders.customer_id
+
+                LEFT JOIN (
+                    SELECT
+                        orders.customer_id AS customer_id,
+                        sum(amount) AS total_amount
+
+                    FROM `/Root/jaffle_shop/stg_payments` AS payments
+
+                    LEFT JOIN `/Root/jaffle_shop/stg_orders` AS orders ON
+                            payments.order_id = orders.order_id
+
+                    GROUP BY orders.customer_id
+                ) AS customer_payments
+                    ON customers.customer_id = customer_payments.customer_id;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT customer_id, first_name, last_name, number_of_orders, customer_lifetime_value
+                FROM `/Root/jaffle_shop/customers__dbt_tmp`
+                ORDER BY customer_id ASC;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([
+                [1;["Alice"];["Anderson"];[2u];[300]];
+                [2;["Bob"];["Brown"];[1u];[50]];
+                [3;["Carol"];["Clark"];#;#]
+            ])");
+        }
+    }
+
     Y_UNIT_TEST(MixedCreateAsSelect) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableMoveColumnTable(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false).SetEnableTempTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
@@ -2066,10 +2438,9 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(TableSink_ReplaceDataShardDataQuery, UseSink) {
+    Y_UNIT_TEST(TableSink_ReplaceDataShardDataQuery) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(UseSink);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
@@ -2158,7 +2529,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         featureFlags.SetEnableMoveColumnTable(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false).SetEnableTempTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(false);
@@ -2167,26 +2537,70 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         {
             auto result = client.ExecuteQuery(R"(
-                CREATE OR REPLACE TABLE `/Root/RowDst` (
-                    PRIMARY KEY (Col1)
-                )
-                WITH (STORE = COLUMN) AS
-                SELECT 1 AS Col1;
-            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "OR REPLACE feature is supported only for EXTERNAL DATA SOURCE and EXTERNAL TABLE", result.GetIssues().ToString());
-        }
-
-        {
-            auto result = client.ExecuteQuery(R"(
-                CREATE OR REPLACE TABLE `/Root/RowDst` (
+                CREATE TABLE `/Root/RowDst` (
                     PRIMARY KEY (Col1)
                 )
                 WITH (STORE = ROW) AS
                 SELECT 1 AS Col1;
             )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "OR REPLACE feature is supported only for EXTERNAL DATA SOURCE and EXTERNAL TABLE", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "CTAS statement is disabled for row-oriented tables.", result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/RowDst` (
+                    PRIMARY KEY (Col1)
+                )
+                WITH (STORE = row) AS
+                SELECT 1 AS Col1;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "CTAS statement is disabled for row-oriented tables.", result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/RowDst` (
+                    PRIMARY KEY (Col1)
+                )
+                WITH (STORE = COLUMN) AS
+                SELECT 1 AS Col1;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/RowDst2` (
+                    PRIMARY KEY (Col1)
+                )
+                WITH (STORE = column) AS
+                SELECT 1 AS Col1;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/Src` (
+                    Col1 Uint32 NOT NULL,
+                    PRIMARY KEY (Col1)
+                )
+                WITH (STORE = row);
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/RowDst3` (
+                    PRIMARY KEY (Col1)
+                )
+                WITH (STORE = column) AS
+                SELECT * From `/Root/Src`;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
 
@@ -2196,7 +2610,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         featureFlags.SetEnableMoveColumnTable(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false).SetEnableTempTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         TKikimrRunner kikimr(settings);
@@ -2570,7 +2983,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         featureFlags.SetEnableMoveColumnTable(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false).SetEnableTempTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
@@ -2701,7 +3113,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                     continue;
                 }
 
-                UNIT_ASSERT(!column.NotNull);
+                UNIT_ASSERT_VALUES_EQUAL(column.NotNull.value_or(false), NotNull && IsOlap);
 
                 THashMap<TString, TString> nameToType = {
                     {"CBool",           "Bool"},
@@ -2745,7 +3157,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     Y_UNIT_TEST_TWIN(CreateAsSelectBadTypes, IsOlap) {
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
@@ -2794,14 +3205,14 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true).SetAuthToken("user0@builtin");;
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         TKikimrRunner kikimr(settings);
 
         {
             auto driverConfig = TDriverConfig()
-            .SetEndpoint(kikimr.GetEndpoint())
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetDatabase("/Root")
                 .SetAuthToken("root@builtin");
             auto driver = TDriver(driverConfig);
             auto schemeClient = NYdb::NScheme::TSchemeClient(driver);
@@ -2866,9 +3277,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(UpdateThenDelete, UseSink) {
+    Y_UNIT_TEST(UpdateThenDelete) {
         auto settings = TKikimrSettings().SetWithSampleTables(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
 
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
@@ -3058,6 +3468,314 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             TString output = StreamResultToYson(it);
             CompareYson(output, R"([[[1u];[1u]];[[10u];[10u]];[[100u];[100u]]])");
         }
+    }
+
+     Y_UNIT_TEST(CreateTableAs_MkDir) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableMoveColumnTable(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        TKikimrRunner kikimr(settings);
+
+        const TString query = R"(
+            CREATE TABLE `/Root/test_dir/Destination` (
+                PRIMARY KEY (Col1)
+            )
+            WITH (STORE = ROW)
+            AS SELECT 1u As Col1, 1u As Col2;
+        )";
+
+        auto client = kikimr.GetQueryClient();
+        {
+            auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto it = client.StreamExecuteQuery(R"(
+                SELECT * FROM `/Root/test_dir/Destination` ORDER BY Col1;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
+            TString output = StreamResultToYson(it);
+            CompareYson(output, R"([[1u;1u]])");
+        }
+    }
+}
+Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
+    TKikimrRunner CreateKikimrWithDiscardSelect(bool useRealThreads = true) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableDiscardSelect(true);
+        auto settings = TKikimrSettings(appConfig).SetUseRealThreads(useRealThreads);
+        return TKikimrRunner(settings);
+    }
+
+    Y_UNIT_TEST(DiscardSelectSupport) {
+        auto kikimr = CreateKikimrWithDiscardSelect();
+        auto db = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
+
+        TVector<TString> queries = {
+            "DISCARD SELECT 1",
+            "DISCARD SELECT COUNT(*) FROM `/Root/EightShard`",
+            "DISCARD SELECT 5 FROM (SELECT Key FROM `/Root/EightShard`)",
+            R"(DISCARD SELECT e1.Key, e2.Value1
+            FROM `/Root/EightShard` AS e1
+            JOIN `/Root/TwoShard` AS e2 ON e1.Key = e2.Key)"
+        };
+
+        TVector<TString> invalidQueries = {
+            "SELECT 5 FROM (DISCARD SELECT Key FROM `/Root/EightShard`)",
+            "SELECT * FROM `/Root/EightShard` WHERE Key IN (DISCARD SELECT 1)",
+            "SELECT 1 UNION ALL (DISCARD SELECT 2)",
+            "SELECT (DISCARD SELECT 1) as result"
+        };
+        TVector<TString> invalidQueriesForDml = {
+            "SELECT 1 UNION ALL DISCARD SELECT 2"
+        };
+
+        TVector<TString> intoResultQueries = {
+            "SELECT 1 UNION ALL (SELECT 2 INTO RESULT foo)",
+            "SELECT 1 UNION ALL (SELECT 2 INTO RESULT foo) UNION ALL SELECT 3"
+        };
+
+        for (const auto& query : queries) {
+            auto result = db.ExecuteQuery(query,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
+                "DISCARD SELECT should return no result sets for query: " << query);
+        }
+        {
+            auto multiLineQuery = R"(SELECT 1; DISCARD SELECT 2; DISCARD SELECT COUNT(*) FROM `/Root/EightShard`;
+                        SELECT MIN(Key) FROM `/Root/TwoShard`)";
+
+                auto result = db.ExecuteQuery(multiLineQuery,
+                        NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 2,
+                "expect 2 result sets, got " << result.GetResultSets().size() << " instead");
+        }
+
+        //  backward compatibility: INTO RESULT in parentheses
+        for (const auto& query : intoResultQueries) {
+            auto result = db.ExecuteQuery(query,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(),
+                "INTO RESULT in parentheses should work (backward compatibility): " << query << ", error: " << result.GetIssues().ToString());
+        }
+
+        for (const auto& query : Concatenate(invalidQueries, invalidQueriesForDml)) {
+            auto result = db.ExecuteQuery(query,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(),
+                "Query should fail: " << query);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "DISCARD");
+        }
+        // backward compatibility test: dml
+        {
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            for (auto& query : Concatenate(queries, invalidQueries)) {
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_C(result.GetResultSets().size() > 0,
+                    "DISCARD SELECT should return result sets for dml (backward compatibility) but got: " << result.GetResultSets().size() << " for query " << query);
+            }
+        }
+        // backward compatibility test: scan
+        for (auto& query : Concatenate(queries, invalidQueries)) {
+            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto collected = CollectStreamResult(it);
+            UNIT_ASSERT_C(!collected.ResultSetYson.empty(),
+                "DISCARD SELECT should return result sets for Scan query (backward compatibility), got empty for query: " << query);
+        }
+
+    }
+
+    Y_UNIT_TEST(DiscardSelectEnsureExecuted) {
+        auto kikimr = CreateKikimrWithDiscardSelect();
+        auto db = kikimr.GetQueryClient();
+
+        auto failingEnsureQuery = std::vector{R"(
+            DISCARD SELECT Ensure(Data, Data > 1000000, "some error message") AS value
+            FROM `/Root/EightShard`)",
+            R"(DISCARD SELECT Ensure(r2, r2 > 100, "some error message") AS final
+                FROM (SELECT Ensure(r1, r1 IS NOT NULL, "ok") AS r2
+                FROM (SELECT Ensure(1, true, "ok") AS r1) AS t1) AS t2;)"
+            };
+
+        for (const auto& query : failingEnsureQuery) {
+            auto result = db.ExecuteQuery(query,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            UNIT_ASSERT_C(!result.IsSuccess(),
+                "Query with DISCARD and failing Ensure should fail, proving Ensure is executed. Got status: " << result.GetStatus());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "some error message");
+        }
+        auto passingEnsureQuery = R"(
+            DISCARD SELECT Ensure(Data, Data < 1000000, "Data value out of range") AS value
+            FROM `/Root/EightShard`
+        )";
+
+        auto result2 = db.ExecuteQuery(passingEnsureQuery,
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_C(result2.IsSuccess(), result2.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result2.GetResultSets().size(), 0,
+            "DISCARD SELECT should return no result sets, got: " << result2.GetResultSets().size());
+    }
+
+    Y_UNIT_TEST(NoChannelDataEventsWhenDiscard) {
+        auto kikimr = CreateKikimrWithDiscardSelect(false);
+        auto db = kikimr.GetQueryClient();
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        ui32 channelDataCount = 0;
+        TActorId executerId;
+        bool executerIdCaptured = false;
+
+        auto observer = [&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NKikimr::NKqp::TEvKqpExecuter::TEvTxRequest::EventType && !executerIdCaptured) {
+                executerId = ev->Recipient;
+                executerIdCaptured = true;
+                Cerr << "Captured ExecuterId: " << executerId << Endl;
+            }
+            if (ev->GetTypeRewrite() == NYql::NDq::TEvDqCompute::TEvChannelData::EventType) {
+                auto& record = ev->Get<NYql::NDq::TEvDqCompute::TEvChannelData>()->Record;
+                    Cerr << "ChannelData event detected, channelId: " << record.GetChannelData().GetChannelId()
+                        << ", sender: " << ev->Sender << ", recipient: " << ev->Recipient << Endl;
+
+                    if (executerIdCaptured && ev->Recipient == executerId) {
+                        ++channelDataCount;
+                        Cerr << "ChannelData sent to Executer! Count: " << channelDataCount << Endl;
+                        return TTestActorRuntime::EEventAction::PROCESS;
+                    }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observer);
+
+        Y_DEFER {
+            runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+        };
+
+        {
+            auto result = kikimr.RunCall([&] {
+                return db.ExecuteQuery(R"(
+                    pragma ydb.DqChannelVersion = "1";
+                    DISCARD SELECT COUNT(*) FROM `/Root/TwoShard`;
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            });
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
+                "DISCARD SELECT should return no result sets");
+
+            UNIT_ASSERT_VALUES_EQUAL_C(channelDataCount, 0,
+                "ChannelData should not be sent when DISCARD is used, count: " << channelDataCount);
+        }
+        {
+            channelDataCount = 0;
+            executerIdCaptured = false;
+
+            auto result = kikimr.RunCall([&] {
+                return db.ExecuteQuery(R"(
+                    pragma ydb.DqChannelVersion = "1";
+                    SELECT COUNT(*) FROM `/Root/TwoShard`;
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetResultSets().size() > 0);
+
+            UNIT_ASSERT_C(channelDataCount > 0,
+                "ChannelDataCount for SELECT: " << channelDataCount);
+        }
+    }
+
+    Y_UNIT_TEST(DiscardSelectMultiLine) {
+        auto kikimr = CreateKikimrWithDiscardSelect();
+        auto db = kikimr.GetQueryClient();
+
+        auto verifyResultValue = [](auto& result, ui32 resultSetIndex, i32 expectedValue) {
+            TResultSetParser parser(result.GetResultSet(resultSetIndex));
+            UNIT_ASSERT_C(parser.TryNextRow(),
+                "Failed to get row from result set " << resultSetIndex);
+            UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(0).GetInt32(), expectedValue,
+                "Result set " << resultSetIndex << " has wrong value");
+        };
+
+        ExecuteQueryAndCheckResultSets(db,
+            "DISCARD SELECT 1; DISCARD SELECT 2; DISCARD SELECT 3",
+            0, "All DISCARD");
+
+        ExecuteQueryAndCheckResultSets(db, R"(
+            SELECT 1;
+            DISCARD SELECT Ensure(Data, Data < 1000000, "Data value too large")
+                FROM `/Root/EightShard`;
+            SELECT 2
+        )", 2, "DISCARD with Ensure");
+
+        {
+            auto result = ExecuteQueryAndCheckResultSets(db,
+                "DISCARD SELECT 1; DISCARD SELECT 2; DISCARD SELECT 3; SELECT 4",
+                1, "Interleaved DISCARD and normal results");
+            verifyResultValue(result, 0, 4);
+        }
+
+        ExecuteQueryAndCheckResultSets(db, R"(
+            DISCARD SELECT Key, COUNT(*) FROM `/Root/EightShard` GROUP BY Key;
+            SELECT MIN(Key) FROM `/Root/TwoShard`
+        )", 1, "DISCARD with aggregation");
+
+        ExecuteQueryAndCheckResultSets(db, R"(
+            DISCARD SELECT e1.Key, e2.Value1
+            FROM `/Root/EightShard` AS e1
+            JOIN `/Root/TwoShard` AS e2 ON e1.Key = e2.Key;
+            SELECT 1
+        )", 1, "DISCARD with JOIN");
+
+        ExecuteQueryAndCheckResultSets(db, R"(
+            DISCARD SELECT * FROM `/Root/EightShard` WHERE Key = 999999;
+            SELECT 1
+        )", 1, "DISCARD with empty result");
+
+        ExecuteQueryAndCheckResultSets(db, R"(
+            SELECT 3;
+            DISCARD SELECT * FROM (SELECT Key FROM `/Root/EightShard` WHERE Key > 100);
+            DISCARD SELECT 1;
+            SELECT COUNT(*) FROM `/Root/TwoShard`;
+        )", 2, "DISCARD with subquery");
+        {
+            auto result = ExecuteQueryAndCheckResultSets(db, R"(
+                DISCARD SELECT * FROM `/Root/EightShard` LIMIT 5;
+                SELECT COUNT(*) as cnt FROM `/Root/TwoShard`;
+                DISCARD SELECT Key FROM `/Root/EightShard` WHERE Key < 200;
+                SELECT MIN(Key) as min_key FROM `/Root/EightShard`
+            )", 2, "Data Executor only");
+        }
+        {
+            auto result = ExecuteQueryAndCheckResultSets(db, R"(SELECT 1; DISCARD SELECT 2; SELECT 3;
+                                                                DISCARD SELECT 4; SELECT 5; DISCARD SELECT 6;
+                                                                SELECT 7)", 4, "Many transactions (> 2)");
+            auto resultValues = std::vector{1, 3, 5, 7};
+            for (auto&& [i, value] : Enumerate(resultValues)) {
+                verifyResultValue(result, i, value);
+            }
+        }
+        {
+            auto query = R"(sub = (DISCARD SELECT 1);
+                                            SELECT * FROM $sub)";
+            auto result = db.ExecuteQuery(query,
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(),
+                "Query should fail: " << query);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "DISCARD");
+        }
+
     }
 }
 

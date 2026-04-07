@@ -4,6 +4,7 @@
 #include "status_codes.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 
 
@@ -50,8 +51,8 @@ class TBalancingPolicy {
     friend class TDriver;
 public:
     //! Use preferable location,
-    //! location is a name of datacenter (VLA, MAN), if location is empty local datacenter is used
-    static TBalancingPolicy UsePreferableLocation(const std::string& location = {});
+    //! location is a name of datacenter (VLA, MAN), if location is nullopt local datacenter is used
+    static TBalancingPolicy UsePreferableLocation(const std::optional<std::string>& location = {});
 
     //! Use all available cluster nodes regardless datacenter locality
     static TBalancingPolicy UseAllNodes();
@@ -60,10 +61,18 @@ public:
     //! Use pile with preferable state
     static TBalancingPolicy UsePreferablePileState(EPileState pileState = EPileState::PRIMARY);
 
+    TBalancingPolicy(const TBalancingPolicy&) = delete;
+    TBalancingPolicy(TBalancingPolicy&&) = default;
+    TBalancingPolicy& operator=(const TBalancingPolicy&) = delete;
+    TBalancingPolicy& operator=(TBalancingPolicy&&) = default;
+
+    ~TBalancingPolicy();
+
     class TImpl;
 private:
     TBalancingPolicy(std::unique_ptr<TImpl>&& impl);
 
+    // For deprecated EBalancingPolicy
     TBalancingPolicy(EBalancingPolicy policy, const std::string& params);
 
     std::unique_ptr<TImpl> Impl_;

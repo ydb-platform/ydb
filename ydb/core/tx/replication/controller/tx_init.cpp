@@ -62,6 +62,10 @@ class TController::TTxInit: public TTxBase {
             replication->SetNextTargetId(nextTid);
             replication->SetDesiredState(desiredState);
 
+            if (!database) {
+                Self->UnresolvedDatabaseReplications.emplace(replication->GetId(), ResolveDatabaseAttemptsLimit);
+            }
+
             if (!rowset.Next()) {
                 return false;
             }
@@ -88,9 +92,6 @@ class TController::TTxInit: public TTxBase {
                 rowset.GetValue<Schema::Targets::DstPathOwnerId>(),
                 rowset.GetValue<Schema::Targets::DstPathLocalId>()
             );
-            const auto transformLambda = rowset.GetValue<Schema::Targets::TransformLambda>();
-            const auto runAsUser = rowset.GetValue<Schema::Targets::RunAsUser>();
-            const auto directoryPath = rowset.GetValue<Schema::Targets::DirectoryPath>();
 
             auto replication = Self->Find(rid);
             Y_VERIFY_S(replication, "Unknown replication: " << rid);
@@ -106,7 +107,7 @@ class TController::TTxInit: public TTxBase {
                     break;
 
                 case TReplication::ETargetKind::Transfer:
-                    config = std::make_shared<TTargetTransfer::TTransferConfig>(srcPath, dstPath, transformLambda, runAsUser, directoryPath);
+                    config = std::make_shared<TTargetTransfer::TTransferConfig>(srcPath, dstPath, replication->GetConfig());
                     break;
             }
 
@@ -244,7 +245,18 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         CLOG_D(ctx, "Complete");
-        Self->SwitchToWork(ctx);
+
+        if (Self->UnresolvedDatabaseReplications.empty()) {
+            Self->SwitchToWork(ctx);
+        } else {
+            for (auto& [rid, resolveAttempts] : Self->UnresolvedDatabaseReplications) {
+                auto replication = Self->Find(rid);
+                replication->ResolveDatabase(ctx);
+                --resolveAttempts;
+            }
+
+            Self->SwitchToDatabaseResolve(ctx);
+        }
     }
 
 }; // TTxInit

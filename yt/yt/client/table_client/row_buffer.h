@@ -3,6 +3,7 @@
 #include "public.h"
 #include "unversioned_row.h"
 #include "versioned_row.h"
+#include "tracked_memory_chunk_provider.h"
 
 #include <yt/yt/core/misc/memory_usage_tracker.h>
 
@@ -23,37 +24,30 @@ class TRowBuffer
     : public TRefCounted
 {
 public:
-    TRowBuffer(
-        TRefCountedTypeCookie tagCookie,
-        IMemoryChunkProviderPtr chunkProvider,
-        size_t startChunkSize = TChunkedMemoryPool::DefaultStartChunkSize,
-        IMemoryUsageTrackerPtr tracker = nullptr,
-        bool allowMemoryOvercommit = false);
-
     template <class TTag = TDefaultRowBufferPoolTag>
     explicit TRowBuffer(
         TTag /*tag*/ = TDefaultRowBufferPoolTag(),
         size_t startChunkSize = TChunkedMemoryPool::DefaultStartChunkSize,
         IMemoryUsageTrackerPtr tracker = nullptr,
         bool allowMemoryOvercommit = false)
-        : MemoryTracker_(std::move(tracker))
-        , AllowMemoryOvercommit_(allowMemoryOvercommit)
-        , Pool_(
-            TTag(),
+        : Pool_(
+            GetRefCountedTypeCookie<TTag>(),
+            GetTrackedMemoryChunkProvider(std::move(tracker), allowMemoryOvercommit),
             startChunkSize)
     {
         static_assert(IsEmptyClass<TTag>());
     }
 
+    TRowBuffer(
+        TRefCountedTypeCookie tagCookie,
+        IMemoryChunkProviderPtr chunkProvider,
+        size_t startChunkSize = TChunkedMemoryPool::DefaultStartChunkSize);
+
     template <class TTag>
     TRowBuffer(
         TTag /*tag*/,
-        IMemoryChunkProviderPtr chunkProvider,
-        IMemoryUsageTrackerPtr tracker = nullptr,
-        bool allowMemoryOvercommit = false)
-        : MemoryTracker_(std::move(tracker))
-        , AllowMemoryOvercommit_(allowMemoryOvercommit)
-        , Pool_(
+        IMemoryChunkProviderPtr chunkProvider)
+        : Pool_(
             GetRefCountedTypeCookie<TTag>(),
             std::move(chunkProvider))
     {
@@ -117,13 +111,7 @@ public:
     void Purge();
 
 private:
-    const IMemoryUsageTrackerPtr MemoryTracker_;
-    const bool AllowMemoryOvercommit_;
-
     TChunkedMemoryPool Pool_;
-    TMemoryUsageTrackerGuard MemoryGuard_;
-
-    void UpdateMemoryUsage();
 };
 
 DEFINE_REFCOUNTED_TYPE(TRowBuffer)

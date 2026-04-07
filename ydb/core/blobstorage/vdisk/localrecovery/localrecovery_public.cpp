@@ -33,7 +33,10 @@ namespace NKikimr {
                                 const TIntrusivePtr<TLsnMngr> &lsnMngr,
                                 TVDiskIncarnationGuid vdiskIncarnationGuid,
                                 NKikimrVDiskData::TScrubEntrypoint scrubEntrypoint,
-                                ui64 scrubEntrypointLsn)
+                                ui64 scrubEntrypointLsn,
+                                NKikimrVDiskData::TMetadataEntryPoint metadataEntryPoint,
+                                std::unique_ptr<TChunkKeeperData>&& chunkKeeperData,
+                                bool hasMetadata)
         : Status(status)
         , RecovInfo(recovInfo)
         , RepairedSyncLog(std::move(repairedSyncLog))
@@ -48,6 +51,9 @@ namespace NKikimr {
         , VDiskIncarnationGuid(vdiskIncarnationGuid)
         , ScrubEntrypoint(std::move(scrubEntrypoint))
         , ScrubEntrypointLsn(scrubEntrypointLsn)
+        , MetadataEntryPoint(std::move(metadataEntryPoint))
+        , ChunkKeeperData(std::move(chunkKeeperData))
+        , HasMetadata(hasMetadata)
     {}
 
     TEvBlobStorage::TEvLocalRecoveryDone::~TEvLocalRecoveryDone() {
@@ -85,6 +91,8 @@ namespace NKikimr {
         NKikimrVDiskData::TScrubEntrypoint ScrubEntrypoint;
         ui64 ScrubEntrypointLsn = 0;
         bool IsTinyDisk = false;
+        NKikimrVDiskData::TMetadataEntryPoint MetadataEntryPoint;
+        bool HasMetadata = false;
 
         TActiveActors ActiveActors;
 
@@ -118,7 +126,10 @@ namespace NKikimr {
                                                 nullptr,
                                                 VDiskIncarnationGuid,
                                                 {},
-                                                0));
+                                                0,
+                                                {},
+                                                nullptr,
+                                                false));
             Die(ctx);
         }
 
@@ -151,7 +162,10 @@ namespace NKikimr {
                                                               lsnMngr,
                                                               VDiskIncarnationGuid,
                                                               std::move(ScrubEntrypoint),
-                                                              ScrubEntrypointLsn));
+                                                              ScrubEntrypointLsn,
+                                                              std::move(MetadataEntryPoint),
+                                                              std::move(LocRecCtx->ChunkKeeperData),
+                                                              HasMetadata));
             Die(ctx);
         }
 
@@ -253,12 +267,46 @@ namespace NKikimr {
             }
         }
 
+        bool InitMetadata(const TStartingPoints& startingPoints, const TActorContext& ctx) {
+            if (const auto it = startingPoints.find(TLogSignature::SignatureMetadata); it != startingPoints.end()) {
+                if (!MetadataEntryPoint.ParseFromArray(it->second.Data.GetData(), it->second.Data.GetSize())) {
+                    SignalErrorAndDie(ctx, NKikimrProto::ERROR, "Entry point for disk metadata is incorrect");
+                    return false;
+                }
+                if (!MetadataEntryPoint.HasHullCompLevel0MaxSstsAtOnce()) {
+                    MetadataEntryPoint.SetHullCompLevel0MaxSstsAtOnce(Config->HullCompLevel0MaxSstsAtOnce);
+                }
+                if (!MetadataEntryPoint.HasHullCompSortedPartsNum()) {
+                    MetadataEntryPoint.SetHullCompSortedPartsNum(Config->HullCompSortedPartsNum);
+                }
+                HasMetadata = true;
+            } else {
+                ui32 hullCompLevel0MaxSstsAtOnce = Config->HullCompLevel0MaxSstsAtOnce;
+                ui32 hullCompSortedPartsNum = Config->HullCompSortedPartsNum;
+
+                if (IsTinyDisk) {
+                    hullCompLevel0MaxSstsAtOnce = TVDiskConfig::TinyDiskHullCompLevel0MaxSstsAtOnce;
+                    hullCompSortedPartsNum = TVDiskConfig::TinyDiskHullCompSortedPartsNum;
+                }
+
+                MetadataEntryPoint.SetHullCompLevel0MaxSstsAtOnce(hullCompLevel0MaxSstsAtOnce);
+                MetadataEntryPoint.SetHullCompSortedPartsNum(hullCompSortedPartsNum);
+            }
+            return true;
+        }
+
         template <class TMetaBase, class TLoader, int signature>
         bool InitMetabase(const TStartingPoints &startingPoints, TIntrusivePtr<TMetaBase> &metabase,
                           bool &initFlag, NMonitoring::TDeprecatedCounter &counter, bool &emptyDb,
                           ui64 freshBufSize, ui64 compThreshold, const TActorContext &ctx) {
             ui32 hullCompLevel0MaxSstsAtOnce = Config->HullCompLevel0MaxSstsAtOnce;
             ui32 hullCompSortedPartsNum = Config->HullCompSortedPartsNum;
+            if (MetadataEntryPoint.HasHullCompLevel0MaxSstsAtOnce()) {
+                hullCompLevel0MaxSstsAtOnce = MetadataEntryPoint.GetHullCompLevel0MaxSstsAtOnce();
+            }
+            if (MetadataEntryPoint.HasHullCompSortedPartsNum()) {
+                hullCompSortedPartsNum = MetadataEntryPoint.GetHullCompSortedPartsNum();
+            }
 
             TStartingPoints::const_iterator it;
             it = startingPoints.find(signature);
@@ -266,11 +314,6 @@ namespace NKikimr {
                 // create an empty DB
                 emptyDb = true;
                 counter = 1;
-
-                if (IsTinyDisk) {
-                    hullCompLevel0MaxSstsAtOnce = TVDiskConfig::TinyDiskHullCompLevel0MaxSstsAtOnce;
-                    hullCompSortedPartsNum = TVDiskConfig::TinyDiskHullCompSortedPartsNum;
-                }
 
                 TLevelIndexSettings settings(LocRecCtx->HullCtx,
                     hullCompLevel0MaxSstsAtOnce,
@@ -304,9 +347,14 @@ namespace NKikimr {
 
                 if (pb.HasHullCompLevel0MaxSstsAtOnce()) {
                     hullCompLevel0MaxSstsAtOnce = pb.GetHullCompLevel0MaxSstsAtOnce();
+                } else {
+                    hullCompLevel0MaxSstsAtOnce = Config->HullCompLevel0MaxSstsAtOnce;
                 }
+
                 if (pb.HasHullCompSortedPartsNum()) {
                     hullCompSortedPartsNum = pb.GetHullCompSortedPartsNum();
+                } else {
+                    hullCompSortedPartsNum = Config->HullCompSortedPartsNum;
                 }
 
                 TLevelIndexSettings settings(LocRecCtx->HullCtx,
@@ -459,6 +507,13 @@ namespace NKikimr {
             Y_VERIFY_S(LocRecCtx->PDiskCtx->Dsk->AppendBlockSize * blocksInChunk == LocRecCtx->PDiskCtx->Dsk->ChunkSize,
                 LocRecCtx->VCtx->VDiskLogPrefix);
 
+            ui32 stepsBetweenPowersOf2 = Config->HugeBlobStepsBetweenPowersOf2;
+            if (IsTinyDisk) {
+                stepsBetweenPowersOf2 = TVDiskConfig::TinyDiskHugeBlobStepsBetweenPowersOf2;
+            }
+
+            bool enableTinyDisks = AppData(ctx)->FeatureFlags.GetEnableTinyDisks();
+
             auto logFunc = [&] (const TString &msg) {
                 LOG_DEBUG(ctx, BS_HULLHUGE, msg);
             };
@@ -473,9 +528,12 @@ namespace NKikimr {
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             Config->MilestoneHugeBlobInBytes,
-                            Config->MaxLogoBlobDataSize + TDiskBlob::HeaderSize,
+                            Config->MaxLogoBlobDataSize + TDiskBlob::MaxHeaderSize,
                             Config->HugeBlobOverhead,
+                            stepsBetweenPowersOf2,
+                            enableTinyDisks,
                             Config->HugeBlobsFreeChunkReservation,
+                            Config->GarbageThresholdToRunFullCompactionPerMille,
                             logFunc);
             } else {
                 // read existing one
@@ -494,15 +552,18 @@ namespace NKikimr {
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             LocRecCtx->PDiskCtx->Dsk->AppendBlockSize,
                             Config->MilestoneHugeBlobInBytes,
-                            Config->MaxLogoBlobDataSize + TDiskBlob::HeaderSize,
+                            Config->MaxLogoBlobDataSize + TDiskBlob::MaxHeaderSize,
                             Config->HugeBlobOverhead,
+                            stepsBetweenPowersOf2,
+                            enableTinyDisks,
                             Config->HugeBlobsFreeChunkReservation,
-                            lsn, entryPoint, logFunc);
+                            lsn,
+                            entryPoint,
+                            Config->GarbageThresholdToRunFullCompactionPerMille,
+                            logFunc);
             }
-            HugeBlobCtx = std::make_shared<THugeBlobCtx>(
-                    LocRecCtx->VCtx->VDiskLogPrefix,
-                    LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(),
-                    Config->AddHeader);
+            HugeBlobCtx = std::make_shared<THugeBlobCtx>(LocRecCtx->VCtx->VDiskLogPrefix,
+                LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(), Config->BlobHeaderMode);
             HugeKeeperInitialized = true;
             return true;
         }
@@ -513,6 +574,20 @@ namespace NKikimr {
                 if (!ScrubEntrypoint.ParseFromArray(it->second.Data.GetData(), it->second.Data.GetSize())) {
                     SignalErrorAndDie(ctx, NKikimrProto::ERROR, "Entry point for Scrub actor is incorrect");
                 }
+            }
+            return true;
+        }
+
+        bool InitChunkKeeper(const TStartingPoints& startingPoints, const TActorContext& ctx) {
+            if (const auto it = startingPoints.find(TLogSignature::SignatureChunkKeeper); it != startingPoints.end()) {
+                NKikimrVDiskData::TChunkKeeperEntryPoint entryPoint;
+                if (!entryPoint.ParseFromArray(it->second.Data.GetData(), it->second.Data.GetSize())) {
+                    SignalErrorAndDie(ctx, NKikimrProto::ERROR, "Entry point for chunk keeper is incorrect");
+                    return false;
+                }
+                LocRecCtx->ChunkKeeperData = std::make_unique<TChunkKeeperData>(entryPoint);
+            } else {
+                LocRecCtx->ChunkKeeperData = std::make_unique<TChunkKeeperData>(NKikimrVDiskData::TChunkKeeperEntryPoint{});
             }
             return true;
         }
@@ -529,7 +604,11 @@ namespace NKikimr {
             } else {
                 VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::LoadDb;
                 const auto &m = ev->Get();
-                IsTinyDisk = m->PDiskParams->IsTinyDisk;
+
+                if (AppData(ctx)->FeatureFlags.GetEnableTinyDisks()) {
+                    IsTinyDisk = m->PDiskParams->IsTinyDisk;
+                }
+
                 LocRecCtx->PDiskCtx = TPDiskCtx::Create(m->PDiskParams, Config);
 
                 LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
@@ -552,7 +631,6 @@ namespace NKikimr {
                         Config->HullCompReadBatchEfficiencyThreshold,
                         Config->HullCompStorageRatioCalcPeriod,
                         Config->HullCompStorageRatioMaxCalcDuration,
-                        Config->AddHeader,
                         Config->HullCompLevel0MaxSstsAtOnce,
                         Config->HullCompSortedPartsNum);
 
@@ -563,7 +641,7 @@ namespace NKikimr {
                 if (Config->UseCostTracker) {
                     NPDisk::EDeviceType trueMediaType = LocRecCtx->PDiskCtx->Dsk->TrueMediaType;
                     if (trueMediaType == NPDisk::DEVICE_TYPE_UNKNOWN) {
-                        // Unable to resolve type from PDisk's properties, using type from VDisk config 
+                        // Unable to resolve type from PDisk's properties, using type from VDisk config
                         trueMediaType = Config->BaseInfo.DeviceType;
                     }
                     if (trueMediaType != NPDisk::DEVICE_TYPE_UNKNOWN) {
@@ -595,6 +673,8 @@ namespace NKikimr {
                         case TLogSignature::SignatureSyncerState:
                         case TLogSignature::SignatureHugeBlobEntryPoint:
                         case TLogSignature::SignatureScrub:
+                        case TLogSignature::SignatureMetadata:
+                        case TLogSignature::SignatureChunkKeeper:
                             break;
 
                         default:
@@ -605,6 +685,9 @@ namespace NKikimr {
                     }
                 }
 
+                // read metadata entry point if present
+                if (!InitMetadata(startingPoints, ctx))
+                    return;
                 // hull DB async initialization
                 if (!InitLogoBlobsMetabase(startingPoints, ctx))
                     return;
@@ -621,6 +704,9 @@ namespace NKikimr {
                 if (!InitHugeBlobKeeper(startingPoints, ctx))
                     return;
                 if (!InitScrub(startingPoints, ctx))
+                    return;
+                // read chunk keeper entry point if present
+                if (!InitChunkKeeper(startingPoints, ctx))
                     return;
 
                 Become(&TThis::StateLoadDatabase);

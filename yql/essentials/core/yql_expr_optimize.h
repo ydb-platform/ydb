@@ -7,10 +7,10 @@
 
 namespace NYql {
 
-typedef std::function<TExprNode::TPtr (const TExprNode::TPtr&, TExprContext&)> TCallableOptimizer;
-typedef std::function<TExprNode::TPtr (const TExprNode::TPtr&, bool&, TExprContext&)> TCallableOptimizerFast;
+using TCallableOptimizer = std::function<TExprNode::TPtr (const TExprNode::TPtr&, TExprContext&)>;
+using TCallableOptimizerFast = std::function<TExprNode::TPtr (const TExprNode::TPtr&, bool&, TExprContext&)>;
 
-typedef std::unordered_set<ui64> TProcessedNodesSet;
+using TProcessedNodesSet = std::unordered_set<ui64>;
 
 struct TOptimizeExprSettings {
     explicit TOptimizeExprSettings(TTypeAnnotationContext* types)
@@ -26,6 +26,7 @@ struct TOptimizeExprSettings {
     bool VisitTuples = false;
     std::function<bool(const TExprNode&)> VisitChecker;
     bool TrackFrames = false;
+    bool ReuseLambda = false;
 };
 
 IGraphTransformer::TStatus OptimizeExpr(const TExprNode::TPtr& input, TExprNode::TPtr& output, TCallableOptimizer optimizer,
@@ -44,17 +45,18 @@ public:
     virtual void RemapNode(const TExprNode& fromNode, const TExprNode::TPtr& toNode) = 0;
 };
 
-typedef std::function<TExprNode::TPtr (const TExprNode::TPtr&, TExprContext&, IOptimizationContext&)> TCallableOptimizerEx;
+using TCallableOptimizerEx = std::function<TExprNode::TPtr (const TExprNode::TPtr&, TExprContext&, IOptimizationContext&)>;
 
 IGraphTransformer::TStatus OptimizeExprEx(const TExprNode::TPtr& input, TExprNode::TPtr& output, TCallableOptimizerEx optimizer,
     TExprContext& ctx, const TOptimizeExprSettings& settings);
 
+IGraphTransformer::TStatus ExpandSeq(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, TTypeAnnotationContext& types);
 IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
 IGraphTransformer::TStatus ExpandApplyNoRepeat(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
 TExprNode::TPtr ApplySyncListToWorld(const TExprNode::TPtr& main, const TSyncMap& syncList, TExprContext& ctx);
 
-typedef std::function<bool (const TExprNode::TPtr&)> TExprVisitPtrFunc;
-typedef std::function<bool (const TExprNode&)> TExprVisitRefFunc;
+using TExprVisitPtrFunc = std::function<bool (const TExprNode::TPtr&)>;
+using TExprVisitRefFunc = std::function<bool (const TExprNode&)>;
 
 void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func);
 void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preFunc, const TExprVisitPtrFunc& postFunc);
@@ -62,13 +64,17 @@ void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preFunc, co
 void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func, TNodeSet& visitedNodes);
 void VisitExpr(const TExprNode& root, const TExprVisitRefFunc& func);
 void VisitExpr(const TExprNode& root, const TExprVisitRefFunc& preFunc, const TExprVisitRefFunc& postFunc);
+void VisitExpr(const TExprNode& root, const TExprVisitRefFunc& func, TNodeSet& visitedNodes);
 void VisitExprLambdasLast(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preLambdaFunc, const TExprVisitPtrFunc& postLambdaFunc);
 
 
 void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func);
+void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func, TNodeOnNodeOwnedMap& worldMap);
 void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preFunc, const TExprVisitPtrFunc& postFunc);
+void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preFunc, const TExprVisitPtrFunc& postFunc, TNodeOnNodeOwnedMap& worldMap);
 void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func, TNodeSet& visitedNodes);
 void VisitExprByFirst(const TExprNode& root, const TExprVisitRefFunc& func);
+void VisitExprByFirst(const TExprNode& root, const TExprVisitRefFunc& func, TNodeOnNodeOwnedMap& worldMap);
 
 TExprNode::TPtr FindNode(const TExprNode::TPtr& root, const TExprVisitPtrFunc& predicate);
 TExprNode::TPtr FindNode(const TExprNode::TPtr& root, const TExprVisitPtrFunc& filter, const TExprVisitPtrFunc& predicate);

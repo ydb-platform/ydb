@@ -132,7 +132,7 @@ private:
 
         const auto& readResult = record.GetPartitionResponse().GetCmdReadResult();
         if (!readResult.ResultSize()) {
-            Send(Worker, new TEvWorker::TEvDataEnd(Partition, {}, {}));
+            Send(Worker, new TEvWorker::TEvTerminateWriter(Partition));
             return;
         }
 

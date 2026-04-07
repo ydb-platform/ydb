@@ -31,6 +31,8 @@ bool THive::SeenDomain(TSubDomainKey domain) {
 
 void THive::ResolveDomain(TSubDomainKey domain) {
     THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+    request->DatabaseName = RootDomainName;
+
     request->ResultSet.emplace_back();
     auto& entry = request->ResultSet.back();
     entry.TableId = TTableId(domain.first, domain.second);
@@ -49,7 +51,7 @@ void THive::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
             TSubDomainKey key(entry.TableId.PathId.OwnerId, entry.TableId.PathId.LocalPathId);
             TString path = CanonizePath(entry.Path);
             Domains[key].Path = path;
-            if (entry.DomainInfo) {
+            if (entry.DomainInfo && entry.DomainInfo->Params.HasHive()) {
                 Domains[key].HiveId = entry.DomainInfo->Params.GetHive();
             }
             BLOG_D("Received NavigateKeySetResult for domain " << entry.TableId << " with path " << path);

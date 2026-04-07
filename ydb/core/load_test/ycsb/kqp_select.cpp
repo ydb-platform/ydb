@@ -201,7 +201,7 @@ private:
 
     void HandlePoison(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActor# " << Id
-            << " tablet recieved PoisonPill, going to die");
+            << " tablet received PoisonPill, going to die");
         CloseSession(ctx);
         Die(ctx);
     }
@@ -329,6 +329,7 @@ private:
     void DescribePath(const TActorContext& ctx) {
         TString path = Target.GetWorkingDir() + "/" + Target.GetTableName();
         auto request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
+        request->Record.SetDatabaseName(Target.GetWorkingDir());
         request->Record.MutableDescribePath()->SetPath(path);
         ctx.Send(MakeTxProxyID(), request.release());
     }
@@ -493,7 +494,7 @@ private:
 
     void HandlePoison(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActorMultiSession# " << Id
-            << " tablet recieved PoisonPill, going to die");
+            << " tablet received PoisonPill, going to die");
         Stop(ctx);
     }
 

@@ -13,6 +13,7 @@
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/raw_socket/sock_ssl.h>
 
 #include <ydb/public/lib/base/msgbus.h>
 
@@ -22,7 +23,7 @@
 #include <ydb/library/actors/core/log_settings.h>
 #include <ydb/library/actors/core/scheduler_actor.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
-#include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/vector.h>
@@ -36,6 +37,7 @@ protected:
     NKikimrConfig::TAppConfig& Config;
     const ui32                       NodeId;
     const TKikimrScopeId             ScopeId;
+    const bool                       TinyMode;
 
 public:
     IKikimrServicesInitializer(const TKikimrRunConfig& runConfig);
@@ -394,13 +396,12 @@ public:
 class TKqpServiceInitializer : public IKikimrServicesInitializer {
 public:
     TKqpServiceInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories,
-        IGlobalObjectStorage& globalObjects, NFq::IYqSharedResources::TPtr yqSharedResources);
+        IGlobalObjectStorage& globalObjects);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 private:
     std::shared_ptr<TModuleFactories> Factories;
     IGlobalObjectStorage& GlobalObjects;
-    NFq::IYqSharedResources::TPtr YqSharedResources;
 };
 
 class TCompDiskLimiterInitializer: public IKikimrServicesInitializer {
@@ -593,6 +594,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
+class TCountersInfoProviderInitializer : public IKikimrServicesInitializer {
+public:
+    TCountersInfoProviderInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 class TFederatedQueryInitializer : public IKikimrServicesInitializer {
 public:
     TFederatedQueryInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories, NFq::IYqSharedResources::TPtr yqSharedResources);
@@ -622,6 +630,9 @@ public:
 
 class TKafkaProxyServiceInitializer : public IKikimrServicesInitializer {
 public:
+    template<typename T>
+    using TSslHolder = NRawSocket::TSslLayer<TStreamSocket>::TSslHolder<T>;
+
     TKafkaProxyServiceInitializer(const TKikimrRunConfig& runConfig);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
@@ -656,6 +667,20 @@ public:
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
+
+class TOverloadManagerInitializer: public IKikimrServicesInitializer {
+public:
+    TOverloadManagerInitializer(const TKikimrRunConfig& runConfig);
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
+#if defined(OS_LINUX)
+class TNbsServiceInitializer: public IKikimrServicesInitializer {
+public:
+    TNbsServiceInitializer(const TKikimrRunConfig &runConfig);
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
+};
+#endif
 
 } // namespace NKikimrServicesInitializers
 } // namespace NKikimr

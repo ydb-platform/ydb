@@ -191,6 +191,13 @@ struct TKikimrEvents : TEvents {
         ES_TRANSFER = 4268,
         ES_TOKEN_MANAGER = 4269,
         ES_TOKEN_AGENT = 4270,
+        ES_OVERLOAD_MANAGER = 4271,
+        ES_COUNTERS_INFO = 4272,
+        ES_SASL_AUTH = 4273,
+        ES_DDISK = 4274,
+        ES_NBS_V2_SERVICE = 4275,
+        ES_FORCED_COMPACTION = 4276,
+        ES_NBS_V2_SS_PROXY = 4277,
     };
 };
 

@@ -9,7 +9,7 @@ using namespace NYT;
 
 TEST(TJobStatisticsTest, Simple)
 {
-    const TString input = R"""(
+    const TStringBuf input = R"""(
         {
             "data" = {
                 "output" = {
@@ -65,7 +65,7 @@ TEST(TJobStatisticsTest, Simple)
 
 TEST(TJobStatisticsTest, OtherTypes)
 {
-    const TString input = R"""(
+    const TStringBuf input = R"""(
     {
         "time" = {
             "exec" = {
@@ -90,7 +90,7 @@ TEST(TJobStatisticsTest, OtherTypes)
 
 TEST(TJobStatisticsTest, Custom)
 {
-    const TString input = R"""(
+    const TStringBuf input = R"""(
         {
             "custom" = {
                 "some" = {
@@ -140,7 +140,7 @@ TEST(TJobStatisticsTest, Custom)
 
 TEST(TJobStatisticsTest, TaskNames)
 {
-    const TString input = R"""(
+    const TStringBuf input = R"""(
         {
             "data" = {
                 "output" = {

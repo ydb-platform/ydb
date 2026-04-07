@@ -5,6 +5,7 @@
 
 #include <yql/essentials/public/udf/sanitizer_utils.h>
 #include <yql/essentials/utils/hash.h>
+#include <yql/essentials/utils/is_pod.h>
 
 #include <util/generic/vector.h>
 #include <util/generic/ptr.h>
@@ -26,9 +27,7 @@
 
 // TODO: Allow only PODs in key/value. Use runtime key/value sizes instead of compile time type instantiation. Use Read/WriteUnaligned
 
-namespace NKikimr {
-
-namespace NCHash {
+namespace NKikimr::NCHash {
 
 class TListPoolBase {
 public:
@@ -79,7 +78,7 @@ public:
         ui32 Size;
         TPageListItem ListItem;
 
-        TLargeListHeader(ui32 capacity)
+        explicit TLargeListHeader(ui32 capacity)
             : Mark(LARGE_MARK)
             , Capacity(capacity)
             , Size(0u)
@@ -115,13 +114,14 @@ public:
     template <typename T, class THeader>
     class TListIterator {
         using TRawByte = std::conditional_t<std::is_const<T>::value, const ui8*, ui8*>;
+
     public:
         using TRaw = std::conditional_t<std::is_const<T>::value, const void*, void*>;
 
         TListIterator() {
         }
 
-        TListIterator(T* list) {
+        explicit TListIterator(T* list) {
             if (LARGE_MARK == GetMark(list)) {
                 CurrentPage_ = EndPage_ = GetLargeListHeader(list)->Next();
                 Current_ = CurrentPage_->template GetList<T>();
@@ -158,12 +158,12 @@ public:
             return *this;
         }
 
-        bool operator ==(const TListIterator& it) const {
+        bool operator==(const TListIterator& it) const {
             return Current_ == it.Current_ && CurrentPage_ == it.CurrentPage_;
         }
 
-        bool operator !=(const TListIterator& it) const {
-            return !operator ==(it);
+        bool operator!=(const TListIterator& it) const {
+            return !operator==(it);
         }
 
         T Get() const {
@@ -251,8 +251,8 @@ protected:
         {
         }
 
-        TUsedPages& operator =(const TUsedPages& other) = delete;
-        TUsedPages& operator =(TUsedPages&& other) {
+        TUsedPages& operator=(const TUsedPages& other) = delete;
+        TUsedPages& operator=(TUsedPages&& other) {
             TUsedPages(std::move(other)).Swap(*this);
             return *this;
         }
@@ -268,22 +268,23 @@ protected:
         TString DebugInfo() const;
 
         std::array<TListType, MAX_SMALL_LIST_SIZE - 1> SmallPages; // 2-16 sizes
-        std::array<TListType, MAX_MEDIUM_LIST_INDEX> MediumPages; // 32,64,128,...,16384. Indexed by pow2
+        std::array<TListType, MAX_MEDIUM_LIST_INDEX> MediumPages;  // 32,64,128,...,16384. Indexed by pow2
         TListType FullPages;
     };
 
 public:
-    TListPoolBase(TAlignedPagePool& pagePool)
+    explicit TListPoolBase(TAlignedPagePool& pagePool)
         : PagePool_(pagePool)
-    {}
+    {
+    }
     TListPoolBase(const TListPoolBase&) = delete;
     TListPoolBase(TListPoolBase&& other)
         : PagePool_(other.PagePool_)
     {
     }
 
-    TListPoolBase& operator =(const TListPoolBase& other) = delete;
-    TListPoolBase& operator =(TListPoolBase&& other) {
+    TListPoolBase& operator=(const TListPoolBase& other) = delete;
+    TListPoolBase& operator=(TListPoolBase&& other) {
         PagePool_.Swap(other.PagePool_);
         return *this;
     }
@@ -299,26 +300,25 @@ public:
     // Returns full list size for short and medium lists. Returns size of last page for a large list
     static size_t GetPartListSize(const void* list) {
         switch (GetMark(list)) {
-        case SMALL_MARK:
-            return GetListHeader(list)->ListSize;
-        case MEDIUM_MARK:
-            return *(reinterpret_cast<const ui16*>(list) - 1);
-        case LARGE_MARK:
-            return GetLargeListHeader(list)->Size;
-        default:
-            Y_ABORT("Bad list address");
+            case SMALL_MARK:
+                return GetListHeader(list)->ListSize;
+            case MEDIUM_MARK:
+                return *(reinterpret_cast<const ui16*>(list) - 1);
+            case LARGE_MARK:
+                return GetLargeListHeader(list)->Size;
+            default:
+                Y_ABORT("Bad list address");
         }
         return 0;
     }
 
     static size_t GetFullListSize(const void* list) {
         switch (GetMark(list)) {
-        case SMALL_MARK:
-            return GetListHeader(list)->ListSize;
-        case MEDIUM_MARK:
-            return *(reinterpret_cast<const ui16*>(list) - 1);
-        case LARGE_MARK:
-            {
+            case SMALL_MARK:
+                return GetListHeader(list)->ListSize;
+            case MEDIUM_MARK:
+                return *(reinterpret_cast<const ui16*>(list) - 1);
+            case LARGE_MARK: {
                 const TLargeListHeader* start = GetLargeListHeader(list);
                 const TLargeListHeader* next = start;
                 size_t size = 0;
@@ -328,35 +328,35 @@ public:
                 } while (next != start);
                 return size;
             }
-        default:
-            Y_ABORT("Bad list address");
+            default:
+                Y_ABORT("Bad list address");
         }
         return 0;
     }
 
     static size_t GetListCapacity(const void* list) {
         switch (GetMark(list)) {
-        case SMALL_MARK:
-        case MEDIUM_MARK:
-            return GetListHeader(list)->ListSize;
-        case LARGE_MARK:
-            return GetLargeListHeader(list)->Capacity;
-        default:
-            Y_ABORT("Bad list address");
+            case SMALL_MARK:
+            case MEDIUM_MARK:
+                return GetListHeader(list)->ListSize;
+            case LARGE_MARK:
+                return GetLargeListHeader(list)->Capacity;
+            default:
+                Y_ABORT("Bad list address");
         }
         return 0;
     }
 
     static void SetPartListSize(void* list, size_t size) {
         switch (GetMark(list)) {
-        case MEDIUM_MARK:
-            *(reinterpret_cast<ui16*>(list) - 1) = size;
-            break;
-        case LARGE_MARK:
-            GetLargeListHeader(list)->Size = size;
-            break;
-        default:
-            Y_ABORT("Bad list address");
+            case MEDIUM_MARK:
+                *(reinterpret_cast<ui16*>(list) - 1) = size;
+                break;
+            case LARGE_MARK:
+                GetLargeListHeader(list)->Size = size;
+                break;
+            default:
+                Y_ABORT("Bad list address");
         }
     }
 
@@ -377,30 +377,33 @@ private:
     static constexpr size_t PoolCount = 1 + !std::is_same<TPrimary, TSecondary>::value;
 
 public:
-    TListPool(TAlignedPagePool& pagePool)
+    explicit TListPool(TAlignedPagePool& pagePool)
         : TListPoolBase(pagePool)
-    {}
+    {
+    }
     TListPool(const TListPool&) = delete;
     TListPool(TListPool&& other)
         : TListPoolBase(std::move(other))
+        // TListPoolBase does not moves Pools_ out
+        // NOLINTNEXTLINE(bugprone-use-after-move)
         , Pools_(std::move(other.Pools_))
     {
     }
 
     ~TListPool() {
-        for (auto& p: Pools_) {
-            for (auto& list: p.SmallPages) {
+        for (auto& p : Pools_) {
+            for (auto& list : p.SmallPages) {
                 Y_ABORT_UNLESS(list.Empty(), "%s", DebugInfo().data());
             }
-            for (auto& list: p.MediumPages) {
+            for (auto& list : p.MediumPages) {
                 Y_ABORT_UNLESS(list.Empty(), "%s", DebugInfo().data());
             }
             Y_ABORT_UNLESS(p.FullPages.Empty(), "%s", DebugInfo().data());
         }
     }
 
-    TListPool& operator =(const TListPool& other) = delete;
-    TListPool& operator =(TListPool&& other) {
+    TListPool& operator=(const TListPool& other) = delete;
+    TListPool& operator=(TListPool&& other) {
         TListPool(std::move(other)).Swap(*this);
         return *this;
     }
@@ -444,8 +447,8 @@ public:
                 header->Size = oldSize;
             }
 
-            if (std::is_trivially_copyable<T>::value) {
-                memcpy(list, oldList, sizeof(T) * oldSize);
+            if constexpr (std::is_trivially_copyable<T>::value) {
+                memcpy(reinterpret_cast<ui8*>(list), reinterpret_cast<const ui8*>(oldList), sizeof(T) * oldSize);
             } else {
                 for (size_t i = 0; i < oldSize; ++i) {
                     ::WriteUnaligned<T>(list + i, ::ReadUnaligned<T>(oldList + i));
@@ -507,17 +510,17 @@ public:
         static_assert(std::is_same<TPrimary, T>::value || std::is_same<TSecondary, T>::value, "Bad returned list type");
         static constexpr size_t PoolNdx = static_cast<size_t>(!std::is_same<TPrimary, T>::value);
         switch (GetMark(list)) {
-        case SMALL_MARK:
-            ReturnSmallList<PoolNdx, T>(GetListHeader(list), list);
-            break;
-        case MEDIUM_MARK:
-            ReturnMediumList<PoolNdx, T>(GetListHeader(list), list);
-            break;
-        case LARGE_MARK:
-            ReturnLargeList<T>(list);
-            break;
-        default:
-            Y_ABORT("Bad list address");
+            case SMALL_MARK:
+                ReturnSmallList<PoolNdx, T>(GetListHeader(list), list);
+                break;
+            case MEDIUM_MARK:
+                ReturnMediumList<PoolNdx, T>(GetListHeader(list), list);
+                break;
+            case LARGE_MARK:
+                ReturnLargeList<T>(list);
+                break;
+            default:
+                Y_ABORT("Bad list address");
         }
     }
 
@@ -658,7 +661,7 @@ private:
         listHeader->FreeListOffset = offset;
         ++listHeader->FreeLists;
         if (1 == listHeader->FreeLists) {
-            listHeader->ListItem.Unlink(); // Remove from full list
+            listHeader->ListItem.Unlink();                                                         // Remove from full list
             Pools_[PoolNdx].SmallPages[listHeader->ListSize - 2].PushFront(&listHeader->ListItem); // Add to partially used
         } else if (GetSmallPageCapacity<T>(listHeader->ListSize) == listHeader->FreeLists) {
             listHeader->ListItem.Unlink(); // Remove from partially used
@@ -701,6 +704,7 @@ private:
         header->~TLargeListHeader();
         GetPagePool().ReturnPage(header);
     }
+
 protected:
     std::array<TUsedPages, PoolCount> Pools_;
 };
@@ -717,7 +721,7 @@ struct TNode {
     ui8 Flag;
     union {
         ui8 D1;
-        ui8 D2[Max<size_t>(sizeof(T), sizeof(T*))];
+        std::array<ui8, Max<size_t>(sizeof(T), sizeof(T*))> D2;
     } Storage;
 
     TNode()
@@ -727,18 +731,18 @@ struct TNode {
     TNode(const TNode& n)
         : Flag(n.Flag)
     {
-        MemCopy(Storage.D2, n.Storage.D2, sizeof(Storage.D2));
+        MemCopy(Storage.D2.data(), n.Storage.D2.data(), sizeof(Storage.D2));
     }
     TNode(TNode&& n)
         : Flag(n.Flag)
     {
-        MemCopy(Storage.D2, n.Storage.D2, sizeof(Storage.D2));
+        MemCopy(Storage.D2.data(), n.Storage.D2.data(), sizeof(Storage.D2));
         n.Flag = FlagEmpty;
     }
 
     TNode& operator=(const TNode& n) {
         Flag = n.Flag;
-        MemCopy(Storage.D2, n.Storage.D2, sizeof(Storage.D2));
+        MemCopy(Storage.D2.data(), n.Storage.D2.data(), sizeof(Storage.D2));
         return *this;
     }
 
@@ -812,7 +816,7 @@ struct TKeyValuePair {
     TKeyValuePair(const TKeyValuePair&) = default;
     TKeyValuePair(TKeyValuePair&&) = default;
 
-    TKeyValuePair(const std::pair<TKey, TValue>& p)
+    explicit TKeyValuePair(const std::pair<TKey, TValue>& p)
         : first(p.first)
         , second(p.second)
     {
@@ -838,10 +842,10 @@ struct TKeyValuePair {
     {
     }
 
-    TKeyValuePair& operator =(const TKeyValuePair&) = default;
-    TKeyValuePair& operator =(TKeyValuePair&&) = default;
+    TKeyValuePair& operator=(const TKeyValuePair&) = default;
+    TKeyValuePair& operator=(TKeyValuePair&&) = default;
 
-    TKey first; // NOLINT(readability-identifier-naming)
+    TKey first;    // NOLINT(readability-identifier-naming)
     TValue second; // NOLINT(readability-identifier-naming)
 };
 
@@ -855,12 +859,12 @@ template <typename TItemType,
           typename TKeyExtractor,
           typename TKeyHash,
           typename TKeyEqual,
-          typename TSubItemType = TItemType
-          >
+          typename TSubItemType = TItemType>
 class TCompactHashBase {
 protected:
     using TItemNode = TNode<TItemType>;
     static_assert(sizeof(TItemNode) == 1 + Max<size_t>(sizeof(TItemType), sizeof(void*)), "Unexpected size");
+    static_assert(sizeof(TKeyType) <= sizeof(void*) * 2, "Key must be small enough for passing by value inside unaligned api.");
 
 public:
     template <typename T>
@@ -869,7 +873,7 @@ public:
         using TBucketIter = TListPoolBase::TListIterator<const T, const TListPoolBase::TLargeListHeader>;
 
         // Full scan iterator
-        TIteratorImpl(const TCompactHashBase* hash)
+        explicit TIteratorImpl(const TCompactHashBase* hash)
             : Hash_(hash)
             , Bucket_(0)
             , EndBucket_(Hash_->BucketsCount_)
@@ -954,7 +958,7 @@ public:
         using TValueIter = TListPoolBase::TListIterator<const T, const TListPoolBase::TLargeListHeader>;
 
         // Full scan iterator
-        TIteratorImpl(const TCompactHashBase* hash)
+        explicit TIteratorImpl(const TCompactHashBase* hash)
             : Hash_(hash)
             , Bucket_(0)
             , EndBucket_(Hash_->BucketsCount_)
@@ -1054,8 +1058,8 @@ public:
     using TBucketIterator = TListPoolBase::TListIterator<TItemType, TListPoolBase::TLargeListHeader>;
     using TConstBucketIterator = TListPoolBase::TListIterator<const TItemType, const TListPoolBase::TLargeListHeader>;
 
-    TCompactHashBase(TAlignedPagePool& pagePool, size_t size = 0, const TKeyExtractor& keyExtractor = TKeyExtractor(),
-        const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
+    explicit TCompactHashBase(TAlignedPagePool& pagePool, size_t size = 0, const TKeyExtractor& keyExtractor = TKeyExtractor(),
+                              const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
         : ListPool_(pagePool)
         , KeyExtractor_(keyExtractor)
         , KeyHash_(keyHash)
@@ -1111,12 +1115,12 @@ public:
         ClearImpl(true);
     }
 
-    TCompactHashBase& operator= (const TCompactHashBase& other) {
+    TCompactHashBase& operator=(const TCompactHashBase& other) {
         TCompactHashBase(other).Swap(*this);
         return *this;
     }
 
-    TCompactHashBase& operator= (TCompactHashBase&& other) {
+    TCompactHashBase& operator=(TCompactHashBase&& other) {
         TCompactHashBase(std::move(other)).Swap(*this);
         return *this;
     }
@@ -1381,10 +1385,10 @@ protected:
     }
 
     template <typename T>
-    struct THasNodeValue : public std::false_type {};
+    struct THasNodeValue: public std::false_type {};
 
     template <typename T>
-    struct THasNodeValue<TKeyNodePair<TKeyType, T>> : public std::true_type {};
+    struct THasNodeValue<TKeyNodePair<TKeyType, T>>: public std::true_type {};
 
     template <typename T>
     void ClearNode(TNode<T>& b) {
@@ -1462,30 +1466,28 @@ protected:
     TKeyEqual KeyEqual_;
 };
 
+struct TSelect1stUnaligned {
+    template <class TPair>
+    inline typename TPair::first_type operator()(const TPair& x) const {
+        return ::ReadUnaligned<typename TPair::first_type>(&x.first);
+    }
+};
+
 template <typename TKey,
           typename TValue,
           typename TKeyHash = THash<TKey>,
           typename TKeyEqual = TEqualTo<TKey>>
-class TCompactHash: public TCompactHashBase<TKeyValuePair<TKey, TValue>, TKey, TSelect1st, TKeyHash, TKeyEqual> {
+class TCompactHash: public TCompactHashBase<TKeyValuePair<TKey, TValue>, TKey, TSelect1stUnaligned, TKeyHash, TKeyEqual> {
 private:
-    static_assert(std::is_trivially_destructible<TKey>::value
-        && std::is_trivially_copy_assignable<TKey>::value
-        && std::is_trivially_move_assignable<TKey>::value
-        && std::is_trivially_copy_constructible<TKey>::value
-        && std::is_trivially_move_constructible<TKey>::value
-        , "Expected POD key type");
-    static_assert(std::is_trivially_destructible<TValue>::value
-        && std::is_trivially_copy_assignable<TValue>::value
-        && std::is_trivially_move_assignable<TValue>::value
-        && std::is_trivially_copy_constructible<TValue>::value
-        && std::is_trivially_move_constructible<TValue>::value
-        , "Expected POD value type");
+    static_assert(NYql::IsPod<TKey>, "Expected POD key type");
+    static_assert(NYql::IsPod<TValue>, "Expected POD value type");
 
     using TItem = TKeyValuePair<TKey, TValue>;
-    using TBase = TCompactHashBase<TItem, TKey, TSelect1st, TKeyHash, TKeyEqual>;
+    using TBase = TCompactHashBase<TItem, TKey, TSelect1stUnaligned, TKeyHash, TKeyEqual>;
+
 public:
-    TCompactHash(TAlignedPagePool& pagePool, size_t size = 0, const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
-        : TBase(pagePool, size, TSelect1st(), keyHash, keyEqual)
+    explicit TCompactHash(TAlignedPagePool& pagePool, size_t size = 0, const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
+        : TBase(pagePool, size, TSelect1stUnaligned(), keyHash, keyEqual)
     {
     }
 
@@ -1498,13 +1500,13 @@ public:
     {
     }
 
-    TCompactHash& operator= (const TCompactHash& rhs) {
-        TBase::operator =(rhs);
+    TCompactHash& operator=(const TCompactHash& rhs) {
+        TBase::operator=(rhs);
         return *this;
     }
 
-    TCompactHash& operator= (TCompactHash&& rhs) {
-        TBase::operator =(std::move(rhs));
+    TCompactHash& operator=(TCompactHash&& rhs) {
+        TBase::operator=(std::move(rhs));
         return *this;
     }
 
@@ -1541,30 +1543,20 @@ template <typename TKey,
           typename TValue,
           typename TKeyHash = THash<TKey>,
           typename TKeyEqual = TEqualTo<TKey>>
-class TCompactMultiHash: public TCompactHashBase<TKeyNodePair<TKey, TValue>, TKey, TSelect1st, TKeyHash, TKeyEqual, TValue> {
+class TCompactMultiHash: public TCompactHashBase<TKeyNodePair<TKey, TValue>, TKey, TSelect1stUnaligned, TKeyHash, TKeyEqual, TValue> {
 private:
-    static_assert(std::is_trivially_destructible<TKey>::value
-        && std::is_trivially_copy_assignable<TKey>::value
-        && std::is_trivially_move_assignable<TKey>::value
-        && std::is_trivially_copy_constructible<TKey>::value
-        && std::is_trivially_move_constructible<TKey>::value
-        , "Expected POD key type");
-    static_assert(std::is_trivially_destructible<TValue>::value
-        && std::is_trivially_copy_assignable<TValue>::value
-        && std::is_trivially_move_assignable<TValue>::value
-        && std::is_trivially_copy_constructible<TValue>::value
-        && std::is_trivially_move_constructible<TValue>::value
-        , "Expected POD value type");
+    static_assert(NYql::IsPod<TKey>, "Expected POD key type");
+    static_assert(NYql::IsPod<TValue>, "Expected POD value type");
 
     using TUserItem = std::pair<TKey, TValue>;
     using TStoreItem = TKeyNodePair<TKey, TValue>;
-    using TBase = TCompactHashBase<TStoreItem, TKey, TSelect1st, TKeyHash, TKeyEqual, TValue>;
+    using TBase = TCompactHashBase<TStoreItem, TKey, TSelect1stUnaligned, TKeyHash, TKeyEqual, TValue>;
 
     static_assert(sizeof(TStoreItem) == sizeof(TKey) + sizeof(TNode<TValue>), "Unexpected size");
 
 public:
-    TCompactMultiHash(TAlignedPagePool& pagePool, size_t size = 0, const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
-        : TBase(pagePool, size, TSelect1st(), keyHash, keyEqual)
+    explicit TCompactMultiHash(TAlignedPagePool& pagePool, size_t size = 0, const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
+        : TBase(pagePool, size, TSelect1stUnaligned(), keyHash, keyEqual)
     {
     }
     TCompactMultiHash(const TCompactMultiHash& other)
@@ -1576,13 +1568,13 @@ public:
     {
     }
 
-    TCompactMultiHash& operator= (const TCompactMultiHash& rhs) {
-        TBase::operator =(rhs);
+    TCompactMultiHash& operator=(const TCompactMultiHash& rhs) {
+        TBase::operator=(rhs);
         return *this;
     }
 
-    TCompactMultiHash& operator= (TCompactMultiHash&& rhs) {
-        TBase::operator =(std::move(rhs));
+    TCompactMultiHash& operator=(TCompactMultiHash&& rhs) {
+        TBase::operator=(std::move(rhs));
         return *this;
     }
 
@@ -1614,17 +1606,12 @@ template <typename TKey,
           typename TKeyEqual = TEqualTo<TKey>>
 class TCompactHashSet: public TCompactHashBase<TKey, TKey, TIdentity, TKeyHash, TKeyEqual> {
 private:
-    static_assert(std::is_trivially_destructible<TKey>::value
-        && std::is_trivially_copy_assignable<TKey>::value
-        && std::is_trivially_move_assignable<TKey>::value
-        && std::is_trivially_copy_constructible<TKey>::value
-        && std::is_trivially_move_constructible<TKey>::value
-        , "Expected POD key type");
+    static_assert(NYql::IsPod<TKey>, "Expected POD key type");
 
     using TBase = TCompactHashBase<TKey, TKey, TIdentity, TKeyHash, TKeyEqual>;
 
 public:
-    TCompactHashSet(TAlignedPagePool& pagePool, size_t size = 0, const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
+    explicit TCompactHashSet(TAlignedPagePool& pagePool, size_t size = 0, const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
         : TBase(pagePool, size, TIdentity(), keyHash, keyEqual)
     {
     }
@@ -1637,13 +1624,13 @@ public:
     {
     }
 
-    TCompactHashSet& operator= (const TCompactHashSet& rhs) {
-        TBase::operator =(rhs);
+    TCompactHashSet& operator=(const TCompactHashSet& rhs) {
+        TBase::operator=(rhs);
         return *this;
     }
 
-    TCompactHashSet& operator= (TCompactHashSet&& rhs) {
-        TBase::operator =(std::move(rhs));
+    TCompactHashSet& operator=(TCompactHashSet&& rhs) {
+        TBase::operator=(std::move(rhs));
         return *this;
     }
 
@@ -1656,6 +1643,4 @@ public:
     }
 };
 
-} // NCHash
-
-} // NKikimr
+} // namespace NKikimr::NCHash

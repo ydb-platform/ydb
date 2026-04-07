@@ -127,9 +127,14 @@ class TTablet : public TActor<TTablet> {
         ui64 BytesInFlight;
 
         std::pair<ui32, ui32> Snapshot;
+        TActorId SnapshotSource;
+        ui64 SnapshotCookie = 0;
 
         struct {
             ui32 SyncStep = 0;
+            ui32 Snapshot = 0;
+            TActorId SnapshotSource;
+            ui64 SnapshotCookie = 0;
         } SyncCommit;
 
         TGraph()
@@ -295,6 +300,8 @@ class TTablet : public TActor<TTablet> {
     THashMap<ui32, TInterconnectPending> InterconnectPending;
     ui64 LastInterconnectSubscribeCookie = 0;
 
+    TMessageRelevanceOwner Relevance = std::make_shared<TMessageRelevanceTracker>();
+
     ui64 TabletID() const;
 
     void ReportTabletStateChange(ETabletState state);
@@ -381,6 +388,7 @@ class TTablet : public TActor<TTablet> {
 
     bool ProgressCommitQueue();
     void ProgressFollowerQueue();
+    void ProgressSendSyncCommit();
     void SpreadFollowerAuxUpdate(const TString& auxUpdate);
     void SendFollowerAuxUpdate(TLeaderInfo& info, const TActorId& follower, const TString& auxUpdate);
 
@@ -422,6 +430,11 @@ class TTablet : public TActor<TTablet> {
     void InterconnectSessionDisconnected(const TActorId& sessionId, ui32 nodeId, ui64 cookie);
     void TabletStateUndelivered(const TActorId& actorId, ui64 cookie);
     void SendViaSession(const TActorId& sessionId, const TActorId& target, IEventBase* event, ui32 flags = 0, ui64 cookie = 0);
+
+    void StartRecovery();
+    void Handle(TEvTablet::TEvCompleteRecoveryBoot::TPtr& ev);
+    void HandleEmptyZeroEntry(TEvTabletBase::TEvWriteLogResult::TPtr& ev);
+    void Handle(TEvTabletBase::TEvDeleteTabletResult::TPtr& ev);
 
     STATEFN(StateResolveStateStorage) {
         switch (ev->GetTypeRewrite()) {
@@ -625,6 +638,35 @@ class TTablet : public TActor<TTablet> {
         }
     }
 
+    STATEFN(StateRecovery) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTablet::TEvCompleteRecoveryBoot, Handle);
+            hFunc(TEvTabletBase::TEvWriteLogResult, HandleEmptyZeroEntry);
+            hFunc(TEvTabletBase::TEvDeleteTabletResult, Handle);
+
+            hFunc(TEvTabletPipe::TEvConnect, Handle);
+            hFunc(TEvTabletPipe::TEvServerDestroyed, Handle);
+
+            hFunc(TEvStateStorage::TEvUpdateSignature, UpdateStateStorageSignature);
+            hFunc(TEvTablet::TEvPing, HandlePingBoot);
+            hFunc(TEvTablet::TEvFeatures, HandleFeatures);
+            hFunc(TEvTablet::TEvTabletStop, HandleStop);
+            cFunc(TEvTablet::TEvTabletStopped::EventType, HandleStopped);
+            cFunc(TEvents::TSystem::PoisonPill, HandlePoisonPill);
+            cFunc(TEvStateStorage::TEvReplicaLeaderDemoted::EventType, HandleDemoted);
+            hFunc(TEvTablet::TEvFollowerAttach, HandleByLeader);
+            hFunc(TEvTablet::TEvFollowerDetach, HandleByLeader);
+            hFunc(TEvTablet::TEvFollowerRefresh, HandleByLeader);
+            hFunc(TEvTablet::TEvUpdateConfig, Handle);
+            hFunc(TEvTabletBase::TEvTrySyncFollower, HandleByLeader);
+            hFunc(TEvTablet::TEvTabletStateSubscribe, Handle);
+            hFunc(TEvTablet::TEvTabletStateUnsubscribe, Handle);
+            hFunc(TEvInterconnect::TEvNodeConnected, HandleByLeader);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, HandleByLeader);
+            hFunc(TEvents::TEvUndelivered, HandleByLeader);
+        }
+    }
+
     STATEFN(StateBootstrapNormal) {
         switch (ev->GetTypeRewrite()) {
             cFunc(TEvents::TEvBootstrap::EventType, Bootstrap);
@@ -708,7 +750,7 @@ public:
             );
 
     TAutoPtr<IEventHandle> AfterRegister(const TActorId &self, const TActorId &parentId) override;
-    static void ExternalWriteZeroEntry(TTabletStorageInfo *info, ui32 gen, TActorIdentity owner);
+    static void ExternalWriteZeroEntry(TTabletStorageInfo *info, ui32 gen, TActorIdentity owner, TMessageRelevanceWatcher relevance);
 };
 
 }

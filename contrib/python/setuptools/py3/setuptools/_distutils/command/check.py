@@ -52,7 +52,7 @@ class check(Command):
         ('strict', 's', 'Will exit with an error if a check fails'),
     ]
 
-    boolean_options = ['metadata', 'restructuredtext', 'strict']
+    boolean_options: ClassVar[list[str]] = ['metadata', 'restructuredtext', 'strict']
 
     def initialize_options(self):
         """Sets default values for options."""
@@ -141,7 +141,7 @@ class check(Command):
         document.note_source(source_path, -1)
         try:
             parser.parse(data, document)
-        except AttributeError as e:
+        except (AttributeError, TypeError) as e:
             reporter.messages.append((
                 -1,
                 f'Could not finish the parsing: {e}.',

@@ -16,4 +16,11 @@ void ITransaction::Detach()
 
 ////////////////////////////////////////////////////////////////////////////////
 
+const TNode::TMapType& IClient::GetDynamicConfiguration(const TString& /*configProfile*/)
+{
+    Y_ABORT("IClient::GetDynamicConfiguration is not implemented");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT

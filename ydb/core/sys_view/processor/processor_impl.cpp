@@ -13,7 +13,7 @@ namespace NSysView {
 TSysViewProcessor::TSysViewProcessor(const NActors::TActorId& tablet, TTabletStorageInfo* info, EProcessorMode processorMode)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
-    , TotalInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 1 : 60))
+    , TotalInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 5 : 60))
     , CollectInterval(TotalInterval / 2)
     , ExternalGroup(new ::NMonitoring::TDynamicCounters)
     , LabeledGroup(new ::NMonitoring::TDynamicCounters)

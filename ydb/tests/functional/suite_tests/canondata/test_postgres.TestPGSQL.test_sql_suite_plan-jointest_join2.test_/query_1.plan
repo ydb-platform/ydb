@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-FullJoin (JoinDict)",
+                                        "Node Type": "TopSort-FullJoin (Dict)",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -65,7 +65,7 @@
                                                         "ExternalPlanNodeId": 14
                                                     }
                                                 ],
-                                                "Name": "FullJoin (JoinDict)"
+                                                "Name": "FullJoin (Dict)"
                                             }
                                         ],
                                         "PlanNodeId": 20,
@@ -140,7 +140,7 @@
                                                                 "PlanNodeType": "Connection",
                                                                 "Plans": [
                                                                     {
-                                                                        "Node Type": "FullJoin (JoinDict)",
+                                                                        "Node Type": "FullJoin (Dict)",
                                                                         "Operators": [
                                                                             {
                                                                                 "Inputs": [
@@ -151,7 +151,7 @@
                                                                                         "ExternalPlanNodeId": 5
                                                                                     }
                                                                                 ],
-                                                                                "Name": "FullJoin (JoinDict)"
+                                                                                "Name": "FullJoin (Dict)"
                                                                             }
                                                                         ],
                                                                         "PlanNodeId": 11,

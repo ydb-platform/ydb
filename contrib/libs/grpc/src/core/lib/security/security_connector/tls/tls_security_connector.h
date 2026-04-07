@@ -206,12 +206,12 @@ class TlsServerSecurityConnector final : public grpc_server_security_connector {
     return server_handshaker_factory_;
   };
 
-  const y_absl::optional<y_absl::string_view>& RootCertsForTesting() {
+  y_absl::optional<y_absl::string_view> RootCertsForTesting() {
     MutexLock lock(&mu_);
     return pem_root_certs_;
   }
 
-  const y_absl::optional<PemKeyCertPairList>& KeyCertPairListForTesting() {
+  y_absl::optional<PemKeyCertPairList> KeyCertPairListForTesting() {
     MutexLock lock(&mu_);
     return pem_key_cert_pair_list_;
   }

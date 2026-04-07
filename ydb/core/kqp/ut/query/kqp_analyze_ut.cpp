@@ -47,22 +47,6 @@ Y_UNIT_TEST_TWIN(AnalyzeTable, ColumnStore) {
     auto result = session.ExecuteSchemeQuery(createTable).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-    if (ColumnStore) {
-        result = session.ExecuteSchemeQuery(
-            Sprintf(R"(
-                    ALTER OBJECT `%s` (TYPE TABLE) 
-                    SET (
-                        ACTION=UPSERT_INDEX, 
-                        NAME=cms_value, 
-                        TYPE=COUNT_MIN_SKETCH,
-                        FEATURES=`{"column_names" : ['Value']}`
-                    );
-                )", "Root/Database/Table"
-            )
-        ).GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    }
-
     TValueBuilder rows;
     rows.BeginList();
     for (size_t i = 0; i < 1500; ++i) {
@@ -83,15 +67,7 @@ Y_UNIT_TEST_TWIN(AnalyzeTable, ColumnStore) {
     result = session.ExecuteSchemeQuery(
         Sprintf(R"(ANALYZE `Root/%s/%s`)", "Database", "Table")
     ).GetValueSync();
-
-    if (ColumnStore) {
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    } else {
-        UNIT_ASSERT(!result.IsSuccess());
-        auto issues = result.GetIssues().ToString();
-        UNIT_ASSERT_C(issues.find("analyze is not supported for oltp tables.") != TString::npos, issues);
-        return;
-    }
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
     auto& runtime = *env.GetServer().GetRuntime();
     ui64 saTabletId;
@@ -103,6 +79,55 @@ Y_UNIT_TEST_TWIN(AnalyzeTable, ColumnStore) {
     UNIT_ASSERT_C(stat >= 1500, ToString(stat));
 }
 
+Y_UNIT_TEST(AnalyzeError) {
+    TTestEnv env(1, 1);
+    auto& runtime = *env.GetServer().GetRuntime();
+    CreateDatabase(env, "Database");
+
+    TTableClient client(env.GetDriver());
+    auto session = env.RunInThreadPool([&] {
+        return client.CreateSession().GetValueSync().GetSession();
+    });
+
+    {
+        // Create table
+        TString createTable = R"(
+            CREATE TABLE `Root/Database/Table` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+        )";
+
+        auto result = env.RunInThreadPool([&] {
+            return session.ExecuteSchemeQuery(createTable).GetValueSync();
+        });
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    // Simulate an ANALYZE error coming from the StatisticsAggregator tablet.
+    auto observer = runtime.AddObserver<TEvStatistics::TEvAnalyzeResponse>(
+        [&](TEvStatistics::TEvAnalyzeResponse::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+        record.SetStatus(NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
+        NYql::TIssue issue("mock issue");
+        NYql::IssueToMessage(issue, record.AddIssues());
+    });
+
+    {
+        // Run ANALYZE and check that the issue is reported.
+        auto result = env.RunInThreadPool([&] {
+            return session.ExecuteSchemeQuery("ANALYZE `Root/Database/Table`").GetValueSync();
+        });
+        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT_C(
+            HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
+                [](const auto& issue) {
+                    return issue.GetMessage() == "mock issue";
+                }),
+            result.GetIssues().ToString());
+    }
+}
 
 } // suite
 

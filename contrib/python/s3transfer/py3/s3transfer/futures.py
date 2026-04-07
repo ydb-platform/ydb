@@ -175,9 +175,7 @@ class TransferCoordinator:
         self._failure_cleanups_lock = threading.Lock()
 
     def __repr__(self):
-        return '{}(transfer_id={})'.format(
-            self.__class__.__name__, self.transfer_id
-        )
+        return f'{self.__class__.__name__}(transfer_id={self.transfer_id})'
 
     @property
     def exception(self):
@@ -295,8 +293,8 @@ class TransferCoordinator:
         with self._lock:
             if self.done():
                 raise RuntimeError(
-                    'Unable to transition from done state %s to non-done '
-                    'state %s.' % (self.status, desired_state)
+                    f'Unable to transition from done state {self.status} to non-done '
+                    f'state {desired_state}.'
                 )
             self._status = desired_state
 
@@ -316,9 +314,7 @@ class TransferCoordinator:
         :returns: A future representing the submitted task
         """
         logger.debug(
-            "Submitting task {} to executor {} for transfer request: {}.".format(
-                task, executor, self.transfer_id
-            )
+            f"Submitting task {task} to executor {executor} for transfer request: {self.transfer_id}."
         )
         future = executor.submit(task, tag=tag)
         # Add this created future to the list of associated future just
@@ -400,7 +396,7 @@ class TransferCoordinator:
         # We do not want a callback interrupting the process, especially
         # in the failure cleanups. So log and catch, the exception.
         except Exception:
-            logger.debug("Exception raised in %s." % callback, exc_info=True)
+            logger.debug(f"Exception raised in {callback}.", exc_info=True)
 
 
 class BoundedExecutor:
@@ -505,6 +501,7 @@ class ExecutorFuture:
             than concurrent.futures.Future.add_done_callback that requires
             a single argument for the future.
         """
+
         # The done callback for concurrent.futures.Future will always pass a
         # the future in as the only argument. So we need to create the
         # proper signature wrapper that will invoke the callback provided.

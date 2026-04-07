@@ -3,12 +3,16 @@
 
 [![Ubuntu 22.04 CI (GCC 11)](https://github.com/fastfloat/fast_float/actions/workflows/ubuntu22.yml/badge.svg)](https://github.com/fastfloat/fast_float/actions/workflows/ubuntu22.yml)
 
+*Note: This library is for C++ users. C programmers should consider [ffc.h](https://github.com/kolemannix/ffc.h). It is a high-performance port of fast_float to C.*
+
+
 The fast_float library provides fast header-only implementations for the C++
 from_chars functions for `float` and `double` types as well as integer types.
 These functions convert ASCII strings representing decimal values (e.g.,
 `1.3e10`) into binary types. We provide exact rounding (including round to
 even). In our experience, these `fast_float` functions many times faster than
 comparable number-parsing functions from existing C++ standard libraries.
+
 
 Specifically, `fast_float` provides the following two functions to parse
 floating-point numbers with a C++17-like syntax (the library itself only
@@ -18,9 +22,9 @@ requires C++11):
 from_chars_result from_chars(char const *first, char const *last, float &value, ...);
 from_chars_result from_chars(char const *first, char const *last, double &value, ...);
 ```
+If they are available on your system, we also support fixed-width floating-point types such as `std::float64_t`, `std::float32_t`, `std::float16_t`, and `std::bfloat16_t`.
 
-You can also parse integer types:
-
+You can also parse integer types such as `char`, `short`, `long`, `long long`,  `unsigned char`, `unsigned short`, `unsigned long`, `unsigned long long`, `bool` (0/1),  `int8_t`, `int16_t`, `int32_t`, `int64_t`, `uint8_t`, `uint16_t`, `uint32_t`, `uint64_t`.
 ```C++
 from_chars_result from_chars(char const *first, char const *last, int &value, ...);
 from_chars_result from_chars(char const *first, char const *last, unsigned &value, ...);
@@ -57,6 +61,7 @@ Example:
 ```C++
 #include "fast_float/fast_float.h"
 #include <iostream>
+#include <string>
 
 int main() {
   std::string input = "3.1416 xyz ";
@@ -65,6 +70,25 @@ int main() {
   if (answer.ec != std::errc()) { std::cerr << "parsing failure\n"; return EXIT_FAILURE; }
   std::cout << "parsed the number " << result << std::endl;
   return EXIT_SUCCESS;
+}
+```
+
+Prior to C++26, checking for a successful `std::from_chars` conversion requires comparing the `from_chars_result::ec` member to `std::errc()`. As an extension `fast_float::from_chars` supports the improved C++26 API that allows checking the result by converting it to `bool`, like so:
+
+```cpp
+#include "fast_float/fast_float.h"
+#include <iostream>
+#include <string>
+
+int main() {
+  std::string input = "3.1416 xyz ";
+  double result;
+  if(auto answer = fast_float::from_chars(input.data(), input.data() + input.size(), result)) {
+    std::cout << "parsed the number " << result << std::endl;
+    return EXIT_SUCCESS;
+  }
+  std::cerr << "failed to parse " << input << std::endl;
+  return EXIT_FAILURE;
 }
 ```
 
@@ -121,9 +145,12 @@ Furthermore, we have the following restrictions:
   fixed-width floating-point types such as `std::float64_t`, `std::float32_t`,
   `std::float16_t`, and `std::bfloat16_t`.
 * We only support the decimal format: we do not support hexadecimal strings.
-* For values that are either very large or very small (e.g., `1e9999`), we
-  represent it using the infinity or negative infinity value and the returned
+* For values that are very large positives or negatives (e.g., `1e9999`), we
+  represent them using a positive or negative infinity and the returned
   `ec` is set to `std::errc::result_out_of_range`.
+* For values that are very close to zero (e.g., `1e-9999`), we represent them
+  using a positive or negative zero and the returned `ec` is set to
+  `std::errc::result_out_of_range`.
 
 We support Visual Studio, macOS, Linux, freeBSD. We support big and little
 endian. We support 32-bit and 64-bit systems.
@@ -357,6 +384,51 @@ int main() {
 }
 ```
 
+## Multiplication of an integer by a power of 10
+An integer `W` can be multiplied by a power of ten `10^Q` and
+converted to `double` with correctly rounded value
+(in "round to nearest, tie to even" fashion) using
+`fast_float::integer_times_pow10()`, e.g.:
+```C++
+const uint64_t W = 12345678901234567;
+const int Q = 23;
+const double result = fast_float::integer_times_pow10(W, Q);
+std::cout.precision(17);
+std::cout << W << " * 10^" << Q << " = " << result << " ("
+  << (result == 12345678901234567e23 ? "==" : "!=") << "expected)\n";
+```
+outputs
+```
+12345678901234567 * 10^23 = 1.2345678901234567e+39 (==expected)
+```
+`fast_float::integer_times_pow10()` gives the same result as
+using `fast_float::from_chars()` when parsing the string `"WeQ"`
+(in this example `"12345678901234567e23"`),
+except `fast_float::integer_times_pow10()` does not report out-of-range errors, and
+underflows to zero or overflows to infinity when the resulting value is
+out of range.
+
+You can use template overloads to get the result converted to different
+supported floating-point types: `float`, `double`, etc.
+For example, to get result as `float` use
+`fast_float::integer_times_pow10<float>()` specialization:
+```C++
+const uint64_t W = 12345678;
+const int Q = 23;
+const float result = fast_float::integer_times_pow10<float>(W, Q);
+std::cout.precision(9);
+std::cout << "float: " << W << " * 10^" << Q << " = " << result << " ("
+          << (result == 12345678e23f ? "==" : "!=") << "expected)\n";
+```
+outputs
+```
+float: 12345678 * 10^23 = 1.23456782e+30 (==expected)
+```
+
+Overloads of `fast_float::integer_times_pow10()` are provided for
+signed and unsigned integer types: `int64_t`, `uint64_t`, etc.
+
+
 ## Users and Related Work
 
 The fast_float library is part of:
@@ -364,6 +436,8 @@ The fast_float library is part of:
 * GCC (as of version 12): the `from_chars` function in GCC relies on fast_float,
 * [Chromium](https://github.com/Chromium/Chromium), the engine behind Google
   Chrome, Microsoft Edge, and Opera,
+* Boost JSON, MySQL, etc.
+* Blender
 * [WebKit](https://github.com/WebKit/WebKit), the engine behind Safari (Apple's
   web browser),
 * [DuckDB](https://duckdb.org),
@@ -376,7 +450,10 @@ The fast_float library is part of:
 The fastfloat algorithm is part of the [LLVM standard
 libraries](https://github.com/llvm/llvm-project/commit/87c016078ad72c46505461e4ff8bfa04819fe7ba).
 There is a [derived implementation part of
-AdaCore](https://github.com/AdaCore/VSS).
+AdaCore](https://github.com/AdaCore/VSS). The [SerenityOS operating
+system](https://github.com/SerenityOS/serenity/commit/53b7f5e6a11e663c83df8030c3171c5945cb75ec)
+has a derived implementation that is inherited by the [Ladybird
+Browser](https://github.com/LadybirdBrowser/ladybird).
 
 The fast_float library provides a performance similar to that of the
 [fast_double_parser](https://github.com/lemire/fast_double_parser) library but
@@ -384,6 +461,14 @@ using an updated algorithm reworked from the ground up, and while offering an
 API more in line with the expectations of C++ programmers. The
 fast_double_parser library is part of the [Microsoft LightGBM machine-learning
 framework](https://github.com/microsoft/LightGBM).
+
+
+
+Packages
+------
+
+[![Packaging status](https://repology.org/badge/vertical-allrepos/fast-float.svg)](https://repology.org/project/fast-float/versions)
+
 
 ## References
 
@@ -407,6 +492,7 @@ framework](https://github.com/microsoft/LightGBM).
   [Jackson](https://github.com/FasterXML/jackson-core).
 * [There is a C# port of the fast_float
   library](https://github.com/CarlVerret/csFastFloat) called `csFastFloat`.
+* [There is a plain C port of the fast_float library](https://github.com/kolemannix/ffc.h) called ffc.h
 
 ## How fast is it?
 
@@ -455,7 +541,7 @@ sufficiently recent version of CMake (3.11 or better at least):
 FetchContent_Declare(
   fast_float
   GIT_REPOSITORY https://github.com/fastfloat/fast_float.git
-  GIT_TAG tags/v8.0.2
+  GIT_TAG tags/v8.2.4
   GIT_SHALLOW TRUE)
 
 FetchContent_MakeAvailable(fast_float)
@@ -471,7 +557,7 @@ You may also use [CPM](https://github.com/cpm-cmake/CPM.cmake), like so:
 CPMAddPackage(
   NAME fast_float
   GITHUB_REPOSITORY "fastfloat/fast_float"
-  GIT_TAG v8.0.2)
+  GIT_TAG v8.2.4)
 ```
 
 ## Using as single header
@@ -483,7 +569,7 @@ if desired as described in the command line help.
 
 You may directly download automatically generated single-header files:
 
-<https://github.com/fastfloat/fast_float/releases/download/v8.0.2/fast_float.h>
+<https://github.com/fastfloat/fast_float/releases/download/v8.2.4/fast_float.h>
 
 ## Benchmarking
 
@@ -522,6 +608,7 @@ cmake --build build
   manager](https://conan.io/center/recipes/fast_float).
 * It is part of the [brew package
   manager](https://formulae.brew.sh/formula/fast_float).
+* fast_float is available on [xmake](https://xmake.io) repository.
 * Some Linux distribution like Fedora include fast_float (e.g., as
   `fast_float-devel`).
 
@@ -535,6 +622,11 @@ long digits.
 
 The library includes code adapted from Google Wuffs (written by Nigel Tao) which
 was originally published under the Apache 2.0 license.
+
+## Stars
+
+
+[![Star History Chart](https://api.star-history.com/svg?repos=fastfloat/fast_float&type=Date)](https://www.star-history.com/#fastfloat/fast_float&Date)
 
 ## License
 

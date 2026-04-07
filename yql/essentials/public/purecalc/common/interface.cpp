@@ -33,7 +33,6 @@ TProgramFactoryOptions::TProgramFactoryOptions()
     , NativeYtTypeFlags(0)
     , UseSystemColumns(false)
     , UseWorkerPool(true)
-    , UseAntlr4(true)
     , LangVer(MinLangVersion)
 {
 }
@@ -123,6 +122,16 @@ TProgramFactoryOptions& TProgramFactoryOptions::SetUseSystemColumns(bool useSyst
 
 TProgramFactoryOptions& TProgramFactoryOptions::SetUseWorkerPool(bool useWorkerPool) {
     UseWorkerPool = useWorkerPool;
+    return *this;
+}
+
+TProgramFactoryOptions& TProgramFactoryOptions::SetInternalSettings(const TInternalProgramSettings& settings) {
+    InternalSettings = settings;
+    return *this;
+}
+
+TProgramFactoryOptions& TProgramFactoryOptions::SetIssueReportTarget(const TString& reportTarget) {
+    IssueReportTarget = reportTarget;
     return *this;
 }
 

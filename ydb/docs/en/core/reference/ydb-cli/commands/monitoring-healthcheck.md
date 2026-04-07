@@ -22,6 +22,8 @@ ydb [global options...] monitoring healthcheck [options...]
 * `json` — a detailed JSON response containing a hierarchical list of detected problems. Possible issues are listed in the [Healthcheck API](../../ydb-sdk/health-check-api.md#issues) documentation.
 
 Default: `pretty`. ||
+|| `--no-merge` | Do not merge entries of health check result. ||
+|| `--no-cache` | Do not use cached result. ||
 |#
 
 ## Examples {#examples}

@@ -12,6 +12,12 @@ void TPortionsSources::DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) 
             TBase::DropNextConstructor();
             continue;
         }
+        {
+            const auto& cursorLocal = std::dynamic_pointer_cast<ISimpleScanCursor>(cursor);
+            if (cursorLocal) {
+                TBase::MutableNextConstructor().ValidateCursor(*cursorLocal);
+            }
+        }
         if (usage) {
             TBase::MutableNextConstructor().SetIsStartedByCursor();
         } else {
@@ -22,13 +28,20 @@ void TPortionsSources::DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) 
 }
 
 std::vector<TInsertWriteId> TPortionsSources::GetUncommittedWriteIds() const {
-    return Uncommitted;
+    std::vector<TInsertWriteId> result;
+    for (auto&& i : TBase::GetConstructors()) {
+        if (!i.GetPortion()->IsCommitted()) {
+            AFL_VERIFY(i.GetPortion()->GetPortionType() == EPortionType::Written);
+            auto* written = static_cast<const TWrittenPortionInfo*>(i.GetPortion().get());
+            result.emplace_back(written->GetInsertWriteId());
+        }
+    }
+    return result;
 }
 
 std::shared_ptr<TPortionDataSource> TSourceConstructor::Construct(
     const std::shared_ptr<NCommon::TSpecialReadContext>& context, std::shared_ptr<TPortionDataAccessor>&& accessor) const {
-    AFL_VERIFY(SourceIdx);
-    auto result = std::make_shared<TPortionDataSource>(*SourceIdx, Portion, context);
+    auto result = std::make_shared<TPortionDataSource>(GetSourceIdx(), Portion, context);
     result->SetPortionAccessor(std::move(accessor));
     if (IsStartedByCursorFlag) {
         result->SetIsStartedByCursor();

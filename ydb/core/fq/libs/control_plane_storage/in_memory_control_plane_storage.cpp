@@ -419,11 +419,12 @@ private:
         const TString& queryId = query.meta().common().id();
         ctx.Response.first.set_query_id(queryId);
 
-        auto queryInternal = GetQueryInternalProto(ctx.Request, ctx.CloudId, ctx.Token, ctx.Quotas);
+        auto queryInternal = GetQueryInternalProto(Config, ctx.Request, ctx.CloudId, ctx.Token, ctx.Quotas);
         const auto queryType = ctx.Request.content().type();
         if (ctx.Request.execute_mode() != FederatedQuery::SAVE) {
             *queryInternal.mutable_compute_connection() = ctx.ComputeDatabase.connection();
             FillConnectionsAndBindings(
+                Config,
                 queryInternal,
                 queryType,
                 GetEntities(Connections, ctx.Scope, ctx.User),
@@ -472,7 +473,7 @@ private:
         }
 
         *ctx.Response.mutable_query() = query->Query;
-        FillDescribeQueryResult(ctx.Response, query->QueryInternal, ctx.User, ctx.Permissions);
+        FillDescribeQueryResult(Config, ctx.Response, query->QueryInternal, ctx.User, ctx.Permissions);
     }
 
     void Handle(TEvControlPlaneStorage::TEvModifyQueryRequest::TPtr& ev) {
@@ -833,7 +834,7 @@ private:
 
         TDuration backoff = Config->TaskLeaseTtl;
         TInstant expireAt = ctx.StartTime + Config->AutomaticQueriesTtl;
-        UpdateTaskInfo(TActivationContext::ActorSystem(), resuest, finalStatus, query->Query, query->QueryInternal, job->Job, pendingQuery->Owner, pendingQuery->RetryLimiter, backoff, expireAt);
+        UpdateTaskInfo(TActivationContext::ActorSystem(), Config, resuest, finalStatus, query->Query, query->QueryInternal, job->Job, pendingQuery->Owner, pendingQuery->RetryLimiter, backoff, expireAt);
         PingTask(ctx, *query, *job, *pendingQuery, backoff, expireAt);
 
         if (IsTerminalStatus(ctx.Request.status())) {

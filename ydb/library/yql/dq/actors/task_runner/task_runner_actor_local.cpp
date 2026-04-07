@@ -20,6 +20,7 @@
 #include <util/generic/queue.h>
 
 #include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
+#include <yql/essentials/minikql/mkql_watermark.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
 #define LOG_W(stream) LOG_WARN_S (*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
@@ -284,39 +285,12 @@ private:
                     LOG_E("Failed to save state: " << e.what());
                     mkqlProgramState = nullptr;
                 }
+                StartResumeByCheckpoint();
                 HasActiveCheckpoint = false;
                 if (!WatermarkRequests.empty()) {
                     auto nextWatermarkRequest = WatermarkRequests.front();
                     LOG_T("Task runner. Pause by watermark " << nextWatermarkRequest);
                     PauseInputs(nextWatermarkRequest);
-                }
-            }
-        }
-
-        TVector<ui32> finishedInputsWithWatermarks;
-        TVector<ui32> finishedSourcesWithWatermarks;
-        if (WatermarkRequests.empty()) {
-            // check if any of inputs become empty and finished and drop them off
-            for (ui32 i = InputsWithWatermarksPendingFinish; i < InputsWithWatermarks.size(); ) {
-                auto& channelId = InputsWithWatermarks[i];
-                auto inputChannel = TaskRunner->GetInputChannel(channelId);
-                if (inputChannel->IsFinished()) {
-                    finishedInputsWithWatermarks.push_back(channelId);
-                    std::swap(channelId, InputsWithWatermarks.back());
-                    InputsWithWatermarks.pop_back();
-                } else {
-                    ++i;
-                }
-            }
-            for (ui32 i = SourcesWithWatermarksPendingFinish; i < SourcesWithWatermarks.size(); ) {
-                auto& sourceId = SourcesWithWatermarks[i];
-                auto source = TaskRunner->GetSource(sourceId);
-                if (source->IsFinished()) {
-                    finishedSourcesWithWatermarks.push_back(sourceId);
-                    std::swap(sourceId, SourcesWithWatermarks.back());
-                    SourcesWithWatermarks.pop_back();
-                } else {
-                    ++i;
                 }
             }
         }
@@ -353,8 +327,6 @@ private:
                 MemoryQuota ? MemoryQuota->GetMkqlMemoryLimit() : 0,
                 std::move(mkqlProgramState),
                 watermarkInjectedToOutputs,
-                std::move(finishedInputsWithWatermarks),
-                std::move(finishedSourcesWithWatermarks),
                 ev->Get()->CheckpointRequest.Defined(),
                 TInstant::Now() - start),
             /*flags=*/0,
@@ -372,16 +344,6 @@ private:
         const ui64 freeSpace = inputChannel->GetFreeSpace();
         if (finish) {
             inputChannel->Finish();
-
-            // check if finished channel was tracked for watermarks move them to Pending part
-            Y_DEBUG_ABORT_UNLESS(InputsWithWatermarksPendingFinish <= InputsWithWatermarks.size());
-            const auto end = InputsWithWatermarks.begin() + InputsWithWatermarksPendingFinish;
-            auto it = std::find(InputsWithWatermarks.begin(), end, channelId); // O(n), but rare/once-per-channel
-            if (it != end) {
-                Y_DEBUG_ABORT_UNLESS(InputsWithWatermarksPendingFinish > 0);
-                --InputsWithWatermarksPendingFinish;
-                std::swap(*it, InputsWithWatermarks[InputsWithWatermarksPendingFinish]);
-            }
         }
         if (ev->Get()->PauseAfterPush) {
             HasActiveCheckpoint = true;
@@ -413,19 +375,10 @@ private:
         source->Push(std::move(batch), space);
         if (finish) {
             source->Finish();
-
-            Y_DEBUG_ABORT_UNLESS(SourcesWithWatermarksPendingFinish <= SourcesWithWatermarks.size());
-            const auto end = SourcesWithWatermarks.begin() + SourcesWithWatermarksPendingFinish;
-            auto it = std::find(SourcesWithWatermarks.begin(), end, index); // O(n), but rare/once-per-channel
-            if (it != end) {
-                Y_DEBUG_ABORT_UNLESS(SourcesWithWatermarksPendingFinish > 0);
-                --SourcesWithWatermarksPendingFinish;
-                std::swap(*it, SourcesWithWatermarks[SourcesWithWatermarksPendingFinish]);
-            }
         }
         Send(
             ParentId,
-            new TEvSourceDataAck(index, source->GetFreeSpace()),
+            new TEvSourceDataAck(index, source->GetFreeSpace(), finish),
             /*flags=*/0,
             cookie);
     }
@@ -480,7 +433,7 @@ private:
             checkpoint = hasCheckpoint ? std::move(poppedCheckpoint) : TMaybe<NDqProto::TCheckpoint>();
 
             if (hasCheckpoint) {
-                ResumeByCheckpoint();
+                AdvanceResumeByCheckpoint();
                 break;
             }
 
@@ -504,10 +457,26 @@ private:
             ev->Cookie);
     }
 
-    void ResumeByCheckpoint() {
+    void MaybeResumeByCheckpoint() {
+        if (UnsentCheckpoints > 0) {
+            LOG_T("Pending " << UnsentCheckpoints << " checkpoints to be sent");
+            return;
+        }
         for (const auto& inputId : InputsWithCheckpoints) {
             TaskRunner->GetInputChannel(inputId)->ResumeByCheckpoint();
         }
+    }
+
+    void StartResumeByCheckpoint() {
+        Y_ENSURE(UnsentCheckpoints == 0);
+        UnsentCheckpoints = Sinks.size() + Outputs.size();
+        MaybeResumeByCheckpoint();
+    }
+
+    void AdvanceResumeByCheckpoint() {
+        Y_ENSURE(UnsentCheckpoints > 0);
+        --UnsentCheckpoints;
+        MaybeResumeByCheckpoint();
     }
 
     void ResumeByWatermark(TInstant watermark) {
@@ -539,7 +508,7 @@ private:
         if (hasCheckpoint) {
             checkpointSize = checkpoint.ByteSize();
             maybeCheckpoint.ConstructInPlace(std::move(checkpoint));
-            ResumeByCheckpoint();
+            AdvanceResumeByCheckpoint();
         }
         const bool finished = sink->IsFinished();
         const bool changed = finished || size > 0 || hasCheckpoint;
@@ -592,8 +561,6 @@ private:
         }
         std::sort(Inputs.begin(), Inputs.end());
         Y_ENSURE(std::unique(Inputs.begin(), Inputs.end()) == Inputs.end());
-        InputsWithWatermarksPendingFinish = InputsWithWatermarks.size();
-        SourcesWithWatermarksPendingFinish = SourcesWithWatermarks.size();
 
         auto& outputs = settings.GetOutputs();
         for (auto outputId = 0; outputId < outputs.size(); outputId++) {
@@ -618,7 +585,7 @@ private:
                 MemoryQuota->TrySetIncreaseMemoryLimitCallbackWithRSSControl(guard.GetMutex());
             } else {
                 MemoryQuota->TrySetIncreaseMemoryLimitCallback(guard.GetMutex());
-            }   
+            }
         }
 
         if (settings.GetEnableSpilling()) {
@@ -686,13 +653,11 @@ private:
     TVector<ui32> Inputs;
     TVector<ui32> InputsWithCheckpoints;
     TVector<ui32> InputsWithWatermarks;
-    ui32 InputsWithWatermarksPendingFinish; // index in InputsWithWatermarks after which source buffers has pending finished mark
     TVector<ui32> InputTransforms;
     TVector<ui32> InputTransformsWithCheckpoints;
     TVector<ui32> InputTransformsWithWatermarks;
     TVector<ui32> Sources;
     TVector<ui32> SourcesWithWatermarks;
-    ui32 SourcesWithWatermarksPendingFinish; // index in SourcesWithWatermarks after which source buffers has pending finished mark
     TVector<ui32> Sinks;
     TVector<ui32> Outputs;
     TVector<ui32> OutputsWithWatermarks;
@@ -702,6 +667,7 @@ private:
     TMaybe<TInstant> LastWatermark;
     std::deque<TInstant> WatermarkRequests;
     bool HasActiveCheckpoint = false;
+    ui32 UnsentCheckpoints = 0;
 };
 
 struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {

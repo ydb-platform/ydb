@@ -29,8 +29,9 @@ class TBatchRowsUploader
     };
 
 public:
-    TBatchRowsUploader(const TIndexBuildScanSettings& scanSettings)
-        : ScanSettings(scanSettings)
+    TBatchRowsUploader(const TString& database, const TIndexBuildScanSettings& scanSettings)
+        : Database(database)
+        , ScanSettings(scanSettings)
     {}
 
     TBufferData* AddDestination(TString table, std::shared_ptr<NTxProxy::TUploadTypes> types) {
@@ -40,7 +41,7 @@ public:
         return &dst.Buffer;
     }
 
-    void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) {
+    bool Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) {
         Y_ENSURE(UploaderId == ev->Sender, "Mismatch"
             << " Uploader: " << UploaderId.ToString()
             << " Sender: " << ev->Sender.ToString());
@@ -51,7 +52,7 @@ public:
         UploadStatus.StatusCode = ev->Get()->Status;
         UploadStatus.Issues = ev->Get()->Issues;
         if (!UploadStatus.IsSuccess()) {
-            return;
+            return false;
         }
 
         UploadRows += Uploading.Buffer.GetRows();
@@ -64,6 +65,8 @@ public:
                 break;
             }
         }
+
+        return true;
     }
 
     bool ShouldWaitUpload()
@@ -127,6 +130,22 @@ public:
         }
 
         return true;
+    }
+
+    bool AllFlushed() const {
+        if (Uploading) {
+            return false;
+        }
+        for (const auto& [_, dst] : Destinations) {
+            if (!dst.Buffer.IsEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    ui64 GetUploadBytes() const {
+        return UploadBytes;
     }
 
     void AddIssue(const std::exception& exc) {
@@ -208,15 +227,16 @@ private:
         Y_ENSURE(!UploaderId);
         Y_ENSURE(Owner);
         auto actor = NTxProxy::CreateUploadRowsInternal(
-            Owner, Uploading.Table, Uploading.Types, Uploading.Buffer.GetRowsData(),
+            Owner, Database, Uploading.Table, Uploading.Types, Uploading.Buffer.GetRowsData(),
             NTxProxy::EUploadRowsMode::WriteToTableShadow,
             true /*writeToPrivateTable*/,
             true /*writeToIndexImplTable*/);
 
-        UploaderId = TlsActivationContext->Register(actor);
+        UploaderId = TlsActivationContext->Register(actor, Owner, TMailboxType::HTSwap, AppData()->BatchPoolId);
     }
 
 private:
+    const TString Database;
     const TIndexBuildScanSettings ScanSettings;
     TActorId Owner;
 

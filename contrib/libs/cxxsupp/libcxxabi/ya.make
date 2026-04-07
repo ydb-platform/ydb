@@ -11,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(19.1.7)
+VERSION(21.1.8)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-19.1.7.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-21.1.8.tar.gz)
 
 PEERDIR(
     contrib/libs/libunwind
@@ -42,26 +42,53 @@ SRCS(
     src/cxa_aux_runtime.cpp
     src/cxa_default_handlers.cpp
     src/cxa_demangle.cpp
-    src/cxa_exception.cpp
     src/cxa_exception_storage.cpp
     src/cxa_guard.cpp
     src/cxa_handlers.cpp
-    src/cxa_personality.cpp
     src/cxa_thread_atexit.cpp
     src/cxa_vector.cpp
     src/cxa_virtual.cpp
     src/fallback_malloc.cpp
-    src/private_typeinfo.cpp
     src/stdlib_exception.cpp
     src/stdlib_new_delete.cpp
     src/stdlib_stdexcept.cpp
     src/stdlib_typeinfo.cpp
 )
 
-IF (NOT MUSL)
-    CFLAGS(
-        -DHAVE___CXA_THREAD_ATEXIT_IMPL
+IF (NO_CXX_EXCEPTIONS)
+    SRCS(
+        src/cxa_noexception.cpp
     )
+ELSE()
+    SRCS(
+        src/cxa_exception.cpp
+        src/cxa_personality.cpp
+    )
+ENDIF()
+
+IF (NO_CXX_RTTI)
+    BUILD_ONLY_IF(NO_CXX_EXCEPTIONS)
+ELSE()
+    SRCS(
+        src/private_typeinfo.cpp
+    )
+ENDIF()
+
+IF (OS_ANDROID)
+    # __cxa_thread_atexit_impl was introduced in Android 6.0
+    # https://android.googlesource.com/platform/bionic/+/main/libc/libc.map.txt#16
+    IF (ANDROID_API >= 23)
+        CFLAGS(
+            -DHAVE___CXA_THREAD_ATEXIT_IMPL
+        )
+    ENDIF()
+ELSE()
+    # As of 1.2.3, musl libc does not provide __cxa_thread_atexit_impl
+    IF (NOT MUSL)
+        CFLAGS(
+            -DHAVE___CXA_THREAD_ATEXIT_IMPL
+        )
+    ENDIF()
 ENDIF()
 
 IF (OS_EMSCRIPTEN AND ARCH_WASM64)

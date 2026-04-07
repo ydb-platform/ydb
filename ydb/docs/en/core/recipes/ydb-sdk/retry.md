@@ -12,6 +12,225 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
 
 {% list tabs %}
 
+- C++
+
+  In the {{ ydb-short-name }} C++ SDK, retries with correct error handling is implemented by several programming interfaces:
+
+  {% cut "Synchronous retry attempts" %}
+
+  The `RetryQuerySync` method is used to execute queries with automatic retries.
+  The method accepts a lambda function that receives a session object and returns the query result.
+  {{ ydb-short-name }} C++ SDK automatically analyzes errors and performs retries according to their type.
+
+  Example code using `RetryQuerySync`:
+
+  ```c++
+  #include <ydb-cpp-sdk/client/query/client.h>
+
+  void ExecuteQueryWithRetry(NYdb::NQuery::TQueryClient client) {
+      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
+          auto query = R"(
+              SELECT series_id, title
+              FROM series
+              WHERE series_id = 1;
+          )";
+          
+          auto result = session.ExecuteQuery(
+              query,
+              NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
+          ).GetValueSync();
+          
+          if (!result.IsSuccess()) {
+              return result;
+          }
+          
+          // Process query results
+          auto resultSet = result.GetResultSet(0);
+          NYdb::TResultSetParser parser(resultSet);
+          while (parser.TryNextRow()) {
+              std::cout << "Series"
+                  << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
+                  << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
+                  << std::endl;
+          }
+          
+          return result;
+      });
+      
+      if (!result.IsSuccess()) {
+          // Handle error after all retry attempts
+          std::cerr << "Query failed: " << result.GetIssues().ToString() << std::endl;
+      }
+  }
+  ```
+
+  {% endcut %}
+
+  {% cut "Asynchronous retry attempts" %}
+
+  The `RetryQuery` method is used for asynchronous query execution with automatic retries.
+  The method returns `NThreading::TFuture`, which allows for asynchronous operations.
+
+  Example code using `RetryQuery`:
+
+  ```c++
+  #include <ydb-cpp-sdk/client/query/client.h>
+
+  void ExecuteQueryWithRetryAsync(NYdb::NQuery::TQueryClient client) {
+      auto future = client.RetryQuery([](NYdb::NQuery::TSession session) -> NYdb::TAsyncStatus {
+          auto query = R"(
+              SELECT series_id, title, release_date
+              FROM series
+              WHERE series_id = 1;
+          )";
+          
+          return session.ExecuteQuery(
+              query,
+              NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
+          ).Apply([](const NYdb::NQuery::TAsyncExecuteQueryResult& asyncResult) -> NYdb::TStatus {
+              auto result = asyncResult.GetValue();
+              if (!result.IsSuccess()) {
+                  return result;
+              }
+              
+              // Process query results
+              auto resultSet = result.GetResultSet(0);
+              NYdb::TResultSetParser parser(resultSet);
+              while (parser.TryNextRow()) {
+                  std::cout << "Series"
+                      << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
+                      << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
+                      << std::endl;
+              }
+              
+              return result;
+          });
+      });
+      
+      // Wait for completion
+      auto status = future.GetValueSync();
+      if (!status.IsSuccess()) {
+          std::cerr << "Query failed: " << status.GetIssues().ToString() << std::endl;
+      }
+  }
+  ```
+
+  {% endcut %}
+
+  {% cut "Retry attempts for streaming queries" %}
+
+  For executing streaming queries with automatic retries, use `StreamExecuteQuery`.
+  Streaming queries allow processing large volumes of data by receiving results in parts.
+
+  Example code using `RetryQuerySync` with `StreamExecuteQuery`:
+
+  ```c++
+  #include <ydb-cpp-sdk/client/query/client.h>
+
+  void StreamQueryWithRetry(NYdb::NQuery::TQueryClient client) {
+      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
+          auto query = R"(
+              SELECT series_id, title, release_date
+              FROM series
+              WHERE series_id > 0;
+          )";
+          
+          auto resultStreamQuery = session.StreamExecuteQuery(
+              query,
+              NYdb::NQuery::TTxControl::NoTx()
+          ).GetValueSync();
+
+          if (!resultStreamQuery.IsSuccess()) {
+              return resultStreamQuery;
+          }
+
+          // Process results in parts
+          bool eos = false;
+          while (!eos) {
+              auto streamPart = resultStreamQuery.ReadNext().ExtractValueSync();
+              
+              if (!streamPart.IsSuccess()) {
+                  eos = true;
+                  if (!streamPart.EOS()) {
+                      return streamPart;
+                  }
+                  continue;
+              }
+
+              if (streamPart.HasResultSet()) {
+                  auto rs = streamPart.ExtractResultSet();
+                  NYdb::TResultSetParser parser(rs);
+                  while (parser.TryNextRow()) {
+                      std::cout << "Series"
+                          << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64().value()
+                          << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8().value()
+                          << std::endl;
+                  }
+              }
+          }
+
+          return resultStreamQuery;
+      });
+      
+      if (!result.IsSuccess()) {
+          std::cerr << "Stream query failed: " << result.GetIssues().ToString() << std::endl;
+      }
+  }
+  ```
+
+  {% endcut %}
+
+  {% cut "Configuring retry parameters" %}
+
+  Users can configure the behavior of the retry mechanism using the `TRetryOperationSettings` class:
+
+  * `MaxRetries(uint32_t)` - maximum number of retry attempts (default is 10)
+  * `Idempotent(bool)` - indicates whether the operation is idempotent. Idempotent operations are retried for a broader range of errors
+  * `RetryNotFound(bool)` - whether to retry operations that returned a `NOT_FOUND` status (default is true)
+  * `MaxTimeout(TDuration)` - maximum time for all retry attempts
+  * `FastBackoffSettings(TBackoffSettings)` - settings for fast retries
+  * `SlowBackoffSettings(TBackoffSettings)` - settings for slow retries
+
+  Example of using retry settings:
+
+  ```c++
+  #include <ydb-cpp-sdk/client/query/client.h>
+  #include <ydb-cpp-sdk/client/retry/retry.h>
+
+  void ExecuteWithCustomRetry(NYdb::NQuery::TQueryClient client) {
+      auto retrySettings = NYdb::NRetry::TRetryOperationSettings()
+          .Idempotent(true)
+          .MaxRetries(20)
+          .MaxTimeout(TDuration::Seconds(30));
+      
+      auto result = client.RetryQuerySync([](NYdb::NQuery::TSession session) -> NYdb::TStatus {
+          auto query = R"(
+              UPSERT INTO series (series_id, title)
+              VALUES (10, "New Series");
+          )";
+          
+          auto result = session.ExecuteQuery(
+              query,
+              NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx()
+          ).GetValueSync();
+          
+          if (!result.IsSuccess()) {
+              return result;
+          }
+          
+          // Process query result
+          std::cout << "Query executed successfully" << std::endl;
+          return result;
+      }, retrySettings);
+      
+      if (!result.IsSuccess()) {
+          std::cerr << "Operation failed: " << result.GetIssues().ToString() << std::endl;
+      }
+  }
+  ```
+
+  {% endcut %}
+
 - Go (native)
 
   In the {{ ydb-short-name }} Go SDK, correct error handling is implemented by several programming interfaces:

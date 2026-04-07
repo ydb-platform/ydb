@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-#include "parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
 
 namespace parquet20 {
 

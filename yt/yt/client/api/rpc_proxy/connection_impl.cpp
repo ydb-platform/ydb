@@ -318,6 +318,12 @@ const std::optional<std::string>& TConnection::GetClusterName() const
     return Config_->ClusterName;
 }
 
+const std::optional<NAuth::TTvmId>& TConnection::GetTvmId() const
+{
+    static std::optional<NAuth::TTvmId> TvmId_;
+    return TvmId_;
+}
+
 bool TConnection::IsSameCluster(const IConnectionPtr& other) const
 {
     // NB: Cluster tag is not defined for RPC proxy connection
@@ -409,8 +415,7 @@ std::vector<std::string> TConnection::DiscoverProxiesViaHttp()
         auto client = IsProxyUrlSecure(url)
             ? NHttps::CreateClient(Config_->HttpsClient, std::move(poller))
             : NHttp::CreateClient(Config_->HttpClient, std::move(poller));
-        // TODO(babenko): switch to std::string
-        auto rsp = WaitFor(client->Get(TString(url), headers))
+        auto rsp = WaitFor(client->Get(url, headers))
             .ValueOrThrow();
 
         if (rsp->GetStatusCode() != EStatusCode::OK) {

@@ -9,11 +9,14 @@
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/public/purecalc/common/interface.h>
 
 namespace NFq::NRowDispatcher::NTests {
 
 namespace {
+
+const NKikimr::NMiniKQL::IFunctionRegistry::TPtr FunctionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {});
 
 class TPurecalcCompileServiceMock : public NActors::TActor<TPurecalcCompileServiceMock> {
     using TBase = NActors::TActor<TPurecalcCompileServiceMock>;
@@ -26,7 +29,8 @@ public:
     {}
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvRowDispatcher::TEvPurecalcCompileRequest, Handle);
+        hFunc(TEvRowDispatcher::TEvPurecalcCompileRequest, Handle)
+        IgnoreFunc(TEvRowDispatcher::TEvPurecalcCompileAbort)
     )
 
     void Handle(TEvRowDispatcher::TEvPurecalcCompileRequest::TPtr& ev) {
@@ -46,12 +50,6 @@ private:
     const NActors::TActorId Owner;
     const NYql::NPureCalc::IProgramFactoryPtr ProgramFactory;
 };
-
-void SegmentationFaultHandler(int) {
-    Cerr << "segmentation fault call stack:" << Endl;
-    FormatBackTrace(&Cerr);
-    abort();
-}
 
 //// TBaseFixture::ICell
 
@@ -151,45 +149,27 @@ TBaseFixture::TBatch& TBaseFixture::TBatch::AddRow(TRow row) {
 //// TBaseFixture
 
 TBaseFixture::TBaseFixture()
-    : TTypeParser(__LOCATION__, {})
+    : TTypeParser(__LOCATION__, ::NFq::NRowDispatcher::NTests::FunctionRegistry.Get(), {})
     , MemoryInfo("TBaseFixture alloc")
     , HolderFactory(std::make_unique<NKikimr::NMiniKQL::THolderFactory>(Alloc.Ref(), MemoryInfo))
-    , Runtime(1, true)
 {
-    NKikimr::EnableYDBBacktraceFormat();
-    signal(SIGSEGV, &SegmentationFaultHandler);
-
     Alloc.Ref().UseRefLocking = true;
 }
 
-void TBaseFixture::SetUp(NUnitTest::TTestContext&) {
-    // Init runtime
-    TAutoPtr<NKikimr::TAppPrepare> app = new NKikimr::TAppPrepare();
-    Runtime.SetLogBackend(NActors::CreateStderrBackend());
-    Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NActors::NLog::PRI_TRACE);
-    Runtime.SetDispatchTimeout(WAIT_TIMEOUT);
-    Runtime.Initialize(app->Unwrap());
-
-    // Init tls context
-    auto* actorSystem = Runtime.GetActorSystem(0);
-    Mailbox = std::make_unique<NActors::TMailbox>();
-    ExecutorThread = std::make_unique<NActors::TExecutorThread>(0, actorSystem, nullptr, "test thread");
-    ActorCtx = std::make_unique<NActors::TActorContext>(*Mailbox, *ExecutorThread, GetCycleCountFast(), NActors::TActorId());
-    PrevActorCtx = NActors::TlsActivationContext;
-    NActors::TlsActivationContext = ActorCtx.get();
+void TBaseFixture::SetUp(NUnitTest::TTestContext& ctx) {
+    Settings.WaitTimeout = WAIT_TIMEOUT;
+    Settings.LogSettings.AddLogPriority(NKikimrServices::EServiceKikimr::FQ_ROW_DISPATCHER, NActors::NLog::PRI_TRACE);
+    TBase::SetUp(ctx);
 }
 
-void TBaseFixture::TearDown(NUnitTest::TTestContext&) {
+void TBaseFixture::TearDown(NUnitTest::TTestContext& ctx) {
     with_lock(Alloc) {
         ProgramBuilder.reset();
         TypeEnv.reset();
-        FunctionRegistry.Reset();
         HolderFactory.reset();
     }
 
-    // Release tls context
-    NActors::TlsActivationContext = PrevActorCtx;
-    PrevActorCtx = nullptr;
+    TBase::TearDown(ctx);
 }
 
 void TBaseFixture::CheckMessageBatch(TRope serializedBatch, const TBatch& expectedBatch) const {
@@ -245,7 +225,7 @@ void CheckSuccess(const TStatus& status) {
 }
 
 void CheckError(const TStatus& status, TStatusCode expectedStatusCode, const TString& expectedMessage) {
-    UNIT_ASSERT_C(status.GetStatus() == expectedStatusCode, "Expected error status " << NYql::NDqProto::StatusIds_StatusCode_Name(expectedStatusCode) << ", but got: " << status.GetErrorMessage());
+    UNIT_ASSERT_C(status.GetStatus() == expectedStatusCode, "Expected error status " << NYql::NDqProto::StatusIds_StatusCode_Name(expectedStatusCode) << ", but got: " << NYql::NDqProto::StatusIds_StatusCode_Name(status.GetStatus()) << " ("<< status.GetErrorMessage() << ")");
     UNIT_ASSERT_STRING_CONTAINS_C(status.GetErrorMessage(), expectedMessage, "Unexpected error message, Status: " << NYql::NDqProto::StatusIds_StatusCode_Name(status.GetStatus()));
 }
 

@@ -1,7 +1,4 @@
-from __future__ import absolute_import
-
-import codecs
-import six
+from hamcrest.core.selfdescribing import SelfDescribing
 
 from .base_description import BaseDescription
 
@@ -10,7 +7,7 @@ __copyright__ = "Copyright 2011 hamcrest.org"
 __license__ = "BSD, see License.txt"
 
 
-def tostring(selfdescribing):
+def tostring(selfdescribing: SelfDescribing) -> str:
     """Returns the description of a
     :py:class:`~hamcrest.core.selfdescribing.SelfDescribing` object as a
     string.
@@ -24,14 +21,15 @@ def tostring(selfdescribing):
 class StringDescription(BaseDescription):
     """A :py:class:`~hamcrest.core.description.Description` that is stored as a
     string.
+
     """
 
-    def __init__(self):
-        self.__out_list = []
+    def __init__(self) -> None:
+        self.out = ""
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Returns the description."""
-        return ''.join(self.__out_list)
+        return self.out
 
-    def append(self, string):
-        self.__out_list.append(six.text_type(string))
+    def append(self, string: str) -> None:
+        self.out += str(string)

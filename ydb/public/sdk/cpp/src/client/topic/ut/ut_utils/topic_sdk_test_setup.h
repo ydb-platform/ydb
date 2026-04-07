@@ -13,6 +13,8 @@ namespace NYdb::inline Dev::NTopic::NTests {
 class TTopicSdkTestSetup : public ITopicTestSetup {
 public:
     explicit TTopicSdkTestSetup(const std::string& testCaseName, const NKikimr::Tests::TServerSettings& settings = MakeServerSettings(), bool createTopic = true);
+    TTopicSdkTestSetup(TTopicSdkTestSetup&& other) noexcept = default;
+    ~TTopicSdkTestSetup();
 
     void CreateTopic(const std::string& name = TEST_TOPIC,
                      const std::string& consumer = TEST_CONSUMER,
@@ -32,7 +34,15 @@ public:
                const std::optional<std::string> producer = std::nullopt,
                std::optional<std::uint64_t> seqNo = std::nullopt);
 
+    void Write(const std::string& topic, const std::string& message, std::uint32_t partitionId = 0,
+               const std::optional<std::string> producer = std::nullopt,
+               std::optional<std::uint64_t> seqNo = std::nullopt);
+
     struct TReadResult {
+        TReadResult(TDriver& driver);
+        ~TReadResult();
+
+        TTopicClient Client;
         std::shared_ptr<IReadSession> Reader;
         bool Timeout;
 
@@ -42,7 +52,8 @@ public:
     TReadResult Read(const std::string& topic, const std::string& consumer,
                      std::function<bool (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent&)> handler,
                      std::optional<std::size_t> partition = std::nullopt,
-                     const TDuration timeout = TDuration::Seconds(5));
+                     const TDuration timeout = TDuration::Seconds(5),
+                     bool autoPartitioningSupport = true);
 
     TStatus Commit(const std::string& path, const std::string& consumerName,
                    std::size_t partitionId, std::size_t offset,
@@ -51,7 +62,7 @@ public:
     std::string GetEndpoint() const override;
     std::string GetDatabase() const override;
 
-    std::string GetFullTopicPath() const;
+    std::string GetFullTopicPath(const std::string& name = TEST_TOPIC) const;
 
     std::vector<std::uint32_t> GetNodeIds() override;
     std::uint16_t GetPort() const override;
@@ -71,6 +82,7 @@ private:
     std::string Database_;
 
     ::NPersQueue::TTestServer Server_;
+    std::unique_ptr<TDriver> Driver;
 
     TLog Log_ = CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG);
 };

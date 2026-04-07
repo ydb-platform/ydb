@@ -1,67 +1,81 @@
 {%- if with_kotlin -%}
 
-{%-     if target.kotlinc.flags|length or (with_kapt and target.kapt.opts|length) %}
+{%-     if target.kotlinc.flags|length %}
 
 tasks.compileKotlin.configure {
     compilerOptions {
-{%-         if target.kotlinc.flags|length -%}
-{%-             for kotlinc_flag in target.kotlinc.flags|unique %}
+{%-         for kotlinc_flag in target.kotlinc.flags|unique %}
         freeCompilerArgs.add({{ PatchRoots(kotlinc_flag, true) }})
-{%-             endfor -%}
-{%-         endif -%}
-{%-         if with_kapt and (target.kapt.opts|length) -%}
-{%-             for kapt_opt in target.kapt.opts|reject('eq', '-P')|unique %}
-        freeCompilerArgs.add("-P")
-        freeCompilerArgs.add("{{ kapt_opt|replace(export_root, "$baseBuildDir") }}")
-{%-             endfor -%}
-{%-         endif %}
+{%-         endfor %}
     }
 }
 {%      endif -%}
 
-{%-     set extra_kotlinc_flags = extra_targets|selectattr('kotlinc')|map(attribute='kotlinc')|map(attribute='flags')|sum -%}
-{%-     set extra_kapt_opts = extra_targets|selectattr('kapt')|map(attribute='kapt')|selectattr('opts')|map(attribute='opts')|sum -%}
-{%-     if target.kotlinc.flags|length -%}
-{%-         if extra_kotlinc_flags|length -%}
-{%-             set extra_kotlinc_flags = target.kotlinc.flags + extra_kotlinc_flags -%}
-{%-         else -%}
-{%-             set extra_kotlinc_flags = target.kotlinc.flags -%}
-{%-         endif -%}
-{%-     endif -%}
-{%-     if extra_kotlinc_flags|length or ((with_kapt or with_test_kapt) and extra_kapt_opts|length) %}
+{%-     set all_kotlinc_flags = all_targets|selectattr('kotlinc')|map(attribute='kotlinc')|map(attribute='flags')|sum -%}
+{%-     if all_kotlinc_flags|length %}
 
 tasks.compileTestKotlin.configure {
     compilerOptions {
-{%-         if extra_kotlinc_flags|length -%}
-{%-             for kotlinc_flag in extra_kotlinc_flags|unique %}
+{%-             for kotlinc_flag in all_kotlinc_flags|unique %}
         freeCompilerArgs.add({{ PatchRoots(kotlinc_flag, true) }})
-{%-             endfor -%}
-{%-         endif -%}
-{%-         if (with_kapt or with_test_kapt) and (extra_kapt_opts|length) -%}
-{%-             set extra_kapt_opts = extra_kapt_opts|reject('eq', '-P')|unique -%}
-{#-             Use only first value for sources, classes, stubs (may be many tests with different values) -#}
-{%-             set extra_kapt_opts_sources = extra_kapt_opts|select('startsWith', 'plugin:org.jetbrains.kotlin.kapt3:sources=')|first -%}
-{%-             if extra_kapt_opts_sources %}
-        freeCompilerArgs.add("-P")
-        freeCompilerArgs.add("{{ extra_kapt_opts_sources|replace(export_root, "$baseBuildDir") }}")
-{%-             endif -%}
-{%-             set extra_kapt_opts_classes = extra_kapt_opts|select('startsWith', 'plugin:org.jetbrains.kotlin.kapt3:classes=')|first -%}
-{%-             if extra_kapt_opts_classes %}
-        freeCompilerArgs.add("-P")
-        freeCompilerArgs.add("{{ extra_kapt_opts_classes|replace(export_root, "$baseBuildDir") }}")
-{%-             endif -%}
-{%-             set extra_kapt_opts_stubs = extra_kapt_opts|select('startsWith', 'plugin:org.jetbrains.kotlin.kapt3:stubs=')|first -%}
-{%-             if extra_kapt_opts_stubs %}
-        freeCompilerArgs.add("-P")
-        freeCompilerArgs.add("{{ extra_kapt_opts_stubs|replace(export_root, "$baseBuildDir") }}")
-{%-             endif -%}
-{%-             set extra_kapt_opts = extra_kapt_opts|reject('startsWith', 'plugin:org.jetbrains.kotlin.kapt3:sources=')|reject('startsWith', 'plugin:org.jetbrains.kotlin.kapt3:classes=')|reject('startsWith', 'plugin:org.jetbrains.kotlin.kapt3:stubs=') -%}
-{%-             for kapt_opt in extra_kapt_opts %}
-        freeCompilerArgs.add("-P")
-        freeCompilerArgs.add("{{ kapt_opt|replace(export_root, "$baseBuildDir") }}")
-{%-             endfor -%}
-{%-         endif %}
+{%-             endfor %}
     }
 }
 {%      endif -%}
+
+{%-     if with_kapt or with_test_kapt %}
+
+{%-         if all_kapt_ap_opts|length %}
+
+fun encodeAPOptions(options: Map<String, String>): String {
+    val os = ByteArrayOutputStream()
+    val oos = ObjectOutputStream(os)
+
+    oos.writeInt(options.size)
+    for ((key, value) in options.entries) {
+        oos.writeUTF(key)
+        oos.writeUTF(value)
+    }
+
+    oos.flush()
+    return Base64.getEncoder().encodeToString(os.toByteArray())
+}
+{%          endif -%}
+
+{%-         set all_kapt_processors = all_targets|selectattr('kapt')|map(attribute='kapt')|selectattr('processors')|map(attribute='processors')|sum -%}
+{%-         set all_kapt_opts = all_targets|selectattr('kapt')|map(attribute='kapt')|selectattr('opts')|map(attribute='opts')|sum -%}
+{%-         set opts_correctErrorTypes = all_kapt_opts|select('startsWith', 'plugin:org.jetbrains.kotlin.kapt3:correctErrorTypes=') -%}
+{%-         set opts_verbose = all_kapt_opts|select('startsWith', 'plugin:org.jetbrains.kotlin.kapt3:verbose=') -%}
+{%-         set has_annotation_processors = all_targets|selectattr('use_annotation_processors')|map(attribute='use_annotation_processors')|sum|length -%}
+{%-         if all_kapt_processors|length or opts_correctErrorTypes|length or opts_verbose|length or all_kapt_ap_opts|length or has_annotation_processors -%}
+
+kapt {
+{%-             if all_kapt_processors|length %}
+    annotationProcessors({%- for processor in all_kapt_processors -%}"{{ processor }}"{%- if not loop.last -%}, {%- endif -%}{%- endfor -%})
+{%-             endif -%}
+{%-             if has_annotation_processors %}
+    keepJavacAnnotationProcessors = true
+{%-             endif -%}
+{%-             if opts_correctErrorTypes|length -%}
+{%-                 set key_and_value = split(opts_correctErrorTypes|first, '=', 2) %}
+    correctErrorTypes = {{ key_and_value[1] }}
+{%-             endif -%}
+{%-             if opts_verbose|length -%}
+{%-                 set key_and_value = split(opts_verbose|first, '=', 2) -%}
+{%-                 if key_and_value[1] == "true" %}
+    dumpDefaultParameterValues = true
+    showProcessorStats = true
+{%-                 endif -%}
+{%-             endif -%}
+{%-             if all_kapt_ap_opts|length %}
+    arguments {
+{%-                 for ap_opt in all_kapt_ap_opts|unique -%}
+{%-                     set key_and_value = split(ap_opt, '=', 2) %}
+        arg("{{ key_and_value[0] }}", {{ PatchRoots(key_and_value[1]) }})
+{%-                 endfor %}
+    }
+{%-             endif %}
+}
+{%-        endif -%}
+{%-     endif -%}
 {%- endif -%}

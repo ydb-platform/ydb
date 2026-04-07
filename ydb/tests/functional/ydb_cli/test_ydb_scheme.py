@@ -79,15 +79,6 @@ class TestSchemeDescribe:
         self.tmp_path = tmp_path
         set_canondata_root("ydb/tests/functional/ydb_cli/canondata")
 
-    def test_describe_view(self, ydb_cluster, ydb_database, ydb_client_session):
-        database_path = ydb_database
-        session_pool = ydb_client_session(database_path)
-        with session_pool.checkout() as session:
-            view = "view"
-            create_view(session, view)
-            output = execute_ydb_cli_command(ydb_cluster.nodes[1], database_path, ["scheme", "describe", view])
-            return canonical_result(output, self.tmp_path)
-
     def test_describe_external_table_references_json(self, ydb_cluster, ydb_database, ydb_client_session):
         database_path = ydb_database
         external_data_source = "external_data_source"
@@ -102,7 +93,7 @@ class TestSchemeDescribe:
                 database_path,
                 ["scheme", "describe", "--format", "proto-json-base64", external_table],
             )
-            description = json.loads(output.splitlines()[1])
+            description = json.loads(output)
             source = description["data_source_path"]
             expected_source = database_path.rstrip("/") + "/" + external_data_source
             assert source == expected_source
@@ -112,7 +103,7 @@ class TestSchemeDescribe:
                 database_path,
                 ["scheme", "describe", "--format", "proto-json-base64", external_data_source],
             )
-            description = json.loads(output.splitlines()[1])
+            description = json.loads(output)
             print(description)
             references = json.loads(description["properties"]["REFERENCES"])
             expected_reference = database_path.rstrip("/") + "/" + external_table

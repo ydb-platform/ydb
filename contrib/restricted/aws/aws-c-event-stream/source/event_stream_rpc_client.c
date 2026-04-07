@@ -797,6 +797,18 @@ static void s_send_message_task_fn(struct aws_task *task, void *arg, enum aws_ta
             goto should_fail_block;
         }
 
+        if (message_args->continuation != NULL) {
+            if (aws_event_stream_rpc_client_continuation_is_closed(message_args->continuation)) {
+                AWS_LOGF_INFO(
+                    AWS_LS_EVENT_STREAM_RPC_CLIENT,
+                    "id=%p: continuation closed, cannot send messages",
+                    (void *)message_args->continuation);
+
+                failure_error_code = AWS_ERROR_EVENT_STREAM_RPC_STREAM_CLOSED;
+                goto should_fail_block;
+            }
+        }
+
         should_fail = false;
     }
 
@@ -832,8 +844,10 @@ should_fail_block:
             (*message_args->flush_fn)(failure_error_code, message_args->user_data);
         }
 
-        /* Fail-to-send is connection fatal */
-        if (connection->channel != NULL) {
+        /* Fail-to-send a non-application message is connection fatal */
+        if (connection->channel != NULL &&
+            message_args->message_type != AWS_EVENT_STREAM_RPC_MESSAGE_TYPE_APPLICATION_MESSAGE &&
+            message_args->message_type != AWS_EVENT_STREAM_RPC_MESSAGE_TYPE_APPLICATION_ERROR) {
             aws_channel_shutdown(connection->channel, failure_error_code);
         }
     }
@@ -873,7 +887,7 @@ static int s_send_protocol_message(
 
     struct aws_event_stream_client_connection_send_message_task *task =
         s_aws_event_stream_client_connection_send_message_task_new(connection->allocator, args);
-    aws_event_loop_schedule_task_now(connection->event_loop, &task->base);
+    aws_event_loop_schedule_task_now_serialized(connection->event_loop, &task->base);
 
     return AWS_OP_SUCCESS;
 }
@@ -1007,9 +1021,6 @@ static void s_route_message_by_type(
 
         aws_mutex_unlock(&connection->lock);
 
-        continuation->continuation_fn(continuation, &message_args, continuation->user_data);
-
-        /* if it was a terminal stream message purge it from the hash table. The delete will decref the continuation. */
         if (message_flags & AWS_EVENT_STREAM_RPC_MESSAGE_FLAG_TERMINATE_STREAM) {
             AWS_LOGF_DEBUG(
                 AWS_LS_EVENT_STREAM_RPC_CLIENT,
@@ -1017,6 +1028,12 @@ static void s_route_message_by_type(
                 (void *)connection,
                 (void *)continuation);
             aws_atomic_store_int(&continuation->is_closed, 1U);
+        }
+
+        continuation->continuation_fn(continuation, &message_args, continuation->user_data);
+
+        /* if it was a terminal stream message purge it from the hash table. The delete will decref the continuation. */
+        if (message_flags & AWS_EVENT_STREAM_RPC_MESSAGE_FLAG_TERMINATE_STREAM) {
             int was_present = 0;
             aws_mutex_lock(&connection->lock);
             aws_hash_table_remove(&connection->synced_data.continuation_table, &stream_id, NULL, &was_present);

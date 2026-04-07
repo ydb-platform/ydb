@@ -6,6 +6,7 @@ __all__ = [
     "TopicClientSettings",
     "TopicCodec",
     "TopicConsumer",
+    "TopicConsumerDescription",
     "TopicAlterConsumer",
     "TopicAlterAutoPartitioningSettings",
     "TopicAutoPartitioningSettings",
@@ -87,6 +88,7 @@ from ._grpc.grpcwrapper import ydb_topic as _ydb_topic
 from ._grpc.grpcwrapper import ydb_topic_public_types as _ydb_topic_public_types
 from ._grpc.grpcwrapper.ydb_topic_public_types import (  # noqa: F401
     PublicDescribeTopicResult as TopicDescription,
+    PublicDescribeConsumerResult as TopicConsumerDescription,
     PublicMultipleWindowsStat as TopicStatWindow,
     PublicPartitionStats as TopicPartitionStats,
     PublicCodec as TopicCodec,
@@ -97,6 +99,8 @@ from ._grpc.grpcwrapper.ydb_topic_public_types import (  # noqa: F401
     PublicAutoPartitioningSettings as TopicAutoPartitioningSettings,
     PublicAlterAutoPartitioningSettings as TopicAlterAutoPartitioningSettings,
 )
+
+from .retries import ydb_retry
 
 logger = logging.getLogger(__name__)
 
@@ -214,8 +218,8 @@ class TopicClientAsyncIO:
         logger.debug("Alter topic request: path=%s", path)
         args = locals().copy()
         del args["self"]
-        req = _ydb_topic_public_types.AlterTopicRequestParams(**args)
-        req = _ydb_topic.AlterTopicRequest.from_public(req)
+        req_params = _ydb_topic_public_types.AlterTopicRequestParams(**args)
+        req = _ydb_topic.AlterTopicRequest.from_public(req_params)
         await self._driver(
             req.to_proto(),
             _apis.TopicService.Stub,
@@ -234,6 +238,35 @@ class TopicClientAsyncIO:
             _apis.TopicService.DescribeTopic,
             _create_result_wrapper(_ydb_topic.DescribeTopicResult),
         )  # type: _ydb_topic.DescribeTopicResult
+        return res.to_public()
+
+    async def describe_consumer(
+        self,
+        path: str,
+        consumer: str,
+        *,
+        include_stats: bool = False,
+        include_location: bool = False,
+    ) -> TopicConsumerDescription:
+        """
+        Describe topic's consumer.
+
+        :param path: full path to topic
+        :param consumer: consumer name
+        :param include_stats: include consumer statistics
+        :param include_location: include partition location
+        :return: consumer description
+        """
+        logger.debug("Describe consumer request: path=%s consumer=%s", path, consumer)
+        args = locals().copy()
+        del args["self"]
+        req = _ydb_topic_public_types.DescribeConsumerRequestParams(**args)
+        res = await self._driver(
+            req.to_proto(),
+            _apis.TopicService.Stub,
+            _apis.TopicService.DescribeConsumer,
+            _create_result_wrapper(_ydb_topic.DescribeConsumerResult),
+        )  # type: _ydb_topic.DescribeConsumerResult
         return res.to_public()
 
     async def drop_topic(self, path: str):
@@ -348,6 +381,7 @@ class TopicClientAsyncIO:
 
         return TopicTxWriterAsyncIO(tx=tx, driver=self._driver, settings=settings, _client=self)
 
+    @ydb_retry(retry_cancelled=True, idempotent=True)
     async def commit_offset(
         self, path: str, consumer: str, partition_id: int, offset: int, read_session_id: Optional[str] = None
     ) -> None:
@@ -506,8 +540,8 @@ class TopicClient:
         del args["self"]
         self._check_closed()
 
-        req = _ydb_topic_public_types.AlterTopicRequestParams(**args)
-        req = _ydb_topic.AlterTopicRequest.from_public(req)
+        req_params = _ydb_topic_public_types.AlterTopicRequestParams(**args)
+        req = _ydb_topic.AlterTopicRequest.from_public(req_params)
         self._driver(
             req.to_proto(),
             _apis.TopicService.Stub,
@@ -528,6 +562,37 @@ class TopicClient:
             _apis.TopicService.DescribeTopic,
             _create_result_wrapper(_ydb_topic.DescribeTopicResult),
         )  # type: _ydb_topic.DescribeTopicResult
+        return res.to_public()
+
+    def describe_consumer(
+        self,
+        path: str,
+        consumer: str,
+        *,
+        include_stats: bool = False,
+        include_location: bool = False,
+    ) -> TopicConsumerDescription:
+        """
+        Describe topic's consumer.
+
+        :param path: full path to topic
+        :param consumer: consumer name
+        :param include_stats: include consumer statistics
+        :param include_location: include partition location
+        :return: consumer description
+        """
+        logger.debug("Describe consumer request: path=%s consumer=%s", path, consumer)
+        args = locals().copy()
+        del args["self"]
+        self._check_closed()
+
+        req = _ydb_topic_public_types.DescribeConsumerRequestParams(**args)
+        res = self._driver(
+            req.to_proto(),
+            _apis.TopicService.Stub,
+            _apis.TopicService.DescribeConsumer,
+            _create_result_wrapper(_ydb_topic.DescribeConsumerResult),
+        )  # type: _ydb_topic.DescribeConsumerResult
         return res.to_public()
 
     def drop_topic(self, path: str):
@@ -645,6 +710,7 @@ class TopicClient:
 
         return TopicTxWriter(tx, self._driver, settings, _parent=self)
 
+    @ydb_retry(retry_cancelled=True, idempotent=True)
     def commit_offset(
         self, path: str, consumer: str, partition_id: int, offset: int, read_session_id: Optional[str] = None
     ) -> None:

@@ -1,6 +1,11 @@
 items:
 - name: Начало работы
   href: getting-started.md
+- name: Потоковые запросы
+  href: streaming-query/index.md
+  include:
+    mode: link
+    path: streaming-query/toc_p.yaml
 - name: Примеры приложений
   href: example-app/index.md
   include:
@@ -20,6 +25,8 @@ items:
   href: secondary-indexes.md
 - name: Векторные индексы
   href: vector-indexes.md
+- name: Векторный индекс вида vector_kmeans_tree
+  href: vector-indexes-kmeans-tree-type.md
 - name: Оптимизация планов запросов
   href: query-plans-optimization.md
 - name: Подсказки оптимизатора
@@ -40,4 +47,3 @@ items:
   href: custom-attributes.md
 - name: Управление потреблением ресурсов
   href: resource-consumption-management.md
-  when: feature_resource_pool == true and feature_resource_pool_classifier == true

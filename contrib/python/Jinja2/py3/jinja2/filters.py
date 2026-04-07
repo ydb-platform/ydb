@@ -6,6 +6,7 @@ import re
 import typing
 import typing as t
 from collections import abc
+from inspect import getattr_static
 from itertools import chain
 from itertools import groupby
 
@@ -438,7 +439,7 @@ def do_sort(
 
 
 @pass_environment
-def do_unique(
+def sync_do_unique(
     environment: "Environment",
     value: "t.Iterable[V]",
     case_sensitive: bool = False,
@@ -468,6 +469,18 @@ def do_unique(
         if key not in seen:
             seen.add(key)
             yield item
+
+
+@async_variant(sync_do_unique)  # type: ignore
+async def do_unique(
+    environment: "Environment",
+    value: "t.Union[t.AsyncIterable[V], t.Iterable[V]]",
+    case_sensitive: bool = False,
+    attribute: t.Optional[t.Union[str, int]] = None,
+) -> "t.Iterator[V]":
+    return sync_do_unique(
+        environment, await auto_to_list(value), case_sensitive, attribute
+    )
 
 
 def _min_or_max(
@@ -987,7 +1000,7 @@ def do_int(value: t.Any, default: int = 0, base: int = 10) -> int:
         # this quirk is necessary so that "42.23"|int gives 42.
         try:
             return int(float(value))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             return default
 
 
@@ -1116,7 +1129,7 @@ def do_batch(
         {%- endfor %}
         </table>
     """
-    tmp: "t.List[V]" = []
+    tmp: t.List[V] = []
 
     for item in value:
         if len(tmp) == linecount:
@@ -1399,31 +1412,25 @@ def do_reverse(value: t.Union[str, t.Iterable[V]]) -> t.Union[str, t.Iterable[V]
 def do_attr(
     environment: "Environment", obj: t.Any, name: str
 ) -> t.Union[Undefined, t.Any]:
-    """Get an attribute of an object.  ``foo|attr("bar")`` works like
-    ``foo.bar`` just that always an attribute is returned and items are not
-    looked up.
+    """Get an attribute of an object. ``foo|attr("bar")`` works like
+    ``foo.bar``, but returns undefined instead of falling back to ``foo["bar"]``
+    if the attribute doesn't exist.
 
     See :ref:`Notes on subscriptions <notes-on-subscriptions>` for more details.
     """
+    # Environment.getattr will fall back to obj[name] if obj.name doesn't exist.
+    # But we want to call env.getattr to get behavior such as sandboxing.
+    # Determine if the attr exists first, so we know the fallback won't trigger.
     try:
-        name = str(name)
-    except UnicodeError:
-        pass
-    else:
-        try:
-            value = getattr(obj, name)
-        except AttributeError:
-            pass
-        else:
-            if environment.sandboxed:
-                environment = t.cast("SandboxedEnvironment", environment)
+        # This avoids executing properties/descriptors, but misses __getattr__
+        # and __getattribute__ dynamic attrs.
+        getattr_static(obj, name)
+    except AttributeError:
+        # This finds dynamic attrs, and we know it's not a descriptor at this point.
+        if not hasattr(obj, name):
+            return environment.undefined(obj=obj, name=name)
 
-                if not environment.is_safe_attribute(obj, name, value):
-                    return environment.unsafe_undefined(obj, name)
-
-            return value
-
-    return environment.undefined(obj=obj, name=name)
+    return environment.getattr(obj, name)
 
 
 @typing.overload
@@ -1629,8 +1636,8 @@ def sync_do_selectattr(
 
     .. code-block:: python
 
-        (u for user in users if user.is_active)
-        (u for user in users if test_none(user.email))
+        (user for user in users if user.is_active)
+        (user for user in users if test_none(user.email))
 
     .. versionadded:: 2.7
     """
@@ -1667,8 +1674,8 @@ def sync_do_rejectattr(
 
     .. code-block:: python
 
-        (u for user in users if not user.is_active)
-        (u for user in users if not test_none(user.email))
+        (user for user in users if not user.is_active)
+        (user for user in users if not test_none(user.email))
 
     .. versionadded:: 2.7
     """
@@ -1768,7 +1775,7 @@ def prepare_select_or_reject(
         args = args[1 + off :]
 
         def func(item: t.Any) -> t.Any:
-            return context.environment.call_test(name, item, args, kwargs)
+            return context.environment.call_test(name, item, args, kwargs, context)
 
     except LookupError:
         func = bool  # type: ignore

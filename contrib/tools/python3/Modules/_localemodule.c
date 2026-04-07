@@ -9,36 +9,26 @@ This software comes with no warranty. Use at your own risk.
 
 ******************************************************************/
 
-#define PY_SSIZE_T_CLEAN
 #include "Python.h"
-#include "pycore_fileutils.h"
+#include "pycore_fileutils.h"     // _Py_GetLocaleconvNumeric()
+#include "pycore_pymem.h"         // _PyMem_Strdup()
 
-#include <stdio.h>
-#include <locale.h>
-#include <string.h>
-#include <ctype.h>
-
+#include <locale.h>               // setlocale()
+#include <string.h>               // strlen()
 #ifdef HAVE_ERRNO_H
-#include <errno.h>
+#  include <errno.h>              // errno
 #endif
-
 #ifdef HAVE_LANGINFO_H
-#include <langinfo.h>
+#  include <langinfo.h>           // nl_langinfo()
 #endif
-
 #ifdef HAVE_LIBINTL_H
-#include <libintl.h>
+#  include <libintl.h>
 #endif
-
-#ifdef HAVE_WCHAR_H
-#include <wchar.h>
-#endif
-
-#if defined(MS_WINDOWS)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
+#ifdef MS_WINDOWS
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  include <windows.h>
 #endif
 
 PyDoc_STRVAR(locale__doc__, "Support for POSIX locales.");
@@ -97,6 +87,41 @@ copy_grouping(const char* s)
     return result;
 }
 
+#if defined(MS_WINDOWS)
+
+// 16 is the number of elements in the szCodePage field
+// of the __crt_locale_strings structure.
+#define MAX_CP_LEN 15
+
+static int
+check_locale_name(const char *locale, const char *end)
+{
+    size_t len = end ? (size_t)(end - locale) : strlen(locale);
+    const char *dot = memchr(locale, '.', len);
+    if (dot && locale + len - dot - 1 > MAX_CP_LEN) {
+        return -1;
+    }
+    return 0;
+}
+
+static int
+check_locale_name_all(const char *locale)
+{
+    const char *start = locale;
+    while (1) {
+        const char *end = strchr(start, ';');
+        if (check_locale_name(start, end) < 0) {
+            return -1;
+        }
+        if (end == NULL) {
+            break;
+        }
+        start = end + 1;
+    }
+    return 0;
+}
+#endif
+
 /*[clinic input]
 _locale.setlocale
 
@@ -120,6 +145,18 @@ _locale_setlocale_impl(PyObject *module, int category, const char *locale)
         PyErr_SetString(get_locale_state(module)->Error,
                         "invalid locale category");
         return NULL;
+    }
+    if (locale) {
+        if ((category == LC_ALL
+             ? check_locale_name_all(locale)
+             : check_locale_name(locale, NULL)) < 0)
+        {
+            /* Debug assertion failure on Windows.
+             * _Py_BEGIN_SUPPRESS_IPH/_Py_END_SUPPRESS_IPH do not help. */
+            PyErr_SetString(get_locale_state(module)->Error,
+                "unsupported locale setting");
+            return NULL;
+        }
     }
 #endif
 
@@ -409,7 +446,9 @@ _locale_strxfrm_impl(PyObject *module, PyObject *str)
 
     /* assume no change in size, first */
     n1 = n1 + 1;
-    buf = PyMem_New(wchar_t, n1);
+    /* Yet another +1 is needed to work around a platform bug in wcsxfrm()
+     * on macOS. See gh-130567. */
+    buf = PyMem_New(wchar_t, n1+1);
     if (!buf) {
         PyErr_NoMemory();
         goto exit;
@@ -435,7 +474,54 @@ _locale_strxfrm_impl(PyObject *module, PyObject *str)
             goto exit;
         }
     }
-    result = PyUnicode_FromWideChar(buf, n2);
+    /* The result is just a sequence of integers, they are not necessary
+       Unicode code points, so PyUnicode_FromWideChar() cannot be used
+       here. For example, 0xD83D 0xDC0D should not be larger than 0xFF41.
+     */
+#if SIZEOF_WCHAR_T == 4
+    {
+        /* Some codes can exceed the range of Unicode code points
+           (0 - 0x10FFFF), so they cannot be directly used in
+           PyUnicode_FromKindAndData(). They should be first encoded in
+           a way that preserves the lexicographical order.
+
+           Codes in the range 0-0xFFFF represent themself.
+           Codes larger than 0xFFFF are encoded as a pair:
+           * 0x1xxxx -- the highest 16 bits
+           * 0x0xxxx -- the lowest 16 bits
+         */
+        size_t n3 = 0;
+        for (size_t i = 0; i < n2; i++) {
+            if ((Py_UCS4)buf[i] > 0x10000u) {
+                n3++;
+            }
+        }
+        if (n3) {
+            n3 += n2; // no integer overflow
+            Py_UCS4 *buf2 = PyMem_New(Py_UCS4, n3);
+            if (buf2 == NULL) {
+                PyErr_NoMemory();
+                goto exit;
+            }
+            size_t j = 0;
+            for (size_t i = 0; i < n2; i++) {
+                Py_UCS4 c = (Py_UCS4)buf[i];
+                if (c > 0x10000u) {
+                    buf2[j++] = (c >> 16) | 0x10000u;
+                    buf2[j++] = c & 0xFFFFu;
+                }
+                else {
+                    buf2[j++] = c;
+                }
+            }
+            assert(j == n3);
+            result = PyUnicode_FromKindAndData(PyUnicode_4BYTE_KIND, buf2, n3);
+            PyMem_Free(buf2);
+            goto exit;
+        }
+    }
+#endif
+    result = PyUnicode_FromKindAndData(sizeof(wchar_t), buf, n2);
 exit:
     PyMem_Free(buf);
     PyMem_Free(s);
@@ -897,12 +983,7 @@ _locale_exec(PyObject *module)
 
     _locale_state *state = get_locale_state(module);
     state->Error = PyErr_NewException("locale.Error", NULL, NULL);
-    if (state->Error == NULL) {
-        return -1;
-    }
-    Py_INCREF(get_locale_state(module)->Error);
-    if (PyModule_AddObject(module, "Error", get_locale_state(module)->Error) < 0) {
-        Py_DECREF(get_locale_state(module)->Error);
+    if (PyModule_AddObjectRef(module, "Error", state->Error) < 0) {
         return -1;
     }
 
@@ -927,6 +1008,7 @@ _locale_exec(PyObject *module)
 static struct PyModuleDef_Slot _locale_slots[] = {
     {Py_mod_exec, _locale_exec},
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
+    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
     {0, NULL}
 };
 

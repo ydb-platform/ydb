@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/core/persqueue/common/partition_id.h>
-
 #include <ydb/core/persqueue/public/key.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/digest/multi.h>
 #include <util/generic/buffer.h>
@@ -21,16 +21,20 @@ public:
         TypeNone = 0,
         TypeInfo = 'm',
         TypeData = 'd',
+        TypeDeduplicator = 'e',
         TypeTmpData = 'x',
         TypeMeta = 'i',
-        TypeTxMeta = 'I'
+        TypeTxMeta = 'I',
+        TypeMLPConsumerData = 'c',
     };
 
     enum EMark : char {
         MarkUser = 'c',
         MarkProtoSourceId = 'p',
         MarkSourceId = 's',
-        MarkUserDeprecated = 'u'
+        MarkUserDeprecated = 'u',
+        MarkMLPSnapshot = 'S',
+        MarkMLPWAL = 'w',
     };
 
     enum EServiceType : char {
@@ -192,46 +196,46 @@ public:
     {}
 
     void SetOffset(const ui64 offset) {
-        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
+        AFL_ENSURE(Size() == KeySize() + HasSuffix());
         Offset = offset;
         memcpy(PtrOffset(), Sprintf("%.20" PRIu64, offset).data(), 20);
     }
 
     ui64 GetOffset() const {
-        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
+        AFL_ENSURE(Size() == KeySize() + HasSuffix());
         return Offset;
     }
 
     void SetCount(const ui32 count) {
-        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
+        AFL_ENSURE(Size() == KeySize() + HasSuffix());
         Count = count;
         memcpy(PtrCount(), Sprintf("%.10" PRIu32, count).data(), 10);
     }
 
     ui32 GetCount() const {
-        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
+        AFL_ENSURE(Size() == KeySize() + HasSuffix());
         return Count;
     }
 
     void SetPartNo(const ui16 partNo) {
-        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
+        AFL_ENSURE(Size() == KeySize() + HasSuffix());
         PartNo = partNo;
         memcpy(PtrPartNo(), Sprintf("%.5" PRIu16, partNo).data(), 5);
     }
 
     ui16 GetPartNo() const {
-        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
+        AFL_ENSURE(Size() == KeySize() + HasSuffix());
         return PartNo;
     }
 
     void SetInternalPartsCount(const ui16 internalPartsCount) {
-        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
+        AFL_ENSURE(Size() == KeySize() + HasSuffix());
         InternalPartsCount = internalPartsCount;
         memcpy(PtrInternalPartsCount(), Sprintf("%.5" PRIu16, internalPartsCount).data(), 5);
     }
 
     ui16 GetInternalPartsCount() const {
-        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
+        AFL_ENSURE(Size() == KeySize() + HasSuffix());
         return InternalPartsCount;
     }
 
@@ -276,6 +280,7 @@ public:
     }
 
     void SetFastWrite();
+    void SetBody();
 
 private:
     TKey(EType type, const TPartitionId& partition, const ui64 offset, const ui16 partNo, const ui32 count, const ui16 internalPartsCount, const TMaybe<char> suffix)
@@ -297,11 +302,11 @@ private:
     TKey(const TString& data)
     {
         Assign(data.data(), data.size());
-        Y_ABORT_UNLESS(data.size() == KeySize() + HasSuffix());
-        Y_ABORT_UNLESS(*(PtrOffset() - 1) == '_');
-        Y_ABORT_UNLESS(*(PtrCount() - 1) == '_');
-        Y_ABORT_UNLESS(*(PtrPartNo() - 1) == '_');
-        Y_ABORT_UNLESS(*(PtrInternalPartsCount() - 1) == '_');
+        AFL_ENSURE(data.size() == KeySize() + HasSuffix());
+        AFL_ENSURE(*(PtrOffset() - 1) == '_');
+        AFL_ENSURE(*(PtrCount() - 1) == '_');
+        AFL_ENSURE(*(PtrPartNo() - 1) == '_');
+        AFL_ENSURE(*(PtrInternalPartsCount() - 1) == '_');
 
         ParsePartition();
         ParseOffset();
@@ -361,8 +366,11 @@ bool TKey::IsHead() const
 }
 
 inline
-TString GetTxKey(ui64 txId)
+TString GetTxKey(ui64 txId, TMaybe<ui32> partition = Nothing())
 {
+    if (partition.Defined()) {
+        return Sprintf("tx_%020" PRIu64 "_%010" PRIu32, txId, *partition);
+    }
     return Sprintf("tx_%020" PRIu64, txId);
 }
 

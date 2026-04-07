@@ -16,30 +16,20 @@ private:
     TPortionAddress InternalPortionAddress;
 
 public:
-    const TPortionAddress& GetInternalPortionAddress() const {
-        return InternalPortionAddress;
-    }
+    const TPortionAddress& GetInternalPortionAddress() const;
 
-    ui64 GetPortionId() const {
-        return InternalPortionAddress.GetPortionId();
-    }
+    ui64 GetPortionId() const;
 
-    TInternalPathId GetPathId() const {
-        return InternalPortionAddress.GetPathId();
-    }
+    TInternalPathId GetPathId() const;
 
-    TGlobalPortionAddress(const NActors::TActorId& actorId, const TPortionAddress& internalAddress)
-        : TabletActorId(actorId)
-        , InternalPortionAddress(internalAddress) {
-    }
+    TGlobalPortionAddress(const NActors::TActorId &actorId,
+                          const TPortionAddress &internalAddress);
 
-    bool operator==(const TGlobalPortionAddress& item) const {
-        return TabletActorId == item.TabletActorId && InternalPortionAddress == item.InternalPortionAddress;
-    }
+    bool operator==(const TGlobalPortionAddress& item) const;
 
-    explicit operator size_t() const {
-        return TabletActorId.Hash() ^ THash<NKikimr::NOlap::TPortionAddress>()(InternalPortionAddress);
-    }
+    explicit operator size_t() const;
+
+    const TString Debug() const;
 };
 
 class TPortionsMetadataCachePolicy {
@@ -49,36 +39,23 @@ public:
     using TSourceId = NActors::TActorId;
     using EConsumer = NOlap::NBlobOperations::EConsumer;
 
-    static TSourceId GetSourceId(const TAddress& address) {
-        return address.GetTabletActorId();
-    }
+    static TSourceId GetSourceId(const TAddress& address);
 
-    static EConsumer DefaultConsumer() {
-        return EConsumer::UNDEFINED;
-    }
+    static EConsumer DefaultConsumer();
 
     class TSizeCalcer {
     public:
-        size_t operator()(const TObject& data) {
-            AFL_VERIFY(data);
-            return sizeof(TAddress) + data->GetMetadataSize();
-        }
+        size_t operator()(const TObject& data);
     };
 
-    static TString GetCacheName() {
-        return "portions_metadata";
-    }
+    static TString GetCacheName();
 
-    static TString GetServiceCode() {
-        return "PRMT";
-    }
+    static TString GetServiceCode();
 
     static std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPortionsMetadataCachePolicy>> BuildObjectsProcessor(
         const NActors::TActorId& serviceActorId);
 
-    static NMemory::EMemoryConsumerKind GetConsumerKind() {
-        return NMemory::EMemoryConsumerKind::ColumnTablesDataAccessorCache;
-    }
+    static NMemory::EMemoryConsumerKind GetConsumerKind();
 };
 
 }   // namespace NKikimr::NOlap::NGeneralCache

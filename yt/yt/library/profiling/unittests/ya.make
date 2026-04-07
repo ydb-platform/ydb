@@ -14,12 +14,15 @@ SRCS(
     solomon_ut.cpp
     tag_ut.cpp
     cube_ut.cpp
+    encoder_ut.cpp
     exporter_ut.cpp
 )
 
 INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
 
 PEERDIR(
+    library/cpp/json/yson
+
     yt/yt/core/test_framework
     yt/yt/library/profiling
     yt/yt/library/profiling/solomon

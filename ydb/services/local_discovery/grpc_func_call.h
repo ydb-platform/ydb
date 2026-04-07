@@ -8,22 +8,22 @@ namespace NGRpcService {
 
 using TFuncCallback = std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)>;
 
-template <typename TReq, typename TResp>
+template <typename TReq, typename TResp, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON>
 class TGrpcRequestFunctionCall
     : public std::conditional_t<TProtoHasValidate<TReq>::Value,
             TGRpcRequestValidationWrapperImpl<
-                TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, true, TGrpcRequestFunctionCall<TReq, TResp>>,
+                TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, true, TGrpcRequestFunctionCall<TReq, TResp, RuntimeEventType>, RuntimeEventType>,
             TGRpcRequestWrapperImpl<
-                TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, true, TGrpcRequestFunctionCall<TReq, TResp>>>
+                TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, true, TGrpcRequestFunctionCall<TReq, TResp, RuntimeEventType>, RuntimeEventType>>
     {
 public:
     static constexpr bool IsOp = true;
     static IActor* CreateRpcActor(IRequestOpCtx* msg);
     using TBase = std::conditional_t<TProtoHasValidate<TReq>::Value,
             TGRpcRequestValidationWrapperImpl<
-                TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, true, TGrpcRequestFunctionCall<TReq, TResp>>,
+                TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, true, TGrpcRequestFunctionCall<TReq, TResp, RuntimeEventType>, RuntimeEventType>,
             TGRpcRequestWrapperImpl<
-                TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, true, TGrpcRequestFunctionCall<TReq, TResp>>>;
+                TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, true, TGrpcRequestFunctionCall<TReq, TResp, RuntimeEventType>, RuntimeEventType>>;
 
     TGrpcRequestFunctionCall(NYdbGrpc::IRequestContextBase* ctx,
         TFuncCallback cb, TRequestAuxSettings auxSettings = {})

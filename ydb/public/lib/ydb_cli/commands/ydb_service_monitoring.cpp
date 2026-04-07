@@ -1,6 +1,7 @@
 #include "ydb_service_monitoring.h"
 
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NYdb {
@@ -17,6 +18,8 @@ TCommandSelfCheck::TCommandSelfCheck()
 {}
 
 void TCommandSelfCheck::Config(TConfig& config) {
+    config.AllowEmptyDatabase = true;
+
     TYdbSimpleCommand::Config(config);
     config.SetFreeArgsNum(0);
 
@@ -24,6 +27,12 @@ void TCommandSelfCheck::Config(TConfig& config) {
 
     config.Opts->AddLongOption('v', "verbose", "Return detailed info about components checked with their statuses.")
         .StoreTrue(&Verbose);
+
+    config.Opts->AddLongOption("no-merge", "Do not merge entries of health check result")
+        .StoreTrue(&NoMerge).Optional();
+
+    config.Opts->AddLongOption("no-cache", "Do not use cached result")
+        .StoreTrue(&NoCache).Optional();
 }
 
 void TCommandSelfCheck::Parse(TConfig& config) {
@@ -39,6 +48,14 @@ int TCommandSelfCheck::Run(TConfig& config) {
         settings.ReturnVerboseStatus(true);
     }
 
+    if (NoMerge) {
+        settings.NoMerge(true);
+    }
+
+    if (NoCache) {
+        settings.NoCache(true);
+    }
+
     NMonitoring::TSelfCheckResult result = client.SelfCheck(
         FillSettings(settings)
     ).GetValueSync();
@@ -52,7 +69,7 @@ int TCommandSelfCheck::PrintResponse(NMonitoring::TSelfCheckResult& result) {
         case EDataFormat::Default:
         case EDataFormat::Pretty:
         {
-            NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+            NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
             TStringBuf statusColor;
             auto hcResultString = SelfCheck_Result_Name(proto.Getself_check_result());
             switch (proto.Getself_check_result()) {

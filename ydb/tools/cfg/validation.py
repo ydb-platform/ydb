@@ -895,8 +895,12 @@ TEMPLATE_SCHEMA = {
                 "enforce_user_token_requirement": {
                     "type": "boolean",
                 },
+                "database_allowed_sids": {"type": "array", "items": {"type": "string"}},
+                "viewer_allowed_sids": {"type": "array", "items": {"type": "string"}},
                 "monitoring_allowed_sids": {"type": "array", "items": {"type": "string"}},
                 "administration_allowed_sids": {"type": "array", "items": {"type": "string"}},
+                "bootstrap_allowed_sids": {"type": "array", "items": {"type": "string"}},
+                "register_dynamic_node_allowed_sids": {"type": "array", "items": {"type": "string"}},
             },
         },
         "static_erasure": {

@@ -4,12 +4,15 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/statistics.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <yql/essentials/core/minsketch/count_min_sketch.h>
 #include <ydb/library/actors/core/events.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 
 namespace NKikimr {
+
+class TCountMinSketch;
+class TEqWidthHistogram;
+
 namespace NStat {
 
 struct TStatSimple {
@@ -17,31 +20,66 @@ struct TStatSimple {
     ui64 BytesSize = 0;
 };
 
-struct TStatHyperLogLog {
-    // TODO:
+struct TStatSimpleColumn {
+    std::optional<NKikimrStat::TSimpleColumnStatistics> Data;
 };
 
 struct TStatCountMinSketch {
     std::shared_ptr<TCountMinSketch> CountMin;
 };
 
-enum EStatType {
+struct TStatEqWidthHistogram {
+    std::shared_ptr<TEqWidthHistogram> Data;
+};
+
+struct TStatTableSummary {
+    std::optional<NKikimrStat::TTableSummaryStatistics> Data;
+};
+
+// NB: enum values are serialized into the .metadata/_statistics table.
+enum class EStatType {
+    // Simple table statistics calculated by aggregating shard statistics reports
+    // (row count may be incorrect if the table is not fully compacted as it counts all row versions).
     SIMPLE = 0,
-    HYPER_LOG_LOG = 1,
+    // Simple column statistics (number of distinct values, min/max).
+    SIMPLE_COLUMN = 1,
+    // Count-min sketch column statistics.
     COUNT_MIN_SKETCH = 2,
+    // Equi-width histogram column statistics.
+    EQ_WIDTH_HISTOGRAM = 3,
+    // Correct table row count calculated during ANALYZE.
+    TABLE_SUMMARY = 4,
 };
 
 struct TRequest {
     TPathId PathId;
-    std::optional<ui32> ColumnTag; // not used for simple stat
+    std::optional<ui32> ColumnTag; // not used for SIMPLE or TABLE_SUMMARY stats
 };
 
 struct TResponse {
     bool Success = true;
     TRequest Req;
     TStatSimple Simple;
-    TStatHyperLogLog HyperLogLog;
+    TStatSimpleColumn SimpleColumn;
     TStatCountMinSketch CountMinSketch;
+    TStatEqWidthHistogram EqWidthHistogram;
+    TStatTableSummary TableSummary;
+};
+
+// A single item of columnar statistics ready to be saved in the internal table.
+struct TStatisticsItem {
+    TStatisticsItem(
+            std::optional<ui32> columnTag,
+            EStatType type,
+            TString data)
+        : ColumnTag(columnTag)
+        , Type(type)
+        , Data(std::move(data))
+    {}
+
+    std::optional<ui32> ColumnTag;
+    EStatType Type;
+    TString Data;
 };
 
 struct TEvStatistics {
@@ -75,8 +113,8 @@ struct TEvStatistics {
         EvAnalyzeStatus,
         EvAnalyzeStatusResponse,
 
-        EvAnalyzeTable,
-        EvAnalyzeTableResponse,
+        EvAnalyzeShard,
+        EvAnalyzeShardResponse,
 
         EvStatisticsRequest,
         EvStatisticsResponse,
@@ -86,7 +124,9 @@ struct TEvStatistics {
         EvAggregateKeepAlive,
         EvAggregateKeepAliveAck,
 
-        EvFinishTraversal,
+        EvAnalyzeActorResult,
+
+        EvAnalyzeCancel,
 
         EvEnd
     };
@@ -116,6 +156,7 @@ struct TEvStatistics {
     {};
 
     struct TEvGetStatistics : public TEventLocal<TEvGetStatistics, EvGetStatistics> {
+        TString Database;
         EStatType StatType;
         std::vector<TRequest> StatRequests;
     };
@@ -190,6 +231,16 @@ struct TEvStatistics {
         TEvSaveStatisticsQueryResponse,
         EvSaveStatisticsQueryResponse>
     {
+        TEvSaveStatisticsQueryResponse(
+                Ydb::StatusIds::StatusCode status,
+                NYql::TIssues issues,
+                TPathId pathId)
+            : Status(status)
+            , Issues(std::move(issues))
+            , PathId(std::move(pathId))
+            , Success(Status == Ydb::StatusIds::SUCCESS)
+        {}
+
         Ydb::StatusIds::StatusCode Status;
         NYql::TIssues Issues;
         TPathId PathId;
@@ -239,17 +290,23 @@ struct TEvStatistics {
         EvAnalyzeStatusResponse>
     {};
 
-    struct TEvAnalyzeTable : public TEventPB<
-        TEvAnalyzeTable,
-        NKikimrStat::TEvAnalyzeTable,
-        EvAnalyzeTable>
+    struct TEvAnalyzeCancel : public TEventPB<
+        TEvAnalyzeCancel,
+        NKikimrStat::TEvAnalyzeCancel,
+        EvAnalyzeCancel>
     {};
 
-    struct TEvAnalyzeTableResponse : public TEventPB<
-        TEvAnalyzeTableResponse,
-        NKikimrStat::TEvAnalyzeTableResponse,
-        EvAnalyzeTableResponse>
-    {};    
+    struct TEvAnalyzeShard : public TEventPB<
+        TEvAnalyzeShard,
+        NKikimrStat::TEvAnalyzeShard,
+        EvAnalyzeShard>
+    {};
+
+    struct TEvAnalyzeShardResponse : public TEventPB<
+        TEvAnalyzeShardResponse,
+        NKikimrStat::TEvAnalyzeShardResponse,
+        EvAnalyzeShardResponse>
+    {};
 
     struct TEvStatisticsRequest : public TEventPB<
         TEvStatisticsRequest,
@@ -262,6 +319,28 @@ struct TEvStatistics {
         NKikimrStat::TEvStatisticsResponse,
         EvStatisticsResponse>
     {};
+
+    struct TEvAnalyzeActorResult : public TEventLocal<
+        TEvAnalyzeActorResult, EvAnalyzeActorResult>
+    {
+        enum class EStatus {
+            Success,
+            InternalError,
+            TableNotFound,
+        };
+        EStatus Status;
+        NYql::TIssues Issues;
+        std::vector<TStatisticsItem> Statistics;
+        bool Final; // Indicates that the actor has finished.
+
+        TEvAnalyzeActorResult(std::vector<TStatisticsItem> statistics, bool final)
+            : Status(EStatus::Success)
+            , Statistics(std::move(statistics))
+            , Final(final)
+        {}
+
+        explicit TEvAnalyzeActorResult(EStatus status) : Status(status), Final(true) {}
+    };
 };
 
 } // NStat

@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.17)
+VERSION(2.18)
 
-ORIGINAL_SOURCE(https://github.com/mm2/Little-CMS/archive/lcms2.17.tar.gz)
+ORIGINAL_SOURCE(https://github.com/mm2/Little-CMS/archive/lcms2.18.tar.gz)
 
 ADDINCL(
     contrib/libs/lcms2/include

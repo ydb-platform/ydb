@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 from concurrent import futures
 from typing import (
@@ -7,6 +9,7 @@ from typing import (
     Dict,
     Any,
     Union,
+    TYPE_CHECKING,
 )
 import time
 import threading
@@ -24,9 +27,10 @@ from ..retries import (
 from .. import issues
 from .. import convert
 from ..settings import BaseRequestSettings
-from .._grpc.grpcwrapper import common_utils
 from .._grpc.grpcwrapper import ydb_query_public_types as _ydb_query_public
 
+if TYPE_CHECKING:
+    from ..driver import Driver as SyncDriver
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +38,11 @@ logger = logging.getLogger(__name__)
 class QuerySessionPool:
     """QuerySessionPool is an object to simplify operations with sessions of Query Service."""
 
+    _driver: "SyncDriver"
+
     def __init__(
         self,
-        driver: common_utils.SupportedDriverType,
+        driver: "SyncDriver",
         size: int = 100,
         *,
         query_client_settings: Optional[QueryClientSettings] = None,
@@ -51,7 +57,7 @@ class QuerySessionPool:
 
         self._driver = driver
         self._tp = futures.ThreadPoolExecutor(workers_threads_count)
-        self._queue = queue.Queue()
+        self._queue: queue.Queue[QuerySession] = queue.Queue()
         self._current_size = 0
         self._size = size
         self._should_stop = threading.Event()
@@ -61,7 +67,7 @@ class QuerySessionPool:
     def _create_new_session(self, timeout: Optional[float]):
         session = QuerySession(self._driver, settings=self._query_client_settings)
         session.create(settings=BaseRequestSettings().with_timeout(timeout))
-        logger.debug(f"New session was created for pool. Session id: {session._state.session_id}")
+        logger.debug(f"New session was created for pool. Session id: {session.session_id}")
         return session
 
     def acquire(self, timeout: Optional[float] = None) -> QuerySession:
@@ -98,12 +104,12 @@ class QuerySessionPool:
                     raise issues.SessionPoolEmpty("Timeout on acquire session")
 
             if session is not None:
-                if session._state.attached:
-                    logger.debug(f"Acquired active session from queue: {session._state.session_id}")
+                if session.is_active:
+                    logger.debug(f"Acquired active session from queue: {session.session_id}")
                     return session
                 else:
                     self._current_size -= 1
-                    logger.debug(f"Acquired dead session from queue: {session._state.session_id}")
+                    logger.debug(f"Acquired dead session from queue: {session.session_id}")
 
             logger.debug(f"Session pool is not large enough: {self._current_size} < {self._size}, will create new one.")
             finish = time.monotonic()
@@ -120,7 +126,7 @@ class QuerySessionPool:
         """Release a session back to Session Pool."""
 
         self._queue.put_nowait(session)
-        logger.debug("Session returned to queue: %s", session._state.session_id)
+        logger.debug("Session returned to queue: %s", session.session_id)
 
     def checkout(self, timeout: Optional[float] = None) -> "SimpleQuerySessionCheckout":
         """Return a Session context manager, that acquires session on enter and releases session on exit.
@@ -197,7 +203,8 @@ class QuerySessionPool:
           1) QuerySerializableReadWrite() which is default mode;
           2) QueryOnlineReadOnly(allow_inconsistent_reads=False);
           3) QuerySnapshotReadOnly();
-          4) QueryStaleReadOnly().
+          4) QuerySnapshotReadWrite();
+          5) QueryStaleReadOnly().
         :param retry_settings: RetrySettings object.
 
         :return: Result sets or exception in case of execution errors.
@@ -322,6 +329,8 @@ class QuerySessionPool:
 
 
 class SimpleQuerySessionCheckout:
+    _session: Optional[QuerySession]
+
     def __init__(self, pool: QuerySessionPool, timeout: Optional[float]):
         self._pool = pool
         self._timeout = timeout
@@ -331,5 +340,6 @@ class SimpleQuerySessionCheckout:
         self._session = self._pool.acquire(self._timeout)
         return self._session
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self._pool.release(self._session)
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        if self._session is not None:
+            self._pool.release(self._session)

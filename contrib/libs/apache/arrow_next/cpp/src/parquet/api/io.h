@@ -18,4 +18,4 @@
 
 #pragma once
 
-#include "parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"

@@ -17,8 +17,7 @@
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/core/langver/yql_core_langver.h>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 namespace {
 
@@ -30,7 +29,7 @@ void FillSettings(NSQLTranslation::TTranslationSettings& settings, const TOption
     settings.Flags = TranslationFlags();
 }
 
-}
+} // namespace
 
 bool CheckProgram(const TString& program, const TOptions& options, TIssues& errors) {
     TMaybe<TIssue> verIssue;
@@ -53,14 +52,12 @@ bool CheckProgram(const TString& program, const TOptions& options, TIssues& erro
     NSQLTranslation::TTranslators translators(
         nullptr,
         NSQLTranslationV1::MakeTranslator(lexers, parsers),
-        NSQLTranslationPG::MakeTranslator()
-    );
+        NSQLTranslationPG::MakeTranslator());
 
     TAstParseResult astRes;
     if (options.IsSql) {
         NSQLTranslation::TTranslationSettings settings;
         FillSettings(settings, options);
-        settings.EmitReadsForExists = true;
         if (options.IsLibrary) {
             settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
         }
@@ -133,5 +130,4 @@ bool CheckProgram(const TString& program, const TOptions& options, TIssues& erro
     return true;
 }
 
-}
-}
+} // namespace NYql::NFastCheck

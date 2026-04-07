@@ -107,7 +107,7 @@ auth_config:
 
 ### Федеративные запросы
 
-[Федеративные запросы](../../concepts/federated_query/index.md) позволяют {{ ydb-short-name }} выполнять запросы к различным внешним источникам данных. Использование TLS при выполнении таких запросов контролируется параметром `USE_TLS` в запросах [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md). Изменения в серверной конфигурации не требуются.
+[Федеративные запросы](../../concepts/query_execution/federated_query/index.md) позволяют {{ ydb-short-name }} выполнять запросы к различным внешним источникам данных. Использование TLS при выполнении таких запросов контролируется параметром `USE_TLS` в запросах [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md). Изменения в серверной конфигурации не требуются.
 
 ### Трассировка
 
@@ -127,7 +127,7 @@ tracing_config:
 
 ## Асинхронная репликация
 
-[Асинхронная репликация](../../concepts/async-replication.md) синхронизирует данные между двумя базами данных {{ ydb-short-name }}, одна из которых выступает в роли клиента для другой. Использование TLS при такой коммуникации контролируется параметром `CONNECTION_STRING` в запросах [CREATE ASYNC REPLICATION](../../yql/reference/syntax/create-async-replication.md). Для TLS-соединений используйте протокол `grpcs://`. Изменения в серверной конфигурации не требуются.
+[Асинхронная репликация](../../concepts/async-replication.md) синхронизирует данные между двумя базами данных {{ ydb-short-name }}, одна из них выступает в роли клиента по отношению к другой. Использование TLS при такой коммуникации контролируется параметром `CONNECTION_STRING` в запросах [CREATE ASYNC REPLICATION](../../yql/reference/syntax/create-async-replication.md). Для TLS-соединений используйте протокол `grpcs://`. Изменения в серверной конфигурации не требуются.
 
 При использовании пользовательского удостоверяющего центра (Certificate Authority, CA) передайте его сертификат в параметре `CA_CERT` при создании экземпляра асинхронной репликации.
 

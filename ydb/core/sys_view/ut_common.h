@@ -11,6 +11,10 @@
 namespace NKikimr {
 namespace NSysView {
 
+NKikimrSchemeOp::TPathDescription DescribePath(TTestActorRuntime& runtime, TString&& path);
+
+NYdb::NQuery::TExecuteQueryResult ExecuteQuery(NYdb::NQuery::TSession& session, const std::string& query);
+
 NKikimrSubDomains::TSubDomainSettings GetSubDomainDeclareSettings(
     const TString &name, const TStoragePools &pools = {});
 
@@ -26,8 +30,13 @@ struct TTestEnvSettings {
     bool AlterObjectEnabled = false;
     bool EnableSparsedColumns = false;
     bool EnableOlapCompression = false;
-    TMaybe<bool> EnableRealSystemViewPaths;
+    bool EnableTableCacheModes = false;
+    bool EnableFulltextIndex = false;
+    bool EnableCsDictionaryEncoding = false;
+    bool EnableLocalBloomFilterIndex = false;
     NKikimrProto::TAuthConfig AuthConfig = {};
+    TMaybe<ui32> DataShardStatsReportIntervalSeconds;
+    NKikimrConfig::TTableServiceConfig TableServiceConfig;
 };
 
 class TTestEnv {
@@ -89,6 +98,12 @@ private:
     THolder<NYdb::TDriver> Driver;
     TVector<ui64> PqTabletIds;
 };
+
+void CreateTenant(TTestEnv& env, const TString& tenantName, bool extSchemeShard = true, ui64 nodesCount = 2);
+
+void CreateTenants(TTestEnv& env, bool extSchemeShard = true);
+
+void CreateTenantsAndTables(TTestEnv& env, bool extSchemeShard = true, ui64 partitionCount = 1);
 
 } // NSysView
 } // NKikimr

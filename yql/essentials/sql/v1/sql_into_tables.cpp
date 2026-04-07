@@ -10,15 +10,14 @@ namespace NSQLTranslationV1 {
 using namespace NSQLv1Generated;
 
 TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
-    static const TMap<TString, ESQLWriteColumnMode> str2Mode = {
+    static const TMap<TString, ESQLWriteColumnMode> Str2Mode = {
         {"InsertInto", ESQLWriteColumnMode::InsertInto},
         {"InsertOrAbortInto", ESQLWriteColumnMode::InsertOrAbortInto},
         {"InsertOrIgnoreInto", ESQLWriteColumnMode::InsertOrIgnoreInto},
         {"InsertOrRevertInto", ESQLWriteColumnMode::InsertOrRevertInto},
         {"UpsertInto", ESQLWriteColumnMode::UpsertInto},
         {"ReplaceInto", ESQLWriteColumnMode::ReplaceInto},
-        {"InsertIntoWithTruncate", ESQLWriteColumnMode::InsertIntoWithTruncate}
-    };
+        {"InsertIntoWithTruncate", ESQLWriteColumnMode::InsertIntoWithTruncate}};
 
     auto& modeBlock = node.GetBlock1();
 
@@ -31,22 +30,19 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
             modeTokens = {
                 modeBlock.GetAlt2().GetToken1(),
                 modeBlock.GetAlt2().GetToken2(),
-                modeBlock.GetAlt2().GetToken3()
-            };
+                modeBlock.GetAlt2().GetToken3()};
             break;
         case TRule_into_table_stmt_TBlock1::AltCase::kAlt3:
             modeTokens = {
                 modeBlock.GetAlt3().GetToken1(),
                 modeBlock.GetAlt3().GetToken2(),
-                modeBlock.GetAlt3().GetToken3()
-            };
+                modeBlock.GetAlt3().GetToken3()};
             break;
         case TRule_into_table_stmt_TBlock1::AltCase::kAlt4:
             modeTokens = {
                 modeBlock.GetAlt4().GetToken1(),
                 modeBlock.GetAlt4().GetToken2(),
-                modeBlock.GetAlt4().GetToken3()
-            };
+                modeBlock.GetAlt4().GetToken3()};
             break;
         case TRule_into_table_stmt_TBlock1::AltCase::kAlt5:
             modeTokens = {modeBlock.GetAlt5().GetToken1()};
@@ -55,7 +51,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
             modeTokens = {modeBlock.GetAlt6().GetToken1()};
             break;
         case TRule_into_table_stmt_TBlock1::AltCase::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            YQL_ENSURE(false, "Unreachable");
     }
 
     TVector<TString> modeStrings;
@@ -91,28 +87,24 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
     std::pair<bool, TDeferredAtom> nameOrAt;
     bool isBinding = false;
 
-    const bool isClusterSpecified = (
-        (tableRefCore.HasAlt_simple_table_ref_core1() &&
-         tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().HasBlock1()) ||
-        (tableRefCore.HasAlt_simple_table_ref_core2() &&
-         tableRefCore.GetAlt_simple_table_ref_core2().HasBlock1())
-    );
+    const bool isClusterSpecified = ((tableRefCore.HasAlt_simple_table_ref_core1() &&
+                                      tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().HasBlock1()) ||
+                                     (tableRefCore.HasAlt_simple_table_ref_core2() &&
+                                      tableRefCore.GetAlt_simple_table_ref_core2().HasBlock1()));
 
-    const bool hasAt = (
-        (tableRefCore.HasAlt_simple_table_ref_core1() &&
-         tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetRule_id_or_at2().HasBlock1()) ||
-        (tableRefCore.HasAlt_simple_table_ref_core2() &&
-         tableRefCore.GetAlt_simple_table_ref_core2().HasBlock2())
-    );
+    const bool hasAt = ((tableRefCore.HasAlt_simple_table_ref_core1() &&
+                         tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetRule_id_or_at2().HasBlock1()) ||
+                        (tableRefCore.HasAlt_simple_table_ref_core2() &&
+                         tableRefCore.GetAlt_simple_table_ref_core2().HasBlock2()));
 
     if (isClusterSpecified) {
         const auto& clusterExpr = tableRefCore.HasAlt_simple_table_ref_core1()
-            ? tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetBlock1().GetRule_cluster_expr1()
-            : tableRefCore.GetAlt_simple_table_ref_core2().GetBlock1().GetRule_cluster_expr1();
+                                      ? tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetBlock1().GetRule_cluster_expr1()
+                                      : tableRefCore.GetAlt_simple_table_ref_core2().GetBlock1().GetRule_cluster_expr1();
 
         const bool result = !hasAt
-            ? ClusterExprOrBinding(clusterExpr, service, cluster, isBinding)
-            : ClusterExpr(clusterExpr, false, service, cluster);
+                                ? ClusterExprOrBinding(clusterExpr, service, cluster, isBinding)
+                                : ClusterExpr(clusterExpr, false, service, cluster);
 
         if (!result) {
             return nullptr;
@@ -148,7 +140,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
             break;
         }
         case TRule_simple_table_ref_core::AltCase::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            YQL_ENSURE(false, "Unreachable");
     }
 
     bool withTruncate = false;
@@ -164,7 +156,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
                 withTruncate = true;
             }
         }
-        std::erase_if(*hints, [](const auto &hint) { return to_upper(hint.first) == "TRUNCATE"; });
+        std::erase_if(*hints, [](const auto& hint) { return to_upper(hint.first) == "TRUNCATE"; });
         tableHints = std::move(*hints);
     }
 
@@ -176,8 +168,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
         }
 
         PureColumnListStr(
-            intoTableRef.GetBlock2().GetRule_pure_column_list3(), *this, eraseColumns
-        );
+            intoTableRef.GetBlock2().GetRule_pure_column_list3(), *this, eraseColumns);
     }
 
     if (withTruncate) {
@@ -188,8 +179,8 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
         SqlIntoModeStr_ += "WithTruncate";
         SqlIntoUserModeStr_ += " ... WITH TRUNCATE";
     }
-    const auto iterMode = str2Mode.find(SqlIntoModeStr_);
-    YQL_ENSURE(iterMode != str2Mode.end(), "Invalid sql write mode string: " << SqlIntoModeStr_);
+    const auto iterMode = Str2Mode.find(SqlIntoModeStr_);
+    YQL_ENSURE(iterMode != Str2Mode.end(), "Invalid sql write mode string: " << SqlIntoModeStr_);
     const auto SqlIntoMode = iterMode->second;
 
     TPosition pos(Ctx_.Pos());
@@ -202,12 +193,12 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
             return nullptr;
         }
     } else {
-        table.Keys = BuildTableKey(pos, service, cluster, nameOrAt.second, {nameOrAt.first ? "@" : ""});
+        table.Keys = BuildTableKey(pos, service, cluster, nameOrAt.second, {.ViewName = nameOrAt.first ? "@" : ""});
     }
 
     Ctx_.IncrementMonCounter("sql_insert_clusters", table.Cluster.GetLiteral() ? *table.Cluster.GetLiteral() : "unknown");
 
-    auto values = TSqlIntoValues(Ctx_, Mode_).Build(node.GetRule_into_values_source4(), SqlIntoUserModeStr_);
+    auto values = TSqlIntoValues(*this).Build(node.GetRule_into_values_source4(), SqlIntoUserModeStr_);
     if (!values) {
         return nullptr;
     }
@@ -228,7 +219,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
 }
 
 bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const TTableRef& table,
-    ESQLWriteColumnMode mode, const TPosition& pos) {
+                                        ESQLWriteColumnMode mode, const TPosition& pos) {
     Y_UNUSED(node);
     auto serviceName = table.Service;
     if (serviceName == UnknownProviderName) {
@@ -254,9 +245,11 @@ bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const
 
     if (isMapReduce) {
         if (mode == ESQLWriteColumnMode::ReplaceInto) {
-            Ctx_.Error(pos) << "Meaning of REPLACE INTO has been changed, now you should use INSERT INTO <table> WITH TRUNCATE ... for " << serviceName;
-            Ctx_.IncrementMonCounter("sql_errors", "ReplaceIntoConflictUsage");
-            return false;
+            if (!Ctx_.EnsureBackwardCompatibleFeatureAvailable(
+                    pos, "REPLACE", MakeLangVersion(2025, 4)))
+            {
+                return false;
+            }
         }
     } else if (isKikimr) {
         if (mode == ESQLWriteColumnMode::InsertIntoWithTruncate) {

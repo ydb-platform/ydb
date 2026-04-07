@@ -6,16 +6,17 @@
 
 namespace NPersQueue {
 
+template<typename TCounter = NKikimr::TTabletCumulativeCounter>
 class TCounterTimeKeeper {
 public:
-    TCounterTimeKeeper (NKikimr::TTabletCumulativeCounter& counter)
+    TCounterTimeKeeper (TCounter& counter)
         : Counter(counter)
     {}
     ~TCounterTimeKeeper() {
         Counter += ui64(CpuTimer.PassedReset() * 1000000.);
     }
 private:
-    NKikimr::TTabletCumulativeCounter& Counter;
+    TCounter& Counter;
     THPTimer CpuTimer;
 };
 

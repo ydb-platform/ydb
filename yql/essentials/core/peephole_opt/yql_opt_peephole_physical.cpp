@@ -46,6 +46,9 @@ using TPeepHoleOptimizerMap = std::unordered_map<std::string_view, TPeepHoleOpti
 using TExtPeepHoleOptimizerPtr = TExprNode::TPtr (*const)(const TExprNode::TPtr&, TExprContext&, TTypeAnnotationContext& types);
 using TExtPeepHoleOptimizerMap = std::unordered_map<std::string_view, TExtPeepHoleOptimizerPtr>;
 
+using TMaybeNonDetPeepHoleOptimizerPtr = TExprNode::TPtr (*const)(const TExprNode::TPtr&, TExprContext&, TTypeAnnotationContext& types, bool* hasNonDeterministicFunctions);
+using TMaybeNonDetPeepHoleOptimizerMap = std::unordered_map<std::string_view, TMaybeNonDetPeepHoleOptimizerPtr>;
+
 struct TBlockFuncRule {
     std::string_view Name;
 };
@@ -60,7 +63,10 @@ std::string_view ToLiteral(const TGUID& uuid) { return std::string_view(reinterp
 template <typename T> TString ToLiteral(const T value) { return ToString<T>(value); }
 
 template <typename TRandomType>
-TExprNode::TPtr Random0Arg(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+TExprNode::TPtr Random0Arg(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types, bool* hasNonDeterministicFunctions) {
+    if (hasNonDeterministicFunctions) {
+        *hasNonDeterministicFunctions = true;
+    }
     if (node->ChildrenSize() == 0U) {
         YQL_CLOG(DEBUG, CorePeepHole) << "0-arg " << node->Content();
         const auto random = types.GetCachedRandom<TRandomType>();
@@ -70,11 +76,24 @@ TExprNode::TPtr Random0Arg(const TExprNode::TPtr& node, TExprContext& ctx, TType
 }
 
 template <ui64(*Convert)(ui64)>
-TExprNode::TPtr Now0Arg(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+TExprNode::TPtr Now0Arg(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types, bool* hasNonDeterministicFunctions) {
+    if (hasNonDeterministicFunctions) {
+        *hasNonDeterministicFunctions = true;
+    }
     if (node->ChildrenSize() == 0U) {
         YQL_CLOG(DEBUG, CorePeepHole) << "0-arg " << node->Content();
         const auto now = types.GetCachedNow();
         return ctx.NewCallable(node->Pos(), node->GetTypeAnn()->Cast<TDataExprType>()->GetName(), { ctx.NewAtom(node->Pos(), ToString(bool(Convert) ? Convert(now) : now), TNodeFlags::Default) });
+    }
+    return node;
+}
+
+TExprNode::TPtr NonDetUdf(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types, bool* hasNonDeterministicFunctions) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(types);
+    YQL_ENSURE(node->ChildrenSize() > 0);
+    if (hasNonDeterministicFunctions) {
+        *hasNonDeterministicFunctions |= node->Child(0)->Content().starts_with("ReservoirSampling.");
     }
     return node;
 }
@@ -586,27 +605,27 @@ std::vector<std::tuple<TExprNode::TPtr, bool, TExprNode::TPtr>> GetRenames(const
         if (const auto it = renames.find(name); renames.cend() != it) {
             const auto& source = it->second.front()->Content();
             if (const auto& part = CutAlias(lAlias, source)) {
-                if (const auto itemType = lType->FindItemType(*part))
+                if (/* const auto itemType = */ lType->FindItemType(*part))
                     result.emplace_back(ctx.NewAtom(join.Pos(), *part), true, std::move(it->second.back()));
             } else if (const auto& part = CutAlias(rAlias, source)) {
-                if (const auto itemType = rType->FindItemType(*part))
+                if (/* const auto itemType = */ rType->FindItemType(*part))
                     result.emplace_back(ctx.NewAtom(join.Pos(), *part), false, std::move(it->second.back()));
-            } else if (const auto itemType = lType->FindItemType(source)) {
+            } else if (/* const auto itemType = */ lType->FindItemType(source)) {
                 result.emplace_back(std::move(it->second.front()), true, std::move(it->second.back()));
-            } else if (const auto itemType = rType->FindItemType(source)) {
+            } else if (/* const auto itemType = */ rType->FindItemType(source)) {
                 result.emplace_back(std::move(it->second.front()), false, std::move(it->second.back()));
             }
         } else {
             auto pass = ctx.NewAtom(join.Pos(), name);
             if (const auto& part = CutAlias(lAlias, name)) {
-                if (const auto itemType = lType->FindItemType(*part))
+                if (/* const auto itemType = */ lType->FindItemType(*part))
                     result.emplace_back(ctx.NewAtom(join.Pos(), *part), true, std::move(pass));
             } else if (const auto& part = CutAlias(rAlias, name)) {
-                if (const auto itemType = rType->FindItemType(*part))
+                if (/* const auto itemType = */ rType->FindItemType(*part))
                     result.emplace_back(ctx.NewAtom(join.Pos(), *part), false, std::move(pass));
-            } else if (const auto itemType = lType->FindItemType(name)) {
+            } else if (/* const auto itemType = */ lType->FindItemType(name)) {
                 result.emplace_back(pass, true, pass);
-            } else if (const auto itemType = rType->FindItemType(name)) {
+            } else if (/* const auto itemType = */ rType->FindItemType(name)) {
                 result.emplace_back(pass, false, pass);
             }
         }
@@ -2362,7 +2381,7 @@ IGraphTransformer::TStatus PeepHoleCommonStage(const TExprNode::TPtr& input, TEx
 IGraphTransformer::TStatus PeepHoleFinalStage(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     TExprContext& ctx, TTypeAnnotationContext& types, bool* hasNonDeterministicFunctions,
     const TPeepHoleOptimizerMap& optimizers, const TExtPeepHoleOptimizerMap& extOptimizers,
-    const TExtPeepHoleOptimizerMap& nonDetOptimizers)
+    const TMaybeNonDetPeepHoleOptimizerMap& nonDetOptimizers)
 {
     TOptimizeExprSettings settings(&types);
     settings.CustomInstantTypeTransformer = types.CustomInstantTypeTransformer.Get();
@@ -2370,10 +2389,7 @@ IGraphTransformer::TStatus PeepHoleFinalStage(const TExprNode::TPtr& input, TExp
     return OptimizeExpr(input, output, [hasNonDeterministicFunctions, &types, &extOptimizers, &optimizers, &nonDetOptimizers](
         const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (const auto nrule = nonDetOptimizers.find(node->Content()); nonDetOptimizers.cend() != nrule) {
-            if (hasNonDeterministicFunctions) {
-                *hasNonDeterministicFunctions = true;
-            }
-            return (nrule->second)(node, ctx, types);
+            return (nrule->second)(node, ctx, types, hasNonDeterministicFunctions);
         }
 
         if (const auto xrule = extOptimizers.find(node->Content()); extOptimizers.cend() != xrule) {
@@ -2407,7 +2423,7 @@ IGraphTransformer::TStatus PeepHoleBlockStage(const TExprNode::TPtr& input, TExp
 
 class TStrongTypeErrorProxy : public IGraphTransformer {
 public:
-    TStrongTypeErrorProxy(IGraphTransformer& inner)
+    explicit TStrongTypeErrorProxy(IGraphTransformer& inner)
         : Inner_(inner)
     {}
 
@@ -3182,8 +3198,33 @@ TExprNode::TPtr ExpandMux(const TExprNode::TPtr& node, TExprContext& ctx) {
     return node;
 }
 
-TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
+bool IsOptimizerExpandLMapOrShuffleByKeysViaBlockAllowed(const TTypeAnnotationContext& types) {
+    static const char Flag[] = "ExpandLMapOrShuffleByKeysViaBlock";
+    return IsOptimizerEnabled<Flag>(types) && !IsOptimizerDisabled<Flag>(types);
+}
+
+TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
+    if (IsOptimizerExpandLMapOrShuffleByKeysViaBlockAllowed(types)) {
+        return ctx.Builder(node->Pos())
+            .Callable("Block")
+                .Lambda(0)
+                    .Param("parent")
+                    .Callable("Collect")
+                        .Apply(0, node->Tail())
+                            .With(0)
+                                .Callable("Iterator")
+                                    .Add(0, node->HeadPtr())
+                                    .Callable(1, "DependsOn")
+                                        .Arg(0, "parent")
+                                    .Seal()
+                                .Seal()
+                            .Done()
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal().Build();
+    }
     return ctx.Builder(node->Pos())
         .Callable("Collect")
             .Apply(0, node->Tail())
@@ -3194,6 +3235,25 @@ TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprCont
                 .Done()
             .Seal()
         .Seal().Build();
+}
+
+bool IsExpandLMapOrShuffleByKeysPromoted(const TTypeAnnotationContext& types) {
+    static const char Flag[] = "PromoteExpandLMapOrShuffleByKeys";
+    return IsOptimizerEnabled<Flag>(types) && !IsOptimizerDisabled<Flag>(types);
+}
+
+TExprNode::TPtr ExpandLMapOrShuffleByKeysAtCommonStage(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    if (IsExpandLMapOrShuffleByKeysPromoted(types)) {
+        return ExpandLMapOrShuffleByKeys(node, ctx, types);
+    }
+    return node;
+}
+
+TExprNode::TPtr ExpandLMapOrShuffleByKeysAtFinalStage(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    if (!IsExpandLMapOrShuffleByKeysPromoted(types)) {
+        return ExpandLMapOrShuffleByKeys(node, ctx, types);
+    }
+    return node;
 }
 
 TExprNode::TPtr ExpandDemux(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -6209,10 +6269,6 @@ private:
 
     // Rewrite if present via BlockIf + BlockExists + BlockValidUnwrap.
     TExprNode::TPtr RewriteIfPresent(TIfPresentCallableView ifPresentView, TRewritesMap& rewrites, const TNodeSet& nonStrictNodes) {
-        // Block Coalesce and block exists between two scalars are available only since 63 version.
-        if constexpr (NKikimr::NMiniKQL::RuntimeVersion < 63U) {
-            return nullptr;
-        }
         // Check that lambda return type is valid.
         if (!IsSupportedAsBlockType(ifPresentView.Lambda()->Pos(), *ifPresentView.Lambda()->GetTypeAnn(), Ctx_, Types_, true)) {
             YQL_CLOG(TRACE, CorePeepHole) << Log(ifPresentView.Lambda().Get()) << "Lambda return type is not supported";
@@ -8750,6 +8806,24 @@ TExprNode::TPtr CompareTagged(const TExprNode& node, TExprContext& ctx) {
     return ctx.ChangeChildren(node, std::move(children));
 }
 
+template<bool IsScore>
+TExprNode::TPtr ExpandFulltextBuiltin(const TExprNode::TPtr& node, TExprContext& ctx) {
+    TString type = IsScore ? "Double" : "Bool";
+    TString error = TStringBuilder() << "Fulltext " << (IsScore ? "score" : "match") << " is not implemented yet";
+    auto nullNode = ctx.NewCallable(node->Pos(), "Nothing", {
+        ctx.NewCallable(node->Pos(), "OptionalType", {
+            ctx.NewCallable(node->Pos(), "DataType", {ctx.NewAtom(node->Pos(), type, TNodeFlags::Default) }) }) });
+
+    auto message = ctx.Builder(node->Pos()).Callable("String").Atom(0, error).Seal().Build();
+
+    return ctx.Builder(node->Pos())
+        .Callable("Unwrap")
+            .Add(0, nullNode)
+            .Add(1, message)
+        .Seal()
+        .Build();
+}
+
 template <bool Equals, bool IsDistinct>
 TExprNode::TPtr ExpandSqlEqual(const TExprNode::TPtr& node, TExprContext& ctx) {
     const auto lType = node->Head().GetTypeAnn();
@@ -8800,6 +8874,12 @@ TExprNode::TPtr ExpandSqlEqual(const TExprNode::TPtr& node, TExprContext& ctx) {
         return ReduceLeftArg<true, Equals, IsDistinct>(*node, ctx);
     } else if (ETypeAnnotationKind::Optional == rKind) {
         return ReduceRightArg<true, Equals, IsDistinct>(*node, ctx);
+    } else if (ETypeAnnotationKind::Pg == lKind && ETypeAnnotationKind::Null == rKind ||
+               ETypeAnnotationKind::Null == lKind && ETypeAnnotationKind::Pg == rKind) {
+        if constexpr (IsDistinct) {
+            const auto pgArg = ETypeAnnotationKind::Pg == lKind ? node->HeadPtr() : node->TailPtr();
+            return ctx.WrapByCallableIf(Equals, "Not", ctx.NewCallable(node->Pos(), "Exists", {pgArg}));
+        }
     }
 
     return node;
@@ -9253,6 +9333,8 @@ struct TPeepHoleRules {
         {"RangeFor", &ExpandRangeFor},
         {"RangeToPg", &ExpandRangeToPg},
         {"ToFlow", &DropToFlowDeps},
+        {"FulltextScore", &ExpandFulltextBuiltin<true>},
+        {"FulltextMatch", &ExpandFulltextBuiltin<false>},
         {"CheckedAdd", &ExpandCheckedAdd},
         {"CheckedSub", &ExpandCheckedSub},
         {"CheckedMul", &ExpandCheckedMul},
@@ -9286,6 +9368,9 @@ struct TPeepHoleRules {
         {"CalcOverWindow", &ExpandCalcOverWindow},
         {"CalcOverSessionWindow", &ExpandCalcOverWindow},
         {"CalcOverWindowGroup", &ExpandCalcOverWindow},
+        {"LMap", &ExpandLMapOrShuffleByKeysAtCommonStage},
+        {"OrderedLMap", &ExpandLMapOrShuffleByKeysAtCommonStage},
+        {"ShuffleByKeys", &ExpandLMapOrShuffleByKeysAtCommonStage},
     };
 
     const TPeepHoleOptimizerMap SimplifyStageRules = {
@@ -9329,9 +9414,6 @@ struct TPeepHoleRules {
         {"OrderedFilter", &ExpandFilter<>},
         {"TakeWhile", &ExpandFilter<false>},
         {"SkipWhile", &ExpandFilter<true>},
-        {"LMap", &ExpandLMapOrShuffleByKeys},
-        {"OrderedLMap", &ExpandLMapOrShuffleByKeys},
-        {"ShuffleByKeys", &ExpandLMapOrShuffleByKeys},
         {"Nth", &OptimizeNth},
         {"Member", &OptimizeMember},
         {"Condense1", &OptimizeCondense1},
@@ -9361,6 +9443,9 @@ struct TPeepHoleRules {
     };
 
     const TExtPeepHoleOptimizerMap FinalStageExtRules = {
+        {"LMap", &ExpandLMapOrShuffleByKeysAtFinalStage},
+        {"OrderedLMap", &ExpandLMapOrShuffleByKeysAtFinalStage},
+        {"ShuffleByKeys", &ExpandLMapOrShuffleByKeysAtFinalStage},
         {"Exists", &OptimizeExists},
         {"ExpandMap", &OptimizeExpandMap},
         {"NarrowFlatMap", &OptimizeNarrowFlatMap},
@@ -9372,14 +9457,15 @@ struct TPeepHoleRules {
         {"SqueezeToDict", &OptimizeSqueezeToDict},
     };
 
-    const TExtPeepHoleOptimizerMap FinalStageNonDetRules = {
+    const TMaybeNonDetPeepHoleOptimizerMap FinalStageNonDetRules = {
         {"Random", &Random0Arg<double>},
         {"RandomNumber", &Random0Arg<ui64>},
         {"RandomUuid", &Random0Arg<TGUID>},
         {"Now", &Now0Arg<nullptr>},
         {"CurrentUtcDate", &Now0Arg<&ToDate>},
         {"CurrentUtcDatetime", &Now0Arg<&ToDatetime>},
-        {"CurrentUtcTimestamp", &Now0Arg<&ToTimestamp>}
+        {"CurrentUtcTimestamp", &Now0Arg<&ToTimestamp>},
+        {"Udf", &NonDetUdf},
     };
 
     const TExtPeepHoleOptimizerMap BlockStageExtRules = {
@@ -9486,7 +9572,8 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
                     extStageRules.insert(finalExtRules.begin(), finalExtRules.end());
                 }
 
-                const auto& nonDetStageRules = withNonDeterministicRules ? TPeepHoleRules::Instance().FinalStageNonDetRules : TExtPeepHoleOptimizerMap{};
+                TMaybeNonDetPeepHoleOptimizerMap emptyMap;
+                const auto& nonDetStageRules = withNonDeterministicRules ? TPeepHoleRules::Instance().FinalStageNonDetRules : emptyMap;
                 return PeepHoleFinalStage(input, output, ctx, types, hasNonDeterministicFunctions, stageRules, extStageRules, nonDetStageRules);
             }
         ),

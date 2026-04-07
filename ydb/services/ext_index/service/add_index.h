@@ -19,6 +19,7 @@ private:
     std::shared_ptr<arrow::RecordBatch> Data;
     const NMetadata::NCSIndex::TObject IndexInfo;
     std::vector<TString> PKFields;
+    const TString DatabaseName;
     TString IndexTablePath;
     IIndexUpsertController::TPtr ExternalController;
 protected:
@@ -36,10 +37,14 @@ public:
     void Bootstrap();
 
     TIndexUpsertActor(const std::shared_ptr<arrow::RecordBatch>& data, const NMetadata::NCSIndex::TObject& indexInfo,
-        const std::vector<TString>& pKFields, const TString& indexTablePath, IIndexUpsertController::TPtr externalController)
+        const std::vector<TString>& pKFields,
+        const TString& databaseName, const TString& indexTablePath,
+        IIndexUpsertController::TPtr externalController
+    )
         : Data(data)
         , IndexInfo(indexInfo)
         , PKFields(pKFields)
+        , DatabaseName(databaseName)
         , IndexTablePath(indexTablePath)
         , ExternalController(externalController)
     {

@@ -252,15 +252,19 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
         if (status == Ydb::StatusIds::SUCCESS) {
             KAFKA_LOG_D("Describe topic '" << topic.Name << "' location finishied successful");
             PendingTopicResponses.emplace(index, locationResponse);
-        } else if (!Message->AllowAutoTopicCreation || !Context->Config.GetAutoCreateTopicsEnable() || TopicСreationAttempts.find(*topic.Name) != TopicСreationAttempts.end()) {
-            KAFKA_LOG_ERROR("Describe topic '" << topic.Name << "' location finishied with error: Code="
-                << locationResponse->Status << ", Issues=" << locationResponse->Issues.ToOneLineString());
-            AddTopicError(topic, ConvertErrorCode(locationResponse->Status));
-        } else if (status == Ydb::StatusIds::SCHEME_ERROR && TopicСreationAttempts.find(*topic.Name) == TopicСreationAttempts.end()) {
+        } else if (status == Ydb::StatusIds::SCHEME_ERROR
+                && Message->AllowAutoTopicCreation
+                && Context->Config.GetAutoCreateTopicsEnable()
+                && TopicСreationAttempts.find(*topic.Name) == TopicСreationAttempts.end()
+            ) {
             KAFKA_LOG_D("Sending create topic'" << topic.Name << "' request");
             TopicСreationAttempts.insert(*topic.Name);
             PendingResponses++;
             SendCreateTopicsRequest(*topic.Name, index, ctx);
+        } else {
+            KAFKA_LOG_ERROR("Describe topic '" << topic.Name << "' location finishied with error: Code="
+                << locationResponse->Status << ", Issues=" << locationResponse->Issues.ToOneLineString());
+            AddTopicError(topic, ConvertErrorCode(locationResponse->Status));
         }
     }
     if (InflyCreateTopics == 0) {
@@ -269,7 +273,7 @@ void TKafkaMetadataActor::HandleLocationResponse(TEvLocationResponse::TPtr ev, c
 }
 
 void TKafkaMetadataActor::Handle(const TEvKafka::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-    // can be recieved only from TCreateTopicActor
+    // can be received only from TCreateTopicActor
     TActorId& creatorActorId = ev->Sender;
     const TTopicNameToIndex& topicNameToIndex = CreateTopicRequests[creatorActorId];
     const TString& topicName = topicNameToIndex.TopicName;
@@ -296,7 +300,7 @@ void TKafkaMetadataActor::SendCreateTopicsRequest(const TString& topicName, ui32
     topicToCreate.NumPartitions = Context->Config.GetTopicCreationDefaultPartitions();
     message->Topics.push_back(topicToCreate);
     TContext::TPtr ContextForTopicCreation;
-    ContextForTopicCreation = std::make_shared<TContext>(TContext(Context->Config));
+    ContextForTopicCreation = std::make_shared<TContext>(TContext(*Context));
     ContextForTopicCreation->ConnectionId = ctx.SelfID;
     ContextForTopicCreation->UserToken = Context->UserToken;
     ContextForTopicCreation->DatabasePath = Context->DatabasePath;

@@ -5,7 +5,9 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
+#include <ydb/public/lib/ydb_cli/common/log.h>
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
+#include <ydb/public/lib/ydb_cli/common/scheme_path_completer.h>
 #include <ydb/public/lib/ydb_cli/common/pg_dump_parser.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 #include <ydb/library/backup/util.h>
@@ -51,7 +53,8 @@ void TCommandDump::Config(TConfig& config) {
     config.SetFreeArgsNum(0);
 
     config.Opts->AddLongOption('p', "path", "Database path to a directory or a table to be dumped.")
-        .DefaultValue(".").StoreResult(&Path);
+        .DefaultValue(".").StoreResult(&Path)
+        .SchemePathCompletionForAll();
     config.Opts->AddLongOption("exclude", "Pattern(s) (PCRE) for paths excluded from dump."
             " Option can be used several times - one for each pattern.")
         .RequiredArgument("STRING").Handler([this](const TString& arg) {
@@ -82,7 +85,8 @@ void TCommandDump::Config(TConfig& config) {
             "database - take one consistent snapshot of all tables specified for dump."
             " Takes more time and is more likely to impact workload;\n"
             "table - take consistent snapshot per each table independently.")
-        .DefaultValue(defaults.ConsistencyLevel_).StoreResult(&ConsistencyLevel);
+        .DefaultValue(defaults.ConsistencyLevel_).StoreResult(&ConsistencyLevel)
+        .ChoicesWithCompletion({{"database", "Consistent snapshot of all tables"}, {"table", "Per-table snapshot"}});
     config.Opts->AddLongOption("ordered", "Preserve order by primary key in backup files.")
         .DefaultValue(defaults.Ordered_).StoreTrue(&Ordered);
 }
@@ -109,7 +113,7 @@ int TCommandDump::Run(TConfig& config) {
         .PreservePoolKinds(PreservePoolKinds)
         .Ordered(Ordered);
 
-    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
     NDump::TClient client(CreateDriver(config), std::move(log));
@@ -132,7 +136,8 @@ void TCommandRestore::Config(TConfig& config) {
 
     config.Opts->AddLongOption('p', "path",
             "[Required] Database path to a destination directory where restored directory or table will be placed.")
-        .StoreResult(&Path);
+        .StoreResult(&Path)
+        .SchemePathCompletionForAll();
     config.Opts->AddLongOption('i', "input",
             "[Required] Path in a local filesystem to a directory with dump.")
         .StoreResult(&FilePath);
@@ -225,6 +230,9 @@ void TCommandRestore::Config(TConfig& config) {
         " instead of silently skipping its removal.")
         .StoreTrue(&VerifyExistence);
 
+    config.Opts->AddLongOption("retries", "Max retry count for every request.")
+        .DefaultValue(10).StoreResult(&Retries);
+
     config.Opts->MutuallyExclusive("bandwidth", "rps");
     config.Opts->MutuallyExclusive("import-data", "bulk-upsert");
     config.Opts->MutuallyExclusive("import-data", "upload-batch-rows");
@@ -247,7 +255,8 @@ int TCommandRestore::Run(TConfig& config) {
         .SavePartialResult(SavePartialResult)
         .RowsPerRequest(NYdb::SizeFromString(RowsPerRequest))
         .Replace(Replace)
-        .VerifyExistence(VerifyExistence);
+        .VerifyExistence(VerifyExistence)
+        .MaxRetries(Retries);
 
     if (InFlight) {
         settings.MaxInFlight(InFlight);
@@ -288,7 +297,7 @@ int TCommandRestore::Run(TConfig& config) {
             << "The --verify-existence option must be used together with the --replace option.";
     }
 
-    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
+    auto log = std::make_shared<TLog>(CreateLogBackend("cerr", VerbosityLevelToELogPriority(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 
     NDump::TClient client(CreateDriver(config), std::move(log));
@@ -306,7 +315,8 @@ TCommandCopy::TCommandCopy()
 {
     TItem::DefineFields({
         {"Source", {{"source", "src", "s"}, "Source table path", true}},
-        {"Destination", {{"destination", "dst", "d"}, "Destination table path", true}}
+        {"Destination", {{"destination", "dst", "d"}, "Destination table path", true}},
+        {"OmitIndexes", {{"omit-indexes"}, "Omit indexes when copying table; indexes are copied by default", false}}
     });
 }
 
@@ -353,6 +363,9 @@ int TCommandCopy::Run(TConfig& config) {
                 return EXIT_FAILURE;
         }
         copyItems.emplace_back(item.Source, item.Destination);
+        if (item.OmitIndexes) {
+            copyItems.back().SetOmitIndexes();
+        }
     }
     NStatusHelpers::ThrowOnErrorOrPrintIssues(
         GetSession(config).CopyTables(

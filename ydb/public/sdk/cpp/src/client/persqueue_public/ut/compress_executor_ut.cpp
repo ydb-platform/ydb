@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(CompressExecutor) {
     Y_UNIT_TEST(TestExecutorMemUsage) {
         auto queue = std::make_shared<TLockFreeQueue<ui64>>();
         auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
-        auto executor = MakeIntrusive<TYdbPqTestExecutor>(queue);
+        auto executor = std::make_shared<TYdbPqTestExecutor>(queue);
         auto config = setup->GetWriteSessionSettings();
         auto memUsageLimit = 1_KB;
         config.MaxMemoryUsage(memUsageLimit);

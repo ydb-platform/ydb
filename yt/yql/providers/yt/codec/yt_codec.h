@@ -44,6 +44,7 @@ public:
         THashMap<TString, NKikimr::NMiniKQL::TType*> AuxColumns;
         ui64 NativeYtTypeFlags = 0;
         bool Dynamic = false;
+        bool RLS = false;
         THashSet<TString> SysColumns;
         THashSet<TString> ExplicitYson;
     };
@@ -66,6 +67,7 @@ public:
         TVector<NKikimr::NUdf::TUnboxedValue> DefaultValues;
         ui64 NativeYtTypeFlags = 0;
         bool Dynamic = false;
+        bool RLS = false;
         TMaybe<ui32> FillSysColumnPath;
         TMaybe<ui32> FillSysColumnRecord;
         TMaybe<ui32> FillSysColumnIndex;

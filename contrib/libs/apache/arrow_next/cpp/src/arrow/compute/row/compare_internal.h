@@ -20,13 +20,13 @@
 
 #include <cstdint>
 
-#include "arrow/compute/light_array_internal.h"
-#include "arrow/compute/row/encode_internal.h"
-#include "arrow/compute/row/row_internal.h"
-#include "arrow/compute/util.h"
-#include "arrow/memory_pool.h"
-#include "arrow/result.h"
-#include "arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/light_array_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/row/encode_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/row/row_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/memory_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
 
 namespace arrow20 {
 namespace compute {

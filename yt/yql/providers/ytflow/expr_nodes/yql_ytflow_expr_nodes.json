@@ -32,7 +32,8 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "YtflowReadWrap"},
             "Children": [
-                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Token", "Type": "TCoSecureParam", "Optional": true}
             ]
         },
         {
@@ -40,7 +41,8 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "YtflowWriteWrap"},
             "Children": [
-                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Token", "Type": "TCoSecureParam", "Optional": true}
             ]
         },
         {
@@ -99,11 +101,53 @@
             ]
         },
         {
-            "Name": "TYtflowMap",
+            "Name": "TYtflowMapBase",
             "Base": "TYtflowOpBase",
-            "Match": {"Type": "Callable", "Name": "YtflowMap!"},
+            "Match": {"Type": "CallableBase"},
             "Children": [
                 {"Index": 4, "Name": "Lambda", "Type": "TCoLambda"}
+            ]
+        },
+        {
+            "Name": "TYtflowMap",
+            "Base": "TYtflowMapBase",
+            "Match": {"Type": "Callable", "Name": "YtflowMap!"}
+        },
+        {
+            "Name": "TYtflowSourceMap",
+            "Base": "TYtflowMapBase",
+            "Match": {"Type": "Callable", "Name": "YtflowSourceMap!"}
+        },
+        {
+            "Name": "TYtflowTransformMap",
+            "Base": "TYtflowMapBase",
+            "Match": {"Type": "Callable", "Name": "YtflowTransformMap!"},
+            "Children": [
+                {"Index": 5, "Name": "GroupByColumns", "Type": "TCoAtomList"}
+            ]
+        },
+        {
+            "Name": "TYtflowLookupJoinScope",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "Label", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Side", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Keys", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "RowSelectionMode", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TYtflowLookupJoin",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "YtflowLookupJoin"},
+            "Children": [
+                {"Index": 0, "Name": "Stream", "Type": "TExprBase"},
+                {"Index": 1, "Name": "LookupSource", "Type": "TExprBase"},
+                {"Index": 2, "Name": "JoinKind", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "StreamScope", "Type": "TYtflowLookupJoinScope"},
+                {"Index": 4, "Name": "LookupSourceScope", "Type": "TYtflowLookupJoinScope"},
+                {"Index": 5, "Name": "Columns", "Type": "TCoAtomList"}
             ]
         },
         {

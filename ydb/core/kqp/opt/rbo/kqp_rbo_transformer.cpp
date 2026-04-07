@@ -1,527 +1,442 @@
 #include "kqp_rbo_transformer.h"
 #include "kqp_operator.h"
+#include "kqp_plan_conversion_utils.h"
+
 #include <yql/essentials/utils/log/log.h>
 
 using namespace NYql;
 using namespace NYql::NNodes;
 using namespace NKikimr::NKqp;
 using namespace NYql::NDq;
-
 namespace {
 
-struct TJoinTableAliases {
-    THashSet<TString> LeftSideAliases;
-    THashSet<TString> RightSideAliases;
-};
-
-TJoinTableAliases GatherJoinAliasesLeftSideMultiInputs(const TVector<TInfoUnit> &joinKeys, const THashSet<TString> &processedInputs) {
-    TJoinTableAliases joinAliases;
-    for (const auto &joinKey : joinKeys) {
-        if (processedInputs.count(joinKey.Alias)) {
-            joinAliases.LeftSideAliases.insert(joinKey.Alias);
-        } else {
-            joinAliases.RightSideAliases.insert(joinKey.Alias);
-        }
-    }
-    Y_ENSURE(joinAliases.LeftSideAliases.size(), "Left side of the join inputs are empty");
-    Y_ENSURE(joinAliases.RightSideAliases.size() == 1, "Right side of the join should have only one input");
-    return joinAliases;
-}
-
-TJoinTableAliases GatherJoinAliasesTwoInputs(const TVector<TInfoUnit> &joinKeys) {
-    TJoinTableAliases joinAliases;
-    for (ui32 i = 0; i < joinKeys.size(); i += 2) {
-        joinAliases.LeftSideAliases.insert(joinKeys[i].Alias);
-        joinAliases.RightSideAliases.insert(joinKeys[i + 1].Alias);
-    }
-
-    Y_ENSURE(joinAliases.LeftSideAliases.size() == 1, "Left side of the join should have only one input");
-    Y_ENSURE(joinAliases.RightSideAliases.size() == 1, "Right side of the join should have only one input");
-    return joinAliases;
-}
-
-TExprNode::TPtr BuildJoinKeys(const TVector<TInfoUnit>& joinKeys, const TJoinTableAliases& joinAliases, THashSet<TString>& processedInputs, TExprContext& ctx,
-                              TPositionHandle pos) {
-    Y_ENSURE(joinKeys.size() >= 2 && !(joinKeys.size() & 1), "Invalid join key size");
-    TVector<TDqJoinKeyTuple> keys;
-    for (ui32 i = 0; i < joinKeys.size(); i += 2) {
-        auto leftSideKey = joinKeys[i];
-        auto rightSideKey = joinKeys[i + 1];
-        if (joinAliases.LeftSideAliases.count(rightSideKey.Alias)) {
-            std::swap(leftSideKey, rightSideKey);
-        }
-        // clang-format off
-        keys.push_back(Build<TDqJoinKeyTuple>(ctx, pos)
-                           .LeftLabel()
-                               .Value(leftSideKey.Alias)
-                           .Build()
-                           .LeftColumn()
-                               .Value(leftSideKey.ColumnName)
-                           .Build()
-                           .RightLabel()
-                               .Value(rightSideKey.Alias)
-                           .Build()
-                           .RightColumn()
-                               .Value(rightSideKey.ColumnName)
-                           .Build()
-                      .Done());
-        // clang-format on
-        processedInputs.insert(leftSideKey.Alias);
-        processedInputs.insert(rightSideKey.Alias);
-    }
-    return Build<TDqJoinKeyTupleList>(ctx, pos).Add(keys).Done().Ptr();
-}
-
-void ToCamelCase(std::string & s)
-{
-    char previous = ' ';
-    auto f = [&](char current){
-        char result = (std::isblank(previous) && std::isalpha(current)) ? std::toupper(current) : std::tolower(current);
-        previous = current;
-        return result;
-    };
-    std::transform(s.begin(),s.end(),s.begin(),f);
-}
-
-TExprNode::TPtr ReplacePgOps(TExprNode::TPtr input, TExprContext& ctx) {
-        if (input->IsLambda()) {
-            auto lambda = TCoLambda(input);
-
-            // clang-format off
-            return Build<TCoLambda>(ctx, input->Pos())
-                .Args(lambda.Args())
-                .Body(ReplacePgOps(lambda.Body().Ptr(), ctx))
-            .Done().Ptr();
-            // clang-format on
-        }
-        else if (input->IsCallable("PgAnd")) {
-            // clang-format off
-            return ctx.Builder(input->Pos())
-                .Callable("ToPg")
-                    .Callable(0, "And")
-                        .Callable(0, "FromPg")
-                            .Add(0, ReplacePgOps(input->ChildPtr(0), ctx))
-                        .Seal()
-                        .Callable(1, "FromPg")
-                            .Add(0, ReplacePgOps(input->ChildPtr(1), ctx))
-                        .Seal()
-                    .Seal()
-                .Seal()
-            .Build();
-            // clang-format on
-            
-        }
-        else if (input->IsCallable("PgOr")) {
-            // clang-format off
-            return ctx.Builder(input->Pos())
-                .Callable("ToPg")
-                    .Callable(0, "Or")
-                        .Callable(0, "FromPg")
-                            .Add(0, ReplacePgOps(input->ChildPtr(0), ctx))
-                        .Seal()
-                        .Callable(1, "FromPg")
-                            .Add(0, ReplacePgOps(input->ChildPtr(1), ctx))
-                        .Seal()
-                    .Seal()
-                .Seal()
-            .Build();
-            // clnag-format on
-        }
-        else if (input->IsCallable()){
-            TVector<TExprNode::TPtr> newChildren;
-            for (auto c : input->Children()) {
-                newChildren.push_back(ReplacePgOps(c, ctx));
-            }
-            // clang-format off
-            return ctx.Builder(input->Pos())
-                .Callable(input->Content())
-                    .Add(std::move(newChildren))
-                .Seal()
-            .Build();
-            // clang-format on
-        }
-        else if(input->IsList()){
-            TVector<TExprNode::TPtr> newChildren;
-            for (auto c : input->Children()) {
-                newChildren.push_back(ReplacePgOps(c, ctx));
-            }
-            // clang-format off
-            return ctx.Builder(input->Pos())
-                .List()
-                    .Add(std::move(newChildren))
-                .Seal()
-            .Build();
-            // clang-format on
-        }
-        else {
-            return input;
-        }
-    }
-
-TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
-    Y_UNUSED(typeCtx);
-    auto setItems = GetSetting(node->Head(), "set_items");
-    
-    TVector<TExprNode::TPtr> resultElements;
-
-    TExprNode::TPtr joinExpr;
-    TExprNode::TPtr filterExpr;
-    TExprNode::TPtr lastAlias;
-
-    auto setItem = setItems->Tail().ChildPtr(0);
-
-    auto from = GetSetting(setItem->Tail(), "from");
-    THashMap<TString, TExprNode::TPtr> aliasToInputMap;
-    TVector<TExprNode::TPtr> inputsInOrder;
-
-    if (from) {
-        for (auto fromItem : from->Child(1)->Children()) {
-            auto readExpr = TKqlReadTableRanges(fromItem->Child(0));
-            auto alias = fromItem->Child(1);
-
-            // clang-format off
-            auto opRead = Build<TKqpOpRead>(ctx, node->Pos())
-                .Table(readExpr.Table())
-                .Alias(alias)
-                .Columns(readExpr.Columns())
-            .Done().Ptr();
-            // clang-format on
-            aliasToInputMap.insert({TString(alias->Content()), opRead});
-            inputsInOrder.push_back(opRead);
-            lastAlias = alias;
-        }
-    }
-
-    THashSet<TString> processedInputs;
-    auto joinOps = GetSetting(setItem->Tail(), "join_ops");
-    if (joinOps) {
-        for (ui32 i = 0; i < joinOps->Tail().ChildrenSize(); ++i) {
-            ui32 tableInputsCount = 0;
-            auto tuple = joinOps->Tail().Child(i);
-            for (ui32 j = 0; j < tuple->ChildrenSize(); ++j) {
-                auto join = tuple->Child(j);
-                auto joinType = join->Child(0)->Content();
-                if (joinType == "push") {
-                    ++tableInputsCount;
-                    continue;
-                }
-
-                Y_ENSURE(join->ChildrenSize() > 1 && join->Child(1)->ChildrenSize() > 1);
-                auto pgResolvedOps = FindNodes(join->Child(1)->Child(1)->TailPtr(), [](const TExprNode::TPtr& node) {
-                    if (node->IsCallable("PgResolvedOp")) {
-                        return true;
-                    } else {
-                        return false;
-                    }
-                });
-
-                TVector<TInfoUnit> joinKeys;
-                for (const auto& pgResolvedOp : pgResolvedOps) {
-                    TVector<TInfoUnit> keys;
-                    GetAllMembers(pgResolvedOp, keys);
-                    joinKeys.insert(joinKeys.end(), keys.begin(), keys.end());
-                }
-
-                TJoinTableAliases joinAliases;
-                TExprNode::TPtr leftInput;
-                TExprNode::TPtr rightInput;
-
-                if (tableInputsCount == 2) {
-                    joinAliases = GatherJoinAliasesTwoInputs(joinKeys);
-                    const auto leftSideAlias = *joinAliases.LeftSideAliases.begin();
-                    const auto rightSideAlias = *joinAliases.RightSideAliases.begin();
-                    Y_ENSURE(aliasToInputMap.count(leftSideAlias), "Left side alias is not present in input tables");
-                    Y_ENSURE(aliasToInputMap.count(rightSideAlias), "Right sided alias is not present input tables");
-                    leftInput = aliasToInputMap[leftSideAlias];
-                    rightInput = aliasToInputMap[rightSideAlias];
-                } else if (tableInputsCount == 1) {
-                    joinAliases = GatherJoinAliasesLeftSideMultiInputs(joinKeys, processedInputs);
-                    const auto rightSideAlias = *joinAliases.RightSideAliases.begin();
-                    Y_ENSURE(aliasToInputMap.contains(rightSideAlias), "Right side alias is not present in input tables");
-                    leftInput = joinExpr;
-                    rightInput = aliasToInputMap[rightSideAlias];
-                }
-
-                auto joinKind = TString(joinType);
-                ToCamelCase(joinKind);
-
-                // clang-format off
-                joinExpr = Build<TKqpOpJoin>(ctx, node->Pos())
-                    .LeftInput(leftInput)
-                    .RightInput(rightInput)
-                    .JoinKind()
-                        .Value(joinKind)
-                    .Build()
-                    .JoinKeys(BuildJoinKeys(joinKeys, joinAliases, processedInputs, ctx, node->Pos()))
-                .Done().Ptr();
-                // clang-format on
-                tableInputsCount = 0;
-            }
-        }
-
-        // Build in order
-        if (!joinExpr) {
-            ui32 inputIndex = 0;
-            if (inputsInOrder.size() > 1) {
-                while (inputIndex < inputsInOrder.size()) {
-                    auto leftTableInput = inputIndex == 0 ? inputsInOrder[inputIndex] : joinExpr;
-                    auto rightTableInput = inputIndex == 0 ? inputsInOrder[inputIndex + 1] : inputsInOrder[inputIndex];
-                    auto joinKeys = Build<TDqJoinKeyTupleList>(ctx, node->Pos()).Done();
-                    // clang-format off
-                    joinExpr = Build<TKqpOpJoin>(ctx, node->Pos())
-                        .LeftInput(leftTableInput)
-                        .RightInput(rightTableInput)
-                        .JoinKind()
-                            .Value("Cross")
-                        .Build()
-                        .JoinKeys(joinKeys)
-                    .Done().Ptr();
-                    // clang-format on
-                    inputIndex += (inputIndex == 0 ? 2 : 1);
-                }
-            } else {
-                joinExpr = inputsInOrder.front();
-            }
-        }
-    }
-
-    filterExpr = joinExpr;
-
-    auto where = GetSetting(setItem->Tail(), "where");
-
-    if (where) {
-        TExprNode::TPtr lambda = where->Child(1)->Child(1);
-        lambda = ReplacePgOps(lambda, ctx);
-        // clang-format off
-        filterExpr = Build<TKqpOpFilter>(ctx, node->Pos())
-            .Input(filterExpr)
-            .Lambda(lambda)
-        .Done().Ptr();
-        // clang-format on
-    }
-
-    if (!filterExpr) {
-        filterExpr = Build<TKqpOpEmptySource>(ctx, node->Pos()).Done().Ptr();
-    }
-
-    auto result = GetSetting(setItem->Tail(), "result");
-    auto finalType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-
-    TExprNode::TPtr resultExpr = filterExpr;
-
-    for (auto resultItem : result->Child(1)->Children()) {
-        auto column = resultItem->Child(0);
-        auto columnName = column->Content();
-        auto variable = Build<TCoAtom>(ctx, node->Pos()).Value(columnName).Done();
-
-        const auto expectedTypeNode = finalType->FindItemType(columnName);
-        Y_ENSURE(expectedTypeNode);
-        const auto expectedType = expectedTypeNode->Cast<TPgExprType>();
-        const auto actualTypeNode = resultItem->GetTypeAnn();
-
-        YQL_CLOG(TRACE, CoreDq) << "Actual type for column: " << columnName << " is: " << *actualTypeNode;
-
-        ui32 actualPgTypeId;
-        bool convertToPg;
-        Y_ENSURE(ExtractPgType(actualTypeNode, actualPgTypeId, convertToPg, node->Pos(), ctx));
-
-        auto needPgCast = (expectedType->GetId() != actualPgTypeId);
-        auto lambda = TCoLambda(ctx.DeepCopyLambda(*(resultItem->Child(2))));
-
-        if (convertToPg) {
-            Y_ENSURE(!needPgCast, TStringBuilder()
-                 << "Conversion to PG type is different at typization (" << expectedType->GetId()
-                 << ") and optimization (" << actualPgTypeId << ") stages.");
-
-            TExprNode::TPtr lambdaBody = lambda.Body().Ptr();
-            lambdaBody = ReplacePgOps(lambdaBody, ctx);
-            auto toPg = ctx.NewCallable(node->Pos(), "ToPg", {lambdaBody});
-
-            // clang-format off
-            lambda = Build<TCoLambda>(ctx, node->Pos())
-                .Args(lambda.Args())
-                .Body(toPg)
-            .Done();
-            // clang-format on
-        }
-        else if (needPgCast) {
-            auto pgType = ctx.NewCallable(node->Pos(), "PgType", {ctx.NewAtom(node->Pos(), NPg::LookupType(expectedType->GetId()).Name)});
-            TExprNode::TPtr lambdaBody = lambda.Body().Ptr();
-            lambdaBody = ReplacePgOps(lambdaBody, ctx);
-            auto pgCast = ctx.NewCallable(node->Pos(), "PgCast", {lambdaBody, pgType});
-
-            // clang-format off
-            lambda = Build<TCoLambda>(ctx, node->Pos())
-                .Args(lambda.Args())
-                .Body(pgCast)
-            .Done();
-            // clang-format on
-        }
-
-        // clang-format off
-        resultElements.push_back(Build<TKqpOpMapElement>(ctx, node->Pos())
-            .Input(resultExpr)
-            .Variable(variable)
-            .Lambda(lambda)
-        .Done().Ptr());
-        // clang-format on
-    }
-
-    // clang-format off
-    return Build<TKqpOpRoot>(ctx, node->Pos())
-        .Input<TKqpOpMap>()
-            .Input(resultExpr)
-                .MapElements()
-                .Add(resultElements)
-            .Build()
-        .Build()
-    .Done().Ptr();
-    // clang-format on
-}
-
-TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
+TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr &node, TExprContext &ctx, const TTypeAnnotationContext &typeCtx) {
     Y_UNUSED(typeCtx);
     auto take = TCoTake(node);
-    if (auto root = take.Input().Maybe<TKqpOpRoot>()){
+    auto takeInput = take.Input();
+    if (takeInput.Maybe<TCoUnordered>()) {
+        takeInput = takeInput.Cast<TCoUnordered>().Input();
+    }
+
+    if (auto root = takeInput.Maybe<TKqpOpRoot>()) {
         // clang-format off
         return Build<TKqpOpRoot>(ctx, node->Pos())
             .Input<TKqpOpLimit>()
                 .Input(root.Cast().Input())
                 .Count(take.Count())
             .Build()
+            .ColumnOrder(root.Cast().ColumnOrder())
+            .PgSyntax(root.Cast().PgSyntax())
         .Done().Ptr();
         // clang-format on
-    }
-    else {
+    } else {
         return node;
     }
 }
+
+TExprNode::TPtr RewriteSublink(const TExprNode::TPtr &node, TExprContext &ctx, bool pgSyntax) {
+    if (node->Child(0)->Content() == "expr") {
+        // clang-format off
+        return Build<TKqpExprSublink>(ctx, node->Pos())
+            .Subquery(node->Child(4))
+            .Done().Ptr();
+        // clang-format on
+    } else if (node->Child(0)->Content() == "any") {
+        // clang-format off
+        return Build<TKqpInSublink>(ctx, node->Pos())
+            .Subquery(node->Child(4))
+            .ReturnPgBool().Value(std::to_string(pgSyntax)).Build()
+            .OuterType(node->Child(2))
+            .InLambda(node->Child(3))
+            .Done().Ptr();
+        // clang-format on
+    } else if (node->Child(0)->Content() == "exists") {
+        // clang-format off
+        return Build<TKqpExistsSublink>(ctx, node->Pos())
+            .Subquery(node->Child(4))
+            .ReturnPgBool().Value(std::to_string(pgSyntax)).Build()
+            .Done().Ptr();
+        // clang-format on
+    }
+    else {
+        Y_ENSURE(false, "Uknown sublink type in query");
+    }
+
 }
+
+TExprNode::TPtr RemoveRootFromSublink(const TExprNode::TPtr &node, TExprContext &ctx) {
+    auto sublink = TKqpSublinkBase(node);
+    if (auto root = sublink.Subquery().Maybe<TKqpOpRoot>()) {
+        if (TKqpExprSublink::Match(node.Get())) {
+            // clang-format off
+            return Build<TKqpExprSublink>(ctx, node->Pos())
+                .Subquery(root.Cast().Input())
+                .Done().Ptr();
+            // clang-format on
+        } else if (TKqpExistsSublink::Match(node.Get())) {
+            // clang-format off
+            return Build<TKqpExistsSublink>(ctx, node->Pos())
+                .Subquery(root.Cast().Input())
+                .ReturnPgBool(node->Child(TKqpExistsSublink::idx_ReturnPgBool))
+                .Done().Ptr();
+            // clang-format on
+        } else if (TKqpInSublink::Match(node.Get())) {
+            auto inSublink = sublink.Cast<TKqpInSublink>();
+            // clang-format off
+            return Build<TKqpInSublink>(ctx, node->Pos())
+                .Subquery(root.Cast().Input())
+                .ReturnPgBool(inSublink.ReturnPgBool())
+                .OuterType(inSublink.OuterType())
+                .InLambda(inSublink.InLambda())
+                .Done().Ptr();
+            // clang-format on
+        }
+    }
+    return node;
+}
+} // namespace
 
 namespace NKikimr {
 namespace NKqp {
 
-IGraphTransformer::TStatus TKqpPgRewriteTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr &output, TExprContext &ctx) {
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
 
-    auto status = OptimizeExpr(output, output, [this] (const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-        if (TCoPgSelect::Match(node.Get())) {
-            return RewritePgSelect(node, ctx, TypeCtx);
-        } else if (TCoTake::Match(node.Get())) {
-            return PushTakeIntoPlan(node, ctx, TypeCtx);
-        }
-        else {
-            return node;
-        }}, ctx, settings);
+    auto status = OptimizeExpr(
+        output, output,
+        [](const TExprNode::TPtr &node, TExprContext &ctx) -> TExprNode::TPtr {
+            if (node->IsCallable("PgSubLink")) {
+                return RewriteSublink(node, ctx, true);
+            } else if (node->IsCallable("YqlSubLink")) {
+                return RewriteSublink(node, ctx, false);
+            } else {
+                return node;
+            }
+        },
+        ctx, settings);
+    
+    if (status != TStatus::Ok) {
+        return status;
+    }
+
+    status = OptimizeExpr(
+        output, output,
+        [this](const TExprNode::TPtr &node, TExprContext &ctx) -> TExprNode::TPtr {
+            // PostgreSQL AST rewrtiting
+            if (TCoPgSelect::Match(node.Get())) {
+                return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter,  true);
+            }
+            
+            // YQL AST rewriting
+            else if (TCoYqlSelect::Match(node.Get())) {
+                return RewriteSelect(node, ctx, TypeCtx, KqpCtx, UniqueSourceIdCounter, false);
+            } else if (TKqpSublinkBase::Match(node.Get())) {
+                return RemoveRootFromSublink(node, ctx);
+            }  else if (TCoTake::Match(node.Get())) {
+                return PushTakeIntoPlan(node, ctx, TypeCtx);
+            } else {
+                return node;
+            }
+        },
+        ctx, settings);
 
     return status;
 }
 
-void TKqpPgRewriteTransformer::Rewind() {
-}
-
+void TKqpRewriteSelectTransformer::Rewind() {}
 
 IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
 
-    auto status = OptimizeExpr(output, output, [this] (const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-        if (TKqpOpRoot::Match(node.Get())) {
-            auto root = TOpRoot(node);
-            return RBO.Optimize(root, ctx);
-        } else {
-            return node;
-        }}, ctx, settings);
+    // At first step convert KqpOps to RBO Ops.
+    auto status = OptimizeExpr(
+        output, output,
+        [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+            Y_UNUSED(ctx);
+            if (TKqpOpRoot::Match(node.Get())) {
+                OpRoot = PlanConverter(TypeCtx, ctx).ConvertRoot(node);
+                OpRoot->ComputeParents();
+                return node;
+            } else {
+                return node;
+            }
+        },
+        ctx, settings);
 
-    if (status != IGraphTransformer::TStatus::Ok) {
+    if (status != TStatus::Ok) {
         return status;
     }
 
-    return IGraphTransformer::TStatus::Ok;
+    if (IsSuitableToRequestStatistics()) {
+        // Async request for statistics.
+        auto status = RequestColumnStatistics(ctx);
+        if (status == TStatus::Async || status == TStatus::Error) {
+            return status;
+        }
+    }
+
+    // Continue optimizations without statistics.
+    return ContinueOptimizations(input, output, ctx);
+}
+
+NThreading::TFuture<void> TKqpNewRBOTransformer::DoGetAsyncFuture(const TExprNode& input) {
+    Y_UNUSED(input);
+    return ColumnStatisticsReadiness;
+}
+
+bool TKqpNewRBOTransformer::IsSuitableToCollectStatistics(const TIntrusivePtr<IOperator>& op) const {
+    return op->Props.Metadata.has_value();
+}
+
+void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TIntrusivePtr<IOperator>& op) {
+    if (MatchOperator<TOpFilter>(op)) {
+        CollectTablesAndColumnsNames(CastOperator<TOpFilter>(op)->FilterExpr, op->Props);
+    }
+}
+
+void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TExpression& expr, const TPhysicalOpProps& props) {
+    const auto& mapping = props.Metadata->ColumnLineage.Mapping;
+    auto lambda = TCoLambda(expr.GetLambda());
+    const auto members = FindNodes(lambda.Body().Ptr(), [](const TExprNode::TPtr& node) { return node->IsCallable("Member"); });
+
+    TVector<TInfoUnit> colNames;
+    for (const auto& member : members) {
+        const auto memberName = TCoMember(member).Name().StringValue();
+        const auto pos = memberName.find(".");
+        if (pos != TString::npos) {
+            const auto aliasName = memberName.substr(0, pos);
+            Y_ENSURE(pos + 1 < memberName.size());
+            const auto colName = memberName.substr(pos + 1);
+            colNames.emplace_back(aliasName, colName);
+        }
+    }
+
+    for (const auto& column : colNames) {
+        const auto it = mapping.find(column.GetFullName());
+        if (it != mapping.end()) {
+            const auto& tableName = it->second.TableName;
+            const auto& colName = it->second.ColumnName;
+            CMColumnsByTableName[tableName].insert(colName);
+            HistColumnsByTableName[tableName].insert(colName);
+        }
+    }
+}
+
+void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(TExprContext& ctx) {
+    Y_ENSURE(OpRoot);
+    TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), *PeepholeTypeAnnTransformer.Get(), FuncRegistry);
+    OpRoot->ComputePlanMetadata(rboCtx);
+    for (auto it : *OpRoot) {
+        if (IsSuitableToCollectStatistics(it.Current)) {
+            CollectTablesAndColumnsNames(it.Current);
+        }
+    }
+}
+
+IGraphTransformer::TStatus TKqpNewRBOTransformer::RequestColumnStatistics(TExprContext& ctx) {
+    CollectTablesAndColumnsNames(ctx);
+
+    TVector<NThreading::TFuture<TColumnStatisticsResponse>> futures;
+    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::COUNT_MIN_SKETCH, CMColumnsByTableName,
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; });
+    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypeCtx, NStat::EStatType::EQ_WIDTH_HISTOGRAM, HistColumnsByTableName,
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
+
+    if (futures.empty()) {
+        return TStatus::Ok;
+    }
+
+    ColumnStatisticsReadiness = NThreading::WaitAll(futures).Apply([this, futures = std::move(futures)](const NThreading::TFuture<void>&) mutable {
+        for (auto& fut : futures) {
+            if (fut.HasException()) {
+                fut.TryRethrow();
+            }
+
+            auto newStats = fut.ExtractValue();
+            if (!ColumnStatisticsResponse) {
+                ColumnStatisticsResponse = std::move(newStats);
+            } else {
+                // merge statistics
+                for (const auto& [table, column2Stat] : newStats.ColumnStatisticsByTableName) {
+                    auto& oldColumn2Stat = ColumnStatisticsResponse->ColumnStatisticsByTableName[table];
+                    for (const auto& [column, newStat] : column2Stat.Data) {
+                        auto& oldStat = oldColumn2Stat.Data[column];
+                        if (newStat.CountMinSketch) {
+                            oldStat.CountMinSketch = newStat.CountMinSketch;
+                        }
+                        if (newStat.EqWidthHistogramEstimator) {
+                            oldStat.EqWidthHistogramEstimator = newStat.EqWidthHistogramEstimator;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    return TStatus::Async;
+}
+
+bool TKqpNewRBOTransformer::IsSuitableToRequestStatistics() {
+    // Currently just checking for a flag.
+    return KqpCtx.Config->FeatureFlags.GetEnableColumnStatistics();
+}
+
+IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+    output = input;
+    TOptimizeExprSettings settings(&TypeCtx);
+    Y_ENSURE(OpRoot, "NEW RBO OpRoot is not initialized.");
+
+    // Apply optimizations.
+    auto status = OptimizeExpr(
+        output, output,
+        [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+            if (TKqpOpRoot::Match(node.Get())) {
+                TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), *PeepholeTypeAnnTransformer.Get(), FuncRegistry);
+                return RBO.Optimize(*OpRoot, rboCtx);
+            } else {
+                return node;
+            }
+        },
+        ctx, settings);
+
+    return status;
+}
+
+void TKqpNewRBOTransformer::ApplyColumnStatistics() {
+    Y_ENSURE(ColumnStatisticsReadiness.IsReady());
+    if (!ColumnStatisticsResponse->Issues().Empty()) {
+        TStringStream ss;
+        ColumnStatisticsResponse->Issues().PrintTo(ss);
+        YQL_CLOG(TRACE, ProviderKikimr) << "Can't load columns statistics for request: " << ss.Str();
+    } else {
+        for (auto&& [tableName, columnStatistics] : ColumnStatisticsResponse->ColumnStatisticsByTableName) {
+            TypeCtx.ColumnStatisticsByTableName.insert({std::move(tableName), new NYql::TOptimizerStatistics::TColumnStatMap(std::move(columnStatistics))});
+        }
+    }
+}
+
+IGraphTransformer::TStatus TKqpNewRBOTransformer::DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+    ApplyColumnStatistics();
+    return ContinueOptimizations(input, output, ctx);
 }
 
 void TKqpNewRBOTransformer::Rewind() {
 }
 
-IGraphTransformer::TStatus TKqpRBOCleanupTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
-    output = input;
+IGraphTransformer::TStatus TKqpRBOCleanupTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr &output, TExprContext &ctx) {
     TOptimizeExprSettings settings(&TypeCtx);
-
     Y_UNUSED(ctx);
+    YQL_CLOG(TRACE, CoreDq) << "Cleanup input plan: " << KqpExprToPrettyString(TExprBase(input), ctx) << Endl;
 
-    /*
-    auto status = OptimizeExpr(output, output, [] (const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-        Y_UNUSED(ctx);
-        YQL_CLOG(TRACE, CoreDq) << "Checking if node " << node->UniqueId() << " is list: " << node->IsList();
-
-        if (node.Get()->IsList() && node.Get()->ChildrenSize()>=1) {
-            auto child_level_1 = node.Get()->Child(0);
-            YQL_CLOG(TRACE, CoreDq) << "Matched level 0";
-
-            if (child_level_1->IsList() && child_level_1->ChildrenSize()>=1) {
-                auto child_level_2 = child_level_1->Child(0);
-                YQL_CLOG(TRACE, CoreDq) << "Matched level 1";
-
-                if (child_level_2->IsList() && child_level_2->ChildrenSize()>=1) {
-                    auto maybeQuery = child_level_2->Child(0);
-                    YQL_CLOG(TRACE, CoreDq) << "Matched level 2";
-
-                    if (TKqpPhysicalQuery::Match(maybeQuery)) {
-                        YQL_CLOG(TRACE, CoreDq) << "Found query node";
-                        return maybeQuery;
-                    }
-                }
-            }
-        }
-        return node;
-    }, ctx, settings);
-
-    */
-
-    YQL_CLOG(TRACE, CoreDq) << "Cleanup input plan: " << output->Dump();
-
-    if (output->IsList() && output->ChildrenSize()>=1) {
-            auto child_level_1 = output->Child(0);
-            YQL_CLOG(TRACE, CoreDq) << "Matched level 0";
-
-            if (child_level_1->IsList() && child_level_1->ChildrenSize()>=1) {
-                auto child_level_2 = child_level_1->Child(0);
-                YQL_CLOG(TRACE, CoreDq) << "Matched level 1";
-
-                if (child_level_2->IsList() && child_level_2->ChildrenSize()>=1) {
-                    auto child_level_3 = child_level_2->Child(0);
-                    YQL_CLOG(TRACE, CoreDq) << "Matched level 2";
-
-                    if (child_level_3->IsList() && child_level_2->ChildrenSize()>=1) {
-                        auto maybeQuery = child_level_3->Child(0);
-
-                        if (TKqpPhysicalQuery::Match(maybeQuery)) {
-                            YQL_CLOG(TRACE, CoreDq) << "Found query node";
-                            output = maybeQuery;
-                        }
-                    }
-                }
-            }
+    // We just need to find a physical query callable.
+    auto physicalQueries = FindNodes(input, [](const TExprNode::TPtr& node) { return TKqpPhysicalQuery::Match(node.Get()); });
+    if (physicalQueries.size() == 1) {
+        output = physicalQueries.front();
+        return IGraphTransformer::TStatus::Ok;
     }
 
-    return IGraphTransformer::TStatus::Ok;
+    return IGraphTransformer::TStatus::Error;
+}
+
+TKqpNewRBOTransformer::TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx,
+                                             TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer, TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer,
+                                             TKikimrTablesData& tables, const TString& cluster, const TString& database, TActorSystem* actorSystem,
+                                             const NMiniKQL::IFunctionRegistry& funcRegistry)
+    : TypeCtx(typeCtx)
+    , KqpCtx(*kqpCtx)
+    , RBOTypeAnnTransformer(std::move(rboTypeAnnTransformer))
+    , PeepholeTypeAnnTransformer(std::move(peepholeTypeAnnTransformer))
+    , FuncRegistry(funcRegistry)
+    , Tables(tables)
+    , Cluster(cluster)
+    , Database(database)
+    , ActorSystem(actorSystem) {
+    // Finally initializes all RBO optimization stages.
+    InitializeRBOOptimizationStages();
+}
+
+void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
+    // Initial stages.
+    // Predicate pull-up stage.
+    TVector<std::unique_ptr<IRule>> filterPullUpRules;
+    filterPullUpRules.emplace_back(std::make_unique<TPullUpCorrelatedFilterRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Correlated predicte pullup", std::move(filterPullUpRules)));
+
+    TVector<std::unique_ptr<IRule>> inlineScalarSubPlanStageRules;
+    inlineScalarSubPlanStageRules.emplace_back(std::make_unique<TInlineScalarSubplanRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline scalar subplans", std::move(inlineScalarSubPlanStageRules)));
+    RBO.AddStage(std::make_unique<TRenameStage>());
+    RBO.AddStage(std::make_unique<TConstantFoldingStage>());
+
+    // Logical stage.
+    TVector<std::unique_ptr<IRule>> logicalStageRules;
+    logicalStageRules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
+    logicalStageRules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());
+    logicalStageRules.emplace_back(std::make_unique<TPushMapRule>());
+    logicalStageRules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
+    logicalStageRules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
+    logicalStageRules.emplace_back(std::make_unique<TPushLimitIntoSortRule>());
+    logicalStageRules.emplace_back(std::make_unique<TInlineSimpleInExistsSubplanRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites I", std::move(logicalStageRules)));
+
+    // Prune column stage.
+    RBO.AddStage(std::make_unique<TPruneColumnsStage>());
+
+    // Physical stage.
+    TVector<std::unique_ptr<IRule>> physicalStageRules;
+    physicalStageRules.emplace_back(std::make_unique<TPeepholePredicate>());
+    physicalStageRules.emplace_back(std::make_unique<TPushOlapFilterRule>());
+    physicalStageRules.emplace_back(std::make_unique<TPushOlapProjectionRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Physical rewrites I", std::move(physicalStageRules)));
+
+    // CBO stages.
+    TVector<std::unique_ptr<IRule>> initialCBOStageRules;
+    initialCBOStageRules.emplace_back(std::make_unique<TBuildInitialCBOTreeRule>());
+    initialCBOStageRules.emplace_back(std::make_unique<TExpandCBOTreeRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Prepare for CBO", std::move(initialCBOStageRules)));
+
+    TVector<std::unique_ptr<IRule>> cboStageRules;
+    cboStageRules.emplace_back(std::make_unique<TOptimizeCBOTreeRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Invoke CBO", std::move(cboStageRules)));
+
+    TVector<std::unique_ptr<IRule>> cleanUpCBOStageRules;
+    cleanUpCBOStageRules.emplace_back(std::make_unique<TInlineCBOTreeRule>());
+    cleanUpCBOStageRules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Clean up after CBO", std::move(cleanUpCBOStageRules)));
+
+    // Assign physical stages.
+    TVector<std::unique_ptr<IRule>> assignPhysicalStageRules;
+    assignPhysicalStageRules.emplace_back(std::make_unique<TAssignStagesRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Assign physical stages", std::move(assignPhysicalStageRules)));
+
+    // Optimize physical stages.
+    TVector<std::unique_ptr<IRule>> optimizePhysicalStagesRules;
+    optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateTopSortThroughStageRule>());
+    optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateLimitThroughStageRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Optimize physical stages", std::move(optimizePhysicalStagesRules)));
 }
 
 void TKqpRBOCleanupTransformer::Rewind() {
 }
 
-TAutoPtr<IGraphTransformer> CreateKqpPgRewriteTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx) {
-    return new TKqpPgRewriteTransformer(kqpCtx, typeCtx);
+TAutoPtr<IGraphTransformer> CreateKqpRewriteSelectTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx) {
+    return new TKqpRewriteSelectTransformer(kqpCtx, typeCtx);
 }
 
-TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config, TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peephole) {
-    return new TKqpNewRBOTransformer(kqpCtx, typeCtx, config, typeAnnTransformer, peephole);
+TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx,
+                                                       TAutoPtr<IGraphTransformer>&& rboTypeAnnTransformer,
+                                                       TAutoPtr<IGraphTransformer>&& peepholeTypeAnnTransformer, TKikimrTablesData& tables,
+                                                       const TString& cluster, const TString& database, TActorSystem* actorSystem,
+                                                       const NMiniKQL::IFunctionRegistry& funcRegistry) {
+    return new TKqpNewRBOTransformer(kqpCtx, typeCtx, std::move(rboTypeAnnTransformer), std::move(peepholeTypeAnnTransformer), tables, cluster, database,
+                                     actorSystem, funcRegistry);
 }
 
-TAutoPtr<IGraphTransformer> CreateKqpRBOCleanupTransformer(TTypeAnnotationContext& typeCtx) {
+TAutoPtr<IGraphTransformer> CreateKqpRBOCleanupTransformer(TTypeAnnotationContext &typeCtx) {
     return new TKqpRBOCleanupTransformer(typeCtx);
 }
 
-}
-}
+} // namespace NKqp
+} // namespace NKikimr

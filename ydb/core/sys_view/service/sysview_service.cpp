@@ -210,7 +210,7 @@ public:
         EProcessorMode processorMode)
         : Config(std::move(config))
         , HasExternalCounters(hasExternalCounters)
-        , TotalInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 6 : 60))
+        , TotalInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 5 : 60))
         , CollectInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 3 : 30))
         , SendInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 2 : 20))
         , ProcessLabeledCountersInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 5 : 60))
@@ -461,6 +461,7 @@ private:
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
         auto request = MakeHolder<TNavigate>();
+        request->DatabaseName = database;
         request->ResultSet.push_back({});
 
         auto& entry = request->ResultSet.back();
@@ -529,6 +530,7 @@ private:
     void RequestDatabaseName(TPathId pathId) {
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
         auto request = MakeHolder<TNavigate>();
+        request->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
         request->ResultSet.push_back({});
 
         auto& entry = request->ResultSet.back();

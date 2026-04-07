@@ -24,7 +24,8 @@ using TEvFetchStorageConfigRequest =
         Ydb::Config::FetchConfigResponse>;
 using TEvBootstrapClusterRequest =
     TGrpcRequestOperationCall<Ydb::Config::BootstrapClusterRequest,
-        Ydb::Config::BootstrapClusterResponse>;
+        Ydb::Config::BootstrapClusterResponse,
+        NRuntimeEvents::EType::BOOTSTRAP_CLUSTER>;
 
 using namespace NActors;
 using namespace Ydb;
@@ -162,16 +163,11 @@ public:
             return;
         }
         self->Become(&TReplaceStorageConfigRequest::StateFunc);
-        self->Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvNodeWardenQueryStorageConfig(false)); 
+        self->Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvNodeWardenQueryStorageConfig(false));
     }
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) override {
         const auto& request = *GetProtoRequest();
-        if (request.dry_run()) {
-            status = Ydb::StatusIds::BAD_REQUEST;
-            issues.AddIssue("DryRun is not supported yet.");
-            return false;
-        }
 
         auto* csk = AppData()->ConfigSwissKnife;
 
@@ -189,7 +185,8 @@ public:
     void FillDistconfQuery(NStorage::TEvNodeConfigInvokeOnRoot& ev) {
         auto *cmd = ev.Record.MutableReplaceStorageConfig();
 
-        auto shim = ConvertConfigReplaceRequest(*GetProtoRequest());
+        auto *protoRequest = GetProtoRequest();
+        auto shim = ConvertConfigReplaceRequest(*protoRequest);
 
         if (shim.MainConfig) {
             cmd->SetYAML(*shim.MainConfig);
@@ -203,6 +200,7 @@ public:
         cmd->SetDedicatedStorageSectionConfigMode(shim.DedicatedConfigMode);
         cmd->SetUserToken(Request_->GetSerializedToken());
         cmd->SetPeerName(Request_->GetPeerName());
+        cmd->SetDryRun(protoRequest->dry_run());
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,
@@ -231,16 +229,20 @@ public:
         const auto& ff = AppData()->FeatureFlags;
 
         return std::make_unique<TEvBlobStorage::TEvControllerReplaceConfigRequest>(
-            shim.MainConfig,
-            shim.StorageConfig,
-            shim.SwitchDedicatedStorageSection,
-            shim.DedicatedConfigMode,
-            request->allow_unknown_fields() || request->bypass_checks(),
-            request->bypass_checks(),
-            /*enableConfigV2=*/ ff.GetSwitchToConfigV2(),
-            /*disableConfigV2=*/ ff.GetSwitchToConfigV1(),
-            Request_->GetPeerName(),
-            Request_->GetSerializedToken());
+            TEvBlobStorage::TEvControllerReplaceConfigRequest::TArgs {
+                .ClusterYaml = shim.MainConfig,
+                .StorageYaml = shim.StorageConfig,
+                .SwitchDedicatedStorageSection = shim.SwitchDedicatedStorageSection,
+                .DedicatedConfigMode = shim.DedicatedConfigMode,
+                .AllowUnknownFields = request->allow_unknown_fields() || request->bypass_checks(),
+                .BypassMetadataChecks = request->bypass_checks(),
+                .DryRun = request->dry_run(),
+                .EnableConfigV2 = ff.GetSwitchToConfigV2(),
+                .DisableConfigV2 = ff.GetSwitchToConfigV1(),
+                .PeerName = Request_->GetPeerName(),
+                .UserToken = Request_->GetSerializedToken()
+            }
+        );
     }
 
 private:
@@ -254,14 +256,14 @@ private:
             TargetDatabase = metadata.Database;
         }
         else {
-            Reply(Ydb::StatusIds::BAD_REQUEST, "No database name found in metadata", 
+            Reply(Ydb::StatusIds::BAD_REQUEST, "No database name found in metadata",
                     NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
             return;
         }
 
-        if (*TargetDatabase == ("/" + AppData()->DomainsInfo->Domain->Name) || 
+        if (*TargetDatabase == ("/" + AppData()->DomainsInfo->Domain->Name) ||
             *TargetDatabase == AppData()->DomainsInfo->Domain->Name) {
-            Reply(Ydb::StatusIds::BAD_REQUEST, "Provided database is a domain database.", 
+            Reply(Ydb::StatusIds::BAD_REQUEST, "Provided database is a domain database.",
                     NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
             return;
         }
@@ -289,14 +291,14 @@ private:
         };
         auto pipe = NTabletPipe::CreateClient(SelfId(), MakeConsoleID(), pipeConfig);
         ConsolePipe = RegisterWithSameMailbox(pipe);
-        
+
         auto PrepareAndSendRequest = [&](auto requestType) {
             using TRequestType = decltype(requestType);
             auto request = std::make_unique<TRequestType>();
             request->Record.SetUserToken(Request_->GetSerializedToken());
             request->Record.SetPeerName(Request_->GetPeerName());
             request->Record.SetIngressDatabase(*TargetDatabase);
-            
+
             auto& req = *request->Record.MutableRequest();
             req.set_config(*DatabaseConfig);
 
@@ -437,6 +439,13 @@ public:
                     default:
                         break;
                 }
+                if (request.has_seed_node_fetch_requestor()) {
+                    auto& r = request.seed_node_fetch_requestor();
+                    for (const auto& host : r.host()) {
+                        record->AddRequestorHost(host);
+                    }
+                    record->SetRequestorPort(r.port());
+                }
                 break;
 
             case Ydb::Config::FetchConfigRequest::ModeCase::kTarget:
@@ -473,6 +482,9 @@ public:
             identity.set_cluster(AppData()->ClusterName);
             identity.mutable_storage();
             config.set_config(conf);
+        }
+        if (res.GetTransient()) {
+            result.set_transient(true);
         }
     }
 
@@ -606,4 +618,3 @@ void DoBootstrapCluster(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvide
 }
 
 } // namespace NKikimr::NGRpcService
-

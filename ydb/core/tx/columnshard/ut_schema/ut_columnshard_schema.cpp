@@ -12,6 +12,7 @@
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/util/aws.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
@@ -405,9 +406,9 @@ public:
         if (ev->GetTypeRewrite() == TEvTablet::EvBoot) {
             Counters->BlockForgets = false;
             return false;
-        } else if (auto* msg = TryGetPrivateEvent<NWrappers::NExternalStorage::TEvPutObjectRequest>(ev)) {
+        } else if (TryGetPrivateEvent<NWrappers::NExternalStorage::TEvPutObjectRequest>(ev)) {
             ss << "S3_REQ(put " << ++Counters->ExportCounters.Request << "):";
-        } else if (auto* msg = TryGetPrivateEvent<NWrappers::NExternalStorage::TEvPutObjectResponse>(ev)) {
+        } else if (TryGetPrivateEvent<NWrappers::NExternalStorage::TEvPutObjectResponse>(ev)) {
             if (Counters->CaptureEvictResponse) {
                 Cerr << "CAPTURE S3_RESPONSE(put)" << Endl;
                 --Counters->CaptureEvictResponse;
@@ -416,9 +417,9 @@ public:
             }
 
             ss << "S3_RESPONSE(put " << ++Counters->ExportCounters.Response << "):";
-        } else if (auto* msg = TryGetPrivateEvent<NWrappers::NExternalStorage::TEvDeleteObjectRequest>(ev)) {
+        } else if (TryGetPrivateEvent<NWrappers::NExternalStorage::TEvDeleteObjectRequest>(ev)) {
             ss << "S3_REQ(delete " << ++Counters->ForgetCounters.Request << "):";
-        } else if (auto* msg = TryGetPrivateEvent<NWrappers::NExternalStorage::TEvDeleteObjectResponse>(ev)) {
+        } else if (TryGetPrivateEvent<NWrappers::NExternalStorage::TEvDeleteObjectResponse>(ev)) {
             if (Counters->CaptureForgetResponse) {
                 Cerr << "CAPTURE S3_RESPONSE(delete)" << Endl;
                 --Counters->CaptureForgetResponse;
@@ -437,7 +438,7 @@ public:
             } else {
                 return false;
             }
-        } else if (auto* msg = TryGetPrivateEvent<NKqp::TEvKqpCompute::TEvScanData>(ev)) {
+        } else if (TryGetPrivateEvent<NKqp::TEvKqpCompute::TEvScanData>(ev)) {
             ss << "Got TEvKqpCompute::TEvScanData" << Endl;
         } else {
             return false;
@@ -491,8 +492,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
 
     // Disable blob cache. It hides evict-delete, evict-read races.
     {
-        TAtomic unused;
-        runtime.GetAppData().Icb->SetValue("BlobCache.MaxCacheDataSize", 0, unused);
+        TControlBoard::SetValue(0, runtime.GetAppData().Icb->BlobCache.MaxCacheDataSize);
     }
 
     ui64 writeId = 0;
@@ -1031,6 +1031,59 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
     }
 }
 
+void TestProposeResultNotViaPipe() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+    auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(
+        runtime,
+        CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard),
+        &CreateColumnShard
+    );
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
+    while (csDefaultControllerGuard->GetShardActualsCount() == 0 && TInstant::Now() < deadline) {
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+    }
+    UNIT_ASSERT_VALUES_EQUAL(csDefaultControllerGuard->GetShardActualsCount(), 1);
+
+    const ui64 tableId = 1;
+    const ui64 txId = 100;
+    const ui64 schemeShardId = 4242;
+
+    bool checkedRecipient = false;
+    runtime.SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
+            auto* forward = ev->Get<TEvPipeCache::TEvForward>();
+            if (forward->TabletId == schemeShardId
+                && forward->Ev
+                && forward->Ev->Type() == TEvColumnShard::EvProposeTransactionResult) {
+                UNIT_FAIL("ProposeResult must not be forwarded via pipe cache. Because the pipe lets the message to be delivered to the next generation of the tablet (in case of restart). And that causes subtle bugs that are very hard to debug.");
+            }
+        } else if (ev->GetTypeRewrite() == TEvColumnShard::EvProposeTransactionResult) {
+            checkedRecipient = true;
+            UNIT_ASSERT_VALUES_EQUAL(ev->Recipient, sender);
+        }
+        return false;
+    });
+    auto txBody = TTestSchema::CreateInitShardTxBody(tableId, testYdbSchema, testYdbPk, {}, "/Root/olapStore");
+    auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(NKikimrTxColumnShard::TX_KIND_SCHEMA, schemeShardId, sender, txId, txBody, 0, 0);
+    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
+
+    auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
+    UNIT_ASSERT(ev);
+    const auto& res = ev->Get()->Record;
+    UNIT_ASSERT_EQUAL(res.GetTxId(), txId);
+    UNIT_ASSERT_EQUAL(res.GetTxKind(), NKikimrTxColumnShard::TX_KIND_SCHEMA);
+    UNIT_ASSERT(checkedRecipient);
+}
+
 }
 
 namespace NColumnShard {
@@ -1149,6 +1202,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
 
     Y_UNIT_TEST_QUATRO(CreateTable, Reboots, GenerateInternalPathId) {
         CreateTable(Reboots, GenerateInternalPathId);
+    }
+
+    Y_UNIT_TEST(ProposeResultNotViaPipe) {
+        TestProposeResultNotViaPipe();
     }
 
     Y_UNIT_TEST_OCTO(TTL, Reboot, Internal, FirstPkColumn) {

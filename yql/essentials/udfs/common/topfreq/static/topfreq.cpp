@@ -8,7 +8,8 @@ using namespace NUdf;
 template <typename THash, typename TEquals>
 TTopFreqBase<THash, TEquals>::TTopFreqBase(THash hash, TEquals equals)
     : Indices_(0, hash, equals)
-{}
+{
+}
 
 template <typename THash, typename TEquals>
 void TTopFreqBase<THash, TEquals>::Init(const TUnboxedValuePod& value, const ui32 minSize, const ui32 maxSize) {
@@ -179,21 +180,21 @@ UDF_TYPE_ID_MAP(INSTANCE_FOR)
 #undef INSTANCE_FOR
 
 TTopFreqGeneric::TTopFreqGeneric(const TUnboxedValuePod& value, const ui32 minSize, const ui32 maxSize,
-    IHash::TPtr hash, IEquate::TPtr equate)
+                                 IHash::TPtr hash, IEquate::TPtr equate)
     : TBase(TGenericHash{hash}, TGenericEquals{equate})
 {
     TBase::Init(value, minSize, maxSize);
 }
 
 TTopFreqGeneric::TTopFreqGeneric(const TTopFreqGeneric& topFreq1, const TTopFreqGeneric& topFreq2,
-    IHash::TPtr hash, IEquate::TPtr equate)
+                                 IHash::TPtr hash, IEquate::TPtr equate)
     : TBase(TGenericHash{hash}, TGenericEquals{equate})
 {
     TBase::Merge(topFreq1, topFreq2);
 }
 
 TTopFreqGeneric::TTopFreqGeneric(const TUnboxedValuePod& serialized,
-    IHash::TPtr hash, IEquate::TPtr equate)
+                                 IHash::TPtr hash, IEquate::TPtr equate)
     : TBase(TGenericHash{hash}, TGenericEquals{equate})
 {
     TBase::Deserialize(serialized);
@@ -210,4 +211,3 @@ TUnboxedValue TTopFreqGeneric::Get(const IValueBuilder* builder, ui32 resultSize
 void TTopFreqGeneric::AddValue(const TUnboxedValuePod& value) {
     TBase::AddValue(value);
 }
-

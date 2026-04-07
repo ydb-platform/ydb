@@ -3,7 +3,7 @@
 
 #include <ydb/public/lib/ydb_cli/common/common.h>
 
-#include <library/cpp/colorizer/colors.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <library/cpp/yaml/as/tstring.h>
 
 #include <util/string/strip.h>
@@ -143,6 +143,42 @@ TClientCommandOption& TClientCommandOption::AddLongName(const TString& name) {
 TClientCommandOption&  TClientCommandOption::IfPresentDisableCompletion() {
     Opt->IfPresentDisableCompletion();
     return *this;
+}
+
+TClientCommandOption& TClientCommandOption::CompletionArgHelp(const TString& help) {
+    Opt->CompletionArgHelp(help);
+    return *this;
+}
+
+TClientCommandOption& TClientCommandOption::Completer(NLastGetopt::NComp::ICompleterPtr completer) {
+    Opt->Completer(std::move(completer));
+    return *this;
+}
+
+TClientCommandOption& TClientCommandOption::ChoicesWithCompletion(TVector<NLastGetopt::NComp::TChoice> choices) {
+    Opt->ChoicesWithCompletion(choices);
+    return *this;
+}
+
+NLastGetopt::NComp::ICompleterPtr SchemePathCompleterForTables();
+NLastGetopt::NComp::ICompleterPtr SchemePathCompleterForTopics();
+NLastGetopt::NComp::ICompleterPtr SchemePathCompleterForDir();
+NLastGetopt::NComp::ICompleterPtr SchemePathCompleterForAll();
+
+TClientCommandOption& TClientCommandOption::SchemePathCompletionForTables() {
+    return CompletionArgHelp("<database path>").Completer(SchemePathCompleterForTables());
+}
+
+TClientCommandOption& TClientCommandOption::SchemePathCompletionForTopics() {
+    return CompletionArgHelp("<database path>").Completer(SchemePathCompleterForTopics());
+}
+
+TClientCommandOption& TClientCommandOption::SchemePathCompletionForDir() {
+    return CompletionArgHelp("<database path>").Completer(SchemePathCompleterForDir());
+}
+
+TClientCommandOption& TClientCommandOption::SchemePathCompletionForAll() {
+    return CompletionArgHelp("<database path>").Completer(SchemePathCompleterForAll());
 }
 
 const NLastGetopt::EHasArg& TClientCommandOption::GetHasArg() const {
@@ -290,7 +326,7 @@ bool TClientCommandOption::NeedPrintDefinitionsPriority() const {
 }
 
 void TClientCommandOption::RebuildHelpMessage() {
-    NColorizer::TColors& colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors& colors = NConsoleClient::AutoColors(Cout);
     TStringBuilder helpMessage;
     helpMessage << Help;
     const bool needDefinitionsPriority = ClientOptions->HelpCommandVerbosiltyLevel >= 2 && NeedPrintDefinitionsPriority();
@@ -570,11 +606,13 @@ std::vector<TString> TOptionsParseResult::LogConnectionParams(const TConnectionP
                     break;
                 }
                 case EOptionValueSource::ActiveProfile: {
-                    TString value;
-                    if (opt->TryParseFromProfile(ActiveProfile, &value, nullptr, &messages, true)) {
-                        TStringBuilder txt;
-                        txt << "active profile \"" << ActiveProfile->GetName() << "\"";
-                        processValue(opt, value, txt, validate);
+                    if (ActiveProfile) {
+                        TString value;
+                        if (opt->TryParseFromProfile(ActiveProfile, &value, nullptr, &messages, true)) {
+                            TStringBuilder txt;
+                            txt << "active profile \"" << ActiveProfile->GetName() << "\"";
+                            processValue(opt, value, txt, validate);
+                        }
                     }
                     break;
                 }
@@ -614,13 +652,15 @@ std::vector<TString> TOptionsParseResult::LogConnectionParams(const TConnectionP
             Cerr << " from explicitly specified profile \"" << ExplicitProfile->GetName() << "\"";
             break;
         case EOptionValueSource::ActiveProfile:
-            Cerr << " from current active profile \"" << ActiveProfile->GetName() << "\"";
+            if (ActiveProfile) {
+                Cerr << " from current active profile \"" << ActiveProfile->GetName() << "\"";
+            }
             break;
         case EOptionValueSource::EnvironmentVariable:
             for (const auto& envInfo : opt.Opt->EnvInfo) {
                 if (TMaybe<TString> mbValue = TryGetEnv(envInfo.EnvName)) {
                     TStringBuilder txt;
-                    Cerr << " from " << envInfo.EnvName << " enviroment variable";
+                    Cerr << " from " << envInfo.EnvName << " environment variable";
                     break;
                 }
             }
@@ -644,7 +684,14 @@ std::vector<TString> TOptionsParseResult::LogConnectionParams(const TConnectionP
             }
         }
     } else {
-        Cerr << "No authentication methods were found. Going without authentication" << Endl;
+        Cerr << "No authentication methods were found; going without authentication";
+        if (const TOptionParseResult* clientCertResult = FindResult("client-cert-file")) {
+            const auto& values = clientCertResult->Values();
+            if (!values.empty() && !values.back().empty()) {
+                Cerr << " (a client certificate is provided and may be used for authentication if the corresponding feature flag is enabled on the server)";
+            }
+        }
+        Cerr << Endl;
     }
 
     return messages;
@@ -699,7 +746,7 @@ std::vector<TString> TOptionsParseResult::ParseFromProfilesAndEnv(std::shared_pt
             continue;
         }
 
-        if (ActiveProfile != ExplicitProfile) {
+        if (ActiveProfile && ActiveProfile != ExplicitProfile) {
             if (TString value; clientOption->TryParseFromProfile(ActiveProfile, &value, &isFileName, &errors, false)) {
                 applyOption(clientOption, value, isFileName, clientOption->HumanReadableFileName, EOptionValueSource::ActiveProfile);
                 continue;
@@ -732,7 +779,7 @@ std::vector<TString> TOptionsParseResult::ParseFromProfilesAndEnv(std::shared_pt
                 continue;
             }
 
-            if (ActiveProfile != ExplicitProfile) {
+            if (ActiveProfile && ActiveProfile != ExplicitProfile) {
                 bool isFileName = false;
                 if (TString value; clientOption->TryParseFromProfile(ActiveProfile, &value, &isFileName, &errors, false)) {
                     applyOption(clientOption, value, isFileName, clientOption->HumanReadableFileName, EOptionValueSource::ActiveProfile);

@@ -30,10 +30,11 @@ public:
 private:
     class TCoroReadBuffer : public NDB::ReadBuffer {
     public:
-        TCoroReadBuffer(TS3DecompressorCoroImpl* coro)
-            : NDB::ReadBuffer(nullptr, 0ULL)
+        explicit TCoroReadBuffer(TS3DecompressorCoroImpl* coro)
+            : NDB::ReadBuffer(nullptr, 0)
             , Coro(coro)
-        { }
+        {}
+
     private:
         bool nextImpl() final {
             while (!Coro->InputFinished || !Coro->Requests.empty()) {
@@ -50,7 +51,8 @@ private:
             }
             return false;
         }
-        TS3DecompressorCoroImpl *const Coro;
+
+        TS3DecompressorCoroImpl* const Coro;
         TString RawDataBuffer;
     };
 
@@ -107,7 +109,7 @@ private:
         InputBuffer = std::move(event.Data);
     }
 
-    TDuration GetCpuTimeDelta() {
+    TDuration GetCpuTimeDelta() const {
         return TDuration::Seconds(NHPTimer::GetSeconds(GetCycleCountFast() - StartCycleCount));
     }
 
@@ -129,16 +131,17 @@ private:
 
 class TS3DecompressorCoroActor : public TActorCoro {
 public:
-    TS3DecompressorCoroActor(THolder<TS3DecompressorCoroImpl> impl)
-        : TActorCoro(THolder<TS3DecompressorCoroImpl>(impl.Release()))
+    explicit TS3DecompressorCoroActor(THolder<TS3DecompressorCoroImpl> impl)
+        : TActorCoro(std::move(impl))
     {}
+
 private:
     void Registered(TActorSystem* actorSystem, const TActorId& parent) override {
         TActorCoro::Registered(actorSystem, parent); // Calls TActorCoro::OnRegister and sends bootstrap event to ourself.
     }
 };
 
-}
+} // anonymous namespace
 
 NActors::IActor* CreateS3DecompressorActor(const NActors::TActorId& parent, const TString& compression) {
     return new TS3DecompressorCoroActor(MakeHolder<TS3DecompressorCoroImpl>(parent, compression));

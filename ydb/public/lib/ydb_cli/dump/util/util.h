@@ -45,6 +45,7 @@ TStatus DescribeTable(NTable::TTableClient& tableClient, const TString& path, TM
 TStatus DescribeExternalDataSource(NTable::TTableClient& tableClient, const TString& path, Ydb::Table::DescribeExternalDataSourceResult& out);
 TStatus DescribeSystemView(NTable::TTableClient& tableClient, const TString& path, Ydb::Table::DescribeSystemViewResult& out);
 TStatus DescribeReplication(NReplication::TReplicationClient& replicationClient, const TString& path, TMaybe<NReplication::TReplicationDescription>& out);
+TStatus DescribeTransfer(NReplication::TReplicationClient& replicationClient, const TString& path, TMaybe<NReplication::TTransferDescription>& out);
 TStatus DescribeViewQuery(const NYdb::TDriver& driver, const TString& path, TString& out);
 
 NScheme::TDescribePathResult DescribePath(
@@ -80,5 +81,9 @@ TStatus CreateDatabase(
     NCms::TCmsClient& cmsClient,
     const std::string& path,
     const NCms::TCreateDatabaseSettings& settings = {});
+
+TStatus CheckSysViewCompatibility(
+    const Ydb::Table::DescribeSystemViewResult& dumpedProto,
+    const Ydb::Table::DescribeSystemViewResult& actualProto);
 
 } // NYdb::NDump

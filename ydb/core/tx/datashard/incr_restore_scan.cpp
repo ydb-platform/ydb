@@ -65,17 +65,17 @@ public:
         Y_ENSURE(table->Columns.size() >= 2);
         TVector<TTag> valueTags;
         valueTags.reserve(table->Columns.size() - 1);
-        bool deletedMarkerColumnFound = false;
+        bool changeMetadataColumnFound = false;
         for (const auto& [tag, column] : table->Columns) {
             if (!column.IsKey) {
                 valueTags.push_back(tag);
-                if (column.Name == "__ydb_incrBackupImpl_deleted") {
-                    deletedMarkerColumnFound = true;
+                if (column.Name == "__ydb_incrBackupImpl_changeMetadata") {
+                    changeMetadataColumnFound = true;
                 }
             }
         }
 
-        Y_ENSURE(deletedMarkerColumnFound);
+        Y_ENSURE(changeMetadataColumnFound);
 
         return valueTags;
     }
@@ -222,6 +222,10 @@ public:
     }
 
     EScan Progress() {
+        // Save the last key for scan continuation before flushing
+        if (Buffer.Rows() > 0) {
+            LastKey = Buffer.GetLastKey();
+        }
         auto rows = Buffer.Flush();
         TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records;
 
@@ -268,7 +272,7 @@ private:
     const TPathId SourcePathId;
     const TPathId TargetPathId;
     const TVector<TTag> ValueTags;
-    const TMaybe<TSerializedCellVec> LastKey;
+    TMaybe<TSerializedCellVec> LastKey;
     const TLimits Limits;
     mutable TMaybe<TString> LogPrefix;
     IDriver* Driver;

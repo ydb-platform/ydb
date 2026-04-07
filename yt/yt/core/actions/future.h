@@ -42,6 +42,9 @@ namespace NYT {
 
 namespace NDetail {
 
+struct TOKFutureTag
+{ };
+
 template <class T>
 class TPromiseState;
 template <class T>
@@ -60,16 +63,14 @@ void Ref(TFutureState<T>* state);
 template <class T>
 void Unref(TFutureState<T>* state);
 
-//! Constructs a well-known pre-set future like #VoidFuture.
-//! For such futures ref-counting is essentially disabled.
-template <class T>
-[[nodiscard]] TFuture<T> MakeWellKnownFuture(TErrorOr<T> value);
-
 template <class T>
 constexpr bool IsFuture = false;
 
 template <class T>
 constexpr bool IsFuture<TFuture<T>> = true;
+
+template <class T>
+constexpr bool IsFuture<TUniqueFuture<T>> = true;
 
 template <class U, class F>
 void InterceptExceptions(const TPromise<U>& promise, const F& func);
@@ -90,9 +91,9 @@ template <class T>
 
 //! Constructs a successful pre-set future.
 template <class T>
-[[nodiscard]] TFuture<T> MakeFuture(TErrorOr<T> value);
+TFuture<T> MakeFuture(TErrorOr<T> value);
 template <class T>
-[[nodiscard]] TFuture<T> MakeFuture(T value);
+TFuture<T> MakeFuture(T value);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Comparison and swap.
@@ -111,13 +112,7 @@ void swap(TPromise<T>& lhs, TPromise<T>& rhs);
 // A bunch of widely-used preset futures.
 
 //! A pre-set successful |void| future.
-extern const TFuture<void> VoidFuture;
-
-//! A pre-set successful |bool| future with |true| value.
-extern const TFuture<bool> TrueFuture;
-
-//! A pre-set successful |bool| future with |false| value.
-extern const TFuture<bool> FalseFuture;
+extern const TFuture<void> OKFuture;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -155,6 +150,7 @@ private:
     friend void swap(TCancelable& lhs, TCancelable& rhs);
     template <class U>
     friend struct ::THash;
+    friend class NDetail::TFutureState<void>;
     template <class U>
     friend class TFutureBase;
 };
@@ -182,13 +178,9 @@ struct TFutureTimeoutOptions
 //! A base class for both TFuture<T> and its specialization TFuture<void>.
 /*!
  *  The resulting value can be accessed by either subscribing (#Subscribe)
- *  for it or retrieving it explicitly (#Get, #TryGet). Also it is possible
- *  to move the value out of the future state (#SubscribeUnique, #GetUnique, #TryGetUnique).
- *  In the latter case, however, at most one extraction is possible;
- *  further attempts to access the value will result in UB.
- *  In particular, at most one call to #SubscribeUnique, #GetUnique, and #TryGetUnique (expect
- *  for calls returning null) must happen to any future state (possibly shared by multiple
- *  TFuture instances).
+ *  for it or retrieving it explicitly (#BlockingGet, #GetOrCrash, #TryGet). Also it is possible
+ *  to move the value out of the future state
+ *  (by converting to TUniqueFuture via #AsUnique and invoking #Subscribe, #BlockingGet, #GetOrCrash, #TryGet).
  */
 template <class T>
 class TFutureBase
@@ -208,41 +200,35 @@ public:
     //! Checks if the value is set.
     bool IsSet() const;
 
-    //! Gets the value.
+    //! Gets the value, blocking until it's set.
     /*!
-     *  This call will block until the value is set.
+     *  \note Consider using NConcurrency::WaitFor(future) instead to avoid blocking and potential deadlocks when using fibers.
      */
-    const TErrorOr<T>& Get() const;
+    const TErrorOr<T>& BlockingGet() const;
 
-    //! Extracts the value by moving it out of the future state.
+    //! Gets the value if it's already set, crashes otherwise.
     /*!
-     *  This call will block until the value is set.
+     *  Use this call when you're certain the future is already set (e.g., after #IsSet check).
      */
-    TErrorOr<T> GetUnique() const;
+    const TErrorOr<T>& GetOrCrash() const;
 
     //! Waits for the value to become set.
     /*!
      *  This call blocks until either the value is set or #timeout (if given) expires.
      */
-    bool Wait(TDuration timeout = TDuration::Max()) const;
+    bool BlockingWait(TDuration timeout = TDuration::Max()) const;
 
     //! Waits for the value to become set.
     /*!
      *  This call blocks until either the value is set or #deadline is reached.
      */
-    bool Wait(TInstant deadline) const;
+    bool BlockingWait(TInstant deadline) const;
 
     //! Gets the value; returns null if the value is not set yet.
     /*!
      *  This call does not block.
      */
     std::optional<TErrorOr<T>> TryGet() const;
-
-    //! Extracts the value by moving it out of the future state; returns null if the value is not set yet.
-    /*!
-     *  This call does not block.
-     */
-    std::optional<TErrorOr<T>> TryGetUnique() const;
 
     //! Attaches a result handler.
     /*!
@@ -270,12 +256,6 @@ public:
      */
     void Unsubscribe(TFutureCallbackCookie cookie) const;
 
-    //! Similar to #Subscribe but enables moving the value to the handler.
-    /*!
-     *  Normally at most one such handler could be attached.
-     */
-    void SubscribeUnique(TCallback<void(TErrorOr<T>&&)> handler) const;
-
     //! Notifies the producer that the promised value is no longer needed.
     //! Returns |true| if succeeded, |false| is the promise was already set or canceled.
     bool Cancel(const TError& error) const;
@@ -284,8 +264,9 @@ public:
     TFuture<T> ToUncancelable() const;
 
     //! Returns a wrapper that handles cancellation requests by immediately becoming set
-    //! with NYT::EErrorCode::Canceled code.
-    TFuture<T> ToImmediatelyCancelable() const;
+    //! with NYT::EErrorCode::Canceled code;
+    //! propagates cancelation to original future if `propagateCancelation` is true.
+    TFuture<T> ToImmediatelyCancelable(bool propagateCancelation = true) const;
 
     //! Returns a future that is either set to an actual value (if the original one is set in timely manner)
     //! or to |EErrorCode::Timeout| (in case the deadline is reached).
@@ -310,26 +291,26 @@ public:
     template <class R>
     TFuture<R> Apply(TCallback<TFuture<R>(const TErrorOr<T>&)> callback) const;
 
-    //! Same as #Apply but assumes that this chaining will be the only subscriber.
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<R(TErrorOr<T>&&)> callback) const;
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<TErrorOr<R>(TErrorOr<T>&&)> callback) const;
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<TFuture<R>(TErrorOr<T>&&)> callback) const;
-
     //! Converts (successful) result to |U|; propagates errors as is.
     template <class U>
-    TFuture<U> As() const;
+    TFuture<U> As() const&;
+    template <class U>
+    TFuture<U> As() &&;
 
     //! Converts to TFuture<void> by discarding the value; propagates errors as is.
-    TFuture<void> AsVoid() const;
+    TFuture<void> AsVoid() const&;
+    TFuture<void> AsVoid() &&;
 
     //! Converts to TCancelable interface.
     TCancelable AsCancelable() const;
 
+    //! Converts to TUniqueFuture interface.
+    TUniqueFuture<T> AsUnique() const&;
+    TUniqueFuture<T> AsUnique() &&;
+
 protected:
     explicit TFutureBase(TIntrusivePtr<NYT::NDetail::TFutureState<T>> impl);
+    constexpr TFutureBase(NDetail::TOKFutureTag, NYT::NDetail::TFutureState<T>* impl);
 
     TIntrusivePtr<NYT::NDetail::TFutureState<T>> Impl_;
 
@@ -359,24 +340,20 @@ public:
     template <class R>
     TFuture<R> Apply(TCallback<TFuture<R>(const T&)> callback) const;
     template <class R>
+    TFuture<R> Apply(TCallback<TUniqueFuture<R>(const T&)> callback) const;
+    template <class R>
     TFuture<R> Apply(TCallback<TFuture<R>(T)> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TUniqueFuture<R>(T)> callback) const;
 
-    //! Same as #Apply but assumes that this chaining will be the only subscriber.
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<R(T&&)> callback) const;
-    template <class R>
-    TFuture<R> ApplyUnique(TCallback<TFuture<R>(T&&)> callback) const;
 
     using TFutureBase<T>::Apply;
-    using TFutureBase<T>::ApplyUnique;
 
 private:
     explicit TFuture(TIntrusivePtr<NYT::NDetail::TFutureState<T>> impl);
 
     template <class U>
     friend TFuture<U> MakeFuture(TErrorOr<U> value);
-    template <class U>
-    friend TFuture<U> NDetail::MakeWellKnownFuture(TErrorOr<U> value);
     template <class U>
     friend TFuture<U> MakeFuture(U value);
     template <class U>
@@ -395,11 +372,15 @@ public:
     TFuture() = default;
     TFuture(std::nullopt_t);
 
+    constexpr TFuture(NDetail::TOKFutureTag, NDetail::TFutureState<void>* impl);
+
     //! Chains the asynchronous computation with another one.
     template <class R>
     TFuture<R> Apply(TCallback<R()> callback) const;
     template <class R>
     TFuture<R> Apply(TCallback<TFuture<R>()> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TUniqueFuture<R>()> callback) const;
 
     using TFutureBase<void>::Apply;
 
@@ -409,12 +390,107 @@ private:
     template <class U>
     friend TFuture<U> MakeFuture(TErrorOr<U> value);
     template <class U>
-    friend TFuture<U> NDetail::MakeWellKnownFuture(TErrorOr<U> value);
-    template <class U>
     // XXX(babenko): 'NYT::' is a workaround; cf. https://gcc.gnu.org/bugzilla/show_bug.cgi?id=52625
     friend class NYT::TFutureBase;
     template <class U>
     friend class TPromiseBase;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Provides the unique-value semantics interface.
+/*!
+ *  Note that at most one value extraction is ever possible;
+ *  further attempts to access the value will result in UB.
+ *  In particular, at most one call to #Subscribe, #Get, and #TryGet (expect
+ *  for calls returning null) must happen to any future state
+ *  (possibly shared by multiple future references).
+ */
+template <class T>
+class TUniqueFutureBase
+    : public TFutureBase<T>
+{
+public:
+    using TFutureBase<T>::TFutureBase;
+
+    //! Gets the value by moving it out of the future state, blocking until it's set.
+    /*!
+     *  \note Consider using NConcurrency::WaitFor(future) instead to avoid blocking and potential deadlocks when using fibers.
+     */
+    TErrorOr<T> BlockingGet() const;
+
+    //! Gets the value by moving it out if it's already set, crashes otherwise.
+    /*!
+     *  Use this call when you're certain the future is already set (e.g., after #IsSet check).
+     */
+    TErrorOr<T> GetOrCrash() const;
+
+    //! Similar to #TFuture::TryGet but extracts the value by moving it out of the future state;
+    //! returns null if the value is not set yet.
+    /*!
+     *  This call does not block.
+     */
+    std::optional<TErrorOr<T>> TryGet() const;
+
+    //! Similar to #TFuture::Subscribe but enables moving the value to the handler.
+    /*!
+     *  Normally at most one such handler could be attached.
+     */
+    void Subscribe(TCallback<void(TErrorOr<T>&&)> handler) const;
+
+    //! Same as #TFuture::Apply but assumes that this chaining will be the only subscriber.
+    template <class R>
+    TFuture<R> Apply(TCallback<R(TErrorOr<T>&&)> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TErrorOr<R>(TErrorOr<T>&&)> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TFuture<R>(TErrorOr<T>&&)> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TUniqueFuture<R>(TErrorOr<T>&&)> callback) const;
+
+private:
+    template <class U>
+    friend class TFutureBase;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+class [[nodiscard]] TUniqueFuture
+    : public TUniqueFutureBase<T>
+{
+public:
+    using TUniqueFutureBase<T>::TUniqueFutureBase;
+
+    //! Same as #TFuture::Apply but assumes that this chaining will be the only subscriber.
+    template <class R>
+    TFuture<R> Apply(TCallback<R(T&&)> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TFuture<R>(T&&)> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TUniqueFuture<R>(T&&)> callback) const;
+
+    using TUniqueFutureBase<T>::Apply;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <>
+class [[nodiscard]] TUniqueFuture<void>
+    : public TUniqueFutureBase<void>
+{
+public:
+    using TUniqueFutureBase<void>::TUniqueFutureBase;
+
+    //! Same as #TFuture::Apply but assumes that this chaining will be the only subscriber.
+    template <class R>
+    TFuture<R> Apply(TCallback<R()> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TFuture<R>()> callback) const;
+    template <class R>
+    TFuture<R> Apply(TCallback<TUniqueFuture<R>()> callback) const;
+
+    using TUniqueFutureBase<void>::Apply;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -448,21 +524,31 @@ public:
     //! Sets the value when #another future is set.
     template <class U>
     void SetFrom(const TFuture<U>& another) const;
+    template <class U>
+    void SetFrom(const TUniqueFuture<U>& another) const;
 
     //! Atomically invokes |Set|, if not already set or canceled.
     //! Returns |true| if succeeded, |false| is the promise was already set or canceled.
     bool TrySet(const TErrorOr<T>& value) const;
+    //! Same as above but takes #value by r-value reference.
+    //! If the promise is already set and |false| is returned, then #value is not affected.
     bool TrySet(TErrorOr<T>&& value) const;
 
     //! Similar to #SetFrom but calls #TrySet instead of #Set.
     template <class U>
     void TrySetFrom(const TFuture<U>& another) const;
 
-    //! Gets the value.
+    //! Gets the value, blocking until it's set.
     /*!
-     *  This call will block until the value is set.
+     *  \note Consider using NConcurrency::WaitFor(future) instead to avoid blocking and potential deadlocks when using fibers.
      */
-    const TErrorOr<T>& Get() const;
+    const TErrorOr<T>& BlockingGet() const;
+
+    //! Gets the value if it's already set, crashes otherwise.
+    /*!
+     *  Use this call when you're certain the promise is already set (e.g., after #IsSet check).
+     */
+    const TErrorOr<T>& GetOrCrash() const;
 
     //! Gets the value if set.
     /*!
@@ -593,10 +679,10 @@ public:
     ~TFutureHolder();
 
     TFutureHolder(const TFutureHolder<T>& other) = delete;
-    TFutureHolder(TFutureHolder<T>&& other) = default;
+    TFutureHolder(TFutureHolder<T>&& other) noexcept = default;
 
-    TFutureHolder& operator = (const TFutureHolder<T>& other) = delete;
-    TFutureHolder& operator = (TFutureHolder<T>&& other) = default;
+    TFutureHolder& operator=(const TFutureHolder<T>& other) = delete;
+    TFutureHolder& operator=(TFutureHolder<T>&& other) noexcept = default;
 
     //! Returns |true| if the holder has an underlying future.
     explicit operator bool() const;
@@ -742,7 +828,7 @@ TFuture<std::vector<TErrorOr<T>>> RunWithAllSucceededBoundedConcurrency(
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Enables runtime checks ensuring that no fiber context switch can happen
-//! during excution of a future handler.
+//! during execution of a future handler.
 //! See YT-25879 for more details.
 void ForbidContextSwitchInFutureHandler();
 bool IsContextSwitchInFutureHandlerForbidden();

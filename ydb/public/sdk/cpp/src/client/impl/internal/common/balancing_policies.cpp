@@ -3,16 +3,16 @@
 
 namespace NYdb::inline Dev {
 
-std::unique_ptr<TBalancingPolicy::TImpl> TBalancingPolicy::TImpl::UseAllNodes() {
-    return std::make_unique<TImpl>();
+TBalancingPolicy::TImpl TBalancingPolicy::TImpl::UseAllNodes() {
+    return {EPolicyType::UseAllNodes, std::nullopt, EPileState::UNSPECIFIED};
 }
 
-std::unique_ptr<TBalancingPolicy::TImpl> TBalancingPolicy::TImpl::UsePreferableLocation(const std::string& location) {
-    return std::make_unique<TImpl>(location);
+TBalancingPolicy::TImpl TBalancingPolicy::TImpl::UsePreferableLocation(const std::optional<std::string>& location) {
+    return {EPolicyType::UsePreferableLocation, location, EPileState::UNSPECIFIED};
 }
 
-std::unique_ptr<TBalancingPolicy::TImpl> TBalancingPolicy::TImpl::UsePreferablePileState(EPileState pileState) {
-    return std::make_unique<TImpl>(pileState);
+TBalancingPolicy::TImpl TBalancingPolicy::TImpl::UsePreferablePileState(EPileState pileState) {
+    return {EPolicyType::UsePreferablePileState, std::nullopt, pileState};
 }
 
 }

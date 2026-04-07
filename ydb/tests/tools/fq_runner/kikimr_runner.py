@@ -22,7 +22,7 @@ from yql.essentials.providers.common.proto import gateways_config_pb2
 from ydb.tests.tools.fq_runner.kikimr_metrics import load_metrics
 
 from ydb.tests.tools.fq_runner.mvp_mock import MvpMockServer
-from yatest.common.network import PortManager
+import library.python.port_manager
 from multiprocessing import Process
 from concurrent.futures import TimeoutError
 
@@ -181,7 +181,9 @@ class BaseTenant(abc.ABC):
             deadline = time.time() + max_waiting_time_sec
             bill_fname = self.kikimr_cluster.nodes[node_index].cwd + "/metering.bill"
             while time.time() < deadline:
-                meterings_loaded = sum(1 for _ in open(bill_fname))
+                with open(bill_fname) as bill_file:
+                    meterings_loaded = sum(1 for _ in bill_file)
+
                 if meterings_loaded >= meterings_expected:
                     break
 
@@ -363,15 +365,15 @@ class BaseTenant(abc.ABC):
         return self.get_checkpoint_coordinator_metric(query_id, "CompletedCheckpoints",
                                                       expect_counters_exist=expect_counters_exist)
 
-    def wait_completed_checkpoints(self, query_id, checkpoints_count,
+    def wait_completed_checkpoints(self, query_id, expected,
                                    timeout=plain_or_under_sanitizer_wrapper(30, 150),
                                    expect_counters_exist=False):
         deadline = time.time() + timeout
         while True:
             completed = self.get_completed_checkpoints(query_id, expect_counters_exist=expect_counters_exist)
-            if completed >= checkpoints_count:
+            if completed >= expected:
                 break
-            assert time.time() < deadline, "Wait zero checkpoint failed, actual completed: " + str(completed)
+            assert time.time() < deadline, "Wait checkpoint failed, actual current: " + str(completed) + ", expected " + str(expected)
             time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
 
     def wait_zero_checkpoint(self, query_id, timeout=plain_or_under_sanitizer_wrapper(30, 150),
@@ -537,6 +539,7 @@ class YqTenant(BaseTenant):
             'max_session_used_memory': 1000000,
             'without_consumer': True}
         fq_config['row_dispatcher']['coordinator'] = {'coordination_node_path': "row_dispatcher"}
+        fq_config['row_dispatcher']['coordinator']['rebalancing_timeout_sec'] = 30
         fq_config['row_dispatcher']['coordinator']['database'] = {}
         self.fill_storage_config(fq_config['row_dispatcher']['coordinator']['database'],
                                  "RowDispatcher_" + self.uuid)
@@ -604,7 +607,7 @@ class StreamingOverKikimr(object):
         if configuration is None:
             configuration = StreamingOverKikimrConfig()
         self.uuid = str(uuid.uuid4())
-        self.mvp_mock_port = PortManager().get_port()
+        self.mvp_mock_port = library.python.port_manager.PortManager().get_port()
         self.mvp_mock_server = Process(target=MvpMockServer(self.mvp_mock_port,  configuration.mvp_external_ydb_endpoint).serve_forever)
         self.tenants = {}
         _tenant_mapping = configuration.tenant_mapping.copy()

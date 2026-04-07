@@ -543,7 +543,12 @@ private:
 
     // TSupportsAttributes members
 
-    IAttributeDictionary* GetCustomAttributes() override
+    const IAttributeDictionary& CustomAttributes() const override
+    {
+        return Attributes();
+    }
+
+    IAttributeDictionary* MutableCustomAttributesOrNull() override
     {
         return MutableAttributes();
     }

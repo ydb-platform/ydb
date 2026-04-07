@@ -27,6 +27,17 @@ class TestBasicReading(SolomonReadingTestBase):
             return False, "values differ from canonical, have {}, should be {}".format(values, canon_values)
         return True, None
 
+    def check_query_result_size(self, result, error):
+        if error is not None:
+            return False, error
+
+        result_size = len(result[0].rows)
+
+        if (result_size != 1):
+            return False, "should only have a single return row, have: {}".format(result_size)
+
+        return True, None
+
     @link_test_case("#16398")
     def test_basic_reading_solomon(self):
         data_source_query = f"""
@@ -143,6 +154,18 @@ class TestBasicReading(SolomonReadingTestBase):
         result, error = self.execute_query(query)
         assert error is None, error
         assert any(column.name == "tt" for column in result[0].columns)
+
+        # query with a single second interval
+        query = """
+            SELECT * FROM local_solomon.basic_reading WITH (
+                selectors = @@{cluster="basic_reading", service="my_service", test_type="basic_reading_test"}@@,
+
+                from = "1970-01-01T00:00:00Z",
+                to = "1970-01-01T00:00:01Z"
+            )
+        """
+        succes, error = self.check_query_result_size(*self.execute_query(query))
+        assert succes, error
 
     @link_test_case("#23192")
     def test_basic_reading_monitoring(self):
@@ -262,3 +285,15 @@ class TestBasicReading(SolomonReadingTestBase):
         result, error = self.execute_query(query)
         assert error is None, error
         assert any(column.name == "tt" for column in result[0].columns)
+
+        # query with a single second interval
+        query = """
+            SELECT * FROM local_monitoring.my_service WITH (
+                selectors = @@{test_type="basic_reading_test"}@@,
+
+                from = "1970-01-01T00:00:00Z",
+                to = "1970-01-01T00:00:01Z"
+            )
+        """
+        succes, error = self.check_query_result_size(*self.execute_query(query))
+        assert succes, error

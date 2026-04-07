@@ -384,6 +384,24 @@ inline Ydb::Maintenance::Action MakeLockAction(ui32 nodeId, TDuration duration) 
     return action;
 }
 
+inline Ydb::Maintenance::Action MakeDrainAction(ui32 nodeId) {
+    Ydb::Maintenance::Action action;
+    auto *drainAction = action.mutable_drain_action();
+
+    drainAction->mutable_scope()->set_node_id(nodeId);
+
+    return action;
+}
+
+inline Ydb::Maintenance::Action MakeCordonAction(ui32 nodeId) {
+    Ydb::Maintenance::Action action;
+    auto *cordonAction = action.mutable_cordon_action();
+
+    cordonAction->mutable_scope()->set_node_id(nodeId);
+
+    return action;
+}
+
 inline void AddActionGroups(
         Ydb::Maintenance::CreateMaintenanceTaskRequest &req,
         const Ydb::Maintenance::ActionGroup &actionGroup) 

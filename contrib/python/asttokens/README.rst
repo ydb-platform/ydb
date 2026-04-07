@@ -8,7 +8,7 @@ ASTTokens
 .. image:: https://github.com/gristlabs/asttokens/actions/workflows/build-and-test.yml/badge.svg
     :target: https://github.com/gristlabs/asttokens/actions/workflows/build-and-test.yml
 .. image:: https://readthedocs.org/projects/asttokens/badge/?version=latest
-    :target: http://asttokens.readthedocs.io/en/latest/index.html
+    :target: https://asttokens.readthedocs.io/en/latest/index.html
 .. image:: https://coveralls.io/repos/github/gristlabs/asttokens/badge.svg
     :target: https://coveralls.io/github/gristlabs/asttokens
 
@@ -28,7 +28,7 @@ asttokens is available on PyPI: https://pypi.python.org/pypi/asttokens/::
 
 The code is on GitHub: https://github.com/gristlabs/asttokens.
 
-The API Reference is here: http://asttokens.readthedocs.io/en/latest/api-index.html.
+The API Reference is here: https://asttokens.readthedocs.io/en/latest/api-index.html.
 
 Usage
 -----

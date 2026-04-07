@@ -9,5 +9,5 @@ IComputationNode* WrapSkipWhile(TCallable& callable, const TComputationNodeFacto
 IComputationNode* WrapTakeWhileInclusive(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapSkipWhileInclusive(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

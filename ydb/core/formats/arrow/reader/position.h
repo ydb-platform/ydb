@@ -3,6 +3,7 @@
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/formats/arrow/permutations.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
+#include <ydb/core/scheme_types/scheme_type_info.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
@@ -12,6 +13,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <util/system/types.h>
+#include <util/datetime/base.h>
 
 namespace NKikimr::NArrow::NMerger {
 
@@ -110,6 +112,17 @@ private:
         return std::partial_ordering::equivalent;
     }
 
+    TSortableScanData(const ui64 start, const ui64 finish, const ui64 lastInit, const ui64 recordsCount,
+        const std::vector<std::shared_ptr<NAccessor::IChunkedArray>>& columns, const std::vector<std::shared_ptr<arrow::Field>>& fields)
+        : RecordsCount(recordsCount)
+        , Columns(columns)
+        , Fields(fields)
+        , StartPosition(start)
+        , FinishPosition(finish)
+        , LastInit(lastInit)
+    {
+    }
+
 public:
     TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch);
     TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns);
@@ -137,8 +150,15 @@ public:
         return PositionAddress[colIdx].GetAddress().GetLocalIndex(pos);
     }
 
-    std::shared_ptr<TSortableScanData> BuildCopy(const ui64 /*position*/) const {
+    std::shared_ptr<TSortableScanData> BuildCopy() const {
         return std::make_shared<TSortableScanData>(*this);
+    }
+
+    std::shared_ptr<TSortableScanData> Trim(const ui64 numFields) const {
+        AFL_VERIFY(numFields < Fields.size())("req", numFields)("self", Fields.size());
+        return std::make_shared<TSortableScanData>(TSortableScanData(StartPosition, FinishPosition, LastInit, RecordsCount,
+            std::vector<std::shared_ptr<NAccessor::IChunkedArray>>(Columns.begin(), Columns.begin() + numFields),
+            std::vector<std::shared_ptr<arrow::Field>>(Fields.begin(), Fields.begin() + numFields)));
     }
 
     TCursor BuildCursor(const ui64 position) const {
@@ -159,6 +179,10 @@ public:
     std::partial_ordering Compare(const ui64 position, const TSortableScanData& item, const ui64 itemPosition) const {
         AFL_VERIFY(PositionAddress.size() == item.PositionAddress.size());
         return CompareImpl(position, item, itemPosition, item.PositionAddress.size());
+    }
+
+    std::partial_ordering ComparePrefix(const ui64 position, const TSortableScanData& item, const ui64 itemPosition, const ui32 prefixSize) const {
+        return CompareImpl(position, item, itemPosition, prefixSize);
     }
 
     std::partial_ordering ComparePartial(const ui64 position, const TSortableScanData& item, const ui64 itemPosition) const {
@@ -192,17 +216,26 @@ public:
         return true;
     }
 
-    NJson::TJsonValue DebugJson(const ui64 position) const {
+    NJson::TJsonValue DebugJson(const ui64 position, const std::vector<NScheme::TTypeInfo>& pkTypes = {}) const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         auto& jsonFields = result.InsertValue("fields", NJson::JSON_ARRAY);
-        for (auto&& i : Fields) {
-            jsonFields.AppendValue(i->ToString());
+        for (ui32 i = 0; i < Fields.size(); ++i) {
+            if (i < pkTypes.size()) {
+                TStringBuilder sb;
+                sb << Fields[i]->name() << ": " << NScheme::TypeName(pkTypes[i]);
+                jsonFields.AppendValue(sb);
+            } else {
+                jsonFields.AppendValue(Fields[i]->ToString());
+            }
         }
+
         for (ui32 i = 0; i < Columns.size(); ++i) {
             auto& jsonColumn = result["sorting_columns"].AppendValue(NJson::JSON_MAP);
             jsonColumn["name"] = Fields[i]->name();
-            jsonColumn["value"] = PositionAddress[i].DebugString(position);
+            const NKikimr::NScheme::TTypeInfo* logicalType = (i < pkTypes.size()) ? &pkTypes[i] : nullptr;
+            jsonColumn["value"] = GetPositionAddress(i).DebugString(position, logicalType);
         }
+
         return result;
     }
 
@@ -213,6 +246,8 @@ public:
         }
         return result;
     }
+
+    std::shared_ptr<arrow::RecordBatch> MakeRecordBatch(const i64 position) const;
 };
 
 class TRWSortableBatchPosition;
@@ -360,6 +395,8 @@ public:
         return ReverseSort;
     }
     NJson::TJsonValue DebugJson() const;
+    
+    TString DebugString() const;
 
     TRWSortableBatchPosition BuildRWPosition(std::shared_ptr<arrow::RecordBatch> batch, const ui32 position) const;
 
@@ -454,10 +491,20 @@ public:
         return ApplyOptionalReverseForCompareResult(directResult);
     }
 
+    std::partial_ordering ComparePrefix(const TSortableBatchPosition& item, const ui32 prefixSize)  const {
+        Y_ABORT_UNLESS(item.ReverseSort == ReverseSort);
+        const auto directResult = Sorting->ComparePrefix(Position, *item.Sorting, item.GetPosition(), prefixSize);
+        return ApplyOptionalReverseForCompareResult(directResult);
+    }
+
     std::partial_ordering ComparePartial(const TSortableBatchPosition& item) const {
         Y_ABORT_UNLESS(item.ReverseSort == ReverseSort);
         const auto directResult = Sorting->ComparePartial(Position, *item.Sorting, item.GetPosition());
         return ApplyOptionalReverseForCompareResult(directResult);
+    }
+
+    TSortableBatchPosition TrimSortingKeys(const ui64 numSortingColumns) const {
+        return TSortableBatchPosition(Position, RecordsCount, ReverseSort, Sorting->Trim(numSortingColumns), Data);
     }
 
     std::partial_ordering Compare(const TSortableScanData& data, const ui64 dataPosition) const {
@@ -474,6 +521,22 @@ public:
 
     bool operator!=(const TSortableBatchPosition& item) const {
         return Compare(item) != std::partial_ordering::equivalent;
+    }
+
+    explicit operator size_t() const {
+        size_t h = (size_t)Position;
+        h = CombineHashes(h, (size_t)RecordsCount);
+        h = CombineHashes(h, (size_t)ReverseSort);
+        return h;
+    }
+
+    std::shared_ptr<arrow::Scalar> GetScalar(const ui32 colIdx) const {
+        AFL_VERIFY(colIdx < Sorting->GetColumns().size())("req", colIdx)("size", Sorting->GetColumns().size());
+        return Sorting->GetColumns()[colIdx]->GetScalar(Sorting->GetPositionInChunk(colIdx, Position));
+    }
+
+    std::shared_ptr<arrow::RecordBatch> MakeRecordBatch() const {
+        return Sorting->MakeRecordBatch(Position);
     }
 };
 

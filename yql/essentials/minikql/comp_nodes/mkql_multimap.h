@@ -8,5 +8,5 @@ IComputationNode* WrapMultiMap(TCallable& callable, const TComputationNodeFactor
 
 IComputationNode* WrapNarrowMultiMap(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

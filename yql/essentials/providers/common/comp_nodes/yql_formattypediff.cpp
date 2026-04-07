@@ -7,22 +7,23 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
-template<bool Pretty>
-class TFormatTypeDiffWrapper : public TMutableComputationNode<TFormatTypeDiffWrapper<Pretty>> {
-    typedef TMutableComputationNode<TFormatTypeDiffWrapper<Pretty>> TBaseComputation;
+template <bool Pretty>
+class TFormatTypeDiffWrapper: public TMutableComputationNode<TFormatTypeDiffWrapper<Pretty>> {
+    using TBaseComputation = TMutableComputationNode<TFormatTypeDiffWrapper<Pretty>>;
+
 public:
     TFormatTypeDiffWrapper(TComputationMutables& mutables, IComputationNode* handle_left, IComputationNode* handle_right)
         : TBaseComputation(mutables)
         , HandleLeft_(handle_left)
         , HandleRight_(handle_right)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         const NYql::TTypeAnnotationNode* type_left = GetYqlType(HandleLeft_->GetValue(ctx));
-        const NYql::TTypeAnnotationNode* type_right =  GetYqlType(HandleRight_->GetValue(ctx));
+        const NYql::TTypeAnnotationNode* type_right = GetYqlType(HandleRight_->GetValue(ctx));
         if constexpr (Pretty) {
             return MakeString(NYql::GetTypePrettyDiff(*type_left, *type_right));
         } else {
@@ -52,5 +53,4 @@ IComputationNode* WrapFormatTypeDiff(TCallable& callable, const TComputationNode
     return new TFormatTypeDiffWrapper<false>(ctx.Mutables, handle_left, handle_right);
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

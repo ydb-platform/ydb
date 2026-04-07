@@ -62,6 +62,32 @@ inline std::tuple<ui32, ui32, ui32> DecomposeVDiskServiceId(const TActorId& acto
     return {nodeId, pdiskId, vslotId};
 }
 
+inline TActorId MakeBlobStorageDDiskId(ui32 node, ui32 pdiskId, ui32 ddiskSlotId) {
+    char x[12] = {'D', 'D', 's', 'k'};
+    x[4] = pdiskId;
+    x[5] = pdiskId >> 8;
+    x[6] = pdiskId >> 16;
+    x[7] = pdiskId >> 24;
+    x[8] = ddiskSlotId;
+    x[9] = ddiskSlotId >> 8;
+    x[10] = ddiskSlotId >> 16;
+    x[11] = ddiskSlotId >> 24;
+    return TActorId(node, TStringBuf(x, 12));
+}
+
+inline TActorId MakeBlobStoragePersistentBufferId(ui32 node, ui32 pdiskId, ui32 ddiskSlotId) {
+    char x[12] = {'N', 'P', 'B', '_'};
+    x[4] = pdiskId;
+    x[5] = pdiskId >> 8;
+    x[6] = pdiskId >> 16;
+    x[7] = pdiskId >> 24;
+    x[8] = ddiskSlotId;
+    x[9] = ddiskSlotId >> 8;
+    x[10] = ddiskSlotId >> 16;
+    x[11] = ddiskSlotId >> 24;
+    return TActorId(node, TStringBuf(x, 12));
+}
+
 inline TActorId MakeBlobStoragePDiskID(ui32 node, ui32 pDiskID) {
     char x[12] = {'b','s','p','d','i','s','k', 0};
     x[8] = (char)pDiskID;
@@ -78,6 +104,11 @@ inline TActorId MakeBlobStorageReplBrokerID() {
 
 inline TActorId MakeBlobStorageSyncBrokerID() {
     char x[12] = {'b', 's', 's', 'y', 'n', 'c', 'b', 'r', 'o', 'k', 'e', 'r'};
+    return TActorId(0, TStringBuf(x, 12));
+}
+
+inline TActorId MakeBlobStorageCompBrokerID() {
+    char x[12] = {'b', 's', 'c', 'o', 'm', 'p', 'b', 'r', 'o', 'k', 'e', 'r'};
     return TActorId(0, TStringBuf(x, 12));
 }
 

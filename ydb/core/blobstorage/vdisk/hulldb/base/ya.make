@@ -8,6 +8,7 @@ PEERDIR(
 )
 
 SRCS(
+    blobstorage_blob.cpp
     blobstorage_blob.h
     blobstorage_hulldefs.cpp
     blobstorage_hulldefs.h
@@ -19,6 +20,7 @@ SRCS(
     hullbase_barrier.h
     hullbase_block.h
     hullbase_logoblob.h
+    hullbase_rec.h
     hullds_arena.h
     hullds_generic_it.h
     hullds_heap_it.h

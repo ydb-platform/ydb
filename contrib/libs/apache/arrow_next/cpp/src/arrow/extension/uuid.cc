@@ -17,10 +17,10 @@
 
 #include <sstream>
 
-#include "arrow/extension_type.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension_type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
-#include "arrow/extension/uuid.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension/uuid.h"
 
 namespace arrow20::extension {
 

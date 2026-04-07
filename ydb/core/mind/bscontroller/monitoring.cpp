@@ -1065,6 +1065,33 @@ void TBlobStorageController::RenderMonPage(IOutputStream& out) {
 
                 DIV_CLASS("panel panel-info") {
                     DIV_CLASS("panel-heading") {
+                        out << "Self Heal Settings";
+                    }
+                    DIV_CLASS("panel-body") {
+                        TABLE_CLASS("table table-condensed") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { out << "Parameter"; }
+                                    TABLEH() { out << "Value"; }
+                                }
+                            }
+
+                            TABLEBODY() {
+                                TABLER() {
+                                    TABLED() { out << "Prefer less occupied rack"; }
+                                    TABLED() { out << (SelfHealSettings.PreferLessOccupiedRack ? "enabled" : "disabled"); }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "With attention to replication"; }
+                                    TABLED() { out << (SelfHealSettings.WithAttentionToReplication ? "enabled" : "disabled"); }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
                         out << "Cluster Balancing Settings";
                     }
                     DIV_CLASS("panel-body") {
@@ -1092,6 +1119,14 @@ void TBlobStorageController::RenderMonPage(IOutputStream& out) {
                                 TABLER() {
                                     TABLED() { out << "Max replicating VDisks"; }
                                     TABLED() { out << ClusterBalancingSettings.MaxReplicatingVDisks; }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "Prefer less occupied rack"; }
+                                    TABLED() { out << (ClusterBalancingSettings.PreferLessOccupiedRack ? "enabled" : "disabled"); }
+                                }
+                                TABLER() {
+                                    TABLED() { out << "With attention to replication"; }
+                                    TABLED() { out << (ClusterBalancingSettings.WithAttentionToReplication ? "enabled" : "disabled"); }
                                 }
                             }
                         }
@@ -1136,6 +1171,8 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                         TABLEH() { out << "Total Size"; }
                         TABLEH() { out << "Status"; }
                         TABLEH() { out << "State"; }
+                        TABLEH() { out << "Decommit status"; }
+                        TABLEH() { out << "Maintenance status"; }
                         TABLEH() { out << "ExpectedSerial"; }
                         TABLEH() { out << "LastSeenSerial"; }
                         TABLEH() { out << "LastSeenPath"; }
@@ -1159,6 +1196,8 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                                     out << NKikimrBlobStorage::TPDiskState::E_Name(m.GetState());
                                 }
                             }
+                            TABLED() { out << NKikimrBlobStorage::EDecommitStatus_Name(pdisk->DecommitStatus); }
+                            TABLED() { out << NKikimrBlobStorage::TMaintenanceStatus::E_Name(pdisk->MaintenanceStatus); }
                             TABLED() { out << pdisk->ExpectedSerial.Quote(); }
                             TABLED() {
                                 TString color = pdisk->ExpectedSerial == pdisk->LastSeenSerial ? "green" : "red";

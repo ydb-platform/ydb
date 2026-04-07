@@ -368,7 +368,7 @@ void FromProto(NNodeTrackerClient::TNodeDescriptor* descriptor, const NNodeTrack
 
 } // namespace NProto
 
-bool operator == (const TNodeDescriptor& lhs, const TNodeDescriptor& rhs)
+bool operator==(const TNodeDescriptor& lhs, const TNodeDescriptor& rhs)
 {
     return
         lhs.GetDefaultAddress() == rhs.GetDefaultAddress() && // shortcut
@@ -379,7 +379,7 @@ bool operator == (const TNodeDescriptor& lhs, const TNodeDescriptor& rhs)
         GetSortedTags(lhs.GetTags()) == GetSortedTags(rhs.GetTags());
 }
 
-bool operator == (const TNodeDescriptor& lhs, const NProto::TNodeDescriptor& rhs)
+bool operator==(const TNodeDescriptor& lhs, const NProto::TNodeDescriptor& rhs)
 {
     if (std::ssize(lhs.Addresses()) != rhs.addresses().entries_size()) {
         return false;
@@ -707,7 +707,7 @@ const std::string& GetAddressOrThrow(const TAddressMap& addresses, const TNetwor
     }
 
     THROW_ERROR_EXCEPTION(EErrorCode::NoSuchNetwork,
-        "Cannot select address for host %v since there is no compatible network",
+        "Cannot select address for host %Qv since there is no compatible network",
         FindDefaultAddress(addresses))
         << TErrorAttribute("remote_networks", GetKeys(addresses))
         << TErrorAttribute("local_networks", networks);

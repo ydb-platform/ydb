@@ -4,6 +4,6 @@
 
 namespace NSQLHighlight {
 
-    IGenerator::TPtr MakeVimGenerator();
+IGenerator::TPtr MakeVimGenerator();
 
 } // namespace NSQLHighlight

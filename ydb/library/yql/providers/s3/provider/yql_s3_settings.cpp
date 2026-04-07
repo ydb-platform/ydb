@@ -1,13 +1,15 @@
 #include "yql_s3_settings.h"
+
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
+
 #include <util/generic/size_literals.h>
 
 namespace NYql {
 
 using namespace NCommon;
 
-TS3Configuration::TS3Configuration()
-{
+TS3Configuration::TS3Configuration() {
     REGISTER_SETTING(*this, SourceCoroActor);
     REGISTER_SETTING(*this, MaxOutputObjectSize);
     REGISTER_SETTING(*this, UniqueKeysCountLimit);
@@ -30,6 +32,7 @@ TS3Configuration::TS3Configuration()
     REGISTER_SETTING(*this, AsyncDecoding);
     REGISTER_SETTING(*this, UsePredicatePushdown);
     REGISTER_SETTING(*this, AsyncDecompressing);
+    REGISTER_SETTING(*this, OutputKeyFlushTimeout);
 }
 
 TS3Settings::TConstPtr TS3Configuration::Snapshot() const {
@@ -40,8 +43,7 @@ bool TS3Configuration::HasCluster(TStringBuf cluster) const {
     return GetValidClusters().contains(cluster);
 }
 
-void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeAnnotationContext> typeCtx)
-{
+void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeAnnotationContext> typeCtx) {
     for (auto& formatSizeLimit: config.GetFormatSizeLimit()) {
         if (formatSizeLimit.GetName()) { // ignore unnamed limits
             FormatSizeLimits.emplace(formatSizeLimit.GetName(), formatSizeLimit.GetFileSizeLimit());
@@ -89,7 +91,7 @@ void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeA
     this->SetValidClusters(clusters);
     this->Dispatch(config.GetDefaultSettings());
 
-    for (const auto& cluster: config.GetClusterMapping()) {
+    for (const auto& cluster : config.GetClusterMapping()) {
         this->Dispatch(cluster.GetName(), cluster.GetSettings());
         auto& settings = Clusters[cluster.GetName()];
         settings.Url = cluster.GetUrl();
@@ -102,4 +104,10 @@ void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeA
     this->FreezeDefaults();
 }
 
-} // NYql
+void TS3Configuration::CheckDisabledPragmas(TExprContext& ctx) const {
+    for (auto* disabledPragma : DisabledPragmas) {
+        disabledPragma->CheckDisabled(ctx);
+    }
+}
+
+} // namespace NYql

@@ -41,6 +41,7 @@ TExprNode::TPtr KeepColumnOrder(const TColumnOrder& order, const TExprNode::TPtr
 template<class TFieldsSet>
 bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TFieldsSet& usedFields, const TParentsMap& parentsMap,
                     bool allowDependsOn = true);
+bool IsFieldSubset(const TStructExprType& structType, const TStructExprType& sourceStructType);
 
 template<class TFieldsSet>
 TExprNode::TPtr FilterByFields(TPositionHandle position, const TExprNode::TPtr& input, const TFieldsSet& subsetFields,
@@ -109,6 +110,7 @@ TExprNode::TPtr MakeNull(TPositionHandle position, TExprContext& ctx);
 TExprNode::TPtr MakeConstMap(TPositionHandle position, const TExprNode::TPtr& input, const TExprNode::TPtr& value, TExprContext& ctx);
 TExprNode::TPtr MakeBoolNothing(TPositionHandle position, TExprContext& ctx);
 TExprNode::TPtr MakeBool(TPositionHandle position, bool value, TExprContext& ctx);
+TExprNode::TPtr MakeString(TPositionHandle position, TStringBuf buf, TExprContext& ctx);
 TExprNode::TPtr MakeOptionalBool(TPositionHandle position, bool value, TExprContext& ctx);
 template <bool Bool>
 TExprNode::TPtr MakeBool(TPositionHandle position, TExprContext& ctx);
@@ -171,8 +173,7 @@ TExprNode::TPtr KeepSideEffects(TExprNode::TPtr node, TExprNode::TPtr src, TExpr
 
 void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, const TParentsMap& parentsMap,
     TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx,
-    std::function<TExprNode::TPtr(const TExprNode::TPtr&, const TExprNode::TPtr&, const TParentsMap&, TExprContext&)> handler,
-    bool withOptionals = false);
+    std::function<TExprNode::TPtr(const TExprNode::TPtr&, const TExprNode::TPtr&, const TParentsMap&, TExprContext&)> handler);
 
 template<bool Ordered = false>
 std::optional<TPartOfConstraintBase::TPathType> GetPathToKey(const TExprNode& body, const TExprNode& arg);
@@ -206,7 +207,7 @@ bool IsOptimizerDisabled(const TTypeAnnotationContext& types) {
     return types.OptimizerFlags.contains(NormallizedName);
 }
 
-extern const char KeepWorldOptName[];
+extern const char KeepWorldOptName[]; // NOLINT(modernize-avoid-c-arrays)
 
 TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& root);
 
@@ -224,6 +225,11 @@ TExprNode::TPtr ReplaceUnessentials(TExprNode::TPtr predicate, TExprNode::TPtr r
 bool IsDependsOnUsage(const TExprNode& node, const TParentsMap& parentsMap);
 bool IsNormalizedDependsOn(const TExprNode& node);
 
+bool IsForbidConstantDependsEnabled(const TTypeAnnotationContext& types);
 bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeAnnotationContext& types);
+
+bool CanApplyExtractMembersToPartitionsByKeys(const TTypeAnnotationContext* types);
+
+bool IsEmitPruneKeysEnabled(const TTypeAnnotationContext* types);
 
 }

@@ -1,7 +1,6 @@
 #include "module.h"
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 using namespace NProtoBuf;
 
@@ -16,12 +15,11 @@ void TProtobufBase::GetAllFunctions(IFunctionsSink& sink) const {
 }
 
 void TProtobufBase::BuildFunctionTypeInfo(
-        const TStringRef& name,
-        TType* userType,
-        const TStringRef& typeConfig,
-        ui32 flags,
-        IFunctionTypeInfoBuilder& builder) const
-{
+    const TStringRef& name,
+    TType* userType,
+    const TStringRef& typeConfig,
+    ui32 flags,
+    IFunctionTypeInfoBuilder& builder) const {
     Y_UNUSED(userType);
     Y_UNUSED(typeConfig);
 
@@ -36,19 +34,24 @@ void TProtobufBase::BuildFunctionTypeInfo(
         if ((TStringRef::Of("Serialize") == name) || (TStringRef::Of("SerializeText") == name)) {
             // function signature:
             //    String Serialize(Protobuf value)
+            // clang-format off
             builder.Returns(stringType)
-                   .Args()->Add(typeInfo.StructType)
-                   .Flags(ICallablePayload::TArgumentFlags::AutoMap)
-                   .Done();
+                .Args()
+                    ->Add(typeInfo.StructType)
+                    .Flags(ICallablePayload::TArgumentFlags::AutoMap)
+                    .Done();
+            // clang-format on
         } else {
             // function signature:
             //    Protobuf Parse(String value)
+            // clang-format off
             builder.Returns(typeInfo.StructType)
-                   .Args()->Add(stringType)
-                   .Flags(ICallablePayload::TArgumentFlags::AutoMap)
-                   .Done();
+                .Args()
+                    ->Add(stringType)
+                    .Flags(ICallablePayload::TArgumentFlags::AutoMap)
+                    .Done();
+            // clang-format on
         }
-
 
         if (TStringRef::Of("Serialize") == name) {
             if ((flags & TFlags::TypesOnly) == 0) {
@@ -75,5 +78,4 @@ void TProtobufBase::BuildFunctionTypeInfo(
     }
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

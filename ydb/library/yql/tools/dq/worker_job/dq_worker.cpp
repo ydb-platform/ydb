@@ -250,8 +250,16 @@ namespace NYql::NDq::NWorker {
             YQL_LOG(DEBUG) << "deterministicMode On";
             pfOptions.Env["YQL_DETERMINISTIC_MODE"] = "1";
         }
+        if (backendConfig.HasEnforceRegexpProbabilityFail()) {
+            pfOptions.Env["YQL_RE2_REGEXP_PROBABILITY_FAIL"] = TString(std::to_string(backendConfig.GetEnforceRegexpProbabilityFail()));
+        } else {
+            pfOptions.Env["YQL_RE2_REGEXP_PROBABILITY_FAIL"] = "0";
+        }
         if (backendConfig.GetEnforceJobUtc()) {
             pfOptions.Env["TZ"] = "UTC0";
+        }
+        if (auto certFile = TryGetEnv("SSL_CERT_FILE")) {
+            pfOptions.Env["SSL_CERT_FILE"] = *certFile;
         }
         if (backendConfig.GetEnforceJobYtIsolation()) {
             pfOptions.Env["YT_ALLOW_HTTP_REQUESTS_TO_YT_FROM_JOB"] = "0";

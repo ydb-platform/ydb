@@ -1,6 +1,7 @@
 #pragma once
 #include "defs.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/core/control/lib/immediate_control_board_wrapper.h>
@@ -105,7 +106,11 @@ struct TPDiskConfig : public TThrRefBase {
 
     ui64 StartOwnerRound = 1ull;  // set only by warden
     TIntrusivePtr<NPDisk::TSectorMap> SectorMap; // set only by warden
-    bool EnableSectorEncryption = true;
+
+    // EnablePDiskDataEncryption feature flag is not the same as the DISABLE_PDISK_ENCRYPTION macro:
+    // unlike the macro, it does not disable metadata encryption.
+    // Tests need a runtime way to emulate DISABLE_PDISK_ENCRYPTION.
+    bool EnableFormatAndMetadataEncryption = true;
 
     ui32 ChunkSize = 128 << 20;
     ui32 SectorSize = 4 << 10;
@@ -134,10 +139,11 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 BufferPoolBufferSizeBytes;
     ui32 BufferPoolBufferCount;
     ui32 MaxQueuedCompletionActions;
+    ui32 IoPieceSizeBytes = 0;
     bool UseSpdkNvmeDriver;
 
     // Next 2 are either user-defined or inferred from drive size
-    ui64 ExpectedSlotCount = 0;
+    ui32 ExpectedSlotCount = 0;
     ui32 SlotSizeInUnits = 0;
 
     // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
@@ -145,7 +151,8 @@ struct TPDiskConfig : public TThrRefBase {
 
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
-    TControlWrapper MaxCommonLogChunks = 200;
+    i64 MaxCommonLogChunks = 200ll;
+    i64 CommonStaticLogChunks = 70ll;
     ui64 MinLogChunksTotal = 4ull; // for tiny disks
 
     // Common multiplier and divisor
@@ -168,6 +175,7 @@ struct TPDiskConfig : public TThrRefBase {
 
     ui32 CompletionThreadsCount = 1;
     bool UseNoopScheduler = false;
+    bool UseBytesFlightControl = false;
 
     bool PlainDataChunks = false;
 
@@ -176,6 +184,9 @@ struct TPDiskConfig : public TThrRefBase {
     bool MetadataOnly = false;
 
     bool ReadOnly = false;
+
+    // used for tests only
+    std::optional<ui64> NonceRandNum;
 
     TPDiskConfig(ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)
@@ -233,6 +244,9 @@ struct TPDiskConfig : public TThrRefBase {
         BufferPoolBufferSizeBytes = choose(128 << 10, 256 << 10, 512 << 10);
         BufferPoolBufferCount = choose(1024, 512, 256);
         MaxQueuedCompletionActions = BufferPoolBufferCount / 2;
+        IoPieceSizeBytes = choose(64 << 10, 64 << 10, 512 << 10);
+        // piece size should be ≤ buffer size
+        IoPieceSizeBytes = Min(IoPieceSizeBytes, BufferPoolBufferSizeBytes);
 
         UseSpdkNvmeDriver = Path.StartsWith("PCIe:");
         Y_VERIFY_S(!UseSpdkNvmeDriver || deviceType == NPDisk::DEVICE_TYPE_NVME,
@@ -291,7 +305,7 @@ struct TPDiskConfig : public TThrRefBase {
         }
         str << " StartOwnerRound# " << StartOwnerRound << x;
         str << " SectorMap# " << (SectorMap ? "true" : "false") << x;
-        str << " EnableSectorEncryption # " << EnableSectorEncryption << x;
+        str << " EnableSectorEncryption # " << FeatureFlags.GetEnablePDiskDataEncryption() << x;
 
         str << " ChunkSize# " << ChunkSize << x;
         str << " SectorSize# " << SectorSize << x;
@@ -319,6 +333,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " BufferPoolBufferSizeBytes# " << BufferPoolBufferSizeBytes << x;
         str << " BufferPoolBufferCount# " << BufferPoolBufferCount << x;
         str << " MaxQueuedCompletionActions# " << MaxQueuedCompletionActions << x;
+        str << " IoPieceSizeBytes# " << IoPieceSizeBytes << x;
         str << " ExpectedSlotCount# " << ExpectedSlotCount << x;
         str << " SlotSizeInUnits# " << SlotSizeInUnits << x;
 
@@ -332,6 +347,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " SpaceColorBorder# " << SpaceColorBorder << x;
         str << " CompletionThreadsCount# " << CompletionThreadsCount << x;
         str << " UseNoopScheduler# " << (UseNoopScheduler ? "true" : "false") << x;
+        str << " UseBytesFlightControl# " << (UseBytesFlightControl ? "true" : "false") << x;
         str << " PlainDataChunks# " << PlainDataChunks << x;
         str << " SeparateHugePriorities# " << SeparateHugePriorities << x;
         str << "}";
@@ -404,6 +420,9 @@ struct TPDiskConfig : public TThrRefBase {
         if (cfg->HasMaxQueuedCompletionActions()) {
             MaxQueuedCompletionActions = cfg->GetMaxQueuedCompletionActions();
         }
+        if (cfg->HasIoPieceSizeBytes()) {
+            IoPieceSizeBytes = cfg->GetIoPieceSizeBytes();
+        }
         if (cfg->HasInsaneLogChunksMultiplier()) {
             InsaneLogChunksMultiplier = cfg->GetInsaneLogChunksMultiplier();
         }
@@ -426,6 +445,9 @@ struct TPDiskConfig : public TThrRefBase {
         if (cfg->HasUseNoopScheduler()) {
             UseNoopScheduler = cfg->GetUseNoopScheduler();
         }
+        if (cfg->HasUseBytesFlightControl()) {
+            UseBytesFlightControl = cfg->GetUseBytesFlightControl();
+        }
         if (cfg->HasPlainDataChunks()) {
             PlainDataChunks = cfg->GetPlainDataChunks();
         }
@@ -447,6 +469,34 @@ struct TPDiskConfig : public TThrRefBase {
         ui32 vu = groupSizeInUnits ? groupSizeInUnits : 1;
         ui32 pu = slotSizeInUnits ? slotSizeInUnits : 1;
         return int(vu / pu) + !!(vu % pu);
+    }
+};
+
+struct TInferPDiskSlotCountSettingsForDriveType {
+    ui64 UnitSize = 0;
+    ui32 MaxSlots = 0;
+    bool PreferInferredSettingsOverExplicit = false;
+
+    TInferPDiskSlotCountSettingsForDriveType(const NKikimrBlobStorage::TInferPDiskSlotCountSettings& settings, NPDisk::EDeviceType type) {
+        switch (type) {
+            case NPDisk::DEVICE_TYPE_ROT:
+                UnitSize = settings.GetRot().GetUnitSize();
+                MaxSlots = settings.GetRot().GetMaxSlots();
+                PreferInferredSettingsOverExplicit = settings.GetRot().GetPreferInferredSettingsOverExplicit();
+                break;
+            case NPDisk::DEVICE_TYPE_SSD:
+            case NPDisk::DEVICE_TYPE_NVME:
+                UnitSize = settings.GetSsd().GetUnitSize();
+                MaxSlots = settings.GetSsd().GetMaxSlots();
+                PreferInferredSettingsOverExplicit = settings.GetSsd().GetPreferInferredSettingsOverExplicit();
+                break;
+            case NPDisk::DEVICE_TYPE_UNKNOWN:
+                break;
+        }
+    }
+
+    explicit operator bool() const {
+        return UnitSize && MaxSlots;
     }
 };
 

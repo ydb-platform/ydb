@@ -26,6 +26,14 @@
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 
+#if defined(__has_feature)
+#  if __has_feature(memory_sanitizer)
+#    include <sanitizer/msan_interface.h>
+#  else
+#    define __msan_unpoison(data, size)
+#  endif
+#endif
+
 #include <deque>
 
 namespace NKikimr::NBackup {
@@ -316,9 +324,12 @@ public:
             int bufferSize = static_cast<int>(dst.Avail());
             Y_VERIFY(bufferSize >= static_cast<int>(size));
 
-            if (int err = EVP_EncryptUpdate(Ctx.get(), reinterpret_cast<unsigned char*>(dst.Data() + dst.Size()), &bufferSize, data, static_cast<int>(size)); err <= 0) {
+            if (int err = EVP_EncryptUpdate(Ctx.get(), reinterpret_cast<unsigned char*>(dst.Pos()), &bufferSize, data, static_cast<int>(size)); err <= 0) {
                 throw yexception() << "Failed to write unencrypted data: " << GetOpenSslErrorText(err);
             }
+
+            __msan_unpoison(dst.Pos(), bufferSize);
+
             dst.Advance(static_cast<size_t>(bufferSize));
         }
     }
@@ -334,9 +345,12 @@ public:
     void FinalizeAndWriteMAC(TBuffer& dst) {
         // Finalize
         int bufferSize = static_cast<int>(dst.Avail());
-        if (int err = EVP_EncryptFinal_ex(Ctx.get(), reinterpret_cast<unsigned char*>(dst.Data() + dst.Size()), &bufferSize); err <= 0) {
+        if (int err = EVP_EncryptFinal_ex(Ctx.get(), reinterpret_cast<unsigned char*>(dst.Pos()), &bufferSize); err <= 0) {
             throw yexception() << "Failed to finalize encryption: " << GetOpenSslErrorText(err);
         }
+
+        __msan_unpoison(dst.Pos(), bufferSize);
+
         dst.Advance(static_cast<size_t>(bufferSize));
 
         // Write MAC
@@ -500,6 +514,9 @@ public:
             if (int err = EVP_DecryptUpdate(Ctx.get(), reinterpret_cast<unsigned char*>(data), &outSize, reinterpret_cast<const unsigned char*>(GetCurrentBufferData()), toDecrypt); err <= 0) {
                 ThrowFileIsCorrupted();
             }
+
+            __msan_unpoison(data, outSize);
+
             Y_VERIFY(static_cast<size_t>(outSize) == toDecrypt);
             CurrentBufferPos += static_cast<size_t>(outSize);
             size -= static_cast<size_t>(outSize);
@@ -686,9 +703,12 @@ public:
     void FinalizeAndCheckMAC(TBuffer& dst) {
         ReadMAC();
         int outLen = dst.Avail();
-        if (int err = EVP_DecryptFinal_ex(Ctx.get(), reinterpret_cast<unsigned char*>(dst.Data() + dst.Size()), &outLen); err <= 0) {
+        if (int err = EVP_DecryptFinal_ex(Ctx.get(), reinterpret_cast<unsigned char*>(dst.Pos()), &outLen); err <= 0) {
             ThrowFileIsCorrupted();
         }
+
+        __msan_unpoison(dst.Pos(), outLen);
+
         dst.Advance(outLen);
     }
 

@@ -39,6 +39,11 @@ namespace {
     constexpr i16 GRpcHandlersPerCompletionQueueInMaxPreparedCpuCase = 1000;
     constexpr i16 GRpcHandlersPerCompletionQueuePerCpu = GRpcHandlersPerCompletionQueueInMaxPreparedCpuCase / MaxPreparedCpuCount;
 
+    constexpr i16 SchedulerTinyCoresThreshold = 4;
+
+    constexpr ::arc_ui64 SchedulerDefaultResolution = 64;
+    constexpr ::arc_ui64 SchedulerTinyResolution = 1024;
+
     TShortPoolCfg ComputeCpuTable[MaxPreparedCpuCount + 1][5] {
         {  {0, 0},  {0, 0},   {0, 0}, {0, 0}, {0, 0} },     // 0
         {  {1, 1},  {0, 1},   {0, 1}, {0, 0}, {0, 0} },     // 1
@@ -227,7 +232,7 @@ namespace NKikimr::NAutoConfigInitializer {
         return servicePools;
     }
 
-    void ApplyAutoConfig(NKikimrConfig::TActorSystemConfig *config, bool isDynamicNode) {
+    void ApplyAutoConfig(NKikimrConfig::TActorSystemConfig *config, bool isDynamicNode, bool tinyMode) {
         config->SetUseAutoConfig(true);
         config->ClearExecutor();
 
@@ -236,10 +241,14 @@ namespace NKikimr::NAutoConfigInitializer {
         config->SetCpuCount(cpuCount);
 
         bool useSharedThreads = config->GetUseSharedThreads();
+        bool useUnitedPool = config->GetUseUnitedPool();
 
         if (!config->HasScheduler()) {
             auto *scheduler = config->MutableScheduler();
-            scheduler->SetResolution(64);
+
+            bool useTiny = tinyMode || (cpuCount >= 1 && cpuCount <= SchedulerTinyCoresThreshold);
+            scheduler->SetResolution(useTiny ? SchedulerTinyResolution : SchedulerDefaultResolution);
+
             scheduler->SetSpinThreshold(0);
             scheduler->SetProgressThreshold(10'000);
         }
@@ -279,10 +288,10 @@ namespace NKikimr::NAutoConfigInitializer {
             assignPool(batchExecutor, "Batch", 10, false);
             assignPool(icExecutor, "IC", 40, true);
 
-            batchExecutor->SetForcedForeignSlots(1);
-            userExecutor->SetForcedForeignSlots(2);
-            icExecutor->SetForcedForeignSlots(2);
-            systemExecutor->SetForcedForeignSlots(2);
+            batchExecutor->SetForcedForeignSlots(0);
+            userExecutor->SetForcedForeignSlots(cpuCount - 1);
+            icExecutor->SetForcedForeignSlots(Min(1, cpuCount - 1));
+            systemExecutor->SetForcedForeignSlots(Min(1, cpuCount - 1));
 
             if (cpuCount >= 2) {
                 userExecutor->AddAdjacentPools(2);
@@ -372,6 +381,7 @@ namespace NKikimr::NAutoConfigInitializer {
             executor->SetMaxThreads(Max(cfg.MaxThreadCount, threadsCount));
             executor->SetPriority(priorities[poolIdx]);
             executor->SetName(names[poolIdx]);
+            executor->SetAllThreadsAreShared(useUnitedPool);
 
             if (names[poolIdx] == TASPools::CommonPoolName) {
                 executor->SetSpinThreshold(0);
@@ -411,8 +421,10 @@ namespace NKikimr::NAutoConfigInitializer {
 
 namespace NKikimr {
     bool NeedToUseAutoConfig(const NKikimrConfig::TActorSystemConfig& config) {
-        return config.GetUseAutoConfig()
-            || config.HasNodeType()
-            || config.HasCpuCount();
+        bool hasSpecialFields = config.HasNodeType() || config.HasCpuCount();
+        if (!config.HasUseAutoConfig() && hasSpecialFields) {
+            return true;
+        }
+        return config.GetUseAutoConfig();
     }
 }

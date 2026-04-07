@@ -1,7 +1,7 @@
 #include "mkql_time_order_recover.h"
 #include "mkql_saveload.h"
 
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
@@ -13,12 +13,13 @@ namespace {
 
 constexpr ui32 StateVersion = 1;
 
-class TTimeOrderRecover : public TStatefulFlowComputationNode<TTimeOrderRecover, true> {
+class TTimeOrderRecover: public TStatefulFlowComputationNode<TTimeOrderRecover, true> {
     using TBaseComputation = TStatefulFlowComputationNode<TTimeOrderRecover, true>;
+
 public:
     class TState: public TComputationValue<TState> {
     public:
-        using TTimestamp = i64; //use signed integers to simplify arithmetics
+        using TTimestamp = i64; // use signed integers to simplify arithmetics
         using TTimeinterval = i64;
         using TSelf = TTimeOrderRecover;
 
@@ -39,7 +40,8 @@ public:
             , Terminating(false)
             , MonotonicCounter(0)
             , Ctx(ctx)
-        {}
+        {
+        }
 
     private:
         using THeapKey = std::pair<TTimestamp, ui64>;
@@ -52,18 +54,25 @@ public:
             std::vector<TEntry, TMKQLAllocator<TEntry>>,
             decltype(Greater)>;
 
-
         struct THeap: public TStdHeap {
-            template<typename...TArgs>
-            THeap(TArgs... args) : TStdHeap(args...) {}
-            
-            auto begin() const { return c.begin(); }
-            auto end() const { return c.end(); }
-            auto clear() { return c.clear(); }
+            template <typename... TArgs>
+            THeap(TArgs... args)
+                : TStdHeap(args...)
+            {
+            }
+
+            auto begin() const {
+                return c.begin();
+            }
+            auto end() const {
+                return c.end();
+            }
+            auto clear() {
+                return c.clear();
+            }
         };
 
     public:
-
         NUdf::TUnboxedValue GetOutputIfReady() {
             if (Terminating && Heap.empty()) {
                 return NUdf::TUnboxedValue::MakeFinish();
@@ -80,7 +89,7 @@ public:
             }
             return NUdf::TUnboxedValue{};
         }
-        ///return input row in case it cannot process it correctly
+        /// return input row in case it cannot process it correctly
         NUdf::TUnboxedValue ProcessRow(TTimestamp t, NUdf::TUnboxedValue&& row) {
             MKQL_ENSURE(!row.IsSpecial(), "Internal logic error");
             MKQL_ENSURE(Heap.size() < RowLimit, "Internal logic error");
@@ -100,7 +109,6 @@ public:
         }
 
     private:
-
         bool HasListItems() const override {
             return false;
         }
@@ -144,13 +152,13 @@ public:
         }
 
     private:
-        const TSelf *const Self;
+        const TSelf* const Self;
         THeap Heap;
         const TTimeinterval Delay;
         const TTimeinterval Ahead;
         const ui32 RowLimit;
         TTimestamp Latest;
-        bool Terminating; //not applicable for streams, but useful for debug and testing
+        bool Terminating; // not applicable for streams, but useful for debug and testing
         ui64 MonotonicCounter;
         TComputationContext& Ctx;
     };
@@ -179,7 +187,8 @@ public:
         , Cache(mutables)
         , StateType(stateType)
         , Packer(mutables)
-    { }
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(NUdf::TUnboxedValue& stateValue, TComputationContext& ctx) const {
         if (stateValue.IsInvalid()) {
@@ -204,7 +213,7 @@ public:
                 stateValue = state;
             }
         }
-        auto& state = *static_cast<TState *>(stateValue.AsBoxed().Get());
+        auto& state = *static_cast<TState*>(stateValue.AsBoxed().Get());
         while (true) {
             if (auto out = state.GetOutputIfReady()) {
                 return AddColumn(std::move(out), false, ctx);
@@ -225,6 +234,7 @@ public:
             }
         }
     }
+
 private:
     void RegisterDependencies() const final {
         if (const auto flow = FlowDependsOn(InputFlow)) {
@@ -263,32 +273,21 @@ private:
     TMutableObjectOverBoxedValue<TValuePackerBoxed> Packer;
 };
 
-} //namespace
+} // namespace
 
 IComputationNode* TimeOrderRecover(const TComputationNodeFactoryContext& ctx,
-    TRuntimeNode inputFlow,
-    TRuntimeNode inputRowArg,
-    TRuntimeNode rowTime,
-    TRuntimeNode inputRowColumnCount,
-    TRuntimeNode outOfOrderColumnIndex,
-    TRuntimeNode delay,
-    TRuntimeNode ahead,
-    TRuntimeNode rowLimit)
+                                   TRuntimeNode inputFlow,
+                                   TRuntimeNode inputRowArg,
+                                   TRuntimeNode rowTime,
+                                   TRuntimeNode inputRowColumnCount,
+                                   TRuntimeNode outOfOrderColumnIndex,
+                                   TRuntimeNode delay,
+                                   TRuntimeNode ahead,
+                                   TRuntimeNode rowLimit)
 {
     auto* rowType = AS_TYPE(TStructType, AS_TYPE(TFlowType, inputFlow.GetStaticType())->GetItemType());
 
-    return new TTimeOrderRecover(ctx.Mutables
-        , GetValueRepresentation(inputFlow.GetStaticType())
-        , LocateNode(ctx.NodeLocator, *inputFlow.GetNode())
-        , static_cast<IComputationExternalNode*>(LocateNode(ctx.NodeLocator, *inputRowArg.GetNode()))
-        , LocateNode(ctx.NodeLocator, *rowTime.GetNode())
-        , AS_VALUE(TDataLiteral, inputRowColumnCount)->AsValue().Get<ui32>()
-        , AS_VALUE(TDataLiteral, outOfOrderColumnIndex)->AsValue().Get<ui32>()
-        , LocateNode(ctx.NodeLocator, *delay.GetNode())
-        , LocateNode(ctx.NodeLocator, *ahead.GetNode())
-        , LocateNode(ctx.NodeLocator, *rowLimit.GetNode())
-        , rowType
-    );
+    return new TTimeOrderRecover(ctx.Mutables, GetValueRepresentation(inputFlow.GetStaticType()), LocateNode(ctx.NodeLocator, *inputFlow.GetNode()), static_cast<IComputationExternalNode*>(LocateNode(ctx.NodeLocator, *inputRowArg.GetNode())), LocateNode(ctx.NodeLocator, *rowTime.GetNode()), AS_VALUE(TDataLiteral, inputRowColumnCount)->AsValue().Get<ui32>(), AS_VALUE(TDataLiteral, outOfOrderColumnIndex)->AsValue().Get<ui32>(), LocateNode(ctx.NodeLocator, *delay.GetNode()), LocateNode(ctx.NodeLocator, *ahead.GetNode()), LocateNode(ctx.NodeLocator, *rowLimit.GetNode()), rowType);
 }
 
-}//namespace NKikimr::NMiniKQL
+} // namespace NKikimr::NMiniKQL

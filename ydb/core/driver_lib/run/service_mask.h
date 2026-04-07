@@ -83,6 +83,9 @@ union TBasicKikimrServicesMask {
         bool EnableCompPriorities : 1;
         bool EnableGeneralCachePortionsMetadata: 1;
         bool EnableGeneralCacheColumnData: 1;
+        bool EnableOverloadManager : 1;
+        bool EnableCountersInfoProvider : 1;
+        bool EnableNBSService : 1;
     };
 
     struct {
@@ -113,6 +116,7 @@ union TBasicKikimrServicesMask {
         EnableViewerService = true;
         EnableMeteringWriter = true;
         EnableProfiler = true;
+        EnableStateStorageService = true;
     }
 
     void SetTinyMode() {

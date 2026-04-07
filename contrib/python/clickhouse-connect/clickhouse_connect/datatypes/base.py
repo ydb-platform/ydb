@@ -41,6 +41,7 @@ class ClickHouseType(ABC):
     encoding = 'utf8'
     np_type = 'O'  # Default to Numpy Object type
     nano_divisor = 0  # Only relevant for date like objects
+    pd_datetime_res = "ns"  # Default date-like resolution for pd
     byte_size = 0
     valid_formats = 'native'
 

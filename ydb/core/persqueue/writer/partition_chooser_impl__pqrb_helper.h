@@ -19,7 +19,7 @@ public:
     }
 
     void SendRequest(const NActors::TActorContext& ctx) {
-        Y_ABORT_UNLESS(BalancerTabletId);
+        Y_ENSURE(BalancerTabletId);
 
         if (!Pipe) {
             NTabletPipe::TClientConfig clientConfig;

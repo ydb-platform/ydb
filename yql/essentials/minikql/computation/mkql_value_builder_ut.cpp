@@ -12,14 +12,12 @@
 #include <arrow/scalar.h>
 #include <arrow/chunked_array.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 TString PgValueToNativeText(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId);
 TString PgValueToNativeBinary(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId);
 
-}
-}
+} // namespace NYql::NCommon
 
 namespace NKikimr {
 
@@ -29,10 +27,10 @@ using namespace NYql::NCommon;
 namespace NMiniKQL {
 
 namespace {
-    TString AsString(const TStringValue& v) {
-        return { v.Data(), v.Size() };
-    }
+TString AsString(const TStringValue& v) {
+    return {v.Data(), v.Size()};
 }
+} // namespace
 
 class TMiniKQLValueBuilderTest: public TTestBase {
 public:
@@ -44,7 +42,7 @@ public:
         , HolderFactory_(Alloc_.Ref(), MemInfo_, FunctionRegistry_.Get())
         , Builder_(HolderFactory_, NUdf::EValidatePolicy::Exception)
         , TypeInfoHelper_(new TTypeInfoHelper())
-        , FunctionTypeInfoBuilder_(NYql::UnknownLangVersion, Env_, TypeInfoHelper_, "", nullptr, {})
+        , FunctionTypeInfoBuilder_(NYql::UnknownLangVersion, Env_, TypeInfoHelper_, "", nullptr, TSourcePosition())
     {
         BoolOid_ = NYql::NPg::LookupType("bool").TypeId;
     }
@@ -65,21 +63,20 @@ private:
     ui32 BoolOid_ = 0;
 
     UNIT_TEST_SUITE(TMiniKQLValueBuilderTest);
-        UNIT_TEST(TestEmbeddedVariant);
-        UNIT_TEST(TestBoxedVariant);
-        UNIT_TEST(TestSubstring);
-        UNIT_TEST(TestPgValueFromErrors);
-        UNIT_TEST(TestPgValueFromText);
-        UNIT_TEST(TestPgValueFromBinary);
-        UNIT_TEST(TestConvertToFromPg);
-        UNIT_TEST(TestConvertToFromPgNulls);
-        UNIT_TEST(TestPgNewString);
-        UNIT_TEST(TestArrowBlock);
+    UNIT_TEST(TestEmbeddedVariant);
+    UNIT_TEST(TestBoxedVariant);
+    UNIT_TEST(TestSubstring);
+    UNIT_TEST(TestPgValueFromErrors);
+    UNIT_TEST(TestPgValueFromText);
+    UNIT_TEST(TestPgValueFromBinary);
+    UNIT_TEST(TestConvertToFromPg);
+    UNIT_TEST(TestConvertToFromPgNulls);
+    UNIT_TEST(TestPgNewString);
+    UNIT_TEST(TestArrowBlock);
     UNIT_TEST_SUITE_END();
 
-
     void TestEmbeddedVariant() {
-        const auto v = Builder_.NewVariant(62, TUnboxedValuePod((ui64) 42));
+        const auto v = Builder_.NewVariant(62, TUnboxedValuePod((ui64)42));
         UNIT_ASSERT(v);
         UNIT_ASSERT(!v.IsBoxed());
         UNIT_ASSERT_VALUES_EQUAL(62, v.GetVariantIndex());
@@ -87,7 +84,7 @@ private:
     }
 
     void TestBoxedVariant() {
-        const auto v = Builder_.NewVariant(63, TUnboxedValuePod((ui64) 42));
+        const auto v = Builder_.NewVariant(63, TUnboxedValuePod((ui64)42));
         UNIT_ASSERT(v);
         UNIT_ASSERT(v.IsBoxed());
         UNIT_ASSERT_VALUES_EQUAL(63, v.GetVariantIndex());
@@ -149,7 +146,7 @@ private:
 
     void TestPgValueFromText() {
         const TBindTerminator bind(&Builder_);
-        for (auto validTrue : { "t"sv, "true"sv }) {
+        for (auto validTrue : {"t"sv, "true"sv}) {
             TStringValue error("");
             auto r = GetPgBuilder().ValueFromText(BoolOid_, validTrue, error);
             UNIT_ASSERT(r);
@@ -158,7 +155,7 @@ private:
             UNIT_ASSERT_VALUES_EQUAL(s, "t");
         }
 
-        for (auto validFalse : { "f"sv, "false"sv }) {
+        for (auto validFalse : {"f"sv, "false"sv}) {
             TStringValue error("");
             auto r = GetPgBuilder().ValueFromText(BoolOid_, validFalse, error);
             UNIT_ASSERT(r);
@@ -331,7 +328,7 @@ private:
             std::shared_ptr<arrow::Array> builder2Result;
             UNIT_ASSERT(builder2.Finish(&builder2Result).ok());
 
-            auto chunked = arrow::ChunkedArray::Make({ builder1Result, builder2Result }).ValueOrDie();
+            auto chunked = arrow::ChunkedArray::Make({builder1Result, builder2Result}).ValueOrDie();
             arrow::Datum d1(chunked);
             NUdf::TUnboxedValue val1 = HolderFactory_.CreateArrowBlock(std::move(d1));
 
@@ -342,10 +339,10 @@ private:
             UNIT_ASSERT(!isScalar);
             UNIT_ASSERT_VALUES_EQUAL(length, 5);
 
-            ArrowArray arrs[2];
+            std::array<ArrowArray, 2> arrs;
             Builder_.ExportArrowBlock(val1, 0, &arrs[0]);
             Builder_.ExportArrowBlock(val1, 1, &arrs[1]);
-            NUdf::TUnboxedValue val2 = Builder_.ImportArrowBlock(arrs, 2, isScalar, *atype);
+            NUdf::TUnboxedValue val2 = Builder_.ImportArrowBlock(arrs.data(), 2, isScalar, *atype);
             const auto& d2 = TArrowBlock::From(val2).GetDatum();
             UNIT_ASSERT(d2.is_arraylike() && !d2.is_array());
             UNIT_ASSERT_VALUES_EQUAL(d2.length(), 5);
@@ -369,5 +366,5 @@ private:
 
 UNIT_TEST_SUITE_REGISTRATION(TMiniKQLValueBuilderTest);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

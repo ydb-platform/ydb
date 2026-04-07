@@ -86,11 +86,11 @@
  * https://github.com/cyrusimap/cyrus-imapd/blob/master/lib/crc32.c
  */
 
-#include "arrow/util/crc32.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/crc32.h"
 
 #include <cstdint>
 
-#include "arrow/util/endian.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/endian.h"
 
 namespace arrow20 {
 namespace internal {

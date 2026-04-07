@@ -11,7 +11,7 @@ namespace NKikimr::NColumnShard {
 class TTableStatsBuilder {
 private:
     TCountersManager& Counters;
-    const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor& Executor;
+    const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* Executor;
 
     void FillPortionStats(::NKikimrTableStats::TTableStats& to, const NOlap::TSimplePortionsGroupInfo& from) const {
         to.SetRowCount(from.GetRecordsCount());
@@ -19,26 +19,28 @@ private:
     }
 
 public:
-    TTableStatsBuilder(TCountersManager& counters, const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* executor)
+    TTableStatsBuilder(TCountersManager& counters, const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* executor = nullptr)
         : Counters(counters)
-        , Executor(*executor) {
+        , Executor(executor) {
     }
 
     void FillTableStats(TInternalPathId pathId, ::NKikimrTableStats::TTableStats& tableStats) {
         Counters.FillTableStats(pathId, tableStats);
 
-        auto activeStats = Counters.GetPortionIndexCounters()->GetTableStats(pathId, TPortionIndexStats::TActivePortions());
-        FillPortionStats(tableStats, activeStats);
+        auto diskUsedPortionsStats = Counters.GetPortionIndexCounters()->GetTableStats(pathId, TPortionIndexStats::TDiskUsedPortions());
+        FillPortionStats(tableStats, diskUsedPortionsStats);
     }
 
     void FillTotalTableStats(::NKikimrTableStats::TTableStats& tableStats) {
         Counters.FillTotalTableStats(tableStats);
 
-        tableStats.SetInFlightTxCount(Executor.GetStats().TxInFly);
-        tableStats.SetHasLoanedParts(Executor.HasLoanedParts());
+        if (Executor) {
+            tableStats.SetInFlightTxCount(Executor->GetStats().TxInFly);
+            tableStats.SetHasLoanedParts(Executor->HasLoanedParts());
+        }
 
-        auto activeStats = Counters.GetPortionIndexCounters()->GetTotalStats(TPortionIndexStats::TActivePortions());
-        FillPortionStats(tableStats, activeStats);
+        auto diskUsedPortionsStats = Counters.GetPortionIndexCounters()->GetTotalStats(TPortionIndexStats::TDiskUsedPortions());
+        FillPortionStats(tableStats, diskUsedPortionsStats);
     }
 };
 

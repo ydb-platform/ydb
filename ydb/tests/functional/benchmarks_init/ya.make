@@ -5,12 +5,13 @@ TEST_SRCS(
     test_init.py
 )
 
-SIZE(MEDIUM)
+REQUIREMENTS(ram:16 cpu:4)
 
-IF(NOT SANITIZER_TYPE)
-    REQUIREMENTS(ram:8)
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
-    REQUIREMENTS(ram:16)
+    SIZE(MEDIUM)
 ENDIF()
 
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")

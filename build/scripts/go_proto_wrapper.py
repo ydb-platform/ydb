@@ -8,7 +8,6 @@ import subprocess
 import sys
 import tempfile
 
-
 OUT_DIR_FLAG_PATTERN = re.compile(r'^(--go(([-_]\w+))*_out=)')
 
 
@@ -66,7 +65,9 @@ def main(args):
         subprocess.check_output(args, stdin=None, stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError as e:
         sys.stderr.write(
-            '{} returned non-zero exit code {}.\n{}\n'.format(' '.join(e.cmd), e.returncode, e.output.decode('utf-8', errors='ignore'))
+            '{} returned non-zero exit code {}.\n{}\n'.format(
+                ' '.join(e.cmd), e.returncode, e.output.decode('utf-8', errors='ignore')
+            )
         )
         return e.returncode
 
@@ -79,7 +80,11 @@ def main(args):
         out_dir_dst = os.path.join(out_dir_orig, contrib_prefix)
     else:
         out_dir_src = os.path.normpath(os.path.join(out_dir_src_arcadia_prefix, proto_namespace))
-        assert os.path.isdir(out_dir_src), 'Make sure your proto namespace {} is correctly set in go_package, path not found {}'.format(proto_namespace, out_dir_src)
+        assert os.path.isdir(
+            out_dir_src
+        ), 'Make sure your proto namespace {} is correctly set in go_package, path not found {}'.format(
+            proto_namespace, out_dir_src
+        )
         out_dir_dst = out_dir_orig
 
     move_tree(out_dir_src, out_dir_dst)

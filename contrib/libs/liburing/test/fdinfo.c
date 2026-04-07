@@ -58,7 +58,7 @@ static void fdinfo_read(struct io_uring *ring)
 
 static int __test_io(const char *file, struct io_uring *ring, int write,
 		     int buffered, int sqthread, int fixed, int nonvec,
-		     int buf_select, int seq, int exp_len)
+		     int buf_select, int seq, int exp_len, int mixed)
 {
 	struct io_uring_sqe *sqe;
 	struct io_uring_cqe *cqe;
@@ -67,9 +67,9 @@ static int __test_io(const char *file, struct io_uring *ring, int write,
 	off_t offset;
 
 #ifdef VERBOSE
-	fprintf(stdout, "%s: start %d/%d/%d/%d/%d: ", __FUNCTION__, write,
+	fprintf(stdout, "%s: start %d/%d/%d/%d/%d/%d: ", __FUNCTION__, write,
 							buffered, sqthread,
-							fixed, nonvec);
+							fixed, nonvec, mixed);
 #endif
 	if (write)
 		open_flags = O_WRONLY;
@@ -108,6 +108,17 @@ static int __test_io(const char *file, struct io_uring *ring, int write,
 
 	offset = 0;
 	for (i = 0; i < BUFFERS; i++) {
+		if (mixed && i & 1) {
+			sqe = io_uring_get_sqe128(ring);
+			if (!sqe) {
+				fprintf(stderr, "sqe get failed\n");
+				goto err;
+			}
+			io_uring_prep_nop128(sqe);
+			sqe->user_data = i;
+			continue;
+		}
+
 		sqe = io_uring_get_sqe(ring);
 		if (!sqe) {
 			fprintf(stderr, "sqe get failed\n");
@@ -168,11 +179,16 @@ static int __test_io(const char *file, struct io_uring *ring, int write,
 			offset += BS;
 	}
 
+	__io_uring_flush_sq(ring);
 	fdinfo_read(ring);
 
 	ret = io_uring_submit(ring);
-	if (ret != BUFFERS) {
+	if (!mixed && ret != BUFFERS) {
 		fprintf(stderr, "submit got %d, wanted %d\n", ret, BUFFERS);
+		goto err;
+	} else if (mixed && ret != BUFFERS + (BUFFERS >> 1)) {
+		fprintf(stderr, "submit got %d, wanted %d\n", ret,
+			BUFFERS + (BUFFERS >> 1));
 		goto err;
 	}
 
@@ -187,7 +203,13 @@ static int __test_io(const char *file, struct io_uring *ring, int write,
 			fprintf(stderr, "wait_cqe=%d\n", ret);
 			goto err;
 		}
-		if (cqe->res == -EINVAL && nonvec) {
+		if (mixed && cqe->user_data & 1) {
+			if (cqe->user_data > 32) {
+				fprintf(stderr, "cqe user data %lld, max expected %d\n",
+					cqe->user_data, BUFFERS - 1);
+				goto err;
+			}
+		} else if (cqe->res == -EINVAL && nonvec) {
 			if (!warned) {
 				fprintf(stdout, "Non-vectored IO not "
 					"supported, skipping\n");
@@ -253,15 +275,19 @@ err:
 	return 1;
 }
 static int test_io(const char *file, int write, int buffered, int sqthread,
-		   int fixed, int nonvec, int exp_len)
+		   int fixed, int nonvec, int exp_len, int mixed)
 {
 	struct io_uring ring;
-	int ret, ring_flags = 0;
+	int ret, ring_flags = 0, entries = 64;
 
 	if (sqthread)
 		ring_flags = IORING_SETUP_SQPOLL;
+	if (mixed) {
+		ring_flags |= IORING_SETUP_SQE_MIXED;
+		entries = 128;
+	}
 
-	ret = t_create_ring(64, &ring, ring_flags);
+	ret = t_create_ring(entries, &ring, ring_flags);
 	if (ret == T_SETUP_SKIP)
 		return 0;
 	if (ret != T_SETUP_OK) {
@@ -270,7 +296,7 @@ static int test_io(const char *file, int write, int buffered, int sqthread,
 	}
 
 	ret = __test_io(file, &ring, write, buffered, sqthread, fixed, nonvec,
-			0, 0, exp_len);
+			0, 0, exp_len, mixed);
 	io_uring_queue_exit(&ring);
 	return ret;
 }
@@ -380,17 +406,18 @@ int main(int argc, char *argv[])
 	vecs = t_create_buffers(BUFFERS, BS);
 
 	/* if we don't have nonvec read, skip testing that */
-	nr = has_nonvec_read() ? 32 : 16;
+	nr = has_nonvec_read() ? 64 : 32;
 
 	for (i = 0; i < nr; i++) {
 		int write = (i & 1) != 0;
 		int buffered = (i & 2) != 0;
 		int sqthread = (i & 4) != 0;
 		int fixed = (i & 8) != 0;
-		int nonvec = (i & 16) != 0;
+		int mixed = (i & 16) != 0;
+		int nonvec = (i & 32) != 0;
 
 		ret = test_io(fname, write, buffered, sqthread, fixed, nonvec,
-			      BS);
+			      BS, mixed);
 		if (ret == T_EXIT_SKIP)
 			continue;
 		if (ret) {

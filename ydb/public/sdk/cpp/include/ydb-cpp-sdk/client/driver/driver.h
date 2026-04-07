@@ -8,6 +8,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/executor/executor.h>
 
 #include <library/cpp/logger/backend.h>
 
@@ -30,6 +31,9 @@ public:
     //! Endpoint to initiate connections with Ydb cluster,
     //! client will connect to others nodes according to client loadbalancing
     TDriverConfig& SetEndpoint(const std::string& endpoint);
+
+    //! Get endpoint, returns the endpoint set via connection string or SetEndpoint()
+    const std::string& GetEndpoint() const;
 
     //! Set number of network threads, default: 2
     TDriverConfig& SetNetworkThreadsNum(size_t sz);
@@ -54,7 +58,7 @@ public:
     //! Enable Ssl.
     //! caCerts  - The buffer containing the PEM encoded root certificates for SSL/TLS connections.
     //!            If this parameter is empty, the default roots will be used.
-    TDriverConfig& UseSecureConnection(const std::string& caCerts = std::string());
+    TDriverConfig& UseSecureConnection(const std::string& caCerts = "");
     TDriverConfig& SetUsePerChannelTcpConnection(bool usePerChannel);
     TDriverConfig& UseClientCertificate(const std::string& clientCert, const std::string& clientPrivateKey);
 
@@ -63,6 +67,9 @@ public:
 
     //! Set database, this option can be overridden for client by ClientSettings
     TDriverConfig& SetDatabase(const std::string& database);
+
+    //! Get database path, returns the database path set via connection string or SetDatabase()
+    const std::string& GetDatabase() const;
 
     //! Set credentials data, this option can be overridden for client by ClientSettings
     TDriverConfig& SetCredentialsProviderFactory(std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory);
@@ -96,6 +103,13 @@ public:
     //! default: true, 30, 5, 10 for linux, and true and OS default for others POSIX
     TDriverConfig& SetTcpKeepAliveSettings(bool enable, size_t idle, size_t count, size_t interval);
 
+    //! Set TCP_NODELAY socket option
+    //! enable - if true TCP_NODELAY is enabled (default, no Nagle algorithm, low latency, packet fragmentation)
+    //!        - if false TCP_NODELAY is disabled (Nagle algorithm enabled, reduced packet fragmentation)
+    //! NOTE: This affects network performance. Disable only if you want to reduce packet fragmentation.
+    //! default: true
+    TDriverConfig& SetTcpNoDelay(bool enable);
+
     //! Enable or disable drain of client logic (e.g. session pool drain) during dtor call
     TDriverConfig& SetDrainOnDtors(bool allowed);
 
@@ -107,7 +121,7 @@ public:
     //! Set policy for balancing
     //! Params is a optionally field to set policy settings
     //! default: EBalancingPolicy::UsePreferableLocation
-    TDriverConfig& SetBalancingPolicy(EBalancingPolicy policy, const std::string& params = std::string());
+    TDriverConfig& SetBalancingPolicy(EBalancingPolicy policy, const std::string& params = "");
 
     //! Set grpc level keep alive. If keepalive ping was delayed more than given timeout
     //! internal grpc routine fails request with TRANSIENT_FAILURE or TRANSPORT_UNAVAILABLE error
@@ -117,6 +131,11 @@ public:
     //! default: enabled, 10 seconds
     TDriverConfig& SetGRpcKeepAliveTimeout(TDuration timeout);
     TDriverConfig& SetGRpcKeepAlivePermitWithoutCalls(bool permitWithoutCalls);
+
+    //! Set grpc load balancing policy
+    //! policy - name of the load balancing policy, see grpc documentation for available policies
+    //! default: "round_robin"
+    TDriverConfig& SetGRpcLoadBalancingPolicy(const std::string& policy);
 
     //! Set inactive socket timeout.
     //! Used to close connections, that were inactive for given time.
@@ -142,6 +161,11 @@ public:
 
     //! Log backend.
     TDriverConfig& SetLog(std::unique_ptr<TLogBackend>&& log);
+
+    //! Set executor for async responses.
+    //! If not set, default executor will be used.
+    TDriverConfig& SetExecutor(std::shared_ptr<IExecutor> executor);
+
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;

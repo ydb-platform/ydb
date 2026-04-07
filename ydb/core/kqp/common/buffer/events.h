@@ -41,8 +41,12 @@ struct TEvResult : public TEventLocal<TEvResult, TKqpBufferWriterEvents::EvResul
 struct TEvError : public TEventLocal<TEvError, TKqpBufferWriterEvents::EvError> {
     NYql::NDqProto::StatusIds::StatusCode StatusCode;
     NYql::TIssues Issues;
+    std::optional<NYql::NDqProto::TDqTaskStats> Stats;
 
-    TEvError(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssues&& issues);
+    TEvError(
+        NYql::NDqProto::StatusIds::StatusCode statusCode,
+        NYql::TIssues&& issues,
+        std::optional<NYql::NDqProto::TDqTaskStats>&& stats);
 };
 
 };

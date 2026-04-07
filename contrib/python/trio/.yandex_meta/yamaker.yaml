@@ -1,0 +1,3 @@
+mark_as_tests:
+  - trio/_tests/*
+  - trio/**/_tests/*

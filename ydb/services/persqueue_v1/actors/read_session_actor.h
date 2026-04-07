@@ -162,6 +162,7 @@ template <bool UseMigrationProtocol> // Migration protocol is "pqv1"
 class TReadSessionActor
     : public TActorBootstrapped<TReadSessionActor<UseMigrationProtocol>>
     , private NPQ::TRlHelpers
+    , public NActors::IActorExceptionHandler
 {
     using TClientMessage = typename std::conditional_t<UseMigrationProtocol,
         PersQueue::V1::MigrationStreamingReadClientMessage,
@@ -222,6 +223,8 @@ public:
         return NKikimrServices::TActivity::FRONT_PQ_READ;
     }
 
+    bool OnUnhandledException(const std::exception& exc) override;
+
 private:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
@@ -274,9 +277,9 @@ private:
         }
     }
 
-    bool ReadFromStreamOrDie(const TActorContext& ctx);
-    bool WriteToStreamOrDie(const TActorContext& ctx, TServerMessage&& response, bool finish = false);
-    bool SendControlMessage(TPartitionId id, TServerMessage&& message, const TActorContext& ctx);
+    [[nodiscard]] bool ReadFromStreamOrDie(const TActorContext& ctx);
+    [[nodiscard]] bool WriteToStreamOrDie(const TActorContext& ctx, TServerMessage&& response, bool finish = false);
+    bool SendControlMessage(TPartitionId id, TServerMessage&& message, const TActorContext& ctx, bool buffer = true);
 
     // grpc events
     void Handle(typename IContext::TEvReadFinished::TPtr& ev, const TActorContext &ctx);
@@ -322,14 +325,14 @@ private:
     void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
 
     TActorId CreatePipeClient(ui64 tabletId, const TActorContext& ctx);
-    void ProcessBalancerDead(ui64 tabletId, const TActorContext& ctx);
+    void ProcessBalancerDead(ui64 tabletId, const TActorId& pipe, const TActorContext& ctx);
 
     void RunAuthActor(const TActorContext& ctx);
     void RecheckACL(const TActorContext& ctx);
-    void InitSession(const TActorContext& ctx);
+    [[nodiscard]] bool InitSession(const TActorContext& ctx);
     void RegisterSession(const TString& topic, const TActorId& pipe, const TVector<ui32>& groups, const TActorContext& ctx);
     void CloseSession(PersQueue::ErrorCode::ErrorCode code, const TString& reason, const TActorContext& ctx);
-    void SendLockPartitionToSelf(ui32 partitionId, TString topicName, const TTopicHolder::TPtr& topic, const TActorContext& ctx);
+    [[nodiscard]] bool SendLockPartitionToSelf(ui32 partitionId, TString topicName, const TTopicHolder::TPtr& topic, const TActorContext& ctx);
 
     void SetupBytesReadByUserAgentCounter();
     void SetupCounters();
@@ -387,6 +390,7 @@ private:
     i64 MaxTimeLagMs;
     i64 ReadTimestampMs;
     i64 ReadSizeBudget;
+    ui64 PartitionMaxInFlightBytes;
 
     TString Auth;
 

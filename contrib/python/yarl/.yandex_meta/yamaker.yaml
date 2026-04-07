@@ -1,2 +1,3 @@
 mark_as_cython_c:
+  - yarl/_helpers_c.pyx
   - yarl/_quoting_c.pyx

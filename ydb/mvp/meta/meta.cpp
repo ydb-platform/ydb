@@ -5,20 +5,26 @@
 #include "meta_cp_databases.h"
 #include "meta_cp_databases_verbose.h"
 #include "meta_cloud.h"
+#include "meta_capabilities.h"
+#include "meta_support_links.h"
 #include "meta_cache.h"
-#include <util/system/hostname.h>
+
 #include <ydb/mvp/core/http_check.h>
 #include <ydb/mvp/core/http_sensors.h>
 #include <ydb/mvp/core/mvp_swagger.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/mvp_log.h>
 #include <ydb/mvp/core/cache_policy.h>
+
 #include <ydb/library/actors/http/http_static.h>
 #include <ydb/library/actors/http/http_cache.h>
+
+#include <util/system/hostname.h>
 
 #define MLOG_D(stream) LOG_DEBUG_S((NMVP::InstanceMVP->ActorSystem), EService::MVP, stream)
 
 using namespace NMVP;
+using namespace NActors;
 
 NHttp::TCachePolicy GetIncomingMetaCachePolicy(const NHttp::THttpRequest* request) {
     NHttp::TCachePolicy policy;
@@ -151,12 +157,17 @@ TString TMVP::GetMetaDatabaseAuthToken(const TRequest& request) {
 }
 
 NYdb::NTable::TClientSettings TMVP::GetMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location) {
-    NYdb::NTable::TClientSettings clientSettings;
-    clientSettings.AuthToken(GetMetaDatabaseAuthToken(request));
-    clientSettings.Database(location.RootDomain);
+    NYdb::NTable::TClientSettings clientSettings = GetStrictMetaDatabaseClientSettings(request, location);
     if (TString database = location.GetDatabaseName(request)) {
         clientSettings.Database(database);
     }
+    return clientSettings;
+}
+
+NYdb::NTable::TClientSettings TMVP::GetStrictMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location) {
+    NYdb::NTable::TClientSettings clientSettings;
+    clientSettings.AuthToken(GetMetaDatabaseAuthToken(request));
+    clientSettings.Database(location.RootDomain);
     return clientSettings;
 }
 
@@ -165,7 +176,7 @@ void TMVP::InitMeta() {
     MetaLocation.Endpoints.emplace_back("cluster-api", MetaApiEndpoint);
     MetaLocation.RootDomain = MetaDatabase;
 
-    LocalEndpoint = TStringBuilder() << "http://" << FQDNHostName() << ":" << HttpPort;
+    LocalEndpoint = StartupOptions.GetLocalEndpoint();
 
     TActorId httpIncomingProxyId = ActorSystem.Register(NHttp::CreateIncomingHttpCache(HttpProxyId, GetIncomingMetaCachePolicy));
 
@@ -206,6 +217,18 @@ void TMVP::InitMeta() {
     ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                          "/meta/cloud",
                          ActorSystem.Register(new NMVP::THandlerActorMetaCloud(HttpProxyId, MetaLocation))
+                         )
+                     );
+
+    ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+                         "/capabilities",
+                         ActorSystem.Register(new NMVP::THandlerActorMetaCapabilities())
+                         )
+                     );
+
+    ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+                         "/meta/support_links",
+                         ActorSystem.Register(new NMVP::TMetaSupportLinksHandlerActor(HttpProxyId, MetaLocation, MetaSettings))
                          )
                      );
 

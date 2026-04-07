@@ -9,32 +9,34 @@
 
 // continues existing contexts chain
 
-#define YQL_LOG_CTX_SCOPE(...)  \
+#define YQL_LOG_CTX_SCOPE(...)                                    \
     auto Y_CAT(c, __LINE__) = ::NYql::NLog::MakeCtx(__VA_ARGS__); \
     Y_UNUSED(Y_CAT(c, __LINE__))
 
-#define YQL_LOG_CTX_BLOCK(...) \
+#define YQL_LOG_CTX_BLOCK(...)                                               \
     if (auto Y_GENERATE_UNIQUE_ID(c) = ::NYql::NLog::MakeCtx(__VA_ARGS__)) { \
-        goto Y_CAT(YQL_LOG_CTX_LABEL, __LINE__); \
-    } else Y_CAT(YQL_LOG_CTX_LABEL, __LINE__):
-
+        goto Y_CAT(YQL_LOG_CTX_LABEL, __LINE__);                             \
+    } else                                                                   \
+        Y_CAT(YQL_LOG_CTX_LABEL, __LINE__)                                   \
+            :
 
 // starts new contexts chain, after leaving current scope restores
 // previous contexts chain
 
-#define YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId, ...) \
+#define YQL_LOG_CTX_ROOT_SESSION_SCOPE(sessionId, ...)                             \
     auto Y_CAT(c, __LINE__) = ::NYql::NLog::MakeRootCtx(sessionId, ##__VA_ARGS__); \
     Y_UNUSED(Y_CAT(c, __LINE__))
 
-#define YQL_LOG_CTX_ROOT_SCOPE(...)  \
+#define YQL_LOG_CTX_ROOT_SCOPE(...)                                       \
     auto Y_CAT(c, __LINE__) = ::NYql::NLog::MakeRootCtx("", __VA_ARGS__); \
     Y_UNUSED(Y_CAT(c, __LINE__))
 
-#define YQL_LOG_CTX_ROOT_BLOCK(...) \
+#define YQL_LOG_CTX_ROOT_BLOCK(...)                                              \
     if (auto Y_GENERATE_UNIQUE_ID(c) = ::NYql::NLog::MakeRootCtx(__VA_ARGS__)) { \
-        goto Y_CAT(YQL_LOG_CTX_LABEL, __LINE__); \
-    } else Y_CAT(YQL_LOG_CTX_LABEL, __LINE__):
-
+        goto Y_CAT(YQL_LOG_CTX_LABEL, __LINE__);                                 \
+    } else                                                                       \
+        Y_CAT(YQL_LOG_CTX_LABEL, __LINE__)                                       \
+            :
 
 // adds current contexts path to exception message before throwing it
 
@@ -42,8 +44,7 @@
 
 class TLogElement;
 
-namespace NYql {
-namespace NLog {
+namespace NYql::NLog {
 
 namespace NImpl {
 
@@ -93,7 +94,9 @@ public:
     }
 
     void Unlink() {
-        if (!HasNext()) return;
+        if (!HasNext()) {
+            return;
+        }
 
         Prev->Next = Next;
         Next->Prev = Prev;
@@ -112,11 +115,12 @@ TLogContextListItem* GetLogContextList();
 
 /**
  * @brief Context element with stored SessionId.
-*/
-class TLogContextSessionItem : public TLogContextListItem {
+ */
+class TLogContextSessionItem: public TLogContextListItem {
 public:
     TLogContextSessionItem(size_t size, bool hasSessionId_)
-        :  TLogContextListItem(size, sizeof(*this)) {
+        : TLogContextListItem(size, sizeof(*this))
+    {
         HasSessionId_ = hasSessionId_;
     }
 
@@ -128,7 +132,7 @@ private:
     bool HasSessionId_;
 };
 
-} // namspace NImpl
+} // namespace NImpl
 
 enum class EContextKey {
     DateTime = 0,
@@ -151,14 +155,14 @@ template <size_t Size>
 class TLogContext: public NImpl::TLogContextListItem {
 public:
     template <typename... TArgs>
-    TLogContext(TArgs... args)
+    explicit TLogContext(TArgs... args)
         : TLogContextListItem(Size)
-        , Names_{{ TString{std::forward<TArgs>(args)}... }}
+        , Names_{{TString{std::forward<TArgs>(args)}...}}
     {
         LinkBefore(NImpl::GetLogContextList());
     }
 
-    ~TLogContext() {
+    ~TLogContext() override {
         Unlink();
     }
 
@@ -178,9 +182,9 @@ template <size_t Size>
 class TRootLogContext: public NImpl::TLogContextSessionItem {
 public:
     template <typename... TArgs>
-    TRootLogContext(const TString& sessionId, TArgs... args)
+    explicit TRootLogContext(const TString& sessionId, TArgs... args)
         : TLogContextSessionItem(Size, !sessionId.empty())
-        , Names_{{ sessionId, TString{std::forward<TArgs>(args)}... }}
+        , Names_{{sessionId, TString{std::forward<TArgs>(args)}...}}
     {
         NImpl::TLogContextListItem* ctxList = NImpl::GetLogContextList();
         PrevLogContextHead_.Prev = ctxList->Prev;
@@ -189,7 +193,7 @@ public:
         LinkBefore(ctxList);
     }
 
-    ~TRootLogContext() {
+    ~TRootLogContext() override {
         Unlink();
         NImpl::TLogContextListItem* ctxList = NImpl::GetLogContextList();
         ctxList->Prev = PrevLogContextHead_.Prev;
@@ -253,7 +257,7 @@ void OutputLogCtx(IOutputStream* out, bool withBraces, bool skipSessionId = fals
  */
 class TYqlLogContextLocation {
 public:
-    TYqlLogContextLocation(const TSourceLocation& location)
+    explicit TYqlLogContextLocation(const TSourceLocation& location)
         : Location_(location.File, location.Line)
     {
     }
@@ -270,5 +274,4 @@ private:
     TSourceLocation Location_;
 };
 
-} // namespace NLog
-} // namespace NYql
+} // namespace NYql::NLog

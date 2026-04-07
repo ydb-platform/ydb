@@ -12,6 +12,7 @@ import itertools
 import queue
 import traceback
 import ydb
+from ydb.tests.stress.common.instrumented_pools import InstrumentedQuerySessionPool
 from library.python.monlib.metric_registry import MetricRegistry
 
 BLOB_MIN_SIZE = 128 * 1024
@@ -32,6 +33,9 @@ class EventKind(object):
 
     ADD_COLUMN_DEFAULT = 'add_column_default'
     DROP_COLUMN = 'drop_column'
+
+    SET_DEFAULT = 'set_default'
+    DROP_DEFAULT = 'drop_default'
 
     READ_TABLE = 'read_table'
 
@@ -62,6 +66,8 @@ class EventKind(object):
         return (
             cls.ADD_COLUMN_DEFAULT,
             cls.DROP_COLUMN,
+            cls.SET_DEFAULT,
+            cls.DROP_DEFAULT,
         )
 
     @classmethod
@@ -84,6 +90,9 @@ class EventKind(object):
             cls.ADD_COLUMN_DEFAULT,
             cls.DROP_COLUMN,
 
+            cls.SET_DEFAULT,
+            cls.DROP_DEFAULT,
+
             cls.READ_TABLE,
 
             cls.FIND_OUTDATED,
@@ -97,7 +106,7 @@ class EventKind(object):
         )
 
 
-def get_table_description(table_name, mode):
+def get_table_description(table_name, mode, in_memory):
     if mode == "row":
         store_entry = "STORE = ROW,"
         ttl_entry = """TTL = Interval("PT240S") ON `timestamp` AS SECONDS,"""
@@ -107,15 +116,28 @@ def get_table_description(table_name, mode):
     else:
         raise RuntimeError("Unkown mode: {}".format(mode))
 
+    if in_memory:
+        families_entry = """
+            FAMILY default (
+                CACHE_MODE = "in_memory"
+            ),
+            FAMILY lz4_family (
+                CACHE_MODE = "in_memory",
+                COMPRESSION = "lz4"
+            ),"""
+    else:
+        families_entry = """
+            FAMILY lz4_family (
+                COMPRESSION = "lz4"
+            ),"""
+
     return f"""
         CREATE TABLE `{table_name}` (
             key Uint64 NOT NULL,
             `timestamp` Uint64 NOT NULL,
             value Utf8 FAMILY lz4_family NOT NULL,
             PRIMARY KEY (key),
-            FAMILY lz4_family (
-                COMPRESSION = "lz4"
-            ),
+            {families_entry}
             INDEX by_timestamp GLOBAL ON (`timestamp`)
         )
         WITH (
@@ -211,7 +233,7 @@ class WorkloadStats(object):
 
 
 class YdbQueue(object):
-    def __init__(self, idx, database, stats, driver, pool, mode):
+    def __init__(self, idx, database, stats, driver, pool, mode, in_memory):
         self.working_dir = os.path.join(database, socket.gethostname().split('.')[0].replace('-', '_') + "_" + str(idx))
         self.copies_dir = os.path.join(self.working_dir, 'copies')
         self.table_name = self.table_name_with_timestamp()
@@ -227,6 +249,7 @@ class YdbQueue(object):
         self.driver.scheme_client.make_directory(self.working_dir)
         self.driver.scheme_client.make_directory(self.copies_dir)
         self.mode = mode
+        self.in_memory = in_memory
         print("Working dir %s" % self.working_dir)
         self.prepare_new_queue(self.table_name)
         # a queue with tables to drop
@@ -236,6 +259,10 @@ class YdbQueue(object):
         self.outdated_keys_max_size = 50
         # a dict with table_name -> set of column ids
         self.alter_column_ids = dict()
+        # a dict with table_name -> set of column ids that currently have a DEFAULT expression
+        self.columns_with_default = dict()
+        # guards concurrent reads/writes of alter_column_ids and columns_with_default
+        self._lock = threading.Lock()
 
     def table_name_with_timestamp(self, working_dir=None):
         if working_dir is not None:
@@ -244,7 +271,7 @@ class YdbQueue(object):
 
     def prepare_new_queue(self, table_name=None):
         table_name = self.table_name_with_timestamp() if table_name is None else table_name
-        self.send_query(get_table_description(table_name, self.mode), parameters=None, event_kind=EventKind.CREATE_TABLE)
+        self.send_query(get_table_description(table_name, self.mode, self.in_memory), parameters=None, event_kind=EventKind.CREATE_TABLE)
 
     def switch(self, switch_to):
         self.table_name = switch_to
@@ -255,7 +282,7 @@ class YdbQueue(object):
 
     def send_query(self, query, parameters, event_kind):
         try:
-            result_list = self.pool.execute_with_retries(query, parameters=parameters, retry_settings=ydb.RetrySettings(max_retries=0), settings=self.ops)
+            result_list = self.pool.execute_with_retries(query, parameters=parameters, retry_settings=ydb.RetrySettings(max_retries=0), settings=self.ops, operation_name=event_kind)
             self.update_stats(event_kind)
             return result_list
         except ydb.Error as e:
@@ -299,9 +326,10 @@ class YdbQueue(object):
 
     def generate_alter_column_id(self):
         val = random.randint(1, 100000)
-        while val in self.alter_column_ids.get(self.table_name, set()):
-            val = random.randint(1, 100000)
-        self.alter_column_ids.setdefault(self.table_name, set()).add(val)
+        with self._lock:
+            while val in self.alter_column_ids.get(self.table_name, set()):
+                val = random.randint(1, 100000)
+            self.alter_column_ids.setdefault(self.table_name, set()).add(val)
         return val
 
     def read_table(self):
@@ -376,35 +404,74 @@ class YdbQueue(object):
         self.send_query(query=query, event_kind=EventKind.WRITE, parameters=parameters)
 
     def add_column(self):
+        val = self.generate_alter_column_id()
         query = "ALTER TABLE `{table_name}` ADD COLUMN column_{val} Utf8".format(
             table_name=self.table_name,
-            val=self.generate_alter_column_id(),
+            val=val,
         )
-
         self.send_query(query, parameters=None, event_kind=EventKind.ADD_COLUMN)
 
     def add_column_default(self):
+        col_id = self.generate_alter_column_id()
         query = "ALTER TABLE `{table_name}` ADD COLUMN column_{val} Utf8 NOT NULL DEFAULT '{default_value}'".format(
             table_name=self.table_name,
-            val=self.generate_alter_column_id(),
+            val=col_id,
             default_value=random_string(10),
         )
-
-        self.send_query(query, parameters=None, event_kind=EventKind.ADD_COLUMN_DEFAULT)
+        result = self.send_query(query, parameters=None, event_kind=EventKind.ADD_COLUMN_DEFAULT)
+        if result is not None:
+            with self._lock:
+                self.columns_with_default.setdefault(self.table_name, set()).add(col_id)
 
     def drop_column(self):
-        if len(self.alter_column_ids.get(self.table_name, set())) == 0:
+        with self._lock:
+            candidates = list(self.alter_column_ids.get(self.table_name, set()))
+        if not candidates:
             return
 
-        val = random.choice(list(self.alter_column_ids[self.table_name]))
-        self.alter_column_ids[self.table_name].remove(val)
-
+        val = random.choice(candidates)
         query = "ALTER TABLE `{table_name}` DROP COLUMN column_{val}".format(
             table_name=self.table_name,
             val=val,
         )
+        result = self.send_query(query, parameters=None, event_kind=EventKind.DROP_COLUMN)
+        if result is not None:
+            with self._lock:
+                self.alter_column_ids.get(self.table_name, set()).discard(val)
+                self.columns_with_default.get(self.table_name, set()).discard(val)
 
-        self.send_query(query, parameters=None, event_kind=EventKind.DROP_COLUMN)
+    def set_default(self):
+        with self._lock:
+            candidates = list(self.alter_column_ids.get(self.table_name, set()))
+        if not candidates:
+            return
+
+        val = random.choice(candidates)
+        query = "ALTER TABLE `{table_name}` ALTER COLUMN column_{val} SET DEFAULT '{default_value}'".format(
+            table_name=self.table_name,
+            val=val,
+            default_value=random_string(10),
+        )
+        result = self.send_query(query, parameters=None, event_kind=EventKind.SET_DEFAULT)
+        if result is not None:
+            with self._lock:
+                self.columns_with_default.setdefault(self.table_name, set()).add(val)
+
+    def drop_default(self):
+        with self._lock:
+            candidates = list(self.columns_with_default.get(self.table_name, set()))
+        if not candidates:
+            return
+
+        val = random.choice(candidates)
+        query = "ALTER TABLE `{table_name}` ALTER COLUMN column_{val} DROP DEFAULT".format(
+            table_name=self.table_name,
+            val=val,
+        )
+        result = self.send_query(query, parameters=None, event_kind=EventKind.DROP_DEFAULT)
+        if result is not None:
+            with self._lock:
+                self.columns_with_default.get(self.table_name, set()).discard(val)
 
     def drop_table(self):
         duplicates = set()
@@ -442,7 +509,7 @@ class Workload:
     def __init__(self, endpoint, database, duration, mode):
         self.database = database
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
-        self.pool = ydb.QuerySessionPool(self.driver, size=200)
+        self.pool = InstrumentedQuerySessionPool(self.driver, size=10)
         self.round_size = 1000
         self.duration = duration
         self.delayed_events = queue.Queue()
@@ -450,10 +517,12 @@ class Workload:
         # TODO: run both modes in parallel?
         self.mode = mode
         self.ydb_queues = [
-            YdbQueue(idx, database, self.workload_stats, self.driver, self.pool, self.mode)
+            YdbQueue(idx, database, self.workload_stats, self.driver, self.pool, self.mode, False)
             for idx in range(2)
         ]
-        self.pool_semaphore = threading.BoundedSemaphore(value=100)
+        if self.mode == "row":
+            self.ydb_queues.append(YdbQueue(len(self.ydb_queues), database, self.workload_stats, self.driver, self.pool, self.mode, True))
+        self.pool_semaphore = threading.BoundedSemaphore(value=1)
         self.worker_exception = []
 
     def random_points(self, size=1):
@@ -492,7 +561,7 @@ class Workload:
                 schedule.extend([(point, op) for point in self.random_points()])
 
             for op in EventKind.basic_schema_row() if self.mode == 'row' else EventKind.basic_schema_column():
-                schedule.extend([(point, op) for point in self.random_points(size=10)])
+                schedule.extend([(point, op) for point in self.random_points(size=30)])
 
             for op in EventKind.periodic_tasks_row() if self.mode == 'row' else EventKind.periodic_tasks_column():
                 schedule.extend([(point, op) for point in self.random_points(size=50)])

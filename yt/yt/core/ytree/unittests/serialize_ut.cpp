@@ -8,7 +8,9 @@
 
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/fluent.h>
+#include <yt/yt/core/ytree/precise_time.h>
 #include <yt/yt/core/ytree/serialize.h>
+#include <yt/yt/core/ytree/size.h>
 #include <yt/yt/core/ytree/ypath_client.h>
 
 #include <yt/yt/core/ytree/unittests/proto/test.pb.h>
@@ -150,6 +152,22 @@ TEST(TCustomTypeSerializationTest, TInstant)
         TestDeserialization<TDuration, i64>(value, 100500);
         TestDeserialization<TDuration, ui64>(value, 100500U);
         TestDeserialization<TDuration, TString>(value, "100.5s");
+
+        TestDeserialization<TDuration, double>(TDuration::MicroSeconds(500), 0.5);
+    }
+    {
+        constexpr auto testException = [](auto source) {
+            auto yson = ConvertToYsonString(source, NYson::EYsonFormat::Text);
+            EXPECT_THROW(PullParserConvert<TDuration>(yson), std::exception) << "Yson: " << yson.ToString();
+            EXPECT_THROW(ConvertTo<TDuration>(ConvertTo<INodePtr>(yson)), std::exception) << "Yson: " << yson.ToString();
+        };
+
+        testException(-1.0);
+        testException(NAN);
+
+        testException(-1LL);
+
+        testException("-10s");
     }
 }
 
@@ -286,6 +304,13 @@ TEST(TSerializationTest, CompactMap)
 TEST(TSerializationTest, Set)
 {
     std::set<TString> original{"First", "Second", "Third"};
+    TestSerializationDeserialization(original);
+    TestSerializationDeserialization(original, EYsonType::ListFragment);
+}
+
+TEST(TSerializationTest, CompactFlatSet)
+{
+    TCompactFlatSet<TString, 4> original{"First", "Second", "Third"};
     TestSerializationDeserialization(original);
     TestSerializationDeserialization(original, EYsonType::ListFragment);
 }
@@ -446,6 +471,39 @@ TEST(TSerializationTest, PlainEnum)
 
     TestSerializationDeserialization(static_cast<EVanillaTestEnum>(42));
 }
+
+TEST(TSerializationTest, TError)
+{
+    TestSerializationDeserialization(TError());
+    TestSerializationDeserialization(TErrorOr<ui64>(5ull));
+    TestSerializationDeserialization(TError("some error"));
+    TestSerializationDeserialization(TErrorOr<ui64>(TError("some error")));
+}
+
+TEST(TSerializationTest, TSize)
+{
+    TestSerializationDeserialization(TSize(123));
+    TestSerializationDeserialization(TSize::FromString("123M"));
+    TestSerializationDeserialization(TSize::FromString("123Pi"));
+}
+
+TEST(TSerializationTest, TPreciseInstant)
+{
+    TestSerializationDeserialization(TPreciseInstant(TInstant::Now()));
+    TestSerializationDeserialization(TPreciseInstant(TInstant::Hours(10)));
+    TestSerializationDeserialization(TPreciseInstant(TInstant::Seconds(10)));
+    TestSerializationDeserialization(TPreciseInstant(TInstant::MilliSeconds(25)));
+    TestSerializationDeserialization(TPreciseInstant(TInstant::MicroSeconds(50)));
+}
+
+TEST(TSerializationTest, TPreciseDuration)
+{
+    TestSerializationDeserialization(TPreciseDuration(TDuration::Hours(10)));
+    TestSerializationDeserialization(TPreciseDuration(TDuration::Seconds(10)));
+    TestSerializationDeserialization(TPreciseDuration(TDuration::MilliSeconds(25)));
+    TestSerializationDeserialization(TPreciseDuration(TDuration::MicroSeconds(50)));
+}
+
 
 TEST(TYTreeSerializationTest, Protobuf)
 {

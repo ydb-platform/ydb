@@ -28,6 +28,7 @@ struct TReadOptions
     bool RenameConvertedCounters = true;
     double RateDenominator = 1.0;
     bool EnableHistogramCompat = false;
+    bool SplitRateHistogramIntoGauges = false;
     bool ReportTimestampsForRateMetrics = true;
 
     bool EnableSolomonAggregationWorkaround = false;
@@ -36,6 +37,8 @@ struct TReadOptions
     ESummaryPolicy SummaryPolicy = ESummaryPolicy::Default;
 
     bool MarkAggregates = false;
+    bool EnableSolomonAggregates = false;
+    bool ExportGlobalsAsMemOnly = false;
 
     std::optional<std::string> Host;
 
@@ -45,6 +48,7 @@ struct TReadOptions
     bool Global = false;
     bool DisableSensorsRename = false;
     bool DisableDefault = false;
+    bool MemOnly = false;
 
     int LingerWindowSize = 0;
 
@@ -65,6 +69,13 @@ bool IsZeroValue(const T& value)
 {
     T zeroValue{};
     return value == zeroValue;
+}
+
+template <class T>
+bool IsZeroValue(const TSummarySnapshot<T>& value)
+{
+    T zeroValue{};
+    return value.Min() == zeroValue && value.Max() == zeroValue;
 }
 
 template <class T>
@@ -117,6 +128,7 @@ public:
 
     // Each projection from `extraProjections` added to each inner projection of this cube.
     void DumpCube(NProto::TCube* cube, const std::vector<TTagIdList>& extraProjections) const;
+    void DumpCube(NProto::TCube* cube, const TTagIdList& extraTagIds = {}) const;
 
 private:
     const int WindowSize_;
@@ -127,6 +139,17 @@ private:
 
     THashMap<TTagIdList, TProjection> Projections_;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+using TGaugeCube = TCube<double>;
+using TCounterCube = TCube<i64>;
+using TTimeCounterCube = TCube<TDuration>;
+using TSummaryCube = TCube<TSummarySnapshot<double>>;
+using TTimerCube = TCube<TSummarySnapshot<TDuration>>;
+using TTimeHistogramCube = TCube<TTimeHistogramSnapshot>;
+using TGaugeHistogramCube = TCube<TGaugeHistogramSnapshot>;
+using TRateHistogramCube = TCube<TRateHistogramSnapshot>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

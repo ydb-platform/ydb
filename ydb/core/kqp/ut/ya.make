@@ -1,6 +1,7 @@
 RECURSE_FOR_TESTS(
     arrow
     batch_operations
+    close_with_load
     cost
     data
     data_integrity
@@ -10,6 +11,7 @@ RECURSE_FOR_TESTS(
     indexes
     idx_test
     join
+    knn
     olap
     opt
     perf
@@ -21,6 +23,8 @@ RECURSE_FOR_TESTS(
     service
     runtime
     sysview
+    tli
+    topics
     tx
     view
     yql

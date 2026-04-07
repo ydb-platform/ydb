@@ -10,10 +10,11 @@ import functools
 import os
 import signal
 import sys
+import threading
 import time
-from collections import namedtuple
 
 from . import _common
+from . import _ntuples as ntp
 from ._common import ENCODING
 from ._common import AccessDenied
 from ._common import NoSuchProcess
@@ -32,7 +33,6 @@ from ._psutil_windows import HIGH_PRIORITY_CLASS
 from ._psutil_windows import IDLE_PRIORITY_CLASS
 from ._psutil_windows import NORMAL_PRIORITY_CLASS
 from ._psutil_windows import REALTIME_PRIORITY_CLASS
-
 
 try:
     from . import _psutil_windows as cext
@@ -146,37 +146,6 @@ pinfo_map = dict(
 
 
 # =====================================================================
-# --- named tuples
-# =====================================================================
-
-
-# fmt: off
-# psutil.cpu_times()
-scputimes = namedtuple('scputimes',
-                       ['user', 'system', 'idle', 'interrupt', 'dpc'])
-# psutil.virtual_memory()
-svmem = namedtuple('svmem', ['total', 'available', 'percent', 'used', 'free'])
-# psutil.Process.memory_info()
-pmem = namedtuple(
-    'pmem', ['rss', 'vms',
-             'num_page_faults', 'peak_wset', 'wset', 'peak_paged_pool',
-             'paged_pool', 'peak_nonpaged_pool', 'nonpaged_pool',
-             'pagefile', 'peak_pagefile', 'private'])
-# psutil.Process.memory_full_info()
-pfullmem = namedtuple('pfullmem', pmem._fields + ('uss', ))
-# psutil.Process.memory_maps(grouped=True)
-pmmap_grouped = namedtuple('pmmap_grouped', ['path', 'rss'])
-# psutil.Process.memory_maps(grouped=False)
-pmmap_ext = namedtuple(
-    'pmmap_ext', 'addr perms ' + ' '.join(pmmap_grouped._fields))
-# psutil.Process.io_counters()
-pio = namedtuple('pio', ['read_count', 'write_count',
-                         'read_bytes', 'write_bytes',
-                         'other_count', 'other_bytes'])
-# fmt: on
-
-
-# =====================================================================
 # --- utils
 # =====================================================================
 
@@ -184,12 +153,21 @@ pio = namedtuple('pio', ['read_count', 'write_count',
 @functools.lru_cache(maxsize=512)
 def convert_dos_path(s):
     r"""Convert paths using native DOS format like:
-        "\Device\HarddiskVolume1\Windows\systemew\file.txt"
+        "\Device\HarddiskVolume1\Windows\systemew\file.txt" or
+        "\??\C:\Windows\systemew\file.txt"
     into:
         "C:\Windows\systemew\file.txt".
     """
+    if s.startswith('\\\\'):
+        return s
     rawdrive = '\\'.join(s.split('\\')[:3])
-    driveletter = cext.QueryDosDevice(rawdrive)
+    if rawdrive in {"\\??\\UNC", "\\Device\\Mup"}:
+        rawdrive = '\\'.join(s.split('\\')[:5])
+        driveletter = '\\\\' + '\\'.join(s.split('\\')[3:5])
+    elif rawdrive.startswith('\\??\\'):
+        driveletter = s.split('\\')[2]
+    else:
+        driveletter = cext.QueryDosDevice(rawdrive)
     remainder = s[len(rawdrive) :]
     return os.path.join(driveletter, remainder)
 
@@ -213,7 +191,7 @@ def virtual_memory():
     free = availphys
     used = total - avail
     percent = usage_percent((total - avail), total, round_=1)
-    return svmem(total, avail, percent, used, free)
+    return ntp.svmem(total, avail, percent, used, free)
 
 
 def swap_memory():
@@ -239,7 +217,12 @@ def swap_memory():
 
     free = total - used
     percent = round(percentswap, 1)
-    return _common.sswap(total, used, free, percent, 0, 0)
+    return ntp.sswap(total, used, free, percent, 0, 0)
+
+
+# malloc / heap functions
+heap_info = cext.heap_info
+heap_trim = cext.heap_trim
 
 
 # =====================================================================
@@ -256,16 +239,15 @@ def disk_usage(path):
         # XXX: do we want to use "strict"? Probably yes, in order
         # to fail immediately. After all we are accepting input here...
         path = path.decode(ENCODING, errors="strict")
-    total, free = cext.disk_usage(path)
-    used = total - free
+    total, used, free = cext.disk_usage(path)
     percent = usage_percent(used, total, round_=1)
-    return _common.sdiskusage(total, used, free, percent)
+    return ntp.sdiskusage(total, used, free, percent)
 
 
 def disk_partitions(all):
     """Return disk partitions."""
     rawlist = cext.disk_partitions(all)
-    return [_common.sdiskpart(*x) for x in rawlist]
+    return [ntp.sdiskpart(*x) for x in rawlist]
 
 
 # =====================================================================
@@ -279,8 +261,10 @@ def cpu_times():
     # Internally, GetSystemTimes() is used, and it doesn't return
     # interrupt and dpc times. cext.per_cpu_times() does, so we
     # rely on it to get those only.
-    percpu_summed = scputimes(*[sum(n) for n in zip(*cext.per_cpu_times())])
-    return scputimes(
+    percpu_summed = ntp.scputimes(
+        *[sum(n) for n in zip(*cext.per_cpu_times())]
+    )
+    return ntp.scputimes(
         user, system, idle, percpu_summed.interrupt, percpu_summed.dpc
     )
 
@@ -289,7 +273,7 @@ def per_cpu_times():
     """Return system per-CPU times as a list of named tuples."""
     ret = []
     for user, system, idle, interrupt, dpc in cext.per_cpu_times():
-        item = scputimes(user, system, idle, interrupt, dpc)
+        item = ntp.scputimes(user, system, idle, interrupt, dpc)
         ret.append(item)
     return ret
 
@@ -308,9 +292,7 @@ def cpu_stats():
     """Return CPU statistics."""
     ctx_switches, interrupts, _dpcs, syscalls = cext.cpu_stats()
     soft_interrupts = 0
-    return _common.scpustats(
-        ctx_switches, interrupts, soft_interrupts, syscalls
-    )
+    return ntp.scpustats(ctx_switches, interrupts, soft_interrupts, syscalls)
 
 
 def cpu_freq():
@@ -319,25 +301,34 @@ def cpu_freq():
     """
     curr, max_ = cext.cpu_freq()
     min_ = 0.0
-    return [_common.scpufreq(float(curr), min_, float(max_))]
+    return [ntp.scpufreq(float(curr), min_, float(max_))]
 
 
-_loadavg_inititialized = False
+_loadavg_initialized = False
+_lock = threading.Lock()
+
+
+def _getloadavg_impl():
+    # Drop to 2 decimal points which is what Linux does
+    raw_loads = cext.getloadavg()
+    return tuple(round(load, 2) for load in raw_loads)
 
 
 def getloadavg():
     """Return the number of processes in the system run queue averaged
     over the last 1, 5, and 15 minutes respectively as a tuple.
     """
-    global _loadavg_inititialized
+    global _loadavg_initialized
 
-    if not _loadavg_inititialized:
-        cext.init_loadavg_counter()
-        _loadavg_inititialized = True
+    if _loadavg_initialized:
+        return _getloadavg_impl()
 
-    # Drop to 2 decimal points which is what Linux does
-    raw_loads = cext.getloadavg()
-    return tuple(round(load, 2) for load in raw_loads)
+    with _lock:
+        if not _loadavg_initialized:
+            cext.init_loadavg_counter()
+            _loadavg_initialized = True
+
+    return _getloadavg_impl()
 
 
 # =====================================================================
@@ -376,7 +367,7 @@ def net_if_stats():
         isup, duplex, speed, mtu = items
         if hasattr(_common, 'NicDuplex'):
             duplex = _common.NicDuplex(duplex)
-        ret[name] = _common.snicstats(isup, duplex, speed, mtu, '')
+        ret[name] = ntp.snicstats(isup, duplex, speed, mtu, '')
     return ret
 
 
@@ -414,7 +405,7 @@ def sensors_battery():
     elif secsleft == -1:
         secsleft = _common.POWER_TIME_UNKNOWN
 
-    return _common.sbattery(percent, secsleft, power_plugged)
+    return ntp.sbattery(percent, secsleft, power_plugged)
 
 
 # =====================================================================
@@ -426,12 +417,14 @@ _last_btime = 0
 
 
 def boot_time():
-    """The system boot time expressed in seconds since the epoch."""
+    """The system boot time expressed in seconds since the epoch. This
+    also includes the time spent during hybernate / suspend.
+    """
     # This dirty hack is to adjust the precision of the returned
     # value which may have a 1 second fluctuation, see:
     # https://github.com/giampaolo/psutil/issues/1007
     global _last_btime
-    ret = float(cext.boot_time())
+    ret = time.time() - cext.uptime()
     if abs(ret - _last_btime) <= 1:
         return _last_btime
     else:
@@ -445,7 +438,7 @@ def users():
     rawlist = cext.users()
     for item in rawlist:
         user, hostname, tstamp = item
-        nt = _common.suser(user, None, hostname, tstamp, None)
+        nt = ntp.suser(user, None, hostname, tstamp, None)
         retlist.append(nt)
     return retlist
 
@@ -824,14 +817,14 @@ class Process:
         t = self._get_raw_meminfo()
         rss = t[2]  # wset
         vms = t[7]  # pagefile
-        return pmem(*(rss, vms) + t)
+        return ntp.pmem(*(rss, vms) + t)
 
     @wrap_exceptions
     def memory_full_info(self):
         basic_mem = self.memory_info()
         uss = cext.proc_memory_uss(self.pid)
         uss *= getpagesize()
-        return pfullmem(*basic_mem + (uss,))
+        return ntp.pfullmem(*basic_mem + (uss,))
 
     def memory_maps(self):
         try:
@@ -937,7 +930,7 @@ class Process:
         rawlist = cext.proc_threads(self.pid)
         retlist = []
         for thread_id, utime, stime in rawlist:
-            ntuple = _common.pthread(thread_id, utime, stime)
+            ntuple = ntp.pthread(thread_id, utime, stime)
             retlist.append(ntuple)
         return retlist
 
@@ -953,7 +946,7 @@ class Process:
             user = info[pinfo_map['user_time']]
             system = info[pinfo_map['kernel_time']]
         # Children user/system times are not retrievable (set to 0).
-        return _common.pcputimes(user, system, 0.0, 0.0)
+        return ntp.pcputimes(user, system, 0.0, 0.0)
 
     @wrap_exceptions
     def suspend(self):
@@ -986,7 +979,7 @@ class Process:
         for file in raw_file_names:
             file = convert_dos_path(file)
             if isfile_strict(file):
-                ntuple = _common.popenfile(file, -1)
+                ntuple = ntp.popenfile(file, -1)
                 ret.add(ntuple)
         return list(ret)
 
@@ -1042,7 +1035,7 @@ class Process:
                 info[pinfo_map['io_count_others']],
                 info[pinfo_map['io_bytes_others']],
             )
-        return pio(*ret)
+        return ntp.pio(*ret)
 
     @wrap_exceptions
     def status(self):
@@ -1100,4 +1093,4 @@ class Process:
     def num_ctx_switches(self):
         ctx_switches = self._proc_info()[pinfo_map['ctx_switches']]
         # only voluntary ctx switches are supported
-        return _common.pctxsw(ctx_switches, 0)
+        return ntp.pctxsw(ctx_switches, 0)

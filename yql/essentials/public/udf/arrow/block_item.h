@@ -27,7 +27,7 @@ public:
         *reinterpret_cast<NYql::NDecimal::TInt128*>(&Raw) = value;
         Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded);
     }
-    
+
     inline explicit TBlockItem(IBoxedValuePtr&& value) {
         Raw.Resource.Meta = static_cast<ui8>(EMarkers::Boxed);
         Raw.Resource.Value = value.Release();
@@ -127,26 +127,26 @@ public:
         Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::String);
         return TStringValue(Raw.StringValue.Value);
     }
-    
+
     inline TStringRef GetStringRefFromValue() const {
         Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::String);
-        return { Raw.StringValue.Value->Data() + (Raw.StringValue.Offset & 0xFFFFFF), Raw.StringValue.Size };
+        return {Raw.StringValue.Value->Data() + (Raw.StringValue.Offset & 0xFFFFFF), Raw.StringValue.Size};
     }
 
-    inline TBlockItem MakeOptional() const
-    {
-        if (Raw.Simple.Meta)
+    inline TBlockItem MakeOptional() const {
+        if (Raw.Simple.Meta) {
             return *this;
+        }
 
         TBlockItem result(*this);
         ++result.Raw.Simple.Count;
         return result;
     }
 
-    inline TBlockItem GetOptionalValue() const
-    {
-        if (Raw.Simple.Meta)
+    inline TBlockItem GetOptionalValue() const {
+        if (Raw.Simple.Meta) {
             return *this;
+        }
 
         Y_DEBUG_ABORT_UNLESS(Raw.Simple.Count > 0U, "Can't get value from empty.");
 
@@ -155,8 +155,7 @@ public:
         return result;
     }
 
-    inline IBoxedValuePtr GetBoxed() const
-    {
+    inline IBoxedValuePtr GetBoxed() const {
         Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::Boxed, "Value is not boxed");
         return Raw.Resource.Value;
     }
@@ -178,21 +177,28 @@ public:
         return v;
     }
 
-    inline const void* GetRawPtr() const
-    {
+    inline const void* GetRawPtr() const {
         return &Raw;
     }
 
-    inline explicit operator bool() const { return bool(Raw); }
-    
+    inline explicit operator bool() const {
+        return bool(Raw);
+    }
+
     EMarkers GetMarkers() const {
         return static_cast<EMarkers>(Raw.Simple.Meta);
     }
 
-    bool HasValue() const { return EMarkers::Empty != GetMarkers(); }
+    bool HasValue() const {
+        return EMarkers::Empty != GetMarkers();
+    }
 
-    bool IsBoxed() const { return EMarkers::Boxed == GetMarkers(); }
-    bool IsEmbedded() const { return EMarkers::Embedded == GetMarkers(); }
+    bool IsBoxed() const {
+        return EMarkers::Boxed == GetMarkers();
+    }
+    bool IsEmbedded() const {
+        return EMarkers::Embedded == GetMarkers();
+    }
     inline void SetTimezoneId(ui16 id) {
         UDF_VERIFY(GetMarkers() == EMarkers::Embedded, "Value is not a datetime");
         Raw.Simple.TimezoneId = id;
@@ -205,19 +211,19 @@ public:
 
 private:
     union TRaw {
-        ui64 Halfs[2] = {0, 0};
+        ui64 Halfs[2] = {0, 0}; // NOLINT(modernize-avoid-c-arrays)
 
         TRawEmbeddedValue Embedded;
-        
+
         TRawBoxedValue Resource;
 
         TRawStringValue StringValue;
 
         struct {
             union {
-                #define FIELD(type) type type##_;
+#define FIELD(type) type type##_;
                 PRIMITIVE_VALUE_TYPES(FIELD);
-                #undef FIELD
+#undef FIELD
                 // According to the YQL <-> arrow type mapping convention,
                 // boolean values are processed as 8-bit unsigned integer
                 // with either 0 or 1 as a condition payload.
@@ -228,7 +234,7 @@ private:
                 ui64 FullMeta;
                 struct {
                     TTimezoneId TimezoneId;
-                    ui8 Reserved[5];
+                    ui8 Reserved[5]; // NOLINT(modernize-avoid-c-arrays)
                     ui8 Meta;
                 };
             };
@@ -246,33 +252,32 @@ private:
             const TBlockItem* Value;
         } Tuple;
 
-        explicit operator bool() const { return Simple.FullMeta | Simple.Count; }
+        explicit operator bool() const {
+            return Simple.FullMeta | Simple.Count;
+        }
     } Raw;
 };
 
 UDF_ASSERT_TYPE_SIZE(TBlockItem, 16);
 
-#define VALUE_AS(xType) \
-    template <> \
-    inline xType TBlockItem::As<xType>() const \
-    { \
+#define VALUE_AS(xType)                                           \
+    template <>                                                   \
+    inline xType TBlockItem::As<xType>() const {                  \
         Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::Embedded); \
-        return Raw.Simple.xType##_; \
+        return Raw.Simple.xType##_;                               \
     }
 
-#define VALUE_GET(xType) \
-    template <> \
-    inline xType TBlockItem::Get<xType>() const \
-    { \
+#define VALUE_GET(xType)                                          \
+    template <>                                                   \
+    inline xType TBlockItem::Get<xType>() const {                 \
         Y_DEBUG_ABORT_UNLESS(GetMarkers() == EMarkers::Embedded); \
-        return Raw.Simple.xType##_; \
+        return Raw.Simple.xType##_;                               \
     }
 
-#define VALUE_CONSTR(xType) \
-    template <> \
-    inline TBlockItem::TBlockItem(xType value) \
-    { \
-        Raw.Simple.xType##_ = value; \
+#define VALUE_CONSTR(xType)                                     \
+    template <>                                                 \
+    inline TBlockItem::TBlockItem(xType value) {                \
+        Raw.Simple.xType##_ = value;                            \
         Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded); \
     }
 
@@ -287,4 +292,4 @@ VALUE_GET(bool)
 #undef VALUE_GET
 #undef VALUE_CONSTR
 
-}
+} // namespace NYql::NUdf

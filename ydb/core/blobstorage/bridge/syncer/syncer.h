@@ -3,6 +3,7 @@
 #include "defs.h"
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events_quoter.h>
 
 namespace NKikimr::NBridge {
 
@@ -16,6 +17,7 @@ namespace NKikimr::NBridge {
     };
 
     IActor *CreateSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId,
-        std::shared_ptr<TSyncerDataStats> syncerDataStats);
+        std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter,
+        TBlobStorageGroupType sourceGroupType);
 
 } // NKikimr::NBridge

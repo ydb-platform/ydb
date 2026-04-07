@@ -102,8 +102,8 @@ public:
    *         - other json errors if parsing fails. You should not rely on these errors to always the same for the
    *           same document: they may vary under runtime dispatch (so they may vary depending on your system and hardware).
    */
-  inline simdjson_result<element> load(const std::string &path) & noexcept;
-  inline simdjson_result<element> load(const std::string &path) &&  = delete ;
+  inline simdjson_result<element> load(std::string_view path) & noexcept;
+  inline simdjson_result<element> load(std::string_view path) &&  = delete ;
 
   /**
    * Load a JSON document from a file into a provide document instance and return a temporary reference to it.
@@ -148,8 +148,8 @@ public:
    *         - other json errors if parsing fails. You should not rely on these errors to always the same for the
    *           same document: they may vary under runtime dispatch (so they may vary depending on your system and hardware).
    */
-  inline simdjson_result<element> load_into_document(document& doc, const std::string &path) & noexcept;
-  inline simdjson_result<element> load_into_document(document& doc, const std::string &path) && =delete;
+  inline simdjson_result<element> load_into_document(document& doc, std::string_view path) & noexcept;
+  inline simdjson_result<element> load_into_document(document& doc, std::string_view path) && =delete;
 
   /**
    * Parse a JSON document and return a temporary reference to it.
@@ -204,10 +204,7 @@ public:
    *
    * ### std::string references
    *
-   * If you pass a mutable std::string reference (std::string&), the parser will seek to extend
-   * its capacity to SIMDJSON_PADDING bytes beyond the end of the string.
-   *
-   * Whenever you pass an std::string reference, the parser will access the bytes beyond the end of
+   * Whenever you pass an std::string reference, the parser may access the bytes beyond the end of
    * the string but before the end of the allocated memory (std::string::capacity()).
    * If you are using a sanitizer that checks for reading uninitialized bytes or std::string's
    * container-overflow checks, you may encounter sanitizer warnings.
@@ -239,7 +236,7 @@ public:
   /** @overload parse(const uint8_t *buf, size_t len, bool realloc_if_needed) */
   simdjson_inline simdjson_result<element> parse(const char *buf, size_t len, bool realloc_if_needed = true) & noexcept;
   simdjson_inline simdjson_result<element> parse(const char *buf, size_t len, bool realloc_if_needed = true) && =delete;
-  /** @overload parse(const uint8_t *buf, size_t len, bool realloc_if_needed) */
+  /** @overload parse(const std::string &) */
   simdjson_inline simdjson_result<element> parse(const std::string &s) & noexcept;
   simdjson_inline simdjson_result<element> parse(const std::string &s) && =delete;
   /** @overload parse(const uint8_t *buf, size_t len, bool realloc_if_needed) */
@@ -386,7 +383,7 @@ public:
    *         - other json errors if parsing fails. You should not rely on these errors to always the same for the
    *           same document: they may vary under runtime dispatch (so they may vary depending on your system and hardware).
    */
-  inline simdjson_result<document_stream> load_many(const std::string &path, size_t batch_size = dom::DEFAULT_BATCH_SIZE) noexcept;
+  inline simdjson_result<document_stream> load_many(std::string_view path, size_t batch_size = dom::DEFAULT_BATCH_SIZE) noexcept;
 
   /**
    * Parse a buffer containing many JSON documents.
@@ -657,7 +654,7 @@ private:
   inline error_code ensure_capacity(document& doc, size_t desired_capacity) noexcept;
 
   /** Read the file into loaded_bytes */
-  inline simdjson_result<size_t> read_file(const std::string &path) noexcept;
+  inline simdjson_result<size_t> read_file(std::string_view path) noexcept;
 
   friend class parser::Iterator;
   friend class document_stream;

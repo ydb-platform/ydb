@@ -1,4 +1,5 @@
 #pragma once
+#include "kqp_column_statistics_utils.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
@@ -12,11 +13,11 @@ namespace NKikimr::NKqp {
 using namespace NYql;
 using namespace NYql::NNodes;
 
-/* 
- * This tranformer collects column's and table's names from an AST. It propogates 
+/*
+ * This tranformer collects column's and table's names from an AST. It propogates
  * KqpTable node from the leaves to the root of the tree and searches members in filters.
  * Then it requests column statistics for these attributes from the column statistics service
- * and stores it into a TTypeAnnotationContext. 
+ * and stores it into a TTypeAnnotationContext.
  */
 class TKqpColumnStatisticsRequester : public TGraphTransformerBase {
 public:
@@ -24,18 +25,20 @@ public:
         const TKikimrConfiguration::TPtr& config,
         TTypeAnnotationContext& typesCtx,
         TKikimrTablesData& tables,
-        TString cluster,
+        const TString& cluster,
+        const TString& database,
         TActorSystem* actorSystem
     )
         : Config(config)
         , TypesCtx(typesCtx)
         , Tables(tables)
         , Cluster(cluster)
+        , Database(database)
         , ActorSystem(actorSystem)
     {}
 
     // Main method of the transformer
-    IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final; 
+    IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
 
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final;
 
@@ -55,28 +58,27 @@ private:
     bool AfterLambdas(const TExprNode::TPtr& input);
 
     bool AfterLambdasUnmatched(const TExprNode::TPtr& input);
-    
+
 private:
     TMaybe<std::pair<TString, TString>> GetTableAndColumnNames(const TCoMember& member);
 
 private:
     THashMap<TExprNode::TPtr, TExprNode::TPtr> KqpTableByExprNode;
-    THashMap<TString, THashSet<TString>> ColumnsByTableName;
+    THashMap<TString, THashSet<TString>> CMColumnsByTableName;
+    THashMap<TString, THashSet<TString>> HistColumnsByTableName;
 
     //////////////////////////////////////////////////////////////
     /* for waiting response with column statistics */
-    struct TColumnStatisticsResponse : public NYql::IKikimrGateway::TGenericResult {
-        THashMap<TString, TOptimizerStatistics::TColumnStatMap> ColumnStatisticsByTableName;
-    };
     std::optional<TColumnStatisticsResponse> ColumnStatisticsResponse;
-    NThreading::TPromise<void> AsyncReadiness;
+    NThreading::TFuture<void> AsyncReadiness;
 
     //////////////////////////////////////////////////////////////
 
     const TKikimrConfiguration::TPtr& Config;
     TTypeAnnotationContext& TypesCtx;
     TKikimrTablesData& Tables;
-    TString Cluster;
+    const TString Cluster;
+    const TString Database;
     TActorSystem* ActorSystem;
 };
 
@@ -84,7 +86,8 @@ TAutoPtr<IGraphTransformer> CreateKqpColumnStatisticsRequester(
     const TKikimrConfiguration::TPtr& config,
     TTypeAnnotationContext& typesCtx,
     TKikimrTablesData& tables,
-    TString cluster,
+    const TString& cluster,
+    const TString& database,
     TActorSystem* actorSystem
 );
 

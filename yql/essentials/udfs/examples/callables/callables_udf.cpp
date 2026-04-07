@@ -5,7 +5,6 @@
 #include <util/generic/yexception.h>
 #include <util/string/cast.h>
 
-
 using namespace NKikimr;
 using namespace NUdf;
 
@@ -14,19 +13,17 @@ namespace {
 //////////////////////////////////////////////////////////////////////////////
 // TFromString
 //////////////////////////////////////////////////////////////////////////////
-class TFromString: public TBoxedValue
-{
+class TFromString: public TBoxedValue {
 public:
     static TStringRef Name() {
-        static auto name = TStringRef::Of("FromString");
-        return name;
+        static auto Name = TStringRef::Of("FromString");
+        return Name;
     }
 
 private:
     TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override
-    {
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const override {
         Y_UNUSED(valueBuilder);
         auto str = args[0].AsStringRef();
         int val = FromString<int>(str);
@@ -37,19 +34,17 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 // TSum
 //////////////////////////////////////////////////////////////////////////////
-class TSum: public TBoxedValue
-{
+class TSum: public TBoxedValue {
 public:
     static TStringRef Name() {
-        static auto name = TStringRef::Of("Sum");
-        return name;
+        static auto Name = TStringRef::Of("Sum");
+        return Name;
     }
 
 private:
     TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override
-    {
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const override {
         int sum = 0;
 
         auto it = args[0].GetListIterator();
@@ -65,19 +60,17 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 // TMul
 //////////////////////////////////////////////////////////////////////////////
-class TMul: public TBoxedValue
-{
+class TMul: public TBoxedValue {
 public:
     static TStringRef Name() {
-        static auto name = TStringRef::Of("Mul");
-        return name;
+        static auto Name = TStringRef::Of("Mul");
+        return Name;
     }
 
 private:
     TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override
-    {
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const override {
         int mul = 1;
 
         const auto it = args[0].GetListIterator();
@@ -100,15 +93,14 @@ using TNamedA = TNamedArg<i32, A>;
 class TNamedArgUdf: public TBoxedValue {
 public:
     static TStringRef Name() {
-        static auto name = TStringRef::Of("NamedArgUdf");
-        return name;
+        static auto Name = TStringRef::Of("NamedArgUdf");
+        return Name;
     }
 
 private:
     TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override
-    {
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const override {
         Y_UNUSED(valueBuilder);
         auto res = args[0] ? args[0].Get<i32>() : 123;
         return TUnboxedValuePod(res + 1);
@@ -122,14 +114,13 @@ private:
 class TReturnNamedArgCallable: public TBoxedValue {
 public:
     static TStringRef Name() {
-        static auto name = TStringRef::Of("ReturnNamedArgCallable");
-        return name;
+        static auto Name = TStringRef::Of("ReturnNamedArgCallable");
+        return Name;
     }
 
     TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override
-    {
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const override {
         Y_UNUSED(valueBuilder);
         Y_UNUSED(args);
         return TUnboxedValuePod(new TNamedArgUdf());
@@ -139,14 +130,14 @@ public:
 //////////////////////////////////////////////////////////////////////////////
 // TCallablesModule
 //////////////////////////////////////////////////////////////////////////////
-class TCallablesModule: public IUdfModule
-{
+class TCallablesModule: public IUdfModule {
 public:
     TStringRef Name() const {
         return TStringRef::Of("Callables");
     }
 
-    void CleanupOnTerminate() const final {}
+    void CleanupOnTerminate() const final {
+    }
 
     void GetAllFunctions(IFunctionsSink& sink) const final {
         sink.Add(TFromString::Name());
@@ -155,12 +146,11 @@ public:
     }
 
     void BuildFunctionTypeInfo(
-            const TStringRef& name,
-            TType* userType,
-            const TStringRef& typeConfig,
-            ui32 flags,
-            IFunctionTypeInfoBuilder& builder) const final
-    {
+        const TStringRef& name,
+        TType* userType,
+        const TStringRef& typeConfig,
+        ui32 flags,
+        IFunctionTypeInfoBuilder& builder) const final {
         try {
             Y_UNUSED(userType);
             Y_UNUSED(typeConfig);
@@ -176,25 +166,20 @@ public:
                 if (!typesOnly) {
                     builder.Implementation(new TFromString);
                 }
-            }
-            else if (TSum::Name() == name) {
+            } else if (TSum::Name() == name) {
                 // function signature:
                 //      int (ListOf(String), int(*)(String))
                 // run config: void
-                builder.Returns<int>().Args()->
-                        Add(builder.List()->Item<char*>())
-                        .Add(builder.Callable()->Returns<int>().Arg<char*>())
-                        .Done();
+                builder.Returns<int>().Args()->Add(builder.List()->Item<char*>()).Add(builder.Callable()->Returns<int>().Arg<char*>()).Done();
 
                 if (!typesOnly) {
                     builder.Implementation(new TSum);
                 }
-            }
-            else if (TMul::Name() == name) {
+            } else if (TMul::Name() == name) {
                 // function signature:
                 //      int (ListOf(String), int(*)(String))
                 // run config: void
-                using TFuncType = int(*)(char*);
+                using TFuncType = int (*)(char*);
                 builder.SimpleSignature<int(TListType<char*>, TFuncType)>();
 
                 if (!typesOnly) {

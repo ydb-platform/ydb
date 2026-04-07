@@ -79,6 +79,62 @@ class TestS3(object):
         assert sum(kikimr.control_plane.get_metering(1)) == 20
 
     @yq_all
+    @pytest.mark.parametrize("format", ["json_each_row", "csv_with_names", "tsv_with_names"])
+    @pytest.mark.parametrize("compression", ["gzip", "zstd", "lz4", "brotli", "bzip2", "xz"])
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_multipart_insert_with_compression(self, kikimr, s3, client, format, compression, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("insert_bucket")
+        bucket.create(ACL='public-read-write')
+        bucket.objects.all().delete()
+
+        storage_connection_name = unique_prefix + "ibucket_compression"
+        client.create_storage_connection(storage_connection_name, "insert_bucket")
+
+        test_text = "hello world"
+        sql = f'''
+            PRAGMA s3.AtomicUploadCommit = "true";
+
+            INSERT INTO `{storage_connection_name}`.`test/` WITH (
+                FORMAT = "{format}",
+                COMPRESSION = "{compression}"
+            ) SELECT * FROM AS_TABLE(ListReplicate(
+                <|data: "{test_text}"|>,
+                1000000
+            ))
+        '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        sql = f'''
+            SELECT
+                MIN(data) AS min_data,
+                MAX(data) AS max_data
+            FROM `{storage_connection_name}`.`test/` WITH (
+                FORMAT = "{format}",
+                COMPRESSION = "{compression}",
+                SCHEMA (
+                    data Utf8 NOT NULL
+                )
+            )
+        '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 2
+        assert len(result_set.rows) == 1
+        assert result_set.rows[0].items[0].text_value == test_text
+        assert result_set.rows[0].items[1].text_value == test_text
+
+    @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_big_json_list_insert(self, kikimr, s3, client, unique_prefix):
         resource = boto3.resource(
@@ -496,7 +552,8 @@ class TestS3(object):
         client.wait_query(query_id)
 
     @yq_all
-    def test_insert_empty_object(self, kikimr, s3, client, unique_prefix):
+    @pytest.mark.parametrize("atomic_upload", ["false", "true"])
+    def test_insert_empty_object(self, kikimr, s3, client, atomic_upload, unique_prefix):
         self.create_bucket_and_upload_file("empty_file", s3, kikimr)
         connection_id = client.create_storage_connection(
             unique_prefix + "empty_file_connection", "fbucket"
@@ -508,6 +565,7 @@ class TestS3(object):
         )
 
         sql = f'''
+            PRAGMA s3.AtomicUploadCommit = "{atomic_upload}";
             INSERT INTO bindings.`{binding_name}`
             SELECT "" AS data;
             '''
@@ -711,3 +769,37 @@ class TestS3(object):
         issues = str(client.describe_query(query_id).result.query.issue)
 
         assert "Writing deadlock occurred, please increase write actor memory limit" in issues, "Incorrect Issues: " + issues
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_insert_partition_limit(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("insert_bucket")
+        bucket.create(ACL='public-read-write')
+        bucket.objects.all().delete()
+
+        storage_connection_name = unique_prefix + "ibucket_partition_limit"
+        client.create_storage_connection(storage_connection_name, "insert_bucket")
+
+        sql = f'''
+            PRAGMA s3.UniqueKeysCountLimit = "1";
+            PRAGMA s3.SerializeMemoryLimit = "1";
+            PRAGMA s3.BlockSizeMemoryLimit = "1";
+
+            INSERT INTO `{storage_connection_name}`.`folder/` WITH (
+                FORMAT = "csv_with_names",
+                PARTITIONED_BY = ("key")
+            ) (key, val)
+            VALUES
+                (1, 2),
+                (2, 3)
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        issues = str(client.describe_query(query_id).result.query.issue)
+
+        assert "Too many unique keys: 2" in issues, "Incorrect Issues: " + issues

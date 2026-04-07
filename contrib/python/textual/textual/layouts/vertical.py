@@ -4,7 +4,7 @@ from fractions import Fraction
 from typing import TYPE_CHECKING
 
 from textual._resolve import resolve_box_models
-from textual.geometry import Region, Size
+from textual.geometry import NULL_OFFSET, Region, Size
 from textual.layout import ArrangeResult, Layout, WidgetPlacement
 
 if TYPE_CHECKING:
@@ -20,8 +20,10 @@ class VerticalLayout(Layout):
     def arrange(
         self, parent: Widget, children: list[Widget], size: Size
     ) -> ArrangeResult:
+        parent.pre_layout(self)
         placements: list[WidgetPlacement] = []
         add_placement = placements.append
+        viewport = parent.app.size
 
         child_styles = [child.styles for child in children]
         box_margins: list[Spacing] = [
@@ -80,27 +82,43 @@ class VerticalLayout(Layout):
 
         _Region = Region
         _WidgetPlacement = WidgetPlacement
+        _Size = Size
         for widget, (content_width, content_height, box_margin), margin in zip(
             children, box_models, margins
         ):
-            overlay = widget.styles.overlay == "screen"
+            styles = widget.styles
+            overlay = styles.overlay == "screen"
             next_y = y + content_height
+            offset = (
+                styles.offset.resolve(
+                    _Size(content_width.__floor__(), content_height.__floor__()),
+                    viewport,
+                )
+                if styles.has_rule("offset")
+                else NULL_OFFSET
+            )
+
+            region = _Region(
+                box_margin.left,
+                y.__floor__(),
+                content_width.__floor__(),
+                next_y.__floor__() - y.__floor__(),
+            )
+
+            absolute = styles.has_rule("position") and styles.position == "absolute"
             add_placement(
                 _WidgetPlacement(
-                    _Region(
-                        box_margin.left,
-                        y.__floor__(),
-                        content_width.__floor__(),
-                        next_y.__floor__() - y.__floor__(),
-                    ),
+                    region,
+                    offset,
                     box_margin,
                     widget,
                     0,
                     False,
                     overlay,
+                    absolute,
                 )
             )
-            if not overlay:
+            if not overlay and not absolute:
                 y = next_y + margin
 
         return placements

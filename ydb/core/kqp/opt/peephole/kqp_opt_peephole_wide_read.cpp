@@ -9,6 +9,150 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
+namespace {
+constexpr const ui32 EliminationColumnLimit = 1000;
+
+bool IsValidBlockAsStruct(const TExprNode *node) {
+    if (!node->IsCallable("BlockAsStruct")) {
+        return false;
+    }
+    for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
+        const auto *child = node->Child(i);
+        if (!child->Child(1)->IsArgument()) {
+            return false;
+        }
+    }
+    return true;
+}
+} // namespace
+
+TExprBase KqpEliminateWideMapPackUnpack(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
+    Y_UNUSED(typesCtx);
+    if (!node.Maybe<TCoWideMap>()) {
+        return node;
+    }
+
+    auto wideMap = node.Cast<TCoWideMap>();
+    auto lambda = wideMap.Lambda();
+    const auto& args = lambda.Ptr()->Head();
+    const auto bodyCount = lambda.Ptr()->ChildrenSize() - 1;
+
+    // Match unpack lambda: (struct, count) → (BlockMember(struct, col1), ..., count)
+    if (args.ChildrenSize() != 2 || bodyCount < 2 ||
+        lambda.Ptr()->Child(bodyCount) != args.Child(1)) {
+        return node;
+    }
+
+    TVector<TStringBuf> unpackColumns;
+    for (ui32 i = 1; i < bodyCount; ++i) {
+        const auto* c = lambda.Ptr()->Child(i);
+        if (!c->IsCallable("BlockMember") || c->Child(0) != args.Child(0)) {
+            return node;
+        }
+        unpackColumns.push_back(c->Child(1)->Content());
+    }
+
+    // Match input: WideTakeBlocks(WideMap(X, packLambda), n)
+    const auto& inp = wideMap.Input().Ref();
+    if (!inp.IsCallable("WideTakeBlocks") || !inp.Head().IsCallable("WideMap")) {
+        return node;
+    }
+
+    const auto packLambda = inp.Head().ChildPtr(1);
+    if (packLambda->ChildrenSize() != 3 ||
+        !packLambda->Child(1)->IsCallable("BlockAsStruct") ||
+        packLambda->Child(2) != packLambda->Head().Child(packLambda->Head().ChildrenSize() - 1)) {
+        return node;
+    }
+
+    const auto* bas = packLambda->Child(1);
+    if (bas->ChildrenSize() != unpackColumns.size()) {
+        return node;
+    }
+
+    if (bas->ChildrenSize() != packLambda->Head().ChildrenSize() - 1) {
+        return node;
+    }
+
+    for (ui32 i = 0; i < bas->ChildrenSize(); ++i) {
+        if (bas->Child(i)->Child(0)->Content() != unpackColumns[i]) {
+            return node;
+        }
+        if (bas->Child(i)->Child(1) != packLambda->Head().Child(i)) {
+            return node;
+        }
+    }
+
+    return TExprBase(ctx.ChangeChild(inp, 0, inp.Head().HeadPtr()));
+}
+
+TExprBase KqpEliminateWideMapForLargeOlapTable(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
+    Y_UNUSED(typesCtx);
+    if (!node.Maybe<TCoWideMap>()) {
+        return node;
+    }
+
+    auto wideMap = node.Cast<TCoWideMap>();
+    if (!wideMap.Input().Maybe<TCoFromFlow>()) {
+        return node;
+    }
+
+    auto fromFlow = wideMap.Input().Cast<TCoFromFlow>();
+    if (!fromFlow.Input().Maybe<TKqpBlockReadOlapTableRanges>()) {
+        return node;
+    }
+
+    auto blockRead = fromFlow.Input().Cast<TKqpBlockReadOlapTableRanges>();
+    if (blockRead.Columns().Size() < EliminationColumnLimit) {
+        return node;
+    }
+
+    auto lambda = wideMap.Lambda();
+    if (const auto wide = lambda.Ptr()->Head().ChildrenSize(); !wide || (lambda.Ptr()->ChildrenSize() != wide + 1)) {
+        return node;
+    }
+
+    TVector<TStringBuf> columnsInOrder;
+    // Looking for pattern (BlockMember BlockAsStruct ... `colName`) ...
+    for (ui32 i = 1, e = lambda.Ptr()->ChildrenSize() - 1; i < e; ++i) {
+        const auto *maybeBlockMember = lambda.Ptr()->Child(i);
+        if (!maybeBlockMember->IsCallable("BlockMember")) {
+            return node;
+        }
+        if (!IsValidBlockAsStruct(maybeBlockMember->Child(0))) {
+            return node;
+        }
+        columnsInOrder.push_back(maybeBlockMember->Child(1)->Content());
+    }
+
+    // Make sure that columns are in the same order, otherwise we cannot eliminate that lambda.
+    const auto items =
+        lambda.Ptr()->Child(1)->Child(0)->GetTypeAnn()->Cast<TBlockExprType>()->GetItemType()->Cast<TStructExprType>()->GetItems();
+    const auto itemsSize = items.size();
+    if (itemsSize != columnsInOrder.size()) {
+        return node;
+    }
+
+    for (ui32 i = 0; i < itemsSize; ++i) {
+        if (items[i]->GetName() != columnsInOrder[i]) {
+            return node;
+        }
+    }
+
+    auto newBlockRead = Build<TKqpBlockReadOlapTableRanges>(ctx, node.Pos())
+        .Table(blockRead.Table())
+        .Ranges(blockRead.Ranges())
+        .Columns(blockRead.Columns())
+        .Settings(blockRead.Settings())
+        .ExplainPrompt(blockRead.ExplainPrompt())
+        .Process(blockRead.Process())
+    .Done();
+
+    return Build<TCoFromFlow>(ctx, node.Pos())
+        .Input(newBlockRead)
+    .Done();
+}
+
 TExprBase KqpBuildWideReadTable(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
     if (!node.Maybe<TKqpReadTable>() &&
         !node.Maybe<TKqpReadOlapTableRanges>() &&

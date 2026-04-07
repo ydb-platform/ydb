@@ -1,12 +1,57 @@
+#include "metering_sink.h"
+
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/metering/metering.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/size_literals.h>
-#include "metering_sink.h"
 
 
 namespace NKikimr::NPQ {
 
 std::atomic<ui64> TMeteringSink::MeteringCounter_{0};
+
+
+struct TMeteringSink::FlushParameters {
+    FlushParameters(TString&& name,
+                    TString&& schema,
+                    TString&& units,
+                    ui64 quantity = 1)
+        : Name(std::move(name))
+        , Schema(std::move(schema))
+        , Units(std::move(units))
+        , Quantity(quantity) {
+    }
+
+    FlushParameters& withTags(THashMap<TString, ui64>&& tags) {
+        Tags = std::move(tags);
+        return *this;
+    }
+
+    FlushParameters& withVersion(TString&& version) {
+        Version = std::move(version);
+        return *this;
+    }
+
+    FlushParameters& withOneFlush() {
+        OneFlush = true;
+        return *this;
+    }
+
+    // skip flush, if quantity is zero
+    FlushParameters& withImplicitZero() {
+        ImplicitZero = true;
+        return *this;
+    }
+
+    TString Name;
+    TString Schema;
+    TString Units;
+    ui64 Quantity;
+    THashMap<TString, ui64> Tags;
+    bool OneFlush = false;
+    bool ImplicitZero = false;
+    TString Version = "v1";
+};
 
 bool TMeteringSink::Create(TInstant now, const TMeteringSink::TParameters& p,
                            const TSet<EMeteringJson>& whichToFlush,
@@ -69,7 +114,7 @@ bool TMeteringSink::IsCreated() const {
 
 TString TMeteringSink::GetMeteringJson(const TMeteringSink::FlushParameters& parameters, ui64 quantity,
                                        TInstant start, TInstant end, TInstant now) {
-    MeteringCounter_.fetch_add(1);
+    const ui64 currentMeteringCounterValue = MeteringCounter_.fetch_add(1) + 1;
 
     TStringStream output;
     NJson::TJsonWriter writer(&output, false);
@@ -83,7 +128,7 @@ TString TMeteringSink::GetMeteringJson(const TMeteringSink::FlushParameters& par
                  "-" << Parameters_.YdbDatabaseId <<
                  "-" << Parameters_.TabletId <<
                  "-" << start.MilliSeconds() <<
-                 "-" << GetMeteringCounter());
+                 "-" << currentMeteringCounterValue);
     writer.Write("schema", parameters.Schema);
 
     writer.OpenMap("tags");
@@ -102,6 +147,7 @@ TString TMeteringSink::GetMeteringJson(const TMeteringSink::FlushParameters& par
     writer.OpenMap("labels");
     writer.Write("datastreams_stream_name", Parameters_.StreamName);
     writer.Write("ydb_database", Parameters_.YdbDatabaseId);
+    writer.Write("Category", "Topic");
     writer.CloseMap(); // "labels"
 
     writer.Write("version", parameters.Version);
@@ -114,7 +160,7 @@ TString TMeteringSink::GetMeteringJson(const TMeteringSink::FlushParameters& par
 }
 
 
-const TMeteringSink::FlushParameters TMeteringSink::GetFlushParameters(const EMeteringJson type, const TInstant& now, const TInstant& lastFlush) {
+TMeteringSink::FlushParameters TMeteringSink::GetFlushParameters(const EMeteringJson type, const TInstant now, const TInstant lastFlush) {
     switch (type) {
     case EMeteringJson::PutEventsV1: {
         ui64 putUnits = CurrentPutUnitsQuantity_;
@@ -166,21 +212,27 @@ const TMeteringSink::FlushParameters TMeteringSink::GetFlushParameters(const EMe
     case EMeteringJson::UsedStorageV1: {
         ui64 duration = (now - lastFlush).MilliSeconds();
         ui64 avgUsage = duration > 0 ? CurrentUsedStorage_ * 1_MB * 1000 / duration : 0;
+        ui64 quantity = (avgUsage > 0) ? 1 : 0;
 
         CurrentUsedStorage_ = 0;
 
+        const TStringBuf schemaName = HasAppData() && AppDataVerified().FeatureFlags.GetUseYdsTopicStorageMetering()
+            ? "yds.serverless.v1"sv
+            : "ydb.serverless.v1"sv;
         return TMeteringSink::FlushParameters(
             "used_storage",
-            "ydb.serverless.v1",
-            "byte*second"
+            ToString(schemaName),
+            "byte*second",
+            quantity
         ).withTags({
                 {"ydb_size", avgUsage}
             })
+        .withImplicitZero()
         .withVersion("1.0.0");
     }
 
     default:
-        Y_ABORT_UNLESS(false);
+        Y_ENSURE(false);
     };
 }
 
@@ -194,7 +246,7 @@ void TMeteringSink::Flush(TInstant now, bool force) {
             continue;
         }
 
-        auto parameters = GetFlushParameters(whichOne, now, lastFlush);
+        const auto parameters = GetFlushParameters(whichOne, now, lastFlush);
 
         if (parameters.OneFlush) {
             const auto isTimeToFlushUnits = now.Hours() > lastFlush.Hours();
@@ -217,13 +269,15 @@ void TMeteringSink::Flush(TInstant now, bool force) {
             auto interval = TInstant::Hours(lastFlush.Hours()) + Parameters_.FlushLimit;
 
             auto tryFlush = [&](TInstant start, TInstant finish) {
-                const auto metricsJson = GetMeteringJson(
-                    parameters,
-                    parameters.Quantity * (finish.Seconds() - start.Seconds()),
-                    start,
-                    finish,
-                    now);
-                FlushFunction_(metricsJson);
+                if (parameters.Quantity > 0 || !parameters.ImplicitZero) {
+                    const auto metricsJson = GetMeteringJson(
+                        parameters,
+                        parameters.Quantity * (finish.Seconds() - start.Seconds()),
+                        start,
+                        finish,
+                        now);
+                    FlushFunction_(metricsJson);
+                }
 
                 lastFlush = finish;
             };
@@ -246,5 +300,7 @@ ui64 TMeteringSink::GetMeteringCounter() const {
 bool TMeteringSink::IsTimeToFlush(TInstant now, TInstant last) const {
     return (now - last) >= Parameters_.FlushInterval;
 }
+
+TMeteringSink::~TMeteringSink() = default;
 
 } // namespace NKikimr::NPQ

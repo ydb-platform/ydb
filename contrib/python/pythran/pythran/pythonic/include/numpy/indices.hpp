@@ -10,10 +10,8 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class pS, class dtype = functor::int64>
-  types::ndarray<
-      typename dtype::type,
-      sutils::push_front_t<
-          pS, std::integral_constant<long, std::tuple_size<pS>::value>>>
+  types::ndarray<typename dtype::type,
+                 sutils::push_front_t<pS, std::integral_constant<long, std::tuple_size<pS>::value>>>
   indices(pS const &shape, dtype d = dtype());
 
   DEFINE_FUNCTOR(pythonic::numpy, indices);

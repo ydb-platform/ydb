@@ -1,7 +1,9 @@
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/concurrency/async_stream.h>
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 #include <yt/yt/core/concurrency/async_stream_pipe.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <util/stream/mem.h>
 
@@ -39,7 +41,7 @@ TEST(TAsyncOutputStreamTest, Simple)
     auto readResult1 = ReadAlreadySetValue(pipe);
     ASSERT_EQ(GetString(readResult1), "foo");
     ASSERT_TRUE(writeResult.IsSet());
-    ASSERT_TRUE(writeResult.Get().IsOK());
+    ASSERT_TRUE(WaitForFast(writeResult).IsOK());
 
     auto closeResult = asyncWriter->Close();
     ASSERT_TRUE(writeResult.IsSet());
@@ -135,7 +137,7 @@ private:
 
 //! This test creates a big block size async zero copy input stream
 //! over a small block size async input stream to provoke a stack overflow.
-TEST(IAsyncZeroCopyInputStreamTest, NoStackOverflow)
+TEST(TIAsyncZeroCopyInputStreamTest, NoStackOverflow)
 {
     TString buf(512_KB, 'a');
     TMemoryInput memoryInput(buf.data(), buf.size());

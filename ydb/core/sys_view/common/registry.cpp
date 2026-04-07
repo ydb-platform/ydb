@@ -54,8 +54,7 @@ const TVector<SysViewsRegistryRecord> SysViewsRegistry::SysViews = {
 
     {"query_sessions", ESysViewType::EQuerySessions, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::QuerySessions>},
     {"query_metrics_one_minute", ESysViewType::EQueryMetricsOneMinute, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::QueryMetrics>},
-    // don't have approved schema yet
-    // {"compile_cache_queries", ESysViewType::ECompileCacheQueries, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::CompileCacheQueries>},
+    {"compile_cache_queries", ESysViewType::ECompileCacheQueries, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::CompileCacheQueries>},
 
     {"ds_pdisks", ESysViewType::EPDisks, {ESource::Domain},  &FillSchema<Schema::PDisks>},
     {"ds_vslots", ESysViewType::EVSlots, {ESource::Domain},  &FillSchema<Schema::VSlots>},
@@ -78,6 +77,20 @@ const TVector<SysViewsRegistryRecord> SysViewsRegistry::SysViews = {
     {"auth_owners", ESysViewType::EAuthOwners, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::AuthOwners>},
     {"auth_permissions", ESysViewType::EAuthPermissions, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::AuthPermissions>},
     {"auth_effective_permissions", ESysViewType::EAuthEffectivePermissions, {ESource::Domain, ESource::SubDomain},  &FillSchema<Schema::AuthPermissions>},
+
+    {"store_primary_index_stats", ESysViewType::EStorePrimaryIndexStats, {ESource::OlapStore},  &FillSchema<Schema::PrimaryIndexStats>},
+    {"store_primary_index_schema_stats", ESysViewType::EStorePrimaryIndexSchemaStats, {ESource::OlapStore},  &FillSchema<Schema::PrimaryIndexSchemaStats>},
+    {"store_primary_index_portion_stats", ESysViewType::EStorePrimaryIndexPortionStats, {ESource::OlapStore},  &FillSchema<Schema::PrimaryIndexPortionStats>},
+    {"store_primary_index_granule_stats", ESysViewType::EStorePrimaryIndexGranuleStats, {ESource::OlapStore},  &FillSchema<Schema::PrimaryIndexGranuleStats>},
+    {"store_primary_index_optimizer_stats", ESysViewType::EStorePrimaryIndexOptimizerStats, {ESource::OlapStore},  &FillSchema<Schema::PrimaryIndexOptimizerStats>},
+
+    {"primary_index_stats", ESysViewType::ETablePrimaryIndexStats, {ESource::ColumnTable},  &FillSchema<Schema::PrimaryIndexStats>},
+    {"primary_index_schema_stats", ESysViewType::ETablePrimaryIndexSchemaStats, {ESource::ColumnTable},  &FillSchema<Schema::PrimaryIndexSchemaStats>},
+    {"primary_index_portion_stats", ESysViewType::ETablePrimaryIndexPortionStats, {ESource::ColumnTable},  &FillSchema<Schema::PrimaryIndexPortionStats>},
+    {"primary_index_granule_stats", ESysViewType::ETablePrimaryIndexGranuleStats, {ESource::ColumnTable},  &FillSchema<Schema::PrimaryIndexGranuleStats>},
+    {"primary_index_optimizer_stats", ESysViewType::ETablePrimaryIndexOptimizerStats, {ESource::ColumnTable},  &FillSchema<Schema::PrimaryIndexOptimizerStats>},
+
+    {"streaming_queries", ESysViewType::EStreamingQueries, {ESource::Domain, ESource::SubDomain}, &FillSchema<Schema::StreamingQueries>},
 };
 
 const TVector<SysViewsRegistryRecord> SysViewsRegistry::RewrittenSysViews = {

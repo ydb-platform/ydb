@@ -31,7 +31,10 @@ public:
         // Handle callables for already parsed/optimized AST
         AddHandler({TYtReadTable::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleReadTable));
         AddHandler({TYtReadTableScheme::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleReadTableScheme));
-        AddHandler({TYtDropTable::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleDropTable));
+        AddHandler({TYtCreateTable::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleCreateDrop));
+        AddHandler({TYtDropTable::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleCreateDrop));
+        AddHandler({TYtCreateView::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleCreateDrop));
+        AddHandler({TYtDropView::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleCreateDrop));
         AddHandler({TYtPublish::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandlePublish));
         AddHandler({TYtSort::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleOperation));
         AddHandler({TYtMap::CallableName()}, Hndl(&TYtIntentDeterminationTransformer::HandleOperation));
@@ -54,7 +57,8 @@ public:
         EYtSettingTypes acceptedSettings = EYtSettingType::View | EYtSettingType::Anonymous
             | EYtSettingType::InferScheme | EYtSettingType::ForceInferScheme
             | EYtSettingType::DoNotFailOnInvalidSchema | EYtSettingType::XLock
-            | EYtSettingType::UserSchema | EYtSettingType::UserColumns | EYtSettingType::IgnoreTypeV3;
+            | EYtSettingType::UserSchema | EYtSettingType::UserColumns
+            | EYtSettingType::ExtraColumns | EYtSettingType::IgnoreTypeV3;
         for (auto path: read.Arg(2).Cast<TExprList>()) {
             if (auto table = path.Maybe<TYtPath>().Table()) {
                 if (!TYtTableInfo::Validate(table.Cast().Ref(), acceptedSettings, ctx)) {
@@ -98,7 +102,12 @@ public:
             try {
                 switch (FromString<EYtWriteMode>(mode->Child(1)->Content())) {
                 case EYtWriteMode::Drop:
+                case EYtWriteMode::DropIfExists:
                     tableDesc.Intents |= TYtTableIntent::Drop;
+                    break;
+                case EYtWriteMode::DropObject:
+                case EYtWriteMode::DropObjectIfExists:
+                    tableDesc.Intents |= TYtTableIntent::Drop | TYtTableIntent::View;
                     break;
                 case EYtWriteMode::Append:
                     tableDesc.Intents |= TYtTableIntent::Append;
@@ -109,6 +118,17 @@ public:
                     break;
                 case EYtWriteMode::Flush:
                     tableDesc.Intents |= TYtTableIntent::Flush;
+                    break;
+                case EYtWriteMode::Replace:
+                    tableDesc.Intents |= TYtTableIntent::Replace;
+                    break;
+                case EYtWriteMode::Create:
+                case EYtWriteMode::CreateIfNotExists:
+                    tableDesc.Intents |= TYtTableIntent::Create;
+                    break;
+                case EYtWriteMode::CreateObject:
+                case EYtWriteMode::CreateObjectIfNotExists:
+                    tableDesc.Intents |= TYtTableIntent::Create | TYtTableIntent::View;
                     break;
                 default:
                     ctx.AddError(TIssue(ctx.GetPosition(mode->Child(1)->Pos()), TStringBuilder() << "Unsupported "
@@ -197,30 +217,30 @@ public:
         return TStatus::Ok;
     }
 
-    TStatus HandleDropTable(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-        auto drop = TYtDropTable(input);
+    TStatus HandleCreateDrop(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        const TYtIsolatedOpBase node(input);
+        const TYtTableInfo tableInfo(node.Table(), false);
+        const auto& cluster = node.DataSink().Cluster().StringValue();
+        auto& tableDesc = State_->TablesData->GetOrAddTable(cluster, tableInfo.Name, tableInfo.Epoch);
 
-        auto cluster = TString{drop.DataSink().Cluster().Value()};
-        TYtTableInfo tableInfo(drop.Table(), false);
-
-        TYtTableDescription& tableDesc = State_->TablesData->GetOrAddTable(
-            cluster,
-            tableInfo.Name,
-            tableInfo.Epoch
-        );
         if (NYql::HasSetting(tableInfo.Settings.Cast().Ref(), EYtSettingType::Anonymous)) {
             tableDesc.IsAnonymous = true;
             RegisterAnonymouseTable(cluster, tableInfo.Name);
         }
-        tableDesc.Intents |= TYtTableIntent::Drop;
+        if (input->IsCallable({TYtCreateTable::CallableName(), TYtCreateView::CallableName()})) {
+            tableDesc.Intents |= TYtTableIntent::Create;
+        }
+        if (input->IsCallable({TYtDropTable::CallableName(), TYtDropView::CallableName()})) {
+            tableDesc.Intents |= TYtTableIntent::Drop;
+        }
+        if (input->IsCallable({TYtCreateView::CallableName(), TYtDropView::CallableName()})) {
+            tableDesc.Intents |= TYtTableIntent::View;
+        }
 
         UpdateDescriptorMeta(tableDesc, tableInfo);
 
         output = ResetTablesMeta(input, ctx, State_->Types->UseTableMetaFromGraph, State_->Types->EvaluationInProgress > 0);
-        if (!output) {
-            return TStatus::Error;
-        }
-        return TStatus::Ok;
+        return !output ? TStatus::Error : TStatus::Ok;
     }
 
     TStatus HandlePublish(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -250,6 +270,9 @@ public:
                     break;
                 case EYtWriteMode::Flush:
                     tableDesc.Intents |= TYtTableIntent::Flush;
+                    break;
+                case EYtWriteMode::Replace:
+                    tableDesc.Intents |= TYtTableIntent::Replace;
                     break;
                 default:
                     ctx.AddError(TIssue(ctx.GetPosition(mode->Child(1)->Pos()), TStringBuilder() << "Unsupported "
@@ -311,6 +334,9 @@ public:
                     break;
                 case EYtWriteMode::Flush:
                     tableDesc.Intents |= TYtTableIntent::Flush;
+                    break;
+                case EYtWriteMode::Replace:
+                    tableDesc.Intents |= TYtTableIntent::Replace;
                     break;
                 default:
                     ctx.AddError(TIssue(ctx.GetPosition(mode->Child(1)->Pos()), TStringBuilder() << "Unsupported "

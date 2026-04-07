@@ -40,6 +40,17 @@ enum ESysViewType {
     EPgClass = 33;
     EShowCreate = 34;
     ECompileCacheQueries = 35;
+    EStorePrimaryIndexStats = 36;
+    EStorePrimaryIndexSchemaStats = 37;
+    EStorePrimaryIndexPortionStats = 38;
+    EStorePrimaryIndexGranuleStats = 39;
+    EStorePrimaryIndexOptimizerStats = 40;
+    ETablePrimaryIndexStats = 41;
+    ETablePrimaryIndexSchemaStats = 42;
+    ETablePrimaryIndexPortionStats = 43;
+    ETablePrimaryIndexGranuleStats = 44;
+    ETablePrimaryIndexOptimizerStats = 45;
+    EStreamingQueries = 46;
 }
 
 message TSysViewDescription {

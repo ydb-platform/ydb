@@ -114,7 +114,8 @@ namespace NActors {
             if (!Metrics) {
                 Metrics = Common->Metrics ? CreateInterconnectMetrics(Common) : CreateInterconnectCounters(Common);
             }
-            Metrics->SetPeerInfo(PeerNodeId, name, info.Location.GetDataCenterId());
+            const TString peerLabel = Common->Settings.MergePerHostCounters ? info.Host : name;
+            Metrics->SetPeerInfo(name, info.Location.GetDataCenterId(), peerLabel);
             PeerBridgePileName = info.Location.GetBridgePileName();
 
             LOG_DEBUG_IC("ICP02", "configured for host %s", name.data());
@@ -330,6 +331,8 @@ namespace NActors {
 
         TEvHandshakeDone *msg = ev->Get();
 
+        bool runDelayedRdmaHandshakeTimer = false;
+
         // Terminate handshake actor working in opposite direction, if set up.
         if (ev->Sender == IncomingHandshakeActor) {
             LOG_INFO_IC("ICP19", "incoming handshake succeeded");
@@ -337,6 +340,9 @@ namespace NActors {
             DropOutgoingHandshake();
         } else if (ev->Sender == OutgoingHandshakeActor) {
             LOG_INFO_IC("ICP20", "outgoing handshake succeeded");
+            if (auto rdmaDisabled = ev->Get()->RdmaHanshakeResult.GetDisabled()) {
+                runDelayedRdmaHandshakeTimer = rdmaDisabled->RunDelayedHandshake;
+            }
             DropIncomingHandshake();
             DropOutgoingHandshake(false);
         } else {
@@ -389,6 +395,13 @@ namespace NActors {
 
         /* Forward all held events */
         ProcessPendingSessionEvents();
+
+        if (runDelayedRdmaHandshakeTimer && !DelayedRdmaHandshakeTimeout) {
+            LOG_NOTICE_IC("ICP29", "run delayed rdma handshake for session: %s", SessionID.ToString().data());
+            DelayedRdmaHandshakeTimeout = TDuration::Seconds(5);
+            TActivationContext::Schedule(DelayedRdmaHandshakeTimeout, new IEventHandle(EvRdmaPendingHandshake, 0, SelfId(),
+                        {}, nullptr, 0));
+        }
     }
 
     void TInterconnectProxyTCP::HandleHandshakeStatus(TEvHandshakeFail::TPtr& ev) {
@@ -425,6 +438,11 @@ namespace NActors {
 
         if (Metrics) {
             Metrics->IncHandshakeFails();
+        }
+        if (Common->Settings.MergePerHostCounters) {
+            LOG_NOTICE_IC("ICP36", "peer-level handshake fail PeerNodeId# %" PRIu32 " Peer# %s Host# %s Temporary# %u"
+                " Explanation# %s", PeerNodeId, Metrics ? Metrics->GetHumanFriendlyPeerHostName().data() : "",
+                TechnicalPeerHostName.data(), ui32(ev->Get()->Temporary), ev->Get()->Explanation.data());
         }
 
         if (IncomingHandshakeActor || OutgoingHandshakeActor) {
@@ -520,6 +538,16 @@ namespace NActors {
                 TActivationContext::Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::Disconnected));
                 break;
 
+            case TEvForwardSubscribeSession::EventType: {
+                auto msg = ev->Release<TEvForwardSubscribeSession>();
+                if (msg->Event) {
+                    Send(msg->Event->Sender, new TEvInterconnect::TEvNodeDisconnected(PeerNodeId), 0, msg->Event->Cookie);
+                    TActivationContext::Send(IEventHandle::ForwardOnNondelivery(std::unique_ptr<IEventHandle>(msg->Event.Release()),
+                        TEvents::TEvUndelivered::Disconnected));
+                }
+                break;
+            }
+
             case TEvInterconnect::TEvConnectNode::EventType:
             case TEvents::TEvSubscribe::EventType:
                 Send(ev->Sender, new TEvInterconnect::TEvNodeDisconnected(PeerNodeId), 0, ev->Cookie);
@@ -566,6 +594,10 @@ namespace NActors {
 
     void TInterconnectProxyTCP::EnqueueSessionEvent(STATEFN_SIG) {
         ICPROXY_PROFILED;
+
+        if (InErrorState) {
+            return DropSessionEvent(ev);
+        }
 
         ValidateEvent(ev, "EnqueueSessionEvent");
         const ui32 size = ev->GetSize();
@@ -614,6 +646,21 @@ namespace NActors {
         Y_ABORT_UNLESS(Session && SessionID);
         ValidateEvent(ev, "ForwardSessionEventToSession");
         InvokeOtherActor(*Session, &TInterconnectSessionTCP::Receive, ev);
+    }
+
+    void TInterconnectProxyTCP::HandleRdmaDelayedHandshake() {
+        if (CurrentStateFunc() == &TThis::StateWork) {
+            // There is a chance that session was promouted to use RDMA without us.
+            if (!InvokeOtherActor(*Session, &TInterconnectSessionTCP::IsRdmaInUse)) {
+                InvokeOtherActor(*Session, &TInterconnectSessionTCP::Terminate, TDisconnectReason::NewSession());
+            }
+            DelayedRdmaHandshakeTimeout = TDuration();
+        } else {
+            LOG_WARN_IC("ICP36", "restart delayed rdma handshake for session: %s", SessionID.ToString().data());
+            DelayedRdmaHandshakeTimeout = TDuration::Seconds(15);
+                TActivationContext::Schedule(DelayedRdmaHandshakeTimeout, new IEventHandle(EvRdmaPendingHandshake, 0, SelfId(),
+                    {}, nullptr, 0));
+        }
     }
 
     void TInterconnectProxyTCP::GenerateHttpInfo(NMon::TEvHttpInfo::TPtr& ev) {
@@ -855,10 +902,14 @@ namespace NActors {
     }
 
     void TInterconnectProxyTCP::HandleClosePeerSocket() {
+        HandleClosePeerSocket("closed connection by debug command");
+    }
+
+    void TInterconnectProxyTCP::HandleClosePeerSocket(std::span<const char> logEntry) {
         ICPROXY_PROFILED;
 
         if (Session && Session->Socket) {
-            LOG_INFO_IC("ICP34", "closed connection by debug command");
+            LOG_INFO_IC("ICP34", logEntry.data());
             Session->Socket->Shutdown(SHUT_RDWR);
         }
     }

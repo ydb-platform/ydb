@@ -115,43 +115,79 @@ namespace NActors {
         , HasOwnSharedThread(cfg.HasSharedThread)
         , MaxLocalQueueSize(cfg.MaxLocalQueueSize)
         , MinLocalQueueSize(cfg.MinLocalQueueSize)
+        , SharedOnly(cfg.ForcedForeignSlotCount || cfg.AdjacentPools.size() || (!cfg.Threads && !cfg.MaxThreadCount))
         , Priority(cfg.Priority)
         , Jail(jail)
         , ActorSystemProfile(cfg.ActorSystemProfile)
     {
         Y_UNUSED(Jail, SoftProcessingDurationTs);
 
-        ui32 threads = ThreadCount;
-        if (HasOwnSharedThread && threads) {
-            threads = threads - 1;
-        }
-
-        if (MaxLocalQueueSize) {
-            LocalQueues.Reset(new NThreading::TPadded<std::queue<ui32>>[threads]);
-            LocalQueueSize = MinLocalQueueSize;
-        }
-        if constexpr (NFeatures::TSpinFeatureFlags::CalcPerThread) {
-            for (ui32 idx = 0; idx < threads; ++idx) {
-                SpinThresholdCyclesPerThread[idx].store(0);
+        if (cfg.AllThreadsAreShared) {
+            ui32 sharedThreads = DefaultThreadCount;
+            ui32 threads = ThreadCount;
+            if (sharedThreads && threads) {
+                threads = threads - sharedThreads;
             }
-        }
-        if constexpr (NFeatures::TSpinFeatureFlags::UsePseudoMovingWindow) {
-            MovingWaitingStats.Reset(new TWaitingStats<double>[threads]);
-        }
+            if (cfg.AllThreadsAreShared) {
+                threads = 0;
+            }
 
-        i16 limit = Min(threads, (ui32)Max<i16>());
-        if (DefaultFullThreadCount) {
-            DefaultFullThreadCount = Min<i16>(DefaultFullThreadCount - HasOwnSharedThread, limit);
+            if (MaxLocalQueueSize) {
+                LocalQueues.Reset(new NThreading::TPadded<std::queue<ui32>>[threads]);
+                LocalQueueSize = MinLocalQueueSize;
+            }
+            if constexpr (NFeatures::TSpinFeatureFlags::CalcPerThread) {
+                for (ui32 idx = 0; idx < threads; ++idx) {
+                    SpinThresholdCyclesPerThread[idx].store(0);
+                }
+            }
+            if constexpr (NFeatures::TSpinFeatureFlags::UsePseudoMovingWindow) {
+                MovingWaitingStats.Reset(new TWaitingStats<double>[threads]);
+            }
+
+            i16 limit = Min(threads, (ui32)Max<i16>());
+            DefaultFullThreadCount = Min<i16>(DefaultFullThreadCount - sharedThreads, limit);
+
+            MaxFullThreadCount = Min(Max<i16>(MaxFullThreadCount - sharedThreads, DefaultFullThreadCount), limit);
+
+            if (MinFullThreadCount) {
+                MinFullThreadCount = Min<i16>(MinFullThreadCount - sharedThreads, DefaultFullThreadCount);
+            } else {
+                MinFullThreadCount = DefaultFullThreadCount;
+            }
         } else {
-            DefaultFullThreadCount = limit;
-        }
+            ui32 threads = ThreadCount;
+            if (HasOwnSharedThread && threads) {
+                threads = threads - 1;
+            }
 
-        MaxFullThreadCount = Min(Max<i16>(MaxFullThreadCount - HasOwnSharedThread, DefaultFullThreadCount), limit);
+            if (MaxLocalQueueSize) {
+                LocalQueues.Reset(new NThreading::TPadded<std::queue<ui32>>[threads]);
+                LocalQueueSize = MinLocalQueueSize;
+            }
+            if constexpr (NFeatures::TSpinFeatureFlags::CalcPerThread) {
+                for (ui32 idx = 0; idx < threads; ++idx) {
+                    SpinThresholdCyclesPerThread[idx].store(0);
+                }
+            }
+            if constexpr (NFeatures::TSpinFeatureFlags::UsePseudoMovingWindow) {
+                MovingWaitingStats.Reset(new TWaitingStats<double>[threads]);
+            }
 
-        if (MinFullThreadCount) {
-            MinFullThreadCount = Min<i16>(MinFullThreadCount - HasOwnSharedThread, DefaultFullThreadCount);
-        } else {
-            MinFullThreadCount = DefaultFullThreadCount;
+            i16 limit = Min(threads, (ui32)Max<i16>());
+            if (DefaultFullThreadCount) {
+                DefaultFullThreadCount = Min<i16>(DefaultFullThreadCount - HasOwnSharedThread, limit);
+            } else {
+                DefaultFullThreadCount = limit;
+            }
+
+            MaxFullThreadCount = Min(Max<i16>(MaxFullThreadCount - HasOwnSharedThread, DefaultFullThreadCount), limit);
+
+            if (MinFullThreadCount) {
+                MinFullThreadCount = Min<i16>(MinFullThreadCount - HasOwnSharedThread, DefaultFullThreadCount);
+            } else {
+                MinFullThreadCount = DefaultFullThreadCount;
+            }
         }
 
         ThreadCount = static_cast<i16>(MaxFullThreadCount);
@@ -163,14 +199,23 @@ namespace NActors {
         MinThreadCount = MinFullThreadCount + HasOwnSharedThread;
         MaxThreadCount = MaxFullThreadCount + HasOwnSharedThread;
 
+        if (SharedOnly) {
+            MaxThreadCount = cfg.ForcedForeignSlotCount + 1;
+        }
+
         Threads.Reset(new NThreading::TPadded<TExecutorThreadCtx>[MaxFullThreadCount]);
         if constexpr (DebugMode) {
             Sanitizer.reset(new TBasicExecutorPoolSanitizer(this));
         }
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "ThreadCount == ", ThreadCount, " DefaultThreadCount == ", DefaultThreadCount, " MinThreadCount == ", MinThreadCount, " MaxThreadCount == ", MaxThreadCount, " DefaultFullThreadCount == ", DefaultFullThreadCount, " MinFullThreadCount == ", MinFullThreadCount, " MaxFullThreadCount == ", MaxFullThreadCount);
     }
 
     TBasicExecutorPool::~TBasicExecutorPool() {
         Threads.Destroy();
+    }
+
+    bool TBasicExecutorPool::IsSharedOnly() const {
+        return SharedOnly;
     }
 
     void TBasicExecutorPool::AskToGoToSleep(bool *needToWait, bool *needToBlock) {
@@ -286,17 +331,11 @@ namespace NActors {
 
         while (!StopFlag.load(std::memory_order_acquire)) {
             {
-                bool needToCheckSleep = false;
-                while (true) {
-                    ui64 checkToSleepWorkers = CheckToSleepWorkers.load(std::memory_order_acquire);
-                    if (checkToSleepWorkers == 0) {
-                        break;
-                    }
-                    needToCheckSleep = true;
+                ui64 checkToSleepWorkers = CheckToSleepWorkers.load(std::memory_order_acquire);
+                bool needToCheckSleep = checkToSleepWorkers != 0;
+                if (needToCheckSleep) {
                     CheckToSleepWorkers.compare_exchange_weak(checkToSleepWorkers, checkToSleepWorkers - 1, std::memory_order_release, std::memory_order_relaxed);
-                }
-
-                if (!needToCheckSleep) {
+                } else { // otherwise we ready to get activation
                     TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
                     if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(++revolvingCounter);}, Activations)) {
                         EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation found");

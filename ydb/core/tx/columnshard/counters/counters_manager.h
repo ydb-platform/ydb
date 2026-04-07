@@ -52,7 +52,7 @@ public:
     }
 
     void OnWriteOverloadDisk() const {
-        TabletCounters->IncCounter(COUNTER_OUT_OF_SPACE);
+        TabletCounters->IncCounter(COUNTER_DISK_GROUP_OUT_OF_SPACE);
     }
 
     void OnWriteOverloadMetadata(const ui64 size) const {
@@ -77,6 +77,11 @@ public:
     void OnWriteOverloadShardWritesSize(const ui64 size) const {
         TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
         CSCounters.OnWriteOverloadShardWritesSize(size);
+    }
+
+    void OnWriteOverloadRejectProbability(const ui64 size) const {
+        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
+        CSCounters.OnWriteOverloadRejectProbability(size);
     }
 
     void FillTableStats(TInternalPathId pathId, ::NKikimrTableStats::TTableStats& tableStats) {

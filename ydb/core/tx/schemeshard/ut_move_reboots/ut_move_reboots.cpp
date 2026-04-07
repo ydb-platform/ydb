@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
 
                 pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                    {NLs::PathExist,
-                                    NLs::ChildrenCount(2),
+                                    NLs::ChildrenCount(3),
                                     NLs::ShardsInsideDomain(1)});
 
                 auto tableVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::ChildrenCount(2),
+                                   {NLs::ChildrenCount(3),
                                     NLs::ShardsInsideDomain(1)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/TableMove"),
                                    {NLs::PathVersionEqual(5),
@@ -280,7 +280,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::ChildrenCount(2),
+                                   {NLs::ChildrenCount(3),
                                     NLs::ShardsInsideDomainOneOf({1,2,3,4})});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                                    {NLs::PathVersionEqual(5),
@@ -341,7 +341,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                 TInactiveZone inactive(activeZone);
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::ChildrenCount(3)});
+                                   {NLs::ChildrenCount(4)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/backup"),
                                    {NLs::PathVersionEqual(5),
                                     NLs::IsTable});
@@ -356,10 +356,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
 
     Y_UNIT_TEST(AlterAfter) {
         TTestWithReboots t;
-
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            ui64 expectedDomainPaths;
             {
                 TInactiveZone inactive(activeZone);
+                auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+                expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
                                 Name: "Table"
                                 Columns { Name: "key"   Type: "Uint64" }
@@ -367,6 +370,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                                 KeyColumnNames: ["key"]
                                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                expectedDomainPaths += 1;
 
                 // Write some data to the user table
                 auto fnWriteRow = [&] (ui64 tabletId) {
@@ -387,7 +392,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
 
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                    {NLs::PathExist,
-                                    NLs::ChildrenCount(2),
+                                    NLs::ChildrenCount(3),
                                     NLs::ShardsInsideDomain(1)});
 
                 TestMoveTable(runtime, ++t.TxId, "/MyRoot/Table", "/MyRoot/TableMove");
@@ -402,13 +407,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
             {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot"),
-                                   {NLs::ChildrenCount(2),
+                                   {NLs::ChildrenCount(3),
                                     NLs::ShardsInsideDomain(1)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/TableMove"),
                                    {NLs::IsTable,
                                     NLs::PathVersionEqual(6),
                                     NLs::CheckColumns("TableMove", {"key", "value", "add"}, {}, {"key"}),
-                                    NLs::PathsInsideDomain(2),
+                                    NLs::PathsInsideDomain(expectedDomainPaths),
                                     NLs::ShardsInsideDomain(1)});
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                                    {NLs::PathNotExist});
@@ -460,6 +465,46 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
 
                 i64 value = DoNextVal(runtime, "/MyRoot/TableMove/myseq");
                 UNIT_ASSERT_VALUES_EQUAL(value, 2);
+            }
+        });
+    }
+
+    Y_UNIT_TEST(ColumnTable) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            TPathVersion pathVersion;
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "ColumnTable"
+                    ColumnShardCount: 1
+                    Schema {
+                        Columns { Name: "key" Type: "Uint64" NotNull: true }
+                        Columns { Name: "value" Type: "Utf8" }
+                        KeyColumnNames: "key"
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                                   {NLs::PathExist,
+                                    NLs::ChildrenCount(3)});
+            }
+
+            t.TestEnv->ReliablePropose(runtime, MoveTableRequest(++t.TxId, "/MyRoot/ColumnTable", "/MyRoot/ColumnTableMove", TTestTxConfig::SchemeShard, {pathVersion}),
+                                       {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
+
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                                   {NLs::ChildrenCount(3)});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTableMove"),
+                                   {NLs::PathVersionEqual(4),
+                                    NLs::PathExist});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/ColumnTable"),
+                                   {NLs::PathNotExist});
             }
         });
     }

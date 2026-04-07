@@ -174,11 +174,10 @@ namespace NKikimr {
                                 lsn, id.ToString().data()));
                 TLogoBlobID genId(id, 0);
                 if (fromVPutCommand)
-                    LocRecCtx->HullDbRecovery->ReplayAddLogoBlobCmd(ctx, genId, id.PartId(), ingress, TRope(buf), lsn,
-                            THullDbRecovery::RECOVERY);
+                    LocRecCtx->HullDbRecovery->ReplayAddLogoBlobCmd(ctx, genId, id.PartId(), ingress, TRope(buf),
+                        std::nullopt, lsn, THullDbRecovery::RECOVERY);
                 else
-                    LocRecCtx->HullDbRecovery->ReplayAddLogoBlobCmd(ctx, genId, ingress, lsn,
-                            THullDbRecovery::RECOVERY);
+                    LocRecCtx->HullDbRecovery->ReplayAddLogoBlobCmd(ctx, genId, ingress, lsn, THullDbRecovery::RECOVERY);
             }
         }
 
@@ -402,7 +401,7 @@ namespace NKikimr {
             const bool fromVPutCommand = true;
             TMaybe<TIngress> ingress = TIngress::CreateIngressWithLocal(LocRecCtx->VCtx->Top.get(), LocRecCtx->VCtx->ShortSelfVDisk,
                 PutMsgOpt.Id, PutMsgOpt.IssueKeepFlag);
-            Y_VERIFY_S(ingress, "Failed to create ingress, VDiskId# " << LocRecCtx->VCtx->ShortSelfVDisk << 
+            Y_VERIFY_S(ingress, "Failed to create ingress, VDiskId# " << LocRecCtx->VCtx->ShortSelfVDisk <<
                     ", BlobId# " << PutMsgOpt.Id);
 
             PutLogoBlobToHullAndSyncLog(ctx, record.Lsn, PutMsgOpt.Id, *ingress, PutMsgOpt.Data, fromVPutCommand);
@@ -792,6 +791,14 @@ namespace NKikimr {
             return EDispatchStatus::Success;
         }
 
+        EDispatchStatus HandleMetadata(const TActorContext& /*ctx*/, const NPDisk::TLogRecord& /*record*/) {
+            return EDispatchStatus::Success;
+        }
+
+        EDispatchStatus HandleChunkKeeper(const TActorContext& /*ctx*/, const NPDisk::TLogRecord& /*record*/) {
+            return EDispatchStatus::Success;
+        }
+
         void Handle(TEvBulkSstEssenceLoaded::TPtr &ev, const TActorContext &ctx) {
             // BulkSstEssence is loaded into memory, apply it
             TEvBulkSstEssenceLoaded *msg = ev->Get();
@@ -878,6 +885,12 @@ namespace NKikimr {
                 case TLogSignature::SignatureScrub:
                     LocRecCtx->RecovInfo->DispatchSignatureScrub(record);
                     return HandleScrub(ctx, record);
+                case TLogSignature::SignatureMetadata:
+                    LocRecCtx->RecovInfo->DispatchSignatureMetadata(record);
+                    return HandleMetadata(ctx, record);
+                case TLogSignature::SignatureChunkKeeper:
+                    LocRecCtx->RecovInfo->DispatchSignatureChunkKeeper(record);
+                    return HandleChunkKeeper(ctx, record);
                 case TLogSignature::Max:
                     break;
             }
@@ -891,6 +904,7 @@ namespace NKikimr {
             LocRecCtx->HullDbRecovery->GetOwnedChunks(chunks);
             LocRecCtx->RepairedHuge->GetOwnedChunks(chunks);
             LocRecCtx->SyncLogRecovery->GetOwnedChunks(chunks);
+            LocRecCtx->ChunkKeeperData->GetOwnedChunks(chunks, LocRecCtx->VCtx->VDiskLogPrefix);
 
             // calculate leaked and unowned chunks
             TVector<TChunkIdx> leaks, misowned;

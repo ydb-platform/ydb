@@ -12,7 +12,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tabletid.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
@@ -128,6 +128,7 @@ namespace {
             entry.RedirectRequired = false;
 
             auto request = MakeHolder<TNavigate>();
+            request->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
             request->ResultSet.emplace_back(std::move(entry));
             request->DomainOwnerId = DomainOwnerId;
 
@@ -273,14 +274,31 @@ namespace {
     public:
         explicit TAccessChecker(TContextPtr context)
             : Context(context)
+            , RootSchemeShard(AppData()->DomainsInfo->GetDomain()->SchemeRoot, 1)
         {
             Y_ABORT_UNLESS(!Context->WaitCounter);
         }
 
         void Bootstrap(const TActorContext&) {
             for (auto& entry : Context->Request->ResultSet) {
-                if (!IsDomain(entry) && Context->ResolvedDomainInfo && entry.DomainInfo) {
-                    // ^ It is allowed to describe subdomains by specifying root as DatabaseName
+                // Lookup path policy for DatabaseName and Path provided by SchemeCache request
+                //
+                // DatabaseName         | Path                              | Allowed
+                // ------------------------------------------------------------------
+                // Domain root path     | Domain root path                  | True
+                // Domain root path     | Regular path within domain        | True
+                // Domain root path     | Subdomain root path               | True
+                // Domain root path     | Regular path within subdomain1    | False
+                // Subdomain1 root path | Domain root path                  | False
+                // Subdomain1 root path | Regular path within domain        | False
+                // Subdomain1 root path | Subdomain1 root path              | True
+                // Subdomain1 root path | Regular path within subdomain1    | True
+                // Subdomain1 root path | Subdomain2 root path              | False
+                // Subdomain1 root path | Regular path within subdomain2    | False
+
+                if (Context->ResolvedDomainInfo && entry.DomainInfo
+                    && !(Context->ResolvedDomainInfo->DomainKey == RootSchemeShard && IsDomain(entry))
+                ) {
 
                     if (Context->ResolvedDomainInfo->DomainKey != entry.DomainInfo->DomainKey) {
                         SBC_LOG_W("Path does not belong to the specified domain"
@@ -318,6 +336,7 @@ namespace {
 
     private:
         TContextPtr Context;
+        const TPathId RootSchemeShard;
 
     }; // TAccessChecker
 
@@ -880,7 +899,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         void FillSystemViewInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
-            if (auto schema = Owner->SystemViewResolver->GetSystemViewSchema(pathDesc.GetSysViewDescription().GetType())) {
+            if (auto schema = NSysView::GetSystemViewResolver().GetSystemViewSchema(pathDesc.GetSysViewDescription().GetType())) {
                 Columns = std::move(schema->Columns);
                 KeyColumnTypes = std::move(schema->KeyColumnTypes);
                 for (const auto& [id, column] : Columns) {
@@ -899,6 +918,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 return NSchemeCache::ETableKind::KindAsyncIndexTable;
             case NKikimrSchemeOp::EPathSubTypeVectorKmeansTreeIndexImplTable:
                 return NSchemeCache::ETableKind::KindVectorIndexTable;
+            case NKikimrSchemeOp::EPathSubTypeFulltextIndexImplTable:
+                return NSchemeCache::ETableKind::KindFulltextIndexTable;
+            case NKikimrSchemeOp::EPathSubTypeJsonIndexImplTable:
+                return NSchemeCache::ETableKind::KindJsonIndexTable;
             default:
                 return NSchemeCache::ETableKind::KindRegularTable;
             }
@@ -911,6 +934,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 case NKikimrSchemeOp::EPathSubTypeSyncIndexImplTable:
                 case NKikimrSchemeOp::EPathSubTypeAsyncIndexImplTable:
                 case NKikimrSchemeOp::EPathSubTypeVectorKmeansTreeIndexImplTable:
+                case NKikimrSchemeOp::EPathSubTypeFulltextIndexImplTable:
+                case NKikimrSchemeOp::EPathSubTypeJsonIndexImplTable:
                     return !AppData()->FeatureFlags.GetEnableAccessToIndexImplTables();
                 default:
                     return false;
@@ -1374,7 +1399,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             });
         }
 
-        const TSubscriber& GetSubcriber() const {
+        const TSubscriber& GetSubscriber() const {
             return Subscriber;
         }
 
@@ -1619,10 +1644,12 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 break;
             case NKikimrSchemeOp::EPathTypeExternalTable:
                 Kind = TNavigate::KindExternalTable;
+                SchemaVersion = entryDesc.HasVersion() ? entryDesc.GetVersion().GetExternalTableVersion() : 0;
                 FillInfo(Kind, ExternalTableInfo, std::move(*pathDesc.MutableExternalTableDescription()));
                 break;
             case NKikimrSchemeOp::EPathTypeExternalDataSource:
                 Kind = TNavigate::KindExternalDataSource;
+                SchemaVersion = entryDesc.HasVersion() ? entryDesc.GetVersion().GetExternalDataSourceVersion() : 0;
                 FillInfo(Kind, ExternalDataSourceInfo, std::move(*pathDesc.MutableExternalDataSourceDescription()));
                 break;
             case NKikimrSchemeOp::EPathTypeBlockStoreVolume:
@@ -1799,7 +1826,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         void FillSystemViewEntry(TNavigateContext* context, TNavigate::TEntry& entry,
-            NSysView::ISystemViewResolver::ESource target) const
+            NSysView::ISystemViewResolver::ESource source) const
         {
             auto sysViewInfo = entry.TableId.SysViewInfo;
 
@@ -1810,13 +1837,14 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
                 auto listNodeEntry = MakeIntrusive<TNavigate::TListNodeEntry>();
 
-                auto names = Owner->SystemViewResolver->GetSystemViewNames(target);
-                std::sort(names.begin(), names.end());
+                const auto namesView = std::views::keys(NSysView::GetSystemViewResolver().GetSystemViewsTypes(source));
+                TVector<TStringBuf> names(namesView.begin(), namesView.end());
+                std::ranges::sort(names);
 
                 listNodeEntry->Kind = TNavigate::KindPath;
                 listNodeEntry->Children.reserve(names.size());
                 for (const auto& name : names) {
-                    listNodeEntry->Children.emplace_back(name, TPathId(), TNavigate::KindTable);
+                    listNodeEntry->Children.emplace_back(TString(name), TPathId(), TNavigate::KindTable);
                 }
 
                 entry.Kind = TNavigate::KindPath;
@@ -1824,14 +1852,19 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 entry.TableId = TTableId(PathId.OwnerId, InvalidLocalPathId, sysViewInfo);
 
             } else {
-                auto schema = Owner->SystemViewResolver->GetSystemViewSchema(sysViewInfo, target);
+                const auto sysViewType = NSysView::GetSystemViewResolver().GetSystemViewType(sysViewInfo, source);
+                if (!sysViewType) {
+                    return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
+                }
+
+                auto schema = NSysView::GetSystemViewResolver().GetSystemViewSchema(*sysViewType);
                 if (!schema) {
                     return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
                 }
 
                 entry.Kind = TNavigate::KindTable;
-                if (target == NSysView::ISystemViewResolver::ESource::OlapStore ||
-                    target == NSysView::ISystemViewResolver::ESource::ColumnTable)
+                if (source == NSysView::ISystemViewResolver::ESource::OlapStore ||
+                    source == NSysView::ISystemViewResolver::ESource::ColumnTable)
                 {
                     // OLAP sys views are represented by OLAP tables
                     entry.Kind =TNavigate::KindColumnTable;
@@ -2050,12 +2083,17 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         void FillSystemViewEntry(TResolveContext* context, TResolve::TEntry& entry,
-            NSysView::ISystemViewResolver::ESource target) const
+            NSysView::ISystemViewResolver::ESource source) const
         {
             TKeyDesc& keyDesc = *entry.KeyDescription;
             auto sysViewInfo = keyDesc.TableId.SysViewInfo;
 
-            auto schema = Owner->SystemViewResolver->GetSystemViewSchema(sysViewInfo, target);
+            const auto sysViewType = NSysView::GetSystemViewResolver().GetSystemViewType(sysViewInfo, source);
+            if (!sysViewType) {
+                return SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists);
+            }
+
+            const auto schema = NSysView::GetSystemViewResolver().GetSystemViewSchema(*sysViewType);
             if (!schema) {
                 return SetError(context, entry, TResolve::EStatus::PathErrorNotExist, TKeyDesc::EStatus::NotExists);
             }
@@ -2425,7 +2463,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
     }
 
     TCacheItem* SwapSubscriberAndUpsert(TCacheItem* byPath, const TPathId& notifyPathId, const TString& notifyPath) {
-        TSubscriber subscriber = CreateSubscriber(byPath->GetPathId(), byPath->GetSubcriber().DomainOwnerId);
+        TSubscriber subscriber = CreateSubscriber(byPath->GetPathId(), byPath->GetSubscriber().DomainOwnerId);
         byPath->SwapSubscriber(subscriber);
 
         TCacheItem newItem(this, subscriber, false);
@@ -2452,7 +2490,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         if (!byPath) {
-            TSubscriber subscriber = CreateSubscriber(notifyPath, byPathId->GetSubcriber().DomainOwnerId);
+            TSubscriber subscriber = CreateSubscriber(notifyPath, byPathId->GetSubscriber().DomainOwnerId);
             return &Cache.Upsert(notifyPath, notifyPathId, TCacheItem(this, subscriber, false));
         }
 
@@ -2521,7 +2559,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 << ", byPath# " << (byPath ? byPath->ToString() : "nullptr")
                 << ", byPathId# " << (byPathId ? byPathId->ToString() : "nullptr"));
 
-            if (byPath->GetPathId() < notify.PathId) {
+            if (PathIdLessThan(byPath->GetPathId(), notify.PathId)) {
                 return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
             }
 
@@ -2537,7 +2575,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 return byPathId;
             }
 
-            SBC_LOG_D("ResolveCacheItemForNotify: this is update from TSS, the update owerrides GSS by path"
+            SBC_LOG_D("ResolveCacheItemForNotify: this is update from TSS, the update overrides GSS by path"
                 << ": self# " << SelfId()
                 << ", path# " << notify.Path
                 << ", pathId# " << notify.PathId);
@@ -2546,7 +2584,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         if (byPath->GetDomainId() == notify.PathId) { //Update from GSS, TSS->GSS
             if (abandonedSchemeShardIds.contains(byPath->GetPathId().OwnerId)) { //GSS reverts TSS
-                SBC_LOG_D("ResolveCacheItemForNotify: this is update from GSS, the update owerrides TSS by path, GSS implicilty reverts that TSS"
+                SBC_LOG_D("ResolveCacheItemForNotify: this is update from GSS, the update overrides TSS by path, GSS implicitly reverts that TSS"
                     << ": self# " << SelfId()
                     << ", path# " << notify.Path
                     << ", pathId# " << notify.PathId);
@@ -2561,7 +2599,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
             }
 
-            SBC_LOG_D("ResolveCacheItemForNotify: this is update from GSS, the update us ignored, TSS is prefered"
+            SBC_LOG_D("ResolveCacheItemForNotify: this is update from GSS, the update is ignored, TSS is preferred"
                 << ": self# " << SelfId()
                 << ", path# " << notify.Path
                 << ", pathId# " << notify.PathId);
@@ -2576,7 +2614,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                       << ", byPath# " << (byPath ? byPath->ToString() : "nullptr")
                       << ", byPathId# " << (byPathId ? byPathId->ToString() : "nullptr"));
 
-            if (byPath->GetPathId() < notify.PathId) {
+            if (PathIdLessThan(byPath->GetPathId(), notify.PathId)) {
                 return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
             }
 
@@ -2798,7 +2836,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 };
 
                 NSysView::ISystemViewResolver::TSystemViewPath sysViewPath;
-                if (SystemViewResolver->IsSystemViewPath(entry.Path, sysViewPath)) {
+                if (NSysView::GetSystemViewResolver().IsSystemViewPath(entry.Path, sysViewPath)) {
                     auto& fallbackEntryInfo = context->EntriesFallbackInfo[i];
                     context->HasSysViewEntries = true;
                     if (fallbackEntryInfo.IsImplicit) {
@@ -2956,7 +2994,6 @@ public:
     TSchemeCache(NSchemeCache::TSchemeCacheConfig* config)
         : Counters(config->Counters)
         , Cache(TDuration::Minutes(2), TThis::Now)
-        , SystemViewResolver(NSysView::CreateSystemViewResolver())
     {
         for (const auto& root : config->Roots) {
             Roots.emplace(root.Name, root.RootSchemeShard);
@@ -2996,7 +3033,6 @@ private:
     TCounters Counters;
 
     TDoubleIndexedCache<TString, TPathId, TCacheItem, TMerger, TEvicter> Cache;
-    THolder<NSysView::ISystemViewResolver> SystemViewResolver;
 
     TActorId WatchCache;
 

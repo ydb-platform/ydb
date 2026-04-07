@@ -32,6 +32,8 @@ namespace NKikimr {
 
         bool IsTinyDisk;
 
+        const ui32 RawSectorSize;
+
         static ui32 CalculateRecommendedReadSize(ui64 seekTimeUs, ui64 readSpeedBps, ui64 appendBlockSize);
         static ui64 CalculatePrefetchSizeBytes(ui64 seekTimeUs, ui64 readSpeedBps);
         static ui64 CalculateGlueRequestDistanceBytes(ui64 seekTimeUs, ui64 readSpeedBps);
@@ -40,7 +42,7 @@ namespace NKikimr {
                      ui32 chunkSize, ui32 appendBlockSize,
                      ui64 seekTimeUs, ui64 readSpeedBps, ui64 writeSpeedBps, ui64 readBlockSize,
                      ui64 writeBlockSize, ui64 bulkWriteBlockSize, NPDisk::EDeviceType trueMediaType,
-                     bool isTinyDisk);
+                     bool isTinyDisk, ui32 rawSectorSize);
         void OutputHtml(IOutputStream &str) const;
         TString ToString() const;
     };

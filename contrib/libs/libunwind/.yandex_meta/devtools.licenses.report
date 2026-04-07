@@ -107,11 +107,11 @@ BELONGS ya.make
         src/UnwindLevel1.c [3:4]
         src/UnwindRegistersRestore.S [3:4]
         src/UnwindRegistersSave.S [3:4]
-        src/cet_unwind.h [3:4]
         src/config.h [3:4]
         src/dwarf2.h [3:4]
         src/libunwind.cpp [3:4]
         src/libunwind_ext.h [3:4]
+        src/shadow_stack_unwind.h [3:4]
     Scancode info:
         Original SPDX id: LLVM-exception
         Score           : 100.00
@@ -142,11 +142,11 @@ BELONGS ya.make
         src/UnwindLevel1.c [3:4]
         src/UnwindRegistersRestore.S [3:4]
         src/UnwindRegistersSave.S [3:4]
-        src/cet_unwind.h [3:4]
         src/config.h [3:4]
         src/dwarf2.h [3:4]
         src/libunwind.cpp [3:4]
         src/libunwind_ext.h [3:4]
+        src/shadow_stack_unwind.h [3:4]
 
 KEEP     Apache-2.0 WITH LLVM-exception 8494a9caed330d9a4f40e19cce7dc770
 BELONGS ya.make
@@ -216,11 +216,11 @@ BELONGS ya.make
         src/UnwindLevel1.c [5:5]
         src/UnwindRegistersRestore.S [5:5]
         src/UnwindRegistersSave.S [5:5]
-        src/cet_unwind.h [5:5]
         src/config.h [5:5]
         src/dwarf2.h [5:5]
         src/libunwind.cpp [5:5]
         src/libunwind_ext.h [5:5]
+        src/shadow_stack_unwind.h [5:5]
     Scancode info:
         Original SPDX id: LLVM-exception
         Score           : 100.00
@@ -251,11 +251,11 @@ BELONGS ya.make
         src/UnwindLevel1.c [5:5]
         src/UnwindRegistersRestore.S [5:5]
         src/UnwindRegistersSave.S [5:5]
-        src/cet_unwind.h [5:5]
         src/config.h [5:5]
         src/dwarf2.h [5:5]
         src/libunwind.cpp [5:5]
         src/libunwind_ext.h [5:5]
+        src/shadow_stack_unwind.h [5:5]
 
 KEEP     Apache-2.0 WITH LLVM-exception c1e6c6536fcc444f916047679115c618
 BELONGS ya.make

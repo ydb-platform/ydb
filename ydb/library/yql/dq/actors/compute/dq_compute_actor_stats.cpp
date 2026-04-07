@@ -92,13 +92,18 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
                     protoBucket->SetValue(snapshot->Value(i));
                 }
             }
+        }
 
-            for (const auto& stat : taskStats.MkqlStats) {
-                auto* s = protoTask->MutableMkqlStats()->Add();
-                s->SetName(TString(stat.Key.GetName()));
-                s->SetValue(stat.Value);
-                s->SetDeriv(stat.Key.IsDeriv());
+        for (const auto& stat : taskStats.MkqlStats) {
+            if (!StatsLevelCollectProfile(level) &&
+                "MultiHop_EarlyThrownEventsCount" != stat.Key.GetName() &&
+                "MultiHop_LateThrownEventsCount"  != stat.Key.GetName()) {
+                continue;
             }
+            auto* s = protoTask->MutableMkqlStats()->Add();
+            s->SetName(TString(stat.Key.GetName()));
+            s->SetValue(stat.Value);
+            s->SetDeriv(stat.Key.IsDeriv());
         }
 
         for (const auto& opStat : taskStats.OperatorStat) {
@@ -137,21 +142,27 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
                 }
                 break;
             case TCollectStatsLevel::Full:
+            case TCollectStatsLevel::Profile:
                 {
                     TDqInputChannelStats pushStats;
                     TDqAsyncStats popStats;
                     bool firstChannelInStage = true;
+                    ui64 localBytes = 0;
                     for (auto& [channelId, inputChannel] : inputChannels) {
                         taskPushStats.MergeData(inputChannel->GetPushStats());
+                        auto& channelPushStats = inputChannel->GetPushStats();
                         if (firstChannelInStage) {
-                            pushStats = inputChannel->GetPushStats();
+                            pushStats = channelPushStats;
                             popStats = inputChannel->GetPopStats();
                             firstChannelInStage = false;
                         } else {
-                            pushStats.Merge(inputChannel->GetPushStats());
+                            pushStats.Merge(channelPushStats);
                             pushStats.DeserializationTime += inputChannel->GetPushStats().DeserializationTime;
                             pushStats.MaxMemoryUsage += inputChannel->GetPushStats().MaxMemoryUsage;
                             popStats.Merge(inputChannel->GetPopStats());
+                        }
+                        if (inputChannel->IsLocal()) {
+                            localBytes += channelPushStats.Bytes;
                         }
                     }
                     if (inputChannels.size() > 1) {
@@ -164,12 +175,14 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
                         protoChannel.SetSrcStageId(srcStageId);
                         FillAsyncStats(*protoChannel.MutablePush(), pushStats);
                         FillAsyncStats(*protoChannel.MutablePop(), popStats);
+                        protoChannel.SetLocalBytes(localBytes);
                         protoChannel.SetDeserializationTimeUs(pushStats.DeserializationTime.MicroSeconds());
                         protoChannel.SetMaxMemoryUsage(pushStats.MaxMemoryUsage);
                     }
                     MergeMinTs(startTime, pushStats.FirstMessageTs);
                 }
                 break;
+            /*
             case TCollectStatsLevel::Profile:
                 for (auto& [channelId, inputChannel] : inputChannels) {
                     const auto& pushStats = inputChannel->GetPushStats();
@@ -179,11 +192,15 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
                     protoChannel.SetSrcStageId(srcStageId);
                     FillAsyncStats(*protoChannel.MutablePush(), pushStats);
                     FillAsyncStats(*protoChannel.MutablePop(), inputChannel->GetPopStats());
+                    if (inputChannel->IsLocal()) {
+                        protoChannel.SetLocalBytes(pushStats.Bytes);
+                    }
                     protoChannel.SetDeserializationTimeUs(pushStats.DeserializationTime.MicroSeconds());
                     protoChannel.SetMaxMemoryUsage(pushStats.MaxMemoryUsage);
                     MergeMinTs(startTime, pushStats.FirstMessageTs);
                 }
                 break;
+            */
         }
     }
 
@@ -221,28 +238,34 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
                 }
                 break;
             case TCollectStatsLevel::Full:
+            case TCollectStatsLevel::Profile:
                 {
                     TDqAsyncStats pushStats;
                     TDqOutputChannelStats popStats;
                     bool firstChannelInStage = true;
+                    ui64 localBytes = 0;
                     for (auto& [channelId, outputChannel] : outputChannels) {
                         taskPopStats.MergeData(outputChannel->GetPopStats());
                         if (dstStageId == 0) {
                             resultStats.MergeData(outputChannel->GetPopStats());
                         }
+                        auto& channelPopStats = outputChannel->GetPopStats();
                         if (firstChannelInStage) {
                             pushStats = outputChannel->GetPushStats();
-                            popStats = outputChannel->GetPopStats();
+                            popStats = channelPopStats;
                             firstChannelInStage = false;
                         } else {
                             pushStats.Merge(outputChannel->GetPushStats());
-                            popStats.Merge(outputChannel->GetPopStats());
+                            popStats.Merge(channelPopStats);
                             popStats.MaxMemoryUsage += outputChannel->GetPopStats().MaxMemoryUsage;
                             popStats.MaxRowsInMemory += outputChannel->GetPopStats().MaxRowsInMemory;
                             popStats.SerializationTime += outputChannel->GetPopStats().SerializationTime;
                             popStats.SpilledBytes += outputChannel->GetPopStats().SpilledBytes;
                             popStats.SpilledRows += outputChannel->GetPopStats().SpilledRows;
                             popStats.SpilledBlobs += outputChannel->GetPopStats().SpilledBlobs;
+                        }
+                        if (outputChannel->IsLocal()) {
+                            localBytes += channelPopStats.Bytes;
                         }
                     }
                     if (outputChannels.size() > 1) {
@@ -255,6 +278,7 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
                         protoChannel.SetDstStageId(dstStageId);
                         FillAsyncStats(*protoChannel.MutablePush(), pushStats);
                         FillAsyncStats(*protoChannel.MutablePop(), popStats);
+                        protoChannel.SetLocalBytes(localBytes);
                         protoChannel.SetMaxMemoryUsage(popStats.MaxMemoryUsage);
                         protoChannel.SetMaxRowsInMemory(popStats.MaxRowsInMemory);
                         protoChannel.SetSerializationTimeUs(popStats.SerializationTime.MicroSeconds());
@@ -265,6 +289,7 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
                     MergeMaxTs(finishTime, popStats.LastMessageTs);
                 }
                 break;
+            /*
             case TCollectStatsLevel::Profile:
                 for (auto& [channelId, outputChannel] : outputChannels) {
                     const auto& popStats = outputChannel->GetPopStats();
@@ -277,6 +302,9 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
                     protoChannel.SetDstStageId(dstStageId);
                     FillAsyncStats(*protoChannel.MutablePush(), outputChannel->GetPushStats());
                     FillAsyncStats(*protoChannel.MutablePop(), popStats);
+                    if (outputChannel->IsLocal()) {
+                        protoChannel.SetLocalBytes(popStats.Bytes);
+                    }
                     protoChannel.SetMaxMemoryUsage(popStats.MaxMemoryUsage);
                     protoChannel.SetMaxRowsInMemory(popStats.MaxRowsInMemory);
                     protoChannel.SetSerializationTimeUs(popStats.SerializationTime.MicroSeconds());
@@ -286,6 +314,7 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
                     MergeMaxTs(finishTime, popStats.LastMessageTs);
                 }
                 break;
+            */
         }
     }
 

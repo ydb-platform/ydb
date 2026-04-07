@@ -8,6 +8,7 @@
 #include "yson_schema.h"
 #include "yson_struct.h"
 #include "proto_yson_struct.h"
+#include "traverse.h"
 
 #include <yt/yt/core/yson/token_writer.h>
 
@@ -109,6 +110,20 @@ T DeserializeMapKey(TStringBuf value)
     }
 }
 
+template <class T>
+TString SerializeMapKey(const T& value)
+{
+    if constexpr (TEnumTraits<T>::IsEnum) {
+        return FormatEnum(value);
+    } else if constexpr (std::is_same_v<T, TGuid>) {
+        return ToString(value);
+    } else if constexpr (TStrongTypedefTraits<T>::IsStrongTypedef) {
+        return SerializeMapKey<typename TStrongTypedefTraits<T>::TUnderlying>(value.Underlying());
+    } else {
+        return ToString(value);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
@@ -184,7 +199,7 @@ struct TYsonSourceTraits<NYson::TYsonPullParserCursor*>
     template <class... TArgs, class TFiller>
     static void FillVector(NYson::TYsonPullParserCursor*& source, std::vector<TArgs...>& vector, TFiller filler)
     {
-        source->ParseList([&](NYson::TYsonPullParserCursor* cursor) {
+        source->ParseList([&] (NYson::TYsonPullParserCursor* cursor) {
             filler(vector, cursor);
         });
     }
@@ -302,15 +317,20 @@ void LoadFromSource(
     const std::function<NYPath::TYPath()>& pathGetter,
     std::optional<EUnrecognizedStrategy> unrecognizedStrategy)
 {
-    if (!parameter) {
-        parameter = New<T>();
-    }
+    try {
+        if (!parameter) {
+            parameter = New<T>();
+        }
 
-    if (unrecognizedStrategy) {
-        parameter->SetUnrecognizedStrategy(*unrecognizedStrategy);
-    }
+        if (unrecognizedStrategy) {
+            parameter->SetUnrecognizedStrategy(*unrecognizedStrategy);
+        }
 
-    parameter->Load(std::move(source), /*postprocess*/ false, /*setDefaults*/ false, pathGetter);
+        parameter->Load(std::move(source), /*postprocess*/ false, /*setDefaults*/ false, pathGetter);
+    } catch (const std::exception& ex) {
+        THROW_ERROR_EXCEPTION("Error loading parameter %v", pathGetter())
+            << ex;
+    }
 }
 
 // YsonStructLite
@@ -577,7 +597,7 @@ inline void PostprocessRecursive(
         PostprocessRecursive(
             value,
             [&pathGetter, &key = key] {
-                return pathGetter() + "/" + NYPath::ToYPathLiteral(key);
+                return pathGetter() + "/" + NYPath::ToYPathLiteral(SerializeMapKey(key));
             });
     }
 }
@@ -860,8 +880,10 @@ template <class TValue>
 TYsonStructParameter<TValue>::TYsonStructParameter(
     std::string key,
     std::unique_ptr<IYsonFieldAccessor<TValue>> fieldAccessor,
-    int fieldIndex)
+    int fieldIndex,
+    const std::type_info& containingStructTypeInfo)
     : Key_(std::move(key))
+    , RegisteringStructTypeInfo_(containingStructTypeInfo)
     , FieldAccessor_(std::move(fieldAccessor))
     , FieldIndex_(fieldIndex)
 { }
@@ -1159,10 +1181,45 @@ std::any TYsonStructParameter<TValue>::FindOption(const std::type_info& typeInfo
 }
 
 template <class TValue>
-void TYsonStructParameter<TValue>::WriteSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const
+void TYsonStructParameter<TValue>::WriteMemberSchema(
+    NYson::IYsonConsumer* consumer,
+    const std::function<NYTree::INodePtr()>& defaultValueGetter,
+    const TYsonStructWriteSchemaOptions& options) const
 {
-    // TODO(bulatman) What about constraints: minimum, maximum, default and etc?
-    NPrivate::WriteSchema(FieldAccessor_->GetValue(self), consumer);
+    // TODO(bulatman) What about constraints: minimum, maximum and etc?
+    BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("name").Value(Key_)
+            .DoIf(options.AddCppTypeNames, [&] (auto fluent) {
+                fluent.Item("cpp_type_name").Value(TypeName<TValue>());
+                fluent.Item("containing_struct_cpp_type_name").Value(TypeName(RegisteringStructTypeInfo_));
+            })
+            .DoIf(options.AddDefaultValues && !IsRequired(), [&] (auto fluent) {
+                if (auto defaultValue = defaultValueGetter()) {
+                    fluent.Item("default_value").Value(defaultValue);
+                }
+            })
+            .Item("type").Do([&] (auto fluent) {
+                WriteTypeSchema(fluent.GetConsumer(), options);
+            })
+            .DoIf(IsRequired(), [] (auto fluent) {
+                fluent.Item("required").Value(true);
+            })
+        .EndMap();
+}
+
+template <class TValue>
+void TYsonStructParameter<TValue>::WriteTypeSchema(
+    NYson::IYsonConsumer* consumer,
+    const TYsonStructWriteSchemaOptions& options) const
+{
+    WriteSchema<TValue>(consumer, options);
+}
+
+template <class TValue>
+void TYsonStructParameter<TValue>::TraverseParameter(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path) const
+{
+    TraverseYsonStruct<TValue>(visitor, path);
 }
 
 template <class TValue>

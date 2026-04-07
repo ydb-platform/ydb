@@ -3,7 +3,7 @@
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/pqrb/partition_scale_manager.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(SlowTopicAutopartitioning) {
                 } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&event)) {
                     x->Confirm();
                     Cerr << ">>>>> " << x->DebugString() << Endl << Flush;
-                } else if (auto* sessionClosedEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&event)) {
+                } else if (std::get_if<NYdb::NTopic::TSessionClosedEvent>(&event)) {
                     x->Confirm();
                     Cerr << ">>>>> " << x->DebugString() << Endl << Flush;
                 }
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(SlowTopicAutopartitioning) {
     }
 
     Y_UNIT_TEST(CDC_Write) {
-        TTopicSdkTestSetup setup = CreateSetup();
+        TTopicSdkTestSetup setup = CreateSetup(NActors::NLog::PRI_ERROR);
         auto client = setup.MakeClient();
         auto tableClient = setup.MakeTableClient();
         auto session = tableClient.CreateSession().GetValueSync().GetSession();

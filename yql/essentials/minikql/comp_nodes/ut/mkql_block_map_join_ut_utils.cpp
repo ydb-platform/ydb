@@ -14,8 +14,9 @@ namespace {
 
 class TWideStreamThrottlerWrapper: public TMutableComputationNode<TWideStreamThrottlerWrapper> {
     typedef TMutableComputationNode<TWideStreamThrottlerWrapper> TBaseComputation;
+
 public:
-    class TStreamValue : public TComputationValue<TStreamValue> {
+    class TStreamValue: public TComputationValue<TStreamValue> {
     public:
         using TBase = TComputationValue<TStreamValue>;
 
@@ -33,15 +34,15 @@ public:
 
             TUnboxedValueVector items(width);
             switch (OrigStream_.WideFetch(items.data(), width)) {
-            case NUdf::EFetchStatus::Yield:
-                return NUdf::EFetchStatus::Yield;
-            case NUdf::EFetchStatus::Ok:
-                for (size_t i = 0; i < width; i++) {
-                    output[i] = std::move(items[i]);
-                }
-                return NUdf::EFetchStatus::Ok;
-            case NUdf::EFetchStatus::Finish:
-                return NUdf::EFetchStatus::Finish;
+                case NUdf::EFetchStatus::Yield:
+                    return NUdf::EFetchStatus::Yield;
+                case NUdf::EFetchStatus::Ok:
+                    for (size_t i = 0; i < width; i++) {
+                        output[i] = std::move(items[i]);
+                    }
+                    return NUdf::EFetchStatus::Ok;
+                case NUdf::EFetchStatus::Finish:
+                    return NUdf::EFetchStatus::Finish;
             }
         }
 
@@ -71,8 +72,9 @@ private:
 
 class TWideStreamDethrottlerWrapper: public TMutableComputationNode<TWideStreamDethrottlerWrapper> {
     typedef TMutableComputationNode<TWideStreamDethrottlerWrapper> TBaseComputation;
+
 public:
-    class TStreamValue : public TComputationValue<TStreamValue> {
+    class TStreamValue: public TComputationValue<TStreamValue> {
     public:
         using TBase = TComputationValue<TStreamValue>;
 
@@ -87,15 +89,15 @@ public:
             TUnboxedValueVector items(width);
             for (;;) {
                 switch (OrigStream_.WideFetch(items.data(), width)) {
-                case NUdf::EFetchStatus::Yield:
-                    continue;
-                case NUdf::EFetchStatus::Ok:
-                    for (size_t i = 0; i < width; i++) {
-                        output[i] = std::move(items[i]);
-                    }
-                    return NUdf::EFetchStatus::Ok;
-                case NUdf::EFetchStatus::Finish:
-                    return NUdf::EFetchStatus::Finish;
+                    case NUdf::EFetchStatus::Yield:
+                        continue;
+                    case NUdf::EFetchStatus::Ok:
+                        for (size_t i = 0; i < width; i++) {
+                            output[i] = std::move(items[i]);
+                        }
+                        return NUdf::EFetchStatus::Ok;
+                    case NUdf::EFetchStatus::Finish:
+                        return NUdf::EFetchStatus::Finish;
                 }
             }
         }
@@ -135,7 +137,7 @@ IComputationNode* WrapWideStreamDethrottler(TCallable& callable, const TComputat
     return new TWideStreamDethrottlerWrapper(ctx.Mutables, origStream);
 }
 
-}
+} // namespace
 
 TType* MakeBlockTupleType(TProgramBuilder& pgmBuilder, TType* tupleType, bool scalar) {
     const auto itemTypes = AS_TYPE(TTupleType, tupleType)->GetElements();
@@ -144,9 +146,9 @@ TType* MakeBlockTupleType(TProgramBuilder& pgmBuilder, TType* tupleType, bool sc
 
     TVector<TType*> blockItemTypes;
     std::transform(itemTypes.cbegin(), itemTypes.cend(), std::back_inserter(blockItemTypes),
-        [&](const auto& itemType) {
-            return pgmBuilder.NewBlockType(itemType, scalar ? TBlockType::EShape::Scalar : TBlockType::EShape::Many);
-        });
+                   [&](const auto& itemType) {
+                       return pgmBuilder.NewBlockType(itemType, scalar ? TBlockType::EShape::Scalar : TBlockType::EShape::Many);
+                   });
     // XXX: Mind the last block length column.
     blockItemTypes.push_back(blockLenType);
 
@@ -154,9 +156,8 @@ TType* MakeBlockTupleType(TProgramBuilder& pgmBuilder, TType* tupleType, bool sc
 }
 
 TType* MakeJoinType(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
-    TType* leftStreamType, const TVector<ui32>& leftKeyDrops,
-    TType* rightListType, const TVector<ui32>& rightKeyDrops
-) {
+                    TType* leftStreamType, const TVector<ui32>& leftKeyDrops,
+                    TType* rightListType, const TVector<ui32>& rightKeyDrops) {
     const auto leftStreamItems = ValidateBlockStreamType(leftStreamType);
     const auto rightListItemType = AS_TYPE(TListType, rightListType)->GetItemType();
     const auto rightPlainStructType = AS_TYPE(TStructType, pgmBuilder.ValidateBlockStructType(AS_TYPE(TStructType, rightListItemType)));
@@ -164,7 +165,7 @@ TType* MakeJoinType(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
     TVector<TType*> joinReturnItems;
 
     const THashSet<ui32> leftKeyDropsSet(leftKeyDrops.cbegin(), leftKeyDrops.cend());
-    for (size_t i = 0; i < leftStreamItems.size() - 1; i++) {  // Excluding block size
+    for (size_t i = 0; i < leftStreamItems.size() - 1; i++) { // Excluding block size
         if (leftKeyDropsSet.contains(i)) {
             continue;
         }
@@ -181,11 +182,10 @@ TType* MakeJoinType(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
 
             auto memberType = rightPlainStructType->GetMemberType(i);
             joinReturnItems.push_back(pgmBuilder.NewBlockType(
-                joinKind == EJoinKind::Inner ? memberType
-                    : IsOptionalOrNull(memberType) ? memberType
-                    : pgmBuilder.NewOptionalType(memberType),
-                TBlockType::EShape::Many
-            ));
+                joinKind == EJoinKind::Inner   ? memberType
+                : IsOptionalOrNull(memberType) ? memberType
+                                               : pgmBuilder.NewOptionalType(memberType),
+                TBlockType::EShape::Many));
         }
     }
 
@@ -194,18 +194,17 @@ TType* MakeJoinType(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
 }
 
 NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize,
-    const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values
-) {
+                                const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values) {
     const auto maxLength = CalcBlockLen(std::accumulate(types.cbegin(), types.cend(), 0ULL,
-        [](size_t max, const TType* type) {
-            return std::max(max, CalcMaxBlockItemSize(type));
-        }));
+                                                        [](size_t max, const TType* type) {
+                                                            return std::max(max, CalcMaxBlockItemSize(type));
+                                                        }));
     TVector<std::unique_ptr<NUdf::IArrayBuilder>> builders;
     std::transform(types.cbegin(), types.cend(), std::back_inserter(builders),
-        [&](const auto& type) {
-            return MakeArrayBuilder(TTypeInfoHelper(), type, ctx.ArrowMemoryPool,
-                                    maxLength, &ctx.Builder->GetPgBuilder());
-        });
+                   [&](const auto& type) {
+                       return MakeArrayBuilder(TTypeInfoHelper(), type, ctx.ArrowMemoryPool,
+                                               maxLength, &ctx.Builder->GetPgBuilder());
+                   });
 
     const auto& holderFactory = ctx.HolderFactory;
     const size_t width = types.size();
@@ -245,8 +244,7 @@ NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize,
 }
 
 NUdf::TUnboxedValuePod MakeUint64ScalarBlock(TComputationContext& ctx, size_t blockSize,
-    const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values
-) {
+                                             const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values) {
     // Creates a block of scalar values using the first element of the given list
 
     for (auto type : types) {
@@ -276,8 +274,7 @@ NUdf::TUnboxedValuePod MakeUint64ScalarBlock(TComputationContext& ctx, size_t bl
 }
 
 NUdf::TUnboxedValuePod FromBlocks(TComputationContext& ctx,
-    const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values
-) {
+                                  const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values) {
     TVector<std::unique_ptr<IBlockReader>> readers;
     TVector<std::unique_ptr<IBlockItemConverter>> converters;
     for (const auto& type : types) {
@@ -347,8 +344,7 @@ TVector<NUdf::TUnboxedValue> ConvertListToVector(const NUdf::TUnboxedValue& list
 }
 
 void CompareResults(const TType* type, const NUdf::TUnboxedValue& expected,
-                    const NUdf::TUnboxedValue& got
-) {
+                    const NUdf::TUnboxedValue& got) {
     const auto itemType = AS_TYPE(TListType, type)->GetItemType();
     const NUdf::ICompare::TPtr compare = MakeCompareImpl(itemType);
     const NUdf::IEquate::TPtr equate = MakeEquateImpl(itemType);

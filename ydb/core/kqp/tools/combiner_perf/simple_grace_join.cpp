@@ -253,6 +253,7 @@ THolder<IComputationGraph> BuildGraph(TSetup<LLVM, Spilling>& setup, std::shared
         pb.NewDataType(NUdf::TDataType<ui64>::Id),
         pb.NewDataType(NUdf::TDataType<ui64>::Id)
     });
+
     const auto resultFlowType = pb.NewFlowType(resultType);
 
     /*
@@ -263,8 +264,8 @@ THolder<IComputationGraph> BuildGraph(TSetup<LLVM, Spilling>& setup, std::shared
     finish: return key + state
     */
     const auto pgmReturn = pb.FromFlow(pb.GraceJoin(
-        pb.ToFlow(TRuntimeNode(leftStreamCallable, false)),
-        pb.ToFlow(TRuntimeNode(rightStreamCallable, false)),
+        pb.ToFlow(TRuntimeNode(leftStreamCallable, false), {}),
+        pb.ToFlow(TRuntimeNode(rightStreamCallable, false), {}),
         EJoinKind::Inner,
         {0u},
         {0u},

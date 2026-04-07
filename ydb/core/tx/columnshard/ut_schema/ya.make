@@ -4,9 +4,9 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:16)
 ELSE()
     SIZE(MEDIUM)
@@ -31,6 +31,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     ut_columnshard_schema.cpp
     ut_columnshard_move_table.cpp
+    ut_columnshard_copy_table.cpp
 )
 
 END()

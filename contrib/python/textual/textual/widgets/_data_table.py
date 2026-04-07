@@ -314,58 +314,86 @@ class DataTable(ScrollView, Generic[CellType], can_focus=True):
     """
 
     DEFAULT_CSS = """
-    DataTable:dark {
-        background: initial;
-    }
     DataTable {
-        background: $surface ;
-        color: $text;
+        background: $surface;
+        color: $foreground;
         height: auto;
         max-height: 100%;
-    }
-    DataTable > .datatable--header {
-        text-style: bold;
-        background: $primary;
-        color: $text;
-    }
-    DataTable > .datatable--fixed {
-        background: $primary 50%;
-        color: $text;
-    }
+        
+        &.datatable--fixed-cursor {
+            background: $block-cursor-blurred-background;
+        }
 
-    DataTable > .datatable--odd-row {
+        &:focus {
+            background-tint: $foreground 5%;
+            & > .datatable--cursor {
+                background: $block-cursor-background;
+                color: $block-cursor-foreground;
+                text-style: $block-cursor-text-style;
+            }
 
-    }
+            & > .datatable--header {
+                background-tint: $foreground 5%;
+            }
 
-    DataTable > .datatable--even-row {
-        background: $primary 10%;
-    }
+            & > .datatable--fixed-cursor {
+                color: $block-cursor-foreground;
+                background: $block-cursor-background;
+            }
+        }
 
-    DataTable > .datatable--cursor {
-        background: $secondary;
-        color: $text;
-    }
+        &:dark {
+            & > .datatable--even-row {
+                background: $surface-darken-1 40%;
+            }
+        }
 
-    DataTable > .datatable--fixed-cursor {
-        background: $secondary 92%;
-        color: $text;
-    }
+        & > .datatable--header {
+            text-style: bold;
+            background: $panel;
+            color: $foreground;
+        }
+        &:ansi > .datatable--header {
+            background: ansi_bright_blue;
+            color: ansi_default;
+        }
 
-    DataTable > .datatable--header-cursor {
-        background: $secondary-darken-1;
-        color: $text;
-    }
+        & > .datatable--fixed {
+            background: $secondary-muted;
+            color: $foreground;
+        }
 
-    DataTable > .datatable--header-hover {
-        background: $secondary 30%;
-    }
+        & > .datatable--odd-row {
 
-    DataTable:dark > .datatable--even-row {
-        background: $primary 15%;
-    }
+        }
 
-    DataTable > .datatable--hover {
-        background: $secondary 20%;
+        & > .datatable--even-row {
+            background: $surface-lighten-1 50%;
+        }
+
+        & > .datatable--cursor {
+            background: $block-cursor-blurred-background;
+            color: $block-cursor-blurred-foreground;
+            text-style: $block-cursor-blurred-text-style;
+        }
+
+        & > .datatable--fixed-cursor {
+            background: $block-cursor-blurred-background;
+            color: $foreground;
+        }
+
+        & > .datatable--header-cursor {
+            background: $accent-darken-1;
+            color: $foreground;
+        }
+
+        & > .datatable--header-hover {
+            background: $accent 30%;
+        }
+
+        & > .datatable--hover {
+            background: $block-hover-background;
+        }
     }
     """
 
@@ -1078,6 +1106,7 @@ class DataTable(ScrollView, Generic[CellType], can_focus=True):
         return self.rows[row_key].height
 
     def notify_style_update(self) -> None:
+        super().notify_style_update()
         self._row_render_cache.clear()
         self._cell_render_cache.clear()
         self._line_cache.clear()
@@ -2315,7 +2344,7 @@ class DataTable(ScrollView, Generic[CellType], can_focus=True):
         return y_offsets[y]
 
     def _render_line(self, y: int, x1: int, x2: int, base_style: Style) -> Strip:
-        """Render a (possibly cropped) line in to a Strip (a list of segments
+        """Render a (possibly cropped) line into a Strip (a list of segments
             representing a horizontal line).
 
         Args:

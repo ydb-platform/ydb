@@ -2,8 +2,7 @@
 #include "defs.h"
 #include "mkql_node.h"
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 TDataLiteral* BuildDataLiteral(const NUdf::TStringRef& data, NUdf::TDataTypeId type, const TTypeEnvironment& env);
 inline TDataLiteral* BuildDataLiteral(const NUdf::TStringRef& data, NUdf::EDataSlot slot, const TTypeEnvironment& env) {
@@ -28,13 +27,14 @@ TBlockType::EShape GetResultShape(const TVector<TType*>& types);
 
 class TTupleLiteralBuilder {
 public:
-    TTupleLiteralBuilder(const TTypeEnvironment& env);
+    explicit TTupleLiteralBuilder(const TTypeEnvironment& env);
     TTupleLiteralBuilder(const TTupleLiteralBuilder&) = default;
     TTupleLiteralBuilder& operator=(const TTupleLiteralBuilder&) = default;
     void Reserve(ui32 size);
     TTupleLiteralBuilder& Add(TRuntimeNode value);
     TTupleLiteral* Build();
     void Clear();
+
 private:
     const TTypeEnvironment& Env_;
     TVector<TType*> Types_;
@@ -43,7 +43,7 @@ private:
 
 class TStructTypeBuilder {
 public:
-    TStructTypeBuilder(const TTypeEnvironment& env);
+    explicit TStructTypeBuilder(const TTypeEnvironment& env);
     TStructTypeBuilder(const TStructTypeBuilder&) = default;
     TStructTypeBuilder& operator=(const TStructTypeBuilder&) = default;
     void Reserve(ui32 size);
@@ -74,7 +74,7 @@ private:
 
 class TStructLiteralBuilder {
 public:
-    TStructLiteralBuilder(const TTypeEnvironment& env);
+    explicit TStructLiteralBuilder(const TTypeEnvironment& env);
     TStructLiteralBuilder(const TStructLiteralBuilder&) = default;
     TStructLiteralBuilder& operator=(const TStructLiteralBuilder&) = default;
     void Reserve(ui32 size);
@@ -134,7 +134,7 @@ private:
 class TCallableBuilder {
 public:
     TCallableBuilder(const TTypeEnvironment& env, const TStringBuf& name, TType* returnType,
-        bool disableMerge = false);
+                     bool disableMerge = false);
     TCallableBuilder(const TCallableBuilder&) = default;
     TCallableBuilder& operator=(const TCallableBuilder&) = default;
     void Reserve(ui32 size);
@@ -160,5 +160,4 @@ private:
     bool HasPayload_;
 };
 
-}
-}
+} // namespace NKikimr::NMiniKQL

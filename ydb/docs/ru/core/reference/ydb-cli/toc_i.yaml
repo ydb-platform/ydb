@@ -45,8 +45,6 @@ items:
       href: commands/explain-plan.md
     - name: Потоковое чтение таблицы
       href: commands/readtable.md
-    - name: Скан запросы
-      href: commands/scan-query.md
   - name: Выгрузка и загрузка данных
     include:
       mode: link
@@ -96,12 +94,6 @@ items:
     - name: Выполнение запросов с параметрами
       href: parameterized-queries-cli.md
       hidden: true
-#  - name: Утилиты
-#    items:
-    # - name: Снятие бэкапа
-    #   href: commands/tools/dump.md
-    # - name: Восстановление бэкапа
-    #   href: commands/tools/restore.md
   - name: Управление фоновыми операциями
     items:
     - name: Получение списка фоновых операций
@@ -120,6 +112,8 @@ items:
       href: commands/discovery-list.md
     - name: Проверка аутентификации
       href: commands/discovery-whoami.md
+    - name: Получение токена аутентификации
+      href: auth-get-token.md
     - name: Просмотр параметров соединения
       href: commands/config-info.md
     - name: Вывод версии YDB CLI
@@ -146,6 +140,8 @@ items:
       href: workload-tpch.md
     - name: TPC-DS нагрузка
       href: workload-tpcds.md
+    - name: Пользовательская нагрузка
+      href: workload-query.md
   - name: Работа с конфигурацией
     href: configs.md
     include:

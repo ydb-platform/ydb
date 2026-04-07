@@ -27,7 +27,7 @@ namespace {
         for (const auto& field : tableSettings.Cast()) {
             if (field.Name().Value() == "storeType") {
                 YQL_ENSURE(field.Value().Maybe<NYql::NNodes::TCoAtom>());
-                if (field.Value().Cast<NYql::NNodes::TCoAtom>().StringValue() == "COLUMN") {
+                if (to_lower(field.Value().Cast<NYql::NNodes::TCoAtom>().StringValue()) == "column") {
                     return true;
                 }
             }
@@ -262,14 +262,14 @@ namespace {
         }
 
         const TString tmpTableName = TStringBuilder()
-            << tableName
-            << "_cas_"
-            << TAppData::RandomProvider->GenRand();
+                << tableName
+                << "_"
+                << TAppData::RandomProvider->GenUuid4().AsUuidString();
 
         const TString createTableName = (TStringBuilder()
                 << CanonizePath(sessionCtx->GetDatabase())
                 << "/.tmp/sessions/"
-                << sessionCtx->GetSessionId()
+                << sessionCtx->GetTempTablesState()->TempDirName
                 << CanonizePath(tmpTableName));
 
         create = exprCtx.ReplaceNode(std::move(create), *columns, exprCtx.NewList(pos, std::move(columnNodes)));
@@ -396,20 +396,18 @@ bool CheckRewrite(
         NYql::TExprContext& exprCtx) {
     ui64 actionsCount = 0;
     ui64 createTableAsCount = 0;
+    ui64 notOlapCreateTableAsCount = 0;
     VisitExpr(root, [&](const NYql::TExprNode::TPtr& node) {
         if (NYql::NNodes::TCoWrite::Match(node.Get())) {
             if (IsCreateTableAs(node, exprCtx)) {
                 if (!IsOlapCreateTableAs(node, exprCtx) && !enableDataShardCreateTableAs) {
-                    exprCtx.AddError(NYql::TIssue(
-                        exprCtx.GetPosition(NYql::NNodes::TExprBase(root).Pos()),
-                        "CTAS statement is disabled for row-oriented tables."));
-                    return false;
+                    ++notOlapCreateTableAsCount;
                 }
                 ++createTableAsCount;
             }
             ++actionsCount;
         }
-        return actionsCount <= 1 && createTableAsCount <= 1;
+        return actionsCount <= 1 && createTableAsCount <= 1 && notOlapCreateTableAsCount <= 1;
     });
 
     if (createTableAsCount == 0) {
@@ -426,6 +424,11 @@ bool CheckRewrite(
         exprCtx.AddError(NYql::TIssue(
             exprCtx.GetPosition(NYql::NNodes::TExprBase(root).Pos()),
             "CTAS statement can't be used with other statements without per-statement mode."));
+        return false;
+    } else if (notOlapCreateTableAsCount > 0) {
+        exprCtx.AddError(NYql::TIssue(
+            exprCtx.GetPosition(NYql::NNodes::TExprBase(root).Pos()),
+            "CTAS statement is disabled for row-oriented tables."));
         return false;
     }
     return true;

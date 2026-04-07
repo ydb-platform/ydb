@@ -63,6 +63,10 @@ public:
         ForeignThreadsAllowedValues[poolId] = slots;
     }
 
+    bool IsUnited() const override {
+        return false;
+    }
+
 private:
     i16 ThreadCount;
     std::vector<i16> ForeignThreadsAllowedValues;

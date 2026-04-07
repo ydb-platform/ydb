@@ -587,7 +587,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
             }));
 
         // Write bad DyNumber
-        UploadRows(runtime, "/Root/Table", 
+        UploadRows(runtime, "/Root", "/Root/Table",
             {{"key", Ydb::Type::UINT32}, {"value", Ydb::Type::DYNUMBER}},
             {TCell::Make(ui32(1))}, {TCell::Make(ui32(55555))}
             );

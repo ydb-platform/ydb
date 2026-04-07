@@ -12,7 +12,8 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
-std::vector<std::shared_ptr<IPortionDataChunk>> TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
+std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBuildIndexImpl(
+    TChunkedBatchReader& reader, const ui32 recordsCount) const {
     std::deque<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> dataOwners;
     ui32 indexHitsCount = 0;
     for (reader.Start(); reader.IsCorrect();) {
@@ -36,7 +37,8 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TBloomIndexMeta::DoBuildIndexImp
     while (dataOwners.size()) {
         GetDataExtractor()->VisitAll(
             dataOwners.front(),
-            [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase) {
+            [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase)
+            {
                 for (ui64 i = 0; i < HashesCount; ++i) {
                     if (hashBase) {
                         const auto predWithBase = [&](const ui64 hash, const ui32 /*idx*/) {
@@ -48,9 +50,13 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TBloomIndexMeta::DoBuildIndexImp
                     }
                 }
             },
-            [&](const std::string_view data, const ui64 hashBase) {
+            [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui64 hashBase) {
+                auto view = data.GetScalarOptional();
+                if (!view.has_value()) {
+                    return;
+                }
                 for (ui64 i = 0; i < HashesCount; ++i) {
-                    const ui64 hash = NArrow::NHash::TXX64::CalcSimple(data, i);
+                    const ui64 hash = NArrow::NHash::TXX64::CalcSimple(view.value(), i);
                     if (hashBase) {
                         filterBits[CombineHashes(hashBase, hash) % bitsCount] = true;
                     } else {
@@ -60,12 +66,12 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TBloomIndexMeta::DoBuildIndexImp
             });
         dataOwners.pop_front();
     }
-    const TString indexData = GetBitsStorageConstructor()->Build(std::move(filterBits))->SerializeToString();
+    const TString indexData = GetBitsStorageConstructor()->SerializeToString(std::move(filterBits));
     return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
 }
 
-bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-    const NArrow::NSSA::TIndexCheckOperation& op) const {
+bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+    const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
     std::set<ui64> hashes;
     AFL_VERIFY(op.GetOperation() == EOperation::Equals)("op", op.DebugString());
     const ui32 bitsCount = data.GetBitsCount();
@@ -119,7 +125,9 @@ bool TBloomIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDe
             return false;
         }
     }
-    FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
+    FalsePositiveProbability = bFilter.HasFalsePositiveProbability() ? bFilter.GetFalsePositiveProbability()
+                                                                     : NDefaults::FalsePositiveProbability;
+
     for (auto&& i : bFilter.GetColumnIds()) {
         AddColumnId(i);
     }

@@ -44,7 +44,7 @@ void FormatProgressWithProjection(
     builder->AppendChar('[');
 
     if (it != segments.begin()) {
-        builder->AppendFormat("<%v, %x>", segments[0].LowerKey, segments[0].Timestamp);
+        builder->AppendFormat("<%v, %v>", segments[0].LowerKey, segments[0].Timestamp);
         if (it != std::next(segments.begin())) {
             builder->AppendString(", ...");
         }
@@ -52,7 +52,7 @@ void FormatProgressWithProjection(
     }
 
     for (; it != segments.end() && it->LowerKey <= replicationProgressProjection.To; ++it) {
-        builder->AppendFormat("%v<%v, %x>", comma ? ", " : "", it->LowerKey,  it->Timestamp);
+        builder->AppendFormat("%v<%v, %v>", comma ? ", " : "", it->LowerKey,  it->Timestamp);
         comma = true;
     }
 
@@ -119,7 +119,7 @@ bool TReplicationCardFetchOptions::Contains(const TReplicationCardFetchOptions& 
     return (selfMask | NDetail::ToBitMask(other)) == selfMask;
 }
 
-TReplicationCardFetchOptions& TReplicationCardFetchOptions::operator |= (const TReplicationCardFetchOptions& other)
+TReplicationCardFetchOptions& TReplicationCardFetchOptions::operator|=(const TReplicationCardFetchOptions& other)
 {
     IncludeCoordinators |= other.IncludeCoordinators;
     IncludeProgress |= other.IncludeProgress;
@@ -140,7 +140,7 @@ void FormatValue(
     const auto& segments = replicationProgress.Segments;
     if (!replicationProgressProjection) {
         builder->AppendFormat("%v", MakeFormattableView(segments, [] (auto* builder, const auto& segment) {
-            builder->AppendFormat("<%v, %x>", segment.LowerKey, segment.Timestamp);
+            builder->AppendFormat("<%v, %v>", segment.LowerKey, segment.Timestamp);
         }));
     } else  {
         NDetail::FormatProgressWithProjection(builder, replicationProgress, *replicationProgressProjection);
@@ -331,6 +331,11 @@ ETableReplicaState GetTargetReplicaState(ETableReplicaState state)
     return (state == ETableReplicaState::Enabled || state == ETableReplicaState::Enabling)
         ? ETableReplicaState::Enabled
         : ETableReplicaState::Disabled;
+}
+
+bool IsTargetReplicaModeSync(NTabletClient::ETableReplicaMode mode)
+{
+    return mode == ETableReplicaMode::Sync || mode == ETableReplicaMode::AsyncToSync;
 }
 
 void UpdateReplicationProgress(TReplicationProgress* progress, const TReplicationProgress& update)
@@ -752,6 +757,7 @@ TReplicationProgress BuildMaxProgress(
     }
 
     TReplicationProgress result;
+    result.Segments.reserve(progress.Segments.size() + other.Segments.size());
 
     auto progressIt = progress.Segments.begin();
     auto otherIt = other.Segments.begin();
@@ -904,7 +910,7 @@ TDuration ComputeReplicationProgressLag(
     return lag;
 }
 
-THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TReplicaInfo>& replicas)
+TReplicationProgress BuildMaxSyncProgress(const THashMap<TReplicaId, TReplicaInfo>& replicas)
 {
     TReplicationProgress syncProgress;
 
@@ -923,6 +929,13 @@ THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TR
             }
         }
     }
+
+    return syncProgress;
+}
+
+THashMap<TReplicaId, TDuration> ComputeReplicasLag(const THashMap<TReplicaId, TReplicaInfo>& replicas)
+{
+    auto syncProgress = BuildMaxSyncProgress(replicas);
 
     THashMap<TReplicaId, TDuration> result;
     for (const auto& [replicaId, replicaInfo] : replicas) {

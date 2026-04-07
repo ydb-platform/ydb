@@ -1,0 +1,28 @@
+/* dqfile can not */
+/* hybridfile can not - missing langver support */
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    i_brand_id AS brand_id,
+    i_brand AS brand,
+    Sum(ss_ext_sales_price) AS ext_price
+FROM
+    plato.date_dim
+,
+    plato.store_sales
+,
+    plato.item
+WHERE
+    d_date_sk == ss_sold_date_sk
+    AND ss_item_sk == i_item_sk
+    AND i_manager_id == 36
+    AND d_moy == 12
+    AND d_year == 2001
+GROUP BY
+    i_brand,
+    i_brand_id
+ORDER BY
+    ext_price DESC,
+    i_brand_id
+LIMIT 100;

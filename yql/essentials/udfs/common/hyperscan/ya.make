@@ -28,3 +28,4 @@ YQL_UDF_CONTRIB(hyperscan_udf)
 RECURSE_FOR_TESTS(
     test
 )
+

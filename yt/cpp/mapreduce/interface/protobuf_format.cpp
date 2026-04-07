@@ -132,7 +132,7 @@ EWrapperFieldFlag::Enum OptionToFieldFlag(TFieldOption option)
     using EFlag = EWrapperFieldFlag;
     struct TVisitor
     {
-        EFlag::Enum operator() (EProtobufType type)
+        EFlag::Enum operator()(EProtobufType type)
         {
             switch (type) {
                 case EProtobufType::Any:
@@ -146,7 +146,7 @@ EWrapperFieldFlag::Enum OptionToFieldFlag(TFieldOption option)
             }
             Y_ABORT();
         }
-        EFlag::Enum operator() (EProtobufSerializationMode serializationMode)
+        EFlag::Enum operator()(EProtobufSerializationMode serializationMode)
         {
             switch (serializationMode) {
                 case EProtobufSerializationMode::Yt:
@@ -158,7 +158,7 @@ EWrapperFieldFlag::Enum OptionToFieldFlag(TFieldOption option)
             }
             Y_ABORT();
         }
-        EFlag::Enum operator() (EProtobufListMode listMode)
+        EFlag::Enum operator()(EProtobufListMode listMode)
         {
             switch (listMode) {
                 case EProtobufListMode::Optional:
@@ -168,7 +168,7 @@ EWrapperFieldFlag::Enum OptionToFieldFlag(TFieldOption option)
             }
             Y_ABORT();
         }
-        EFlag::Enum operator() (EProtobufMapMode mapMode)
+        EFlag::Enum operator()(EProtobufMapMode mapMode)
         {
             switch (mapMode) {
                 case EProtobufMapMode::ListOfStructsLegacy:
@@ -182,7 +182,7 @@ EWrapperFieldFlag::Enum OptionToFieldFlag(TFieldOption option)
             }
             Y_ABORT();
         }
-        EFlag::Enum operator() (EProtobufEnumWritingMode enumWritingMode)
+        EFlag::Enum operator()(EProtobufEnumWritingMode enumWritingMode)
         {
             switch (enumWritingMode) {
                 case EProtobufEnumWritingMode::SkipUnknownValues:
@@ -202,7 +202,7 @@ EWrapperMessageFlag::Enum OptionToMessageFlag(TMessageOption option)
     using EFlag = EWrapperMessageFlag;
     struct TVisitor
     {
-        EFlag::Enum operator() (EProtobufFieldSortOrder sortOrder)
+        EFlag::Enum operator()(EProtobufFieldSortOrder sortOrder)
         {
             switch (sortOrder) {
                 case EProtobufFieldSortOrder::AsInProtoFile:
@@ -222,7 +222,7 @@ EWrapperOneofFlag::Enum OptionToOneofFlag(TOneofOption option)
     using EFlag = EWrapperOneofFlag;
     struct TVisitor
     {
-        EFlag::Enum operator() (EProtobufOneofMode mode)
+        EFlag::Enum operator()(EProtobufOneofMode mode)
         {
             switch (mode) {
                 case EProtobufOneofMode::SeparateFields:
@@ -236,7 +236,6 @@ EWrapperOneofFlag::Enum OptionToOneofFlag(TOneofOption option)
 
     return std::visit(TVisitor(), option);
 }
-
 
 template <typename T, typename TOptionToFlag>
 void SetOption(TMaybe<T>& option, T newOption, TOptionToFlag optionToFlag)
@@ -255,27 +254,27 @@ void SetOption(TMaybe<T>& option, T newOption, TOptionToFlag optionToFlag)
 class TParseProtobufFieldOptionsVisitor
 {
 public:
-    void operator() (EProtobufType type)
+    void operator()(EProtobufType type)
     {
         SetOption(Type, type);
     }
 
-    void operator() (EProtobufSerializationMode serializationMode)
+    void operator()(EProtobufSerializationMode serializationMode)
     {
         SetOption(SerializationMode, serializationMode);
     }
 
-    void operator() (EProtobufListMode listMode)
+    void operator()(EProtobufListMode listMode)
     {
         SetOption(ListMode, listMode);
     }
 
-    void operator() (EProtobufMapMode mapMode)
+    void operator()(EProtobufMapMode mapMode)
     {
         SetOption(MapMode, mapMode);
     }
 
-    void operator() (EProtobufEnumWritingMode enumWritingMode)
+    void operator()(EProtobufEnumWritingMode enumWritingMode)
     {
         SetOption(EnumWritingMode, enumWritingMode);
     }
@@ -297,7 +296,7 @@ public:
 class TParseProtobufMessageOptionsVisitor
 {
 public:
-    void operator() (EProtobufFieldSortOrder fieldSortOrder)
+    void operator()(EProtobufFieldSortOrder fieldSortOrder)
     {
         SetOption(FieldSortOrder, fieldSortOrder);
     }
@@ -315,7 +314,7 @@ public:
 class TParseProtobufOneofOptionsVisitor
 {
 public:
-    void operator() (EProtobufOneofMode mode)
+    void operator()(EProtobufOneofMode mode)
     {
         SetOption(Mode, mode);
     }
@@ -493,6 +492,18 @@ private:
     THashSet<const Descriptor*> ActiveVertices_;
     TStack<const Descriptor*> Stack_;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString GetOneofName(const ::google::protobuf::OneofDescriptor* descriptor)
+{
+    auto nameFromExtension = descriptor->options().GetExtension(variant_field_name);
+    if (nameFromExtension.empty()) {
+        return FromProto<TString>(descriptor->name());
+    } else {
+        return nameFromExtension;
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1102,19 +1113,36 @@ NTi::TTypePtr CreateStruct(TStringBuf fieldName, TVector<TMember> members)
 
 TMaybe<TVector<TString>> InferColumnFilter(const ::google::protobuf::Descriptor& descriptor)
 {
-    auto isOtherColumns = [] (const ::google::protobuf::FieldDescriptor& field) {
-        return GetFieldOptions(&field).Type == EProtobufType::OtherColumns;
+    auto isOtherColumns = [] (const ::google::protobuf::FieldDescriptor* field) {
+        return GetFieldOptions(field).Type == EProtobufType::OtherColumns;
+    };
+    auto isEmbeddedColumn = [] (const ::google::protobuf::FieldDescriptor* field) {
+        return GetFieldOptions(field).SerializationMode == EProtobufSerializationMode::Embedded;
     };
 
     TVector<TString> result;
     result.reserve(descriptor.field_count());
     for (int i = 0; i < descriptor.field_count(); ++i) {
-        const auto& field = *descriptor.field(i);
+        auto field = descriptor.field(i);
         if (isOtherColumns(field)) {
             return {};
         }
-        result.push_back(GetColumnName(field));
+        if (isEmbeddedColumn(field) && field->message_type() != nullptr) {
+            auto embeddedFilter = InferColumnFilter(*field->message_type());
+            if (!embeddedFilter) {
+                return {};
+            }
+            result.insert(result.end(), embeddedFilter->begin(), embeddedFilter->end());
+        } else {
+            result.push_back(GetColumnName(*field));
+        }
     }
+
+    for (int i = 0; i < descriptor.real_oneof_decl_count(); ++i) {
+        const auto* oneof = descriptor.oneof_decl(i);
+        result.push_back(GetOneofName(oneof));
+    }
+
     return result;
 }
 

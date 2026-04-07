@@ -20,7 +20,7 @@ class TAggregate
 public:
     TAggregate<T>() = default;
 
-    void operator=(T value);
+    void Set(T value, EStatisticsAggregation statisticsAggregation);
 
     void Merge(const TAggregate<T>& other);
 };
@@ -32,7 +32,6 @@ struct TExecutionStatistics
     i64 RowsRead = {};
     i64 DataWeightRead = {};
     i64 RowsWritten = {};
-    i64 MemoryUsage = {};
     i64 GroupedRowCount = {};
 
     TDuration SyncTime;
@@ -73,9 +72,14 @@ struct TQueryStatistics
 
     void Merge(const TQueryStatistics& statistics);
 
-    static TQueryStatistics FromExecutionStatistics(const TExecutionStatistics& statistics);
+    static TQueryStatistics FromExecutionStatistics(
+        const TExecutionStatistics& statistics,
+        EStatisticsAggregation statisticsAggregation);
+
+    static bool IsDepthAggregate(EStatisticsAggregation statisticsAggregation);
 };
 
+////////////////////////////////////////////////////////////////////////////////
 
 void ToProto(NProto::TQueryStatistics* serialized, const TQueryStatistics& original);
 void FromProto(TQueryStatistics* original, const NProto::TQueryStatistics& serialized);

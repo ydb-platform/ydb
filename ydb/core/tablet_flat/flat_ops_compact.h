@@ -60,6 +60,7 @@ namespace NTabletFlatExecutor {
     class TOpsCompact: private ::NActors::IActorCallback, public IActorExceptionHandler, public NTable::IVersionScan {
         using TEvPut = TEvBlobStorage::TEvPut;
         using TEvPutResult = TEvBlobStorage::TEvPutResult;
+        using ELockMode = NTable::ELockMode;
         using TScheme = NTable::TRowScheme;
         using TPartWriter = NTable::TPartWriter;
         using TBundle = NWriter::TBundle;
@@ -158,6 +159,7 @@ namespace NTabletFlatExecutor {
                     << "}";
             }
 
+            Y_DEBUG_ABORT_UNLESS(!IsLocked);
             return Flush(false /* intermediate, sleep or feed */);
         }
 
@@ -190,6 +192,17 @@ namespace NTabletFlatExecutor {
                 DeltasOrder.emplace_back(txId);
             } else if (!res.first->second.IsFinalized()) {
                 res.first->second.Merge(row);
+            }
+
+            return Flush(false /* intermediate, sleep or feed */);
+        }
+
+        EScan Feed(ELockMode mode, ui64 txId) override
+        {
+            // We write the first (latest) lock we observe
+            if (!IsLocked) {
+                Writer->AddKeyLock(mode, txId);
+                IsLocked = true;
             }
 
             return Flush(false /* intermediate, sleep or feed */);
@@ -250,6 +263,8 @@ namespace NTabletFlatExecutor {
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl << NFmt::Do(*this) << " end key { written " << written << " row versions }";
             }
+
+            IsLocked = false;
 
             return Flush(false /* intermediate, sleep or feed */);
         }
@@ -582,8 +597,14 @@ namespace NTabletFlatExecutor {
             }
 
             auto flag = NKikimrBlobStorage::AsyncBlob;
-            auto *ev = new TEvPut(id.Logo, std::exchange(glob.Data, TString{ }), TInstant::Max(), flag,
-                TEvBlobStorage::TEvPut::ETactic::TacticMaxThroughput);
+            auto *ev = new TEvPut(TEvPut::TParameters{
+                .BlobId = id.Logo,
+                .Buffer = TRope(std::exchange(glob.Data, TString{ })),
+                .Deadline = TInstant::Max(),
+                .HandleClass = flag,
+                .Tactic = TEvBlobStorage::TEvPut::ETactic::TacticMaxThroughput,
+                .ExternalRelevanceWatcher = RelevanceTracker,
+            });
             auto ctx = ActorContext();
 
             SendToBSProxy(ctx, id.Group, ev);
@@ -592,6 +613,7 @@ namespace NTabletFlatExecutor {
     private:
         const TLogoBlobID Mask;
         const TActorId Owner;
+        TMessageRelevanceOwner RelevanceTracker = std::make_shared<TMessageRelevanceTracker>();
         TAutoPtr<NUtil::ILogger> Logger;
         IDriver * Driver = nullptr;
         THolder<TCompactCfg> Conf;
@@ -619,6 +641,7 @@ namespace NTabletFlatExecutor {
 
         THashMap<ui64, TRow> Deltas;
         TSmallVec<ui64> DeltasOrder;
+        bool IsLocked = false;
     };
 }
 }

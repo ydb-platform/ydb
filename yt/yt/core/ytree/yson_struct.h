@@ -1,6 +1,7 @@
 #pragma once
 
 #include "node.h"
+#include "yson_schema_options.h"
 #include "yson_struct_public.h"
 
 #include <yt/yt/core/misc/error.h>
@@ -49,10 +50,6 @@ namespace NYT::NYTree {
  * In order to speed up compilation it is possible to use DECLARE_YSON_STRUCT(TYourClass) in the class body
  * and supplement it with DEFINE_YSON_STRUCT(TYourClass) in the .cpp file. Similar DECLARE_YSON_STRUCT_LITE
  * macro is available for non-ref-counted structs.
- *
- * The key difference from TYsonSerializable is that the latter builds the whole meta every time
- * an instance of the class is being constructed
- * while TYsonStruct builds meta only once just before construction of the first instance.
  */
 class TYsonStructBase
 {
@@ -61,6 +58,11 @@ public:
     using TPreprocessor = std::function<void()>;
 
     TYsonStructBase();
+
+    TYsonStructBase(const TYsonStructBase& that) = default;
+    TYsonStructBase(TYsonStructBase&& that) noexcept = default;
+    TYsonStructBase& operator=(const TYsonStructBase& that);
+    TYsonStructBase& operator=(TYsonStructBase&& that) noexcept;
 
     virtual ~TYsonStructBase() = default;
 
@@ -122,7 +124,7 @@ public:
 
     std::vector<std::string> GetAllParameterAliases(const std::string& key) const;
 
-    void WriteSchema(NYson::IYsonConsumer* consumer) const;
+    void WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options = {}) const;
 
     // Always returns |true| for itself
     // else always returns |false| if one of the fields
@@ -204,8 +206,8 @@ public:
     TYsonStructLiteWithFieldTracking(const TYsonStructLiteWithFieldTracking& other);
     TYsonStructLiteWithFieldTracking& operator=(const TYsonStructLiteWithFieldTracking& other);
 
-    TYsonStructLiteWithFieldTracking(TYsonStructLiteWithFieldTracking&& other) = default;
-    TYsonStructLiteWithFieldTracking& operator=(TYsonStructLiteWithFieldTracking&& other) = default;
+    TYsonStructLiteWithFieldTracking(TYsonStructLiteWithFieldTracking&& other) noexcept = default;
+    TYsonStructLiteWithFieldTracking& operator=(TYsonStructLiteWithFieldTracking&& other) noexcept = default;
 
     bool IsSet(const std::string& key) const;
 
@@ -287,7 +289,10 @@ public:
     static bool InitializationInProgress();
 
     template <class TStruct>
-    void InitializeStruct(TStruct* target);
+    void InitializeStruct(TStruct* target, const NYT::TSourceLocation& sourceLocation = {});
+
+    template <CYsonStructDerived TStruct>
+    const IYsonStructMeta* GetMeta();
 
     void OnBaseCtorCalled();
 
@@ -382,7 +387,7 @@ public:
 
     void UnrecognizedStrategy(EUnrecognizedStrategy strategy);
 
-    template<class TBase>
+    template <class TBase>
     operator TYsonStructRegistrar<TBase>();
 
 private:

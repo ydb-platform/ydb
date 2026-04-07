@@ -6,9 +6,9 @@ using namespace NSQLComplete;
 
 Y_UNIT_TEST_SUITE(RankingTests) {
 
-    Y_UNIT_TEST(RankingIsBuilt) {
-        auto ranking = MakeDefaultRanking(LoadFrequencyData());
-        Y_DO_NOT_OPTIMIZE_AWAY(ranking);
-    }
+Y_UNIT_TEST(RankingIsBuilt) {
+    auto ranking = MakeDefaultRanking(LoadFrequencyData());
+    Y_DO_NOT_OPTIMIZE_AWAY(ranking);
+}
 
 } // Y_UNIT_TEST_SUITE(RankingTests)

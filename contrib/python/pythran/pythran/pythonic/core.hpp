@@ -2,13 +2,13 @@
 #ifndef PYTHONIC_CORE_HPP
 #define PYTHONIC_CORE_HPP
 
-#define PYTHONIC_NS_BEGIN                                                      \
-  namespace                                                                    \
-  {                                                                            \
-    namespace pythonic                                                         \
+#define PYTHONIC_NS_BEGIN                                                                          \
+  namespace                                                                                        \
+  {                                                                                                \
+    namespace pythonic                                                                             \
     {
-#define PYTHONIC_NS_END                                                        \
-  }                                                                            \
+#define PYTHONIC_NS_END                                                                            \
+  }                                                                                                \
   }
 
 // mostly to flag '_' as unused in generated code
@@ -29,6 +29,11 @@
 // clang-format on
 
 #ifdef ENABLE_PYTHON_MODULE
+
+#if defined(Py_LIMITED_API) && Py_LIMITED_API < 0x03070000
+#error Pythran only supports Py_LIMITED_API from 0x03070000 upward
+#endif
+
 // Define python's visibility macros
 #include "pyconfig.h"
 

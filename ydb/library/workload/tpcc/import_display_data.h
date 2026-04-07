@@ -2,6 +2,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 
+#include <library/cpp/time_provider/monotonic.h>
+
 #include <util/generic/string.h>
 
 #include <stop_token>
@@ -9,13 +11,32 @@
 namespace NYdb::NTPCC {
 
 struct TIndexBuildState {
+    NMonotonic::TMonotonic StartMonoTs;
     TOperation::TOperationId Id;
     TString Table;
     TString Name;
     double Progress = 0.0;
 
     TIndexBuildState(TOperation::TOperationId id, const TString& table, const TString& name)
-        : Id(id), Table(table), Name(name) {}
+        : StartMonoTs(NMonotonic::TMonotonic::Now())
+        , Id(id)
+        , Table(table)
+        , Name(name)
+    {}
+
+    double GetRemainingSeconds() const {
+        // We could try to estimate, but that's just initial state.
+        // Normally, when progress is 0, we still have regular tables loading
+        // and use their estimate
+        auto passed = NMonotonic::TMonotonic::Now() - StartMonoTs;
+        if (Progress == 0 || passed.Seconds() < 1) {
+            return 0;
+        }
+
+        double loadRate = Progress / passed.Seconds();
+        double percentLeft = 100 - Progress;
+        return percentLeft / loadRate;
+    }
 };
 
 struct TImportState {
@@ -23,6 +44,7 @@ struct TImportState {
         ELOAD_INDEXED_TABLES = 0,
         ELOAD_TABLES_BUILD_INDICES,
         EWAIT_INDICES,
+        EWAIT_COMPACTION,
         ESUCCESS
     };
 
@@ -42,7 +64,9 @@ struct TImportState {
         , IndexedRangesLoaded(other.IndexedRangesLoaded.load(std::memory_order_relaxed))
         , RangesLoaded(other.RangesLoaded.load(std::memory_order_relaxed))
         , IndexBuildStates(other.IndexBuildStates)
+        , CompactionStates(other.CompactionStates)
         , CurrentIndex(other.CurrentIndex)
+        , CurrentCompaction(other.CurrentCompaction)
         , ApproximateDataSize(other.ApproximateDataSize)
     {
     }
@@ -55,7 +79,9 @@ struct TImportState {
             IndexedRangesLoaded.store(other.IndexedRangesLoaded.load(std::memory_order_relaxed), std::memory_order_relaxed);
             RangesLoaded.store(other.RangesLoaded.load(std::memory_order_relaxed), std::memory_order_relaxed);
             IndexBuildStates = other.IndexBuildStates;
+            CompactionStates = other.CompactionStates;
             CurrentIndex = other.CurrentIndex;
+            CurrentCompaction = other.CurrentCompaction;
             ApproximateDataSize = other.ApproximateDataSize;
         }
         return *this;
@@ -75,7 +101,9 @@ struct TImportState {
     // single threaded
 
     std::vector<TIndexBuildState> IndexBuildStates;
+    std::vector<TIndexBuildState> CompactionStates;
     size_t CurrentIndex = 0;
+    size_t CurrentCompaction = 0;
     size_t ApproximateDataSize = 0;
 };
 
@@ -88,7 +116,7 @@ struct TImportStatusData {
     int ElapsedSeconds = 0;
     int EstimatedTimeLeftMinutes = 0;
     int EstimatedTimeLeftSeconds = 0;
-    bool IsWaitingForIndices = false;
+    bool IsWaitingForPostLoadOps = false;
     bool IsLoadingTablesAndBuildingIndices = false;
 };
 

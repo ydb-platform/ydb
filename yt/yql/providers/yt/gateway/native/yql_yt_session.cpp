@@ -12,19 +12,21 @@ namespace NYql {
 namespace NNative {
 
 TSession::TSession(IYtGateway::TOpenSessionOptions&& options, size_t numThreads)
-    : TSessionBase(options.SessionId_, std::move(options.UserName()), std::move(options.RandomProvider()))
-    , ProgressWriter_(std::move(options.ProgressWriter()))
+    : TSessionBase(options.SessionId_, std::move(options.UserName()), std::move(options.RandomProvider()), std::move(options.TimeProvider()),
+    std::move(options.OperationOptions()), std::move(options.ProgressWriter())
+)
     , StatWriter_(std::move(options.StatWriter()))
-    , OperationOptions_(std::move(options.OperationOptions()))
-    , TimeProvider_(std::move(options.TimeProvider()))
     , DeterministicMode_(GetEnv("YQL_DETERMINISTIC_MODE"))
     , OperationSemaphore(nullptr)
     , LocalCalcSemaphore_(nullptr)
     , TxCache_(UserName_)
+    , QContext_(options.QContext())
+    , FullCapture_(options.FullCapture())
 {
     InitYtApiOnce(OperationOptions_.AttrsYson);
 
-    Queue_ = TAsyncQueue::Make(numThreads, "YtGateway");
+    QueueOwned_ = TAsyncQueue::Make(numThreads, "YtGateway");
+    Queue_ = QueueOwned_;
     if (options.CreateOperationTracker()) {
         OpTracker_ = MakeIntrusive<TOperationTracker>();
     }
@@ -34,7 +36,7 @@ void TSession::StopQueueAndTracker() {
     if (OpTracker_) {
         OpTracker_->Stop();
     }
-    Queue_->Stop();
+    QueueOwned_.reset();
 }
 
 void TSession::Close() {
@@ -51,10 +53,6 @@ void TSession::Close() {
     }
 
     StopQueueAndTracker();
-}
-
-NYT::TNode TSession::CreateSpecWithDesc(const TVector<std::pair<TString, TString>>& code) const {
-    return YqlOpOptionsToSpec(OperationOptions_, UserName_, code);
 }
 
 NYT::TNode TSession::CreateTableAttrs() const {

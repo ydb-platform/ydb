@@ -80,12 +80,7 @@ public:
 
     virtual const TReadStats& GetStats() const override;
 
-    virtual TString DebugString(const bool verbose) const override {
-        return TStringBuilder()
-            << "ready_results:(" << ReadyResults.DebugString() << ");"
-            << "indexed_data:(" << IndexedData->DebugString(verbose) << ")"
-            ;
-    }
+    virtual TString DebugString(const bool verbose) const override;
 
     virtual void Apply(const std::shared_ptr<IApplyAction>& task) override;
 

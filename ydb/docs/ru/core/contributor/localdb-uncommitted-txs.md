@@ -22,7 +22,7 @@
 
 * [EvUpdateTx](https://github.com/ydb-platform/ydb/blob/ab6222f2deabf1a12b50db13728b68cbd6b59604/ydb/core/tablet_flat/flat_redo_writer.h#L160) сохраняет изменения в таблице с указанием незакомиченного `TxId`. Это событие создаётся методом [TDatabase::UpdateTx](https://github.com/ydb-platform/ydb/blob/ab6222f2deabf1a12b50db13728b68cbd6b59604/ydb/core/tablet_flat/flat_database.h#L123) локальной базы данных (LocalDB).
 * [EvRemoveTx](https://github.com/ydb-platform/ydb/blob/ab6222f2deabf1a12b50db13728b68cbd6b59604/ydb/core/tablet_flat/flat_redo_writer.h#L169) используется для удаленения указанного `TxId`, когда выполняется отмена транзакции. Это событие создаётся методом [TDatabase::RemoveTx](https://github.com/ydb-platform/ydb/blob/ab6222f2deabf1a12b50db13728b68cbd6b59604/ydb/core/tablet_flat/flat_database.h#L124) локальной базы данных.
-* [EvCommitTx](https://github.com/ydb-platform/ydb/blob/ab6222f2deabf1a12b50db13728b68cbd6b59604/ydb/core/tablet_flat/flat_redo_writer.h#L183) используется для коммита указанного `TxId` с указанием [MVCC](../concepts/mvcc.md) версии коммита. Это событие создаётся методом [TDatabase::CommitTx](https://github.com/ydb-platform/ydb/blob/ab6222f2deabf1a12b50db13728b68cbd6b59604/ydb/core/tablet_flat/flat_database.h#L125) локальной базы данных.
+* [EvCommitTx](https://github.com/ydb-platform/ydb/blob/ab6222f2deabf1a12b50db13728b68cbd6b59604/ydb/core/tablet_flat/flat_redo_writer.h#L183) используется для коммита указанного `TxId` с указанием [MVCC](../concepts/query_execution/mvcc.md) версии коммита. Это событие создаётся методом [TDatabase::CommitTx](https://github.com/ydb-platform/ydb/blob/ab6222f2deabf1a12b50db13728b68cbd6b59604/ydb/core/tablet_flat/flat_database.h#L125) локальной базы данных.
 
 ## Хранение незакомиченных изменений в MemTable
 
@@ -177,3 +177,5 @@
 8. В такой ситуации в `TxStatus` от шарда L будет коммит, а в `TxStatus` от шарда R будет отмена для того же `TxId`. Так как транзакции успешно коммитят все изменения, а отмена может быть в том числе из-за наложенного фильтра, в случае мержа конфликтующей информации по `TxId` коммит «выигрывает» над отменой.
 
 На практике DataShard перед очередным сплитом или мержем полностью компактятся, так что конфликтующая информация по статусу коммита не должна возникнуть. Например, это означает, что транзакции не могут решить закоммитить только часть изменений, все изменения для конкретного `TxId` должны быть закоммичены вместе. Это также означает, что идентификаторы транзакций нельзя переиспользовать, в том числе между разными шардами. В качестве `TxId` для незакомиченных изменений также могут использоваться только глобально уникальные идентификаторы.
+
+{% include [career](./_includes/career.md) %}

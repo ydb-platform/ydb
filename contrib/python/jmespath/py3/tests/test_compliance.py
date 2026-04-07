@@ -48,19 +48,20 @@ def _walk_files():
 
 
 def load_cases(full_path):
-    all_test_data = json.load(open(full_path), object_pairs_hook=OrderedDict)
-    for test_data in all_test_data:
-        given = test_data['given']
-        for case in test_data['cases']:
-            if 'result' in case:
-                test_type = 'result'
-            elif 'error' in case:
-                test_type = 'error'
-            elif 'bench' in case:
-                test_type = 'bench'
-            else:
-                raise RuntimeError("Unknown test type: %s" % json.dumps(case))
-            yield (given, test_type, case)
+    with open(full_path, 'r', encoding='utf-8') as f:
+        all_test_data = json.load(f, object_pairs_hook=OrderedDict)
+        for test_data in all_test_data:
+            given = test_data['given']
+            for case in test_data['cases']:
+                if 'result' in case:
+                    test_type = 'result'
+                elif 'error' in case:
+                    test_type = 'error'
+                elif 'bench' in case:
+                    test_type = 'bench'
+                else:
+                    raise RuntimeError(f"Unknown test type: {json.dumps(case)}")
+                yield (given, test_type, case)
 
 
 @pytest.mark.parametrize(

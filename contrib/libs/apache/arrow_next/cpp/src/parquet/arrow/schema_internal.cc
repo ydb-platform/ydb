@@ -15,12 +15,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/arrow/schema_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/arrow/schema_internal.h"
 
-#include "arrow/extension/json.h"
-#include "arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension/json.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
 
-#include "parquet/properties.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/properties.h"
 
 using ArrowType = ::arrow20::DataType;
 using ArrowTypeId = ::arrow20::Type;

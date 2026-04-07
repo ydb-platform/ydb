@@ -50,6 +50,7 @@ namespace NKikimr {
         bool UseActorSystemTimeInBSQueue = false;
         std::optional<ui32> ReplMaxQuantumBytes = std::nullopt;
         std::optional<ui32> ReplMaxDonorNotReadyCount = std::nullopt;
+        bool TinySyncLog = false;
 
         TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory> &pDiskServiceFactory)
             : PDiskServiceFactory(pDiskServiceFactory)

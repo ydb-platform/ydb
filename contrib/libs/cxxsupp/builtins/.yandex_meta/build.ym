@@ -1,16 +1,15 @@
 {% extends '//builtin/bag.ym' %}
 
-{% block current_version %}20.1.8{% endblock %}
+{% block current_version %}21.1.8{% endblock %}
 
 {% block current_url %}
-https://github.com/llvm/llvm-project/releases/download/llvmorg-{{self.version().strip()}}/compiler-rt-{{self.version().strip()}}.src.tar.xz
+https://github.com/llvm/llvm-project/archive/llvmorg-{{self.version().strip()}}.tar.gz
 {% endblock %}
 
 {% block patch_source %}
 {{super()}}
 (
-rm CMakeLists.txt
-cd lib/builtins
+cd compiler-rt/lib/builtins
 rm CMakeLists.txt
 rm aarch64/lse.S
 sed -e 's|.*#include.*ptrauth.h.*||' -i crtbegin.c
@@ -69,11 +68,19 @@ IF (GCC OR CLANG)
     # Just generate native code from the beginning.
     NO_LTO()
 ENDIF()
+
+IF (OS_ANDROID AND ARCH_ARM7)
+    # For some reason, some intrinsincs fail to compile under Thumb mode restrictions
+    # Disable it, since it's not used in upstream NDK anyway
+    CFLAGS(
+        -mno-thumb
+    )
+ENDIF()
 {% endblock %}
 
 {% block gen_ya_make %}
 (
-cd lib/builtins
+cd compiler-rt/lib/builtins
 
 cat << EOF > join.py
 import os
@@ -117,7 +124,13 @@ def it_srcs():
         if n not in sset:
             yield x
 
-    yield from set(special) - {'x86_64/floatdixf.c', 'aarch64/sme-libc-routines.c'}
+    yield from set(special) - {
+		'x86_64/floatdixf.c',
+		'aarch64/sme-libc-memcpy-memmove.c',
+		'aarch64/sme-libc-memset-memchr.c',
+		'aarch64/sme-libc-opt-memcpy-memmove.S',
+		'aarch64/sme-libc-opt-memset-memchr.S',
+	}
 
 print('\n'.join(sorted(list(it_srcs()))).strip())
 EOF
@@ -164,14 +177,19 @@ ls aarch64/*.c cpu_model/aarch64.*c aarch64/*.S > special
 python3 join.py common special aarch
 echo ')'
 
-echo 'IF(NOT OS_DARWIN) SRCS(aarch64/sme-libc-routines.c) ENDIF()'
+echo 'IF(NOT OS_DARWIN)'
+echo '    SRCS('
+echo '        aarch64/sme-libc-opt-memcpy-memmove.S'
+echo '        aarch64/sme-libc-opt-memset-memchr.S'
+echo '    )'
+echo 'ENDIF()'
 echo 'ELSEIF (ARCH_X86_64)'
 echo 'SRCS('
 ls x86_64/*.c cpu_model/x86.*c  x86_64/*.S > special
 python3 join.py common special x86_64
 echo ')'
 
-# As llvm/compiler-rt/lib/builtins says:
+# As llvm/compiler-rt/lib/builtins/CMakeLists.txt says:
 # Implement extended-precision builtins, assuming long double is 80 bits.
 # long double is not 80 bits on Android or MSVC.
 echo 'IF(NOT OS_WINDOWS AND NOT OS_ANDROID) SRCS(x86_64/floatdixf.c'
@@ -199,7 +217,7 @@ rm join.py common special
 
 {% block move_to_output %}
 {{super()}}
-cp -R lib/builtins/* ${OUTPUT}/
+cp -R compiler-rt/lib/builtins/* ${OUTPUT}/
 {% endblock %}
 
 {% block run_license_analyzer %}

@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import hashlib
 import io
+import json
 import os
 import os.path
 import six
@@ -20,6 +21,7 @@ from threading import Lock
 import pytest
 import yatest.common
 import cyson
+from library.python import resource
 
 import logging
 import getpass
@@ -31,6 +33,13 @@ KSV_ATTR = '''{_yql_row_spec={
         [[key;[DataType;String]];
         [subkey;[DataType;String]];
         [value;[DataType;String]]]]}}'''
+
+UNDEFINED_SANITIZER_IGNORE_STRINGS = [
+    "Failed to find UDF function",
+    "Module not loaded for script type"
+]
+
+FEATURES = json.loads(resource.find('yql/essentials/data/language/features.json'))
 
 
 def get_param(name, default=None):
@@ -58,6 +67,11 @@ def do_custom_error_check(res, sql_query):
     assert err_string, 'Expected custom error check in test.\nTest error: %s' % res.std_err
     log('Custom error: ' + err_string)
     assert err_string in res.std_err, '"' + err_string + '" is not found in "' + res.std_err + "'"
+
+
+def skip_on_ubsan_known_failure(res_text):
+    if yatest.common.context.sanitize == 'undefined' and any(known_failure in res_text for known_failure in UNDEFINED_SANITIZER_IGNORE_STRINGS):
+        pytest.skip('An attempt to load UDF under UBSan was detected. Ignoring these tests due to problems with shared library loading under UBSan.')
 
 
 def get_gateway_cfg_suffix():
@@ -444,9 +458,6 @@ def get_tables(suite, cfg, data_path, def_attr=None, attr_postprocess=None):
     res_dir = get_yql_dir('table_')
 
     for splitted in cfg:
-        if splitted[0] == 'udf' and yatest.common.context.sanitize == 'undefined':
-            pytest.skip("udf under ubsan")
-
         if len(splitted) == 4:
             type_name, table, file_name, format_name = splitted
         elif len(splitted) == 3:
@@ -497,18 +508,33 @@ def is_os_supported(cfg):
     return True
 
 
-def is_xfail(cfg):
-    for item in cfg:
-        if item[0] == 'xfail':
-            return True
-    return False
+def is_xsqlfail(cfg, filename=''):
+    return (
+        any(item[0] == 'xsqlfail' for item in cfg) or
+        filename.endswith('.sqlx')
+    )
+
+
+def is_xfail(cfg, filename=''):
+    return (
+        any(item[0] == 'xfail' for item in cfg) or
+        is_xsqlfail(cfg, filename)
+    )
 
 
 def get_langver(cfg):
-    for item in cfg:
-        if item[0] == 'langver':
-            return item[1]
-    return None
+    def resolve(alias):
+        if alias in FEATURES:
+            return FEATURES[alias]["since_langver"]
+        if alias[0].isdigit():
+            return alias
+        raise ValueError('Bad alias ' + alias)
+
+    return next((
+        resolve(item[1])
+        for item in cfg
+        if item[0] == 'langver'
+    ), None)
 
 
 def get_envs(cfg):
@@ -588,7 +614,8 @@ def execute(
         output_tables=None,
         pretty_plan=True,
         parameters={},
-        langver=None
+        langver=None,
+        attrs={}
 ):
     '''
     Executes YQL/SQL
@@ -605,6 +632,7 @@ def execute(
     :param output_tables: list of Table (will be returned)
     :param pretty_plan: whether to use pretty printing for plan or not
     :param parameters: query parameters as dict like {name: json_value}
+    :param attrs: query operation attributes as dict like {attr_name: attr value}
     :return: YQLExecResult
     '''
 
@@ -628,7 +656,8 @@ def execute(
         tables=(output_tables + input_tables),
         pretty_plan=pretty_plan,
         parameters=parameters,
-        langver=langver
+        langver=langver,
+        attrs=attrs
     )
 
     try:
@@ -685,9 +714,12 @@ def get_mount_config_file(content=None):
 
 
 def run_command(program, cmd, tmpdir_module=None, stdin=None,
-                check_exit_code=True, env=None, stdout=None):
+                check_exit_code=True, env=None, stdout=None,
+                cwd=None):
     if tmpdir_module is None:
         tmpdir_module = tempfile.mkdtemp()
+    if cwd is None:
+        cwd = tmpdir_module
 
     stdin_stream = None
     if isinstance(stdin, six.string_types):
@@ -718,7 +750,7 @@ def run_command(program, cmd, tmpdir_module=None, stdin=None,
 
     res = yatest.common.execute(
         cmd,
-        cwd=tmpdir_module,
+        cwd=cwd,
         stdin=stdin_stream,
         stdout=stdout_stream,
         stderr=stderr_stream,

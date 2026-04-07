@@ -22,8 +22,8 @@
 #include <tuple>
 #include <type_traits>
 
-#include "arrow/result.h"
-#include "arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
 
 namespace arrow20 {
 namespace internal {

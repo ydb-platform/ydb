@@ -1,16 +1,19 @@
 #include "service_operation.h"
 #include "operation_helpers.h"
 #include "rpc_operation_request_base.h"
+
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
+#include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
-#include <ydb/library/actors/core/hfunc.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -39,6 +42,8 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
             return "[CancelIncrementalBackup]";
         case TOperationId::RESTORE:
             return "[CancelBackupCollectionRestore]";
+        case TOperationId::COMPACTION:
+            return "[CancelForcedCompaction]";
         default:
             return "[Untagged]";
         }
@@ -52,6 +57,8 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
             return new TEvImport::TEvCancelImportRequest(TxId, GetDatabaseName(), RawOperationId);
         case TOperationId::BUILD_INDEX:
             return new TEvIndexBuilder::TEvCancelRequest(TxId, GetDatabaseName(), RawOperationId);
+        case TOperationId::COMPACTION:
+            return new TEvForcedCompaction::TEvCancelRequest(TxId, GetDatabaseName(), RawOperationId);
         default:
             Y_ABORT("unreachable");
         }
@@ -61,7 +68,8 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
         const TOperationId::EKind kind = OperationId.GetKind();
         return kind == TOperationId::EXPORT
             || kind == TOperationId::IMPORT
-            || kind == TOperationId::BUILD_INDEX;
+            || kind == TOperationId::BUILD_INDEX
+            || kind == TOperationId::COMPACTION;
     }
 
     void Handle(TEvExport::TEvCancelExportResponse::TPtr& ev) {
@@ -91,6 +99,15 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
         Reply(record.GetStatus(), record.GetIssues());
     }
 
+    void Handle(TEvForcedCompaction::TEvCancelResponse::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+
+        LOG_D("Handle TEvForcedCompaction::TEvCancelResponse"
+            << ": record# " << record.ShortDebugString());
+
+        Reply(record.GetStatus(), record.GetIssues());
+    }
+
 public:
     using TRpcOperationRequestActor::TRpcOperationRequestActor;
 
@@ -104,6 +121,7 @@ public:
             case TOperationId::EXPORT:
             case TOperationId::IMPORT:
             case TOperationId::BUILD_INDEX:
+            case TOperationId::COMPACTION:
                 if (!TryGetId(OperationId, RawOperationId)) {
                     return Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Unable to extract operation id");
                 }
@@ -138,6 +156,7 @@ public:
             hFunc(TEvExport::TEvCancelExportResponse, Handle);
             hFunc(TEvImport::TEvCancelImportResponse, Handle);
             hFunc(TEvIndexBuilder::TEvCancelResponse, Handle);
+            hFunc(TEvForcedCompaction::TEvCancelResponse, Handle);
             hFunc(NKqp::TEvCancelScriptExecutionOperationResponse, Handle);
         default:
             return StateBase(ev);
@@ -151,7 +170,7 @@ public:
     }
 
     void SendCancelScriptExecutionOperation() {
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvCancelScriptExecutionOperation(GetDatabaseName(), OperationId));
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvCancelScriptExecutionOperation(GetDatabaseName(), OperationId, GetUserSID(*Request)));
     }
 
 private:

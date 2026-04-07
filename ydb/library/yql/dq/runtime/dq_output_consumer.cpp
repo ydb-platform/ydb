@@ -21,6 +21,15 @@
 
 namespace NYql::NDq {
 
+TString FillLevelToString(EDqFillLevel level) {
+    switch(level) {
+        case NoLimit : return "No";
+        case SoftLimit : return "Soft";
+        case HardLimit : return "Hard";
+        default: return "-";
+    }
+}
+
 namespace {
 
 using namespace NKikimr;
@@ -33,16 +42,7 @@ using namespace NUdf;
 
 // TODO: maybe use common interface without templates?
 
-struct THashV1 {
-    explicit THashV1(
-        const TVector<TColumnInfo>& keyColumns
-    )
-    {
-        for (const auto& column : keyColumns) {
-            Hashers.emplace_back(MakeHashImpl(column.Type));
-        }
-    }
-
+struct THashBase {
     void Start() {
         Hash = 0;
     }
@@ -51,20 +51,27 @@ struct THashV1 {
     void Update(const TValue& value, size_t keyIdx) {
         Hash = CombineHashes(Hash, value.HasValue() ? Hashers.at(keyIdx)->Hash(value) : 0);
     }
-
-    ui64 Finish(ui64 outputsSize) {
-        return Hash % outputsSize;
-    }
-
 protected:
+    THashBase() = default;
+
     TVector<NUdf::IHash::TPtr> Hashers;
     ui64 Hash;
 };
 
+struct THashV1 : public THashBase {
+    explicit THashV1(const TVector<TColumnInfo>& keyColumns) {
+        for (const auto& column : keyColumns) {
+            Hashers.emplace_back(MakeHashImpl(column.DataType));
+        }
+    }
+
+    ui64 Finish(ui64 outputsSize) {
+        return Hash % outputsSize;
+    }
+};
+
 struct THashV2 : public THashV1 {
-    explicit THashV2(
-        const TVector<TColumnInfo>& keyColumns
-    )
+    explicit THashV2(const TVector<TColumnInfo>& keyColumns)
         : THashV1(keyColumns)
     {}
 
@@ -78,24 +85,24 @@ struct THashV2 : public THashV1 {
     }
 };
 
-struct TBlockHashV1 {
-    TBlockHashV1(
-        const TVector<TColumnInfo>& keyColumns,
-        const NKikimr::NMiniKQL::TType* outputType
-    )
-    {
-        TBlockTypeHelper helper;
-        auto multiType = static_cast<const NMiniKQL::TMultiType*>(outputType);
-        for (const auto& column : keyColumns) {
-            auto columnType = multiType->GetElementType(column.Index);
-            YQL_ENSURE(columnType->IsBlock());
-            auto blockType = static_cast<const NMiniKQL::TBlockType*>(columnType);
-            Hashers.emplace_back(helper.MakeHasher(blockType->GetItemType()));
-        }
-    }
-
+struct TBlockHashBase {
     void Start() {
         Hash = 0;
+    }
+
+protected:
+    TBlockHashBase() = default;
+
+    TVector<NUdf::IBlockItemHasher::TPtr> Hashers;
+    ui64 Hash;
+};
+
+struct TBlockHashV1 : public TBlockHashBase {
+    explicit TBlockHashV1(const TVector<TColumnInfo>& keyColumns) {
+        TBlockTypeHelper helper;
+        for (const auto& column : keyColumns) {
+            Hashers.emplace_back(helper.MakeHasher(column.OriginalType));
+        }
     }
 
     template <class TValue>
@@ -106,19 +113,20 @@ struct TBlockHashV1 {
     ui64 Finish(ui64 outputsSize) {
         return Hash % outputsSize;
     }
-
-protected:
-    TVector<NUdf::IBlockItemHasher::TPtr> Hashers;
-    ui64 Hash;
 };
 
-struct TBlockHashV2 : public TBlockHashV1 {
-    TBlockHashV2(
-        const TVector<TColumnInfo>& keyColumns,
-        const NKikimr::NMiniKQL::TType* outputType
-    )
-        : TBlockHashV1(keyColumns, outputType)
-    {}
+struct TBlockHashV2 : public TBlockHashBase {
+    explicit TBlockHashV2(const TVector<TColumnInfo>& keyColumns) {
+        TBlockTypeHelper helper;
+        for (const auto& column : keyColumns) {
+            Hashers.emplace_back(helper.MakeHasher(column.DataType));
+        }
+    }
+
+    template <class TValue>
+    void Update(const TValue& item, size_t keyIdx) {
+        Hash = CombineHashes(Hash, item.HasValue() ? Hashers.at(keyIdx)->Hash(item) : 0);
+    }
 
     ui64 Finish(ui64 outputsSize) {
         return THashV2::SpreadHash(Hash) % outputsSize;
@@ -324,10 +332,50 @@ public:
         }
     }
 
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& consumer : Consumers) {
+            consumer->Consume(NDqProto::TWatermark(watermark));
+        }
+    }
+
     void Finish() override {
         for (auto& consumer : Consumers) {
             consumer->Finish();
         }
+    }
+
+    void Flush() override {
+        for (auto& consumer : Consumers) {
+            consumer->Flush();
+        }
+    }
+
+    bool IsFinished() const override {
+        for (auto consumer : Consumers) {
+            if (!consumer->IsFinished()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool IsEarlyFinished() const override {
+        for (auto consumer : Consumers) {
+            if (!consumer->IsEarlyFinished()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    TString DebugString() override {
+        TStringBuilder builder;
+        builder << "TDqOutputMultiConsumer [";
+        for (auto consumer : Consumers) {
+            builder << consumer->DebugString();
+        }
+        builder << ']';
+        return builder;
     }
 
 private:
@@ -355,8 +403,28 @@ public:
         Output->Push(std::move(checkpoint));
     }
 
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        Output->Push(std::move(watermark));
+    }
+
     void Finish() override {
         Output->Finish();
+    }
+
+    void Flush() override {
+        Output->Flush();
+    }
+
+    bool IsFinished() const override {
+        return Output->IsFinished();
+    }
+
+    bool IsEarlyFinished() const override {
+        return Output->IsEarlyFinished();
+    }
+
+    TString DebugString() override {
+        return "TDqOutputMapConsumer";
     }
 
 private:
@@ -369,10 +437,6 @@ private:
     mutable TUnboxedValue WaitingValue;
     mutable TUnboxedValueVector WideWaitingValues;
     mutable IDqOutput::TPtr OutputWaiting;
-protected:
-    virtual bool DoTryFinish() override {
-        return true;
-    }
 public:
     TDqOutputHashPartitionConsumer(
         TVector<IDqOutput::TPtr>&& outputs,
@@ -396,15 +460,22 @@ public:
     }
 
     EDqFillLevel GetFillLevel() const override {
-        return Aggregator->GetFillLevel();
+        auto result = Aggregator->GetFillLevel();
+        if (result == HardLimit) {
+            for (auto output : Outputs) {
+                output->UpdateFillLevel();
+            }
+            result = Aggregator->GetFillLevel();
+        }
+        return result;
     }
 
     TString DebugString() override {
         TStringBuilder builder;
-        builder << Aggregator->DebugString() << " TDqOutputHashPartitionConsumer {";
+        builder << "TDqOutputHashPartitionConsumer " << Aggregator->DebugString() << " Channels {";
         ui32 i = 0;
         for (auto output : Outputs) {
-            builder << " C" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            builder << " C" << i++ << ":" << FillLevelToString(output->UpdateFillLevel());
             if (i >= 20) {
                 builder << "...";
                 break;
@@ -432,10 +503,30 @@ public:
         }
     }
 
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& output : Outputs) {
+            output->Push(NDqProto::TWatermark(watermark));
+        }
+    }
+
     void Finish() final {
         for (auto& output : Outputs) {
             output->Finish();
         }
+    }
+
+    void Flush() final {
+        for (auto& output : Outputs) {
+            output->Flush();
+        }
+    }
+
+    bool IsFinished() const override {
+        return Aggregator->IsFinished();
+    }
+
+    bool IsEarlyFinished() const override {
+        return Aggregator->IsEarlyFinished();
     }
 
 private:
@@ -497,15 +588,22 @@ public:
     }
 private:
     EDqFillLevel GetFillLevel() const override {
-        return Aggregator->GetFillLevel();
+        auto result = Aggregator->GetFillLevel();
+        if (result == HardLimit) {
+            for (auto output : Outputs_) {
+                output->UpdateFillLevel();
+            }
+            result = Aggregator->GetFillLevel();
+        }
+        return result;
     }
 
     TString DebugString() override {
         TStringBuilder builder;
-        builder << Aggregator->DebugString() << " TDqOutputHashPartitionConsumerScalar {";
+        builder << "TDqOutputHashPartitionConsumerScalar " << Aggregator->DebugString() << " Channels {";
         ui32 i = 0;
         for (auto output : Outputs_) {
-            builder << " C" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            builder << " C" << i++ << ":" << FillLevelToString(output->UpdateFillLevel());
             if (i >= 20) {
                 builder << "...";
                 break;
@@ -535,14 +633,30 @@ private:
         }
     }
 
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& output : Outputs_) {
+            output->Push(NDqProto::TWatermark(watermark));
+        }
+    }
+
     void Finish() final {
         for (auto& output : Outputs_) {
             output->Finish();
         }
     }
 
-    bool DoTryFinish() final {
-        return true;
+    void Flush() final {
+        for (auto& output : Outputs_) {
+            output->Flush();
+        }
+    }
+
+    bool IsFinished() const override {
+        return Aggregator->IsFinished();
+    }
+
+    bool IsEarlyFinished() const override {
+        return Aggregator->IsEarlyFinished();
     }
 
     size_t GetHashPartitionIndex(const TUnboxedValue* values) {
@@ -586,7 +700,6 @@ public:
         , HashFunc(std::move(hashFunc))
     {
         TTypeInfoHelper helper;
-        YQL_ENSURE(OutputWidth_ > KeyColumns_.size());
 
         TVector<const NMiniKQL::TType*> blockTypes;
         for (auto& columnType : OutputType_->GetElements()) {
@@ -612,15 +725,22 @@ public:
 
 private:
     EDqFillLevel GetFillLevel() const override {
-        return Aggregator->GetFillLevel();
+        auto result = Aggregator->GetFillLevel();
+        if (result == HardLimit) {
+            for (auto output : Outputs_) {
+                output->UpdateFillLevel();
+            }
+            result = Aggregator->GetFillLevel();
+        }
+        return result;
     }
 
     TString DebugString() override {
         TStringBuilder builder;
-        builder << Aggregator->DebugString() << " TDqOutputHashPartitionConsumerBlock {";
+        builder << "TDqOutputHashPartitionConsumerBlock " << Aggregator->DebugString() << " Channels {";
         ui32 i = 0;
         for (auto output : Outputs_) {
-            builder << " C" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            builder << " C" << i++ << ":" << FillLevelToString(output->UpdateFillLevel());
             if (i >= 20) {
                 builder << "...";
                 break;
@@ -716,14 +836,30 @@ private:
         }
     }
 
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& output : Outputs_) {
+            output->Push(NDqProto::TWatermark(watermark));
+        }
+    }
+
     void Finish() final {
         for (auto& output : Outputs_) {
             output->Finish();
         }
     }
 
-    bool DoTryFinish() final {
-        return true;
+    void Flush() final {
+        for (auto& output : Outputs_) {
+            output->Flush();
+        }
+    }
+
+    bool IsFinished() const override {
+        return Aggregator->IsFinished();
+    }
+
+    bool IsEarlyFinished() const override {
+        return Aggregator->IsEarlyFinished();
     }
 
     size_t GetHashPartitionIndex(const arrow::Datum* values[], ui64 blockIndex) {
@@ -793,15 +929,22 @@ public:
     }
 
     EDqFillLevel GetFillLevel() const override {
-        return Aggregator->GetFillLevel();
+        auto result = Aggregator->GetFillLevel();
+        if (result == HardLimit) {
+            for (auto output : Outputs) {
+                output->UpdateFillLevel();
+            }
+            result = Aggregator->GetFillLevel();
+        }
+        return result;
     }
 
     TString DebugString() override {
         TStringBuilder builder;
-        builder << Aggregator->DebugString() << " TDqOutputBroadcastConsumer {";
+        builder << "TDqOutputBroadcastConsumer " << Aggregator->DebugString() << " Channels {";
         ui32 i = 0;
         for (auto output : Outputs) {
-            builder << " C" << i++ << ":" << static_cast<ui32>(output->UpdateFillLevel());
+            builder << " C" << i++ << ":" << FillLevelToString(output->UpdateFillLevel());
             if (i >= 20) {
                 builder << "...";
                 break;
@@ -833,10 +976,30 @@ public:
         }
     }
 
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& output : Outputs) {
+            output->Push(NDqProto::TWatermark(watermark));
+        }
+    }
+
     void Finish() override {
         for (auto& output : Outputs) {
             output->Finish();
         }
+    }
+
+    void Flush() override {
+        for (auto& output : Outputs) {
+            output->Flush();
+        }
+    }
+
+    bool IsFinished() const override {
+        return Aggregator->IsFinished();
+    }
+
+    bool IsEarlyFinished() const override {
+        return Aggregator->IsEarlyFinished();
     }
 
 private:
@@ -930,7 +1093,7 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
                 return MakeIntrusive<TDqOutputHashPartitionConsumer<THashV2>>(std::move(outputs), std::move(keyColumns), outputWidth, std::move(hashFunc));
             }
 
-            TBlockHashV2 hashFunc(keyColumns, outputType);
+            TBlockHashV2 hashFunc(keyColumns);
             YQL_ENSURE(outputWidth.Defined(), "Expecting wide stream for block data");
             if (AllOf(keyColumns, [](const auto& info) { return *info.IsScalar; })) {
                 // all key columns are scalars - all data will go to single output
@@ -947,7 +1110,7 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
                 return MakeIntrusive<TDqOutputHashPartitionConsumer<THashV1>>(std::move(outputs), std::move(keyColumns), outputWidth, std::move(hashFunc));
             }
 
-            TBlockHashV1 hashFunc(keyColumns, outputType);
+            TBlockHashV1 hashFunc(keyColumns);
             YQL_ENSURE(outputWidth.Defined(), "Expecting wide stream for block data");
             if (AllOf(keyColumns, [](const auto& info) { return *info.IsScalar; })) {
                 // all key columns are scalars - all data will go to single output

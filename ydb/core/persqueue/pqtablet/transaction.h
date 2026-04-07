@@ -1,7 +1,9 @@
 #pragma once
 
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/pqdata_transaction.pb.h>
 #include <ydb/core/protos/msgbus_kv.pb.h>
 #include <ydb/core/protos/tx.pb.h>
 #include <ydb/core/tx/tx_processing.h>
@@ -35,7 +37,11 @@ struct TDistributedTransaction {
                    std::unique_ptr<TEvTxProcessing::TEvReadSetAck> ack);
     void OnReadSetAck(const NKikimrTx::TEvReadSetAck& event);
     void OnReadSetAck(ui64 tabletId);
-    void OnTxCommitDone(const TEvPQ::TEvTxCommitDone& event);
+    void OnTxDone(const TEvPQ::TEvTxDone& event);
+
+    void SendPlanStepAcksAfterCompletion(const TActorId& sender, std::unique_ptr<TEvTxProcessing::TEvPlanStep>&& event);
+
+    bool GetSkipSrcIdInfo() const;
 
     using EDecision = NKikimrTx::TReadSetData::EDecision;
     using EState = NKikimrPQ::TTransaction::EState;
@@ -123,6 +129,11 @@ struct TDistributedTransaction {
     void EndDeleteSpan();
 
     NWilson::TTraceId GetExecuteSpanTraceId();
+
+    TMaybe<NKikimrPQ::TError> Error;
+
+    TActorId PlanStepSender;
+    std::unique_ptr<TEvTxProcessing::TEvPlanStep> PlanStepEvent;
 
 private:
     NWilson::TSpan CreateSpan(const char* name, ui64 tabletId);

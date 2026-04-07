@@ -8,7 +8,7 @@ TEST_SRCS(
 
 SIZE(MEDIUM)
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 PEERDIR(
     ydb/tests/library

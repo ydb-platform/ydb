@@ -1,16 +1,25 @@
-# coding: utf-8
 
-from _ruamel_yaml import CParser, CEmitter  # type: ignore
+from __future__ import annotations
 
-from ruamel.yaml.constructor import Constructor, BaseConstructor, SafeConstructor
-from ruamel.yaml.representer import Representer, SafeRepresenter, BaseRepresenter
-from ruamel.yaml.resolver import Resolver, BaseResolver
+if False:  # MYPY
+    from typing import Any, Optional
+    from ruamel.yaml.compat import StreamTextType, StreamType, VersionType  # NOQA
+
+__yaml_lib: Optional[str] = None
+try:
+    from _ruamel_yaml import CParser, CEmitter  # type: ignore
+    __yaml_lib = 'clib'
+except ModuleNotFoundError:
+    from _ruamel_yaml_clibz import CParser, CEmitter  # type: ignore
+    __yaml_lib = 'clibz'
+
+from ruamel.yaml.constructor import Constructor, BaseConstructor, SafeConstructor  # NOQA
+from ruamel.yaml.representer import Representer, SafeRepresenter, BaseRepresenter  # NOQA
+from ruamel.yaml.resolver import Resolver, BaseResolver                            # NOQA
 
 
-from typing import Any, Union, Optional  # NOQA
-from ruamel.yaml.compat import StreamTextType, StreamType, VersionType  # NOQA
-
-__all__ = ['CBaseLoader', 'CSafeLoader', 'CLoader', 'CBaseDumper', 'CSafeDumper', 'CDumper']
+__all__ = ['CBaseLoader', 'CSafeLoader', 'CLoader', 'CBaseDumper', 'CSafeDumper', 'CDumper',
+           '__yaml_lib']
 
 
 # this includes some hacks to solve the  usage of resolver by lower level

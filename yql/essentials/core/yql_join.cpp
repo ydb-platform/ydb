@@ -3,6 +3,7 @@
 #include "yql_expr_type_annotation.h"
 #include "yql_opt_utils.h"
 
+#include <util/generic/typetraits.h>
 #include <util/string/cast.h>
 #include <util/string/join.h>
 #include <util/string/type.h>
@@ -374,7 +375,8 @@ namespace {
                 }
                 leftKeyType = leftKeyType->Cast<TListExprType>()->GetItemType();
             }
-            if (strictKeys && leftKeyType != rightKeyType) {
+            if (strictKeys && !IsSameAnnotation(*leftKeyType, *rightKeyType) &&
+                !leftKeyType->HasUniversal() && !rightKeyType->HasUniversal()) {
                 ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
                     TStringBuilder() << "Strict key type match requested, but keys have different types: ("
                     << leftKeys[i].first << "." << leftKeys[i].second
@@ -469,16 +471,24 @@ namespace {
         TTypeAnnotationNode::TListType AllTypes;
     };
 
-    void CollectEquiJoinKeyColumnsFromLeaf(const TExprNode& columns, THashMap<TStringBuf, THashSet<TStringBuf>>& tableKeysMap) {
+    template <typename TContainer>
+    void CollectEquiJoinKeyColumnsFromLeaf(const TExprNode& columns, TContainer& tableKeysMap) {
         YQL_ENSURE(columns.ChildrenSize() % 2 == 0);
         for (ui32 i = 0; i < columns.ChildrenSize(); i += 2) {
             auto table = columns.Child(i)->Content();
             auto column = columns.Child(i + 1)->Content();
-            tableKeysMap[table].insert(column);
+            if constexpr (std::is_same_v<TContainer, THashMap<TStringBuf, THashSet<TStringBuf>>>) {
+                tableKeysMap[table].insert(column);
+            } else if constexpr (std::is_same_v<TContainer, THashMap<TStringBuf, TVector<TStringBuf>>>) {
+                tableKeysMap[table].push_back(column);
+            } else {
+                static_assert(TDependentFalse<TContainer>());
+            }
         }
     }
 
-    void CollectEquiJoinKeyColumns(const TExprNode& joinTree, THashMap<TStringBuf, THashSet<TStringBuf>>& tableKeysMap) {
+    template <typename TContainer>
+    void CollectEquiJoinKeyColumns(const TExprNode& joinTree, TContainer& tableKeysMap) {
         auto& left = *joinTree.Child(1);
         if (!left.IsAtom()) {
             CollectEquiJoinKeyColumns(left, tableKeysMap);
@@ -1039,6 +1049,12 @@ THashMap<TStringBuf, THashSet<TStringBuf>> CollectEquiJoinKeyColumnsByLabel(cons
     return result;
 };
 
+THashMap<TStringBuf, TVector<TStringBuf>> CollectOrderedEquiJoinKeyColumnsByLabel(const TExprNode& joinTree) {
+    THashMap<TStringBuf, TVector<TStringBuf>> result;
+    CollectEquiJoinKeyColumns(joinTree, result);
+    return result;
+};
+
 bool IsLeftJoinSideOptional(const TStringBuf& joinType) {
     if (joinType == "Right" || joinType == "Full" || joinType == "Exclusion") {
         return true;
@@ -1063,8 +1079,8 @@ THashMap<TStringBuf, bool> CollectAdditiveInputLabels(const TCoEquiJoinTuple& jo
 
 bool IsSkipNullsUnessential(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
-    static const char flag[] = "EmitSkipNullOnPushdownUsingUnessential";
-    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+    static const char Flag[] = "EmitSkipNullOnPushdownUsingUnessential";
+    return IsOptimizerEnabled<Flag>(*types) && !IsOptimizerDisabled<Flag>(*types);
 }
 
 TExprNode::TPtr FilterOutNullJoinColumns(
@@ -1955,8 +1971,8 @@ TExprNode::TPtr PreparePredicate(TExprNode::TPtr predicate, TExprContext& ctx) {
 
     for (ui32 i = 1; i < andParts.size(); ++i) {
         THashSet<const TExprNode*> found;
-        for (ui32 j = 0; j < andParts[i].size(); ++j) {
-            found.insert(andParts[i][j].Get());
+        for (const auto& part : andParts[i]) {
+            found.insert(part.Get());
         }
 
         // remove
@@ -1986,14 +2002,14 @@ TExprNode::TPtr PreparePredicate(TExprNode::TPtr predicate, TExprContext& ctx) {
     }
 
     TExprNode::TListType orArgs;
-    for (ui32 i = 0; i < andParts.size(); ++i) {
+    for (auto& andPart : andParts) {
         TExprNode::TListType restAndArgs;
-        for (ui32 j = 0; j < andParts[i].size(); ++j) {
-            if (commonParts.contains(andParts[i][j].Get())) {
+        for (const auto& part : andPart) {
+            if (commonParts.contains(part.Get())) {
                 continue;
             }
 
-            restAndArgs.push_back(andParts[i][j]);
+            restAndArgs.push_back(part);
         }
 
         if (restAndArgs.size() >= 1) {
@@ -2045,6 +2061,7 @@ TExprNode::TPtr FuseAndTerms(TPositionHandle position, const TExprNode::TListTyp
                 continue;
             }
             term = std::move(replaceWith);
+            replaceWith = nullptr;
         }
 
         if (!added.insert(term.Get()).second) {

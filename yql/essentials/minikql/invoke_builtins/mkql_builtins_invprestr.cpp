@@ -1,4 +1,4 @@
-#include "mkql_builtins_impl.h"  // Y_IGNORE
+#include "mkql_builtins_impl.h" // Y_IGNORE
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/computation/presort.h>
 #include <util/thread/singleton.h>
@@ -8,7 +8,7 @@ namespace NMiniKQL {
 
 namespace {
 
-struct TStringDescEncoder : public TPresortEncoder {
+struct TStringDescEncoder: public TPresortEncoder {
     TStringDescEncoder() {
         AddType(NUdf::EDataSlot::String, false, true);
     }
@@ -43,7 +43,7 @@ struct TInversePresortString {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        return CallUnaryUnboxedValueFunction<&Presort>(Type::getInt128Ty(ctx.Codegen.GetContext()), arg, ctx.Codegen, block);
+        return EmitFunctionCall<&Presort>(Type::getInt128Ty(ctx.Codegen.GetContext()), {arg}, ctx, block);
     }
 #endif
 };
@@ -58,12 +58,12 @@ struct TInverseString {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        return CallUnaryUnboxedValueFunction<&Inverse>(Type::getInt128Ty(ctx.Codegen.GetContext()), arg, ctx.Codegen, block);
+        return EmitFunctionCall<&Inverse>(Type::getInt128Ty(ctx.Codegen.GetContext()), {arg}, ctx, block);
     }
 #endif
 };
 
-}
+} // namespace
 
 void RegisterInversePresortString(IBuiltinFunctionRegistry& registry) {
     const auto name = "InversePresortString";

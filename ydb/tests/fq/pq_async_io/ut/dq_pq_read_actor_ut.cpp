@@ -1,12 +1,12 @@
-#include <ydb/tests/fq/pq_async_io/ut_helpers.h>
-
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/overloaded.h>
 
 #include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 
 namespace NYql::NDq {
 
@@ -32,9 +32,6 @@ public:
             partitioningParams->SetEachTopicPartitionGroupId(0);
             partitioningParams->SetDqPartitionsCount(1);
 
-            TString serializedParams;
-            UNIT_ASSERT(params.SerializeToString(&serializedParams));
-
             TPqGatewayServices pqServices(
                 Driver,
                 nullptr,
@@ -52,15 +49,16 @@ public:
                 "query_1",
                 0,
                 {},
-                {{"pq", serializedParams}},
-                {},
+                {params},
                 Driver,
                 nullptr,
                 actor.SelfId(),
                 actor.GetHolderFactory(),
-                MakeIntrusive<NMonitoring::TDynamicCounters>(),
+                nullptr,
                 MakeIntrusive<NMonitoring::TDynamicCounters>(),
                 CreatePqNativeGateway(std::move(pqServices)),
+                1,
+                true,
                 freeSpace
             );
 
@@ -91,23 +89,40 @@ public:
         const std::vector<TWatermarkOr<T>>& expected,
         const std::vector<TWatermarkOr<T>>& actual
     ) const {
-        for (size_t i = 0; i < std::min(expected.size(), actual.size()); ++i) {
+        size_t expected_i = 0, actual_i = 0;
+        for (; expected_i < expected.size() && actual_i < actual.size(); ++expected_i, ++actual_i) {
             std::visit(TOverloaded{
-                [i](const T& expected, const T& actual) {
-                    UNIT_ASSERT_VALUES_EQUAL_C(expected, actual, i);
+                [&expected_i, &actual_i](const T& expected, const T& actual) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(expected, actual, "expected_i = " << expected_i << ", actual_i = " << actual_i);
                 },
-                [i](const T&, const TInstant&) {
-                    UNIT_ASSERT_C(false, i);
+                [&expected_i](const T&, const TInstant&) {
+                    --expected_i;
                 },
-                [i](const TInstant&, const T&) {
-                    UNIT_ASSERT_C(false, i);
+                [&actual_i](const TInstant&, const T&) {
+                    --actual_i;
                 },
                 [](TInstant, TInstant) {
-                    // UNIT_ASSERT_VALUES_EQUAL_C(expected, actual, i);
                 },
-            }, expected[i], actual[i]);
+            }, expected[expected_i], actual[actual_i]);
         }
-        UNIT_ASSERT_VALUES_EQUAL(expected.size(), actual.size());
+        for (; expected_i < expected.size(); ++expected_i) {
+            std::visit(TOverloaded{
+                [expected_i](const T&) {
+                    UNIT_FAIL("expected_i = " << expected_i);
+                },
+                [](TInstant) {
+                },
+            }, expected[expected_i]);
+        }
+        for (; actual_i < actual.size(); ++actual_i) {
+            std::visit(TOverloaded{
+                [actual_i](const T&) {
+                    UNIT_FAIL("actual_i = " << actual_i);
+                },
+                [](TInstant) {
+                },
+            }, actual[actual_i]);
+        }
     }
 
     void WaitForNextWatermark() {
@@ -181,7 +196,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         InitSource(topicName);
 
         TInstant deadline = Now() + TDuration::Seconds(5);
-        auto future = CaSetup->AsyncInputPromises.FatalError.GetFuture();
+        auto future = CaSetup->AsyncInputPromises->FatalError.GetFuture();
         bool failed = false;
         while (Now() < deadline) {
             SourceRead<TString>(UVParser);
@@ -233,6 +248,9 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             setup2.SaveSourceState(checkpoint, state2);
 
             PQWrite({Message2}, topicName);
+
+            // Wait for events to be written to topic
+            Sleep(TDuration::Seconds(10));
         }
 
         TSourceState state3;
@@ -247,6 +265,9 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             // pq session is still alive
 
             PQWrite({Message3}, topicName);
+
+            // Wait for events to be written to topic
+            Sleep(TDuration::Seconds(10));
 
             auto checkpoint = CreateCheckpoint();
             setup3.SaveSourceState(checkpoint, state3);

@@ -1,7 +1,11 @@
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/schemeshard_index_build_info.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <util/string/strip.h>
+
+#include <source_location>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -239,6 +243,67 @@ ColumnFamilies {
         "{ 0 -> 0, 1 -> 1 }");
     }
 
+    // Helper: call ApplyChanges with minimal args (no appData, no columns)
+    bool ApplyBloomChanges(
+        NKikimrSchemeOp::TPartitionConfig& result,
+        const NKikimrSchemeOp::TPartitionConfig& src,
+        const NKikimrSchemeOp::TPartitionConfig& changes,
+        TString& errDescr)
+    {
+        ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription> columns;
+        return TPartitionConfigMerger::ApplyChanges(result, src, changes, columns, nullptr, false, errDescr);
+    }
+
+    Y_UNIT_TEST(BloomFilterPrefixMerge) {
+        // Existing [3, 1], delta adds [1, 2] -> result should be [1, 2, 3] (merged, sorted, deduped)
+        NKikimrSchemeOp::TPartitionConfig src;
+        src.AddByKeyFilterPrefixes(3);
+        src.AddByKeyFilterPrefixes(1);
+
+        NKikimrSchemeOp::TPartitionConfig changes;
+        changes.AddByKeyFilterPrefixes(1);
+        changes.AddByKeyFilterPrefixes(2);
+
+        NKikimrSchemeOp::TPartitionConfig result;
+        TString errDescr;
+        UNIT_ASSERT(ApplyBloomChanges(result, src, changes, errDescr));
+        UNIT_ASSERT_VALUES_EQUAL(result.ByKeyFilterPrefixesSize(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetByKeyFilterPrefixes(0), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetByKeyFilterPrefixes(1), 2);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetByKeyFilterPrefixes(2), 3);
+    }
+
+    Y_UNIT_TEST(BloomFilterDisableClearsPrefixes) {
+        // Existing config has prefixes [1, 2], delta disables EnableFilterByKey -> prefixes cleared
+        NKikimrSchemeOp::TPartitionConfig src;
+        src.SetEnableFilterByKey(true);
+        src.AddByKeyFilterPrefixes(1);
+        src.AddByKeyFilterPrefixes(2);
+
+        NKikimrSchemeOp::TPartitionConfig changes;
+        changes.SetEnableFilterByKey(false);
+
+        NKikimrSchemeOp::TPartitionConfig result;
+        TString errDescr;
+        UNIT_ASSERT(ApplyBloomChanges(result, src, changes, errDescr));
+        UNIT_ASSERT_VALUES_EQUAL(result.GetEnableFilterByKey(), false);
+        UNIT_ASSERT_VALUES_EQUAL(result.ByKeyFilterPrefixesSize(), 0);
+    }
+
+    Y_UNIT_TEST(BloomFilterDisableAndAddPrefixesConflict) {
+        // Delta has both EnableFilterByKey=false and ByKeyFilterPrefixes -> must be rejected
+        NKikimrSchemeOp::TPartitionConfig src;
+
+        NKikimrSchemeOp::TPartitionConfig changes;
+        changes.SetEnableFilterByKey(false);
+        changes.AddByKeyFilterPrefixes(1);
+
+        NKikimrSchemeOp::TPartitionConfig result;
+        TString errDescr;
+        UNIT_ASSERT(!ApplyBloomChanges(result, src, changes, errDescr));
+        UNIT_ASSERT_STRING_CONTAINS(errDescr, "Cannot disable KEY_BLOOM_FILTER and add bloom filter prefixes");
+    }
+
     Y_UNIT_TEST(IndexBuildInfoAddParent) {
         TIndexBuildInfo info;
 
@@ -340,6 +405,257 @@ ColumnFamilies {
         UNIT_ASSERT(checkShards(13, 13, {12, 13}));
         UNIT_ASSERT(checkShards(14, 15, {12}));
 
+    }
+
+    Y_UNIT_TEST(FillItemsFromSchemaMappingTest) {
+        TSchemeShard* schemeshard;
+        auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
+            schemeshard = new TSchemeShard(tablet, info);
+            return schemeshard;
+        };
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts, ssFactory);
+
+        const TPathId domainPathId = TPath::Resolve("/MyRoot", schemeshard).Base()->PathId;
+
+        auto getImportInfo = [&](const TString& settingsProto, const TString& schemaMapping, bool expectSuccess = true, const TString& expectedError = {}) -> TImportInfo::TPtr {
+            Ydb::Import::ImportFromS3Settings settings;
+            UNIT_ASSERT(NProtoBuf::TextFormat::ParseFromString(settingsProto, &settings));
+
+            TImportInfo::TPtr importInfo = new TImportInfo(42, "uid_42", TImportInfo::EKind::S3, settings, domainPathId, "localhost");
+
+            for (const auto& item : settings.items()) {
+                auto& importInfoItem = importInfo->Items.emplace_back(item.destination_path());
+                importInfoItem.SrcPath = item.source_path();
+                importInfoItem.SrcPrefix = item.source_prefix();
+            }
+
+            importInfo->SchemaMapping.ConstructInPlace();
+            TString error;
+            UNIT_ASSERT_C(importInfo->SchemaMapping->Deserialize(schemaMapping, error), error);
+
+            auto fillResult = runtime.RunCall(
+                [&]() {
+                    return importInfo->FillItemsFromSchemaMapping(schemeshard);
+                }
+            );
+            if (expectSuccess) {
+                UNIT_ASSERT_C(fillResult.Success, fillResult.ErrorMessage);
+            } else {
+                UNIT_ASSERT(!fillResult.Success);
+                UNIT_ASSERT_STRING_CONTAINS(fillResult.ErrorMessage, expectedError);
+            }
+
+            std::sort(importInfo->Items.begin(), importInfo->Items.end(), [](const TImportInfo::TItem& item1, const TImportInfo::TItem& item2) { return item1.SrcPath < item2.SrcPath; });
+            return importInfo;
+        };
+
+        auto validateImportItem = [](const TImportInfo::TItem& item, const TString& dstPath, const TString& srcPrefix, const TString& srcPath, TMaybe<NBackup::TEncryptionIV> iv = Nothing(), const std::source_location location = std::source_location::current()) {
+            UNIT_ASSERT_VALUES_EQUAL_C(item.DstPathName, dstPath, location.file_name() << ':' << location.line());
+            UNIT_ASSERT_VALUES_EQUAL_C(item.SrcPrefix, srcPrefix, location.file_name() << ':' << location.line());
+            UNIT_ASSERT_VALUES_EQUAL_C(item.SrcPath, srcPath, location.file_name() << ':' << location.line());
+            UNIT_ASSERT_EQUAL_C(item.ExportItemIV, iv, location.file_name() << ':' << location.line());
+        };
+
+        const TString settingsWithoutFilter = "";
+
+        const TString settingsWithDestinationPath = R"proto(
+            destination_path: "/MyRoot/restored//"
+        )proto";
+
+        const TString settingsWithFilterByPath = R"proto(
+            items {
+                source_path: "dir1/Table1"
+            }
+        )proto";
+
+        const TString settingsWithRecursiveFilterByPath = R"proto(
+            items {
+                source_path: "dir1"
+            }
+        )proto";
+
+        const TString settingsWithRecursiveFilterByPathWithDestinationPath = R"proto(
+            destination_path: "/MyRoot/dst"
+            items {
+                source_path: "dir2"
+            }
+        )proto";
+
+        const TString settingsWithRecursiveFilterByPathAndDestination = R"proto(
+            items {
+                source_path: "dir1"
+                destination_path: "/MyRoot/dir1dst"
+            }
+        )proto";
+
+        const TString settingsWithExplicitParams = R"proto(
+            items {
+                source_prefix: "prefix1"
+                destination_path: "/MyRoot/d1"
+            }
+            items {
+                source_prefix: "prefix/prefix3"
+                destination_path: "/MyRoot/d3"
+            }
+        )proto";
+
+        const TString settingsWithExplicitParamsTwoDestinations = R"proto(
+            destination_path: "/MyRoot/common_dest"
+            items {
+                source_prefix: "prefix1"
+                destination_path: "d1"
+            }
+            items {
+                source_prefix: "prefix/prefix3"
+                destination_path: "/MyRoot/d3"
+            }
+        )proto";
+
+        const TString settingsWithInvalidFilterByPath = R"proto(
+            items {
+                source_path: "invalid"
+            }
+            items {
+                source_path: "dir1"
+            }
+        )proto";
+
+        const TString settingsWithInvalidFilterByPrefix = R"proto(
+            items {
+                source_prefix: "invalid"
+            }
+            items {
+                source_path: "dir1"
+            }
+        )proto";
+
+        const TString emptySchemaMapping = R"json(
+        {
+            "exportedObjects": {}
+        }
+        )json";
+
+        const TString schemaMapping = R"json(
+        {
+            "exportedObjects": {
+                "dir1/Table1": {
+                    "exportPrefix": "prefix1"
+                },
+                "dir2/Table2": {
+                    "exportPrefix": "prefix2"
+                },
+                "dir1/dir2/Table3": {
+                    "exportPrefix": "prefix/prefix3"
+                }
+            }
+        }
+        )json";
+
+        const TString schemaMappingWithIVs = R"json(
+        {
+            "exportedObjects": {
+                "dir1/Table1": {
+                    "exportPrefix": "prefix1",
+                    "iv": "1234567890ABCDEF98765432"
+                },
+                "dir2/Table2": {
+                    "exportPrefix": "prefix2",
+                    "iv": "1234567890ABCDEF98765432"
+                },
+                "dir1/dir2/Table3": {
+                    "exportPrefix": "prefix/prefix3",
+                    "iv": "1234567890ABCDEF98765432"
+                }
+            }
+        }
+        )json";
+
+        const NBackup::TEncryptionIV iv = NBackup::TEncryptionIV::FromHexString("1234567890ABCDEF98765432");
+
+        {
+            auto importInfo = getImportInfo(settingsWithoutFilter, schemaMapping);
+            UNIT_ASSERT_VALUES_EQUAL(importInfo->Items.size(), 3);
+            validateImportItem(importInfo->Items[0], "/MyRoot/dir1/Table1", "prefix1", "dir1/Table1");
+            validateImportItem(importInfo->Items[1], "/MyRoot/dir1/dir2/Table3", "prefix/prefix3", "dir1/dir2/Table3");
+            validateImportItem(importInfo->Items[2], "/MyRoot/dir2/Table2", "prefix2", "dir2/Table2");
+        }
+
+        {
+            auto importInfo = getImportInfo(settingsWithDestinationPath, schemaMapping);
+            UNIT_ASSERT_VALUES_EQUAL(importInfo->Items.size(), 3);
+            validateImportItem(importInfo->Items[0], "/MyRoot/restored/dir1/Table1", "prefix1", "dir1/Table1");
+            validateImportItem(importInfo->Items[1], "/MyRoot/restored/dir1/dir2/Table3", "prefix/prefix3", "dir1/dir2/Table3");
+            validateImportItem(importInfo->Items[2], "/MyRoot/restored/dir2/Table2", "prefix2", "dir2/Table2");
+        }
+
+        {
+            auto importInfo = getImportInfo(settingsWithFilterByPath, schemaMapping);
+            UNIT_ASSERT_VALUES_EQUAL(importInfo->Items.size(), 1);
+            validateImportItem(importInfo->Items[0], "/MyRoot/dir1/Table1", "prefix1", "dir1/Table1");
+        }
+
+        {
+            auto importInfo = getImportInfo(settingsWithRecursiveFilterByPath, schemaMapping);
+            UNIT_ASSERT_VALUES_EQUAL(importInfo->Items.size(), 2);
+            validateImportItem(importInfo->Items[0], "/MyRoot/dir1/Table1", "prefix1", "dir1/Table1");
+            validateImportItem(importInfo->Items[1], "/MyRoot/dir1/dir2/Table3", "prefix/prefix3", "dir1/dir2/Table3");
+        }
+
+        {
+            auto importInfo = getImportInfo(settingsWithRecursiveFilterByPathWithDestinationPath, schemaMapping);
+            UNIT_ASSERT_VALUES_EQUAL(importInfo->Items.size(), 1);
+            validateImportItem(importInfo->Items[0], "/MyRoot/dst/dir2/Table2", "prefix2", "dir2/Table2");
+        }
+
+        {
+            auto importInfo = getImportInfo(settingsWithRecursiveFilterByPathAndDestination, schemaMapping);
+            UNIT_ASSERT_VALUES_EQUAL(importInfo->Items.size(), 2);
+            validateImportItem(importInfo->Items[0], "/MyRoot/dir1dst/Table1", "prefix1", "dir1/Table1");
+            validateImportItem(importInfo->Items[1], "/MyRoot/dir1dst/dir2/Table3", "prefix/prefix3", "dir1/dir2/Table3");
+        }
+
+        {
+            auto importInfo = getImportInfo(settingsWithExplicitParams, schemaMapping);
+            UNIT_ASSERT_VALUES_EQUAL(importInfo->Items.size(), 2);
+            validateImportItem(importInfo->Items[0], "/MyRoot/d1", "prefix1", "dir1/Table1");
+            validateImportItem(importInfo->Items[1], "/MyRoot/d3", "prefix/prefix3", "dir1/dir2/Table3");
+        }
+
+        {
+            auto importInfo = getImportInfo(settingsWithExplicitParamsTwoDestinations, schemaMapping);
+            UNIT_ASSERT_VALUES_EQUAL(importInfo->Items.size(), 2);
+            validateImportItem(importInfo->Items[0], "/MyRoot/common_dest/d1", "prefix1", "dir1/Table1");
+            validateImportItem(importInfo->Items[1], "/MyRoot/d3", "prefix/prefix3", "dir1/dir2/Table3");
+        }
+
+        {
+            auto importInfo = getImportInfo(settingsWithoutFilter, schemaMappingWithIVs);
+            UNIT_ASSERT_VALUES_EQUAL(importInfo->Items.size(), 3);
+            validateImportItem(importInfo->Items[0], "/MyRoot/dir1/Table1", "prefix1", "dir1/Table1", iv);
+            validateImportItem(importInfo->Items[1], "/MyRoot/dir1/dir2/Table3", "prefix/prefix3", "dir1/dir2/Table3", iv);
+            validateImportItem(importInfo->Items[2], "/MyRoot/dir2/Table2", "prefix2", "dir2/Table2", iv);
+        }
+
+        {
+            auto importInfo = getImportInfo(settingsWithRecursiveFilterByPath, schemaMappingWithIVs);
+            UNIT_ASSERT_VALUES_EQUAL(importInfo->Items.size(), 2);
+            validateImportItem(importInfo->Items[0], "/MyRoot/dir1/Table1", "prefix1", "dir1/Table1", iv);
+            validateImportItem(importInfo->Items[1], "/MyRoot/dir1/dir2/Table3", "prefix/prefix3", "dir1/dir2/Table3", iv);
+        }
+
+        {
+            auto importInfo = getImportInfo(settingsWithInvalidFilterByPath, schemaMapping, false, "cannot find source path \"invalid\" in schema mapping");
+        }
+
+        {
+            auto importInfo = getImportInfo(settingsWithInvalidFilterByPrefix, schemaMapping, false, "cannot find prefix \"invalid\" in schema mapping");
+        }
+
+        {
+            auto importInfo = getImportInfo(settingsWithoutFilter, emptySchemaMapping, false, "no items to import");
+        }
     }
 
 }

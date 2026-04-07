@@ -12,6 +12,7 @@ from clickhouse_connect.driver.options import np, pd
 
 
 class String(ClickHouseType):
+    python_type = str
     valid_formats = 'bytes', 'native'
 
     def _active_encoding(self, ctx):
@@ -58,6 +59,7 @@ class String(ClickHouseType):
 
 
 class FixedString(ClickHouseType):
+    python_type = str
     valid_formats = 'string', 'native'
 
     def __init__(self, type_def: TypeDef):

@@ -28,17 +28,17 @@ ui32 TKernelRequestBuilder::AddUnaryOp(EUnaryOp op, const TTypeAnnotationNode* a
     Y_UNUSED(returnType);
     const auto arg = MakeArg(arg1Type);
     switch (op) {
-    case EUnaryOp::Not:
-        Items_.emplace_back(Pb_.BlockNot(arg));
-        break;
-    case EUnaryOp::Just:
-        Items_.emplace_back(Pb_.BlockJust(arg));
-        break;
-    case EUnaryOp::Size:
-    case EUnaryOp::Minus:
-    case EUnaryOp::Abs:
-        Items_.emplace_back(Pb_.BlockFunc(ToString(op), returnType, { arg }));
-        break;
+        case EUnaryOp::Not:
+            Items_.emplace_back(Pb_.BlockNot(arg));
+            break;
+        case EUnaryOp::Just:
+            Items_.emplace_back(Pb_.BlockJust(arg));
+            break;
+        case EUnaryOp::Size:
+        case EUnaryOp::Minus:
+        case EUnaryOp::Abs:
+            Items_.emplace_back(Pb_.BlockFunc(ToString(op), returnType, {arg}));
+            break;
     }
 
     return Items_.size() - 1;
@@ -50,34 +50,34 @@ ui32 TKernelRequestBuilder::AddBinaryOp(EBinaryOp op, const TTypeAnnotationNode*
     const auto arg1 = MakeArg(arg1Type);
     const auto arg2 = MakeArg(arg2Type);
     switch (op) {
-    case EBinaryOp::And:
-        Items_.emplace_back(Pb_.BlockAnd(arg1, arg2));
-        break;
-    case EBinaryOp::Or:
-        Items_.emplace_back(Pb_.BlockOr(arg1, arg2));
-        break;
-    case EBinaryOp::Xor:
-        Items_.emplace_back(Pb_.BlockXor(arg1, arg2));
-        break;
-    case EBinaryOp::Coalesce:
-        Items_.emplace_back(Pb_.BlockCoalesce(arg1, arg2));
-        break;
-    case EBinaryOp::Add:
-    case EBinaryOp::Sub:
-    case EBinaryOp::Mul:
-    case EBinaryOp::Div:
-    case EBinaryOp::Mod:
-    case EBinaryOp::StartsWith:
-    case EBinaryOp::EndsWith:
-    case EBinaryOp::StringContains:
-    case EBinaryOp::Equals:
-    case EBinaryOp::NotEquals:
-    case EBinaryOp::Less:
-    case EBinaryOp::LessOrEqual:
-    case EBinaryOp::Greater:
-    case EBinaryOp::GreaterOrEqual:
-        Items_.emplace_back(Pb_.BlockFunc(ToString(op), returnType, { arg1, arg2 }));
-        break;
+        case EBinaryOp::And:
+            Items_.emplace_back(Pb_.BlockAnd(arg1, arg2));
+            break;
+        case EBinaryOp::Or:
+            Items_.emplace_back(Pb_.BlockOr(arg1, arg2));
+            break;
+        case EBinaryOp::Xor:
+            Items_.emplace_back(Pb_.BlockXor(arg1, arg2));
+            break;
+        case EBinaryOp::Coalesce:
+            Items_.emplace_back(Pb_.BlockCoalesce(arg1, arg2));
+            break;
+        case EBinaryOp::Add:
+        case EBinaryOp::Sub:
+        case EBinaryOp::Mul:
+        case EBinaryOp::Div:
+        case EBinaryOp::Mod:
+        case EBinaryOp::StartsWith:
+        case EBinaryOp::EndsWith:
+        case EBinaryOp::StringContains:
+        case EBinaryOp::Equals:
+        case EBinaryOp::NotEquals:
+        case EBinaryOp::Less:
+        case EBinaryOp::LessOrEqual:
+        case EBinaryOp::Greater:
+        case EBinaryOp::GreaterOrEqual:
+            Items_.emplace_back(Pb_.BlockFunc(ToString(op), returnType, {arg1, arg2}));
+            break;
     }
 
     return Items_.size() - 1;
@@ -94,17 +94,16 @@ ui32 TKernelRequestBuilder::AddIf(const TTypeAnnotationNode* conditionType, cons
 }
 
 ui32 TKernelRequestBuilder::Udf(const TString& name, bool isPolymorphic, const TTypeAnnotationNode::TListType& argTypes,
-    const TTypeAnnotationNode* retType) {
+                                const TTypeAnnotationNode* retType) {
     const TGuard<TScopedAlloc> allocGuard(Alloc_);
     std::vector<TType*> inputTypes;
     for (const auto& type : argTypes) {
         inputTypes.emplace_back(MakeType(type));
     }
 
-    const auto userType = Pb_.NewTupleType({
-        Pb_.NewTupleType(inputTypes),
-        Pb_.NewEmptyStructType(),
-        Pb_.NewEmptyTupleType()});
+    const auto userType = Pb_.NewTupleType({Pb_.NewTupleType(inputTypes),
+                                            Pb_.NewEmptyStructType(),
+                                            Pb_.NewEmptyTupleType()});
 
     if (!isPolymorphic) {
         // find scalar func too
@@ -113,10 +112,9 @@ ui32 TKernelRequestBuilder::Udf(const TString& name, bool isPolymorphic, const T
             scalarInputTypes.push_back(AS_TYPE(TBlockType, t)->GetItemType());
         }
 
-        const auto scalarUserType = Pb_.NewTupleType({
-            Pb_.NewTupleType(scalarInputTypes),
-            Pb_.NewEmptyStructType(),
-            Pb_.NewEmptyTupleType()});
+        const auto scalarUserType = Pb_.NewTupleType({Pb_.NewTupleType(scalarInputTypes),
+                                                      Pb_.NewEmptyStructType(),
+                                                      Pb_.NewEmptyTupleType()});
 
         Pb_.Udf(name, Pb_.NewVoid(), scalarUserType);
     }
@@ -141,7 +139,7 @@ ui32 TKernelRequestBuilder::AddScalarApply(const TExprNode& lambda, const TTypeA
 
     NCommon::TMkqlCommonCallableCompiler compiler;
     NCommon::TMkqlBuildContext compileCtx(compiler, Pb_, ctx);
-    const auto apply = Pb_.ScalarApply(args, [&lambda, &compileCtx] (const TArrayRef<const TRuntimeNode>& args) {
+    const auto apply = Pb_.ScalarApply(args, [&lambda, &compileCtx](const TArrayRef<const TRuntimeNode>& args) {
         return MkqlBuildLambda(lambda, compileCtx, TRuntimeNode::TList(args.cbegin(), args.cend()));
     });
 
@@ -155,7 +153,7 @@ ui32 TKernelRequestBuilder::JsonExists(const TTypeAnnotationNode* arg1Type, cons
     bool isScalar = false;
     bool isBinaryJson = (RemoveOptionalType(NYql::GetBlockItemType(*arg1Type, isScalar))->Cast<TDataExprType>()->GetSlot() == EDataSlot::JsonDocument);
 
-    auto udfName = TStringBuilder() << "Json2." << (isBinaryJson ? "JsonDocument" : "" ) << "SqlExists";
+    auto udfName = TStringBuilder() << "Json2." << (isBinaryJson ? "JsonDocument" : "") << "SqlExists";
 
     auto exists = Pb_.Udf(udfName);
     auto parse = Pb_.Udf("Json2.Parse");
@@ -166,10 +164,10 @@ ui32 TKernelRequestBuilder::JsonExists(const TTypeAnnotationNode* arg1Type, cons
     auto scalarApply = Pb_.ScalarApply({arg1, arg2}, [&](const auto& args) {
         auto json = args[0];
         auto processJson = [&](auto unpacked) {
-            auto input = Pb_.NewOptional(isBinaryJson ? unpacked : Pb_.Apply(parse, { unpacked }));
-            auto path = Pb_.Apply(compilePath, { args[1] });
+            auto input = Pb_.NewOptional(isBinaryJson ? unpacked : Pb_.Apply(parse, {unpacked}));
+            auto path = Pb_.Apply(compilePath, {args[1]});
             auto dictType = Pb_.NewDictType(Pb_.NewDataType(NUdf::EDataSlot::Utf8), Pb_.NewResourceType("JsonNode"), false);
-            return Pb_.Apply(exists, { input, path, Pb_.NewDict(dictType, {}), Pb_.NewOptional(Pb_.NewDataLiteral(false)) });
+            return Pb_.Apply(exists, {input, path, Pb_.NewDict(dictType, {}), Pb_.NewOptional(Pb_.NewDataLiteral(false))});
         };
 
         if (json.GetStaticType()->IsOptional()) {
@@ -191,7 +189,7 @@ ui32 TKernelRequestBuilder::JsonValue(const TTypeAnnotationNode* arg1Type, const
     bool isBinaryJson = (RemoveOptionalType(NYql::GetBlockItemType(*arg1Type, isScalar))->Cast<TDataExprType>()->GetSlot() == EDataSlot::JsonDocument);
     auto resultSlot = RemoveOptionalType(NYql::GetBlockItemType(*retType, isScalar))->Cast<TDataExprType>()->GetSlot();
 
-    auto udfName = TStringBuilder() << "Json2." << (isBinaryJson ? "JsonDocument" : "" );
+    auto udfName = TStringBuilder() << "Json2." << (isBinaryJson ? "JsonDocument" : "");
     if (NYql::IsDataTypeFloat(resultSlot)) {
         udfName << "SqlValueNumber";
     } else if (NYql::IsDataTypeNumeric(resultSlot)) {
@@ -215,10 +213,10 @@ ui32 TKernelRequestBuilder::JsonValue(const TTypeAnnotationNode* arg1Type, const
     auto scalarApply = Pb_.ScalarApply({arg1, arg2}, [&](const auto& args) {
         auto json = args[0];
         auto processJson = [&](auto unpacked) {
-            auto input = Pb_.NewOptional( isBinaryJson ? unpacked : Pb_.Apply(parse, { unpacked }));
-            auto path = Pb_.Apply(compilePath, { args[1] });
+            auto input = Pb_.NewOptional(isBinaryJson ? unpacked : Pb_.Apply(parse, {unpacked}));
+            auto path = Pb_.Apply(compilePath, {args[1]});
             auto dictType = Pb_.NewDictType(Pb_.NewDataType(NUdf::EDataSlot::Utf8), Pb_.NewResourceType("JsonNode"), false);
-            auto resultTuple = Pb_.Apply(jsonValue, { input, path, Pb_.NewDict(dictType, {})});
+            auto resultTuple = Pb_.Apply(jsonValue, {input, path, Pb_.NewDict(dictType, {})});
             return Pb_.VisitAll(resultTuple, [&](ui32 index, TRuntimeNode item) {
                 if (index == 0) {
                     return Pb_.NewEmptyOptional(outType->GetItemType());
@@ -244,7 +242,7 @@ TString TKernelRequestBuilder::Serialize() {
     const TGuard<TScopedAlloc> allocGuard(Alloc_);
     const auto kernelTuple = Items_.empty() ? Pb_.AsScalar(Pb_.NewEmptyTuple()) : Pb_.BlockAsTuple(Items_);
     const auto argsTuple = ArgsItems_.empty() ? Pb_.AsScalar(Pb_.NewEmptyTuple()) : Pb_.BlockAsTuple(ArgsItems_);
-    const auto tuple = Pb_.BlockAsTuple( { argsTuple, kernelTuple });
+    const auto tuple = Pb_.BlockAsTuple({argsTuple, kernelTuple});
     return SerializeRuntimeNode(tuple, Env_.GetNodeStack());
 }
 
@@ -270,4 +268,4 @@ TBlockType* TKernelRequestBuilder::MakeType(const TTypeAnnotationNode* type) {
     return AS_TYPE(TBlockType, ret);
 }
 
-}
+} // namespace NYql

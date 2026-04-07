@@ -13,7 +13,16 @@ namespace NKikimr::NStLog {
 
     extern bool OutputLogJson;
 
+    // Non-template helper functions to reduce binary bloat
     void ProtobufToJson(const NProtoBuf::Message& m, NJson::TJsonWriter& json);
+    void OutputProtobufMessage(IOutputStream& s, const google::protobuf::Message& value);
+    void OutputProtobufEnum(IOutputStream& s, int enumValue, const google::protobuf::EnumDescriptor* descriptor);
+    void OutputProtobufEnumToJson(NJson::TJsonWriter& json, int enumValue, const google::protobuf::EnumDescriptor* descriptor);
+    void OutputBool(IOutputStream& s, bool value);
+    void OutputNull(IOutputStream& s);
+    const char* GetFileName(const char* file);
+    void WriteMessageHeader(IOutputStream& s, const char* marker, const char* file, int line);
+    void WriteJsonMessageHeader(NJson::TJsonWriter& json, const char* marker, const char* file, int line);
 
 #define STLOG_EXPAND(X) X
 
@@ -96,11 +105,14 @@ namespace NKikimr::NStLog {
     };
 
     template<typename T> struct TIsIterable { static constexpr bool value = false; };
+    template<typename T, size_t S> struct TIsIterable<std::span<T, S>> { static constexpr bool value = true; };
     template<typename T, typename Y> struct TIsIterable<std::deque<T, Y>> { static constexpr bool value = true; };
     template<typename T, typename Y> struct TIsIterable<std::list<T, Y>> { static constexpr bool value = true; };
     template<typename T, typename Y> struct TIsIterable<std::vector<T, Y>> { static constexpr bool value = true; };
     template<typename T, typename Y> struct TIsIterable<TVector<T, Y>> { static constexpr bool value = true; };
     template<typename T, typename X, typename Y, typename Z> struct TIsIterable<THashSet<T, X, Y, Z>> { static constexpr bool value = true; };
+    template<typename... Ts> struct TIsIterable<std::set<Ts...>> { static constexpr bool value = true; };
+    template<typename... Ts> struct TIsIterable<std::unordered_set<Ts...>> { static constexpr bool value = true; };
     template<typename T> struct TIsIterable<NProtoBuf::RepeatedField<T>> { static constexpr bool value = true; };
     template<typename T> struct TIsIterable<NProtoBuf::RepeatedPtrField<T>> { static constexpr bool value = true; };
 
@@ -112,6 +124,12 @@ namespace NKikimr::NStLog {
 
     template<typename T> struct TIsIdWrapper { static constexpr bool value = false; };
     template<typename TType, typename TTag> struct TIsIdWrapper<TIdWrapper<TType, TTag>> { static constexpr bool value = true; };
+
+    template<typename T> struct TIsVariant { static constexpr bool value = false; };
+    template<typename... Ts> struct TIsVariant<std::variant<Ts...>> { static constexpr bool value = true; };
+
+    template<typename T> struct TIsTuple { static constexpr bool value = false; };
+    template<typename... Ts> struct TIsTuple<std::tuple<Ts...>> { static constexpr bool value = true; };
 
     template<typename Base, typename T>
     class TBoundParam : public Base {
@@ -141,6 +159,8 @@ namespace NKikimr::NStLog {
         template<typename Tx> struct TOptionalTraits<std::optional<Tx>> { static constexpr bool HasOptionalValue = true; };
         template<typename Tx> struct TOptionalTraits<TMaybe<Tx>> { static constexpr bool HasOptionalValue = true; };
         template<typename Tx> struct TOptionalTraits<Tx*> { static constexpr bool HasOptionalValue = true; };
+        template<typename... Ts> struct TOptionalTraits<std::unique_ptr<Ts...>> { static constexpr bool HasOptionalValue = true; };
+        template<typename... Ts> struct TOptionalTraits<std::shared_ptr<Ts...>> { static constexpr bool HasOptionalValue = true; };
 
         template<typename TValue>
         static void OutputParam(IOutputStream& s, const TValue& value) {
@@ -148,29 +168,18 @@ namespace NKikimr::NStLog {
 
             if constexpr (google::protobuf::is_proto_enum<Tx>::value) {
                 const google::protobuf::EnumDescriptor *e = google::protobuf::GetEnumDescriptor<Tx>();
-                if (const auto *val = e->FindValueByNumber(value)) {
-                    s << val->name();
-                } else {
-                    s << static_cast<int>(value);
-                }
+                OutputProtobufEnum(s, static_cast<int>(value), e);
             } else if constexpr (std::is_same_v<Tx, bool>) {
-                s << (value ? "true" : "false");
+                OutputBool(s, value);
             } else if constexpr (std::is_base_of_v<google::protobuf::Message, Tx>) {
-                google::protobuf::TextFormat::Printer p;
-                p.SetSingleLineMode(true);
-                TString str;
-                if (p.PrintToString(value, &str)) {
-                    s << "{" << str << "}";
-                } else {
-                    s << "<error>";
-                }
+                OutputProtobufMessage(s, value);
             } else if constexpr (THasToStringMethod<Tx>::value) {
                 s << value.ToString();
             } else if constexpr (TOptionalTraits<Tx>::HasOptionalValue) {
                 if (value) {
                     OutputParam(s, *value);
                 } else {
-                    s << "<null>";
+                    OutputNull(s);
                 }
             } else if constexpr (TIsIterable<Tx>::value) {
                 auto begin = std::begin(value);
@@ -199,9 +208,22 @@ namespace NKikimr::NStLog {
                     OutputParam(s, v);
                 }
                 s << '}';
+            } else if constexpr (TIsVariant<Tx>::value) {
+                std::visit([&](auto& x) { OutputParam(s, x); }, value);
+            } else if constexpr (TIsTuple<Tx>::value) {
+                s << '[';
+                std::apply([&](const auto&... args) { OutputParam(s, args...); }, value);
+                s << ']';
             } else {
                 s << value;
             }
+        }
+
+        template<typename TValue, typename... TRest>
+        static void OutputParam(IOutputStream& s, const TValue& first, const TRest&... rest) {
+            OutputParam(s, first);
+            s << ':';
+            OutputParam(s, rest...);
         }
 
         template<typename TValue>
@@ -210,11 +232,7 @@ namespace NKikimr::NStLog {
 
             if constexpr (google::protobuf::is_proto_enum<Tx>::value) {
                 const google::protobuf::EnumDescriptor *e = google::protobuf::GetEnumDescriptor<Tx>();
-                if (const auto *val = e->FindValueByNumber(value)) {
-                    json.Write(val->name());
-                } else {
-                    json.Write(static_cast<int>(value));
-                }
+                OutputProtobufEnumToJson(json, static_cast<int>(value), e);
             } else if constexpr (std::is_base_of_v<google::protobuf::Message, Tx>) {
                 ProtobufToJson(value, json);
             } else if constexpr (TOptionalTraits<Tx>::HasOptionalValue) {
@@ -246,11 +264,23 @@ namespace NKikimr::NStLog {
                 json.Write(value.GetRawId());
             } else if constexpr (std::is_constructible_v<NJson::TJsonValue, Tx>) {
                 json.Write(value);
+            } else if constexpr (TIsVariant<Tx>::value) {
+                std::visit([&](auto& x) { OutputParam(json, x); }, value);
+            } else if constexpr (TIsTuple<Tx>::value) {
+                json.OpenArray();
+                std::apply([&](const auto&... args) { OutputParam(json, args...); }, value);
+                json.CloseArray();
             } else {
                 TStringStream stream;
                 OutputParam(stream, value);
                 json.Write(stream.Str());
             }
+        }
+
+        template<typename TValue, typename... TRest>
+        static void OutputParam(NJson::TJsonWriter& json, const TValue& first, const TRest&... rest) {
+            OutputParam(json, first);
+            OutputParam(json, rest...);
         }
     };
 
@@ -347,12 +377,7 @@ namespace NKikimr::NStLog {
             ~TJsonWriter() {
                 Json.OpenMap();
                 if (Self->Header()) {
-                    Json.WriteKey("marker");
-                    Json.Write(Self->Marker);
-                    Json.WriteKey("file");
-                    Json.Write(Self->GetFileName());
-                    Json.WriteKey("line");
-                    Json.Write(Self->Line);
+                    WriteJsonMessageHeader(Json, Self->Marker, Self->File, Self->Line);
                 }
                 Json.WriteKey("brief_message");
                 Json.Write(Stream.Str());
@@ -375,12 +400,11 @@ namespace NKikimr::NStLog {
         }
 
         const char *GetFileName() const {
-            const char *p = strrchr(File, '/');
-            return p ? p + 1 : File;
+            return GetFileName(File);
         }
 
         void WriteHeaderToStream(IOutputStream& s) const {
-            s << "{" << Marker << "@" << GetFileName() << ":" << Line << "} ";
+            WriteMessageHeader(s, Marker, File, Line);
         }
 
         void WriteParamsToStream(IOutputStream& s) const {

@@ -17,10 +17,12 @@ namespace NKikimr::NPQ {
 
 class TInitializerStep;
 class TPartition;
+class TPartitionId;
 
 struct TInitializionContext {
     std::optional<ui64> StartOffset;
     std::optional<ui64> EndOffset;
+    std::deque<TString> DeletedKeys;
 };
 
 
@@ -68,6 +70,8 @@ public:
     virtual void Execute(const TActorContext& ctx) = 0;
     virtual bool Handle(STFUNC_SIG);
 
+    void RestartTablet(const std::string_view message) const;
+
     TPartition* Partition() const;
     const TPartitionId& PartitionId() const;
     const TString& TopicName() const;
@@ -78,7 +82,6 @@ public:
 
 protected:
     void Done(const TActorContext& ctx);
-    void PoisonPill(const TActorContext& ctx);
 
     TString LogPrefix() const;
 
@@ -131,7 +134,7 @@ public:
     void Execute(const TActorContext& ctx) override;
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) override;
 private:
-    void LoadMeta(const NKikimrClient::TResponse& kvResponse, const TMaybe<TActorContext>& mbCtx);
+    void LoadMeta(const NKikimrClient::TResponse& kvResponse);
 };
 
 class TInitInfoRangeStep: public TBaseKVStep {
@@ -152,8 +155,26 @@ public:
     void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) override;
 
 private:
-    void FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx);
+    void FillBlobsMetaData(const TActorContext& ctx);
     void FormHeadAndProceed();
+
+    TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult> Ranges;
+};
+
+class TDeleteKeysStep: public TBaseKVStep {
+public:
+    TDeleteKeysStep(TInitializer* initializer);
+
+    void Execute(const TActorContext& ctx) override;
+    void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) override;
+};
+
+class TInitMessageDeduplicatorStep: public TBaseKVStep {
+public:
+    TInitMessageDeduplicatorStep(TInitializer* initializer);
+
+    void Execute(const TActorContext& ctx) override;
+    void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) override;
 };
 
 class TInitDataStep: public TBaseKVStep {
@@ -167,6 +188,13 @@ public:
 class TInitEndWriteTimestampStep: public TInitializerStep {
 public:
     TInitEndWriteTimestampStep(TInitializer* initializer);
+
+    void Execute(const TActorContext& ctx) override;
+};
+
+class TInitFieldsStep: public TInitializerStep {
+public:
+    TInitFieldsStep(TInitializer* initializer);
 
     void Execute(const TActorContext& ctx) override;
 };

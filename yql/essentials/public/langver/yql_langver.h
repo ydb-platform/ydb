@@ -1,5 +1,7 @@
 #pragma once
 #include <util/generic/strbuf.h>
+#include <util/generic/string.h>
+#include <util/generic/maybe.h>
 #include <util/system/types.h>
 
 #include <array>
@@ -8,6 +10,11 @@
 namespace NYql {
 
 using TLangVersion = ui32;
+
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
+constexpr std::pair<ui32, ui32> Versions[] = {
+#include "yql_langver_list.inc"
+};
 
 constexpr TLangVersion UnknownLangVersion = 0;
 
@@ -50,7 +57,16 @@ constexpr inline bool IsUnsupportedLangVersion(TLangVersion ver, TLangVersion ma
 constexpr TLangVersion MinLangVersion = MakeLangVersion(2025, 1);
 
 TLangVersion GetMaxReleasedLangVersion();
-TLangVersion GetMaxLangVersion();
+
+constexpr TLangVersion GetMaxLangVersion() {
+    TLangVersion max = 0;
+    for (const auto& version : Versions) {
+        auto v = MakeLangVersion(version.first, version.second);
+        max = Max(max, v);
+    }
+
+    return max;
+}
 
 constexpr ui32 LangVersionBufferSize = 4 + 1 + 2 + 1; // year.minor\0
 using TLangVersionBuffer = std::array<char, LangVersionBufferSize>;
@@ -58,6 +74,7 @@ using TLangVersionBuffer = std::array<char, LangVersionBufferSize>;
 bool IsValidLangVersion(TLangVersion ver);
 bool ParseLangVersion(TStringBuf str, TLangVersion& result);
 bool FormatLangVersion(TLangVersion ver, TLangVersionBuffer& buffer, TStringBuf& result);
+TMaybe<TString> FormatLangVersion(TLangVersion ver);
 void EnumerateLangVersions(const std::function<void(TLangVersion)>& callback);
 
 enum class EBackportCompatibleFeaturesMode {
@@ -67,6 +84,6 @@ enum class EBackportCompatibleFeaturesMode {
 };
 
 bool IsBackwardCompatibleFeatureAvailable(TLangVersion currentVer, TLangVersion featureVer,
-    EBackportCompatibleFeaturesMode mode);
+                                          EBackportCompatibleFeaturesMode mode);
 
-}
+} // namespace NYql

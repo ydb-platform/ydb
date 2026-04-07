@@ -36,7 +36,7 @@ TNodePtr AddTablePathPrefix(TContext &ctx, TStringBuf prefixPath, const TDeferre
     return BuildQuotedAtom(path.Build()->GetPos(), prefixPathSplit.AppendMany(pathSplit.begin(), pathSplit.end()).Reconstruct());
 }
 
-typedef bool TContext::*TPragmaField;
+using TPragmaField = bool TContext::*;
 
 THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"PullUpFlatMapOverJoin", &TContext::PragmaPullUpFlatMapOverJoin},

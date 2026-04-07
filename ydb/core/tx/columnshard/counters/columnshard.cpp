@@ -22,6 +22,7 @@ TCSCounters::TCSCounters()
     SetupIndexationCount = TBase::GetDeriviative("SetupIndexation/Count");
     SetupTtlCount = TBase::GetDeriviative("SetupTtl/Count");
     SetupCleanupCount = TBase::GetDeriviative("SetupCleanup/Count");
+    SetupCleanupSkippedByInProgressCount = TBase::GetDeriviative("SetupCleanup/SkippedByInProgress/Count");
 
     SkipIndexationInputDueToGranuleOverloadBytes = TBase::GetDeriviative("SkipIndexationInput/GranuleOverload/Bytes");
     SkipIndexationInputDueToGranuleOverloadCount = TBase::GetDeriviative("SkipIndexationInput/GranuleOverload/Count");
@@ -43,6 +44,8 @@ TCSCounters::TCSCounters()
     OverloadShardWritesCount = TBase::GetDeriviative("Overload/Shard/Writes/Count");
     OverloadShardWritesSizeBytes = TBase::GetDeriviative("Overload/Shard/WritesSize/Bytes");
     OverloadShardWritesSizeCount = TBase::GetDeriviative("Overload/Shard/WritesSize/Count");
+    OverloadRejectProbabilityBytes = TBase::GetDeriviative("Overload/RejectProbability/Bytes");
+    OverloadRejectProbabilityCount = TBase::GetDeriviative("Overload/RejectProbability/Count");
 
     InternalCompactionGranuleBytes = TBase::GetValueAutoAggregationsClient("InternalCompaction/Bytes");
     InternalCompactionGranulePortionsCount = TBase::GetValueAutoAggregationsClient("InternalCompaction/PortionsCount");

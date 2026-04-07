@@ -9,6 +9,8 @@
 #include <util/string/split.h>
 #include <util/string/join.h>
 
+#include <utility>
+
 using namespace NYql;
 
 namespace NSQLTranslationV0 {
@@ -37,8 +39,8 @@ struct TJoinDescr {
 
     TVector<std::pair<TFullColumn, TFullColumn>> Keys;
 
-    TJoinDescr(const TString& op)
-        : Op(op)
+    explicit TJoinDescr(TString op)
+        : Op(std::move(op))
     {}
 };
 
@@ -140,8 +142,8 @@ public:
     TNodePtr BuildJoinKeys(TContext& ctx, const TVector<TDeferredAtom>& names) override {
         const size_t n = JoinOps_.size();
         TString what(Sources_[n]->GetLabel());
-        static const TSet<TString> noRightSourceJoinOps = {"LeftOnly", "LeftSemi"};
-        for (size_t nn = n; nn > 0 && noRightSourceJoinOps.contains(JoinOps_[nn-1]); --nn) {
+        static const TSet<TString> NoRightSourceJoinOps = {"LeftOnly", "LeftSemi"};
+        for (size_t nn = n; nn > 0 && NoRightSourceJoinOps.contains(JoinOps_[nn-1]); --nn) {
             what = Sources_[nn-1]->GetLabel();
         }
         const TString with(Sources_[n + 1]->GetLabel());
@@ -329,7 +331,7 @@ protected:
         }
 
         JoinDescrs_.back().Keys.push_back({ { leftSourceIdx, op ? op->GetArgs()[leftArg] : nullptr},
-            { rightSourceIdx, op ? op->GetArgs()[rightArg] : nullptr } });
+                    { rightSourceIdx, op ? op->GetArgs()[rightArg] : nullptr } });
         KeysInitializing_ = false;
         return true;
     }

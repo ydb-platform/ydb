@@ -8,7 +8,6 @@ import time
 import unittest
 import urllib.request
 import tarfile
-import tempfile
 from library.python import resource
 import ydb
 
@@ -32,7 +31,7 @@ class Workload(unittest.TestCase):
         self._unpack_resource('ydb_cli')
 
     def _unpack_resource(self, name):
-        working_dir = os.path.join(tempfile.gettempdir(), "kafka_ydb_cli")
+        working_dir = os.path.join(os.getcwd(), "kafka_ydb_cli")
         self.tmp_dirs.append(working_dir)
         os.makedirs(working_dir, exist_ok=True)
         res = resource.find(name)
@@ -48,6 +47,8 @@ class Workload(unittest.TestCase):
         TEST_FILES_DIRECTORY = "./test-files/"
         JAR_FILE_NAME = "e2e-kafka-api-tests-1.0-with-parameter-choice.jar"
         JDK_FILE_NAME = "jdk-linux-x86_64.yandex.tgz"
+        if os.path.exists(TEST_FILES_DIRECTORY):
+            shutil.rmtree(TEST_FILES_DIRECTORY)
         if not os.path.exists(TEST_FILES_DIRECTORY):
             os.makedirs(TEST_FILES_DIRECTORY)
 
@@ -114,15 +115,14 @@ class Workload(unittest.TestCase):
                 targetCount = len(targetPartitionMess)
                 totalMessCountTest += testCount
                 totalMessCountTarget += targetCount
-
             print(f"target {self.target_topic_path}-{i}. totalMessCountTest = {totalMessCountTest},"
-                  "totalMessCountTarget = {totalMessCountTarget}")
+                  f"totalMessCountTarget = {totalMessCountTarget}")
             if i >= 1:
-                assert totalMessCountTest <= totalMessCountTarget, "Source message count is greater than the target {self.target_topic_path}-{i} topic's message count:" + \
+                assert totalMessCountTest <= totalMessCountTarget, f"Source message count is greater than the target {self.target_topic_path}-{i} topic's message count:" + \
                        f"{totalMessCountTest} and {totalMessCountTarget} respectively."
             else:
                 assert totalMessCountTest == totalMessCountTarget, f"Source and target {self.target_topic_path}-{i} topics total messages count are not equal:" + \
-                       "{totalMessCountTest} and {totalMessCountTarget} respectively."
+                       f"{totalMessCountTest} and {totalMessCountTarget} respectively."
             print(f"Total num of messages: {totalMessCountTest}")
         return
 

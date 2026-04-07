@@ -5,18 +5,18 @@
 
 namespace NSQLComplete {
 
-    struct TFrequencyData {
-        THashMap<TString, size_t> Keywords;
-        THashMap<TString, size_t> Pragmas;
-        THashMap<TString, size_t> Types;
-        THashMap<TString, size_t> Functions;
-        THashMap<TString, size_t> Hints;
-    };
+struct TFrequencyData {
+    THashMap<TString, size_t> Keywords;
+    THashMap<TString, size_t> Pragmas;
+    THashMap<TString, size_t> Types;
+    THashMap<TString, size_t> Functions;
+    THashMap<TString, size_t> Hints;
+};
 
-    TFrequencyData Pruned(const TFrequencyData& data);
+TFrequencyData Pruned(const TFrequencyData& data);
 
-    TFrequencyData ParseJsonFrequencyData(TStringBuf text);
+TFrequencyData ParseJsonFrequencyData(TStringBuf text);
 
-    TFrequencyData LoadFrequencyData();
+TFrequencyData LoadFrequencyData();
 
 } // namespace NSQLComplete

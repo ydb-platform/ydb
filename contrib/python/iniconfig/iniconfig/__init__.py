@@ -1,42 +1,31 @@
-""" brain-dead simple parser for ini-style files.
+"""brain-dead simple parser for ini-style files.
 (C) Ronny Pfannschmidt, Holger Krekel -- MIT licensed
 """
-from __future__ import annotations
-from typing import (
-    Callable,
-    Iterator,
-    Mapping,
-    Optional,
-    Tuple,
-    TypeVar,
-    Union,
-    TYPE_CHECKING,
-    NoReturn,
-    NamedTuple,
-    overload,
-    cast,
-)
 
 import os
-
-if TYPE_CHECKING:
-    from typing import Final
+from collections.abc import Callable
+from collections.abc import Iterator
+from collections.abc import Mapping
+from typing import Final
+from typing import TypeVar
+from typing import overload
 
 __all__ = ["IniConfig", "ParseError", "COMMENTCHARS", "iscommentline"]
 
-from .exceptions import ParseError
 from . import _parse
-from ._parse import COMMENTCHARS, iscommentline
+from ._parse import COMMENTCHARS
+from ._parse import iscommentline
+from .exceptions import ParseError
 
 _D = TypeVar("_D")
 _T = TypeVar("_T")
 
 
 class SectionWrapper:
-    config: Final[IniConfig]
+    config: Final["IniConfig"]
     name: Final[str]
 
-    def __init__(self, config: IniConfig, name: str) -> None:
+    def __init__(self, config: "IniConfig", name: str) -> None:
         self.config = config
         self.name = name
 
@@ -44,16 +33,14 @@ class SectionWrapper:
         return self.config.lineof(self.name, name)
 
     @overload
-    def get(self, key: str) -> str | None:
-        ...
+    def get(self, key: str) -> str | None: ...
 
     @overload
     def get(
         self,
         key: str,
         convert: Callable[[str], _T],
-    ) -> _T | None:
-        ...
+    ) -> _T | None: ...
 
     @overload
     def get(
@@ -61,12 +48,10 @@ class SectionWrapper:
         key: str,
         default: None,
         convert: Callable[[str], _T],
-    ) -> _T | None:
-        ...
+    ) -> _T | None: ...
 
     @overload
-    def get(self, key: str, default: _D, convert: None = None) -> str | _D:
-        ...
+    def get(self, key: str, default: _D, convert: None = None) -> str | _D: ...
 
     @overload
     def get(
@@ -74,8 +59,7 @@ class SectionWrapper:
         key: str,
         default: _D,
         convert: Callable[[str], _T],
-    ) -> _T | _D:
-        ...
+    ) -> _T | _D: ...
 
     # TODO: investigate possible mypy bug wrt matching the passed over data
     def get(  # type: ignore [misc]
@@ -105,47 +89,101 @@ class SectionWrapper:
 class IniConfig:
     path: Final[str]
     sections: Final[Mapping[str, Mapping[str, str]]]
+    _sources: Final[Mapping[tuple[str, str | None], int]]
 
     def __init__(
         self,
         path: str | os.PathLike[str],
         data: str | None = None,
         encoding: str = "utf-8",
+        *,
+        _sections: Mapping[str, Mapping[str, str]] | None = None,
+        _sources: Mapping[tuple[str, str | None], int] | None = None,
     ) -> None:
         self.path = os.fspath(path)
+
+        # Determine sections and sources
+        if _sections is not None and _sources is not None:
+            # Use provided pre-parsed data (called from parse())
+            sections_data = _sections
+            sources = _sources
+        else:
+            # Parse the data (backward compatible path)
+            if data is None:
+                if os.path.basename(self.path).startswith('pkg:'):
+                    import pkgutil
+
+                    basename = os.path.basename(self.path)
+                    _, package, resource = basename.split(':')
+                    content = pkgutil.get_data(package, resource)
+                    data = content.decode('utf-8')
+                else:
+                    with open(self.path, encoding=encoding) as fp:
+                        data = fp.read()
+
+            # Use old behavior (no stripping) for backward compatibility
+            sections_data, sources = _parse.parse_ini_data(
+                self.path, data, strip_inline_comments=False
+            )
+
+        # Assign once to Final attributes
+        self._sources = sources
+        self.sections = sections_data
+
+    @classmethod
+    def parse(
+        cls,
+        path: str | os.PathLike[str],
+        data: str | None = None,
+        encoding: str = "utf-8",
+        *,
+        strip_inline_comments: bool = True,
+        strip_section_whitespace: bool = False,
+    ) -> "IniConfig":
+        """Parse an INI file.
+
+        Args:
+            path: Path to the INI file (used for error messages)
+            data: Optional INI content as string. If None, reads from path.
+            encoding: Encoding to use when reading the file (default: utf-8)
+            strip_inline_comments: Whether to strip inline comments from values
+                (default: True). When True, comments starting with # or ; are
+                removed from values, matching the behavior for section comments.
+            strip_section_whitespace: Whether to strip whitespace from section and key names
+                (default: False). When True, strips Unicode whitespace from section and key names,
+                addressing issue #4. When False, preserves existing behavior for backward compatibility.
+
+        Returns:
+            IniConfig instance with parsed configuration
+
+        Example:
+            # With comment stripping (default):
+            config = IniConfig.parse("setup.cfg")
+            # value = "foo" instead of "foo # comment"
+
+            # Without comment stripping (old behavior):
+            config = IniConfig.parse("setup.cfg", strip_inline_comments=False)
+            # value = "foo # comment"
+
+            # With section name stripping (opt-in for issue #4):
+            config = IniConfig.parse("setup.cfg", strip_section_whitespace=True)
+            # section names and keys have Unicode whitespace stripped
+        """
+        fspath = os.fspath(path)
+
         if data is None:
-            if os.path.basename(self.path).startswith('pkg:'):
-                import pkgutil
+            with open(fspath, encoding=encoding) as fp:
+                data = fp.read()
 
-                basename = os.path.basename(self.path)
-                _, package, resource = basename.split(':')
-                content = pkgutil.get_data(package, resource)
-                data = content.decode('utf-8')
-            else:
-                with open(self.path, encoding=encoding) as fp:
-                    data = fp.read()
+        sections_data, sources = _parse.parse_ini_data(
+            fspath,
+            data,
+            strip_inline_comments=strip_inline_comments,
+            strip_section_whitespace=strip_section_whitespace,
+        )
 
-        tokens = _parse.parse_lines(self.path, data.splitlines(True))
-
-        self._sources = {}
-        sections_data: dict[str, dict[str, str]]
-        self.sections = sections_data = {}
-
-        for lineno, section, name, value in tokens:
-            if section is None:
-                raise ParseError(self.path, lineno, "no section header defined")
-            self._sources[section, name] = lineno
-            if name is None:
-                if section in self.sections:
-                    raise ParseError(
-                        self.path, lineno, f"duplicate section {section!r}"
-                    )
-                sections_data[section] = {}
-            else:
-                if name in self.sections[section]:
-                    raise ParseError(self.path, lineno, f"duplicate name {name!r}")
-                assert value is not None
-                sections_data[section][name] = value
+        # Call constructor with pre-parsed sections and sources
+        return cls(path=fspath, _sections=sections_data, _sources=sources)
 
     def lineof(self, section: str, name: str | None = None) -> int | None:
         lineno = self._sources.get((section, name))
@@ -156,8 +194,7 @@ class IniConfig:
         self,
         section: str,
         name: str,
-    ) -> str | None:
-        ...
+    ) -> str | None: ...
 
     @overload
     def get(
@@ -165,8 +202,7 @@ class IniConfig:
         section: str,
         name: str,
         convert: Callable[[str], _T],
-    ) -> _T | None:
-        ...
+    ) -> _T | None: ...
 
     @overload
     def get(
@@ -175,14 +211,12 @@ class IniConfig:
         name: str,
         default: None,
         convert: Callable[[str], _T],
-    ) -> _T | None:
-        ...
+    ) -> _T | None: ...
 
     @overload
     def get(
         self, section: str, name: str, default: _D, convert: None = None
-    ) -> str | _D:
-        ...
+    ) -> str | _D: ...
 
     @overload
     def get(
@@ -191,8 +225,7 @@ class IniConfig:
         name: str,
         default: _D,
         convert: Callable[[str], _T],
-    ) -> _T | _D:
-        ...
+    ) -> _T | _D: ...
 
     def get(  # type: ignore
         self,

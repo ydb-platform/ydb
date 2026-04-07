@@ -11,16 +11,14 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class E, class dtype>
-  auto empty_like(E const &expr,
-                  dtype d) -> decltype(empty(sutils::getshape(expr), d))
+  auto empty_like(E const &expr, dtype d) -> decltype(empty(sutils::getshape(expr), d))
   {
     return empty(sutils::getshape(expr), d);
   }
 
   template <class E>
   auto empty_like(E const &expr, types::none_type)
-      -> decltype(empty(sutils::getshape(expr),
-                        types::dtype_t<typename E::dtype>()))
+      -> decltype(empty(sutils::getshape(expr), types::dtype_t<typename E::dtype>()))
   {
     return empty(sutils::getshape(expr), types::dtype_t<typename E::dtype>());
   }

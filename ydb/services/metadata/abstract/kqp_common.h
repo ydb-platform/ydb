@@ -8,6 +8,7 @@ class IInitializationBehaviour;
 }
 
 namespace NModifications {
+class IOptimizationManager;
 class IOperationsManager;
 }
 
@@ -15,12 +16,15 @@ class IClassBehaviour {
 public:
     using TFactory = NObjectFactory::TObjectFactory<IClassBehaviour, TString>;
     using TPtr = std::shared_ptr<IClassBehaviour>;
+
 private:
     mutable std::shared_ptr<NInitializer::IInitializationBehaviour> Initializer;
+
 protected:
     virtual std::shared_ptr<NInitializer::IInitializationBehaviour> ConstructInitializer() const = 0;
     virtual TString GetInternalStorageTablePath() const = 0;
     virtual TString GetInternalStorageHistoryTablePath() const;
+
 public:
     virtual ~IClassBehaviour() = default;
     TString GetStorageTablePath() const;
@@ -28,6 +32,7 @@ public:
     TString GetStorageHistoryTablePath() const;
     TString FormPathToResourceTable(const TString& resourceDatabasePath) const;
     std::shared_ptr<NInitializer::IInitializationBehaviour> GetInitializer() const;
+    virtual std::shared_ptr<NModifications::IOptimizationManager> ConstructOptimizationManager() const;
     virtual std::shared_ptr<NModifications::IOperationsManager> GetOperationsManager() const = 0;
 
     virtual TString GetTypeId() const = 0;

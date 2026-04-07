@@ -36,14 +36,13 @@ namespace numpy
       else if (side[0] == "r")
         return false;
       else
-        throw types::ValueError("'" + side +
-                                "' is an invalid value for keyword 'side'");
+        throw types::ValueError("'" + side + "' is an invalid value for keyword 'side'");
     }
   } // namespace details
 
   template <class T, class U>
-  typename std::enable_if<!types::is_numexpr_arg<T>::value, long>::type
-  searchsorted(U const &a, T const &v, types::str const &side)
+  std::enable_if_t<!types::is_numexpr_arg<T>::value, long> searchsorted(U const &a, T const &v,
+                                                                        types::str const &side)
   {
     bool left = details::issearchsortedleft(side);
     return details::searchsorted(a, v, left);
@@ -52,37 +51,31 @@ namespace numpy
   namespace
   {
     template <class E, class I0, class I1>
-    void _search_sorted(E const &a, I0 ibegin, I0 iend, I1 obegin, bool left,
-                        utils::int_<1>)
+    void _search_sorted(E const &a, I0 ibegin, I0 iend, I1 obegin, bool left, utils::int_<1>)
     {
       for (; ibegin != iend; ++ibegin, ++obegin)
         *obegin = details::searchsorted(a, *ibegin, left);
     }
 
     template <class E, class I0, class I1, size_t N>
-    void _search_sorted(E const &a, I0 ibegin, I0 iend, I1 obegin, bool left,
-                        utils::int_<N>)
+    void _search_sorted(E const &a, I0 ibegin, I0 iend, I1 obegin, bool left, utils::int_<N>)
     {
       for (; ibegin != iend; ++ibegin, ++obegin)
-        _search_sorted(a, (*ibegin).begin(), (*ibegin).end(), (*obegin).begin(),
-                       left, utils::int_<N - 1>());
+        _search_sorted(a, (*ibegin).begin(), (*ibegin).end(), (*obegin).begin(), left,
+                       utils::int_<N - 1>());
     }
   } // namespace
 
   template <class E, class T>
-  typename std::enable_if<
-      types::is_numexpr_arg<E>::value,
-      types::ndarray<long, types::array_tuple<long, E::value>>>::type
+  std::enable_if_t<types::is_numexpr_arg<E>::value,
+                   types::ndarray<long, types::array_tuple<long, E::value>>>
   searchsorted(T const &a, E const &v, types::str const &side)
   {
-    static_assert(T::value == 1,
-                  "Not Implemented : searchsorted for dimension != 1");
+    static_assert(T::value == 1, "Not Implemented : searchsorted for dimension != 1");
     bool left = details::issearchsortedleft(side);
 
-    types::ndarray<long, types::array_tuple<long, E::value>> out(
-        asarray(v)._shape, builtins::None);
-    _search_sorted(a, v.begin(), v.end(), out.begin(), left,
-                   utils::int_<E::value>());
+    types::ndarray<long, types::array_tuple<long, E::value>> out(asarray(v)._shape, builtins::None);
+    _search_sorted(a, v.begin(), v.end(), out.begin(), left, utils::int_<E::value>());
     return out;
   }
 } // namespace numpy

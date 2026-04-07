@@ -1,5 +1,5 @@
 import socket
-from ipaddress import IPv4Address, IPv6Address
+from ipaddress import ip_address, IPv4Address, IPv6Address
 from typing import Union, MutableSequence, Sequence, Any
 
 from clickhouse_connect.datatypes.base import ClickHouseType
@@ -64,64 +64,60 @@ class IPv6(ClickHouseType):
         return self._read_binary_ip(source, num_rows)
 
     @staticmethod
-    def _read_binary_ip(source: ByteSource, num_rows: int):
+    def _read_binary_ip(source: ByteSource, num_rows: int) -> list[IPv6Address]:
+        """Read IPv6 addresses in native format, always returning IPv6Address objects."""
         fast_ip_v6 = IPv6Address.__new__
-        fast_ip_v4 = IPv4Address.__new__
         with_scope_id = '_scope_id' in IPv6Address.__slots__
         new_col = []
         app = new_col.append
         ifb = int.from_bytes
         for _ in range(num_rows):
             int_value = ifb(source.read_bytes(16), 'big')
-            if int_value >> 32 == 0xFFFF:
-                ipv4 = fast_ip_v4(IPv4Address)
-                ipv4._ip = int_value & 0xFFFFFFFF
-                app(ipv4)
-            else:
-                ipv6 = fast_ip_v6(IPv6Address)
-                ipv6._ip = int_value
-                if with_scope_id:
-                    ipv6._scope_id = None
-                app(ipv6)
+            ipv6 = fast_ip_v6(IPv6Address)
+            ipv6._ip = int_value
+            if with_scope_id:
+                ipv6._scope_id = None
+            app(ipv6)
         return new_col
 
     @staticmethod
-    def _read_binary_str(source: ByteSource, num_rows: int):
+    def _read_binary_str(source: ByteSource, num_rows: int) -> list[str]:
+        """Read IPv6 addresses in string format, always returning IPv6Address strings."""
         new_col = []
         app = new_col.append
-        v4mask = IPV4_V6_MASK
-        tov4 = socket.inet_ntoa
         tov6 = socket.inet_ntop
         af6 = socket.AF_INET6
         for _ in range(num_rows):
             x = source.read_bytes(16)
-            if x[:12] == v4mask:
-                app(tov4(x[12:]))
-            else:
-                app(tov6(af6, x))
+            # Always use IPv6 string representation, even for IPv4-mapped addresses
+            app(tov6(af6, x))
         return new_col
 
-    def _write_column_binary(self, column: Union[Sequence, MutableSequence], dest: bytearray, ctx: InsertContext):
-        v = V6_NULL
-        first = first_value(column, self.nullable)
-        v4mask = IPV4_V6_MASK
-        af6 = socket.AF_INET6
-        tov6 = socket.inet_pton
-        if isinstance(first, str):
-            for x in column:
-                if x is None:
-                    dest += v
-                elif '.' in x:
-                    dest += v4mask + bytes(int(b) for b in x.split('.'))
-                else:
-                    dest += tov6(af6, x)
-        else:
-            for x in column:
-                if x is None:
-                    dest += v
-                else:
-                    b = x.packed
-                    dest += b if len(b) == 16 else (v4mask + b)
+    def _write_column_binary(
+        self,
+        column: Union[Sequence, MutableSequence],
+        dest: bytearray,
+        ctx: InsertContext,
+    ):
+        """Write IPv6 addresses, promoting IPv4 addresses to IPv4-mapped IPv6 addresses."""
+        for value in column:
+            if value is None:
+                dest += V6_NULL
+                continue
+
+            try:
+                addr = ip_address(value)
+            except ValueError as e:
+                raise ValueError(
+                    f"Failed to parse '{value}' as a valid IP address for column '{ctx.column_name}'"
+                ) from e
+
+            # Now handle parsed object
+            if isinstance(addr, IPv6Address):
+                dest += addr.packed
+            elif isinstance(addr, IPv4Address):
+                # We have an IPv4, but the column is IPv6 so convert to IPv4-mapped.
+                dest += IPV4_V6_MASK + addr.packed
 
     def _active_null(self, ctx):
         if ctx.use_none:

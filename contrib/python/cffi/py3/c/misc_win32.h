@@ -1,3 +1,7 @@
+#ifndef CFFI_MISC_WIN32_H
+#define CFFI_MISC_WIN32_H
+
+
 #include <malloc.h>   /* for alloca() */
 
 
@@ -226,9 +230,71 @@ static int dlclose(void *handle)
 static const char *dlerror(void)
 {
     static char buf[32];
-    DWORD dw = GetLastError(); 
+    DWORD dw = GetLastError();
     if (dw == 0)
         return NULL;
     sprintf(buf, "error 0x%x", (unsigned int)dw);
     return buf;
 }
+
+/* Minimal atomic support */
+static int cffi_atomic_compare_exchange(void **ptr, void **expected,
+                                        void *value)
+{
+    void *initial = _InterlockedCompareExchangePointer(ptr, value, expected);
+    if (initial == *expected) {
+        return 1;
+    }
+    *expected = initial;
+    return 0;
+}
+
+static void *cffi_atomic_load(void **ptr)
+{
+#if defined(_M_X64) || defined(_M_IX86)
+    return *(volatile void **)ptr;
+#elif defined(_M_ARM64)
+    return (void *)__ldar64((volatile unsigned __int64 *)ptr);
+#else
+# error "no implementation of cffi_atomic_load"
+#endif
+}
+
+static uint8_t cffi_atomic_load_uint8(uint8_t *ptr)
+{
+#if defined(_M_X64) || defined(_M_IX86)
+    return *(volatile uint8_t *)ptr;
+#elif defined(_M_ARM64)
+    return (uint8_t)__ldar8((volatile uint8_t *)ptr);
+#else
+# error "no implementation of cffi_atomic_load_uint8"
+#endif
+}
+
+static Py_ssize_t cffi_atomic_load_ssize(Py_ssize_t *ptr)
+{
+#if defined(_M_X64) || defined(_M_IX86)
+    return *(volatile Py_ssize_t *)ptr;
+#elif defined(_M_ARM64)
+    return (Py_ssize_t)__ldar64((volatile unsigned __int64 *)ptr);
+#else
+# error "no implementation of cffi_atomic_load_ssize"
+#endif
+}
+
+static void cffi_atomic_store_ssize(Py_ssize_t *ptr, Py_ssize_t value)
+{
+    _InterlockedExchangePointer(ptr, value);
+}
+
+static void cffi_atomic_store(void **ptr, void *value)
+{
+    _InterlockedExchangePointer(ptr, value);
+}
+
+static void cffi_atomic_store_uint8(uint8_t *ptr, uint8_t value)
+{
+    _InterlockedExchange8(ptr, value);
+}
+
+#endif /* CFFI_MISC_WIN32_H */

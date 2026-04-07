@@ -160,6 +160,7 @@ namespace NTable {
         virtual EScan BeginKey(TArrayRef<const TCell>) = 0;
         virtual EScan BeginDeltas() = 0;
         virtual EScan Feed(const TRow&, ui64) = 0;
+        virtual EScan Feed(ELockMode, ui64) = 0;
         virtual EScan EndDeltas() = 0;
         virtual EScan Feed(const TRow&, TRowVersion&) = 0;
         virtual EScan EndKey() = 0;

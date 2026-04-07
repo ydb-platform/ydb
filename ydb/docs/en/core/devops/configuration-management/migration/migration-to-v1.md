@@ -13,7 +13,7 @@ This guide is intended for emergency situations when unexpected problems arise a
 Migration to configuration V1 is only possible if the cluster uses [configuration V2](../../configuration-management/configuration-v2/config-overview.md). This can be achieved:
 
 - as a result of [migration to configuration V2](migration-to-v2.md)
-- during [initial deployment](../../deployment-options/manual/initial-deployment.md) of the cluster
+- during [initial deployment](../../deployment-options/manual/initial-deployment/index.md) of the cluster
 
 You can determine the current configuration version on nodes using several methods described in the article [Checking Configuration Version](../check-config-version.md). Before starting the migration, ensure that the cluster is running on configuration V2.
 
@@ -24,12 +24,12 @@ To migrate the {{ ydb-short-name }} cluster to configuration V1, you need to per
 1. Get the current cluster configuration using the [ydb admin cluster config fetch](../../../reference/ydb-cli/commands/configuration/cluster/fetch.md) command:
 
     ```bash
-    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch --for-v1-migration > config.yaml
+    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch --v2-internal-state > config.yaml
     ```
 
     {% cut "More details" %}
 
-    The `--for-v1-migration` argument specifies that the full cluster configuration will be retrieved, including [State Storage](../../../reference/configuration/domains_config.md#domains-state) and [static group](../../../reference/configuration/blob_storage_config.md#blob_storage_config) configuration parameters.
+    The `--v2-internal-state` argument specifies that the full cluster configuration will be retrieved, including [State Storage](../../../reference/configuration/domains_config.md#domains-state) and [static group](../../../reference/configuration/blob_storage_config.md#blob_storage_config) configuration parameters.
 
     {% endcut %}
 

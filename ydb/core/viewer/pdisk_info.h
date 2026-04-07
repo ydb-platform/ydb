@@ -6,6 +6,7 @@
 namespace NKikimr::NViewer {
 
 using namespace NActors;
+using namespace NNodeWhiteboard;
 
 class TPDiskInfo : public TViewerPipeClient {
     enum EEv {
@@ -43,8 +44,8 @@ public:
     void Bootstrap() override {
         TString pDiskId = Params.Get("pdisk_id");
         if (pDiskId.Contains('-')) {
-            PDiskId = FromStringWithDefault<ui32>(TStringBuf(pDiskId).Before('-'), Max<ui32>());
-            NodeId = FromStringWithDefault<ui32>(TStringBuf(pDiskId).After('-'), 0);
+            NodeId = FromStringWithDefault<ui32>(TStringBuf(pDiskId).Before('-'), 0);
+            PDiskId = FromStringWithDefault<ui32>(TStringBuf(pDiskId).After('-'), Max<ui32>());
         } else {
             NodeId = FromStringWithDefault<ui32>(Params.Get("node_id"), 0);
             PDiskId = FromStringWithDefault<ui32>(Params.Get("pdisk_id"), Max<ui32>());
@@ -85,14 +86,18 @@ public:
 
     void SendWhiteboardRequests() {
         TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(NodeId);
+        auto pdiskRequest = new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest();
+        pdiskRequest->Record.AddFieldsRequired(-1);
         WhiteboardPDisk = TBase::MakeRequest<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse>(
             whiteboardServiceId,
-            new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest,
+            pdiskRequest,
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, // we only need it once because we are sending to the same node
             NodeId);
+        auto vdiskRequest = new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateRequest();
+        vdiskRequest->Record.AddFieldsRequired(-1);
         WhiteboardVDisk = TBase::MakeRequest<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse>(
             whiteboardServiceId,
-            new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateRequest,
+            vdiskRequest,
             0,
             NodeId);
     }

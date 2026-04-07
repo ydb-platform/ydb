@@ -8,5 +8,5 @@ IComputationNode* WrapWideTopBlocks(TCallable& callable, const TComputationNodeF
 IComputationNode* WrapWideTopSortBlocks(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapWideSortBlocks(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             CompareYson(result, R"([[[0];4600u];[[1];4600u];[[2];4600u];[[3];4600u];[[4];4600u]])");
 
             // Check plan
-            CheckPlanForAggregatePushdown(query, tableClient, { "WideCombiner" }, "Aggregate-TableFullScan");
+            CheckPlanForAggregatePushdown(query, tableClient, { "DqPhyHashCombine" }, "Aggregate-TableFullScan");
 //            CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" }, "TableFullScan");
         }
     }
@@ -229,7 +229,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
 
             auto plan = CollectStreamResult(res);
 
-            const auto expectedAggregateNodeName = AllowSpilling ? "WideCombiner" : "BlockMergeFinalizeHashed";
+            const auto expectedAggregateNodeName = AllowSpilling ? "DqPhyHashCombine" : "BlockMergeFinalizeHashed";
 
             bool hasExpectedAggregateNode = plan.QueryStats->Getquery_ast().Contains(expectedAggregateNodeName);
             UNIT_ASSERT_C(hasExpectedAggregateNode, plan.QueryStats->Getquery_ast());
@@ -271,6 +271,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             auto plan = CollectStreamResult(res);
 
             UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("BlockMergeFinalizeHashed"), plan.QueryStats->Getquery_ast());
+            UNIT_ASSERT_C(!plan.QueryStats->Getquery_ast().Contains("DqPhyHashCombine"), plan.QueryStats->Getquery_ast());
             UNIT_ASSERT_C(!plan.QueryStats->Getquery_ast().Contains("WideCombiner"), plan.QueryStats->Getquery_ast());
         }
 
@@ -486,8 +487,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 LIMIT 2
             )")
             .AddExpectedPlanOptions("KqpOlapFilter")
-            .MutableLimitChecker().SetExpectedLimit(2)
-            .SetExpectedResultCount(400); // FIXME (delete this line)
+            .MutableLimitChecker().SetExpectedLimit(2);
         TestAggregations({ testCase });
     }
 
@@ -502,8 +502,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 LIMIT 2
             )")
             .AddExpectedPlanOptions("KqpOlapFilter")
-            .MutableLimitChecker().SetExpectedLimit(2)
-            .SetExpectedResultCount(400); // FIXME (delete this line)
+            .MutableLimitChecker().SetExpectedLimit(2);
         TestAggregations({ testCase });
     }
 
@@ -518,8 +517,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             )")
             .AddExpectedPlanOptions("KqpOlapFilter")
             .AddExpectedPlanOptions("KqpOlapExtractMembers")
-            .MutableLimitChecker().SetExpectedLimit(2)
-            .SetExpectedResultCount(400); // FIXME (delete this line)
+            .MutableLimitChecker().SetExpectedLimit(2);
         TestAggregations({ testCase });
     }
 
@@ -535,8 +533,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             )")
             .AddExpectedPlanOptions("KqpOlapFilter")
             .AddExpectedPlanOptions("KqpOlapExtractMembers")
-            .MutableLimitChecker().SetExpectedLimit(2)
-            .SetExpectedResultCount(400); // FIXME (delete this line)
+            .MutableLimitChecker().SetExpectedLimit(2);
         TestAggregations({ testCase });
     }
 

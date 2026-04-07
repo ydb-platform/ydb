@@ -3,6 +3,7 @@
 #include "common.h"
 #include "portion_info.h"
 
+#include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/splitter/abstract/chunks.h>
 
 #include <ydb/library/accessor/accessor.h>

@@ -4,6 +4,6 @@
 
 namespace NSQLHighlight {
 
-    IGenerator::TPtr MakeJsonGenerator();
+IGenerator::TPtr MakeJsonGenerator();
 
 } // namespace NSQLHighlight

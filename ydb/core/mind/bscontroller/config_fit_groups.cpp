@@ -17,6 +17,7 @@ namespace NKikimr {
             const bool AllowUnusableDisks;
             const bool SettleOnlyOnOperationalDisks;
             const bool IsSelfHealReasonDecommit;
+            const bool DDisk;
             std::deque<ui64> ExpectedSlotSize;
             const ui32 PDiskSpaceMarginPromille;
             const TGroupGeometryInfo Geometry;
@@ -40,6 +41,7 @@ namespace NKikimr {
                 , AllowUnusableDisks(cmd.GetAllowUnusableDisks())
                 , SettleOnlyOnOperationalDisks(cmd.GetSettleOnlyOnOperationalDisks())
                 , IsSelfHealReasonDecommit(cmd.GetIsSelfHealReasonDecommit())
+                , DDisk(storagePool.DDisk)
                 , ExpectedSlotSize(expectedSlotSize)
                 , PDiskSpaceMarginPromille(pdiskSpaceMarginPromille)
                 , Geometry(TBlobStorageGroupType(storagePool.ErasureSpecies), storagePool.GetGroupGeometry())
@@ -112,7 +114,8 @@ namespace NKikimr {
                         StoragePoolId, /* storagePoolId */
                         0, /* numFailRealms */
                         0, /* numFailDomainsPerFailRealm */
-                        0); /* numVDisksPerFailDomain */
+                        0, /* numVDisksPerFailDomain */
+                        false); /* ddisk */
 
                     // bind group to storage pool
                     State.StoragePoolGroups.Unshare().emplace(StoragePoolId, mainGroupId);
@@ -190,7 +193,8 @@ namespace NKikimr {
                     0, Geometry.GetErasure(), desiredPDiskCategory.GetOrElse(0), StoragePool.VDiskKind,
                     StoragePool.EncryptionMode.GetOrElse(0), lifeCyclePhase, mainKeyId, encryptedGroupKey,
                     groupKeyNonce, MainKeyVersion, false, false, groupSizeInUnits, bridgePileId, StoragePoolId,
-                    Geometry.GetNumFailRealms(), Geometry.GetNumFailDomainsPerFailRealm(), Geometry.GetNumVDisksPerFailDomain());
+                    Geometry.GetNumFailRealms(), Geometry.GetNumFailDomainsPerFailRealm(), Geometry.GetNumVDisksPerFailDomain(),
+                    DDisk);
 
                 groupInfo->BridgeProxyGroupId = bridgeProxyGroupId;
 
@@ -207,7 +211,7 @@ namespace NKikimr {
                 return groupId;
             }
 
-            void CheckExistingGroup(TGroupId groupId) {
+            void CheckExistingGroup(TGroupId groupId, bool allocate) {
                 ////////////////////////////////////////////////////////////////////////////////////////////////////////
                 // extract TGroupInfo for specified group
                 ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -219,6 +223,22 @@ namespace NKikimr {
                 TGroupMapper::TGroupDefinition group;
                 TGroupMapper::TGroupConstraintsDefinition softConstraints, hardConstraints;
                 bool layoutIsValid = true;
+
+                if (allocate) {
+                    TGroupInfo *groupInfo = State.Groups.FindForUpdate(groupId);
+                    Y_ABORT_UNLESS(groupInfo);
+                    groupInfo->Topology = Geometry.CreateTopology();
+                    groupInfo->Topology->FinalizeConstruction();
+                    groupInfo->VDisksInGroup.resize(groupInfo->Topology->GetTotalVDisksNum());
+
+                    // TODO(alexvru): calculate required space
+                    Geometry.ResizeGroup(group);
+                    AllocateOrSanitizeGroup(groupId, group, {}, {}, groupInfo->GroupSizeInUnits, Min<i64>(), false,
+                        groupInfo->BridgePileId, &TGroupGeometryInfo::AllocateGroup);
+
+                    CreateVSlotsForGroup(groupInfo, group, {});
+                    return;
+                }
 
                 auto getGroup = [&]() -> TGroupMapper::TGroupDefinition& {
                     if (!group) {
@@ -542,16 +562,17 @@ namespace NKikimr {
                     TBridgePileId bridgePileId,
                     T&& func) {
                 if (!Mapper) {
-                    Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping);
+                    Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping, State.Fit.PreferLessOccupiedRack, State.Fit.WithAttentionToReplication);
                     PopulateGroupMapper();
                 }
+                TPDiskSlotTracker& pdiskSlotTracker= Mapper->GetPDiskSlotTracker();
                 TStackVec<TPDiskId, 32> removeQ;
                 if (addExistingDisks) {
                     for (const auto& realm : group) {
                         for (const auto& domain : realm) {
                             for (const TPDiskId id : domain) {
                                 if (id != TPDiskId()) {
-                                    if (auto *info = State.PDisks.Find(id); info && RegisterPDisk(id, *info, false, "X")) {
+                                    if (auto *info = State.PDisks.Find(id); info && RegisterPDisk(id, *info, false, pdiskSlotTracker, "X")) {
                                         removeQ.push_back(id);
                                     }
                                 }
@@ -560,14 +581,14 @@ namespace NKikimr {
                     }
                 }
                 struct TUnregister {
-                    TGroupMapper& Mapper;
+                    TBlobStorageController::TGroupFitter& Self;
                     TStackVec<TPDiskId, 32>& RemoveQ;
                     ~TUnregister() {
                         for (const TPDiskId pdiskId : RemoveQ) {
-                            Mapper.UnregisterPDisk(pdiskId);
+                            Self.UnregisterPDisk(pdiskId);
                         }
                     }
-                } unregister{*Mapper, removeQ};
+                } unregister{*this, removeQ};
                 return std::invoke(func, Geometry, *Mapper, groupId, group, constraints, replacedDisks,
                     std::move(forbid), groupSizeInUnits, requiredSpace, bridgePileId);
             }
@@ -591,6 +612,22 @@ namespace NKikimr {
             void PopulateGroupMapper() {
                 const TBoxId boxId = std::get<0>(StoragePoolId);
 
+                TPDiskSlotTracker pdiskSlotTracker;
+
+                bool populateSlotTracker = State.Fit.PreferLessOccupiedRack || State.Fit.WithAttentionToReplication;
+
+                if (populateSlotTracker) {
+                    State.VSlots.ForEach([&](const TVSlotId& id, const TVSlotInfo& info) {
+                        if (info.IsBeingDeleted()) {
+                            return; // ignore slots being deleted
+                        }
+                        if (info.GetStatus() == NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
+                            TPDiskId pdiskId = id.ComprisingPDiskId();
+                            pdiskSlotTracker.AddReplicatingVSlot(pdiskId);
+                        }
+                    });
+                }
+
                 State.PDisks.ForEach([&](const TPDiskId& id, const TPDiskInfo& info) {
                     if (info.BoxId != boxId) {
                         return; // ignore disks not from desired box
@@ -602,15 +639,17 @@ namespace NKikimr {
 
                     for (const auto& filter : StoragePool.PDiskFilters) {
                         if (filter.MatchPDisk(info)) {
-                            const bool inserted = RegisterPDisk(id, info, true);
+                            const bool inserted = RegisterPDisk(id, info, true, pdiskSlotTracker);
                             Y_ABORT_UNLESS(inserted);
                             break;
                         }
                     }
                 });
+
+                Mapper->SetPDiskSlotTracker(std::move(pdiskSlotTracker));
             }
 
-            bool RegisterPDisk(TPDiskId id, const TPDiskInfo& info, bool usable, TString whyUnusable = {}) {
+            bool RegisterPDisk(TPDiskId id, const TPDiskInfo& info, bool usable, TPDiskSlotTracker& pdiskSlotTracker, TString whyUnusable = {}) {
                 // calculate number of used slots on this PDisk, also counting the static ones
                 ui32 numSlots = info.NumActiveSlots + info.StaticSlotUsage;
 
@@ -678,10 +717,12 @@ namespace NKikimr {
                 ui32 slotSizeInUnits = 0;
                 info.ExtractInferredPDiskSettings(maxSlots, slotSizeInUnits);
 
+                auto location = State.HostRecords->GetLocation(id.NodeId);
+
                 // register PDisk in the mapper
-                return Mapper->RegisterPDisk({
+                bool registered = Mapper->RegisterPDisk({
                     .PDiskId = id,
-                    .Location = State.HostRecords->GetLocation(id.NodeId),
+                    .Location = location,
                     .Usable = usable,
                     .NumSlots = numSlots,
                     .MaxSlots = maxSlots,
@@ -693,6 +734,26 @@ namespace NKikimr {
                     .WhyUnusable = std::move(whyUnusable),
                     .BridgePileId = bridgePileId,
                 });
+
+                bool populateSlotTracker = State.Fit.PreferLessOccupiedRack || State.Fit.WithAttentionToReplication;
+
+                if (registered && populateSlotTracker) {
+                    i32 freeSlots = i32(maxSlots) - numSlots;
+                    pdiskSlotTracker.AddFreeSlotsForRack(location.GetRackId(), freeSlots);
+                }
+
+                return registered;
+            }
+
+            void UnregisterPDisk(TPDiskId id) {
+                TGroupMapper::TPDiskRecord rec = Mapper->UnregisterPDisk(id);
+
+                bool populatedSlotTracker = State.Fit.PreferLessOccupiedRack || State.Fit.WithAttentionToReplication;
+
+                if (populatedSlotTracker) {
+                    i32 freeSlots = i32(rec.MaxSlots) - rec.NumSlots;
+                    Mapper->GetPDiskSlotTracker().AddFreeSlotsForRack(rec.Location.GetRackId(), -freeSlots);
+                }
             }
 
             std::map<TVDiskIdShort, TVSlotInfo*> CreateVSlotsForGroup(TGroupInfo *groupInfo,
@@ -733,7 +794,7 @@ namespace NKikimr {
                                 TVSlotInfo *vslotInfo = State.VSlots.ConstructInplaceNewEntry(vslotId, vslotId, pdiskInfo,
                                     groupInfo->ID, 0, groupInfo->Generation, StoragePool.VDiskKind, failRealmIdx,
                                     failDomainIdx, vdiskIdx, TMood::Normal, groupInfo, &VSlotReadyTimestampQ,
-                                    TInstant::Zero(), TDuration::Zero());
+                                    TInstant::Zero(), TDuration::Zero(), 0, 0);
                                 vslotInfo->VDiskStatusTimestamp = State.Mono;
 
                                 // mark as uncommitted
@@ -761,9 +822,38 @@ namespace NKikimr {
             }
         };
 
+        void FillGroupMapperError(NKikimrBlobStorage::TGroupMapperError& groupMapperErrorProto, const TGroupMapperError& error) {
+            auto fillStats = [](NKikimrBlobStorage::TGroupMapperError::TStats& statsProto, const TGroupMapperError::TStats& stats) {
+                statsProto.SetDomain(stats.Domain);
+                statsProto.SetAllSlotsAreOccupied(stats.AllSlotsAreOccupied);
+                statsProto.SetNotEnoughSpace(stats.NotEnoughSpace);
+                statsProto.SetNotAcceptingNewSlots(stats.NotAcceptingNewSlots);
+                statsProto.SetNotOperational(stats.NotOperational);
+                statsProto.SetDecommission(stats.Decommission);
+            };
+            fillStats(*groupMapperErrorProto.MutableTotalStats(), error.TotalStats);
+            for (const auto& domainStat : error.MatchingDomainsStats) {
+                auto* domainStatsProto = groupMapperErrorProto.AddMatchingDomainsStats();
+                fillStats(*domainStatsProto, domainStat);
+            }
+            groupMapperErrorProto.SetMissingFailRealmsCount(error.MissingFailRealmsCount);
+            groupMapperErrorProto.SetFailRealmsWithMissingDomainsCount(error.FailRealmsWithMissingDomainsCount);
+            groupMapperErrorProto.SetOkDisksCount(error.OkDisksCount);
+            groupMapperErrorProto.SetRealmLocationKey(error.RealmLocationKey);
+            groupMapperErrorProto.SetDomainLocationKey(error.DomainLocationKey);
+        }
+
         void TBlobStorageController::FitGroupsForUserConfig(TConfigState& state, ui32 availabilityDomainId,
                 const NKikimrBlobStorage::TConfigRequest& cmd, std::deque<ui64> expectedSlotSize,
                 NKikimrBlobStorage::TConfigResponse::TStatus& status) {
+            Y_DEFER {
+                // reset Fit options so they do not affect further commands
+                state.Fit.OnlyToLessOccupiedPDisk = false;
+                state.Fit.PreferLessOccupiedRack = false;
+                state.Fit.WithAttentionToReplication = false;
+                state.Fit.GroupsToAllocate.clear();
+            };
+
             auto poolsAndGroups = std::exchange(state.Fit.PoolsAndGroups, {});
             if (poolsAndGroups.empty()) {
                 return; // nothing to do
@@ -796,7 +886,7 @@ namespace NKikimr {
                     id = storagePoolId;
 
                     enumerateGroups([&](TGroupId groupId) {
-                        fitter.CheckExistingGroup(groupId);
+                        fitter.CheckExistingGroup(groupId, state.Fit.GroupsToAllocate.contains(groupId));
                         if (const TGroupInfo *group = state.Groups.Find(groupId); group && !group->BridgePileId) {
                             ++numActualGroups;
                         }
@@ -810,10 +900,16 @@ namespace NKikimr {
                         }
                     }
                 } catch (const TExFitGroupError& ex) {
-                    throw TExError() << "Group fit error"
+                    TExError err;
+                    err << "Group fit error"
                         << " BoxId# " << std::get<0>(storagePoolId)
                         << " StoragePoolId# " << std::get<1>(storagePoolId)
                         << " Error# " << ex.what();
+                    if (ex.GroupMapperError) {
+                        auto& failParam = err.FailParams.emplace_back();
+                        FillGroupMapperError(*failParam.MutableGroupMapperError(), *ex.GroupMapperError);
+                    }
+                    throw err;
                 }
                 if (storagePool.NumGroups < numActualGroups) {
                     throw TExError() << "Storage pool modification error"

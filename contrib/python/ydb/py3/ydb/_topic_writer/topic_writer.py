@@ -67,10 +67,14 @@ class WriterSettings(PublicWriterSettings):
         self.__dict__ = settings.__dict__.copy()
 
     def create_init_request(self) -> StreamWriteMessage.InitRequest:
+        # producer_id is guaranteed to be set in __post_init__
+        producer_id = self.producer_id
+        if producer_id is None:
+            raise ValueError("producer_id must be set")
         return StreamWriteMessage.InitRequest(
             path=self.topic,
-            producer_id=self.producer_id,
-            write_session_meta=self.session_metadata,
+            producer_id=producer_id,
+            write_session_meta=self.session_metadata if self.session_metadata else {},
             partitioning=self.get_partitioning(),
             get_last_seq_no=True,
         )
@@ -78,7 +82,11 @@ class WriterSettings(PublicWriterSettings):
     def get_partitioning(self) -> StreamWriteMessage.PartitioningType:
         if self.partition_id is not None:
             return StreamWriteMessage.PartitioningPartitionID(self.partition_id)
-        return StreamWriteMessage.PartitioningMessageGroupID(self.producer_id)
+        # producer_id is guaranteed to be set in __post_init__
+        producer_id = self.producer_id
+        if producer_id is None:
+            raise ValueError("producer_id must be set")
+        return StreamWriteMessage.PartitioningMessageGroupID(producer_id)
 
 
 class SendMode(Enum):
@@ -125,16 +133,30 @@ class InternalMessage(StreamWriteMessage.WriteRequest.MessageData, IToProto):
     codec: PublicCodec
 
     def __init__(self, mess: PublicMessage):
-        metadata_items = mess.metadata_items or {}
+        metadata_items: Dict[str, bytes] = {}
+        if mess.metadata_items:
+            for k, v in mess.metadata_items.items():
+                if isinstance(v, bytes):
+                    metadata_items[k] = v
+                else:
+                    metadata_items[k] = v.encode("utf-8")
+
+        data_bytes: bytes
+        if isinstance(mess.data, bytes):
+            data_bytes = mess.data
+        else:
+            data_bytes = mess.data.encode("utf-8")
+
+        # created_at will be set later in _prepare_internal_messages if auto_created_at is enabled
         super().__init__(
-            seq_no=mess.seqno,
-            created_at=mess.created_at,
-            data=mess.data,
+            seq_no=mess.seqno if mess.seqno is not None else 0,
+            created_at=mess.created_at,  # type: ignore[arg-type]
+            data=data_bytes,
             metadata_items=metadata_items,
-            uncompressed_size=len(mess.data),
+            uncompressed_size=len(data_bytes),
             partitioning=None,
         )
-        self.codec = PublicCodec.RAW
+        self.codec = PublicCodec(PublicCodec.RAW)
 
     def _get_bytes(self, obj: Optional[PublicMessage.SimpleSourceType]) -> bytes:
         if obj is None:
@@ -257,11 +279,11 @@ _message_data_overhead = (
 def _split_messages_for_send(
     messages: List[InternalMessage],
 ) -> List[List[InternalMessage]]:
-    codec_groups = []  # type: List[List[InternalMessage]]
-    for _, messages in itertools.groupby(messages, lambda x: x.codec):
-        codec_groups.append(list(messages))
+    codec_groups: List[List[InternalMessage]] = []
+    for _, group_iter in itertools.groupby(messages, lambda x: x.codec):
+        codec_groups.append(list(group_iter))
 
-    res = []  # type: List[List[InternalMessage]]
+    res: List[List[InternalMessage]] = []
     for codec_group in codec_groups:
         group_by_size = _split_messages_by_size_with_default_overhead(codec_group)
         res.extend(group_by_size)
@@ -282,8 +304,8 @@ def _split_messages_by_size(
     split_size: int,
     get_msg_size: typing.Callable[[InternalMessage], int],
 ) -> List[List[InternalMessage]]:
-    res = []
-    group = []
+    res: List[List[InternalMessage]] = []
+    group: List[InternalMessage] = []
     group_size = 0
 
     for msg in messages:

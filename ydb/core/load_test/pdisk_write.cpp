@@ -1,13 +1,14 @@
 #include <util/random/shuffle.h>
 #include "service_actor.h"
+#include "util.h"
 #include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/control/lib/dynamic_control_board_impl.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <util/random/fast.h>
 #include <util/generic/queue.h>
-#include <ydb/core/control/lib/immediate_control_board_impl.h>
 
 namespace NKikimr {
 
@@ -17,13 +18,6 @@ class TPDiskWriterLoadTestActor : public TActorBootstrapped<TPDiskWriterLoadTest
         ui32 NumSlots;
         ui32 SlotSizeBlocks;
         ui32 Weight;
-        ui64 AccumWeight;
-
-        struct TFindByWeight {
-            bool operator ()(ui64 left, const TChunkInfo& right) const {
-                return left < right.AccumWeight;
-            }
-        };
     };
 
     struct TParts : public NPDisk::TEvChunkWrite::IParts {
@@ -81,6 +75,7 @@ class TPDiskWriterLoadTestActor : public TActorBootstrapped<TPDiskWriterLoadTest
     const TActorId Parent;
     ui64 Tag;
     ui32 DurationSeconds;
+    TDuration DelayBeforeMeasurements;
     ui32 IntervalMsMin = 0;
     ui32 IntervalMsMax = 0;
     TControlWrapper MaxInFlight;
@@ -107,6 +102,7 @@ class TPDiskWriterLoadTestActor : public TActorBootstrapped<TPDiskWriterLoadTest
     bool Reuse;
     bool IsWardenlessTest;
     bool Harakiri = false;
+    bool TestStarted = false;
 
     TInstant TestStartTime;
     TInstant MeasurementStartTime;
@@ -145,6 +141,7 @@ public:
 
         VERIFY_PARAM(DurationSeconds);
         DurationSeconds = cmd.GetDurationSeconds();
+        DelayBeforeMeasurements = TDuration::Seconds(cmd.GetDelayBeforeMeasurementsSeconds());
         Y_ASSERT(DurationSeconds > DelayBeforeMeasurements.Seconds());
         Report->Duration = TDuration::Seconds(DurationSeconds);
 
@@ -180,7 +177,6 @@ public:
                     chunk.GetSlots(),
                     0,
                     chunk.GetWeight(),
-                    0,
                 });
         }
 
@@ -208,9 +204,8 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         Become(&TPDiskWriterLoadTestActor::StateFunc);
-        ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
-        AppData(ctx)->Icb->RegisterLocalControl(MaxInFlight, Sprintf("PDiskWriteLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
+        AppData(ctx)->Dcb->RegisterLocalControl(MaxInFlight, Sprintf("PDiskWriteLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
         if (IsWardenlessTest) {
             SendRequest(ctx, std::make_unique<NPDisk::TEvYardInit>(OwnerRound, VDiskId, PDiskGuid));
         } else {
@@ -242,8 +237,6 @@ public:
         for (TChunkInfo& chunk : Chunks) {
             chunk.SlotSizeBlocks = PDiskParams->ChunkSize / PDiskParams->AppendBlockSize / chunk.NumSlots;
         }
-        TestStartTime = TAppData::TimeProvider->Now();
-        MeasurementStartTime = TestStartTime + DelayBeforeMeasurements;
         CheckForReserve(ctx);
     }
 
@@ -371,6 +364,13 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     void SendWriteRequests(const TActorContext& ctx) {
+        if (!TestStarted) {
+            TestStarted = true;
+            TestStartTime = TAppData::TimeProvider->Now();
+            MeasurementStartTime = TestStartTime + DelayBeforeMeasurements;
+            ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);
+        }
+
         while (InFlight < MaxInFlight) {
             // Randomize interval (if required)
             if (!IntervalMs && IntervalMsMax && IntervalMsMin) {
@@ -393,21 +393,23 @@ public:
                 IntervalMs = 0; // To enforce regeneration of new random interval
             }
 
-            // Prepare to send request
-            ui64 accumWeight = 0;
-            for (TChunkInfo& chunkInfo : Chunks) {
-                chunkInfo.AccumWeight = accumWeight;
-                if (!chunkInfo.WriteQueue.empty()) {
-                    accumWeight += chunkInfo.Weight;
+            // Prepare to send request.
+            TWeightedIndices weightedIndices;
+            TVector<ui32> chunkIndices;
+            chunkIndices.reserve(Chunks.size());
+            for (ui32 i = 0; i < Chunks.size(); ++i) {
+                if (!Chunks[i].WriteQueue.empty()) {
+                    weightedIndices.AddWeight(Chunks[i].Weight);
+                    chunkIndices.push_back(i);
                 }
             }
-            if (!accumWeight) {
+            if (weightedIndices.Empty()) {
                 break;
             }
 
-            ui64 w = (ui64(Rng()) << 32 | Rng()) % accumWeight;
-            auto it = std::prev(std::upper_bound(Chunks.begin(), Chunks.end(), w, TChunkInfo::TFindByWeight()));
-            TChunkInfo& chunkInfo = *it;
+            const ui32 selectedIdx = weightedIndices.GetRandomIndex();
+            Y_ABORT_UNLESS(selectedIdx < chunkIndices.size());
+            TChunkInfo& chunkInfo = Chunks[chunkIndices[selectedIdx]];
 
             Y_ABORT_UNLESS(!chunkInfo.WriteQueue.empty());
 

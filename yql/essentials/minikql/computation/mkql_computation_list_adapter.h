@@ -3,20 +3,20 @@
 #include "mkql_computation_node_impl.h"
 #include <yql/essentials/minikql/mkql_alloc.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 template <typename TVectorType>
-class TVectorListAdapter : public TComputationValue<TVectorListAdapter<TVectorType>> {
+class TVectorListAdapter: public TComputationValue<TVectorListAdapter<TVectorType>> {
 public:
-    typedef typename TVectorType::value_type TItem;
-    typedef TVectorListAdapter<TVectorType> TSelf;
-    typedef std::function<NUdf::TUnboxedValue(const TItem&)> TItemFactory;
-    typedef TComputationValue<TVectorListAdapter<TVectorType>> TBase;
+    using TItem = typename TVectorType::value_type;
+    using TSelf = TVectorListAdapter<TVectorType>;
+    using TItemFactory = std::function<NUdf::TUnboxedValue(const TItem&)>;
+    using TBase = TComputationValue<TVectorListAdapter<TVectorType>>;
 
     class TIterator: public TTemporaryComputationValue<TIterator> {
     public:
-        TIterator(TMemoryUsageInfo* memInfo, const TVectorType& list, TItemFactory itemFactory, ui64 start, ui64 finish, bool reversed)
+        TIterator(TMemoryUsageInfo* memInfo, const TVectorType& list,
+                  TItemFactory itemFactory, ui64 start, ui64 finish, bool reversed)
             : TTemporaryComputationValue<TIterator>(memInfo)
             , List_(list)
             , ItemFactory_(itemFactory)
@@ -29,20 +29,23 @@ public:
 
     private:
         bool Next(NUdf::TUnboxedValue& value) override {
-            if (!Skip())
+            if (!Skip()) {
                 return false;
+            }
             value = ItemFactory_(List_[Index_]);
             return true;
         }
 
         bool Skip() override {
             if (!Reversed_) {
-                if (Index_ + 1 >= Finish_)
+                if (Index_ + 1 >= Finish_) {
                     return false;
+                }
                 ++Index_;
             } else {
-                if (Index_ < Start_ + 1)
+                if (Index_ < Start_ + 1) {
                     return false;
+                }
                 --Index_;
             }
 
@@ -57,13 +60,14 @@ public:
         ui64 Index_;
     };
 
-    class TDictIterator : public TTemporaryComputationValue<TDictIterator> {
+    class TDictIterator: public TTemporaryComputationValue<TDictIterator> {
     public:
         TDictIterator(TMemoryUsageInfo* memInfo, THolder<TIterator>&& iter)
             : TTemporaryComputationValue<TDictIterator>(memInfo)
             , Iter_(std::move(iter))
             , Index_(Max<ui64>())
-        {}
+        {
+        }
 
     private:
         bool Next(NUdf::TUnboxedValue& key) override {
@@ -98,11 +102,11 @@ public:
     };
 
     TVectorListAdapter(
-            TMemoryUsageInfo* memInfo,
-            const TVectorType& list,
-            TItemFactory itemFactory,
-            ui64 start, ui64 finish,
-            bool reversed)
+        TMemoryUsageInfo* memInfo,
+        const TVectorType& list,
+        TItemFactory itemFactory,
+        ui64 start, ui64 finish,
+        bool reversed)
         : TBase(memInfo)
         , List_(list)
         , ItemFactory_(itemFactory)
@@ -180,11 +184,15 @@ private:
     }
 
     NUdf::TUnboxedValue GetKeysIterator() const override {
-        return NUdf::TUnboxedValuePod(new TDictIterator(this->GetMemInfo(), MakeHolder<TIterator>(this->GetMemInfo(), List_, ItemFactory_, Start_, Finish_, Reversed_)));
+        return NUdf::TUnboxedValuePod(new TDictIterator(
+            this->GetMemInfo(),
+            MakeHolder<TIterator>(this->GetMemInfo(), List_, ItemFactory_, Start_, Finish_, Reversed_)));
     }
 
     NUdf::TUnboxedValue GetDictIterator() const override {
-        return NUdf::TUnboxedValuePod(new TDictIterator(this->GetMemInfo(), MakeHolder<TIterator>(this->GetMemInfo(), List_, ItemFactory_, Start_, Finish_, Reversed_)));
+        return NUdf::TUnboxedValuePod(new TDictIterator(
+            this->GetMemInfo(),
+            MakeHolder<TIterator>(this->GetMemInfo(), List_, ItemFactory_, Start_, Finish_, Reversed_)));
     }
 
     ui64 GetDictLength() const override {
@@ -208,30 +216,34 @@ private:
 };
 
 template <typename TVectorType>
-class TOwningVectorListAdapter : private TVectorType, public TVectorListAdapter<TVectorType> {
+class TOwningVectorListAdapter: private TVectorType, public TVectorListAdapter<TVectorType> {
 public:
     using TAdapterBase = TVectorListAdapter<TVectorType>;
 
     TOwningVectorListAdapter(
-            TMemoryUsageInfo* memInfo,
-            TVectorType&& list,
-            typename TAdapterBase::TItemFactory itemFactory,
-            ui64 start, ui64 finish,
-            bool reversed)
+        TMemoryUsageInfo* memInfo,
+        TVectorType&& list,
+        typename TAdapterBase::TItemFactory itemFactory,
+        ui64 start, ui64 finish,
+        bool reversed)
         : TVectorType(std::move(list))
-        , TAdapterBase(memInfo, *this, itemFactory, start, finish, reversed) {}
+        , TAdapterBase(memInfo, *this, itemFactory, start, finish, reversed)
+    {
+    }
 
     TOwningVectorListAdapter(
-            TMemoryUsageInfo* memInfo,
-            const TVectorType& list,
-            typename TAdapterBase::TItemFactory itemFactory,
-            ui64 start, ui64 finish,
-            bool reversed)
+        TMemoryUsageInfo* memInfo,
+        const TVectorType& list,
+        typename TAdapterBase::TItemFactory itemFactory,
+        ui64 start, ui64 finish,
+        bool reversed)
         : TVectorType(list)
-        , TAdapterBase(memInfo, *this, itemFactory, start, finish, reversed) {}
+        , TAdapterBase(memInfo, *this, itemFactory, start, finish, reversed)
+    {
+    }
 };
 
-template<typename TVectorType>
+template <typename TVectorType>
 NUdf::TUnboxedValue CreateOwningVectorListAdapter(
     TVectorType&& list,
     typename TVectorListAdapter<std::remove_reference_t<TVectorType>>::TItemFactory itemFactory,
@@ -243,5 +255,4 @@ NUdf::TUnboxedValue CreateOwningVectorListAdapter(
         &memInfo, std::forward<TVectorType>(list), itemFactory, start, finish, reversed));
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

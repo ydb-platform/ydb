@@ -1,4 +1,6 @@
+{%- set copy_files = current_target.target_commands|selectattr("macro", "eq", "copy_file") -%}
 {%- if copy_files|length -%}
+{%-     set current_target_object_indexes = current_target_object_indexes + copy_files|map(attribute='_object_index') -%}
 {%-     for copy in copy_files -%}
 {%-         set src = copy.args[0] -%}
 {%-         set dst = copy.args[1] -%}
@@ -13,7 +15,7 @@ val {{ varprefix }}{{ copy['_object_index'] }} = tasks.register<Copy>("{{ varpre
     from({{ PatchRoots(src_path, copy['flags']|select("eq", "src_is_depend")|length) }}) {
         include("{{ src_name }}")
     }
-    into({{ PatchRoots(dst_path, false, true) }})
+    into({{ PatchRoots(dst_path, false, "_") }})
 {%-         if src_name != dst_name %}
     rename("{{ src_name }}", "{{ dst_name }}")
 {%-         endif %}

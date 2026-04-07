@@ -6,10 +6,10 @@
 
 namespace NSQLHighlight {
 
-    IGenerator::TPtr MakeJsonGenerator() {
-        return MakeOnlyFileGenerator([](IOutputStream& out, const THighlighting& highlighting, bool /* ansi */) {
-            Print(out, ToJson(highlighting));
-        });
-    }
+IGenerator::TPtr MakeJsonGenerator() {
+    return MakeOnlyFileGenerator([](IOutputStream& out, const THighlighting& highlighting, bool /* ansi */) {
+        Print(out, ToJson(highlighting));
+    });
+}
 
 } // namespace NSQLHighlight

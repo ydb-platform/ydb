@@ -80,6 +80,11 @@
     "kind": "Normal"
   },
   {
+    "name": "AsOptionalType",
+    "kind": "Normal",
+    "minLangVer": "2026.01"
+  },
+  {
     "name": "AsSet",
     "kind": "Normal"
   },
@@ -130,6 +135,10 @@
   {
     "name": "BitXor",
     "kind": "Agg"
+  },
+  {
+    "name": "Block",
+    "kind": "Normal"
   },
   {
     "name": "BlockWardHistogram",
@@ -214,6 +223,11 @@
   {
     "name": "CombineMembers",
     "kind": "Normal"
+  },
+  {
+    "name": "Concat",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "Corr",
@@ -344,6 +358,11 @@
     "kind": "Normal"
   },
   {
+    "name": "DictInsert",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
     "name": "DictItems",
     "kind": "Normal"
   },
@@ -372,6 +391,11 @@
     "kind": "Normal"
   },
   {
+    "name": "DictRemove",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
     "name": "DictType",
     "kind": "Normal"
   },
@@ -384,6 +408,26 @@
     "kind": "Normal"
   },
   {
+    "name": "DictUpdate",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
+    "name": "DictUpsert",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
+    "name": "DynamicLinearType",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
+    "name": "DynamicLinearTypeHandle",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
     "name": "DynamicVariant",
     "kind": "Normal"
   },
@@ -392,11 +436,19 @@
     "kind": "Normal"
   },
   {
+    "name": "EmptyDictType",
+    "kind": "Normal"
+  },
+  {
     "name": "EmptyDictTypeHandle",
     "kind": "Normal"
   },
   {
     "name": "EmptyList",
+    "kind": "Normal"
+  },
+  {
+    "name": "EmptyListType",
     "kind": "Normal"
   },
   {
@@ -512,6 +564,16 @@
     "kind": "Normal"
   },
   {
+    "name": "FromDynamicLinear",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
+    "name": "FromMutDict",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
     "name": "FromPg",
     "kind": "Normal"
   },
@@ -620,12 +682,32 @@
     "kind": "Normal"
   },
   {
+    "name": "LinearDestroy",
+    "kind": "Normal",
+    "minLangVer": "2025.05"
+  },
+  {
     "name": "LinearHistogram",
     "kind": "Agg"
   },
   {
     "name": "LinearHistogramCDF",
     "kind": "Agg"
+  },
+  {
+    "name": "LinearItemType",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
+    "name": "LinearType",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
+    "name": "LinearTypeHandle",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "ListAggregate",
@@ -916,6 +998,71 @@
     "kind": "Agg"
   },
   {
+    "name": "MutDictContains",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
+    "name": "MutDictCreate",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
+    "name": "MutDictHasItems",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
+    "name": "MutDictInsert",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
+    "name": "MutDictItems",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
+    "name": "MutDictKeys",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
+    "name": "MutDictLength",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
+    "name": "MutDictLookup",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
+    "name": "MutDictPayloads",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
+    "name": "MutDictPop",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
+    "name": "MutDictRemove",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
+    "name": "MutDictUpdate",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
+    "name": "MutDictUpsert",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
     "name": "NTile",
     "kind": "Window"
   },
@@ -930,6 +1077,15 @@
   {
     "name": "NthValue",
     "kind": "Window"
+  },
+  {
+    "name": "NullIf",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
+    "name": "NullType",
+    "kind": "Normal"
   },
   {
     "name": "NullTypeHandle",
@@ -1036,6 +1192,11 @@
     "kind": "Agg"
   },
   {
+    "name": "PositionOf",
+    "kind": "Normal",
+    "minLangVer": "2026.01"
+  },
+  {
     "name": "QuoteCode",
     "kind": "Normal"
   },
@@ -1052,8 +1213,18 @@
     "kind": "Normal"
   },
   {
+    "name": "RandomSample",
+    "kind": "Agg",
+    "minLangVer": "2025.04"
+  },
+  {
     "name": "RandomUuid",
     "kind": "Normal"
+  },
+  {
+    "name": "RandomValue",
+    "kind": "Agg",
+    "minLangVer": "2025.04"
   },
   {
     "name": "Rank",
@@ -1145,6 +1316,38 @@
   },
   {
     "name": "SetUnion",
+    "kind": "Normal"
+  },
+  {
+    "name": "SimplePg::ceil",
+    "kind": "Normal"
+  },
+  {
+    "name": "SimplePg::date_part",
+    "kind": "Normal"
+  },
+  {
+    "name": "SimplePg::date_trunc",
+    "kind": "Normal"
+  },
+  {
+    "name": "SimplePg::floor",
+    "kind": "Normal"
+  },
+  {
+    "name": "SimplePg::now",
+    "kind": "Normal"
+  },
+  {
+    "name": "SimplePg::round",
+    "kind": "Normal"
+  },
+  {
+    "name": "SimplePg::to_char",
+    "kind": "Normal"
+  },
+  {
+    "name": "SimplePg::to_date",
     "kind": "Normal"
   },
   {
@@ -1344,6 +1547,11 @@
     "kind": "Normal"
   },
   {
+    "name": "ToDynamicLinear",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
     "name": "ToHashedDict",
     "kind": "Normal"
   },
@@ -1354,6 +1562,11 @@
   {
     "name": "ToMultiDict",
     "kind": "Normal"
+  },
+  {
+    "name": "ToMutDict",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "ToPg",
@@ -1508,12 +1721,19 @@
     "kind": "Normal"
   },
   {
+    "name": "WithIssue",
+    "kind": "Normal",
+    "minLangVer": "2026.01"
+  },
+  {
     "name": "WithSideEffects",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "WithSideEffectsMode",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "WorldCode",

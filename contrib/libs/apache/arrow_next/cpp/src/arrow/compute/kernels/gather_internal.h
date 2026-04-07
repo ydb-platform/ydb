@@ -22,12 +22,12 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "arrow/array/data.h"
-#include "arrow/util/bit_block_counter.h"
-#include "arrow/util/bit_run_reader.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/bitmap_ops.h"
-#include "arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/data.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_block_counter.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_run_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_ops.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
 
 // Implementation helpers for kernels that need to load/gather fixed-width
 // data from multiple, arbitrary indices.

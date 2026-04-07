@@ -8,14 +8,15 @@ PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/scheme
     ydb/core/formats/arrow/accessor
-    ydb/core/formats/arrow/serializer
     ydb/core/formats/arrow/dictionary
-    ydb/core/formats/arrow/transformer
+    ydb/core/formats/arrow/hash
+    ydb/core/formats/arrow/printer
     ydb/core/formats/arrow/reader
     ydb/core/formats/arrow/rows
     ydb/core/formats/arrow/save_load
+    ydb/core/formats/arrow/serializer
     ydb/core/formats/arrow/splitter
-    ydb/core/formats/arrow/hash
+    ydb/core/formats/arrow/transformer
     ydb/library/actors/core
     ydb/library/arrow_kernels
     yql/essentials/types/binary_json
@@ -23,6 +24,8 @@ PEERDIR(
     ydb/library/formats/arrow
     ydb/library/services
     yql/essentials/core/arrow_kernels/request
+    yql/essentials/minikql
+    ydb/core/kqp/common/result_set_format
 )
 
 YQL_LAST_ABI_VERSION()
@@ -30,6 +33,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     arrow_batch_builder.cpp
     arrow_helpers.cpp
+    arrow_helpers_minikql.cpp
     arrow_filter.cpp
     converter.cpp
     converter.h

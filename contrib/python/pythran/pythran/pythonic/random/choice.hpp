@@ -16,9 +16,7 @@ namespace random
   {
 
     template <class Seq>
-    typename std::enable_if<types::has_size<Seq>::value,
-                            typename Seq::value_type>::type
-    choice(Seq const &seq)
+    std::enable_if_t<types::has_size<Seq>::value, typename Seq::value_type> choice(Seq const &seq)
     {
       auto tmp = seq.begin();
       // std::advance not usable because it requires operator--
@@ -28,11 +26,9 @@ namespace random
     }
 
     template <class Seq>
-    typename std::enable_if<!types::has_size<Seq>::value,
-                            typename Seq::value_type>::type
-    choice(Seq const &seq)
+    std::enable_if_t<!types::has_size<Seq>::value, typename Seq::value_type> choice(Seq const &seq)
     {
-      using dtype = typename std::decay<typename Seq::value_type>::type;
+      using dtype = std::decay_t<typename Seq::value_type>;
       std::vector<dtype, utils::allocator<dtype>> tmp(seq.begin(), seq.end());
       return tmp[long(random() * tmp.size())];
     }

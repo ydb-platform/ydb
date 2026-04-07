@@ -133,6 +133,10 @@ TExprNode::TPtr MakeOptionalBool(TPositionHandle position, bool value, TExprCont
     return ctx.NewCallable(position, "Just", { MakeBool(position, value, ctx)});
 }
 
+TExprNode::TPtr MakeString(TPositionHandle position, TStringBuf buf, TExprContext& ctx) {
+    return ctx.Builder(position).Callable("String").Atom(0, buf).Seal().Build();
+}
+
 TExprNode::TPtr MakePgBool(TPositionHandle position, bool value, TExprContext& ctx) {
     return ctx.NewCallable(position, "PgConst", {
         ctx.NewAtom(position, value ? "t" : "f", TNodeFlags::Default),
@@ -497,6 +501,22 @@ template bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& ar
 template bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, std::map<std::string_view, TExprNode::TPtr>& usedFields,
                             const TParentsMap& parentsMap, bool allowDependsOn);
 
+bool IsFieldSubset(const TStructExprType& structType, const TStructExprType& sourceStructType) {
+    for (auto& item : structType.GetItems()) {
+        auto name = item->GetName();
+        auto type = item->GetItemType();
+        if (auto idx = sourceStructType.FindItem(name)) {
+            if (sourceStructType.GetItems()[*idx]->GetItemType() == type) {
+                continue;
+            }
+        }
+
+        return false;
+    }
+
+    return true;
+}
+
 TExprNode::TPtr AddMembersUsedInside(const TExprNode::TPtr& start, const TExprNode& arg, TExprNode::TPtr&& members, const TParentsMap& parentsMap, TExprContext& ctx) {
     if (!members || !start || &arg == start.Get()) {
         return {};
@@ -849,13 +869,13 @@ TExprNode::TPtr MakeSingleGroupRow(const TExprNode& aggregateNode, TExprNode::TP
                 .Build());
         } else {
             const auto& multiFields = column->Child(0)->Children();
-            for (ui32 field = 0; field < multiFields.size(); ++field) {
+            for (const auto& multiField : multiFields) {
                 finalRowNodes.push_back(ctx.Builder(pos)
                     .List()
-                        .Atom(0, multiFields[field]->Content())
+                        .Atom(0, multiField->Content())
                         .Callable(1, "Member")
                             .Add(0, opt)
-                            .Atom(1, multiFields[field]->Content())
+                            .Atom(1, multiField->Content())
                         .Seal()
                     .Seal()
                     .Build());
@@ -1828,9 +1848,9 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> ReplaceDependsOn(TExprNode::TPtr lam
             if (node->Head().IsList()) {
                 auto dependsOnArgs = node->Head().ChildrenList();
                 bool changed = false;
-                for (size_t i = 0; i < dependsOnArgs.size(); i++) {
-                    if (dependsOnArgs[i].Get() == arg) {
-                        dependsOnArgs[i] = placeHolder;
+                for (auto& dependsOnArg : dependsOnArgs) {
+                    if (dependsOnArg.Get() == arg) {
+                        dependsOnArg = placeHolder;
                         changed = true;
                     }
                 }
@@ -2134,12 +2154,12 @@ TExprNode::TPtr FindNonYieldTransparentNode(const TExprNode::TPtr& root, const T
         });
     }
 
-    static const THashSet<TStringBuf> WHITE_LIST = {"EmptyIterator"sv, TCoToStream::CallableName(), TCoIterator::CallableName(),
+    static const THashSet<TStringBuf> WhiteList = {"EmptyIterator"sv, TCoToStream::CallableName(), TCoIterator::CallableName(),
         TCoToFlow::CallableName(), TCoApply::CallableName(), TCoNth::CallableName(), TCoMux::CallableName()};
     // Find all other flow sources (readers)
     auto sources = FindNodes(from,
         [](const TExprNode::TPtr& node) {
-            return !node->IsCallable(WHITE_LIST)
+            return !node->IsCallable(WhiteList)
                 && node->IsCallable()
                 && IsFlowOrStream(*node)
                 && (node->ChildrenSize() == 0 || !IsFlowOrStream(node->Head()));
@@ -2158,7 +2178,7 @@ bool IsYieldTransparent(const TExprNode::TPtr& root, const TTypeAnnotationContex
 }
 
 TMaybe<bool> IsStrictNoRecurse(const TExprNode& node) {
-    if (node.IsCallable({"Unwrap", "Ensure", "ScriptUdf", "Error", "ErrorType"})) {
+    if (node.IsCallable({"Unwrap", "Ensure", "ScriptUdf", "Error", "ErrorType", "Unpickle", "FromDynamicLinear"})) {
         return false;
     }
     if (node.IsCallable("Udf")) {
@@ -2285,13 +2305,12 @@ bool HasOnlyOneJoinType(const TExprNode& joinTree, TStringBuf joinType) {
 
 void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, const TParentsMap& parentsMap,
     TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx,
-    std::function<TExprNode::TPtr(const TExprNode::TPtr&, const TExprNode::TPtr&, const TParentsMap&, TExprContext&)> handler,
-    bool withOptionals)
+    std::function<TExprNode::TPtr(const TExprNode::TPtr&, const TExprNode::TPtr&, const TParentsMap&, TExprContext&)> handler)
 {
     auto kind = node->GetTypeAnn()->GetKind();
 
     // Ignore stream input, because it cannot be used multiple times
-    if (!(kind == ETypeAnnotationKind::List || (withOptionals && kind == ETypeAnnotationKind::Optional))) {
+    if (!(kind == ETypeAnnotationKind::List || kind == ETypeAnnotationKind::Optional)) {
         return;
     }
 
@@ -2799,8 +2818,12 @@ bool IsNormalizedDependsOn(const TExprNode& node) {
     return false;
 }
 
+bool IsForbidConstantDependsEnabled(const TTypeAnnotationContext& types) {
+    return !IsOptimizerDisabled<ForbidConstantDependsOnFuseOptName>(types);
+}
+
 bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeAnnotationContext& types) {
-    if (!IsOptimizerEnabled<ForbidConstantDependsOnFuseOptName>(types) || IsOptimizerDisabled<ForbidConstantDependsOnFuseOptName>(types)) {
+    if (!IsForbidConstantDependsEnabled(types)) {
         return true;
     }
 
@@ -2839,6 +2862,18 @@ bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeA
     } else {
         YQL_ENSURE(false, "Incompatible lambdas for fuse");
     }
+}
+
+bool CanApplyExtractMembersToPartitionsByKeys(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char OptName[] = "ExtractMembersForPartitionsByKeys";
+    return !IsOptimizerDisabled<OptName>(*types);
+}
+
+bool IsEmitPruneKeysEnabled(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char OptName[] = "EmitPruneKeys";
+    return IsOptimizerEnabled<OptName>(*types) && !IsOptimizerDisabled<OptName>(*types);
 }
 
 }

@@ -4,27 +4,26 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/ast/serialize/yql_expr_serialize.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
-class TFormatCodeWrapper : public TMutableComputationNode<TFormatCodeWrapper> {
-    typedef TMutableComputationNode<TFormatCodeWrapper> TBaseComputation;
+class TFormatCodeWrapper: public TMutableComputationNode<TFormatCodeWrapper> {
+    using TBaseComputation = TMutableComputationNode<TFormatCodeWrapper>;
+
 public:
     TFormatCodeWrapper(TComputationMutables& mutables, IComputationNode* code, bool annotatePosition, ui32 exprCtxMutableIndex)
         : TBaseComputation(mutables)
         , Code_(code)
         , AnnotatePosition_(annotatePosition)
         , ExprCtxMutableIndex_(exprCtxMutableIndex)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         auto codeValue = Code_->GetValue(ctx);
         auto code = GetYqlCode(codeValue);
         NYql::TExprContext& exprCtx = GetExprContext(ctx, ExprCtxMutableIndex_);
         NYql::TConvertToAstSettings settings;
-        settings.AnnotationFlags = AnnotatePosition_ ?
-            NYql::TExprAnnotationFlags::Position :
-            NYql::TExprAnnotationFlags::None;
+        settings.AnnotationFlags = AnnotatePosition_ ? NYql::TExprAnnotationFlags::Position : NYql::TExprAnnotationFlags::None;
         settings.RefAtoms = true;
         settings.AllowFreeArgs = true;
         auto ast = NYql::ConvertToAst(*code, exprCtx, settings);
@@ -42,22 +41,24 @@ private:
     const ui32 ExprCtxMutableIndex_;
 };
 
-class TSerializeCodeWrapper : public TMutableComputationNode<TSerializeCodeWrapper> {
-    typedef TMutableComputationNode<TSerializeCodeWrapper> TBaseComputation;
+class TSerializeCodeWrapper: public TMutableComputationNode<TSerializeCodeWrapper> {
+    using TBaseComputation = TMutableComputationNode<TSerializeCodeWrapper>;
+
 public:
     TSerializeCodeWrapper(TComputationMutables& mutables, IComputationNode* code, ui32 exprCtxMutableIndex)
         : TBaseComputation(mutables)
         , Code_(code)
         , ExprCtxMutableIndex_(exprCtxMutableIndex)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         auto codeValue = Code_->GetValue(ctx);
         auto code = GetYqlCode(codeValue);
         NYql::TExprContext& exprCtx = GetExprContext(ctx, ExprCtxMutableIndex_);
         auto str = NYql::SerializeGraph(*code, exprCtx,
-            NYql::TSerializedExprGraphComponents::Graph |
-            NYql::TSerializedExprGraphComponents::Positions);
+                                        NYql::TSerializedExprGraphComponents::Graph |
+                                            NYql::TSerializedExprGraphComponents::Positions);
         return MakeString(str);
     }
 
@@ -77,11 +78,9 @@ IComputationNode* WrapFormatCode(TCallable& callable, const TComputationNodeFact
     return new TFormatCodeWrapper(ctx.Mutables, code, AnnotatePosition, exprCtxMutableIndex);
 }
 
-template IComputationNode* WrapFormatCode<false>
-    (TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
+template IComputationNode* WrapFormatCode<false>(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
 
-template IComputationNode* WrapFormatCode<true>
-    (TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
+template IComputationNode* WrapFormatCode<true>(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
 
 IComputationNode* WrapSerializeCode(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
@@ -89,5 +88,4 @@ IComputationNode* WrapSerializeCode(TCallable& callable, const TComputationNodeF
     return new TSerializeCodeWrapper(ctx.Mutables, code, exprCtxMutableIndex);
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

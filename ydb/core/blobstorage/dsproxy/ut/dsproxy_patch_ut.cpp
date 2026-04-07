@@ -55,11 +55,6 @@ struct TTestArgs {
         case TErasureType::ErasureNone:
             PartPlacement[0].push_back(1);
             break;
-        case TErasureType::ErasureMirror3:
-            PartPlacement[0].push_back(1);
-            PartPlacement[1].push_back(1);
-            PartPlacement[2].push_back(1);
-            break;
         case TErasureType::ErasureMirror3dc:
             PartPlacement[0].push_back(1);
             PartPlacement[3].push_back(2);
@@ -386,7 +381,7 @@ void ConductNaivePatch(TTestBasicRuntime &runtime, const TTestArgs &args, ENaive
     CTEST << "ConductNaivePatch: Finish\n";
 }
 
-template <typename InnerType> 
+template <typename InnerType>
 TString ToString(const TVector<InnerType> &lst) {
     TStringBuilder bld;
     bld << '[';
@@ -678,7 +673,7 @@ void RunGeneralTest(void(*runner)(TTestBasicRuntime &runtime, const TTestArgs &a
 //    Y_UNIT_TEST_VPATCH(OneErrorAndAllPartExistInStart, erasure)
 //    Y_UNIT_TEST_VPATCH(OnePartLostInStart, erasure)
 //    Y_UNIT_TEST_VPATCH(DeadGroupInStart, erasure)
-//    Y_UNIT_TEST_VPATCH(ErrorDuringVPatchDiff, erasure) 
+//    Y_UNIT_TEST_VPATCH(ErrorDuringVPatchDiff, erasure)
 
     Y_UNIT_TEST_PATCH_PACK(ErasureNone)
     Y_UNIT_TEST_PATCH_PACK(Erasure4Plus2Block)

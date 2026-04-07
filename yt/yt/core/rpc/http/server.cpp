@@ -91,7 +91,7 @@ public:
 
     TFuture<void> GetReadyFuture() const override
     {
-        return VoidFuture;
+        return OKFuture;
     }
 
     TFuture<void> Send(TSharedRefArray message, const NBus::TSendOptions& /*options*/) override
@@ -315,6 +315,12 @@ private:
             auto sslSessionIdIt = cookieMap.find(SessionId2CookieName);
             if (sslSessionIdIt != cookieMap.end()) {
                 getCredentialsExt()->set_ssl_session_id(sslSessionIdIt->second);
+            }
+
+            static const std::string SessionGuardCookieName("sessguard");
+            auto sessionGuardIt = cookieMap.find(SessionGuardCookieName);
+            if (sessionGuardIt != cookieMap.end()) {
+                getCredentialsExt()->set_session_guard(sessionGuardIt->second);
             }
         }
 

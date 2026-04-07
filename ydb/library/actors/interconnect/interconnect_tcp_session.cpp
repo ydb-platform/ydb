@@ -8,7 +8,10 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/util/datetime.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
+#include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
+
+#include <tuple>
 
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
@@ -27,6 +30,14 @@ namespace NActors {
         }
     }
 
+    TStringBuf FormatActivityName(ui32 activityIndex) {
+        return activityIndex == Max<ui32>() ? TStringBuf("manual") : GetActivityTypeName(activityIndex);
+    }
+
+    TStringBuf FormatEventTypeName(const TString& eventTypeName) {
+        return eventTypeName.empty() ? TStringBuf("manual") : TStringBuf(eventTypeName);
+    }
+
     TInterconnectSessionTCP::TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy, TSessionParams params)
         : TActor(&TInterconnectSessionTCP::StateFunc)
         , Created(TInstant::Now())
@@ -34,6 +45,7 @@ namespace NActors {
         , CloseOnIdleWatchdog(GetCloseOnIdleTimeout(), std::bind(&TThis::OnCloseOnIdleTimerHit, this))
         , LostConnectionWatchdog(GetLostConnectionTimeout(), std::bind(&TThis::OnLostConnectionTimerHit, this))
         , Params(std::move(params))
+        , KernelLivenessMode(Params.UseKernelLiveness)
         , TotalOutputQueueSize(0)
         , OutputStuckFlag(false)
         , OutputQueueUtilization(16)
@@ -61,27 +73,48 @@ namespace NActors {
         };
         Pool = std::make_unique<TEventHolderPool>(Proxy->Common, std::move(destroyCallback));
         ChannelScheduler.ConstructInPlace(Proxy->PeerNodeId, Proxy->Common->ChannelsConfig, Proxy->Metrics,
-            Proxy->Common->Settings.MaxSerializedEventSize, Params);
+            Proxy->Common->Settings.MaxSerializedEventSize, Params, Proxy->Common->RdmaMemPool);
 
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] session created", Proxy->PeerNodeId);
         SetPrefix(Sprintf("Session %s [node %" PRIu32 "]", SelfId().ToString().data(), Proxy->PeerNodeId));
         SendUpdateToWhiteboard();
     }
 
-    std::optional<ui8> TInterconnectSessionTCP::GetXDCFlags() const {
+    std::optional<ui8> TInterconnectSessionTCP::GetXDCFlags() const noexcept {
+        std::optional<ui8> flags;
+        using NInterconnect::NRdma::TQueuePair;
         if (XdcSocket) {
+            flags = TInterconnectProxyTCP::TProxyStats::NONE;
             if (ZcProcessor.ZcStateIsOk()) {
-                return TInterconnectProxyTCP::TProxyStats::MSG_ZERO_COPY_SEND;
-            } else {
-                return TInterconnectProxyTCP::TProxyStats::NONE;
+                *flags |= TInterconnectProxyTCP::TProxyStats::MSG_ZERO_COPY_SEND;
             }
-        } else {
-            return {};
+            if (RdmaQp) {
+                TQueuePair::TQpState res = RdmaQp->GetState(false);
+                TQueuePair::TQpS* qpState = std::get_if<TQueuePair::TQpS>(&res);
+                if (qpState) {
+                    if (TQueuePair::IsRtsState(*qpState)) {
+                        *flags |= TInterconnectProxyTCP::TProxyStats::RDMA_READ;
+                    }
+                }
+            }
         }
+        return flags;
     }
 
     void TInterconnectSessionTCP::CloseInputSession() {
         Send(ReceiverId, new TEvInterconnect::TEvCloseInputSession);
+    }
+
+    bool TInterconnectSessionTCP::IsRdmaInUse() {
+        if (RdmaQp) {
+            using NInterconnect::NRdma::TQueuePair;
+            const TQueuePair::TQpState res = RdmaQp->GetState(false);
+            const TQueuePair::TQpS* qpState = std::get_if<TQueuePair::TQpS>(&res);
+            if (qpState) {
+                return TQueuePair::IsRtsState(*qpState);
+            }
+        }
+        return false;
     }
 
     void TInterconnectSessionTCP::Handle(TEvTerminate::TPtr& ev) {
@@ -95,12 +128,18 @@ namespace NActors {
     void TInterconnectSessionTCP::Terminate(TDisconnectReason reason) {
         LOG_INFO_IC_SESSION("ICS01", "socket: %" PRIi64 " reason# %s", (Socket ? i64(*Socket) : -1), reason.ToString().data());
 
+        // Move RdmaQp to the error state to prevent read our memory from the peer side after possible desctuction events
+        if (RdmaQp) {
+            RdmaQp->ToErrorState();
+        }
+
         IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::UnregisterSession, this);
         ShutdownSocket(std::move(reason));
 
         ReceiveContext->Terminated = true; // prevent further message generation by receiving actor
         for (const auto& kv : Subscribers) {
-            Send(kv.first, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, kv.second);
+            Send(kv.first, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, kv.second.Cookie);
+            Proxy->Metrics->AddSubscribersByActivity(kv.second.ActivityIndex, -1);
         }
         Proxy->Metrics->SubSubscribersCount(Subscribers.size());
         Subscribers.clear();
@@ -125,14 +164,13 @@ namespace NActors {
 
         Proxy->Metrics->SubOutputBuffersTotalSize(TotalOutputQueueSize);
         Proxy->Metrics->SubInflightDataAmount(InflightDataAmount);
+        Proxy->Metrics->SubInflightRdmaDataAmount(RdmaInflightDataAmount);
 
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] session destroyed", Proxy->PeerNodeId);
 
-        if (!Subscribers.empty()) {
-            Proxy->Metrics->SubSubscribersCount(Subscribers.size());
-        }
-
         guard->Terminate(std::move(Pool), XdcSocket, TlsActivationContext->AsActorContext());
+
+        SetOutputStuckFlag(false);
 
         TActor::PassAway();
     }
@@ -151,7 +189,9 @@ namespace NActors {
         auto& oChannel = ChannelScheduler->GetOutputChannel(evChannel);
         const bool wasWorking = oChannel.IsWorking();
 
-        const auto [dataSize, event] = oChannel.Push(*ev, *Pool);
+        TInstant now = TlsActivationContext->Now();
+
+        const auto [dataSize, event] = oChannel.Push(*ev, *Pool, now);
         LWTRACK(ForwardEvent, event->Orbit, Proxy->PeerNodeId, event->Descr.Type, event->Descr.Flags, LWACTORID(event->Descr.Recipient), LWACTORID(event->Descr.Sender), event->Descr.Cookie, event->EventSerializedSize);
 
         TotalOutputQueueSize += dataSize;
@@ -196,6 +236,26 @@ namespace NActors {
             Subscribe(ev);
         }
 
+        EnqueueForward(std::move(ev));
+    }
+
+    void TInterconnectSessionTCP::ForwardWithSubscribe(STATEFN_SIG) {
+        Proxy->ValidateEvent(ev, "ForwardWithSubscribe");
+
+        auto msg = ev->Release<TEvForwardSubscribeSession>();
+        Y_ABORT_UNLESS(msg->Event);
+
+        LOG_DEBUG_IC_SESSION("ICS12", "subscribe for session state for %s", msg->Event->Sender.ToString().data());
+        UpdateSubscriber(msg->Event->Sender, msg->Event->Cookie, msg->ActivityIndex, std::move(msg->EventTypeName),
+            std::move(msg->StackTrace));
+        Send(msg->Event->Sender, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId), 0, msg->Event->Cookie);
+
+        EnqueueForward(TAutoPtr<IEventHandle>(msg->Event.Release()));
+    }
+
+    void TInterconnectSessionTCP::EnqueueForward(TAutoPtr<IEventHandle> ev) {
+        Y_ABORT_UNLESS(ev);
+
         if (Y_UNLIKELY(Proxy->Common->Settings.EventDelay)) {
             auto& d = DelayedEvents.emplace_back();
             d.Event = std::move(ev);
@@ -220,18 +280,46 @@ namespace NActors {
 
     void TInterconnectSessionTCP::Subscribe(STATEFN_SIG) {
         LOG_DEBUG_IC_SESSION("ICS04", "subscribe for session state for %s", ev->Sender.ToString().data());
-        const auto [it, inserted] = Subscribers.emplace(ev->Sender, ev->Cookie);
-        if (inserted) {
-            Proxy->Metrics->IncSubscribersCount();
-        } else {
-            it->second = ev->Cookie;
-        }
+        UpdateSubscriber(ev->Sender, ev->Cookie);
         Send(ev->Sender, new TEvInterconnect::TEvNodeConnected(Proxy->PeerNodeId), 0, ev->Cookie);
     }
 
     void TInterconnectSessionTCP::Unsubscribe(STATEFN_SIG) {
         LOG_DEBUG_IC_SESSION("ICS05", "unsubscribe for session state for %s", ev->Sender.ToString().data());
-        Proxy->Metrics->SubSubscribersCount(Subscribers.erase(ev->Sender));
+        if (const auto it = Subscribers.find(ev->Sender); it != Subscribers.end()) {
+            Proxy->Metrics->AddSubscribersByActivity(it->second.ActivityIndex, -1);
+            Subscribers.erase(it);
+            Proxy->Metrics->SubSubscribersCount(1);
+        }
+    }
+
+    void TInterconnectSessionTCP::UpdateSubscriber(const TActorId& actorId, ui64 cookie, ui32 activityIndex, TString eventTypeName,
+            TString stackTrace) {
+        auto updateInfo = [&] (TSubscriberInfo& info) {
+            info.Cookie = cookie;
+            info.ActivityIndex = activityIndex;
+            info.EventTypeName = eventTypeName;
+            info.StackTrace = stackTrace;
+        };
+
+        auto historyKey = TSubscriberHistoryKey(stackTrace, activityIndex, eventTypeName);
+        if (const auto it = SubscriberHistory.find(historyKey); it != SubscriberHistory.end()) {
+            ++it->second;
+        } else if (SubscriberHistory.size() < MaxSubscriberHistoryEntries) {
+            SubscriberHistory.emplace(std::move(historyKey), 1);
+        } else {
+            SubscriberHistoryOverflow = true;
+        }
+
+        const auto [it, inserted] = Subscribers.emplace(actorId, TSubscriberInfo{});
+        if (inserted) {
+            Proxy->Metrics->IncSubscribersCount();
+            Proxy->Metrics->AddSubscribersByActivity(activityIndex, +1);
+        } else if (it->second.ActivityIndex != activityIndex) {
+            Proxy->Metrics->AddSubscribersByActivity(it->second.ActivityIndex, -1);
+            Proxy->Metrics->AddSubscribersByActivity(activityIndex, +1);
+        }
+        updateInfo(it->second);
     }
 
     THolder<TEvHandshakeAck> TInterconnectSessionTCP::ProcessHandshakeRequest(TEvHandshakeAsk::TPtr& ev) {
@@ -254,9 +342,10 @@ namespace NActors {
             return;
         }
 
-        LOG_INFO_IC_SESSION("ICS09", "handshake done sender: %s self: %s peer: %s socket: %" PRIi64,
+        LOG_INFO_IC_SESSION("ICS09", "handshake done sender: %s self: %s peer: %s socket: %" PRIi64 " qp: %d",
             ev->Sender.ToString().data(), ev->Get()->Self.ToString().data(), ev->Get()->Peer.ToString().data(),
-            i64(*ev->Get()->Socket));
+            i64(*ev->Get()->Socket),
+            (ev->Get()->RdmaHanshakeResult.IsOk() ? (int)ev->Get()->RdmaHanshakeResult.GetOk()->RdmaQp->GetQpNum() : -1));
 
         NewConnectionSet = TActivationContext::Now();
         BytesWrittenToSocket = 0;
@@ -265,9 +354,19 @@ namespace NActors {
         Socket = std::move(ev->Get()->Socket);
         XdcSocket = std::move(ev->Get()->XdcSocket);
 
+        NInterconnect::NRdma::ICq::TPtr cq;
+        RdmaQp.reset();
+        if (auto rdmaSuccess = ev->Get()->RdmaHanshakeResult.GetOk()) {
+            cq = std::move(rdmaSuccess->RdmaCq);
+            RdmaQp = std::move(rdmaSuccess->RdmaQp);
+        }
+
         if (XdcSocket) {
             ZcProcessor.ApplySocketOption(*XdcSocket);
         }
+
+        // Apply kernel-liveness decision for this concrete transport connection.
+        KernelLivenessMode = ev->Get()->Params.UseKernelLiveness;
 
         // there may be a race
         const ui64 nextPacket = Max(LastConfirmed, ev->Get()->NextPacket);
@@ -276,7 +375,8 @@ namespace NActors {
         RearmCloseOnIdle();
 
         // reset activity timestamps
-        LastInputActivityTimestamp = LastPayloadActivityTimestamp = TActivationContext::Monotonic();
+        LastInputActivityTimestamp = LastPayloadActivityTimestamp = LastPingTimestamp = TActivationContext::Monotonic();
+        ClockSkewPingTimestamp = TMonotonic::Max();
 
         LOG_INFO_IC_SESSION("ICS10", "traffic start");
 
@@ -289,8 +389,11 @@ namespace NActors {
 
         // create input session actor
         ReceiveContext->UnlockLastPacketSerialToConfirm();
+        // Keep most session params stable, but pass current transport-level liveness mode.
+        TSessionParams inputSessionParams = Params;
+        inputSessionParams.UseKernelLiveness = KernelLivenessMode;
         auto actor = MakeHolder<TInputSessionTCP>(SelfId(), Socket, XdcSocket, ReceiveContext, Proxy->Common,
-            Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), Params);
+            Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), std::move(inputSessionParams), RdmaQp, std::move(cq));
         ReceiverId = RegisterWithSameMailbox(actor.Release());
 
         // register our socket in poller actor
@@ -305,6 +408,10 @@ namespace NActors {
         LostConnectionWatchdog.Disarm();
         Proxy->Metrics->SetConnected(1);
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] connected", Proxy->PeerNodeId);
+        if (Proxy->Common->Settings.MergePerHostCounters) {
+            LOG_INFO_IC_SESSION("ICS80", "peer-level connect PeerNodeId# %" PRIu32 " Peer# %s Host# %s",
+                Proxy->PeerNodeId, Proxy->Metrics->GetHumanFriendlyPeerHostName().data(), Proxy->TechnicalPeerHostName.data());
+        }
 
         // arm pinger timer
         ResetFlushLogic();
@@ -335,6 +442,7 @@ namespace NActors {
         LOG_DEBUG_IC_SESSION("ICS06", "rewind SendQueue size# %zu LastConfirmed# %" PRIu64 " NextSerial# %" PRIu64,
             SendQueue.size(), LastConfirmed, serial);
 
+        SetOutputStuckFlag(NumEventsInQueue != 0);
         SwitchStuckPeriod();
 
         LastHandshakeDone = TActivationContext::Now();
@@ -442,7 +550,7 @@ namespace NActors {
             bool canProducePackets;
             bool canWriteData;
 
-            canProducePackets = NumEventsInQueue && InflightDataAmount < GetTotalInflightAmountOfData() &&
+            canProducePackets = NumEventsInQueue && (InflightDataAmount + RdmaInflightDataAmount) < GetTotalInflightAmountOfData() &&
                 GetUnsentSize() < GetUnsentLimit();
 
             canWriteData = ((OutgoingStream || OutOfBandStream) && !ReceiveContext->MainWriteBlocked) ||
@@ -479,8 +587,12 @@ namespace NActors {
         // we exit cycle
         static constexpr ui32 maxBytesToProduce = 64 * 1024;
         ui32 bytesProduced = 0;
-        while (NumEventsInQueue && InflightDataAmount < GetTotalInflightAmountOfData() && GetUnsentSize() < GetUnsentLimit()) {
-            if ((bytesProduced && TimeLimit->CheckExceeded()) || bytesProduced >= maxBytesToProduce) {
+        // Give more chanse to send XDC command via regular channel after RDMA region preparation.
+        // It reduces rdma memory usage and latency but in theory may also decrease effecincy of regular tcp channel in case of mixed RDMA + TCP traffic
+        // TODO (dcherednik): recheck impact on the huge clusters
+        const ui64 rdmaBytesToProduce = RdmaInflightDataAmount; 
+        while (NumEventsInQueue &&  (InflightDataAmount + RdmaInflightDataAmount) < GetTotalInflightAmountOfData() && GetUnsentSize() < GetUnsentLimit()) {
+            if ((bytesProduced && TimeLimit->CheckExceeded()) || bytesProduced >= maxBytesToProduce || RdmaInflightDataAmount > rdmaBytesToProduce) {
                 break;
             }
             try {
@@ -550,7 +662,13 @@ namespace NActors {
             LostConnectionWatchdog.Rearm(SelfId());
             Proxy->Metrics->SetConnected(0);
             Proxy->RegisterDisconnect();
+            SetOutputStuckFlag(false);
             LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] disconnected", Proxy->PeerNodeId);
+            if (Proxy->Common->Settings.MergePerHostCounters) {
+                LOG_NOTICE_IC_SESSION("ICS81", "peer-level disconnect PeerNodeId# %" PRIu32 " Peer# %s Host# %s Reason# %s",
+                    Proxy->PeerNodeId, Proxy->Metrics->GetHumanFriendlyPeerHostName().data(),
+                    Proxy->TechnicalPeerHostName.data(), reason.ToString().data());
+            }
         }
         if (XdcSocket) {
             // call shutdown but do not call close and do not free wrapper object - we need descriptor to finish ZC op
@@ -822,9 +940,12 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::ScheduleFlush() {
-        if (FlushSchedule.empty() || ForcePacketTimestamp < FlushSchedule.top()) {
-            Schedule(ForcePacketTimestamp, new TEvFlush);
-            FlushSchedule.push(ForcePacketTimestamp);
+        const TMonotonic nextFlushTimestamp = UseKernelLivenessMode()
+            ? Min(ForcePacketTimestamp, ClockSkewPingTimestamp)
+            : ForcePacketTimestamp;
+        if (nextFlushTimestamp != TMonotonic::Max() && (FlushSchedule.empty() || nextFlushTimestamp < FlushSchedule.top())) {
+            Schedule(nextFlushTimestamp, new TEvFlush);
+            FlushSchedule.push(nextFlushTimestamp);
             MaxFlushSchedule = Max(MaxFlushSchedule, FlushSchedule.size());
             ++FlushEventsScheduled;
         }
@@ -840,7 +961,11 @@ namespace NActors {
                 ++ConfirmPacketsForcedByTimeout;
                 ++FlushEventsProcessed;
                 MakePacket(false); // just generate confirmation packet if we have preconditions for this
-            } else if (ForcePacketTimestamp != TMonotonic::Max()) {
+            }
+            const TMonotonic nextFlushTimestamp = UseKernelLivenessMode()
+                ? Min(ForcePacketTimestamp, ClockSkewPingTimestamp)
+                : ForcePacketTimestamp;
+            if (nextFlushTimestamp != TMonotonic::Max() && now < nextFlushTimestamp) {
                 ScheduleFlush();
             }
             GenerateTraffic();
@@ -850,9 +975,20 @@ namespace NActors {
     void TInterconnectSessionTCP::ResetFlushLogic() {
         ForcePacketTimestamp = TMonotonic::Max();
         UnconfirmedBytes = 0;
-        const TDuration ping = Proxy->Common->Settings.PingPeriod;
-        if (ping != TDuration::Zero() && !NumEventsInQueue) {
-            SetForcePacketTimestamp(ping);
+        if (UseKernelLivenessMode()) {
+            const TDuration clockSkewPingTimeout = Proxy->Common->Settings.ClockSkewPingTimeout;
+            if (clockSkewPingTimeout == TDuration::Zero()) {
+                ClockSkewPingTimestamp = TMonotonic::Max();
+            } else {
+                ClockSkewPingTimestamp = LastPingTimestamp + clockSkewPingTimeout;
+                ScheduleFlush();
+            }
+        } else {
+            Y_DEBUG_ABORT_UNLESS(ClockSkewPingTimestamp == TMonotonic::Max());
+            const TDuration ping = Proxy->Common->Settings.PingPeriod;
+            if (ping != TDuration::Zero() && !NumEventsInQueue) {
+                SetForcePacketTimestamp(ping);
+            }
         }
     }
 
@@ -882,8 +1018,10 @@ namespace NActors {
             Y_ABORT_UNLESS(!packet.IsEmpty());
 
             InflightDataAmount += packet.GetDataSize();
+            RdmaInflightDataAmount += packet.GetRdmaPayloadSize();
             Proxy->Metrics->AddInflightDataAmount(packet.GetDataSize());
-            if (InflightDataAmount > GetTotalInflightAmountOfData()) {
+            Proxy->Metrics->AddInflightRdmaDataAmount(packet.GetRdmaPayloadSize());
+            if ((InflightDataAmount + RdmaInflightDataAmount) > GetTotalInflightAmountOfData()) {
                 Proxy->Metrics->IncInflyLimitReach();
             }
 
@@ -921,12 +1059,14 @@ namespace NActors {
         if (data) {
             SendQueue.push_back(TOutgoingPacket{
                 static_cast<ui32>(packetSize),
-                static_cast<ui32>(packet.GetExternalSize())
+                static_cast<ui32>(packet.GetExternalSize()),
+                packet.GetRdmaPayloadSize()
             });
         }
 
         LOG_DEBUG_IC_SESSION("ICS22", "outgoing packet Serial# %" PRIu64 " Confirm# %" PRIu64 " DataSize# %" PRIu32
-            " InflightDataAmount# %" PRIu64, serial, lastInputSerial, packet.GetDataSize(), InflightDataAmount);
+            " RdmaPayload# %" PRIu32 " InflightDataAmount# %" PRIu64 " RdmaInflightDataAmount# %" PRIu64, serial, lastInputSerial,
+            packet.GetDataSize(), packet.GetRdmaPayloadSize(), InflightDataAmount, RdmaInflightDataAmount);
 
         // reset forced packet sending timestamp as we have confirmed all received data
         ResetFlushLogic();
@@ -951,6 +1091,7 @@ namespace NActors {
         // making Serial <= confirm true
         size_t bytesDropped = 0;
         size_t bytesDroppedFromXdc = 0;
+        size_t bytesDroppedFromRdma = 0;
         ui64 frontPacketSerial = OutputCounter - SendQueue.size() + 1;
         Y_DEBUG_ABORT_UNLESS(OutgoingIndex < SendQueue.size() || (OutgoingIndex == SendQueue.size() && !OutgoingOffset && !OutgoingStream),
             "OutgoingIndex# %zu SendQueue.size# %zu OutgoingOffset# %zu Unsent# %zu Total# %zu",
@@ -962,6 +1103,7 @@ namespace NActors {
             XdcOffset -= front.ExternalSize;
             bytesDropped += front.PacketSize;
             bytesDroppedFromXdc += front.ExternalSize;
+            bytesDroppedFromRdma += front.RdmaPayloadSize;
             ++numDropped;
 
             ++frontPacketSerial;
@@ -984,11 +1126,13 @@ namespace NActors {
 
         PacketsConfirmed += numDropped;
         InflightDataAmount -= droppedDataAmount;
+        RdmaInflightDataAmount -= bytesDroppedFromRdma;
         Proxy->Metrics->SubInflightDataAmount(droppedDataAmount);
+        Proxy->Metrics->SubInflightRdmaDataAmount(bytesDroppedFromRdma);
         LWPROBE(DropConfirmed, Proxy->PeerNodeId, droppedDataAmount, InflightDataAmount);
 
-        LOG_DEBUG_IC_SESSION("ICS24", "exit InflightDataAmount: %" PRIu64 " bytes droppedDataAmount: %" PRIu64 " bytes"
-            " dropped %" PRIu32 " packets", InflightDataAmount, droppedDataAmount, numDropped);
+        LOG_DEBUG_IC_SESSION("ICS24", "exit InflightDataAmount: %" PRIu64 " bytes RdmaInflightDataAmount: %" PRIu64 " bytes droppedDataAmount: %" PRIu64 " bytes"
+            " dropped %" PRIu32 " rdma bytes dropped %" PRIu32 " packets", InflightDataAmount, RdmaInflightDataAmount, droppedDataAmount, bytesDroppedFromRdma, numDropped);
 
         Pool->Trim(); // send any unsent free requests
 
@@ -1006,13 +1150,13 @@ namespace NActors {
             // generate some data within this channel
             const ui64 netBefore = channel->GetBufferedAmountOfData();
             const ui32 grossBefore = task.GetDataSize();
-            const bool eventDone = channel->FeedBuf(task, serial);
+            const bool eventDone = channel->FeedBuf(task, serial, RdmaQp ? RdmaQp->GetDeviceIndex() : -1);
             const ui32 grossAfter = task.GetDataSize();
             Y_DEBUG_ABORT_UNLESS(grossBefore <= grossAfter);
             const ui32 gross = grossAfter - grossBefore;
             channel->UnaccountedTraffic += gross;
             const ui64 netAfter = channel->GetBufferedAmountOfData();
-            Y_DEBUG_ABORT_UNLESS(netAfter <= netBefore); // net amount should shrink
+            Y_DEBUG_ABORT_UNLESS(netAfter <= netBefore, "netBefore# %" PRIu64 " netAfter# %" PRIu64, netBefore, netAfter); // net amount should shrink
             const ui64 net = netBefore - netAfter; // number of net bytes serialized
 
             // adjust metrics for local and global queue size
@@ -1065,12 +1209,14 @@ namespace NActors {
                 flagState = EFlag::GREEN;
 
                 do {
-                    auto lastInputDelay = TActivationContext::Monotonic() - LastInputActivityTimestamp;
-                    if (lastInputDelay * 4 >= GetDeadPeerTimeout() * 3) {
-                        flagState = EFlag::ORANGE;
-                        break;
-                    } else if (lastInputDelay * 2 >= GetDeadPeerTimeout()) {
-                        flagState = EFlag::YELLOW;
+                    if (!UseKernelLivenessMode()) {
+                        auto lastInputDelay = TActivationContext::Monotonic() - LastInputActivityTimestamp;
+                        if (lastInputDelay * 4 >= GetDeadPeerTimeout() * 3) {
+                            flagState = EFlag::ORANGE;
+                            break;
+                        } else if (lastInputDelay * 2 >= GetDeadPeerTimeout()) {
+                            flagState = EFlag::YELLOW;
+                        }
                     }
 
                     // check utilization
@@ -1122,6 +1268,12 @@ namespace NActors {
             lastpair.first += GetCycleCountFast();
 
         OutputStuckFlag = state;
+
+        if (state) {
+            Proxy->Common->AddSessionWithDataInQueue();
+        } else {
+            Proxy->Common->RemoveSessionWithDataInQueue();
+        }
     }
 
     void TInterconnectSessionTCP::SwitchStuckPeriod() {
@@ -1159,14 +1311,20 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCP::IssuePingRequest() {
+        const TDuration period = UseKernelLivenessMode()
+            ? Proxy->Common->Settings.ClockSkewPingTimeout
+            : PingPeriodicity;
+        if (period == TDuration::Zero()) {
+            return;
+        }
         const TMonotonic now = TActivationContext::Monotonic();
-        if (now >= LastPingTimestamp + PingPeriodicity) {
+        if (now >= LastPingTimestamp + period) {
             LOG_DEBUG_IC_SESSION("ICS00", "Issuing ping request");
+            LastPingTimestamp = now;
             if (Socket) {
                 MakePacket(false, GetCycleCountFast() | TTcpPacketBuf::PingRequestMask);
                 MakePacket(false, TInstant::Now().MicroSeconds() | TTcpPacketBuf::ClockMask);
             }
-            LastPingTimestamp = now;
         }
     }
 
@@ -1293,6 +1451,10 @@ namespace NActors {
                                 TABLED() { str << "Frame version/Checksum"; }
                                 TABLED() { str << (Params.Encryption ? "v2/none" : Params.UseXxhash ? "v2/xxhash" : "v2/crc32c"); }
                             }
+                            TABLER() {
+                                TABLED() { str << "RdmaMode" ; }
+                                TABLED() { str << (Params.UseRdma ? Params.ChecksumRdmaEvent ? "On | SoftwareChecksum" : "On" : "Off"); }
+                            }
 #define MON_VAR(NAME)     \
     TABLER() {            \
         TABLED() {        \
@@ -1305,6 +1467,10 @@ namespace NActors {
 
                             MON_VAR(Created)
                             MON_VAR(Params.UseExternalDataChannel)
+                            TABLER() {
+                                TABLED() { str << "Params.UseKernelLiveness"; }
+                                TABLED() { str << UseKernelLivenessMode(); }
+                            }
                             MON_VAR(NewConnectionSet)
                             MON_VAR(ReceiverId)
                             MON_VAR(MessagesGot)
@@ -1356,6 +1522,7 @@ namespace NActors {
                             MON_VAR(NumEventsInQueue)
                             MON_VAR(TotalOutputQueueSize)
                             MON_VAR(InflightDataAmount)
+                            MON_VAR(RdmaInflightDataAmount)
                             MON_VAR(unsentQueueSize)
                             MON_VAR(SendBufferSize)
                             MON_VAR(now - LastInputActivityTimestamp)
@@ -1418,6 +1585,7 @@ namespace NActors {
                             MON_VAR(GetTotalInflightAmountOfData())
                             MON_VAR(GetCloseOnIdleTimeout())
                             MON_VAR(Subscribers.size())
+                            MON_VAR(SubscriberHistory.size())
                             TABLER() {
                                 TABLED() { str << "ZeroCopy state"; }
                                 TABLED() { str << ZcProcessor.GetCurrentStateName(); }
@@ -1444,6 +1612,75 @@ namespace NActors {
                     }
                 }
             }
+
+            const bool collectSubscriptionStackTrace = Proxy->Common->Settings.CollectSubscriptionStackTrace;
+            auto aggregateSubscribers = [&](const auto& subscribers) {
+                TSubscriberHistory subscriberGroups;
+                for (const auto& [actorId, info] : subscribers) {
+                    Y_UNUSED(actorId);
+                    ++subscriberGroups[TSubscriberHistoryKey(info.StackTrace, info.ActivityIndex, info.EventTypeName)];
+                }
+                return subscriberGroups;
+            };
+
+            auto renderSubscriberGroups = [&](TStringBuf title, const TSubscriberHistory& subscriberGroups,
+                    bool showOverflowWarning = false) {
+                if (subscriberGroups.empty() && !showOverflowWarning) {
+                    return;
+                }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        str << title;
+                    }
+                    DIV_CLASS("panel-body") {
+                        if (showOverflowWarning) {
+                            DIV_CLASS("alert alert-warning") {
+                                str << "Subscription history storage limit of " << MaxSubscriberHistoryEntries
+                                    << " aggregated entries has been reached; new history groups are no longer added.";
+                            }
+                        }
+                        TABLE_CLASS("table table-sortable") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { str << "Count"; }
+                                    TABLEH() { str << "Activity"; }
+                                    if (collectSubscriptionStackTrace) {
+                                        TABLEH() { str << "EventTypeName"; }
+                                    }
+                                    if (collectSubscriptionStackTrace) {
+                                        TABLEH() { str << "StackTrace"; }
+                                    }
+                                }
+                            }
+                            TABLEBODY() {
+                                for (const auto& [groupKey, count] : subscriberGroups) {
+                                    const auto& [stackTrace, activityIndex, eventTypeName] = groupKey;
+                                    TABLER() {
+                                        TABLED() { str << count; }
+                                        TABLED() { str << EncodeHtmlPcdata(FormatActivityName(activityIndex)); }
+                                        if (collectSubscriptionStackTrace) {
+                                            TABLED() { str << EncodeHtmlPcdata(FormatEventTypeName(eventTypeName)); }
+                                            TABLED() {
+                                                if (stackTrace.empty()) {
+                                                    str << "manual";
+                                                } else {
+                                                    PRE() {
+                                                        str << EncodeHtmlPcdata(stackTrace);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            renderSubscriberGroups("Subscriptions", aggregateSubscribers(Subscribers));
+            renderSubscriberGroups("Subscription history", SubscriberHistory, SubscriberHistoryOverflow);
         }
 
         auto h = std::make_unique<IEventHandle>(ev->Recipient, ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));

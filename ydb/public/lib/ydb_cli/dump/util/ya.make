@@ -4,16 +4,20 @@ SRCS(
     query_utils.cpp
     util.cpp
     view_utils.cpp
+    replication_utils.cpp
+    external_data_source_utils.cpp
+    external_table_utils.cpp
 )
 
 PEERDIR(
     ydb/public/lib/ydb_cli/common
+    ydb/public/sdk/cpp/src/client/cms
     ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/types/status
-    yql/essentials/parser/proto_ast/gen/v1
-    yql/essentials/parser/proto_ast/gen/v1_proto_split
+    yql/essentials/parser/proto_ast/gen/v1_antlr4
+    yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4
     yql/essentials/sql/settings
     yql/essentials/sql/v1/format
     yql/essentials/sql/v1/proto_parser
@@ -21,10 +25,6 @@ PEERDIR(
     yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/v1/proto_parser/antlr4
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
-    yql/essentials/sql/v1/lexer/antlr3
-    yql/essentials/sql/v1/lexer/antlr3_ansi
-    yql/essentials/sql/v1/proto_parser/antlr3
-    yql/essentials/sql/v1/proto_parser/antlr3_ansi
     library/cpp/protobuf/util
 )
 

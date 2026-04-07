@@ -19,6 +19,7 @@ message TExport {
     oneof Settings {
         Ydb.Export.ExportToYtSettings ExportToYtSettings = 5;
         Ydb.Export.ExportToS3Settings ExportToS3Settings = 6;
+        Ydb.Export.ExportToFsSettings ExportToFsSettings = 11;
     }
     optional string UserSID = 10;
 }
@@ -28,6 +29,7 @@ message TCreateExportRequest {
     oneof Settings {
         Ydb.Export.ExportToYtSettings ExportToYtSettings = 2;
         Ydb.Export.ExportToS3Settings ExportToS3Settings = 3;
+        Ydb.Export.ExportToFsSettings ExportToFsSettings = 4;
     }
 }
 

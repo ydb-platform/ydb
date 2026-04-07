@@ -9,7 +9,5 @@ IComputationNode* WrapWideTop(TCallable& callable, const TComputationNodeFactory
 IComputationNode* WrapWideTopSort(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapWideSort(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
-
-
+} // namespace NMiniKQL
+} // namespace NKikimr

@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/size_statistics.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/size_statistics.h"
 
 #include <algorithm>
 #include <array>
@@ -24,9 +24,9 @@
 #include <string_view>
 #include <vector>
 
-#include "arrow/util/logging.h"
-#include "parquet/exception.h"
-#include "parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
 
 namespace parquet20 {
 

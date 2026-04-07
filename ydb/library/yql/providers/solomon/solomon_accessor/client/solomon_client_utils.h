@@ -20,12 +20,13 @@ class TSolomonClientResponse {
 public:
     TSolomonClientResponse();
     explicit TSolomonClientResponse(const TString& error, EStatus status = STATUS_FATAL_ERROR);
-    explicit TSolomonClientResponse(T&& result);
+    explicit TSolomonClientResponse(T&& result, ui64 downloadedBytes);
 
 public:
     EStatus Status;
     TString Error;
     T Result;
+    ui64 DownloadedBytes = 0;
 };
 
 struct TGetLabelsResult {
@@ -39,6 +40,12 @@ struct TListMetricsResult {
     ui64 TotalCount;
 };
 using TListMetricsResponse = TSolomonClientResponse<TListMetricsResult>;
+
+struct TListMetricsLabelsResult {
+    std::vector<TLabelValues> Labels;
+    ui64 TotalCount;
+};
+using TListMetricsLabelsResponse = TSolomonClientResponse<TListMetricsLabelsResult>;
 
 struct TGetPointsCountResult {
     ui64 PointsCount;

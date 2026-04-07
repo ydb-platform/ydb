@@ -33,7 +33,7 @@ TFederatedReadSessionSettings& TFederatedReadSessionSettings::ReadMirrored(const
         ythrow TContractViolation("Reading from local database not supported, use specific database");
     }
     DatabasesToReadFrom.clear();
-    DatabasesToReadFrom.insert(std::move(database));
+    DatabasesToReadFrom.insert(database);
     ReadMirroredEnabled = true;
     return *this;
 }
@@ -73,10 +73,10 @@ std::shared_ptr<IFederatedReadSession> TFederatedTopicClient::CreateReadSession(
     return Impl_->CreateReadSession(settings);
 }
 
-// std::shared_ptr<NTopic::ISimpleBlockingWriteSession> TFederatedTopicClient::CreateSimpleBlockingWriteSession(
-//     const TFederatedWriteSessionSettings& settings) {
-//     return Impl_->CreateSimpleBlockingWriteSession(settings);
-// }
+std::shared_ptr<NTopic::ISimpleBlockingWriteSession> TFederatedTopicClient::CreateSimpleBlockingWriteSession(
+    const TFederatedWriteSessionSettings& settings) {
+    return Impl_->CreateSimpleBlockingWriteSession(settings);
+}
 
 std::shared_ptr<NTopic::IWriteSession> TFederatedTopicClient::CreateWriteSession(const TFederatedWriteSessionSettings& settings) {
     return Impl_->CreateWriteSession(settings);

@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/io/interfaces.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/interfaces.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -28,18 +28,18 @@
 #include <typeinfo>
 #include <utility>
 
-#include "arrow/buffer.h"
-#include "arrow/io/concurrency.h"
-#include "arrow/io/type_fwd.h"
-#include "arrow/io/util_internal.h"
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/future.h"
-#include "arrow/util/io_util.h"
-#include "arrow/util/iterator.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/thread_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/concurrency.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/future.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/io_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/iterator.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/thread_pool.h"
 
 namespace arrow20 {
 

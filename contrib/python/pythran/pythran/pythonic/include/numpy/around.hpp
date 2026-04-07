@@ -17,29 +17,21 @@ namespace numpy
 
   // generic floating point version, pure numpy_expr
   template <class E>
-  auto around(E &&a, long decimals) ->
-      typename std::enable_if<
-          !std::is_integral<typename types::dtype_of<
-              typename std::decay<E>::type>::type>::value,
-          decltype(functor::rint{}(functor::multiply{}(
-                       std::forward<E>(a),
-                       std::declval<typename types::dtype_of<
-                           typename std::decay<E>::type>::type>())) /
-                   std::declval<typename types::dtype_of<
-                       typename std::decay<E>::type>::type>())>::type;
+  auto around(E &&a, long decimals) -> std::enable_if_t<
+      !std::is_integral<typename types::dtype_of<std::decay_t<E>>::type>::value,
+      decltype(functor::rint{}(functor::multiply{}(
+                   std::forward<E>(a),
+                   std::declval<typename types::dtype_of<std::decay_t<E>>::type>())) /
+               std::declval<typename types::dtype_of<std::decay_t<E>>::type>())>;
 
   // the integer version is only relevant when decimals < 0
   template <class E>
-  auto around(E &&a, long decimals) ->
-      typename std::enable_if<
-          std::is_integral<typename types::dtype_of<
-              typename std::decay<E>::type>::type>::value,
-          decltype(numpy::functor::floor_divide{}(
-                       functor::float64{}(std::forward<E>(a)),
-                       std::declval<typename types::dtype_of<
-                           typename std::decay<E>::type>::type>()) *
-                   std::declval<typename types::dtype_of<
-                       typename std::decay<E>::type>::type>())>::type;
+  auto around(E &&a, long decimals) -> std::enable_if_t<
+      std::is_integral<typename types::dtype_of<std::decay_t<E>>::type>::value,
+      decltype(numpy::functor::floor_divide{}(
+                   functor::float64{}(std::forward<E>(a)),
+                   std::declval<typename types::dtype_of<std::decay_t<E>>::type>()) *
+               std::declval<typename types::dtype_of<std::decay_t<E>>::type>())>;
 
   DEFINE_FUNCTOR(pythonic::numpy, around);
 } // namespace numpy

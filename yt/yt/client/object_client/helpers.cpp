@@ -38,7 +38,6 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::DoubleNode ||
         type == EObjectType::BooleanNode ||
         type == EObjectType::MapNode ||
-        type == EObjectType::ListNode ||
         type == EObjectType::File ||
         type == EObjectType::Table ||
         type == EObjectType::ReplicatedTable ||
@@ -160,7 +159,6 @@ bool IsUserType(EObjectType type)
         type == EObjectType::DoubleNode ||
         type == EObjectType::BooleanNode ||
         type == EObjectType::MapNode ||
-        type == EObjectType::ListNode ||
         type == EObjectType::File ||
         type == EObjectType::Table ||
         type == EObjectType::ReplicatedTable ||
@@ -175,8 +173,7 @@ bool IsUserType(EObjectType type)
         type == EObjectType::SchedulerPool ||
         type == EObjectType::SchedulerPoolTree ||
         type == EObjectType::ChaosReplicatedTable ||
-        type == EObjectType::HunkStorage ||
-        type == EObjectType::SecondaryIndex;
+        type == EObjectType::HunkStorage;
 }
 
 bool IsSchemafulType(EObjectType type)
@@ -325,8 +322,8 @@ bool IsCompositeNodeType(EObjectType type)
         type == EObjectType::MapNode ||
         type == EObjectType::Scion ||
         type == EObjectType::PortalExit ||
-        type == EObjectType::SysNode ||
-        type == EObjectType::ListNode;
+        type == EObjectType::ClusterProxyNode ||
+        type == EObjectType::SysNode;
 }
 
 bool IsLinkType(EObjectType type)

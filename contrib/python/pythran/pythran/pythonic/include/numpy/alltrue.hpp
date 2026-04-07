@@ -8,8 +8,7 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class... Types>
-  auto
-  alltrue(Types &&...types) -> decltype(all(std::forward<Types>(types)...));
+  auto alltrue(Types &&...types) -> decltype(all(std::forward<Types>(types)...));
 
   DEFINE_FUNCTOR(pythonic::numpy, alltrue);
 } // namespace numpy

@@ -101,11 +101,11 @@ public:
     }
 
     TQueryStatsScan(const NActors::TActorId& ownerId, ui32 scanId,
-        const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         NKikimrSysView::EStatsType statsType,
         ui64 bucketCount, const TDuration& bucketSize)
-        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
+        : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
         , StatsType(statsType)
         , BucketRange(this->TableRange, bucketSize)
     {
@@ -195,6 +195,12 @@ private:
             this->ReplyEmptyAndDie();
             return;
         }
+
+        if (OldScanStarted) {
+            return;
+        }
+
+        OldScanStarted = true;
 
         NodesToRequest.reserve(this->TenantNodes.size());
         for (const auto& nodeId : this->TenantNodes) {
@@ -504,45 +510,46 @@ private:
 
     THolder<TScanQueryHistory<TGreater>> History;
 
+    bool OldScanStarted = false;
     bool UseProcessor = false;
     NKikimrSysView::TEvGetQueryMetricsRequest Request;
 };
 
 THolder<NActors::IActor> CreateQueryStatsScan(const NActors::TActorId& ownerId, ui32 scanId,
-    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
-    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
     switch (sysViewInfo.GetType()) {
     case ESysViewType::ETopQueriesByDurationOneMinute:
-        return MakeHolder<TQueryStatsScan<TDurationGreater>>(ownerId, scanId, sysViewInfo, tableRange, columns,
+        return MakeHolder<TQueryStatsScan<TDurationGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_DURATION_ONE_MINUTE,
             ONE_MINUTE_BUCKET_COUNT, ONE_MINUTE_BUCKET_SIZE);
     case ESysViewType::ETopQueriesByDurationOneHour:
-        return MakeHolder<TQueryStatsScan<TDurationGreater>>(ownerId, scanId, sysViewInfo, tableRange, columns,
+        return MakeHolder<TQueryStatsScan<TDurationGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_DURATION_ONE_HOUR,
             ONE_HOUR_BUCKET_COUNT, ONE_HOUR_BUCKET_SIZE);
     case ESysViewType::ETopQueriesByReadBytesOneMinute:
-        return MakeHolder<TQueryStatsScan<TReadBytesGreater>>(ownerId, scanId, sysViewInfo, tableRange, columns,
+        return MakeHolder<TQueryStatsScan<TReadBytesGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_READ_BYTES_ONE_MINUTE,
             ONE_MINUTE_BUCKET_COUNT, ONE_MINUTE_BUCKET_SIZE);
     case ESysViewType::ETopQueriesByReadBytesOneHour:
-        return MakeHolder<TQueryStatsScan<TReadBytesGreater>>(ownerId, scanId, sysViewInfo, tableRange, columns,
+        return MakeHolder<TQueryStatsScan<TReadBytesGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_READ_BYTES_ONE_HOUR,
             ONE_HOUR_BUCKET_COUNT, ONE_HOUR_BUCKET_SIZE);
     case ESysViewType::ETopQueriesByCpuTimeOneMinute:
-        return MakeHolder<TQueryStatsScan<TCpuTimeGreater>>(ownerId, scanId, sysViewInfo, tableRange, columns,
+        return MakeHolder<TQueryStatsScan<TCpuTimeGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_CPU_TIME_ONE_MINUTE,
             ONE_MINUTE_BUCKET_COUNT, ONE_MINUTE_BUCKET_SIZE);
     case ESysViewType::ETopQueriesByCpuTimeOneHour:
-        return MakeHolder<TQueryStatsScan<TCpuTimeGreater>>(ownerId, scanId, sysViewInfo, tableRange, columns,
+        return MakeHolder<TQueryStatsScan<TCpuTimeGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_CPU_TIME_ONE_HOUR,
             ONE_HOUR_BUCKET_COUNT, ONE_HOUR_BUCKET_SIZE);
     case ESysViewType::ETopQueriesByRequestUnitsOneMinute:
-        return MakeHolder<TQueryStatsScan<TRequestUnitsGreater>>(ownerId, scanId, sysViewInfo, tableRange, columns,
+        return MakeHolder<TQueryStatsScan<TRequestUnitsGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_REQUEST_UNITS_ONE_MINUTE,
             ONE_MINUTE_BUCKET_COUNT, ONE_MINUTE_BUCKET_SIZE);
     case ESysViewType::ETopQueriesByRequestUnitsOneHour:
-        return MakeHolder<TQueryStatsScan<TRequestUnitsGreater>>(ownerId, scanId, sysViewInfo, tableRange, columns,
+        return MakeHolder<TQueryStatsScan<TRequestUnitsGreater>>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
             NKikimrSysView::TOP_REQUEST_UNITS_ONE_HOUR,
             ONE_HOUR_BUCKET_COUNT, ONE_HOUR_BUCKET_SIZE);
     default:

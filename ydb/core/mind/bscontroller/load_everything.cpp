@@ -228,7 +228,8 @@ public:
                                                    storagePoolId,
                                                    std::get<0>(geom),
                                                    std::get<1>(geom),
-                                                   std::get<2>(geom));
+                                                   std::get<2>(geom),
+                                                   false /* ddisk, will fill in later */);
 
                 group.DecommitStatus = groups.GetValueOrDefault<T::DecommitStatus>();
                 if (group.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) {
@@ -247,6 +248,7 @@ public:
                 OPTIONAL(BlobDepotConfig)
                 OPTIONAL(BlobDepotId)
                 OPTIONAL(ErrorReason)
+                OPTIONAL(AppliedGroupGeneration)
 
                 if (groups.HaveValue<T::Metrics>()) {
                     const bool success = group.GroupMetrics.emplace().ParseFromString(groups.GetValue<T::Metrics>());
@@ -353,8 +355,7 @@ public:
                     Self->DefaultMaxSlots, disks.GetValue<T::Status>(), disks.GetValue<T::Timestamp>(),
                     disks.GetValue<T::DecommitStatus>(), disks.GetValue<T::Mood>(), disks.GetValue<T::ExpectedSerial>(),
                     disks.GetValue<T::LastSeenSerial>(), disks.GetValue<T::LastSeenPath>(), staticSlotUsage,
-                    disks.GetValueOrDefault<T::ShredComplete>(), disks.GetValueOrDefault<T::MaintenanceStatus>(),
-                    disks.GetValueOrDefault<T::InferPDiskSlotCountFromUnitSize>());
+                    disks.GetValueOrDefault<T::ShredComplete>(), disks.GetValueOrDefault<T::MaintenanceStatus>());
 
                 if (!disks.Next())
                     return false;
@@ -403,7 +404,8 @@ public:
                     slot.GetValue<T::GroupGeneration>(), slot.GetValue<T::Category>(), slot.GetValue<T::RingIdx>(),
                     slot.GetValue<T::FailDomainIdx>(), slot.GetValue<T::VDiskIdx>(), slot.GetValueOrDefault<T::Mood>(),
                     Self->FindGroup(groupId), &Self->VSlotReadyTimestampQ, slot.GetValue<T::LastSeenReady>(),
-                    slot.GetValue<T::ReplicationTime>());
+                    slot.GetValue<T::ReplicationTime>(), slot.GetValueOrDefault<T::DDiskNumVChunksClaimed>(0),
+                    slot.GetValueOrDefault<T::PersistentBufferRefs>(0));
                 if (x.LastSeenReady != TInstant::Zero()) {
                     Self->NotReadyVSlotIds.insert(x.VSlotId);
                 }
@@ -579,6 +581,13 @@ public:
             });
         }
 
+        // fill in DDisk property for groups
+        for (const auto& [id, group] : Self->GroupMap) {
+            const auto it = Self->StoragePools.find(group->StoragePoolId);
+            Y_ABORT_UNLESS(it != Self->StoragePools.end());
+            group->DDisk = it->second.DDisk;
+        }
+
         // primitive garbage collection for obsolete metrics
         for (const auto& key : pdiskMetricsToDelete) {
             db.Table<Schema::PDiskMetrics>().Key(key).Delete();
@@ -680,16 +689,8 @@ public:
                 kvp->SetKey(Sprintf("G%08" PRIx32, groupId));
                 kvp->SetGeneration(groupInfo->Generation);
 
-                TMaybe<TKikimrScopeId> scopeId;
-                const TStoragePoolInfo& info = Self->StoragePools.at(groupInfo->StoragePoolId);
-                if (info.SchemeshardId && info.PathItemId) {
-                    scopeId = TKikimrScopeId(*info.SchemeshardId, *info.PathItemId);
-                } else {
-                    Y_ABORT_UNLESS(!info.SchemeshardId && !info.PathItemId);
-                }
-
                 NKikimrBlobStorage::TGroupInfo proto;
-                SerializeGroupInfo(&proto, *groupInfo, info.Name, scopeId);
+                SerializeGroupInfo(&proto, *groupInfo, Self->StoragePools);
                 const bool success = proto.SerializeToString(kvp->MutableValue());
                 Y_DEBUG_ABORT_UNLESS(success);
             }
@@ -703,7 +704,11 @@ public:
     void Complete(const TActorContext&) override {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE03, "TTxLoadEverything Complete");
         Self->LoadFinished();
+        if (Self->EnableConfigV2) {
+            Self->PendingV2MigrationCheck = true;
+        }
         if (!Self->SelfManagementEnabled) {
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE05, "TTxLoadEverything StartConsoleInteraction");
             Self->ConsoleInteraction->Start();
         }
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE04, "TTxLoadEverything InitQueue processed");

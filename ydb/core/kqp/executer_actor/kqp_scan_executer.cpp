@@ -11,7 +11,6 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
-#include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
@@ -43,35 +42,29 @@ public:
 
     TKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        TResultSetFormatSettings resultSetFormatSettings, TKqpRequestCounters::TPtr counters,
+        NFormats::TFormatsSettings formatsSettings,
+        TKqpRequestCounters::TPtr counters,
         const TExecuterConfig& executerConfig,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-        const std::optional<TLlvmSettings>& llvmSettings)
+        const std::optional<TLlvmSettings>& llvmSettings,
+        std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
+        const IKqpTransactionManagerPtr& txManager)
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, {}, database,
-            userToken, std::move(resultSetFormatSettings), counters, executerConfig,
-            userRequestContext, statementResultIndex, TWilsonKqp::ScanExecuter, "ScanExecuter", false)
+            userToken, std::move(formatsSettings), counters, executerConfig,
+            userRequestContext, statementResultIndex, TWilsonKqp::ScanExecuter, "ScanExecuter",
+            {}, txManager, Nothing(), channelService)
         , LlvmSettings(llvmSettings)
     {
         YQL_ENSURE(Request.Transactions.size() == 1);
-        YQL_ENSURE(Request.DataShardLocks.empty());
         YQL_ENSURE(Request.LocksOp == ELocksOp::Unspecified);
-        YQL_ENSURE(Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
+        YQL_ENSURE(Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_UNDEFINED);
         YQL_ENSURE(Request.Snapshot.IsValid());
+    }
 
-        size_t resultsSize = Request.Transactions[0].Body->ResultsSize();
-        YQL_ENSURE(resultsSize != 0);
-
-        StreamResult = Request.Transactions[0].Body->GetResults(0).GetIsStream();
-
-        if (StreamResult) {
-            YQL_ENSURE(resultsSize == 1);
-        } else {
-            for (size_t i = 1; i < resultsSize; ++i) {
-                YQL_ENSURE(Request.Transactions[0].Body->GetResults(i).GetIsStream() == StreamResult);
-            }
-        }
+    bool GetSimplifiedUseFollowers() const {
+        return false;
     }
 
 public:
@@ -110,7 +103,8 @@ private:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvDqCompute::TEvState, HandleComputeState);
-                hFunc(TEvDqCompute::TEvChannelData, HandleChannelData); // from CA
+                hFunc(TEvDqCompute::TEvChannelData, HandleChannelData);    // from CA
+                hFunc(TEvDqCompute::TEvResumeExecution, HandleResultData); // from Fast Channels
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvents::TEvUndelivered, HandleUndelivered);
@@ -118,6 +112,7 @@ private:
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
                 IgnoreFunc(TEvKqpNode::TEvCancelKqpTasksResponse);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
+                hFunc(NActors::NMon::TEvHttpInfo, HandleHttpInfo);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 default:
                     UnexpectedEvent("ExecuteState", ev->GetTypeRewrite());
@@ -132,22 +127,7 @@ private:
 
 private:
     void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
-        if (!TBase::HandleResolve(ev)) return;
-        TSet<ui64> shardIds;
-        for (auto& [stageId, stageInfo] : GetTasksGraph().GetStagesInfo()) {
-            if (stageInfo.Meta.ShardKey) {
-                for (auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
-                    shardIds.insert(partition.ShardId);
-                }
-            }
-        }
-        if (shardIds) {
-            LOG_D("Start resolving tablets nodes... (" << shardIds.size() << ")");
-            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterShardsResolve, ExecuterSpan.GetTraceId(), "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
-            auto kqpShardsResolver = CreateKqpShardsResolver(
-                this->SelfId(), TxId, false, std::move(shardIds));
-            KqpShardsResolverId = this->RegisterWithSameMailbox(kqpShardsResolver);
-        } else {
+        if (TBase::HandleResolve(ev) == CONTINUE) {
             GetResourcesSnapshot();
         }
     }
@@ -159,7 +139,9 @@ private:
 
     void HandleResolve(TEvPrivate::TEvResourcesSnapshot::TPtr& ev) {
         if (ev->Get()->Snapshot.empty()) {
-            LOG_E("Can not find default state storage group for database " << Database);
+            KQP_STLOG_E(KQPSCAN, "Can not find default state storage group for database",
+                (database, Database),
+                (trace_id, TraceId()));
         }
 
         ResourcesSnapshot = std::move(ev->Get()->Snapshot);
@@ -177,22 +159,28 @@ private:
             }
         }
 
-        BuildAllTasks<true>(false, LlvmSettings);
+        TasksGraph.BuildAllTasks(LlvmSettings, ResourcesSnapshot, Stats.get());
+        OnEmptyResult();
 
         TIssue validateIssue;
-        if (!ValidateTasks(GetTasksGraph(), EExecType::Scan, /* enableSpilling */ GetTasksGraph().GetMeta().AllowWithSpilling, validateIssue)) {
+        if (!ValidateTasks(TasksGraph, EExecType::Scan, TasksGraph.GetMeta().AllowWithSpilling, validateIssue)) {
             TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, validateIssue);
             return;
+        }
+
+        if (Stats) {
+            Stats->Prepare();
         }
 
         ui32 nShardScans = 0;
         TVector<ui64> computeTasks;
 
         // calc stats
-        for (const auto& task : GetTasksGraph().GetTasks()) {
-            const auto& stageInfo = GetTasksGraph().GetStageInfo(task.StageId);
+        for (const auto& task : TasksGraph.GetTasks()) {
+            const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
 
             if (task.Meta.NodeId || stageInfo.Meta.IsSysView()) {
+                // TODO: YQL_ENSURE(task.Meta.Type == TTaskMeta::TTaskType::Scan);
                 // Task with source
                 if (!task.Meta.Reads) {
                     continue;
@@ -208,19 +196,27 @@ private:
             }
         }
 
-        if (GetTasksGraph().GetTasks().size() > Request.MaxComputeActors) {
+        if (TasksGraph.GetTasks().size() > Request.MaxComputeActors) {
             // LOG_N("Too many compute actors: computeTasks=" << computeTasks.size() << ", scanTasks=" << nScanTasks);
-            LOG_N("Too many compute actors: totalTasks=" << GetTasksGraph().GetTasks().size());
+            KQP_STLOG_N(KQPSCAN, "Too many compute actors",
+                (total_tasks, TasksGraph.GetTasks().size()),
+                (trace_id, TraceId()));
             TBase::ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
                 YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
-                    << "Requested too many execution units: " << GetTasksGraph().GetTasks().size()));
+                    << "Requested too many execution units: " << TasksGraph.GetTasks().size()));
             return;
         }
 
-        LOG_D("TotalShardScans: " << nShardScans);
+        KQP_STLOG_D(KQPSCAN, "TotalShardScans",
+            (count, nShardScans),
+            (trace_id, TraceId()));
 
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ScanExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
         ExecuteScanTx();
+
+        if (CheckExecutionComplete()) {
+            return;
+        }
 
         Become(&TKqpScanExecuter::ExecuteState);
     }
@@ -257,7 +253,9 @@ private:
     {
         if (Planner) {
             if (!Planner->GetPendingComputeTasks().empty()) {
-                LOG_D("terminate pending resources request: " << Ydb::StatusIds::StatusCode_Name(status));
+                KQP_STLOG_D(KQPSCAN, "terminate pending resources request",
+                    (status, Ydb::StatusIds::StatusCode_Name(status)),
+                    (trace_id, TraceId()));
 
                 auto ev = MakeHolder<TEvKqpNode::TEvCancelKqpTasksRequest>();
                 ev->Record.SetTxId(TxId);
@@ -281,15 +279,16 @@ private:
 } // namespace
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TResultSetFormatSettings resultSetFormatSettings, TKqpRequestCounters::TPtr counters,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, NFormats::TFormatsSettings formatsSettings, TKqpRequestCounters::TPtr counters,
     const TExecuterConfig& executerConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const std::optional<TLlvmSettings>& llvmSettings)
+    const std::optional<TLlvmSettings>& llvmSettings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
+    const IKqpTransactionManagerPtr& txManager)
 {
-    return new TKqpScanExecuter(std::move(request), database, userToken, std::move(resultSetFormatSettings),
+    return new TKqpScanExecuter(std::move(request), database, userToken, std::move(formatsSettings),
         counters, executerConfig, std::move(asyncIoFactory), userRequestContext, statementResultIndex,
-        federatedQuerySetup, GUCSettings, llvmSettings);
+        federatedQuerySetup, GUCSettings, llvmSettings, channelService, txManager);
 }
 
 } // namespace NKqp

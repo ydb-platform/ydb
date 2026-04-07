@@ -446,7 +446,6 @@ const std::vector<TCreatePathOp> CreatePathOperations({
         //TODO: proper check
         .CreateRequest = nullptr,
         // .SetupFlags = [](TTestEnvOptions& options) {
-        //     options.EnableTopicTransfer(true);
         // },
         // .CreateRequest = [](const TString& workingDir, const TString& path) {
         //     const TString modifyScheme = Sprintf(
@@ -809,6 +808,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysNames) {
             .EnableSystemNamesProtection(EnableSystemNamesProtection)
             .EnableDatabaseAdmin(EnableDatabaseAdmin)
             .EnableRealSystemViewPaths(false)
+            .RunFakeConfigDispatcher(true)
         ;
         if (op.SetupFlags) {
             op.SetupFlags(opts);

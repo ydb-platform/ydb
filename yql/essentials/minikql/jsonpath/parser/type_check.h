@@ -4,9 +4,9 @@
 
 namespace NYql::NJsonPath {
 
-class TJsonPathTypeChecker : public IAstNodeVisitor {
+class TJsonPathTypeChecker: public IAstNodeVisitor {
 public:
-    TJsonPathTypeChecker(TIssues& Issues);
+    explicit TJsonPathTypeChecker(TIssues& Issues);
 
     void VisitRoot(const TRootNode& node) override;
 
@@ -50,11 +50,10 @@ public:
 
     void VisitLikeRegexPredicate(const TLikeRegexPredicateNode& node) override;
 
-    void Error(const TAstNodePtr node, const TStringBuf message);
+    void Error(const TAstNodePtr& node, TStringBuf message);
 
 private:
     TIssues& Issues_;
 };
 
-}
-
+} // namespace NYql::NJsonPath

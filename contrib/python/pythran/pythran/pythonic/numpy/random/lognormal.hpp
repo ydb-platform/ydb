@@ -19,8 +19,7 @@ namespace numpy
   {
 
     template <class pS>
-    types::ndarray<double, pS> lognormal(double mean, double sigma,
-                                         pS const &shape)
+    types::ndarray<double, pS> lognormal(double mean, double sigma, pS const &shape)
     {
       types::ndarray<double, pS> result{shape, types::none_type()};
       std::lognormal_distribution<double> distribution{mean, sigma};
@@ -37,8 +36,7 @@ namespace numpy
 
     inline double lognormal(double mean, double sigma, types::none_type d)
     {
-      return std::lognormal_distribution<double>{mean,
-                                                 sigma}(details::generator);
+      return std::lognormal_distribution<double>{mean, sigma}(details::generator);
     }
   } // namespace random
 } // namespace numpy

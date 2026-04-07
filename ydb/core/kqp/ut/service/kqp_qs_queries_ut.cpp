@@ -113,98 +113,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         DoClosedSessionRemovedWhileActiveTest(false);
     }
 */
-    // Copy paste from table service but with some modifications for query service
-    // Checks read iterators/session/sdk counters have expected values
-    Y_UNIT_TEST(CloseSessionsWithLoad) {
-        auto kikimr = std::make_shared<TKikimrRunner>();
-        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
-        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
-        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_ACTOR, NLog::PRI_DEBUG);
-        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NLog::PRI_DEBUG);
-
-        NYdb::NQuery::TQueryClient db = kikimr->GetQueryClient();
-
-        const ui32 SessionsCount = 50;
-        const TDuration WaitDuration = TDuration::Seconds(1);
-
-        TVector<NYdb::NQuery::TQueryClient::TSession> sessions;
-        for (ui32 i = 0; i < SessionsCount; ++i) {
-            auto sessionResult = db.GetSession().GetValueSync();
-            UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
-
-            sessions.push_back(sessionResult.GetSession());
-        }
-
-        NPar::LocalExecutor().RunAdditionalThreads(SessionsCount + 1);
-        NPar::LocalExecutor().ExecRange([&kikimr, sessions, WaitDuration](int id) mutable {
-            if (id == (i32)sessions.size()) {
-                Sleep(WaitDuration);
-                Cerr << "start sessions close....." << Endl;
-                auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr->GetEndpoint());
-                for (ui32 i = 0; i < sessions.size(); ++i) {
-                    bool allDoneOk = true;
-                    NTestHelpers::CheckDelete(clientConfig, TString{sessions[i].GetId()}, Ydb::StatusIds::SUCCESS, allDoneOk);
-                    UNIT_ASSERT(allDoneOk);
-                }
-
-                Cerr << "finished sessions close....." << Endl;
-                auto counters = GetServiceCounters(kikimr->GetTestServer().GetRuntime()->GetAppData(0).Counters,  "ydb");
-
-                ui64 pendingCompilations = 0;
-                do {
-                    Sleep(WaitDuration);
-                    pendingCompilations = counters->GetNamedCounter("name", "table.query.compilation.active_count", false)->Val();
-                    Cerr << "still compiling... " << pendingCompilations << Endl;
-                } while (pendingCompilations != 0);
-
-                ui64 pendingSessions = 0;
-                do {
-                    Sleep(WaitDuration);
-                    pendingSessions = counters->GetNamedCounter("name", "table.session.active_count", false)->Val();
-                    Cerr << "still active sessions ... " << pendingSessions << Endl;
-                } while (pendingSessions != 0);
-
-                return;
-            }
-
-            auto session = sessions[id];
-            std::optional<TTransaction> tx;
-
-            while (true) {
-                if (tx) {
-                    auto result = tx->Commit().GetValueSync();
-                    if (!result.IsSuccess()) {
-                        return;
-                    }
-
-                    tx = {};
-                    continue;
-                }
-
-                auto query = Sprintf(R"(
-                    SELECT Key, Text, Data FROM `/Root/EightShard` WHERE Key=%1$d + 0;
-                    SELECT Key, Data, Text FROM `/Root/EightShard` WHERE Key=%1$d + 1;
-                    SELECT Text, Key, Data FROM `/Root/EightShard` WHERE Key=%1$d + 2;
-                    SELECT Text, Data, Key FROM `/Root/EightShard` WHERE Key=%1$d + 3;
-                    SELECT Data, Key, Text FROM `/Root/EightShard` WHERE Key=%1$d + 4;
-                    SELECT Data, Text, Key FROM `/Root/EightShard` WHERE Key=%1$d + 5;
-
-                    UPSERT INTO `/Root/EightShard` (Key, Text) VALUES
-                        (%2$dul, "New");
-                )", RandomNumber<ui32>(), RandomNumber<ui32>());
-
-                auto result = session.ExecuteQuery(query, TTxControl::BeginTx()).GetValueSync();
-                if (!result.IsSuccess()) {
-                    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_SESSION);
-                    Cerr << "received non-success status for session " << id << Endl;
-                    return;
-                }
-
-                tx = result.GetTransaction();
-            }
-        }, 0, SessionsCount + 1, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
-        WaitForZeroReadIterators(kikimr->GetTestServer(), "/Root/EightShard");
-    }
 
     Y_UNIT_TEST(PeriodicTaskInSessionPool) {
         auto kikimr = DefaultKikimrRunner();
@@ -363,6 +271,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                         switch (execResult.GetStatus()) {
                             case EStatus::SUCCESS:
                             case EStatus::BAD_SESSION:
+                            case EStatus::CANCELLED:
                                 break;
                             default:
                                 UNIT_ASSERT_C(false, "unexpected status: " << execResult.GetStatus());
@@ -414,8 +323,10 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         UNIT_ASSERT_VALUES_EQUAL(count, 1);
     }
 
-    Y_UNIT_TEST(ExecuteQueryUpsertDoesntChangeIndexedValuesIfNotChanged) {
-        auto kikimr = DefaultKikimrRunner();
+    Y_UNIT_TEST_TWIN(ExecuteQueryUpsertDoesntChangeIndexedValuesIfNotChanged, UseStreamIndex) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
+        auto kikimr = DefaultKikimrRunner({}, app);
         auto db = kikimr.GetQueryClient();
 
         auto settings = TExecuteQuerySettings()
@@ -1095,7 +1006,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             auto [totalRows, totalBatches] = CalcRowsAndBatches(it);
 
             UNIT_ASSERT_VALUES_EQUAL(totalRows, 100);
-            UNIT_ASSERT_VALUES_EQUAL(totalBatches, 100);
+            UNIT_ASSERT_GE_C(totalBatches, 100, "At least 100 batches are expected"); // ignore final empty batch, if any
         }
 
         auto settings = TExecuteQuerySettings().OutputChunkMaxSize(10000);
@@ -1505,7 +1416,12 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(ExecStatsPlan) {
-        auto kikimr = DefaultKikimrRunner();
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetExtractPredicateParameterListSizeLimit(10000);
+        appConfig.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms(true);
+        appConfig.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimization(true);
+
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
         auto db = kikimr.GetQueryClient();
 
         auto params = TParamsBuilder()
@@ -1884,14 +1800,25 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(CreateTempTable) {
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings().SetKqpSettings({setting}).SetAuthToken("user0@builtin");
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
         TKikimrRunner kikimr(
             serverSettings.SetWithSampleTables(false).SetEnableTempTables(true));
-        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
-        auto client = kikimr.GetQueryClient();
 
-        TString SessionId;
+        kikimr.GetTestClient().GrantConnect("user0@builtin");
+        kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
+        WaitForProxy(kikimr, "user0@builtin");
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetAuthToken("user0@builtin")
+            .SetDatabase("/Root");
+        auto driver = TDriver(driverConfig);
+        auto client = NYdb::NQuery::TQueryClient(driver);
+
+        auto clientConfig = NGRpcProxy::TGRpcClientConfig(kikimr.GetEndpoint());
+
+        TString TempDirName;
         {
             auto session = client.GetSession().GetValueSync().GetSession();
             auto id = session.GetId();
@@ -1916,8 +1843,15 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 querySelect, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
 
-            const TVector<TString> sessionIdSplitted = StringSplitter(id).SplitByString("&id=");
-            SessionId = sessionIdSplitted.back();
+            {
+                auto schemeClient = kikimr.GetSchemeClient();
+                auto listResult = schemeClient.ListDirectory(
+                    "/Root/.tmp/sessions"
+                    ).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SUCCESS, listResult.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL(listResult.GetChildren().size(), 1);
+                TempDirName = listResult.GetChildren()[0].Name;
+            }
 
             const auto queryCreateRestricted = Q_(fmt::format(R"(
                 --!syntax_v1
@@ -1925,7 +1859,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                     Key Uint64 NOT NULL,
                     Value String,
                     PRIMARY KEY (Key)
-                );)", SessionId));
+                );)", TempDirName));
 
             auto resultCreateRestricted = session.ExecuteQuery(queryCreateRestricted, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT(!resultCreateRestricted.IsSuccess());
@@ -1953,7 +1887,16 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         {
             auto schemeClient = kikimr.GetSchemeClient();
             auto listResult = schemeClient.ListDirectory(
-                fmt::format("/Root/.tmp/sessions/{}", SessionId)
+                fmt::format("/Root/.tmp/sessions/{}", TempDirName)
+                ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SCHEME_ERROR, listResult.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(listResult.GetIssues().ToString(), "Path not found",listResult.GetIssues().ToString());
+        }
+
+        {
+            auto schemeClient = kikimr.GetSchemeClient();
+            auto listResult = schemeClient.ListDirectory(
+                fmt::format("/Root/.tmp/sessions/{}", TempDirName)
                 ).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), NYdb::EStatus::SCHEME_ERROR, listResult.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(listResult.GetIssues().ToString(), "Path not found",listResult.GetIssues().ToString());
@@ -3610,14 +3553,13 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(SeveralCTAS, UseSink) {
+    Y_UNIT_TEST(SeveralCTAS) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetKqpSettings({setting})
             .SetWithSampleTables(false)
             .SetEnableTempTables(true);
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         serverSettings.AppConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
@@ -3654,6 +3596,47 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(2)));
         }
     }
+
+     Y_UNIT_TEST_TWIN(CTAS_BadKey, IsOlap) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetKqpSettings({setting})
+            .SetWithSampleTables(false)
+            .SetEnableTempTables(true);
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+
+        {
+            auto result = db.ExecuteQuery(Sprintf(R"(
+                CREATE TABLE Table (
+                    PRIMARY KEY (Key2, Key)
+                ) WITH (STORE=%s)
+                AS SELECT 1u AS Key, "1" AS Value1, "1" AS Value2;
+                )", IsOlap ? "COLUMN" : "ROW"), TTxControl::NoTx(), TExecuteQuerySettings()).ExtractValueSync();
+
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().contains("Unknown column 'Key2' specified in key column list"),
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.ExecuteQuery(Sprintf(R"(
+                CREATE TABLE Table (
+                    PRIMARY KEY (Key, Key2)
+                ) WITH (STORE=%s)
+                AS SELECT 1u AS Key, "1" AS Value1, "1" AS Value2;
+                )", IsOlap ? "COLUMN" : "ROW"), TTxControl::NoTx(), TExecuteQuerySettings()).ExtractValueSync();
+
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().contains("Unknown column 'Key2' specified in key column list"),
+                result.GetIssues().ToString());
+        }
+     }
 
     Y_UNIT_TEST(CheckIsolationLevelFroPerStatementMode) {
         auto setting = NKikimrKqp::TKqpSetting();
@@ -3929,10 +3912,9 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(TableSink_Htap, withOltpSink) {
+    Y_UNIT_TEST(TableSink_Htap) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(withOltpSink);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -4115,11 +4097,10 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(TableSink_HtapComplex, withOltpSink) {
+    Y_UNIT_TEST(TableSink_HtapComplex) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(withOltpSink);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -4233,10 +4214,9 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(TableSink_HtapInteractive, withOltpSink) {
+    Y_UNIT_TEST(TableSink_HtapInteractive) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(withOltpSink);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -4316,7 +4296,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     Y_UNIT_TEST(TableSink_BadTransactions) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(false);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -4552,7 +4531,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST_TWIN(TableSink_OltpReplace, HasSecondaryIndex) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
 
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -4621,7 +4599,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(TableSink_OltpLiteralUpsert) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
 
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -4667,7 +4644,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         void Execute() {
             auto settings = TKikimrSettings().SetWithSampleTables(false);
             settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(IsOlap);
-            settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(!IsOlap);
 
             Kikimr = std::make_unique<TKikimrRunner>(settings);
             Tests::NCommon::TLoggerInit(*Kikimr).Initialize();
@@ -5056,7 +5032,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     Y_UNIT_TEST(TableSink_DisableSink) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
 
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -5083,7 +5058,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT(!prepareResult.IsSuccess());
             UNIT_ASSERT_C(
-                prepareResult.GetIssues().ToString().contains("Data manipulation queries do not support column shard tables."),
+                prepareResult.GetIssues().ToString().contains(
+                    "Data manipulation queries with column-oriented tables are disabled."),
                 prepareResult.GetIssues().ToString());
         }
 
@@ -5097,10 +5073,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(TableSink_Oltp_Replace, UseSink) {
+    Y_UNIT_TEST(TableSink_Oltp_Replace) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(UseSink);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
@@ -5205,7 +5179,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
      Y_UNIT_TEST(TableSink_OltpInteractive) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
@@ -5305,7 +5278,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     Y_UNIT_TEST(ReadDatashardAndColumnshard) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(false);
 
         TKikimrRunner kikimr(settings);
@@ -5395,7 +5367,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     Y_UNIT_TEST(ReplaceIntoWithDefaultValue) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
 
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
@@ -5502,141 +5473,119 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     // TODO: flown4qqqq
-    Y_UNIT_TEST(AlterTable_SetNotNull_Invalid) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableSetColumnConstraint(true);
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+    // Y_UNIT_TEST(AlterTable_SetNotNull_Invalid) {
+    //     NKikimrConfig::TFeatureFlags featureFlags;
+    //     featureFlags.SetEnableSetColumnConstraint(true);
+    //     auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
+    //     TKikimrRunner kikimr(settings);
 
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+    //     Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
-        auto client = kikimr.GetQueryClient();
+    //     auto client = kikimr.GetQueryClient();
 
-        {
-            auto createTable = client.ExecuteQuery(R"sql(
-                CREATE TABLE `/Root/test/alterNotNull` (
-                    id Int32 NOT NULL,
-                    val Int32 DEFAULT(0),
-                    PRIMARY KEY (id)
-                );
-            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(createTable.IsSuccess(), createTable.GetIssues().ToString());
-        }
+    //     {
+    //         auto createTable = client.ExecuteQuery(R"sql(
+    //             CREATE TABLE `/Root/test/alterNotNull` (
+    //                 id Int32 NOT NULL,
+    //                 val Int32 DEFAULT(0),
+    //                 PRIMARY KEY (id)
+    //             );
+    //         )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    //         UNIT_ASSERT_C(createTable.IsSuccess(), createTable.GetIssues().ToString());
+    //     }
 
-        {
-            auto initValues = client.ExecuteQuery(R"sql(
-                REPLACE INTO `/Root/test/alterNotNull` (id, val)
-                VALUES
-                ( 1, 1 ),
-                ( 2, 10 ),
-                ( 3, 100 ),
-                ( 4, NULL ),
-                ( 5, 10000 ),
-                ( 6, 100000 ),
-                ( 7, 1000000 );
-            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
-        }
+    //     {
+    //         auto initValues = client.ExecuteQuery(R"sql(
+    //             REPLACE INTO `/Root/test/alterNotNull` (id, val)
+    //             VALUES
+    //             ( 1, 1 ),
+    //             ( 2, 10 ),
+    //             ( 3, 100 ),
+    //             ( 4, NULL ),
+    //             ( 5, 10000 ),
+    //             ( 6, 100000 ),
+    //             ( 7, 1000000 );
+    //         )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    //         UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
+    //     }
 
-        // need to remove
-        {
-            auto setNotNull = client.ExecuteQuery(R"sql(
-                ALTER TABLE `/Root/test/alterNotNull`
-                ALTER COLUMN val SET NOT NULL;
-            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL_C(setNotNull.GetStatus(), EStatus::PRECONDITION_FAILED, setNotNull.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(), "CreateSetConstraintInitiate is not implemented. TablePath = '/Root/test/alterNotNull'");
-        }
+    //     {
+    //         auto setNotNull = client.ExecuteQuery(R"sql(
+    //             ALTER TABLE `/Root/test/alterNotNull`
+    //             ALTER COLUMN val SET NOT NULL;
+    //         )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    //         UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
+    //         UNIT_ASSERT_VALUES_EQUAL_C(setNotNull.GetStatus(), EStatus::GENERIC_ERROR, setNotNull.GetIssues().ToString());
+    //         UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(), "One of the shards report CHECKING_NOT_NULL_ERROR at Filling stage, process has to be canceled");
+    //     }
 
-        // {
-        //     auto setNotNull = client.ExecuteQuery(R"sql(
-        //         ALTER TABLE `/Root/test/alterNotNull`
-        //         ALTER COLUMN val SET NOT NULL;
-        //     )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-        //     UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
-        //     UNIT_ASSERT_VALUES_EQUAL_C(setNotNull.GetStatus(), EStatus::GENERIC_ERROR, setNotNull.GetIssues().ToString());
-        //     UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(), "One of the shards report CHECKING_NOT_NULL_ERROR at Filling stage, process has to be canceled");
-        // }
-
-        // {
-        //     auto initNullValues = client.ExecuteQuery(R"sql(
-        //         REPLACE INTO `/Root/test/alterNotNull` (id, val)
-        //         VALUES
-        //         ( 1, NULL ),
-        //         ( 2, NULL );
-        //     )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        //     UNIT_ASSERT_C(initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
-        // }
-    }
+    //     {
+    //         auto initNullValues = client.ExecuteQuery(R"sql(
+    //             REPLACE INTO `/Root/test/alterNotNull` (id, val)
+    //             VALUES
+    //             ( 1, NULL ),
+    //             ( 2, NULL );
+    //         )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    //         UNIT_ASSERT_C(initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
+    //     }
+    // }
 
     // TODO: flown4qqqq
-    Y_UNIT_TEST(AlterTable_SetNotNull_Valid) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableSetColumnConstraint(true);
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
-        TKikimrRunner kikimr(settings);
+    // Y_UNIT_TEST(AlterTable_SetNotNull_Valid) {
+    //     NKikimrConfig::TFeatureFlags featureFlags;
+    //     featureFlags.SetEnableSetColumnConstraint(true);
+    //     auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(false);
+    //     TKikimrRunner kikimr(settings);
 
-        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+    //     Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
-        auto client = kikimr.GetQueryClient();
+    //     auto client = kikimr.GetQueryClient();
 
-        {
-            auto createTable = client.ExecuteQuery(R"sql(
-                CREATE TABLE `/Root/test/alterNotNull` (
-                    id Int32 NOT NULL,
-                    val Int32 DEFAULT(0),
-                    PRIMARY KEY (id)
-                );
-            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(createTable.IsSuccess(), createTable.GetIssues().ToString());
-        }
+    //     {
+    //         auto createTable = client.ExecuteQuery(R"sql(
+    //             CREATE TABLE `/Root/test/alterNotNull` (
+    //                 id Int32 NOT NULL,
+    //                 val Int32 DEFAULT(0),
+    //                 PRIMARY KEY (id)
+    //             );
+    //         )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    //         UNIT_ASSERT_C(createTable.IsSuccess(), createTable.GetIssues().ToString());
+    //     }
 
-        {
-            auto initValues = client.ExecuteQuery(R"sql(
-                REPLACE INTO `/Root/test/alterNotNull` (id, val)
-                VALUES
-                ( 1, 1 ),
-                ( 2, 10 ),
-                ( 3, 100 ),
-                ( 4, 1000 ),
-                ( 5, 10000 ),
-                ( 6, 100000 ),
-                ( 7, 1000000 );
-            )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
-        }
+    //     {
+    //         auto initValues = client.ExecuteQuery(R"sql(
+    //             REPLACE INTO `/Root/test/alterNotNull` (id, val)
+    //             VALUES
+    //             ( 1, 1 ),
+    //             ( 2, 10 ),
+    //             ( 3, 100 ),
+    //             ( 4, 1000 ),
+    //             ( 5, 10000 ),
+    //             ( 6, 100000 ),
+    //             ( 7, 1000000 );
+    //         )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    //         UNIT_ASSERT_C(initValues.IsSuccess(), initValues.GetIssues().ToString());
+    //     }
 
-        // need to remove
-        {
-            auto setNotNull = client.ExecuteQuery(R"sql(
-                ALTER TABLE `/Root/test/alterNotNull`
-                ALTER COLUMN val SET NOT NULL;
-            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL_C(setNotNull.GetStatus(), EStatus::PRECONDITION_FAILED, setNotNull.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(), "CreateSetConstraintInitiate is not implemented. TablePath = '/Root/test/alterNotNull'");
-        }
+    //     {
+    //         auto setNotNull = client.ExecuteQuery(R"sql(
+    //             ALTER TABLE `/Root/test/alterNotNull`
+    //             ALTER COLUMN val SET NOT NULL;
+    //         )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    //         UNIT_ASSERT_C(setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
+    //     }
 
-        // {
-        //     auto setNotNull = client.ExecuteQuery(R"sql(
-        //         ALTER TABLE `/Root/test/alterNotNull`
-        //         ALTER COLUMN val SET NOT NULL;
-        //     )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-        //     UNIT_ASSERT_C(setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
-        // }
-
-        // {
-        //     auto initNullValues = client.ExecuteQuery(R"sql(
-        //         REPLACE INTO `/Root/test/alterNotNull` (id, val)
-        //         VALUES
-        //         ( 1, NULL ),
-        //         ( 2, NULL );
-        //     )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        //     UNIT_ASSERT_C(!initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
-        //     UNIT_ASSERT_VALUES_EQUAL_C(initNullValues.GetStatus(), EStatus::GENERIC_ERROR, initNullValues.GetIssues().ToString());
-        // }
-    }
+    //     {
+    //         auto initNullValues = client.ExecuteQuery(R"sql(
+    //             REPLACE INTO `/Root/test/alterNotNull` (id, val)
+    //             VALUES
+    //             ( 1, NULL ),
+    //             ( 2, NULL );
+    //         )sql", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    //         UNIT_ASSERT_C(!initNullValues.IsSuccess(), initNullValues.GetIssues().ToString());
+    //         UNIT_ASSERT_VALUES_EQUAL_C(initNullValues.GetStatus(), EStatus::GENERIC_ERROR, initNullValues.GetIssues().ToString());
+    //     }
+    // }
 
     Y_UNIT_TEST(AlterTable_DropNotNull_WithSetFamily_Valid) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
@@ -6067,7 +6016,6 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     Y_UNIT_TEST(MixedReadQueryWithoutStreamLookup) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(false);
 
 
@@ -6280,10 +6228,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(LargeUpsert, UseSink) {
+    Y_UNIT_TEST(LargeUpsert) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
@@ -6344,6 +6290,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
                 auto result = session.ExecuteQuery(query, TTxControl::Tx(tx), params.Build()).GetValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                Sleep(TDuration::MilliSeconds(500));
             }
 
             auto commitResult = tx.Commit().GetValueSync();

@@ -38,6 +38,12 @@
 
 {% endnote %}
 
+{% note info %}
+
+При выполнении выгрузки в корневом каталоге базы данных создается директория с именем `export_*`, где `*` — это числовая часть идентификатора выгрузки. В данной директории размещаются таблицы, содержащие консистентный снапшот выгружаемых данных на момент начала выгрузки. После успешного завершения операции резервного копирования директория `export_*` вместе с содержимым удаляется.
+
+{% endnote %}
+
 {% include [_includes/backup_and_recovery/cli_overlay.md](_includes/backup_and_recovery/cli_overlay.md) %}
 
 {% include [_includes/backup_and_recovery/others_overlay.md](_includes/backup_and_recovery/others_overlay.md) %}

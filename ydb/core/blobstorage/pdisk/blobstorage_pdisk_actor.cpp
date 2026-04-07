@@ -32,6 +32,7 @@
 #include <util/generic/algorithm.h>
 #include <util/string/split.h>
 #include <util/system/sanitizers.h>
+#include <util/generic/variant.h>
 
 namespace NKikimr {
 namespace NPDisk {
@@ -56,46 +57,12 @@ void CreatePDiskActor(TExecutorThread& executorThread,
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
-    struct TInitQueueItem {
-        TOwnerRound OwnerRound = 0;
-        TVDiskID VDisk = TVDiskID::InvalidId;
-        ui32 SlotSizeInUnits = 0;
-        ui64 PDiskGuid = 0;
-        TActorId Sender;
-        TActorId CutLogId;
-        TActorId WhiteboardProxyId;
-        ui32 SlotId = 0;
-        bool IsShred = false;
-        ui64 ShredGeneration = 0;
-        ui64 Cookie;
-
-        TInitQueueItem(const TActorId sender, const ui64 shredGeneration, ui64 cookie)
-            : Sender(sender)
-            , IsShred(true)
-            , ShredGeneration(shredGeneration)
-            , Cookie(cookie)
-        {}
-
-        TInitQueueItem(
-                TOwnerRound ownerRound,
-                TVDiskID vDisk,
-                ui32 slotSizeInUnits,
-                ui64 pDiskGuid,
-                TActorId sender,
-                TActorId cutLogId,
-                TActorId whiteboardProxyId,
-                ui32 slotId
-        )
-            : OwnerRound(ownerRound)
-            , VDisk(vDisk)
-            , SlotSizeInUnits(slotSizeInUnits)
-            , PDiskGuid(pDiskGuid)
-            , Sender(sender)
-            , CutLogId(cutLogId)
-            , WhiteboardProxyId(whiteboardProxyId)
-            , SlotId(slotId)
-        {}
-    };
+    using TInitQueueItem = std::variant<
+        NPDisk::TEvYardInit::TPtr,
+        NPDisk::TEvShredPDisk::TPtr,
+        NPDisk::TEvYardResize::TPtr,
+        NPDisk::TEvChangeExpectedSlotCount::TPtr
+    >;
 
     TString StateErrorReason;
     TIntrusivePtr<TPDiskConfig> Cfg;
@@ -243,6 +210,9 @@ public:
     }
 
     ~TPDiskActor() {
+        if (FormattingThread) {
+            FormattingThread->Join();
+        }
         SecureWipeBuffer((ui8*)MainKey.Keys.data(), sizeof(NPDisk::TKey) * MainKey.Keys.size());
     }
 
@@ -313,17 +283,30 @@ public:
     void InitError(const TString &errorReason, bool allowMetadataHandling = false) {
         Become(&TThis::StateError);
         for (TList<TInitQueueItem>::iterator it = InitQueue.begin(); it != InitQueue.end(); ++it) {
-            if (it->IsShred) {
-                Send(it->Sender, new NPDisk::TEvShredPDiskResult(NKikimrProto::CORRUPTED, it->ShredGeneration, errorReason), 0, it->Cookie);
-                if (PDisk) {
-                    PDisk->Mon.ShredPDisk.CountResponse();
+            std::visit([this, &errorReason](const auto& ev) {
+                using T = std::decay_t<decltype(ev)>;
+                if constexpr (std::is_same_v<T, NPDisk::TEvShredPDisk::TPtr>) {
+                    Send(ev->Sender, new NPDisk::TEvShredPDiskResult(NKikimrProto::CORRUPTED, ev->Get()->ShredGeneration, errorReason), 0, ev->Cookie);
+                    if (PDisk) {
+                        PDisk->Mon.ShredPDisk.CountResponse();
+                    }
+                } else if constexpr (std::is_same_v<T, NPDisk::TEvYardInit::TPtr>) {
+                    Send(ev->Sender, new NPDisk::TEvYardInitResult(NKikimrProto::CORRUPTED, errorReason));
+                    if (PDisk) {
+                        PDisk->Mon.YardInit.CountResponse();
+                    }
+                } else if constexpr (std::is_same_v<T, NPDisk::TEvYardResize::TPtr>) {
+                    Send(ev->Sender, new NPDisk::TEvYardResizeResult(NKikimrProto::CORRUPTED, {}, errorReason));
+                    if (PDisk) {
+                        PDisk->Mon.YardResize.CountResponse();
+                    }
+                } else if constexpr (std::is_same_v<T, NPDisk::TEvChangeExpectedSlotCount::TPtr>) {
+                    Send(ev->Sender, new NPDisk::TEvChangeExpectedSlotCountResult(NKikimrProto::CORRUPTED, errorReason));
+                    if (PDisk) {
+                        PDisk->Mon.ChangeExpectedSlotCount.CountResponse();
+                    }
                 }
-            } else {
-                Send(it->Sender, new NPDisk::TEvYardInitResult(NKikimrProto::CORRUPTED, errorReason));
-                if (PDisk) {
-                    PDisk->Mon.YardInit.CountResponse();
-                }
-            }
+            }, *it);
         }
         InitQueue.clear();
         TStringStream str;
@@ -397,7 +380,12 @@ public:
     void CheckMagicSector(ui8 *magicData, ui32 magicDataSize) {
         bool isFormatMagicValid = PDisk->IsFormatMagicValid(magicData, magicDataSize, MainKey);
         if (isFormatMagicValid) {
-            auto format = PDisk->CheckMetadataFormatSector(magicData, magicDataSize, MainKey, PCtx->PDiskLogPrefix);
+            auto format = PDisk->CheckMetadataFormatSector(
+                magicData,
+                magicDataSize,
+                MainKey,
+                PCtx->PDiskLogPrefix,
+                Cfg->EnableFormatAndMetadataEncryption);
             PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TPushUnformattedMetadataSector>(format,
                 !Cfg->MetadataOnly));
             if (Cfg->MetadataOnly) {
@@ -436,14 +424,12 @@ public:
         P_LOG(PRI_WARN, BSP01, PDisk->ErrorStr);
 
         // Is used to pass parameters into formatting thread, because TThread can pass only void*
-        using TCookieType = std::tuple<TPDiskActor*, TActorSystem*, TActorId, std::optional<TRcBuf>>;
+        using TCookieType = std::tuple<TIntrusivePtr<TPDiskConfig>, NPDisk::TKey, TActorSystem*, TActorId, std::optional<TRcBuf>>;
         FormattingThread.Reset(new TThread(
                 [] (void *cookie) -> void* {
                     auto params = static_cast<TCookieType*>(cookie);
-                    auto [actor, actorSystem, pDiskActor, metadata] = *params;
+                    auto [cfg, mainKey, actorSystem, pDiskActor, metadata] = std::move(*params);
                     delete params;
-
-                    TPDiskConfig *cfg = actor->Cfg.Get();
 
                     if (cfg->ReadOnly) {
                         TString readOnlyError = "PDisk is in read-only mode";
@@ -460,16 +446,23 @@ public:
                     SafeEntropyPoolRead(&sysLogKey, sizeof(NKikimr::NPDisk::TKey));
 
                     try {
+                        TFormatOptions options;
+                        options.TrimEntireDevice = cfg->FeatureFlags.GetTrimEntireDeviceOnStartup();
+                        options.SectorMap = cfg->SectorMap;
+                        options.EnableSmallDiskOptimization = cfg->FeatureFlags.GetEnableSmallDiskOptimization();
+                        options.Metadata = metadata;
+                        options.PlainDataChunks = cfg->PlainDataChunks;
+                        options.EnableFormatAndMetadataEncryption = cfg->EnableFormatAndMetadataEncryption;
+                        options.EnableSectorEncryption = cfg->FeatureFlags.GetEnablePDiskDataEncryption();
+
                         try {
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,
-                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(), false,
-                                cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap,
-                                cfg->FeatureFlags.GetEnableSmallDiskOptimization(), metadata, cfg->PlainDataChunks);
+                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, mainKey, TString(),
+                                options);
                         } catch (NPDisk::TPDiskFormatBigChunkException) {
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, NPDisk::SmallDiskMaximumChunkSize,
-                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(), false,
-                                cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap,
-                                cfg->FeatureFlags.GetEnableSmallDiskOptimization(), metadata, cfg->PlainDataChunks);
+                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, mainKey, TString(),
+                                options);
                         }
                         actorSystem->Send(pDiskActor, new TEvPDiskFormattingFinished(true, ""));
                     } catch (yexception ex) {
@@ -478,7 +471,7 @@ public:
                     }
                     return nullptr;
                 },
-                new TCookieType(this, TlsActivationContext->ActorSystem(), SelfId(), std::move(ev->Get()->Metadata))));
+                new TCookieType(Cfg, MainKey.Keys.back(), TlsActivationContext->ActorSystem(), SelfId(), std::move(ev->Get()->Metadata))));
 
         FormattingThread->Start();
     }
@@ -604,7 +597,6 @@ public:
                     // PDisk GUID is OK and format is complete
                     *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialSysLogRead;
                     *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::BootingSysLogRead;
-                    PDisk->Format.InitMagic();
                     PDisk->ReadSysLog(SelfId());
                 }
             }
@@ -633,17 +625,23 @@ public:
     void InitSuccess() {
         Become(&TThis::StateOnline);
         for (TList<TInitQueueItem>::iterator it = InitQueue.begin(); it != InitQueue.end(); ++it) {
-            if (it->IsShred) {
-                NPDisk::TEvShredPDisk evShredPDisk(it->ShredGeneration);
-                auto* request = PDisk->ReqCreator.CreateFromEv<NPDisk::TShredPDisk>(evShredPDisk, it->Sender);
-                request->Cookie = it->Cookie;
-                PDisk->InputRequest(request);
-            } else {
-                NPDisk::TEvYardInit evInit(it->OwnerRound, it->VDisk, it->PDiskGuid, it->CutLogId, it->WhiteboardProxyId,
-                    it->SlotId, it->SlotSizeInUnits);
-                auto* request = PDisk->ReqCreator.CreateFromEv<TYardInit>(evInit, it->Sender);
-                PDisk->InputRequest(request);
-            }
+            std::visit([this](const auto& ev) {
+                using T = std::decay_t<decltype(ev)>;
+                if constexpr (std::is_same_v<T, NPDisk::TEvShredPDisk::TPtr>) {
+                    auto* request = PDisk->ReqCreator.CreateFromEv<NPDisk::TShredPDisk>(*ev->Get(), ev->Sender);
+                    request->Cookie = ev->Cookie;
+                    PDisk->InputRequest(request);
+                } else if constexpr (std::is_same_v<T, NPDisk::TEvYardInit::TPtr>) {
+                    auto* request = PDisk->ReqCreator.CreateFromEv<TYardInit>(*ev->Get(), ev->Sender);
+                    PDisk->InputRequest(request);
+                } else if constexpr (std::is_same_v<T, NPDisk::TEvYardResize::TPtr>) {
+                    auto* request = PDisk->ReqCreator.CreateFromEv<TYardResize>(*ev->Get(), ev->Sender);
+                    PDisk->InputRequest(request);
+                } else if constexpr (std::is_same_v<T, NPDisk::TEvChangeExpectedSlotCount::TPtr>) {
+                    auto* request = PDisk->ReqCreator.CreateFromEv<TChangeExpectedSlotCount>(*ev->Get(), ev->Sender);
+                    PDisk->InputRequest(request);
+                }
+            }, *it);
         }
         InitQueue.clear();
         if (ControledStartResult) {
@@ -653,9 +651,7 @@ public:
     }
 
     void InitHandle(NPDisk::TEvYardInit::TPtr &ev) {
-        const NPDisk::TEvYardInit &evYardInit = *ev->Get();
-        InitQueue.emplace_back(evYardInit.OwnerRound, evYardInit.VDisk, evYardInit.GroupSizeInUnits, evYardInit.PDiskGuid,
-            ev->Sender, evYardInit.CutLogID, evYardInit.WhiteboardProxyId, evYardInit.SlotId);
+        InitQueue.emplace_back(ev);
     }
 
     void OnPDiskStop(TActorId &sender, void *cookie) {
@@ -700,13 +696,16 @@ public:
 
     void InitHandle(NPDisk::TEvYardResize::TPtr &ev) {
         PDisk->Mon.YardResize.CountRequest();
-        Send(ev->Sender, new NPDisk::TEvYardResizeResult(NKikimrProto::CORRUPTED, {}, StateErrorReason));
-        PDisk->Mon.YardResize.CountResponse();
+        InitQueue.emplace_back(ev);
+    }
+
+    void InitHandle(NPDisk::TEvChangeExpectedSlotCount::TPtr &ev) {
+        PDisk->Mon.ChangeExpectedSlotCount.CountRequest();
+        InitQueue.emplace_back(ev);
     }
 
     void InitHandle(NPDisk::TEvShredPDisk::TPtr &ev) {
-        const NPDisk::TEvShredPDisk &evShredPDisk = *ev->Get();
-        InitQueue.emplace_back(ev->Sender, evShredPDisk.ShredGeneration, ev->Cookie);
+        InitQueue.emplace_back(ev);
     }
 
     void InitHandle(NPDisk::TEvPreShredCompactVDiskResult::TPtr &ev) {
@@ -735,7 +734,7 @@ public:
 
     void ErrorHandle(NPDisk::TEvCheckSpace::TPtr &ev) {
         PDisk->Mon.CheckSpace.CountRequest();
-        Send(ev->Sender, new NPDisk::TEvCheckSpaceResult(NKikimrProto::CORRUPTED, 0, 0, 0, 0, 0, 0u, StateErrorReason));
+        Send(ev->Sender, new NPDisk::TEvCheckSpaceResult(NKikimrProto::CORRUPTED, 0, 0, 0, 0, 0, 0u, 0, StateErrorReason));
         PDisk->Mon.CheckSpace.CountResponse();
     }
 
@@ -804,6 +803,14 @@ public:
         PDisk->Mon.LogRead.CountResponse();
     }
 
+    void ErrorHandle(NPDisk::TEvChunkWriteRaw::TPtr ev) {
+        Send(ev->Sender, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::CORRUPTED, StateErrorReason), 0, ev->Cookie);
+    }
+
+    void ErrorHandle(NPDisk::TEvChunkReadRaw::TPtr ev) {
+        Send(ev->Sender, new NPDisk::TEvChunkReadRawResult(NKikimrProto::CORRUPTED, StateErrorReason), 0, ev->Cookie);
+    }
+
     void ErrorHandle(NPDisk::TEvChunkWrite::TPtr &ev) {
         const NPDisk::TEvChunkWrite &evChunkWrite = *ev->Get();
         PDisk->Mon.GetWriteCounter(evChunkWrite.PriorityClass)->CountRequest(0);
@@ -848,9 +855,21 @@ public:
         PDisk->Mon.YardResize.CountResponse();
     }
 
+    void ErrorHandle(NPDisk::TEvChangeExpectedSlotCount::TPtr &ev) {
+        PDisk->Mon.ChangeExpectedSlotCount.CountRequest();
+        Send(ev->Sender, new NPDisk::TEvChangeExpectedSlotCountResult(NKikimrProto::CORRUPTED, StateErrorReason));
+        PDisk->Mon.ChangeExpectedSlotCount.CountResponse();
+    }
+
+    void ErrorHandle(NPDisk::TEvConfigureScheduler::TPtr &ev) {
+        PDisk->Mon.YardConfigureScheduler.CountRequest();
+        Send(ev->Sender, new NPDisk::TEvConfigureSchedulerResult(NKikimrProto::CORRUPTED, StateErrorReason));
+        PDisk->Mon.YardConfigureScheduler.CountResponse();
+    }
+
     void ErrorHandle(NPDisk::TEvChunkReserve::TPtr &ev) {
         PDisk->Mon.ChunkReserve.CountRequest();
-        Send(ev->Sender, new NPDisk::TEvChunkReserveResult(NKikimrProto::CORRUPTED, 0, StateErrorReason));
+        Send(ev->Sender, new NPDisk::TEvChunkReserveResult(NKikimrProto::CORRUPTED, 0, StateErrorReason), 0, ev->Cookie);
         PDisk->Mon.ChunkReserve.CountResponse();
     }
 
@@ -964,6 +983,14 @@ public:
         PDisk->InputRequest(request);
     }
 
+    void Handle(NPDisk::TEvChunkWriteRaw::TPtr ev) {
+        PDisk->InputRequest(PDisk->ReqCreator.CreateChunkWriteRaw(*ev));
+    }
+
+    void Handle(NPDisk::TEvChunkReadRaw::TPtr ev) {
+        PDisk->InputRequest(PDisk->ReqCreator.CreateChunkReadRaw(*ev));
+    }
+
     void Handle(NPDisk::TEvChunkWrite::TPtr &ev) {
         double burstMs;
         TChunkWrite* request = PDisk->ReqCreator.CreateChunkWrite(*ev->Get(), ev->Sender, burstMs, std::move(ev->TraceId));
@@ -994,8 +1021,14 @@ public:
         PDisk->InputRequest(request);
     }
 
+    void Handle(NPDisk::TEvChangeExpectedSlotCount::TPtr &ev) {
+        PDisk->Mon.YardResize.CountRequest();
+        TChangeExpectedSlotCount* request = PDisk->ReqCreator.CreateFromEv<TChangeExpectedSlotCount>(*ev->Get(), ev->Sender);
+        PDisk->InputRequest(request);
+    }
+
     void Handle(NPDisk::TEvChunkReserve::TPtr &ev) {
-        auto* request = PDisk->ReqCreator.CreateFromEv<TChunkReserve>(*ev->Get(), ev->Sender);
+        auto* request = PDisk->ReqCreator.CreateFromEv<TChunkReserve>(*ev->Get(), ev->Sender, ev->Cookie);
         PDisk->InputRequest(request);
     }
 
@@ -1472,6 +1505,8 @@ public:
             hFunc(NPDisk::TEvReadLog, ErrorHandle);
             hFunc(NPDisk::TEvChunkWrite, ErrorHandle);
             hFunc(NPDisk::TEvChunkRead, ErrorHandle);
+            hFunc(NPDisk::TEvChunkWriteRaw, ErrorHandle);
+            hFunc(NPDisk::TEvChunkReadRaw, ErrorHandle);
             hFunc(NPDisk::TEvHarakiri, ErrorHandle);
             hFunc(NPDisk::TEvSlay, InitHandle);
             hFunc(NPDisk::TEvChunkReserve, ErrorHandle);
@@ -1499,6 +1534,7 @@ public:
             hFunc(NPDisk::TEvShredVDiskResult, InitHandle);
             hFunc(NPDisk::TEvContinueShred, InitHandle);
             hFunc(NPDisk::TEvYardResize, InitHandle);
+            hFunc(NPDisk::TEvChangeExpectedSlotCount, InitHandle);
 
             hFunc(TEvReadMetadata, Handle);
             hFunc(TEvWriteMetadata, Handle);
@@ -1513,6 +1549,8 @@ public:
             hFunc(NPDisk::TEvReadLog, Handle);
             hFunc(NPDisk::TEvChunkWrite, Handle);
             hFunc(NPDisk::TEvChunkRead, Handle);
+            hFunc(NPDisk::TEvChunkWriteRaw, Handle);
+            hFunc(NPDisk::TEvChunkReadRaw, Handle);
             hFunc(NPDisk::TEvHarakiri, Handle);
             hFunc(NPDisk::TEvSlay, Handle);
             hFunc(NPDisk::TEvChunkReserve, Handle);
@@ -1532,6 +1570,7 @@ public:
             hFunc(NPDisk::TEvShredVDiskResult, Handle);
             hFunc(NPDisk::TEvContinueShred, Handle);
             hFunc(NPDisk::TEvYardResize, Handle);
+            hFunc(NPDisk::TEvChangeExpectedSlotCount, Handle);
 
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
             hFunc(NMon::TEvHttpInfo, Handle);
@@ -1552,6 +1591,8 @@ public:
             hFunc(NPDisk::TEvReadLog, ErrorHandle);
             hFunc(NPDisk::TEvChunkWrite, ErrorHandle);
             hFunc(NPDisk::TEvChunkRead, ErrorHandle);
+            hFunc(NPDisk::TEvChunkWriteRaw, ErrorHandle);
+            hFunc(NPDisk::TEvChunkReadRaw, ErrorHandle);
             hFunc(NPDisk::TEvHarakiri, ErrorHandle);
             hFunc(NPDisk::TEvSlay, ErrorHandle);
             hFunc(NPDisk::TEvChunkReserve, ErrorHandle);
@@ -1569,6 +1610,8 @@ public:
             hFunc(NPDisk::TEvShredVDiskResult, ErrorHandle);
             hFunc(NPDisk::TEvContinueShred, ErrorHandle);
             hFunc(NPDisk::TEvYardResize, ErrorHandle);
+            hFunc(NPDisk::TEvChangeExpectedSlotCount, ErrorHandle);
+            hFunc(NPDisk::TEvConfigureScheduler, ErrorHandle);
 
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
             hFunc(NMon::TEvHttpInfo, Handle);

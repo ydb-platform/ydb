@@ -5,10 +5,11 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/testing/unittest
     library/cpp/threading/future
     ydb/core/testlib/actors
-    ydb/library/yql/providers/pq/gateway/dummy
-    ydb/library/yql/providers/pq/provider
+    ydb/library/testlib/common
+    ydb/library/yql/providers/pq/gateway/abstract
 )
 
 YQL_LAST_ABI_VERSION()

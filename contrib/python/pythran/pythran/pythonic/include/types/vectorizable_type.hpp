@@ -14,14 +14,12 @@ namespace types
   };
   struct vectorizer {
     template <class E>
-    static auto
-    vbegin(E &&expr) -> decltype(std::forward<E>(expr).vbegin(vectorize{}))
+    static auto vbegin(E &&expr) -> decltype(std::forward<E>(expr).vbegin(vectorize{}))
     {
       return std::forward<E>(expr).vbegin(vectorize{});
     }
     template <class E>
-    static auto
-    vend(E &&expr) -> decltype(std::forward<E>(expr).vend(vectorize{}))
+    static auto vend(E &&expr) -> decltype(std::forward<E>(expr).vend(vectorize{}))
     {
       return std::forward<E>(expr).vend(vectorize{});
     }
@@ -30,14 +28,12 @@ namespace types
   };
   struct vectorizer_nobroadcast {
     template <class E>
-    static auto vbegin(E &&expr)
-        -> decltype(std::forward<E>(expr).vbegin(vectorize_nobroadcast{}))
+    static auto vbegin(E &&expr) -> decltype(std::forward<E>(expr).vbegin(vectorize_nobroadcast{}))
     {
       return std::forward<E>(expr).vbegin(vectorize_nobroadcast{});
     }
     template <class E>
-    static auto vend(E &&expr)
-        -> decltype(std::forward<E>(expr).vend(vectorize_nobroadcast{}))
+    static auto vend(E &&expr) -> decltype(std::forward<E>(expr).vend(vectorize_nobroadcast{}))
     {
       return std::forward<E>(expr).vend(vectorize_nobroadcast{});
     }
@@ -45,10 +41,9 @@ namespace types
 
   template <class T>
   struct is_vectorizable_dtype {
-    static const bool value =
-        is_dtype<T>::value && !std::is_same<T, bool>::value &&
-        !std::is_same<T, long double>::value &&
-        !std::is_same<T, std::complex<long double>>::value;
+    static const bool value = is_dtype<T>::value && !std::is_same<T, bool>::value &&
+                              !std::is_same<T, long double>::value &&
+                              !std::is_same<T, std::complex<long double>>::value;
   };
 
   /* trait to check if is T is an array-like type that supports vectorization
@@ -67,9 +62,8 @@ namespace types
 
   template <class T>
   struct is_vectorizable {
-    static const bool value =
-        std::conditional<is_dtype<T>::value, is_vectorizable_dtype<T>,
-                         is_vectorizable_array<T>>::type::value;
+    static const bool value = std::conditional_t<is_dtype<T>::value, is_vectorizable_dtype<T>,
+                                                 is_vectorizable_array<T>>::value;
   };
 
   template <class O, class... Args>

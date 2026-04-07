@@ -7,6 +7,8 @@
 namespace NKikimr {
     namespace NHullComp {
 
+        static constexpr bool USE_NEW_BALANCE_STRATEGY = false;
+
         ////////////////////////////////////////////////////////////////////////////
         // NHullComp::EAction
         ////////////////////////////////////////////////////////////////////////////
@@ -299,10 +301,12 @@ namespace NKikimr {
             TDeleteSsts DeleteSsts;
             TMoveSsts MoveSsts;
             TCompactSsts CompactSsts;
+            bool IsFullCompaction = false;
             // this field contains
             // * original std::optional<TFullCompactionAttrs>
             // * if 'first' was set, than result of full compaction: second=true -- full compaction has been finished
             std::pair<std::optional<TFullCompactionAttrs>, bool> FullCompactionInfo;
+            double MaxRatio = 0.0;
 
             TTask() {
                 Clear();
@@ -313,6 +317,7 @@ namespace NKikimr {
                 DeleteSsts.Clear();
                 MoveSsts.Clear();
                 CompactSsts.Clear();
+                IsFullCompaction = false;
                 FullCompactionInfo.first.reset();
                 FullCompactionInfo.second = false;
             }

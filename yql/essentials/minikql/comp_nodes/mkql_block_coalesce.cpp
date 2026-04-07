@@ -112,13 +112,6 @@ bool DispatchBlendingCoalesce(const arrow::Datum& left, const arrow::Datum& righ
     }
 }
 
-std::shared_ptr<arrow::Scalar> UnwrapScalar(std::shared_ptr<arrow::Scalar> scalar, bool firstScalarIsExternalOptional) {
-    if (firstScalarIsExternalOptional) {
-        return dynamic_cast<arrow::StructScalar&>(*scalar).value.at(0);
-    }
-    return scalar;
-}
-
 class TCoalesceBlockExec {
 public:
     TCoalesceBlockExec(const std::shared_ptr<arrow::DataType>& returnArrowType, TType* firstItemType, TType* secondItemType, bool needUnwrapFirst)
@@ -126,7 +119,6 @@ public:
         , FirstItemType_(firstItemType)
         , SecondItemType_(secondItemType)
         , NeedUnwrapFirst_(needUnwrapFirst)
-        , FirstScalarIsExternalOptional_(NeedWrapWithExternalOptional(FirstItemType_))
     {
     }
 
@@ -136,7 +128,7 @@ public:
 
         if (first.is_scalar() && second.is_scalar()) {
             if (first.scalar()->is_valid) {
-                *res = NeedUnwrapFirst_ ? UnwrapScalar(first.scalar(), FirstScalarIsExternalOptional_) : first.scalar();
+                *res = NeedUnwrapFirst_ ? UnwrapScalar(first.scalar(), FirstItemType_) : first.scalar();
             } else {
                 *res = second.scalar();
             }
@@ -218,7 +210,6 @@ private:
     TType* const FirstItemType_;
     TType* const SecondItemType_;
     const bool NeedUnwrapFirst_;
-    const bool FirstScalarIsExternalOptional_;
 };
 
 std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockCoalesceKernel(const TVector<TType*>& argTypes, TType* resultType, bool needUnwrapFirst) {

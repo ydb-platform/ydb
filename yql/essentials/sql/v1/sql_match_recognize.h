@@ -6,9 +6,10 @@
 
 namespace NSQLTranslationV1 {
 
-class TSqlMatchRecognizeClause final : public TSqlTranslation {
+class TSqlMatchRecognizeClause final: public TSqlTranslation {
 public:
-    TSqlMatchRecognizeClause(TContext& ctx, NSQLTranslation::ESqlMode mode);
+    explicit TSqlMatchRecognizeClause(class TSqlTranslation& that);
+
     TMatchRecognizeBuilderPtr CreateBuilder(const TRule_row_pattern_recognition_clause& node);
     static constexpr size_t MaxPatternNesting = 20;
     static constexpr size_t MaxPermutedItems = 6;

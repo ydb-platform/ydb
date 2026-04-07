@@ -24,4 +24,4 @@ TVector<NBus::TBindResult> BindInRange(TRangeWalker<int>& portWalker) {
 
     ythrow yexception() << "Unable to bind within port range [" << portWalker.GetStart() << ", " << portWalker.GetFinish() << "]";
 }
-}
+} // namespace NYql

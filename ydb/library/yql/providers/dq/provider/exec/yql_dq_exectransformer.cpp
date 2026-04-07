@@ -768,6 +768,12 @@ private:
             return filesRes;
         }
         FlushCounter("FreezeUsedFiles");
+
+        auto& qContext = State->TypeCtx->QContext;
+        if (qContext.CanWrite() && qContext.CaptureMode() == EQPlayerCaptureMode::Full && !files.empty()) {
+            YQL_CLOG(DEBUG, ProviderDq) << "DQ full capture has not been taken: file dump is unsupported";
+            State->IsFullCaptureReady = false;
+        }
         // copy-paste }
 
         TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), State->FunctionRegistry->SupportsSizedAllocators());
@@ -818,7 +824,7 @@ private:
         bool fallbackFlag = BuildUploadList(uploadList, localRun, explorer, typeEnv, files);
 
         if (fallbackFlag) {
-            YQL_CLOG(DEBUG, ProviderDq) << "Fallback: " << NCommon::ExprToPrettyString(ctx, *input);
+            YQL_CLOG(TRACE, ProviderDq) << "Fallback: " << NCommon::ExprToPrettyString(ctx, *input);
             return Fallback();
         } else {
             *lambda = SerializeRuntimeNode(root, typeEnv);
@@ -919,6 +925,33 @@ private:
                 if (const auto status = PeepHole(resInput, resInput, ctx, resSettings, publicIds); status.Level != TStatus::Ok) {
                     return SyncStatus(status);
                 }
+            }
+
+            bool hasErrors = false;
+            auto fallback = [&ctx, &hasErrors](const TExprNode& n, const TString& msg) {
+                auto issues = TIssues{TIssue(ctx.GetPosition(n.Pos()), msg).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_WARNING)};
+                ctx.AssociativeIssues.emplace(&n, std::move(issues));
+                hasErrors = true;
+            };
+
+            VisitExpr(*input.Get(), [&fallback, &hasErrors](const TExprNode& n) {
+                if (TCoScriptUdf::Match(&n) && NKikimr::NMiniKQL::IsSystemPython(NKikimr::NMiniKQL::ScriptTypeFromStr(n.Head().Content()))) {
+                    fallback(n, TStringBuilder() << "Cannot execute system python udf " << n.Content() << " in DQ");
+                    return false;
+                }
+                if ((TCoScriptUdf::Match(&n) && n.ChildrenSize() > 4) || (TCoUdf::Match(&n) && n.ChildrenSize() == 8)) {
+                    for (const auto& setting: n.Child(TCoScriptUdf::Match(&n) ? 4 : 7)->Children()) {
+                        YQL_ENSURE(setting->Head().IsAtom());
+                        if (setting->Head().Content() == "layers") {
+                            fallback(n, TStringBuilder() << "Cannot execute udf " << n.Head().Content() << " with layers in DQ");
+                            return false;
+                        }
+                    }
+                }
+                return !hasErrors;
+            });
+            if (hasErrors) {
+                return Fallback();
             }
 
             THashMap<TString, TString> secureParams;
@@ -1074,7 +1107,7 @@ private:
                         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
                     }
 
-                    YQL_CLOG(DEBUG, ProviderDq) << "Fallback from gateway: " << NCommon::ExprToPrettyString(ctx, *input);
+                    YQL_CLOG(TRACE, ProviderDq) << "Fallback from gateway: " << NCommon::ExprToPrettyString(ctx, *input);
                     TIssue warning(ctx.GetPosition(input->Pos()), "DQ cannot execute the query");
                     warning.Severity = TSeverityIds::S_INFO;
                     ctx.IssueManager.RaiseIssue(warning);
@@ -1320,6 +1353,12 @@ private:
             return filesRes;
         }
         FlushCounter("FreezeUsedFiles");
+
+        auto& qContext = State->TypeCtx->QContext;
+        if (qContext.CanWrite() && qContext.CaptureMode() == EQPlayerCaptureMode::Full && !files.empty()) {
+            YQL_CLOG(DEBUG, ProviderDq) << "DQ full capture has not been taken: file dump is unsupported";
+            State->IsFullCaptureReady = false;
+        }
         // copy-paste }
 
         THashMap<TString, TString> secureParams;
@@ -1873,6 +1912,12 @@ private:
                 continue;
             }
             FlushCounter("FreezeUsedFiles");
+
+            auto& qContext = State->TypeCtx->QContext;
+            if (qContext.CanWrite() && qContext.CaptureMode() == EQPlayerCaptureMode::Full && !files.empty()) {
+                YQL_CLOG(DEBUG, ProviderDq) << "DQ full capture has not been taken: file dump is unsupported";
+                State->IsFullCaptureReady = false;
+            }
             // copy-paste }
 
             auto settings = std::make_shared<TDqSettings>(*commonSettings);

@@ -250,6 +250,35 @@ grpc_error_handle grpc_set_socket_low_latency(int fd, int low_latency) {
   return y_absl::OkStatus();
 }
 
+/* Set Differentiated Services Code Point (DSCP) */
+grpc_error_handle grpc_set_socket_dscp(int fd, int dscp) {
+  if (dscp == grpc_core::PosixTcpOptions::kDscpNotSet) {
+    return y_absl::OkStatus();
+  }
+  // The TOS/TrafficClass byte consists of following bits:
+  // | 7 6 5 4 3 2 | 1 0 |
+  // |    DSCP     | ECN |
+  int value = dscp << 2;
+
+  int optval;
+  socklen_t optlen = sizeof(optval);
+  // Get ECN bits from current IP_TOS value unless IPv6 only
+  if (0 == getsockopt(fd, IPPROTO_IP, IP_TOS, &optval, &optlen)) {
+    value |= (optval & 0x3);
+    if (0 != setsockopt(fd, IPPROTO_IP, IP_TOS, &value, sizeof(value))) {
+      return GRPC_OS_ERROR(errno, "setsockopt(IP_TOS)");
+    }
+  }
+  // Get ECN from current Traffic Class value if IPv6 is available
+  if (0 == getsockopt(fd, IPPROTO_IPV6, IPV6_TCLASS, &optval, &optlen)) {
+    value |= (optval & 0x3);
+    if (0 != setsockopt(fd, IPPROTO_IPV6, IPV6_TCLASS, &value, sizeof(value))) {
+      return GRPC_OS_ERROR(errno, "setsockopt(IPV6_TCLASS)");
+    }
+  }
+  return y_absl::OkStatus();
+}
+
 // The default values for TCP_USER_TIMEOUT are currently configured to be in
 // line with the default values of KEEPALIVE_TIMEOUT as proposed in
 // https://github.com/grpc/proposal/blob/master/A18-tcp-user-timeout.md
@@ -299,6 +328,19 @@ void config_default_tcp_user_timeout(bool enable, int timeout, bool is_client) {
 }
 
 // Set TCP_USER_TIMEOUT
+// As documented in
+// https://github.com/grpc/proposal/blob/master/A18-tcp-user-timeout.md, the
+// default values for TCP_USER_TIMEOUT are currently configured to be in line
+// with the default values of KEEPALIVE_TIMEOUT as proposed in
+// https://github.com/grpc/proposal/blob/master/A18-tcp-user-timeout.md. In
+// other words, by default, TCP_USER_TIMEOUT is disabled on clients (since
+// keepalive is disabled on clients by default), and enabled on servers. To
+// override the default settings of enabling/disabling TCP_USER_TIMEOUT, the
+// value of KEEPALIVE_TIME on channel args is used. If present, a value of
+// INT_MAX means that TCP_USER_TIMEOUT would be disabled, while any other value
+// would enable TCP_USER_TIMEOUT. If TCP_USER_TIMEOUT is enabled, the default
+// setting is 20 seconds (aligning with the default of KEEPALIVE_TIMEOUT). The
+// KEEPALIVE_TIMEOUT channel arg overrides the value used for TCP_USER_TIMEOUT.
 grpc_error_handle grpc_set_socket_tcp_user_timeout(
     int fd, const grpc_core::PosixTcpOptions& options, bool is_client) {
   // Use conditionally-important parameter to avoid warning
@@ -358,8 +400,10 @@ grpc_error_handle grpc_set_socket_tcp_user_timeout(
           return y_absl::OkStatus();
         }
         if (newval != timeout) {
-          // Do not fail on failing to set TCP_USER_TIMEOUT for now.
-          gpr_log(GPR_ERROR, "Failed to set TCP_USER_TIMEOUT");
+          gpr_log(GPR_INFO,
+                  "Setting TCP_USER_TIMEOUT to value %d ms. Actual "
+                  "TCP_USER_TIMEOUT value is %d ms",
+                  timeout, newval);
           return y_absl::OkStatus();
         }
       }

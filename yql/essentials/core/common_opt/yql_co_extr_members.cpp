@@ -51,145 +51,9 @@ TExprNode::TPtr ApplyExtractMembersToExtend(const TExprNode::TPtr& node, const T
     return ctx.NewCallable(node->Pos(), node->Content(), std::move(inputs));
 }
 
-namespace {
-TExprNode::TPtr ApplyExtractMembersToSkipNullMembersLegacy(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
-    TCoSkipNullMembers skipNullMembers(node);
-    const auto& filtered = skipNullMembers.Members();
-    if (!filtered) {
-        return {};
-    }
-    TExprNode::TListType filteredMembers;
-    for (const auto& x : filtered.Cast()) {
-        auto member = x.Value();
-        bool hasMember = false;
-        for (const auto& y : members->ChildrenList()) {
-            if (member == y->Content()) {
-                hasMember = true;
-                break;
-            }
-        }
-
-        if (hasMember) {
-            filteredMembers.push_back(x.Ptr());
-        } else {
-            return nullptr;
-        }
-    }
-
-    YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix;
-    return Build<TCoSkipNullMembers>(ctx, skipNullMembers.Pos())
-        .Input<TCoExtractMembers>()
-            .Input(skipNullMembers.Input())
-            .Members(members)
-        .Build()
-        .Members(ctx.NewList(skipNullMembers.Pos(), std::move(filteredMembers)))
-        .Done().Ptr();
-}
-
-TExprNode::TPtr ApplyExtractMembersToFilterNullMembersLegacy(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
-    TCoFilterNullMembers filterNullMembers(node);
-    if (!filterNullMembers.Input().Maybe<TCoAssumeAllMembersNullableAtOnce>()) {
-        return {};
-    }
-    auto input = filterNullMembers.Input().Cast<TCoAssumeAllMembersNullableAtOnce>().Input();
-
-    const auto originalStructType = GetSeqItemType(*filterNullMembers.Input().Ref().GetTypeAnn()).Cast<TStructExprType>();
-
-    TExprNode::TPtr extendedMembers;
-    TMaybeNode<TCoAtomList> filteredMembers;
-    if (const auto& filtered = filterNullMembers.Members()) {
-        TExprNode::TListType updatedMembers;
-        for (const auto& x : filtered.Cast()) {
-            auto member = x.Value();
-            bool hasMember = false;
-            for (const auto& y : members->ChildrenList()) {
-                if (member == y->Content()) {
-                    hasMember = true;
-                    break;
-                }
-            }
-
-            if (hasMember) {
-                updatedMembers.push_back(x.Ptr());
-            }
-        }
-        if ((members->ChildrenList().size() + updatedMembers.empty()) == originalStructType->GetSize()) {
-            return {};
-        }
-        if (updatedMembers.empty()) {
-            // Keep at least one optional field in input
-            const auto extra = filtered.Cast().Item(0).Ptr();
-            updatedMembers.push_back(extra);
-            auto list = members->ChildrenList();
-            list.push_back(extra);
-            extendedMembers = ctx.NewList(members->Pos(), std::move(list));
-        }
-        filteredMembers = TCoAtomList(ctx.NewList(filtered.Cast().Pos(), std::move(updatedMembers)));
-    } else {
-
-        bool hasOptional = false;
-        for (const auto& y : members->ChildrenList()) {
-            if (auto type = originalStructType->FindItemType(y->Content()); type->GetKind() == ETypeAnnotationKind::Optional) {
-                hasOptional = true;
-                break;
-            }
-        }
-
-        if ((members->ChildrenList().size() + !hasOptional) == originalStructType->GetSize()) {
-            return {};
-        }
-
-        if (!hasOptional) {
-            // Keep at least one optional field in input (use first any optional field)
-            for (const auto& x : originalStructType->GetItems()) {
-                if (x->GetItemType()->GetKind() == ETypeAnnotationKind::Optional) {
-                    auto list = members->ChildrenList();
-                    list.push_back(ctx.NewAtom(members->Pos(), x->GetName()));
-                    extendedMembers = ctx.NewList(members->Pos(), std::move(list));
-                    break;
-                }
-            }
-            YQL_ENSURE(extendedMembers);
-        }
-    }
-
-    YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix;
-
-    if (extendedMembers) {
-        return Build<TCoExtractMembers>(ctx, filterNullMembers.Pos())
-            .Input<TCoFilterNullMembers>()
-                .Input<TCoExtractMembers>()
-                    .Input(input)
-                    .Members(extendedMembers)
-                .Build()
-                .Members(filteredMembers)
-            .Build()
-            .Members(members)
-            .Done().Ptr();
-    }
-
-    return Build<TCoFilterNullMembers>(ctx, filterNullMembers.Pos())
-        .Input<TCoExtractMembers>()
-            .Input(input)
-            .Members(members)
-        .Build()
-        .Members(filteredMembers)
-        .Done().Ptr();
-}
-
-} // namespace
-
 TExprNode::TPtr ApplyExtractMembersToFilterSkipNullMembers(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx,
-    TOptimizeContext& optCtx, TStringBuf logSuffix)
+    TStringBuf logSuffix)
 {
-    static const char optName[] = "MemberNthOverFlatMap";
-    YQL_ENSURE(optCtx.Types);
-    if (IsOptimizerDisabled<optName>(*optCtx.Types)) {
-        return node->IsCallable("FilterNullMembers") ?
-            ApplyExtractMembersToFilterNullMembersLegacy(node, members, ctx, logSuffix) :
-            ApplyExtractMembersToSkipNullMembersLegacy(node, members, ctx, logSuffix);
-    }
-
     TCoFilterNullMembersBase self(node);
     TSet<TStringBuf> filteredMembers = GetFilteredMembers(self);
     YQL_ENSURE(!filteredMembers.empty());
@@ -505,14 +369,15 @@ TExprNode::TPtr ApplyExtractMembersToFlatMap(const TExprNode::TPtr& node, const 
 }
 
 TExprNode::TPtr ApplyExtractMembersToPartitionByKey(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
-    TCoPartitionByKey part(node);
+    TCoPartitionByKeyBase part(node);
     YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
     auto newBody = Build<TCoExtractMembers>(ctx, part.Pos())
         .Input(part.ListHandlerLambda().Body())
         .Members(members)
         .Done();
 
-    return Build<TCoPartitionByKey>(ctx, part.Pos())
+    return Build<TCoPartitionByKeyBase>(ctx, part.Pos())
+        .CallableName(node->Content())
         .Input(part.Input())
         .KeySelectorLambda(part.KeySelectorLambda())
         .ListHandlerLambda()

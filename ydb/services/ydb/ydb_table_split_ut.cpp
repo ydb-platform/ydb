@@ -144,16 +144,16 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         Cerr << "Table has " << shardsBefore << " shards" << Endl;
         UNIT_ASSERT_VALUES_EQUAL(shardsBefore, 1);
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        server.Server_->GetRuntime()->GetAppData().DataShardConfig.SetStatsReportIntervalSeconds(0);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_INFO);
 
         // Set low CPU usage threshold for robustness
-        TAtomic unused;
-        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("SchemeShard_FastSplitCpuPercentageThreshold", 5, unused);
-//        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("SchemeShard_SplitByLoadEnabled", 1, unused);
-        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("DataShardControls.CpuUsageReportThreshlodPercent", 1, unused);
-        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("DataShardControls.CpuUsageReportIntervalSeconds", 3, unused);
+        auto& icb = *server.Server_->GetRuntime()->GetAppData().Icb;
+        TControlBoard::SetValue(5, icb.SchemeShardControls.FastSplitCpuPercentageThreshold);
+//        TControlBoard::SetValue(1, icb.SchemeShardControls.SplitByLoadEnabled);
+        TControlBoard::SetValue(1, icb.DataShardControls.CpuUsageReportThresholdPercent);
+        TControlBoard::SetValue(3, icb.DataShardControls.CpuUsageReportIntervalSeconds);
 
         TAtomic enough = 0;
         TAtomic finished = 0;
@@ -272,16 +272,16 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         SetAutoSplitByLoad(client, "/Root/Foo", true);
 
         // Set low CPU usage threshold for robustness
-        TAtomic unused;
-        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("SchemeShard_FastSplitCpuPercentageThreshold", 5, unused);
-        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("DataShardControls.CpuUsageReportThreshlodPercent", 1, unused);
-        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("DataShardControls.CpuUsageReportIntervalSeconds", 3, unused);
+        auto& icb = *server.Server_->GetRuntime()->GetAppData().Icb;
+        TControlBoard::SetValue(5, icb.SchemeShardControls.FastSplitCpuPercentageThreshold);
+        TControlBoard::SetValue(1, icb.DataShardControls.CpuUsageReportThresholdPercent);
+        TControlBoard::SetValue(3, icb.DataShardControls.CpuUsageReportIntervalSeconds);
 
         size_t shardsBefore = oldClient.GetTablePartitions("/Root/Foo").size();
         Cerr << "Table has " << shardsBefore << " shards" << Endl;
         UNIT_ASSERT_VALUES_EQUAL(shardsBefore, 1);
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        server.Server_->GetRuntime()->GetAppData().DataShardConfig.SetStatsReportIntervalSeconds(0);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_INFO);
 
@@ -369,16 +369,16 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         NKikimrConfig::TAppConfig appConfig;
         TKikimrWithGrpcAndRootSchema server(appConfig);
 
+        auto& icb = *server.Server_->GetRuntime()->GetAppData().Icb;
         // Set min uptime before merge by load to 10h
-        TAtomic unused;
-        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("SchemeShard_MergeByLoadMinUptimeSec", 4*3600, unused);
-        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("SchemeShard_MergeByLoadMinLowLoadDurationSec", 10*3600, unused);
+        TControlBoard::SetValue(4*3600, icb.SchemeShardControls.MergeByLoadMinUptimeSec);
+        TControlBoard::SetValue(10*3600, icb.SchemeShardControls.MergeByLoadMinLowLoadDurationSec);
 
         Cerr << "Triggering split by load" << Endl;
         DoTestSplitByLoad(server, query);
 
         // Set split threshold very high and run some more load on new shards
-        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("SchemeShard_FastSplitCpuPercentageThreshold", 110, unused);
+        TControlBoard::SetValue(110, icb.SchemeShardControls.FastSplitCpuPercentageThreshold);
 
         Cerr << "Loading new shards" << Endl;
         {
@@ -392,7 +392,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         }
 
         // Set split threshold at 10% so that merge can be trigger after high load goes away
-        server.Server_->GetRuntime()->GetAppData().Icb->SetValue("SchemeShard_FastSplitCpuPercentageThreshold", 10, unused);
+        TControlBoard::SetValue(10, icb.SchemeShardControls.FastSplitCpuPercentageThreshold);
 
         // Stop all load an see how many partitions the table has
         NFlatTests::TFlatMsgBusClient oldClient(server.ServerSettings->Port);
@@ -427,7 +427,6 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
     Y_UNIT_TEST(RenameTablesAndSplit) {
         // KIKIMR-14636
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(2);
         NDataShard::gDbStatsDataSizeResolution = 10;
         NDataShard::gDbStatsRowCountResolution = 10;
 
@@ -437,6 +436,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
 
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableResourcePools(true);
+        appConfig.MutableDataShardConfig()->SetStatsReportIntervalSeconds(2);
 
         TKikimrWithGrpcAndRootSchema server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);

@@ -20,8 +20,8 @@
 
 #include <sstream>
 
-#include "arrow/compute/api_scalar.h"
-#include "arrow/compute/kernels/common_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/common_internal.h"
 
 namespace arrow20 {
 namespace compute {

@@ -13,6 +13,8 @@
 #include <ydb/core/util/stlog.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/map.h>
+#include <util/system/file.h>
+#include <util/system/fhandle.h>
 
 
 namespace NKikimr {
@@ -22,6 +24,10 @@ IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainK
 
 struct TPDiskMon;
 namespace NPDisk {
+
+struct TDiskFormat;
+
+using TDiskFormatPtr = std::unique_ptr<TDiskFormat, void(*)(TDiskFormat*)>;
 
 struct TCommitRecord {
     ui64 FirstLsnToKeep = 0; // 0 == not set
@@ -140,6 +146,7 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
     TActorId WhiteboardProxyId;
     ui32 SlotId;
     ui32 GroupSizeInUnits;
+    bool GetDiskFd = false; // if true, response will contain a duplicated file descriptor for direct disk access
 
     TEvYardInit(
             TOwnerRound ownerRound,
@@ -148,7 +155,8 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
             const TActorId &cutLogID = TActorId(),
             const TActorId& whiteboardProxyId = {},
             ui32 slotId = Max<ui32>(),
-            ui32 groupSizeInUnits = 0
+            ui32 groupSizeInUnits = 0,
+            bool getDiskFd = false
         )
         : OwnerRound(ownerRound)
         , VDisk(vdisk)
@@ -157,6 +165,7 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
         , WhiteboardProxyId(whiteboardProxyId)
         , SlotId(slotId)
         , GroupSizeInUnits(groupSizeInUnits)
+        , GetDiskFd(getDiskFd)
     {}
 
     TString ToString() const {
@@ -172,6 +181,7 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
         str << " WhiteboardProxyId# " << record.WhiteboardProxyId;
         str << " SlotId# " << record.SlotId;
         str << " GroupSizeInUnits# " << record.GroupSizeInUnits;
+        str << " GetDiskFd# " << record.GetDiskFd;
         str << "}";
         return str.Str();
     }
@@ -184,11 +194,13 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
     TIntrusivePtr<TPDiskParams> PDiskParams;
     TVector<TChunkIdx> OwnedChunks;  // Sorted vector of owned chunk identifiers.
     TString ErrorReason;
+    TFileHandle DiskFd; // A duplicated fd for direct disk access
+    TDiskFormatPtr DiskFormat{nullptr, nullptr}; // On-device format for direct disk access offset calculations
 
     TEvYardInitResult(const NKikimrProto::EReplyStatus status, TString errorReason)
         : Status(status)
         , StatusFlags(0)
-        , PDiskParams(new TPDiskParams(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, DEVICE_TYPE_ROT, false))
+        , PDiskParams(new TPDiskParams(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, DEVICE_TYPE_ROT, false, 0))
         , ErrorReason(std::move(errorReason))
     {
         Y_VERIFY(status != NKikimrProto::OK, "Single-parameter constructor is for error responses only");
@@ -199,7 +211,8 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
             ui64 bulkWriteBlockSize, ui32 chunkSize, ui32 appendBlockSize,
             TOwner owner, TOwnerRound ownerRound, ui32 slotSizeInUnits,
             TStatusFlags statusFlags, TVector<TChunkIdx> ownedChunks,
-            EDeviceType trueMediaType, bool isTinyDisk, TString errorReason)
+            EDeviceType trueMediaType, bool isTinyDisk, ui32 rawSectorSize,
+            TString errorReason)
         : Status(status)
         , StatusFlags(statusFlags)
         , PDiskParams(new TPDiskParams(
@@ -215,7 +228,8 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
                     writeBlockSize,
                     bulkWriteBlockSize,
                     trueMediaType,
-                    isTinyDisk))
+                    isTinyDisk,
+                    rawSectorSize))
         , OwnedChunks(std::move(ownedChunks))
         , ErrorReason(std::move(errorReason))
     {}
@@ -247,6 +261,8 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
             str << record.OwnedChunks[i];
         }
         str << "}";
+        str << " DiskFd# " << static_cast<FHANDLE>(record.DiskFd);
+        str << " DiskFormat# " << (record.DiskFormat ? "set" : "null");
         str << "}";
         return str.Str();
     }
@@ -303,6 +319,53 @@ struct TEvYardResizeResult : TEventLocal<TEvYardResizeResult, TEvBlobStorage::Ev
         str << "{TEvYardResizeResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
         str << " ErrorReason# \"" << record.ErrorReason << "\"";
         str << " StatusFlags# " << StatusFlagsToString(record.StatusFlags);
+        str << "}";
+        return str.Str();
+    }
+};
+
+struct TEvChangeExpectedSlotCount : TEventLocal<TEvChangeExpectedSlotCount, TEvBlobStorage::EvChangeExpectedSlotCount> {
+    ui32 ExpectedSlotCount;
+    ui32 SlotSizeInUnits;
+
+    TEvChangeExpectedSlotCount(ui32 expectedSlotCount, ui32 slotSizeInUnits)
+        : ExpectedSlotCount(expectedSlotCount)
+        , SlotSizeInUnits(slotSizeInUnits)
+    {}
+
+    TString ToString() const {
+        return ToString(*this);
+    }
+
+    static TString ToString(const TEvChangeExpectedSlotCount& record) {
+        TStringStream str;
+        str << "{";
+        str << "EvChangeExpectedSlotCount ";
+        str << " ExpectedSlotCount# " << record.ExpectedSlotCount;
+        str << " SlotSizeInUnits# " << record.SlotSizeInUnits;
+        str << "}";
+        return str.Str();
+    }
+};
+
+struct TEvChangeExpectedSlotCountResult : TEventLocal<TEvChangeExpectedSlotCountResult, TEvBlobStorage::EvChangeExpectedSlotCountResult> {
+    NKikimrProto::EReplyStatus Status;
+    TString ErrorReason;
+
+    TEvChangeExpectedSlotCountResult(NKikimrProto::EReplyStatus status, TString errorReason)
+        : Status(status)
+        , ErrorReason(std::move(errorReason))
+    {}
+
+    TString ToString() const {
+        return ToString(*this);
+    }
+
+    static TString ToString(const TEvChangeExpectedSlotCountResult& record) {
+        TStringStream str;
+        str << "{";
+        str << "EvChangeExpectedSlotCountResult Status#" << NKikimrProto::EReplyStatus_Name(record.Status).data();
+        str << " ErrorReason# \"" << record.ErrorReason << "\"";
         str << "}";
         return str.Str();
     }
@@ -910,6 +973,7 @@ struct TEvChunkRead : TEventLocal<TEvChunkRead, TEvBlobStorage::EvChunkRead> {
     TOwnerRound OwnerRound;
     ui8 PriorityClass;
     void *Cookie;
+    TLogoBlobID BlobId; // when set, this blob id is used to salt sector hash
 
     TEvChunkRead(TOwner owner, TOwnerRound ownerRound, TChunkIdx chunkIdx, ui32 offset, ui32 size,
             ui8 priorityClass, void *cookie)
@@ -1026,6 +1090,7 @@ struct TEvChunkWrite : TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunkWrite> 
     ui8 PriorityClass;
     bool DoFlush;
     bool IsSeqWrite; // sequential write to this chunk (normally, it is 'true', for huge blobs -- 'false')
+    TLogoBlobID BlobId; // when set, this blob id is used to salt sector hash
 
     mutable NLWTrace::TOrbit Orbit;
 
@@ -1231,6 +1296,91 @@ struct TEvChunkWriteResult : TEventLocal<TEvChunkWriteResult, TEvBlobStorage::Ev
     }
 };
 
+struct TEvChunkReadRaw : TEventLocal<TEvChunkReadRaw, TEvBlobStorage::EvChunkReadRaw> {
+    TOwner Owner;
+    TOwnerRound OwnerRound;
+    TChunkIdx ChunkIdx;
+    ui32 Offset;
+    ui32 Size;
+
+    TEvChunkReadRaw(TOwner owner, TOwnerRound ownerRound, TChunkIdx chunkIdx, ui32 offset, ui32 size)
+        : Owner(owner)
+        , OwnerRound(ownerRound)
+        , ChunkIdx(chunkIdx)
+        , Offset(offset)
+        , Size(size)
+    {}
+
+    TString ToString() const {
+        return TStringBuilder() << "{TEvChunkReadRaw Owner# " << Owner
+            << " OwnerRound# " << OwnerRound
+            << " ChunkIdx# " << ChunkIdx
+            << " Offset# " << Offset
+            << " Size# " << Size << "}";
+    }
+};
+
+struct TEvChunkReadRawResult : TEventLocal<TEvChunkReadRawResult, TEvBlobStorage::EvChunkReadRawResult> {
+    NKikimrProto::EReplyStatus Status;
+    TString ErrorReason;
+    TRope Data;
+
+    TEvChunkReadRawResult(NKikimrProto::EReplyStatus status, TString errorReason)
+        : Status(status)
+        , ErrorReason(std::move(errorReason))
+    {}
+
+    TEvChunkReadRawResult(TRope&& data)
+        : Status(NKikimrProto::OK)
+        , Data(std::move(data))
+    {}
+
+    TString ToString() const {
+        return TStringBuilder() << "{TEvChunkReadRawResult Status# " << NKikimrProto::EReplyStatus_Name(Status)
+            << " ErrorReason# '" << ErrorReason << "'"
+            << " Data.size# " << Data.size() << "}";
+    }
+};
+
+struct TEvChunkWriteRaw : TEventLocal<TEvChunkWriteRaw, TEvBlobStorage::EvChunkWriteRaw> {
+    TOwner Owner;
+    TOwnerRound OwnerRound;
+    TChunkIdx ChunkIdx;
+    ui32 Offset;
+    TRope Data;
+
+    TEvChunkWriteRaw(TOwner owner, TOwnerRound ownerRound, TChunkIdx chunkIdx, ui32 offset, TRope&& data)
+        : Owner(owner)
+        , OwnerRound(ownerRound)
+        , ChunkIdx(chunkIdx)
+        , Offset(offset)
+        , Data(std::move(data))
+    {}
+
+    TString ToString() const {
+        return TStringBuilder() << "{TEvChunkWriteRaw Owner# " << Owner
+            << " OwnerRound# " << OwnerRound
+            << " ChunkIdx# " << ChunkIdx
+            << " Offset# " << Offset
+            << " Data.size# " << Data.size() << "}";
+    }
+};
+
+struct TEvChunkWriteRawResult : TEventLocal<TEvChunkWriteRawResult, TEvBlobStorage::EvChunkWriteRawResult> {
+    NKikimrProto::EReplyStatus Status;
+    TString ErrorReason;
+
+    TEvChunkWriteRawResult(NKikimrProto::EReplyStatus status, TString errorReason)
+        : Status(status)
+        , ErrorReason(std::move(errorReason))
+    {}
+
+    TString ToString() const {
+        return TStringBuilder() << "{TEvChunkWriteRawResult Status# " << NKikimrProto::EReplyStatus_Name(Status)
+            << " ErrorReason# '" << ErrorReason << "'" << "}";
+    }
+};
+
 ////////////////////////////////////////////////////////////////////////////
 // DELETE OWNER AND ALL HIS DATA
 ////////////////////////////////////////////////////////////////////////////
@@ -1375,12 +1525,16 @@ struct TEvCheckSpace : TEventLocal<TEvCheckSpace, TEvBlobStorage::EvCheckSpace> 
 struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::EvCheckSpaceResult> {
     NKikimrProto::EReplyStatus Status;
     TStatusFlags StatusFlags;
-    ui32 FreeChunks;
-    ui32 TotalChunks; // contains common limit in shared free space mode, Total != Free + Used
-    ui32 UsedChunks; // number of chunks allocated by requesting owner
-    ui32 NumSlots; // number of VSlots over PDisk
-    ui32 NumActiveSlots; // $ \sum_i{ceil(VSlot[i].SlotSizeInUnits / PDisk.SlotSizeInUnits)} $
-    double Occupancy = 0;
+    ui32 FreeChunks; // contains SharedQuota.Free
+    ui32 TotalChunks; // contains OwnerQuota.HardLimit(owner), Total != Free + Used
+    ui32 UsedChunks; // equals OwnerQuota.Used(owner) - a number of chunks allocated by requesting owner
+    ui32 NumSlots; // number of VDisks over PDisk, not their weight
+    ui32 NumActiveSlots; // sum of VDisks weights - $ \sum_i{ceil(VSlot[i].GroupSizeInUnits / PDisk.SlotSizeInUnits)} $
+    double NormalizedOccupancy = 0;
+    double VDiskSlotUsage = 0;  // 100.0 * Owner.Used / Owner.LightYellowLimit
+    double VDiskRawUsage = 0;  // 100.0 * Owner.Used / Owner.HardLimit
+    double PDiskUsage = 0;  // 100.0 * SharedQuota.Used / SharedQuota.HardLimit
+    ui32 ExpectedSlotCount = 0; // maximum number of VDisks over PDisk
     TString ErrorReason;
     TStatusFlags LogStatusFlags;
 
@@ -1392,6 +1546,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
             ui32 usedChunks,
             ui32 numSlots,
             ui32 numActiveSlots,
+            ui32 expectedSlotCount,
             TString errorReason,
             TStatusFlags logStatusFlags = {})
         : Status(status)
@@ -1401,6 +1556,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
         , UsedChunks(usedChunks)
         , NumSlots(numSlots)
         , NumActiveSlots(numActiveSlots)
+        , ExpectedSlotCount(expectedSlotCount)
         , ErrorReason(std::move(errorReason))
         , LogStatusFlags(logStatusFlags)
     {}
@@ -1414,6 +1570,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
         str << " UsedChunks# " << UsedChunks;
         str << " NumSlots# " << NumSlots;
         str << " NumActiveSlots# " << NumActiveSlots;
+        str << " ExpectedSlotCount# " << ExpectedSlotCount;
         str << " ErrorReason# \"" << ErrorReason << "\"";
         str << " LogStatusFlags# " << StatusFlagsToString(LogStatusFlags);
         str << "}";

@@ -2,6 +2,7 @@
 
 #include <ydb/core/backup/impl/local_partition_reader.h>
 #include <ydb/core/backup/impl/table_writer.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -17,44 +18,30 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
-#define LOG_T(stream) LOG_TRACE_S (*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << stream)
-#define LOG_D(stream) LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << stream)
-#define LOG_I(stream) LOG_INFO_S  (*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << stream)
-#define LOG_W(stream) LOG_WARN_S  (*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << stream)
-#define LOG_E(stream) LOG_ERROR_S (*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << stream)
-#define LOG_C(stream) LOG_CRIT_S  (*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << stream)
-
 using namespace NKikimr::NReplication::NService;
 using namespace NKikimr::NReplication;
 
 namespace NKikimr::NPQ {
 
 class TOffloadActor
-    : public TActorBootstrapped<TOffloadActor>
+    : public TBaseTabletActor<TOffloadActor>
+    , private TConstantLogPrefix
     , private NSchemeCache::TSchemeCacheHelpers
 {
 private:
-    const TActorId ParentTablet;
-    const ui64 TabletID;
     const ui32 Partition;
+    const TString Database;
     const NKikimrPQ::TOffloadConfig Config;
 
-    mutable TMaybe<TString> LogPrefix;
     TActorId Worker;
     TActorId SchemeShardPipe;
 
-    TStringBuf GetLogPrefix() const {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
+    TString BuildLogPrefix() const override {
+        return TStringBuilder()
                 << "[OffloadActor]"
-                << "[" << ParentTablet << "]"
-                << "[" << TabletID << "]"
+                << "[" << TabletActorId << "]"
                 << "[" << Partition << "]"
                 << SelfId() << " ";
-        }
-
-        return LogPrefix.GetRef();
     }
 
 public:
@@ -62,26 +49,29 @@ public:
         return NKikimrServices::TActivity::BACKUP_PQ_OFFLOAD_ACTOR;
     }
 
-    TOffloadActor(TActorId parentTablet, ui64 tabletId, ui32 partition, const NKikimrPQ::TOffloadConfig& config)
-        : ParentTablet(parentTablet)
-        , TabletID(tabletId)
+    TOffloadActor(TActorId parentTablet, ui64 tabletId, ui32 partition,
+        const TString& database, const NKikimrPQ::TOffloadConfig& config
+    )
+        : TBaseTabletActor(tabletId, parentTablet, NKikimrServices::CONTINUOUS_BACKUP)
         , Partition(partition)
+        , Database(database)
         , Config(config)
     {}
 
     auto CreateReaderFactory() {
         return [=, this]() -> IActor* {
-            return NBackup::NImpl::CreateLocalPartitionReader(ParentTablet, Partition);
+            return NBackup::NImpl::CreateLocalPartitionReader(TabletActorId, Partition);
         };
     }
 
     auto CreateWriterFactory() {
         return [=, this]() -> IActor* {
             if (Config.HasIncrementalBackup()) {
-                return NBackup::NImpl::CreateLocalTableWriter(TPathId::FromProto(Config.GetIncrementalBackup().GetDstPathId()));
+                return NBackup::NImpl::CreateLocalTableWriter(
+                    Database, TPathId::FromProto(Config.GetIncrementalBackup().GetDstPathId()));
             } else {
                 return NBackup::NImpl::CreateLocalTableWriter(
-                    TPathId::FromProto(Config.GetIncrementalRestore().GetDstPathId()),
+                    Database, TPathId::FromProto(Config.GetIncrementalRestore().GetDstPathId()),
                     NBackup::NImpl::EWriterType::Restore);
             }
         };
@@ -114,7 +104,7 @@ public:
 
             auto request = std::make_unique<TEvPersQueue::TEvOffloadStatus>();
             request->Record.SetStatus(NKikimrPQ::TEvOffloadStatus::DONE);
-            request->Record.SetTabletId(TabletID);
+            request->Record.SetTabletId(TabletId);
             request->Record.SetPartitionId(Partition);
             request->Record.SetTxId(Config.GetIncrementalBackup().GetTxId());
 
@@ -162,8 +152,10 @@ public:
     }
 };
 
-IActor* CreateOffloadActor(TActorId parentTablet, ui64 tabletId, TPartitionId partition, const NKikimrPQ::TOffloadConfig& config) {
-    return new TOffloadActor(parentTablet, tabletId, partition.OriginalPartitionId, config);
+IActor* CreateOffloadActor(TActorId parentTablet, ui64 tabletId,
+    TPartitionId partition, const TString& database, const NKikimrPQ::TOffloadConfig& config)
+{
+    return new TOffloadActor(parentTablet, tabletId, partition.OriginalPartitionId, database, config);
 }
 
 } // namespace NKikimr::NPQ

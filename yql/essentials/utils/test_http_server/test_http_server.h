@@ -60,7 +60,7 @@ public:
         TString IfModifiedSince;
     };
 
-    typedef std::function<TReply(const TRequest& request)> TRequestHandler;
+    using TRequestHandler = std::function<TReply(const TRequest& request)>;
 
 public:
     explicit TTestHttpServer(int port);
@@ -74,4 +74,4 @@ private:
     THolder<TImpl> Impl_;
 };
 
-}
+} // namespace NYql

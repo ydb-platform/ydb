@@ -31,8 +31,9 @@ private:
 
 class TDataShard::TTxInitRestored : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
-    TTxInitRestored(TDataShard* self)
+    TTxInitRestored(TDataShard* self, THashMap<ui64, TOperation::TPtr> migratedTxs)
         : TTransactionBase(self)
+        , MigratedTxs(std::move(migratedTxs))
     {}
 
     TTxType GetTxType() const override { return TXTYPE_INIT_RESTORED; }
@@ -41,7 +42,9 @@ public:
     void Complete(const TActorContext& ctx) override;
 
 private:
+    THashMap<ui64, TOperation::TPtr> MigratedTxs;
     bool InMemoryStateActorStarted = false;
+    bool Rescheduled = false;
 };
 
 bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
@@ -92,12 +95,53 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInit::Complete");
 }
 
-void TDataShard::OnInMemoryStateRestored() {
-    Execute(CreateTxInitRestored());
+void TDataShard::OnInMemoryStateRestored(THashMap<ui64, TOperation::TPtr> migratedTxs) {
+    Execute(CreateTxInitRestored(std::move(migratedTxs)));
 }
 
 bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Execute");
+
+    TDataShardLocksDb locksDb(*Self, txc);
+    if (Self->SysLocks.RestorePersistentState(&locksDb)) {
+        // We may not be able to apply all persistent lock state updates in a
+        // single commit, e.g. removing locks with a large number of conflicts
+        // may result in large commits. Prefer starting a new transaction after
+        // every change, but without waiting for each commit to succeed.
+        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Execute: persistent lock state updated, rescheduling transaction");
+        Self->OnInMemoryStateRestored(std::move(MigratedTxs));
+        Rescheduled = true;
+        return true;
+    }
+
+    if (!MigratedTxs.empty()) {
+        bool wasEmpty = Self->TransQueue.GetPlan().empty();
+
+        for (auto& [txId, op] : MigratedTxs) {
+            if (op->GetStep() && op->GetStep() > Self->Pipeline.GetLastPlannedTx().Step) {
+                // When op->GetStep() > LastPlannedTx.Step it means this tx was
+                // planned by the previous generation, but commit failed. We
+                // may have other non-volatile transactions which may need to
+                // be planned before this step, so change it to a predicted
+                // step instead.
+                op->SetPredictedStep(op->GetStep());
+                op->SetStep(0);
+            }
+            if (op->OnFinishMigration(*Self, txc.DB.GetScheme())) {
+                Self->TransQueue.AddTxInFly(op);
+                if (!op->IsExecutionPlanFinished()) {
+                    Self->Pipeline.GetExecutionUnit(op->GetCurrentUnit()).AddOperation(op);
+                }
+                if (op->GetPredictedStep() && !op->GetStep()) {
+                    Self->Pipeline.AddPredictedPlan(op->GetPredictedStep(), op->GetTxId(), ctx);
+                }
+            }
+        }
+
+        if (wasEmpty && Self->TransQueue.GetPlan().size()) {
+            Self->Pipeline.AddCandidateUnit(EExecutionUnitKind::PlanQueue);
+        }
+    }
 
     InMemoryStateActorStarted = Self->StartInMemoryStateActor();
 
@@ -117,6 +161,10 @@ bool TDataShard::TTxInitRestored::Execute(TTransactionContext& txc, const TActor
 }
 
 void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
+    if (Rescheduled) {
+        return;
+    }
+
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::TTxInitRestored::Complete");
 
     if (Self->InMemoryStateActor && InMemoryStateActorStarted) {
@@ -161,7 +209,7 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
     }
 
     // Find subdomain path id if needed
-    if (Self->State == TShardState::Ready) {
+    if (Self->NeedToWatchSubDomainPathId()) {
         if (Self->SubDomainPathId) {
             Self->StartWatchingSubDomainPathId();
         } else {
@@ -243,6 +291,8 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         PRECHARGE_SYS_TABLE(Schema::TxVolatileParticipants);
         PRECHARGE_SYS_TABLE(Schema::CdcStreamScans);
         PRECHARGE_SYS_TABLE(Schema::CdcStreamHeartbeats);
+        PRECHARGE_SYS_TABLE(Schema::MultiTxIds);
+        PRECHARGE_SYS_TABLE(Schema::MultiTxIdGraph);
 
         if (!ready)
             return false;
@@ -608,6 +658,12 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         }
     }
 
+    if (Self->State != TShardState::Offline) {
+        if (!Self->MultiTxIdManager.Load(db)) {
+            return false;
+        }
+    }
+
     Self->SubscribeNewLocks();
 
     Self->ScheduleRemoveAbandonedLockChanges();
@@ -728,8 +784,8 @@ ITransaction* TDataShard::CreateTxInit() {
     return new TTxInit(this);
 }
 
-ITransaction* TDataShard::CreateTxInitRestored() {
-    return new TTxInitRestored(this);
+ITransaction* TDataShard::CreateTxInitRestored(THashMap<ui64, TOperation::TPtr> migratedTxs) {
+    return new TTxInitRestored(this, std::move(migratedTxs));
 }
 
 ITransaction* TDataShard::CreateTxInitSchema() {

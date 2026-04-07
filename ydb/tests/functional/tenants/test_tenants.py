@@ -45,11 +45,17 @@ def enable_alter_database_create_hive_first(request):
     return request.param
 
 
+@pytest.fixture(scope='module', params=[True, False], ids=["enable_pool_encryption--true", "enable_pool_encryption--false"])
+def enable_pool_encryption(request):
+    return request.param
+
+
 # fixtures.ydb_cluster_configuration local override
 @pytest.fixture(scope='module')
-def ydb_cluster_configuration(enable_alter_database_create_hive_first):
+def ydb_cluster_configuration(enable_alter_database_create_hive_first, enable_pool_encryption):
     conf = copy.deepcopy(CLUSTER_CONFIG)
     conf['enable_alter_database_create_hive_first'] = enable_alter_database_create_hive_first
+    conf['enable_pool_encryption'] = enable_pool_encryption
     return conf
 
 
@@ -257,9 +263,6 @@ class TestTenants():
                 )
             )
 
-        for session in sessions:
-            pool.release(session)
-
         success_responses_count = 0
         for create_future in create_futures:
             try:
@@ -269,6 +272,9 @@ class TestTenants():
                 pass
             except ydb.Unavailable as e:
                 logger.info("ydb.Unavailable: %s", e)
+
+        for session in sessions:
+            pool.release(session)
 
         with pool.checkout() as session:
             assert_that(
@@ -444,9 +450,10 @@ class TestTenants():
             dirname, basename = os.path.split(database_path)
             result = driver.scheme_client.list_directory(dirname)
             logger.debug("From root: list above database <%s> is %s", dirname, convert(result))
-            assert len(result.children) > 0
-            assert result.children[0].name == basename
-            assert result.children[0].type == ydb.scheme.SchemeEntryType.DATABASE
+            assert len(result.children) > 1
+            assert result.children[0].name == ".sys"
+            assert result.children[1].name == basename
+            assert result.children[1].type == ydb.scheme.SchemeEntryType.DATABASE
 
 
 def _initial_credit(pool):

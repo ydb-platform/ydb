@@ -27,6 +27,13 @@ bool ShouldThrow(EUnrecognizedStrategy strategy)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TYsonStructMeta::TYsonStructMeta(const NYT::TSourceLocation& sourceLocation, const std::function<IMapNodePtr()>& defaultStructNodeGetter)
+    : SourceLocation_(sourceLocation)
+    , StructType_(nullptr)
+    , MetaUnrecognizedStrategy_()
+    , DefaultStructNodeGetter_(defaultStructNodeGetter)
+{ }
+
 void TYsonStructMeta::SetDefaultsOfInitializedStruct(TYsonStructBase* target, bool dontSetLiteMembers) const
 {
     if (auto* bitmap = target->GetSetFieldsBitmap()) {
@@ -69,7 +76,8 @@ IYsonStructParameterPtr TYsonStructMeta::GetParameter(const std::string& keyOrAl
             return parameter;
         }
     }
-    THROW_ERROR_EXCEPTION("Key or alias %Qv not found in yson struct", keyOrAlias);
+    THROW_ERROR_EXCEPTION("Key or alias %Qv not found in YSON struct", keyOrAlias)
+        << TErrorAttribute("type", TypeName(GetStructType()));
 }
 
 void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const std::string& key, const NYTree::INodePtr& node) const
@@ -89,7 +97,8 @@ void TYsonStructMeta::LoadParameter(TYsonStructBase* target, const std::string& 
                 "Postprocess failed while loading parameter %Qv from value %Qv",
                 key,
                 ConvertToYsonString(node, NYson::EYsonFormat::Text))
-                    << ex;
+                    << ex
+                    << TErrorAttribute("struct", TypeName(GetStructType()));
         }
     };
     auto loadOptions = TLoadParameterOptions{
@@ -114,7 +123,8 @@ void TYsonStructMeta::PostprocessStruct(TYsonStructBase* target, const std::func
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Postprocess failed at %v",
             !pathGetter ? "root" : pathGetter())
-                << ex;
+                << ex
+                << TErrorAttribute("struct", TypeName(GetStructType()));
     }
 }
 
@@ -141,8 +151,9 @@ void TYsonStructMeta::LoadStruct(
             auto otherChild = mapNode->FindChild(alias);
             if (child && otherChild && !AreNodesEqual(child, otherChild)) {
                 THROW_ERROR_EXCEPTION("Different values for aliased parameters %Qv and %Qv", key, alias)
-                        << TErrorAttribute("main_value", child)
-                            << TErrorAttribute("aliased_value", otherChild);
+                    << TErrorAttribute("struct", TypeName(GetStructType()))
+                    << TErrorAttribute("main_value", child)
+                    << TErrorAttribute("aliased_value", otherChild);
             }
             if (!child && otherChild) {
                 child = otherChild;
@@ -168,6 +179,7 @@ void TYsonStructMeta::LoadStruct(
                 if (ShouldThrow(unrecognizedStrategy)) {
                     auto path = (pathGetter ? pathGetter() : TYPath(""));
                     THROW_ERROR_EXCEPTION("Unrecognized field %Qv has been encountered", path + "/" + ToYPathLiteral(key))
+                        << TErrorAttribute("struct", TypeName(GetStructType()))
                         << TErrorAttribute("key", key)
                         << TErrorAttribute("path", path);
                 }
@@ -231,6 +243,7 @@ void TYsonStructMeta::LoadStruct(
             auto secondNode = ConvertTo<INodePtr>(NYson::TYsonStringBuf(data));
             if (!AreNodesEqual(firstNode, secondNode)) {
                 THROW_ERROR_EXCEPTION("Different values for aliased parameters %Qv and %Qv", canonicalKey, key)
+                    << TErrorAttribute("struct", TypeName(GetStructType()))
                     << TErrorAttribute("main_value", firstNode)
                     << TErrorAttribute("aliased_value", secondNode);
             }
@@ -253,6 +266,7 @@ void TYsonStructMeta::LoadStruct(
         if (ShouldThrow(unrecognizedStrategy)) {
             auto path = (pathGetter ? pathGetter() : TYPath(""));
             THROW_ERROR_EXCEPTION("Unrecognized field %Qv has been encountered", path + "/" + ToYPathLiteral(key))
+                << TErrorAttribute("struct", TypeName(GetStructType()))
                 << TErrorAttribute("key", key)
                 << TErrorAttribute("path", path);
         }
@@ -316,7 +330,8 @@ IMapNodePtr TYsonStructMeta::GetRecursiveUnrecognized(const TYsonStructBase* tar
 
 void TYsonStructMeta::RegisterParameter(std::string key, IYsonStructParameterPtr parameter)
 {
-    YT_VERIFY(Parameters_.template emplace(std::move(key), std::move(parameter)).second);
+    InitialOrderParameters_.emplace_back(key, parameter);
+    YT_VERIFY(Parameters_.template try_emplace(std::move(key), std::move(parameter)).second, key);
 }
 
 void TYsonStructMeta::RegisterPreprocessor(std::function<void(TYsonStructBase*)> preprocessor)
@@ -334,24 +349,43 @@ void TYsonStructMeta::SetUnrecognizedStrategy(EUnrecognizedStrategy strategy)
     MetaUnrecognizedStrategy_ = strategy;
 }
 
-void TYsonStructMeta::WriteSchema(const TYsonStructBase* target, NYson::IYsonConsumer* consumer) const
+void TYsonStructMeta::WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const
 {
     BuildYsonFluently(consumer)
         .BeginMap()
             .Item("type_name").Value("struct")
-            .Item("members").DoListFor(Parameters_, [&] (auto fluent, const auto& pair) {
-                fluent.Item()
-                    .BeginMap()
-                        .Item("name").Value(pair.first)
-                        .Item("type").Do([&] (auto fluent) {
-                            pair.second->WriteSchema(target, fluent.GetConsumer());
-                        })
-                        .DoIf(pair.second->IsRequired(), [] (auto fluent) {
-                            fluent.Item("required").Value(true);
-                        })
-                    .EndMap();
+            .DoIf(options.AddCppTypeNames, [&] (auto fluent) {
+                YT_VERIFY(StructType_);
+                fluent.Item("cpp_type_name").Value(TypeName(*StructType_));
+            })
+            .DoIf(options.AddSourceLocation && SourceLocation_.IsValid(), [&] (auto fluent) {
+                fluent.Item("source_location_file_name").Value(SourceLocation_.GetFileName());
+                fluent.Item("source_location_line").Value(i64{SourceLocation_.GetLine()});
+            })
+            .Item("members").DoListFor(InitialOrderParameters_, [&] (auto fluent, const auto& pair) {
+                const auto& [key, parameter] = pair;
+                auto defaultValueGetter = [&] {
+                    return DefaultStructNodeGetter_()->FindChild(key);
+                };
+                fluent.Item().Do([&] (auto fluent) {
+                    parameter->WriteMemberSchema(fluent.GetConsumer(), defaultValueGetter, options);
+                });
             })
         .EndMap();
+}
+
+void TYsonStructMeta::Traverse(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path) const
+{
+    for (const auto& [name, parameter] : InitialOrderParameters_) {
+        auto parameterPath = path + "/" + NYPath::ToYPathLiteral(name);
+        visitor(TYsonStructTraverseContext{
+            .Path = parameterPath,
+            .StructType = StructType_,
+            .Key = name,
+            .Parameter = parameter.Get(),
+        });
+        parameter->TraverseParameter(visitor, parameterPath);
+    }
 }
 
 void TYsonStructMeta::FinishInitialization(const std::type_info& structType)
@@ -406,6 +440,12 @@ bool TYsonStructMeta::CompareStructs(
     }
 
     return true;
+}
+
+const std::type_info& TYsonStructMeta::GetStructType() const
+{
+    YT_VERIFY(StructType_);
+    return *StructType_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -3,6 +3,8 @@
 
 namespace NSQLTranslationV1 {
 
-NSQLTranslation::TParserFactoryPtr MakeAntlr4AnsiParserFactory();
+NSQLTranslation::TParserFactoryPtr MakeAntlr4AnsiParserFactory(
+    bool isAmbiguityError = false,
+    bool isAmbiguityDebugging = false);
 
-}
+} // namespace NSQLTranslationV1

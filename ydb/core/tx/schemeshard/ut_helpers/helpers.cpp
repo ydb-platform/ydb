@@ -7,6 +7,7 @@
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/auth.pb.h>
@@ -476,6 +477,45 @@ namespace NSchemeShardUT_Private {
         TestCopyTable(runtime, TTestTxConfig::SchemeShard, txId, dstPath, dstName, srcFullName, expectedResult);
     }
 
+    TEvSchemeShard::TEvModifySchemeTransaction* CopyColumnTableRequest(ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName, TApplyIf applyIf) {
+        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
+        auto transaction = evTx->Record.AddTransaction();
+        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
+        transaction->SetWorkingDir(dstPath);
+
+        auto op = transaction->MutableCreateColumnTable();
+        op->SetName(dstName);
+        op->SetCopyFromTable(srcFullName);
+        op->SetIsBackup(true);
+
+        SetApplyIf(*transaction, applyIf);
+        return evTx;
+    }
+
+    void AsyncCopyColumnTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId,
+                        const TString& dstPath, const TString& dstName, const TString& srcFullName) {
+        TActorId sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, schemeShardId, sender, CopyColumnTableRequest(txId, dstPath, dstName, srcFullName));
+    }
+
+    void AsyncCopyColumnTable(TTestActorRuntime& runtime, ui64 txId,
+                        const TString& dstPath, const TString& dstName, const TString& srcFullName) {
+        AsyncCopyColumnTable(runtime, TTestTxConfig::SchemeShard, txId, dstPath, dstName, srcFullName);
+    }
+
+    void TestCopyColumnTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId,
+                       const TString& dstPath, const TString& dstName, const TString& srcFullName,
+                       TEvSchemeShard::EStatus expectedResult) {
+        AsyncCopyColumnTable(runtime, schemeShardId, txId, dstPath, dstName, srcFullName);
+        TestModificationResult(runtime, txId, expectedResult);
+    }
+
+    void TestCopyColumnTable(TTestActorRuntime& runtime, ui64 txId,
+                       const TString& dstPath, const TString& dstName, const TString& srcFullName,
+                       TEvSchemeShard::EStatus expectedResult) {
+        TestCopyColumnTable(runtime, TTestTxConfig::SchemeShard, txId, dstPath, dstName, srcFullName, expectedResult);
+    }
+
     TString TestDescribe(TTestActorRuntime& runtime, const TString& path) {
         return TestLs(runtime, path, true);
     }
@@ -534,6 +574,32 @@ namespace NSchemeShardUT_Private {
 
     void TestMoveIndex(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& tablePath, const TString& src, const TString& dst, bool allowOverwrite, const TVector<TExpectedResult>& expectedResults) {
         AsyncMoveIndex(runtime, txId, tablePath, src, dst, allowOverwrite, schemeShard);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
+    TEvSchemeShard::TEvModifySchemeTransaction* TruncateTableRequest(ui64 txId, const TString& workingDir, const TString& tableName, ui64 schemeShard, const TApplyIf& applyIf) {
+        THolder<TEvSchemeShard::TEvModifySchemeTransaction> evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShard);
+        auto transaction = evTx->Record.AddTransaction();
+        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable);
+        transaction->SetWorkingDir(workingDir);
+        SetApplyIf(*transaction, applyIf);
+
+        auto descr = transaction->MutableTruncateTable();
+        descr->SetTableName(tableName);
+
+        return evTx.Release();
+    }
+
+    void AsyncTruncateTable(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& tableName, ui64 schemeShard) {
+        AsyncSend(runtime, schemeShard, TruncateTableRequest(txId, workingDir, tableName, schemeShard, {}));
+    }
+
+    void TestTruncateTable(TTestActorRuntime& runtime, ui64 txId, const TString& workingDir, const TString& tableName, const TVector<TExpectedResult>& expectedResults) {
+        TestTruncateTable(runtime, TTestTxConfig::SchemeShard, txId, workingDir, tableName, expectedResults);
+    }
+
+    void TestTruncateTable(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& workingDir, const TString& tableName, const TVector<TExpectedResult>& expectedResults) {
+        AsyncTruncateTable(runtime, txId, workingDir, tableName, schemeShard);
         TestModificationResults(runtime, txId, expectedResults);
     }
 
@@ -1624,16 +1690,51 @@ namespace NSchemeShardUT_Private {
         NKikimrProto::EReplyStatus status = LocalSchemeTx(runtime, tabletId, "", true, scheme, err);
         UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
         //Cdbg << scheme << "\n";
+
+        // Find the table info to get key column count
+        ui32 keyColumnCount = 0;
+        for (ui32 i = 0; i < scheme.DeltaSize(); ++i) {
+            const auto& d = scheme.GetDelta(i);
+            if (d.GetDeltaType() == NTabletFlatScheme::TAlterRecord::AddTable &&
+                d.GetTableId() == table)
+            {
+                // Count key columns by counting subsequent AddColumnToKey deltas for this table
+                for (ui32 j = i + 1; j < scheme.DeltaSize(); ++j) {
+                    const auto& dj = scheme.GetDelta(j);
+                    if (dj.GetDeltaType() == NTabletFlatScheme::TAlterRecord::AddTable) {
+                        // Stop at the next table definition
+                        break;
+                    }
+                    if (dj.GetDeltaType() == NTabletFlatScheme::TAlterRecord::AddColumnToKey &&
+                        dj.GetTableId() == table)
+                    {
+                        keyColumnCount++;
+                    }
+                }
+                break;
+            }
+        }
+
+        // With unified system, ByKeyFilter is now stored as a ByKeyFilterPrefixes entry
+        // with prefix length = key column count
         for (ui32 i = 0; i < scheme.DeltaSize(); ++i) {
             const auto& d = scheme.GetDelta(i);
             if (d.GetDeltaType() == NTabletFlatScheme::TAlterRecord::SetTable &&
                 d.GetTableId() == table &&
-                d.HasByKeyFilter())
+                d.ByKeyFilterPrefixesSize() > 0)
             {
-                return d.GetByKeyFilter();
+                // Check if full-key bloom is enabled
+                // Full-key bloom is represented as a prefix entry with length = key column count
+                for (ui32 j = 0; j < d.ByKeyFilterPrefixesSize(); ++j) {
+                    if (d.GetByKeyFilterPrefixes(j) == keyColumnCount && keyColumnCount > 0) {
+                        return true;
+                    }
+                }
+                return false;
             }
         }
-        UNIT_ASSERT_C(false, "ByKeyFilter delta record not found");
+
+        // No SetTable delta found with ByKeyFilterPrefixes - bloom is disabled
         return false;
     }
 
@@ -1803,8 +1904,8 @@ namespace NSchemeShardUT_Private {
         return tableDescription;
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction *UpgradeSubDomainRequest(ui64 txId, const TString &parentPath, const TString &name) {
-        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
+    TEvSchemeShard::TEvModifySchemeTransaction *UpgradeSubDomainRequest(ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name) {
+        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, schemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomain);
         transaction->SetWorkingDir(parentPath);
@@ -1812,9 +1913,23 @@ namespace NSchemeShardUT_Private {
         return evTx;
     }
 
+    void AsyncUpgradeSubDomain(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name) {
+        auto evTx = UpgradeSubDomainRequest(schemeShard, txId, parentPath, name);
+        AsyncSend(runtime, schemeShard, evTx);
+    }
+
     void AsyncUpgradeSubDomain(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name) {
-        auto evTx = UpgradeSubDomainRequest(txId, parentPath, name);
-        AsyncSend(runtime, TTestTxConfig::SchemeShard, evTx);
+        AsyncUpgradeSubDomain(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name);
+    }
+
+    void TestUpgradeSubDomain(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name, const TVector<TExpectedResult> &expectedResults) {
+        AsyncUpgradeSubDomain(runtime, schemeShard, txId, parentPath, name);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
+    void TestUpgradeSubDomain(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name) {
+        AsyncUpgradeSubDomain(runtime, schemeShard, txId, parentPath, name);
+        TestModificationResults(runtime, txId, {{TEvSchemeShard::EStatus::StatusAccepted, ""}});
     }
 
     void TestUpgradeSubDomain(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name, const TVector<TExpectedResult> &expectedResults) {
@@ -1827,8 +1942,8 @@ namespace NSchemeShardUT_Private {
         TestModificationResults(runtime, txId, {{TEvSchemeShard::EStatus::StatusAccepted, ""}});
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction *UpgradeSubDomainDecisionRequest(ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
-        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
+    TEvSchemeShard::TEvModifySchemeTransaction *UpgradeSubDomainDecisionRequest(ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
+        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, schemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomainDecision);
         transaction->SetWorkingDir(parentPath);
@@ -1837,9 +1952,23 @@ namespace NSchemeShardUT_Private {
         return evTx;
     }
 
+    void AsyncUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
+        auto evTx = UpgradeSubDomainDecisionRequest(schemeShard, txId, parentPath, name, decision);
+        AsyncSend(runtime, schemeShard, evTx);
+    }
+
     void AsyncUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
-        auto evTx = UpgradeSubDomainDecisionRequest(txId, parentPath, name, decision);
-        AsyncSend(runtime, TTestTxConfig::SchemeShard, evTx);
+        AsyncUpgradeSubDomainDecision(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, decision);
+    }
+
+    void TestUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name, const TVector<TExpectedResult> &expectedResults, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
+        AsyncUpgradeSubDomainDecision(runtime, schemeShard, txId, parentPath, name, decision);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
+    void TestUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
+        AsyncUpgradeSubDomainDecision(runtime, schemeShard, txId, parentPath, name, decision);
+        TestModificationResults(runtime, txId, {{TEvSchemeShard::EStatus::StatusAccepted, ""}});
     }
 
     void TestUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name, const TVector<TExpectedResult> &expectedResults, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
@@ -1883,13 +2012,17 @@ namespace NSchemeShardUT_Private {
         return { step, txId };
     }
 
-    TEvIndexBuilder::TEvCreateRequest* CreateBuildIndexRequest(ui64 id, const TString& dbName, const TString& src, const TBuildIndexConfig& cfg) {
+    TEvIndexBuilder::TEvCreateRequest* CreateBuildIndexRequest(ui64 id, const TString& dbName, const TString& src, const Ydb::Table::TableIndex& index) {
         NKikimrIndexBuilder::TIndexBuildSettings settings;
         settings.set_source_path(src);
         settings.MutableScanSettings()->SetMaxBatchRows(1);
         settings.set_max_shards_in_flight(2);
+        *settings.mutable_index() = index;
+        return new TEvIndexBuilder::TEvCreateRequest(id, dbName, std::move(settings));
+    }
 
-        Ydb::Table::TableIndex& index = *settings.mutable_index();
+    TEvIndexBuilder::TEvCreateRequest* CreateBuildIndexRequest(ui64 id, const TString& dbName, const TString& src, const TBuildIndexConfig& cfg) {
+        Ydb::Table::TableIndex index;
         index.set_name(cfg.IndexName);
         *index.mutable_index_columns() = {cfg.IndexColumns.begin(), cfg.IndexColumns.end()};
         *index.mutable_data_columns() = {cfg.DataColumns.begin(), cfg.DataColumns.end()};
@@ -1897,19 +2030,19 @@ namespace NSchemeShardUT_Private {
         switch (cfg.IndexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal: {
             auto& settings = *index.mutable_global_index()->mutable_settings();
-            if (cfg.GlobalIndexSettings) {
+            if (cfg.GlobalIndexSettings.size() == 1) {
                 cfg.GlobalIndexSettings[0].SerializeTo(settings);
             }
         } break;
         case NKikimrSchemeOp::EIndexTypeGlobalUnique: {
             auto& settings = *index.mutable_global_unique_index()->mutable_settings();
-            if (cfg.GlobalIndexSettings) {
+            if (cfg.GlobalIndexSettings.size() == 1) {
                 cfg.GlobalIndexSettings[0].SerializeTo(settings);
             }
         } break;
         case NKikimrSchemeOp::EIndexTypeGlobalAsync: {
             auto& settings = *index.mutable_global_async_index()->mutable_settings();
-            if (cfg.GlobalIndexSettings) {
+            if (cfg.GlobalIndexSettings.size() == 1) {
                 cfg.GlobalIndexSettings[0].SerializeTo(settings);
             }
         } break;
@@ -1929,21 +2062,34 @@ namespace NSchemeShardUT_Private {
                 kmeansTreeSettings.set_levels(2);
             }
 
-            if (cfg.GlobalIndexSettings) {
-                cfg.GlobalIndexSettings[0].SerializeTo(*settings.mutable_level_table_settings());
-                if (cfg.GlobalIndexSettings.size() > 1) {
-                    cfg.GlobalIndexSettings[1].SerializeTo(*settings.mutable_posting_table_settings());
+            const bool isPrefixed = cfg.IndexColumns.size() > 1;
+            if (cfg.GlobalIndexSettings.size() == (isPrefixed ? 3 : 2)) {
+                cfg.GlobalIndexSettings[NTableIndex::NKMeans::LevelTablePosition].SerializeTo(*settings.mutable_level_table_settings());
+                cfg.GlobalIndexSettings[NTableIndex::NKMeans::PostingTablePosition].SerializeTo(*settings.mutable_posting_table_settings());
+                if (isPrefixed) {
+                    cfg.GlobalIndexSettings[NTableIndex::NKMeans::PrefixTablePosition].SerializeTo(*settings.mutable_prefix_table_settings());
                 }
-                if (cfg.GlobalIndexSettings.size() > 2) {
-                    cfg.GlobalIndexSettings[2].SerializeTo(*settings.mutable_prefix_table_settings());
-                }
+            }
+        } break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
+            if (cfg.GlobalIndexSettings.size() == 1) {
+                cfg.GlobalIndexSettings[0].SerializeTo(*index.mutable_global_fulltext_plain_index()->mutable_settings());
+            }
+        } break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
+            auto& settings = *index.mutable_global_fulltext_relevance_index();
+            if (cfg.GlobalIndexSettings.size() == 4) {
+                cfg.GlobalIndexSettings[NTableIndex::NFulltext::DictTablePosition].SerializeTo(*settings.mutable_dict_table_settings());
+                cfg.GlobalIndexSettings[NTableIndex::NFulltext::DocsTablePosition].SerializeTo(*settings.mutable_docs_table_settings());
+                cfg.GlobalIndexSettings[NTableIndex::NFulltext::StatsTablePosition].SerializeTo(*settings.mutable_stats_table_settings());
+                cfg.GlobalIndexSettings[NTableIndex::NFulltext::PostingTablePosition].SerializeTo(*settings.mutable_posting_table_settings());
             }
         } break;
         default:
             UNIT_ASSERT_C(false, "Unknown index type: " << static_cast<ui32>(cfg.IndexType));
         }
 
-        return new TEvIndexBuilder::TEvCreateRequest(id, dbName, std::move(settings));
+        return CreateBuildIndexRequest(id, dbName, src, index);
     }
 
     std::unique_ptr<TEvIndexBuilder::TEvCreateRequest> CreateBuildColumnRequest(ui64 id, const TString& dbName, const TString& src, const TString& columnName, const Ydb::TypedValue& literal) {
@@ -1957,6 +2103,13 @@ namespace NSchemeShardUT_Private {
         col->mutable_default_from_literal()->CopyFrom(literal);
 
         return std::make_unique<TEvIndexBuilder::TEvCreateRequest>(id, dbName, std::move(settings));
+    }
+
+    void AsyncBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const Ydb::Table::TableIndex& index) {
+        auto sender = runtime.AllocateEdgeActor();
+        auto request = CreateBuildIndexRequest(id, dbName, src, index);
+
+        ForwardToTablet(runtime, schemeShard, sender, request);
     }
 
     void AsyncBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TBuildIndexConfig &cfg) {
@@ -1977,7 +2130,7 @@ namespace NSchemeShardUT_Private {
                        const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns)
     {
         AsyncBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
-            name, NKikimrSchemeOp::EIndexTypeGlobal, columns, dataColumns
+            name, NKikimrSchemeOp::EIndexTypeGlobal, columns, dataColumns, {}
         });
     }
 
@@ -1985,7 +2138,7 @@ namespace NSchemeShardUT_Private {
                        const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns)
     {
         AsyncBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
-            name, NKikimrSchemeOp::EIndexTypeGlobalUnique, columns, dataColumns
+            name, NKikimrSchemeOp::EIndexTypeGlobalUnique, columns, dataColumns, {}
         });
     }
 
@@ -1993,7 +2146,7 @@ namespace NSchemeShardUT_Private {
                               const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns)
     {
         AsyncBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
-            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, columns, std::move(dataColumns)
+            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, columns, std::move(dataColumns), {}
         });
     }
 
@@ -2007,6 +2160,23 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(event);
 
         Cerr << "BUILDCOLUMN RESPONSE CREATE: " << event->ToString() << Endl;
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus,
+                            "status mismatch"
+                                << " got " << Ydb::StatusIds::StatusCode_Name(event->Record.GetStatus())
+                                << " expected "  << Ydb::StatusIds::StatusCode_Name(expectedStatus)
+                                << " issues was " << event->Record.GetIssues());
+    }
+
+    void TestBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
+                       const TString &src, const Ydb::Table::TableIndex& index, Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        AsyncBuildIndex(runtime, id, schemeShard, dbName, src, index);
+
+        TAutoPtr<IEventHandle> handle;
+        TEvIndexBuilder::TEvCreateResponse* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
+        UNIT_ASSERT(event);
+
+        Cerr << "BUILDINDEX RESPONSE CREATE: " << event->ToString() << Endl;
         UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus,
                             "status mismatch"
                                 << " got " << Ydb::StatusIds::StatusCode_Name(event->Record.GetStatus())
@@ -2036,7 +2206,7 @@ namespace NSchemeShardUT_Private {
                        Ydb::StatusIds::StatusCode expectedStatus)
     {
         TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
-            name, NKikimrSchemeOp::EIndexTypeGlobal, columns, {}
+            name, NKikimrSchemeOp::EIndexTypeGlobal, columns, {}, {}
         }, expectedStatus);
     }
 
@@ -2045,7 +2215,7 @@ namespace NSchemeShardUT_Private {
                            Ydb::StatusIds::StatusCode expectedStatus)
     {
         TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
-            name, NKikimrSchemeOp::EIndexTypeGlobalUnique, columns, {}
+            name, NKikimrSchemeOp::EIndexTypeGlobalUnique, columns, {}, {}
         }, expectedStatus);
     }
 
@@ -2054,7 +2224,7 @@ namespace NSchemeShardUT_Private {
                               Ydb::StatusIds::StatusCode expectedStatus)
     {
         TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
-            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, columns, {}
+            name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, columns, {}, {}
         }, expectedStatus);
     }
 
@@ -2171,6 +2341,148 @@ namespace NSchemeShardUT_Private {
         return event->Record;
     }
 
+    void AsyncCompact(TTestActorRuntime& runtime, ui64 schemeshardId, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight) {
+        NKikimrForcedCompaction::TForcedCompactionSettings settings;
+        settings.set_source_path(tablePath);
+        settings.set_max_shards_in_flight(maxShardsInFlight);
+        auto ev = MakeHolder<TEvForcedCompaction::TEvCreateRequest>(id, dbName, settings);
+        AsyncSend(runtime, schemeshardId, ev.Release());
+    }
+
+    void AsyncCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight) {
+        AsyncCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, maxShardsInFlight);
+    }
+
+    void TestCompact(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        ui64 id,
+        const TString& dbName,
+        const TString& tablePath,
+        ui32 maxShardsInFlight,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        AsyncCompact(runtime, schemeshardId, id, dbName, tablePath, maxShardsInFlight);
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvCreateResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+    }
+
+    void TestCompact(TTestActorRuntime& runtime, ui64 id, const TString& dbName, const TString& tablePath, ui32 maxShardsInFlight, Ydb::StatusIds::StatusCode expectedStatus) {
+        TestCompact(runtime, TTestTxConfig::SchemeShard, id, dbName, tablePath, maxShardsInFlight, expectedStatus);
+    }
+
+    NKikimrForcedCompaction::TEvGetResponse TestGetCompaction(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        ui64 id,
+        const TString& dbName,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvForcedCompaction::TEvGetRequest(dbName, id));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvGetResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+
+        return ev->Record;
+    }
+
+    NKikimrForcedCompaction::TEvGetResponse TestGetCompaction(
+        TTestActorRuntime& runtime,
+        ui64 id,
+        const TString& dbName,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        return TestGetCompaction(runtime, TTestTxConfig::SchemeShard, id, dbName, expectedStatus);
+    }
+
+    NKikimrForcedCompaction::TEvCancelResponse TestCancelCompaction(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        ui64 txId,
+        const TString& dbName,
+        ui64 id,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvForcedCompaction::TEvCancelRequest(txId, dbName, id));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvCancelResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+
+        return ev->Record;
+    }
+
+    NKikimrForcedCompaction::TEvCancelResponse TestCancelCompaction(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        const TString& dbName,
+        ui64 id,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        return TestCancelCompaction(runtime, TTestTxConfig::SchemeShard, txId, dbName, id, expectedStatus);
+    }
+
+    NKikimrForcedCompaction::TEvForgetResponse TestForgetCompaction(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        ui64 txId,
+        const TString& dbName,
+        ui64 id,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvForcedCompaction::TEvForgetRequest(txId, dbName, id));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvForgetResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+
+        return ev->Record;
+    }
+
+    NKikimrForcedCompaction::TEvForgetResponse TestForgetCompaction(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        const TString& dbName,
+        ui64 id,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        return TestForgetCompaction(runtime, TTestTxConfig::SchemeShard, txId, dbName, id, expectedStatus);
+    }
+
+    NKikimrForcedCompaction::TEvListResponse TestListCompactions(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        const TString& dbName,
+        ui64 pageSize,
+        const TString& pageToken,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvForcedCompaction::TEvListRequest(dbName, pageSize, pageToken));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvForcedCompaction::TEvListResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+
+        return ev->Record;
+    }
+
+    NKikimrForcedCompaction::TEvListResponse TestListCompactions(
+        TTestActorRuntime& runtime,
+        const TString& dbName,
+        ui64 pageSize,
+        const TString& pageToken,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        return TestListCompactions(runtime, TTestTxConfig::SchemeShard, dbName, pageSize, pageToken, expectedStatus);
+    }
+
     TPathId TestFindTabletSubDomainPathId(
             TTestActorRuntime& runtime, ui64 tabletId,
             NKikimrScheme::TEvFindTabletSubDomainPathIdResult::EStatus expected)
@@ -2208,6 +2520,22 @@ namespace NSchemeShardUT_Private {
         auto createUser = transaction->MutableAlterLogin()->MutableCreateUser();
         createUser->SetUser(user);
         createUser->SetPassword(password);
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
+    void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& hashedPassword, const TString& hashedPasswordOldFormat, const TVector<TExpectedResult>& expectedResults) {
+        auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
+        auto transaction = modifyTx->Record.AddTransaction();
+        transaction->SetWorkingDir(database);
+        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
+
+        auto createUser = transaction->MutableAlterLogin()->MutableCreateUser();
+        createUser->SetUser(user);
+        createUser->SetIsHashedPassword(true);
+        createUser->SetPassword(hashedPasswordOldFormat);
+        createUser->SetHashedPassword(hashedPassword);
 
         AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
         TestModificationResults(runtime, txId, expectedResults);
@@ -2286,6 +2614,23 @@ namespace NSchemeShardUT_Private {
         if (auto ldapDomain = runtime.GetAppData().AuthConfig.GetLdapAuthenticationDomain(); user.EndsWith("@" + ldapDomain)) {
             evLogin->Record.SetExternalAuth(ldapDomain);
         }
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evLogin);
+        TAutoPtr<IEventHandle> handle;
+        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvLoginResult>(handle);
+        UNIT_ASSERT(event);
+        return event->Record;
+    }
+
+    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, NLoginProto::ESaslAuthMech::SaslAuthMech authMech, NLoginProto::EHashType::HashType hashType, const TString& hash, const TString& authMessage) {
+        TActorId sender = runtime.AllocateEdgeActor();
+        auto evLogin = new TEvSchemeShard::TEvLogin();
+        evLogin->Record.SetUser(user);
+        auto& hashesToValidate = *evLogin->Record.MutableHashToValidate();
+        hashesToValidate.SetAuthMech(authMech);
+        hashesToValidate.SetHashType(hashType);
+        hashesToValidate.SetHash(hash);
+        hashesToValidate.SetAuthMessage(authMessage);
+
         ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evLogin);
         TAutoPtr<IEventHandle> handle;
         auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvLoginResult>(handle);
@@ -2842,7 +3187,7 @@ namespace NSchemeShardUT_Private {
         return WaitNextValResult(runtime, sender, expectedStatus);
     }
 
-    NKikimrMiniKQL::TResult ReadTable(TTestActorRuntime& runtime, ui64 tabletId,
+    NKikimrMiniKQL::TResult ReadSystemTable(TTestActorRuntime& runtime, ui64 tabletId,
             const TString& table, const TVector<TString>& pk, const TVector<TString>& columns,
             const TString& rangeFlags)
     {
@@ -2857,13 +3202,43 @@ namespace NSchemeShardUT_Private {
         NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"((
             (let range '(%s%s))
             (let columns '(%s))
-            (let result (SelectRange '__user__%s range columns '()))
+            (let result (SelectRange '%s range columns '()))
             (return (AsList (SetResult 'Result result) ))
         ))", rangeFlags.data(), keyFmt.data(), columnsFmt.data(), table.data()), result, error);
         UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         return result;
+    }
+
+    NKikimrMiniKQL::TResult ReadTable(TTestActorRuntime& runtime, ui64 tabletId,
+            const TString& table, const TVector<TString>& pk, const TVector<TString>& columns,
+            const TString& rangeFlags)
+    {
+        return ReadSystemTable(runtime, tabletId, "__user__"+table, pk, columns, rangeFlags);
+    }
+
+    TVector<TString> ReadShards(TTestActorRuntime& runtime, ui64 schemeshardId, const TString& table) {
+        auto pathDesc = DescribePath(runtime, schemeshardId, table, true, false, true);
+        auto tableDesc = pathDesc.GetPathDescription().GetTable();
+        TVector<TString> columns;
+        for (const auto& c : tableDesc.GetColumns()) {
+            columns.push_back(c.GetName());
+        }
+        TVector<TString> shardRows;
+        for (const auto& partition : pathDesc.GetPathDescription().GetTablePartitions()) {
+            auto result = ReadTable(runtime, partition.GetDatashardId(), tableDesc.GetName(),
+                {tableDesc.GetKeyColumnNames().begin(), tableDesc.GetKeyColumnNames().end()}, {columns.begin(), columns.end()});
+
+            TStringStream ysonStream;
+            NYson::TYsonWriter writer(&ysonStream, NYson::EYsonFormat::Text);
+            NYql::IDataProvider::TFillSettings fillSettings;
+            bool truncated;
+            KikimrResultToYson(ysonStream, writer, result, {}, fillSettings, truncated);
+            UNIT_ASSERT(!truncated);
+            shardRows.push_back(ysonStream.Str());
+        }
+        return shardRows;
     }
 
     ui32 CountRows(TTestActorRuntime& runtime, ui64 schemeshardId, const TString& table) {

@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
+#include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
@@ -65,16 +66,22 @@ private:
         virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
             if (result.HasErrors()) {
                 Fetcher->OnError("cannot fetch accessors");
-            } else {
-                AFL_VERIFY(result.GetPortions().size() == Fetcher->GetInput().GetPortions().size());
-                std::vector<std::shared_ptr<TPortionDataAccessor>> accessors;
-                for (auto&& i : Fetcher->GetInput().GetPortions()) {
-                    accessors.emplace_back(result.ExtractPortionAccessorVerified(i->GetPortionInfo()->GetPortionId()));
-                }
-                Fetcher->MutableCurrentContext().SetPortionAccessors(std::move(accessors));
-                Fetcher->MutableScript().Next();
-                Fetcher->Resume(Fetcher);
+                return;
             }
+
+            if (result.HasRemovedData()) {
+                Fetcher->OnError(TStringBuilder{} << "some portion accessors were removed, count: " << result.GetRemovedData().size());
+                return;
+            }
+
+            AFL_VERIFY(result.GetPortions().size() == Fetcher->GetInput().GetPortions().size());
+            std::vector<std::shared_ptr<TPortionDataAccessor>> accessors;
+            for (auto&& i : Fetcher->GetInput().GetPortions()) {
+                accessors.emplace_back(result.ExtractPortionAccessorVerified(i->GetPortionInfo()->GetPortionId()));
+            }
+            Fetcher->MutableCurrentContext().SetPortionAccessors(std::move(accessors));
+            Fetcher->MutableScript().Next();
+            Fetcher->Resume(Fetcher);
         }
         virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
             return Default<std::shared_ptr<const TAtomicCounter>>();
@@ -275,10 +282,10 @@ private:
         THashMap<TString, THashSet<TBlobRange>> ranges;
         for (ui32 idx = 0; idx < accessors.size(); ++idx) {
             if (ColumnIds) {
-                accessors[idx]->FillBlobRangesByStorage(ranges, fetchingContext->GetInput().GetPortions()[idx]->GetSchema()->GetIndexInfo());
-            } else {
                 accessors[idx]->FillBlobRangesByStorage(
                     ranges, fetchingContext->GetInput().GetPortions()[idx]->GetSchema()->GetIndexInfo(), &ColumnIds->GetColumnIds());
+            } else {
+                accessors[idx]->FillBlobRangesByStorage(ranges, fetchingContext->GetInput().GetPortions()[idx]->GetSchema()->GetIndexInfo());
             }
         }
         std::vector<std::shared_ptr<IBlobsReadingAction>> readActions;
@@ -295,6 +302,7 @@ private:
                 new NOlap::NBlobOperations::NRead::TActor(std::make_shared<TSubscriber>(fetchingContext, std::move(readActions))));
             return IFetchingStep::EStepResult::Detached;
         } else {
+            fetchingContext->MutableCurrentContext().SetBlobs(NBlobOperations::NRead::TCompositeReadBlobs());
             return IFetchingStep::EStepResult::Continue;
         }
     }
@@ -307,12 +315,15 @@ public:
 
 class TAssembleDataStep: public IFetchingStep {
 private:
+    std::shared_ptr<NReader::NCommon::TColumnsSetIds> ColumnIds;
+
+private:
     virtual IFetchingStep::EStepResult DoExecute(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext) const override {
         auto& context = fetchingContext->MutableCurrentContext();
         std::vector<NArrow::TGeneralContainer> result;
         std::vector<ISnapshotSchema::TPtr> schemas;
         for (const auto& portion : fetchingContext->GetInput().GetPortions()) {
-            schemas.emplace_back(portion->GetSchema());
+            schemas.emplace_back(std::make_shared<TFilteredSnapshotSchema>(portion->GetSchema(), ColumnIds->GetColumnIds()));
         }
         std::vector<std::shared_ptr<TPortionDataAccessor>> accessors = context.ExtractPortionAccessors();
         auto blobs = TPortionDataAccessor::DecodeBlobAddresses(accessors, schemas, context.ExtractBlobs());
@@ -323,8 +334,8 @@ private:
             AFL_VERIFY(accessor->GetPortionInfo().GetAddress() == portion->GetPortionInfo()->GetAddress());
 
             std::shared_ptr<NArrow::TGeneralContainer> container =
-                accessor->PrepareForAssemble(*portion->GetSchema(), *portion->GetSchema(), blobs[i])
-                    .AssembleToGeneralContainer({})
+                accessor->PrepareForAssemble(*schemas[i], *schemas[i], blobs[i])
+                    .AssembleToGeneralContainer({}, portion->GetPortionInfo()->GetPathId().DebugString())
                     .DetachResult();
             result.emplace_back(std::move(*container));
         }
@@ -333,7 +344,10 @@ private:
     }
 
 public:
-    TAssembleDataStep() = default;
+    TAssembleDataStep(const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& columnIds)
+        : ColumnIds(columnIds)
+    {
+    }
 };
 
 }   // namespace NKikimr::NOlap::NDataFetcher

@@ -1,6 +1,10 @@
 UNITTEST_FOR(ydb/core/graph)
 
-SIZE(SMALL)
+IF (SANITIZER_TYPE)
+    SIZE(MEDIUM)
+ELSE()
+    SIZE(SMALL)
+ENDIF()
 
 SRC(
     graph_ut.cpp

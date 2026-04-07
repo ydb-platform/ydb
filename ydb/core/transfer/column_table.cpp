@@ -9,9 +9,10 @@ class TColumnTableState : public ITableKindState {
 public:
     TColumnTableState(
         const TActorId& selfId,
+        const TString& database,
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result
     )
-        : ITableKindState(selfId, result)
+        : ITableKindState(selfId, database, result)
     {
         Path = JoinPath(result->ResultSet.front().Path);
     }
@@ -33,7 +34,7 @@ public:
         }
 
         UploaderActorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(
-            new TTableUploader(SelfId, GetScheme(), std::move(tableData))
+            new TTableUploader(SelfId, Database, GetScheme(), std::move(tableData))
         );
 
         Batchers.clear();
@@ -45,13 +46,16 @@ private:
     TString Path;
 };
 
-std::unique_ptr<ITableKindState> CreateColumnTableState(const TActorId& selfId, TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result) {
-    return std::make_unique<TColumnTableState>(selfId, result);
+std::unique_ptr<ITableKindState> CreateColumnTableState(const TActorId& selfId, const TString& database, TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& result) {
+    return std::make_unique<TColumnTableState>(selfId, database, result);
 }
 
 template<>
-IActor* TTableUploader<arrow::RecordBatch>::CreateUploaderInternal(const TString& tablePath, const std::shared_ptr<arrow::RecordBatch>& data, ui64 cookie) {
-    return NTxProxy::CreateUploadColumnsInternal(SelfId(), tablePath, Scheme->Types, data, cookie);
+IActor* TTableUploader<arrow::RecordBatch>::CreateUploaderInternal(
+    const TString& database, const TString& tablePath,
+    const std::shared_ptr<arrow::RecordBatch>& data, ui64 cookie)
+{
+    return NTxProxy::CreateUploadColumnsInternal(SelfId(), database, tablePath, Scheme->Types, data, cookie);
 }
 
 }

@@ -18,8 +18,8 @@ namespace builtins
 
     bool isdigit(types::str const &s)
     {
-      return !s.empty() && std::all_of(s.chars().begin(), s.chars().end(),
-                                       (int (*)(int))std::isdigit);
+      return !s.empty() &&
+             std::all_of(s.chars().begin(), s.chars().end(), (int (*)(int))std::isdigit);
     }
   } // namespace str
 } // namespace builtins

@@ -2,7 +2,7 @@
 
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/protos/kqp.pb.h>
-#include <ydb/core/kqp/common/kqp_result_set_format_settings.h>
+#include <ydb/core/kqp/common/result_set_format/kqp_result_set_format_settings.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/grpc_services/base/iface.h>
@@ -14,6 +14,12 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/event_local.h>
+
+#include <memory>
+
+namespace NKikimr::NKqp {
+    struct IWmSessionUpdater;
+}
 
 namespace NKikimr::NKqp::NPrivateEvents {
 
@@ -83,20 +89,27 @@ public:
         const ::Ydb::Operations::OperationParams* operationParams,
         const TQueryRequestSettings& querySettings = TQueryRequestSettings(),
         const TString& poolId = "",
-        std::optional<NKqp::TArrowFormatSettings> arrowFormatSettings = std::nullopt);
+        std::optional<NFormats::TArrowFormatSettings> arrowFormatSettings = std::nullopt);
 
     TEvQueryRequest() {
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
     }
 
+    TEvQueryRequest(const TString& userSID);
+
     bool IsSerializable() const override {
         return true;
     }
 
-    TEventSerializationInfo CreateSerializationInfo() const override { return {}; }
+    TEventSerializationInfo CreateSerializationInfo(bool /*allowExternalDataChannel*/) const override { return {}; }
 
     const TString& GetDatabase() const {
         return RequestCtx ? Database : Record.GetRequest().GetDatabase();
+    }
+
+    TString GetUserSID() const {
+        auto token = GetUserToken();
+        return token ? token->GetUserSID() : "";
     }
 
     const std::shared_ptr<NGRpcService::IRequestCtxMtSafe>& GetRequestCtx() const {
@@ -291,6 +304,11 @@ public:
         return RequestCtx ? RequestCtx->IsInternalCall() : Record.GetRequest().GetIsInternalCall();
     }
 
+    bool GetIsWarmupCompilation() const {
+        // RequestCtx is set only if request came from grpc, warmup is internal operation
+        return RequestCtx ? false : Record.GetRequest().GetIsWarmupCompilation();
+    }
+
     ui64 GetParametersSize() const {
         if (ParametersSize > 0) {
             return ParametersSize;
@@ -333,6 +351,14 @@ public:
 
     TIntrusivePtr<TUserRequestContext> GetUserRequestContext() const {
         return UserRequestContext;
+    }
+
+    void SetWmSessionUpdater(const std::shared_ptr<IWmSessionUpdater>& wmSessionUpdater) {
+        WmSessionUpdater = wmSessionUpdater;
+    }
+
+    std::shared_ptr<IWmSessionUpdater> GetWmSessionUpdater() const {
+        return WmSessionUpdater;
     }
 
     void SetProgressStatsPeriod(TDuration progressStatsPeriod) {
@@ -388,11 +414,20 @@ public:
     }
 
     bool HasArrowFormatSettings() const {
-        return ArrowFormatSettings.has_value();
+        if (RequestCtx) {
+            return ArrowFormatSettings.has_value();
+        }
+        return Record.GetRequest().HasArrowFormatSettings();
     }
 
-    std::optional<NKqp::TArrowFormatSettings> GetArrowFormatSettings() const {
-        return ArrowFormatSettings;
+    std::optional<NFormats::TArrowFormatSettings> GetArrowFormatSettings() const {
+        if (RequestCtx) {
+            return ArrowFormatSettings;
+        }
+        if (Record.GetRequest().HasArrowFormatSettings()) {
+            return NFormats::TArrowFormatSettings::ImportFromProto(Record.GetRequest().GetArrowFormatSettings());
+        }
+        return std::nullopt;
     }
 
     bool GetSaveQueryPhysicalGraph() const {
@@ -417,6 +452,14 @@ public:
 
     i64 GetGeneration() const {
         return Generation;
+    }
+
+    void SetDisableDefaultTimeout(bool disableDefaultTimeout) {
+        DisableDefaultTimeout = disableDefaultTimeout;
+    }
+
+    bool GetDisableDefaultTimeout() const {
+        return DisableDefaultTimeout;
     }
 
     mutable NKikimrKqp::TEvQueryRequest Record;
@@ -449,10 +492,12 @@ private:
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     TDuration ProgressStatsPeriod;
     std::optional<NResourcePool::TPoolSettings> PoolConfig;
-    std::optional<NKqp::TArrowFormatSettings> ArrowFormatSettings;
+    std::optional<NFormats::TArrowFormatSettings> ArrowFormatSettings;
     bool SaveQueryPhysicalGraph = false;  // Used only in execute script queries
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
     i64 Generation = 0;
+    bool DisableDefaultTimeout = false;
+    std::shared_ptr<IWmSessionUpdater> WmSessionUpdater;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

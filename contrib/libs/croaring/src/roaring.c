@@ -24,6 +24,8 @@ namespace api {
 
 #define CROARING_SERIALIZATION_ARRAY_UINT32 1
 #define CROARING_SERIALIZATION_CONTAINER 2
+extern inline bool roaring_bitmap_contains(const roaring_bitmap_t *r,
+                                           uint32_t val);
 extern inline int roaring_trailing_zeroes(unsigned long long input_num);
 extern inline int roaring_leading_zeroes(unsigned long long input_num);
 extern inline void roaring_bitmap_init_cleared(roaring_bitmap_t *r);
@@ -416,6 +418,30 @@ void roaring_bitmap_statistics(const roaring_bitmap_t *r,
     }
 }
 
+bool roaring_contains_shared(const roaring_bitmap_t *r) {
+    const roaring_array_t *ra = &r->high_low_container;
+    for (int i = 0; i < ra->size; ++i) {
+        if (ra->typecodes[i] == SHARED_CONTAINER_TYPE) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool roaring_unshare_all(roaring_bitmap_t *r) {
+    const roaring_array_t *ra = &r->high_low_container;
+    bool unshared = false;
+    for (int i = 0; i < ra->size; ++i) {
+        uint8_t typecode = ra->typecodes[i];
+        if (typecode == SHARED_CONTAINER_TYPE) {
+            ra->containers[i] = get_writable_copy_if_shared(ra->containers[i],
+                                                            &ra->typecodes[i]);
+            unshared = true;
+        }
+    }
+    return unshared;
+}
+
 /*
  * Checks that:
  * - Array containers are sorted and contain no duplicates
@@ -423,6 +449,7 @@ void roaring_bitmap_statistics(const roaring_bitmap_t *r,
  * - Roaring containers are sorted by key and there are no duplicate keys
  * - The correct container type is use for each container (e.g. bitmaps aren't
  * used for small containers)
+ * - Shared containers are only used when the bitmap is COW
  */
 bool roaring_bitmap_internal_validate(const roaring_bitmap_t *r,
                                       const char **reason) {
@@ -475,7 +502,13 @@ bool roaring_bitmap_internal_validate(const roaring_bitmap_t *r,
         prev_key = ra->keys[i];
     }
 
+    bool cow = roaring_bitmap_get_copy_on_write(r);
+
     for (int32_t i = 0; i < ra->size; ++i) {
+        if (ra->typecodes[i] == SHARED_CONTAINER_TYPE && !cow) {
+            *reason = "shared container in non-COW bitmap";
+            return false;
+        }
         if (!container_internal_validate(ra->containers[i], ra->typecodes[i],
                                          reason)) {
             // reason should already be set
@@ -1399,7 +1432,13 @@ void roaring_bitmap_to_uint32_array(const roaring_bitmap_t *r, uint32_t *ans) {
 
 bool roaring_bitmap_range_uint32_array(const roaring_bitmap_t *r, size_t offset,
                                        size_t limit, uint32_t *ans) {
-    return ra_range_uint32_array(&r->high_low_container, offset, limit, ans);
+    roaring_uint32_iterator_t it;
+    roaring_iterator_init(r, &it);
+    roaring_uint32_iterator_skip(&it, offset);
+    roaring_uint32_iterator_read(&it, ans, limit);
+
+    // This function always succeeds
+    return true;
 }
 
 /** convert array and bitmap containers to run containers when it is more
@@ -1596,7 +1635,7 @@ roaring_bitmap_t *roaring_bitmap_deserialize_safe(const void *buf,
         for (uint32_t i = 0; i < card; i++) {
             // elems may not be aligned, read with memcpy
             uint32_t elem;
-            memcpy((char*)&elem, (char*)(elems + i), sizeof(elem));
+            memcpy((char *)&elem, (char *)(elems + i), sizeof(elem));
             roaring_bitmap_add_bulk(bitmap, &context, elem);
         }
         return bitmap;
@@ -1832,11 +1871,63 @@ uint32_t roaring_uint32_iterator_read(roaring_uint32_iterator_t *it,
         if (has_value) {
             it->has_value = true;
             it->current_value = it->highbits | low16;
+            // If the container still has values, we must have stopped because
+            // we skipped enough values.
             assert(ret == count);
             return ret;
         }
         it->container_index++;
         it->has_value = loadfirstvalue(it);
+    }
+    return ret;
+}
+
+uint32_t roaring_uint32_iterator_skip(roaring_uint32_iterator_t *it,
+                                      uint32_t count) {
+    uint32_t ret = 0;
+    while (it->has_value && ret < count) {
+        uint32_t consumed;
+        uint16_t low16 = (uint16_t)it->current_value;
+        bool has_value = container_iterator_skip(it->container, it->typecode,
+                                                 &it->container_it, count - ret,
+                                                 &consumed, &low16);
+        ret += consumed;
+        if (has_value) {
+            it->has_value = true;
+            it->current_value = it->highbits | low16;
+            // If the container still has values, we must have stopped because
+            // we skipped enough values.
+            assert(ret == count);
+            return ret;
+        }
+        // We have skipped over all items in the current container, so set
+        // ourselves at the first item of the next container.
+        // We do NOT need to count another item skipped here.
+        it->container_index++;
+        it->has_value = loadfirstvalue(it);
+    }
+    return ret;
+}
+
+uint32_t roaring_uint32_iterator_skip_backward(roaring_uint32_iterator_t *it,
+                                               uint32_t count) {
+    uint32_t ret = 0;
+    while (it->has_value && ret < count) {
+        uint32_t consumed;
+        uint16_t low16 = (uint16_t)it->current_value;
+        bool has_value = container_iterator_skip_backward(
+            it->container, it->typecode, &it->container_it, count - ret,
+            &consumed, &low16);
+        ret += consumed;
+        if (has_value) {
+            it->has_value = true;
+            it->current_value = it->highbits | low16;
+            return ret;
+        }
+        // We have skipped over all items in the current container backwards.
+        // Moving to the previous container counts as consuming one more skip.
+        it->container_index--;
+        it->has_value = loadlastvalue(it);
     }
     return ret;
 }
@@ -2826,23 +2917,6 @@ uint64_t roaring_bitmap_xor_cardinality(const roaring_bitmap_t *x1,
     return c1 + c2 - 2 * inter;
 }
 
-bool roaring_bitmap_contains(const roaring_bitmap_t *r, uint32_t val) {
-    const uint16_t hb = val >> 16;
-    /*
-     * the next function call involves a binary search and lots of branching.
-     */
-    int32_t i = ra_get_index(&r->high_low_container, hb);
-    if (i < 0) return false;
-
-    uint8_t typecode;
-    // next call ought to be cheap
-    container_t *container = ra_get_container_at_index(&r->high_low_container,
-                                                       (uint16_t)i, &typecode);
-    // rest might be a tad expensive, possibly involving another round of binary
-    // search
-    return container_contains(container, val & 0xFFFF, typecode);
-}
-
 /**
  * Check whether a range of values from range_start (included) to range_end
  * (excluded) is present
@@ -3016,7 +3090,7 @@ void roaring_bitmap_frozen_serialize(const roaring_bitmap_t *rb, char *buf) {
     uint16_t *key_zone = (uint16_t *)arena_alloc(&buf, 2 * ra->size);
     uint16_t *count_zone = (uint16_t *)arena_alloc(&buf, 2 * ra->size);
     uint8_t *typecode_zone = (uint8_t *)arena_alloc(&buf, ra->size);
-    char *header_zone = (char*)arena_alloc(&buf, 4);
+    char *header_zone = (char *)arena_alloc(&buf, 4);
 
     for (int32_t i = 0; i < ra->size; i++) {
         uint16_t count;

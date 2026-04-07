@@ -8,6 +8,7 @@ val testsJar by tasks.registering(Jar::class) {
 artifacts.add(configurations.create("testArtifacts").name, testsJar)
 
 tasks.test {
+    failOnNoDiscoveredTests = false
     testLogging {
         showStandardStreams = true
         events("passed", "skipped", "failed")
@@ -15,7 +16,7 @@ tasks.test {
 }
 {%  endif -%}
 
-{%- if has_junit5_test %}
+{%- if has_junit5_test or has_junit6_test %}
 tasks.named<Test>("test") {
     useJUnitPlatform()
 }

@@ -11,13 +11,11 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class Iterable, class dtype>
-  types::ndarray<typename std::remove_cv<typename std::remove_reference<
-                     Iterable>::type>::type::value_type,
+  types::ndarray<typename std::remove_cv_t<std::remove_reference_t<Iterable>>::value_type,
                  types::pshape<long>>
   fromiter(Iterable &&iterable, dtype d, long count)
   {
-    using T = typename std::remove_cv<
-        typename std::remove_reference<Iterable>::type>::type::value_type;
+    using T = typename std::remove_cv_t<std::remove_reference_t<Iterable>>::value_type;
     if (count < 0) {
       types::list<T> buffer(0);
       std::copy(iterable.begin(), iterable.end(), std::back_inserter(buffer));

@@ -7,13 +7,15 @@ namespace NMiniKQL {
 
 namespace {
 
-class TSeqWrapper : public TMutableComputationNode<TSeqWrapper> {
+class TSeqWrapper: public TMutableComputationNode<TSeqWrapper> {
     typedef TMutableComputationNode<TSeqWrapper> TBaseComputation;
+
 public:
     TSeqWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& args)
         : TBaseComputation(mutables)
         , Args(std::move(args))
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         for (size_t i = 0; i + 1 < Args.size(); ++i) {
@@ -32,7 +34,7 @@ private:
     const TComputationNodePtrVector Args;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapSeq(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() >= 1, "Seq: Expected at least one argument");
@@ -46,5 +48,5 @@ IComputationNode* WrapSeq(TCallable& callable, const TComputationNodeFactoryCont
     return new TSeqWrapper(ctx.Mutables, std::move(args));
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

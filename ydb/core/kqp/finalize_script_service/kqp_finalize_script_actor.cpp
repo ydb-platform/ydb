@@ -1,7 +1,7 @@
 #include "kqp_finalize_script_actor.h"
 
 #include <ydb/core/fq/libs/events/events.h>
-#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_compression.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/tx/datashard/const.h>
@@ -86,7 +86,7 @@ private:
     }
 
     void FetchSecrets() {
-        RegisterDescribeSecretsActor(SelfId(), UserToken, SecretNames, ActorContext().ActorSystem());
+        RegisterDescribeSecretsActor(SelfId(), UserToken, Database, SecretNames, ActorContext().ActorSystem());
     }
 
     void Handle(TEvDescribeSecretsResponse::TPtr& ev) {
@@ -226,7 +226,7 @@ private:
     TString CustomerSuppliedId;
     std::vector<NKqpProto::TKqpExternalSink> Sinks;
 
-    TString UserToken;
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     std::vector<TString> SecretNames;
     std::unordered_map<TString, TString> SecureParams;
 };

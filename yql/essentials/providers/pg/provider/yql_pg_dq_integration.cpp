@@ -2,6 +2,8 @@
 #include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
 #include <yql/essentials/providers/pg/expr_nodes/yql_pg_expr_nodes.h>
 
+#include <utility>
+
 namespace NYql {
 
 using namespace NNodes;
@@ -10,9 +12,10 @@ namespace {
 
 class TPgDqIntegration: public TDqIntegrationBase {
 public:
-    TPgDqIntegration(TPgState::TPtr state)
-        : State_(state)
-    {}
+    explicit TPgDqIntegration(TPgState::TPtr state)
+        : State_(std::move(state))
+    {
+    }
 
     bool CanRead(const TExprNode& read, TExprContext&, bool) override {
         return TPgReadTable::Match(&read);
@@ -35,10 +38,10 @@ private:
     const TPgState::TPtr State_;
 };
 
-}
+} // namespace
 
 THolder<IDqIntegration> CreatePgDqIntegration(TPgState::TPtr state) {
     return MakeHolder<TPgDqIntegration>(state);
 }
 
-}
+} // namespace NYql

@@ -13,9 +13,9 @@ namespace {
 using ResultSetRow = std::tuple<ui32, std::optional<ui64>>;
 using ResultSetDoubleRow = std::tuple<ui32, std::optional<std::string>, std::optional<ui64>>;
 
-NKikimrConfig::TAppConfig GetAppConfig(bool pointConsolidation = false) {
+NKikimrConfig::TAppConfig GetAppConfig(bool pointConsolidation = true) {
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableParallelPointReadConsolidation(pointConsolidation);
+    appConfig.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimization(pointConsolidation);
     return appConfig;
 }
 
@@ -126,8 +126,8 @@ std::vector<ResultSetDoubleRow> ResultSetDoubleToSortedVector(const TExecuteQuer
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpPointConsolidation) {
-    Y_UNIT_TEST_TWIN(TasksCount, PointConsolidation) {
-        TKikimrRunner kikimr(GetAppConfig(PointConsolidation));
+    Y_UNIT_TEST(TasksCount) {
+        TKikimrRunner kikimr(GetAppConfig(true));
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 

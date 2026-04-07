@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/persqueue/pq.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/pqtablet/partition/user_info.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
@@ -262,13 +263,55 @@ struct TTabletPreparationParameters {
     TString account{"federationAccount"};
     ::NKikimrPQ::TPQTabletConfig_EMeteringMode meteringMode = NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY;
     bool enableCompactificationByKey{false};
+    std::optional<uint32_t> metricsLevel;
+    std::optional<TString> monitoringProjectId;
+    bool AddDefaultConsumer{true};
 };
+
+struct TConsumerPreparationParameters {
+    TString Name;
+    bool Important = false;
+    std::optional<uint32_t> MetricsLevel;
+    std::optional<TString> MonitoringProjectId;
+};
+
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,
-    const TVector<std::pair<TString, bool>>& users,
+    const TConstArrayRef<TConsumerPreparationParameters> users,
     TTestActorRuntime& runtime,
     ui64 tabletId,
     TActorId edge);
+
+
+struct TBalancerParams {
+    TString Topic;
+    TVector<std::pair<ui32, std::pair<ui64, ui32>>> Map;
+    ui64 SsId;
+    TTestActorRuntime& Runtime;
+    ui64 BalancerTabletId;
+    TActorId Edge;
+    const bool RequireAuth = false;
+    bool Kill = true;
+    THashSet<TString> XtraConsumers = {};
+    bool EnableKeyCompaction = false;
+
+    static TBalancerParams FromContext(const TString topic,
+            const TVector<std::pair<ui32, std::pair<ui64, ui32>>>& map,
+            const ui64 ssId,
+            TTestContext& context,
+            bool requireAuth = false,
+            bool kill = true,
+            const THashSet<TString>& xtraConsumers = {},
+            bool enableKeyCompaction = false)
+    {
+        return TBalancerParams{
+            .Topic=topic, .Map=map, .SsId=ssId, .Runtime=*context.Runtime, .BalancerTabletId=context.BalancerTabletId,
+            .Edge=context.Edge, .RequireAuth=requireAuth, .Kill=kill, .XtraConsumers=xtraConsumers, .EnableKeyCompaction=enableKeyCompaction};
+    }
+};
+
+
+void PQBalancerPrepare(const TBalancerParams& params);
 
 void PQBalancerPrepare(
     const TString topic,
@@ -459,10 +502,14 @@ struct TPQCmdReadSettings : public TPQCmdSettingsBase {
     ui64 DirectReadId = 0;
     i64 LastOffset = 0;
     TActorId Pipe;
+
+    ui64* SizeLag = nullptr;
+
     TPQCmdReadSettings() = default;
     TPQCmdReadSettings(const TString& session, ui32 partition, i64 offset, ui32 count, ui32 size, ui32 resCount, bool timeout = false,
                        TVector<i32> offsets = {}, const ui32 maxTimeLagMs = 0, const ui64 readTimestampMs = 0,
-                       const TString user = "user", const i64 lastOffset = 0)
+                       const TString user = "user", const i64 lastOffset = 0,
+                       ui64* sizeLag = nullptr)
 
         : TPQCmdSettingsBase{partition, user, session, 0, offset, false}
         , Count(count)
@@ -473,6 +520,7 @@ struct TPQCmdReadSettings : public TPQCmdSettingsBase {
         , MaxTimeLagMs(maxTimeLagMs)
         , ReadTimestampMs(readTimestampMs)
         , LastOffset(lastOffset)
+        , SizeLag(sizeLag)
     {}
 };
 
@@ -527,11 +575,17 @@ void CmdRead(
     TVector<i32> offsets = {},
     const ui32 maxTimeLagMs = 0,
     const ui64 readTimestampMs = 0,
-    const TString user = "user");
+    const TString user = "user",
+    ui64* sizeLag = nullptr);
 
 void CmdRead(
     const TPQCmdReadSettings& settings,
     TTestContext& tc);
+
+ui64 GetSizeLag(const ui32 partition,
+                const ui64 offset,
+                bool isEndOffset,
+                TTestContext& tc);
 
 void BeginCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc);
 bool EndCmdRead(const TPQCmdReadSettings& settings, TTestContext& tc);
@@ -594,6 +648,34 @@ void CmdWrite(
     bool treatBadOffsetAsError = true,
     bool disableDeduplication = false);
 
+struct TCmdWriteOptions {
+    ui32 Partition;
+    TString SourceId;
+    TVector<std::pair<ui64, TString>> Data;
+    TTestContext& TestContext;
+    bool Error = false;
+    const THashSet<ui32>& AlreadyWrittenSeqNo = {};
+    bool IsFirst = false;
+    const TString& OwnerCookie = "";
+    i32 MessageNo = -1;
+    i64 Offset = -1;
+    bool TreatWrongCookieAsError = false;
+    bool TreatBadOffsetAsError = true;
+    bool DisableDeduplication = false;
+};
+void CmdWrite(const TCmdWriteOptions&);
+
+void CmdRunCompaction(TTestActorRuntime& runtime,
+                      ui64 tabletId,
+                      const TActorId& sender,
+                      const ui32 partition);
+void CmdRunCompaction(const ui32 partition,
+                      TTestContext& tc);
+
 THolder<TEvPersQueue::TEvPeriodicTopicStats> GetReadBalancerPeriodicTopicStats(TTestActorRuntime& runtime, ui64 balancerId);
+
+void CmdRenameKey(const TString& oldKey,
+                  const TString& newKey,
+                  TTestContext& tc);
 
 } // namespace NKikimr::NPQ

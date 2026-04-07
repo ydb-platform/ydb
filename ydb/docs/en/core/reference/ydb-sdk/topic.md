@@ -1,6 +1,6 @@
 # Working with topics
 
-This article provides examples of how to use the {{ ydb-short-name }} SDK to work with [topics](../../concepts/topic.md).
+This article provides examples of how to use the {{ ydb-short-name }} SDK to work with [topics](../../concepts/datamodel/topic.md).
 
 Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and [add a consumer](../ydb-cli/topic-consumer-add.md).
 
@@ -235,7 +235,7 @@ When you update a topic, you must specify the topic path and the parameters to b
 
   For a full list of supported parameters, see the [source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L458).
 
-  Example of adding an [important consumer](../../concepts/topic#important-consumer) and setting two days [retention time](../../concepts/topic#retention-time) for the topic:
+  Example of adding an [important consumer](../../concepts/datamodel/topic.md#important-consumer) and setting two days [retention time](../../concepts/datamodel/topic.md#retention-time) for the topic:
 
   ```cpp
   auto alterSettings = NYdb::NTopic::TAlterTopicSettings()
@@ -1423,7 +1423,7 @@ To establish a connection to the `my-topic` and `my-specific-topic` topics using
 
 ### Reading messages {#reading-messages}
 
-The server stores the [consumer offset](../../concepts/topic.md#consumer-offset). After reading a message, the client should [send a commit to the server](#commit). The consumer offset changes and only uncommitted messages will be read in case of a new connection.
+The server stores the [consumer offset](../../concepts/datamodel/topic.md#consumer-offset). After reading a message, the client should [send a commit to the server](#commit). The consumer offset changes and only uncommitted messages will be read in case of a new connection.
 
 You can read messages without a [commit](#no-commit) as well. In this case, all uncommited messages, including those processed, will be read if there is a new connection.
 

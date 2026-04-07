@@ -15,8 +15,7 @@ namespace numpy
   namespace
   {
     template <class I0, class I1>
-    bool _allclose(I0 begin, I0 end, I1 ibegin, double rtol, double atol,
-                   utils::int_<1>)
+    bool _allclose(I0 begin, I0 end, I1 ibegin, double rtol, double atol, utils::int_<1>)
     {
       for (; begin != end; ++begin, ++ibegin) {
         auto u = *begin;
@@ -31,12 +30,11 @@ namespace numpy
     }
 
     template <class I0, class I1, size_t N>
-    bool _allclose(I0 begin, I0 end, I1 ibegin, double rtol, double atol,
-                   utils::int_<N>)
+    bool _allclose(I0 begin, I0 end, I1 ibegin, double rtol, double atol, utils::int_<N>)
     {
       for (; begin != end; ++begin, ++ibegin)
-        if (!_allclose((*begin).begin(), (*begin).end(), (*ibegin).begin(),
-                       rtol, atol, utils::int_<N - 1>()))
+        if (!_allclose((*begin).begin(), (*begin).end(), (*ibegin).begin(), rtol, atol,
+                       utils::int_<N - 1>()))
           return false;
       return true;
     }
@@ -45,8 +43,7 @@ namespace numpy
   template <class U, class V>
   bool allclose(U const &u, V const &v, double rtol, double atol)
   {
-    return _allclose(u.begin(), u.end(), v.begin(), rtol, atol,
-                     utils::int_<U::value>());
+    return _allclose(u.begin(), u.end(), v.begin(), rtol, atol, utils::int_<U::value>());
   }
 } // namespace numpy
 PYTHONIC_NS_END

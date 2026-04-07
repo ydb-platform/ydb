@@ -1,22 +1,31 @@
 #include <yql/essentials/sql/v1/node.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
 #include <library/cpp/json/writer/json.h>
 #include <util/generic/yexception.h>
 
 using namespace NYql;
 
-int Main(int argc, const char *argv[])
+int Main(int argc, const char** argv)
 {
     Y_UNUSED(argc);
     Y_UNUSED(argv);
     NJsonWriter::TBuf json;
     json.BeginList();
-    NSQLTranslationV1::EnumerateBuiltins([&](auto name, auto kind) {
+    NSQLTranslationV1::EnumerateBuiltins([&](auto name, auto kind, NYql::TLangVersion minLangVer, NYql::TLangVersion maxLangVer) {
         json.BeginObject();
         json.WriteKey("name");
         json.WriteString(name);
         json.WriteKey("kind");
         json.WriteString(kind);
+        if (minLangVer != NYql::UnknownLangVersion) {
+            json.WriteKey("minLangVer");
+            json.WriteString(NYql::FormatLangVersion(minLangVer).GetRef());
+        }
+        if (maxLangVer != NYql::UnknownLangVersion) {
+            json.WriteKey("maxLangVer");
+            json.WriteString(NYql::FormatLangVersion(maxLangVer).GetRef());
+        }
         json.EndObject();
     });
 
@@ -26,14 +35,13 @@ int Main(int argc, const char *argv[])
     return 0;
 }
 
-int main(int argc, const char *argv[]) {
+int main(int argc, const char** argv) {
     NYql::NBacktrace::RegisterKikimrFatalActions();
     NYql::NBacktrace::EnableKikimrSymbolize();
 
     try {
         return Main(argc, argv);
-    }
-    catch (...) {
+    } catch (...) {
         Cerr << CurrentExceptionMessage() << Endl;
         return 1;
     }

@@ -6,6 +6,8 @@
 #include "subprocess.h"
 #include "kqp_setup.h"
 
+#include <ydb/library/yql/dq/comp_nodes/ut/utils/preallocated_spiller.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_rh_hash.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
@@ -46,7 +48,9 @@ void NativeToUnboxed(const std::string& value, bool isEmbedded, NUdf::TUnboxedVa
     }
 }
 
-TStreamValues GenerateSample(size_t numKeys, size_t numRows, const std::vector<TFieldDescr>& keys, const std::vector<TFieldDescr>& values)
+using TVerificationReferenceData = std::unordered_map<std::string, ui64>;
+
+TStreamValues GenerateSample(size_t numKeys, size_t numRows, const std::vector<TFieldDescr>& keys, const std::vector<TFieldDescr>& values, TVerificationReferenceData* refData)
 {
     TStreamValues result;
     result.reserve(numRows * (keys.size() + values.size()));
@@ -60,30 +64,48 @@ TStreamValues GenerateSample(size_t numKeys, size_t numRows, const std::vector<T
 
     std::shuffle(primaryKeys.begin(), primaryKeys.end(), eng);
 
-    auto pushValue = [&](const TFieldDescr& descr, const ui64 key, const bool isKeyColumn) {
-        ui64 smolValue = isKeyColumn ? key : (key % 1000);
+    auto pushValue = [&](const TFieldDescr& descr, const ui64 key, const bool isKeyColumn, const bool pushToReference) {
+        ui64 aggregatable = key % 1000;
+        ui64 columnValue = isKeyColumn ? key : aggregatable;
         result.emplace_back();
+
+        std::string refKey;
         if (descr.IsString) {
-            auto value = descr.IsEmbedded ? Sprintf("%08u", smolValue) : Sprintf("%08u.%08u.%08u.", smolValue, smolValue, smolValue);
-            NativeToUnboxed(value, descr.IsEmbedded, result.back());
+            refKey = descr.IsEmbedded ? Sprintf("%08u", columnValue) : Sprintf("%08u.%08u.%08u.", columnValue, columnValue, columnValue);
+            NativeToUnboxed(refKey, descr.IsEmbedded, result.back());
         } else {
-            NativeToUnboxed(smolValue, result.back());
+            NativeToUnboxed(columnValue, result.back());
+            if (pushToReference) {
+                refKey = ToString(columnValue);
+            }
+        }
+
+        if (pushToReference && refData) {
+            auto ii = refData->find(refKey);
+            if (ii == refData->end()) {
+                refData->emplace(refKey, aggregatable);
+            } else {
+                ii->second += aggregatable;
+            }
         }
     };
 
     for (ui64 pk : primaryKeys) {
+        bool ref = true;
+
         for (const auto& descr : keys) {
-            pushValue(descr, pk, true);
+            pushValue(descr, pk, true, ref);
+            ref = false;
         }
         for (const auto& descr : values) {
-            pushValue(descr, pk, false);
+            pushValue(descr, pk, false, false);
         }
     }
 
     return result;
 }
 
-size_t CountStreamOutputs(const NUdf::TUnboxedValue& wideStream, size_t width)
+size_t CountStreamOutputs(const NUdf::TUnboxedValue& wideStream, size_t width, bool sleepOnYield)
 {
     std::vector<TUnboxedValue> resultValues;
     resultValues.resize(width);
@@ -95,6 +117,48 @@ size_t CountStreamOutputs(const NUdf::TUnboxedValue& wideStream, size_t width)
     while ((fetchStatus = wideStream.WideFetch(resultValues.data(), width)) != NUdf::EFetchStatus::Finish) {
         if (fetchStatus == NUdf::EFetchStatus::Ok) {
             ++lineCount;
+        } else if (sleepOnYield) {
+            ::Sleep(TDuration::MilliSeconds(1));
+        }
+    }
+
+    return lineCount;
+}
+
+size_t CollectStreamOutputs(const NUdf::TUnboxedValue& wideStream, const std::vector<TFieldDescr>& keyFields, size_t width, TVerificationReferenceData& data, bool sleepOnYield)
+{
+    std::vector<TUnboxedValue> resultValues;
+    Cerr << "collect width: " << width << Endl;
+    resultValues.resize(width);
+
+    Y_ENSURE(wideStream.IsBoxed());
+
+    size_t lineCount = 0;
+
+    NUdf::EFetchStatus fetchStatus;
+    while ((fetchStatus = wideStream.WideFetch(resultValues.data(), width)) != NUdf::EFetchStatus::Finish) {
+        if (fetchStatus == NUdf::EFetchStatus::Yield) {
+            if (sleepOnYield) {
+                ::Sleep(TDuration::MilliSeconds(1));
+            }
+            continue;
+        }
+
+        ++lineCount;
+
+        std::string key;
+        if (keyFields[0].IsString) {
+            key = UnboxedToNative<std::string>(resultValues[0]);
+        } else {
+            key = ToString<ui64>(UnboxedToNative<ui64>(resultValues[0]));
+        }
+
+        ui64 value = UnboxedToNative<ui64>(resultValues.back());
+        auto iter = data.find(key);
+        if (iter == data.end()) {
+            data.emplace(key, value);
+        } else {
+            iter->second += value;
         }
     }
 
@@ -109,12 +173,15 @@ public:
         ythrow yexception() << "only WideFetch is supported here";
     }
 
-    TPrebuiltStream(const TStreamValues& values, size_t width, size_t iterations)
+    using TCallback = std::function<void()>;
+    TPrebuiltStream(const TStreamValues& values, size_t width, size_t iterations, size_t callbackAfter = 0, TCallback callback = {})
         : Values(values)
         , ValuesEnd(Values.end())
         , CurrItem(Values.begin())
         , Width(width)
         , MaxIterations(iterations)
+        , CallbackAfter(callbackAfter)
+        , Callback(callback)
     {
     }
 
@@ -149,6 +216,11 @@ public:
 
         TryProceed();
 
+        ++NumFetches;
+        if (CallbackAfter && NumFetches == CallbackAfter) {
+            Callback();
+        }
+
         return NUdf::EFetchStatus::Ok;
     }
 
@@ -157,13 +229,23 @@ public:
     TStreamValues::const_iterator CurrItem;
     const size_t Width;
     const size_t MaxIterations;
+    size_t CallbackAfter;
+    TCallback Callback;
+    size_t NumFetches = 0;
     size_t Iteration = 0;
 };
 
 
 
-template<bool LLVM>
-THolder<IComputationGraph> BuildGraph(TKqpSetup<LLVM>& setup, THolder<NUdf::TBoxedValue> inputStream, bool useDqImpl, std::vector<TType*> keyTypes, std::vector<TType*> valueTypes, size_t memLimit)
+template<bool LLVM, bool Spilling>
+THolder<IComputationGraph> BuildGraph(
+    TKqpSetup<LLVM, Spilling>& setup,
+    std::shared_ptr<ISpillerFactory> spillerFactory,
+    THolder<NUdf::TBoxedValue> inputStream,
+    bool useDqImpl,
+    std::vector<TType*> keyTypes,
+    std::vector<TType*> valueTypes,
+    size_t memLimit)
 {
     TKqpProgramBuilder& pb = setup.GetKqpBuilder();
 
@@ -205,17 +287,36 @@ THolder<IComputationGraph> BuildGraph(TKqpSetup<LLVM>& setup, THolder<NUdf::TBox
 
     TRuntimeNode pgmReturn;
 
+    constexpr const bool useFlow = true; // TODO: configurable
     if (useDqImpl) {
-        pgmReturn = pb.DqHashCombine(
-            TRuntimeNode(streamCallable, false),
-            memLimit,
+        if (useFlow) {
+            pgmReturn = pb.FromFlow(pb.DqHashAggregate(
+                pb.ToFlow(TRuntimeNode(streamCallable, false), {}),
+                Spilling,
+                lambdaKey,
+                lambdaInit,
+                lambdaUpdate,
+                lambdaFinalize));
+        } else {
+            pgmReturn = pb.DqHashAggregate(
+                TRuntimeNode(streamCallable, false),
+                Spilling,
+                lambdaKey,
+                lambdaInit,
+                lambdaUpdate,
+                lambdaFinalize);
+        }
+    } else if (Spilling) {
+        pgmReturn = pb.FromFlow(pb.WideLastCombinerWithSpilling(
+            pb.ToFlow(TRuntimeNode(streamCallable, false), {}),
             lambdaKey,
             lambdaInit,
             lambdaUpdate,
-            lambdaFinalize);
+            lambdaFinalize
+        ));
     } else {
         pgmReturn = pb.FromFlow(pb.WideCombiner(
-            pb.ToFlow(TRuntimeNode(streamCallable, false)),
+            pb.ToFlow(TRuntimeNode(streamCallable, false), {}),
             memLimit,
             lambdaKey,
             lambdaInit,
@@ -225,6 +326,10 @@ THolder<IComputationGraph> BuildGraph(TKqpSetup<LLVM>& setup, THolder<NUdf::TBox
     }
 
     auto graph = setup.BuildGraph(pgmReturn, {streamCallable});
+    if (Spilling) {
+        graph->GetContext().SpillerFactory = spillerFactory;
+    }
+
     auto myStream = NUdf::TUnboxedValuePod(inputStream.Release());
     graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(myStream));
 
@@ -244,37 +349,76 @@ std::vector<TType*> FieldDescrToTypes(const std::vector<TFieldDescr>& fds, TProg
     return result;
 }
 
-template<bool LLVM>
+template<bool LLVM, bool Spilling = true>
 TRunResult RunTestOverGraph(
     const TRunParams& params,
-    const TStreamValues& inputData,
     const std::vector<TFieldDescr>& keyFields,
     const std::vector<TFieldDescr>& valueFields,
-    [[maybe_unused]] const bool needsVerification,
-    [[maybe_unused]] const bool measureReference)
+    const bool doVerification,
+    const bool measureReference,
+    const bool slowSpilling = false)
 {
-    TKqpSetup<LLVM> setup(GetPerfTestFactory());
+    TKqpSetup<LLVM, Spilling> setup(GetPerfTestFactory());
+
+    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
 
     NYql::NLog::InitLogger("cerr", false);
 
+    std::shared_ptr<TPreallocatedSpillerFactory> realSpillerFactory = Spilling ? std::make_shared<TPreallocatedSpillerFactory>() : nullptr;
+    std::shared_ptr<ISpillerFactory> spillerFactory = realSpillerFactory;
+    if (realSpillerFactory && slowSpilling) {
+        spillerFactory = std::make_shared<TSlowSpillerFactory>(spillerFactory);
+    }
+
+    TVerificationReferenceData referenceData;
+    TVerificationReferenceData collectedData;
+
+    TStreamValues inputData = GenerateSample(params.NumKeys, params.RowsPerRun, keyFields, valueFields,
+        doVerification ? &referenceData : nullptr);
+
     auto makeStream = [&]() -> THolder<NUdf::TBoxedValue> {
-        return MakeHolder<TPrebuiltStream>(inputData, keyFields.size() + valueFields.size(), params.NumRuns);
+        size_t yellowZoneTrigger = Spilling ? 1000000 : std::numeric_limits<size_t>::max();
+        return MakeHolder<TPrebuiltStream>(inputData, keyFields.size() + valueFields.size(), params.NumRuns, yellowZoneTrigger, [&](){
+            Cerr << "Enabling yellow zone" << Endl;
+            setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+        });
     };
 
     auto measureGraphTime = [&](auto& computeGraphPtr, bool isDq) {
         Cerr << "Compute " << (isDq ? "DqHashCombine" : "WideCombine") << " graph result" << Endl;
         const auto graphTimeStart = GetThreadCPUTime();
-        size_t lineCount = CountStreamOutputs(computeGraphPtr->GetValue(), keyFields.size() + valueFields.size());
-        Cerr << lineCount << Endl;
+        size_t lineCount;
+        if (!doVerification) {
+            lineCount = CountStreamOutputs(computeGraphPtr->GetValue(), keyFields.size() + valueFields.size(), slowSpilling);
+            Cerr << "Output row count: " << lineCount << Endl;
+        } else {
+            lineCount = CollectStreamOutputs(computeGraphPtr->GetValue(), keyFields, keyFields.size() + valueFields.size(), collectedData, slowSpilling);
+            Cerr << "Output row count: " << lineCount << Endl;
+            Cerr << "Output distinct value count: " << collectedData.size() << Endl;
+        }
 
-        return GetThreadCPUTimeDelta(graphTimeStart);
+        auto duration = GetThreadCPUTimeDelta(graphTimeStart);
+        if (realSpillerFactory) {
+            for (auto& spiller : realSpillerFactory->GetCreatedSpillers()) {
+                auto preallocSpiller = dynamic_cast<TPreallocatedSpiller*>(spiller.get());
+                if (!preallocSpiller) {
+                    continue;
+                }
+                Cerr << "Preallocated spiller usage: " << Endl;
+                Cerr << "Put operations: " << preallocSpiller->GetPutSizes().size() << Endl;
+                auto putAmount = std::accumulate(preallocSpiller->GetPutSizes().begin(), preallocSpiller->GetPutSizes().end(), 0ull);
+                Cerr << "\"Written\" MB: " << putAmount / 1_MB << Endl;
+            }
+            realSpillerFactory->ForgetSpillers();
+        }
+        return duration;
     };
 
     auto keyTypes = FieldDescrToTypes(keyFields, *setup.PgmBuilder);
     auto valueTypes = FieldDescrToTypes(valueFields, *setup.PgmBuilder);
 
-    auto graphRunDq = BuildGraph(setup, makeStream(), true, keyTypes, valueTypes, params.WideCombinerMemLimit);
-    auto graphRunWc = BuildGraph(setup, makeStream(), false, keyTypes, valueTypes, params.WideCombinerMemLimit);
+    auto graphRunDq = BuildGraph(setup, spillerFactory, makeStream(), true, keyTypes, valueTypes, params.WideCombinerMemLimit);
+    auto graphRunWc = BuildGraph(setup, spillerFactory, makeStream(), false, keyTypes, valueTypes, params.WideCombinerMemLimit);
 
     TRunResult result;
     long maxRssBefore = GetMaxRSS();
@@ -285,6 +429,24 @@ TRunResult RunTestOverGraph(
     } else {
         result.ResultTime = measureGraphTime(graphRunDq, true);
         result.MaxRSSDelta = GetMaxRSSDelta(maxRssBefore);
+    }
+
+    if (doVerification) {
+        if (referenceData.size() != collectedData.size()) {
+            ythrow yexception() << "Reference dataset has " << referenceData.size() << " unique keys, combiner result has " << collectedData.size();
+        }
+
+        for (auto kv : referenceData) {
+            auto iter = collectedData.find(kv.first);
+            if (iter == collectedData.end()) {
+                ythrow yexception() << "Key " << kv.first << " from the reference dataset not found in result";
+            }
+            if (iter->second != kv.second) {
+                ythrow yexception() << "Key " << kv.first << " has different values. Reference data value: " << kv.second << ", result value: " << iter->second;
+            }
+        }
+
+        Cerr << "Verification passed" << Endl;
     }
 
     return result;
@@ -318,23 +480,27 @@ void PrepareColumnDescriptions(const TRunParams& params, std::vector<TFieldDescr
     }
 
     Cerr << "Key columns: " << numKeys << ", aggregations: " << numValues << Endl;
+    Cerr << "Key column types: " << Endl;
 
     for (size_t i = 0; i < numKeys; ++i) {
         TFieldDescr descr;
         switch (params.SamplerType) {
         case ESamplerType::StringKeysUI64Values:
+            Cerr << "string ";
             descr.IsString = true;
-            descr.IsEmbedded = true;
+            descr.IsEmbedded = !params.LongStringKeys;
             break;
         case ESamplerType::UI64KeysUI64Values:
+            Cerr << "ui64 ";
             descr.IsString = false;
-            descr.IsEmbedded = true;
+            descr.IsEmbedded = !params.LongStringKeys;
             break;
         default:
             ythrow yexception() << "Unsupported sampler type for dq-hash-combine test";
         }
         keyFields.emplace_back(descr);
     };
+    Cerr << Endl;
 
     for (size_t i = 0; i < numValues; ++i) {
         valueFields.emplace_back(TFieldDescr{
@@ -344,7 +510,7 @@ void PrepareColumnDescriptions(const TRunParams& params, std::vector<TFieldDescr
     };
 }
 
-template<bool LLVM>
+template<bool LLVM, bool Spilling>
 void RunTestDqHashCombineVsWideCombine(const TRunParams& params, TTestResultCollector& printout)
 {
     std::vector<TFieldDescr> keyFields;
@@ -354,25 +520,24 @@ void RunTestDqHashCombineVsWideCombine(const TRunParams& params, TTestResultColl
 
     std::optional<TRunResult> finalResult;
 
-    const TStreamValues inputData = GenerateSample(params.NumKeys, params.RowsPerRun, keyFields, valueFields);
-
     Cerr << "======== " << __func__ << ", keys: " << params.NumKeys << ", llvm: " << LLVM << ", mem limit: " << params.WideCombinerMemLimit << Endl;
 
     if (params.NumAttempts <= 1 && !params.MeasureReferenceMemory && !params.AlwaysSubprocess) {
-        finalResult = RunTestOverGraph<LLVM>(params, inputData, keyFields, valueFields, true, false);
+        finalResult = RunTestOverGraph<LLVM, Spilling>(params, keyFields, valueFields, false, false);
+        if (params.EnableVerification) {
+            RunTestOverGraph<LLVM, Spilling>(params, keyFields, valueFields, true, false);
+        }
     }
     else {
         for (int i = 1; i <= params.NumAttempts; ++i) {
             Cerr << "------ Run " << i << " of " << params.NumAttempts << Endl;
 
-            const bool needsVerification = (i == 1);
-
             TRunResult runResultDq = RunForked([&]() {
-                return RunTestOverGraph<LLVM>(params, inputData, keyFields, valueFields, needsVerification, false);
+                return RunTestOverGraph<LLVM, Spilling>(params, keyFields, valueFields, false, false);
             });
 
             TRunResult runResultWide = RunForked([&]() {
-                return RunTestOverGraph<LLVM>(params, inputData, keyFields, valueFields, needsVerification, true);
+                return RunTestOverGraph<LLVM, Spilling>(params, keyFields, valueFields, false, true);
             });
 
             if (finalResult.has_value()) {
@@ -381,6 +546,12 @@ void RunTestDqHashCombineVsWideCombine(const TRunParams& params, TTestResultColl
                 finalResult.emplace(runResultDq);
             }
             MergeRunResults(runResultWide, *finalResult);
+
+            if (params.EnableVerification && i == 1) {
+                RunForked([&]() {
+                    return RunTestOverGraph<LLVM, Spilling>(params, keyFields, valueFields, true, false);
+                });
+            }
         }
     }
 
@@ -398,8 +569,10 @@ void RunTestDqHashCombineVsWideCombine(const TRunParams& params, TTestResultColl
     printout.SubmitMetrics(params, *finalResult, "DqHashCombine", LLVM);
 }
 
-template void RunTestDqHashCombineVsWideCombine<false>(const TRunParams& params, TTestResultCollector& printout);
-template void RunTestDqHashCombineVsWideCombine<true>(const TRunParams& params, TTestResultCollector& printout);
+template void RunTestDqHashCombineVsWideCombine<false, false>(const TRunParams& params, TTestResultCollector& printout);
+template void RunTestDqHashCombineVsWideCombine<false, true>(const TRunParams& params, TTestResultCollector& printout);
+template void RunTestDqHashCombineVsWideCombine<true, false>(const TRunParams& params, TTestResultCollector& printout);
+template void RunTestDqHashCombineVsWideCombine<true, true>(const TRunParams& params, TTestResultCollector& printout);
 
 }
 }

@@ -73,7 +73,6 @@ void FromProto(THistogramSnapshot* histogram, const NProto::THistogramSnapshot& 
 TRemoteRegistry::TRemoteRegistry(TSolomonRegistry* registry)
     : Registry_(registry)
 {
-    TagRename_.emplace_back();
 }
 
 void TRemoteRegistry::Transfer(const NProto::TSensorDump& dump)
@@ -89,10 +88,19 @@ void TRemoteRegistry::Transfer(const NProto::TSensorDump& dump)
         }
     }
 
-    for (TTagId tagId = TagRename_.size(); tagId < dump.tags().size(); tagId++) {
+    TTagIdList tagRename(dump.tags().size());
+    for (TTagId tagId = 1; tagId < dump.tags().size(); tagId++) {
         const auto& remoteTag = dump.tags()[tagId];
-        TagRename_.push_back(Registry_->TagRegistry_.Encode(TTag{remoteTag.key(), remoteTag.value()}));
+        tagRename[tagId] = Registry_->TagRegistry_.Encode(TTag{remoteTag.key(), remoteTag.value()});
     }
+
+    auto renameTags = [&tagRename] (const TTagIdList& tags) {
+        TTagIdList renamed;
+        for (auto tag : tags) {
+            renamed.push_back(tagRename[tag]);
+        }
+        return renamed;
+    };
 
     auto oldSensors = std::move(Sensors_);
     Sensors_ = {};
@@ -114,7 +122,7 @@ void TRemoteRegistry::Transfer(const NProto::TSensorDump& dump)
             for (const auto& tagId : projection.tag_ids()) {
                 tagIds.push_back(tagId);
             }
-            tagIds = RenameTags(tagIds);
+            tagIds = renameTags(tagIds);
 
             auto transferValue = [&] (auto cube, ESensorType type, auto value) {
                 sensorSet->InitializeType(type);
@@ -195,15 +203,6 @@ void TRemoteRegistry::DoDetach(const THashMap<std::string, TRemoteSensorSet>& se
             }
         }
     }
-}
-
-TTagIdList TRemoteRegistry::RenameTags(const TTagIdList& tags)
-{
-    TTagIdList renamed;
-    for (auto tag : tags) {
-        renamed.push_back(TagRename_[tag]);
-    }
-    return renamed;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

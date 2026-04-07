@@ -4,6 +4,7 @@
 
 #include <util/charset/utf8.h>
 #include <util/generic/scope.h>
+#include <util/thread/singleton.h>
 
 #include <fcntl.h>
 #include <stdint.h>
@@ -187,12 +188,13 @@ static struct TGlobalInit {
     }
 } GlobalInit;
 
-void PGParse(const TString& input, IPGParseEvents& events) {
+void PGParse(const TString& input, TPGParseResult& result) {
     pg_thread_init();
 
     PgQueryInternalParsetreeAndError parsetree_and_error;
 
-    TArenaMemoryContext arena;
+    auto arena = MakeHolder<TArenaMemoryContext>();
+
     auto prevErrorContext = ErrorContext;
     ErrorContext = CurrentMemoryContext;
 
@@ -228,10 +230,49 @@ void PGParse(const TString& input, IPGParseEvents& events) {
             }
         }
 
-        events.OnError(TIssue(position, "ERROR:  " + TString(parsetree_and_error.error->message) + "\n"));
+        result = TPGParseResult(TIssue(position, "ERROR:  " + TString(parsetree_and_error.error->message) + "\n"));
     } else {
-        events.OnResult(parsetree_and_error.tree);
+        arena->Release(); // detach from TLS
+        result = TPGParseResult(parsetree_and_error.tree, std::move(arena));
     }
+}
+
+TPGParseResult::~TPGParseResult()
+{
+    auto astData = std::get_if<TAstData>(&Data_);
+    if (astData && astData->second) {
+        // need to attach TLS before destruction
+        astData->second->Acquire();
+    }
+}
+
+TPGParseResult::TPGParseResult(TIssue&& issue)
+    : Data_(std::move(issue))
+{}
+
+TPGParseResult::TPGParseResult(const List* raw, THolder<TArenaMemoryContext>&& arena)
+    : Data_(TAstData(raw, std::move(arena)))
+{
+}
+
+void TPGParseResult::Visit(IPGParseEvents& events) const {
+    if (auto astData = std::get_if<TAstData>(&Data_)) {
+        Y_ENSURE(astData->second);
+        astData->second->Acquire();
+        Y_DEFER {
+            astData->second->Release();
+        };
+
+        events.OnResult(astData->first);
+    } else {
+        events.OnError(std::get<TIssue>(Data_));
+    }
+}
+
+void PGParse(const TString& input, IPGParseEvents& events) {
+    TPGParseResult result;
+    PGParse(input, result);
+    result.Visit(events);
 }
 
 TString PrintPGTree(const List* raw) {
@@ -250,9 +291,16 @@ TString GetCommandName(Node* node) {
 }
 
 extern "C" void setup_pg_thread_cleanup() {
-    struct TThreadCleanup {
+    class TThreadCleanup {
+    public:
+        TThreadCleanup() {
+            Registry_ = NYql::TExtensionsRegistry::InstanceShared();
+        }
         ~TThreadCleanup() {
-            NYql::TExtensionsRegistry::Instance().CleanupThread();
+            if (auto registryStrong = Registry_.lock()) {
+                registryStrong->CleanupThread();
+            }
+
             destroy_timezone_hashtable();
             destroy_typecache_hashtable();
             RE_cleanup_cache();
@@ -262,9 +310,11 @@ extern "C" void setup_pg_thread_cleanup() {
             MemoryContextDelete(TopMemoryContext);
             free(MyProc);
         }
+    private:
+        std::weak_ptr<NYql::TExtensionsRegistry> Registry_;
     };
 
-    static thread_local TThreadCleanup ThreadCleanup;
+    FastTlsSingleton<TThreadCleanup>();
     Log_error_verbosity = PGERROR_DEFAULT;
     SetDatabaseEncoding(PG_UTF8);
     SetClientEncoding(PG_UTF8);
@@ -294,4 +344,5 @@ extern "C" void setup_pg_thread_cleanup() {
     MyDatabaseId = 3; // from catalog.pg_database
     namespace_search_path = pstrdup("public");
     InitializeSessionUserId(nullptr, 1);
+    SetUserIdAndSecContext(1, 0);
 };

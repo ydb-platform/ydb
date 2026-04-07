@@ -5,4 +5,4 @@
 
 namespace NYql {
 TVector<NBus::TBindResult> BindInRange(TRangeWalker<int>& portWalker);
-}
+} // namespace NYql

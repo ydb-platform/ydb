@@ -31,9 +31,32 @@
 #include <util/string/ascii.h>
 #include <util/string/join.h>
 
-#include <ydb/library/security/util.h>
-
 namespace NKikimr::NSQS {
+
+constexpr char const ConsumerName[] = "sqs_consumer";
+
+class TMigrationFeatureFlags
+{
+public:
+    TMigrationFeatureFlags()
+        : EnableSQSMigrationTopicCreation_(GetFeatureFlags().GetEnableSQSMigrationTopicCreation())
+        , EnableSQSMigrationCompatibility_(GetFeatureFlags().GetEnableSQSMigrationCompatibility())
+        , EnableSQSMigrationFinished_(GetFeatureFlags().GetEnableSQSMigrationFinished())
+    {
+    }
+
+    static const TFeatureFlags& GetFeatureFlags() {
+        static TFeatureFlags DefaultFeatureFlags;
+        return TlsActivationContext ?
+               AppData()->FeatureFlags
+             : DefaultFeatureFlags;
+    }
+
+public:
+    const bool EnableSQSMigrationTopicCreation_;
+    const bool EnableSQSMigrationCompatibility_;
+    const bool EnableSQSMigrationFinished_;
+};
 
 template <typename TDerived>
 class TActionActor
@@ -188,6 +211,11 @@ protected:
         return *TablesFormat_;
     }
 
+    virtual bool IsTopicCreated() const {
+        Y_ABORT_UNLESS(TopicCreated_);
+        return *TopicCreated_;
+    }
+
     virtual void DoStart() { }
 
     virtual void DoFinish() { }
@@ -258,6 +286,15 @@ protected:
 
     TString MakeQueueUrl(const TString& name) const {
         return Join("/", RootUrl_, UserName_, name);
+    }
+
+    TString GetDatabaseName() const {
+        return Cfg().GetRoot();
+    }
+
+    TString GetTopicName() const {
+        const auto& root = Cfg().GetRoot();
+        return Join("/", root, UserName_, DoGetQueueName(), TStringBuilder() << "v" << QueueVersion_, "streamImpl");
     }
 
     void SendReplyAndDie() {
@@ -387,7 +424,7 @@ private:
     void AuditLogEntryImpl(const TString& requestId, const TError* error = nullptr) {
         static const TString EmptyValue = "{none}";
         AUDIT_LOG(
-            AUDIT_PART("component", TString("ymq"))
+            AUDIT_PART("component", "ymq")
             AUDIT_PART("request_id", requestId)
             AUDIT_PART("subject", (UserSID_ ? UserSID_ : EmptyValue))
             AUDIT_PART("account", UserName_)
@@ -396,7 +433,7 @@ private:
             AUDIT_PART("resource_id", GetQueueName(), Cfg().GetYandexCloudMode())
             AUDIT_PART("operation", ActionToCloudConvMethod(Action_))
             AUDIT_PART("queue", GetQueueName())
-            AUDIT_PART("status", TString(error ? "ERROR": "SUCCESS"))
+            AUDIT_PART("status", error ? "ERROR": "SUCCESS")
             AUDIT_PART("reason", error->GetMessage(), error)
             AUDIT_PART("detailed_status", error->GetErrorCode(), error)
         );
@@ -575,7 +612,7 @@ private:
         UserName_ = request.GetAuth().GetUserName();
         FolderId_ = request.GetAuth().GetFolderId();
         UserSID_ = request.GetAuth().GetUserSID();
-        MaskedToken_ = NKikimr::MaskIAMTicket(SecurityToken_);
+        MaskedToken_ = request.GetAuth().GetMaskedToken();
         AuthType_ = request.GetAuth().GetAuthType();
 
         if (IsCloud() && !FolderId_) {
@@ -641,6 +678,7 @@ private:
         UserCounters_ = std::move(ev->Get()->UserCounters);
         QueueLeader_ = ev->Get()->QueueLeader;
         QuoterResources_ = std::move(ev->Get()->QuoterResources);
+        TopicCreated_ = ev->Get()->TopicCreated;
 
         RLOG_SQS_TRACE("Got configuration. Root url: " << RootUrl_
                         << ", Shards: " << Shards_
@@ -738,7 +776,7 @@ private:
 
     void HandleTicketParserResponse(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) {
         const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get());
-        if (!result.Error.empty()) {
+        if (result.HasError()) {
             RLOG_SQS_ERROR("Got ticket parser error: " << result.Error << ". " << Action_ << " was rejected");
             MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED);
             SendReplyAndDie();
@@ -895,6 +933,7 @@ protected:
     TMaybe<bool> IsFifo_;
     TMaybe<ui64> QueueVersion_;
     TMaybe<ui32> TablesFormat_;
+    TMaybe<bool> TopicCreated_;
     TInstant StartTs_;
     TInstant FinishTs_;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> SqsCoreCounters_; // Raw counters interface. Is is not prefered to use them
@@ -914,6 +953,8 @@ protected:
     bool NeedReportYmqActionInflyCounter = false;
     TSchedulerCookieHolder TimeoutCookie_;
     NKikimrClient::TSqsRequest SourceSqsRequest_;
+
+    TMigrationFeatureFlags FeatureFlags_;
 };
 
 } // namespace NKikimr::NSQS

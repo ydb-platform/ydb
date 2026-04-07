@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
+#include <ydb/core/tx/columnshard/engines/portions/written.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
@@ -30,14 +31,23 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
         kffAccessors = 0.01;
     }
 
+    auto scanMemoryLimit = TGlobalLimits::ScanMemoryLimit;
+
+    if (HasAppData()) {
+        if (AppData()->ColumnShardConfig.HasScanMemoryLimit()) {
+            scanMemoryLimit = AppData()->ColumnShardConfig.GetScanMemoryLimit();
+        }
+    }
+
     std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> stages = {
         NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(
-            stagePrefix + "::ACCESSORS", kffAccessors * TGlobalLimits::ScanMemoryLimit),
+            stagePrefix + "::ACCESSORS", kffAccessors * scanMemoryLimit),
         NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(
-            stagePrefix + "::FILTER", kffFilter * TGlobalLimits::ScanMemoryLimit),
+            stagePrefix + "::FILTER", kffFilter * scanMemoryLimit),
         NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(
-            stagePrefix + "::FETCHING", kffFetching * TGlobalLimits::ScanMemoryLimit),
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(stagePrefix + "::MERGE", kffMerge * TGlobalLimits::ScanMemoryLimit)
+            stagePrefix + "::FETCHING", kffFetching * scanMemoryLimit),
+        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(
+            stagePrefix + "::MERGE", kffMerge * scanMemoryLimit)
     };
     ProcessMemoryGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildProcessGuard(ReadMetadata->GetTxId(), stages);
     ProcessScopeGuard = ProcessMemoryGuard->BuildScopeGuard(GetCommonContext()->GetScanId());
@@ -105,6 +115,56 @@ TString TSpecialReadContext::DebugString() const {
        << "ff=" << FFColumns->DebugString() << ";"
        << "program_input=" << ProgramInputColumns->DebugString() << ";";
     return sb;
+}
+
+/*
+Returns the portion state at the moment of the scan planning on the column shard.
+
+Scan reads portions in separate actors from the column shard, so the portions state may
+be changed during the scan. To avoid anomalies caused by the fact that scan may see different
+portion states, we need a way to get a stable portion state during the whole scan. Here it is.
+*/
+TPortionStateAtScanStart TSpecialReadContext::GetPortionStateAtScanStart(const TPortionInfo& portionInfo) const {
+    bool committed = false;
+    bool conflicting = false;
+    TSnapshot maxRecordSnapshot = TSnapshot::Zero();
+    if (portionInfo.GetPortionType() == EPortionType::Compacted) {
+        // compacted portions are stable and not conflicting,
+        // they have max snapshot less or equal to the request snapshot
+        AFL_VERIFY(portionInfo.RecordSnapshotMax() <= GetReadMetadata()->GetRequestSnapshot())("portion_info", portionInfo.DebugString())("request_snapshot", GetReadMetadata()->GetRequestSnapshot().DebugString());
+        committed = true;
+        conflicting = false;
+        maxRecordSnapshot = portionInfo.RecordSnapshotMax();
+    } else {
+        const auto& wPortionInfo = static_cast<const TWrittenPortionInfo&>(portionInfo);
+        auto maybeConflicting = GetReadMetadata()->MayWriteBeConflicting(wPortionInfo.GetInsertWriteId());
+        if (maybeConflicting) {
+            // uncommitted portions by other txs
+            committed = false;
+            conflicting = true;
+        } else if (!wPortionInfo.IsCommitted()) {
+            // uncommitted portions by the current tx
+            committed = false;
+            conflicting = false;
+        } else if (wPortionInfo.RecordSnapshotMax() > GetReadMetadata()->GetRequestSnapshot()) {
+            // portions that were committed at the moment of the scan start
+            // but have snapshot greater than the request snapshot, so the current tx
+            // does not see them and may conflict with them
+            committed = true;
+            conflicting = true;
+            maxRecordSnapshot = wPortionInfo.RecordSnapshotMax();
+        } else {
+            // committed, not yet compacted portions, visible to the current tx
+            committed = true;
+            conflicting = false;
+            maxRecordSnapshot = wPortionInfo.RecordSnapshotMax();
+        }
+    }
+    return TPortionStateAtScanStart {
+        .Committed = committed,
+        .Conflicting = conflicting,
+        .MaxRecordSnapshot = maxRecordSnapshot
+    };
 }
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

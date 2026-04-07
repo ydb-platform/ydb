@@ -50,13 +50,23 @@ namespace NKikimr::NBlobDepot {
 
                 if (!std::exchange(Self->Configured, true)) {
                     Self->StartOperation();
+                } else {
+                    // TODO(alexvru): handle it in a better way, without tablet restart
+                    Self->Send(Self->Tablet(), new TEvents::TEvPoison);
                 }
 
                 TActivationContext::Send(Response.release());
             }
         };
 
-        auto responseEvent = std::make_unique<TEvBlobDepot::TEvApplyConfigResult>(TabletID(), ev->Get()->Record.GetTxId());
+        const auto& record = ev->Get()->Record;
+        if (record.HasGroupInfo()) {
+            TStringStream err;
+            GroupInfo = TBlobStorageGroupInfo::Parse(record.GetGroupInfo(), nullptr, &err);
+            Y_DEBUG_ABORT_UNLESS(GroupInfo);
+        }
+
+        auto responseEvent = std::make_unique<TEvBlobDepot::TEvApplyConfigResult>(TabletID(), record.GetTxId());
         auto response = std::make_unique<IEventHandle>(ev->Sender, SelfId(), responseEvent.release(), 0, ev->Cookie);
         Execute(std::make_unique<TTxApplyConfig>(this, *ev->Get(), std::move(response), ev->InterconnectSession));
     }

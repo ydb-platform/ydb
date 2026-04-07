@@ -109,7 +109,7 @@ public:
         if (NYql::HasSetting(section.Settings().Ref(), EYtSettingType::Sample)) {
             return read;
         }
-        if (AnyOf(section.Paths(), [](const auto& path) { TYtPathInfo pathInfo(path); return (pathInfo.Table->Meta && pathInfo.Table->Meta->IsDynamic) || pathInfo.Ranges; })) {
+        if (AnyOf(section.Paths(), [](const auto& path) { TYtPathInfo pathInfo(path); return (pathInfo.Table->Meta && pathInfo.Table->Meta->IsDynamic) || pathInfo.Ranges || pathInfo.QLFilter; })) {
             return read;
         }
 

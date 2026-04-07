@@ -34,14 +34,13 @@ namespace operator_
     void helper(T &t, A const &a, utils::int_<0>) const;
 
     template <class A>
-    auto operator()(A const &a) const
-        -> std::tuple<typename std::remove_cv<typename std::remove_reference<
-            decltype(a[std::declval<Types>()])>::type>::type...>;
+    auto operator()(A const &a) const -> std::tuple<
+        std::remove_cv_t<std::remove_reference_t<decltype(a[std::declval<Types>()])>>...>;
   };
 
   template <class... L>
-  itemgetter_tuple_return<long, long, L...>
-  itemgetter(long const &item1, long const &item2, L... items);
+  itemgetter_tuple_return<long, long, L...> itemgetter(long const &item1, long const &item2,
+                                                       L... items);
 
   DEFINE_FUNCTOR(pythonic::operator_, itemgetter);
 } // namespace operator_

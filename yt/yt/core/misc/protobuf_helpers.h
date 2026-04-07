@@ -156,14 +156,14 @@ void FromProto(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class TSerialized, class T, class TTag>
-void FromProto(TStrongTypedef<T, TTag>* original, const TSerialized& serialized);
+template <class TSerialized, class T, class TTag, TStrongTypedefOptions Options>
+void FromProto(TStrongTypedef<T, TTag, Options>* original, const TSerialized& serialized);
 
-template <class TSerialized, class T, class TTag>
-void ToProto(TSerialized* serialized, const TStrongTypedef<T, TTag>& original);
+template <class TSerialized, class T, class TTag, TStrongTypedefOptions Options>
+void ToProto(TSerialized* serialized, const TStrongTypedef<T, TTag, Options>& original);
 
-template <class T, class TTag>
-struct TProtoTraits<TStrongTypedef<T, TTag>>
+template <class T, class TTag, TStrongTypedefOptions Options>
+struct TProtoTraits<TStrongTypedef<T, TTag, Options>>
 {
     using TSerialized = T;
 };
@@ -385,7 +385,7 @@ struct IProtobufExtensionRegistry
 };
 
 #define REGISTER_PROTO_EXTENSION(type, tag, name) \
-    YT_STATIC_INITIALIZER( \
+    YT_STATIC_INITIALIZER({ \
         NYT::IProtobufExtensionRegistry::Get()->AddAction([] { \
             const auto* descriptor = type::default_instance().GetDescriptor(); \
             ::NYT::IProtobufExtensionRegistry::Get()->RegisterDescriptor({ \
@@ -393,7 +393,8 @@ struct IProtobufExtensionRegistry
                 .Tag = tag, \
                 .Name = #name, \
             });\
-        }));
+        }); \
+    })
 
 //! Finds and deserializes an extension of the given type. Fails if no matching
 //! extension is found.
@@ -450,9 +451,9 @@ class TRefCountedProto
 public:
     TRefCountedProto() = default;
     TRefCountedProto(const TRefCountedProto<TProto>& other);
-    TRefCountedProto(TRefCountedProto<TProto>&& other);
+    TRefCountedProto(TRefCountedProto<TProto>&& other) noexcept;
     explicit TRefCountedProto(const TProto& other);
-    explicit TRefCountedProto(TProto&& other);
+    explicit TRefCountedProto(TProto&& other) noexcept;
     ~TRefCountedProto();
 
     i64 GetSize() const;
@@ -483,24 +484,22 @@ google::protobuf::Timestamp GetProtoNow();
         : std::nullopt)
 
 #define YT_OPTIONAL_TO_PROTO(message, field, original) \
-    do {\
-        if (original.has_value()) {\
-            ToProto((message)->mutable_##field(), *original);\
+    [] (const auto& message_, const auto& original_) {\
+        if (original_.has_value()) {\
+            ToProto(message_->mutable_##field(), *original_);\
         } else {\
-            (message)->clear_##field();\
+            message_->clear_##field();\
         }\
-    } while (false)
+    }((message), (original))
 
 #define YT_OPTIONAL_SET_PROTO(message, field, original) \
-    do {\
-        /* Avoid unnecessary computation if <original> is a return value of a call*/\
-        const auto& originalRef = (original);\
-        if (originalRef.has_value()) {\
-            (message)->set_##field(ToProto(*originalRef));\
+    [] (const auto& message_, const auto& original_) {\
+        if (original_.has_value()) {\
+            message_->set_##field(ToProto(*original_));\
         } else {\
-            (message)->clear_##field();\
+            message_->clear_##field();\
         }\
-    } while (false)
+    }((message), (original))
 
 // TODO(cherepashka): to remove after std::optional::and_then is here.
 //! This macro may be used to extract std::optional<T> from protobuf message field of type T and to apply some function to value if it is present.

@@ -1,5 +1,6 @@
 #include "linter.h"
 #include "check_runner.h"
+#include "check_state.h"
 
 #include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -8,12 +9,11 @@
 
 #include <functional>
 
-namespace NYql {
-namespace NFastCheck {
+namespace NYql::NFastCheck {
 
 namespace {
 
-class TCheckRunnerFactory : public ICheckRunnerFactory {
+class TCheckRunnerFactory: public ICheckRunnerFactory {
 public:
     using TRunnerFactoryFunction = std::function<std::unique_ptr<ICheckRunner>()>;
 
@@ -22,6 +22,7 @@ public:
         Registry_.emplace("parser", MakeParserRunner);
         Registry_.emplace("format", MakeFormatRunner);
         Registry_.emplace("translator", MakeTranslatorRunner);
+        Registry_.emplace("typecheck", MakeTypecheckRunner);
         for (const auto& x : Registry_) {
             CheckNames_.emplace(x.first);
         }
@@ -76,11 +77,11 @@ TCheckRunnerFactory& GetCheckRunnerFactory() {
     return *Singleton<TCheckRunnerFactory>();
 };
 
-}
+} // namespace
 
 TVector<TCheckFilter> ParseChecks(const TString& checks) {
     TVector<TCheckFilter> res;
-    for (TStringBuf one: StringSplitter(checks).SplitByString(",")) {
+    for (TStringBuf one : StringSplitter(checks).SplitByString(",")) {
         TCheckFilter f;
         TStringBuf afterPrefix = one;
         if (one.AfterPrefix("-", afterPrefix)) {
@@ -101,15 +102,27 @@ TSet<TString> ListChecks(const TMaybe<TVector<TCheckFilter>>& filters) {
 TChecksResponse RunChecks(const TChecksRequest& request) {
     auto enabledChecks = GetEnabledChecks(GetCheckRunnerFactory().ListChecks(), request.Filters);
     TChecksResponse res;
+
+    // Create shared state for caching intermediate results between checks
+    TCheckState state(request);
+
     for (const auto& c : enabledChecks) {
         auto checkRunner = GetCheckRunnerFactory().MakeRunner(c);
         if (checkRunner) {
-            res.Checks.push_back(checkRunner->Run(request));
+            try {
+                res.Checks.push_back(checkRunner->Run(request, state));
+            } catch (const std::exception& e) {
+                TCheckResponse r;
+                r.CheckName = c;
+                r.Success = false;
+                r.Issues.AddIssue(ExceptionToIssue(e));
+                CheckFatalIssues(r.Issues, request.IssueReportTarget);
+                res.Checks.push_back(std::move(r));
+            }
         }
     }
 
     return res;
 }
 
-}
-}
+} // namespace NYql::NFastCheck

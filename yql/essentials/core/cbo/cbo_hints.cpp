@@ -1,5 +1,6 @@
 #include "cbo_optimizer_new.h"
 
+#include <yql/essentials/utils/yql_panic.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
 #include <library/cpp/iterator/zip.h>
@@ -7,7 +8,7 @@
 using namespace NYql;
 
 TString ToLower(TString s) {
-    for (char& c: s) {
+    for (char& c : s) {
         c = std::tolower(c);
     }
     return s;
@@ -15,11 +16,12 @@ TString ToLower(TString s) {
 
 class TOptimizerHintsParser {
 public:
-    TOptimizerHintsParser(const TString& text)
+    explicit TOptimizerHintsParser(const TString& text)
         : Pos_(-1)
         , Size_(static_cast<i32>(text.size()) - 1)
         , Text_(text)
-    {}
+    {
+    }
 
     TOptimizerHints Parse() {
         Start();
@@ -72,7 +74,7 @@ private:
         TVector<EJoinAlgoType> joinAlgos = {EJoinAlgoType::GraceJoin, EJoinAlgoType::LookupJoin, EJoinAlgoType::MapJoin};
         TVector<TString> joinAlgosStr = {"shuffle", "lookup", "broadcast"};
 
-        for (const auto& [JoinType, joinAlgoStr]: Zip(joinAlgos, joinAlgosStr)) {
+        for (const auto& [JoinType, joinAlgoStr] : Zip(joinAlgos, joinAlgosStr)) {
             if (ToLower(reqJoinAlgoStr) == joinAlgoStr) {
                 Hints_.JoinAlgoHints->PushBack(std::move(labels), JoinType, "JoinType" + Text_.substr(beginPos, Pos_ - beginPos + 1));
                 return;
@@ -80,7 +82,7 @@ private:
         }
 
         ParseError(Sprintf("Unknown JoinType: '%s', supported algos: [%s]", reqJoinAlgoStr.c_str(), JoinSeq(", ", joinAlgosStr).c_str()), Pos_ - reqJoinAlgoStr.size());
-        Y_UNREACHABLE();
+        YQL_ENSURE(false, "Unreachable");
     }
 
     void JoinOrder(bool leading /* is keyword "Leading" or "JoinOrder" */) {
@@ -92,8 +94,7 @@ private:
 
         Hints_.JoinOrderHints->PushBack(
             std::move(joinOrderHintTree),
-            leading? "Leading" : "JoinOrder" + Text_.substr(beginPos, Pos_ - beginPos + 1)
-        );
+            leading ? "Leading" : "JoinOrder" + Text_.substr(beginPos, Pos_ - beginPos + 1));
     }
 
     std::shared_ptr<TJoinOrderHints::ITreeNode> JoinOrderLabels() {
@@ -112,7 +113,7 @@ private:
         }
 
         ParseError(Sprintf("JoinOrder args must be either a relation, either a join, example of the format: JoinOrder(t1 (t2 t3))"), Pos_);
-        Y_UNREACHABLE();
+        YQL_ENSURE(false, "Unreachable");
     }
 
     void CardinalityOrBytes(bool isRows) {
@@ -128,12 +129,30 @@ private:
 
         TCardinalityHints::ECardOperation op;
         switch (sign) {
-            case '+': { op = TCardinalityHints::ECardOperation::Add; break; }
-            case '-': { op = TCardinalityHints::ECardOperation::Subtract; break; }
-            case '/': { op = TCardinalityHints::ECardOperation::Divide; break; }
-            case '*': { op = TCardinalityHints::ECardOperation::Multiply; break; }
-            case '#': { op = TCardinalityHints::ECardOperation::Replace; break; }
-            default: {ParseError(Sprintf("Unknown operation: '%c'", sign), Pos_ - 1); Y_UNREACHABLE();}
+            case '+': {
+                op = TCardinalityHints::ECardOperation::Add;
+                break;
+            }
+            case '-': {
+                op = TCardinalityHints::ECardOperation::Subtract;
+                break;
+            }
+            case '/': {
+                op = TCardinalityHints::ECardOperation::Divide;
+                break;
+            }
+            case '*': {
+                op = TCardinalityHints::ECardOperation::Multiply;
+                break;
+            }
+            case '#': {
+                op = TCardinalityHints::ECardOperation::Replace;
+                break;
+            }
+            default: {
+                ParseError(Sprintf("Unknown operation: '%c'", sign), Pos_ - 1);
+                YQL_ENSURE(false, "Unreachable");
+            }
         }
 
         if (isRows) {
@@ -183,14 +202,14 @@ private:
 
     char Char(unsigned char c) {
         std::bitset<256> allowed;
-        allowed[c] = 1;
+        allowed[c] = true;
         return Char(allowed);
     }
 
     char Char(unsigned char intervalBegin, unsigned char intervalEnd) {
         std::bitset<256> allowed;
         for (size_t i = intervalBegin; i <= intervalEnd; ++i) {
-            allowed[i] = 1;
+            allowed[i] = true;
         }
         return Char(allowed);
     }
@@ -212,13 +231,13 @@ private:
         }
 
         ParseError(Sprintf("Expected [%s], but got [%c]", "", nextSym), Pos_);
-        Y_UNREACHABLE();
+        YQL_ENSURE(false, "Unreachable");
     }
 
     std::optional<TString> MaybeKeyword(const TVector<TString>& keywords) {
         try {
             return Keyword(keywords);
-        } catch(...) {
+        } catch (...) {
             return std::nullopt;
         }
     }
@@ -227,7 +246,7 @@ private:
         SkipWhiteSpaces();
         Y_ENSURE(Pos_ < Size_, Sprintf("Expected [%s], but got end of the string.", JoinSeq(", ", keywords).c_str()));
 
-        for (const auto& keyword: keywords) {
+        for (const auto& keyword : keywords) {
             size_t lowInclude = Pos_ + 1;
             size_t highExclude = lowInclude + keyword.size();
 
@@ -238,7 +257,7 @@ private:
         }
 
         ParseError(Sprintf("Expected [%s], but got [%c]", JoinSeq(", ", keywords).c_str(), Text_[Pos_ + 1]), Pos_);
-        Y_UNREACHABLE();
+        YQL_ENSURE(false, "Unreachable");
     }
 
     double Number() {
@@ -256,7 +275,7 @@ private:
         } catch (...) {
             ParseError(Sprintf("Expected a number, got [%s]", term.c_str()), Pos_ - term.size());
         }
-        Y_UNREACHABLE();
+        YQL_ENSURE(false, "Unreachable");
     }
 
 private:
@@ -264,8 +283,8 @@ private:
     constexpr std::bitset<256> Chars(const TString& s) {
         std::bitset<256> res;
 
-        for (char c: s) {
-            res[c] = 1;
+        for (char c : s) {
+            res[c] = true;
         }
 
         return res;
@@ -275,10 +294,10 @@ private:
         std::bitset<256> res;
 
         for (unsigned char i = 'a'; i <= 'z'; ++i) {
-            res[i] = 1;
+            res[i] = true;
         }
         for (unsigned char i = 'A'; i <= 'Z'; ++i) {
-            res[i] = 1;
+            res[i] = true;
         }
 
         return res;
@@ -288,7 +307,7 @@ private:
         std::bitset<256> res;
 
         for (unsigned char i = '0'; i <= '9'; ++i) {
-            res[i] = 1;
+            res[i] = true;
         }
 
         return res;
@@ -296,7 +315,7 @@ private:
 
     constexpr std::bitset<256> LabelAllowedSymbols() {
         auto labelSymbols = Digits() | Letters();
-        labelSymbols['_'] = 1;
+        labelSymbols['_'] = true;
         return labelSymbols;
     }
 

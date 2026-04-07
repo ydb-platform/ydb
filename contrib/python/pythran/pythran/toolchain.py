@@ -331,11 +331,8 @@ def compile_cxxfile(module_name, cxxfile, output_binary=None, **kwargs):
     # local import so that we don't depend on setuptools for the code generation
     # part
     from pythran.dist import PythranExtension, PythranBuildExt
-    try:
-        # `numpy.distutils is deprecated, may not be present, or broken
-        from numpy.distutils.core import setup
-    except Exception:
-        from setuptools import setup
+
+    from setuptools import setup
 
     builddir = mkdtemp()
     buildtmp = mkdtemp()
@@ -367,6 +364,10 @@ def compile_cxxfile(module_name, cxxfile, output_binary=None, **kwargs):
                 dest.write(src.read())
 
     ext = sysconfig.get_config_var('EXT_SUFFIX')
+    if getattr(extension, 'py_limited_api', False):
+        _, ext = os.path.splitext(ext)
+        ext = f".abi3{ext}"
+
     # Copy all generated files including the module name prefix (.pdb, ...)
     for f in glob.glob(os.path.join(builddir, module_name + "*")):
         if f.endswith(ext):

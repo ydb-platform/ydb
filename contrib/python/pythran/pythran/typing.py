@@ -28,6 +28,12 @@ class ListMeta(type):
         return List(item)
 
 
+class TypeMeta(type):
+
+    def __getitem__(cls, item):
+        return Type(item)
+
+
 class IterableMeta(type):
 
     def __getitem__(cls, item):
@@ -64,7 +70,7 @@ class PointerMeta(type):
         return Pointer(item)
 
 
-class Type(type):
+class TypeBase(type):
 
     def __new__(cls, args):
         return type.__new__(
@@ -78,47 +84,47 @@ class Type(type):
         pass
 
 
-class Fun(Type, metaclass=FunMeta):
+class Fun(TypeBase, metaclass=FunMeta):
     pass
 
 
-class Dict(Type, metaclass=DictMeta):
+class Dict(TypeBase, metaclass=DictMeta):
     pass
 
 
-class Union(Type, metaclass=UnionMeta):
+class Union(TypeBase, metaclass=UnionMeta):
     pass
 
 
-class Set(Type, metaclass=SetMeta):
+class Set(TypeBase, metaclass=SetMeta):
     pass
 
 
-class List(Type, metaclass=ListMeta):
+class List(TypeBase, metaclass=ListMeta):
     pass
 
 
-class Iterable(Type, metaclass=IterableMeta):
+class Iterable(TypeBase, metaclass=IterableMeta):
     pass
 
 
-class Generator(Type, metaclass=GeneratorMeta):
+class Generator(TypeBase, metaclass=GeneratorMeta):
     pass
 
 
-class Tuple(Type, metaclass=TupleMeta):
+class Tuple(TypeBase, metaclass=TupleMeta):
     pass
 
 
-class Optional(Type, metaclass=OptionalMeta):
+class Optional(TypeBase, metaclass=OptionalMeta):
     pass
 
 
-class NDArray(Type, metaclass=NDArrayMeta):
+class NDArray(TypeBase, metaclass=NDArrayMeta):
     pass
 
 
-class Pointer(Type, metaclass=PointerMeta):
+class Pointer(TypeBase, metaclass=PointerMeta):
     pass
 
 
@@ -137,4 +143,8 @@ class Any(object):
 
 
 class File(object):
+    pass
+
+
+class Type(TypeBase, metaclass=TypeMeta):
     pass

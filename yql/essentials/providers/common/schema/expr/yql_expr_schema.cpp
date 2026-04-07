@@ -14,18 +14,18 @@
 #include <util/generic/map.h>
 #include <util/stream/str.h>
 
+#include <utility>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
-template <template<typename> class TSaver>
+template <template <typename> class TSaver>
 class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
-    typedef TSaver<TExprTypeSaver<TSaver>> TBase;
+    using TBase = TSaver<TExprTypeSaver<TSaver>>;
 
     struct TStructAdaptor {
         const TStructExprType* Type;
 
-        TStructAdaptor(const TStructExprType* type)
+        explicit TStructAdaptor(const TStructExprType* type)
             : Type(type)
         {
         }
@@ -49,7 +49,7 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
         TMappingOrderedStructAdaptor(const TStructMemberMapper& mapper, const TMaybe<TColumnOrder>& columns, const TStructExprType* type, bool writePhysical = true)
         {
             TMap<TStringBuf, const TTypeAnnotationNode*> members;
-            for (auto& item: type->GetItems()) {
+            for (auto& item : type->GetItems()) {
                 TMaybe<TStringBuf> name = mapper ? mapper(item->GetName()) : item->GetName();
                 if (!name) {
                     continue;
@@ -85,7 +85,7 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
     struct TTupleAdaptor {
         const TTupleExprType* Type;
 
-        TTupleAdaptor(const TTupleExprType* type)
+        explicit TTupleAdaptor(const TTupleExprType* type)
             : Type(type)
         {
         }
@@ -102,7 +102,7 @@ class TExprTypeSaver: public TSaver<TExprTypeSaver<TSaver>> {
     struct TCallableAdaptor {
         const TCallableExprType* Type;
 
-        TCallableAdaptor(const TCallableExprType* type)
+        explicit TCallableAdaptor(const TCallableExprType* type)
             : Type(type)
         {
         }
@@ -200,6 +200,12 @@ public:
             case ETypeAnnotationKind::Unit:
                 TBase::SaveUnitType();
                 break;
+            case ETypeAnnotationKind::Universal:
+                TBase::SaveUniversalType();
+                break;
+            case ETypeAnnotationKind::UniversalStruct:
+                TBase::SaveUniversalStructType();
+                break;
             case ETypeAnnotationKind::EmptyList:
                 TBase::SaveEmptyListType();
                 break;
@@ -223,6 +229,18 @@ public:
                 break;
             case ETypeAnnotationKind::Stream:
                 TBase::SaveStreamType(*type->Cast<TStreamExprType>());
+                break;
+            case ETypeAnnotationKind::Linear:
+                TBase::SaveLinearType(*type->Cast<TLinearExprType>());
+                break;
+            case ETypeAnnotationKind::DynamicLinear:
+                TBase::SaveDynamicLinearType(*type->Cast<TDynamicLinearExprType>());
+                break;
+            case ETypeAnnotationKind::Block:
+                TBase::SaveBlockType(*type->Cast<TBlockExprType>());
+                break;
+            case ETypeAnnotationKind::Scalar:
+                TBase::SaveScalarType(*type->Cast<TScalarExprType>());
                 break;
             default:
                 YQL_ENSURE(false, "Unsupported type annotation kind: " << type->GetKind());
@@ -268,14 +286,14 @@ TString WriteTypeToYson(const TTypeAnnotationNode* type, NYson::EYsonFormat form
 }
 
 struct TExprTypeLoader {
-    typedef const TTypeAnnotationNode* TType;
+    using TType = const TTypeAnnotationNode*;
 
     TExprContext& Ctx;
     TPosition Pos;
 
-    TExprTypeLoader(TExprContext& ctx, const TPosition& pos = TPosition())
+    explicit TExprTypeLoader(TExprContext& ctx, TPosition pos = TPosition())
         : Ctx(ctx)
-        , Pos(pos)
+        , Pos(std::move(pos))
     {
     }
     TMaybe<TType> LoadVoidType(ui32 /*level*/) {
@@ -286,6 +304,12 @@ struct TExprTypeLoader {
     }
     TMaybe<TType> LoadUnitType(ui32 /*level*/) {
         return Ctx.MakeType<TUnitExprType>();
+    }
+    TMaybe<TType> LoadUniversalType(ui32 /*level*/) {
+        return Ctx.MakeType<TUniversalExprType>();
+    }
+    TMaybe<TType> LoadUniversalStructType(ui32 /*level*/) {
+        return Ctx.MakeType<TUniversalStructExprType>();
     }
     TMaybe<TType> LoadGenericType(ui32 /*level*/) {
         return Ctx.MakeType<TGenericExprType>();
@@ -321,7 +345,7 @@ struct TExprTypeLoader {
     TMaybe<TType> LoadStructType(const TVector<std::pair<TString, TType>>& members, ui32 /*level*/) {
         TVector<const TItemExprType*> items;
         TColumnOrder order;
-        for (auto& member: members) {
+        for (auto& member : members) {
             items.push_back(Ctx.MakeType<TItemExprType>(order.AddColumn(member.first), member.second));
         }
         auto ret = Ctx.MakeType<TStructExprType>(items);
@@ -337,6 +361,12 @@ struct TExprTypeLoader {
     TMaybe<TType> LoadOptionalType(TType itemType, ui32 /*level*/) {
         return Ctx.MakeType<TOptionalExprType>(itemType);
     }
+    TMaybe<TType> LoadLinearType(TType itemType, ui32 /*level*/) {
+        return Ctx.MakeType<TLinearExprType>(itemType);
+    }
+    TMaybe<TType> LoadDynamicLinearType(TType itemType, ui32 /*level*/) {
+        return Ctx.MakeType<TDynamicLinearExprType>(itemType);
+    }
     TMaybe<TType> LoadTupleType(const TVector<TType>& elements, ui32 /*level*/) {
         auto ret = Ctx.MakeType<TTupleExprType>(elements);
         YQL_ENSURE(ret->Validate(TPosition(), Ctx));
@@ -348,7 +378,7 @@ struct TExprTypeLoader {
         return ret;
     }
     TMaybe<TType> LoadCallableType(TType returnType, const TVector<TType>& argTypes, const TVector<TString>& argNames,
-        const TVector<ui64>& argFlags, size_t optionalCount, const TString& payload, ui32 /*level*/) {
+                                   const TVector<ui64>& argFlags, size_t optionalCount, const TString& payload, ui32 /*level*/) {
         YQL_ENSURE(argTypes.size() == argNames.size() && argTypes.size() == argFlags.size());
         TVector<TCallableExprType::TArgumentInfo> args;
         for (size_t i = 0; i < argTypes.size(); ++i) {
@@ -365,6 +395,12 @@ struct TExprTypeLoader {
         auto ret = Ctx.MakeType<TVariantExprType>(underlyingType);
         YQL_ENSURE(ret->Validate(TPosition(), Ctx));
         return ret;
+    }
+    TMaybe<TType> LoadBlockType(TType itemType, ui32 /*level*/) {
+        return Ctx.MakeType<TBlockExprType>(itemType);
+    }
+    TMaybe<TType> LoadScalarType(TType itemType, ui32 /*level*/) {
+        return Ctx.MakeType<TScalarExprType>(itemType);
     }
     void Error(const TString& info) {
         Ctx.AddError(TIssue(Pos, info));
@@ -399,7 +435,7 @@ const TTypeAnnotationNode* ParseTypeFromYson(const NYT::TNode& node, TExprContex
 }
 
 struct TOrderAwareExprTypeLoader: public TExprTypeLoader {
-    typedef const TTypeAnnotationNode* TType;
+    using TType = const TTypeAnnotationNode*;
     TColumnOrder& TopLevelColumns;
 
     TOrderAwareExprTypeLoader(TExprContext& ctx, const TPosition& pos, TColumnOrder& topLevelColumns)
@@ -442,5 +478,4 @@ void WriteResOrPullType(NYson::TYsonConsumerBase& writer, const TTypeAnnotationN
     }
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

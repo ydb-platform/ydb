@@ -15,11 +15,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/util/formatting.h"
-#include "arrow/util/config.h"
-#include "arrow/util/double_conversion.h"
-#include "arrow/util/float16.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/formatting.h"
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/double_conversion.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/float16.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 

@@ -564,6 +564,7 @@ static __thread char *server_encoding_string;
 static __thread char *server_version_string;
 static __thread int	server_version_num;
 static __thread char *debug_io_direct_string;
+static __thread char *restrict_nonsystem_relation_kind_string;
 
 #ifdef HAVE_SYSLOG
 #define	DEFAULT_SYSLOG_FACILITY LOG_LOCAL0

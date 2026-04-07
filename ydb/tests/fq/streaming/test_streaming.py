@@ -1,0 +1,599 @@
+import logging
+import pytest
+import random
+import string
+import time
+
+import ydb
+
+from ydb.tests.fq.streaming.common import StreamingTestBase
+from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
+
+logger = logging.getLogger(__name__)
+
+
+class TestStreamingInYdb(StreamingTestBase):
+    def get_input_name(self, kikimr, name, local_topics, entity_name, partitions_count=1, shared=False):
+        if local_topics and shared:
+            pytest.skip("Shared reading is not supported for local topics: YQ-5036")
+
+        endpoint = self.get_endpoint(kikimr, local_topics)
+        source_name = entity_name(name)
+        self.init_topics(source_name, create_output=False, partitions_count=partitions_count, endpoint=endpoint)
+        self.create_source(kikimr, source_name, shared=shared)
+
+        if local_topics:
+            return f"`{self.input_topic}`", endpoint
+        else:
+            return f"`{source_name}`.`{self.input_topic}`", endpoint
+
+    def get_io_names(self, kikimr, name, local_topics, entity_name, partitions_count=1, shared=False):
+        if local_topics and shared:
+            pytest.skip("Shared reading is not supported for local topics: YQ-5036")
+
+        endpoint = self.get_endpoint(kikimr, local_topics)
+        source_name = entity_name(name)
+        self.init_topics(source_name, create_output=True, partitions_count=partitions_count, endpoint=endpoint)
+        self.create_source(kikimr, source_name, shared=shared)
+
+        if local_topics:
+            return f"`{self.input_topic}`", f"`{self.output_topic}`", endpoint
+        else:
+            return f"`{source_name}`.`{self.input_topic}`", f"`{source_name}`.`{self.output_topic}`", endpoint
+
+    @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_read_topic(self, kikimr, entity_name, local_topics, use_partition_balancing):
+        input_name, endpoint = self.get_input_name(kikimr, f"test_read_topic{local_topics!s:.1}{use_partition_balancing!s:.1}", local_topics, entity_name)
+
+        sql = f"""SELECT time FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "json_each_row",
+                SCHEMA = (time String NOT NULL)
+            )
+            LIMIT 1"""
+        if use_partition_balancing:
+            sql = 'PRAGMA pq.MaxPartitionReadSkew = "10s";\n' + sql
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+        data = ['{"time": "lunch time"}']
+        self.write_stream(data, endpoint=endpoint)
+        result_sets = future.result()
+        assert result_sets[0].rows[0]['time'] == b'lunch time'
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_read_topic_shared_reading_limit(self, kikimr, entity_name, local_topics):
+        input_name, endpoint = self.get_input_name(kikimr, "test_read_topic_shared_reading_limit", local_topics, entity_name, partitions_count=10, shared=True)
+
+        sql = f"""SELECT time FROM {input_name}
+            WITH (
+                STREAMING = "TRUE",
+                FORMAT = "json_each_row",
+                SCHEMA = (time String NOT NULL)
+            )
+            WHERE time like "%lunch%"
+            LIMIT 1"""
+
+        future1 = kikimr.ydb_client.query_async(sql)
+        future2 = kikimr.ydb_client.query_async(sql)
+        time.sleep(3)
+        data = ['{"time": "lunch time"}']
+        self.write_stream(data, endpoint=endpoint)
+        result_sets1 = future1.result()
+        result_sets2 = future2.result()
+        assert result_sets1[0].rows[0]['time'] == b'lunch time'
+        assert result_sets2[0].rows[0]['time'] == b'lunch time'
+
+    @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_restart_query(self, kikimr, entity_name, local_topics, use_partition_balancing):
+        inp, out, endpoint = self.get_io_names(kikimr, "test_restart_query", local_topics, entity_name, partitions_count=10)
+
+        name = f"test_restart_query_{local_topics!s:.1}{use_partition_balancing!s:.1}"
+        pragma = 'PRAGMA pq.MaxPartitionReadSkew = "10s";\n' if use_partition_balancing else ""
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                ''' + pragma + R'''$in = SELECT time FROM {inp}
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(time String NOT NULL))
+                WHERE time like "%lunch%";
+                INSERT INTO {out} SELECT time FROM $in;
+            END DO;'''
+
+        path = f"/Root/{name}"
+        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+        self.wait_completed_checkpoints(kikimr, path)
+
+        data = ['{"time": "lunch time"}']
+        expected_data = ['lunch time']
+        self.write_stream(data, endpoint=endpoint)
+
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        self.wait_completed_checkpoints(kikimr, path)
+
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
+        time.sleep(0.5)
+
+        data = ['{"time": "next lunch time"}']
+        expected_data = ['next lunch time']
+        self.write_stream(data, endpoint=endpoint)
+
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = TRUE);")
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_read_topic_shared_reading_insert_to_topic(self, kikimr, entity_name, local_topics):
+        inp, out, endpoint = self.get_io_names(kikimr, f"shared_reading_insert_to_topic{local_topics!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
+
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT time FROM {inp}
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(time String NOT NULL))
+                WHERE time like "%lunch%";
+                INSERT INTO {out} SELECT time FROM $in;
+            END DO;'''
+
+        query_name1 = f"test_read_topic_shared_reading_insert_to_topic1_{local_topics!s:.1}"
+        query_name2 = f"test_read_topic_shared_reading_insert_to_topic2_{local_topics!s:.1}"
+        kikimr.ydb_client.query(sql.format(query_name=query_name1, inp=inp, out=out))
+        kikimr.ydb_client.query(sql.format(query_name=query_name2, inp=inp, out=out))
+        path1 = f"/Root/{query_name1}"
+        path2 = f"/Root/{query_name2}"
+        self.wait_completed_checkpoints(kikimr, path1)
+
+        # Check that streaming.query.tasks.count metric exists for both queries
+        self.wait_streaming_query_metric(kikimr, path1, "streaming.query.tasks.count", expected_value=1)
+        self.wait_streaming_query_metric(kikimr, path2, "streaming.query.tasks.count", expected_value=1)
+
+        data = ['{"time": "lunch time"}']
+        expected_data = ['lunch time', 'lunch time']
+        self.write_stream(data, endpoint=endpoint)
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        self.wait_completed_checkpoints(kikimr, path1)
+
+        sql = R'''ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);'''
+        kikimr.ydb_client.query(sql.format(query_name=query_name1))
+        kikimr.ydb_client.query(sql.format(query_name=query_name2))
+
+        time.sleep(1)
+
+        data = ['{"time": "next lunch time"}']
+        expected_data = ['next lunch time', 'next lunch time']
+        self.write_stream(data, endpoint=endpoint)
+
+        sql = R'''ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);'''
+        kikimr.ydb_client.query(sql.format(query_name=query_name1))
+        kikimr.ydb_client.query(sql.format(query_name=query_name2))
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+
+        sql = R'''DROP STREAMING QUERY `{query_name}`;'''
+        kikimr.ydb_client.query(sql.format(query_name=query_name1))
+        kikimr.ydb_client.query(sql.format(query_name=query_name2))
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_read_topic_shared_reading_restart_nodes(self, kikimr, entity_name, local_topics):
+        inp, out, endpoint = self.get_io_names(kikimr, f"reading_restart_nodes_{local_topics!s:.1}", local_topics, entity_name, partitions_count=1, shared=True)
+
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT value FROM {inp}
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(value String NOT NULL))
+                WHERE value like "%value%";
+                INSERT INTO {out} SELECT value FROM $in;
+            END DO;'''
+
+        query_name = f"test_read_topic_shared_reading_restart_nodes_{local_topics!s:.1}"
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        path = f"/Root/{query_name}"
+        self.wait_completed_checkpoints(kikimr, path)
+
+        self.write_stream(['{"value": "value1"}'], endpoint=endpoint)
+        expected_data = ['value1']
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        self.wait_completed_checkpoints(kikimr, path)
+
+        def restart_node():
+            restart_node_id = None
+            for node_id in kikimr.cluster.nodes:
+                count = self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
+                if count:
+                    restart_node_id = node_id
+            assert restart_node_id is not None
+            logger.debug(f"Restart node {restart_node_id}")
+            node = kikimr.cluster.nodes[restart_node_id]
+            node.stop()
+            node.start()
+
+        restart_node()
+        self.write_stream(['{"value": "value2"}'], endpoint=endpoint)
+        expected_data = ['value2']
+        self.wait_completed_checkpoints(kikimr, path)
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        self.wait_completed_checkpoints(kikimr, path)
+
+        restart_node()
+        self.write_stream(['{"value": "value3"}'], endpoint=endpoint)
+        expected_data = ['value3']
+        self.wait_completed_checkpoints(kikimr, path)
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        self.wait_completed_checkpoints(kikimr, path)
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_read_topic_restore_state(self, kikimr, entity_name, local_topics):
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_read_topic_restore_state_{local_topics!s:.1}", local_topics, entity_name, partitions_count=1, shared=True)
+
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                pragma FeatureR010="prototype";
+                PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;
+
+                $in = SELECT * FROM {inp}
+                    WITH (
+                        FORMAT="json_each_row",
+                        SCHEMA=(dt UINT64, str STRING));
+                $mr = SELECT * FROM $in
+                    MATCH_RECOGNIZE(
+                        MEASURES
+                        LAST(A.dt) as a_time,
+                        LAST(B.dt) as b_time,
+                        LAST(C.dt) as c_time
+                        ONE ROW PER MATCH
+                        AFTER MATCH SKIP TO NEXT ROW
+                        PATTERN ( ( A | B ) ( B | C ) )
+                        DEFINE
+                            A as A.str='A',
+                            B as B.str='B',
+                            C as C.str='C');
+                INSERT INTO {out}
+                    SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $mr;
+            END DO;'''
+
+        query_name = f"test_read_topic_restore_state_{local_topics!s:.1}"
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        path = f"/Root/{query_name}"
+        self.wait_completed_checkpoints(kikimr, path)
+
+        data = [
+            '{"dt": 1696849942000001, "str": "A" }',
+            '{"dt": 1696849942500001, "str": "B" }'
+        ]
+        self.write_stream(data, endpoint=endpoint)
+        expected_data = ['{"a_time":1696849942000001,"b_time":1696849942500001,"c_time":null}']
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        self.wait_completed_checkpoints(kikimr, path)
+
+        restart_node_id = None
+        for node_id in kikimr.cluster.nodes:
+            count = self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
+            if count:
+                restart_node_id = node_id
+
+        logger.debug(f"Restart node {restart_node_id}")
+        node = kikimr.cluster.nodes[restart_node_id]
+        node.stop()
+        node.start()
+
+        data = ['{"dt": 1696849943000001, "str": "C" }']
+        self.write_stream(data, endpoint=endpoint)
+        self.wait_completed_checkpoints(kikimr, path)
+
+        expected_data = ['{"a_time":null,"b_time":1696849942500001,"c_time":1696849943000001}']
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_json_errors(self, kikimr, entity_name, local_topics):
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_json_errors_{local_topics!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
+
+        name = f"test_json_errors_{local_topics!s:.1}"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT data FROM {inp}
+                WITH (
+                    FORMAT="json_each_row",
+                    `skip.json.errors` = "true",
+                    SCHEMA=(time UINT32 NOT NULL, data String NOT NULL));
+                INSERT INTO {out} SELECT data FROM $in;
+            END DO;'''
+
+        path = f"/Root/{name}"
+        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+        self.wait_completed_checkpoints(kikimr, path)
+
+        data = [
+            '{"time": 101, "data": "hello1"}',
+            '{"time": 102, "data": 7777}',
+            '{"time": 103, "data": "hello2"}'
+        ]
+        self.write_stream(data, partition_key="key", endpoint=endpoint)
+
+        expected = ['hello1', 'hello2']
+        assert self.read_stream(len(expected), topic_path=self.output_topic, endpoint=endpoint) == expected
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_restart_query_by_rescaling(self, kikimr, entity_name, local_topics):
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_restart_query_by_rescaling{local_topics!s:.1}", local_topics, entity_name, partitions_count=10, shared=True)
+
+        name = f"test_restart_query_by_rescaling_{local_topics!s:.1}"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA ydb.OverridePlanner = @@ [
+                    {{ "tx": 0, "stage": 0, "tasks": 2 }}
+                ] @@;
+                $in = SELECT time FROM {inp}
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(time String NOT NULL))
+                WHERE time like "%time%";
+                INSERT INTO {out} SELECT time FROM $in;
+            END DO;'''
+
+        path = f"/Root/{name}"
+        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+        self.wait_completed_checkpoints(kikimr, path)
+
+        message_count = 20
+        for i in range(message_count):
+            self.write_stream(['{"time": "time to do it"}'], topic_path=None, partition_key=(''.join(random.choices(string.digits, k=8))), endpoint=endpoint)
+        assert self.read_stream(message_count, topic_path=self.output_topic, endpoint=endpoint) == ["time to do it" for i in range(message_count)]
+        self.wait_completed_checkpoints(kikimr, path)
+
+        logger.debug(f"stopping query {name}")
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
+
+        sql = R'''ALTER STREAMING QUERY `{query_name}` SET (
+            RUN = TRUE,
+            FORCE = TRUE
+            ) AS
+            DO BEGIN
+                PRAGMA ydb.OverridePlanner = @@ [
+                    {{ "tx": 0, "stage": 0, "tasks": 3 }}
+                ] @@;
+                $in = SELECT time FROM {inp}
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(time String NOT NULL))
+                WHERE time like "%lunch%";
+                INSERT INTO {out} SELECT time FROM $in;
+            END DO;'''
+
+        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+
+        message = '{"time": "time to lunch"}'
+        for i in range(message_count):
+            self.write_stream([message], topic_path=None, partition_key=(''.join(random.choices(string.digits, k=8))), endpoint=endpoint)
+        assert self.read_stream(message_count, topic_path=self.output_topic, endpoint=endpoint) == ["time to lunch" for i in range(message_count)]
+
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
+
+    @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_pragma(self, kikimr, entity_name, local_topics, use_partition_balancing):
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_pragma_{local_topics!s:.1}{use_partition_balancing!s:.1}", local_topics, entity_name, partitions_count=10)
+
+        create_read_rule(self.input_topic, self.consumer_name, default_endpoint=endpoint)
+
+        query_name = f"test_pragma1_{local_topics!s:.1}{use_partition_balancing!s:.1}"
+        pragma_balancing = 'PRAGMA pq.MaxPartitionReadSkew = "10s";\n' if use_partition_balancing else ""
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                ''' + pragma_balancing + R'''PRAGMA ydb.DisableCheckpoints="true";
+                PRAGMA ydb.MaxTasksPerStage = "1";
+                PRAGMA pq.Consumer = "{consumer_name}";
+                $in = SELECT time FROM {inp}
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(time String NOT NULL));
+                INSERT INTO {out} SELECT time FROM $in;
+            END DO;'''
+
+        kikimr.ydb_client.query(sql.format(query_name=query_name, consumer_name=self.consumer_name, inp=inp, out=out))
+        self.write_stream(['{"time": "lunch time"}'], endpoint=endpoint)
+        assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == ['lunch time']
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
+
+    @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_types(self, kikimr, entity_name, local_topics, use_partition_balancing):
+        inp, out, endpoint = self.get_io_names(kikimr, "test_types", local_topics, entity_name, partitions_count=1)
+
+        query_name = f"test_types1_{local_topics!s:.1}{use_partition_balancing!s:.1}"
+
+        def test_type(self, kikimr, type, input, expected_output, use_partition_balancing=False):
+            pragma = 'PRAGMA pq.MaxPartitionReadSkew = "10s";\n' if use_partition_balancing else ""
+            sql = R'''
+                CREATE STREAMING QUERY `{query_name}` AS
+                DO BEGIN
+                    ''' + pragma + R'''$in = SELECT field_name FROM {inp}
+                    WITH (
+                        FORMAT="json_each_row",
+                        SCHEMA=(field_name {type_name} NOT NULL));
+                    INSERT INTO {out} SELECT CAST(field_name as String) FROM $in;
+                END DO;'''
+
+            kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, type_name=type, out=out))
+            self.write_stream([f"{{\"field_name\": {input}}}"], endpoint=endpoint)
+            assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == [expected_output]
+            kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
+
+        test_type(self, kikimr, type="String", input='"lunch time"', expected_output='lunch time', use_partition_balancing=use_partition_balancing)
+        test_type(self, kikimr, type="Utf8", input='"Relativitätstheorie"', expected_output='Relativitätstheorie', use_partition_balancing=use_partition_balancing)
+        test_type(self, kikimr, type="Int8", input='42', expected_output='42', use_partition_balancing=use_partition_balancing)
+        test_type(self, kikimr, type="Uint64", input='777', expected_output='777', use_partition_balancing=use_partition_balancing)
+        test_type(self, kikimr, type="Float", input='1024.1024', expected_output='1024.1024', use_partition_balancing=use_partition_balancing)
+        test_type(self, kikimr, type="Double", input='-777.777', expected_output='-777.777', use_partition_balancing=use_partition_balancing)
+        test_type(self, kikimr, type="Bool", input='true', expected_output='true', use_partition_balancing=use_partition_balancing)
+        test_type(self, kikimr, type="Uuid", input='"3d6c7233-d082-4b25-83e2-10d271bbc911"', expected_output='3d6c7233-d082-4b25-83e2-10d271bbc911', use_partition_balancing=use_partition_balancing)
+        # Unsupported
+        # test_type(self, kikimr, type="Timestamp", input='"2025-08-25 10:49:00"', expected_output='2025-08-25T10:49:00Z')
+        # test_type(self, kikimr, type="Json", input='{"name": "value"}', expected_output='{"name": "value"}')
+        # test_type(self, kikimr, type="JsonDocument", input='{"name": "value"}', expected_output='lunch time')
+
+    @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_raw_format(self, kikimr, entity_name, local_topics, use_partition_balancing):
+        inp, out, endpoint = self.get_io_names(kikimr, "test_raw_format", local_topics, entity_name, partitions_count=10)
+
+        pragma = 'PRAGMA pq.MaxPartitionReadSkew = "10s";\n' if use_partition_balancing else ""
+
+        query_name = f"test_raw_format_string_{local_topics!s:.1}{use_partition_balancing!s:.1}"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                ''' + pragma + R'''$input = SELECT CAST(data AS Json) AS json FROM {inp}
+                WITH (
+                    FORMAT="raw",
+                    SCHEMA=(data String));
+                $parsed = SELECT JSON_VALUE(json, "$.time") as k, JSON_VALUE(json, "$.value") as v FROM $input;
+                INSERT INTO {out} SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
+            END DO;'''
+        path = f"/Root/{query_name}"
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.wait_completed_checkpoints(kikimr, path)
+
+        data = ['{"time": "2020-01-01T13:00:00.000000Z", "value": "lunch time"}']
+        expected_data = ['{"k":"2020-01-01T13:00:00.000000Z","v":"lunch time"}']
+        self.write_stream(data, endpoint=endpoint)
+
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
+
+        query_name = f"test_raw_format_default_{local_topics!s:.1}{use_partition_balancing!s:.1}"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                ''' + pragma + R'''$input = SELECT CAST(Data AS Json) AS json FROM {inp};
+                $parsed = SELECT JSON_VALUE(json, "$.time") as k, JSON_VALUE(json, "$.value") as v FROM $input;
+                INSERT INTO {out} SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
+            END DO;'''
+        path = f"/Root/{query_name}"
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.wait_completed_checkpoints(kikimr, path)
+
+        data = ['{"time": "2020-01-01T13:00:00.000000Z", "value": "lunch time"}']
+        expected_data = ['{"k":"2020-01-01T13:00:00.000000Z","v":"lunch time"}']
+        self.write_stream(data, endpoint=endpoint)
+
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
+
+        query_name = f"test_raw_format_json_{local_topics!s:.1}{use_partition_balancing!s:.1}"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                ''' + pragma + R'''$input = SELECT data AS json FROM {inp}
+                WITH (
+                    FORMAT="raw",
+                    SCHEMA=(data Json));
+                $parsed = SELECT JSON_VALUE(json, "$.time") as k, JSON_VALUE(json, "$.value") as v FROM $input;
+                INSERT INTO {out} SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $parsed;
+            END DO;'''
+        path = f"/Root/{query_name}"
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.wait_completed_checkpoints(kikimr, path)
+
+        data = ['{"time": "2020-01-01T13:00:00.000000Z", "value": "lunch time"}']
+        expected_data = ['{"k":"2020-01-01T13:00:00.000000Z","v":"lunch time"}']
+        self.write_stream(data, endpoint=endpoint)
+
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`")
+
+    @pytest.mark.parametrize("kikimr", [{"checkpointing_period_ms": "20000"}], indirect=["kikimr"])
+    @pytest.mark.parametrize("local_topics", [False, True])
+    def test_deduplication(self, kikimr, entity_name, local_topics):
+
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                PRAGMA pq.EnableDeduplication = "{enable}";
+                INSERT INTO {out} SELECT Data FROM {inp};
+            END DO;'''
+
+        # Disable deduplication
+
+        inp, out, endpoint = self.get_io_names(kikimr, "test_deduplication_disabled", local_topics, entity_name, partitions_count=10)
+        name = f"test_deduplication_{local_topics!s:.1}"
+        path = f"/Root/{name}"
+        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out, enable="FALSE"))
+        self.wait_completed_checkpoints(kikimr, path, checkpoints_count=1)
+
+        data1 = 'value1'
+        count1 = 1
+        self.write_stream([data1], topic_path=None, partition_key=''.join(random.choices(string.ascii_uppercase, k=8)), endpoint=endpoint)
+        assert self.read_stream(count1, topic_path=self.output_topic, endpoint=endpoint) == [data1 for i in range(count1)]
+
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
+
+        data2 = 'value2'
+        count2 = 10
+        for i in range(count2):
+            self.write_stream([data2], topic_path=None, partition_key=''.join(random.choices(string.ascii_uppercase, k=8)), endpoint=endpoint)
+
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = TRUE);")
+
+        readed_data = self.read_stream(count1 + count2, topic_path=self.output_topic, endpoint=endpoint)
+        expected = [data2 for i in range(count2)] + [data1 for i in range(count1)]
+        assert sorted(readed_data) == sorted(expected)
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
+
+        # Enable deduplication
+
+        inp, out, endpoint = self.get_io_names(kikimr, "test_deduplication_enabled", local_topics, entity_name, partitions_count=10)
+        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out, enable="TRUE"))
+        self.wait_completed_checkpoints(kikimr, path, checkpoints_count=1)
+
+        self.write_stream([data1], topic_path=None, partition_key=''.join(random.choices(string.ascii_uppercase, k=8)), endpoint=endpoint)
+        assert self.read_stream(count1, topic_path=self.output_topic, endpoint=endpoint) == [data1 for i in range(count1)]
+
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
+
+        for i in range(count2):
+            self.write_stream([data2], topic_path=None, partition_key=''.join(random.choices(string.ascii_uppercase, k=8)), endpoint=endpoint)
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = TRUE);")
+
+        readed_data = self.read_stream(20, topic_path=self.output_topic, endpoint=endpoint)
+        assert len(readed_data) == 10
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
+
+    @pytest.mark.parametrize(
+        "kikimr",
+        [
+            {"enable_shared_reading_in_streaming_queries": False},
+            {"enable_shared_reading_in_streaming_queries": True},
+        ],
+        indirect=["kikimr"],
+    )
+    def test_check_shared_reading_disabled(self, kikimr, entity_name, request):
+        cfg = request.node.callspec.params["kikimr"]
+        enable_shared_reading_in_streaming_queries = cfg["enable_shared_reading_in_streaming_queries"]
+        source_name = entity_name("MyEDS")
+
+        if enable_shared_reading_in_streaming_queries:
+            self.create_source(kikimr, source_name, shared=True)
+            kikimr.ydb_client.query(f"DROP EXTERNAL DATA SOURCE `{source_name}`;")
+        else:
+            with pytest.raises(
+                ydb.issues.GenericError,
+                match=r"SHARED_READING in External data source is not supported",
+            ):
+                self.create_source(kikimr, source_name, shared=True)

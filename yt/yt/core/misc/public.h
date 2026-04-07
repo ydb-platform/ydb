@@ -103,6 +103,9 @@ DECLARE_REFCOUNTED_STRUCT(IPersistentDigest)
 DECLARE_REFCOUNTED_STRUCT(TSlruCacheDynamicConfig)
 DECLARE_REFCOUNTED_STRUCT(TSlruCacheConfig)
 
+template <class TKey, class TValue, class THash = THash<TKey>>
+class TSimpleLruCache;
+
 DECLARE_REFCOUNTED_STRUCT(TAsyncExpiringCacheDynamicConfig)
 DECLARE_REFCOUNTED_STRUCT(TAsyncExpiringCacheConfig)
 
@@ -191,8 +194,8 @@ class TFairShareHierarchicalSlotQueue;
 template <typename TTag>
 using TFairShareHierarchicalSlotQueuePtr = TIntrusivePtr<TFairShareHierarchicalSlotQueue<TTag>>;
 
+DECLARE_REFCOUNTED_STRUCT(IAdaptiveHedgingManager)
 DECLARE_REFCOUNTED_STRUCT(TAdaptiveHedgingManagerConfig)
-DECLARE_REFCOUNTED_STRUCT(IHedgingManager)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -207,6 +210,7 @@ DEFINE_ENUM(EProcessErrorCode,
 
 DECLARE_REFCOUNTED_STRUCT(IMemoryUsageTracker)
 DECLARE_REFCOUNTED_STRUCT(IReservingMemoryUsageTracker)
+DECLARE_REFCOUNTED_STRUCT(IScopedMemoryUsageTracker)
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -14,10 +14,16 @@
 
 - [директория](../../../../concepts/datamodel/dir.md);
 - [строковая таблица](../../../../concepts/datamodel/table.md#row-oriented-tables);
-- [вторичный индекс](../../../../concepts/glossary.md#secondary-index).
-- [векторный индекс](../../../../concepts/glossary.md#vector-index).
+- [вторичный индекс](../../../../concepts/glossary.md#secondary-index);
+- [векторный индекс](../../../../concepts/glossary.md#vector-index);
+- [топик](../../../../concepts/datamodel/topic.md) (только схема);
+- [представление (view)](../../../../concepts/datamodel/view.md);
+- [асинхронная репликация](../../../../concepts/async-replication.md);
+- [трансфер](../../../../concepts/transfer.md);
+- [внешний источник данных](../../../../concepts/datamodel/external_data_source.md);
+- [внешняя таблица](../../../../concepts/datamodel/external_table.md).
 
-Для более простого экспорта одиночных строковых и колоночных таблиц в S3-совместимое хранилище данных можно использовать [внешние источники данных](../../../../concepts/datamodel/external_data_source.md). Подробнее см. в статье [{#T}](../../../../concepts/federated_query/s3/write_data.md#export-to-s3).
+Для более простого экспорта одиночных строковых и колоночных таблиц в S3-совместимое хранилище данных можно использовать [внешние источники данных](../../../../concepts/datamodel/external_data_source.md). Подробнее см. в статье [{#T}](../../../../concepts/query_execution/federated_query/s3/write_data.md#export-to-s3).
 
 {% endnote %}
 
@@ -127,9 +133,7 @@
 
 ### Завершение операции выгрузки {#forget}
 
-При выполнении выгрузки в корневом каталоге базы данных создается директория с именем `export_*`, где `*` — это числовая часть идентификатора выгрузки. В данной директории размещаются таблицы, содержащие консистентный снапшот выгружаемых данных на момент начала выгрузки.
-
-После выполнения выгрузки воспользуйтесь командой `operation forget` для того, чтобы выгрузка была завершена: удалена из перечня операций, а также были удалены все созданные для неё файлы:
+После выполнения выгрузки воспользуйтесь командой `operation forget` для того, чтобы выгрузка считалась завершённой (была удалена из перечня операций):
 
 ```bash
 {{ ydb-cli }} -p quickstart operation forget "ydb://export/6?id=281474976788395&kind=s3"

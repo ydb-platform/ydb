@@ -13,7 +13,7 @@ public:
         : Task(task)
         , Columns(columns)
     {
-        Y_ENSURE(task.HasS3Settings());
+        Y_ENSURE(task.HasS3Settings() || task.HasFSSettings());
     }
 
     IActor* CreateUploader(const TActorId& dataShard, ui64 txId) const override;

@@ -1,6 +1,6 @@
 # Topic load
 
-Applies load to your {{ ydb-short-name }} [topics](../../concepts/topic.md), using them as message queues. You can use a variety of input parameters to simulate production load: message number, message size, target write rate, and number of consumers and producers.
+Applies load to your {{ ydb-short-name }} [topics](../../concepts/datamodel/topic.md), using them as message queues. You can use a variety of input parameters to simulate production load: message number, message size, target write rate, and number of consumers and producers.
 
 As you apply load to your topic, the console displays the results (the number of written messages, message write rate, and others).
 

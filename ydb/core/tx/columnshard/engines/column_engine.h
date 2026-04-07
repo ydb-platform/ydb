@@ -5,14 +5,16 @@
 #include "changes/abstract/settings.h"
 #include "predicate/filter.h"
 #include "scheme/snapshot_scheme.h"
+#include "snapshot_holders.h"
 #include "scheme/versions/versioned_index.h"
 
-#include <ydb/core/tx/columnshard/common/reverse_accessor.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/common/reverse_accessor.h>
 #include <ydb/core/tx/columnshard/counters/common_data.h>
+#include <ydb/core/tx/columnshard/data_accessor/request.h>
+#include <ydb/core/tx/columnshard/engines/scheme/tiering/tier_info.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/container.h>
 #include <ydb/core/tx/columnshard/tx_reader/abstract.h>
-
 namespace NKikimr::NColumnShard {
 class TTiersManager;
 }   // namespace NKikimr::NColumnShard
@@ -125,6 +127,19 @@ public:
         }
     };
 
+    class TSelectedPortionInfo {
+    private:
+        YDB_READONLY_DEF(std::shared_ptr<TPortionInfo>, Portion);
+        YDB_READONLY_DEF(bool, IsVisible);
+
+    public:
+        TSelectedPortionInfo(const std::shared_ptr<TPortionInfo> portion, const bool isVisible)
+            : Portion(portion)
+            , IsVisible(isVisible)
+        {
+        }
+    };
+
     void FetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const;
 
     static ui64 GetMetadataLimit();
@@ -144,12 +159,12 @@ public:
         return DoRegisterTable(pathId);
     }
     virtual bool IsOverloadedByMetadata(const ui64 limit) const = 0;
-    virtual std::vector<std::shared_ptr<TPortionInfo>> Select(
-        TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withUncommitted) const = 0;
-    virtual std::shared_ptr<TColumnEngineChanges> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
-    virtual ui64 GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<TInternalPathId>& pathIds,
+    virtual std::vector<TSelectedPortionInfo> Select(
+        TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withNonconflicting, const bool withConflicting, const std::optional<THashSet<TInsertWriteId>>& ownPortions) const = 0;
+    virtual std::vector<std::shared_ptr<TColumnEngineChanges>> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
+    virtual ui64 GetCompactionPriority(const std::set<TInternalPathId>& pathIds,
         const std::optional<ui64> waitingPriority) const noexcept = 0;
-    virtual std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshot& snapshot,
+    virtual std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshotHolders& snapshotHolders,
         const THashSet<TInternalPathId>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
     virtual std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(const THashSet<TInternalPathId>& pathsToDrop) noexcept = 0;
     virtual std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<TInternalPathId, TTiering>& pathEviction,

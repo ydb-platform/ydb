@@ -22,19 +22,13 @@ namespace NKikimr::NStorage {
     {
         TEvNodeConfigReversePush() = default;
 
-        TEvNodeConfigReversePush(ui32 rootNodeId, const NKikimrBlobStorage::TStorageConfig *committedConfig) {
+        TEvNodeConfigReversePush(ui32 rootNodeId) {
             Record.SetRootNodeId(rootNodeId);
-            if (committedConfig) {
-                Record.MutableCommittedStorageConfig()->CopyFrom(*committedConfig);
-            }
         }
 
-        static std::unique_ptr<TEvNodeConfigReversePush> MakeRejected(const NKikimrBlobStorage::TStorageConfig *config) {
+        static std::unique_ptr<TEvNodeConfigReversePush> MakeRejected() {
             auto res = std::make_unique<TEvNodeConfigReversePush>();
             res->Record.SetRejected(true);
-            if (config) {
-                res->Record.MutableCommittedStorageConfig()->CopyFrom(*config);
-            }
             return res;
         }
     };
@@ -169,9 +163,12 @@ namespace NKikimr::NStorage {
         : TEventLocal<TEvNodeWardenUpdateConfigFromPeer, TEvBlobStorage::EvNodeWardenUpdateConfigFromPeer>
     {
         NKikimrBlobStorage::TStorageConfig Config;
+        std::optional<NKikimrBlobStorage::TStorageConfig> CommittedConfig;
 
-        TEvNodeWardenUpdateConfigFromPeer(NKikimrBlobStorage::TStorageConfig config)
+        TEvNodeWardenUpdateConfigFromPeer(NKikimrBlobStorage::TStorageConfig config,
+                std::optional<NKikimrBlobStorage::TStorageConfig> committedConfig)
             : Config(std::move(config))
+            , CommittedConfig(std::move(committedConfig))
         {}
     };
 
@@ -192,7 +189,6 @@ namespace NKikimr::NStorage {
             , TargetGroupId(targetGroupId)
             , ErrorReason(errorReason)
         {}
-
     };
 
 } // NKikimr::NStorage

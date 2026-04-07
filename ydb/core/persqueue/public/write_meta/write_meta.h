@@ -62,7 +62,7 @@ TString GetSerializedData(const NKikimrPQClient::TDataChunk& init, TArgs&...args
 
     TString str;
     bool res = proto.SerializeToString(&str);
-    Y_ABORT_UNLESS(res);
+    Y_ENSURE(res);
     return str;
 }
 

@@ -22,15 +22,13 @@ namespace builtins
     }
 
     template <class Iterator>
-    enumerate_iterator<Iterator>::enumerate_iterator(Iterator const &iter,
-                                                     long first)
+    enumerate_iterator<Iterator>::enumerate_iterator(Iterator const &iter, long first)
         : value(first), iter(iter)
     {
     }
 
     template <class Iterator>
-    enumerate_iterator<Iterator> &
-    enumerate_iterator<Iterator>::operator+=(long n)
+    enumerate_iterator<Iterator> &enumerate_iterator<Iterator>::operator+=(long n)
     {
       value += n, iter += n;
       return *this;
@@ -42,29 +40,25 @@ namespace builtins
     // TODO : We could handle case with && without size if there is a
     // performances benefits
     template <class Iterator>
-    bool enumerate_iterator<Iterator>::operator!=(
-        enumerate_iterator<Iterator> const &other) const
+    bool enumerate_iterator<Iterator>::operator!=(enumerate_iterator<Iterator> const &other) const
     {
       return !(*this == other);
     }
 
     template <class Iterator>
-    bool enumerate_iterator<Iterator>::operator<(
-        enumerate_iterator const &other) const
+    bool enumerate_iterator<Iterator>::operator<(enumerate_iterator const &other) const
     {
       return iter < other.iter;
     }
 
     template <class Iterator>
-    bool enumerate_iterator<Iterator>::operator==(
-        enumerate_iterator<Iterator> const &other) const
+    bool enumerate_iterator<Iterator>::operator==(enumerate_iterator<Iterator> const &other) const
     {
       return iter == other.iter;
     }
 
     template <class Iterator>
-    long enumerate_iterator<Iterator>::operator-(
-        enumerate_iterator<Iterator> const &other) const
+    long enumerate_iterator<Iterator>::operator-(enumerate_iterator<Iterator> const &other) const
     {
       return iter - other.iter;
     }
@@ -77,8 +71,7 @@ namespace builtins
 
     template <class Iterable>
     enumerate<Iterable>::enumerate(Iterable seq, long first)
-        : Iterable(seq), iterator(Iterable::begin(), first),
-          end_iter(Iterable::end(), -1)
+        : Iterable(seq), iterator(Iterable::begin(), first), end_iter(Iterable::end(), -1)
     {
     }
 
@@ -89,8 +82,7 @@ namespace builtins
     }
 
     template <class Iterable>
-    typename enumerate<Iterable>::iterator const &
-    enumerate<Iterable>::begin() const
+    typename enumerate<Iterable>::iterator const &enumerate<Iterable>::begin() const
     {
       return *this;
     }
@@ -105,9 +97,8 @@ namespace builtins
   /// enumerate implementation
 
   template <class Iterable>
-  details::enumerate<typename std::remove_cv<
-      typename std::remove_reference<Iterable>::type>::type>
-  enumerate(Iterable &&seq, long first)
+  details::enumerate<std::remove_cv_t<std::remove_reference_t<Iterable>>> enumerate(Iterable &&seq,
+                                                                                    long first)
   {
     return {std::forward<Iterable>(seq), first};
   }

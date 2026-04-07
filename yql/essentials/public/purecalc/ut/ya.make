@@ -4,7 +4,9 @@ SRCS(
     empty_stream.h
     fake_spec.cpp
     fake_spec.h
+    test_compile_settings.cpp
     test_langver.cpp
+    test_linear.cpp
     test_schema.cpp
     test_sexpr.cpp
     test_sql.cpp
@@ -21,6 +23,7 @@ PEERDIR(
     yql/essentials/public/purecalc
     yql/essentials/public/purecalc/io_specs/protobuf
     yql/essentials/public/purecalc/ut/protos
+    yql/essentials/public/purecalc/helpers/stream
 )
 
 SIZE(MEDIUM)

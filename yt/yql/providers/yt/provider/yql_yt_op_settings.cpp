@@ -367,6 +367,31 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
 
             break;
         }
+        case EYtSettingType::Columns: {
+            if (!EnsureTupleSize(*setting, 2, ctx)) {
+                return false;
+            }
+            for (const auto& child : setting->Tail().Children()) {
+                if (!EnsureTupleMinSize(*child, 2U, ctx)) {
+                    return false;
+                }
+                if (!EnsureAtom(child->Head(), ctx)) {
+                    return false;
+                }
+            }
+            break;
+        }
+        case EYtSettingType::OrderBy: {
+            if (!EnsureTupleSize(*setting, 2, ctx)) {
+                return false;
+            }
+            for (const auto& child : setting->Tail().Children()) {
+                if (!(EnsureTupleSize(*child, 2U, ctx) && EnsureTupleOfAtoms(*child, ctx))) {
+                    return false;
+                }
+            }
+            break;
+        }
         case EYtSettingType::StatColumns: {
             if (!EnsureTupleSize(*setting, 2, ctx)) {
                 return false;
@@ -393,6 +418,18 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
                         << "Unsupported system column " << col.Quote()));
                     return false;
                 }
+            }
+            break;
+        }
+        case NYql::EYtSettingType::ExtraColumns: {
+            if (!EnsureTupleSize(*setting, 2, ctx)) {
+                return false;
+            }
+
+            if (!setting->Tail().IsCallable("AsStruct")) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                    << "Expecting AsStruct as extraColumns value"));
+                return false;
             }
             break;
         }
@@ -445,6 +482,7 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
         case EYtSettingType::BlockInputApplied:
         case EYtSettingType::BlockOutputApplied:
         case EYtSettingType::Small:
+        case EYtSettingType::Pruned:
             if (!EnsureTupleSize(*setting, 1, ctx)) {
                 return false;
             }
@@ -705,16 +743,18 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             }
             break;
         }
-        case EYtSettingType::CompressionCodec:
+        case EYtSettingType::CompressionCodec: {
             if (!EnsureTupleSize(*setting, 2, ctx)) {
                 return false;
             }
-            if (!ValidateCompressionCodecValue(setting->Tail().Content())) {
+            const TString codecStr{setting->Tail().Content()};
+            if (!ValidateCompressionCodecValue(codecStr)) {
                 ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
-                    << "Unsupported compression codec value " << TString{setting->Tail().Content()}.Quote()));
+                    << "Unsupported compression codec value " << codecStr.Quote()));
                 return false;
             }
             break;
+        }
         case EYtSettingType::Expiration: {
             if (!EnsureTupleSize(*setting, 2, ctx) || !EnsureAtom(setting->Tail(), ctx)) {
                 return false;
@@ -936,15 +976,16 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             break;
         }
         case EYtSettingType::QLFilter: {
-            if (!EnsureTupleSize(*setting, 2, ctx)) {
+            if (!EnsureTupleSize(*setting, 1, ctx)) {
                 return false;
             }
-            const auto qlFilter = setting->Child(1);
-            if (!qlFilter->IsCallable("YtQLFilter")) {
-                ctx.AddError(TIssue(ctx.GetPosition(qlFilter->Pos()), TStringBuilder()
-                    << "Expected YtQLFilter node, got: " << qlFilter->Content()));
-            }
             break;
+        }
+        case EYtSettingType::Actions:
+        case EYtSettingType::Features: {
+            ctx.AddError(TIssue(ctx.GetPosition(nameNode->Pos()), TStringBuilder()
+                << "Feature '" << nameNode->Content() << "' isn't supported."));
+            return false;
         }
         case EYtSettingType::LAST: {
             YQL_ENSURE(false, "Unexpected EYtSettingType");
@@ -1071,8 +1112,10 @@ const TString& GetSingleColumnGroupSpec() {
 
 TExprNode::TPtr GetSetting(const TExprNode& settings, EYtSettingType type) {
     for (auto& setting : settings.Children()) {
-        if (setting->ChildrenSize() != 0 && FromString<EYtSettingType>(setting->Child(0)->Content()) == type) {
-            return setting;
+        if (setting->ChildrenSize() != 0) {
+            if (const auto t = TryFromString<EYtSettingType>(setting->Head().Content()); t && *t == type) {
+                return setting;
+            }
         }
     }
     return nullptr;

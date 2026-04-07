@@ -66,9 +66,11 @@ message Entry {
         EXTERNAL_DATA_SOURCE = 19;
         VIEW = 20;
         RESOURCE_POOL = 21;
+        BACKUP_COLLECTION = 22;
         TRANSFER = 23;
         SYS_VIEW = 24;
-        STREAMING_QUERY = 25;
+        STREAMING_QUERY = 26;
+        SECRET = 27;
     }
 
     // Name of scheme entry (dir2 of /dir1/dir2)

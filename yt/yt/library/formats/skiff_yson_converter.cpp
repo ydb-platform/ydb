@@ -80,7 +80,7 @@ struct TSkiffStructField
     std::shared_ptr<TSkiffSchema> Type;
 };
 
-template<EWireType wireType>
+template <EWireType wireType>
 constexpr EYsonItemType WireTypeToYsonItemType()
 {
     if constexpr (
@@ -223,7 +223,6 @@ TOptionalTypesMatch MatchOptionalTypes(
     };
 
     try {
-
         // First of all we compute strict and relaxed depths of optional chain.
         // Strict depth is the depth of chain where each element is optional<T>.
         // Relaxed depth is the depth of chain where each element is optional<T> or variant<null, T>
@@ -351,7 +350,6 @@ std::vector<std::optional<TTypePair>> MatchStructTypes(
                     skiffFields[index].Name);
             }
             result.emplace_back(std::nullopt);
-
         };
 
         ssize_t nextSkiffFieldIndex = 0;
@@ -552,7 +550,7 @@ public:
         : Descriptor_(std::move(descriptor))
     { }
 
-    void operator () (TYsonPullParserCursor* cursor, TCheckedInDebugSkiffWriter* writer)
+    void operator()(TYsonPullParserCursor* cursor, TCheckedInDebugSkiffWriter* writer)
     {
         if constexpr (wireType == EWireType::Yson32) {
             TmpString_.clear();
@@ -825,7 +823,7 @@ public:
         , InnerOptionalTranslate_(skiffOptionalLevel > 0)
     { }
 
-    void operator () (TYsonPullParserCursor* cursor, TCheckedInDebugSkiffWriter* writer)
+    void operator()(TYsonPullParserCursor* cursor, TCheckedInDebugSkiffWriter* writer)
     {
         auto throwValueExpectedToBeNonempty = [&] {
             ThrowYsonToSkiffConversionError(Descriptor_, "\"#\" found while value expected to be nonempty");
@@ -910,7 +908,7 @@ public:
         , OuterTranslateLevel_(ysonOptionalLevel)
     { }
 
-    void operator () (TYsonPullParserCursor* cursor, TCheckedInDebugSkiffWriter* writer)
+    void operator()(TYsonPullParserCursor* cursor, TCheckedInDebugSkiffWriter* writer)
     {
         auto throwValueExpectedToBeNonempty = [&] {
             ThrowYsonToSkiffConversionError(Descriptor_, "\"#\" found while value expected to be nonempty");
@@ -1191,7 +1189,7 @@ public:
         , Descriptor_(std::move(descriptor))
     { }
 
-    void operator () (TYsonPullParserCursor* cursor, TCheckedInDebugSkiffWriter* writer)
+    void operator()(TYsonPullParserCursor* cursor, TCheckedInDebugSkiffWriter* writer)
     {
         if (cursor->GetCurrent().GetType() != EYsonItemType::BeginList) {
             ThrowBadYsonToken(Descriptor_, {EYsonItemType::BeginList}, cursor->GetCurrent().GetType());
@@ -1335,7 +1333,7 @@ public:
         : Function_(std::move(function))
     { }
 
-    void operator() (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer)
+    void operator()(TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer)
     {
         auto value = Function_(parser);
 
@@ -1375,7 +1373,7 @@ private:
 class TYson32SkiffToYsonConverter
 {
 public:
-    Y_FORCE_INLINE void operator () (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer)
+    Y_FORCE_INLINE void operator()(TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer)
     {
         TMemoryInput inputStream(parser->ParseYson32());
         TYsonPullParser pullParser(&inputStream, EYsonType::Node);
@@ -1554,7 +1552,7 @@ public:
         YT_VERIFY(ysonNesting <= skiffNesting + 1);
     }
 
-    void operator () (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer)
+    void operator()(TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer)
     {
         for (int i = 0; i < OuterFill_; ++i) {
             writer->WriteBeginList();
@@ -1632,7 +1630,7 @@ public:
         YT_VERIFY(ysonNesting <= skiffNesting + 1);
     }
 
-    void operator () (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer)
+    void operator()(TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer)
     {
         for (int i = 0; i < OuterFill_; ++i) {
             writer->WriteBeginList();
@@ -1716,7 +1714,7 @@ TSkiffToYsonConverter CreateListSkiffToYsonConverter(
     auto match = MatchListTypes(descriptor, skiffSchema);
     auto innerConverter = CreateSkiffToYsonConverterImpl(std::move(match.first), match.second, context, config);
 
-    return [innerConverter = innerConverter, descriptor=std::move(descriptor)] (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer) {
+    return [innerConverter = innerConverter, descriptor = std::move(descriptor)] (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer) {
         writer->WriteBeginList();
         while (true) {
             auto tag = parser->ParseVariant8Tag();
@@ -1804,7 +1802,7 @@ public:
         , Descriptor_(std::move(descriptor))
     { }
 
-    void operator () (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer)
+    void operator()(TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer)
     {
         int tag;
         if constexpr (wireType == EWireType::Variant8) {
@@ -1873,7 +1871,7 @@ TSkiffToYsonConverter CreateDictSkiffToYsonConverter(
     return [
         keyConverter = std::move(keyConverter),
         valueConverter = std::move(valueConverter),
-        descriptor=std::move(descriptor)
+        descriptor = std::move(descriptor)
     ] (TCheckedInDebugSkiffParser* parser, TCheckedInDebugYsonTokenWriter* writer) {
         writer->WriteBeginList();
         while (true) {

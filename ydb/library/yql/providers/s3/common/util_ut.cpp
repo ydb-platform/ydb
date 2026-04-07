@@ -3,7 +3,6 @@
 #include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-
 namespace NYql::NS3Util {
 
 Y_UNIT_TEST_SUITE(TestS3UrlEscape) {
@@ -24,9 +23,9 @@ Y_UNIT_TEST_SUITE(TestS3UrlEscape) {
 
     // Test additional symbols escape
     Y_UNIT_TEST(EscapeAdditionalSymbols) {
-        TString s = "hello#?world";
+        TString s = "hello#?wor;ld";
 
-        UNIT_ASSERT_VALUES_EQUAL(NS3Util::UrlEscapeRet(s), "hello%23%3Fworld");
+        UNIT_ASSERT_VALUES_EQUAL(NS3Util::UrlEscapeRet(s), "hello%23%3Fwor%3Bld");
     }
 }
 

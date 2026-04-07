@@ -3,7 +3,6 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 
 #include <ydb/core/tx/long_tx_service/public/events.h>
-#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/io_formats/arrow/scheme/scheme.h>
@@ -26,10 +25,6 @@
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
-
-#define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
-#undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -107,7 +102,8 @@ TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& repl
     const NLongTxService::TLongTxId& longTxId, const TString& dedupId,
     const TString& databaseName, const TString& path,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-    std::shared_ptr<NYql::TIssues> issues);
+    std::shared_ptr<NYql::TIssues> issues,
+    const TString& userSID);
 
 template <NKikimrServices::TActivity::EType DerivedActivityType>
 class TUploadRowsBase : public TActorBootstrapped<TUploadRowsBase<DerivedActivityType>> {
@@ -132,6 +128,7 @@ private:
         ui64 SentOverloadSeqNo = 0;
     };
 
+    const TString UserSID;
     TActorId SchemeCache;
     TActorId LeaderPipeCache;
     TDuration Timeout;
@@ -211,10 +208,12 @@ public:
     }
 
     explicit TUploadRowsBase(std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>> rows,
+                             const TString& userSID,
                              TDuration timeout = TDuration::Max(),
                              bool diskQuotaExceeded = false,
                              NWilson::TSpan span = {})
         : TBase()
+        , UserSID(userSID)
         , SchemeCache(MakeSchemeCacheID())
         , LeaderPipeCache(MakePipePerNodeCacheID(false))
         , Timeout((timeout && timeout <= DEFAULT_TIMEOUT) ? timeout : DEFAULT_TIMEOUT)
@@ -280,8 +279,8 @@ private:
         // nothing by default
     }
 
-    virtual TString GetDatabase() = 0;
-    virtual const TString& GetTable() = 0;
+    virtual const TString& GetDatabase() const = 0;
+    virtual const TString& GetTable() const = 0;
     virtual bool CheckAccess(TString& errorMessage) = 0;
     virtual TConclusion<TVector<std::pair<TString, Ydb::Type>>> GetRequestColumns() const = 0;
     virtual bool ExtractRows(TString& errorMessage) = 0;
@@ -348,6 +347,10 @@ private:
         if (!ok && allowConvert) {
             ok = NArrow::TArrowToYdbConverter::NeedConversion(type1, type2);
         }
+        if (!ok) {
+            // TODO: SwitchYqlTypeToArrowType(Interval) == arrow::Type::DURATION, but YQL Interval is Int64
+            ok = type1.GetTypeId() == NScheme::NTypeIds::Int64 && type2.GetTypeId() == NScheme::NTypeIds::Interval;
+        }
         return ok;
     }
 
@@ -381,8 +384,11 @@ private:
         THashMap<TString, ui32> columnByName;
         THashSet<TString> keyColumnsLeft;
         THashSet<TString> notNullColumnsLeft = entry.NotNullColumns;
+        THashSet<TString> defaultColumnsLeft;
         SrcColumns.reserve(entry.Columns.size());
         THashSet<TString> HasInternalConversion;
+
+        bool fillBuildInProgressColumns = AllowWriteToPrivateTable && AllowWriteToIndexImplTable && !IsIndexImplTable;
 
         for (const auto& [_, colInfo] : entry.Columns) {
             ui32 id = colInfo.Id;
@@ -399,6 +405,10 @@ private:
                 keyColumnIds.resize(Max<size_t>(keyColumnIds.size(), keyOrder + 1));
                 keyColumnIds[keyOrder] = id;
                 keyColumnsLeft.insert(name);
+            }
+
+            if (colInfo.IsDefaultFromLiteral()) {
+                defaultColumnsLeft.insert(name);
             }
         }
 
@@ -441,6 +451,10 @@ private:
             const ui32 colId = *cp;
             auto& ci = *entry.Columns.FindPtr(colId);
 
+            if (ci.IsBuildInProgress && !fillBuildInProgressColumns) {
+                return TConclusionStatus::Fail(Sprintf("Column %s is under build operation", name.c_str()));
+            }
+
             TString columnTypeName = NScheme::TypeName(ci.PType, ci.PTypeMod);
 
             const Ydb::Type& typeInProto = (*reqColumns)[pos].second;
@@ -456,46 +470,50 @@ private:
 
             TString inTypeName = NScheme::TypeName(typeInRequest, typeInRequest.GetPgTypeMod(ci.PTypeMod));
 
-                if (typeInProto.has_type_id()) {
-                    bool sourceIsArrow = GetSourceType() != EUploadSource::ProtoValues;
+            if (typeInProto.has_type_id()) {
+                bool sourceIsArrow = GetSourceType() != EUploadSource::ProtoValues;
                 bool ok = SameOrConvertableDstType(typeInRequest, ci.PType, sourceIsArrow); // TODO
-                    if (!ok) {
+                if (!ok) {
                     return TConclusionStatus::Fail(Sprintf("Type mismatch, got type %s for column %s, but expected %s",
                         inTypeName.c_str(), name.c_str(), columnTypeName.c_str()));
-                    }
-                    if (NArrow::TArrowToYdbConverter::NeedInplaceConversion(typeInRequest, ci.PType)) {
-                        ColumnsToConvertInplace[name] = ci.PType;
-                    }
-                } else if (typeInProto.has_decimal_type()) {
-                    if (typeInRequest != ci.PType) {
-                    return TConclusionStatus::Fail(Sprintf("Type mismatch, got type %s for column %s, but expected %s",
-                        inTypeName.c_str(), name.c_str(), columnTypeName.c_str()));
-                    }
-                } else if (typeInProto.has_pg_type()) {
-                    bool ok = SameDstType(typeInRequest, ci.PType, false);
-                    if (!ok) {
-                    return TConclusionStatus::Fail(Sprintf("Type mismatch, got type %s for column %s, but expected %s",
-                        inTypeName.c_str(), name.c_str(), columnTypeName.c_str()));
-                    }
-                    if (!ci.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(typeInRequest.GetPgTypeDesc())) {
-                        if (inTypeInfoMod.TypeMod != ci.PTypeMod) {
-                            return TConclusionStatus::Fail(Sprintf("Typemod mismatch, got type %s for column %s, type mod %s, but expected %s",
-                                inTypeName.c_str(), name.c_str(), inTypeInfoMod.TypeMod.c_str(), ci.PTypeMod.c_str()));
-                        }
-
-                        const auto result = NPg::BinaryTypeModFromTextTypeMod(inTypeInfoMod.TypeMod, typeInRequest.GetPgTypeDesc());
-                        if (result.Error) {
-                            return TConclusionStatus::Fail(Sprintf("Invalid typemod %s, got type %s for column %s, error %s",
-                                inTypeInfoMod.TypeMod.c_str(), inTypeName.c_str(), name.c_str(), result.Error->c_str()));
-                        }
-                        pgTypeMod = result.Typmod;
-                    }
                 }
+                if (NArrow::TArrowToYdbConverter::NeedInplaceConversion(typeInRequest, ci.PType)) {
+                    ColumnsToConvertInplace[name] = ci.PType;
+                }
+            } else if (typeInProto.has_decimal_type()) {
+                if (typeInRequest != ci.PType) {
+                return TConclusionStatus::Fail(Sprintf("Type mismatch, got type %s for column %s, but expected %s",
+                    inTypeName.c_str(), name.c_str(), columnTypeName.c_str()));
+                }
+            } else if (typeInProto.has_pg_type()) {
+                bool ok = SameDstType(typeInRequest, ci.PType, false);
+                if (!ok) {
+                return TConclusionStatus::Fail(Sprintf("Type mismatch, got type %s for column %s, but expected %s",
+                    inTypeName.c_str(), name.c_str(), columnTypeName.c_str()));
+                }
+                if (!ci.PTypeMod.empty() && NPg::TypeDescNeedsCoercion(typeInRequest.GetPgTypeDesc())) {
+                    if (inTypeInfoMod.TypeMod != ci.PTypeMod) {
+                        return TConclusionStatus::Fail(Sprintf("Typemod mismatch, got type %s for column %s, type mod %s, but expected %s",
+                            inTypeName.c_str(), name.c_str(), inTypeInfoMod.TypeMod.c_str(), ci.PTypeMod.c_str()));
+                    }
+
+                    const auto result = NPg::BinaryTypeModFromTextTypeMod(inTypeInfoMod.TypeMod, typeInRequest.GetPgTypeDesc());
+                    if (result.Error) {
+                        return TConclusionStatus::Fail(Sprintf("Invalid typemod %s, got type %s for column %s, error %s",
+                            inTypeInfoMod.TypeMod.c_str(), inTypeName.c_str(), name.c_str(), result.Error->c_str()));
+                    }
+                    pgTypeMod = result.Typmod;
+                }
+            }
 
             bool notNull = entry.NotNullColumns.contains(ci.Name);
             if (notNull) {
                 notNullColumnsLeft.erase(ci.Name);
                 NotNullColumns.emplace(ci.Name);
+            }
+
+            if (defaultColumnsLeft.contains(ci.Name)) {
+                defaultColumnsLeft.erase(ci.Name);
             }
 
             if (ci.KeyOrder != -1) {
@@ -582,6 +600,22 @@ private:
             return TConclusionStatus::Fail(Sprintf("Missing not null columns: %s", JoinSeq(", ", notNullColumnsLeft).c_str()));
         }
 
+        if (!defaultColumnsLeft.empty() && UpsertIfExists) {
+            // some default columns are not specified in the request, but upsert will only update existing rows
+            // and only the columns specified in the request will be updated; unspecified default columns will not be changed.
+            defaultColumnsLeft.clear();
+        }
+
+        if (!defaultColumnsLeft.empty()) {
+            if (AppData(ctx)->FeatureFlags.GetDisableMissingDefaultColumnsInBulkUpsert()) {
+                return TConclusionStatus::Fail(Sprintf("Missing default columns: %s", JoinSeq(", ", defaultColumnsLeft).c_str()));
+            }
+
+            // TODO: Unreachable, delete "MissingDefaultColumns/Count" counter
+            UploadCounters.OnMissingDefaultColumns();
+            LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, "Missing default columns: " << JoinSeq(", ", defaultColumnsLeft).c_str());
+        }
+
         TConclusionStatus res = TConclusionStatus::Success();
         if (isColumnTable && HasAppData() && AppDataVerified().ColumnShardConfig.GetBulkUpsertRequireAllColumns()) {
             res = CheckRequiredColumns(entry, *reqColumns);
@@ -599,6 +633,8 @@ private:
         AuditContextStart();
 
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
+        request->DatabaseName = GetDatabase();
+
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.Path = ::NKikimr::SplitPath(table);
         if (entry.Path.empty()) {
@@ -909,7 +945,7 @@ private:
         ui32 batchNo = 0;
         TString dedupId = ToString(batchNo);
         DoLongTxWriteSameMailbox(
-            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues);
+            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues, UserSID);
     }
 
     void RollbackLongTx(const TActorContext& ctx) {
@@ -1023,7 +1059,7 @@ private:
         auto keyRange = MakeHolder<TKeyDesc>(entry.TableId, range, TKeyDesc::ERowOperation::Update, KeyColumnTypes, columns);
 
         TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
-
+        request->DatabaseName = GetDatabase();
         request->ResultSet.emplace_back(std::move(keyRange));
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));
@@ -1086,6 +1122,7 @@ private:
 
         auto ev = std::make_unique<TEvDataShard::TEvUploadRowsRequest>();
         ev->Record = state->Headers;
+        ev->Record.SetUserSID(UserSID);
         for (const auto& pr : state->Rows) {
             auto* row = ev->Record.AddRows();
             row->SetKeyColumns(pr.first.GetBuffer());
@@ -1133,6 +1170,7 @@ private:
                 shardRequests[shardIdx].reset(new TEvDataShard::TEvUploadRowsRequest());
                 ev = shardRequests[shardIdx].get();
                 ev->Record.SetCancelDeadlineMs(Deadline().MilliSeconds());
+                ev->Record.SetUserSID(UserSID);
 
                 ev->Record.SetTableId(keyRange->TableId.PathId.LocalPathId);
                 if (keyRange->TableId.SchemaVersion) {
@@ -1262,11 +1300,7 @@ private:
                 }
             }
 
-            bool isRetryableError = shardResponse.GetStatus() == NKikimrTxDataShard::TError::WRONG_SHARD_STATE ||
-                shardResponse.GetStatus() == NKikimrTxDataShard::TError::SHARD_IS_BLOCKED ||
-                shardResponse.GetStatus() == NKikimrTxDataShard::TError::SCHEME_CHANGED;
-
-            if (!isRetryableError || !Backoff.HasMore()) {
+            if (!ev->Get()->IsRetriableError() || !Backoff.HasMore()) {
                 return ReplyWithError(
                     TUploadStatus(static_cast<NKikimrTxDataShard::TError::EKind>(shardResponse.GetStatus()),
                     shardResponse.GetErrorDescription()), ctx);

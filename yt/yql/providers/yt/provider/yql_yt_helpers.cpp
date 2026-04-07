@@ -4,6 +4,7 @@
 #include "yql_yt_optimize.h"
 
 #include <yt/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
+#include <yt/yql/providers/yt/provider/yql_yt_layers_integration.h>
 #include <yt/yql/providers/yt/common/yql_configuration.h>
 #include <yt/yql/providers/yt/opt/yql_yt_key_selector.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
@@ -21,6 +22,7 @@
 #include <yql/essentials/core/yql_expr_csee.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_layers_helpers.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/utils/log/log.h>
 
@@ -386,6 +388,25 @@ TMaybe<TString> DeriveClusterFromSection(const NNodes::TYtSection& section, ERun
     return result;
 }
 
+void GetNodesToCalculateFromQLFilter(const TExprNode& qlFilter, TExprNode::TListType &needCalc, TNodeSet &uniqNodes) {
+    YQL_ENSURE(qlFilter.IsCallable("YtQLFilter"));
+    const auto lambdaBody = qlFilter.Child(1)->Child(1);
+    VisitExpr(lambdaBody, [&needCalc, &uniqNodes](const TExprNode::TPtr& node) {
+        if (node->IsCallable({"And", "Or", "Not", "Coalesce", "Exists", "<", "<=", ">", ">=", "==", "!="})) {
+            return true;
+        }
+        if (node->IsCallable("Member")) {
+            return false;
+        }
+        if (uniqNodes.insert(node.Get()).second) {
+            if (NeedCalc(TExprBase(node.Get()))) {
+                needCalc.push_back(node);
+            }
+        }
+        return false;
+    });
+}
+
 } // unnamed
 
 TString GetClusterFromSection(const NNodes::TYtSection& section) {
@@ -627,8 +648,11 @@ TExprNode::TPtr YtCleanupWorld(const TExprNode::TPtr& input, TExprContext& ctx, 
     return output;
 }
 
-TYtOutputOpBase GetOutputOp(TYtOutput output) {
+TYtOutputOpBase GetOutputOp(TYtOutput output, bool takeFirstInHybrid) {
     if (const auto tr = output.Operation().Maybe<TYtTryFirst>()) {
+        if (takeFirstInHybrid) {
+            return tr.Cast().First();
+        }
         return tr.Cast().Second();
     }
     return output.Operation().Cast<TYtOutputOpBase>();
@@ -710,25 +734,6 @@ bool IsConstExpSortDirections(NNodes::TExprBase sortDirections) {
     return false;
 }
 
-void GetNodesToCalculateFromQLFilter(const TExprNode& qlFilter, TExprNode::TListType &needCalc, TNodeSet &uniqNodes) {
-    YQL_ENSURE(qlFilter.IsCallable("YtQLFilter"));
-    const auto lambdaBody = qlFilter.Child(1)->Child(1);
-    VisitExpr(lambdaBody, [&needCalc, &uniqNodes](const TExprNode::TPtr& node) {
-        if (node->IsCallable({"And", "Or", "Not", "Coalesce", "Exists", "<", "<=", ">", ">=", "==", "!="})) {
-            return true;
-        }
-        if (node->IsCallable("Member")) {
-            return false;
-        }
-        if (uniqNodes.insert(node.Get()).second) {
-            if (NeedCalc(TExprBase(node.Get()))) {
-                needCalc.push_back(node);
-            }
-        }
-        return false;
-    });
-}
-
 TExprNode::TListType GetNodesToCalculate(const TExprNode::TPtr& input) {
     TExprNode::TListType needCalc;
     TNodeSet uniqNodes;
@@ -747,9 +752,6 @@ TExprNode::TListType GetNodesToCalculate(const TExprNode::TPtr& input) {
                             }
                         }
                     }
-                    break;
-                case EYtSettingType::QLFilter:
-                    GetNodesToCalculateFromQLFilter(setting.Value().Cast().Ref(), needCalc, uniqNodes);
                     break;
                 default:
                     break;
@@ -791,6 +793,14 @@ TExprNode::TListType GetNodesToCalculate(const TExprNode::TPtr& input) {
                         }
                     }
                     break;
+                }
+                case EYtSettingType::QLFilter: {
+                    for (const auto& p : section.Paths()) {
+                        TYtPathInfo pathInfo(p);
+                        if (pathInfo.QLFilter) {
+                            GetNodesToCalculateFromQLFilter(*pathInfo.QLFilter, needCalc, uniqNodes);
+                        }
+                    }
                 }
                 default:
                     break;
@@ -1361,9 +1371,9 @@ TExprNode::TPtr ResetTablesMeta(const TExprNode::TPtr& input, TExprContext& ctx,
     return input;
 }
 
-std::pair<TExprBase, TString> GetOutTableWithCluster(TExprBase ytOutput) {
+std::pair<TExprBase, TString> GetOutTableWithCluster(TExprBase ytOutput, bool takeFirstInHybrid) {
     const auto output = ytOutput.Cast<TYtOutput>();
-    const auto op = GetOutputOp(output);
+    const auto op = GetOutputOp(output, takeFirstInHybrid);
     const auto cluster = TString{ op.DataSink().Cluster().Value() };
     size_t ndx = 0;
     YQL_ENSURE(TryFromString<size_t>(output.OutIndex().Value(), ndx), "Bad " << TYtOutput::CallableName() << " output index value");
@@ -1482,6 +1492,7 @@ IGraphTransformer::TStatus SubstTables(TExprNode::TPtr& input, const TYtState::T
                                         .Columns<TCoVoid>().Build()
                                         .Ranges<TCoVoid>().Build()
                                         .Stat<TCoVoid>().Build()
+                                        .QLFilter<TCoVoid>().Build()
                                     .Build()
                                 .Build()
                                 .Settings()
@@ -1508,6 +1519,7 @@ IGraphTransformer::TStatus SubstTables(TExprNode::TPtr& input, const TYtState::T
                                         .Columns<TCoVoid>().Build()
                                         .Ranges<TCoVoid>().Build()
                                         .Stat<TCoVoid>().Build()
+                                        .QLFilter<TCoVoid>().Build()
                                     .Build()
                                 .Build()
                                 .Settings()
@@ -1532,6 +1544,7 @@ IGraphTransformer::TStatus SubstTables(TExprNode::TPtr& input, const TYtState::T
                                         .Columns<TCoVoid>().Build()
                                         .Ranges<TCoVoid>().Build()
                                         .Stat<TCoVoid>().Build()
+                                        .QLFilter<TCoVoid>().Build()
                                     .Build()
                                 .Build()
                                 .Settings()
@@ -1730,6 +1743,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
                     if (sortConstraintEnabled) {
                         TKeySelectorBuilder builder(path.Pos(), ctx, useNativeDescSort, scheme.Cast<TStructExprType>());
                         builder.ProcessRowSpec(*mapOutTable.RowSpec);
+                        builder.FillRowSpecSort(*mapOutTable.RowSpec, useNativeYtDefaultColumnOrder);
                         if (builder.NeedMap()) {
                             mapper = builder.MakeRemapLambda(true);
                         }
@@ -1761,6 +1775,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
                         .Columns<TCoVoid>().Build()
                         .Ranges<TCoVoid>().Build()
                         .Stat<TCoVoid>().Build()
+                        .QLFilter<TCoVoid>().Build()
                         .Done();
                 }
                 updatedPaths.push_back(path);
@@ -1814,6 +1829,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
         if (sortConstraintEnabled && outTable.RowSpec->IsSorted()) {
             TKeySelectorBuilder builder(pos, ctx, useNativeDescSort, scheme.Cast<TStructExprType>());
             builder.ProcessRowSpec(*outTable.RowSpec);
+            builder.FillRowSpecSort(*outTable.RowSpec, useNativeYtDefaultColumnOrder);
             if (builder.NeedMap()) {
                 mapper = builder.MakeRemapLambda(true);
             }
@@ -1840,6 +1856,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
             .Columns<TCoVoid>().Build()
             .Ranges<TCoVoid>().Build()
             .Stat<TCoVoid>().Build()
+            .QLFilter<TCoVoid>().Build()
             .Done();
     }
 
@@ -1904,6 +1921,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
         .Columns<TCoVoid>().Build()
         .Ranges<TCoVoid>().Build()
         .Stat<TCoVoid>().Build()
+        .QLFilter<TCoVoid>().Build()
         .Done();
 }
 
@@ -2324,6 +2342,7 @@ TYtReadTable ConvertContentInputToRead(TExprBase input, TMaybeNode<TCoNameValueT
                     .Columns(columns)
                     .Ranges<TCoVoid>().Build()
                     .Stat<TCoVoid>().Build()
+                    .QLFilter<TCoVoid>().Build()
                 .Build()
             .Build()
             .Settings(settings.Cast())
@@ -2425,6 +2444,49 @@ TMaybeNode<TCoLambda> GetMapLambda(const TYtWithUserJobsOpBase& op) {
     }
 
     return {};
+}
+
+TMaybe<TVector<TString>> BuildLayersPaths(const TExprNode::TPtr& input, const TString& cluster, const NLayers::ILayersRegistryPtr& layersRegistry,
+    const NLayers::ILayersIntegrationPtr& integration, const TYtSettings::TConstPtr& conf, TExprContext& ctx)
+{
+    auto layers = ExtractLayersFromExpr(input);
+    if (layers.empty()) {
+        return TVector<TString>();
+    }
+    if (auto val = conf->LayerPaths.Get(cluster)) {
+        ctx.AddError(TIssue("Can't use both Layers and yt.LayerPaths"));
+        return {};
+    }
+    auto logicalOrder = layersRegistry->ResolveLogicalLayers(layers, ctx);
+    if (!logicalOrder) {
+        return {};
+    }
+    if (auto caches = conf->LayerCaches.Get(cluster)) {
+        for (const auto& [name, locs]: *caches) {
+            TVector<NLayers::TLocation> locationInfos;
+            locationInfos.reserve(locs.size());
+            for (const auto& loc: locs) {
+                locationInfos.emplace_back(NLayers::TLocation{
+                    .System = TString(YtProviderName),
+                    .Cluster = cluster,
+                    .Path = loc
+                });
+            }
+            if (!integration->UpdateLayerLocations(NLayers::TKey(name), std::move(locationInfos), ctx)) {
+                return {};
+            }
+        }
+    }
+    auto finalOrder = layersRegistry->ResolveLayers(*logicalOrder, TString(YtProviderName), cluster, ctx);
+    if (!finalOrder) {
+        return {};
+    }
+    TVector<TString> finalCypressPaths;
+    finalCypressPaths.reserve(finalOrder->size());
+    for (auto& loc: *finalOrder) {
+        finalCypressPaths.emplace_back(std::move(loc.Path));
+    }
+    return finalCypressPaths;
 }
 
 } // NYql

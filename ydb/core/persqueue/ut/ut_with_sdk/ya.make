@@ -5,10 +5,11 @@ ADDINCL(
 )
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(200)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -29,6 +30,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     autoscaling_ut.cpp
+    describe_ut.cpp
     balancing_ut.cpp
     commitoffset_ut.cpp
     mirrorer_autoscaling_ut.cpp

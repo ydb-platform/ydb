@@ -31,7 +31,7 @@ namespace NKikimr::NBlobDepot {
     {}
 
     void TBlobDepot::HandleFromAgent(STATEFN_SIG) {
-        switch (const ui32 type = ev->GetTypeRewrite()) {
+        switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobDepot::TEvRegisterAgent, Handle);
             hFunc(TEvBlobDepot::TEvAllocateIds, Handle);
             hFunc(TEvBlobDepot::TEvCommitBlobSeq, Handle);
@@ -152,7 +152,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::PassAway() {
-        for (const TActorId& actorId : {GroupAssimilatorId, S3Manager->GetWrapperId()}) {
+        for (const TActorId& actorId : {GroupAssimilatorId, GroupRecommissionerId, S3Manager->GetWrapperId()}) {
             if (actorId) {
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
             }

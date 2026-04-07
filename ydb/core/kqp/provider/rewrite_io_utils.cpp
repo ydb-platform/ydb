@@ -8,10 +8,6 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/sql.h>
-#include <yql/essentials/sql/v1/lexer/antlr3/lexer.h>
-#include <yql/essentials/sql/v1/lexer/antlr3_ansi/lexer.h>
-#include <yql/essentials/sql/v1/proto_parser/antlr3/proto_parser.h>
-#include <yql/essentials/sql/v1/proto_parser/antlr3_ansi/proto_parser.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
@@ -36,14 +32,10 @@ TExprNode::TPtr CompileViewQuery(
     NSQLTranslation::Deserialize(viewData.CapturedContext, translationSettings);
 
     NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
-    lexers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiLexerFactory();
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
     NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr3 = NSQLTranslationV1::MakeAntlr3ParserFactory();
-    parsers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiParserFactory();
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(settingsBuilder.GetIsAmbiguityError());
     parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 
     NSQLTranslation::TTranslators translators(
@@ -100,45 +92,41 @@ void InsertExecutionOrderDependencies(
     queryGraph = ctx.ReplaceNode(std::move(queryGraph), *initialWorldOfTheQuery, worldBefore);
 }
 
-bool CheckTopLevelness(const TExprNode::TPtr& candidateRead, const TExprNode::TPtr& queryGraph) {
-    THashSet<TExprNode::TPtr> readsInCandidateSubgraph;
-    VisitExpr(candidateRead, [&readsInCandidateSubgraph](const TExprNode::TPtr& node) {
+}
+
+TExprNode::TPtr FindTopLevelRead(const TExprNode::TPtr& queryGraph) {
+    THashMap<const TExprNode*, TExprNode::TPtr> allReads;
+    VisitExpr(queryGraph, [&allReads](const TExprNode::TPtr& node) {
         if (node->IsCallable(ReadName)) {
-            readsInCandidateSubgraph.emplace(node);
+            allReads.emplace(node.Get(), node);
         }
         return true;
     });
 
-    return !FindNode(queryGraph, [&readsInCandidateSubgraph](const TExprNode::TPtr& node) {
-        return node->IsCallable(ReadName) && !readsInCandidateSubgraph.contains(node);
-    });
-}
-
-}
-
-TExprNode::TPtr FindTopLevelRead(const TExprNode::TPtr& queryGraph) {
-    const TExprNode::TPtr* lastReadInTopologicalOrder = nullptr;
-    VisitExpr(
-        queryGraph,
-        nullptr,
-        [&lastReadInTopologicalOrder](const TExprNode::TPtr& node) {
-            if (node->IsCallable(ReadName)) {
-                lastReadInTopologicalOrder = &node;
-            }
-            return true;
-        }
-    );
-
-    if (!lastReadInTopologicalOrder) {
+    if (allReads.empty()) {
         return nullptr;
     }
 
-    YQL_ENSURE(CheckTopLevelness(*lastReadInTopologicalOrder, queryGraph),
-               "Info for developers: assumption that there is only one top level Read! is wrong "
-               "for the expression graph of the query stored in the view:\n"
-                   << queryGraph->Dump());
+    THashSet<const TExprNode*> leftDependencies;
+    for (const auto& [rawPtr, _] : allReads) {
+        if (rawPtr->ChildrenSize() > 0 && rawPtr->Child(0)->IsCallable(LeftName)) {
+            const auto* leftNode = rawPtr->Child(0);
+            if (leftNode->ChildrenSize() > 0 && allReads.contains(leftNode->Child(0))) {
+                leftDependencies.insert(leftNode->Child(0));
+            }
+        }
+    }
 
-    return *lastReadInTopologicalOrder;
+    TExprNode::TPtr topLevelRead;
+    for (const auto& [rawPtr, ptr] : allReads) {
+        if (!leftDependencies.contains(rawPtr)) {
+            topLevelRead = ptr;
+        }
+    }
+
+    YQL_ENSURE(topLevelRead, "No top level Read! found — possible cycle in Read! dependencies:\n"
+                                 << queryGraph->Dump());
+    return topLevelRead;
 }
 
 TExprNode::TPtr RewriteReadFromView(

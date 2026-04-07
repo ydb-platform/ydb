@@ -619,7 +619,15 @@ vacuum(List *relations, VacuumParams *params, BufferAccessStrategy bstrategy,
 
 			if (params->options & VACOPT_VACUUM)
 			{
-				if (!vacuum_rel(vrel->oid, vrel->relation, params, bstrategy))
+				VacuumParams params_copy;
+
+				/*
+				 * vacuum_rel() scribbles on the parameters, so give it a copy
+				 * to avoid affecting other relations.
+				 */
+				memcpy(&params_copy, params, sizeof(VacuumParams));
+
+				if (!vacuum_rel(vrel->oid, vrel->relation, &params_copy, bstrategy))
 					continue;
 			}
 
@@ -642,6 +650,8 @@ vacuum(List *relations, VacuumParams *params, BufferAccessStrategy bstrategy,
 				if (use_own_xacts)
 				{
 					PopActiveSnapshot();
+					/* standard_ProcessUtility() does CCI if !use_own_xacts */
+					CommandCounterIncrement();
 					CommitTransactionCommand();
 				}
 				else
@@ -1427,7 +1437,9 @@ vac_update_relstats(Relation relation,
 {
 	Oid			relid = RelationGetRelid(relation);
 	Relation	rd;
+	ScanKeyData key[1];
 	HeapTuple	ctup;
+	void	   *inplace_state;
 	Form_pg_class pgcform;
 	bool		dirty,
 				futurexid,
@@ -1438,7 +1450,12 @@ vac_update_relstats(Relation relation,
 	rd = table_open(RelationRelationId, RowExclusiveLock);
 
 	/* Fetch a copy of the tuple to scribble on */
-	ctup = SearchSysCacheCopy1(RELOID, ObjectIdGetDatum(relid));
+	ScanKeyInit(&key[0],
+				Anum_pg_class_oid,
+				BTEqualStrategyNumber, F_OIDEQ,
+				ObjectIdGetDatum(relid));
+	systable_inplace_update_begin(rd, ClassOidIndexId, true,
+								  NULL, 1, key, &ctup, &inplace_state);
 	if (!HeapTupleIsValid(ctup))
 		elog(ERROR, "pg_class entry for relid %u vanished during vacuuming",
 			 relid);
@@ -1546,7 +1563,9 @@ vac_update_relstats(Relation relation,
 
 	/* If anything changed, write out the tuple. */
 	if (dirty)
-		heap_inplace_update(rd, ctup);
+		systable_inplace_update_finish(inplace_state, ctup);
+	else
+		systable_inplace_update_cancel(inplace_state);
 
 	table_close(rd, RowExclusiveLock);
 
@@ -1598,6 +1617,7 @@ vac_update_datfrozenxid(void)
 	bool		bogus = false;
 	bool		dirty = false;
 	ScanKeyData key[1];
+	void	   *inplace_state;
 
 	/*
 	 * Restrict this task to one backend per database.  This avoids race
@@ -1721,20 +1741,18 @@ vac_update_datfrozenxid(void)
 	relation = table_open(DatabaseRelationId, RowExclusiveLock);
 
 	/*
-	 * Get the pg_database tuple to scribble on.  Note that this does not
-	 * directly rely on the syscache to avoid issues with flattened toast
-	 * values for the in-place update.
+	 * Fetch a copy of the tuple to scribble on.  We could check the syscache
+	 * tuple first.  If that concluded !dirty, we'd avoid waiting on
+	 * concurrent heap_update() and would avoid exclusive-locking the buffer.
+	 * For now, don't optimize that.
 	 */
 	ScanKeyInit(&key[0],
 				Anum_pg_database_oid,
 				BTEqualStrategyNumber, F_OIDEQ,
 				ObjectIdGetDatum(MyDatabaseId));
 
-	scan = systable_beginscan(relation, DatabaseOidIndexId, true,
-							  NULL, 1, key);
-	tuple = systable_getnext(scan);
-	tuple = heap_copytuple(tuple);
-	systable_endscan(scan);
+	systable_inplace_update_begin(relation, DatabaseOidIndexId, true,
+								  NULL, 1, key, &tuple, &inplace_state);
 
 	if (!HeapTupleIsValid(tuple))
 		elog(ERROR, "could not find tuple for database %u", MyDatabaseId);
@@ -1768,7 +1786,9 @@ vac_update_datfrozenxid(void)
 		newMinMulti = dbform->datminmxid;
 
 	if (dirty)
-		heap_inplace_update(relation, tuple);
+		systable_inplace_update_finish(inplace_state, tuple);
+	else
+		systable_inplace_update_cancel(inplace_state);
 
 	heap_freetuple(tuple);
 	table_close(relation, RowExclusiveLock);
@@ -1981,8 +2001,15 @@ vacuum_rel(Oid relid, RangeVar *relation, VacuumParams *params,
 	Oid			save_userid;
 	int			save_sec_context;
 	int			save_nestlevel;
+	VacuumParams toast_vacuum_params;
 
 	Assert(params != NULL);
+
+	/*
+	 * This function scribbles on the parameters, so make a copy early to
+	 * avoid affecting the TOAST table (if we do end up recursing to it).
+	 */
+	memcpy(&toast_vacuum_params, params, sizeof(VacuumParams));
 
 	/* Begin a transaction for vacuuming this relation */
 	StartTransactionCommand();
@@ -2246,10 +2273,7 @@ vacuum_rel(Oid relid, RangeVar *relation, VacuumParams *params,
 	 */
 	if (toast_relid != InvalidOid)
 	{
-		VacuumParams toast_vacuum_params;
-
 		/* force VACOPT_PROCESS_MAIN so vacuum_rel() processes it */
-		memcpy(&toast_vacuum_params, params, sizeof(VacuumParams));
 		toast_vacuum_params.options |= VACOPT_PROCESS_MAIN;
 
 		vacuum_rel(toast_relid, NULL, &toast_vacuum_params, bstrategy);

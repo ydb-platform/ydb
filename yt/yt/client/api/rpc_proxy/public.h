@@ -6,12 +6,13 @@ namespace NYT::NApi::NRpcProxy {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TConnectionOptions;
-
 DECLARE_REFCOUNTED_STRUCT(IRowStreamEncoder)
 DECLARE_REFCOUNTED_STRUCT(IRowStreamDecoder)
 
 DECLARE_REFCOUNTED_STRUCT(TConnectionConfig)
+
+DECLARE_REFCOUNTED_CLASS(TClusterDirectory)
+DECLARE_REFCOUNTED_CLASS(TClientDirectory)
 
 extern const std::string ApiServiceName;
 extern const std::string DiscoveryServiceName;
@@ -41,6 +42,8 @@ DEFINE_ENUM(EAddressType,
     ((TvmOnlyHttp)        (5))
     ((TvmOnlyHttps)       (6))
     ((PublicRpc)          (7))
+    ((ChytHttp)           (8))
+    ((ChytHttps)          (9))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

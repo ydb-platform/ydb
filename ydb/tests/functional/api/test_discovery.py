@@ -224,7 +224,7 @@ class TestMirror3DCDiscovery(object):
 
     def test_mirror3dc_discovery_logic(self):
         driver_config = ydb.DriverConfig(
-            "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port), '/Root')
+            "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port), '/Root', use_all_nodes=False)
         driver = ydb.Driver(driver_config)
         driver.wait(timeout=10)
 

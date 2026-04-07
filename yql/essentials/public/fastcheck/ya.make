@@ -8,19 +8,28 @@ SRCS(
     parser.cpp
     settings.cpp
     translator.cpp
+    typecheck.cpp
     format.cpp
+    utils.cpp
+    check_state.cpp
 )
 
 PEERDIR(
+    library/cpp/resource
+    library/cpp/json
     yql/essentials/ast
     yql/essentials/core/services/mounts
     yql/essentials/core/user_data
     yql/essentials/core/issue/protos
+    yql/essentials/core/type_ann
     yql/essentials/public/udf/service/exception_policy
+    yql/essentials/public/udf_meta
     yql/essentials/sql
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
     yql/essentials/providers/common/provider
+    yql/essentials/providers/common/schema/expr
+    yql/essentials/providers/config
     yql/essentials/public/langver
     yql/essentials/core/langver
     yql/essentials/sql/v1/lexer
@@ -33,6 +42,10 @@ PEERDIR(
     yql/essentials/sql/settings
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/sql/v1
+)
+
+RESOURCE(
+    yql/essentials/data/language/udfs_basic.json udfs_basic.json
 )
 
 GENERATE_ENUM_SERIALIZATION(linter.h)

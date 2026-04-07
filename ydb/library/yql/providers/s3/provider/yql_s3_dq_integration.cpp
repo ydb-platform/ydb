@@ -1,10 +1,7 @@
 #include "yql_s3_dq_integration.h"
 #include "yql_s3_mkql_compiler.h"
 
-#include <yql/essentials/core/yql_opt_utils.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
-#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
@@ -16,8 +13,12 @@
 #include <ydb/library/yql/providers/s3/proto/source.pb.h>
 #include <ydb/library/yql/providers/s3/range_helpers/file_tree_builder.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
-#include <yql/essentials/utils/log/log.h>
 #include <ydb/library/yql/utils/plan/plan_utils.h>
+
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
+#include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/yson/node/node_io.h>
@@ -82,12 +83,11 @@ std::optional<ui64> TryExtractLimitHint(const TS3SourceSettingsBase& settings) {
 
 using namespace NYql::NS3Details;
 
-class TS3DqIntegration: public TDqIntegrationBase {
+class TS3DqIntegration : public TDqIntegrationBase {
 public:
-    TS3DqIntegration(TS3State::TPtr state)
+    explicit TS3DqIntegration(TS3State::TPtr state)
         : State_(state)
-    {
-    }
+    {}
 
     ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, const TPartitionSettings& settings) override {
         std::vector<std::vector<TPath>> parts;
@@ -104,7 +104,11 @@ public:
                     packed.Data().Literal().Value(),
                     FromString<bool>(packed.IsText().Literal().Value()),
                     paths);
-                parts.reserve(parts.size() + paths.size());
+
+                if (parts.capacity() < paths.size()) {
+                    parts.reserve(parts.size() + paths.size());
+                }
+
                 for (const auto& path : paths) {
                     if (path.IsDirectory) {
                         hasDirectories = true;
@@ -121,7 +125,7 @@ public:
             YQL_CLOG(TRACE, ProviderS3) << "limited max partitions to " << maxPartitions;
         }
 
-        auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
+        const auto useRuntimeListing = State_->Configuration->UseRuntimeListing.GetOrDefault();
 
         YQL_CLOG(DEBUG, ProviderS3) << " useRuntimeListing=" << useRuntimeListing;
         if (useRuntimeListing) {
@@ -291,7 +295,7 @@ public:
             }
 
             auto format = s3ReadObject.Object().Format().Ref().Content();
-            if (const auto useCoro = State_->Configuration->SourceCoroActor.Get(); (!useCoro || *useCoro) && format != "raw" && format != "json_list") {
+            if (State_->Configuration->SourceCoroActor.GetOrDefault() && format != "raw" && format != "json_list") {
                 return Build<TDqSourceWrap>(ctx, read->Pos())
                     .Input<TS3ParseSettings>()
                         .World(s3ReadObject.World())
@@ -389,9 +393,9 @@ public:
             if (const auto mayParseSettings = settings.Maybe<TS3ParseSettings>()) {
                 const auto parseSettings = mayParseSettings.Cast();
                 srcDesc.SetFormat(parseSettings.Format().StringValue().c_str());
-                srcDesc.SetParallelRowGroupCount(State_->Configuration->ArrowParallelRowGroupCount.Get().GetOrElse(0));
-                srcDesc.SetRowGroupReordering(State_->Configuration->ArrowRowGroupReordering.Get().GetOrElse(true));
-                srcDesc.SetParallelDownloadCount(State_->Configuration->ParallelDownloadCount.Get().GetOrElse(0));
+                srcDesc.SetParallelRowGroupCount(State_->Configuration->ArrowParallelRowGroupCount.GetOrDefault());
+                srcDesc.SetRowGroupReordering(State_->Configuration->ArrowRowGroupReordering.GetOrDefault());
+                srcDesc.SetParallelDownloadCount(State_->Configuration->ParallelDownloadCount.GetOrDefault());
 
                 const TStructExprType* fullRowType = parseSettings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
                 // exclude extra columns to get actual row type we need to read from input
@@ -445,18 +449,18 @@ public:
                 srcDesc.MutableSettings()->insert({"addPathIndex", "true"});
             }
 
-            srcDesc.SetAsyncDecoding(State_->Configuration->AsyncDecoding.Get().GetOrElse(false));
-            srcDesc.SetAsyncDecompressing(State_->Configuration->AsyncDecompressing.Get().GetOrElse(false));
+            srcDesc.SetAsyncDecoding(State_->Configuration->AsyncDecoding.GetOrDefault());
+            srcDesc.SetAsyncDecompressing(State_->Configuration->AsyncDecompressing.GetOrDefault());
 
 #if defined(_linux_) || defined(_darwin_)
 
-            auto useRuntimeListing = State_->Configuration->UseRuntimeListing.Get().GetOrElse(false);
+            const auto useRuntimeListing = State_->Configuration->UseRuntimeListing.GetOrDefault();
             srcDesc.SetUseRuntimeListing(useRuntimeListing);
 
-            auto fileQueueBatchSizeLimit = State_->Configuration->FileQueueBatchSizeLimit.Get().GetOrElse(1000000);
+            const auto fileQueueBatchSizeLimit = State_->Configuration->FileQueueBatchSizeLimit.GetOrDefault();
             srcDesc.MutableSettings()->insert({"fileQueueBatchSizeLimit", ToString(fileQueueBatchSizeLimit)});
 
-            auto fileQueueBatchObjectCountLimit = State_->Configuration->FileQueueBatchObjectCountLimit.Get().GetOrElse(1000);
+            const auto fileQueueBatchObjectCountLimit = State_->Configuration->FileQueueBatchObjectCountLimit.GetOrDefault();
             srcDesc.MutableSettings()->insert({"fileQueueBatchObjectCountLimit", ToString(fileQueueBatchObjectCountLimit)});
 
             YQL_CLOG(DEBUG, ProviderS3) << " useRuntimeListing=" << useRuntimeListing;
@@ -465,14 +469,10 @@ public:
                 TPathList paths;
                 for (auto i = 0u; i < settings.Paths().Size(); ++i) {
                     const auto& packed = settings.Paths().Item(i);
-                    TPathList pathsChunk;
                     UnpackPathsList(
                         packed.Data().Literal().Value(),
                         FromString<bool>(packed.IsText().Literal().Value()),
                         paths);
-                    paths.insert(paths.end(),
-                        std::make_move_iterator(pathsChunk.begin()),
-                        std::make_move_iterator(pathsChunk.end()));
                 }
 
                 for (size_t i = 0; i < paths.size(); ++i) {
@@ -596,16 +596,14 @@ public:
                 sinkDesc.MutableKeys()->Add(TString(key->Content()));
             }
 
-            if (const auto& memoryLimit = State_->Configuration->InFlightMemoryLimit.Get()) {
-                sinkDesc.SetMemoryLimit(*memoryLimit);
-            }
+            sinkDesc.SetMemoryLimit(State_->Configuration->InFlightMemoryLimit.GetOrDefault());
 
             if (const auto& compression = GetCompression(settings.Settings().Ref()); !compression.empty()) {
                 sinkDesc.SetCompression(TString(compression));
             }
 
             sinkDesc.SetMultipart(GetMultipart(settings.Settings().Ref()));
-            sinkDesc.SetAtomicUploadCommit(State_->Configuration->AllowAtomicUploadCommit && State_->Configuration->AtomicUploadCommit.Get().GetOrElse(false));
+            sinkDesc.SetAtomicUploadCommit(State_->Configuration->AtomicUploadCommit.GetOrDefault());
 
             if (GetBlockOutput(settings.Settings().Ref())) {
                 auto& arrowSettings = *sinkDesc.MutableArrowSettings();
@@ -613,14 +611,8 @@ public:
                 const auto& fullRowType = settings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
                 TExprContext ctx;
                 arrowSettings.SetRowType(NCommon::WriteTypeToYson(fullRowType, NYT::NYson::EYsonFormat::Text));
-
-                if (const auto maxFileSize = State_->Configuration->MaxOutputObjectSize.Get()) {
-                    arrowSettings.SetMaxFileSize(*maxFileSize);
-                }
-
-                if (const auto maxBlockSize = State_->Configuration->BlockSizeMemoryLimit.Get()) {
-                    arrowSettings.SetMaxBlockSize(*maxBlockSize);
-                }
+                arrowSettings.SetMaxFileSize(State_->Configuration->MaxOutputObjectSize.GetOrDefault());
+                arrowSettings.SetMaxBlockSize(State_->Configuration->BlockSizeMemoryLimit.GetOrDefault());
             }
 
             protoSettings.PackFrom(sinkDesc);
@@ -712,14 +704,15 @@ public:
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {
         RegisterDqS3MkqlCompilers(compiler, State_);
     }
+
 private:
     const TS3State::TPtr State_;
 };
 
-}
+} // anonymous namespace
 
 THolder<IDqIntegration> CreateS3DqIntegration(TS3State::TPtr state) {
     return MakeHolder<TS3DqIntegration>(state);
 }
 
-}
+} // namespace NYql

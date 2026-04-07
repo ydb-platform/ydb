@@ -1,5 +1,4 @@
 #include "datastreams_proxy.h"
-#include "datastreams_codes.h"
 #include "put_records_actor.h"
 #include "shard_iterator.h"
 #include "next_token.h"
@@ -14,6 +13,7 @@
 #include <ydb/core/persqueue/events/internal.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/services/datastreams/codes/datastreams_codes.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
@@ -1170,7 +1170,7 @@ namespace NKikimr::NDataStreams::V1 {
         const auto& pqConfig = appData->PQConfig;
         auto serviceTypes = GetSupportedClientServiceTypes(pqConfig);
 
-        auto messageAndCode = AddReadRuleToConfig(tabletConfig, readRule, serviceTypes, pqConfig);
+        auto messageAndCode = AddReadRuleToConfig(tabletConfig, readRule, serviceTypes, pqConfig, nullptr);
         size_t issueCode = static_cast<size_t>(messageAndCode.PQCode);
         Ydb::StatusIds::StatusCode status;
         if (messageAndCode.PQCode == Ydb::PersQueue::ErrorCode::OK) {

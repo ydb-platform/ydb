@@ -1,6 +1,6 @@
 PY3TEST()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 TEST_SRCS(
     conftest.py
@@ -17,7 +17,7 @@ TEST_SRCS(
     test_users_groups_with_acl.py
 )
 
-SPLIT_FACTOR(20)
+SPLIT_FACTOR(50)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/library/flavours/flavours_deps.inc)
 
@@ -39,9 +39,10 @@ FORK_SUBTESTS()
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-    REQUIREMENTS(ram:10 cpu:1)
+    REQUIREMENTS(ram:10 cpu:16)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 END()

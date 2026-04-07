@@ -2,10 +2,10 @@ YQL_UDF_CONTRIB(yson2_udf)
     
     YQL_ABI_VERSION(
         2
-        28
+        44
         0
     )
-    
+
     SRCS(
         yson2_udf.cpp
     )
@@ -14,6 +14,7 @@ YQL_UDF_CONTRIB(yson2_udf)
         library/cpp/containers/stack_vector
         library/cpp/yson_pull
         yql/essentials/minikql/dom
+        yql/essentials/public/langver
     )
     
     END()

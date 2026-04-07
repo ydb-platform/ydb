@@ -76,7 +76,7 @@ class TestTpch100(TpchSuiteBase):
         'lineitem': 600037902,
     }
     scale: int = 100
-    timeout = max(TpchSuiteBase.timeout, 300.)
+    timeout = max(TpchSuiteBase.timeout, 3600.)
 
 
 class TestTpch1000(TpchSuiteBase):
@@ -95,6 +95,16 @@ class TestTpch10000(TpchSuiteBase):
     scale: int = 10000
     iterations: int = 1
     timeout = max(TpchSuiteBase.timeout, 14400.)
+
+
+class TestTpch100000(TpchSuiteBase):
+    tables_size: dict[str, int] = {
+        'lineitem': 599999969200,
+    }
+
+    scale: int = 100000
+    iterations: int = 1
+    timeout = max(TpchSuiteBase.timeout, 6 * 3600.)
 
 
 class TpchParallelBase(LoadSuiteParallel):

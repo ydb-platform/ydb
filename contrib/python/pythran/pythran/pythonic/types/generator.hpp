@@ -17,8 +17,7 @@ namespace types
   } // this represents the end
 
   template <class T>
-  generator_iterator<T>::generator_iterator(T const &a_generator)
-      : the_generator(a_generator)
+  generator_iterator<T>::generator_iterator(T const &a_generator) : the_generator(a_generator)
   {
   }
 
@@ -40,33 +39,24 @@ namespace types
   }
 
   template <class T>
-  bool
-  generator_iterator<T>::operator!=(generator_iterator<T> const &other) const
+  bool generator_iterator<T>::operator!=(generator_iterator<T> const &other) const
   {
-    assert(other.the_generator.__generator_state == -1 ||
-           the_generator.__generator_state == -1);
-    return the_generator.__generator_state !=
-           other.the_generator.__generator_state;
+    assert(other.the_generator.__generator_state == -1 || the_generator.__generator_state == -1);
+    return the_generator.__generator_state != other.the_generator.__generator_state;
   }
 
   template <class T>
-  bool
-  generator_iterator<T>::operator==(generator_iterator<T> const &other) const
+  bool generator_iterator<T>::operator==(generator_iterator<T> const &other) const
   {
-    assert(other.the_generator.__generator_state == -1 ||
-           the_generator.__generator_state == -1);
-    return the_generator.__generator_state ==
-           other.the_generator.__generator_state;
+    assert(other.the_generator.__generator_state == -1 || the_generator.__generator_state == -1);
+    return the_generator.__generator_state == other.the_generator.__generator_state;
   }
 
   template <class T>
-  bool
-  generator_iterator<T>::operator<(generator_iterator<T> const &other) const
+  bool generator_iterator<T>::operator<(generator_iterator<T> const &other) const
   {
-    assert(other.the_generator.__generator_state == -1 ||
-           the_generator.__generator_state == -1);
-    return the_generator.__generator_state !=
-           other.the_generator.__generator_state;
+    assert(other.the_generator.__generator_state == -1 || the_generator.__generator_state == -1);
+    return the_generator.__generator_state != other.the_generator.__generator_state;
   }
 } // namespace types
 PYTHONIC_NS_END

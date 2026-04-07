@@ -16,6 +16,8 @@ import subprocess
 import sys
 import sysconfig
 import tempfile
+from collections.abc import Callable, Iterable, Mapping
+from typing import TYPE_CHECKING, AnyStr
 
 from jaraco.functools import pass_none
 
@@ -23,6 +25,11 @@ from ._log import log
 from ._modified import newer
 from .errors import DistutilsByteCompileError, DistutilsPlatformError
 from .spawn import spawn
+
+if TYPE_CHECKING:
+    from typing_extensions import TypeVarTuple, Unpack
+
+    _Ts = TypeVarTuple("_Ts")
 
 
 def get_host_platform() -> str:
@@ -39,7 +46,7 @@ def get_host_platform() -> str:
     return sysconfig.get_platform()
 
 
-def get_platform():
+def get_platform() -> str:
     if os.name == 'nt':
         TARGET_TO_PLAT = {
             'x86': 'win32',
@@ -108,13 +115,13 @@ def get_macosx_target_ver():
     return syscfg_ver
 
 
-def split_version(s):
+def split_version(s: str) -> list[int]:
     """Convert a dot-separated string into a list of numbers for comparisons"""
     return [int(n) for n in s.split('.')]
 
 
 @pass_none
-def convert_path(pathname: str | os.PathLike) -> str:
+def convert_path(pathname: str | os.PathLike[str]) -> str:
     r"""
     Allow for pathlib.Path inputs, coax to a native path string.
 
@@ -132,7 +139,9 @@ def convert_path(pathname: str | os.PathLike) -> str:
     return os.fspath(pathlib.PurePath(pathname))
 
 
-def change_root(new_root, pathname):
+def change_root(
+    new_root: AnyStr | os.PathLike[AnyStr], pathname: AnyStr | os.PathLike[AnyStr]
+) -> AnyStr:
     """Return 'pathname' with 'new_root' prepended.  If 'pathname' is
     relative, this is equivalent to "os.path.join(new_root,pathname)".
     Otherwise, it requires making 'pathname' relative and then joining the
@@ -154,7 +163,7 @@ def change_root(new_root, pathname):
 
 
 @functools.lru_cache
-def check_environ():
+def check_environ() -> None:
     """Ensure that 'os.environ' has all the environment variables we
     guarantee that users can use in config files, command-line options,
     etc.  Currently this includes:
@@ -176,7 +185,7 @@ def check_environ():
         os.environ['PLAT'] = get_platform()
 
 
-def subst_vars(s, local_vars):
+def subst_vars(s, local_vars: Mapping[str, object]) -> str:
     """
     Perform variable substitution on 'string'.
     Variables are indicated by format-style braces ("{var}").
@@ -215,7 +224,7 @@ def _subst_compat(s):
     return repl
 
 
-def grok_environment_error(exc, prefix="error: "):
+def grok_environment_error(exc: object, prefix: str = "error: ") -> str:
     # Function kept for backward compatibility.
     # Used to try clever things with EnvironmentErrors,
     # but nowadays str(exception) produces good messages.
@@ -233,7 +242,7 @@ def _init_regex():
     _dquote_re = re.compile(r'"(?:[^"\\]|\\.)*"')
 
 
-def split_quoted(s):
+def split_quoted(s: str) -> list[str]:
     """Split a string up according to Unix shell-like rules for quotes and
     backslashes.  In short: words are delimited by spaces, as long as those
     spaces are not escaped by a backslash, or inside a quoted string.
@@ -299,14 +308,16 @@ def split_quoted(s):
 # split_quoted ()
 
 
-def execute(func, args, msg=None, verbose=False, dry_run=False):
-    """Perform some action that affects the outside world (eg.  by
-    writing to the filesystem).  Such actions are special because they
-    are disabled by the 'dry_run' flag.  This method takes care of all
-    that bureaucracy for you; all you have to do is supply the
-    function to call and an argument tuple for it (to embody the
-    "external action" being performed), and an optional message to
-    print.
+def execute(
+    func: Callable[[Unpack[_Ts]], object],
+    args: tuple[Unpack[_Ts]],
+    msg: object = None,
+    verbose: bool = False,
+) -> None:
+    """
+    Perform some action that affects the outside world (e.g. by
+    writing to the filesystem). Was previously used to deal with
+    "dry run" operations, but now runs unconditionally.
     """
     if msg is None:
         msg = f"{func.__name__}{args!r}"
@@ -314,11 +325,10 @@ def execute(func, args, msg=None, verbose=False, dry_run=False):
             msg = msg[0:-2] + ')'
 
     log.info(msg)
-    if not dry_run:
-        func(*args)
+    func(*args)
 
 
-def strtobool(val):
+def strtobool(val: str) -> bool:
     """Convert a string representation of truth to true (1) or false (0).
 
     True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values
@@ -327,23 +337,22 @@ def strtobool(val):
     """
     val = val.lower()
     if val in ('y', 'yes', 't', 'true', 'on', '1'):
-        return 1
+        return True
     elif val in ('n', 'no', 'f', 'false', 'off', '0'):
-        return 0
+        return False
     else:
         raise ValueError(f"invalid truth value {val!r}")
 
 
 def byte_compile(  # noqa: C901
-    py_files,
-    optimize=0,
-    force=False,
-    prefix=None,
-    base_dir=None,
-    verbose=True,
-    dry_run=False,
-    direct=None,
-):
+    py_files: Iterable[str],
+    optimize: int = 0,
+    force: bool = False,
+    prefix: str | None = None,
+    base_dir: str | None = None,
+    verbose: bool = True,
+    direct: bool | None = None,
+) -> None:
     """Byte-compile a collection of Python source files to .pyc
     files in a __pycache__ subdirectory.  'py_files' is a list
     of files to compile; any files that don't end in ".py" are silently
@@ -360,9 +369,6 @@ def byte_compile(  # noqa: C901
     source filename, and 'base_dir' is a directory name that will be
     prepended (after 'prefix' is stripped).  You can supply either or both
     (or neither) of 'prefix' and 'base_dir', as you wish.
-
-    If 'dry_run' is true, doesn't actually do anything that would
-    affect the filesystem.
 
     Byte-compilation is either done directly in this interpreter process
     with the standard py_compile module, or indirectly by writing a
@@ -395,42 +401,41 @@ def byte_compile(  # noqa: C901
     if not direct:
         (script_fd, script_name) = tempfile.mkstemp(".py")
         log.info("writing byte-compilation script '%s'", script_name)
-        if not dry_run:
-            script = os.fdopen(script_fd, "w", encoding='utf-8')
+        script = os.fdopen(script_fd, "w", encoding='utf-8')
 
-            with script:
-                script.write(
-                    """\
+        with script:
+            script.write(
+                """\
 from distutils.util import byte_compile
 files = [
 """
-                )
+            )
 
-                # XXX would be nice to write absolute filenames, just for
-                # safety's sake (script should be more robust in the face of
-                # chdir'ing before running it).  But this requires abspath'ing
-                # 'prefix' as well, and that breaks the hack in build_lib's
-                # 'byte_compile()' method that carefully tacks on a trailing
-                # slash (os.sep really) to make sure the prefix here is "just
-                # right".  This whole prefix business is rather delicate -- the
-                # problem is that it's really a directory, but I'm treating it
-                # as a dumb string, so trailing slashes and so forth matter.
+            # XXX would be nice to write absolute filenames, just for
+            # safety's sake (script should be more robust in the face of
+            # chdir'ing before running it).  But this requires abspath'ing
+            # 'prefix' as well, and that breaks the hack in build_lib's
+            # 'byte_compile()' method that carefully tacks on a trailing
+            # slash (os.sep really) to make sure the prefix here is "just
+            # right".  This whole prefix business is rather delicate -- the
+            # problem is that it's really a directory, but I'm treating it
+            # as a dumb string, so trailing slashes and so forth matter.
 
-                script.write(",\n".join(map(repr, py_files)) + "]\n")
-                script.write(
-                    f"""
+            script.write(",\n".join(map(repr, py_files)) + "]\n")
+            script.write(
+                f"""
 byte_compile(files, optimize={optimize!r}, force={force!r},
-             prefix={prefix!r}, base_dir={base_dir!r},
-             verbose={verbose!r}, dry_run=False,
-             direct=True)
+         prefix={prefix!r}, base_dir={base_dir!r},
+         verbose={verbose!r},
+         direct=True)
 """
-                )
+            )
 
         cmd = [sys.executable]
         cmd.extend(subprocess._optim_args_from_interpreter_flags())
         cmd.append(script_name)
-        spawn(cmd, dry_run=dry_run)
-        execute(os.remove, (script_name,), f"removing {script_name}", dry_run=dry_run)
+        spawn(cmd)
+        execute(os.remove, (script_name,), f"removing {script_name}")
 
     # "Direct" byte-compilation: use the py_compile module to compile
     # right here, right now.  Note that the script generated in indirect
@@ -467,13 +472,12 @@ byte_compile(files, optimize={optimize!r}, force={force!r},
             if direct:
                 if force or newer(file, cfile):
                     log.info("byte-compiling %s to %s", file, cfile_base)
-                    if not dry_run:
-                        compile(file, cfile, dfile)
+                    compile(file, cfile, dfile)
                 else:
                     log.debug("skipping byte-compilation of %s to %s", file, cfile_base)
 
 
-def rfc822_escape(header):
+def rfc822_escape(header: str) -> str:
     """Return a version of the string escaped for inclusion in an
     RFC-822 header, by ensuring there are 8 spaces space after each newline.
     """
@@ -488,7 +492,7 @@ def rfc822_escape(header):
     return indent.join(lines) + suffix
 
 
-def is_mingw():
+def is_mingw() -> bool:
     """Returns True if the current platform is mingw.
 
     Python compiled with Mingw-w64 has sys.platform == 'win32' and

@@ -175,10 +175,12 @@ public:
                     "Error during UpdateDevicesInfo after receiving TEvControllerRegisterNode", (TExError, e.what()));
         }
 
-        TString error;
-        if (!updateIsSuccessful || (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, false, txc, &error))) {
-            State->Rollback();
-            State.reset();
+        bool validated = true;
+        if (updateIsSuccessful) {
+            validated = !Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags(), txc);
+        }
+        if (!updateIsSuccessful || !validated) {
+            Self->RollbackConfigUpdate(State);
         }
 
         return true;
@@ -236,61 +238,42 @@ public:
         }
         Self->ProcessVDiskStatus(record.GetVDiskStatus());
 
-        // create map of group ids to their generations as reported by the node warden
-        TMap<ui32, ui32> startedGroups;
-        if (record.GroupsSize() == record.GroupGenerationsSize()) {
-            for (size_t i = 0; i < record.GroupsSize(); ++i) {
-                startedGroups.emplace(record.GetGroups(i), record.GetGroupGenerations(i));
-            }
-        } else {
-            for (ui32 groupId : record.GetGroups()) {
-                startedGroups.emplace(groupId, 0);
-            }
-        }
-
         Response = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(NKikimrProto::OK, nodeId);
 
-        TSet<ui32> groupIDsToRead;
+        TSet<TGroupId> groupIDsToRead;
+        TSet<TGroupId> groupsToDiscard;
+        // Effective subscription set for this RegisterNode:
+        // 1) groups inferred from local VSlots on this node,
+        // 2) groups explicitly listed by NodeWarden in RegisterNode.Record.Groups.
+        TSet<TGroupId> groupsToSubscribe;
+
         const TPDiskId minPDiskId(TPDiskId::MinForNode(nodeId));
         const TVSlotId vslotId = TVSlotId::MinForPDisk(minPDiskId);
         for (auto it = Self->VSlots.lower_bound(vslotId); it != Self->VSlots.end() && it->first.NodeId == nodeId; ++it) {
             Self->ReadVSlot(*it->second, Response.get());
             if (!it->second->IsBeingDeleted()) {
-                groupIDsToRead.insert(it->second->GroupId.GetRawId());
+                groupIDsToRead.insert(it->second->GroupId);
+                // Local dynamic VSlots imply local interest in group updates even without active proxy.
+                if (NKikimr::IsDynamicGroup(it->second->GroupId)) {
+                    groupsToSubscribe.insert(it->second->GroupId);
+                }
             }
         }
 
-        TSet<ui32> groupsToDiscard;
-
-        auto processGroup = [&](const auto& p, TGroupInfo *group) {
-            auto&& [groupId, generation] = p;
-            if (!group) {
+        const auto& groups = record.GetGroups();
+        const bool hasGenerations = groups.size() == record.GetGroupGenerations().size();
+        for (int i = 0; i < groups.size(); ++i) {
+            const TGroupId groupId = TGroupId::FromValue(groups[i]);
+            if (const TGroupInfo *group = Self->FindGroup(groupId); !group) { // group has vanished
                 groupsToDiscard.insert(groupsToDiscard.end(), groupId);
-            } else if (group->Generation > generation) {
+            } else if (!hasGenerations || record.GetGroupGenerations(i) < group->Generation) { // group is obsolete at NW
                 groupIDsToRead.insert(groupId);
             }
-        };
-
-        if (startedGroups.size() <= Self->GroupMap.size() / 10) {
-            for (const auto& p : startedGroups) {
-                processGroup(p, Self->FindGroup(TGroupId::FromValue(p.first)));
-            }
-        } else {
-            auto started = startedGroups.begin();
-            auto groupIt = Self->GroupMap.begin();
-
-            while (started != startedGroups.end()) {
-                TGroupInfo *group = nullptr;
-
-                // scan through groups until we find matching one
-                for (; groupIt != Self->GroupMap.end() && groupIt->first.GetRawId() <= started->first; ++groupIt) {
-                    if (groupIt->first.GetRawId() == started->first) {
-                        group = groupIt->second.Get();
-                    }
-                }
-
-                processGroup(*started++, group);
-            }
+        }
+        for (ui32 groupIdProto : groups) {
+            // Keep backward-compatible behavior: every group requested explicitly by NodeWarden
+            // must remain in GroupsRequested.
+            groupsToSubscribe.insert(TGroupId::FromValue(groupIdProto));
         }
 
         Self->ApplySyncerState(nodeId, record.GetSyncerState(), groupIDsToRead, /*comprehensive=*/ true);
@@ -300,6 +283,7 @@ public:
         Y_ABORT_UNLESS(groupIDsToRead.empty());
 
         Self->ReadGroups(groupsToDiscard, true, Response.get(), nodeId);
+        Y_ABORT_UNLESS(groupsToDiscard.empty());
 
         for (auto it = Self->PDisks.lower_bound(minPDiskId); it != Self->PDisks.end() && it->first.NodeId == nodeId; ++it) {
             auto& pdisk = it->second;
@@ -331,9 +315,9 @@ public:
         node.DeclarativePDiskManagement = record.GetDeclarativePDiskManagement();
         db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::LastConnectTimestamp>(node.LastConnectTimestamp);
 
-        for (ui32 groupId : record.GetGroups()) {
-            node.GroupsRequested.insert(TGroupId::FromValue(groupId));
-            Self->GroupToNode.emplace(TGroupId::FromValue(groupId), nodeId);
+        for (const TGroupId groupId : groupsToSubscribe) {
+            node.GroupsRequested.insert(groupId);
+            Self->GroupToNode.emplace(groupId, nodeId);
         }
 
         for (const auto& status : record.GetShredStatus()) {
@@ -401,8 +385,16 @@ public:
 
     void Complete(const TActorContext&) override {
         if (Response) {
-            Self->SendInReply(*Request, std::move(Response));
-            Self->Execute(new TTxUpdateNodeDrives(std::move(UpdateNodeDrivesRecord), Self));
+            if (const auto it = Self->PipeServerToNode.find(Request->Recipient); it != Self->PipeServerToNode.end()) {
+                const TNodeId nodeId = Request->Sender.NodeId();
+                Y_ABORT_UNLESS(it->second == nodeId);
+                auto *node = Self->FindNode(nodeId);
+                Y_ABORT_UNLESS(node);
+                Y_ABORT_UNLESS(!node->Registered);
+                node->Registered = true;
+                Self->SendInReply(*Request, std::move(Response));
+                Self->Execute(new TTxUpdateNodeDrives(std::move(UpdateNodeDrivesRecord), Self));
+            }
         }
         Self->ShredState.OnNodeReportTxComplete();
     }
@@ -431,10 +423,10 @@ public:
     void Complete(const TActorContext&) override {}
 };
 
-void TBlobStorageController::ReadGroups(TSet<ui32>& groupIDsToRead, bool discard,
+void TBlobStorageController::ReadGroups(TSet<TGroupId>& groupIDsToRead, bool discard,
         TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result, TNodeId nodeId) {
     for (auto it = groupIDsToRead.begin(); it != groupIDsToRead.end(); ) {
-        const TGroupId groupId = TGroupId::FromValue(*it);
+        const TGroupId groupId = *it;
         TGroupInfo *group = FindGroup(groupId);
         if (group || discard) {
             NKikimrBlobStorage::TNodeWardenServiceSet *serviceSetProto = result->Record.MutableServiceSet();
@@ -443,16 +435,7 @@ void TBlobStorageController::ReadGroups(TSet<ui32>& groupIDsToRead, bool discard
                 groupProto->SetGroupID(groupId.GetRawId());
                 groupProto->SetEntityStatus(NKikimrBlobStorage::DESTROY);
             } else if (group->Listable()) {
-                const TStoragePoolInfo& info = StoragePools.at(group->StoragePoolId);
-
-                TMaybe<TKikimrScopeId> scopeId;
-                if (info.SchemeshardId && info.PathItemId) {
-                    scopeId.ConstructInPlace(*info.SchemeshardId, *info.PathItemId);
-                } else {
-                    Y_ABORT_UNLESS(!info.SchemeshardId && !info.PathItemId);
-                }
-
-                SerializeGroupInfo(groupProto, *group, info.Name, scopeId);
+                SerializeGroupInfo(groupProto, *group, StoragePools);
             } else if (nodeId) {
                 // group is not listable, so we have to postpone the request from NW
                 group->WaitingNodes.insert(nodeId);
@@ -486,9 +469,6 @@ void TBlobStorageController::ReadPDisk(const TPDiskId& pdiskId, const TPDiskInfo
         if (pdisk.PDiskConfig && !pDisk->MutablePDiskConfig()->ParseFromString(pdisk.PDiskConfig)) {
             STLOG(PRI_CRIT, BS_CONTROLLER, BSCTXRN02, "PDiskConfig invalid", (NodeId, pdiskId.NodeId),
                 (PDiskId, pdiskId.PDiskId));
-        }
-        if (pdisk.InferPDiskSlotCountFromUnitSize) {
-            pDisk->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
         }
     }
     pDisk->SetExpectedSerial(pdisk.ExpectedSerial);
@@ -587,6 +567,7 @@ void TBlobStorageController::OnWardenConnected(TNodeId nodeId, TActorId serverId
         EraseKnownDrivesOnDisconnected(&node);
     }
     node.ConnectedServerId = serverId;
+    node.Registered = false;
     node.InterconnectSessionId = interconnectSessionId;
 
     for (auto it = PDisks.lower_bound(TPDiskId::MinForNode(nodeId)); it != PDisks.end() && it->first.NodeId == nodeId; ++it) {
@@ -607,6 +588,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
     }
     node.ConnectedServerId = {};
     node.InterconnectSessionId = {};
+    node.Registered = false;
 
     for (const TGroupId groupId : std::exchange(node.WaitingForGroups, {})) {
         if (TGroupInfo *group = FindGroup(groupId)) {
@@ -624,7 +606,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
     const TVSlotId startingId(nodeId, Min<Schema::VSlot::PDiskID::Type>(), Min<Schema::VSlot::VSlotID::Type>());
     std::vector<TEvControllerUpdateSelfHealInfo::TVDiskStatusUpdate> updates;
     for (auto it = VSlots.lower_bound(startingId); it != VSlots.end() && it->first.NodeId == nodeId; ++it) {
-        if (const TGroupInfo *group = it->second->Group) {
+        if (it->second->Group) {
             if (it->second->IsReady) {
                 NotReadyVSlotIds.insert(it->second->VSlotId);
             }

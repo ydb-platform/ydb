@@ -1,4 +1,6 @@
 #pragma once
+
+#include "portion_interval_tree.h"
 #include "portions_index.h"
 
 #include <ydb/core/base/appdata.h>
@@ -123,9 +125,9 @@ private:
     THashMap<TInsertWriteId, std::shared_ptr<TWrittenPortionInfo>> InsertedPortions;
     THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>> InsertedPortionsById;
     THashMap<TInsertWriteId, std::shared_ptr<TPortionDataAccessor>> InsertedAccessors;
+    std::unique_ptr<PortionIntervalTree::TPortionIntervalTree> IntervalTree;
     mutable std::optional<TGranuleAdditiveSummary> AdditiveSummaryCache;
 
-    void RebuildHardMetrics() const;
     void RebuildAdditiveMetrics() const;
 
     mutable bool AllowInsertionFlag = false;
@@ -146,7 +148,6 @@ private:
     void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter,
         NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard, const bool onLoad = false);
     void OnAdditiveSummaryChange() const;
-    YDB_READONLY(TMonotonic, LastCompactionInstant, TMonotonic::Zero());
 
     TConclusion<std::shared_ptr<TPortionInfo>> GetInnerPortion(const TPortionInfo::TConstPtr& portion) const {
         if (!portion) {
@@ -225,8 +226,14 @@ public:
         auto it = InsertedPortions.find(insertWriteId);
         AFL_VERIFY(it != InsertedPortions.end());
         AFL_VERIFY(InsertedPortionsById.contains(it->second->GetPortionId()));
-        it->second->SetCommitSnapshot(ssRemove);
+        // it is better to set remove snapshot before the commit snapshot
+        // because otherwise concurrent readers may see the portion as just committed while
+        // the commit snapshot is already set, but the remove snapshot is not set yet.
+        // this problem should be addressed properly by a synchronized (or atomic) access
+        // to this part of the portion info state https://github.com/ydb-platform/ydb/issues/27205.
+        // until then, this workaround is better than nothing.
         it->second->SetRemoveSnapshot(ssRemove);
+        it->second->SetCommitSnapshot(ssRemove);
         TDbWrapper wrapper(txc.DB, nullptr);
         it->second->CommitToDatabase(wrapper);
     }
@@ -275,15 +282,11 @@ public:
         return OptimizerPlanner->GetBucketPositions();
     }
 
-    void OnStartCompaction() {
-        LastCompactionInstant = TMonotonic::Now();
-    }
-
     void BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const;
 
-    std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(
+    std::vector<std::shared_ptr<TColumnEngineChanges>> GetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
-        return OptimizerPlanner->GetOptimizationTask(self, locksManager);
+        return OptimizerPlanner->GetOptimizationTasks(self, locksManager);
     }
 
     const NGranule::NPortionsIndex::TPortionsIndex& GetPortionsIndex() const {
@@ -355,6 +358,15 @@ public:
 
     const THashMap<ui64, std::shared_ptr<TPortionInfo>>& GetPortions() const {
         return Portions;
+    }
+
+    bool HasPortionIntervalTree() const {
+        return IntervalTree != nullptr;
+    }
+
+    const PortionIntervalTree::TPortionIntervalTree& GetPortionIntervalTreeVerified() const {
+        AFL_VERIFY(HasPortionIntervalTree());
+        return *IntervalTree;
     }
 
     const THashMap<TInsertWriteId, std::shared_ptr<TWrittenPortionInfo>>& GetInsertedPortions() const {

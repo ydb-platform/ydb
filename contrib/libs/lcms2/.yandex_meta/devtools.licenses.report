@@ -169,7 +169,7 @@ BELONGS utils/psicc/ya.make
         Match type      : REFERENCE
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
     Files with this license:
-        utils/psicc/psicc.c [61:61]
+        utils/psicc/psicc.c [64:64]
 
 KEEP     MIT                  b1101be903428cec3d118f4496ad8c15
 BELONGS ya.make

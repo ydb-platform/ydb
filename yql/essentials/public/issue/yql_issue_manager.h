@@ -3,6 +3,8 @@
 #include "yql_issue.h"
 #include "yql_warning.h"
 
+#include <yql/essentials/utils/exception_utils.h>
+
 #include <util/generic/maybe.h>
 #include <util/generic/stack.h>
 #include <util/generic/hash_set.h>
@@ -27,7 +29,7 @@ public:
     void Reset(const TIssues& issues);
     void Reset();
 
-    void AddWarningRule(const TWarningRule &rule);
+    void AddWarningRule(const TWarningRule& rule);
     void SetWarningToErrorTreatMessage(const TString& msg);
 
     void SetIssueCountLimit(size_t limit) {
@@ -35,23 +37,32 @@ public:
     }
 
     void RaiseIssueForEmptyScope();
+    void Mute(bool onlyWarnings);
+    void Unmute();
 
 private:
+    struct TIssueHash {
+        ui64 operator()(const TIssuePtr& p) const {
+            return p->Hash();
+        }
+    };
+
+    struct TIssueEqual {
+        bool operator()(const TIssuePtr& l, const TIssuePtr& r) const {
+            return *l == *r;
+        }
+    };
+
+    enum class EMuteMode {
+        None,
+        Warnings,
+        All
+    };
+
     TIssuePtr CheckUniqAndLimit(const TIssue& issue);
     TIssuePtr CheckUniqAndLimit(TIssuePtr issue);
     void LeaveAllScopes();
     bool HasOpenScopes() const;
-
-    struct TIssueHash {
-        ui64 operator()(const TIssuePtr& p) {
-            return p->Hash();
-        }
-    };
-    struct TIssueEqual {
-        bool operator()(const TIssuePtr& l, const TIssuePtr& r) {
-            return *l == *r;
-        }
-    };
     TStack<std::pair<TMaybe<TIssuePtr>, std::function<TIssuePtr()>>> RawIssues_;
     TIssues CompletedIssues_;
     TMaybe<TString> WarningToErrorTreatMessage_;
@@ -59,10 +70,12 @@ private:
     std::array<TIssuePtr, NYql::TSeverityIds::ESeverityId_ARRAYSIZE> OverflowIssues_;
     std::array<THashSet<TIssuePtr, TIssueHash, TIssueEqual>, NYql::TSeverityIds::ESeverityId_ARRAYSIZE> UniqueIssues_;
     size_t IssueLimit_ = 0;
+    EMuteMode MuteMode_ = EMuteMode::None;
 };
 
 class TIssueScopeGuard: private TNonCopyable {
     TIssueManager& Manager_;
+
 public:
     TIssueScopeGuard(TIssueManager& manager, std::function<TIssuePtr()> fn)
         : Manager_(manager)
@@ -74,10 +87,13 @@ public:
         Manager_.RaiseIssueForEmptyScope();
     }
 
+    // TODO(YQL-20903): Fix exception handling in destructor.
     ~TIssueScopeGuard()
     {
-        Manager_.LeaveScope();
+        NYql::WithAbortOnException([&] {
+            Manager_.LeaveScope();
+        }, "TIssueScopeGuard");
     }
 };
 
-}
+} // namespace NYql

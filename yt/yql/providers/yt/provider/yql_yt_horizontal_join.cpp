@@ -54,7 +54,7 @@ bool THorizontalJoinBase::IsGoodForHorizontalJoin(TYtMap map) const {
     }
 
     // Map has output limit or is sharded MapJoin
-    if (NYql::HasAnySetting(map.Settings().Ref(), EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::Sharded | EYtSettingType::JobCount | EYtSettingType::BlockInputApplied | EYtSettingType::BlockOutputApplied | EYtSettingType::QLFilter)) {
+    if (NYql::HasAnySetting(map.Settings().Ref(), EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::Sharded | EYtSettingType::JobCount | EYtSettingType::BlockInputApplied | EYtSettingType::BlockOutputApplied)) {
         return false;
     }
 
@@ -68,7 +68,7 @@ bool THorizontalJoinBase::IsGoodForHorizontalJoin(TYtMap map) const {
         innerLambdaArg = maybeInnerLambda.Cast().Args().Arg(0).Raw();
     }
 
-    VisitExpr(map.Mapper().Body().Ref(), [&good, innerLambdaArg](const TExprNode& node) -> bool {
+    VisitExpr(map.Mapper().Body().Ref(), [&good, innerLambdaArg, directRowDependsOn = State_->Types->DirectRowDependsOn](const TExprNode& node) -> bool {
         if (!good) {
             return false;
         }
@@ -79,19 +79,10 @@ bool THorizontalJoinBase::IsGoodForHorizontalJoin(TYtMap map) const {
         else if (TYtRowNumber::Match(&node)) {
             good = false;
         }
-        else if (auto p = TMaybeNode<TYtTablePath>(&node)) {
+        else if (TYtTablePath::Match(&node) || TYtTableRecord::Match(&node) || TYtTableIndex::Match(&node)) {
             // Support only YtTableProps in FlatMap over input stream. Other YtTableProps cannot be properly integrated into the Switch
-            if (p.Cast().DependsOn().Input().Raw() != innerLambdaArg) {
-                good = false;
-            }
-        }
-        else if (auto p = TMaybeNode<TYtTableRecord>(&node)) {
-            if (p.Cast().DependsOn().Input().Raw() != innerLambdaArg) {
-                good = false;
-            }
-        }
-        else if (auto p = TMaybeNode<TYtTableIndex>(&node)) {
-            if (p.Cast().DependsOn().Input().Raw() != innerLambdaArg) {
+            auto row = directRowDependsOn ? &node.Head().Head() : &node.Head();
+            if (row != innerLambdaArg) {
                 good = false;
             }
         }
@@ -122,8 +113,8 @@ TCoLambda THorizontalJoinBase::CleanupAuxColumns(TCoLambda lambda, TExprContext&
             return false;
         }
         if (auto p = TMaybeNode<TYtTablePath>(&node)) {
-            auto input = p.Cast().DependsOn().Input();
-            if (input.Ptr() == innerLambdaArg) {
+            auto row = State_->Types->DirectRowDependsOn ? node.Head().HeadPtr() : node.HeadPtr();
+            if (row == innerLambdaArg) {
                 hasTablePath = true;
                 replaces[&node] = Build<TCoMember>(ctx, node.Pos())
                     .Struct(extendedArg)
@@ -132,10 +123,9 @@ TCoLambda THorizontalJoinBase::CleanupAuxColumns(TCoLambda lambda, TExprContext&
                     .Build()
                     .Done().Ptr();
             }
-        }
-        else if (auto p = TMaybeNode<TYtTableRecord>(&node)) {
-            auto input = p.Cast().DependsOn().Input();
-            if (input.Ptr() == innerLambdaArg) {
+        } else if (auto p = TMaybeNode<TYtTableRecord>(&node)) {
+            auto row = State_->Types->DirectRowDependsOn ? node.Head().HeadPtr() : node.HeadPtr();
+            if (row == innerLambdaArg) {
                 hasTableRecord = true;
                 replaces[&node] = Build<TCoMember>(ctx, node.Pos())
                     .Struct(extendedArg)
@@ -144,10 +134,9 @@ TCoLambda THorizontalJoinBase::CleanupAuxColumns(TCoLambda lambda, TExprContext&
                     .Build()
                     .Done().Ptr();
             }
-        }
-        else if (auto p = TMaybeNode<TYtTableIndex>(&node)) {
-            auto input = p.Cast().DependsOn().Input();
-            if (input.Ptr() == innerLambdaArg) {
+        } else if (auto p = TMaybeNode<TYtTableIndex>(&node)) {
+            auto row = State_->Types->DirectRowDependsOn ? node.Head().HeadPtr() : node.HeadPtr();
+            if (row == innerLambdaArg) {
                 hasTableIndex = true;
                 replaces[&node] = Build<TCoMember>(ctx, node.Pos())
                     .Struct(extendedArg)
@@ -229,20 +218,18 @@ void THorizontalJoinBase::AddToJoinGroup(TYtMap map) {
                 return false;
             }
             if (auto p = TMaybeNode<TYtTablePath>(&node)) {
-                auto input = p.Cast().DependsOn().Input();
-                if (input.Ptr() == innerLambdaArg) {
+                auto row = State_->Types->DirectRowDependsOn ? node.Head().HeadPtr() : node.HeadPtr();
+                if (row == innerLambdaArg) {
                     hasTablePath = true;
                 }
-            }
-            else if (auto p = TMaybeNode<TYtTableRecord>(&node)) {
-                auto input = p.Cast().DependsOn().Input();
-                if (input.Ptr() == innerLambdaArg) {
+            } else if (auto p = TMaybeNode<TYtTableRecord>(&node)) {
+                auto row = State_->Types->DirectRowDependsOn ? node.Head().HeadPtr() : node.HeadPtr();
+                if (row == innerLambdaArg) {
                     hasTableRecord = true;
                 }
-            }
-            else if (auto p = TMaybeNode<TYtTableIndex>(&node)) {
-                auto input = p.Cast().DependsOn().Input();
-                if (input.Ptr() == innerLambdaArg) {
+            } else if (auto p = TMaybeNode<TYtTableIndex>(&node)) {
+                auto row = State_->Types->DirectRowDependsOn ? node.Head().HeadPtr() : node.HeadPtr();
+                if (row == innerLambdaArg) {
                     hasTableIndex = true;
                 }
             }
@@ -283,6 +270,16 @@ TCoLambda THorizontalJoinBase::BuildMapperWithAuxColumnsForSingleInput(TPosition
         .Body("row")
         .Done();
 
+    TCoLambda rowLambda = mapLambda;
+    if (State_->Types->DirectRowDependsOn) {
+        rowLambda = Build<TCoLambda>(ctx, pos)
+            .Args({"row"})
+            .Body<TCoDependsOn>()
+                .Input("row")
+            .Build()
+            .Done();
+    }
+
     if (!UsesTablePath.Empty()) {
         mapLambda = Build<TCoLambda>(ctx, pos)
             .Args({"row"})
@@ -295,8 +292,9 @@ TCoLambda THorizontalJoinBase::BuildMapperWithAuxColumnsForSingleInput(TPosition
                     .Value("_yql_table_path")
                 .Build()
                 .Item<TYtTablePath>()
-                    .DependsOn<TCoDependsOn>()
-                        .Input("row")
+                    .Row<TExprApplier>()
+                        .Apply(rowLambda)
+                        .With(0, "row")
                     .Build()
                 .Build()
             .Build()
@@ -314,8 +312,9 @@ TCoLambda THorizontalJoinBase::BuildMapperWithAuxColumnsForSingleInput(TPosition
                     .Value("_yql_table_record")
                 .Build()
                 .Item<TYtTableRecord>()
-                    .DependsOn<TCoDependsOn>()
-                        .Input("row")
+                    .Row<TExprApplier>()
+                        .Apply(rowLambda)
+                        .With(0, "row")
                     .Build()
                 .Build()
             .Build()
@@ -333,8 +332,9 @@ TCoLambda THorizontalJoinBase::BuildMapperWithAuxColumnsForSingleInput(TPosition
                     .Value("_yql_table_index")
                 .Build()
                 .Item<TYtTableIndex>()
-                    .DependsOn<TCoDependsOn>()
-                        .Input("row")
+                    .Row<TExprApplier>()
+                        .Apply(rowLambda)
+                        .With(0, "row")
                     .Build()
                 .Build()
             .Build()
@@ -389,6 +389,16 @@ TCoLambda THorizontalJoinBase::BuildMapperWithAuxColumnsForMultiInput(TPositionH
             .Body("row")
             .Done();
 
+        TCoLambda rowLambda = visitLambda;
+        if (State_->Types->DirectRowDependsOn) {
+            rowLambda = Build<TCoLambda>(ctx, pos)
+                .Args({"row"})
+                .Body<TCoDependsOn>()
+                    .Input("row")
+                .Build()
+                .Done();
+        }
+
         if (UsesTablePath.Get(i)) {
             visitLambda = Build<TCoLambda>(ctx, pos)
                 .Args({"row"})
@@ -401,8 +411,9 @@ TCoLambda THorizontalJoinBase::BuildMapperWithAuxColumnsForMultiInput(TPositionH
                         .Value("_yql_table_path")
                     .Build()
                     .Item<TYtTablePath>()
-                        .DependsOn<TCoDependsOn>()
-                            .Input("row")
+                        .Row<TExprApplier>()
+                            .Apply(rowLambda)
+                            .With(0, "row")
                         .Build()
                     .Build()
                 .Build()
@@ -421,8 +432,9 @@ TCoLambda THorizontalJoinBase::BuildMapperWithAuxColumnsForMultiInput(TPositionH
                         .Value("_yql_table_record")
                     .Build()
                     .Item<TYtTableRecord>()
-                        .DependsOn<TCoDependsOn>()
-                            .Input("row")
+                        .Row<TExprApplier>()
+                            .Apply(rowLambda)
+                            .With(0, "row")
                         .Build()
                     .Build()
                 .Build()
@@ -441,8 +453,9 @@ TCoLambda THorizontalJoinBase::BuildMapperWithAuxColumnsForMultiInput(TPositionH
                         .Value("_yql_table_index")
                     .Build()
                     .Item<TYtTableIndex>()
-                        .DependsOn<TCoDependsOn>()
-                            .Input("row")
+                        .Row<TExprApplier>()
+                            .Apply(rowLambda)
+                            .With(0, "row")
                         .Build()
                     .Build()
                 .Build()
@@ -603,6 +616,7 @@ TExprNode::TPtr THorizontalJoinOptimizer::HandleList(const TExprNode::TPtr& node
             size_t outNdx = JoinedMaps.size();
             const TExprNode* columns = nullptr;
             const TExprNode* ranges = nullptr;
+            const TExprNode* qlFilter = nullptr;
             bool incompleteSectionSettings = false;
             if (sectionList) {
                 const auto section = TYtSection(node->Child(sectionNum));
@@ -614,6 +628,7 @@ TExprNode::TPtr THorizontalJoinOptimizer::HandleList(const TExprNode::TPtr& node
 
                 columns = path.Columns().Raw();
                 ranges = path.Ranges().Raw();
+                qlFilter = path.QLFilter().Raw();
             }
 
             auto uniqIt = UniqMaps.find(map.Raw());
@@ -622,7 +637,7 @@ TExprNode::TPtr THorizontalJoinOptimizer::HandleList(const TExprNode::TPtr& node
                 // Move all {section,path} pairs to ExclusiveOuts
                 ExclusiveOuts[uniqIt->second].emplace_back(sectionNum, pathNum);
 
-                auto it = GroupedOuts.find(std::make_tuple(sectionNum, columns, ranges));
+                auto it = GroupedOuts.find(std::make_tuple(sectionNum, columns, ranges, qlFilter));
                 if (it != GroupedOuts.end()) {
                     auto itOut = it->second.find(uniqIt->second);
                     if (itOut != it->second.end()) {
@@ -655,7 +670,7 @@ TExprNode::TPtr THorizontalJoinOptimizer::HandleList(const TExprNode::TPtr& node
                     outputCountIncrement = 1;
                 }
             }
-            else if (GroupedOuts.find(std::make_tuple(sectionNum, columns, ranges)) == GroupedOuts.end()) {
+            else if (GroupedOuts.find(std::make_tuple(sectionNum, columns, ranges, qlFilter)) == GroupedOuts.end()) {
                 outputCountIncrement = 1;
             }
 
@@ -704,16 +719,26 @@ TExprNode::TPtr THorizontalJoinOptimizer::HandleList(const TExprNode::TPtr& node
             if (sortedOut || incompleteSectionSettings) {
                 ExclusiveOuts[outNdx].emplace_back(sectionNum, pathNum);
             } else {
-                GroupedOuts[std::make_tuple(sectionNum, columns, ranges)][outNdx] = pathNum;
+                GroupedOuts[std::make_tuple(sectionNum, columns, ranges, qlFilter)][outNdx] = pathNum;
             }
             UniqMaps.emplace(map.Raw(), outNdx);
 
             auto section = map.Input().Item(0);
             if (section.Paths().Size() == 1) {
                 auto path = section.Paths().Item(0);
-                GroupedInputs.emplace(path.Table().Raw(), path.Ranges().Raw(), section.Settings().Raw(), NYql::HasSetting(map.Settings().Ref(), EYtSettingType::WeakFields));
+                GroupedInputs.emplace(
+                    path.Table().Raw(),
+                    path.Ranges().Raw(),
+                    path.QLFilter().Raw(),
+                    section.Settings().Raw(),
+                    NYql::HasSetting(map.Settings().Ref(), EYtSettingType::WeakFields));
             } else {
-                GroupedInputs.emplace(section.Raw(), nullptr, nullptr, NYql::HasSetting(map.Settings().Ref(), EYtSettingType::WeakFields));
+                GroupedInputs.emplace(
+                    section.Raw(),
+                    nullptr,
+                    nullptr,
+                    nullptr,
+                    NYql::HasSetting(map.Settings().Ref(), EYtSettingType::WeakFields));
             }
 
             AddToJoinGroup(map);
@@ -876,7 +901,7 @@ bool THorizontalJoinOptimizer::MakeJoinedMap(TPositionHandle pos, TExprContext& 
                 for (auto itemType: map.Input().Item(0).Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->GetItems()) {
                     usedFields.insert(itemType->GetName());
                 }
-                if (std::get<3>(*GroupedInputs.begin())) {
+                if (std::get<4>(*GroupedInputs.begin())) {
                     for (auto path: map.Input().Item(0).Paths()) {
                         if (auto columns = path.Columns().Maybe<TExprList>()) {
                             for (auto child: columns.Cast()) {
@@ -1382,9 +1407,19 @@ bool TMultiHorizontalJoinOptimizer::HandleGroup(const TVector<TYtMap>& maps, TEx
         auto section = map.Input().Item(0);
         if (section.Paths().Size() == 1) {
             auto path = section.Paths().Item(0);
-            GroupedInputs.emplace(path.Table().Raw(), path.Ranges().Raw(), section.Settings().Raw(), NYql::HasSetting(map.Settings().Ref(), EYtSettingType::WeakFields));
+            GroupedInputs.emplace(
+                path.Table().Raw(),
+                path.Ranges().Raw(),
+                path.QLFilter().Raw(),
+                section.Settings().Raw(),
+                NYql::HasSetting(map.Settings().Ref(), EYtSettingType::WeakFields));
         } else {
-            GroupedInputs.emplace(section.Raw(), nullptr, nullptr, NYql::HasSetting(map.Settings().Ref(), EYtSettingType::WeakFields));
+            GroupedInputs.emplace(
+                section.Raw(),
+                nullptr,
+                nullptr,
+                nullptr,
+                NYql::HasSetting(map.Settings().Ref(), EYtSettingType::WeakFields));
         }
 
         AddToJoinGroup(map);
@@ -1423,7 +1458,7 @@ bool TMultiHorizontalJoinOptimizer::MakeJoinedMap(TExprContext& ctx) {
                 for (auto itemType: map.Input().Item(0).Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->GetItems()) {
                     usedFields.insert(itemType->GetName());
                 }
-                if (std::get<3>(*GroupedInputs.begin())) {
+                if (std::get<4>(*GroupedInputs.begin())) {
                     for (auto path: map.Input().Item(0).Paths()) {
                         if (auto columns = path.Columns().Maybe<TExprList>()) {
                             for (auto child: columns.Cast()) {
@@ -1665,8 +1700,16 @@ bool TOutHorizontalJoinOptimizer::MakeJoinedMap(TPositionHandle pos, const TGrou
         }
 
         auto sectionSettingsBuilder = Build<TCoNameValueTupleList>(ctx, pos);
-        if (std::get<4>(key)) {
-            sectionSettingsBuilder.Add(ctx.ShallowCopy(*std::get<4>(key)));
+        if (std::get<4>(key) && !std::get<4>(key)->IsCallable("Void")) {
+            sectionSettingsBuilder
+                .Add()
+                    .Name()
+                        .Value(ToString(EYtSettingType::QLFilter))
+                    .Build()
+                .Build();
+        }
+        if (std::get<5>(key)) {
+            sectionSettingsBuilder.Add(ctx.ShallowCopy(*std::get<5>(key)));
         }
         if (!UsedSysFields.empty()) {
             sectionSettingsBuilder
@@ -1692,7 +1735,9 @@ bool TOutHorizontalJoinOptimizer::MakeJoinedMap(TPositionHandle pos, const TGrou
                             .Table(ctx.ShallowCopy(*std::get<2>(key)))
                             .Columns(columns)
                             .Ranges(ctx.ShallowCopy(*std::get<3>(key)))
+                            .QLFilter(ctx.ShallowCopy(*std::get<4>(key)))
                             .Stat<TCoVoid>().Build()
+                            .QLFilter<TCoVoid>().Build()
                         .Build()
                     .Build()
                     .Settings(sectionSettingsBuilder.Done())
@@ -1834,6 +1879,7 @@ IGraphTransformer::TStatus TOutHorizontalJoinOptimizer::Optimize(TExprNode::TPtr
                     map.World().Raw(),
                     table.Cast().Raw(),
                     path.Ranges().Raw(),
+                    path.QLFilter().Raw(),
                     NYql::GetSetting(section.Settings().Ref(), EYtSettingType::Sample).Get(),
                     flags
                 };
@@ -1860,6 +1906,7 @@ IGraphTransformer::TStatus TOutHorizontalJoinOptimizer::Optimize(TExprNode::TPtr
                     map.World().Raw(),
                     std::get<2>(reader),
                     section.Paths().Item(0).Ranges().Raw(),
+                    section.Paths().Item(0).QLFilter().Raw(),
                     NYql::GetSetting(section.Settings().Ref(), EYtSettingType::Sample).Get(),
                     flags
                 };

@@ -25,8 +25,7 @@ PYTHONIC_NS_END
 PYTHONIC_NS_BEGIN
 
 template <class R, class... Args>
-PyObject *
-to_python<types::cfun<R(Args...)>>::convert(types::cfun<R(Args...)> const &v)
+PyObject *to_python<types::cfun<R(Args...)>>::convert(types::cfun<R(Args...)> const &v)
 {
   return PyCapsule_New(v.ptr, nullptr, nullptr);
 }
@@ -38,11 +37,9 @@ bool from_python<types::cfun<R(Args...)>>::is_convertible(PyObject *obj)
 }
 
 template <class R, class... Args>
-types::cfun<R(Args...)>
-from_python<types::cfun<R(Args...)>>::convert(PyObject *obj)
+types::cfun<R(Args...)> from_python<types::cfun<R(Args...)>>::convert(PyObject *obj)
 {
-  void *ptr = PyCapsule_GetPointer(
-      obj, PyCapsule_GetName(obj) /* avoid the string check*/);
+  void *ptr = PyCapsule_GetPointer(obj, PyCapsule_GetName(obj) /* avoid the string check*/);
   return {reinterpret_cast<R (*)(Args...)>(ptr)};
 }
 PYTHONIC_NS_END

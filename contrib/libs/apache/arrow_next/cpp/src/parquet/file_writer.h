@@ -22,10 +22,10 @@
 #include <memory>
 #include <utility>
 
-#include "parquet/metadata.h"
-#include "parquet/platform.h"
-#include "parquet/properties.h"
-#include "parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/properties.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
 
 namespace parquet20 {
 

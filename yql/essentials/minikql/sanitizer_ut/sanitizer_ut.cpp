@@ -16,7 +16,8 @@ enum class EAllocatorType {
 class MemoryTest: public testing::Test {
 protected:
     MemoryTest()
-        : ScopedAlloc_(__LOCATION__) {
+        : ScopedAlloc_(__LOCATION__)
+    {
     }
 
     void AccessMemory(volatile void* memory, ssize_t offset) const {
@@ -321,6 +322,7 @@ TEST_P(MemoryTestWithSizeAndAllocator, DoubleFree) {
 // Allow empty tests for MSAN and other sanitizers.
 GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(MemoryTestWithSizeAndAllocator);
 
+// NOLINTNEXTLINE(misc-use-anonymous-namespace)
 INSTANTIATE_TEST_SUITE_P(MemoryTestWithSizeAndAllocators, MemoryTestWithSizeAndAllocator,
                          ::testing::Combine(::testing::Values(8, 64, 32 * 1024, 64 * 1024, 128 * 1024, 64 * 1024 * 1024),
                                             ::testing::Values(EAllocatorType::DefaultAllocator, EAllocatorType::ArrowAllocator,

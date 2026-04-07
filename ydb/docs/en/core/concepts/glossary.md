@@ -115,6 +115,9 @@ The term **interactive transactions** refers to transactions that are split into
 1. Update some data in the database.
 1. Commit the transaction in a separate query.
 
+### Sessions
+
+Logical "connections" to the database that maintains the context needed to execute queries and manage transactions. They are explained in more detail in [{#T}](query_execution.md#sessions).
 
 ### Multi-version concurrency control {#mvcc}
 
@@ -133,6 +136,14 @@ A **region** is a large geographic area containing multiple availability zones. 
 #### Rack {#rack}
 
 A **rack** or **server rack** is a piece of equipment used to mount multiple servers in an organized manner. Servers in the same rack are more likely to become unavailable simultaneously due to rack-wide issues related to electricity, cooling, etc. Thus, {{ ydb-short-name }} can consider information about which server is located in which rack when placing each piece of data in bare-metal environments.
+
+#### Pile {#pile}
+
+A **pile** is a set of nodes that can fail or be disconnected simultaneously while other cluster parts (pile) remain operational. A pile can remain operational when other cluster nodes are disconnected. Pile are used in [bridge mode](#bridge) to divide the cluster into several parts with synchronous replication between them. A pile can consist of nodes from one or more regions.
+
+#### Bridge mode {#bridge}
+
+**Bridge mode** is a special cluster topology in which data is stored with synchronous replication between multiple [pile](#pile). Mode details are described in [{#T}](topology.md#bridge) and in [{#T}](bridge.md).
 
 ### Table {#table}
 
@@ -192,13 +203,13 @@ A **user-defined view** is created by a user with the [{#T}](../yql/reference/sy
 
 #### System view {#system-view}
 
-A **system view** is for monitoring the DB status. System views are located in the .sys directory in the root of the database tree. It is explained in a separate article [{#T}](../dev/system-views.md).
+**System views** are special views automatically created by the system for monitoring the state of the database and cluster. They are located in a special directory `.sys` in the root folder of each database. System views for databases are described in [{#T}](../dev/system-views.md); system views for the cluster, as well as access control issues for them, are described in [{#T}](../devops/observability/system-views.md).
 
 ### Topic {#topic}
 
 A **topic** is a persistent queue that can be used for reliable asynchronous communications between various systems via message passing. {{ ydb-short-name }} provides the infrastructure to ensure "exactly once" semantics in such communications, which ensures that there are both no lost messages and no accidental duplicates.
 
-Several terms related to topics are listed below. How {{ ydb-short-name }} topics work is explained in more detail in a separate article [{#T}](topic.md).
+Several terms related to topics are listed below. How {{ ydb-short-name }} topics work is explained in more detail in a separate article [{#T}](datamodel/topic.md).
 
 #### Partition {#partition}
 
@@ -245,6 +256,14 @@ A **coordination node** is a schema object that allows client applications to cr
 #### Semaphore {#semaphore}
 
 A **semaphore** is an object within a [coordination node](#coordination-node) that provides a synchronization mechanism for distributed applications. Semaphores can be persistent or ephemeral and support operations like creation, acquisition, release, and monitoring. Learn more about [semaphores in {{ ydb-short-name }}](./datamodel/coordination-node.md#semaphore).
+
+{% if feature_resource_pool == true and feature_resource_pool_classifier == true %}
+
+**Resource pool** is a schema object that describes the restrictions placed on the resources (CPU, RAM, etc.) available for executing queries in this resource pool. A query is always executed in some resource pool. By default, all queries are executed in a resource pool named `default`, which does not impose any restrictions. More information about using resource pools can be found in the article (link)
+
+**Resource pool classifier** is an object designed to manage the distribution of queries between resource pools(link). It describes the rules by which a pool of resources is selected for each query. These classifiers are global for the entire database(link) and apply to all queries entering it. More information about their use can be found in the article (link)
+
+{% endif %}
 
 ### YQL {#yql}
 
@@ -416,9 +435,9 @@ The **actor system pool** is a [thread pool](https://en.wikipedia.org/wiki/Threa
 
 - **System**: A pool that handles internal operations within {{ ydb-short-name }} node. It serves system [tablets](#tablet), [state storage](#state-storage), [distributed storage](#distributed-storage) I/O, and so on.
 
-- **User**: A pool dedicated to user-generated load, such as running non-system tablets or queries executed by the [KQP](#kqp).
+- **User**: A pool dedicated to user-generated load, such as running non-system tablets or queries executed by the [QP](#kqp).
 
-- **Batch**: A pool for tasks without strict execution deadlines, including heavy queries handled by the [KQP](#kqp) background operations like backups, data compaction, and garbage collection.
+- **Batch**: A pool for tasks without strict execution deadlines, including heavy queries handled by the [QP](#kqp) background operations like backups, data compaction, and garbage collection.
 
 - **IO**: A pool for tasks involving blocking operations, such as authentication or writing logs to files.
 
@@ -576,6 +595,14 @@ Information in state storage is volatile. Thus, it is lost when the power is tur
 
 Due to its nature, the state storage service operates in a best-effort manner. For example, the absence of several tablet leaders is guaranteed through the leader election protocol on [distributed storage](#distributed-storage), not state storage.
 
+### Board {#board}
+
+**Board** is a distributed service for storing metadata as key-value pairs. It is used, among other things, to store information about [endpoints](connect.md#endpoint).
+
+### Scheme board {#scheme-board}
+
+**SchemeBoard** is a distributed service for storing metadata as key-value pairs. It is used, among other things, to store information about [schemes](#global-schema).
+
 #### Compaction {#compaction}
 
 **Compaction** is the internal background process of rebuilding [LSM tree](#lsm-tree) data. The data in [VDisks](#vdisk) and [local databases](#local-database) are organized in the form of an LSM tree. Therefore, there is a distinction between **VDisk compaction** and **Tablet compaction**. The compaction process is usually quite resource-intensive, so efforts are made to minimize the overhead associated with it, for example, by limiting the number of concurrent compactions.
@@ -583,6 +610,12 @@ Due to its nature, the state storage service operates in a best-effort manner. F
 #### gRPC proxy {#grpc-proxy}
 
 A **gRPC Proxy** is the client proxy system for external user requests. Client requests enter the system via the [gRPC](https://grpc.io) protocol, then the proxy component translates them into internal calls for executing these requests, passed around via [Interconnect](#actor-system-interconnect). This proxy provides an interface for both request-response and bidirectional streaming.
+
+### Distributed configuration {#distributed-configuration}
+
+**Distributed configuration** or **DistConf** is an internal cluster [configuration](../devops/configuration-management/configuration-v2/config-overview.md) mechanism that handles startup and configuration of [static nodes](#static-node), automatic management of [static storage groups](#static-group), and [State storage](#state-storage). Distributed configuration starts before any [tablets](#tablet), [storage groups](#storage-group), or [State storage](#state-storage).
+
+For more on how distributed configuration works, see [{#T}](../contributor/configuration-v2.md).
 
 ### Distributed storage implementation {#distributed-storage-implementation}
 
@@ -683,6 +716,10 @@ Terms related to the implementation of [distributed transactions](#transactions)
 
 As in many other database management systems, {{ ydb-short-name }} queries can put locks on certain pieces of data, like table rows, to ensure that concurrent access does not modify them into an inconsistent state. However, {{ ydb-short-name }} checks these locks not at the beginning of transactions but during commit attempts. The former is called **pessimistic locking** (used in PostgreSQL, for example), while the latter is called **optimistic locking** (used in {{ ydb-short-name }}).
 
+#### Transaction lock invalidation {#tli}
+
+**Transaction lock invalidation** (TLI) is the standard behavior of {{ ydb-short-name }} when parallel transactions conflict under [optimistic locking](#optimistic-locking). If one transaction (the breaker) writes data and thereby breaks the locks of another transaction (the victim), {{ ydb-short-name }} detects this at the victim's commit time and rolls it back with a `transaction locks invalidated` error. For more information about TLI diagnostics, see [{#T}](../troubleshooting/performance/queries/transaction-lock-invalidation.md).
+
 #### Prepare stage {#prepare-stage}
 
 The **prepare stage** is a phase of distributed transaction execution, during which the transaction body is registered on all participating shards.
@@ -707,7 +744,7 @@ The **read set** or **ReadSet data** is what participating shards forward during
 
 #### Transaction proxy {#transaction-proxy}
 
-The **transaction proxy** or `TX_PROXY` is a service that orchestrates the execution of many [distributed transactions](#transactions): sequential phases, phase execution, planning, and aggregation of results. In the case of direct orchestration by other actors (for example, KQP data transactions), it is used for caching and allocation of unique [TxIDs](#txid).
+The **transaction proxy** or `TX_PROXY` is a service that orchestrates the execution of many [distributed transactions](#transactions): sequential phases, phase execution, planning, and aggregation of results. In the case of direct orchestration by other actors (for example, QP data transactions), it is used for caching and allocation of unique [TxIDs](#txid).
 
 #### Transaction flags {#txflags}
 
@@ -735,9 +772,9 @@ During the distributed query execution, **mediator time** is the logical time be
 
 MiniKQL is a low-level language. The system's end users only see queries in the [YQL](#yql) language, which relies on MiniKQL in its implementation.
 
-#### KQP {#kqp}
+#### Query Processor {#kqp}
 
-**KQP** or **Query Processor** is a {{ ydb-short-name }} component responsible for the orchestration of user query execution and generating the final response.
+**QP** or **Query Processor** (previously, **KQP**) is a {{ ydb-short-name }} component responsible for the orchestration of user query execution and generating the final response.
 
 ### Global schema {#global-schema}
 

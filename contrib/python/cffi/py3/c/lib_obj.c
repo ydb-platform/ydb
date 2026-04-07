@@ -158,11 +158,11 @@ static PyObject *lib_build_cpython_func(LibObject *lib,
        random even value.  But OP_FUNCTION_END is odd, so the
        condition below still works correctly. */
     i = type_index + 1;
-    while (_CFFI_GETOP(opcodes[i]) != _CFFI_OP_FUNCTION_END)
+    while (_CFFI_GETOP(_CFFI_LOAD_OP(opcodes[i])) != _CFFI_OP_FUNCTION_END)
         i++;
     pfargs = alloca(sizeof(CTypeDescrObject *) * (i - type_index - 1));
     i = type_index + 1;
-    while (_CFFI_GETOP(opcodes[i]) != _CFFI_OP_FUNCTION_END) {
+    while (_CFFI_GETOP(_CFFI_LOAD_OP(opcodes[i])) != _CFFI_OP_FUNCTION_END) {
         CTypeDescrObject *ct = realize_c_type(lib->l_types_builder, opcodes, i);
         if (ct == NULL)
             goto error;
@@ -554,7 +554,7 @@ static PyObject *lib_getattr(LibObject *lib, PyObject *name)
         Py_INCREF(x);
         return x;
     }
-    /* this hack is for Python 3.5, and also to give a more 
+    /* this hack is for Python 3.5, and also to give a more
        module-like behavior */
     if (strcmp(p, "__name__") == 0) {
         PyErr_Clear();

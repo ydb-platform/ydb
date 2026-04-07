@@ -5,6 +5,8 @@
 #include <yql/essentials/core/sql_types/match_recognize.h>
 #include <util/generic/ptr.h>
 
+#include <utility>
+
 namespace NSQLTranslationV1 {
 
 struct TNamedFunction {
@@ -26,18 +28,19 @@ public:
         TNodePtr patternVars,
         TNodePtr subset,
         TVector<TNamedFunction> definitions)
-    : Pos_(pos)
-    , PartitionKeySelector_(std::move(partitionKeySelector))
-    , PartitionColumns_(std::move(partitionColumns))
-    , SortSpecs_(std::move(sortSpecs))
-    , Measures_(std::move(measures))
-    , RowsPerMatch_(std::move(rowsPerMatch))
-    , SkipTo_(std::move(skipTo))
-    , Pattern_(std::move(pattern))
-    , PatternVars_(std::move(patternVars))
-    , Subset_(std::move(subset))
-    , Definitions_(std::move(definitions))
-    {}
+        : Pos_(std::move(pos))
+        , PartitionKeySelector_(std::move(partitionKeySelector))
+        , PartitionColumns_(std::move(partitionColumns))
+        , SortSpecs_(std::move(sortSpecs))
+        , Measures_(std::move(measures))
+        , RowsPerMatch_(std::move(rowsPerMatch))
+        , SkipTo_(std::move(skipTo))
+        , Pattern_(std::move(pattern))
+        , PatternVars_(std::move(patternVars))
+        , Subset_(std::move(subset))
+        , Definitions_(std::move(definitions))
+    {
+    }
 
     TNodePtr Build(TContext& ctx, TString label, ISource* source);
 

@@ -93,7 +93,7 @@ ELockType GetStrongestLock(ELockType lhs, ELockType rhs)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator == (const TLockMask& lhs, const TLockMask& rhs)
+bool operator==(const TLockMask& lhs, const TLockMask& rhs)
 {
     int lockCount = std::max(lhs.GetSize(), rhs.GetSize());
     for (int index = 0; index < lockCount; ++index) {
@@ -334,14 +334,8 @@ std::string TColumnSchema::GetDiagnosticNameString() const
 ////////////////////////////////////////////////////////////////////////////////
 
 TDeletedColumn::TDeletedColumn(TColumnStableName stableName)
-    : StableName_(stableName)
+    : StableName_(std::move(stableName))
 { }
-
-TDeletedColumn& TDeletedColumn::SetStableName(TColumnStableName value)
-{
-    StableName_ = std::move(value);
-    return *this;
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -470,7 +464,7 @@ void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema)
 
 void FromProto(TDeletedColumn* schema, const NProto::TDeletedColumn& protoSchema)
 {
-    schema->SetStableName(TColumnStableName{protoSchema.stable_name()});
+    schema->StableName() = TColumnStableName{protoSchema.stable_name()};
 }
 
 void PrintTo(const TColumnSchema& columnSchema, std::ostream* os)
@@ -766,14 +760,20 @@ bool TTableSchema::IsEmpty() const
     return Columns().empty();
 }
 
-bool TTableSchema::IsCGComparatorApplicable() const
+bool TTableSchema::IsCGComparatorApplicable(std::optional<int> keyColumnCount) const
 {
-    if (GetKeyColumnCount() > MaxKeyColumnCountInDynamicTable) {
+    auto keyTypes = GetKeyColumnTypes();
+    auto checkCount = keyColumnCount.value_or(std::ssize(keyTypes));
+
+    if (checkCount > std::ssize(keyTypes)) {
         return false;
     }
 
-    auto keyTypes = GetKeyColumnTypes();
-    return std::none_of(keyTypes.begin(), keyTypes.end(), [] (auto type) {
+    if (checkCount > MaxKeyColumnCountInDynamicTable) {
+        return false;
+    }
+
+    return std::none_of(keyTypes.begin(), keyTypes.begin() + checkCount, [](const auto& type) {
         return type == EValueType::Any || type == EValueType::Null;
     });
 }
@@ -1275,7 +1275,7 @@ TTableSchemaPtr TTableSchema::ToSorted(const TKeyColumns& keyColumns) const
     for (const auto& keyColumn : keyColumns) {
         sortColumns.push_back(TColumnSortSchema{
             .Name = keyColumn,
-            .SortOrder = ESortOrder::Ascending
+            .SortOrder = ESortOrder::Ascending,
         });
     }
 
@@ -1817,7 +1817,7 @@ std::optional<TNestedColumn> TryParseNestedAggregate(TStringBuf description)
         throwError("expected \")\" or \",\" ");
     }
 
-    THROW_ERROR_EXCEPTION("Error while parsing nested aggregate description. Expected nested_key or nested_value");
+    THROW_ERROR_EXCEPTION("Error while parsing nested aggregate description: expected \"nested_key\" or \"nested_value\"");
 }
 
 EValueType GetNestedColumnElementType(const TLogicalType* logicalType)
@@ -1997,10 +1997,11 @@ void ValidateColumnSchema(
                 options);
         }
 
-        {
-            TComplexTypeFieldDescriptor descriptor(name, columnSchema.LogicalType());
-            ValidateLogicalType(descriptor, MaxSchemaDepth);
-        }
+        ValidateLogicalType(
+            TComplexTypeFieldDescriptor(name, columnSchema.LogicalType()),
+            TLogicalTypeValidationOptions{
+                .DepthLimit = MaxSchemaDepth,
+            });
 
         if (!IsComparable(columnSchema.LogicalType()) &&
             columnSchema.SortOrder() &&
@@ -2542,22 +2543,6 @@ void FromProto(NTableClient::TColumnFilter* columnFilter, const TColumnFilter& p
 }
 
 } // namespace NProto
-
-////////////////////////////////////////////////////////////////////////////////
-
-TCellTaggedTableSchema::TCellTaggedTableSchema(TTableSchema tableSchema, TCellTag cellTag)
-    : TableSchema(std::move(tableSchema))
-    , CellTag(cellTag)
-{ }
-
-////////////////////////////////////////////////////////////////////////////////
-
-TCellTaggedTableSchemaPtr::TCellTaggedTableSchemaPtr(TTableSchemaPtr tableSchema, TCellTag cellTag)
-    : TableSchema(std::move(tableSchema))
-    , CellTag(cellTag)
-{
-    YT_VERIFY(TableSchema);
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 

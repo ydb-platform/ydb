@@ -35,6 +35,10 @@ def get_sql_flags():
     if yql_get_param('SQL_FLAGS'):
         flags = yql_get_param('SQL_FLAGS').split(',')
         gateway_config.SqlCore.TranslationFlags.extend(flags)
+
+    for flag in gateway_config.SqlCore.ExtendedTranslationFlags:
+        gateway_config.SqlCore.TranslationFlags.append(flag.Name)
+
     return gateway_config.SqlCore.TranslationFlags
 
 
@@ -80,8 +84,8 @@ def pytest_generate_tests_by_template(template, metafunc, data_path):
     metafunc.parametrize(['suite', 'case'], argvalues)
 
 
-def pytest_generate_sql_tests(metafunc, data_path):
-    pytest_generate_tests_by_template(['.sql', '.yql'], metafunc, data_path)
+def pytest_generate_sql_tests(metafunc, data_path, template=['.sql', '.yql']):
+    pytest_generate_tests_by_template(template, metafunc, data_path)
 
 
 def collect_argvalues_for_run(template, suites, currentPart, partsCount, data_path, mode_expander):
@@ -162,6 +166,7 @@ def validate_cfg(result):
             "canonize_lineage",
             "peephole_use_blocks",
             "with_final_result_issues",
+            "xsqlfail",
             "xfail",
             "pragma",
             "canonize_yt",

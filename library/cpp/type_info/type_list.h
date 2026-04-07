@@ -63,6 +63,9 @@ namespace NTi {
         Date32,
         Datetime64,
         Timestamp64,
+        TzDate32,
+        TzDatetime64,
+        TzTimestamp64,
         Interval64,
     };
 
@@ -106,6 +109,9 @@ namespace NTi {
         Date32,
         Datetime64,
         Timestamp64,
+        TzDate32,
+        TzDatetime64,
+        TzTimestamp64,
         Interval64,
 
         FIRST_PRIMITIVE = Bool,

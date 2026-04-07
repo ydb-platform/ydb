@@ -12,6 +12,7 @@
 #include <yt/yt/core/concurrency/delayed_executor.h>
 #include <yt/yt/core/concurrency/thread_affinity.h>
 #include <yt/yt/core/concurrency/fair_share_thread_pool.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 #include <yt/yt/core/concurrency/two_level_fair_share_thread_pool.h>
 
 #include <yt/yt/core/logging/log.h>
@@ -377,11 +378,11 @@ TEST_F(TSchedulerTest, CurrentInvokerSync)
 TEST_F(TSchedulerTest, CurrentInvokerInActionQueue)
 {
     auto invoker = Queue1->GetInvoker();
-    BIND([=] {
+    WaitFor(BIND([=] {
         EXPECT_EQ(invoker, GetCurrentInvoker());
     })
-    .AsyncVia(invoker).Run()
-    .Get();
+    .AsyncVia(invoker).Run())
+        .ThrowOnError();
 }
 
 TEST_F(TSchedulerTest, Intercept)
@@ -389,7 +390,7 @@ TEST_F(TSchedulerTest, Intercept)
     auto invoker = Queue1->GetInvoker();
     int counter1 = 0;
     int counter2 = 0;
-    BIND([&] {
+    WaitFor(BIND([&] {
         TContextSwitchGuard guard(
             [&] {
                 EXPECT_EQ(counter1, 0);
@@ -403,8 +404,8 @@ TEST_F(TSchedulerTest, Intercept)
             });
         TDelayedExecutor::WaitForDuration(SleepQuantum);
     })
-    .AsyncVia(invoker).Run()
-    .Get();
+    .AsyncVia(invoker).Run())
+        .ThrowOnError();
     EXPECT_EQ(counter1, 1);
     EXPECT_EQ(counter2, 1);
 }
@@ -416,7 +417,7 @@ TEST_F(TSchedulerTest, InterceptEnclosed)
     int counter2 = 0;
     int counter3 = 0;
     int counter4 = 0;
-    BIND([&] {
+    WaitFor(BIND([&] {
         {
             TContextSwitchGuard guard(
                 [&] { ++counter1; },
@@ -432,8 +433,8 @@ TEST_F(TSchedulerTest, InterceptEnclosed)
         }
         TDelayedExecutor::WaitForDuration(SleepQuantum);
     })
-    .AsyncVia(invoker).Run()
-    .Get();
+    .AsyncVia(invoker).Run())
+        .ThrowOnError();
     EXPECT_EQ(counter1, 3);
     EXPECT_EQ(counter2, 3);
     EXPECT_EQ(counter3, 1);
@@ -453,8 +454,8 @@ TEST_F(TSchedulerTest, CurrentInvokerConcurrent)
         EXPECT_EQ(invoker2, GetCurrentInvoker());
     }).AsyncVia(invoker2).Run();
 
-    result1.Get();
-    result2.Get();
+    WaitUntilSet(result1);
+    WaitUntilSet(result2);
 }
 
 TEST_W(TSchedulerTest, WaitForAsyncVia)
@@ -472,11 +473,11 @@ TEST_W(TSchedulerTest, WaitForAsyncVia)
 TEST_F(TSchedulerTest, WaitForInSerializedInvoker1)
 {
     auto invoker = CreateSerializedInvoker(Queue1->GetInvoker());
-    BIND([&] {
+    WaitForFast(BIND([&] {
         for (int i = 0; i < 10; ++i) {
             TDelayedExecutor::WaitForDuration(SleepQuantum);
         }
-    }).AsyncVia(invoker).Run().Get().ThrowOnError();
+    }).AsyncVia(invoker).Run()).ThrowOnError();
 }
 
 TEST_F(TSchedulerTest, WaitForInSerializedInvoker2)
@@ -499,7 +500,7 @@ TEST_F(TSchedulerTest, WaitForInSerializedInvoker2)
         }
     }).AsyncVia(invoker).Run());
 
-    AllSucceeded(futures).Get().ThrowOnError();
+    WaitForFast(AllSucceeded(futures)).ThrowOnError();
 }
 
 TEST_F(TSchedulerTest, PropagateFiberCancelationToFuture)
@@ -545,7 +546,7 @@ TEST_F(TSchedulerTest, FiberUnwindOrder)
     p1.Set();
     Sleep(SleepQuantum);
     EXPECT_TRUE(f2.IsSet());
-    EXPECT_FALSE(f2.Get().IsOK());
+    EXPECT_FALSE(WaitForFast(f2).IsOK());
 }
 
 TEST_F(TSchedulerTest, TestWaitUntilSet)
@@ -560,7 +561,7 @@ TEST_F(TSchedulerTest, TestWaitUntilSet)
 
     WaitUntilSet(f1);
     EXPECT_TRUE(f1.IsSet());
-    EXPECT_TRUE(f1.Get().IsOK());
+    EXPECT_TRUE(WaitForFast(f1).IsOK());
 }
 
 TEST_F(TSchedulerTest, AsyncViaCanceledBeforeStart)
@@ -575,10 +576,10 @@ TEST_F(TSchedulerTest, AsyncViaCanceledBeforeStart)
     EXPECT_FALSE(asyncResult1.IsSet());
     EXPECT_FALSE(asyncResult2.IsSet());
     asyncResult2.Cancel(TError("Error"));
-    EXPECT_TRUE(asyncResult1.Get().IsOK());
+    EXPECT_TRUE(WaitForFast(asyncResult1).IsOK());
     Sleep(SleepQuantum);
     EXPECT_TRUE(asyncResult2.IsSet());
-    EXPECT_EQ(NYT::EErrorCode::Canceled, asyncResult2.Get().GetCode());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, WaitForFast(asyncResult2).GetCode());
 }
 
 TEST_F(TSchedulerTest, CancelCurrentFiber)
@@ -588,9 +589,9 @@ TEST_F(TSchedulerTest, CancelCurrentFiber)
         NYT::NConcurrency::GetCurrentFiberCanceler().Run(TError("Error"));
         SwitchTo(invoker);
     }).AsyncVia(invoker).Run();
-    asyncResult.Get();
+    WaitUntilSet(asyncResult);
     EXPECT_TRUE(asyncResult.IsSet());
-    EXPECT_EQ(NYT::EErrorCode::Canceled, asyncResult.Get().GetCode());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, WaitForFast(asyncResult).GetCode());
 }
 
 TEST_F(TSchedulerTest, YieldToFromCanceledFiber)
@@ -600,28 +601,28 @@ TEST_F(TSchedulerTest, YieldToFromCanceledFiber)
     auto invoker2 = Queue2->GetInvoker();
 
     auto asyncResult = BIND([=] () mutable {
-        BIND([=] {
+        WaitUntilSet(BIND([=] {
             NYT::NConcurrency::GetCurrentFiberCanceler().Run(TError("Error"));
-        }).AsyncVia(invoker2).Run().Get();
+        }).AsyncVia(invoker2).Run());
         WaitFor(promise.ToFuture(), invoker2)
             .ThrowOnError();
     }).AsyncVia(invoker1).Run();
 
     promise.Set();
-    asyncResult.Get();
+    WaitUntilSet(asyncResult);
 
     EXPECT_TRUE(asyncResult.IsSet());
-    EXPECT_TRUE(asyncResult.Get().IsOK());
+    EXPECT_TRUE(WaitForFast(asyncResult).IsOK());
 }
 
 TEST_F(TSchedulerTest, JustYield1)
 {
     auto invoker = Queue1->GetInvoker();
-    auto asyncResult = BIND([] {
+    auto asyncResult = WaitForFast(BIND([] {
         for (int i = 0; i < 10; ++i) {
             Yield();
         }
-    }).AsyncVia(invoker).Run().Get();
+    }).AsyncVia(invoker).Run());
     EXPECT_TRUE(asyncResult.IsOK());
 }
 
@@ -640,24 +641,24 @@ TEST_F(TSchedulerTest, JustYield2)
     }).AsyncVia(invoker).Run();
 
     // This callback must complete before the first.
-    auto errorOrValue = BIND([&] {
+    auto errorOrValue = WaitForFast(BIND([&] {
         return flag;
-    }).AsyncVia(invoker).Run().Get();
+    }).AsyncVia(invoker).Run());
 
     EXPECT_TRUE(errorOrValue.IsOK());
     EXPECT_FALSE(errorOrValue.Value());
-    EXPECT_TRUE(asyncResult.Get().IsOK());
+    EXPECT_TRUE(WaitForFast(asyncResult).IsOK());
 }
 
 TEST_F(TSchedulerTest, CancelInAdjacentCallback)
 {
     auto invoker = Queue1->GetInvoker();
-    auto asyncResult1 = BIND([=] {
+    auto asyncResult1 = WaitForFast(BIND([=] {
         NYT::NConcurrency::GetCurrentFiberCanceler().Run(TError("Error"));
-    }).AsyncVia(invoker).Run().Get();
-    auto asyncResult2 = BIND([=] {
+    }).AsyncVia(invoker).Run());
+    auto asyncResult2 = WaitForFast(BIND([=] {
         Yield();
-    }).AsyncVia(invoker).Run().Get();
+    }).AsyncVia(invoker).Run());
     EXPECT_TRUE(asyncResult1.IsOK());
     EXPECT_TRUE(asyncResult2.IsOK());
 }
@@ -666,13 +667,13 @@ TEST_F(TSchedulerTest, CancelInAdjacentThread)
 {
     auto closure = TCallback<void(const TError&)>();
     auto invoker = Queue1->GetInvoker();
-    auto asyncResult1 = BIND([=, &closure] {
+    auto asyncResult1 = WaitForFast(BIND([=, &closure] {
         closure = NYT::NConcurrency::GetCurrentFiberCanceler();
-    }).AsyncVia(invoker).Run().Get();
+    }).AsyncVia(invoker).Run());
     closure.Run(TError("Error")); // *evil laugh*
-    auto asyncResult2 = BIND([=] {
+    auto asyncResult2 = WaitForFast(BIND([=] {
         Yield();
-    }).AsyncVia(invoker).Run().Get();
+    }).AsyncVia(invoker).Run());
     closure.Reset(); // *evil smile*
     EXPECT_TRUE(asyncResult1.IsOK());
     EXPECT_TRUE(asyncResult2.IsOK());
@@ -688,9 +689,9 @@ TEST_F(TSchedulerTest, SerializedDoubleWaitFor)
     auto promise = NewPromise<void>();
 
     BIND([&] {
-        WaitFor(VoidFuture)
+        WaitFor(OKFuture)
             .ThrowOnError();
-        WaitFor(VoidFuture)
+        WaitFor(OKFuture)
             .ThrowOnError();
         promise.Set();
 
@@ -700,15 +701,14 @@ TEST_F(TSchedulerTest, SerializedDoubleWaitFor)
     .Via(serializedInvoker)
     .Run();
 
-    promise.ToFuture().Get();
+    WaitUntilSet(promise.ToFuture());
 
-    auto result = BIND([&] () -> bool {
+    auto result = WaitFor(BIND([&] () -> bool {
         return flag;
     })
     .AsyncVia(serializedInvoker)
-    .Run()
-    .Get()
-    .ValueOrThrow();
+    .Run())
+        .ValueOrThrow();
 
     EXPECT_TRUE(result);
 }
@@ -735,7 +735,7 @@ TEST_W(TSchedulerTest, CancelDelayedFuture)
     auto future = TDelayedExecutor::MakeDelayed(TDuration::Seconds(10));
     future.Cancel(TError("Error"));
     EXPECT_TRUE(future.IsSet());
-    auto error = future.Get();
+    auto error = WaitForFast(future);
     EXPECT_EQ(NYT::EErrorCode::Canceled, error.GetCode());
     EXPECT_EQ(1, std::ssize(error.InnerErrors()));
     EXPECT_EQ(NYT::EErrorCode::Generic, error.InnerErrors()[0].GetCode());
@@ -941,249 +941,9 @@ TEST_W(TSchedulerTest, FutureUpdatedRaceInWaitFor_YT_18899)
             .AsyncVia(serializedInvoker)
             .Run());
 
-        ASSERT_NO_THROW(testResultFuture
-            .Get()
+        ASSERT_NO_THROW(WaitFor(testResultFuture)
             .ThrowOnError());
     }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TSuspendableInvokerTest
-    : public ::testing::Test
-{
-protected:
-    TLazyIntrusivePtr<TActionQueue> Queue1;
-
-    void TearDown() override
-    {
-        if (Queue1.HasValue()) {
-            Queue1->Shutdown();
-        }
-    }
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-TEST_F(TSuspendableInvokerTest, PollSuspendFuture)
-{
-    std::atomic<bool> flag(false);
-
-    auto suspendableInvoker = CreateSuspendableInvoker(Queue1->GetInvoker());
-
-    BIND([&] {
-        Sleep(SleepQuantum * 10);
-        flag = true;
-    })
-    .Via(suspendableInvoker)
-    .Run();
-
-    auto future = suspendableInvoker->Suspend();
-
-    while (!flag) {
-        EXPECT_EQ(flag, future.IsSet());
-        Sleep(SleepQuantum);
-    }
-    Sleep(SleepQuantum);
-    EXPECT_EQ(flag, future.IsSet());
-}
-
-TEST_F(TSuspendableInvokerTest, SuspendableDoubleWaitFor)
-{
-    std::atomic<bool> flag(false);
-
-    auto threadPool = CreateThreadPool(3, "MyPool");
-    auto suspendableInvoker = CreateSuspendableInvoker(threadPool->GetInvoker());
-
-    auto promise = NewPromise<void>();
-
-    auto setFlagFuture = BIND([&] {
-        WaitFor(VoidFuture)
-            .ThrowOnError();
-        Sleep(SleepQuantum);
-        WaitFor(VoidFuture)
-            .ThrowOnError();
-        promise.Set();
-
-        Sleep(SleepQuantum * 10);
-        flag = true;
-    })
-    .AsyncVia(suspendableInvoker)
-    .Run();
-
-    suspendableInvoker->Suspend().Get();
-    EXPECT_FALSE(promise.ToFuture().IsSet());
-    suspendableInvoker->Resume();
-    promise.ToFuture().Get();
-
-    setFlagFuture.Get();
-
-    auto flagValue = BIND([&] () -> bool {
-        return flag;
-    })
-    .AsyncVia(suspendableInvoker)
-    .Run()
-    .Get()
-    .ValueOrThrow();
-
-    EXPECT_TRUE(flagValue);
-}
-
-TEST_F(TSuspendableInvokerTest, EarlySuspend)
-{
-    auto suspendableInvoker = CreateSuspendableInvoker(Queue1->GetInvoker());
-    suspendableInvoker->Suspend().Get();
-
-    auto promise = NewPromise<void>();
-
-    BIND([&] {
-        promise.Set();
-    })
-    .Via(suspendableInvoker)
-    .Run();
-
-    EXPECT_FALSE(promise.IsSet());
-    suspendableInvoker->Resume();
-    promise.ToFuture().Get();
-    EXPECT_TRUE(promise.IsSet());
-}
-
-TEST_F(TSuspendableInvokerTest, ResumeBeforeFullSuspend)
-{
-    auto suspendableInvoker = CreateSuspendableInvoker(Queue1->GetInvoker());
-
-    BIND([&] {
-        Sleep(SleepQuantum);
-    })
-    .Via(suspendableInvoker)
-    .Run();
-
-    auto firstFuture = suspendableInvoker->Suspend();
-
-    EXPECT_FALSE(firstFuture.IsSet());
-    suspendableInvoker->Resume();
-    EXPECT_FALSE(firstFuture.Get().IsOK());
-}
-
-TEST_F(TSuspendableInvokerTest, AllowSuspendOnContextSwitch)
-{
-    std::atomic<bool> flag(false);
-
-    auto suspendableInvoker = CreateSuspendableInvoker(Queue1->GetInvoker());
-    auto promise = NewPromise<void>();
-    auto future = promise.ToFuture();
-
-    auto setFlagFuture = BIND([&] {
-        Sleep(SleepQuantum);
-        WaitUntilSet(future);
-        flag = true;
-    })
-    .AsyncVia(suspendableInvoker)
-    .Run();
-
-    auto suspendFuture = suspendableInvoker->Suspend();
-    EXPECT_FALSE(suspendFuture.IsSet());
-    EXPECT_TRUE(suspendFuture.Get().IsOK());
-
-    suspendableInvoker->Resume();
-    promise.Set();
-    setFlagFuture.Get();
-    EXPECT_TRUE(flag);
-}
-
-TEST_F(TSuspendableInvokerTest, SuspendResumeOnFinishedRace)
-{
-    std::atomic<bool> flag(false);
-    auto suspendableInvoker = CreateSuspendableInvoker(Queue1->GetInvoker());
-
-    BIND([&] {
-        for (int i = 0; i < 100; ++i) {
-            Sleep(TDuration::MilliSeconds(1));
-            Yield();
-        }
-    })
-    .Via(suspendableInvoker)
-    .Run();
-
-    int hits = 0;
-    while (hits < 100) {
-        flag = false;
-        auto future = suspendableInvoker->Suspend()
-            .Apply(BIND([=, &flag] { flag = true; }));
-
-        if (future.IsSet()) {
-            ++hits;
-        }
-        suspendableInvoker->Resume();
-        auto error = future.Get();
-        if (!error.IsOK()) {
-            EXPECT_FALSE(flag);
-            YT_VERIFY(error.GetCode() == NYT::EErrorCode::Canceled);
-        } else {
-            EXPECT_TRUE(flag);
-        }
-    }
-    auto future = suspendableInvoker->Suspend();
-    EXPECT_TRUE(future.Get().IsOK());
-}
-
-TEST_F(TSuspendableInvokerTest, ResumeInApply)
-{
-    auto suspendableInvoker = CreateSuspendableInvoker(Queue1->GetInvoker());
-
-    BIND([&] {
-        Sleep(SleepQuantum);
-    })
-    .Via(suspendableInvoker)
-    .Run();
-
-    auto suspendFuture = suspendableInvoker->Suspend()
-        .Apply(BIND([=] { suspendableInvoker->Resume(); }));
-
-    EXPECT_TRUE(suspendFuture.Get().IsOK());
-}
-
-TEST_F(TSuspendableInvokerTest, VerifySerializedActionsOrder)
-{
-    auto suspendableInvoker = CreateSuspendableInvoker(Queue1->GetInvoker());
-
-    suspendableInvoker->Suspend()
-        .Get();
-
-    const int totalActionCount = 100000;
-
-    std::atomic<int> actionIndex = 0;
-    std::atomic<int> reorderingCount = 0;
-
-    for (int i = 0; i < totalActionCount / 2; ++i) {
-        BIND([&actionIndex, &reorderingCount, i] {
-            reorderingCount += (actionIndex != i);
-            ++actionIndex;
-        })
-        .Via(suspendableInvoker)
-        .Run();
-    }
-
-    TDelayedExecutor::Submit(
-        BIND([&] {
-            suspendableInvoker->Resume();
-        }),
-        SleepQuantum / 10);
-
-    for (int i = totalActionCount / 2; i < totalActionCount; ++i) {
-        BIND([&actionIndex, &reorderingCount, i] {
-            reorderingCount += (actionIndex != i);
-            ++actionIndex;
-        })
-        .Via(suspendableInvoker)
-        .Run();
-    }
-
-    while (actionIndex < totalActionCount) {
-        Sleep(SleepQuantum);
-    }
-    EXPECT_EQ(actionIndex, totalActionCount);
-    EXPECT_EQ(reorderingCount, 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1217,7 +977,7 @@ TEST_P(TFairShareSchedulerTest, TwoLevelFairness)
         "MyFairSharePool",
         {
             /*poolWeightProvider*/ nullptr,
-            /*verboseLogging*/ true
+            /*verboseLogging*/ true,
         });
 
     std::vector<TDuration> progresses(numWorkers);

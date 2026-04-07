@@ -20,7 +20,8 @@ public:
     
 public:
     virtual NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const TSelectors& selectors, TInstant from, TInstant to) const = 0;
-    virtual NThreading::TFuture<TListMetricsResponse> ListMetrics(const TSelectors& selectors, TInstant from, TInstant to, int pageSize, int page) const = 0;
+    virtual NThreading::TFuture<TListMetricsResponse> ListMetrics(const TSelectors& selectors, TInstant from, TInstant to) const = 0;
+    virtual NThreading::TFuture<TListMetricsLabelsResponse> ListMetricsLabels(const TSelectors& selectors, TInstant from, TInstant to) const = 0;
     virtual NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const TSelectors& selectors, TInstant from, TInstant to) const = 0;
     virtual NThreading::TFuture<TGetDataResponse> GetData(const TSelectors& selectors, TInstant from, TInstant to) const = 0;
     virtual NThreading::TFuture<TGetDataResponse> GetData(const TString& program, TInstant from, TInstant to) const = 0;

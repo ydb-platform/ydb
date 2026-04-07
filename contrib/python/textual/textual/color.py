@@ -40,6 +40,7 @@ import rich.repr
 from rich.color import Color as RichColor
 from rich.color import ColorType
 from rich.color_triplet import ColorTriplet
+from rich.terminal_theme import TerminalTheme
 from typing_extensions import Final
 
 from textual._color_constants import ANSI_COLORS, COLOR_NAME_TO_RGB
@@ -109,11 +110,11 @@ hsla{OPEN_BRACE}({DECIMAL}{COMMA}{PERCENT}{COMMA}{PERCENT}{COMMA}{DECIMAL}){CLOS
     re.VERBOSE,
 )
 
-# Fast way to split a string of 6 characters in to 3 pairs of 2 characters
+# Fast way to split a string of 6 characters into 3 pairs of 2 characters
 _split_pairs3: Callable[[str], tuple[str, str, str]] = itemgetter(
     slice(0, 2), slice(2, 4), slice(4, 6)
 )
-# Fast way to split a string of 8 characters in to 4 pairs of 2 characters
+# Fast way to split a string of 8 characters into 4 pairs of 2 characters
 _split_pairs4: Callable[[str], tuple[str, str, str, str]] = itemgetter(
     slice(0, 2), slice(2, 4), slice(4, 6), slice(6, 8)
 )
@@ -167,19 +168,34 @@ class Color(NamedTuple):
     """Alpha (opacity) component in range 0 to 1."""
     ansi: int | None = None
     """ANSI color index. `-1` means default color. `None` if not an ANSI color."""
+    auto: bool = False
+    """Is the color automatic? (automatic colors may be white or black, to provide maximum contrast)"""
 
     @classmethod
-    def from_rich_color(cls, rich_color: RichColor) -> Color:
+    def automatic(cls, alpha_percentage: float = 100.0) -> Color:
+        """Create an automatic color."""
+        return cls(0, 0, 0, alpha_percentage / 100.0, auto=True)
+
+    @classmethod
+    @lru_cache(maxsize=1024)
+    def from_rich_color(
+        cls, rich_color: RichColor | None, theme: TerminalTheme | None = None
+    ) -> Color:
         """Create a new color from Rich's Color class.
 
         Args:
             rich_color: An instance of [Rich color][rich.color.Color].
+            theme: Optional Rich [terminal theme][rich.terminal_theme.TerminalTheme].
 
         Returns:
             A new Color instance.
         """
-        r, g, b = rich_color.get_truecolor()
-        return cls(r, g, b)
+        if rich_color is None:
+            return TRANSPARENT
+        r, g, b = rich_color.get_truecolor(theme)
+        return cls(
+            r, g, b, ansi=rich_color.number if rich_color.is_system_defined else None
+        )
 
     @classmethod
     def from_hsl(cls, h: float, s: float, l: float) -> Color:
@@ -203,7 +219,7 @@ class Color(NamedTuple):
         Returns:
             Inverse color.
         """
-        r, g, b, a, _ = self
+        r, g, b, a, _, _ = self
         return Color(255 - r, 255 - g, 255 - b, a)
 
     @property
@@ -214,14 +230,15 @@ class Color(NamedTuple):
     @property
     def clamped(self) -> Color:
         """A clamped color (this color with all values in expected range)."""
-        r, g, b, a, _ = self
+        r, g, b, a, ansi, auto = self
         _clamp = clamp
         color = Color(
             _clamp(r, 0, 255),
             _clamp(g, 0, 255),
             _clamp(b, 0, 255),
             _clamp(a, 0.0, 1.0),
-            self.ansi,
+            ansi,
+            auto,
         )
         return color
 
@@ -233,7 +250,7 @@ class Color(NamedTuple):
         Returns:
             A color object as used by Rich.
         """
-        r, g, b, _a, ansi = self
+        r, g, b, a, ansi, _ = self
         if ansi is not None:
             return RichColor.parse("default") if ansi < 0 else RichColor.from_ansi(ansi)
         return RichColor(
@@ -247,13 +264,13 @@ class Color(NamedTuple):
         Returns:
             Normalized components.
         """
-        r, g, b, _a, _ = self
+        r, g, b, _a, _, _ = self
         return (r / 255, g / 255, b / 255)
 
     @property
     def rgb(self) -> tuple[int, int, int]:
         """The red, green, and blue color components as a tuple of ints."""
-        r, g, b, _, _ = self
+        r, g, b, _, _, _ = self
         return (r, g, b)
 
     @property
@@ -286,7 +303,7 @@ class Color(NamedTuple):
 
         For example, `"#46b3de"` for an RGB color, or `"#3342457f"` for a color with alpha.
         """
-        r, g, b, a, ansi = self.clamped
+        r, g, b, a, ansi, _ = self.clamped
         if ansi is not None:
             return "ansi_default" if ansi == -1 else f"ansi_{ANSI_COLORS[ansi]}"
         return (
@@ -301,7 +318,7 @@ class Color(NamedTuple):
 
         For example, `"#46b3de"`.
         """
-        r, g, b, _a, _ = self.clamped
+        r, g, b, _a, _, _ = self.clamped
         return f"#{r:02X}{g:02X}{b:02X}"
 
     @property
@@ -310,7 +327,14 @@ class Color(NamedTuple):
 
         For example, `"rgb(10,20,30)"` for an RGB color, or `"rgb(50,70,80,0.5)"` for an RGBA color.
         """
-        r, g, b, a, ansi = self
+        r, g, b, a, ansi, auto = self
+        if auto:
+            alpha_percentage = clamp(a, 0.0, 1.0) * 100.0
+            if alpha_percentage == 100:
+                return "auto"
+            if not alpha_percentage % 1:
+                return f"auto {int(alpha_percentage)}%"
+            return f"auto {alpha_percentage:.1f}%"
         if ansi is not None:
             return "ansi_default" if ansi == -1 else f"ansi_{ANSI_COLORS[ansi]}"
         return f"rgb({r},{g},{b})" if a == 1 else f"rgba({r},{g},{b},{a})"
@@ -322,17 +346,18 @@ class Color(NamedTuple):
         Returns:
             The monochrome (black and white) version of this color.
         """
-        r, g, b, a, _ = self
+        r, g, b, a, _, _ = self
         gray = round(r * 0.2126 + g * 0.7152 + b * 0.0722)
         return Color(gray, gray, gray, a)
 
     def __rich_repr__(self) -> rich.repr.Result:
-        r, g, b, a, ansi = self
+        r, g, b, a, ansi, auto = self
         yield r
         yield g
         yield b
         yield "a", a, 1.0
         yield "ansi", ansi, None
+        yield "auto", auto, False
 
     def with_alpha(self, alpha: float) -> Color:
         """Create a new color with the given alpha.
@@ -343,7 +368,7 @@ class Color(NamedTuple):
         Returns:
             A new color.
         """
-        r, g, b, _, _ = self
+        r, g, b, _, _, _ = self
         return Color(r, g, b, alpha)
 
     def multiply_alpha(self, alpha: float) -> Color:
@@ -357,8 +382,8 @@ class Color(NamedTuple):
         """
         if self.ansi is not None:
             return self
-        r, g, b, a, _ = self
-        return Color(r, g, b, a * alpha)
+        r, g, b, a, _ansi, auto = self
+        return Color(r, g, b, a * alpha, auto=auto)
 
     @lru_cache(maxsize=1024)
     def blend(
@@ -378,14 +403,16 @@ class Color(NamedTuple):
         Returns:
             A new color.
         """
+        if destination.auto:
+            destination = self.get_contrast_text(destination.a)
         if destination.ansi is not None:
             return destination
         if factor <= 0:
             return self
         elif factor >= 1:
             return destination
-        r1, g1, b1, a1, _ = self
-        r2, g2, b2, a2, _ = destination
+        r1, g1, b1, a1, _, _ = self
+        r2, g2, b2, a2, _, _ = destination
 
         if alpha is None:
             new_alpha = a1 + (a2 - a1) * factor
@@ -412,10 +439,10 @@ class Color(NamedTuple):
             New color
         """
 
-        r1, g1, b1, a1, ansi1 = self
+        r1, g1, b1, a1, ansi1, _ = self
         if ansi1 is not None:
             return self
-        r2, g2, b2, a2, ansi2 = color
+        r2, g2, b2, a2, ansi2, _ = color
         if ansi2 is not None:
             return self
         return Color(
@@ -428,6 +455,15 @@ class Color(NamedTuple):
     def __add__(self, other: object) -> Color:
         if isinstance(other, Color):
             return self.blend(other, other.a, 1.0)
+        elif other is None:
+            return self
+        return NotImplemented
+
+    def __radd__(self, other: object) -> Color:
+        if isinstance(other, Color):
+            return self.blend(other, other.a, 1.0)
+        elif other is None:
+            return self
         return NotImplemented
 
     @classmethod
@@ -551,7 +587,7 @@ class Color(NamedTuple):
             l = percentage_string_to_float(l)
             a = clamp(float(a), 0.0, 1.0)
             color = Color.from_hsl(h, s, l).with_alpha(a)
-        else:
+        else:  # pragma: no-cover
             raise AssertionError(  # pragma: no-cover
                 "Can't get here if RE_COLOR matches"
             )

@@ -2,15 +2,12 @@ UNITTEST_FOR(ydb/core/tablet_flat)
 
 FORK_SUBTESTS()
 
-IF (WITH_VALGRIND)
-    TAG(ya:fat)
-    SIZE(LARGE)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(MEDIUM)
 
 IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:32 cpu:4)
+ELSE()
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 SRCS(
@@ -49,6 +46,7 @@ SRCS(
     ut_pages.cpp
     ut_redo.cpp
     ut_rename_table_column.cpp
+    ut_rowlocks.cpp
     ut_other.cpp
     ut_forward.cpp
     ut_screen.cpp
@@ -59,6 +57,7 @@ SRCS(
     ut_slice_loader.cpp
     ut_vacuum.cpp
     ut_versions.cpp
+    ut_backup.cpp
 )
 
 RESOURCE(

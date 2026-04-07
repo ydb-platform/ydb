@@ -1,4 +1,6 @@
 #include "arrow_parser.h"
+#include "arrow_metadata_constants.h"
+#include "arrow_helpers.h"
 
 #include <yt/yt/client/formats/parser.h>
 
@@ -83,7 +85,7 @@ void CheckTzArrowType(
         {
             arrow20::Type::BINARY,
             arrow20::Type::STRUCT,
-            arrow20::Type::DICTIONARY
+            arrow20::Type::DICTIONARY,
         },
         arrowTypeName,
         arrowDataType->id());
@@ -107,7 +109,7 @@ void CheckTzArrowType(
             CheckArrowType(
                 columnType,
                 {
-                    arrow20::Type::UINT16
+                    arrow20::Type::UINT16,
                 },
                 arrowTypeName,
                 timestampType->id());
@@ -116,7 +118,7 @@ void CheckTzArrowType(
             CheckArrowType(
                 columnType,
                 {
-                    arrow20::Type::UINT32
+                    arrow20::Type::UINT32,
                 },
                 arrowTypeName,
                 timestampType->id());
@@ -125,7 +127,7 @@ void CheckTzArrowType(
             CheckArrowType(
                 columnType,
                 {
-                    arrow20::Type::UINT64
+                    arrow20::Type::UINT64,
                 },
                 arrowTypeName,
                 timestampType->id());
@@ -134,7 +136,7 @@ void CheckTzArrowType(
             CheckArrowType(
                 columnType,
                 {
-                    arrow20::Type::INT32
+                    arrow20::Type::INT32,
                 },
                 arrowTypeName,
                 timestampType->id());
@@ -143,7 +145,7 @@ void CheckTzArrowType(
             CheckArrowType(
                 columnType,
                 {
-                    arrow20::Type::INT64
+                    arrow20::Type::INT64,
                 },
                 arrowTypeName,
                 timestampType->id());
@@ -152,7 +154,7 @@ void CheckTzArrowType(
             CheckArrowType(
                 columnType,
                 {
-                    arrow20::Type::INT64
+                    arrow20::Type::INT64,
                 },
                 arrowTypeName,
                 timestampType->id());
@@ -635,6 +637,23 @@ i64 CheckAndTransformTimestamp(i64 arrowValue, arrow20::TimeUnit::type timeUnit,
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool HasEmptyStructTypeInMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
+{
+    return GetArrowMetadataYTType(schemaField) == YTTypeMetadataValueEmptyStruct;
+}
+
+bool HasNestedOptionalTypeInMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
+{
+    return GetArrowMetadataYTType(schemaField) == YTTypeMetadataValueNestedOptional;
+}
+
+bool HasYsonTypeInMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
+{
+    return GetArrowMetadataYTType(schemaField) == YTTypeMetadataValueYson;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TArraySimpleVisitor
     : public arrow20::TypeVisitor
 {
@@ -643,11 +662,13 @@ public:
         std::optional<ESimpleLogicalValueType> columnType,
         int columnId,
         std::shared_ptr<arrow20::Array> array,
+        std::shared_ptr<arrow20::Field> schemaField,
         std::shared_ptr<TChunkedOutputStream> bufferForStringLikeValues,
         TUnversionedRowValues* rowValues)
         : ColumnType_(columnType)
         , ColumnId_(columnId)
         , Array_(std::move(array))
+        , SchemaField_(std::move(schemaField))
         , BufferForStringLikeValues_(std::move(bufferForStringLikeValues))
         , RowValues_(rowValues)
     { }
@@ -822,6 +843,7 @@ private:
     const i64 ColumnId_;
 
     std::shared_ptr<arrow20::Array> Array_;
+    std::shared_ptr<arrow20::Field> SchemaField_;
     std::shared_ptr<TChunkedOutputStream> BufferForStringLikeValues_;
     TUnversionedRowValues* RowValues_;
 
@@ -990,7 +1012,7 @@ private:
         // which leads to a "too few arguments" in the point of its invocation if we try to pass
         // it directly to ParseStringLikeArray.
         return ParseStringLikeArray<ArrayType>([this] (TStringBuf value, i64 columnId) {
-            if (ColumnType_  && *ColumnType_ == ESimpleLogicalValueType::Any) {
+            if (HasYsonTypeInMetadata(SchemaField_)) {
                 return MakeUnversionedAnyValue(value, columnId);
             } else {
                 return MakeUnversionedStringValue(value, columnId);
@@ -1076,11 +1098,13 @@ public:
     TArrayCompositeVisitor(
         TLogicalTypePtr ytType,
         const std::shared_ptr<arrow20::Array>& array,
+        const std::shared_ptr<arrow20::Field>& schemaField,
         NYson::TCheckedInDebugYsonTokenWriter* writer,
         int rowIndex)
         : YTType_(DenullifyLogicalType(ytType))
         , RowIndex_(rowIndex)
         , Array_(array)
+        , SchemaField_(schemaField)
         , Writer_(writer)
     {
         YT_VERIFY(writer != nullptr);
@@ -1098,6 +1122,7 @@ public:
             TArrayCompositeVisitor visitor(
                 YTType_,
                 dictionary,
+                SchemaField_,
                 Writer_,
                 dictionaryArrayColumn->GetValueIndex(RowIndex_));
             ThrowOnError(dictionary->type()->Accept(&visitor));
@@ -1293,6 +1318,7 @@ private:
     const int RowIndex_;
 
     std::shared_ptr<arrow20::Array> Array_;
+    std::shared_ptr<arrow20::Field> SchemaField_;
     NYson::TCheckedInDebugYsonTokenWriter* Writer_ = nullptr;
 
     template <typename ArrayType>
@@ -1513,7 +1539,7 @@ private:
 
             auto listValue = array->value_slice(RowIndex_);
             for (int offset = 0; offset < listValue->length(); ++offset) {
-                TArrayCompositeVisitor visitor(YTType_->AsListTypeRef().GetElement(), listValue, Writer_, offset);
+                TArrayCompositeVisitor visitor(YTType_->AsListTypeRef().GetElement(), listValue, array->type()->field(0), Writer_, offset);
                 try {
                     ThrowOnError(listValue->type()->Accept(&visitor));
                 } catch (const std::exception& ex) {
@@ -1548,12 +1574,15 @@ private:
             auto keyList = allKeys->Slice(offset, length);
             auto valueList = allValues->Slice(offset, length);
 
+            // Map is represented as list of pairs.
+            auto pairType = array->type()->field(0)->type();
+
             Writer_->WriteBeginList();
 
             for (int offset = 0; offset < keyList->length(); ++offset) {
                 Writer_->WriteBeginList();
 
-                TArrayCompositeVisitor keyVisitor(YTType_->AsDictTypeRef().GetKey(), keyList, Writer_, offset);
+                TArrayCompositeVisitor keyVisitor(YTType_->AsDictTypeRef().GetKey(), keyList, pairType->field(0), Writer_, offset);
                 try {
                     ThrowOnError(keyList->type()->Accept(&keyVisitor));
                 } catch (const std::exception& ex) {
@@ -1564,7 +1593,7 @@ private:
 
                 Writer_->WriteItemSeparator();
 
-                TArrayCompositeVisitor valueVisitor(YTType_->AsDictTypeRef().GetValue(), valueList, Writer_, offset);
+                TArrayCompositeVisitor valueVisitor(YTType_->AsDictTypeRef().GetValue(), valueList, pairType->field(1), Writer_, offset);
                 try {
                     ThrowOnError(valueList->type()->Accept(&valueVisitor));
                 } catch (const std::exception& ex) {
@@ -1584,29 +1613,41 @@ private:
         return arrow20::Status::OK();
     }
 
-    arrow20::Status ParseStruct()
+    void ParseStructForStruct()
     {
-        if (YTType_->GetMetatype() != ELogicalMetatype::Struct) {
-            THROW_ERROR_EXCEPTION("Unexpected arrow type \"struct\" for YT metatype %Qlv",
-                YTType_->GetMetatype());
-        }
         auto array = std::static_pointer_cast<arrow20::StructArray>(Array_);
         if (array->IsNull(RowIndex_)) {
             Writer_->WriteEntity();
         } else {
             Writer_->WriteBeginList();
-            auto structFields = YTType_->AsStructTypeRef().GetFields();
-            if (std::ssize(structFields) != array->num_fields()) {
-                THROW_ERROR_EXCEPTION("The number of fields in the Arrow \"struct\" type does not match the number of fields in the YT \"struct\" type")
-                    << TErrorAttribute("arrow_field_count", array->num_fields())
-                    << TErrorAttribute("yt_field_count", std::ssize(structFields));
+
+            const auto& structFields = YTType_->AsStructTypeRef().GetFields();
+
+            if (structFields.empty()) {
+                if (!HasEmptyStructTypeInMetadata(SchemaField_)) {
+                    THROW_ERROR_EXCEPTION(
+                        "YT \"struct\" type has no fields, but no metadata found with the key %Qv and the value %Qv",
+                        YTTypeMetadataKey,
+                        YTTypeMetadataValueEmptyStruct);
+                }
+                if (array->num_fields() != 1 && array->field(0)->type()->Equals(arrow20::null())) {
+                    THROW_ERROR_EXCEPTION("YT \"struct\" type has no fields, but Arrow \"struct\" type does not have a single dummy null field");
+                }
+            } else {
+                if (std::ssize(structFields) != array->num_fields()) {
+                    THROW_ERROR_EXCEPTION("The number of fields in the Arrow \"struct\" type does not match the number of fields in the YT \"struct\" type")
+                        << TErrorAttribute("arrow_field_count", array->num_fields())
+                        << TErrorAttribute("yt_field_count", std::ssize(structFields));
+                }
             }
+
+            const auto& structType = std::static_pointer_cast<arrow20::StructType>(array->type());
             for (const auto& field : structFields) {
                 auto arrowField = array->GetFieldByName(field.Name);
                 if (!arrowField) {
                     THROW_ERROR_EXCEPTION("Field %Qv is not found in arrow type \"struct\"", field.Name);
                 }
-                TArrayCompositeVisitor visitor(field.Type, arrowField, Writer_, RowIndex_);
+                TArrayCompositeVisitor visitor(field.Type, arrowField, structType->GetFieldByName(field.Name), Writer_, RowIndex_);
                 try {
                     ThrowOnError(arrowField->type()->Accept(&visitor));
                 } catch (const std::exception& ex) {
@@ -1619,13 +1660,60 @@ private:
 
             Writer_->WriteEndList();
         }
+    }
+
+    void ParseStructForOptional()
+    {
+        auto array = std::static_pointer_cast<arrow20::StructArray>(Array_);
+        if (array->IsNull(RowIndex_)) {
+            Writer_->WriteEntity();
+        } else {
+            Writer_->WriteBeginList();
+            if (!HasNestedOptionalTypeInMetadata(SchemaField_)) {
+                THROW_ERROR_EXCEPTION(
+                    "The element of YT \"optional\" type is nullable, but no metadata found with the key %Qv and the value %Qv",
+                    YTTypeMetadataKey,
+                    YTTypeMetadataValueNestedOptional);
+            }
+            if (array->num_fields() != 1) {
+                THROW_ERROR_EXCEPTION("The number of fields in the Arrow \"struct\" type is not equal to 1 for the YT \"optional\" type")
+                    << TErrorAttribute("arrow_field_count", array->num_fields());
+            }
+
+            const auto& arrowField = array->field(0);
+            TArrayCompositeVisitor visitor(YTType_->GetElement(), arrowField, array->type()->field(0), Writer_, RowIndex_);
+            try {
+                ThrowOnError(arrowField->type()->Accept(&visitor));
+            } catch (const std::exception& ex) {
+                THROW_ERROR_EXCEPTION("Failed to parse arrow struct field for the YT \"optional\" type")
+                    << ex;
+            }
+
+            Writer_->WriteItemSeparator();
+            Writer_->WriteEndList();
+        }
+    }
+
+    arrow20::Status ParseStruct()
+    {
+        switch (YTType_->GetMetatype()) {
+            case ELogicalMetatype::Struct:
+                ParseStructForStruct();
+                break;
+            case ELogicalMetatype::Optional:
+                ParseStructForOptional();
+                break;
+            default:
+                THROW_ERROR_EXCEPTION("Unexpected arrow type \"struct\" for YT metatype %Qlv",
+                    YTType_->GetMetatype());
+        }
         return arrow20::Status::OK();
     }
 
     template <class TUnderlyingType>
     void WriteDecimalBinary(TStringBuf arrowValue, int precision)
     {
-        const auto maxByteCount = sizeof(TUnderlyingType);
+        constexpr auto maxByteCount = sizeof(TUnderlyingType);
         char buffer[maxByteCount];
         auto decimalBinary = SerializeDecimalBinary<TUnderlyingType>(arrowValue, precision, buffer, maxByteCount);
         Writer_->WriteBinaryString(decimalBinary);
@@ -1638,11 +1726,12 @@ void PrepareArrayForSimpleLogicalType(
     ESimpleLogicalValueType columnType,
     const std::shared_ptr<TChunkedOutputStream>&  bufferForStringLikeValues,
     const std::shared_ptr<arrow20::Array>& column,
+    const std::shared_ptr<arrow20::Field>& schemaField,
     TUnversionedRowValues& rowValues,
     int columnId)
 {
     CheckArrowTypeMatch(columnType, column);
-    TArraySimpleVisitor visitor(columnType, columnId, column, bufferForStringLikeValues, &rowValues);
+    TArraySimpleVisitor visitor(columnType, columnId, column, schemaField, bufferForStringLikeValues, &rowValues);
     ThrowOnError(column->type()->Accept(&visitor));
 }
 
@@ -1650,6 +1739,7 @@ void PrepareArrayForComplexType(
     const TLogicalTypePtr& denullifiedLogicalType,
     const std::shared_ptr<TChunkedOutputStream>& bufferForStringLikeValues,
     const std::shared_ptr<arrow20::Array>& column,
+    const std::shared_ptr<arrow20::Field>& schemaField,
     TUnversionedRowValues& rowValues,
     int columnId)
 {
@@ -1659,7 +1749,7 @@ void PrepareArrayForComplexType(
                 metatype,
                 {
                     arrow20::Type::LIST,
-                    arrow20::Type::BINARY
+                    arrow20::Type::BINARY,
                 },
                 column->type()->name(),
                 column->type_id());
@@ -1670,7 +1760,7 @@ void PrepareArrayForComplexType(
                 metatype,
                 {
                     arrow20::Type::MAP,
-                    arrow20::Type::BINARY
+                    arrow20::Type::BINARY,
                 },
                 column->type()->name(),
                 column->type_id());
@@ -1681,7 +1771,7 @@ void PrepareArrayForComplexType(
                 metatype,
                 {
                     arrow20::Type::STRUCT,
-                    arrow20::Type::BINARY
+                    arrow20::Type::BINARY,
                 },
                 column->type()->name(),
                 column->type_id());
@@ -1692,13 +1782,23 @@ void PrepareArrayForComplexType(
                 metatype,
                 {
                     arrow20::Type::DECIMAL128,
-                    arrow20::Type::DECIMAL256
+                    arrow20::Type::DECIMAL256,
                 },
                 column->type()->name(),
                 column->type_id());
             break;
 
         case ELogicalMetatype::Optional:
+            CheckArrowType(
+                metatype,
+                {
+                    arrow20::Type::STRUCT,
+                    arrow20::Type::BINARY,
+                },
+                column->type()->name(),
+                column->type_id());
+            break;
+
         case ELogicalMetatype::Tuple:
         case ELogicalMetatype::VariantTuple:
         case ELogicalMetatype::VariantStruct:
@@ -1714,7 +1814,7 @@ void PrepareArrayForComplexType(
         column->type()->id() == arrow20::Type::DECIMAL256)
     {
         TUnversionedRowValues stringValues(rowValues.size());
-        TArraySimpleVisitor visitor(/*columnType*/ std::nullopt, columnId, column, bufferForStringLikeValues, &stringValues);
+        TArraySimpleVisitor visitor(/*columnType*/ std::nullopt, columnId, column, schemaField, bufferForStringLikeValues, &stringValues);
         ThrowOnError(column->type()->Accept(&visitor));
         for (int offset = 0; offset < std::ssize(rowValues); ++offset) {
             if (column->IsNull(offset)) {
@@ -1722,8 +1822,16 @@ void PrepareArrayForComplexType(
             } else if (column->type()->id() == arrow20::Type::DECIMAL128 || column->type()->id() == arrow20::Type::DECIMAL256) {
                 rowValues[offset] = MakeUnversionedStringValue(stringValues[offset].AsStringBuf(), columnId);
             } else {
-                // TODO(max): is it even correct? Binary is not necessarily a correct YSON...
                 rowValues[offset] = MakeUnversionedCompositeValue(stringValues[offset].AsStringBuf(), columnId);
+                if (HasYsonTypeInMetadata(schemaField)) {
+                    rowValues[offset] = MakeUnversionedCompositeValue(stringValues[offset].AsStringBuf(), columnId);
+                } else {
+                    THROW_ERROR_EXCEPTION(
+                        "Unexpected arrow type in complex type %Qv, there was no metadata found with the key %Qv and the value %Qv",
+                        column->type()->name(),
+                        YTTypeMetadataKey,
+                        YTTypeMetadataValueYson);
+                }
             }
         }
     } else {
@@ -1735,7 +1843,7 @@ void PrepareArrayForComplexType(
                 TBufferOutput out(valueBuffer);
                 NYson::TCheckedInDebugYsonTokenWriter writer(&out);
 
-                TArrayCompositeVisitor visitor(denullifiedLogicalType, column, &writer, rowIndex);
+                TArrayCompositeVisitor visitor(denullifiedLogicalType, column, schemaField, &writer, rowIndex);
 
                 ThrowOnError(column->type()->Accept(&visitor));
 
@@ -1760,6 +1868,7 @@ void PrepareArray(
     const TLogicalTypePtr& denullifiedLogicalType,
     const std::shared_ptr<TChunkedOutputStream>& bufferForStringLikeValues,
     const std::shared_ptr<arrow20::Array>& column,
+    const std::shared_ptr<arrow20::Field>& schemaField,
     TUnversionedRowValues& rowValues,
     int columnId)
 {
@@ -1767,7 +1876,7 @@ void PrepareArray(
         auto dictionaryArrayColumn = std::static_pointer_cast<arrow20::DictionaryArray>(column);
         auto dictionary = dictionaryArrayColumn->dictionary();
         TUnversionedRowValues dictionaryValues(dictionary->length());
-        PrepareArray(denullifiedLogicalType, bufferForStringLikeValues, dictionary, dictionaryValues, columnId);
+        PrepareArray(denullifiedLogicalType, bufferForStringLikeValues, dictionary, schemaField, dictionaryValues, columnId);
 
         for (int offset = 0; offset < std::ssize(rowValues); ++offset) {
             if (dictionaryArrayColumn->IsNull(offset)) {
@@ -1785,6 +1894,7 @@ void PrepareArray(
                     denullifiedLogicalType->AsSimpleTypeRef().GetElement(),
                     bufferForStringLikeValues,
                     column,
+                    schemaField,
                     rowValues,
                     columnId);
 
@@ -1802,6 +1912,7 @@ void PrepareArray(
                     denullifiedLogicalType,
                     bufferForStringLikeValues,
                     column,
+                    schemaField,
                     rowValues,
                     columnId);
 
@@ -1827,8 +1938,9 @@ class TListener
     : public arrow20::ipc::Listener
 {
 public:
-    explicit TListener(IValueConsumer* valueConsumer)
+    explicit TListener(IValueConsumer* valueConsumer, const TArrowParserOptions& options)
         : Consumer_(valueConsumer)
+        , Options_(options)
     { }
 
     arrow20::Status OnEOS() override
@@ -1852,6 +1964,22 @@ public:
 
         auto numColumns = batch->num_columns();
         auto numRows = batch->num_rows();
+
+        if (Options_.EnableMemoryLimit) {
+            // Guard against crafted Arrow IPC streams that claim a huge number of rows with
+            // minimal body data (e.g. NullType columns have zero-size bodies).
+            // Note: this is distinct from TLimitingArrowMemoryPool — that pool limits Arrow's
+            // own internal allocations, while rowsValues below is our own allocation via C++ new,
+            // which does not go through Arrow's memory pool.
+            constexpr ui64 MaxBatchAllocationBytes = 2_GB;
+            if (static_cast<ui64>(numRows) * static_cast<ui64>(numColumns) * sizeof(TUnversionedValue) > MaxBatchAllocationBytes) {
+                THROW_ERROR_EXCEPTION("Arrow record batch is too large: %v columns x %v rows would allocate more than %v bytes",
+                    numColumns,
+                    numRows,
+                    MaxBatchAllocationBytes);
+            }
+        }
+
         std::vector<TUnversionedRowValues> rowsValues(numColumns, TUnversionedRowValues(numRows));
 
         for (int columnIndex = 0; columnIndex < numColumns; ++columnIndex) {
@@ -1865,10 +1993,13 @@ public:
                 : OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Any));
             auto denullifiedColumnType = DenullifyLogicalType(columnType);
             try {
+                const auto& column = batch->column(columnIndex);
+                ThrowOnError(column->ValidateFull());
                 PrepareArray(
                     denullifiedColumnType,
                     bufferForStringLikeValues,
-                    batch->column(columnIndex),
+                    column,
+                    batch->schema()->field(columnIndex),
                     rowsValues[columnIndex],
                     columnId);
             } catch (const std::exception& ex) {
@@ -1899,6 +2030,7 @@ public:
 
 private:
     IValueConsumer* const Consumer_;
+    const TArrowParserOptions Options_;
 
     EListenerState CurrentState_ = EListenerState::InProgress;
 };
@@ -1915,13 +2047,79 @@ std::shared_ptr<arrow20::Buffer> MakeBuffer(const char* data, i64 size)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// A crafted Arrow IPC stream can trigger huge internal Arrow allocations (e.g. by declaring
+// an enormous uncompressed buffer size). This pool intercepts Arrow allocations and returns
+// OutOfMemory for oversized requests, which ThrowOnError then converts to a C++ exception.
+// Used in fuzz tests to prevent process kills from libFuzzer's RSS monitor.
+class TLimitingArrowMemoryPool
+    : public arrow20::MemoryPool
+{
+public:
+    explicit TLimitingArrowMemoryPool(int64_t maxSingleAllocationBytes)
+        : MaxSingleAllocationBytes_(maxSingleAllocationBytes)
+    { }
+
+    arrow20::Status Allocate(int64_t size, int64_t alignment, uint8_t** out) override
+    {
+        if (size > MaxSingleAllocationBytes_) {
+            return arrow20::Status::OutOfMemory(
+                "Arrow allocation of ", size, " bytes exceeds the limit of ",
+                MaxSingleAllocationBytes_, " bytes");
+        }
+        return arrow20::default_memory_pool()->Allocate(size, alignment, out);
+    }
+
+    arrow20::Status Reallocate(int64_t oldSize, int64_t newSize, int64_t alignment, uint8_t** ptr) override
+    {
+        if (newSize > MaxSingleAllocationBytes_) {
+            return arrow20::Status::OutOfMemory(
+                "Arrow reallocation to ", newSize, " bytes exceeds the limit of ",
+                MaxSingleAllocationBytes_, " bytes");
+        }
+        return arrow20::default_memory_pool()->Reallocate(oldSize, newSize, alignment, ptr);
+    }
+
+    void Free(uint8_t* buffer, int64_t size, int64_t alignment) override
+    {
+        arrow20::default_memory_pool()->Free(buffer, size, alignment);
+    }
+
+    int64_t bytes_allocated() const override
+    {
+        return arrow20::default_memory_pool()->bytes_allocated();
+    }
+
+    int64_t total_bytes_allocated() const override
+    {
+        return arrow20::default_memory_pool()->total_bytes_allocated();
+    }
+
+    int64_t num_allocations() const override
+    {
+        return arrow20::default_memory_pool()->num_allocations();
+    }
+
+    std::string backend_name() const override
+    {
+        return arrow20::default_memory_pool()->backend_name();
+    }
+
+private:
+    const int64_t MaxSingleAllocationBytes_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TArrowParser
     : public IParser
 {
 public:
-    TArrowParser(IValueConsumer* valueConsumer)
-        : Listener_(std::make_shared<TListener>(valueConsumer))
-        , Decoder_(std::make_shared<arrow20::ipc::StreamDecoder>(Listener_))
+    static constexpr i64 DefaultMaxAllocationBytes = 16_GB;
+
+    explicit TArrowParser(IValueConsumer* valueConsumer, const TArrowParserOptions& options = {})
+        : Listener_(std::make_shared<TListener>(valueConsumer, options))
+        , MemoryPool_(options.EnableMemoryLimit ? DefaultMaxAllocationBytes : std::numeric_limits<int64_t>::max())
+        , Decoder_(MakeDecoder())
     { }
 
     void Read(TStringBuf data) override
@@ -1930,6 +2128,13 @@ public:
         const char* currentPtr = data.data();
         while (restSize > 0) {
             i64 nextRequiredSize = Decoder_->next_required_size();
+            // Normally this cannot happen: next_required_size() is 0 only in EOS state,
+            // but after EOS we reset the decoder above, so it starts fresh with
+            // next_required_size() == sizeof(int32_t). Guard against infinite loop
+            // if Arrow ever returns 0 unexpectedly.
+            if (nextRequiredSize == 0) {
+                THROW_ERROR_EXCEPTION("Arrow stream decoder returned zero next_required_size");
+            }
             auto currentSize = std::min(nextRequiredSize, restSize);
 
             ThrowOnError(Decoder_->Consume(MakeBuffer(currentPtr, currentSize)));
@@ -1941,7 +2146,7 @@ public:
                     break;
 
                 case EListenerState::EOS:
-                    Decoder_ = std::make_shared<arrow20::ipc::StreamDecoder>(Listener_);
+                    Decoder_ = MakeDecoder();
                     Listener_->Reset();
                     break;
 
@@ -1966,8 +2171,16 @@ public:
     }
 
 private:
+    std::shared_ptr<arrow20::ipc::StreamDecoder> MakeDecoder()
+    {
+        arrow20::ipc::IpcReadOptions options;
+        options.memory_pool = &MemoryPool_;
+        return std::make_shared<arrow20::ipc::StreamDecoder>(Listener_, options);
+    }
+
     const std::shared_ptr<TListener> Listener_;
 
+    TLimitingArrowMemoryPool MemoryPool_;
     std::shared_ptr<arrow20::ipc::StreamDecoder> Decoder_;
     EListenerState LastState_ = EListenerState::Empty;
 };
@@ -1976,9 +2189,9 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::unique_ptr<IParser> CreateParserForArrow(IValueConsumer* consumer)
+std::unique_ptr<IParser> CreateParserForArrow(IValueConsumer* consumer, const TArrowParserOptions& options)
 {
-    return std::make_unique<TArrowParser>(consumer);
+    return std::make_unique<TArrowParser>(consumer, options);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

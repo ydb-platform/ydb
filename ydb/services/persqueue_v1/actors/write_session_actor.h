@@ -33,6 +33,7 @@ template<bool UseMigrationProtocol>
 class TWriteSessionActor
     : public NActors::TActorBootstrapped<TWriteSessionActor<UseMigrationProtocol>>
     , private NPQ::TRlHelpers
+    , public NActors::IActorExceptionHandler
 {
     using TSelf = TWriteSessionActor<UseMigrationProtocol>;
     using TClientMessage = std::conditional_t<UseMigrationProtocol, PersQueue::V1::StreamingWriteClientMessage,
@@ -77,6 +78,7 @@ public:
     void Bootstrap(const NActors::TActorContext& ctx);
 
     void Die(const NActors::TActorContext& ctx) override;
+    bool OnUnhandledException(const std::exception& exc) override;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::FRONT_PQ_WRITE;
@@ -131,7 +133,6 @@ private:
     void Handle(typename TEvWrite::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(typename TEvUpdateToken::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvDone::TPtr& ev, const NActors::TActorContext& ctx);
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
     void LogSession(const TActorContext& ctx);
     bool InitAfterDiscovery(const TActorContext& ctx);

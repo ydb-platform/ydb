@@ -351,7 +351,7 @@ void TKafkaBalancerActor::JoinStepCheckGroupState(NKqp::TEvKqp::TEvQueryResponse
     if (SessionTimeoutMs > MAX_SESSION_TIMEOUT_MS || SessionTimeoutMs < MIN_SESSION_TIMEOUT_MS) {
         SendJoinGroupResponseFail(ctx, CorrelationId,
             EKafkaErrors::INVALID_SESSION_TIMEOUT,
-            "Invalid session timeout");
+            TStringBuilder() << "Invalid session timeout " << SessionTimeoutMs);
         return;
     }
 
@@ -879,8 +879,13 @@ void TKafkaBalancerActor::HeartbeatStepUpdateHeartbeatDeadlines(NKqp::TEvKqp::TE
         return;
     }
 
-    if (!groupStatus->Exists || groupStatus->Generation != GenerationId || groupStatus->State != GROUP_STATE_WORKING) {
+    if (!groupStatus->Exists ||
+        ((groupStatus->Generation != GenerationId + 1) && (groupStatus->State != GROUP_STATE_WORKING))) {
         SendHeartbeatResponseFail(ctx, CorrelationId, EKafkaErrors::REBALANCE_IN_PROGRESS, "Group state changed. Rejoin required");
+        return;
+    }
+    if (groupStatus->Generation != GenerationId) {
+        SendHeartbeatResponseFail(ctx, CorrelationId, EKafkaErrors::ILLEGAL_GENERATION, TStringBuilder() << "Old or unknown group generation: " << GenerationId << ". Group generationId=" << groupStatus->Generation);
         return;
     }
 
@@ -1123,7 +1128,7 @@ bool TKafkaBalancerActor::ParseDeadsAndSessionTimeout(
     auto& resp = record.GetResponse();
 
     if (resp.GetYdbResults().size() < 2) {
-        return false;
+        return true;
     }
 
     {
@@ -1141,9 +1146,10 @@ bool TKafkaBalancerActor::ParseDeadsAndSessionTimeout(
     {
         NYdb::TResultSetParser parser(resp.GetYdbResults(1));
         if (!parser.TryNextRow()) {
-            return false;
+            sessionTimeoutMs = DEFAULT_SESSION_TIMEOUT_MS;
+        } else {
+            sessionTimeoutMs = parser.ColumnParser("session_timeout_ms").GetOptionalUint32().value_or(DEFAULT_SESSION_TIMEOUT_MS);
         }
-        sessionTimeoutMs = parser.ColumnParser("session_timeout_ms").GetOptionalUint32().value_or(DEFAULT_SESSION_TIMEOUT_MS);
         if (parser.TryNextRow()) {
             return false;
         }
@@ -1243,7 +1249,7 @@ bool TKafkaBalancerActor::ChooseProtocolAndFillStates() {
 NYdb::TParamsBuilder TKafkaBalancerActor::BuildCheckGroupStateParams() {
     NYdb::TParamsBuilder params;
     params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
-    params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+    params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
 
     return params;
 }
@@ -1251,7 +1257,7 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildCheckGroupStateParams() {
 NYdb::TParamsBuilder TKafkaBalancerActor::BuildSetMasterDeadParams() {
     NYdb::TParamsBuilder params;
     params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
-    params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+    params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
     params.AddParam("$State").Uint64(GROUP_STATE_MASTER_IS_DEAD).Build();
     params.AddParam("$Generation").Uint64(GenerationId).Build();
 
@@ -1263,7 +1269,7 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildUpdateOrInsertNewGroupParams() {
     params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
     params.AddParam("$Generation").Uint64(GenerationId).Build();
     params.AddParam("$State").Uint64(GROUP_STATE_JOIN).Build();
-    params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+    params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
     params.AddParam("$Master").Utf8(MemberId).Build();
     params.AddParam("$LastMasterHeartbeat").Datetime(TInstant::Now()).Build();
     params.AddParam("$ProtocolType").Utf8(ProtocolType).Build();
@@ -1285,7 +1291,7 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildInsertMemberParams() {
     params.AddParam("$Generation").Uint64(GenerationId).Build();
     params.AddParam("$MemberId").Utf8(MemberId).Build();
     params.AddParam("$InstanceId").Utf8(InstanceId).Build();
-    params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+    params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
     params.AddParam("$HeartbeatDeadline").Datetime(TInstant::Now() + TDuration::MilliSeconds(SessionTimeoutMs)).Build();
     params.AddParam("$SessionTimeoutMs").Uint32(SessionTimeoutMs).Build();
     params.AddParam("$RebalanceTimeoutMs").Uint32(RebalanceTimeoutMs).Build();
@@ -1308,7 +1314,7 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildInsertMemberParams() {
 NYdb::TParamsBuilder TKafkaBalancerActor::BuildAssignmentsParams() {
     NYdb::TParamsBuilder params;
     params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
-    params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+    params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
     params.AddParam("$Generation").Uint64(GenerationId).Build();
     params.AddParam("$State").Uint64(GROUP_STATE_WORKING).Build();
     params.AddParam("$LastMasterHeartbeat").Datetime(TInstant::Now()).Build();
@@ -1333,7 +1339,7 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildAssignmentsParams() {
 NYdb::TParamsBuilder TKafkaBalancerActor::BuildSelectMembersParams(ui64 generationId) {
     NYdb::TParamsBuilder params;
     params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
-    params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+    params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
     params.AddParam("$Generation").Uint64(generationId).Build();
     params.AddParam("$Limit").Uint64(LIMIT_MEMBERS_PER_REQUEST).Build();
     params.AddParam("$PaginationMemberId").Utf8(WorkerStatesPaginationMemberId).Build();
@@ -1345,7 +1351,7 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildUpdateGroupStateAndProtocolParams
     NYdb::TParamsBuilder params;
     params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
     params.AddParam("$State").Uint64(GROUP_STATE_SYNC).Build();
-    params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+    params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
     params.AddParam("$Protocol").Utf8(Protocol).Build();
     params.AddParam("$LastMasterHeartbeat").Datetime(TInstant::Now()).Build();
 
@@ -1357,7 +1363,7 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildFetchAssignmentsParams() {
     params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
     params.AddParam("$Generation").Uint64(GenerationId).Build();
     params.AddParam("$MemberId").Utf8(MemberId).Build();
-    params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+    params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
 
     return params;
 }
@@ -1367,16 +1373,10 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildLeaveGroupParams() {
     params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
     params.AddParam("$Generation").Uint64(GenerationId).Build();
     params.AddParam("$MemberId").Utf8(MemberId).Build();
-    params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+    params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
     params.AddParam("$LastMasterHeartbeat").Datetime(TInstant::Now() - TDuration::Seconds(1)).Build();
-    params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
     params.AddParam("$State").Uint64(GROUP_STATE_MASTER_IS_DEAD).Build();
-
-    if (IsMaster) {
-        params.AddParam("$UpdateState").Bool(true).Build();
-    } else {
-        params.AddParam("$UpdateState").Bool(false).Build();
-    }
+    params.AddParam("$UpdateState").Bool(IsMaster).Build();
 
     return params;
 }
@@ -1385,7 +1385,7 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildGetMemberParams() {
     NYdb::TParamsBuilder params;
     params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
     params.AddParam("$MemberId").Utf8(MemberId).Build();
-    params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+    params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
 
     return params;
 }
@@ -1396,15 +1396,10 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildUpdateLastHeartbeatsParams() {
     params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
     params.AddParam("$Generation").Uint64(GenerationId).Build();
     params.AddParam("$MemberId").Utf8(MemberId).Build();
-    params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+    params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
     params.AddParam("$LastMasterHeartbeat").Datetime(now).Build();
     params.AddParam("$HeartbeatDeadline").Datetime(now + TDuration::MilliSeconds(SessionTimeoutMs)).Build();
-
-    if (IsMaster) {
-        params.AddParam("$UpdateGroupHeartbeat").Bool(true).Build();
-    } else {
-        params.AddParam("$UpdateGroupHeartbeat").Bool(false).Build();
-    }
+    params.AddParam("$UpdateGroupHeartbeat").Bool(IsMaster).Build();
 
     return params;
 }
@@ -1413,7 +1408,7 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildCheckDeadsParams() {
     NYdb::TParamsBuilder params;
     params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
     params.AddParam("$Generation").Uint64(GenerationId).Build();
-    params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+    params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
     params.AddParam("$MemberId").Utf8(MemberId).Build();
     params.AddParam("$Now").Datetime(TInstant::Now()).Build();
 
@@ -1424,7 +1419,7 @@ NYdb::TParamsBuilder TKafkaBalancerActor::BuildCheckMasterAlive() {
     NYdb::TParamsBuilder params;
     params.AddParam("$ConsumerGroup").Utf8(GroupId).Build();
     params.AddParam("$MasterId").Utf8(Master).Build();
-    params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+    params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
     params.AddParam("$Generation").Uint64(GenerationId).Build();
     params.AddParam("$Now").Datetime(TInstant::Now()).Build();
 
@@ -1473,6 +1468,7 @@ void TKafkaBalancerActor::SendJoinGroupResponseOk(const TActorContext& ctx, ui64
         }
     }
 
+    Send(Context->ConnectionId, new TEvKafka::TEvReadSessionInfo(GroupId));
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(correlationId, response, EKafkaErrors::NONE_ERROR));
     Die(ctx);
 }

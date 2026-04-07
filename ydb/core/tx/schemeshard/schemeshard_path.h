@@ -37,6 +37,7 @@ public:
         const TChecker& Fail(EStatus status, const TString& error) const;
 
     public:
+        using TCheckerMethodPtr = const TChecker& (TChecker::*)(EStatus status) const;
         explicit TChecker(const TPath& path, const NCompat::TSourceLocation location = NCompat::TSourceLocation::current());
 
         explicit operator bool() const;
@@ -84,7 +85,7 @@ public:
         const TChecker& IsCdcStream(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsLikeDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
         const TChecker& IsDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
-        const TChecker& IsSysViewDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
+        const TChecker& IsSystemDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
         const TChecker& IsRtmrVolume(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsTheSameDomain(const TPath& another, EStatus status = EStatus::StatusInvalidParameter) const;
         const TChecker& FailOnWrongType(const TSet<TPathElement::EPathType>& expectedTypes) const;
@@ -116,6 +117,7 @@ public:
         const TChecker& IsSysView(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsSecret(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsStreamingQuery(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& Or(TCheckerMethodPtr leftFunc, TCheckerMethodPtr rightFunc, EStatus status = EStatus::StatusNameConflict) const;
     };
 
 public:
@@ -172,9 +174,11 @@ public:
     bool IsUnderDeleting() const;
     bool IsUnderMoving() const;
     bool IsUnderOutgoingIncrementalRestore() const;
+    bool IsUnderIncomingIncrementalRestore() const;
     TPath& RiseUntilOlapStore();
     TPath FindOlapStore() const;
     bool IsCommonSensePath() const;
+    bool ShouldSkipCommonPathCheckForIndexImplTable() const;
     bool AtLocalSchemeShardPath() const;
     bool IsInsideTableIndexPath(bool failOnUnresolved = true) const;
     bool IsInsideCdcStreamPath() const;
@@ -187,6 +191,7 @@ public:
     bool IsSequence() const;
     bool IsReplication() const;
     bool IsTransfer() const;
+    bool IsSupportedInExports() const;
     ui32 Depth() const;
     ui64 Shards() const;
     const TString& LeafName() const;

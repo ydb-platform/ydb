@@ -104,6 +104,7 @@ TNode SerializeParamsForCreate(
     result["recursive"] = options.Recursive_;
     result["type"] = ToString(type);
     result["ignore_existing"] = options.IgnoreExisting_;
+    result["ignore_type_mismatch"] = options.IgnoreTypeMismatch_;
     result["force"] = options.Force_;
     if (options.Attributes_) {
         result["attributes"] = *options.Attributes_;
@@ -534,10 +535,18 @@ TNode SerializeParamsForGetJob(
 
 TNode SerializeParamsForGetJobTrace(
     const TOperationId& operationId,
-    const TGetJobTraceOptions& /* options */)
+    const TJobId& jobId,
+    const TGetJobTraceOptions& options)
 {
     TNode result;
     SetOperationIdParam(&result, operationId);
+    result["job_id"] = GetGuidAsString(jobId);
+    if (options.FromTime_) {
+        result["from_time"] = ToString(options.FromTime_);
+    }
+    if (options.ToTime_) {
+        result["to_time"] = ToString(options.ToTime_);
+    }
     return result;
 }
 
@@ -574,6 +583,9 @@ TNode SerializeParamsForListJobs(
     }
     if (options.OperationIncarnation_) {
         result["operation_incarnation"] = *options.OperationIncarnation_;
+    }
+    if (options.MonitoringDescriptor_) {
+        result["monitoring_descriptor"] = *options.MonitoringDescriptor_;
     }
     if (options.FromTime_) {
         result["from_time"] = ToString(options.FromTime_);
@@ -698,6 +710,7 @@ TNode SerializeParamsForReadTable(
     TNode result;
     SetTransactionIdParam(&result, transactionId);
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    result["omit_inaccessible_rows"] = options.OmitInaccessibleRows_;
     result["control_attributes"] = BuildYsonNodeFluently()
         .BeginMap()
             .Item("enable_row_index").Value(options.ControlAttributes_.EnableRowIndex_)
@@ -711,6 +724,11 @@ TNode SerializeParamsForReadTablePartition(const TString& cookie, const TTablePa
     TNode node;
     node["cookie"] = cookie;
     SerializeSuppressableAccessTrackingOptions(&node, options);
+    node["control_attributes"] = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("enable_row_index").Value(options.ControlAttributes_.EnableRowIndex_)
+            .Item("enable_range_index").Value(options.ControlAttributes_.EnableRangeIndex_)
+        .EndMap();
     return node;
 }
 
@@ -827,6 +845,50 @@ TNode SerializeParamsForAlterTable(
     if (options.UpstreamReplicaId_) {
         result["upstream_replica_id"] = GetGuidAsString(*options.UpstreamReplicaId_);
     }
+    return result;
+}
+
+void SetBasicDistributedStartParams(
+    TNode& result,
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount)
+{
+    SetTransactionIdParam(&result, transactionId);
+
+    result["path"] = PathToNode(richPath);
+    result["cookie_count"] = cookieCount;
+}
+
+TNode SerializeParamsForStartDistributedFileSession(
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteFileOptions& options)
+{
+    TNode result;
+    SetBasicDistributedStartParams(result, transactionId, richPath, cookieCount);
+
+    if (options.SessionTimeout_) {
+        result["session_timeout"] = static_cast<i64>(options.SessionTimeout_->MilliSeconds());
+    }
+
+    return result;
+}
+
+TNode SerializeParamsForStartDistributedTableSession(
+    const TTransactionId& transactionId,
+    const TRichYPath& richPath,
+    i64 cookieCount,
+    const TStartDistributedWriteTableOptions& options)
+{
+    TNode result;
+    SetBasicDistributedStartParams(result, transactionId, richPath, cookieCount);
+
+    if (options.SessionTimeout_) {
+        result["session_timeout"] = static_cast<i64>(options.SessionTimeout_->MilliSeconds());
+    }
+
     return result;
 }
 

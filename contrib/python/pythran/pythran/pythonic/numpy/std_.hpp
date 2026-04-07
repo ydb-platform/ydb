@@ -10,8 +10,7 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class... Args>
-  auto std_(Args &&...args)
-      -> decltype(functor::sqrt{}(var(std::forward<Args>(args)...)))
+  auto std_(Args &&...args) -> decltype(functor::sqrt{}(var(std::forward<Args>(args)...)))
   {
     return functor::sqrt{}(var(std::forward<Args>(args)...));
   }

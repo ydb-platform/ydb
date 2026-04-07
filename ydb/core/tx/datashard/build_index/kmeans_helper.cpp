@@ -60,18 +60,47 @@ void AddRowToData(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell>
     buffer.AddRow(pk, dataColumns, origKey);
 }
 
-TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding, 
-    const google::protobuf::RepeatedPtrField<TProtoStringType>& data, ui32& embeddingPos,
-    ui32& dataPos, NTable::TTag& embeddingTag)
+void AddRowToDataWithForeign(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> sourcePk,
+    TArrayRef<const TCell> dataColumns, TArrayRef<const TCell> origKey, bool isForeign, double distance, bool isPostingLevel) {
+    if (isPostingLevel) {
+        parent = SetPostingParentFlag(parent);
+    } else {
+        EnsureNoPostingParentFlag(parent);
+    }
+
+    TVector<TCell> pk(::Reserve(sourcePk.size() + 1));
+    pk.insert(pk.end(), sourcePk.begin(), sourcePk.end());
+    // Cluster ID in the end of the key to allow filtering row duplicates based on foreign key
+    // I.e. we'll have to select 3 nearest rows for every PK from each 9, for example
+    pk.push_back(TCell::Make(parent));
+
+    // isForeign and distance in the beginning of the row
+    TVector<TCell> data;
+    data.push_back(TCell::Make(isForeign));
+    data.push_back(TCell::Make(distance));
+    data.insert(data.end(), dataColumns.begin(), dataColumns.end());
+    buffer.AddRow(pk, data, origKey);
+}
+
+TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding,
+    const google::protobuf::RepeatedPtrField<TProtoStringType>& data, bool forBuild, NTable::TPos& embeddingPos,
+    NTable::TPos& dataPos, NTable::TPos* isForeignPos)
 {
     auto tags = GetAllTags(table);
     TTags result;
-    result.reserve(1 + data.size());
-    embeddingTag = tags.at(embedding);
+    result.reserve(1 + data.size() + (isForeignPos ? 1 : 0));
+    auto embeddingTag = tags.at(embedding);
+    if (isForeignPos) {
+        auto foreignTag = tags.at(NTableIndex::NKMeans::IsForeignColumn);
+        *isForeignPos = result.size();
+        result.push_back(foreignTag);
+    }
     if (auto it = std::find(data.begin(), data.end(), embedding); it != data.end()) {
-        embeddingPos = it - data.begin();
-        dataPos = 0;
+        embeddingPos = result.size() + it - data.begin();
+        dataPos = result.size();
     } else {
+        embeddingPos = result.size();
+        dataPos = result.size() + (forBuild ? 0 : 1); // always include embedding in build tables
         result.push_back(embeddingTag);
     }
     for (const auto& column : data) {
@@ -82,15 +111,17 @@ TTags MakeScanTags(const TUserTable& table, const TProtoStringType& embedding,
 
 std::shared_ptr<NTxProxy::TUploadTypes> MakeOutputTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState uploadState,
     const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
-    const google::protobuf::RepeatedPtrField<TProtoStringType>& pkColumns)
+    const google::protobuf::RepeatedPtrField<TProtoStringType>& pkColumns, bool withForeignFlag)
 {
     auto types = GetAllTypes(table);
 
     auto result = std::make_shared<NTxProxy::TUploadTypes>();
 
     Ydb::Type type;
-    type.set_type_id(NTableIndex::NKMeans::ClusterIdType);
-    result->emplace_back(NTableIndex::NKMeans::ParentColumn, type);
+    if (!withForeignFlag) {
+        type.set_type_id(NTableIndex::NKMeans::ClusterIdType);
+        result->emplace_back(NTableIndex::NKMeans::ParentColumn, type);
+    }
 
     auto addType = [&](const auto& column) {
         auto it = types.find(column);
@@ -109,6 +140,16 @@ std::shared_ptr<NTxProxy::TUploadTypes> MakeOutputTypes(const TUserTable& table,
             addType(table.Columns.at(column).Name);
         }
     }
+
+    if (withForeignFlag) {
+        type.set_type_id(NTableIndex::NKMeans::ClusterIdType);
+        result->emplace_back(NTableIndex::NKMeans::ParentColumn, type);
+        type.set_type_id(NTableIndex::NKMeans::IsForeignType);
+        result->emplace_back(NTableIndex::NKMeans::IsForeignColumn, type);
+        type.set_type_id(NTableIndex::NKMeans::DistanceType);
+        result->emplace_back(NTableIndex::NKMeans::DistanceColumn, type);
+    }
+
     switch (uploadState) {
         case NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_BUILD:
         case NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD:

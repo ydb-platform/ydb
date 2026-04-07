@@ -31,6 +31,10 @@ is_extra_target = true
 is_test = true
 is_extra_target = true
 
+[targets.junit6]
+is_test = true
+is_extra_target = true
+
 [attrs.target]
 # DEPRECATED
 annotation_processors="list"
@@ -39,11 +43,15 @@ required_jdk="str"
 add_vcs_info_to_mf="bool"
 junit4_test="flag"
 junit5_test="flag"
+junit6_test="flag"
 test_cwd="list"
 test_env="list"
 app_main_class="str"
 enable_preview="flag"
-use_annotation_processor="list"
+use_annotation_processors="list"
+use_annotation_processors-ITEM="dict"
+use_annotation_processors-jar="str"
+use_annotation_processors-deps="list"
 use_errorprone="flag"
 jdk_version="str"
 jdk_path="str"
@@ -60,9 +68,9 @@ resource_sets-realdir="str"
 resource_sets-globs="list"
 resource_sets-prefix="str"
 
-publish="flag"
-publish_group="str"
-publish_version="str"
+publish="skip"
+publish_group="skip"
+publish_version="skip"
 
 proto_files="list"
 proto_namespace="str"
@@ -76,6 +84,10 @@ proto_kotlin="flag"
 proto_kotlin_grpc="flag"
 proto_kotlin_grpc_version="str"
 
+proto_plugins="list"
+proto_plugins-name="str"
+proto_plugins-bin="str"
+
 kotlin_version="str"
 with_kotlin="flag"
 with_kotlinc_plugin_allopen="set"
@@ -85,7 +97,7 @@ with_kotlinc_plugin_serialization="set"
 
 runs="list"
 runs-args="list"
-runs-classpath="list"
+runs-classpath="str"
 runs-cwd="str"
 runs-in="list"
 runs-in_dir="list"
@@ -93,6 +105,7 @@ runs-in_noparse="list"
 runs-out="list"
 runs-out_dir="list"
 runs-tool="list"
+runs-env="list"
 
 custom_runs="list"
 custom_runs-depends="list"
@@ -104,10 +117,12 @@ custom_runs-cmake_packages="list"
 custom_runs-cmake_packages-ITEM="dict"
 custom_runs-cmake_packages-name="str"
 custom_runs-cmake_packages-components="list"
+custom_runs-jar="str"
 
 javac-flags="list"
 kotlinc-flags="list"
 jvm_args="list"
+system_properties="list"
 
 target_commands="list"
 target_commands-ITEM="dict"
@@ -119,8 +134,19 @@ target_commands-flags="list"
 with_kapt="flag"
 kapt-opts="list"
 kapt-processors="list"
-kapt-classpaths="list"
+kapt-kapts="list"
+kapt-kapts-ITEM="dict"
+kapt-kapts-jar="str"
+kapt-kapts-deps="list"
 kapt-ap_opts="list"
+
+from_sandboxes="list"
+from_sandboxes-mode="str"
+from_sandboxes-resource_id="str"
+from_sandboxes-renames="list"
+from_sandboxes-outs="list"
+from_sandboxes-reldir="str"
+from_sandboxes-executable="bool"
 
 [attrs.root]
 

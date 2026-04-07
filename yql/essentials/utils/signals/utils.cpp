@@ -8,14 +8,18 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/json/yson/json2yson.h>
 
-#include <string.h>
+#include <cstring>
 
 extern char** environ;
 
 namespace NYql {
 
-static char** g_OriginalArgv = nullptr;
-static char* g_OriginalArgvLast = nullptr;
+namespace {
+
+char** g_OriginalArgv = nullptr;
+char* g_OriginalArgvLast = nullptr;
+
+} // namespace
 
 /*
  * To change the process title in Linux and Darwin we have to set argv[1]
@@ -36,7 +40,7 @@ static char* g_OriginalArgvLast = nullptr;
  *                                                     \/
  *                                         must be relocated elsewhere
  */
-void ProcTitleInit(int argc, const char* argv[])
+void ProcTitleInit(int argc, const char** argv)
 {
     Y_UNUSED(argc);
     Y_ABORT_UNLESS(!g_OriginalArgv, "ProcTitleInit() was already called");
@@ -73,7 +77,9 @@ void ProcTitleInit(int argc, const char* argv[])
 
 void SetProcTitle(const char* title)
 {
-    if (!g_OriginalArgv) return;
+    if (!g_OriginalArgv) {
+        return;
+    }
 
     char* p = g_OriginalArgv[0];
     p += strlcpy(p, "yqlworker: ", g_OriginalArgvLast - p);
@@ -88,7 +94,9 @@ void SetProcTitle(const char* title)
 
 void AddProcTitleSuffix(const char* suffix)
 {
-    if (!g_OriginalArgv) return;
+    if (!g_OriginalArgv) {
+        return;
+    }
 
     char* p = g_OriginalArgv[0];
     p += strlcat(p, " ", g_OriginalArgvLast - p);

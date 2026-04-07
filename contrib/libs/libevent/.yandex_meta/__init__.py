@@ -16,6 +16,11 @@ def libevent_post_install(self):
     shutil.rmtree(os.path.join(self.dstdir, "compat"))
     os.remove(os.path.join(self.dstdir, "strlcpy.c"))
 
+    with self.yamakes["."] as m:
+        m.CFLAGS = []
+        m.CFLAGS.append("-DHAVE_CONFIG_H")
+        m.CFLAGS.append("-Darc4random_buf=xxx_arc4random_buf")
+
     with self.yamakes["event_core"] as m:
         m.SRCS -= {"epoll.c", "poll.c", "select.c", "strlcpy.c"}
 

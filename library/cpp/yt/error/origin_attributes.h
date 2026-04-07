@@ -69,6 +69,7 @@ namespace NDetail {
 inline constexpr NGlobal::TVariableTag GetExtensionDataTag = {};
 inline constexpr NGlobal::TVariableTag FormatOriginTag = {};
 inline constexpr NGlobal::TVariableTag ExtractFromDictionaryTag = {};
+inline constexpr NGlobal::TVariableTag CompareExtensionDataTag = {};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -85,6 +86,8 @@ TOriginAttributes ExtractFromDictionary(TErrorAttributes* attributes);
 
 // Default impl of weak symbol.
 TOriginAttributes ExtractFromDictionaryDefault(TErrorAttributes* attributes);
+
+bool CompareExtensionData(const TOriginAttributes::TErasedExtensionData& lhs, const TOriginAttributes::TErasedExtensionData& rhs);
 
 } // namespace NDetail
 

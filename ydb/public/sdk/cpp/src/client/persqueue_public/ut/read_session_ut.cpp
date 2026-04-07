@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
+#include <ydb/public/sdk/cpp/adapters/executor/executor.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/read_session.h>
 
@@ -17,7 +18,7 @@
 
 using namespace NYdb;
 using namespace NYdb::NPersQueue;
-using IExecutor = NYdb::NPersQueue::IExecutor;
+using IExecutor = NYdb::IExecutor;
 using namespace ::testing; // Google mock.
 
 #define UNIT_ASSERT_EVENT_TYPE(event, type)                 \
@@ -550,6 +551,10 @@ public:
         Executor->Start();
     }
 
+    void Stop() override {
+        Executor->Stop();
+    }
+
     size_t GetTasksAdded() {
         with_lock (Lock) {
             return TasksAdded;
@@ -562,19 +567,6 @@ private:
     size_t TasksAdded = 0;
     ::IExecutor::TPtr Executor;
     std::vector<TFunction> Functions;
-};
-
-class TSynchronousExecutor : public ::IExecutor {
-    bool IsAsync() const override {
-        return false;
-    }
-
-    void Post(TFunction&& f) override {
-        f();
-    }
-
-    void DoStart() override {
-    }
 };
 
 extern TLogFormatter NYdb::GetPrefixLogFormatter(const std::string& prefix); // Defined in ydb.cpp.
@@ -608,7 +600,7 @@ TReadSessionImplTestSetup::~TReadSessionImplTestSetup() noexcept(false) {
     if (!DefaultExecutor) {
         ThreadPool = std::make_shared<TThreadPool>();
         ThreadPool->Start(1);
-        DefaultExecutor = CreateThreadPoolExecutorAdapter(ThreadPool);
+        DefaultExecutor = NAdapters::CreateExternalThreadPoolExecutorAdapter(ThreadPool);
     }
     return DefaultExecutor;
 }
@@ -1184,7 +1176,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
     Y_UNIT_TEST(ProperlyOrdersDecompressedData) {
         TReadSessionImplTestSetup setup;
-        setup.Settings.DecompressionExecutor(new TReorderingExecutor());
+        setup.Settings.DecompressionExecutor(std::make_shared<TReorderingExecutor>());
         setup.SuccessfulInit();
         TPartitionStream::TPtr stream = setup.CreatePartitionStream();
         for (ui64 i = 1; i <= 2; ++i) {
@@ -1209,7 +1201,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
     Y_UNIT_TEST(BrokenCompressedData) {
         TReadSessionImplTestSetup setup;
-        setup.Settings.DecompressionExecutor(new TReorderingExecutor(1));
+        setup.Settings.DecompressionExecutor(std::make_shared<TReorderingExecutor>(1));
         setup.SuccessfulInit();
         TPartitionStream::TPtr stream = setup.CreatePartitionStream();
         setup.MockProcessor->AddServerResponse(TMockReadSessionProcessor::TServerReadInfo()
@@ -1286,7 +1278,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
     }
 
     Y_UNIT_TEST(DecompressWithSynchronousExecutor) {
-        DecompressImpl(Ydb::PersQueue::V1::CODEC_ZSTD, "msg", new TSynchronousExecutor());
+        DecompressImpl(Ydb::PersQueue::V1::CODEC_ZSTD, "msg", CreateSyncExecutor());
     }
 
     TString GenerateMessageData(size_t size) {
@@ -1313,7 +1305,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         if (memoryLimit) {
             setup.Settings.MaxMemoryUsageBytes(memoryLimit);
         }
-        auto executor = MakeIntrusive<TReorderingExecutor>(reorderedCycleSize);
+        auto executor = std::make_shared<TReorderingExecutor>(reorderedCycleSize);
         setup.Settings.DecompressionExecutor(executor);
         setup.SuccessfulInit();
         TPartitionStream::TPtr stream = setup.CreatePartitionStream();
@@ -1548,7 +1540,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
     Y_UNIT_TEST(HoleBetweenOffsets) {
         TReadSessionImplTestSetup setup;
-        setup.Settings.DecompressionExecutor(MakeIntrusive<TReorderingExecutor>(2ull));
+        setup.Settings.DecompressionExecutor(std::make_shared<TReorderingExecutor>(2ull));
         setup.SuccessfulInit();
         TPartitionStream::TPtr stream = setup.CreatePartitionStream();
         setup.MockProcessor->AddServerResponse(TMockReadSessionProcessor::TServerReadInfo()
@@ -1656,7 +1648,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
 
     Y_UNIT_TEST(DataReceivedCallback) {
         TReadSessionImplTestSetup setup;
-        setup.Settings.DecompressionExecutor(MakeIntrusive<TReorderingExecutor>(2ull));
+        setup.Settings.DecompressionExecutor(std::make_shared<TReorderingExecutor>(2ull));
         auto calledPromise = NThreading::NewPromise<void>();
         int time = 0;
         setup.Settings.EventHandlers_.DataReceivedHandler([&](TReadSessionEvent::TDataReceivedEvent& event) {
@@ -1913,14 +1905,15 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                                                                    0);
 
         std::atomic<bool> ready = true;
+        std::atomic<bool> abandoned = false;
 
-        stream->InsertDataEvent(0, 0, data, ready);
+        stream->InsertDataEvent(0, 0, data, ready, abandoned);
         stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
-        stream->InsertDataEvent(0, 0, data, ready);
-        stream->InsertDataEvent(0, 0, data, ready);
+        stream->InsertDataEvent(0, 0, data, ready, abandoned);
+        stream->InsertDataEvent(0, 0, data, ready, abandoned);
         stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
         stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
-        stream->InsertDataEvent(0, 0, data, ready);
+        stream->InsertDataEvent(0, 0, data, ready, abandoned);
 
         TDeferredActions actions;
 

@@ -251,7 +251,7 @@ PyType_Slot ZstdDecompressionWriterSlots[] = {
 };
 
 PyType_Spec ZstdDecompressionWriterSpec = {
-    "zstd.ZstdDecompressionWriter",
+    "zstandard.backend_c.ZstdDecompressionWriter",
     sizeof(ZstdDecompressionWriter),
     0,
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,

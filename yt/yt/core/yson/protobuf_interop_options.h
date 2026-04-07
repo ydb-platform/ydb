@@ -20,7 +20,7 @@ struct TResolveProtobufElementByYPathOptions
 struct TProtobufWriterOptions
 {
     //! Keep: all unknown fields found during YSON parsing
-    //! are translated into Protobuf unknown fields (each has number UnknownYsonFieldNumber
+    //! are translated into Protobuf unknown fields (each has number `unknown_yson_field_number`
     //! and is a key-value pair with field name being its key and YSON being the value).
     //!
     //! Skip: all unknown fields are silently skipped.

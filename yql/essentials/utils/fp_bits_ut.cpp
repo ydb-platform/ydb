@@ -25,9 +25,9 @@ void CanonizeFpBitsTest() {
         Max
     };
 
-    T values[EValues::Max];
-    T newValues[EValues::Max];
-    int valuesClass[EValues::Max];
+    std::array<T, EValues::Max> values;
+    std::array<T, EValues::Max> newValues;
+    std::array<int, EValues::Max> valuesClass;
     values[Zero] = T(0);
     values[MZero] = -values[Zero];
     values[One] = T(1);
@@ -83,23 +83,23 @@ void CanonizeFpBitsTest() {
         UNIT_ASSERT(std::memcmp((const void*)&newValues[v], (const void*)&values[originalV], std::min(size_t(10), sizeof(T))) == 0);
     }
 }
-}
+} // namespace
 
 Y_UNIT_TEST_SUITE(TFpBits) {
-    Y_UNIT_TEST(CanonizeFloat) {
-        CanonizeFpBitsTest<float>();
-    }
-
-    Y_UNIT_TEST(CanonizeDouble) {
-        CanonizeFpBitsTest<double>();
-    }
-
-    Y_UNIT_TEST(CanonizeLongDouble) {
-        if (NValgrind::ValgrindIsOn()) {
-            return; // TODO KIKIMR-3431
-        }
-        CanonizeFpBitsTest<long double>();
-    }
+Y_UNIT_TEST(CanonizeFloat) {
+    CanonizeFpBitsTest<float>();
 }
 
+Y_UNIT_TEST(CanonizeDouble) {
+    CanonizeFpBitsTest<double>();
 }
+
+Y_UNIT_TEST(CanonizeLongDouble) {
+    if (NValgrind::ValgrindIsOn()) {
+        return; // TODO KIKIMR-3431
+    }
+    CanonizeFpBitsTest<long double>();
+}
+} // Y_UNIT_TEST_SUITE(TFpBits)
+
+} // namespace NYql

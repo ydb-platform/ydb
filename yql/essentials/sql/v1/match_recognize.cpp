@@ -12,12 +12,13 @@ constexpr auto VarDataName = "data";
 constexpr auto VarMatchedVarsName = "vars";
 constexpr auto VarLastRowIndexName = "lri";
 
-class TMatchRecognizeColumnAccessNode final : public TAstListNode {
+class TMatchRecognizeColumnAccessNode final: public TAstListNode {
 public:
     TMatchRecognizeColumnAccessNode(TPosition pos, TString var, TString column)
-    : TAstListNode(pos)
-    , Var_(std::move(var))
-    , Column_(std::move(column)) {
+        : TAstListNode(pos)
+        , Var_(std::move(var))
+        , Column_(std::move(column))
+    {
     }
 
     const TString* GetColumnName() const override {
@@ -26,32 +27,34 @@ public:
 
     bool DoInit(TContext& ctx, ISource* /* src */) override {
         switch (ctx.GetColumnReferenceState()) {
-        case EColumnRefState::MatchRecognizeMeasures:
-            if (!ctx.SetMatchRecognizeAggrVar(Var_)) {
+            case EColumnRefState::MatchRecognizeMeasures:
+                if (!ctx.SetMatchRecognizeAggrVar(Var_)) {
+                    return false;
+                }
+                Add(
+                    "Member",
+                    BuildAtom(Pos_, "row"),
+                    Q(Column_));
+                break;
+            case EColumnRefState::MatchRecognizeDefine:
+                if (ctx.GetMatchRecognizeDefineVar() != Var_) {
+                    ctx.Error() << "Row pattern navigation function is required";
+                    return false;
+                }
+                BuildLookup(VarLastRowIndexName);
+                break;
+            case EColumnRefState::MatchRecognizeDefineAggregate:
+                if (!ctx.SetMatchRecognizeAggrVar(Var_)) {
+                    return false;
+                }
+                BuildLookup("index");
+                break;
+            case EColumnRefState::Deny:
+            case EColumnRefState::Allow:
+            case EColumnRefState::AsStringLiteral:
+            case EColumnRefState::AsPgType:
+                ctx.Error(Pos_) << "Unexpected column reference state";
                 return false;
-            }
-            Add(
-                "Member",
-                BuildAtom(Pos_, "row"),
-                Q(Column_)
-            );
-            break;
-        case EColumnRefState::MatchRecognizeDefine:
-            if (ctx.GetMatchRecognizeDefineVar() != Var_) {
-                ctx.Error() << "Row pattern navigation function is required";
-                return false;
-            }
-            BuildLookup(VarLastRowIndexName);
-            break;
-        case EColumnRefState::MatchRecognizeDefineAggregate:
-            if (!ctx.SetMatchRecognizeAggrVar(Var_)) {
-                return false;
-            }
-            BuildLookup("index");
-            break;
-        default:
-            ctx.Error(Pos_) << "Unexpected column reference state";
-            return false;
         }
         return true;
     }
@@ -68,12 +71,9 @@ private:
                 "Lookup",
                 Y(
                     "ToIndexDict",
-                    BuildAtom(Pos_, VarDataName)
-                ),
-                BuildAtom(Pos_, std::move(varKeyName))
-            ),
-            Q(Column_)
-        );
+                    BuildAtom(Pos_, VarDataName)),
+                BuildAtom(Pos_, std::move(varKeyName))),
+            Q(Column_));
     }
 
 private:
@@ -81,12 +81,13 @@ private:
     TString Column_;
 };
 
-class TMatchRecognizeDefineAggregate final : public TAstListNode {
+class TMatchRecognizeDefineAggregate final: public TAstListNode {
 public:
     TMatchRecognizeDefineAggregate(TPosition pos, TString name, TVector<TNodePtr> args)
-    : TAstListNode(pos)
-    , Name_(std::move(name))
-    , Args_(std::move(args)) {
+        : TAstListNode(pos)
+        , Name_(std::move(name))
+        , Args_(std::move(args))
+    {
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
@@ -130,11 +131,12 @@ private:
     TVector<TNodePtr> Args_;
 };
 
-class TMatchRecognizeVarAccessNode final : public INode {
+class TMatchRecognizeVarAccessNode final: public INode {
 public:
     TMatchRecognizeVarAccessNode(TPosition pos, TNodePtr aggr)
-    : INode(pos)
-    , Aggr_(std::move(aggr)) {
+        : INode(pos)
+        , Aggr_(std::move(aggr))
+    {
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
@@ -144,23 +146,25 @@ public:
         auto var = ctx.ExtractMatchRecognizeAggrVar();
         Expr_ = [&]() -> TNodePtr {
             switch (ctx.GetColumnReferenceState()) {
-            case EColumnRefState::MatchRecognizeMeasures: {
-                ctx.GetMatchRecognizeAggregations().emplace_back(std::move(var), Aggr_->GetAggregation());
-                return Aggr_;
-            }
-            case EColumnRefState::MatchRecognizeDefine:
-                return Y(
-                    "Apply",
-                    BuildLambda(Pos_, Y("item"), Aggr_),
-                    Y(
-                        "Member",
-                        BuildAtom(ctx.Pos(), VarMatchedVarsName),
-                        Q(std::move(var))
-                    )
-                );
-            default:
-                ctx.Error(Pos_) << "Unexpected column reference state";
-                return {};
+                case EColumnRefState::MatchRecognizeMeasures: {
+                    ctx.GetMatchRecognizeAggregations().emplace_back(std::move(var), Aggr_->GetAggregation());
+                    return Aggr_;
+                }
+                case EColumnRefState::MatchRecognizeDefine:
+                    return Y(
+                        "Apply",
+                        BuildLambda(Pos_, Y("item"), Aggr_),
+                        Y(
+                            "Member",
+                            BuildAtom(ctx.Pos(), VarMatchedVarsName),
+                            Q(std::move(var))));
+                case EColumnRefState::Deny:
+                case EColumnRefState::Allow:
+                case EColumnRefState::AsStringLiteral:
+                case EColumnRefState::AsPgType:
+                case EColumnRefState::MatchRecognizeDefineAggregate:
+                    ctx.Error(Pos_) << "Unexpected column reference state";
+                    return {};
             }
         }();
         return Expr_ && Expr_->Init(ctx, src);
@@ -179,7 +183,7 @@ private:
     TNodePtr Expr_;
 };
 
-class TMatchRecognize final : public TAstListNode {
+class TMatchRecognize final: public TAstListNode {
 public:
     TMatchRecognize(
         TPosition pos,
@@ -194,18 +198,19 @@ public:
         TNodePtr patternVars,
         TNodePtr subset,
         TVector<TNamedFunction> definitions)
-    : TAstListNode(pos)
-    , Label_(std::move(label))
-    , PartitionKeySelector_(std::move(partitionKeySelector))
-    , PartitionColumns_(std::move(partitionColumns))
-    , SortSpecs_(std::move(sortSpecs))
-    , Measures_(std::move(measures))
-    , RowsPerMatch_(std::move(rowsPerMatch))
-    , SkipTo_(std::move(skipTo))
-    , Pattern_(std::move(pattern))
-    , PatternVars_(std::move(patternVars))
-    , Subset_(std::move(subset))
-    , Definitions_(std::move(definitions)) {
+        : TAstListNode(pos)
+        , Label_(std::move(label))
+        , PartitionKeySelector_(std::move(partitionKeySelector))
+        , PartitionColumns_(std::move(partitionColumns))
+        , SortSpecs_(std::move(sortSpecs))
+        , Measures_(std::move(measures))
+        , RowsPerMatch_(std::move(rowsPerMatch))
+        , SkipTo_(std::move(skipTo))
+        , Pattern_(std::move(pattern))
+        , PatternVars_(std::move(patternVars))
+        , Subset_(std::move(subset))
+        , Definitions_(std::move(definitions))
+    {
     }
 
 private:
@@ -226,7 +231,7 @@ private:
 
         auto measureNames = Y();
         auto measuresCallables = Y();
-        for (auto& m: Measures_) {
+        for (auto& m : Measures_) {
             TColumnRefScope scope(ctx, EColumnRefState::MatchRecognizeMeasures);
             if (!m.Callable || !m.Callable->Init(ctx, src)) {
                 return false;
@@ -253,9 +258,7 @@ private:
                     "MatchRecognizeMeasuresCallable",
                     BuildLambda(pos, Y("row"), std::move(m.Callable)),
                     Q(measuresVars),
-                    Q(measuresAggregates)
-                )
-            );
+                    Q(measuresAggregates)));
         }
         auto measuresNode = Y("MatchRecognizeMeasuresCallables", inputRowType, Q(PatternVars_), Q(measureNames), Q(measuresCallables));
 
@@ -276,11 +279,11 @@ private:
         }
 
         auto defineNames = Y();
-        for (auto& d: Definitions_) {
+        for (auto& d : Definitions_) {
             defineNames = L(defineNames, BuildQuotedAtom(d.Callable->GetPos(), d.Name));
         }
         auto defineNode = Y("MatchRecognizeDefines", inputRowType, Q(PatternVars_), Q(defineNames));
-        for (auto& d: Definitions_) {
+        for (auto& d : Definitions_) {
             TColumnRefScope scope(ctx, EColumnRefState::MatchRecognizeDefine, true, d.Name);
             if (!d.Callable || !d.Callable->Init(ctx, src)) {
                 return false;
@@ -303,21 +306,17 @@ private:
                 Y("let", "subset", Subset_ ? Subset_ : Q("")),
                 Y("let", "define", defineNode),
                 Y("let", "res", Y("MatchRecognize",
-                    "input",
-                    "partitionKeySelector",
-                    "partitionColumns",
-                    "sortTraits",
-                    Y("MatchRecognizeParams",
-                        "measures",
-                        "rowsPerMatch",
-                        "skipTo",
-                        "pattern",
-                        "define"
-                    )
-                )),
-                Y("return", "res")
-            ))
-        );
+                                  "input",
+                                  "partitionKeySelector",
+                                  "partitionColumns",
+                                  "sortTraits",
+                                  Y("MatchRecognizeParams",
+                                    "measures",
+                                    "rowsPerMatch",
+                                    "skipTo",
+                                    "pattern",
+                                    "define"))),
+                Y("return", "res"))));
         return true;
     }
 
@@ -334,8 +333,7 @@ private:
             Pattern_,
             PatternVars_,
             Subset_,
-            Definitions_
-        );
+            Definitions_);
     }
 
 private:
@@ -367,8 +365,7 @@ TNodePtr TMatchRecognizeBuilder::Build(TContext& ctx, TString label, ISource* sr
         std::move(Pattern_),
         std::move(PatternVars_),
         std::move(Subset_),
-        std::move(Definitions_)
-    );
+        std::move(Definitions_));
     if (!node->Init(ctx, src)) {
         return {};
     }

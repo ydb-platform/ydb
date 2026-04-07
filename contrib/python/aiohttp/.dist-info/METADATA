@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: aiohttp
-Version: 3.9.5
+Version: 3.10.6
 Summary: Async http client/server framework (asyncio)
 Home-page: https://github.com/aio-libs/aiohttp
 Maintainer: aiohttp team <team@aiohttp.org>
@@ -28,20 +28,22 @@ Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
 Classifier: Topic :: Internet :: WWW/HTTP
 Requires-Python: >=3.8
 Description-Content-Type: text/x-rst
 License-File: LICENSE.txt
+Requires-Dist: aiohappyeyeballs >=2.3.0
 Requires-Dist: aiosignal >=1.1.2
 Requires-Dist: attrs >=17.3.0
 Requires-Dist: frozenlist >=1.1.1
 Requires-Dist: multidict <7.0,>=4.5
-Requires-Dist: yarl <2.0,>=1.0
+Requires-Dist: yarl <2.0,>=1.12.0
 Requires-Dist: async-timeout <5.0,>=4.0 ; python_version < "3.11"
 Provides-Extra: speedups
 Requires-Dist: brotlicffi ; (platform_python_implementation != "CPython") and extra == 'speedups'
 Requires-Dist: Brotli ; (platform_python_implementation == "CPython") and extra == 'speedups'
-Requires-Dist: aiodns ; (sys_platform == "linux" or sys_platform == "darwin") and extra == 'speedups'
+Requires-Dist: aiodns >=3.2.0 ; (sys_platform == "linux" or sys_platform == "darwin") and extra == 'speedups'
 
 ==================================
 Async http client/server framework
@@ -193,7 +195,7 @@ Communication channels
 
 *aio-libs Discussions*: https://github.com/aio-libs/aiohttp/discussions
 
-*gitter chat* https://gitter.im/aio-libs/Lobby
+*Matrix*: `#aio-libs:matrix.org <https://matrix.to/#/#aio-libs:matrix.org>`_
 
 We support `Stack Overflow
 <https://stackoverflow.com/questions/tagged/aiohttp>`_.
@@ -202,7 +204,6 @@ Please add *aiohttp* tag to your question there.
 Requirements
 ============
 
-- async-timeout_
 - attrs_
 - multidict_
 - yarl_

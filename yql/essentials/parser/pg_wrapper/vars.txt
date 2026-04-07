@@ -713,6 +713,7 @@ cached_db_hash
 cached_expression_list
 cached_role
 cached_roles
+catcache_in_progress_stack
 catchupInterruptPending
 cert_errdetail
 check_function_bodies
@@ -1343,6 +1344,8 @@ reply_message
 reporting_enabled
 reserved_class_prefix
 restart_after_crash
+restrict_nonsystem_relation_kind
+restrict_nonsystem_relation_kind_string
 reverse_dispatch_table
 ri_compare_cache
 ri_constraint_cache

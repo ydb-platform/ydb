@@ -1,4 +1,5 @@
 #include "examples.h"
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -61,7 +62,7 @@ void TCommandWithExamples::AddCommandExamples(TExampleSet&& examples) {
 
 namespace {
     void PrintExamples(TStringStream& descr, const TVector<TExample>& examples) {
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
         if (examples.size() == 1) {
             if (examples[0].Title) {
                 descr << examples[0].Title << ':' << Endl;
@@ -91,7 +92,7 @@ void TCommandWithExamples::CheckExamples(const TClientCommand::TConfig& config) 
             continue;
         }
         TStringStream descr;
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
         descr << opt->Help_ << Endl << Endl << colors.BoldColor();
         if (examples.Title) {
             descr << examples.Title;

@@ -1,7 +1,7 @@
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
-#include "schemeshard_utils.h"  // for TransactionTemplate
+#include "schemeshard_index_utils.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
@@ -40,20 +40,24 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     auto indexedTable = tx.GetCreateIndexedTable();
     const NKikimrSchemeOp::TTableDescription& baseTableDescription = indexedTable.GetTableDescription();
 
-    ui32 indexesCount = indexedTable.IndexDescriptionSize();
-    ui32 indexedTableShards = 0;
-    for (const auto& desc : indexedTable.GetIndexDescription()) {
-        if (desc.IndexImplTableDescriptionsSize()) {
-            indexedTableShards += TTableInfo::ShardsToCreate(desc.GetIndexImplTableDescriptions(0));
-        } else {
-            indexedTableShards += 1;
+    TIndexObjectCounts totalCounts;
+    ui32 indexCount = indexedTable.IndexDescriptionSize();
+    for (const auto& indexDesc : indexedTable.GetIndexDescription()) {
+        auto counts = GetIndexObjectCounts(indexDesc);
+        totalCounts.IndexTableCount += counts.IndexTableCount;
+        totalCounts.SequenceCount += counts.SequenceCount;
+        totalCounts.IndexTableShards += counts.IndexTableShards;
+        if (totalCounts.ShardsPerPath < counts.ShardsPerPath) {
+            totalCounts.ShardsPerPath = counts.ShardsPerPath;
         }
     }
 
-    ui32 sequencesCount = indexedTable.SequenceDescriptionSize();
     ui32 baseShards = TTableInfo::ShardsToCreate(baseTableDescription);
-    ui32 shardsToCreate = baseShards + indexedTableShards;
-    ui32 pathToCreate = 1 + indexesCount * 2 + sequencesCount;
+    if (totalCounts.ShardsPerPath < baseShards) {
+        totalCounts.ShardsPerPath = baseShards;
+    }
+    ui32 shardsToCreate = baseShards + totalCounts.IndexTableShards;
+    ui32 pathToCreate = 1 + indexCount + totalCounts.IndexTableCount + totalCounts.SequenceCount;
 
     TPath workingDir = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     if (workingDir.IsEmpty()) {
@@ -86,7 +90,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
     TSubDomainInfo::TPtr domainInfo = baseTablePath.DomainInfo();
 
-    if (sequencesCount > 0 && domainInfo->GetSequenceShards().empty()) {
+    if (totalCounts.SequenceCount > 0 && domainInfo->GetSequenceShards().empty()) {
         ++shardsToCreate;
     }
 
@@ -96,13 +100,14 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     << " domain path id: " << baseTablePath.GetPathIdForDomain()
                     << " domain path: " << TPath::Init(baseTablePath.GetPathIdForDomain(), context.SS).PathString()
                     << " shardsToCreate: " << shardsToCreate
+                    << " shardsPerPath: " << totalCounts.ShardsPerPath
                     << " GetShardsInside: " << domainInfo->GetShardsInside()
                     << " MaxShards: " << domainInfo->GetSchemeLimits().MaxShards);
 
-    if (indexesCount > domainInfo->GetSchemeLimits().MaxTableIndices) {
+    if (indexCount > domainInfo->GetSchemeLimits().MaxTableIndices) {
         auto msg = TStringBuilder() << "indexes count has reached maximum value in the table"
                                     << ", children limit for dir in domain: " << domainInfo->GetSchemeLimits().MaxTableIndices
-                                    << ", intention to create new children: " << indexesCount;
+                                    << ", intention to create new children: " << indexCount;
         return {CreateReject(nextId, NKikimrScheme::EStatus::StatusResourceExhausted, msg)};
     }
 
@@ -113,7 +118,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
         if (!tx.GetInternal()) {
             checks
-                .PathShardsLimit(baseShards)
+                .PathShardsLimit(totalCounts.ShardsPerPath)
                 .ShardsLimit(shardsToCreate);
         }
 
@@ -127,6 +132,45 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     TTableColumns baseTableColumns = ExtractInfo(baseTableDescription);
     for (auto& indexDescription: indexedTable.GetIndexDescription()) {
         const auto& indexName = indexDescription.GetName();
+
+        switch (GetIndexType(indexDescription)) {
+            case NKikimrSchemeOp::EIndexTypeGlobal:
+            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+                // no feature flag, everything is fine
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                if (!context.SS->EnableInitialUniqueIndex) {
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Unique constraint feature is disabled")};
+                }
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+                TString msg;
+                if (!NKikimr::NKMeans::ValidateSettings(indexDescription.GetVectorIndexKmeansTreeDescription().GetSettings(), msg)) {
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
+                }
+                break;
+            }
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
+                if (!context.SS->EnableFulltextIndex) {
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Fulltext index support is disabled")};
+                }
+                TString msg;
+                if (!NKikimr::NFulltext::ValidateSettings(indexDescription.GetFulltextIndexDescription().GetSettings(), msg)) {
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
+                }
+                break;
+            }
+            case NKikimrSchemeOp::EIndexTypeGlobalJson: {
+                if (!context.SS->EnableJsonIndex) {
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "JSON index support is disabled")};
+                }
+                break;
+            }
+            default:
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDescription.GetType()))};
+        }
+
         bool uniformIndexTable = false;
         if (indexDescription.IndexImplTableDescriptionsSize()) {
             if (indexDescription.GetIndexImplTableDescriptions(0).HasUniformPartitionsCount()) {
@@ -241,35 +285,6 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     }
 
     for (auto& indexDescription: indexedTable.GetIndexDescription()) {
-        const auto indexType = indexDescription.HasType()
-            ? indexDescription.GetType()
-            : NKikimrSchemeOp::EIndexTypeGlobal;
-
-        switch (indexType) {
-            case NKikimrSchemeOp::EIndexTypeInvalid:
-                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Invalid index type")};
-            case NKikimrSchemeOp::EIndexTypeGlobal:
-            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
-                // no feature flag, everything is fine
-                break;
-            case NKikimrSchemeOp::EIndexTypeGlobalUnique: {
-                if (!context.SS->EnableInitialUniqueIndex) {
-                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Unique constraint feature is disabled")};
-                }
-                break;
-            }
-            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
-                if (!context.SS->EnableVectorIndex) {
-                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Vector index support is disabled")};
-                }
-                TString msg;
-                if (!NKikimr::NKMeans::ValidateSettings(indexDescription.GetVectorIndexKmeansTreeDescription().GetSettings(), msg)) {
-                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
-                }
-                break;
-            }
-        }
-
         {
             auto scheme = TransactionTemplate(
                 tx.GetWorkingDir() + "/" + baseTableDescription.GetName(),
@@ -279,12 +294,12 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             scheme.SetInternal(tx.GetInternal());
 
             scheme.MutableCreateTableIndex()->CopyFrom(indexDescription);
-            scheme.MutableCreateTableIndex()->SetType(indexType);
+            scheme.MutableCreateTableIndex()->SetType(GetIndexType(indexDescription));
 
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), scheme));
         }
 
-        auto createIndexImplTable = [&] (NKikimrSchemeOp::TTableDescription&& implTableDesc) {
+        auto createIndexImplTable = [&] (NKikimrSchemeOp::TTableDescription&& implTableDesc, const THashSet<TString>& localSequences = {}) {
             auto scheme = TransactionTemplate(
                 tx.GetWorkingDir() + "/" + baseTableDescription.GetName() + "/" + indexDescription.GetName(),
                 NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
@@ -294,36 +309,88 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
             *scheme.MutableCreateTable() = std::move(implTableDesc);
 
-            return CreateNewTable(NextPartId(nextId, result), scheme);
+            return CreateNewTable(NextPartId(nextId, result), scheme, localSequences);
         };
 
         const auto& implTableColumns = indexes.at(indexDescription.GetName());
-        if (indexDescription.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-            const bool prefixVectorIndex = indexDescription.GetKeyColumnNames().size() > 1;
-            NKikimrSchemeOp::TTableDescription userLevelDesc, userPostingDesc, userPrefixDesc;
-            if (indexDescription.IndexImplTableDescriptionsSize() == 2 + prefixVectorIndex) {
-                // This description provided by user to override partition policy
-                userLevelDesc = indexDescription.GetIndexImplTableDescriptions(0);
-                userPostingDesc = indexDescription.GetIndexImplTableDescriptions(1);
-                if (prefixVectorIndex) {
-                    userPrefixDesc = indexDescription.GetIndexImplTableDescriptions(2);
+        const auto indexType = GetIndexType(indexDescription);
+        switch (indexType) {
+            case NKikimrSchemeOp::EIndexTypeGlobal:
+            case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+            case NKikimrSchemeOp::EIndexTypeGlobalUnique: {
+                NKikimrSchemeOp::TTableDescription userIndexDesc;
+                if (indexDescription.IndexImplTableDescriptionsSize()) {
+                    // This description provided by user to override partition policy
+                    userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
                 }
+                result.push_back(createIndexImplTable(CalcImplTableDesc(baseTableDescription, implTableColumns, userIndexDesc)));
+                break;
             }
-            const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
-            result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc)));
-            result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userPostingDesc)));
-            if (prefixVectorIndex) {
-                const THashSet<TString> prefixColumns{indexDescription.GetKeyColumnNames().begin(), indexDescription.GetKeyColumnNames().end() - 1};
-                result.push_back(createIndexImplTable(CalcVectorKmeansTreePrefixImplTableDesc(prefixColumns, baseTableDescription, baseTableDescription.GetPartitionConfig(), implTableColumns, userPrefixDesc)));
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+                const bool prefixVectorIndex = indexDescription.GetKeyColumnNames().size() > 1;
+                NKikimrSchemeOp::TTableDescription userLevelDesc, userPostingDesc, userPrefixDesc;
+                if (indexDescription.IndexImplTableDescriptionsSize() == 2 + prefixVectorIndex) {
+                    // This description provided by user to override partition policy
+                    userLevelDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NKMeans::LevelTablePosition);
+                    userPostingDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NKMeans::PostingTablePosition);
+                    if (prefixVectorIndex) {
+                        userPrefixDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NKMeans::PrefixTablePosition);
+                    }
+                }
+                const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
+                result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc)));
+                result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userPostingDesc)));
+                if (prefixVectorIndex) {
+                    const THashSet<TString> prefixColumns{indexDescription.GetKeyColumnNames().begin(), indexDescription.GetKeyColumnNames().end() - 1};
+                    result.push_back(createIndexImplTable(CalcVectorKmeansTreePrefixImplTableDesc(
+                        prefixColumns, baseTableDescription, baseTableDescription.GetPartitionConfig(), implTableColumns, userPrefixDesc),
+                        THashSet<TString>{NTableIndex::NKMeans::IdColumnSequence}));
+                    // Create the sequence
+                    auto outTx = TransactionTemplate(tx.GetWorkingDir() + "/" + baseTableDescription.GetName() + "/" +
+                        indexDescription.GetName() + "/" + NTableIndex::NKMeans::PrefixTable,
+                        NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
+                    outTx.MutableSequence()->SetName(NTableIndex::NKMeans::IdColumnSequence);
+                    outTx.MutableSequence()->SetMinValue(-0x7FFFFFFFFFFFFFFF);
+                    outTx.MutableSequence()->SetMaxValue(-1);
+                    outTx.MutableSequence()->SetStartValue(NTableIndex::NKMeans::SetPostingParentFlag(1));
+                    outTx.MutableSequence()->SetRestart(true);
+                    outTx.SetFailOnExist(tx.GetFailOnExist());
+                    outTx.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
+                    outTx.SetInternal(tx.GetInternal());
+                    result.push_back(CreateNewSequence(NextPartId(nextId, result), outTx));
+                }
+                break;
             }
-        } else {
-            NKikimrSchemeOp::TTableDescription userIndexDesc;
-            if (indexDescription.IndexImplTableDescriptionsSize()) {
-                // This description provided by user to override partition policy
-                userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
+            case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
+                NKikimrSchemeOp::TTableDescription userIndexDesc;
+                if (indexDescription.IndexImplTableDescriptionsSize() == 1) {
+                    userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
+                }
+                const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
+                result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
+                    indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), indexType)));
+                break;
             }
-
-            result.push_back(createIndexImplTable(CalcImplTableDesc(baseTableDescription, implTableColumns, userIndexDesc)));
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
+                NKikimrSchemeOp::TTableDescription userIndexDesc, docsTableDesc, dictTableDesc, statsTableDesc;
+                if (indexDescription.IndexImplTableDescriptionsSize() == 4) {
+                    dictTableDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DictTablePosition);
+                    docsTableDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DocsTablePosition);
+                    statsTableDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NFulltext::StatsTablePosition);
+                    userIndexDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NFulltext::PostingTablePosition);
+                }
+                const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
+                result.push_back(createIndexImplTable(CalcFulltextImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(),
+                    indexDataColumns, userIndexDesc, indexDescription.GetFulltextIndexDescription(), indexType)));
+                result.push_back(createIndexImplTable(CalcFulltextDocsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, docsTableDesc)));
+                result.push_back(createIndexImplTable(CalcFulltextDictImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), dictTableDesc, indexDescription.GetFulltextIndexDescription())));
+                result.push_back(createIndexImplTable(CalcFulltextStatsImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), statsTableDesc)));
+                break;
+            }
+            default:
+                Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexDescription.GetType()));
+                break;
         }
     }
 

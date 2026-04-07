@@ -20,7 +20,7 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     const ::Ydb::Operations::OperationParams* operationParams,
     const TQueryRequestSettings& querySettings,
     const TString& poolId,
-    std::optional<NKqp::TArrowFormatSettings> arrowFormatSettings)
+    std::optional<NKqp::NFormats::TArrowFormatSettings> arrowFormatSettings)
     : RequestCtx(ctx)
     , RequestActorId(requestActorId)
     , Database(CanonizePath(ctx->GetDatabaseName().GetOrElse("")))
@@ -45,6 +45,14 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
             CancelAfter = GetDuration(operationParams->cancel_after());
         }
     }
+}
+
+TEvKqp::TEvQueryRequest::TEvQueryRequest(const TString& userSID) : TEvQueryRequest()
+{
+    NACLib::TUserToken::TUserTokenInitFields fields {
+        .UserSID = userSID
+    };
+    Token_ = new NACLib::TUserToken(fields);
 }
 
 void TEvKqp::TEvQueryRequest::PrepareRemote() const {

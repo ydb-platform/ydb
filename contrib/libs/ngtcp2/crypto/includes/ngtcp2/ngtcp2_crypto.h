@@ -26,6 +26,7 @@
 #define NGTCP2_CRYPTO_H
 
 #include <ngtcp2/ngtcp2.h>
+#include <contrib/libs/ngtcp2/crypto/rename.h>
 
 #ifdef __cplusplus
 extern "C" {

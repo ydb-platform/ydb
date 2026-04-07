@@ -2,9 +2,10 @@ UNITTEST_FOR(ydb/services/ydb)
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -12,6 +13,7 @@ ENDIF()
 SRCS(
     backup_path_ut.cpp
     encrypted_backup_ut.cpp
+    fs_backup_validation_ut.cpp
     list_objects_in_s3_export_ut.cpp
     ydb_backup_ut.cpp
 )
@@ -36,5 +38,9 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
+
+IF (OS_LINUX)
+    LDFLAGS(-Wl,--wrap=statfs)
+ENDIF()
 
 END()

@@ -32,15 +32,15 @@ void TEvReadStart::DoSerializeToProto(NKikimrColumnShardTxProto::TEvent& proto) 
     *proto.MutableRead()->MutableSchema() = NArrow::SerializeSchema(*Schema);
 }
 
-void TEvReadStart::DoAddToInteraction(const ui64 txId, TInteractionsContext& context) const {
+void TEvReadStart::DoAddToInteraction(const ui64 lockId, TInteractionsContext& context) const {
     for (auto&& i : *Filter) {
-        context.AddInterval(txId, PathId, TIntervalPoint::From(i.GetPredicateFrom(), Schema), TIntervalPoint::To(i.GetPredicateTo(), Schema));
+        context.AddInterval(lockId, PathId.InternalPathId, TIntervalPoint::From(i.GetPredicateFrom(), Schema), TIntervalPoint::To(i.GetPredicateTo(), Schema));
     }
 }
 
-void TEvReadStart::DoRemoveFromInteraction(const ui64 txId, TInteractionsContext& context) const {
+void TEvReadStart::DoRemoveFromInteraction(const ui64 lockId, TInteractionsContext& context) const {
     for (auto&& i : *Filter) {
-        context.RemoveInterval(txId, PathId, TIntervalPoint::From(i.GetPredicateFrom(), Schema), TIntervalPoint::To(i.GetPredicateTo(), Schema));
+        context.RemoveInterval(lockId, PathId.InternalPathId, TIntervalPoint::From(i.GetPredicateFrom(), Schema), TIntervalPoint::To(i.GetPredicateTo(), Schema));
     }
 }
 

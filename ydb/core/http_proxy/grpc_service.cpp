@@ -8,6 +8,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/grpc/server/grpc_method_setup.h>
 #include <library/cpp/uri/uri.h>
 
 #include <util/generic/guid.h>
@@ -125,15 +126,6 @@ private:
     TString RequestId;
 };
 
-
-static TString GetSdkBuildInfo(NYdbGrpc::IRequestContextBase* reqCtx) {
-    const auto& res = reqCtx->GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
-    if (res.empty()) {
-        return {};
-    }
-    return TString{res[0]};
-}
-
 TGRpcDiscoveryService::TGRpcDiscoveryService(NActors::TActorSystem *system, std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
                                  TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
     : ActorSystem_(system)
@@ -149,22 +141,27 @@ void TGRpcDiscoveryService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrp
 }
 
 void TGRpcDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
-    auto getCounterBlock = NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
-#ifdef ADD_REQUEST
-#error ADD_REQUEST macro already defined
-#endif
-#define ADD_REQUEST(NAME, IN, OUT, ACTION) \
-     MakeIntrusive<TGRpcRequest<Ydb::Discovery::IN, Ydb::Discovery::OUT, TGRpcDiscoveryService>>(this, &Service_, CQ_, \
-         [this](NYdbGrpc::IRequestContextBase *reqCtx) { \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer(), GetSdkBuildInfo(reqCtx)); \
-            ACTION; \
-         }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME, \
-         #NAME, logger, getCounterBlock("discovery", #NAME))->Run();
+    using namespace Ydb::Discovery;
+    auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
+    ReportSdkBuildInfo();
 
-    ADD_REQUEST(ListEndpoints, ListEndpointsRequest, ListEndpointsResponse, {
+#ifdef SETUP_LEGACY_EVENT_METHOD
+#error SETUP_LEGACY_EVENT_METHOD macro already defined
+#endif
+
+#define SETUP_LEGACY_EVENT_METHOD(methodName, inputType, outputType, action)                                          \
+    MakeIntrusive<TGRpcRequest<inputType, outputType, TGRpcDiscoveryService>>(this, &Service_, CQ_,                   \
+        [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                                               \
+           NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer(), GetSdkBuildInfoIfNeeded(reqCtx));       \
+           action;                                                                                                    \
+        }, &TGrpcAsyncService::Y_CAT(Request, methodName),                                                            \
+        Y_STRINGIZE(methodName), logger, YDB_API_DEFAULT_COUNTER_BLOCK(discovery, methodName))->Run();
+
+    SETUP_LEGACY_EVENT_METHOD(ListEndpoints, ListEndpointsRequest, ListEndpointsResponse, {
         ActorSystem_->Register(new TGRpcRequestActor(reqCtx));
-    })
-#undef ADD_REQUEST
+    });
+
+#undef SETUP_LEGACY_EVENT_METHOD
 }
 
 } // namespace NKikimr

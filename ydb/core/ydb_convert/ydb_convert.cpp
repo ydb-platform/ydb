@@ -5,6 +5,7 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
+#include <ydb/library/mkql_proto/mkql_proto.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
@@ -479,28 +480,28 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const Ydb::Value& valu
             break;
         case NUdf::TDataType<NUdf::TDate32>::Id:
             CheckTypeId(value.value_case(), Ydb::Value::kInt32Value, "Date32");
-            if (value.int32_value() >= NUdf::MAX_DATE32) {
+            if (value.int32_value() < NUdf::MIN_DATE32 || value.int32_value() > NUdf::MAX_DATE32) {
                 throw yexception() << "Invalid Date32 value";
             }
             res.SetInt32(value.int32_value());
             break;
         case NUdf::TDataType<NUdf::TDatetime64>::Id:
             CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Datetime64");
-            if (value.int64_value() >= NUdf::MAX_DATETIME64) {
+            if (value.int64_value() < NUdf::MIN_DATETIME64 || value.int64_value() > NUdf::MAX_DATETIME64) {
                 throw yexception() << "Invalid Datetime64 value";
             }
             res.SetInt64(value.int64_value());
             break;
         case NUdf::TDataType<NUdf::TTimestamp64>::Id:
             CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Timestamp64");
-            if (value.int64_value() >= NUdf::MAX_TIMESTAMP64) {
+            if (value.int64_value() < NUdf::MIN_TIMESTAMP64 || value.int64_value() > NUdf::MAX_TIMESTAMP64) {
                 throw yexception() << "Invalid Timestamp64 value";
             }
             res.SetInt64(value.int64_value());
             break;
         case NUdf::TDataType<NUdf::TInterval64>::Id:
             CheckTypeId(value.value_case(), Ydb::Value::kInt64Value, "Interval64");
-            if (std::abs(value.int64_value()) >= NUdf::MAX_INTERVAL64) {
+            if (std::abs(value.int64_value()) > NUdf::MAX_INTERVAL64) {
                 throw yexception() << "Invalid Interval64 value";
             }
             res.SetInt64(value.int64_value());
@@ -1122,19 +1123,19 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
         break;
 
     case NScheme::NTypeIds::Date32:
-        ok = cell.AsValue<i32>() < NUdf::MAX_DATE32;
+        ok = cell.AsValue<i32>() >= NUdf::MIN_DATE32 && cell.AsValue<i32>() <= NUdf::MAX_DATE32;
         break;
 
     case NScheme::NTypeIds::Datetime64:
-        ok = cell.AsValue<i64>() < NUdf::MAX_DATETIME64;
+        ok = cell.AsValue<i64>() >= NUdf::MIN_DATETIME64 && cell.AsValue<i64>() <= NUdf::MAX_DATETIME64;
         break;
 
     case NScheme::NTypeIds::Timestamp64:
-        ok = cell.AsValue<i64>() < NUdf::MAX_TIMESTAMP64;
+        ok = cell.AsValue<i64>() >= NUdf::MIN_TIMESTAMP64 && cell.AsValue<i64>() <= NUdf::MAX_TIMESTAMP64;
         break;
 
     case NScheme::NTypeIds::Interval64:
-        ok = std::abs(cell.AsValue<i64>()) < NUdf::MAX_INTERVAL64;
+        ok = std::abs(cell.AsValue<i64>()) <= NUdf::MAX_INTERVAL64;
         break;
 
     case NScheme::NTypeIds::Utf8:
@@ -1278,7 +1279,21 @@ bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Val
         }
         break;
     }
-    case NScheme::NTypeIds::Decimal :
+    case NScheme::NTypeIds::Decimal : {
+
+        std::pair<ui64,ui64>& valInPool = *valueDataPool.Allocate<std::pair<ui64,ui64> >();
+        valInPool.first = val.low_128();
+        valInPool.second = val.high_128();
+        ui8 precision = type.GetDecimalType().GetPrecision();
+        auto validate = NYql::NDecimal::FromHalfs(val.low_128(), val.high_128());
+        if (!NKikimr::NMiniKQL::IsValidDecimal(precision, validate)) {
+            err = "Invalid decimal value";
+            return false;
+        }
+
+        c = TCell((const char*)&valInPool, sizeof(valInPool));
+        break;
+    }
     case NScheme::NTypeIds::Uuid : {
         std::pair<ui64,ui64>& valInPool = *valueDataPool.Allocate<std::pair<ui64,ui64> >();
         valInPool.first = val.low_128();
@@ -1455,9 +1470,13 @@ bool FillACL(NKikimrSchemeOp::TModifyScheme& out,
     }
 
     NACLib::TDiffACL diffACL;
+    diffACL.ClearAccess();
     for (const auto& action : in->actions()) {
         if (action.has_grant() && !FillAllowPermissions(diffACL, action.grant(), error)) {
             return false;
+        }
+        if (action.has_change_owner()) {
+            out.MutableModifyACL()->SetNewOwner(action.change_owner());
         }
     }
     out.MutableModifyACL()->SetDiffACL(diffACL.SerializeAsString());

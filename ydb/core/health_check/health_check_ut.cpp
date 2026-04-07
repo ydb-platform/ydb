@@ -5,11 +5,13 @@
 
 #include <ydb/core/mind/hive/hive_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include "health_check.cpp"
+#include <ydb/core/cms/console/console.h>
+#include "health_check.h"
 
 #include <util/stream/null.h>
 
@@ -27,7 +29,7 @@ using namespace NNodeWhiteboard;
 #endif
 
 Y_UNIT_TEST_SUITE(THealthCheckTest) {
-    void BasicTest(IEventBase* ev) {
+    Ydb::Monitoring::SelfCheckResult BasicTest(IEventBase* ev) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -49,6 +51,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         NHealthCheck::TEvSelfCheckResult* result = runtime->GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle);
 
         UNIT_ASSERT(result != nullptr);
+
+        return result->Result;
     }
 
     Y_UNIT_TEST(Basic) {
@@ -57,6 +61,14 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     Y_UNIT_TEST(BasicNodeCheckRequest) {
         BasicTest(new NHealthCheck::TEvNodeCheckRequest());
+    }
+
+    Y_UNIT_TEST(DatabaseDoesNotExist) {
+        auto ev = std::make_unique<NHealthCheck::TEvSelfCheckRequest>();
+        ev->Database = "/Root/this/db/does/not/exist";
+        auto result = BasicTest(ev.release());
+        Cerr << result.ShortDebugString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(result.issue_log().size(), 1);
     }
 
     const int GROUP_START_ID = 0x80000000;
@@ -148,7 +160,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             auto group = pbConfig->add_group();
             group->CopyFrom(groupSample);
             group->set_groupid(groupId);
-            group->set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+            group->set_erasurespecies(NHealthCheck::BLOCK_4_2);
             group->set_operatingstatus(NKikimrBlobStorage::TGroupStatus::DEGRADED);
 
             group->clear_vslotid();
@@ -181,7 +193,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             auto* entry = record.add_entries();
             entry->CopyFrom(entrySample);
             entry->mutable_key()->set_groupid(groupId);
-            entry->mutable_info()->set_erasurespeciesv2(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+            entry->mutable_info()->set_erasurespeciesv2(NHealthCheck::BLOCK_4_2);
             entry->mutable_info()->set_storagepoolid(poolId);
             entry->mutable_info()->set_generation(DEFAULT_GROUP_GENERATION);
         };
@@ -206,9 +218,9 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             entry->CopyFrom(entrySample);
             entry->mutable_key()->set_groupid(groupId);
             if (proxyGroup) {
-                entry->mutable_info()->set_erasurespeciesv2(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+                entry->mutable_info()->set_erasurespeciesv2(NHealthCheck::BLOCK_4_2);
             } else {
-                entry->mutable_info()->set_erasurespeciesv2(NHealthCheck::TSelfCheckRequest::NONE);
+                entry->mutable_info()->set_erasurespeciesv2(NHealthCheck::NONE);
             }
             entry->mutable_info()->set_storagepoolid(poolId);
             entry->mutable_info()->set_generation(DEFAULT_GROUP_GENERATION);
@@ -326,7 +338,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         staticGroup->set_groupid(0);
         staticGroup->set_storagepoolid(0);
         staticGroup->set_operatingstatus(groupStatus);
-        staticGroup->set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+        staticGroup->set_erasurespecies(NHealthCheck::BLOCK_4_2);
         staticGroup->set_groupgeneration(DEFAULT_GROUP_GENERATION);
 
         auto group = pbConfig->add_group();
@@ -334,7 +346,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         group->set_groupid(GROUP_START_ID);
         group->set_storagepoolid(1);
         group->set_operatingstatus(groupStatus);
-        group->set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+        group->set_erasurespecies(NHealthCheck::BLOCK_4_2);
         group->set_groupgeneration(DEFAULT_GROUP_GENERATION);
 
         group->clear_vslotid();
@@ -391,7 +403,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
     void ChangeGroupStateResponse(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateResponse::TPtr* ev) {
         for (auto& groupInfo : *(*ev)->Get()->Record.mutable_bsgroupstateinfo()) {
-            groupInfo.set_erasurespecies(NHealthCheck::TSelfCheckRequest::BLOCK_4_2);
+            groupInfo.set_erasurespecies(NHealthCheck::BLOCK_4_2);
         }
     }
 
@@ -624,7 +636,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(0)] = &bridgeInfo->Piles[0];
         bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(1)] = &bridgeInfo->Piles[1];
 
-        auto* nodeWardenStorageConfig = new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), nullptr, false, nullptr);
+        auto* nodeWardenStorageConfig = new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), false, nullptr);
         nodeWardenStorageConfig->BridgeInfo = bridgeInfo;
         runtime.Send(new IEventHandle(GetNameserviceActorId(), runtime.AllocateEdgeActor(), nodeWardenStorageConfig));
 
@@ -692,6 +704,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
 
         TLocationFilter& Pile(const TString& name) {
             Filters.emplace_back([=](auto&& location) { return location.storage().pool().group().pile().name() == name || location.compute().pile().name() == name; });
+            return *this;
+        }
+
+        TLocationFilter& TabletType(const TString& type) {
+            Filters.emplace_back([=](auto&& location) { return location.compute().tablet().type() == type; });
             return *this;
         }
     };
@@ -2223,7 +2240,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         bridgeInfo->SelfNodePile = bridgeInfo->Piles.data();
         bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(0)] = &bridgeInfo->Piles[0];
 
-        auto* nodeWardenStorageConfig = new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), nullptr, false, nullptr);
+        auto* nodeWardenStorageConfig = new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), false, nullptr);
         nodeWardenStorageConfig->BridgeInfo = bridgeInfo;
         runtime.Send(new IEventHandle(GetNameserviceActorId(), runtime.AllocateEdgeActor(), nodeWardenStorageConfig));
 
@@ -2275,6 +2292,51 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT(bscTabletIssueFoundInResult);
 
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("static").Pile("pile0"));
+    }
+
+    Y_UNIT_TEST(TestNoSchemeShardResponse) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        auto &dynamicNameserviceConfig = runtime.GetAppData().DynamicNameserviceConfig;
+        dynamicNameserviceConfig->MaxStaticNodeId = runtime.GetNodeId(server.StaticNodes() - 1);
+        dynamicNameserviceConfig->MinDynamicNodeId = runtime.GetNodeId(server.StaticNodes());
+        dynamicNameserviceConfig->MaxDynamicNodeId = runtime.GetNodeId(server.StaticNodes() + server.DynamicNodes() - 1);
+
+        TBlockEvents<TEvSchemeShard::TEvDescribeScheme> blockSS(runtime);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        request->Request.set_return_verbose_status(true);
+        request->Database = "/Root";
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        const auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+
+        Ctest << result.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::EMERGENCY);
+        CheckHcResultHasIssuesWithStatus(result, "SYSTEM_TABLET", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().TabletType("SchemeShard"));
+
+        UNIT_ASSERT_VALUES_EQUAL(result.database_status_size(), 1);
+        const auto &database_status = result.database_status(0);
+
+        UNIT_ASSERT_VALUES_EQUAL(database_status.name(), "/Root");
+        UNIT_ASSERT_VALUES_EQUAL(database_status.overall(), Ydb::Monitoring::StatusFlag::RED);
+
+        UNIT_ASSERT_VALUES_EQUAL(database_status.compute().overall(), Ydb::Monitoring::StatusFlag::RED);
+        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::GREY);
     }
 
     Y_UNIT_TEST(ShardsLimit999) {
@@ -2484,6 +2546,98 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         Cerr << result.ShortDebugString();
 
         UNIT_ASSERT(!HasTabletIssue(result));
+    }
+
+    Y_UNIT_TEST(TestOnlyRequestNeededTablets) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(2)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+
+        TTestActorRuntime* runtime = server.GetRuntime();
+        TActorId sender = runtime->AllocateEdgeActor();
+
+        struct THiveInfoObserver {
+            size_t TabletCount = 0;
+            TTestActorRuntimeBase::TEventObserverHolder Observer;
+
+            void Do(TEvHive::TEvResponseHiveInfo::TPtr& ev) {
+                TabletCount += ev->Get()->Record.TabletsSize();
+            }
+
+            THiveInfoObserver(TServer& server) {
+                Observer = server.GetRuntime()->AddObserver<TEvHive::TEvResponseHiveInfo>([this](auto&& ev) { Do(ev); });
+            }
+        };
+
+        struct TCreateTabletObserver {
+            size_t TabletCount = 0;
+            TTestActorRuntimeBase::TEventObserverHolder Observer;
+            ui64 SchemeShard;
+
+            void Do(TEvHive::TEvCreateTablet::TPtr& ev) {
+                auto& record = ev->Get()->Record;
+                auto* allowedDomain = record.AddAllowedDomains();
+                allowedDomain->SetSchemeShard(SchemeShard);
+                allowedDomain->SetPathId(1);
+                record.MutableObjectDomain()->SetSchemeShard(SchemeShard);
+                record.MutableObjectDomain()->SetPathId(1 + (++TabletCount % 2));
+            }
+
+            TCreateTabletObserver(TServer& server) {
+                Observer = server.GetRuntime()->AddObserver<TEvHive::TEvCreateTablet>([this](auto&& ev) { Do(ev); });
+                SchemeShard = ChangeStateStorage(Tests::SchemeRoot, server.GetSettings().Domain);
+            }
+        };
+
+        struct TNavigateObserver {
+            ui64 Hive;
+            ui64 SchemeShard;
+            TTestActorRuntimeBase::TEventObserverHolder Observer;
+
+            void Do(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+                TSchemeCacheNavigate::TEntry& entry(ev->Get()->Request->ResultSet.front());
+                TString path = CanonizePath(entry.Path);
+                if (path == "/Root/database") {
+                    entry.Status = TSchemeCacheNavigate::EStatus::Ok;
+                    entry.Kind = TSchemeCacheNavigate::EKind::KindExtSubdomain;
+                    entry.Path = {"Root", "database"};
+                    entry.DomainInfo = MakeIntrusive<TDomainInfo>(TPathId{SchemeShard, 2}, TPathId{SchemeShard, 1});
+                    entry.DomainInfo->Params.SetHive(Hive);
+                }
+            }
+
+            TNavigateObserver(TServer& server) {
+                Observer = server.GetRuntime()->AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>([this](auto&& ev) { Do(ev); });
+                SchemeShard = ChangeStateStorage(Tests::SchemeRoot, server.GetSettings().Domain);
+                Hive = server.GetRuntime()->GetAppData().DomainsInfo->GetHive();
+            }
+
+        };
+
+        THiveInfoObserver infoObserver(server);
+        TCreateTabletObserver tabletObserver(server);
+        TNavigateObserver navigateObserver(server);
+        auto tenantObserver = runtime->AddObserver<NConsole::TEvConsole::TEvGetTenantStatusResponse>([](auto&& ev) { ChangeGetTenantStatusResponse(&ev, "/Root/database"); });
+
+        server.SetupDynamicLocalService(2, "Root");
+        server.StartPQTablets(10);
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = std::make_unique<NHealthCheck::TEvSelfCheckRequest>();
+        ev->Database = "/Root/database";
+        runtime->Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, ev.release(), 0));
+        runtime->GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL(infoObserver.TabletCount, tabletObserver.TabletCount / 2);
     }
 
     void SendHealthCheckConfigUpdate(TTestActorRuntime &runtime, const TActorId& sender, const NKikimrConfig::THealthCheckConfig &cfg) {
@@ -2850,7 +3004,76 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         runtime.DispatchEvents({}, TDuration::MilliSeconds(500));
         block.Stop().Unblock();
         auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        Cerr << result.ShortDebugString() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
+    }
+
+    void TestStateStorage(ui32 deadNodes, std::optional<Ydb::Monitoring::StatusFlag::Status> expectedStatus) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(9)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        TIntrusivePtr<TStateStorageInfo> info = new TStateStorageInfo();
+        info->RingGroups.push_back({ERingGroupState::PRIMARY, false, 9, {}, {}});
+        info->RingGroups.back().Rings.resize(9);
+        info->RingGroups.back().NToSelect = 9;
+        for (ui32 i = 0; i < 9; ++i) {
+            info->RingGroups.back().Rings[i].Replicas.emplace_back(runtime.GetNodeId(i), "FAKE");
+        }
+
+        auto ssObserver = runtime.AddObserver<TEvStateStorage::TEvListStateStorageResult>([&](auto&& ev) { ev->Get()->Info = info; });
+        auto sbObserver = runtime.AddObserver<TEvStateStorage::TEvListSchemeBoardResult>([&](auto&& ev) { ev->Get()->Info = info; });
+        auto bObserver = runtime.AddObserver<TEvStateStorage::TEvListBoardResult>([&](auto&& ev) { ev->Get()->Info = info; });
+
+        auto disconnectObserver = runtime.AddObserver<TEvWhiteboard::TEvSystemStateResponse>([&](auto&& ev) {
+            auto actor = ev->Recipient;
+            auto nodeId = ev->Sender.NodeId();
+            auto nodeIdx = nodeId - runtime.GetNodeId(0);
+            if (nodeIdx < deadNodes) {
+                runtime.Send(new IEventHandle(actor, actor, new TEvInterconnect::TEvNodeDisconnected(nodeId)), actor.NodeId() - runtime.GetNodeId(0));
+                ev.Reset();
+            }
+        });
+
+        auto *request = new NHealthCheck::TEvSelfCheckRequest();
+        request->Request.set_merge_records(true);
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        Cerr << result.ShortDebugString() << Endl;
+        if (expectedStatus) {
+            CheckHcResultHasIssuesWithStatus(result, "STATE_STORAGE", *expectedStatus, 1);
+            CheckHcResultHasIssuesWithStatus(result, "SCHEME_BOARD", *expectedStatus, 1);
+            CheckHcResultHasIssuesWithStatus(result, "BOARD", *expectedStatus, 1);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
+        }
+    }
+
+    Y_UNIT_TEST(TestStateStorageOk) {
+        TestStateStorage(0, std::nullopt);
+    }
+
+    Y_UNIT_TEST(TestStateStorageBlue) {
+        TestStateStorage(1, Ydb::Monitoring::StatusFlag::BLUE);
+    }
+
+    Y_UNIT_TEST(TestStateStorageYellow) {
+        TestStateStorage(3, Ydb::Monitoring::StatusFlag::YELLOW);
+    }
+
+    Y_UNIT_TEST(TestStateStorageRed) {
+        TestStateStorage(6, Ydb::Monitoring::StatusFlag::RED);
     }
 
     Y_UNIT_TEST(CLusterNotBootstrapped) {
@@ -2915,7 +3138,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(2)] = &bridgeInfo->Piles[1];
         bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(3)] = &bridgeInfo->Piles[1];
 
-        auto* nodeWardenStorageConfig = new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), nullptr, false, nullptr);
+        auto* nodeWardenStorageConfig = new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), false, nullptr);
         nodeWardenStorageConfig->BridgeInfo = bridgeInfo;
         runtime.Send(new IEventHandle(GetNameserviceActorId(), runtime.AllocateEdgeActor(), nodeWardenStorageConfig));
 
@@ -2961,7 +3184,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
 
         Ctest << result.ShortDebugString() << Endl;
-        CheckHcResultHasIssuesWithStatus(result, "CLOCK_SKEW", Ydb::Monitoring::StatusFlag::YELLOW, 1, TLocationFilter().Pile("pile0"));
+        CheckHcResultHasIssuesWithStatus(result, "CLOCK_SKEW", Ydb::Monitoring::StatusFlag::YELLOW, 2, TLocationFilter().Pile("pile0"));
     }
 }
 }

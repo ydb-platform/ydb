@@ -23,6 +23,7 @@ private:
     std::optional<ui32> ColumnBlobBytes;
     std::optional<ui32> IndexRawBytes;
     std::optional<ui32> IndexBlobBytes;
+    std::optional<ui32> NumSlices;
 
     std::optional<ui32> DeletionsCount;
 
@@ -44,6 +45,11 @@ public:
         AFL_VERIFY(ColumnBlobBytes);
         AFL_VERIFY(IndexBlobBytes);
         return *ColumnBlobBytes + *IndexBlobBytes;
+    }
+
+    ui32 GetSlices() const {
+        AFL_VERIFY(NumSlices);
+        return *NumSlices;
     }
 
     void SetCompactionLevel(const ui64 level) {

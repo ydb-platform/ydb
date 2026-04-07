@@ -73,6 +73,15 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT(StatsGroup, UsedSpaceBytes, false);
     COUNTER_INIT(StatsGroup, SectorMapAllocatedBytes, false);
 
+    COUNTER_INIT(StatsGroup, NumActiveSlots, false);
+    COUNTER_INIT(StatsGroup, ExpectedSlotCount, false);
+    COUNTER_INIT(StatsGroup, SlotSizeInUnits, false);
+
+    COUNTER_INIT(StatsGroup, EmulatedWriteErrors, true);
+    COUNTER_INIT(StatsGroup, EmulatedReadErrors, true);
+    COUNTER_INIT(StatsGroup, EmulatedSilentWriteFails, true);
+    COUNTER_INIT(StatsGroup, EmulatedReadReplays, true);
+
     // states subgroup
     COUNTER_INIT(StateGroup, PDiskState, false);
     COUNTER_INIT(StateGroup, PDiskBriefState, false);
@@ -80,9 +89,11 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT(StateGroup, AtLeastOneVDiskNotLogged, false);
     COUNTER_INIT(StateGroup, TooMuchLogChunks, false);
     COUNTER_INIT(StateGroup, SerialNumberMismatched, false);
-    L6. Initialize(StateGroup, "L6");
-    L7. Initialize(StateGroup, "L7");
-    IdleLight.Initialize(StateGroup, "DeviceBusyPeriods", "DeviceIdleTimeMsPerSec", "DeviceBusyTimeMsPerSec");
+    L6.Initialize(StateGroup, TLightCounterConfig::WithDefaultLightSet("L6"));
+    L7.Initialize(StateGroup, TLightCounterConfig::WithDefaultLightSet("L7"));
+    IdleLight.Initialize(StateGroup, TLightCounterConfig::Create()
+        .WithRedMs("DeviceIdleTimeMsPerSec")
+        .WithGreenMs("DeviceBusyTimeMsPerSec"));
 
     COUNTER_INIT_IF_EXTENDED(StateGroup, OwnerIdsIssued, false);
     COUNTER_INIT_IF_EXTENDED(StateGroup, LastOwnerId, false);
@@ -99,7 +110,9 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT(DeviceGroup, DeviceInFlightBytesRead, false);
     COUNTER_INIT(DeviceGroup, DeviceInFlightBytesWrite, false);
     COUNTER_INIT(DeviceGroup, DeviceInFlightReads, false);
+    MaxDeviceInFlightReads.Init(DeviceGroup->GetCounter("MaxDeviceInFlightReads", false));
     COUNTER_INIT(DeviceGroup, DeviceInFlightWrites, false);
+    MaxDeviceInFlightWrites.Init(DeviceGroup->GetCounter("MaxDeviceInFlightWrites", false));
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceTakeoffs, false);
     COUNTER_INIT_IF_EXTENDED(DeviceGroup, DeviceLandings, false);
     COUNTER_INIT(DeviceGroup, DeviceHaltDetected, false);
@@ -231,6 +244,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardSlay, YardSlay);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardControl, YardControl);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardResize, YardResize);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ChangeExpectedSlotCount, ChangeExpectedSlotCount);
 
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ShredPDisk, ShredPDisk);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, PreShredCompactVDisk, PreShredCompactVDisk);
@@ -405,6 +419,9 @@ void TPDiskMon::UpdatePercentileTrackers() {
 
     InputQLA.Update();
     InputQCA.Update();
+
+    MaxDeviceInFlightReads.Update();
+    MaxDeviceInFlightWrites.Update();
 }
 
 void TPDiskMon::UpdateLights() {

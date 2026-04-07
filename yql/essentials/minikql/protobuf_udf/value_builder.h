@@ -6,17 +6,16 @@
 
 #include <google/protobuf/message.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
-class TProtobufValue : public TBoxedValue {
+class TProtobufValue: public TBoxedValue {
 public:
-     TProtobufValue(const TProtoInfo& info);
+    explicit TProtobufValue(TProtoInfo info);
     ~TProtobufValue() override;
 
     TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override;
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const override;
 
     virtual TAutoPtr<NProtoBuf::Message> Parse(const TStringBuf& data) const = 0;
 
@@ -24,14 +23,14 @@ protected:
     const TProtoInfo Info_;
 };
 
-class TProtobufSerialize : public TBoxedValue {
+class TProtobufSerialize: public TBoxedValue {
 public:
-     TProtobufSerialize(const TProtoInfo& info);
+    explicit TProtobufSerialize(TProtoInfo info);
     ~TProtobufSerialize() override;
 
     TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override;
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const override;
 
     virtual TMaybe<TString> Serialize(const NProtoBuf::Message& proto) const = 0;
 
@@ -42,9 +41,8 @@ protected:
 };
 
 TUnboxedValue FillValueFromProto(
-        const NProtoBuf::Message& proto,
-        const IValueBuilder* valueBuilder,
-        const TProtoInfo& info);
+    const NProtoBuf::Message& proto,
+    const IValueBuilder* valueBuilder,
+    const TProtoInfo& info);
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

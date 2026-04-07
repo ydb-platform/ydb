@@ -31,6 +31,7 @@
 # pylint:disable=no-value-for-parameter
 import unittest
 
+import zope.interface.interface
 from __tests__.tests import CleanUp
 from __tests__.tests import MissingSomeAttrs
 from __tests__.tests import OptimizationTestMixin
@@ -38,6 +39,7 @@ from __tests__.tests import SubclassableMixin
 
 
 _marker = object()
+HashMe = zope.interface.interface.InterfaceClass('HashMe')
 
 
 class Test_invariant(unittest.TestCase):
@@ -716,6 +718,23 @@ class InterfaceClassTests(unittest.TestCase):
         self.assertEqual(inst.__bases__, ())
         self.assertEqual(list(inst.names()), [])
 
+    def test_ctor_attrs_w___annotate_func__(self) -> None:
+        from zope.interface import Attribute
+        from zope.interface import Interface
+        from zope.interface import directlyProvides
+        from zope.interface.verify import verifyObject
+
+        class IAnnotated(Interface):
+            value: int = Attribute("Value")
+
+        class Annotated:
+            value: int = 0
+
+        self.assertEqual(list(IAnnotated.names()), ['value'])
+        annotated = Annotated()
+        directlyProvides(annotated, IAnnotated)
+        verifyObject(IAnnotated, annotated)
+
     def test_ctor_attrs_w__decorator_non_return(self):
         from zope.interface.interface import _decorator_non_return
         ATTRS = {'dropme': _decorator_non_return}
@@ -1172,7 +1191,7 @@ class InterfaceClassTests(unittest.TestCase):
         self.assertEqual(iface.__reduce__(), 'PickleMe')
 
     def test___hash___normal(self):
-        iface = self._makeOne('HashMe')
+        from __tests__.tests.test_interface import HashMe as iface
         self.assertEqual(
             hash(iface),
             hash(('HashMe', '__tests__.tests.test_interface'))

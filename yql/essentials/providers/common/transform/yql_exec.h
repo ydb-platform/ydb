@@ -12,7 +12,7 @@
 
 namespace NYql {
 
-class TExecTransformerBase : public TAsyncCallbackTransformer<TExecTransformerBase> {
+class TExecTransformerBase: public TAsyncCallbackTransformer<TExecTransformerBase> {
 public:
     using TStatusCallbackPair = std::pair<TStatus, TAsyncTransformCallbackFuture>;
 
@@ -35,26 +35,25 @@ protected:
     static TPrerequisite RequireSequenceOf(std::initializer_list<size_t> children);
 
     template <class TDerived>
-    TPrerequisite Require(TStatus(TDerived::* prerequisite)(const TExprNode::TPtr&)) {
-        return [this, prerequisite] (const TExprNode::TPtr& input) {
+    TPrerequisite Require(TStatus (TDerived::*prerequisite)(const TExprNode::TPtr&)) {
+        return [this, prerequisite](const TExprNode::TPtr& input) {
             return (static_cast<TDerived*>(this)->*prerequisite)(input);
         };
     }
-
 
     static TStatusCallbackPair ExecPass(const TExprNode::TPtr& input, TExprContext& ctx);
     static THandler Pass();
 
     template <class TDerived>
-    THandler Hndl(TStatusCallbackPair(TDerived::* handler)(const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&)) {
-        return [this, handler] (const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+    THandler Hndl(TStatusCallbackPair (TDerived::*handler)(const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&)) {
+        return [this, handler](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             return (static_cast<TDerived*>(this)->*handler)(input, output, ctx);
         };
     }
 
     template <class TDerived>
-    THandler Hndl(TStatusCallbackPair(TDerived::* handler)(const TExprNode::TPtr&, TExprContext&)) {
-        return [this, handler] (const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) {
+    THandler Hndl(TStatusCallbackPair (TDerived::*handler)(const TExprNode::TPtr&, TExprContext&)) {
+        return [this, handler](const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) {
             return (static_cast<TDerived*>(this)->*handler)(input, ctx);
         };
     }
@@ -67,4 +66,4 @@ protected:
     THashMap<TStringBuf, THandlerInfo> Handlers_;
 };
 
-} // NYql
+} // namespace NYql

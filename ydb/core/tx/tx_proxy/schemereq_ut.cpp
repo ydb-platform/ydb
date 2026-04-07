@@ -80,6 +80,15 @@ public:
         // default settings
         ServerSettings->AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
         ServerSettings->AppConfig->MutableDomainsConfig()->MutableSecurityConfig()->AddAdministrationAllowedSIDs(RootToken);
+        if (settings.AppConfig) {
+            const auto& securityConfig = settings.AppConfig->GetDomainsConfig().GetSecurityConfig();
+            if (securityConfig.GetEnforceUserTokenRequirement()) {
+                ServerSettings->AppConfig->MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+            }
+            for (const auto& sid : securityConfig.GetAdministrationAllowedSIDs()) {
+                ServerSettings->AppConfig->MutableDomainsConfig()->MutableSecurityConfig()->AddAdministrationAllowedSIDs(sid);
+            }
+        }
         ServerSettings->AuthConfig = settings.AuthConfig;
         ServerSettings->AuthConfig.SetUseBuiltinDomain(true);
         ServerSettings->SetEnableMockOnSingleNode(false);
@@ -123,7 +132,7 @@ public:
         Client = MakeHolder<Tests::TClient>(*ServerSettings);
         Client->SetSecurityToken(RootToken);
         Client->InitRootScheme();
-        Client->TestGrant("/", ServerSettings->DomainName, RootToken, NACLib::EAccessRights::GenericFull );
+        Client->TestGrant("/", ServerSettings->DomainName, RootToken, NACLib::EAccessRights::GenericFull);
 
         // driver for actual grpc clients
         Endpoint = "localhost:" + ToString(grpcPort);
@@ -181,11 +190,28 @@ TString LoginUser(TTestEnv& env, const TString& database, const TString& user, c
 
     using TEvLoginRequest = NGRpcService::TGRpcRequestWrapperNoAuth<NGRpcService::TRpcServices::EvLogin, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>;
 
-    auto result = NRpcService::DoLocalRpc<TEvLoginRequest>(
-        std::move(request), database, {}, env.GetTestServer().GetRuntime()->GetActorSystem(0)
-    ).ExtractValueSync();
+    // It is bad but easy way to fix problem with error 'Cannot find user ...'
+    auto retryableDoLocalRpc = [&]() -> auto {
+        size_t retriesCount = 3;
 
-    const auto& operation = result.operation();
+        for (size_t i = 0; i < retriesCount; ++i) {
+            auto requestCopy = request;
+            auto result = NRpcService::DoLocalRpc<TEvLoginRequest>(
+                std::move(requestCopy), database, {}, env.GetTestServer().GetRuntime()->GetActorSystem(0)
+            ).ExtractValueSync();
+
+            auto operation = result.operation();
+
+            if (operation.status() == Ydb::StatusIds::SUCCESS) {
+                return operation;
+            }
+        }
+
+        UNIT_ASSERT(false);
+        Y_UNREACHABLE();
+    };
+
+    auto operation = retryableDoLocalRpc();
     UNIT_ASSERT_VALUES_EQUAL_C(operation.status(), Ydb::StatusIds::SUCCESS, operation.issues(0).message());
     Ydb::Auth::LoginResult loginResult;
     operation.result().UnpackTo(&loginResult);
@@ -245,6 +271,17 @@ NYdb::NDiscovery::TDiscoveryClient CreateDiscoveryClient(const TTestEnv& env, co
     return NYdb::NDiscovery::TDiscoveryClient(env.GetDriver(), settings);
 }
 
+auto RetryableExecuteQuery(NYdb::NQuery::TQueryClient&& client, const TString& sql) {
+    auto retrySettings = NYdb::NQuery::TRetryOperationSettings()
+        .MaxRetries(3)
+        .GetSessionClientTimeout(TDuration::Seconds(30))
+        .RetryUndefined(true);
+
+    return client.RetryQuery([sql](NYdb::NQuery::TSession session) {
+        return session.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx());
+    }, retrySettings).ExtractValueSync();
+}
+
 void CreateLocalUser(const TTestEnv& env, const TString& database, const TString& name, const TString& token) {
     auto query = Sprintf(
         R"(
@@ -252,14 +289,15 @@ void CreateLocalUser(const TTestEnv& env, const TString& database, const TString
         )",
         name.c_str()
     );
-    auto sessionResult = CreateQueryClient(env, token, database).GetSession().ExtractValueSync();
-    UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
-    auto result = sessionResult.GetSession().ExecuteQuery(query,  NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+    auto result = RetryableExecuteQuery(CreateQueryClient(env, token, database), query);
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
+
 void CreateLocalUser(const TTestEnv& env, const TString& database, const TString& user) {
     CreateLocalUser(env, database, user, env.RootToken);
 }
+
 void CreateLocalGroup(const TTestEnv& env, const TString& database, const TString& name, const TString& token) {
     auto query = Sprintf(
         R"(
@@ -267,22 +305,23 @@ void CreateLocalGroup(const TTestEnv& env, const TString& database, const TStrin
         )",
         name.c_str()
     );
-    auto sessionResult = CreateQueryClient(env, token, database).GetSession().ExtractValueSync();
-    UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
-    auto result = sessionResult.GetSession().ExecuteQuery(query,  NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+    auto result = RetryableExecuteQuery(CreateQueryClient(env, token, database), query);
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
+
 void CreateLocalGroup(const TTestEnv& env, const TString& database, const TString& name) {
     CreateLocalGroup(env, database, name, env.RootToken);
 }
+
 void CreateLocalUser2(TTestEnv& env, const TString& database, const TString& name, const TString& token) {
     auto runtime = env.GetTestServer().GetRuntime();
     const auto edge = runtime->AllocateEdgeActor(0);
     TString userToken;
     {
         runtime->Send(new IEventHandle(MakeTicketParserID(), edge, new TEvTicketParser::TEvAuthorizeTicket({
-            .Database = database,
             .Ticket = token,
+            .Database = database,
             .PeerName = "test",
         })), 0);
 
@@ -292,7 +331,7 @@ void CreateLocalUser2(TTestEnv& env, const TString& database, const TString& nam
         auto event = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         Cerr << __FUNCTION__ << " grab ticket_parser result" << Endl;
 
-        UNIT_ASSERT_C(event->Error.empty(), event->Error);
+        UNIT_ASSERT_C(!event->HasError(), event->Error);
         UNIT_ASSERT(event->Token != nullptr);
         userToken = event->Token->SerializeAsString();
     }
@@ -322,14 +361,15 @@ void CreateLocalUser2(TTestEnv& env, const TString& database, const TString& nam
         UNIT_ASSERT_VALUES_EQUAL(NKikimrScheme::EStatus(event->Record.GetSchemeShardStatus()), NKikimrScheme::EStatus::StatusSuccess);
     }
 }
+
 void CreateLocalGroup2(TTestEnv& env, const TString& database, const TString& name, const TString& token) {
     auto runtime = env.GetTestServer().GetRuntime();
     const auto edge = runtime->AllocateEdgeActor(0);
     TString userToken;
     {
         runtime->Send(new IEventHandle(MakeTicketParserID(), edge, new TEvTicketParser::TEvAuthorizeTicket({
-            .Database = database,
             .Ticket = token,
+            .Database = database,
             .PeerName = "test",
         })), 0);
 
@@ -339,7 +379,7 @@ void CreateLocalGroup2(TTestEnv& env, const TString& database, const TString& na
         auto event = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         Cerr << __FUNCTION__ << " grab ticket_parser result" << Endl;
 
-        UNIT_ASSERT_C(event->Error.empty(), event->Error);
+        UNIT_ASSERT_C(!event->HasError(), event->Error);
         UNIT_ASSERT(event->Token != nullptr);
         userToken = event->Token->SerializeAsString();
     }
@@ -384,6 +424,7 @@ void ChangeOwner(const TTestEnv& env, const TString& path, const TString& target
         .ExtractValueSync();
     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 }
+
 void ChangeOwner(const TTestEnv& env, const TString& path, const TString& targetSid) {
     ChangeOwner(env, path, targetSid, env.RootToken);
 }
@@ -511,11 +552,29 @@ Y_UNIT_TEST_SUITE(SchemeReqAccess) {
 //
 //     }
     void AlterLoginProtect_RootDB(NUnitTest::TTestContext&, const TAlterLoginTestCase params) {
+        // Determine subject SID upfront (needed to configure server before start)
+        TString subjectSid = params.LocalSid
+            ? LocalSubjectSid(params.SubjectLevel)
+            : BuiltinSubjectSid(params.SubjectLevel);
+
+        // Build AppConfig with security settings that must be set before server start
+        // to avoid data races with gRPC actor threads reading AppData concurrently.
+        NKikimrConfig::TAppConfig appConfig;
+        {
+            auto& securityConfig = *appConfig.MutableDomainsConfig()->MutableSecurityConfig();
+            securityConfig.SetEnforceUserTokenRequirement(params.EnforceUserTokenRequirement);
+            // Make subject a proper cluster admin before server start, if requested
+            if (params.SubjectLevel == EAccessLevel::ClusterAdmin) {
+                securityConfig.AddAdministrationAllowedSIDs(subjectSid);
+            }
+        }
+
         auto settings = Tests::TServerSettings()
             .SetNodeCount(1)
             .SetDynamicNodeCount(1)
             .SetEnableStrictUserManagement(params.EnableStrictUserManagement)
             .SetEnableDatabaseAdmin(params.EnableDatabaseAdmin)
+            .SetAppConfig(appConfig)
             // .SetLoggerInitializer([](auto& runtime) {
             //     runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
             // })
@@ -524,23 +583,13 @@ Y_UNIT_TEST_SUITE(SchemeReqAccess) {
 
         // Test context preparations
 
-        // Turn on mandatory authentication, if requested
-        env.GetTestServer().GetRuntime()->GetAppData().EnforceUserTokenRequirement = params.EnforceUserTokenRequirement;
-
         // Create local user for the subject and obtain auth token, if requested
-        TString subjectSid;
         TString subjectToken;
         if (params.LocalSid) {
-            subjectSid = LocalSubjectSid(params.SubjectLevel);
             CreateLocalUser(env, env.RootPath, subjectSid);
             subjectToken = LoginUser(env, env.RootPath, subjectSid, "passwd");
         } else {
-            subjectSid = subjectToken = BuiltinSubjectSid(params.SubjectLevel);
-        }
-
-        // Make subject a proper cluster admin, if requested
-        if (params.SubjectLevel == EAccessLevel::ClusterAdmin) {
-            env.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back(subjectSid);
+            subjectToken = subjectSid;
         }
 
         // Give subject requested schema permissions
@@ -559,13 +608,9 @@ Y_UNIT_TEST_SUITE(SchemeReqAccess) {
 
         // Test body
         {
-            auto client = CreateQueryClient(env, subjectToken, env.RootPath);
-            auto sessionResult = client.GetSession().ExtractValueSync();
-            UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
-            auto session = sessionResult.GetSession();
+            auto result = RetryableExecuteQuery(CreateQueryClient(env, subjectToken, env.RootPath), params.SqlStatement);
 
             // test body
-            auto result = session.ExecuteQuery(params.SqlStatement, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.IsSuccess(), params.ExpectedResult,
                 "query '" << params.SqlStatement << "'"
                 << ", subject " << subjectSid
@@ -980,6 +1025,9 @@ Y_UNIT_TEST_SUITE(SchemeReqAdminAccessInTenant) {
         CreateLocalUser(env, env.RootPath, "clusteradmin");
         env.GetTestServer().GetRuntime()->GetAppData(0).AdministrationAllowedSIDs.push_back("clusteradmin");
         env.GetTestServer().GetRuntime()->GetAppData(1).AdministrationAllowedSIDs.push_back("clusteradmin");
+
+        // Give cluster admin admin permissions (actually needed to be able to set owners)
+        SetPermissions(env, env.RootPath, "clusteradmin", {"ydb.generic.full"});
 
         Cerr << "TEST login clusteradmin" << Endl;
         auto subjectToken = LoginUser(env, env.RootPath, "clusteradmin", "passwd");

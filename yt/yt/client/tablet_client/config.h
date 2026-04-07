@@ -46,6 +46,7 @@ struct TRemoteDynamicStoreReaderConfig
     TDuration ServerReadTimeout;
     TDuration ClientWriteTimeout;
     TDuration ServerWriteTimeout;
+    TDuration RequestTimeout;
     i64 MaxRowsPerServerRead;
 
     ssize_t WindowSize;

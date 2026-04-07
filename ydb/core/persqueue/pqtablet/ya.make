@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    fix_transaction_states.cpp
     metering_sink.cpp
     pq_impl.cpp
     pq_impl_app.cpp
@@ -16,6 +17,7 @@ PEERDIR(
     ydb/core/persqueue/public/counters
     ydb/core/persqueue/pqtablet/cache
     ydb/core/persqueue/pqtablet/partition
+    ydb/core/persqueue/pqtablet/readproxy
 )
 
 END()
@@ -24,6 +26,8 @@ RECURSE(
     blob
     common
     partition
+    quota
+    readproxy
 )
 
 RECURSE_FOR_TESTS(

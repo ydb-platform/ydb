@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Sequence, Tuple
 from urllib.parse import parse_qs, urlencode
 
 import pytest
@@ -88,7 +88,7 @@ def test_query_dont_unqoute_twice():
 _SEMICOLON_XFAIL = pytest.mark.xfail(
     condition="separator" not in parse_qs.__code__.co_varnames,
     reason=(
-        "Python versions < 3.7.10, < 3.8.8 and < 3.9.2 lack a fix for "
+        "Python versions < 3.8.8 and < 3.9.2 lack a fix for "
         'CVE-2021-23336 dropping ";" as a valid query parameter separator, '
         "making this test fail."
     ),
@@ -134,10 +134,10 @@ def test_query_separators_from_parsing(
     URLS_WITH_RESERVED_CHARS_IN_QUERY_VALUES_W_XFAIL,
 )
 def test_query_separators_from_update_query(
-    original_url,
-    expected_query_len,
-    expected_value_a,
-):
+    original_url: URL,
+    expected_query_len: int,
+    expected_value_a: str,
+) -> None:
     new_url = original_url.update_query({"c": expected_value_a})
     assert new_url.query["a"] == expected_value_a
     assert new_url.query["c"] == expected_value_a
@@ -148,10 +148,10 @@ def test_query_separators_from_update_query(
     URLS_WITH_RESERVED_CHARS_IN_QUERY_VALUES,
 )
 def test_query_separators_from_with_query(
-    original_url,
-    expected_query_len,
-    expected_value_a,
-):
+    original_url: URL,
+    expected_query_len: int,
+    expected_value_a: int,
+) -> None:
     new_url = original_url.with_query({"c": expected_value_a})
     assert new_url.query["c"] == expected_value_a
 
@@ -161,13 +161,51 @@ def test_query_separators_from_with_query(
     URLS_WITH_RESERVED_CHARS_IN_QUERY_VALUES,
 )
 def test_query_from_empty_update_query(
-    original_url,
-    expected_query_len,
-    expected_value_a,
-):
+    original_url: URL,
+    expected_query_len: int,
+    expected_value_a: str,
+) -> None:
     new_url = original_url.update_query({})
 
     assert new_url.query["a"] == original_url.query["a"]
 
     if "b" in original_url.query:
         assert new_url.query["b"] == original_url.query["b"]
+
+
+@pytest.mark.parametrize(
+    ("original_query_string", "keys_to_drop", "expected_query_string"),
+    [
+        ("a=10&b=M%C3%B9a+xu%C3%A2n&u%E1%BB%91ng=cafe", ["a"], "b=Mùa xuân&uống=cafe"),
+        ("a=10&b=M%C3%B9a+xu%C3%A2n", ["b"], "a=10"),
+        ("a=10&b=M%C3%B9a+xu%C3%A2n&c=30", ["b"], "a=10&c=30"),
+        (
+            "a=10&b=M%C3%B9a+xu%C3%A2n&u%E1%BB%91ng=cafe",
+            ["uống"],
+            "a=10&b=Mùa xuân",
+        ),
+        ("a=10&b=M%C3%B9a+xu%C3%A2n", ["a", "b"], ""),
+    ],
+)
+def test_without_query_params(
+    original_query_string: str, keys_to_drop: Sequence[str], expected_query_string: str
+) -> None:
+    url = URL(f"http://example.com?{original_query_string}")
+    new_url = url.without_query_params(*keys_to_drop)
+    assert new_url.query_string == expected_query_string
+    assert new_url is not url
+
+
+@pytest.mark.parametrize(
+    ("original_query_string", "keys_to_drop"),
+    [
+        ("a=10&b=M%C3%B9a+xu%C3%A2n&c=30", ["invalid_key"]),
+        ("a=10&b=M%C3%B9a+xu%C3%A2n", []),
+    ],
+)
+def test_skip_dropping_query_params(
+    original_query_string: str, keys_to_drop: Sequence[str]
+) -> None:
+    url = URL(f"http://example.com?{original_query_string}")
+    new_url = url.without_query_params(*keys_to_drop)
+    assert new_url is url

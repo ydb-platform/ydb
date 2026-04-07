@@ -10,6 +10,10 @@
 
 #include <map>
 
+namespace NKikimr::NScheme {
+    class TTypeInfo;
+}
+
 namespace NKikimr::NArrow {
 
 using TArrayVec = std::vector<std::shared_ptr<arrow::Array>>;
@@ -90,8 +94,6 @@ TConclusion<bool> ScalarIsTrue(const std::shared_ptr<arrow::Scalar>& x);
 int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y);
 int ScalarCompare(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
 int ScalarCompareNullable(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
-std::partial_ordering ColumnsCompare(
-    const std::vector<std::shared_ptr<arrow::Array>>& x, const ui32 xRow, const std::vector<std::shared_ptr<arrow::Array>>& y, const ui32 yRow);
 bool ColumnEqualsScalar(const std::shared_ptr<arrow::Array>& c, const ui32 position, const std::shared_ptr<arrow::Scalar>& s);
 bool ScalarLess(const std::shared_ptr<arrow::Scalar>& x, const std::shared_ptr<arrow::Scalar>& y);
 bool ScalarLess(const arrow::Scalar& x, const arrow::Scalar& y);
@@ -107,7 +109,7 @@ NJson::TJsonValue DebugJson(std::shared_ptr<arrow::Array> array, const ui32 head
 NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> batch, const ui32 head, const ui32 tail);
 
 NJson::TJsonValue DebugJson(std::shared_ptr<arrow::Array> array, const ui32 position);
-TString DebugString(std::shared_ptr<arrow::Array> array, const ui32 position);
+TString DebugString(std::shared_ptr<arrow::Array> array, const ui32 position, const NKikimr::NScheme::TTypeInfo* logicalType = nullptr);
 NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> array, const ui32 position);
 
 std::shared_ptr<arrow::RecordBatch> Reorder(
@@ -118,5 +120,16 @@ std::shared_ptr<arrow::RecordBatch> Reorder(
 
 // Deep-copies all internal arrow::buffers - and makes sure that new buffers don't have any parents.
 std::shared_ptr<arrow::Table> DeepCopy(const std::shared_ptr<arrow::Table>& table, arrow::MemoryPool* pool = arrow::default_memory_pool());
+
+// When PROFILE_MEMORY_ALLOCATIONS is enabled, performs a deep copy of the table
+// so that all Arrow buffers are re-allocated through the given memory pool,
+// making memory ownership explicit and trackable. Otherwise returns the original table as-is.
+inline std::shared_ptr<arrow::Table> ClaimMemoryOwnership(const std::shared_ptr<arrow::Table>& table, [[maybe_unused]] arrow::MemoryPool* pool = arrow::default_memory_pool()) {
+#ifdef PROFILE_MEMORY_ALLOCATIONS
+    return table ? DeepCopy(table, pool) : table;
+#else
+    return table;
+#endif
+}
 
 }   // namespace NKikimr::NArrow

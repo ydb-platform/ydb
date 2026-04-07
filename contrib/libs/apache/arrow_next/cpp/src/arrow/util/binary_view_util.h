@@ -21,8 +21,8 @@
 #include <string_view>
 #include <utility>
 
-#include "arrow/type.h"
-#include "arrow/util/span.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/span.h"
 
 namespace arrow20::util {
 

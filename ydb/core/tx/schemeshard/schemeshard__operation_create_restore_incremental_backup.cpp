@@ -4,7 +4,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_states.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
@@ -201,14 +200,7 @@ public:
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         auto table = context.SS->Tables.at(pathId);
 
-        table->AlterVersion += 1;
-
         NIceDb::TNiceDb db(context.GetDB());
-        context.SS->PersistTableAlterVersion(db, pathId, table);
-
-        context.SS->ClearDescribePathCaches(path);
-        context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
-
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
 
         return true;
@@ -254,15 +246,21 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(IsExpectedTxType(txState->TxType));
 
-        // FIXME: should we release all path states here? Seems now our RestoreMultipleIncrementalBackups became Single again, need to fix it.
-        if (RestoreOp.GetSrcPathIds().size() > 0) {
-            for (const auto& pathId : RestoreOp.GetSrcPathIds()) {
-                context.OnComplete.ReleasePathState(OperationId, TPathId::FromProto(pathId), TPathElement::EPathState::EPathStateNoChanges);
+        if (txState->TargetPathId != InvalidPathId) {
+            Y_ABORT_UNLESS(context.SS->PathsById.contains(txState->TargetPathId));
+            // Don't publish here - finalize will publish after bumping index versions
+            context.OnComplete.ReleasePathState(OperationId, txState->TargetPathId, TPathElement::EPathState::EPathStateNoChanges);
+        }
+
+        if (RestoreOp.SrcTablePathsSize() > 0) {
+            for (const auto& srcTablePathStr : RestoreOp.GetSrcTablePaths()) {
+                const auto srcTablePath = TPath::Resolve(srcTablePathStr, context.SS);
+                if (srcTablePath.IsResolved()) {
+                    context.OnComplete.ReleasePathState(OperationId, srcTablePath.Base()->PathId, TPathElement::EPathState::EPathStateNoChanges);
+                }
             }
-        } else {
-            if (txState->SourcePathId) {
-                context.OnComplete.ReleasePathState(OperationId, txState->SourcePathId, TPathElement::EPathState::EPathStateNoChanges);
-            }
+        } else if (txState->SourcePathId != InvalidPathId) {
+            context.OnComplete.ReleasePathState(OperationId, txState->SourcePathId, TPathElement::EPathState::EPathStateNoChanges);
         }
 
         context.OnComplete.DoneOperation(OperationId);
@@ -415,8 +413,12 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotAsyncReplicaTable()
-                .NotUnderDeleting()
-                .IsCommonSensePath();
+                .NotUnderDeleting();
+
+            // Allow restoring to private paths (e.g., index implementation tables)
+            if (!dstTablePath.IsInsideTableIndexPath(false)) {
+                checks.IsCommonSensePath();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -447,7 +449,6 @@ public:
             auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
             Y_ABORT_UNLESS(table->AlterVersion != 0);
-            Y_ABORT_UNLESS(!table->AlterData);
 
             tablePath.Base()->PathState = NKikimrSchemeOp::EPathStateOutgoingIncrementalRestore;
             tablePath.Base()->LastTxId = OperationId.GetTxId();
@@ -556,8 +557,12 @@ bool CreateRestoreMultipleIncrementalBackups(
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
-                .NotUnderDeleting()
-                .IsCommonSensePath();
+                .NotUnderDeleting();
+
+            // Allow restoring to private paths (e.g., index implementation tables)
+            if (!dstTablePath.IsInsideTableIndexPath(false)) {
+                checks.IsCommonSensePath();
+            }
         } else {
             checks
                 .FailOnExist(TPathElement::EPathType::EPathTypeTable, false);

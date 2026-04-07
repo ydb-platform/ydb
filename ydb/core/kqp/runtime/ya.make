@@ -2,8 +2,12 @@ LIBRARY()
 
 SRCS(
     kqp_arrow_memory_pool.cpp
+    kqp_buffer_lookup_actor.cpp
     kqp_compute.cpp
     kqp_effects.cpp
+    kqp_full_text_source.cpp
+    kqp_sys_view_source.cpp
+    kqp_fulltext_analyze.cpp
     kqp_output_stream.cpp
     kqp_program_builder.cpp
     kqp_read_actor.cpp
@@ -37,6 +41,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/apache/arrow
+    library/cpp/regex/pire
     library/cpp/threading/hot_swap
     ydb/core/actorlib_impl
     ydb/core/base
@@ -45,9 +50,12 @@ PEERDIR(
     ydb/core/formats
     ydb/core/kqp/common
     ydb/core/kqp/common/buffer
+    ydb/core/persqueue/events
     ydb/core/protos
     ydb/core/scheme
     ydb/core/ydb_convert
+    ydb/library/aclib
+    ydb/library/yql/dq/actors
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/actors/spilling
     ydb/library/yql/dq/common
@@ -55,6 +63,7 @@ PEERDIR(
     yql/essentials/minikql/computation/llvm16
     yql/essentials/minikql/comp_nodes
     yql/essentials/utils
+    ydb/core/kqp/common/result_set_format
 )
 
 YQL_LAST_ABI_VERSION()

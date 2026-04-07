@@ -3,8 +3,10 @@ import json
 import logging
 import re
 import uuid
+from importlib import import_module
+from importlib.metadata import version as dist_version
 from base64 import b64encode
-from typing import Optional, Dict, Any, Sequence, Union, List, Callable, Generator, BinaryIO
+from typing import Literal, Optional, Dict, Any, Sequence, Union, List, Callable, Generator, BinaryIO
 from urllib.parse import urlencode
 
 from urllib3 import Timeout
@@ -24,7 +26,7 @@ from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.httputil import ResponseSource, get_pool_manager, get_response_data, \
     default_pool_manager, get_proxy_manager, all_managers, check_env_proxy, check_conn_expiration
 from clickhouse_connect.driver.insert import InsertContext
-from clickhouse_connect.driver.query import QueryResult, QueryContext
+from clickhouse_connect.driver.query import QueryResult, QueryContext, TzSource
 from clickhouse_connect.driver.binding import quote_identifier, bind_query
 from clickhouse_connect.driver.summary import QuerySummary
 from clickhouse_connect.driver.transform import NativeTransform
@@ -32,6 +34,7 @@ from clickhouse_connect.driver.transform import NativeTransform
 logger = logging.getLogger(__name__)
 columns_only_re = re.compile(r'LIMIT 0\s*$', re.IGNORECASE)
 ex_header = 'X-ClickHouse-Exception-Code'
+ex_tag_header = 'X-ClickHouse-Exception-Tag'
 
 
 # pylint: disable=too-many-instance-attributes
@@ -40,13 +43,15 @@ class HttpClient(Client):
     valid_transport_settings = {'database', 'buffer_size', 'session_id',
                                 'compress', 'decompress', 'session_timeout',
                                 'session_check', 'query_id', 'quota_key',
-                                'wait_end_of_query', 'client_protocol_version'}
+                                'wait_end_of_query', 'client_protocol_version',
+                                'role'}
     optional_transport_settings = {'send_progress_in_http_headers',
                                    'http_headers_progress_interval_ms',
                                    'enable_http_compression'}
     _owns_pool_manager = False
 
-    # pylint: disable=too-many-positional-arguments,too-many-arguments,too-many-locals,too-many-branches,too-many-statements,unused-argument
+    # R0917: too-many-positional-arguments
+    # pylint: disable=too-many-arguments,R0917,too-many-locals,too-many-branches,too-many-statements,unused-argument
     def __init__(self,
                  interface: str,
                  host: str,
@@ -71,11 +76,17 @@ class HttpClient(Client):
                  http_proxy: Optional[str] = None,
                  https_proxy: Optional[str] = None,
                  server_host_name: Optional[str] = None,
+                 tz_source: Optional[TzSource] = None,
+                 tz_mode: Optional[str] = None,
+                 utc_tz_aware: Optional[Union[bool, Literal["schema"]]] = None,
                  apply_server_timezone: Optional[Union[str, bool]] = None,
                  show_clickhouse_errors: Optional[bool] = None,
                  autogenerate_session_id: Optional[bool] = None,
+                 autogenerate_query_id: Optional[bool] = None,
                  tls_mode: Optional[str] = None,
-                 proxy_path: str = ''):
+                 proxy_path: str = '',
+                 form_encode_query_params: bool = False,
+                 rename_response_column: Optional[str] = None):
         """
         Create an HTTP ClickHouse Connect client
         See clickhouse_connect.get_client for parameters
@@ -85,6 +96,7 @@ class HttpClient(Client):
             proxy_path = '/' + proxy_path
         self.url = f'{interface}://{host}:{port}{proxy_path}'
         self.headers = {}
+        self.form_encode_query_params = form_encode_query_params
         self.params = dict_copy(HttpClient.params)
         ch_settings = dict_copy(settings, self.params)
         self.http = pool_mgr
@@ -125,6 +137,7 @@ class HttpClient(Client):
         elif (not client_cert or tls_mode in ('strict', 'proxy')) and username:
             self.headers['Authorization'] = 'Basic ' + b64encode(f'{username}:{password}'.encode()).decode()
 
+        self._reported_libs = set()
         self.headers['User-Agent'] = common.build_client_name(client_name)
         self._read_format = self._write_format = 'Native'
         self._transform = NativeTransform()
@@ -140,6 +153,7 @@ class HttpClient(Client):
         self._send_comp_setting = False
         self._progress_interval = None
         self._active_session = None
+        self._rename_response_column = rename_response_column
 
         # allow to override the global autogenerate_session_id setting via the constructor params
         _autogenerate_session_id = common.get_setting('autogenerate_session_id') \
@@ -150,6 +164,11 @@ class HttpClient(Client):
             ch_settings['session_id'] = session_id
         elif 'session_id' not in ch_settings and _autogenerate_session_id:
             ch_settings['session_id'] = str(uuid.uuid4())
+
+        # allow to override the global autogenerate_query_id setting via the constructor params
+        self._autogenerate_query_id = common.get_setting('autogenerate_query_id') \
+            if autogenerate_query_id is None \
+            else autogenerate_query_id
 
         if coerce_bool(compress):
             compression = ','.join(available_compression)
@@ -167,9 +186,16 @@ class HttpClient(Client):
                          query_limit=query_limit,
                          query_retries=query_retries,
                          server_host_name=server_host_name,
+                         tz_source=tz_source,
+                         tz_mode=tz_mode,
+                         utc_tz_aware=utc_tz_aware,
                          apply_server_timezone=apply_server_timezone,
                          show_clickhouse_errors=show_clickhouse_errors)
         self.params = dict_copy(self.params, self._validate_settings(ch_settings))
+        cancel_setting = self._setting_status("cancel_http_readonly_queries_on_client_close")
+        if cancel_setting.is_writable and not cancel_setting.is_set and \
+                "cancel_http_readonly_queries_on_client_close" not in (settings or {}):
+            self.params["cancel_http_readonly_queries_on_client_close"] = "1"
         comp_setting = self._setting_status('enable_http_compression')
         self._send_comp_setting = not comp_setting.is_set and comp_setting.is_writable
         if comp_setting.is_set or comp_setting.is_writable:
@@ -180,15 +206,15 @@ class HttpClient(Client):
                 self._setting_status('http_headers_progress_interval_ms').is_writable:
             self._progress_interval = str(min(120000, max(10000, (send_receive_timeout - 5) * 1000)))
 
-    def set_client_setting(self, key, value):
+    def set_client_setting(self, key: str, value: Any) -> None:
         str_value = self._validate_setting(key, value, common.get_setting('invalid_setting_action'))
         if str_value is not None:
             self.params[key] = str_value
 
-    def get_client_setting(self, key) -> Optional[str]:
+    def get_client_setting(self, key: str) -> Optional[str]:
         return self.params.get(key)
 
-    def set_access_token(self, access_token: str):
+    def set_access_token(self, access_token: str) -> None:
         auth_header = self.headers.get('Authorization')
         if auth_header and not auth_header.startswith('Bearer'):
             raise ProgrammingError('Cannot set access token when a different auth type is used')
@@ -211,18 +237,42 @@ class HttpClient(Client):
         if self.protocol_version:
             params['client_protocol_version'] = self.protocol_version
             context.block_info = True
-        params.update(context.bind_params)
         params.update(self._validate_settings(context.settings))
+        context.rename_response_column = self._rename_response_column
         if not context.is_insert and columns_only_re.search(context.uncommented_query):
-            response = self._raw_request(f'{context.final_query}\n FORMAT JSON',
-                                         params, headers, retries=self.query_retries)
+            # Mirror normal query behavior for form encoding and external data
+            fmt_json_query = f'{context.final_query}\n FORMAT JSON'
+            if self.form_encode_query_params:
+                fields = {'query': fmt_json_query}
+                fields.update(context.bind_params)
+                if context.external_data:  # Deal with form encoding + external data
+                    params.update(context.external_data.query_params)
+                    fields.update(context.external_data.form_data)
+                response = self._raw_request(bytes(), params, headers, retries=self.query_retries, fields=fields)
+            elif context.external_data:  # Deal with external data without form encoding
+                fields = context.external_data.form_data
+                params.update(context.bind_params)
+                params.update(context.external_data.query_params)
+                params['query'] = fmt_json_query
+                response = self._raw_request(bytes(), params, headers, retries=self.query_retries, fields=fields)
+            else:  # Legacy behavior (plain body, bind params in URL)
+                params.update(context.bind_params)
+                response = self._raw_request(fmt_json_query,
+                                             params, headers, retries=self.query_retries)
             json_result = json.loads(response.data)
             # ClickHouse will respond with a JSON object of meta, data, and some other objects
             # We just grab the column names and column types from the metadata sub object
             names: List[str] = []
             types: List[ClickHouseType] = []
+            renamer = context.column_renamer
             for col in json_result['meta']:
-                names.append(col['name'])
+                name = col['name']
+                if renamer is not None:
+                    try:
+                        name = renamer(name)
+                    except Exception as e:  # pylint: disable=broad-exception-caught
+                        logger.debug("Failed to rename col '%s'. Skipping rename. Error: %s", name, e)
+                names.append(name)
                 types.append(registry.get_from_name(col['type']))
             return QueryResult([], None, tuple(names), tuple(types))
 
@@ -231,12 +281,23 @@ class HttpClient(Client):
             if self._send_comp_setting:
                 params['enable_http_compression'] = '1'
         final_query = self._prep_query(context)
-        if context.external_data:
+        fields = {}
+        # Setup additional query parameters and body
+        if self.form_encode_query_params:
+            body = bytes()
+            fields['query'] = final_query
+            fields.update(context.bind_params)
+            if context.external_data:
+                params.update(context.external_data.query_params)
+                fields.update(context.external_data.form_data)
+        elif context.external_data:
+            params.update(context.bind_params)
             body = bytes()
             params['query'] = final_query
             params.update(context.external_data.query_params)
             fields = context.external_data.form_data
         else:
+            params.update(context.bind_params)
             body = final_query
             fields = None
             headers['Content-Type'] = 'text/plain; charset=utf-8'
@@ -247,7 +308,8 @@ class HttpClient(Client):
                                      retries=self.query_retries,
                                      fields=fields,
                                      server_wait=not context.streaming)
-        byte_source = RespBuffCls(ResponseSource(response))  # pylint: disable=not-callable
+        exception_tag = response.headers.get(ex_tag_header)
+        byte_source = RespBuffCls(ResponseSource(response, exception_tag=exception_tag))  # pylint: disable=not-callable
         context.set_response_tz(self._check_tz_change(response.headers.get('X-ClickHouse-Timezone')))
         query_result = self._transform.parse_response(byte_source, context)
         query_result.summary = self._summary(response)
@@ -281,10 +343,12 @@ class HttpClient(Client):
             params['database'] = self.database
         params.update(self._validate_settings(context.settings))
         headers = dict_copy(headers, context.transport_settings)
-        response = self._raw_request(block_gen, params, headers, error_handler=error_handler, server_wait=False)
-        logger.debug('Context insert response code: %d, content: %s', response.status, response.data)
-        context.data = None
-        return QuerySummary(self._summary(response))
+        try:
+            response = self._raw_request(block_gen, params, headers, error_handler=error_handler, server_wait=False)
+            logger.debug('Context insert response code: %d, content: %s', response.status, response.data)
+            return QuerySummary(self._summary(response))
+        finally:
+            context.data = None
 
     def raw_insert(self, table: str = None,
                    column_names: Optional[Sequence[str]] = None,
@@ -329,11 +393,11 @@ class HttpClient(Client):
         return summary
 
     def command(self,
-                cmd,
+                cmd: str,
                 parameters: Optional[Union[Sequence, Dict[str, Any]]] = None,
                 data: Union[str, bytes] = None,
                 settings: Optional[Dict] = None,
-                use_database: int = True,
+                use_database: bool = True,
                 external_data: Optional[ExternalData] = None,
                 transport_settings: Optional[Dict[str, str]] = None) -> Union[str, int, Sequence[str], QuerySummary]:
         """
@@ -380,25 +444,47 @@ class HttpClient(Client):
         return QuerySummary(self._summary(response))
 
     def _error_handler(self, response: HTTPResponse, retried: bool = False) -> None:
-        if self.show_clickhouse_errors:
+        """
+        Handles HTTP errors. Tries to be robust and provide maximum context.
+        """
+        try:
+            body = ""
+            # Always try to read the response body for context.
             try:
-                err_content = get_response_data(response)
+                # get_response_data reads body and decodes it for the error message
+                raw_body = get_response_data(response)
+                body = common.format_error(
+                    raw_body.decode(errors="backslashreplace")
+                ).strip()
             except Exception:  # pylint: disable=broad-except
-                err_content = None
-            finally:
-                response.close()
+                # If we can't read or decode the body, we'll proceed without it
+                logger.warning("Failed to read error response body", exc_info=True)
 
-            err_str = f'HTTPDriver for {self.url} returned response code {response.status}'
-            err_code = response.headers.get(ex_header)
-            if err_code:
-                err_str = f'HTTPDriver for {self.url} received ClickHouse error code {err_code}'
-            if err_content:
-                err_msg = common.format_error(err_content.decode(errors='backslashreplace'))
-                if err_msg.startswith('Code'):
-                    err_str = f'{err_str}\n {err_msg}'
-        else:
-            err_str = 'The ClickHouse server returned an error.'
+            # Build the error message
+            if self.show_clickhouse_errors:
+                err_code = response.headers.get(ex_header)
+                if err_code:
+                    # Prioritize the specific ClickHouse exception code if it exists.
+                    err_str = f"Received ClickHouse exception, code: {err_code}"
+                else:
+                    # Otherwise, just use the generic HTTP status
+                    err_str = f"HTTP driver received HTTP status {response.status}"
 
+                if body:
+                    # Always append the body if it exists
+                    err_str = f"{err_str}, server response: {body}"
+            else:
+                # Simple message for when detailed errors are disabled
+                err_str = "The ClickHouse server returned an error"
+
+            # Add the URL for additional context
+            err_str = f"{err_str} (for url {self.url})"
+
+        finally:
+            # Ensure closed response to prevent resource leaks
+            response.close()
+
+        # Raise the appropriate exception class
         raise OperationalError(err_str) if retried else DatabaseError(err_str) from None
 
     def _raw_request(self,
@@ -427,6 +513,10 @@ class HttpClient(Client):
             final_params['http_headers_progress_interval_ms'] = self._progress_interval
         final_params = dict_copy(self.params, final_params)
         final_params = dict_copy(final_params, params)
+
+        if self._autogenerate_query_id and "query_id" not in final_params:
+            final_params["query_id"] = str(uuid.uuid4())
+
         url = f'{self.url}?{urlencode(final_params)}'
         kwargs = {
             'headers': headers,
@@ -519,20 +609,76 @@ class HttpClient(Client):
         params = self._validate_settings(settings or {})
         if use_database and self.database:
             params['database'] = self.database
-        params.update(bind_params)
-        if external_data:
-            if isinstance(final_query, bytes):
-                raise ProgrammingError('Cannot combine binary query data with `External Data`')
+        fields = {}
+        # Setup query body
+        if external_data and not self.form_encode_query_params and isinstance(final_query, bytes):
+            raise ProgrammingError("Binary query cannot be placed in URL when using External Data; enable form encoding.")
+        # Setup additional query parameters and body
+        if self.form_encode_query_params:
+            body = bytes()
+            fields['query'] = final_query
+            fields.update(bind_params)
+            if external_data:
+                params.update(external_data.query_params)
+                fields.update(external_data.form_data)
+        elif external_data:
+            params.update(bind_params)
             body = bytes()
             params['query'] = final_query
             params.update(external_data.query_params)
             fields = external_data.form_data
         else:
+            params.update(bind_params)
             body = final_query
             fields = None
         return body, params, fields
 
-    def ping(self):
+    # pylint: disable=broad-exception-caught
+    def _add_integration_tag(self, name: str):
+        """
+        Dynamically adds a product (like pandas or sqlalchemy) to the User-Agent string details section.
+        """
+        if not common.get_setting("send_integration_tags") or name in self._reported_libs:
+            return
+
+        try:
+            ver = "unknown"
+            try:
+                ver = dist_version(name)
+            except Exception:
+                try:
+                    mod = import_module(name)
+                    ver = getattr(mod, "__version__", "unknown")
+                except Exception:
+                    pass
+
+            product_info = f"{name}/{ver}"
+
+            ua = self.headers.get("User-Agent", "")
+            start = ua.find("(")
+            if start == -1:
+                return
+            end = ua.find(")", start + 1)
+            if end == -1:
+                return
+
+            details = ua[start + 1 : end].strip()
+
+            if product_info in details:
+                self._reported_libs.add(name)
+                return
+
+            new_details = f"{product_info}; {details}" if details else product_info
+            new_ua = f"{ua[: start + 1]}{new_details}{ua[end:]}"
+            self.headers["User-Agent"] = new_ua.strip()
+
+            self._reported_libs.add(name)
+            logger.debug("Added '%s' to User-Agent", product_info)
+
+        except Exception as e:
+            logger.debug("Problem adding '%s' to User-Agent: %s", name, e)
+
+    def ping(self) -> bool:
         """
         See BaseClient doc_string for this method
         """
@@ -543,10 +689,10 @@ class HttpClient(Client):
             logger.debug('ping failed', exc_info=True)
             return False
 
-    def close_connections(self):
+    def close_connections(self) -> None:
         self.http.clear()
 
-    def close(self):
+    def close(self) -> None:
         if self._owns_pool_manager:
             self.http.clear()
             all_managers.pop(self.http, None)

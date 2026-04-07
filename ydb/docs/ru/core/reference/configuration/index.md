@@ -13,18 +13,25 @@
 || [{#T}](actor_system_config.md) | Да | Распределение CPU-ресурсов по пулам акторной системы ||
 || [{#T}](auth_config.md) | Нет | Настройки аутентификации и авторизации ||
 || [{#T}](blob_storage_config.md) | Нет | Конфигурация статической группы кластера для системных таблеток ||
+|| [{#T}](bridge_config.md) | Нет | Конфигурация [режима bridge](../../concepts/bridge.md) ||
 || [{#T}](client_certificate_authorization.md) | Нет | Аутентификация с помощью клиентских сертификатов ||
+|| [{#T}](cms_config.md) | Нет | Конфигурация Cluster Management System (CMS) ||
 || [{#T}](domains_config.md) | Нет | Конфигурация домена кластера, включая Blob Storage и State Storage ||
 || [{#T}](feature_flags.md) | Нет | Функциональные флаги для включения или отключения определённых возможностей {{ ydb-short-name }} ||
 || [{#T}](healthcheck_config.md) | Нет | Пороговые значения и таймауты сервиса Health Check ||
+|| [{#T}](hive_config.md) | Нет | Конфигурация запуска таблеток ||
 || [{#T}](host_configs.md) | Нет | Типовые конфигурации хостов для узлов кластера ||
 || [{#T}](hosts.md) | Да | Конфигурация статических узлов кластера ||
+|| [{#T}](kafka_proxy_config.md) | Нет | Конфигурация [Kafka Proxy](../../reference/kafka-api/index.md) ||
 || [{#T}](log_config.md) | Нет | Конфигурация и параметры логирования ||
 || [{#T}](memory_controller_config.md) | Нет | Распределение памяти и лимиты для компонентов базы данных ||
+|| [{#T}](monitoring_config.md) | Нет | Параметры [YDB Monitoring](../embedded-ui/ydb-monitoring.md) ||
 || [{#T}](node_broker_config.md) | Нет | Конфигурация стабильных имен узлов ||
+|| [{#T}](query_service_config.md) | Нет | Конфигурация внешних источников для федеративных запросов ||
 || [{#T}](resource_broker_config.md) | Нет | Брокер ресурсов для контроля потребления CPU и памяти ||
 || [{#T}](security_config.md) | Нет | Настройки конфигурации безопасности ||
 || [{#T}](table_service_config.md) | Нет | Настройки конфигурации выполнения запросов||
+|| [{#T}](tli_config.md) | Нет | Параметры диагностики [инвалидации блокировок транзакций](../../concepts/glossary.md#tli) (TLI) ||
 || [{#T}](tls.md) | Нет | Конфигурация TLS для безопасных соединений ||
 |#
 
@@ -34,9 +41,9 @@
 
 - В рамках первоначального развёртывания кластера {{ ydb-short-name }}:
 
-    - [Ansible](../../devops/deployment-options/ansible/initial-deployment.md)
-    - [Kubernetes](../../devops/deployment-options/kubernetes/initial-deployment.md)
-    - [Вручную](../../devops/deployment-options/manual/initial-deployment.md)
+- [Ansible](../../devops/deployment-options/ansible/initial-deployment/index.md)
+- [Kubernetes](../../devops/deployment-options/kubernetes/initial-deployment.md)
+- [Вручную](../../devops/deployment-options/manual/initial-deployment/index.md)
 
 - В рамках [поиска и устранения неисправностей](../../troubleshooting/index.md)
 - В рамках [усиления безопасности](../../security/index.md)
@@ -44,4 +51,3 @@
 ## Примеры конфигураций кластеров
 
 Модельные конфигурации кластера для развертывания можно найти в [репозитории](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/). Изучите их перед развертыванием кластера.
-

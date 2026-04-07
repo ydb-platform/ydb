@@ -4,6 +4,7 @@ SRCS(
     gc.cpp
     storage_proxy.cpp
     storage_service.cpp
+    storage_settings.cpp
     ydb_checkpoint_storage.cpp
     ydb_state_storage.cpp
 )

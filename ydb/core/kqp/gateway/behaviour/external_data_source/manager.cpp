@@ -2,12 +2,13 @@
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/kqp/federated_query/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/gateway/utils/metadata_helpers.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
 #include <ydb/library/conclusion/generic/result.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/core/external_sources/iceberg_fields.h>
 
 namespace NKikimr::NKqp {
@@ -22,10 +23,15 @@ using TYqlConclusion = TConclusionImpl<TYqlConclusionStatus, TValue>;
 
 //// Async actions
 
-TAsyncStatus ValidateExternalDatasourceSecrets(const NKikimrSchemeOp::TExternalDataSourceDescription& externaDataSourceDesc, const TExternalDataSourceManager::TInternalModificationContext& context) {
+TAsyncStatus ValidateExternalDatasourceSecrets(const NKikimrSchemeOp::TExternalDataSourceDescription& externalDataSourceDesc, const TExternalDataSourceManager::TInternalModificationContext& context) {
     const auto& externalData = context.GetExternalData();
-    const auto& userToken = externalData.GetUserToken();
-    auto describeFuture = DescribeExternalDataSourceSecrets(externaDataSourceDesc.GetAuth(), userToken ? userToken->GetUserSID() : "", externalData.GetActorSystem());
+    const std::optional<NACLib::TUserToken>& userToken = externalData.GetUserToken();
+    auto describeFuture = DescribeExternalDataSourceSecrets(
+        externalDataSourceDesc.GetAuth(),
+        userToken ? new NACLib::TUserToken(*userToken) : nullptr,
+        externalData.GetDatabase(),
+        externalData.GetActorSystem()
+    );
 
     return describeFuture.Apply([](const NThreading::TFuture<TEvDescribeSecretsResponse::TDescription>& f) {
         if (const auto& value = f.GetValue(); value.Status != Ydb::StatusIds::SUCCESS) {
@@ -42,38 +48,51 @@ TString GetOrEmpty(const NYql::TCreateObjectSettings& container, const TString& 
     return fValue ? *fValue : TString{};
 }
 
-[[nodiscard]] TYqlConclusionStatus FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescription& externaDataSourceDesc, const TString& name, const NYql::TCreateObjectSettings& settings) {
-    externaDataSourceDesc.SetName(name);
-    externaDataSourceDesc.SetSourceType(GetOrEmpty(settings, "source_type"));
-    externaDataSourceDesc.SetLocation(GetOrEmpty(settings, "location"));
-    externaDataSourceDesc.SetInstallation(GetOrEmpty(settings, "installation"));
-    externaDataSourceDesc.SetReplaceIfExists(settings.GetReplaceIfExists());
+TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString& secretKeyPrefix) {
+    if (const auto secret = GetOrEmpty(settings, secretKeyPrefix + "_name"); !secret.empty()) {
+        return secret;
+    }
+
+    return GetOrEmpty(settings, secretKeyPrefix + "_path");
+}
+
+[[nodiscard]] TYqlConclusionStatus FillCreateExternalDataSourceDesc(
+    NKikimrSchemeOp::TExternalDataSourceDescription& externalDataSourceDesc,
+    const TString& name,
+    const NYql::TCreateObjectSettings& settings,
+    NActors::TActorSystem* actorSystem)
+{
+    externalDataSourceDesc.SetName(name);
+    externalDataSourceDesc.SetSourceType(GetOrEmpty(settings, "source_type"));
+    externalDataSourceDesc.SetLocation(GetOrEmpty(settings, "location"));
+    externalDataSourceDesc.SetInstallation(GetOrEmpty(settings, "installation"));
+    externalDataSourceDesc.SetReplaceIfExists(settings.GetReplaceIfExists());
 
     const TString& authMethod = GetOrEmpty(settings, "auth_method");
     if (authMethod == "NONE") {
-        externaDataSourceDesc.MutableAuth()->MutableNone();
+        externalDataSourceDesc.MutableAuth()->MutableNone();
     } else if (authMethod == "SERVICE_ACCOUNT") {
-        auto& sa = *externaDataSourceDesc.MutableAuth()->MutableServiceAccount();
+        auto& sa = *externalDataSourceDesc.MutableAuth()->MutableServiceAccount();
         sa.SetId(GetOrEmpty(settings, "service_account_id"));
-        sa.SetSecretName(GetOrEmpty(settings, "service_account_secret_name"));
+        sa.SetSecretName(GetSecretName(settings, "service_account_secret"));
     } else if (authMethod == "BASIC") {
-        auto& basic = *externaDataSourceDesc.MutableAuth()->MutableBasic();
+        auto& basic = *externalDataSourceDesc.MutableAuth()->MutableBasic();
         basic.SetLogin(GetOrEmpty(settings, "login"));
-        basic.SetPasswordSecretName(GetOrEmpty(settings, "password_secret_name"));
+        basic.SetPasswordSecretName(GetSecretName(settings, "password_secret"));
     } else if (authMethod == "MDB_BASIC") {
-        auto& mdbBasic = *externaDataSourceDesc.MutableAuth()->MutableMdbBasic();
+        auto& mdbBasic = *externalDataSourceDesc.MutableAuth()->MutableMdbBasic();
         mdbBasic.SetServiceAccountId(GetOrEmpty(settings, "service_account_id"));
-        mdbBasic.SetServiceAccountSecretName(GetOrEmpty(settings, "service_account_secret_name"));
+        mdbBasic.SetServiceAccountSecretName(GetSecretName(settings, "service_account_secret"));
         mdbBasic.SetLogin(GetOrEmpty(settings, "login"));
-        mdbBasic.SetPasswordSecretName(GetOrEmpty(settings, "password_secret_name"));
+        mdbBasic.SetPasswordSecretName(GetSecretName(settings, "password_secret"));
     } else if (authMethod == "AWS") {
-        auto& aws = *externaDataSourceDesc.MutableAuth()->MutableAws();
-        aws.SetAwsAccessKeyIdSecretName(GetOrEmpty(settings, "aws_access_key_id_secret_name"));
-        aws.SetAwsSecretAccessKeySecretName(GetOrEmpty(settings, "aws_secret_access_key_secret_name"));
+        auto& aws = *externalDataSourceDesc.MutableAuth()->MutableAws();
+        aws.SetAwsAccessKeyIdSecretName(GetSecretName(settings, "aws_access_key_id_secret"));
+        aws.SetAwsSecretAccessKeySecretName(GetSecretName(settings, "aws_secret_access_key_secret"));
         aws.SetAwsRegion(GetOrEmpty(settings, "aws_region"));
     } else if (authMethod == "TOKEN") {
-        auto& token = *externaDataSourceDesc.MutableAuth()->MutableToken();
-        token.SetTokenSecretName(GetOrEmpty(settings, "token_secret_name"));
+        auto& token = *externalDataSourceDesc.MutableAuth()->MutableToken();
+        token.SetTokenSecretName(GetSecretName(settings, "token_secret"));
     } else {
         return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder() << "Internal error. Unknown auth method: " << authMethod);
     }
@@ -92,21 +111,29 @@ TString GetOrEmpty(const NYql::TCreateObjectSettings& container, const TString& 
         "unsupported_type_display_mode", // mongodb
         "grpc_location", // solomon
         "project", // solomon
-        "cluster" // solomon
+        "cluster", // solomon
+        "shared_reading" // ydb (topics)
     };
 
     auto& featuresExtractor = settings.GetFeaturesExtractor();
 
     for (const auto& property : properties) {
         if (const auto value = featuresExtractor.Extract(property)) {
-            externaDataSourceDesc.MutableProperties()->MutableProperties()->insert({property, *value});
+            if (property == "shared_reading") {
+                if (!actorSystem || !AppData(actorSystem)->FeatureFlags.GetEnableSharedReadingInStreamingQueries()) {
+                    return TYqlConclusionStatus::Fail(
+                        NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+                        "SHARED_READING in External data source is not supported");
+                }
+            }
+            externalDataSourceDesc.MutableProperties()->MutableProperties()->insert({property, *value});
         }
     }
 
     // Iceberg properties for connector
     for (const auto& property : NKikimr::NExternalSource::NIceberg::FieldsToConnector) {
         if (const auto value = featuresExtractor.Extract(property)) {
-            externaDataSourceDesc.MutableProperties()->MutableProperties()->insert({property, *value});
+            externalDataSourceDesc.MutableProperties()->MutableProperties()->insert({property, *value});
         }
     }
 
@@ -120,7 +147,7 @@ TYqlConclusion<std::pair<TString, TString>> SplitPath(const TString& tableName, 
     std::pair<TString, TString> pathPair;
     TString error;
     if (!NSchemeHelpers::SplitTablePath(tableName, database, pathPair, error, createDir)) {
-        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid extarnal data source path: " << error);
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "Invalid external data source path: " << error);
     }
     return pathPair;
 }
@@ -224,7 +251,8 @@ TYqlConclusionStatus TExternalDataSourceManager::PrepareCreateExternalDataSource
     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExternalDataSource);
     schemeTx.SetFailedOnAlreadyExists(!settings.GetExistingOk());
 
-    return FillCreateExternalDataSourceDesc(*schemeTx.MutableCreateExternalDataSource(), name, settings);
+    return FillCreateExternalDataSourceDesc(
+        *schemeTx.MutableCreateExternalDataSource(), name, settings, context.GetExternalData().GetActorSystem());
 }
 
 TYqlConclusionStatus TExternalDataSourceManager::PrepareDropExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const {

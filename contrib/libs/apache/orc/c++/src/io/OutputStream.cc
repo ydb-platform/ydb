@@ -66,7 +66,7 @@ namespace orc {
   }
 
   int64_t BufferedOutputStream::ByteCount() const {
-    return static_cast<google::protobuf::int64>(dataBuffer_->size());
+    return static_cast<int64_t>(dataBuffer_->size());
   }
 
   bool BufferedOutputStream::WriteAliasedRaw(const void*, int) {

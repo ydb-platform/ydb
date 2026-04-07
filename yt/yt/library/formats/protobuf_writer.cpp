@@ -38,7 +38,7 @@ using ::google::protobuf::internal::WireFormatLite;
 class TZeroCopyWriterWithGapsBase
 {
 public:
-    TZeroCopyWriterWithGapsBase(TBlob& blob)
+    explicit TZeroCopyWriterWithGapsBase(TBlob& blob)
         : Blob_(blob)
         , InitialSize_(blob.Size())
     { }
@@ -70,7 +70,7 @@ public:
     using TGapPosition = ui64;
 
     // NOTE: We need base class to initialize `InitialSize_` before `TZeroCopyOutputStreamWriter`.
-    TZeroCopyWriterWithGaps(TBlobOutput* blobOutput)
+    explicit TZeroCopyWriterWithGaps(TBlobOutput* blobOutput)
         : TZeroCopyWriterWithGapsBase(blobOutput->Blob())
         , TZeroCopyOutputStreamWriter(blobOutput)
     { }
@@ -119,7 +119,7 @@ public:
             /* enableRaw */ true)
     {
         for (int tableIndex = 0; tableIndex < description->GetTableCount(); ++tableIndex) {
-            if (auto fieldDescription = description->FindOtherColumnsField(tableIndex)) {
+            if (description->FindOtherColumnsField(tableIndex)) {
                 TableIndexToConverter_[tableIndex].emplace(
                     nameTable,
                     schemas[tableIndex],
@@ -265,7 +265,7 @@ public:
 
     Y_FORCE_INLINE void OnString(TStringBuf value, const TProtobufWriterTypePtr& type)
     {
-        if (Y_UNLIKELY(!type->EnumerationDescription)) {
+        if (!type->EnumerationDescription) [[unlikely]] {
             THROW_ERROR_EXCEPTION("Enumeration description not found");
         }
         if (SuppressUnknownValueError_) {
@@ -318,7 +318,7 @@ Y_FORCE_INLINE void WriteProtobufEnum(
             : "<unknown>";
     };
 
-    if (Y_UNLIKELY(!visitor.InRange_)) {
+    if (!visitor.InRange_) [[unlikely]] {
         if (visitor.SuppressUnknownValueError_) {
             return;
         } else {
@@ -406,7 +406,7 @@ Y_FORCE_INLINE void WriteProtobufField(
 void ValidateYsonCursorType(const TYsonPullParserCursor* cursor, EYsonItemType expected)
 {
     auto actual = cursor->GetCurrent().GetType();
-    if (Y_UNLIKELY(actual != expected)) {
+    if (actual != expected) [[unlikely]] {
         THROW_ERROR_EXCEPTION("Protobuf writing error: bad YSON item, expected %Qlv, actual %Qlv",
             expected,
             actual);
@@ -476,7 +476,7 @@ private:
 
 void ValidateUnversionedValueType(const TUnversionedValue& value, EValueType type)
 {
-    if (Y_UNLIKELY(value.Type != type)) {
+    if (value.Type != type) [[unlikely]] {
         THROW_ERROR_EXCEPTION("Invalid protobuf storage type: expected %Qlv, got %Qlv",
             type,
             value.Type);
@@ -580,8 +580,6 @@ class TWriterImpl
 {
 private:
     using TMessageSize = ui32;
-    std::vector<TBlobOutput> EmbeddedBuffers;
-    TProtobufWriterFormatDescriptionPtr FormatDescription;
 
 public:
     TWriterImpl(
@@ -589,14 +587,15 @@ public:
         const TNameTablePtr& nameTable,
         const TProtobufWriterFormatDescriptionPtr& description,
         const TYsonConverterConfig& config)
-        : EmbeddedBuffers(description->GetTableDescription(0).Embeddings.size())
-        , FormatDescription(description)
+        : FormatDescription(description)
+        , EmbeddedBuffers_(GetMaxEmbeddingsSize(description))
         , OtherColumnsWriter_(schemas, nameTable, description, config)
     { }
 
     void SetTableIndex(i64 tableIndex)
     {
         OtherColumnsWriter_.SetTableIndex(tableIndex);
+        TableIndex_ = tableIndex;
     }
 
     Y_FORCE_INLINE void OnBeginRow(TZeroCopyWriterWithGaps* writer)
@@ -643,7 +642,7 @@ public:
     Y_FORCE_INLINE void OnValue(TUnversionedValue value, const TProtobufWriterFieldDescription& fieldDescription)
     {
         if (fieldDescription.ParentEmbeddingIndex != TProtobufWriterEmbeddingDescription::InvalidIndex) {
-            TZeroCopyWriterWithGaps writer(&EmbeddedBuffers[fieldDescription.ParentEmbeddingIndex]);
+            TZeroCopyWriterWithGaps writer(&EmbeddedBuffers_[fieldDescription.ParentEmbeddingIndex]);
             DoOnValue(&writer, value, fieldDescription);
         } else {
             DoOnValue(Writer_, value, fieldDescription);
@@ -658,7 +657,7 @@ public:
             TYsonPullParser parser(&input, EYsonType::Node);
             auto maxVarIntSize = GetMaxVarIntSizeOfProtobufSizeOfComplexType();
             Traverse(writer, fieldDescription, &parser, maxVarIntSize);
-        } else if (Y_UNLIKELY(MatchesEnumerateType(fieldDescription))) {
+        } else if (MatchesEnumerateType(fieldDescription)) [[unlikely]] {
             WriteProtobufEnum(writer,
                 fieldDescription,
                 TUnversionedValueExtractor(value));
@@ -684,25 +683,24 @@ public:
     Y_FORCE_INLINE void OnEndRow()
     {
         TZeroCopyWriterWithGaps* writer = Writer_;
-        auto& embeddings = FormatDescription->GetTableDescription(0).Embeddings;
+        auto& embeddings = FormatDescription->GetTableDescription(TableIndex_).Embeddings;
 
         int parentEmbeddingIndex = 0;
 
-        std::function<int(int)> EmitMessage = [&] (int parentEmbeddingIndex) {
+        std::function<int(int)> emitMessage = [&] (int parentEmbeddingIndex) {
             auto& embeddingDescription = embeddings[parentEmbeddingIndex];
-            auto& blob = EmbeddedBuffers[parentEmbeddingIndex];
+            auto& blob = EmbeddedBuffers_[parentEmbeddingIndex];
 
             int myParentEmbeddingIndex = parentEmbeddingIndex;
 
             WriteVarUint32(writer, embeddingDescription.WireTag);
 
             WriteWithSizePrefix(writer, sizeof(TMessageSize), [&] {
-
                 writer->Write(blob.Begin(), blob.Size());
                 blob.Clear();
                 parentEmbeddingIndex++;
                 while (parentEmbeddingIndex < std::ssize(embeddings) && embeddings[parentEmbeddingIndex].ParentEmbeddingIndex == myParentEmbeddingIndex) {
-                    parentEmbeddingIndex = EmitMessage(parentEmbeddingIndex);
+                    parentEmbeddingIndex = emitMessage(parentEmbeddingIndex);
                 }
             });
             return parentEmbeddingIndex;
@@ -710,7 +708,7 @@ public:
 
         while (parentEmbeddingIndex < std::ssize(embeddings)) {
             YT_VERIFY(embeddings[parentEmbeddingIndex].ParentEmbeddingIndex == TProtobufWriterEmbeddingDescription::InvalidIndex);
-            parentEmbeddingIndex = EmitMessage(parentEmbeddingIndex);
+            parentEmbeddingIndex = emitMessage(parentEmbeddingIndex);
         }
 
         OtherColumnsWriter_.OnEndRow();
@@ -801,7 +799,7 @@ private:
             WriteVarUint32(writer, fieldDescription.WireTag);
             WriteWithSizePrefix(writer, maxVarIntSize, [&] {
                 while (!parser->IsEndList()) {
-                    if (Y_UNLIKELY(MatchesEnumerateType(fieldDescription))) {
+                    if (MatchesEnumerateType(fieldDescription)) [[unlikely]] {
                         WriteProtobufEnum(writer,
                             fieldDescription,
                             TYsonValueExtractor(parser));
@@ -891,11 +889,24 @@ private:
         parser->ParseEndList();
     }
 
+    static size_t GetMaxEmbeddingsSize(const TProtobufWriterFormatDescriptionPtr& description)
+    {
+        size_t maxSize = 0;
+        for (int i = 0; i < description->GetTableCount(); ++i) {
+            maxSize = std::max(maxSize, description->GetTableDescription(i).Embeddings.size());
+        }
+        return maxSize;
+    }
+
 private:
+    const TProtobufWriterFormatDescriptionPtr FormatDescription;
+
+    std::vector<TBlobOutput> EmbeddedBuffers_;
     TOtherColumnsWriter OtherColumnsWriter_;
     TZeroCopyWriterWithGaps* Writer_;
     TZeroCopyWriterWithGaps::TGapPosition MessageSizeGapPosition_;
     ui64 TotalWrittenSizeBefore_;
+    i64 TableIndex_ = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -971,7 +982,7 @@ private:
 
     void TryFlushBufferAndUpdateWriter(bool force)
     {
-        TryFlushBuffer(force);
+        MaybeFlushBuffer(force);
         // |StreamWriter_| could have been reset in |FlushWriter()|.
         if (!StreamWriter_) {
             StreamWriter_.emplace(GetOutputStream());

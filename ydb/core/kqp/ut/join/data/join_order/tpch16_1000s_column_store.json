@@ -19,10 +19,6 @@
                           "args":
                             [
                               {
-                                "op_name":"TableFullScan",
-                                "table":"part"
-                              },
-                              {
                                 "op_name":"HashShuffle",
                                 "args":
                                   [
@@ -31,6 +27,10 @@
                                       "table":"partsupp"
                                     }
                                   ]
+                              },
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"part"
                               }
                             ]
                         }

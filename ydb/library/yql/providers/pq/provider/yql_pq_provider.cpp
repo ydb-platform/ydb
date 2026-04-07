@@ -2,6 +2,9 @@
 #include "yql_pq_provider_impl.h"
 #include "yql_pq_dq_integration.h"
 
+#include "yql_pq_ytflow_integration.h"
+#include "yql_pq_ytflow_optimize.h"
+
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/utils/log/context.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
@@ -15,8 +18,10 @@ TDataProviderInitializer GetPqDataProviderInitializer(
     std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
     const NPq::NProto::StreamingDisposition& disposition,
     const std::vector<std::pair<TString, TString>>& taskSensorLabels,
-    const std::vector<ui64>& nodeIds) {
-    return [gateway, supportRtmrMode, dbResolver, disposition, taskSensorLabels, nodeIds] (
+    const std::vector<ui64>& nodeIds,
+    bool useActorSystemThreadsInTopicClient,
+    bool useYtflowEngine) {
+    return [gateway, supportRtmrMode, dbResolver, disposition, taskSensorLabels, nodeIds, useActorSystemThreadsInTopicClient, useYtflowEngine] (
                const TString& userName,
                const TString& sessionId,
                const TGatewaysConfig* gatewaysConfig,
@@ -38,6 +43,7 @@ TDataProviderInitializer GetPqDataProviderInitializer(
 
             auto state = MakeIntrusive<TPqState>(sessionId);
             state->SupportRtmrMode = supportRtmrMode;
+            state->UseActorSystemThreadsInTopicClient = useActorSystemThreadsInTopicClient;
             state->Types = typeCtx.Get();
             state->FunctionRegistry = functionRegistry;
             state->DbResolver = dbResolver;
@@ -49,6 +55,10 @@ TDataProviderInitializer GetPqDataProviderInitializer(
             }
             state->Gateway = gateway;
             state->DqIntegration = CreatePqDqIntegration(state);
+            if (useYtflowEngine) {
+                state->YtflowIntegration = CreatePqYtflowIntegration(state);
+                state->YtflowOptimization = CreatePqYtflowOptimization(state);
+            }
 
             TDataProviderInfo info;
 

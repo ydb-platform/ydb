@@ -15,6 +15,8 @@ from ydb.draft import DynamicConfigClient
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.fixtures import ydb_database_ctx
 
+from helpers import cluster_endpoint, CaptureFileOutput
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,10 +47,6 @@ CLUSTER_CONFIG = dict(
     # two builtin users with empty passwords
     default_users=dict((i, '') for i in ('root', 'other-user')),
 )
-
-
-def cluster_endpoint(cluster):
-    return f'{cluster.nodes[1].host}:{cluster.nodes[1].port}'
 
 
 def ydbcli_db_schema_exec(cluster, operation_proto):
@@ -116,22 +114,6 @@ def alter_user_attrs(cluster, path, **kwargs):
     )
 
     ydbcli_db_schema_exec(cluster, alter_proto)
-
-
-class CaptureFileOutput:
-    def __init__(self, filename):
-        self.filename = filename
-
-    def __enter__(self):
-        self.saved_pos = os.path.getsize(self.filename)
-        return self
-
-    def __exit__(self, *exc):
-        # unreliable way to get all due audit records into the file
-        time.sleep(0.1)
-        with open(self.filename, 'rb', buffering=0) as f:
-            f.seek(self.saved_pos)
-            self.captured = f.read().decode('utf-8')
 
 
 @pytest.fixture(scope='module')

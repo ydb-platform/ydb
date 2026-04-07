@@ -6,7 +6,9 @@
 #include "yql_yt_io_discovery_walk_folders.h"
 
 #include <yt/yql/providers/yt/common/yql_yt_settings.h>
+#include <yt/yql/providers/yt/lib/full_capture/yql_yt_full_capture.h>
 #include <yt/yql/providers/yt/lib/row_spec/yql_row_spec.h>
+#include <yql/essentials/sql/settings/translation_sql_flags.h>
 #include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <yql/essentials/core/dq_integration/yql_dq_helper.h>
@@ -57,7 +59,7 @@ struct TYtTableDescription: public TYtTableDescriptionBase {
     bool Fill(
         const TString& cluster, const TString& table, const TQContext& qContext, TExprContext& ctx,
         IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
-        bool allowViewIsolation, IUdfResolver::TPtr udfResolver);
+        bool allowViewIsolation, IUdfResolver::TPtr udfResolver, const NSQLTranslation::TSqlFlags& sqlFlags);
     void ToYson(NYson::TYsonWriter& writer, const TString& cluster, const TString& table, const TString& view) const;
     bool Validate(TPosition pos, TStringBuf cluster, TStringBuf tableName, bool withQB,
         const THashMap<std::pair<TString, TString>, TString>& anonymousLabels, TExprContext& ctx) const;
@@ -65,7 +67,7 @@ struct TYtTableDescription: public TYtTableDescriptionBase {
     bool FillViews(
         const TString& cluster, const TString& table, const TQContext& qContext, TExprContext& ctx,
         IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
-        bool allowViewIsolation, IUdfResolver::TPtr udfResolver);
+        bool allowViewIsolation, IUdfResolver::TPtr udfResolver, const NSQLTranslation::TSqlFlags& sqlFlags);
 };
 
 // Anonymous tables are kept by labels
@@ -97,10 +99,11 @@ struct TYtState {
     bool IsHybridEnabled() const;
     bool IsHybridEnabledForCluster(const std::string_view& cluster) const;
     bool HybridTakesTooLong() const;
+    TMaybe<TString> ResolveClusterToken(const TString& cluster);
 
-    TYtState(TTypeAnnotationContext* types) {
+    TYtState(TTypeAnnotationContext* types, const TQContext& qContext = {}) {
         Types = types;
-        Configuration = MakeIntrusive<TYtVersionedConfiguration>(*types);
+        Configuration = MakeIntrusive<TYtVersionedConfiguration>(*types, qContext);
     }
 
     TString SessionId;
@@ -115,6 +118,7 @@ struct TYtState {
     THashMap<ui32, TOperationStatistics> Statistics; // public id -> stat
     THashMap<TString, TOperationStatistics> HybridStatistics; // subfolder -> stat
     THashMap<TString, THashMap<TString, TOperationStatistics>> HybridOpStatistics; // operation name -> subfolder -> stat
+    bool FullHybridExecution = true; // flag is not cleared at query finish -> all yt operations were executed through hybrid
     TMutex StatisticsMutex;
     THashSet<std::pair<TString, TString>> Checkpoints; // Set of checkpoint tables
     THolder<IDqIntegration> DqIntegration_;
@@ -132,6 +136,9 @@ struct TYtState {
     IOptimizerFactory::TPtr OptimizerFactory_;
     IDqHelper::TPtr DqHelper;
     bool IsDqTimeout = false;
+    NLayers::ILayersIntegrationPtr LayersIntegration_;
+    THashMap<TString, THashMap<TString, std::pair<TString, ui64>>> LayersSnapshots;
+    IYtFullCapture::TPtr FullCapture_;
 private:
     std::unordered_map<ui64, TYtVersionedConfiguration::TState> ConfigurationEvalStates_;
     std::unordered_map<ui64, ui32> EpochEvalStates_;
@@ -141,7 +148,9 @@ private:
 class TYtGatewayConfig;
 std::pair<std::shared_ptr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::TPtr gateway, const TString& userName, const TString& sessionId,
     const TYtGatewayConfig* ytGatewayConfig, TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-    const IOptimizerFactory::TPtr& optFactory, const IDqHelper::TPtr& helper);
+    const IOptimizerFactory::TPtr& optFactory, const IDqHelper::TPtr& helper,
+    const TYtTablesData::TPtr& tablesData = {}, const IYtFullCapture::TPtr& fullCapture = {},
+    const TQContext& qContext = {});
 TIntrusivePtr<IDataProvider> CreateYtDataSource(TYtState::TPtr state);
 TIntrusivePtr<IDataProvider> CreateYtDataSink(TYtState::TPtr state);
 

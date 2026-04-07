@@ -113,7 +113,7 @@ void TWriteSessionActor::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateFunc);
     const auto& pqConfig = AppData(ctx)->PQConfig;
 
-    Database = NKikimr::NPQ::GetDatabaseFromConfig(pqConfig);
+    Database = CanonizePath(NKikimr::NPQ::GetDatabaseFromConfig(pqConfig));
     ConverterFactory = MakeHolder<NPersQueue::TTopicNamesConverterFactory>(
             pqConfig, LocalDC
     );
@@ -221,7 +221,7 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
     }
     PeerName = event->PeerName;
     if (!event->Database.empty()) {
-        Database = event->Database;
+        Database = CanonizePath(event->Database);
     }
 
     SourceId = init.GetSourceId();
@@ -438,8 +438,8 @@ void TWriteSessionActor::InitCheckACL(const TActorContext& ctx) {
 
     auto entries = NKikimr::NGRpcProxy::V1::GetTicketParserEntries(DatabaseId, FolderId);
     ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
-            .Database = Database,
             .Ticket = ticket,
+            .Database = Database,
             .PeerName = PeerName,
             .Entries = entries
         }));
@@ -451,9 +451,9 @@ void TWriteSessionActor::Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr&
     TString maskedTicket = ticket.size() > 5 ? (ticket.substr(0, 5) + "***" + ticket.substr(ticket.size() - 5)) : "***";
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "CheckACL ticket " << maskedTicket << " got result from TICKET_PARSER response: error: "
                             << ev->Get()->Error << " user: "
-                            << (ev->Get()->Error.empty() ? ev->Get()->Token->GetUserSID() : ""));
+                            << (!ev->Get()->HasError() ? ev->Get()->Token->GetUserSID() : ""));
 
-    if (!ev->Get()->Error.empty()) {
+    if (ev->Get()->HasError()) {
         CloseSession(TStringBuilder() << "Ticket parsing error: " << ev->Get()->Error, NPersQueue::NErrorCode::ACCESS_DENIED, ctx);
         return;
     }

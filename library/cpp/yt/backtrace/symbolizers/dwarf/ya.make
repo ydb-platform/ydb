@@ -11,8 +11,6 @@ PEERDIR(
 
 END()
 
-IF (BUILD_TYPE == "DEBUG" OR BUILD_TYPE == "PROFILE")
-    RECURSE_FOR_TESTS(
-        unittests
-    )
-ENDIF()
+RECURSE_FOR_TESTS(
+    unittests
+)

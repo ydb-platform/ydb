@@ -59,7 +59,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 class TReadTablePartitionCommand
-    : public TTypedCommand<NApi::TTableReaderOptions>
+    : public TTypedCommand<NApi::TReadTablePartitionOptions>
 {
     REGISTER_YSON_STRUCT_LITE(TReadTablePartitionCommand);
 
@@ -67,6 +67,7 @@ class TReadTablePartitionCommand
 
 private:
     std::string Cookie;
+    NFormats::TControlAttributesConfigPtr ControlAttributes;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -126,6 +127,7 @@ private:
     NTableClient::EColumnarStatisticsFetcherMode FetcherMode;
     std::optional<int> MaxChunksPerNodeFetch;
     bool EnableEarlyFinish;
+    bool EnableReadSizeEstimation;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -143,10 +145,13 @@ public:
 private:
     std::vector<NYPath::TRichYPath> Paths;
     NTableClient::ETablePartitionMode PartitionMode;
-    i64 DataWeightPerPartition;
+    std::optional<i64> DataWeightPerPartition;
+    std::optional<i64> CompressedDataSizePerPartition;
     std::optional<int> MaxPartitionCount;
     bool EnableKeyGuarantee;
 
+    // TODO(pavook): remove or rename this option, as semantically it's
+    // really nothing more than AreYouReallySureYouWantMaxPartitionCount.
     //! Treat the #DataWeightPerPartition as a hint and not as a maximum limit.
     //! Consider the situation when the #MaxPartitionCount is given
     //! and the total data weight exceeds #MaxPartitionCount * #DataWeightPerPartition.
@@ -159,11 +164,7 @@ private:
     //! Return cookies that can be used with read_table_partition command
     bool EnableCookies;
 
-    //! COMPAT(apollo1321): remove in 25.2 release.
-    bool UseNewSlicingImplementationInOrderedPool;
-
-    //! COMPAT(apollo1321): remove in 25.2 release.
-    bool UseNewSlicingImplementationInUnorderedPool;
+    bool OmitInaccessibleRows;
 
     void DoExecute(ICommandContextPtr context) override;
 };

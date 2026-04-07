@@ -1,5 +1,7 @@
 #pragma once
 
+#include "kqp_compute_actor.h"
+
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/scheduler/fwd.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
@@ -8,9 +10,11 @@
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
+#include <ydb/library/yql/dq/runtime/dq_channel_service.h>
 
 namespace NKikimr::NKqp {
     struct TKqpFederatedQuerySetup;
+    class TNodeState;
 }
 
 namespace NKikimr::NKqp::NComputeActor {
@@ -92,15 +96,10 @@ public:
     }
 };
 
-struct IKqpNodeState {
-    virtual ~IKqpNodeState() = default;
-
-    virtual void OnTaskTerminate(ui64 txId, ui64 taskId, bool success) = 0;
-};
-
-
 struct IKqpNodeComputeActorFactory {
     virtual ~IKqpNodeComputeActorFactory() = default;
+
+    std::atomic<bool> AccountDefaultPoolInScheduler = false;
 
 public:
     struct TCreateArgs {
@@ -111,7 +110,7 @@ public:
         const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
         NYql::NDqProto::TDqTask* Task;
         TIntrusivePtr<NRm::TTxState> TxInfo;
-        const NYql::NDq::TComputeRuntimeSettings& RuntimeSettings;
+        TMaybe<NYql::NDq::TReportStatsSettings> ReportStatsSettings;
         NWilson::TTraceId TraceId;
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;
         const TString& SerializedGUCSettings;
@@ -127,7 +126,7 @@ public:
         const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
 
         TComputeStagesWithScan* ComputesByStages = nullptr;
-        std::shared_ptr<IKqpNodeState> State = nullptr;
+        std::shared_ptr<TNodeState> State = nullptr;
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         TString Database;
 
@@ -138,11 +137,14 @@ public:
     virtual TActorStartResult CreateKqpComputeActor(TCreateArgs&& args) = 0;
 
     virtual void ApplyConfig(const NKikimrConfig::TTableServiceConfig::TResourceManager& config) = 0;
+    virtual bool GetVerboseMemoryLimitException() = 0;
+    virtual TShardsScanningPolicy GetShardsScanningPolicy() = 0;
 };
 
 std::shared_ptr<IKqpNodeComputeActorFactory> MakeKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup);
+        const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+        std::shared_ptr<NYql::NDq::IDqChannelService> channelService);
 
 } // namespace NKikimr::NKqp::NComputeActor

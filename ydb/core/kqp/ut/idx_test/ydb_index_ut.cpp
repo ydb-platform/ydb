@@ -21,7 +21,7 @@ static void RunTest(ui32 shardsCount, ui32 rowsCount, ui32 indexCount, const TRu
     bool withDataColumn = settings.WithDataColumn;
     bool uniqIndex = settings.UniqIndex;
 
-    TKikimrRunner kikimr(SyntaxV1Settings());
+    TKikimrRunner kikimr;
 
     auto driver = NYdb::TDriver(
         TDriverConfig()
@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
     }
 
     void RunOnlineBuildTest(bool withDataColumn) {
-        TKikimrRunner kikimr(SyntaxV1Settings());
+        TKikimrRunner kikimr;
 
         auto driver = NYdb::TDriver(
             TDriverConfig()

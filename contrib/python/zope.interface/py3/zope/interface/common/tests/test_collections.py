@@ -65,10 +65,6 @@ class TestVerifyClass(VerifyClassMixin, unittest.TestCase):
         # including some that aren't part of a language protocol, such as
         # ``index`` and ``count``.
         memoryview,
-        # 'pkg_resources._vendor.pyparsing.ParseResults' is registered as a
-        # MutableMapping but is missing methods like ``popitem`` and
-        # ``setdefault``.  It's imported due to namespace packages.
-        'ParseResults',
         # sqlite3.Row claims ISequence but also misses ``index`` and
         # ``count``.  It's imported because...? Coverage imports it, but why
         # do we have it without coverage?

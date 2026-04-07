@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/ipc/reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/reader.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -31,40 +31,40 @@
 
 #include <flatbuffers/flatbuffers.h>  // IWYU pragma: export
 
-#include "arrow/array.h"
-#include "arrow/buffer.h"
-#include "arrow/extension_type.h"
-#include "arrow/io/caching.h"
-#include "arrow/io/interfaces.h"
-#include "arrow/io/memory.h"
-#include "arrow/ipc/message.h"
-#include "arrow/ipc/metadata_internal.h"
-#include "arrow/ipc/reader_internal.h"
-#include "arrow/ipc/writer.h"
-#include "arrow/record_batch.h"
-#include "arrow/sparse_tensor.h"
-#include "arrow/status.h"
-#include "arrow/table.h"
-#include "arrow/type.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/bitmap_ops.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/compression.h"
-#include "arrow/util/endian.h"
-#include "arrow/util/key_value_metadata.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/parallel.h"
-#include "arrow/util/string.h"
-#include "arrow/util/thread_pool.h"
-#include "arrow/util/ubsan.h"
-#include "arrow/util/vector.h"
-#include "arrow/visit_type_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension_type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/caching.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/interfaces.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/memory.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/message.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/metadata_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/reader_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/record_batch.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/sparse_tensor.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/table.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bitmap_ops.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/compression.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/endian.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/key_value_metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/parallel.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/string.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/thread_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/ubsan.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_type_inline.h"
 
-#include "generated/File.fbs.h"  // IWYU pragma: export
-#include "generated/Message.fbs.h"
-#include "generated/Schema.fbs.h"
-#include "generated/SparseTensor.fbs.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/generated/File.fbs.h"  // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/generated/Message.fbs.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/generated/Schema.fbs.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/generated/SparseTensor.fbs.h"
 
 namespace arrow20 {
 

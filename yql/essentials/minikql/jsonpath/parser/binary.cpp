@@ -2,6 +2,8 @@
 
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <utility>
+
 namespace NYql::NJsonPath {
 
 bool TArraySubscriptOffsets::IsRange() const {
@@ -40,8 +42,8 @@ const NReWrapper::IRePtr& TJsonPathItem::GetRegex() const {
     return std::get<NReWrapper::IRePtr>(Data);
 }
 
-TJsonPathReader::TJsonPathReader(const TJsonPathPtr path)
-    : Path_(path)
+TJsonPathReader::TJsonPathReader(TJsonPathPtr path)
+    : Path_(std::move(path))
     , InitialPos_(0)
     , Mode_(ReadMode(InitialPos_))
 {
@@ -495,7 +497,7 @@ void TJsonPathBuilder::WriteZeroInputItem(EJsonPathItemType type, const TAstNode
     WritePos(node);
 }
 
-void TJsonPathBuilder::WriteSingleInputItem(EJsonPathItemType type, const TAstNode& node, const TAstNodePtr input) {
+void TJsonPathBuilder::WriteSingleInputItem(EJsonPathItemType type, const TAstNode& node, const TAstNodePtr& input) {
     // Block structure:
     // <(1) TUint> <(2) TUint> <(3) TUint> <(4) TUint> <(5) item>
     // Components:
@@ -510,7 +512,7 @@ void TJsonPathBuilder::WriteSingleInputItem(EJsonPathItemType type, const TAstNo
     input->Accept(*this);
 }
 
-void TJsonPathBuilder::WriteTwoInputsItem(EJsonPathItemType type, const TAstNode& node, const TAstNodePtr firstInput, const TAstNodePtr secondInput) {
+void TJsonPathBuilder::WriteTwoInputsItem(EJsonPathItemType type, const TAstNode& node, const TAstNodePtr& firstInput, const TAstNodePtr& secondInput) {
     // Block structure:
     // <(1) TUint> <(2) TUint> <(3) TUint> <(4) TUint> <(5) TUint> <(6) item> <(7) item>
     // Components:
@@ -600,5 +602,4 @@ TUint TJsonPathBuilder::CurrentEndPos() const {
     return Result_->Size();
 }
 
-
-}
+} // namespace NYql::NJsonPath

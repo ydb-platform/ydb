@@ -168,7 +168,7 @@ int TSensorSet::Collect()
                 continue;
             }
 
-            counter->TagSet.Range([&, value=value] (auto tags) {
+            counter->TagSet.Range([&, value = value] (auto tags) {
                 cube.Update(std::move(tags), value);
             });
         }
@@ -256,7 +256,7 @@ int TSensorSet::Collect()
         }
 
         auto value = owner->GetSnapshot(true);
-        return {value, true};
+        return {TTimeHistogramSnapshot(value), true};
     });
 
     collect(GaugeHistograms_, GaugeHistogramsCube_, [] (auto counter) -> std::pair<TGaugeHistogramSnapshot, bool> {
@@ -266,7 +266,7 @@ int TSensorSet::Collect()
         }
 
         auto value = owner->GetSnapshot(false);
-        return {value, true};
+        return {TGaugeHistogramSnapshot(value), true};
     });
 
     collect(RateHistograms_, RateHistogramsCube_, [] (auto counter) -> std::pair<TRateHistogramSnapshot, bool> {
@@ -276,7 +276,7 @@ int TSensorSet::Collect()
         }
 
         auto value = owner->GetSnapshot(true);
-        return {value, true};
+        return {TRateHistogramSnapshot(value), true};
     });
 
     return count;
@@ -296,7 +296,9 @@ void TSensorSet::ReadSensors(
     readOptions.Global = Options_.Global;
     readOptions.DisableSensorsRename = Options_.DisableSensorsRename;
     readOptions.DisableDefault = Options_.DisableDefault;
+    readOptions.MemOnly = Options_.MemOnly;
     if (Options_.SummaryPolicy != ESummaryPolicy::Default) {
+        // Use summary option from sensor if specified.
         readOptions.SummaryPolicy = Options_.SummaryPolicy;
     }
 

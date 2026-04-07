@@ -132,6 +132,13 @@ class TestCSManyUpdates(object):
                 self.ydb_client.query(update_query)
                 timer.one_more()
 
+    def _delete_all(self, table_path, timer):
+        """Delete all rows using DELETE statement."""
+        update_query = f"""
+        DELETE FROM `{table_path}`
+        """
+        self.ydb_client.query(update_query)
+
     def _do_upsert(self, table_path, pks, mods, timer):
         """Apply modifications using individual UPSERT statements."""
         for pk in pks:
@@ -263,6 +270,21 @@ class TestCSManyUpdates(object):
         assert len(rows) == rows_num
         actual_data = {row["id"]: row["value"] for row in rows}
         assert actual_data == expected_data
+
+        timer = Timer("delete from table")
+        with timer:
+            self._delete_all(table_path, timer)
+        print(timer.report())
+
+        timer = Timer("select all after delete")
+        with timer:
+            result_sets = self.ydb_client.query(
+                f"SELECT id, value FROM `{table_path}`;"
+            )
+        print(timer.report())
+
+        rows = [row for result_set in result_sets for row in result_set.rows]
+        assert not rows
 
     @pytest.mark.parametrize(
         "rows_num,operation_sequence",

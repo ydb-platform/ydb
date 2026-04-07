@@ -41,9 +41,9 @@ void TransferTableAttributes(const NYT::TNode& attributes, const std::function<v
 NYT::TNode FilterYqlAttributes(const NYT::TNode& attributes);
 
 bool IterateYamredRows(NYT::ITransactionPtr tx, const NYT::TRichYPath& table, ui32 tableIndex, TMkqlIOCache& specsCache,
-    IExecuteResOrPull& exec, const TTableLimiter& limiter, const TMaybe<TSampleParams>& sampling = {});
+    IExecuteResOrPull& exec, const TTableLimiter& limiter, const bool supportRLSTables, const TMaybe<TSampleParams>& sampling = {});
 bool IterateYsonRows(NYT::ITransactionPtr tx, const NYT::TRichYPath& table, ui32 tableIndex, TMkqlIOCache& specsCache,
-    IExecuteResOrPull& exec, const TTableLimiter& limiter, const TMaybe<TSampleParams>& sampling = {});
+    IExecuteResOrPull& exec, const TTableLimiter& limiter, const bool supportRLSTables, const TMaybe<TSampleParams>& sampling = {});
 bool SelectRows(NYT::IClientPtr client, const TString& table, ui32 tableIndex, TMkqlIOCache& specsCache,
     IExecuteResOrPull& exec, TTableLimiter& limiter);
 
@@ -71,5 +71,10 @@ IYtGateway::TCanonizedPath CanonizedPath(const TString& path);
 void EnsureSpecDoesntUseNativeYtTypes(const NYT::TNode& spec, TStringBuf tableName, bool read);
 
 TIssue MakeIssueFromYtError(const NYT::TYtError& e, TStringBuf what, TPosition pos = {}, bool shortErrors = false);
+
+TMaybe<TString> GenerateInputQuery(const TExprNode::TPtr& qlFilterNode);
+
+TString UploadBinarySnapshotToYt(const TString& remotePath, NYT::IClientPtr client, NYT::ITransactionPtr snapshotTx,
+    const TString& localPath, TDuration expirationInterval, const TMaybe<NYT::TNode>& transactionSpec = Nothing());
 
 } // NYql

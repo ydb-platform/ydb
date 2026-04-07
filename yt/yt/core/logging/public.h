@@ -42,11 +42,12 @@ DECLARE_REFCOUNTED_STRUCT(TStderrLogWriterConfig)
 struct ILogFormatter;
 struct ISystemLogEventProvider;
 struct ILogWriterHost;
+
 DECLARE_REFCOUNTED_STRUCT(ILogWriterFactory)
 DECLARE_REFCOUNTED_STRUCT(ILogWriter)
 DECLARE_REFCOUNTED_STRUCT(IFileLogWriter)
 DECLARE_REFCOUNTED_STRUCT(IStreamLogOutput)
-DECLARE_REFCOUNTED_STRUCT(ILogCompressionCodec)
+DECLARE_REFCOUNTED_STRUCT(ILogCodec)
 
 YT_DECLARE_RECONFIGURABLE_SINGLETON(TLogManagerConfig, TLogManagerDynamicConfig);
 

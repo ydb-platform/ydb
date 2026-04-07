@@ -43,7 +43,7 @@ for /f "delims=" %%F in ('where python 2^>nul') do (
     )
 )
 call :dbg Searching for python in ftypes...
-for /f delims^=^=^"^ tokens^=2 %%F in ('ftype Python.File 2^>nul') do (
+for /f "tokens=2 delims==" %%F in ('ftype Python.File 2^>nul') do (
     call :test_python %%F
     if not ERRORLEVEL 1 (
         set YA_BAT_PYTHON=%%F

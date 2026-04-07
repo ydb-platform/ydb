@@ -110,6 +110,8 @@ struct TKikimrQueryContext : TThrRefBase {
     bool DocumentApiRestricted = true;
     bool IsInternalCall = false;
     bool ConcurrentResults = true;
+    i32 RuntimeParameterSizeLimit = 0;
+    bool RuntimeParameterSizeLimitSatisfied = false;
 
     std::unique_ptr<NKikimrKqp::TPreparedQuery> PreparingQuery;
     std::shared_ptr<const NKikimrKqp::TPreparedQuery> PreparedQuery;
@@ -281,6 +283,10 @@ enum class TYdbOperation : ui64 {
     DropTransfer           = 1ull << 36,
     AlterDatabase          = 1ull << 37,
     FillTable              = 1ull << 38,
+    CreateSecret           = 1ull << 39,
+    AlterSecret            = 1ull << 40,
+    DropSecret             = 1ull << 41,
+    TruncateTable          = 1ull << 42,
 };
 
 Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation);
@@ -290,9 +296,6 @@ const TYdbOperations& KikimrSchemeOps();
 const TYdbOperations& KikimrDataOps();
 const TYdbOperations& KikimrModifyOps();
 const TYdbOperations& KikimrReadOps();
-
-TIssue AddDmlIssue(const TIssue& issue);
-bool AddDmlIssue(const TIssue& issue, TExprContext& ctx);
 
 class TKikimrTransactionContextBase : public TThrRefBase {
 public:
@@ -374,7 +377,7 @@ public:
             if (TempTablesState) {
                 auto tempTableInfoIt = TempTablesState->FindInfo(table, false);
                 if (tempTableInfoIt != TempTablesState->TempTables.end()) {
-                    table = NKikimr::NKqp::GetTempTablePath(TempTablesState->Database, TempTablesState->SessionId, tempTableInfoIt->first);
+                    table = NKikimr::NKqp::GetTempTablePath(TempTablesState->Database, TempTablesState->TempDirName, tempTableInfoIt->first);
                 }
             }
 
@@ -455,7 +458,7 @@ public:
 public:
     THashMap<TString, TYdbOperations> TableOperations;
     THashMap<TKikimrPathId, TString> TableByIdMap;
-    TMaybe<NKikimrKqp::EIsolationLevel> EffectiveIsolationLevel;
+    TMaybe<NKqpProto::EIsolationLevel> EffectiveIsolationLevel;
     NKikimr::NKqp::TKqpTempTablesState::TConstPtr TempTablesState;
     bool Readonly = false;
     bool Invalidated = false;
@@ -520,10 +523,6 @@ public:
         return DatabaseId;
     }
 
-    const TString& GetSessionId() const {
-        return SessionId;
-    }
-
     void SetCluster(const TString& cluster) {
         Cluster = cluster;
     }
@@ -534,10 +533,6 @@ public:
 
     void SetDatabaseId(const TString& databaseId) {
         DatabaseId = databaseId;
-    }
-
-    void SetSessionId(const TString& sessionId) {
-        SessionId = sessionId;
     }
 
     NKikimr::NKqp::TKqpTempTablesState::TConstPtr GetTempTablesState() const {
@@ -575,7 +570,6 @@ private:
     TString Cluster;
     TString Database;
     TString DatabaseId;
-    TString SessionId;
     TKikimrConfiguration::TPtr Configuration;
     TIntrusivePtr<TKikimrTablesData> TablesData;
     TIntrusivePtr<TKikimrQueryContext> QueryCtx;

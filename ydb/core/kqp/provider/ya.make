@@ -34,11 +34,13 @@ PEERDIR(
     ydb/library/aclib/protos
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
+    ydb/core/kqp/opt/cbo
     yql/essentials/core/services
     yql/essentials/minikql
     yql/essentials/public/decimal
     ydb/public/lib/scheme_types
     ydb/public/sdk/cpp/src/client/topic
+    ydb/services/metadata/optimization
     yql/essentials/core/expr_nodes
     yql/essentials/core/peephole_opt
     yql/essentials/parser/pg_wrapper/interface
@@ -58,10 +60,6 @@ PEERDIR(
     yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/v1/proto_parser/antlr4
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
-    yql/essentials/sql/v1/lexer/antlr3
-    yql/essentials/sql/v1/lexer/antlr3_ansi
-    yql/essentials/sql/v1/proto_parser/antlr3
-    yql/essentials/sql/v1/proto_parser/antlr3_ansi
     ydb/library/ydb_issue/proto
     yql/essentials/public/issue
     yql/essentials/utils/log
@@ -108,6 +106,7 @@ ELSE()
 ENDIF()
 
 GENERATE_ENUM_SERIALIZATION(yql_kikimr_provider.h)
+GENERATE_ENUM_SERIALIZATION(yql_kikimr_gateway.h)
 
 END()
 

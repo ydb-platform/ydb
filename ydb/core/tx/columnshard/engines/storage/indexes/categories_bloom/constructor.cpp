@@ -14,7 +14,8 @@ std::shared_ptr<IIndexMeta> TBloomIndexConstructor::DoCreateIndexMeta(
         return nullptr;
     }
     return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
-        columnInfo->GetId(), FalsePositiveProbability, std::make_shared<TDefaultDataExtractor>(), TBase::GetBitsStorageConstructor());
+        GetInheritPortionStorage().value_or(false), columnInfo->GetId(), FalsePositiveProbability, std::make_shared<TDefaultDataExtractor>(),
+        TBase::GetBitsStorageConstructor());
 }
 
 NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
@@ -47,7 +48,8 @@ NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromProto(const 
             return conclusion;
         }
     }
-    FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
+    FalsePositiveProbability = bFilter.HasFalsePositiveProbability() ? bFilter.GetFalsePositiveProbability()
+                                                                       : NDefaults::FalsePositiveProbability;
     if (FalsePositiveProbability < 0.01 || FalsePositiveProbability >= 1) {
         const TString errorMessage = "FalsePositiveProbability have to be in interval[0.01, 1)";
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", errorMessage);

@@ -35,14 +35,14 @@ struct TRefCountedTracker::TGlobalSlot
 
     TGlobalSlot() = default;
 
-    TGlobalSlot(TGlobalSlot&& other)
+    TGlobalSlot(TGlobalSlot&& other) noexcept
     {
         #define XX(name) name = other.name.load();
         ENUMERATE_SLOT_FIELDS()
         #undef XX
     }
 
-    TGlobalSlot& operator += (const TLocalSlot& rhs)
+    TGlobalSlot& operator+=(const TLocalSlot& rhs)
     {
         #define XX(name) name += rhs.name;
         ENUMERATE_SLOT_FIELDS()
@@ -82,7 +82,7 @@ public:
         #endif
     #endif
 
-    TNamedSlot& REF_COUNTED_TRACKER_NO_TSAN operator += (const TLocalSlot& rhs)
+    TNamedSlot& REF_COUNTED_TRACKER_NO_TSAN operator+=(const TLocalSlot& rhs)
     {
         #define XX(name) name ## _ += rhs.name;
         ENUMERATE_SLOT_FIELDS()
@@ -92,7 +92,7 @@ public:
 
     #undef REF_COUNTED_TRACKER_NO_TSAN
 
-    TNamedSlot& operator += (const TGlobalSlot& rhs)
+    TNamedSlot& operator+=(const TGlobalSlot& rhs)
     {
         #define XX(name) name ## _ += rhs.name.load();
         ENUMERATE_SLOT_FIELDS()
@@ -129,7 +129,7 @@ Y_FORCE_INLINE TRefCountedTracker* TRefCountedTracker::Get()
 #define INCREMENT_COUNTER(fallback, name, delta) \
     auto index = cookie.Underlying(); \
     YT_ASSERT(index >= 0); \
-    if (Y_UNLIKELY(index >= RefCountedTrackerLocalSlotsSize())) { \
+    if (index >= RefCountedTrackerLocalSlotsSize()) [[unlikely]] { \
         Get()->fallback; \
     } else { \
         RefCountedTrackerLocalSlotsBegin()[index].name += delta; \

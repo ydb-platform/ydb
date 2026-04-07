@@ -29,6 +29,7 @@ public:
 };
 
 IActor* CreateLocalTableWriter(
+    const TString& database,
     const TPathId& tablePathId,
     THolder<IChangeRecordParser>&& parser,
     THolder<IChangeRecordSerializer>&& serializer,

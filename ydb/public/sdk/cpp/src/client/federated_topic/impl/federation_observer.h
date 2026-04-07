@@ -84,6 +84,7 @@ private:
     std::shared_ptr<TFederatedDbState> FederatedDbState;
     NThreading::TPromise<void> PromiseToInitState;
     TRpcRequestSettings RpcSettings;
+    TDeadline::Duration ConnectionTimeout;
     TSpinLock Lock;
 
     NTopic::IRetryPolicy::TPtr FederationDiscoveryRetryPolicy;

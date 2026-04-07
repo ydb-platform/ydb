@@ -88,6 +88,12 @@ enum class EConvertDynamicTablesToStatic {
     All             /* "all" */,
 };
 
+enum class EFuseMapToMapReduceMode {
+    Disable  /* "disable" */,
+    Normal   /* "normal" */,
+    Late     /* "late" */,
+};
+
 struct TYtSettings {
 private:
     static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
@@ -114,6 +120,11 @@ public:
     NCommon::TConfSetting<EBlockOutputMode, StaticPerCluster> JobBlockOutput;
     NCommon::TConfSetting<TSet<TString>, StaticPerCluster> JobBlockOutputSupportedTypes;
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, StaticPerCluster> JobBlockOutputSupportedDataTypes;
+    NCommon::TConfSetting<bool, StaticPerCluster> ValidatePool;
+    NCommon::TConfSetting<TString, StaticPerCluster> _QueryDumpFolder;
+    NCommon::TConfSetting<TString, StaticPerCluster> _QueryDumpAccount;
+    NCommon::TConfSetting<bool, StaticPerCluster> _EnableDynamicTablesWrite;
+    NCommon::TConfSetting<bool, StaticPerCluster> _EnableRLSTablesSupport;
 
     // static global
     NCommon::TConfSetting<TString, Static> Auth;
@@ -135,6 +146,7 @@ public:
     NCommon::TConfSetting<TDuration, Static> QueryCacheTtl;
     NCommon::TConfSetting<bool, Static> QueryCacheUseExpirationTimeout;
     NCommon::TConfSetting<bool, Static> QueryCacheUseForCalc;
+    NCommon::TConfSetting<bool, Static> QueryCacheCombineChunksReplace;
     NCommon::TConfSetting<ui32, Static> DefaultMaxJobFails;
     NCommon::TConfSetting<TString, Static> DefaultCluster;
     NCommon::TConfSetting<TDuration, Static> BinaryExpirationInterval;
@@ -152,6 +164,15 @@ public:
     NCommon::TConfSetting<bool, Static> EnableDynamicStoreReadInDQ;
     NCommon::TConfSetting<bool, Static> UseDefaultArrowAllocatorInJobs;
     NCommon::TConfSetting<bool, Static> UseNativeYtDefaultColumnOrder;
+    NCommon::TConfSetting<bool, Static> EarlyPartitionPruning;
+    NCommon::TConfSetting<bool, Static> ValidateClusters;
+    NCommon::TConfSetting<NSize::TSize, Static> _QueryDumpTableSizeLimit;
+    NCommon::TConfSetting<ui32, Static> _QueryDumpTableCountPerClusterLimit;
+    NCommon::TConfSetting<ui32, Static> _QueryDumpFileCountPerOperationLimit;
+    NCommon::TConfSetting<bool, Static> KeepWorldDepForFillOp;
+    NCommon::TConfSetting<ui32, Static> CostBasedOptimizerPartial;
+    NCommon::TConfSetting<bool, Static> OmitInaccessibleRows;
+    NCommon::TConfSetting<NSize::TSize, Static> _MinJobStateSizeToPassViaFile;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;
@@ -209,6 +230,7 @@ public:
     NCommon::TConfSetting<TString, Dynamic> PublishedAutoMerge;
     NCommon::TConfSetting<TString, Dynamic> TemporaryAutoMerge;
     NCommon::TConfSetting<TVector<TString>, Dynamic> LayerPaths;
+    NCommon::TConfSetting<THashMap<TString, TVector<TString>>, StaticPerCluster> LayerCaches;
     NCommon::TConfSetting<TString, Dynamic> DockerImage;
     NCommon::TConfSetting<NYT::TNode, Dynamic> JobEnv;
     NCommon::TConfSetting<NYT::TNode, Dynamic> OperationSpec;
@@ -279,7 +301,8 @@ public:
     NCommon::TConfSetting<ui32, Static> MaxInputTablesForSortedMerge;
     NCommon::TConfSetting<ui32, Static> MaxOutputTables;
     NCommon::TConfSetting<bool, Static> DisableFuseOperations;
-    NCommon::TConfSetting<bool, Static> EnableFuseMapToMapReduce;
+    NCommon::TConfSetting<bool, Static> EnableFuseMapToMapReduce; // Deprecated. Use FuseMapToMapReduceMode
+    NCommon::TConfSetting<EFuseMapToMapReduceMode, Static> FuseMapToMapReduce;
     NCommon::TConfSetting<NSize::TSize, Static> MaxExtraJobMemoryToFuseOperations;
     NCommon::TConfSetting<double, Static> MaxReplicationFactorToFuseOperations;
     NCommon::TConfSetting<ui32, Static> MaxOperationFiles;
@@ -306,6 +329,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseNativeDescSort;
     NCommon::TConfSetting<bool, Static> UseIntermediateSchema;
     NCommon::TConfSetting<bool, Static> UseIntermediateStreams;
+    NCommon::TConfSetting<bool, Static> PassSqlFlagsForViewTranslation;
     NCommon::TConfSetting<bool, Static> UseFlow;
     NCommon::TConfSetting<ui16, Static> WideFlowLimit;
     NCommon::TConfSetting<bool, Static> UseSystemColumns;
@@ -343,6 +367,8 @@ public:
     NCommon::TConfSetting<bool, Static> UseColumnGroupsFromInputTables;
     NCommon::TConfSetting<bool, Static> UseNativeDynamicTableRead;
     NCommon::TConfSetting<bool, Static> DontForceTransformForInputTables;
+    NCommon::TConfSetting<bool, Static> _RequestOnlyRequiredAttrs;
+    NCommon::TConfSetting<bool, Static> _CacheSchemaBySchemaId;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);
@@ -354,7 +380,7 @@ inline TString GetTablesTmpFolder(const TYtSettings& settings, const TString& cl
 struct TYtConfiguration : public TYtSettings, public NCommon::TSettingDispatcher {
     using TPtr = TIntrusivePtr<TYtConfiguration>;
 
-    TYtConfiguration(TTypeAnnotationContext& typeCtx);
+    TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQContext& qContext = {});
     TYtConfiguration(const TYtConfiguration&) = delete;
 
     template <class TProtoConfig, typename TFilter>
@@ -395,14 +421,15 @@ public:
         TYtSettings::TConstPtr Snapshot;
     };
 
-    TYtVersionedConfiguration(TTypeAnnotationContext& types)
-        : TYtConfiguration(types)
+    TYtVersionedConfiguration(TTypeAnnotationContext& types, const TQContext& qContext = {})
+        : TYtConfiguration(types, qContext)
     {
     }
 
     ~TYtVersionedConfiguration() = default;
 
     size_t FindNodeVer(const TExprNode& node);
+    void CopyNodeVer(const TExprNode& from, const TExprNode& to);
     void FreezeZeroVersion();
     void PromoteVersion(const TExprNode& node);
     size_t GetLastVersion() const {
@@ -427,7 +454,7 @@ private:
     std::unordered_map<ui64, size_t> NodeIdToVer;
 };
 
-bool ValidateCompressionCodecValue(const TStringBuf& codec);
+bool ValidateCompressionCodecValue(const TString& codec);
 void MediaValidator(const NYT::TNode& value);
 
 } // NYql

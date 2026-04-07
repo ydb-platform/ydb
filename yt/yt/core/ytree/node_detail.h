@@ -92,7 +92,7 @@ protected:
 
     virtual int GetMaxChildCount() const;
 
-    void ValidateChildCount(const TYPath& path, int childCount) const;
+    void ValidateChildCount(TYPathBuf path, int childCount) const;
 
     virtual void SetChildValue(
         INodeFactory* factory,
@@ -139,8 +139,6 @@ protected:
         bool recursive) final;
 
 private:
-    void ThrowMaxKeyLengthViolated() const;
-
     std::pair<TString, INodePtr> PrepareSetChildOrChildValue(
         INodeFactory* factory,
         const TYPath& path,

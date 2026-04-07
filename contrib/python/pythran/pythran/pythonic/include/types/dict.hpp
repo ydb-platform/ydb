@@ -31,19 +31,32 @@ namespace types
   struct item_iterator_adaptator {
     I base;
     using difference_type = typename std::iterator_traits<I>::difference_type;
-    using value_type = make_tuple_t<
-        typename std::remove_cv<typename std::iterator_traits<I>::value_type::first_type>::type,
-        typename std::iterator_traits<I>::value_type::second_type>;
+    using value_type =
+        make_tuple_t<std::remove_cv_t<typename std::iterator_traits<I>::value_type::first_type>,
+                     typename std::iterator_traits<I>::value_type::second_type>;
     using pointer = value_type *;
     using reference = value_type &;
     using iterator_category = typename std::iterator_traits<I>::iterator_category;
     item_iterator_adaptator() = default;
     item_iterator_adaptator(I const &i);
     value_type operator*() const;
-    bool operator==(item_iterator_adaptator const& other) const { return base == other.base;}
-    bool operator!=(item_iterator_adaptator const& other) const { return base != other.base;}
-    item_iterator_adaptator& operator++() { ++base; return *this;}
-    auto operator->() ->decltype( &*base) { return &*base;}
+    bool operator==(item_iterator_adaptator const &other) const
+    {
+      return base == other.base;
+    }
+    bool operator!=(item_iterator_adaptator const &other) const
+    {
+      return base != other.base;
+    }
+    item_iterator_adaptator &operator++()
+    {
+      ++base;
+      return *this;
+    }
+    auto operator->() -> decltype(&*base)
+    {
+      return &*base;
+    }
   };
 
   template <class I>
@@ -57,10 +70,23 @@ namespace types
     key_iterator_adaptator() = default;
     key_iterator_adaptator(I const &i);
     value_type operator*() const;
-    bool operator==(key_iterator_adaptator const& other) const { return base == other.base;}
-    bool operator!=(key_iterator_adaptator const& other) const { return base != other.base;}
-    key_iterator_adaptator& operator++() { ++base; return *this;}
-    auto operator->() ->decltype( &*base) { return &*base;}
+    bool operator==(key_iterator_adaptator const &other) const
+    {
+      return base == other.base;
+    }
+    bool operator!=(key_iterator_adaptator const &other) const
+    {
+      return base != other.base;
+    }
+    key_iterator_adaptator &operator++()
+    {
+      ++base;
+      return *this;
+    }
+    auto operator->() -> decltype(&*base)
+    {
+      return &*base;
+    }
   };
 
   template <class I>
@@ -74,10 +100,23 @@ namespace types
     value_iterator_adaptator() = default;
     value_iterator_adaptator(I const &i);
     value_type operator*() const;
-    bool operator==(value_iterator_adaptator const& other) const { return base == other.base;}
-    bool operator!=(value_iterator_adaptator const& other) const { return base != other.base;}
-    value_iterator_adaptator& operator++() { ++base; return *this;}
-    auto operator->() ->decltype( &*base) { return &*base;}
+    bool operator==(value_iterator_adaptator const &other) const
+    {
+      return base == other.base;
+    }
+    bool operator!=(value_iterator_adaptator const &other) const
+    {
+      return base != other.base;
+    }
+    value_iterator_adaptator &operator++()
+    {
+      ++base;
+      return *this;
+    }
+    auto operator->() -> decltype(&*base)
+    {
+      return &*base;
+    }
   };
 
   template <class D>
@@ -134,35 +173,73 @@ namespace types
     value_type data_[1];
     bool empty_;
 
-    none_type_map(size_type) : data_(), empty_(true) {}
+    none_type_map(size_type) : data_(), empty_(true)
+    {
+    }
     template <class B, class E>
-    none_type_map(B begin, E end) : data_{begin == end ? value_type() : *begin}, empty_(begin == end) {
+    none_type_map(B begin, E end)
+        : data_{begin == end ? value_type() : *begin}, empty_(begin == end)
+    {
     }
 
-    mapped_type& operator[](none_type) {
+    mapped_type &operator[](none_type)
+    {
       empty_ = false;
       return data_[0].second;
     }
 
-    iterator find(none_type) {
+    iterator find(none_type)
+    {
       return data_ + empty_;
     }
 
-    const_iterator find(none_type) const {
+    const_iterator find(none_type) const
+    {
       return data_ + empty_;
     }
 
-    iterator begin() { return data_ + empty_; }
-    const_iterator begin() const { return data_ + empty_; }
-    iterator end() { return data_ + 1; }
-    const_iterator end() const { return data_ + 1; }
+    iterator begin()
+    {
+      return data_ + empty_;
+    }
+    const_iterator begin() const
+    {
+      return data_ + empty_;
+    }
+    iterator end()
+    {
+      return data_ + 1;
+    }
+    const_iterator end() const
+    {
+      return data_ + 1;
+    }
 
-    bool empty() const { return empty_;}
-    void clear() { empty_ = true; data_[0].second = {}; }
-    const_iterator erase(const_iterator pos) {  clear(); return end();}
-    bool erase(none_type) { bool res = empty_; clear(); return !res;}
+    bool empty() const
+    {
+      return empty_;
+    }
+    void clear()
+    {
+      empty_ = true;
+      data_[0].second = {};
+    }
+    const_iterator erase(const_iterator pos)
+    {
+      clear();
+      return end();
+    }
+    bool erase(none_type)
+    {
+      bool res = empty_;
+      clear();
+      return !res;
+    }
 
-    size_t size() const { return empty_?0:1;}
+    size_t size() const
+    {
+      return empty_ ? 0 : 1;
+    }
   };
 
   template <class K, class V>
@@ -170,15 +247,12 @@ namespace types
   {
 
     // data holder
-    using _key_type =
-        typename std::remove_cv<typename std::remove_reference<K>::type>::type;
-    using _value_type =
-        typename std::remove_cv<typename std::remove_reference<V>::type>::type;
-    using container_type = typename std::conditional<std::is_same<K, none_type>::value,
-          none_type_map<_value_type>,
-          std::unordered_map<
-        _key_type, _value_type, std::hash<_key_type>, std::equal_to<_key_type>,
-        utils::allocator<std::pair<const _key_type, _value_type>>>>::type;
+    using _key_type = std::remove_cv_t<std::remove_reference_t<K>>;
+    using _value_type = std::remove_cv_t<std::remove_reference_t<V>>;
+    using container_type = std::conditional_t<
+        std::is_same<K, none_type>::value, none_type_map<_value_type>,
+        std::unordered_map<_key_type, _value_type, std::hash<_key_type>, std::equal_to<_key_type>,
+                           utils::allocator<std::pair<const _key_type, _value_type>>>>;
 
     utils::shared_ref<container_type> data;
     template <class Kp, class Vp>
@@ -188,20 +262,20 @@ namespace types
     // types
     using reference = typename container_type::reference;
     using const_reference = typename container_type::const_reference;
-    using iterator = utils::comparable_iterator<
-        key_iterator_adaptator<typename container_type::iterator>>;
-    using const_iterator = utils::comparable_iterator<
-        key_iterator_adaptator<typename container_type::const_iterator>>;
-    using item_iterator = utils::comparable_iterator<
-        item_iterator_adaptator<typename container_type::iterator>>;
+    using iterator =
+        utils::comparable_iterator<key_iterator_adaptator<typename container_type::iterator>>;
+    using const_iterator =
+        utils::comparable_iterator<key_iterator_adaptator<typename container_type::const_iterator>>;
+    using item_iterator =
+        utils::comparable_iterator<item_iterator_adaptator<typename container_type::iterator>>;
     using item_const_iterator = utils::comparable_iterator<
         item_iterator_adaptator<typename container_type::const_iterator>>;
-    using key_iterator = utils::comparable_iterator<
-        key_iterator_adaptator<typename container_type::iterator>>;
-    using key_const_iterator = utils::comparable_iterator<
-        key_iterator_adaptator<typename container_type::const_iterator>>;
-    using value_iterator = utils::comparable_iterator<
-        value_iterator_adaptator<typename container_type::iterator>>;
+    using key_iterator =
+        utils::comparable_iterator<key_iterator_adaptator<typename container_type::iterator>>;
+    using key_const_iterator =
+        utils::comparable_iterator<key_iterator_adaptator<typename container_type::const_iterator>>;
+    using value_iterator =
+        utils::comparable_iterator<value_iterator_adaptator<typename container_type::iterator>>;
     using value_const_iterator = utils::comparable_iterator<
         value_iterator_adaptator<typename container_type::const_iterator>>;
     using size_type = typename container_type::size_type;
@@ -334,8 +408,7 @@ namespace types
 
 template <class K, class V>
 struct assignable<types::dict<K, V>> {
-  using type =
-      types::dict<typename assignable<K>::type, typename assignable<V>::type>;
+  using type = types::dict<typename assignable<K>::type, typename assignable<V>::type>;
 };
 
 std::ostream &operator<<(std::ostream &os, types::empty_dict const &);
@@ -388,57 +461,45 @@ struct __combined<pythonic::types::dict<C, B>, container<A>> {
 
 template <class T>
 struct __combined<pythonic::types::empty_dict, pythonic::types::list<T>> {
-  using type = pythonic::types::dict<typename std::tuple_element<0, T>::type,
-                                     typename std::tuple_element<1, T>::type>;
+  using type = pythonic::types::dict<std::tuple_element_t<0, T>, std::tuple_element_t<1, T>>;
 };
 
 template <class T, size_t N>
-struct __combined<pythonic::types::empty_dict,
-                  pythonic::types::static_list<T, N>> {
-  using type = pythonic::types::dict<typename std::tuple_element<0, T>::type,
-                                     typename std::tuple_element<1, T>::type>;
+struct __combined<pythonic::types::empty_dict, pythonic::types::static_list<T, N>> {
+  using type = pythonic::types::dict<std::tuple_element_t<0, T>, std::tuple_element_t<1, T>>;
 };
 
 template <class T>
 struct __combined<pythonic::types::list<T>, pythonic::types::empty_dict> {
-  using type = pythonic::types::dict<typename std::tuple_element<0, T>::type,
-                                     typename std::tuple_element<1, T>::type>;
+  using type = pythonic::types::dict<std::tuple_element_t<0, T>, std::tuple_element_t<1, T>>;
 };
 template <class T, size_t N>
-struct __combined<pythonic::types::static_list<T, N>,
-                  pythonic::types::empty_dict> {
-  using type = pythonic::types::dict<typename std::tuple_element<0, T>::type,
-                                     typename std::tuple_element<1, T>::type>;
+struct __combined<pythonic::types::static_list<T, N>, pythonic::types::empty_dict> {
+  using type = pythonic::types::dict<std::tuple_element_t<0, T>, std::tuple_element_t<1, T>>;
 };
 
 template <class K0, class V0, class T>
 struct __combined<pythonic::types::dict<K0, V0>, pythonic::types::list<T>> {
-  using type = pythonic::types::dict<
-      typename __combined<K0, typename std::tuple_element<0, T>::type>::type,
-      typename __combined<V0, typename std::tuple_element<1, T>::type>::type>;
+  using type = pythonic::types::dict<typename __combined<K0, std::tuple_element_t<0, T>>::type,
+                                     typename __combined<V0, std::tuple_element_t<1, T>>::type>;
 };
 
 template <class K0, class V0, class T, size_t N>
-struct __combined<pythonic::types::dict<K0, V0>,
-                  pythonic::types::static_list<T, N>> {
-  using type = pythonic::types::dict<
-      typename __combined<K0, typename std::tuple_element<0, T>::type>::type,
-      typename __combined<V0, typename std::tuple_element<1, T>::type>::type>;
+struct __combined<pythonic::types::dict<K0, V0>, pythonic::types::static_list<T, N>> {
+  using type = pythonic::types::dict<typename __combined<K0, std::tuple_element_t<0, T>>::type,
+                                     typename __combined<V0, std::tuple_element_t<1, T>>::type>;
 };
 
 template <class K0, class V0, class T>
 struct __combined<pythonic::types::list<T>, pythonic::types::dict<K0, V0>> {
-  using type = pythonic::types::dict<
-      typename __combined<K0, typename std::tuple_element<0, T>::type>::type,
-      typename __combined<V0, typename std::tuple_element<1, T>::type>::type>;
+  using type = pythonic::types::dict<typename __combined<K0, std::tuple_element_t<0, T>>::type,
+                                     typename __combined<V0, std::tuple_element_t<1, T>>::type>;
 };
 
 template <class K0, class V0, class T, size_t N>
-struct __combined<pythonic::types::static_list<T, N>,
-                  pythonic::types::dict<K0, V0>> {
-  using type = pythonic::types::dict<
-      typename __combined<K0, typename std::tuple_element<0, T>::type>::type,
-      typename __combined<V0, typename std::tuple_element<1, T>::type>::type>;
+struct __combined<pythonic::types::static_list<T, N>, pythonic::types::dict<K0, V0>> {
+  using type = pythonic::types::dict<typename __combined<K0, std::tuple_element_t<0, T>>::type,
+                                     typename __combined<V0, std::tuple_element_t<1, T>>::type>;
 };
 
 template <class K>
@@ -488,14 +549,14 @@ struct __combined<pythonic::types::empty_dict, indexable_container<K, V>> {
 
 template <class K0, class V0, class K1, class V1>
 struct __combined<pythonic::types::dict<K0, V0>, indexable_container<K1, V1>> {
-  using type = pythonic::types::dict<typename __combined<K0, K1>::type,
-                                     typename __combined<V0, V1>::type>;
+  using type =
+      pythonic::types::dict<typename __combined<K0, K1>::type, typename __combined<V0, V1>::type>;
 };
 
 template <class K0, class V0, class K1, class V1>
 struct __combined<indexable_container<K1, V1>, pythonic::types::dict<K0, V0>> {
-  using type = pythonic::types::dict<typename __combined<K0, K1>::type,
-                                     typename __combined<V0, V1>::type>;
+  using type =
+      pythonic::types::dict<typename __combined<K0, K1>::type, typename __combined<V0, V1>::type>;
 };
 
 template <class K, class V>

@@ -21,6 +21,7 @@
 #include <ydb/core/protos/key.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
 
@@ -69,9 +70,9 @@ namespace NActors {
         Initialize();
     }
 
-    TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads)
+    TTestActorRuntime::TTestActorRuntime(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads, bool useRdmaAllocator)
         : TPortManager(false)
-        , TTestActorRuntimeBase{nodeCount, dataCenterCount, useRealThreads}
+        , TTestActorRuntimeBase{nodeCount, dataCenterCount, useRealThreads, useRdmaAllocator}
     {
         Initialize();
     }
@@ -126,7 +127,7 @@ namespace NActors {
             AddLocalService(
                 NKikimr::NAudit::MakeAuditServiceID(),
                 TActorSetupCmd(
-                    NKikimr::NAudit::CreateAuditWriter(std::move(AuditLogBackends)).Release(),
+                    NKikimr::NAudit::CreateAuditWriter(std::move(AuditLogBackends)),
                     TMailboxType::HTSwap,
                     0
                 ),
@@ -215,7 +216,10 @@ namespace NActors {
             nodeAppData->TransferWriterFactory = std::make_shared<NKikimr::Tests::MockTransferWriterFactory>();
             if (nodeIndex < egg.Icb.size()) {
                 nodeAppData->Icb = std::move(egg.Icb[nodeIndex]);
-                nodeAppData->InFlightLimiterRegistry.Reset(new NKikimr::NGRpcService::TInFlightLimiterRegistry(nodeAppData->Icb));
+                nodeAppData->InFlightLimiterRegistry.Reset(new NKikimr::NGRpcService::TInFlightLimiterRegistry());
+            }
+            if (nodeIndex < egg.Dcb.size()) {
+                nodeAppData->Dcb = std::move(egg.Dcb[nodeIndex]);
             }
             if (KeyConfigGenerator) {
                 nodeAppData->KeyConfig = KeyConfigGenerator(nodeIndex);

@@ -1,6 +1,7 @@
 #include "type_io.h"
 
 #include "builder.h"
+#include "error.h"
 #include "type_constructors.h"
 #include "type_factory.h"
 
@@ -309,6 +310,15 @@ namespace NTi::NIo {
                         type = TDatetime64Type::InstanceRaw();
                         break;
                     case ETypeName::Timestamp64:
+                        type = TTzTimestamp64Type::InstanceRaw();
+                        break;
+                    case ETypeName::TzDate32:
+                        type = TTzDate32Type::InstanceRaw();
+                        break;
+                    case ETypeName::TzDatetime64:
+                        type = TTzDatetime64Type::InstanceRaw();
+                        break;
+                    case ETypeName::TzTimestamp64:
                         type = TTimestamp64Type::InstanceRaw();
                         break;
                     case ETypeName::Interval64:
@@ -559,8 +569,11 @@ namespace NTi::NIo {
                     {"timestamp", ETypeName::Timestamp},
                     {"timestamp64", ETypeName::Timestamp64},
                     {"tz_date", ETypeName::TzDate},
+                    {"tz_date32", ETypeName::TzDate32},
                     {"tz_datetime", ETypeName::TzDatetime},
+                    {"tz_datetime64", ETypeName::TzDatetime64},
                     {"tz_timestamp", ETypeName::TzTimestamp},
+                    {"tz_timestamp64", ETypeName::TzTimestamp64},
                     {"interval", ETypeName::Interval},
                     {"interval64", ETypeName::Interval64},
                     {"json", ETypeName::Json},
@@ -745,6 +758,15 @@ namespace NTi::NIo {
             },
             [&consumer](const TTimestamp64Type*) {
                 consumer.OnScalarString("timestamp64");
+            },
+            [&consumer](const TTzDate32Type*) {
+                consumer.OnScalarString("tz_date32");
+            },
+            [&consumer](const TTzDatetime64Type*) {
+                consumer.OnScalarString("tz_datetime64");
+            },
+            [&consumer](const TTzTimestamp64Type*) {
+                consumer.OnScalarString("tz_timestamp64");
             },
             [&consumer](const TInterval64Type*) {
                 consumer.OnScalarString("interval64");
@@ -1016,6 +1038,15 @@ namespace NTi::NIo {
             [&consumer](const TTimestamp64Type*) {
                 WriteDataType(consumer, EPrimitiveTypeName::Timestamp64);
             },
+            [&consumer](const TTzDate32Type*) {
+                WriteDataType(consumer, EPrimitiveTypeName::TzDate32);
+            },
+            [&consumer](const TTzDatetime64Type*) {
+                WriteDataType(consumer, EPrimitiveTypeName::TzDatetime64);
+            },
+            [&consumer](const TTzTimestamp64Type*) {
+                WriteDataType(consumer, EPrimitiveTypeName::TzTimestamp64);
+            },
             [&consumer](const TInterval64Type*) {
                 WriteDataType(consumer, EPrimitiveTypeName::Interval64);
             },
@@ -1196,6 +1227,9 @@ namespace NTi::NIo {
                 [](const TDate32Type*) -> TStringBuf { return "int64"; },
                 [](const TDatetime64Type*) -> TStringBuf { return "int64"; },
                 [](const TTimestamp64Type*) -> TStringBuf { return "int64"; },
+                [](const TTzDate32Type*) -> TStringBuf { return "string"; },
+                [](const TTzDatetime64Type*) -> TStringBuf { return "string"; },
+                [](const TTzTimestamp64Type*) -> TStringBuf { return "string"; },
                 [](const TInterval64Type*) -> TStringBuf { return "int64"; },
                 [](const TDecimalType*) -> TStringBuf { return "string"; },
                 [](const TOptionalType*) -> TStringBuf { return "any"; },

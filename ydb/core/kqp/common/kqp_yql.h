@@ -44,11 +44,14 @@ struct TKqpPhyTxSettings {
 };
 
 constexpr TStringBuf KqpReadRangesSourceName = "KqpReadRangesSource";
+constexpr TStringBuf KqpFullTextSourceName = "KqpFullTextSource";
+constexpr TStringBuf KqpSysViewSourceName = "KqpSysViewSource";
 constexpr TStringBuf KqpTableSinkName = "KqpTableSink";
 
 enum class EStreamLookupStrategyType {
     Unspecified,
     LookupRows,
+    LookupUniqueRows,
     LookupJoinRows,
     LookupSemiJoinRows,
 };
@@ -56,20 +59,37 @@ enum class EStreamLookupStrategyType {
 struct TKqpStreamLookupSettings {
     static constexpr TStringBuf StrategySettingName = "Strategy";
     static constexpr TStringBuf AllowNullKeysSettingName = "AllowNullKeysPrefixSize";
+    static constexpr TStringBuf VectorTopColumnSettingName = "VectorTopColumn";
+    static constexpr TStringBuf VectorTopIndexSettingName = "VectorTopIndex";
+    static constexpr TStringBuf VectorTopLimitSettingName = "VectorTopLimit";
+    static constexpr TStringBuf VectorTopTargetSettingName = "VectorTopTarget";
+    static constexpr TStringBuf VectorTopDistinctSettingName = "VectorTopDistinct";
 
     // stream lookup strategy types
     static constexpr std::string_view LookupStrategyName = "LookupRows"sv;
+    static constexpr std::string_view LookupUniqueStrategyName = "LookupUniqueRows"sv;
     static constexpr std::string_view LookupJoinStrategyName = "LookupJoinRows"sv;
     static constexpr std::string_view LookupSemiJoinStrategyName = "LookupSemiJoinRows"sv;
 
     TMaybe<ui32> AllowNullKeysPrefixSize;
     EStreamLookupStrategyType Strategy = EStreamLookupStrategyType::Unspecified;
 
+    // VectorTopColumn must be a fixed string, but Target and Limit may be calculated in runtime
+    // Vector index settings are not needed here because we know them from the indexImpl table name or index name
+    TString VectorTopColumn;
+    TString VectorTopIndex;
+    TExprNode::TPtr VectorTopTarget;
+    TExprNode::TPtr VectorTopLimit;
+
+    bool VectorTopDistinct = false;
+
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
     static TKqpStreamLookupSettings Parse(const NNodes::TKqlStreamLookupTable& node);
     static TKqpStreamLookupSettings Parse(const NNodes::TKqlStreamLookupIndex& node);
     static TKqpStreamLookupSettings Parse(const NNodes::TKqpCnStreamLookup& node);
     static TKqpStreamLookupSettings Parse(const NNodes::TCoNameValueTupleList& node);
+    static bool HasVectorTopColumn(const NNodes::TKqlStreamLookupTable& node);
+    static bool HasVectorTopColumn(const NNodes::TCoNameValueTupleList& node);
 };
 
 struct TKqpDeleteRowsIndexSettings {
@@ -107,6 +127,35 @@ public:
     }
 };
 
+struct TKqpReadTableFullTextIndexSettings: public TSortingOperator<ERequestSorting::NONE> {
+public:
+    static constexpr TStringBuf ItemsLimitSettingName = "ItemsLimit";
+    static constexpr TStringBuf SkipLimitSettingName = "SkipLimit";
+    static constexpr TStringBuf BFactorSettingName = "B";
+    static constexpr TStringBuf K1FactorSettingName = "K1";
+    static constexpr TStringBuf DefaultOperatorSettingName = "DefaultOperator";
+    static constexpr TStringBuf MinimumShouldMatchSettingName = "MinimumShouldMatch";
+    static constexpr TStringBuf ModeSettingName = "Mode";
+    TExprNode::TPtr ItemsLimit;
+    TExprNode::TPtr SkipLimit;
+    TExprNode::TPtr BFactor;
+    TExprNode::TPtr K1Factor;
+    TExprNode::TPtr DefaultOperator;
+    TExprNode::TPtr MinimumShouldMatch;
+    TExprNode::TPtr Mode;
+
+    void SetItemsLimit(const TExprNode::TPtr& expr) { ItemsLimit = expr; }
+    void SetSkipLimit(const TExprNode::TPtr& expr) { SkipLimit = expr; }
+    void SetBFactor(const TExprNode::TPtr& expr) { BFactor = expr; }
+    void SetK1Factor(const TExprNode::TPtr& expr) { K1Factor = expr; }
+    void SetDefaultOperator(const TExprNode::TPtr& expr) { DefaultOperator = expr; }
+    void SetMinimumShouldMatch(const TExprNode::TPtr& expr) { MinimumShouldMatch = expr; }
+    void SetMode(const TExprNode::TPtr& expr) { Mode = expr; }
+
+    static TKqpReadTableFullTextIndexSettings Parse(const NNodes::TCoNameValueTupleList& node);
+    NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
+};
+
 struct TKqpReadTableSettings: public TSortingOperator<ERequestSorting::NONE> {
 public:
     static constexpr TStringBuf SkipNullKeysSettingName = "SkipNullKeys";
@@ -119,6 +168,10 @@ public:
     static constexpr TStringBuf TabletIdName = "TabletId";
     static constexpr TStringBuf PointPrefixLenSettingName = "PointPrefixLen";
     static constexpr TStringBuf IndexSelectionDebugInfoSettingName = "IndexSelectionDebugInfo";
+    static constexpr TStringBuf VectorTopKColumnSettingName = "VectorTopKColumn";
+    static constexpr TStringBuf VectorTopKMetricSettingName = "VectorTopKMetric";
+    static constexpr TStringBuf VectorTopKTargetSettingName = "VectorTopKTarget";
+    static constexpr TStringBuf VectorTopKLimitSettingName = "VectorTopKLimit";
 
     TVector<TString> SkipNullKeys;
     TExprNode::TPtr ItemsLimit;
@@ -127,6 +180,12 @@ public:
     bool ForcePrimary = false;
     ui64 PointPrefixLen = 0;
     THashMap<TString, TString> IndexSelectionInfo;
+
+    // Vector top-K pushdown settings for brute force vector search
+    TString VectorTopKColumn;
+    TString VectorTopKMetric;
+    TExprNode::TPtr VectorTopKTarget;
+    TExprNode::TPtr VectorTopKLimit;
 
     void AddSkipNullKey(const TString& key);
     void SetItemsLimit(const TExprNode::TPtr& expr) { ItemsLimit = expr; }

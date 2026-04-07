@@ -28,8 +28,7 @@ namespace types
   {
   }
   template <class T, class S>
-  sliced_list<T, S>::sliced_list(sliced_list<T, S> const &s)
-      : _data(s._data), slicing(s.slicing)
+  sliced_list<T, S>::sliced_list(sliced_list<T, S> const &s) : _data(s._data), slicing(s.slicing)
   {
   }
   template <class T, class S>
@@ -39,8 +38,7 @@ namespace types
   }
   template <class T, class S>
   template <class Sn>
-  sliced_list<T, S>::sliced_list(utils::shared_ref<container_type> const &other,
-                                 Sn const &s)
+  sliced_list<T, S>::sliced_list(utils::shared_ref<container_type> const &other, Sn const &s)
       : _data(other), slicing(s)
   {
   }
@@ -81,8 +79,7 @@ namespace types
 
   // accessor
   template <class T, class S>
-  typename sliced_list<T, S>::const_reference
-  sliced_list<T, S>::fast(long i) const
+  typename sliced_list<T, S>::const_reference sliced_list<T, S>::fast(long i) const
   {
     assert(0 <= i && i < size());
     auto const index = slicing.get(i);
@@ -90,8 +87,7 @@ namespace types
     return (*_data)[index];
   }
   template <class T, class S>
-  typename sliced_list<T, S>::const_reference
-  sliced_list<T, S>::operator[](long i) const
+  typename sliced_list<T, S>::const_reference sliced_list<T, S>::operator[](long i) const
   {
     assert(i < size());
     auto const index = slicing.get(i);
@@ -109,9 +105,8 @@ namespace types
 
   template <class T, class S>
   template <class Sp>
-  typename std::enable_if<
-      is_slice<Sp>::value,
-      sliced_list<T, decltype(std::declval<S>() * std::declval<Sp>())>>::type
+  std::enable_if_t<is_slice<Sp>::value,
+                   sliced_list<T, decltype(std::declval<S>() * std::declval<Sp>())>>
   sliced_list<T, S>::operator[](Sp s) const
   {
     return {_data, slicing * s.normalize(this->size())};
@@ -148,13 +143,20 @@ namespace types
     return size() == 0;
   }
   template <class T, class S>
-  inline sliced_list<T, S> &
-  sliced_list<T, S>::operator=(sliced_list<T, S> const &s)
+  inline sliced_list<T, S> &sliced_list<T, S>::operator=(sliced_list<T, S> const &s)
   {
     if (slicing.step == 1) {
-      // inserting before erasing in case of self-copy
-      auto insert_pt = _data->begin() + slicing.lower;
-      _data->insert(insert_pt, s.begin(), s.end());
+      // no sharing
+      if (_data->data() != s._data->data()) {
+        auto insert_pt = _data->begin() + slicing.lower;
+        _data->insert(insert_pt, s.begin(), s.end());
+      }
+      // sharing
+      else {
+        std::vector<T> tmp{s.begin(), s.end()};
+        auto insert_pt = _data->begin() + slicing.lower;
+        _data->insert(insert_pt, tmp.begin(), tmp.end());
+      }
       auto erase_pt = _data->begin() + s.size();
       _data->erase(erase_pt + slicing.lower, erase_pt + slicing.upper);
     } else
@@ -165,9 +167,17 @@ namespace types
   sliced_list<T, S> &sliced_list<T, S>::operator=(list<T> const &seq)
   {
     if (slicing.step == 1) {
-      // inserting before erasing in case of self-copy
-      auto insert_pt = _data->begin() + slicing.lower;
-      _data->insert(insert_pt, seq.begin(), seq.end());
+      // no sharing
+      if (_data->data() != seq._data->data()) {
+        auto insert_pt = _data->begin() + slicing.lower;
+        _data->insert(insert_pt, seq.begin(), seq.end());
+      }
+      // sharing
+      else {
+        std::vector<T> tmp{seq.begin(), seq.end()};
+        auto insert_pt = _data->begin() + slicing.lower;
+        _data->insert(insert_pt, tmp.begin(), tmp.end());
+      }
       auto erase_pt = _data->begin() + seq.size();
       _data->erase(erase_pt + slicing.lower, erase_pt + slicing.upper);
     } else
@@ -206,21 +216,18 @@ namespace types
 #ifdef USE_XSIMD
   template <class T, class S>
   template <class vectorizer>
-  typename sliced_list<T, S>::simd_iterator
-  sliced_list<T, S>::vbegin(vectorizer) const
+  typename sliced_list<T, S>::simd_iterator sliced_list<T, S>::vbegin(vectorizer) const
   {
     return {_data->data() + slicing.lower};
   }
 
   template <class T, class S>
   template <class vectorizer>
-  typename sliced_list<T, S>::simd_iterator
-  sliced_list<T, S>::vend(vectorizer) const
+  typename sliced_list<T, S>::simd_iterator sliced_list<T, S>::vend(vectorizer) const
   {
     using vector_type = typename xsimd::batch<dtype>;
     static const std::size_t vector_size = vector_type::size;
-    return {_data->data() + slicing.lower +
-            long(size() / vector_size * vector_size)};
+    return {_data->data() + slicing.lower + long(size() / vector_size * vector_size)};
   }
 
 #endif
@@ -256,9 +263,8 @@ namespace types
   template <class InputIterator>
   list<T>::list(InputIterator start, InputIterator stop) : _data()
   {
-    if (std::is_same<
-            typename std::iterator_traits<InputIterator>::iterator_category,
-            std::random_access_iterator_tag>::value)
+    if (std::is_same<typename std::iterator_traits<InputIterator>::iterator_category,
+                     std::random_access_iterator_tag>::value)
       _data->reserve(std::distance(start, stop));
     else
       _data->reserve(DEFAULT_CAPACITY);
@@ -292,8 +298,7 @@ namespace types
   }
   template <class T>
   template <class Tp, class S>
-  list<T>::list(sliced_list<Tp, S> const &other)
-      : _data(other.begin(), other.end())
+  list<T>::list(sliced_list<Tp, S> const &other) : _data(other.begin(), other.end())
   {
   }
 
@@ -458,14 +463,12 @@ namespace types
   template <class T>
   bool list<T>::operator<(list<T> const &other) const
   {
-    return std::lexicographical_compare(begin(), end(), other.begin(),
-                                        other.end());
+    return std::lexicographical_compare(begin(), end(), other.begin(), other.end());
   }
   template <class T>
   bool list<T>::operator>(list<T> const &other) const
   {
-    return std::lexicographical_compare(other.begin(), other.end(), begin(),
-                                        end());
+    return std::lexicographical_compare(other.begin(), other.end(), begin(), end());
   }
   template <class T>
   bool list<T>::operator<=(list<T> const &other) const
@@ -527,8 +530,7 @@ namespace types
 
   template <class T>
   template <class Sp>
-  typename std::enable_if<is_slice<Sp>::value, sliced_list<T, Sp>>::type
-  list<T>::operator[](Sp const &s) const
+  std::enable_if_t<is_slice<Sp>::value, sliced_list<T, Sp>> list<T>::operator[](Sp const &s) const
   {
     return {*this, s};
   }
@@ -607,8 +609,7 @@ namespace types
 
   template <class T>
   template <class F>
-  list<typename __combined<T, F>::type>
-  list<T>::operator+(list<F> const &s) const
+  list<typename __combined<T, F>::type> list<T>::operator+(list<F> const &s) const
   {
     list<typename __combined<T, F>::type> clone(size() + s.size());
     std::copy(s.begin(), s.end(), std::copy(begin(), end(), clone.begin()));
@@ -617,12 +618,10 @@ namespace types
 
   template <class T>
   template <class F, class S>
-  list<decltype(std::declval<T>() +
-                std::declval<typename sliced_list<F, S>::value_type>())>
+  list<decltype(std::declval<T>() + std::declval<typename sliced_list<F, S>::value_type>())>
   list<T>::operator+(sliced_list<F, S> const &s) const
   {
-    list<decltype(std::declval<T>() +
-                  std::declval<typename sliced_list<F, S>::value_type>())>
+    list<decltype(std::declval<T>() + std::declval<typename sliced_list<F, S>::value_type>())>
         clone(size() + len(s));
     std::copy(s.begin(), s.end(), std::copy(begin(), end(), clone.begin()));
     return clone;
@@ -690,8 +689,7 @@ namespace types
   template <class E, size_t L>
   long list<T>::_flat_size(E const &e, utils::int_<L>) const
   {
-    return std::distance(e.begin(), e.end()) *
-           _flat_size(e[0], utils::int_<L - 1>{});
+    return std::distance(e.begin(), e.end()) * _flat_size(e[0], utils::int_<L - 1>{});
   }
   template <class T>
   long list<T>::flat_size() const
@@ -738,8 +736,7 @@ namespace types
     return empty_list();
   }
   template <class F>
-  typename std::enable_if<!is_numexpr_arg<F>::value,
-                          list<typename F::value_type>>::type
+  std::enable_if_t<!is_numexpr_arg<F>::value, list<typename F::value_type>>
   empty_list::operator+(F s) const
   {
     return {s.begin(), s.end()};
@@ -770,8 +767,7 @@ namespace utils
 {
 
   template <class T, class From>
-  void reserve(types::list<T> &l, From const &f,
-               typename From::const_iterator *)
+  void reserve(types::list<T> &l, From const &f, typename From::const_iterator *)
   {
     l.reserve(builtins::len(f));
   }
@@ -788,22 +784,19 @@ namespace std
   }
 
   template <size_t I, class T>
-  typename pythonic::types::list<T>::const_reference
-  get(pythonic::types::list<T> const &t)
+  typename pythonic::types::list<T>::const_reference get(pythonic::types::list<T> const &t)
   {
     return t[I];
   }
 
   template <size_t I, class T>
-  typename pythonic::types::list<T>::value_type
-  get(pythonic::types::list<T> &&t)
+  typename pythonic::types::list<T>::value_type get(pythonic::types::list<T> &&t)
   {
     return std::move(t)[I];
   }
 
   template <size_t I, class T, class S>
-  typename pythonic::types::sliced_list<T, S>::reference
-  get(pythonic::types::sliced_list<T, S> &t)
+  typename pythonic::types::sliced_list<T, S>::reference get(pythonic::types::sliced_list<T, S> &t)
   {
     return t[I];
   }
@@ -827,15 +820,19 @@ namespace std
 
 PYTHONIC_NS_BEGIN
 
+#ifdef Py_LIMITED_API
+#define PyList_SET_ITEM PyList_SetItem
+#endif
+
 inline PyObject *to_python<typename std::vector<bool>::reference>::convert(
     typename std::vector<bool>::reference const &v)
 {
   return ::to_python((bool)v);
 }
 
-inline PyObject *to_python<typename std::conditional<
-    std::is_same<bool, typename std::vector<bool>::const_reference>::value,
-    phantom_type, typename std::vector<bool>::const_reference>::type>::
+inline PyObject *
+to_python<std::conditional_t<std::is_same<bool, typename std::vector<bool>::const_reference>::value,
+                             phantom_type, typename std::vector<bool>::const_reference>>::
     convert(typename std::vector<bool>::const_reference const &v)
 {
   return ::to_python((bool)v);
@@ -851,8 +848,7 @@ PyObject *to_python<types::list<T>>::convert(types::list<T> const &v)
   return ret;
 }
 template <class T, class S>
-PyObject *
-to_python<types::sliced_list<T, S>>::convert(types::sliced_list<T, S> const &v)
+PyObject *to_python<types::sliced_list<T, S>>::convert(types::sliced_list<T, S> const &v)
 {
   Py_ssize_t n = v.size();
   PyObject *ret = PyList_New(n);
@@ -861,8 +857,7 @@ to_python<types::sliced_list<T, S>>::convert(types::sliced_list<T, S> const &v)
   return ret;
 }
 
-inline PyObject *
-to_python<types::empty_list>::convert(types::empty_list const &)
+inline PyObject *to_python<types::empty_list>::convert(types::empty_list const &)
 {
   return PyList_New(0);
 }
@@ -870,23 +865,48 @@ to_python<types::empty_list>::convert(types::empty_list const &)
 template <class T>
 bool from_python<types::list<T>>::is_convertible(PyObject *obj)
 {
-  return PyList_Check(obj) &&
-         (PyObject_Not(obj) ||
-          ::is_convertible<T>(PySequence_Fast_GET_ITEM(obj, 0)));
+  if (!PyList_Check(obj))
+    return false;
+  if (PyObject_Not(obj))
+    return true;
+#ifdef Py_LIMITED_API
+  PyObject *Item = PySequence_GetItem(obj, 0);
+  bool result = ::is_convertible<T>(Item);
+  Py_DECREF(Item);
+  return result;
+#else
+  return ::is_convertible<T>(PySequence_Fast_GET_ITEM(obj, 0));
+#endif
 }
 
 template <class T>
 types::list<T> from_python<types::list<T>>::convert(PyObject *obj)
 {
+#ifdef Py_LIMITED_API
+  Py_ssize_t l = PySequence_Size(obj);
+#else
   Py_ssize_t l = PySequence_Fast_GET_SIZE(obj);
+#endif
   types::list<T> v(l);
 
+#ifdef Py_LIMITED_API
+  for (Py_ssize_t i = 0; i < l; ++i) {
+    PyObject *item = PySequence_GetItem(obj, i);
+    v.fast(i) = ::from_python<T>(item);
+    Py_DECREF(item);
+  }
+#else
   PyObject **core = PySequence_Fast_ITEMS(obj);
-  std::transform(core, core + l, v.begin(),
-                 [](PyObject *o) { return ::from_python<T>(o); });
+  std::transform(core, core + l, v.begin(), [](PyObject *o) { return ::from_python<T>(o); });
+#endif
 
   return v;
 }
+
+#ifdef Py_LIMITED_API
+#undef PyList_SET_ITEM
+#endif
+
 PYTHONIC_NS_END
 
 #endif

@@ -1,7 +1,7 @@
 #include "mkql_wide_top_sort.h"
 
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
-#include <yql/essentials/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_llvm_base.h>                // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_spiller_adapter.h>
 #include <yql/essentials/minikql/computation/presort.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
@@ -12,6 +12,7 @@
 
 #include <yql/essentials/utils/sort.h>
 
+#include <deque>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -26,14 +27,14 @@ struct TKeyInfo {
 };
 
 struct TRuntimeKeyInfo {
-    TRuntimeKeyInfo(const TKeyInfo& keyInfo)
+    explicit TRuntimeKeyInfo(const TKeyInfo& keyInfo)
         : Slot(keyInfo.Slot)
         , IsOptional(keyInfo.IsOptional)
         , Compare(keyInfo.Compare.Get())
     {
         if (keyInfo.PresortType) {
-            LeftPacker = keyInfo.PresortType;
-            RightPacker = keyInfo.PresortType;
+            LeftPacker = TGenericPresortEncoder(keyInfo.PresortType);
+            RightPacker = TGenericPresortEncoder(keyInfo.PresortType);
         }
     }
 
@@ -45,7 +46,7 @@ struct TRuntimeKeyInfo {
 };
 
 struct TMyValueCompare {
-    TMyValueCompare(const std::vector<TKeyInfo>& keys)
+    explicit TMyValueCompare(const std::vector<TKeyInfo>& keys)
         : Keys(keys.cbegin(), keys.cend())
     {
     }
@@ -70,7 +71,7 @@ struct TMyValueCompare {
                 cmp = CompareValues(key.Slot, directions[i], key.IsOptional, left[i], right[i]);
             }
 
-            if (cmp)  {
+            if (cmp) {
                 return cmp;
             }
         }
@@ -85,12 +86,15 @@ using NYql::TChunkedBuffer;
 using TAsyncWriteOperation = std::optional<NThreading::TFuture<ISpiller::TKey>>;
 using TAsyncReadOperation = std::optional<NThreading::TFuture<std::optional<TChunkedBuffer>>>;
 using TStorage = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue, EMemorySubPool::Temporary>>;
+using TStorageDeque = std::deque<TStorage, TMKQLAllocator<TStorage, EMemorySubPool::Temporary>>;
 
 struct TSpilledData {
     using TPtr = TSpilledData*;
 
-    TSpilledData(std::unique_ptr<TWideUnboxedValuesSpillerAdapter> &&spiller)
-    : Spiller(std::move(spiller)) {}
+    TSpilledData(std::unique_ptr<TWideUnboxedValuesSpillerAdapter>&& spiller)
+        : Spiller(std::move(spiller))
+    {
+    }
 
     TAsyncWriteOperation Write(NUdf::TUnboxedValue* item, size_t size) {
         AsyncWriteOperation = Spiller->WriteWideItem({item, size});
@@ -102,7 +106,7 @@ struct TSpilledData {
         return AsyncWriteOperation;
     }
 
-    TAsyncReadOperation Read(TStorage &buffer, const TComputationContext& ctx) {
+    TAsyncReadOperation Read(TStorage& buffer, const TComputationContext& ctx) {
         if (AsyncReadOperation) {
             if (AsyncReadOperation->HasValue()) {
                 Spiller->AsyncReadCompleted(AsyncReadOperation->ExtractValue().value(), ctx.HolderFactory);
@@ -137,14 +141,13 @@ private:
     ui32 Width_;
     const TComputationContext* Ctx;
     bool HasValue = false;
-public:
 
+public:
     TSpilledUnboxedValuesIterator(
-        const std::function<bool(const NUdf::TUnboxedValuePod*,const NUdf::TUnboxedValuePod*)>& lessFunc,
+        const std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)>& lessFunc,
         TSpilledData::TPtr spilledData,
         size_t dataWidth,
-        const TComputationContext* ctx
-        )
+        const TComputationContext* ctx)
         : SpilledData(spilledData)
         , LessFunc(lessFunc)
         , Width_(dataWidth)
@@ -195,12 +198,13 @@ public:
     }
 };
 
-using TComparePtr = int(*)(const bool*, const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*);
+using TComparePtr = int (*)(const bool*, const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*);
 using TCompareFunc = std::function<int(const bool*, const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)>;
 
 template <bool Sort>
-class TState : public TComputationValue<TState<Sort>> {
-using TBase = TComputationValue<TState<Sort>>;
+class TState: public TComputationValue<TState<Sort>> {
+    using TBase = TComputationValue<TState<Sort>>;
+
 private:
     using TFields = std::vector<NUdf::TUnboxedValue*, TMKQLAllocator<NUdf::TUnboxedValue*, EMemorySubPool::Temporary>>;
     using TPointers = std::vector<NUdf::TUnboxedValuePod*, TMKQLAllocator<NUdf::TUnboxedValuePod*, EMemorySubPool::Temporary>>;
@@ -209,10 +213,30 @@ private:
         return std::max<size_t>(Count << 2ULL, 1ULL << 8ULL);
     }
 
+    static constexpr size_t GetStorageBlockSize() {
+        return 1ULL << 10ULL;
+    }
+
     void ResetFields() {
+        MaybeGrowStorage();
         auto ptr = Tongue = Free.back();
         std::for_each(Indexes.cbegin(), Indexes.cend(), [&](ui32 index) { Fields[index] = static_cast<NUdf::TUnboxedValue*>(ptr++); });
     }
+
+    void MaybeGrowStorage() {
+        if (Free.empty()) {
+            const size_t fieldsCount = Indexes.size();
+            const size_t blockSize = std::min(GetStorageBlockSize(), GetStorageSize());
+            TStorage& newStorageBlock = Storage.emplace_back(blockSize * fieldsCount);
+            auto* ptr = newStorageBlock.data();
+            Free.reserve(Free.size() + blockSize);
+            for (size_t i = 0; i < blockSize; ++i) {
+                Free.emplace_back(ptr);
+                ptr += fieldsCount;
+            }
+        }
+    }
+
 public:
     TState(TMemoryUsageInfo* memInfo, ui64 count, const bool* directons, size_t keyWidth, const TCompareFunc& compare, const std::vector<ui32>& indexes)
         : TBase(memInfo)
@@ -222,22 +246,15 @@ public:
         , LessFunc(std::bind(std::less<int>(), std::bind(compare, Directions.data(), std::placeholders::_1, std::placeholders::_2), 0))
         , Fields(Indexes.size(), nullptr)
     {
-        Storage.resize(GetStorageSize() * Indexes.size());
-        Free.resize(GetStorageSize(), nullptr);
         if (Count) {
-            Full.reserve(GetStorageSize());
-            auto ptr = Storage.data();
-            std::generate(Free.begin(), Free.end(), [&ptr, this]() {
-                const auto p = ptr;
-                ptr += Indexes.size();
-                return p;
-            });
+            Full.reserve(std::min(GetStorageBlockSize(), GetStorageSize()));
             ResetFields();
-        } else
+        } else {
             InputStatus = EFetchResult::Finish;
+        }
     }
 
-    NUdf::TUnboxedValue*const* GetFields() const {
+    NUdf::TUnboxedValue* const* GetFields() const {
         return Fields.data();
     }
 
@@ -257,11 +274,13 @@ public:
         }
 
         if (Full.size() >= Count) {
-            if (!Throat)
+            if (!Throat) {
                 Throat = *std::max_element(Full.cbegin(), Full.cend(), LessFunc);
+            }
 
-            if (!LessFunc(Tongue, Throat))
+            if (!LessFunc(Tongue, Throat)) {
                 return false;
+            }
         }
 
         Full.emplace_back(Free.back());
@@ -279,13 +298,15 @@ public:
             Full.resize(Count);
         }
 
-        if constexpr (Sort)
+        if constexpr (Sort) {
             std::sort(Full.rbegin(), Full.rend(), LessFunc);
+        }
     }
 
     NUdf::TUnboxedValue* Extract() {
-        if (Full.empty())
+        if (Full.empty()) {
             return nullptr;
+        }
 
         const auto ptr = Full.back();
         Full.pop_back();
@@ -295,12 +316,13 @@ public:
     EFetchResult InputStatus = EFetchResult::One;
     NUdf::TUnboxedValuePod* Tongue = nullptr;
     NUdf::TUnboxedValuePod* Throat = nullptr;
+
 private:
     const ui64 Count;
     const std::vector<ui32> Indexes;
     const std::vector<bool> Directions;
     const std::function<bool(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*)> LessFunc;
-    TStorage Storage;
+    TStorageDeque Storage;
     TPointers Free, Full;
     TFields Fields;
 };
@@ -313,13 +335,15 @@ private:
     llvm::IntegerType* ValueType;
     llvm::PointerType* PtrValueType;
     llvm::IntegerType* StatusType;
+
 protected:
     using TBase::Context;
+
 public:
     std::vector<llvm::Type*> GetFieldsArray() {
         std::vector<llvm::Type*> result = TBase::GetFields();
-        result.emplace_back(StatusType); //status
-        result.emplace_back(PtrValueType); //tongue
+        result.emplace_back(StatusType);   // status
+        result.emplace_back(PtrValueType); // tongue
         return result;
     }
 
@@ -335,24 +359,31 @@ public:
         : TBase(context)
         , ValueType(Type::getInt128Ty(Context))
         , PtrValueType(PointerType::getUnqual(ValueType))
-        , StatusType(Type::getInt32Ty(Context)) {
-
+        , StatusType(Type::getInt32Ty(Context))
+    {
     }
 };
 #endif
 
-template<bool Sort>
+template <bool Sort>
 class TWideTopWrapper: public TStatefulWideFlowCodegeneratorNode<TWideTopWrapper<Sort>>
 #ifndef MKQL_DISABLE_CODEGEN
-    , public ICodegeneratorRootNode
+    ,
+                       public ICodegeneratorRootNode
 #endif
 {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideTopWrapper<Sort>>;
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideTopWrapper<Sort>>;
+
 public:
     TWideTopWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, TComputationNodePtrVector&& directions, std::vector<TKeyInfo>&& keys,
-        std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Boxed), Flow(flow), Count(count), Directions(std::move(directions)), Keys(std::move(keys))
-        , Indexes(std::move(indexes)), Representations(std::move(representations))
+                    std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
+        , Flow(flow)
+        , Count(count)
+        , Directions(std::move(directions))
+        , Keys(std::move(keys))
+        , Indexes(std::move(indexes))
+        , Representations(std::move(representations))
     {
         for (const auto& x : Keys) {
             if (x.Compare || x.PresortType) {
@@ -365,11 +396,11 @@ public:
         }
     }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (state.IsInvalid()) {
             const auto count = Count->GetValue(ctx).Get<ui64>();
             std::vector<bool> dirs(Directions.size());
-            std::transform(Directions.cbegin(), Directions.cend(), dirs.begin(), [&ctx](IComputationNode* dir){ return dir->GetValue(ctx).Get<bool>(); });
+            std::transform(Directions.cbegin(), Directions.cend(), dirs.begin(), [&ctx](IComputationNode* dir) { return dir->GetValue(ctx).Get<bool>(); });
             MakeState(ctx, state, count, dirs.data());
         }
 
@@ -389,10 +420,11 @@ public:
 
             if (auto extract = ptr->Extract()) {
                 for (const auto index : Indexes) {
-                    if (const auto to = output[index])
+                    if (const auto to = output[index]) {
                         *to = std::move(*extract++);
-                    else
+                    } else {
                         ++extract;
+                    }
                 }
                 return EFetchResult::One;
             }
@@ -400,7 +432,7 @@ public:
             return EFetchResult::Finish;
         }
 
-        Y_UNREACHABLE();
+        MKQL_ENSURE(false, "Unreachable");
     }
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
@@ -453,10 +485,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = annotate(CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block));
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWideTopWrapper::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType(), trunc->getType(), dirs->getType()}, false);
-        const auto makeFuncPtr = annotate(CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block));
-        annotate(CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr, trunc, dirs}, "", block));
+        EmitFunctionCall<&TWideTopWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, statePtr, trunc, dirs}, ctx, block);
         annotate(BranchInst::Create(main, block));
 
         block = main;
@@ -496,16 +525,13 @@ public:
             block = rest;
 
             annotate(new StoreInst(ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::Finish)), statusPtr, block));
-            const auto sealFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState<Sort>::Seal>());
-            const auto sealType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType()}, false);
-            const auto sealPtr = annotate(CastInst::Create(Instruction::IntToPtr, sealFunc, PointerType::getUnqual(sealType), "seal", block));
-            annotate(CallInst::Create(sealType, sealPtr, {stateArg}, "", block));
+            EmitFunctionCall<&TState<Sort>::Seal>(Type::getVoidTy(context), {stateArg}, ctx, block);
 
             annotate(BranchInst::Create(full, block));
 
             block = good;
 
-            const auto tonguePtr = annotate(GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetTongue() }, "tongue_ptr", block));
+            const auto tonguePtr = annotate(GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetTongue()}, "tongue_ptr", block));
             const auto tongue = annotate(new LoadInst(ptrValueType, tonguePtr, "tongue", block));
 
             std::vector<Value*> placeholders(Representations.size());
@@ -518,10 +544,7 @@ public:
                 annotate(new StoreInst(item, placeholders[i], block));
             }
 
-            const auto pushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState<Sort>::Put>());
-            const auto pushType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType()}, false);
-            const auto pushPtr = annotate(CastInst::Create(Instruction::IntToPtr, pushFunc, PointerType::getUnqual(pushType), "function", block));
-            const auto accepted = annotate(CallInst::Create(pushType, pushPtr, {stateArg}, "accepted", block));
+            const auto accepted = EmitFunctionCall<&TState<Sort>::Put>(Type::getInt1Ty(context), {stateArg}, ctx, block);
 
             const auto push = BasicBlock::Create(context, "push", ctx.Func);
             const auto skip = BasicBlock::Create(context, "skip", ctx.Func);
@@ -557,10 +580,7 @@ public:
 
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
 
-            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState<Sort>::Extract>());
-            const auto extractType = FunctionType::get(outputPtrType, {stateArg->getType()}, false);
-            const auto extractPtr = annotate(CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block));
-            const auto out = annotate(CallInst::Create(extractType, extractPtr, {stateArg}, "out", block));
+            const auto out = EmitFunctionCall<&TState<Sort>::Extract>(outputPtrType, {stateArg}, ctx, block);
             const auto has = annotate(CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, out, ConstantPointerNull::get(outputPtrType), "has", block));
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), block);
@@ -595,8 +615,8 @@ private:
         }
     }
 
-    IComputationWideFlowNode *const Flow;
-    IComputationNode *const Count;
+    IComputationWideFlowNode* const Flow;
+    IComputationNode* const Count;
     const TComputationNodePtrVector Directions;
     const std::vector<TKeyInfo> Keys;
     const std::vector<ui32> Indexes;
@@ -629,8 +649,9 @@ private:
 #endif
 };
 
-class TSpillingSupportState : public TComputationValue<TSpillingSupportState> {
-using TBase = TComputationValue<TSpillingSupportState>;
+class TSpillingSupportState: public TComputationValue<TSpillingSupportState> {
+    using TBase = TComputationValue<TSpillingSupportState>;
+
 private:
     using TStorage = std::vector<NUdf::TUnboxedValue, TMKQLAllocator<NUdf::TUnboxedValue, EMemorySubPool::Temporary>>;
     using TFields = std::vector<NUdf::TUnboxedValue*, TMKQLAllocator<NUdf::TUnboxedValue*, EMemorySubPool::Temporary>>;
@@ -651,7 +672,7 @@ private:
 
 public:
     TSpillingSupportState(TMemoryUsageInfo* memInfo, const bool* directons, size_t keyWidth, const TCompareFunc& compare,
-        const std::vector<ui32>& indexes, TMultiType* tupleMultiType, const TComputationContext& ctx, NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent)
+                          const std::vector<ui32>& indexes, TMultiType* tupleMultiType, const TComputationContext& ctx, NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent)
         : TBase(memInfo)
         , Indexes(indexes)
         , Directions(directons, directons + keyWidth)
@@ -671,27 +692,24 @@ public:
     bool IsReadyToContinue() {
         switch (GetMode()) {
             case EOperatingMode::InMemory:
-               return true;
-            case EOperatingMode::Spilling:
-            {
+                return true;
+            case EOperatingMode::Spilling: {
                 if (!SpillState()) {
                     return false;
                 }
                 ResetFields();
                 auto nextMode = (IsReadFromChannelFinished() ? EOperatingMode::ProcessSpilled : EOperatingMode::InMemory);
 
-                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() <<
-                        (nextMode == EOperatingMode::ProcessSpilled ? "Switching to ProcessSpilled" : "Switching to Memory mode"));
+                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << (nextMode == EOperatingMode::ProcessSpilled ? "Switching to ProcessSpilled" : "Switching to Memory mode"));
 
                 SwitchMode(nextMode);
                 return IsReadyToContinue();
             }
-            case EOperatingMode::ProcessSpilled:
-            {
+            case EOperatingMode::ProcessSpilled: {
                 if (SpilledUnboxedValuesIterators.empty()) {
                     return true;
                 }
-                for (auto &spilledUnboxedValuesIterator : SpilledUnboxedValuesIterators) {
+                for (auto& spilledUnboxedValuesIterator : SpilledUnboxedValuesIterators) {
                     if (!spilledUnboxedValuesIterator.CheckForInit()) {
                         return false;
                     }
@@ -705,7 +723,7 @@ public:
         return IsReadFromChannelFinished() && SpilledUnboxedValuesIterators.empty();
     }
 
-    NUdf::TUnboxedValue*const* GetFields() const {
+    NUdf::TUnboxedValue* const* GetFields() const {
         return Fields.data();
     }
 
@@ -715,7 +733,7 @@ public:
             const auto used = TlsAllocState->GetUsed();
             const auto limit = TlsAllocState->GetLimit();
 
-            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << "Yellow zone reached " << (used*100/limit) << "%=" << used << "/" << limit);
+            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << "Yellow zone reached " << (used * 100 / limit) << "%=" << used << "/" << limit);
             UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, "Switching Memory mode to Spilling");
 
             SwitchMode(EOperatingMode::Spilling);
@@ -749,15 +767,18 @@ public:
         }
 
         std::pop_heap(SpilledUnboxedValuesIterators.begin(), SpilledUnboxedValuesIterators.end());
-        auto &currentIt = SpilledUnboxedValuesIterators.back();
+        auto& currentIt = SpilledUnboxedValuesIterators.back();
         Storage = currentIt.Pop();
         if (currentIt.IsFinished()) {
             SpilledUnboxedValuesIterators.pop_back();
         }
         return Storage.data();
     }
+
 private:
-    EOperatingMode GetMode() const { return Mode; }
+    EOperatingMode GetMode() const {
+        return Mode;
+    }
 
     bool HasMemoryForProcessing() const {
         // We decided to turn off spilling in Sort nodes for now
@@ -771,19 +792,17 @@ private:
     }
 
     void SwitchMode(EOperatingMode mode) {
-        switch(mode) {
+        switch (mode) {
             case EOperatingMode::InMemory:
                 break;
-            case EOperatingMode::Spilling:
-            {
+            case EOperatingMode::Spilling: {
                 const size_t PACK_SIZE = 5_MB;
                 SpilledStates.emplace_back(std::make_unique<TWideUnboxedValuesSpillerAdapter>(Spiller, TupleMultiType, PACK_SIZE));
                 break;
             }
-            case EOperatingMode::ProcessSpilled:
-            {
+            case EOperatingMode::ProcessSpilled: {
                 SpilledUnboxedValuesIterators.reserve(SpilledStates.size());
-                for (auto &state: SpilledStates) {
+                for (auto& state : SpilledStates) {
                     SpilledUnboxedValuesIterators.emplace_back(LessFunc, &state, Indexes.size(), &Ctx);
                 }
                 break;
@@ -794,7 +813,7 @@ private:
 
     bool SpillState() {
         MKQL_ENSURE(!SpilledStates.empty(), "At least one Spiller must be created to spill data in Sort operation.");
-        auto &lastSpilledState = SpilledStates.back();
+        auto& lastSpilledState = SpilledStates.back();
         if (lastSpilledState.AsyncWriteOperation.has_value()) {
             if (!lastSpilledState.AsyncWriteOperation->HasValue()) {
                 return false;
@@ -818,7 +837,7 @@ private:
         }
 
         auto writeFinishOp = lastSpilledState.FinishWrite();
-        if (writeFinishOp){
+        if (writeFinishOp) {
             return false;
         }
         Storage.resize(0);
@@ -826,8 +845,9 @@ private:
     }
 
     NUdf::TUnboxedValue* ExtractInMemory() {
-        if (Full.empty())
+        if (Full.empty()) {
             return nullptr;
+        }
 
         const auto ptr = Full.back();
         Full.pop_back();
@@ -849,6 +869,7 @@ private:
 public:
     EFetchResult InputStatus = EFetchResult::One;
     NUdf::TUnboxedValuePod* Pointer = nullptr;
+
 private:
     const std::vector<ui32> Indexes;
     const std::vector<bool> Directions;
@@ -869,15 +890,22 @@ private:
 
 class TWideSortWrapper: public TStatefulWideFlowCodegeneratorNode<TWideSortWrapper>
 #ifndef MKQL_DISABLE_CODEGEN
-    , public ICodegeneratorRootNode
+    ,
+                        public ICodegeneratorRootNode
 #endif
 {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideSortWrapper>;
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideSortWrapper>;
+
 public:
     TWideSortWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationNodePtrVector&& directions, std::vector<TKeyInfo>&& keys,
-        std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations, TMultiType* tupleMultiType)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Boxed), Flow(flow), Directions(std::move(directions)), Keys(std::move(keys))
-        , Indexes(std::move(indexes)), Representations(std::move(representations)), TupleMultiType(tupleMultiType)
+                     std::vector<ui32>&& indexes, std::vector<EValueRepresentation>&& representations, TMultiType* tupleMultiType)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Boxed)
+        , Flow(flow)
+        , Directions(std::move(directions))
+        , Keys(std::move(keys))
+        , Indexes(std::move(indexes))
+        , Representations(std::move(representations))
+        , TupleMultiType(tupleMultiType)
     {
         for (const auto& x : Keys) {
             if (x.Compare || x.PresortType) {
@@ -890,10 +918,10 @@ public:
         }
     }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (state.IsInvalid()) {
             std::vector<bool> dirs(Directions.size());
-            std::transform(Directions.cbegin(), Directions.cend(), dirs.begin(), [&ctx](IComputationNode* dir){ return dir->GetValue(ctx).Get<bool>(); });
+            std::transform(Directions.cbegin(), Directions.cend(), dirs.begin(), [&ctx](IComputationNode* dir) { return dir->GetValue(ctx).Get<bool>(); });
             MakeState(ctx, state, dirs.data());
         }
 
@@ -907,8 +935,9 @@ public:
                         ptr->Put();
                         continue;
                     case EFetchResult::Finish:
-                        if (ptr->Seal())
+                        if (ptr->Seal()) {
                             break;
+                        }
                         [[fallthrough]];
                     case EFetchResult::Yield:
                         return EFetchResult::Yield;
@@ -917,10 +946,11 @@ public:
 
             if (auto extract = ptr->Extract()) {
                 for (const auto index : Indexes) {
-                    if (const auto to = output[index])
+                    if (const auto to = output[index]) {
                         *to = std::move(*extract++);
-                    else
+                    } else {
                         ++extract;
+                    }
                 }
                 return EFetchResult::One;
             }
@@ -928,7 +958,7 @@ public:
             return ptr->IsFinished() ? EFetchResult::Finish : EFetchResult::Yield;
         }
 
-        Y_UNREACHABLE();
+        MKQL_ENSURE(false, "Unreachable");
     }
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
@@ -978,10 +1008,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = annotate(CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block));
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWideSortWrapper::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType(), dirs->getType()}, false);
-        const auto makeFuncPtr = annotate(CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block));
-        annotate(CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr, dirs}, "", block));
+        EmitFunctionCall<&TWideSortWrapper::MakeState>(Type::getVoidTy(context), {self, ctx.Ctx, statePtr, dirs}, ctx, block);
         annotate(BranchInst::Create(main, block));
 
         block = main;
@@ -989,7 +1016,6 @@ public:
         const auto state = annotate(new LoadInst(valueType, statePtr, "state", block));
         const auto half = annotate(CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block));
         const auto stateArg = annotate(CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block));
-        const auto boolFuncType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType()}, false);
         annotate(BranchInst::Create(more, block));
 
         block = more;
@@ -1012,9 +1038,7 @@ public:
 
             block = loop;
 
-            const auto readyFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSpillingSupportState::IsReadyToContinue>());
-            const auto readyPtr = annotate(CastInst::Create(Instruction::IntToPtr, readyFunc, PointerType::getUnqual(boolFuncType), "ready", block));
-            const auto process = annotate(CallInst::Create(boolFuncType, readyPtr, {stateArg}, "process", block));
+            const auto process = EmitFunctionCall<&TSpillingSupportState::IsReadyToContinue>(Type::getInt1Ty(context), {stateArg}, ctx, block);
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
 
@@ -1033,9 +1057,7 @@ public:
             block = rest;
 
             annotate(new StoreInst(ConstantInt::get(last->getType(), static_cast<i32>(EFetchResult::Finish)), statusPtr, block));
-            const auto sealFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSpillingSupportState::Seal>());
-            const auto sealPtr = annotate(CastInst::Create(Instruction::IntToPtr, sealFunc, PointerType::getUnqual(boolFuncType), "seal", block));
-            const auto stop = annotate(CallInst::Create(boolFuncType, sealPtr, {stateArg}, "stop", block));
+            const auto stop = EmitFunctionCall<&TSpillingSupportState::Seal>(Type::getInt1Ty(context), {stateArg}, ctx, block);
 
             result->addIncoming(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), block);
 
@@ -1043,7 +1065,7 @@ public:
 
             block = good;
 
-            const auto tonguePtr = annotate(GetElementPtrInst::CreateInBounds(stateType, stateArg, { stateFields.This(), stateFields.GetTongue() }, "tongue_ptr", block));
+            const auto tonguePtr = annotate(GetElementPtrInst::CreateInBounds(stateType, stateArg, {stateFields.This(), stateFields.GetTongue()}, "tongue_ptr", block));
             const auto tongue = annotate(new LoadInst(ptrValueType, tonguePtr, "tongue", block));
 
             std::vector<Value*> placeholders(Representations.size());
@@ -1057,10 +1079,7 @@ public:
                 annotate(new StoreInst(item, placeholders[i], block));
             }
 
-            const auto pushFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSpillingSupportState::Put>());
-            const auto pushType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType()}, false);
-            const auto pushPtr = annotate(CastInst::Create(Instruction::IntToPtr, pushFunc, PointerType::getUnqual(pushType), "function", block));
-            annotate(CallInst::Create(pushType, pushPtr, {stateArg}, "", block));
+            EmitFunctionCall<&TSpillingSupportState::Put>(Type::getVoidTy(context), {stateArg}, ctx, block);
 
             annotate(BranchInst::Create(loop, block));
         }
@@ -1071,10 +1090,7 @@ public:
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
             const auto last = BasicBlock::Create(context, "last", ctx.Func);
 
-            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSpillingSupportState::Extract>());
-            const auto extractType = FunctionType::get(outputPtrType, {stateArg->getType()}, false);
-            const auto extractPtr = annotate(CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block));
-            const auto out = annotate(CallInst::Create(extractType, extractPtr, {stateArg}, "out", block));
+            const auto out = EmitFunctionCall<&TSpillingSupportState::Extract>(outputPtrType, {stateArg}, ctx, block);
             const auto has = annotate(CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, out, ConstantPointerNull::get(outputPtrType), "has", block));
 
             annotate(BranchInst::Create(good, last, has, block));
@@ -1088,13 +1104,11 @@ public:
 
             block = last;
 
-            const auto finishedFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSpillingSupportState::IsFinished>());
-            const auto finishedPtr = annotate(CastInst::Create(Instruction::IntToPtr, finishedFunc, PointerType::getUnqual(boolFuncType), "finished_ptr", block));
-            const auto finished = annotate(CallInst::Create(boolFuncType, finishedPtr, {stateArg}, "finished", block));
+            const auto finished = EmitFunctionCall<&TSpillingSupportState::IsFinished>(Type::getInt1Ty(context), {stateArg}, ctx, block);
             const auto output = SelectInst::Create(finished,
-                ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)),
-                ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)),
-                "output", block);
+                                                   ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)),
+                                                   ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)),
+                                                   "output", block);
 
             result->addIncoming(output, block);
             annotate(BranchInst::Create(over, block));
@@ -1122,13 +1136,13 @@ private:
         }
     }
 
-    IComputationWideFlowNode *const Flow;
+    IComputationWideFlowNode* const Flow;
     const TComputationNodePtrVector Directions;
     const std::vector<TKeyInfo> Keys;
     const std::vector<ui32> Indexes;
     const std::vector<EValueRepresentation> Representations;
     TKeyTypes KeyTypes;
-    TMultiType *const TupleMultiType;
+    TMultiType* const TupleMultiType;
     bool HasComplexType = false;
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -1156,9 +1170,9 @@ private:
 #endif
 };
 
-}
+} // namespace
 
-template<bool Sort, bool HasCount>
+template <bool Sort, bool HasCount>
 IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     constexpr ui32 offset = HasCount ? 0 : 1;
     const ui32 inputsWithCount = callable.GetInputsCount() + offset;
@@ -1191,7 +1205,7 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
         bool encoded;
         bool useIHash;
         TKeyTypes oneKeyTypes;
-        GetDictionaryKeyTypes(inputWideComponents[keyIndex], oneKeyTypes, isTuple,encoded, useIHash, false);
+        GetDictionaryKeyTypes(inputWideComponents[keyIndex], oneKeyTypes, isTuple, encoded, useIHash, false);
         if (useIHash) {
             keys[i].Compare = MakeCompareImpl(inputWideComponents[keyIndex]);
         } else if (encoded) {
@@ -1202,7 +1216,6 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
             keys[i].IsOptional = oneKeyTypes.front().second;
         }
     }
-
 
     size_t payloadPos = keyWidth;
     for (auto i = 0U; i < indexes.size(); ++i) {
@@ -1215,21 +1228,23 @@ IComputationNode* WrapWideTopT(TCallable& callable, const TComputationNodeFactor
     }
 
     std::vector<EValueRepresentation> representations(inputWideComponents.size());
-    for (auto i = 0U; i < representations.size(); ++i)
+    for (auto i = 0U; i < representations.size(); ++i) {
         representations[i] = GetValueRepresentation(inputWideComponents[indexes[i]]);
+    }
 
-    auto tupleMultiType = TMultiType::Create(tupleTypes.size(),tupleTypes.data(), ctx.Env);
+    auto tupleMultiType = TMultiType::Create(tupleTypes.size(), tupleTypes.data(), ctx.Env);
     TComputationNodePtrVector directions(keyWidth);
     auto index = 1U - offset;
-    std::generate(directions.begin(), directions.end(), [&](){ return LocateNode(ctx.NodeLocator, callable, ++++index); });
+    std::generate(directions.begin(), directions.end(), [&]() { return LocateNode(ctx.NodeLocator, callable, ++ ++index); });
 
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
-        if constexpr (HasCount)
+        if constexpr (HasCount) {
             return new TWideTopWrapper<Sort>(ctx.Mutables, wide, count, std::move(directions), std::move(keys),
-                std::move(indexes), std::move(representations));
-        else
+                                             std::move(indexes), std::move(representations));
+        } else {
             return new TWideSortWrapper(ctx.Mutables, wide, std::move(directions), std::move(keys),
-                std::move(indexes), std::move(representations), tupleMultiType);
+                                        std::move(indexes), std::move(representations), tupleMultiType);
+        }
     }
 
     THROW yexception() << "Expected wide flow.";
@@ -1247,5 +1262,5 @@ IComputationNode* WrapWideSort(TCallable& callable, const TComputationNodeFactor
     return WrapWideTopT<true, false>(callable, ctx);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

@@ -4,6 +4,7 @@
 
 #include <ydb/core/testlib/actors/test_runtime.h>
 
+#include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
@@ -12,6 +13,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <ydb/core/protos/workload_manager_config.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 
 namespace NKikimr::NKqp::NWorkload {
@@ -71,12 +73,15 @@ struct TYdbSetupSettings {
     FLUENT_SETTING_DEFAULT(ui32, NodeCount, 1);
     FLUENT_SETTING_DEFAULT(TString, DomainName, "Root");
     FLUENT_SETTING_DEFAULT(bool, CreateSampleTenants, false);
+    FLUENT_SETTING_DEFAULT(bool, CreateSamplePool, true);
     FLUENT_SETTING_DEFAULT(bool, EnableResourcePools, true);
+    FLUENT_SETTING_DEFAULT(bool, EnableResourcePoolsScheduler, true);
     FLUENT_SETTING_DEFAULT(bool, EnableResourcePoolsOnServerless, false);
     FLUENT_SETTING_DEFAULT(bool, EnableMetadataObjectsOnServerless, true);
     FLUENT_SETTING_DEFAULT(bool, EnableExternalDataSourcesOnServerless, true);
+    FLUENT_SETTING_DEFAULT(bool, EnableStreamingQueries, true);
     FLUENT_SETTING(NKikimrConfig::TWorkloadManagerConfig, WorkloadManagerConfig);
-
+    FLUENT_SETTING_DEFAULT(i32, DedicatedDiskQuota, -1);
 
     // Default pool settings
     FLUENT_SETTING_DEFAULT(TString, PoolId, "sample_pool_id");
@@ -86,8 +91,10 @@ struct TYdbSetupSettings {
     FLUENT_SETTING_DEFAULT(double, QueryMemoryLimitPercentPerNode, -1);
     FLUENT_SETTING_DEFAULT(double, DatabaseLoadCpuThreshold, -1);
 
+    FLUENT_SETTING_DEFAULT(bool, WorkSafeWithGlobalObjects, true);
+
     NResourcePool::TPoolSettings GetDefaultPoolSettings() const;
-    TIntrusivePtr<IYdbSetup> Create() const;
+    TIntrusivePtr<IYdbSetup> Create(std::function<void(Tests::TServerSettings&)> fnc = nullptr) const;
 
     TString GetDedicatedTenantName() const;
     TString GetSharedTenantName() const;
@@ -98,6 +105,9 @@ class IYdbSetup : public TThrRefBase {
 public:
     // Cluster helpers
     virtual void UpdateNodeCpuInfo(double usage, ui32 threads, ui64 nodeIndex = 0) = 0;
+
+    virtual NYdb::NTable::TTableClient GetTableClient(
+        NYdb::NTable::TClientSettings settings = NYdb::NTable::TClientSettings()) const = 0;
 
     // Scheme queries helpers
     virtual NYdb::NScheme::TSchemeClient GetSchemeClient() const = 0;
@@ -116,6 +126,9 @@ public:
     virtual NActors::TActorId CreateInFlightCoordinator(ui32 numberRequests, ui32 expectedInFlight) const = 0;
 
     // Pools actions
+    virtual void CreateResourcePool(const TString& poolId, const NResourcePool::TPoolSettings& settings) const = 0;
+    virtual void CreateSamplePoolOn(const TString& databaseId) const = 0;
+    virtual void CreateResourcePool(const TString& databaseId, const TString& poolId, const NResourcePool::TPoolSettings& settings) const = 0;
     virtual TPoolStateDescription GetPoolDescription(TDuration leaseDuration = FUTURE_WAIT_TIMEOUT, const TString& poolId = "") const = 0;
     virtual void WaitPoolState(const TPoolStateDescription& state, const TString& poolId = "") const = 0;
     virtual void WaitPoolHandlersCount(i64 finalCount, std::optional<i64> initialCount = std::nullopt, TDuration timeout = FUTURE_WAIT_TIMEOUT) const = 0;
@@ -123,14 +136,24 @@ public:
     virtual void ValidateWorkloadServiceCounters(bool checkTableCounters = true, const TString& poolId = "") const = 0;
     virtual TEvFetchDatabaseResponse::TPtr FetchDatabase(const TString& database) const = 0;
 
-    // Coomon helpers
+    // Common helpers
+    virtual ui64 GetGrpcPort() const = 0;
     virtual TTestActorRuntime* GetRuntime() const = 0;
     virtual const TYdbSetupSettings& GetSettings() const = 0;
     static void WaitFor(TDuration timeout, TString description, std::function<bool(TString&)> callback);
 
-    virtual TLocalPathId GetDedicatedTenantPathId() const = 0;
-    virtual TLocalPathId GetSharedTenantPathId() const = 0;
-    virtual TLocalPathId GetServerlessTenantPathId() const = 0;
+    // Db management
+    virtual void CreateDedicatedTenant(const TString& path, const TString& unitKind) = 0;
+    virtual void DropDedicatedTenant(const TString& path) = 0;
+
+    struct TTenantInfo {
+        TLocalPathId PathId;
+        ui64 GrpcPort = 0;
+        ui32 NodeIdx = 0;
+    };
+    virtual TTenantInfo GetDedicatedTenantInfo() const = 0;
+    virtual TTenantInfo GetSharedTenantInfo() const = 0;
+    virtual TTenantInfo GetServerlessTenantInfo() const = 0;
 };
 
 // Test queries

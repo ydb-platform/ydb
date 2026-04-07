@@ -150,6 +150,28 @@ public:
         return ChunkTracker.EstimateSpaceColor(owner, allocationSize, occupancy);
     }
 
+    double GetPDiskUsage() const {
+        i64 totalUsed = ChunkTracker.GetTotalUsed();
+        i64 totalHardLimit = ChunkTracker.GetTotalHardLimit();
+        return 100.0 * (totalHardLimit ? (double)totalUsed / totalHardLimit : 1.0);
+    }
+
+    NKikimrBlobStorage::TPDiskSpaceColor::E GetPDiskCapacityAlert() const {
+        return ChunkTracker.GetPDiskCapacityAlert();
+    }
+
+    double GetVDiskSlotUsage(TOwner owner) const {
+        i64 used = ChunkTracker.GetOwnerUsed(owner);
+        ui32 lightYellowLimit = ChunkTracker.ColorFlagLimit(owner, NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_YELLOW);
+        return 100.0 * (lightYellowLimit ? (double)used / lightYellowLimit : 1.0);
+    }
+
+    double GetVDiskRawUsage(TOwner owner) const {
+        i64 used = ChunkTracker.GetOwnerUsed(owner);
+        i64 hardLimit = ChunkTracker.GetOwnerHardLimit(owner);
+        return 100.0 * (hardLimit ? (double)used / hardLimit : 1.0);
+    }
+
     //
     // Trimming
     //
@@ -174,6 +196,18 @@ public:
 
     ui32 ColorFlagLimit(TOwner owner, NKikimrBlobStorage::TPDiskSpaceColor::E color) {
         return ChunkTracker.ColorFlagLimit(owner, color);
+    }
+
+    //
+    // Runtime (re)configuration
+    //
+
+    void SetExpectedOwnerCount(size_t newOwnerCount) {
+        ChunkTracker.SetExpectedOwnerCount(newOwnerCount);
+    }
+
+    void SetColorBorder(NKikimrBlobStorage::TPDiskSpaceColor::E colorBorder) {
+        ChunkTracker.SetColorBorder(colorBorder);
     }
 
     //

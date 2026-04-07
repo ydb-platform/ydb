@@ -40,6 +40,9 @@ int ComputeTypeComplexity(const TType* type)
         case ETypeName::Date32:
         case ETypeName::Datetime64:
         case ETypeName::Timestamp64:
+        case ETypeName::TzDate32:
+        case ETypeName::TzDatetime64:
+        case ETypeName::TzTimestamp64:
         case ETypeName::Interval64:
         case ETypeName::Void:
         case ETypeName::Null:
@@ -79,4 +82,3 @@ int ComputeTypeComplexity(const TType* type)
 }
 
 } // namespace NTi
-

@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: pytest-mock
-Version: 3.14.1
+Version: 3.15.1
 Summary: Thin-wrapper around the mock package for easier use with pytest
 Author-email: Bruno Oliveira <nicoddemus@gmail.com>
 License: MIT
@@ -17,7 +17,6 @@ Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3 :: Only
-Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
@@ -25,7 +24,7 @@ Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: 3.14
 Classifier: Topic :: Software Development :: Testing
-Requires-Python: >=3.8
+Requires-Python: >=3.9
 Description-Content-Type: text/x-rst
 License-File: LICENSE
 Requires-Dist: pytest>=6.2.5

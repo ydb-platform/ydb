@@ -15,13 +15,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/compute/kernels/scalar_cast_internal.h"
-#include "arrow/compute/cast_internal.h"
-#include "arrow/compute/kernels/common_internal.h"
-#include "arrow/extension_type.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/float16.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/scalar_cast_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/cast_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/common_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension_type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/float16.h"
 
 namespace arrow20 {
 

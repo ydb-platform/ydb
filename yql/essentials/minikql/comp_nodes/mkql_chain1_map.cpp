@@ -1,6 +1,6 @@
 #include "mkql_chain1_map.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_custom_list.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
@@ -18,17 +18,21 @@ struct TComputationNodes {
     IComputationNode* const UpdateState;
 };
 
-class TFold1MapFlowWrapper : public TStatefulFlowCodegeneratorNode<TFold1MapFlowWrapper> {
+class TFold1MapFlowWrapper: public TStatefulFlowCodegeneratorNode<TFold1MapFlowWrapper> {
     typedef TStatefulFlowCodegeneratorNode<TFold1MapFlowWrapper> TBaseComputation;
-public:
-     TFold1MapFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* flow,
-        IComputationExternalNode* itemArg, IComputationExternalNode* stateArg,
-        IComputationNode* initItem, IComputationNode* initState,
-        IComputationNode* updateItem, IComputationNode* updateState)
-        : TBaseComputation(mutables, flow, kind, EValueRepresentation::Embedded),
-            Flow(flow), ComputationNodes({itemArg, stateArg, initItem, initState, updateItem, updateState})
 
-    {}
+public:
+    TFold1MapFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* flow,
+                         IComputationExternalNode* itemArg, IComputationExternalNode* stateArg,
+                         IComputationNode* initItem, IComputationNode* initState,
+                         IComputationNode* updateItem, IComputationNode* updateState)
+        : TBaseComputation(mutables, flow, kind, EValueRepresentation::Embedded)
+        ,
+        Flow(flow)
+        , ComputationNodes({itemArg, stateArg, initItem, initState, updateItem, updateState})
+
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         auto item = Flow->GetValue(ctx);
@@ -115,29 +119,35 @@ private:
 template <bool IsStream>
 class TBaseChain1MapWrapper {
 public:
-    class TListValue : public TCustomListValue {
+    class TListValue: public TCustomListValue {
     public:
-        class TIterator : public TComputationValue<TIterator> {
+        class TIterator: public TComputationValue<TIterator> {
         public:
             TIterator(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& iter, const TComputationNodes& computationNodes)
                 : TComputationValue<TIterator>(memInfo)
                 , CompCtx(compCtx)
                 , Iter(std::move(iter))
                 , ComputationNodes(computationNodes)
-            {}
+            {
+            }
 
         private:
             bool Next(NUdf::TUnboxedValue& value) final {
-                if (!Iter.Next(ComputationNodes.ItemArg->RefValue(CompCtx))) {
-                    return false;
+                if (Length > 0) {
+                    ComputationNodes.StateArg->SetValue(CompCtx, std::move(PreservedState));
                 }
 
+                NYql::NUdf::TUnboxedValue fetchResult;
+                if (!Iter.Next(fetchResult)) {
+                    return false;
+                }
+                ComputationNodes.ItemArg->SetValue(CompCtx, std::move(fetchResult));
                 ++Length;
 
                 auto itemNode = Length == 1 ? ComputationNodes.InitItem : ComputationNodes.UpdateItem;
                 auto stateNode = Length == 1 ? ComputationNodes.InitState : ComputationNodes.UpdateState;
                 value = itemNode->GetValue(CompCtx);
-                ComputationNodes.StateArg->SetValue(CompCtx, stateNode->GetValue(CompCtx));
+                PreservedState = stateNode->GetValue(CompCtx);
                 return true;
             }
 
@@ -145,6 +155,7 @@ public:
             const NUdf::TUnboxedValue Iter;
             const TComputationNodes& ComputationNodes;
             ui64 Length = 0;
+            NUdf::TUnboxedValue PreservedState;
         };
 
         TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& list, const TComputationNodes& computationNodes)
@@ -152,7 +163,8 @@ public:
             , CompCtx(compCtx)
             , List(std::move(list))
             , ComputationNodes(computationNodes)
-        {}
+        {
+        }
 
     private:
         NUdf::TUnboxedValue GetListIterator() const final {
@@ -180,7 +192,7 @@ public:
         const TComputationNodes& ComputationNodes;
     };
 
-    class TStreamValue : public TComputationValue<TStreamValue> {
+    class TStreamValue: public TComputationValue<TStreamValue> {
     public:
         using TBase = TComputationValue<TStreamValue>;
 
@@ -189,14 +201,18 @@ public:
             , CompCtx(compCtx)
             , List(std::move(list))
             , ComputationNodes(computationNodes)
-        {}
+        {
+        }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& value) final {
-            const auto status = List.Fetch(ComputationNodes.ItemArg->RefValue(CompCtx));
+            NYql::NUdf::TUnboxedValue fetchResult;
+            const auto status = List.Fetch(fetchResult);
             if (status != NUdf::EFetchStatus::Ok) {
                 return status;
             }
+
+            ComputationNodes.ItemArg->SetValue(CompCtx, std::move(fetchResult));
 
             ++Length;
 
@@ -214,13 +230,15 @@ public:
     };
 
     TBaseChain1MapWrapper(IComputationNode* list, IComputationExternalNode* itemArg, IComputationExternalNode* stateArg,
-        IComputationNode* initItem, IComputationNode* initState,
-        IComputationNode* updateItem, IComputationNode* updateState)
-        : List(list), ComputationNodes({itemArg, stateArg, initItem, initState, updateItem, updateState})
-    {}
+                          IComputationNode* initItem, IComputationNode* initState,
+                          IComputationNode* updateItem, IComputationNode* updateState)
+        : List(list)
+        , ComputationNodes({itemArg, stateArg, initItem, initState, updateItem, updateState})
+    {
+    }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    template<bool IsFirst>
+    template <bool IsFirst>
     Function* GenerateMapper(NYql::NCodegen::ICodegen& codegen, const TString& name) const {
         auto& module = codegen.GetModule();
         auto& context = codegen.GetContext();
@@ -234,14 +252,17 @@ public:
         MKQL_ENSURE(codegenItemArg, "Item arg must be codegenerator node.");
         MKQL_ENSURE(codegenStateArg, "State arg must be codegenerator node.");
 
-        if (const auto f = module.getFunction(name.c_str()))
+        if (const auto f = module.getFunction(name.c_str())) {
             return f;
+        }
 
         const auto valueType = Type::getInt128Ty(context);
         const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = IsStream ? Type::getInt32Ty(context) : Type::getInt1Ty(context);
-        const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType)}, false);
+        const auto funcType = IsStream
+                                  ? FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType)}, false)
+                                  : FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(valueType)}, false);
 
         TCodegenContext ctx(codegen);
         ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -252,6 +273,7 @@ public:
 
         ctx.Ctx = &*args;
         const auto containerArg = &*++args;
+        const auto stateArg = IsStream ? nullptr : &*++args;
         const auto valuePtr = &*++args;
 
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
@@ -259,17 +281,22 @@ public:
 
         const auto container = static_cast<Value*>(containerArg);
 
+        if constexpr (IsStream) {
+            Y_ABORT_UNLESS(stateArg == nullptr);
+        } else {
+            if constexpr (!IsFirst) {
+                codegenStateArg->CreateSetValue(ctx, block, stateArg);
+            }
+        }
+
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
 
-        const auto itemPtr = codegenItemArg->CreateRefValue(ctx, block);
-        const auto status = IsStream ?
-            CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, itemPtr):
-            CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(statusType, container, codegen, block, itemPtr);
+        const auto [status, itemPtr] = RefValueWithCallResult(codegenItemArg, ctx, block, [&](Value* itemPtr) {
+            return IsStream ? CallBoxedValueFetch(container, ctx, block, itemPtr) : CallBoxedValueNext(container, ctx, block, itemPtr);
+        });
 
-        const auto icmp = IsStream ?
-            CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, status, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block):
-            CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::getFalse(context), "cond", block);
+        const auto icmp = IsStream ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, status, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block) : CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::getFalse(context), "cond", block);
 
         BranchInst::Create(done, good, icmp, block);
         block = good;
@@ -279,7 +306,13 @@ public:
 
         const auto nextState = GetNodeValue(newState, ctx, block);
 
-        codegenStateArg->CreateSetValue(ctx, block, nextState);
+        if constexpr (IsStream) {
+            codegenStateArg->CreateSetValue(ctx, block, nextState);
+        } else {
+            ValueUnRef(EValueRepresentation::Any, stateArg, ctx, block);
+            new StoreInst(nextState, stateArg, block);
+            ValueAddRef(EValueRepresentation::Any, stateArg, ctx, block);
+        }
 
         BranchInst::Create(done, block);
         block = done;
@@ -301,21 +334,25 @@ public:
     const TComputationNodes ComputationNodes;
 };
 
-class TStreamChain1MapWrapper : public TCustomValueCodegeneratorNode<TStreamChain1MapWrapper>, private TBaseChain1MapWrapper<true> {
+class TStreamChain1MapWrapper: public TCustomValueCodegeneratorNode<TStreamChain1MapWrapper>, private TBaseChain1MapWrapper<true> {
     typedef TCustomValueCodegeneratorNode<TStreamChain1MapWrapper> TBaseComputation;
     typedef TBaseChain1MapWrapper<true> TBaseWrapper;
+
 public:
     TStreamChain1MapWrapper(TComputationMutables& mutables, IComputationNode* list,
-        IComputationExternalNode* itemArg, IComputationExternalNode* stateArg,
-        IComputationNode* initItem, IComputationNode* initState,
-        IComputationNode* updateItem, IComputationNode* updateState
-    ) : TBaseComputation(mutables), TBaseWrapper(list, itemArg, stateArg, initItem, initState, updateItem, updateState)
-    {}
+                            IComputationExternalNode* itemArg, IComputationExternalNode* stateArg,
+                            IComputationNode* initItem, IComputationNode* initState,
+                            IComputationNode* updateItem, IComputationNode* updateState)
+        : TBaseComputation(mutables)
+        , TBaseWrapper(list, itemArg, stateArg, initItem, initState, updateItem, updateState)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
 #ifndef MKQL_DISABLE_CODEGEN
-        if (ctx.ExecuteLLVM && MapOne && MapTwo)
+        if (ctx.ExecuteLLVM && MapOne && MapTwo) {
             return ctx.HolderFactory.Create<TStreamCodegenValueOne>(MapOne, MapTwo, &ctx, List->GetValue(ctx));
+        }
 #endif
         return ctx.HolderFactory.Create<TStreamValue>(ctx, List->GetValue(ctx), ComputationNodes);
     }
@@ -339,24 +376,29 @@ private:
     }
 
     void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        if (MapFuncOne)
+        if (MapFuncOne) {
             MapOne = reinterpret_cast<TChainMapPtr>(codegen.GetPointerToFunction(MapFuncOne));
-        if (MapFuncTwo)
+        }
+        if (MapFuncTwo) {
             MapTwo = reinterpret_cast<TChainMapPtr>(codegen.GetPointerToFunction(MapFuncTwo));
+        }
     }
 #endif
 };
 
-class TListChain1MapWrapper : public TBothWaysCodegeneratorNode<TListChain1MapWrapper>, private TBaseChain1MapWrapper<false> {
+class TListChain1MapWrapper: public TBothWaysCodegeneratorNode<TListChain1MapWrapper>, private TBaseChain1MapWrapper<false> {
     typedef TBothWaysCodegeneratorNode<TListChain1MapWrapper> TBaseComputation;
     typedef TBaseChain1MapWrapper<false> TBaseWrapper;
+
 public:
     TListChain1MapWrapper(TComputationMutables& mutables, IComputationNode* list,
-        IComputationExternalNode* itemArg, IComputationExternalNode* stateArg,
-        IComputationNode* initItem, IComputationNode* initState,
-        IComputationNode* updateItem, IComputationNode* updateState
-    ) : TBaseComputation(mutables), TBaseWrapper(list, itemArg, stateArg, initItem, initState, updateItem, updateState)
-    {}
+                          IComputationExternalNode* itemArg, IComputationExternalNode* stateArg,
+                          IComputationNode* initItem, IComputationNode* initState,
+                          IComputationNode* updateItem, IComputationNode* updateState)
+        : TBaseComputation(mutables)
+        , TBaseWrapper(list, itemArg, stateArg, initItem, initState, updateItem, updateState)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto list = List->GetValue(ctx);
@@ -414,9 +456,7 @@ public:
 
             const auto size = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListLength>(Type::getInt64Ty(context), list, ctx.Codegen, block);
 
-            const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ?
-                new AllocaInst(elementsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()):
-                new AllocaInst(elementsType, 0U, "items_ptr", block);
+            const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(elementsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()) : new AllocaInst(elementsType, 0U, "items_ptr", block);
             const auto array = GenNewArray(ctx, size, itemsPtr, block);
             const auto items = new LoadInst(elementsType, itemsPtr, "items", block);
 
@@ -469,12 +509,9 @@ public:
         {
             block = lazy;
 
-            const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TListChain1MapWrapper::MakeLazyList>());
             const auto ptrType = PointerType::getUnqual(StructType::get(context));
             const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-            const auto funType = FunctionType::get(list->getType() , {self->getType(), ctx.Ctx->getType(), list->getType()}, false);
-            const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
-            const auto value = CallInst::Create(funType, doFuncPtr, {self, ctx.Ctx, list}, "value", block);
+            const auto value = EmitFunctionCall<&TListChain1MapWrapper::MakeLazyList>(list->getType(), {self, ctx.Ctx, list}, ctx, block);
             map->addIncoming(value, block);
             BranchInst::Create(done, block);
         }
@@ -505,15 +542,17 @@ private:
 
     void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
         TMutableCodegeneratorRootNode<TListChain1MapWrapper>::FinalizeFunctions(codegen);
-        if (MapFuncOne)
+        if (MapFuncOne) {
             MapOne = reinterpret_cast<TChainMapPtr>(codegen.GetPointerToFunction(MapFuncOne));
-        if (MapFuncTwo)
+        }
+        if (MapFuncTwo) {
             MapTwo = reinterpret_cast<TChainMapPtr>(codegen.GetPointerToFunction(MapFuncTwo));
+        }
     }
 #endif
 };
 
-}
+} // namespace
 
 IComputationNode* WrapChain1Map(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 7, "Expected 7 args");
@@ -536,5 +575,5 @@ IComputationNode* WrapChain1Map(TCallable& callable, const TComputationNodeFacto
     THROW yexception() << "Expected flow, list or stream.";
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

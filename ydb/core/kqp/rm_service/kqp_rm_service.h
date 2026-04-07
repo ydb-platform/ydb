@@ -378,7 +378,7 @@ struct TKqpProxySharedResources {
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
     TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker = {},
     std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources = nullptr,
-    ui32 nodeId = 0);
+    ui32 nodeId = 0, TDuration warmupDeadline = TDuration::Zero());
 
 std::shared_ptr<NRm::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> nodeId = Nothing());
 std::shared_ptr<NRm::IKqpResourceManager> TryGetKqpResourceManager(TMaybe<ui32> nodeId = Nothing());

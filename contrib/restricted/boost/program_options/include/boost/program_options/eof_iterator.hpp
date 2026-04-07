@@ -11,12 +11,12 @@
 namespace boost {
 
     /** The 'eof_iterator' class is useful for constructing forward iterators
-        in cases where iterator extract data from some source and it's easy
+        in cases where the iterator extracts data from some source and it's easy
         to detect 'eof' \-- i.e. the situation where there's no data. One
         apparent example is reading lines from a file.
 
         Implementing such iterators using 'iterator_facade' directly would
-        require to create class with three core operation, a couple of
+        require to create class with three core operations, a couple of
         constructors. When using 'eof_iterator', the derived class should define
         only one method to get new value, plus a couple of constructors.
 

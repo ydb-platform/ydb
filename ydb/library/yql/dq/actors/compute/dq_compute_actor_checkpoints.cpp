@@ -351,7 +351,7 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvGetTaskStateResult::TPt
 void TDqComputeActorCheckpoints::AfterStateLoading(const TMaybe<TString>& error) {
     auto& checkpoint = RestoringTaskRunnerForCheckpoint;
     if (error.Defined()) {
-        auto message = TStringBuilder() << "Failed to load state: " << error << ", ABORTED";        
+        auto message = TStringBuilder() << "Failed to load state: " << error << ", ABORTED";
         LOG_CP_E(checkpoint, message);
         NYql::TIssues issues;
         issues.AddIssue(message);
@@ -586,13 +586,31 @@ NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TDqTaskSettings& tas
 }
 
 bool IsIngress(const TDqTaskSettings& task) {
-    // No inputs at all or the only inputs are sources.
-    for (const auto& input : task.GetInputs()) {
-        if (!input.HasSource()) {
-            return false;
+    // No inputs at all or there is no input channels with checkpoints.
+    // We don't want to inject checkpoint into tasks that has checkpointed input channels,
+    // otherwise task can be checkpointed twice;
+    // once checkpoint will arrive from channels, it will pause reading from sources too.
+
+    const auto& inputs = task.GetInputs();
+    if (inputs.empty()) {
+        return true;
+    }
+
+    bool hasSource = false;
+    for (const auto& input : inputs) {
+        if (input.HasSource()) {
+            hasSource = true;
+            continue;
+        }
+
+        for (const auto& channel : input.GetChannels()) {
+            if (channel.GetCheckpointingMode() != NDqProto::CHECKPOINTING_MODE_DISABLED) {
+                return false;
+            }
         }
     }
-    return true;
+
+    return hasSource;
 }
 
 bool IsEgress(const TDqTaskSettings& task) {

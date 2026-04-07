@@ -50,28 +50,27 @@ bool RewriteTemporaryTablePath(const TString& database, TString& tablePath, TStr
     return true;
 }
 
-class TShowCreate : public TScanActorBase<TShowCreate> {
+class TShowCreate : public TScanActorWithoutBackPressure<TShowCreate>, public NActors::IActorExceptionHandler {
 public:
-    using TBase  = TScanActorBase<TShowCreate>;
+    using TBase = TScanActorWithoutBackPressure<TShowCreate>;
 
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 
     TShowCreate(const NActors::TActorId& ownerId, ui32 scanId,
-        const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
-        const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
-        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
-        , Database(database)
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken)
+        : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
         , UserToken(std::move(userToken))
     {
     }
 
-    STFUNC(StateWork) {
+    STFUNC(StateScan) {
        switch (ev->GetTypeRewrite()) {
             hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
-            hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, Handle);
+            sFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleAck);
             default:
                 LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
                     "NSysView::TScanActorBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
@@ -80,11 +79,12 @@ public:
 
     STFUNC(StateCollectTableSettings) {
         switch (ev->GetTypeRewrite()) {
-             hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleCollectTableSettings);
-             hFunc(NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult, Handle);
-             default:
-                 LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                     "NSysView::TScanActorBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleCollectTableSettings);
+            hFunc(NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult, Handle);
+            sFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleAck);
+            default:
+                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
+                    "NSysView::TScanActorBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
     }
 
@@ -110,7 +110,25 @@ private:
         return;
     }
 
-    void StartScan() {
+    bool OnUnhandledException(const std::exception_ptr& exception) override {
+        try {
+            if (exception) {
+                std::rethrow_exception(exception);
+            }
+        } catch (const TFormatFail& ex) {
+            ReplyErrorAndDie(ex.Status, ex.Error);
+            return true;
+        }
+
+        return false;
+    }
+
+    bool OnUnhandledException(const std::exception& ex) override {
+        ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, ex.what());
+        return true;
+    }
+
+    void StartScan() final {
         if (!AppData()->FeatureFlags.GetEnableShowCreate()) {
             ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
                 TStringBuilder() << "Sys view 'show_create' is not supported");
@@ -147,7 +165,7 @@ private:
         }
 
         std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
-        navigateRequest->Record.SetDatabaseName(Database);
+        navigateRequest->Record.SetDatabaseName(DatabaseName);
         if (UserToken) {
             navigateRequest->Record.SetUserToken(UserToken->GetSerializedToken());
         }
@@ -165,17 +183,6 @@ private:
         Send(MakeTxProxyID(), navigateRequest.release());
     }
 
-    void Handle(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr&) {
-        StartScan();
-    }
-
-    void ProceedToScan() override {
-        Become(&TShowCreate::StateWork);
-        if (AckReceived) {
-            StartScan();
-        }
-    }
-
     bool NeedToCollectTableSettings(const NKikimrSchemeOp::TTableDescription& tableDesc) {
         return !tableDesc.GetCdcStreams().empty() || !tableDesc.GetSequences().empty();
     }
@@ -188,7 +195,7 @@ private:
 
         for (const auto& cdcStream: tableDesc.GetCdcStreams()) {
             std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
-            navigateRequest->Record.SetDatabaseName(Database);
+            navigateRequest->Record.SetDatabaseName(DatabaseName);
             if (UserToken) {
                 navigateRequest->Record.SetUserToken(UserToken->GetSerializedToken());
             }
@@ -213,7 +220,7 @@ private:
             CollectTableSettingsState->Sequences[sequencePathId] = nullptr;
 
             Send(NSequenceProxy::MakeSequenceProxyServiceID(),
-                new NSequenceProxy::TEvSequenceProxy::TEvGetSequence(Database, sequencePathId)
+                new NSequenceProxy::TEvSequenceProxy::TEvGetSequence(DatabaseName, sequencePathId)
             );
         }
     }
@@ -254,6 +261,19 @@ private:
         switch (status) {
             case NKikimrScheme::StatusSuccess: {
                 const auto& pathDescription = record.GetPathDescription();
+                switch (pathDescription.GetSelf().GetPathType()) {
+                    case NKikimrSchemeOp::EPathTypeTable:
+                    case NKikimrSchemeOp::EPathTypeColumnTable:
+                    case NKikimrSchemeOp::EPathTypeView:
+                        break;
+
+                    default: {
+                        return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                            << "Cannot display show create table result, unsupported path type: " << NKikimrSchemeOp::EPathType_Name(pathDescription.GetSelf().GetPathType())
+                        );
+                    }
+                }
+
                 if (auto pathType = ToString(pathDescription.GetSelf().GetPathType()); pathType != PathType) {
                     return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
                         << "Path type mismatch, expected: " << PathType << ", found: " << pathType
@@ -263,7 +283,7 @@ private:
                 std::pair<TString, TString> pathPair;
                 {
                     TString error;
-                    if (!TrySplitPathByDb(Path, Database, pathPair, error)) {
+                    if (!TrySplitPathByDb(Path, DatabaseName, pathPair, error)) {
                         ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, error);
                         return;
                     }
@@ -275,9 +295,9 @@ private:
                         auto tablePath = pathPair.second;
 
                         bool temporary = false;
-                        if (NKqp::IsSessionsDirPath(Database, pathPair.second)) {
+                        if (NKqp::IsSessionsDirPath(DatabaseName, pathPair.second)) {
                             TString error;
-                            if (!RewriteTemporaryTablePath(Database, tablePath, error)) {
+                            if (!RewriteTemporaryTablePath(DatabaseName, tablePath, error)) {
                                 return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, error);
                             }
                             temporary = true;
@@ -305,9 +325,9 @@ private:
                         auto tablePath = pathPair.second;
 
                         bool temporary = false;
-                        if (NKqp::IsSessionsDirPath(Database, pathPair.second)) {
+                        if (NKqp::IsSessionsDirPath(DatabaseName, pathPair.second)) {
                             TString error;
-                            if (!RewriteTemporaryTablePath(Database, tablePath, error)) {
+                            if (!RewriteTemporaryTablePath(DatabaseName, tablePath, error)) {
                                 return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, error);
                             }
                             temporary = true;
@@ -388,7 +408,7 @@ private:
                 std::pair<TString, TString> pathPair;
                 {
                     TString error;
-                    if (!TrySplitPathByDb(currentPath, Database, pathPair, error)) {
+                    if (!TrySplitPathByDb(currentPath, DatabaseName, pathPair, error)) {
                         ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, error);
                         return;
                     }
@@ -515,7 +535,6 @@ private:
     }
 
 private:
-    TString Database;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString Path;
     TString PathType;
@@ -539,11 +558,11 @@ private:
 }
 
 THolder<NActors::IActor> CreateShowCreate(const NActors::TActorId& ownerId, ui32 scanId,
-    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
-    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns, const TString& database,
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TShowCreate>(ownerId, scanId, sysViewInfo, tableRange, columns, database,
+    return MakeHolder<TShowCreate>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
         std::move(userToken));
 }
 

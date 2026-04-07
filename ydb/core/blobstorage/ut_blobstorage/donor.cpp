@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(Donor) {
                 auto* msg = ev->Get<TEvBlobStorage::TEvVGet>();
 
                 TVDiskID vdid = VDiskIDFromVDiskID(msg->Record.GetVDiskID());
-                
+
                 auto senderActor = env.Runtime->GetActor(ev->Sender);
 
                 auto senderType = senderActor->GetActivityType().GetName();
@@ -307,7 +307,7 @@ Y_UNIT_TEST_SUITE(Donor) {
                 char *end = p + len;
                 TReallyFastRng32 rng(RandomNumber<ui64>());
                 while (p + sizeof(ui32) <= end) {
-                    *reinterpret_cast<ui32*>(p) = rng();
+                    WriteUnaligned<ui32>(p, rng());
                     p += sizeof(ui32);
                 }
                 for (; p != end; ++p) {

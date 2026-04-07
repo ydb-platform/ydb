@@ -9,6 +9,9 @@
 
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
 
+#include <ranges>
+#include <utility>
+
 namespace NYql {
 
 using namespace NNodes;
@@ -84,7 +87,7 @@ void MakeTransitiveClosure(TMap<TString, TSet<TString>>& aliases) {
     }
 }
 
-struct GatherOptionalKeyColumnsOptions {
+struct TGatherOptionalKeyColumnsOptions {
     const TJoinLabels& Labels;
     ui32 InputIndex;
     bool WithInnerOptionals;
@@ -94,7 +97,7 @@ struct GatherOptionalKeyColumnsOptions {
 void GatherOptionalKeyColumnsFromEquality(
     TExprNode::TPtr columns,
     TSet<TString>& optionalKeyColumns,
-    const GatherOptionalKeyColumnsOptions& options
+    const TGatherOptionalKeyColumnsOptions& options
 ) {
     for (ui32 i = 0; i < columns->ChildrenSize(); i += 2) {
         const auto table = columns->Child(i)->Content();
@@ -112,7 +115,7 @@ void GatherOptionalKeyColumnsFromEquality(
 void GatherOptionalKeyColumns(
     TExprNode::TPtr joinTree,
     TSet<TString>& optionalKeyColumns,
-    const GatherOptionalKeyColumnsOptions& options
+    const TGatherOptionalKeyColumnsOptions& options
 ) {
     auto left = joinTree->Child(1);
     auto right = joinTree->Child(2);
@@ -240,14 +243,14 @@ TExprNode::TPtr ApplyJoinPredicate(const TExprNode::TPtr& predicate, const TExpr
 
 bool NeedEmitSkipNullMembers(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
-    static const char flag[] = "EmitSkipNullOnPushdown";
-    return IsOptimizerEnabled<flag>(*types) || !IsOptimizerDisabled<flag>(*types);
+    static const char Flag[] = "EmitSkipNullOnPushdown";
+    return IsOptimizerEnabled<Flag>(*types) || !IsOptimizerDisabled<Flag>(*types);
 }
 
 bool IsPredicatePushdownOverEquiJoinBothSides(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
-    static const char flag[] = "PredicatePushdownOverEquiJoinBothSides";
-    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+    static const char Flag[] = "PredicatePushdownOverEquiJoinBothSides";
+    return IsOptimizerEnabled<Flag>(*types) && !IsOptimizerDisabled<Flag>(*types);
 }
 
 TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(
@@ -444,8 +447,8 @@ TExprNode::TListType ExtractOrPredicatesOverEquiJoin(const TExprNode::TPtr& pred
                     auto expanded = ExpandAndOverOr(orTerm, ctx, types);
                     if (!expanded.empty() && expansionSize + expanded.size() <= types.AndOverOrExpansionLimit) {
                         // Update orTermsToProcess with terms after expansion and repeat
-                        for (auto it = expanded.rbegin(); it != expanded.rend(); it++) {
-                            orTermsToProcess.push_front(std::move(*it));
+                        for (auto& it : std::ranges::reverse_view(expanded)) {
+                            orTermsToProcess.push_front(std::move(it));
                             // joinInputs update is not needed
                             // as innerAndTerm can't be newly constructed node
                         }
@@ -608,8 +611,8 @@ TExprNode::TPtr CreateLabelList(const THashSet<TString>& labels, TExprContext& c
 
 bool FilterPushdownOverJoinOptionalSideIgnoreOnlyKeys(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
-    static const char flag[] = "FilterPushdownOverJoinOptionalSideIgnoreOnlyKeys";
-    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+    static const char Flag[] = "FilterPushdownOverJoinOptionalSideIgnoreOnlyKeys";
+    return IsOptimizerEnabled<Flag>(*types) && !IsOptimizerDisabled<Flag>(*types);
 }
 
 TExprNode::TPtr FilterPushdownOverJoinOptionalSide(
@@ -899,7 +902,7 @@ public:
     TJoinTreeRebuilder(const TJoinLabels& labels, TExprNode::TPtr joinTree, TStringBuf label1, TStringBuf column1, TStringBuf label2, TStringBuf column2,
         TExprContext& ctx, bool rotateJoinTree)
         : JoinLabels_(labels)
-        , JoinTree_(joinTree)
+        , JoinTree_(std::move(joinTree))
         , Labels_{ label1, label2 }
         , Columns_{ column1, column2 }
         , Ctx_(ctx)
@@ -1185,8 +1188,8 @@ private:
 
     const TJoinLabels& JoinLabels_;
     TExprNode::TPtr JoinTree_;
-    TStringBuf Labels_[2];
-    TStringBuf Columns_[2];
+    std::array<TStringBuf, 2> Labels_;
+    std::array<TStringBuf, 2> Columns_;
     TExprContext& Ctx_;
     bool RotateJoinTree_;
 };
@@ -1240,20 +1243,20 @@ TExprNode::TPtr DecayCrossJoinIntoInner(TExprNode::TPtr equiJoin, const TExprNod
 
 bool IsEqualityFilterOverJoinEnabled(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
-    static const char flag[] = "EqualityFilterOverJoin";
-    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+    static const char Flag[] = "EqualityFilterOverJoin";
+    return IsOptimizerEnabled<Flag>(*types) && !IsOptimizerDisabled<Flag>(*types);
 }
 
 bool IsExtractOrPredicatesOverEquiJoinEnabled(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
-    static const char flag[] = "ExtractOrPredicatesOverEquiJoin";
-    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+    static const char Flag[] = "ExtractOrPredicatesOverEquiJoin";
+    return IsOptimizerEnabled<Flag>(*types) && !IsOptimizerDisabled<Flag>(*types);
 }
 
 bool IsNormalizeEqualityFilterOverJoinEnabled(const TTypeAnnotationContext* types) {
     YQL_ENSURE(types);
-    static const char flag[] = "NormalizeEqualityFilterOverJoin";
-    return IsOptimizerEnabled<flag>(*types) && !IsOptimizerDisabled<flag>(*types);
+    static const char Flag[] = "NormalizeEqualityFilterOverJoin";
+    return !IsOptimizerDisabled<Flag>(*types);
 }
 
 struct TExtraInputPredicates {
@@ -1619,8 +1622,13 @@ TExprBase NormalizeEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoi
             .Lambda(1)
                 .Param("row")
                 .Callable(body.CallableName())
-                    .Apply(0, newPredicateLambda)
-                        .With(0, "row")
+                    .Callable(0, "Coalesce")
+                        .Apply(0, newPredicateLambda)
+                            .With(0, "row")
+                        .Seal()
+                        .Callable(1, "Bool")
+                            .Atom(0, "false")
+                        .Seal()
                     .Seal()
                     .Apply(1, valueLambda)
                         .With(0)
@@ -1755,7 +1763,7 @@ TExprBase HandleEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoinLa
                 extraInputPreds[*idx].MainColumn = it->second.Name;
                 AppendEquality(predicate->Pos(), extraInputPreds[*idx], it->second.Name, col, label, ctx);
             } else {
-                eqSetByInput.insert({*idx, {col, 0}});
+                eqSetByInput.insert({*idx, {.Name=col, .UseCount=0}});
             }
         }
     }

@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/csv/chunker.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/chunker.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -23,9 +23,9 @@
 #include <string_view>
 #include <utility>
 
-#include "arrow/csv/lexing_internal.h"
-#include "arrow/status.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/csv/lexing_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 namespace csv {

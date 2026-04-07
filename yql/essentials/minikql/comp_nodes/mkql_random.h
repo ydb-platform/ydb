@@ -8,14 +8,13 @@ IComputationNode* WrapNewMTRand(TCallable& callable, const TComputationNodeFacto
 IComputationNode* WrapNextMTRand(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
 enum class ERandom {
-   Double,
-   Number,
-   Uuid
+    Double,
+    Number,
+    Uuid
 };
 
 template <ERandom Rnd>
 IComputationNode* WrapRandom(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

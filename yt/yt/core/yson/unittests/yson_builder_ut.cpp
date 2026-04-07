@@ -1,4 +1,5 @@
 #include <yt/yt/core/yson/consumer.h>
+#include <yt/yt/core/yson/forwarding_consumer.h>
 #include <yt/yt/core/yson/string.h>
 #include <yt/yt/core/yson/yson_builder.h>
 
@@ -11,7 +12,7 @@ namespace {
 
 TEST(TYsonStringBuilderTest, Simple)
 {
-    NYson::TYsonStringBuilder builder;
+    TYsonStringBuilder builder;
     builder->OnStringScalar("some_scalar");
     ASSERT_EQ(builder.Flush().ToString(), TString{"\1\x16some_scalar"});
     ASSERT_TRUE(builder.IsEmpty());
@@ -19,7 +20,7 @@ TEST(TYsonStringBuilderTest, Simple)
 
 TEST(TYsonStringBuilderTest, Reusing)
 {
-    NYson::TYsonStringBuilder builder;
+    TYsonStringBuilder builder;
     builder->OnStringScalar("some_scalar1");
     ASSERT_EQ(builder.Flush().ToString(), TString{"\1\x18some_scalar1"});
     ASSERT_TRUE(builder.IsEmpty());
@@ -31,7 +32,7 @@ TEST(TYsonStringBuilderTest, Reusing)
 
 TEST(TYsonStringBuilderTest, Checkpoints)
 {
-    NYson::TYsonStringBuilder builder;
+    TYsonStringBuilder builder;
     builder->OnStringScalar("some_scalar");
 
     auto checkpoint = builder.CreateCheckpoint();
@@ -45,7 +46,7 @@ TEST(TYsonStringBuilderTest, Checkpoints)
 
 TEST(TYsonStringBuilderTest, MapCheckpoints)
 {
-    NYson::TYsonStringBuilder builder(NYson::EYsonFormat::Text);
+    TYsonStringBuilder builder(EYsonFormat::Text);
 
     builder->OnBeginMap();
 
@@ -64,13 +65,22 @@ TEST(TYsonStringBuilderTest, MapCheckpoints)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TDirectForwardingYsonConsumer
+    : public TForwardingYsonConsumer
+{
+    TDirectForwardingYsonConsumer(IYsonConsumer* consumer)
+    {
+        Forward(consumer);
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TYsonBuilderTest, Forwarding)
 {
-    NYson::TYsonStringBuilder stringBuilder(NYson::EYsonFormat::Text);
-    NYson::TYsonBuilder builder(
-        NYson::EYsonBuilderForwardingPolicy::Forward,
-        &stringBuilder,
-        stringBuilder.GetConsumer());
+    TYsonStringBuilder stringBuilder(EYsonFormat::Text);
+    TYsonBuilder<TDirectForwardingYsonConsumer> builder(stringBuilder);
+
     builder->OnBeginMap();
     auto checkpoint = builder.CreateCheckpoint();
     builder->OnKeyedItem("key");

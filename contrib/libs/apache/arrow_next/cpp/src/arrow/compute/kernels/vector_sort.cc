@@ -17,9 +17,9 @@
 
 #include <unordered_set>
 
-#include "arrow/compute/function.h"
-#include "arrow/compute/kernels/vector_sort_internal.h"
-#include "arrow/compute/registry.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/function.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/vector_sort_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/registry.h"
 
 namespace arrow20 {
 

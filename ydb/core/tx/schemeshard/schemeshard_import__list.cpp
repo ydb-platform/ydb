@@ -22,13 +22,16 @@ struct TSchemeShard::TImport::TTxList: public TSchemeShard::TXxport::TTxList<
         if (str == "import/s3") {
             parsed = TImportInfo::EKind::S3;
             return true;
+        } else if (str == "import/fs") {
+            parsed = TImportInfo::EKind::FS;
+            return true;
         }
 
         return false;
     }
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
-        return DoExecuteImpl(Self->Imports, txc, ctx);
+        return DoExecuteImpl(Self->Imports, Self->ImportsByTime, txc, ctx);
     }
 
 }; // TTxList

@@ -126,7 +126,7 @@ int TCommandConfigFetch::Run(TConfig& config) {
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     auto client = NYdb::NConfig::TConfigClient(*driver);
 
-    NYdb::NConfig::TFetchConfigResult result(TStatus(EStatus::CLIENT_CALL_UNIMPLEMENTED, {}), {});
+    NYdb::NConfig::TFetchConfigResult result(TStatus(EStatus::CLIENT_CALL_UNIMPLEMENTED, {}), {}, {});
 
     if (!UseLegacyApi) {
         NYdb::NConfig::TFetchAllConfigsSettings settings;
@@ -278,8 +278,8 @@ void TCommandConfigReplace::Parse(TConfig& config) {
     if (!IgnoreCheck) {
         NYamlConfig::GetMainMetadata(configStr);
         auto tree = NFyaml::TDocument::Parse(configStr);
-        const auto resolved = NYamlConfig::ResolveAll(tree);
-        Y_UNUSED(resolved); // we can't check it better without ydbd
+
+        NYamlConfig::ResolveUniqueDocs(tree, [](NYamlConfig::TDocumentConfig&&) {});
     }
 }
 

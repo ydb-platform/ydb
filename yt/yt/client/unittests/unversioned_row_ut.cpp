@@ -19,7 +19,7 @@ using namespace NTableClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TUnversionedValue, TestConversionToYsonTokenWriter)
+TEST(TUnversionedValueTest, TestConversionToYsonTokenWriter)
 {
     auto convert = [] (TUnversionedValue value) {
         TStringStream stream;
@@ -49,13 +49,13 @@ TEST(TUnversionedValue, TestConversionToYsonTokenWriter)
     }
     {
         auto value = MakeUnversionedStringValue("boo");
-        TString parsed;
-        EXPECT_NO_THROW(parsed = ConvertTo<TString>(TYsonString(convert(value))));
+        std::string parsed;
+        EXPECT_NO_THROW(parsed = ConvertTo<std::string>(TYsonString(convert(value))));
         EXPECT_EQ(parsed, "boo");
     }
     {
         auto value = MakeUnversionedNullValue();
-        TString str;
+        std::string str;
         EXPECT_NO_THROW(str = convert(value));
         EXPECT_EQ(str, "#");
     }
@@ -86,13 +86,15 @@ static_assert(TUnversionedValueConversionTraits<std::optional<i64>>::Inline, "i6
 static_assert(TUnversionedValueConversionTraits<std::optional<i64>>::Scalar, "i64? must be scalar.");
 static_assert(!TUnversionedValueConversionTraits<TString>::Inline, "TString must not be inline.");
 static_assert(TUnversionedValueConversionTraits<TString>::Scalar, "TString must be scalar.");
+static_assert(!TUnversionedValueConversionTraits<std::string>::Inline, "std::string must not be inline.");
+static_assert(TUnversionedValueConversionTraits<std::string>::Scalar, "std::string must be scalar.");
 static_assert(TUnversionedValueConversionTraits<TAnnotatedValue<i64>>::Scalar, "i64 must be scalar.");
 YT_DEFINE_STRONG_TYPEDEF(TStrongInt, i64);
 static_assert(TUnversionedValueConversionTraits<TStrongInt>::Scalar, "TStrongInt must be scalar.");
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TMakeUnversionedOwningRow, Empty)
+TEST(TMakeUnversionedOwningRowTest, Empty)
 {
     auto row = MakeUnversionedOwningRow();
     EXPECT_EQ(0, row.GetCount());
@@ -107,10 +109,11 @@ void CheckSingleValue(T value)
     EXPECT_EQ(value, FromUnversionedValue<T>(row[0]));
 }
 
-TEST(TMakeUnversionedOwningRow, SingleValue)
+TEST(TMakeUnversionedOwningRowTest, SingleValue)
 {
     CheckSingleValue(TGuid::Create());
     CheckSingleValue(TString("hello"));
+    CheckSingleValue(std::string("hello"));
     CheckSingleValue(TStringBuf("hello"));
     CheckSingleValue(true);
     CheckSingleValue(TYsonString(TStringBuf("{a=1}")));
@@ -128,15 +131,15 @@ TEST(TMakeUnversionedOwningRow, SingleValue)
     CheckSingleValue(TStrongInt(123));
 }
 
-TEST(TMakeUnversionedOwningRow, CharPtr)
+TEST(TMakeUnversionedOwningRowTest, CharPtr)
 {
     auto row = MakeUnversionedOwningRow("test");
     EXPECT_EQ(1, row.GetCount());
     EXPECT_EQ(0, row[0].Id);
-    EXPECT_EQ("test", FromUnversionedValue<TString>(row[0]));
+    EXPECT_EQ("test", FromUnversionedValue<std::string>(row[0]));
 }
 
-TEST(TMakeUnversionedOwningRow, NullValue)
+TEST(TMakeUnversionedOwningRowTest, NullValue)
 {
     auto row = MakeUnversionedOwningRow(std::nullopt);
     EXPECT_EQ(1, row.GetCount());
@@ -144,20 +147,20 @@ TEST(TMakeUnversionedOwningRow, NullValue)
     EXPECT_EQ(EValueType::Null, row[0].Type);
 }
 
-TEST(TMakeUnversionedOwningRow, Tuple)
+TEST(TMakeUnversionedOwningRowTest, Tuple)
 {
-    auto row = MakeUnversionedOwningRow(TString("hello"), true);
+    auto row = MakeUnversionedOwningRow(std::string("hello"), true);
     EXPECT_EQ(2, row.GetCount());
     EXPECT_EQ(0, row[0].Id);
-    EXPECT_EQ("hello", FromUnversionedValue<TString>(row[0]));
+    EXPECT_EQ("hello", FromUnversionedValue<std::string>(row[0]));
     EXPECT_EQ(1, row[1].Id);
     EXPECT_EQ(true, FromUnversionedValue<bool>(row[1]));
 }
 
-TEST(TMakeUnversionedOwningRow, FromUnversionedRow)
+TEST(TMakeUnversionedOwningRowTest, FromUnversionedRow)
 {
-    auto row = MakeUnversionedOwningRow(TString("hello"), TStringBuf("world"), 123);
-    TString a;
+    auto row = MakeUnversionedOwningRow(std::string("hello"), TStringBuf("world"), 123);
+    std::string a;
     TStringBuf b;
     i16 c;
     FromUnversionedRow(row, &a, &b, &c);
@@ -166,19 +169,19 @@ TEST(TMakeUnversionedOwningRow, FromUnversionedRow)
     EXPECT_EQ(123, c);
 }
 
-TEST(TMakeUnversionedOwningRow, TupleFromUnversionedRow)
+TEST(TMakeUnversionedOwningRowTest, TupleFromUnversionedRow)
 {
-    auto row = MakeUnversionedOwningRow(TString("hello"), TStringBuf("world"), 123);
-    auto [a, b, c] = FromUnversionedRow<TString, TStringBuf, i16>(row);
+    auto row = MakeUnversionedOwningRow(std::string("hello"), TStringBuf("world"), 123);
+    auto [a, b, c] = FromUnversionedRow<std::string, TStringBuf, i16>(row);
     EXPECT_EQ("hello", a);
     EXPECT_EQ("world", b);
     EXPECT_EQ(123, c);
 }
 
-TEST(TMakeUnversionedOwningRow, ExplicitIds)
+TEST(TMakeUnversionedOwningRowTest, ExplicitIds)
 {
     auto row = MakeUnversionedOwningRow(
-        TAnnotatedValue{TString("hello"), 10},
+        TAnnotatedValue{std::string("hello"), 10},
         TAnnotatedValue{TStringBuf("world"), 20});
     EXPECT_EQ(2, row.GetCount());
     EXPECT_EQ(10, row[0].Id);
@@ -187,14 +190,14 @@ TEST(TMakeUnversionedOwningRow, ExplicitIds)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TUnversionedRowsBuilder, Empty)
+TEST(TUnversionedRowsBuilderTest, Empty)
 {
     TUnversionedRowsBuilder builder;
     auto rows = builder.Build();
     EXPECT_EQ(0, std::ssize(rows));
 }
 
-TEST(TUnversionedRowsBuilder, SomeValues)
+TEST(TUnversionedRowsBuilderTest, SomeValues)
 {
     TUnversionedRowsBuilder builder;
     builder.AddRow(1, "hello");
@@ -202,14 +205,14 @@ TEST(TUnversionedRowsBuilder, SomeValues)
     auto rows = builder.Build();
     EXPECT_EQ(2, std::ssize(rows));
     {
-        auto [i, s] = FromUnversionedRow<int, TString>(rows[0]);
+        auto [i, s] = FromUnversionedRow<int, std::string>(rows[0]);
         EXPECT_EQ(1, i);
         EXPECT_EQ("hello", s);
         EXPECT_EQ(0, rows[0][0].Id);
         EXPECT_EQ(1, rows[0][1].Id);
     }
     {
-        auto [i, s] = FromUnversionedRow<int, TString>(rows[1]);
+        auto [i, s] = FromUnversionedRow<int, std::string>(rows[1]);
         EXPECT_EQ(2, i);
         EXPECT_EQ("world", s);
         EXPECT_EQ(0, rows[1][0].Id);
@@ -217,7 +220,7 @@ TEST(TUnversionedRowsBuilder, SomeValues)
     }
 }
 
-TEST(TUnversionedRowsBuilder, AnnotatedValue)
+TEST(TUnversionedRowsBuilderTest, AnnotatedValue)
 {
     TUnversionedRowsBuilder builder;
     builder.AddRow(TAnnotatedValue{1, 10}, TAnnotatedValue{"hello", 20});
@@ -226,14 +229,14 @@ TEST(TUnversionedRowsBuilder, AnnotatedValue)
     auto rows = builder.Build();
     EXPECT_EQ(3, std::ssize(rows));
     {
-        auto [i, s] = FromUnversionedRow<int, TString>(rows[0]);
+        auto [i, s] = FromUnversionedRow<int, std::string>(rows[0]);
         EXPECT_EQ(1, i);
         EXPECT_EQ("hello", s);
         EXPECT_EQ(10, rows[0][0].Id);
         EXPECT_EQ(20, rows[0][1].Id);
     }
     {
-        auto [i, s] = FromUnversionedRow<int, TString>(rows[1]);
+        auto [i, s] = FromUnversionedRow<int, std::string>(rows[1]);
         EXPECT_EQ(2, i);
         EXPECT_EQ("world", s);
         EXPECT_EQ(30, rows[1][0].Id);

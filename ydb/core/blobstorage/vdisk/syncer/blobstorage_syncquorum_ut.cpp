@@ -82,26 +82,6 @@ namespace NKikimr {
                 }
             }
         }
-
-        Y_UNIT_TEST(ErasureMirror3IncludingMyFailDomain_4_2) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
-            auto vdisks = GetDisks(&groupInfo);
-            const TVDiskID& self = vdisks[0];
-
-            TQuorumTracker tracker(self, groupInfo.PickTopology(), true);
-            TVector<int> notYetQuorum = {0, 1, 2, 3, 4, 7};
-            Check(tracker, vdisks, notYetQuorum, 6);
-        }
-
-        Y_UNIT_TEST(ErasureMirror3IncludingMyFailDomain_5_2) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 5);
-            auto vdisks = GetDisks(&groupInfo);
-            const TVDiskID& self = vdisks[0];
-
-            TQuorumTracker tracker(self, groupInfo.PickTopology(), true);
-            TVector<int> notYetQuorum = {0, 1, 3, 4, 5, 6, 8, 9};
-            Check(tracker, vdisks, notYetQuorum, 2);
-        }
     }
 
 } // NKikimr

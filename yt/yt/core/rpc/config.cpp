@@ -100,6 +100,14 @@ void TServiceConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TMethodTestingConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("random_delay", &TThis::RandomDelay)
+        .Default();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TMethodConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("heavy", &TThis::Heavy)
@@ -132,6 +140,8 @@ void TMethodConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("pooled", &TThis::Pooled)
         .Optional();
+    registrar.Parameter("testing", &TThis::Testing)
+        .Default();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -174,14 +184,12 @@ void TViablePeerRegistryConfig::Register(TRegistrar registrar)
     registrar.Parameter("hashes_per_peer", &TThis::HashesPerPeer)
         .GreaterThan(0)
         .Default(10);
-    registrar.Parameter("peer_priority_strategy", &TThis::PeerPriorityStrategy)
-        .Default(EPeerPriorityStrategy::None);
     registrar.Parameter("min_peer_count_for_priority_awareness", &TThis::MinPeerCountForPriorityAwareness)
         .GreaterThanOrEqual(0)
         .Default(0);
 
     registrar.Parameter("enable_power_of_two_choices_strategy", &TThis::EnablePowerOfTwoChoicesStrategy)
-        .Default(false);
+        .Default(true);
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->MinPeerCountForPriorityAwareness > config->MaxPeerCount) {
@@ -209,6 +217,8 @@ void TDynamicChannelPoolConfig::Register(TRegistrar registrar)
         .Default(TDuration::Seconds(10));
     registrar.Parameter("peer_polling_request_timeout", &TThis::PeerPollingRequestTimeout)
         .Default(TDuration::Seconds(15));
+    registrar.Parameter("peer_priority_strategy", &TThis::PeerPriorityStrategy)
+        .Default(EPeerPriorityStrategy::None);
 
     registrar.Parameter("discovery_session_timeout", &TThis::DiscoverySessionTimeout)
         .Default(TDuration::Minutes(5))
@@ -376,17 +386,19 @@ void TDispatcherDynamicConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TServiceMethod::Register(TRegistrar registrar)
+void TOverloadTrackedServiceMethod::Register(TRegistrar registrar)
 {
     registrar.Parameter("service", &TThis::Service)
         .Default();
     registrar.Parameter("method", &TThis::Method)
         .Default();
+    registrar.Parameter("max_window", &TThis::MaxWindow)
+        .Default(1'024);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TServiceMethodConfig::Register(TRegistrar registrar)
+void TOverloadTrackedServiceMethodConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("service", &TThis::Service)
         .Default();

@@ -15,6 +15,9 @@
 
 namespace NKikimrReplication {
     class TReplicationConfig;
+    class TReplicationLocationConfig;
+    class TWorkerStats;
+    class TEvDescribeReplicationResult;
 }
 
 namespace NKikimr::NReplication::NController {
@@ -53,6 +56,12 @@ public:
         Removing,
         Removed,
         Error = 255
+    };
+
+    class ITargetStats {
+    public:
+        virtual void Serialize(NKikimrReplication::TEvDescribeReplicationResult& destination, bool detailed) const = 0;
+        virtual ~ITargetStats() = default;
     };
 
     class ITarget {
@@ -100,6 +109,10 @@ public:
         virtual void UpdateLag(ui64 workerId, TDuration lag) = 0;
         virtual const TMaybe<TDuration> GetLag() const = 0;
 
+        virtual void UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats) = 0;
+        virtual void WorkerStatusChanged(ui64 workerId, ui64 status) = 0;
+        virtual const ITargetStats* GetStats() = 0;
+
         virtual void Progress(const TActorContext& ctx) = 0;
         virtual void Shutdown(const TActorContext& ctx) = 0;
 
@@ -139,15 +152,16 @@ public:
     const TActorId& GetYdbProxy() const;
     ui64 GetSchemeShardId() const;
     void SetConfig(NKikimrReplication::TReplicationConfig&& config);
+    void SetLocation(const NKikimrReplication::TReplicationLocationConfig& location);
     void ResetCredentials(const TActorContext& ctx);
     const NKikimrReplication::TReplicationConfig& GetConfig() const;
-    const TString& GetDatabase() const;
     void SetState(EState state, TString issue = {});
     EState GetState() const;
     EState GetDesiredState() const;
     void SetDesiredState(EState state);
     const TString& GetIssue() const;
     const TMaybe<TDuration> GetLag() const;
+    const NKikimrReplication::TReplicationLocationConfig& GetLocation() const;
 
     void SetNextTargetId(ui64 value);
     ui64 GetNextTargetId() const;
@@ -155,8 +169,11 @@ public:
     void UpdateSecret(const TString& secretValue);
     ui64 GetExpectedSecretResolverCookie() const;
 
-    void SetTenant(const TString& value);
-    const TString& GetTenant() const;
+    void UpdateResourceId(const TString& value);
+
+    void SetDatabase(const TString& value);
+    const TString& GetDatabase() const;
+    void ResolveDatabase(const TActorContext& ctx);
 
     bool CheckAlterDone() const;
 

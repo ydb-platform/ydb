@@ -1,56 +1,23 @@
 PyHamcrest
 ==========
 
-| |docs| |travis| |coveralls| |landscape| |scrutinizer| |codeclimate|
-| |version| |downloads| |wheel| |supported-versions| |supported-implementations|
+| |docs| |status| |version| |downloads|
 
-.. |docs| image:: https://readthedocs.org/projects/pyhamcrest/badge/?style=flat
-    :target: https://pyhamcrest.readthedocs.org/
+.. |docs| image:: https://readthedocs.org/projects/pyhamcrest/badge/?version=latest
+    :target: https://pyhamcrest.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
 
-.. |travis| image:: http://img.shields.io/travis/hamcrest/PyHamcrest/master.png?style=flat
-    :alt: Travis-CI Build Status
-    :target: https://travis-ci.org/hamcrest/PyHamcrest
+.. |status| image:: https://github.com/hamcrest/PyHamcrest/workflows/CI/badge.svg
+    :alt: CI Build Status
+    :target: https://github.com/hamcrest/PyHamcrest/actions?query=workflow%3ACI
 
-.. |appveyor| image:: https://ci.appveyor.com/api/projects/status/github/hamcrest/PyHamcrest?branch=master
-    :alt: AppVeyor Build Status
-    :target: https://ci.appveyor.com/project/hamcrest/PyHamcrest
-
-.. |coveralls| image:: http://img.shields.io/coveralls/hamcrest/PyHamcrest/master.png?style=flat
-    :alt: Coverage Status
-    :target: https://coveralls.io/r/hamcrest/PyHamcrest
-
-.. |landscape| image:: https://landscape.io/github/hamcrest/PyHamcrest/master/landscape.svg?style=flat
-    :target: https://landscape.io/github/hamcrest/PyHamcrest/master
-    :alt: Code Quality Status
-
-.. |codeclimate| image:: https://codeclimate.com/github/hamcrest/PyHamcrest/badges/gpa.svg
-   :target: https://codeclimate.com/github/hamcrest/PyHamcrest
-   :alt: Code Climate
-
-.. |version| image:: http://img.shields.io/pypi/v/PyHamcrest.png?style=flat
+.. |version| image:: http://img.shields.io/pypi/v/PyHamcrest.svg?style=flat
     :alt: PyPI Package latest release
     :target: https://pypi.python.org/pypi/PyHamcrest
 
-.. |downloads| image:: http://img.shields.io/pypi/dm/PyHamcrest.png?style=flat
+.. |downloads| image:: http://img.shields.io/pypi/dm/PyHamcrest.svg?style=flat
     :alt: PyPI Package monthly downloads
     :target: https://pypi.python.org/pypi/PyHamcrest
-
-.. |wheel| image:: https://pypip.in/wheel/PyHamcrest/badge.png?style=flat
-    :alt: PyPI Wheel
-    :target: https://pypi.python.org/pypi/PyHamcrest
-
-.. |supported-versions| image:: https://pypip.in/py_versions/PyHamcrest/badge.png?style=flat
-    :alt: Supported versions
-    :target: https://pypi.python.org/pypi/PyHamcrest
-
-.. |supported-implementations| image:: https://pypip.in/implementation/PyHamcrest/badge.png?style=flat
-    :alt: Supported imlementations
-    :target: https://pypi.python.org/pypi/PyHamcrest
-
-.. |scrutinizer| image:: https://img.shields.io/scrutinizer/g/hamcrest/PyHamcrest/master.png?style=flat
-    :alt: Scrtinizer Status
-    :target: https://scrutinizer-ci.com/g/hamcrest/PyHamcrest/
 
 
 Introduction
@@ -79,6 +46,12 @@ Hamcrest can be installed using the usual Python packaging tools. It depends on
 distribute, but as long as you have a network connection when you install, the
 installation process will take care of that for you.
 
+For example:
+
+.. code::
+
+ pip install PyHamcrest
+
 My first PyHamcrest test
 ========================
 
@@ -88,16 +61,18 @@ the standard set of matchers:
 
 .. code:: python
 
- from hamcrest import *
+ from hamcrest import assert_that, equal_to
  import unittest
+
 
  class BiscuitTest(unittest.TestCase):
      def testEquals(self):
-         theBiscuit = Biscuit('Ginger')
-         myBiscuit = Biscuit('Ginger')
+         theBiscuit = Biscuit("Ginger")
+         myBiscuit = Biscuit("Ginger")
          assert_that(theBiscuit, equal_to(myBiscuit))
 
- if __name__ == '__main__':
+
+ if __name__ == "__main__":
      unittest.main()
 
 The ``assert_that`` function is a stylized sentence for making a test
@@ -112,14 +87,14 @@ for the tested value in the assertion:
 
 .. code:: python
 
- assert_that(theBiscuit.getChocolateChipCount(), equal_to(10), 'chocolate chips')
- assert_that(theBiscuit.getHazelnutCount(), equal_to(3), 'hazelnuts')
+ assert_that(theBiscuit.getChocolateChipCount(), equal_to(10), "chocolate chips")
+ assert_that(theBiscuit.getHazelnutCount(), equal_to(3), "hazelnuts")
 
 As a convenience, assert_that can also be used to verify a boolean condition:
 
 .. code:: python
 
- assert_that(theBiscuit.isCooked(), 'cooked')
+ assert_that(theBiscuit.isCooked(), "cooked")
 
 This is equivalent to the ``assert_`` method of unittest.TestCase, but because
 it's a standalone function, it offers greater flexibility in test writing.
@@ -163,7 +138,7 @@ PyHamcrest comes with a library of useful matchers:
   * ``all_of`` - ``and`` together all matchers
   * ``any_of`` - ``or`` together all matchers
   * ``anything`` - match anything, useful in composite matchers when you don't care about a particular value
-  * ``is_not`` - negate the matcher
+  * ``is_not``, ``not_`` - negate the matcher
 
 * Sequence
 
@@ -184,7 +159,7 @@ PyHamcrest comes with a library of useful matchers:
 
 * Decorator
 
-  * ``calling`` - wrap a callable in a deffered object, for subsequent matching on calling behaviour
+  * ``calling`` - wrap a callable in a deferred object, for subsequent matching on calling behaviour
   * ``raises`` - Ensure that a deferred callable raises as expected
   * ``described_as`` - give the matcher a custom failure description
   * ``is_`` - decorator to improve readability - see `Syntactic sugar` below
@@ -238,7 +213,7 @@ This is the test we want to write:
 .. code:: python
 
  def testDateIsOnASaturday(self):
-     d = datetime.date(2008, 04, 26)
+     d = datetime.date(2008, 4, 26)
      assert_that(d, is_(on_a_saturday()))
 
 And here's the implementation:
@@ -248,21 +223,30 @@ And here's the implementation:
  from hamcrest.core.base_matcher import BaseMatcher
  from hamcrest.core.helpers.hasmethod import hasmethod
 
- class IsGivenDayOfWeek(BaseMatcher):
 
+ class IsGivenDayOfWeek(BaseMatcher):
      def __init__(self, day):
          self.day = day  # Monday is 0, Sunday is 6
 
      def _matches(self, item):
-         if not hasmethod(item, 'weekday'):
+         if not hasmethod(item, "weekday"):
              return False
          return item.weekday() == self.day
 
      def describe_to(self, description):
-         day_as_string = ['Monday', 'Tuesday', 'Wednesday', 'Thursday',
-                          'Friday', 'Saturday', 'Sunday']
-         description.append_text('calendar date falling on ')    \
-                    .append_text(day_as_string[self.day])
+         day_as_string = [
+             "Monday",
+             "Tuesday",
+             "Wednesday",
+             "Thursday",
+             "Friday",
+             "Saturday",
+             "Sunday",
+         ]
+         description.append_text("calendar date falling on ").append_text(
+             day_as_string[self.day]
+         )
+
 
  def on_a_saturday():
      return IsGivenDayOfWeek(5)
@@ -275,7 +259,7 @@ failure message looks:
 
 .. code:: python
 
- assert_that(datetime.date(2008, 04, 06), is_(on_a_saturday()))
+ assert_that(datetime.date(2008, 4, 6), is_(on_a_saturday()))
 
 fails with the message::
 
@@ -288,16 +272,18 @@ could use it in our test by importing the factory function ``on_a_saturday``:
 
 .. code:: python
 
- from hamcrest import *
+ from hamcrest import assert_that, is_
  import unittest
  from isgivendayofweek import on_a_saturday
 
+
  class DateTest(unittest.TestCase):
      def testDateIsOnASaturday(self):
-         d = datetime.date(2008, 04, 26)
+         d = datetime.date(2008, 4, 26)
          assert_that(d, is_(on_a_saturday()))
 
- if __name__ == '__main__':
+
+ if __name__ == "__main__":
      unittest.main()
 
 Even though the ``on_a_saturday`` function creates a new matcher each time it
@@ -314,7 +300,7 @@ More resources
 * Sources_
 * Hamcrest_
 
-.. _Documentation: http://readthedocs.org/docs/pyhamcrest/en/V1.8.2/
+.. _Documentation: https://pyhamcrest.readthedocs.io/
 .. _Package: http://pypi.python.org/pypi/PyHamcrest
 .. _Sources: https://github.com/hamcrest/PyHamcrest
 .. _Hamcrest: http://hamcrest.org

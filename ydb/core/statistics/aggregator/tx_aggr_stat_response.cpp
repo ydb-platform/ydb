@@ -36,19 +36,20 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
         for (auto& column : Record.GetColumns()) {
             auto tag = column.GetTag();
             for (auto& statistic : column.GetStatistics()) {
-                if (statistic.GetType() == NKikimr::NStat::COUNT_MIN_SKETCH) {
+                if (statistic.GetType() == static_cast<ui32>(EStatType::COUNT_MIN_SKETCH)) {
                     if (!Self->ColumnNames.contains(tag)) {
                         continue;
                     }
 
+                    const auto& cmsStr = statistic.GetData();
+                    std::unique_ptr<TCountMinSketch> cms(TCountMinSketch::FromString(
+                        cmsStr.data(), cmsStr.size()));
                     auto [currentIt, emplaced] = Self->CountMinSketches.try_emplace(tag);
                     if (emplaced) {
-                        currentIt->second.reset(TCountMinSketch::Create());
+                        currentIt->second = std::move(cms);
+                    } else {
+                        *(currentIt->second) += *cms;
                     }
-
-                    auto* data = statistic.GetData().data();
-                    auto* sketch = reinterpret_cast<const TCountMinSketch*>(data);
-                    *(currentIt->second) += *sketch;
                 }
             }
         }
@@ -56,6 +57,11 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
         if (Record.FailedTabletsSize() == 0 ||
             Self->TraversalRound >= Self->MaxTraversalRoundCount)
         {
+            for (auto& [tag, sketch] : Self->CountMinSketches) {
+                TString strSketch(sketch->AsStringBuf());
+                Self->StatisticsToSave.emplace_back(
+                    tag, EStatType::COUNT_MIN_SKETCH, std::move(strSketch));
+            }
             Self->SaveStatisticsToTable();
             return true;
         }

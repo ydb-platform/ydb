@@ -108,7 +108,62 @@ bool TNodeFilter::IsAllowedDataCenter(TDataCenterId dc) const {
 }
 
 bool TNodeFilter::IsAllowedPile(TBridgePileId pile) const {
-    return Hive->IsAllowedPile(pile);
+    if (MustBePrimaryPile) {
+        return Hive->IsPrimaryPile(pile);
+    } else {
+        const auto* pileInfo = Hive->FindPile(pile);
+        if (!pileInfo) {
+            return false;
+        }
+        return pileInfo->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
+    }
+}
+
+TMetrics& TMetrics::operator+=(const TMetrics& other) {
+    CPU += other.CPU;
+    Memory += other.Memory;
+    Network += other.Network;
+    Counter += other.Counter;
+    Storage += other.Storage;
+    ReadThroughput += other.ReadThroughput;
+    WriteThroughput += other.WriteThroughput;
+    ReadIops += other.ReadIops;
+    WriteIops += other.WriteIops;
+    return *this;
+}
+
+void TMetrics::ToProto(NKikimrTabletBase::TMetrics* proto) const {
+    if (CPU) {
+        proto->SetCPU(CPU);
+    }
+    if (Memory) {
+        proto->SetMemory(Memory);
+    }
+    if (Network) {
+        proto->SetNetwork(Network);
+    }
+    if (Counter) {
+        proto->SetCounter(Counter);
+    }
+    if (Storage) {
+        proto->SetStorage(Storage);
+    }
+    if (ReadThroughput) {
+        proto->SetReadThroughput(ReadThroughput);
+    }
+    if (WriteThroughput) {
+        proto->SetWriteThroughput(WriteThroughput);
+    }
+    if (ReadIops) {
+        proto->SetReadIops(ReadIops);
+    }
+    if (WriteIops) {
+        proto->SetWriteIops(WriteIops);
+    }
+    proto->MutableGroupReadThroughput()->Assign(GroupReadThroughput.begin(), GroupReadThroughput.end());
+    proto->MutableGroupWriteThroughput()->Assign(GroupWriteThroughput.begin(), GroupWriteThroughput.end());
+    proto->MutableGroupReadIops()->Assign(GroupReadIops.begin(), GroupReadIops.end());
+    proto->MutableGroupWriteIops()->Assign(GroupWriteIops.begin(), GroupWriteIops.end());
 }
 
 template <typename K, typename V>
@@ -132,6 +187,8 @@ const std::unordered_map<TTabletTypes::EType, TString> TABLET_TYPE_SHORT_NAMES =
                                                                                   {TTabletTypes::Mediator, "M"},
                                                                                   {TTabletTypes::BlockStoreVolume, "BV"},
                                                                                   {TTabletTypes::BlockStorePartition2, "BP"},
+                                                                                  {TTabletTypes::BlockStoreVolumeDirect, "DV"},
+                                                                                  {TTabletTypes::BlockStorePartitionDirect, "DP"},
                                                                                   {TTabletTypes::Kesus, "K"},
                                                                                   {TTabletTypes::SysViewProcessor, "SV"},
                                                                                   {TTabletTypes::FileStore, "FS"},

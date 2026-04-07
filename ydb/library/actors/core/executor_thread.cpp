@@ -103,7 +103,6 @@ namespace NActors {
                         actorPtr = pool->Actors.back();
                         actorPtr->StuckIndex = i;
                         pool->Actors.pop_back();
-                        pool->DeadActorsUsage.emplace_back(actor->GetActivityType().GetIndex(), actor->GetUsage(GetCycleCountFast()));
                     }
                 }
             }
@@ -213,7 +212,7 @@ namespace NActors {
         ThreadCtx.ResetOverwrittenEventsPerMailbox();
         ThreadCtx.ResetOverwrittenTimePerMailboxTs();
         for (; execCtx.ExecutedEvents < ThreadCtx.OverwrittenEventsPerMailbox(); execCtx.ExecutedEvents++) {
-            if (TAutoPtr<IEventHandle> evExt = mailbox->Pop()) {
+            if (std::unique_ptr<IEventHandle> evExt = mailbox->Pop()) {
                 EXECUTOR_THREAD_DEBUG(EDebugLevel::Event, "mailbox->Pop()");
                 recipient = evExt->GetRecipientRewrite();
                 actor = mailbox->FindActor(recipient.LocalId());
@@ -228,7 +227,7 @@ namespace NActors {
                 TActorContext ctx(*mailbox, *this, eventStart, recipient);
                 TlsActivationContext = &ctx; // ensure dtor (if any) is called within actor system
                 // move for destruct before ctx;
-                auto ev = std::move(evExt);
+                TAutoPtr<IEventHandle> ev = evExt.release();
                 if (actor) {
                     EXECUTOR_THREAD_DEBUG(EDebugLevel::Event, "actor is not null");
                     wasWorking = true;
@@ -269,8 +268,6 @@ namespace NActors {
 
                     hpnow = GetCycleCountFast();
                     hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-
-                    actor->OnDequeueEvent();
 
                     size_t dyingActorsCnt = DyingActors.size();
                     EXECUTOR_THREAD_DEBUG(EDebugLevel::Event, "dyingActorsCnt ", dyingActorsCnt);

@@ -13,6 +13,7 @@
 
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace NKikimr {
@@ -42,6 +43,7 @@ struct TAlignedPagePoolCounters {
 
 // NOTE: We intentionally avoid inheritance from std::exception here to make it harder
 // to catch this exception in UDFs code, so we can handle it in the host.
+// NOLINTNEXTLINE(hicpp-exception-baseclass)
 class TMemoryLimitExceededException {
 public:
     virtual ~TMemoryLimitExceededException() = default;
@@ -50,7 +52,7 @@ public:
 class TSystemMmap {
 public:
     static void* Mmap(size_t size);
-    static int Munmap(void* addr, size_t size);
+    static int Munmap(void* addr, size_t size) noexcept;
 };
 
 class TFakeMmap {
@@ -59,10 +61,10 @@ public:
     static std::function<void(void* addr, size_t size)> OnMunmap;
 
     static void* Mmap(size_t size);
-    static int Munmap(void* addr, size_t size);
+    static int Munmap(void* addr, size_t size) noexcept;
 };
 
-template<typename TMmap = TSystemMmap>
+template <typename TMmap = TSystemMmap>
 class TAlignedPagePoolImpl {
 public:
     static constexpr ui64 POOL_PAGE_SIZE = 1ULL << 16; // 64k
@@ -70,8 +72,8 @@ public:
     static constexpr ui64 ALLOC_AHEAD_PAGES = 31;
 
     explicit TAlignedPagePoolImpl(const TSourceLocation& location,
-            const TAlignedPagePoolCounters& counters = TAlignedPagePoolCounters())
-        : Counters_(counters)
+                                  TAlignedPagePoolCounters counters = TAlignedPagePoolCounters())
+        : Counters_(std::move(counters))
         , DebugInfo_(location)
     {
         if (Counters_.PoolsCntr) {
@@ -82,8 +84,8 @@ public:
     TAlignedPagePoolImpl(const TAlignedPagePoolImpl&) = delete;
     TAlignedPagePoolImpl(TAlignedPagePoolImpl&& other) = delete;
 
-    TAlignedPagePoolImpl& operator = (const TAlignedPagePoolImpl&) = delete;
-    TAlignedPagePoolImpl& operator = (TAlignedPagePoolImpl&& other) = delete;
+    TAlignedPagePoolImpl& operator=(const TAlignedPagePoolImpl&) = delete;
+    TAlignedPagePoolImpl& operator=(TAlignedPagePoolImpl&& other) = delete;
 
     ~TAlignedPagePoolImpl();
 
@@ -109,7 +111,7 @@ public:
 
     void* GetPage();
 
-    void ReturnPage(void* addr) noexcept;
+    void ReturnPage(void* addr);
 
     void Swap(TAlignedPagePoolImpl& other) {
         DoSwap(FreePages_, other.FreePages_);
@@ -141,7 +143,7 @@ public:
 
     void* GetBlock(size_t size);
 
-    void ReturnBlock(void* ptr, size_t size) noexcept;
+    void ReturnBlock(void* ptr, size_t size);
 
     size_t GetPeakAllocated() const noexcept {
         return PeakAllocated_;
@@ -243,7 +245,7 @@ public:
 
 protected:
     void* Alloc(size_t size);
-    void Free(void* ptr, size_t size) noexcept;
+    void Free(void* ptr, size_t size);
 
     void UpdatePeaks() {
         PeakAllocated_ = Max(PeakAllocated_, GetAllocated());
@@ -259,6 +261,7 @@ protected:
     void* GetBlockImpl(size_t size);
 
     void* GetPageImpl();
+
 protected:
     std::stack<void*, std::vector<void*>> FreePages_;
     std::unordered_set<void*> AllPages_;
@@ -307,23 +310,23 @@ protected:
 
 using TAlignedPagePool = TAlignedPagePoolImpl<>;
 
-template<typename TMmap = TSystemMmap>
+template <typename TMmap = TSystemMmap>
 void* GetAlignedPage(ui64 size);
 
-template<typename TMmap = TSystemMmap>
+template <typename TMmap = TSystemMmap>
 void* GetAlignedPage();
 
-template<typename TMmap = TSystemMmap>
+template <typename TMmap = TSystemMmap>
 void ReleaseAlignedPage(void* mem, ui64 size);
 
-template<typename TMmap = TSystemMmap>
+template <typename TMmap = TSystemMmap>
 void ReleaseAlignedPage(void* mem);
 
-template<typename TMmap = TSystemMmap>
+template <typename TMmap = TSystemMmap>
 i64 GetTotalMmapedBytes();
-template<typename TMmap = TSystemMmap>
+template <typename TMmap = TSystemMmap>
 i64 GetTotalFreeListBytes();
 
 size_t GetMemoryMapsCount();
 
-} // NKikimr
+} // namespace NKikimr

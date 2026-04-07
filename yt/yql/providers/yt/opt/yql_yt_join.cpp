@@ -32,6 +32,7 @@ TMaybe<ui64> TMapJoinSettings::CalculatePartSize(ui64 rows) const {
         if (partSize < MapJoinShardMinRows) {
             // make less parts
             partSize = MapJoinShardMinRows;
+            YQL_ENSURE(partSize > 0);
             ui64 count = (rows + partSize - 1) / partSize;
             if (count > 1) {
                 return partSize;

@@ -2,6 +2,7 @@
 #define FASTFLOAT_FLOAT_COMMON_H
 
 #include <cfloat>
+#include <cstddef>
 #include <cstdint>
 #include <cassert>
 #include <cstring>
@@ -16,8 +17,8 @@
 #include "constexpr_feature_detect.h"
 
 #define FASTFLOAT_VERSION_MAJOR 8
-#define FASTFLOAT_VERSION_MINOR 0
-#define FASTFLOAT_VERSION_PATCH 2
+#define FASTFLOAT_VERSION_MINOR 2
+#define FASTFLOAT_VERSION_PATCH 4
 
 #define FASTFLOAT_STRINGIZE_IMPL(x) #x
 #define FASTFLOAT_STRINGIZE(x) FASTFLOAT_STRINGIZE_IMPL(x)
@@ -58,6 +59,11 @@ enum class chars_format : uint64_t {
 template <typename UC> struct from_chars_result_t {
   UC const *ptr;
   std::errc ec;
+
+  // https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2023/p2497r0.html
+  constexpr explicit operator bool() const noexcept {
+    return ec == std::errc();
+  }
 };
 
 using from_chars_result = from_chars_result_t<char>;
@@ -88,11 +94,12 @@ using parse_options = parse_options_t<char>;
      defined(__MINGW64__) || defined(__s390x__) ||                             \
      (defined(__ppc64__) || defined(__PPC64__) || defined(__ppc64le__) ||      \
       defined(__PPC64LE__)) ||                                                 \
-     defined(__loongarch64))
+     defined(__loongarch64) || (defined(__riscv) && __riscv_xlen == 64))
 #define FASTFLOAT_64BIT 1
 #elif (defined(__i386) || defined(__i386__) || defined(_M_IX86) ||             \
        defined(__arm__) || defined(_M_ARM) || defined(__ppc__) ||              \
-       defined(__MINGW32__) || defined(__EMSCRIPTEN__))
+       defined(__MINGW32__) || defined(__EMSCRIPTEN__) ||                      \
+       (defined(__riscv) && __riscv_xlen == 32))
 #define FASTFLOAT_32BIT 1
 #else
   // Need to check incrementally, since SIZE_MAX is a size_t, avoid overflow.
@@ -261,18 +268,147 @@ struct is_supported_char_type
                              > {
 };
 
+template <typename UC>
+inline FASTFLOAT_CONSTEXPR14 bool
+fastfloat_strncasecmp3(UC const *actual_mixedcase,
+                       UC const *expected_lowercase) {
+  uint64_t mask{0};
+  FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 1) { mask = 0x2020202020202020; }
+  else FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 2) {
+    mask = 0x0020002000200020;
+  }
+  else FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 4) {
+    mask = 0x0000002000000020;
+  }
+  else {
+    return false;
+  }
+
+  uint64_t val1{0}, val2{0};
+  if (cpp20_and_in_constexpr()) {
+    for (size_t i = 0; i < 3; i++) {
+      if ((actual_mixedcase[i] | 32) != expected_lowercase[i]) {
+        return false;
+      }
+    }
+    return true;
+  } else {
+    FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 1 || sizeof(UC) == 2) {
+      ::memcpy(&val1, actual_mixedcase, 3 * sizeof(UC));
+      ::memcpy(&val2, expected_lowercase, 3 * sizeof(UC));
+      val1 |= mask;
+      val2 |= mask;
+      return val1 == val2;
+    }
+    else FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 4) {
+      ::memcpy(&val1, actual_mixedcase, 2 * sizeof(UC));
+      ::memcpy(&val2, expected_lowercase, 2 * sizeof(UC));
+      val1 |= mask;
+      if (val1 != val2) {
+        return false;
+      }
+      return (actual_mixedcase[2] | 32) == (expected_lowercase[2]);
+    }
+    else {
+      return false;
+    }
+  }
+}
+
+template <typename UC>
+inline FASTFLOAT_CONSTEXPR14 bool
+fastfloat_strncasecmp5(UC const *actual_mixedcase,
+                       UC const *expected_lowercase) {
+  uint64_t mask{0};
+  uint64_t val1{0}, val2{0};
+  if (cpp20_and_in_constexpr()) {
+    for (size_t i = 0; i < 5; i++) {
+      if ((actual_mixedcase[i] | 32) != expected_lowercase[i]) {
+        return false;
+      }
+    }
+    return true;
+  } else {
+    FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 1) {
+      mask = 0x2020202020202020;
+      ::memcpy(&val1, actual_mixedcase, 5 * sizeof(UC));
+      ::memcpy(&val2, expected_lowercase, 5 * sizeof(UC));
+      val1 |= mask;
+      val2 |= mask;
+      return val1 == val2;
+    }
+    else FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 2) {
+      mask = 0x0020002000200020;
+      ::memcpy(&val1, actual_mixedcase, 4 * sizeof(UC));
+      ::memcpy(&val2, expected_lowercase, 4 * sizeof(UC));
+      val1 |= mask;
+      if (val1 != val2) {
+        return false;
+      }
+      return (actual_mixedcase[4] | 32) == (expected_lowercase[4]);
+    }
+    else FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 4) {
+      mask = 0x0000002000000020;
+      ::memcpy(&val1, actual_mixedcase, 2 * sizeof(UC));
+      ::memcpy(&val2, expected_lowercase, 2 * sizeof(UC));
+      val1 |= mask;
+      if (val1 != val2) {
+        return false;
+      }
+      ::memcpy(&val1, actual_mixedcase + 2, 2 * sizeof(UC));
+      ::memcpy(&val2, expected_lowercase + 2, 2 * sizeof(UC));
+      val1 |= mask;
+      if (val1 != val2) {
+        return false;
+      }
+      return (actual_mixedcase[4] | 32) == (expected_lowercase[4]);
+    }
+    else {
+      return false;
+    }
+  }
+}
+
 // Compares two ASCII strings in a case insensitive manner.
 template <typename UC>
 inline FASTFLOAT_CONSTEXPR14 bool
 fastfloat_strncasecmp(UC const *actual_mixedcase, UC const *expected_lowercase,
                       size_t length) {
-  for (size_t i = 0; i < length; ++i) {
-    UC const actual = actual_mixedcase[i];
-    if ((actual < 256 ? actual | 32 : actual) != expected_lowercase[i]) {
-      return false;
-    }
+  uint64_t mask{0};
+  FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 1) { mask = 0x2020202020202020; }
+  else FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 2) {
+    mask = 0x0020002000200020;
   }
-  return true;
+  else FASTFLOAT_IF_CONSTEXPR17(sizeof(UC) == 4) {
+    mask = 0x0000002000000020;
+  }
+  else {
+    return false;
+  }
+
+  if (cpp20_and_in_constexpr()) {
+    for (size_t i = 0; i < length; i++) {
+      if ((actual_mixedcase[i] | 32) != expected_lowercase[i]) {
+        return false;
+      }
+    }
+    return true;
+  } else {
+    uint64_t val1{0}, val2{0};
+    size_t sz{8 / (sizeof(UC))};
+    for (size_t i = 0; i < length; i += sz) {
+      val1 = val2 = 0;
+      sz = std::min(sz, length - i);
+      ::memcpy(&val1, actual_mixedcase + i, sz * sizeof(UC));
+      ::memcpy(&val2, expected_lowercase + i, sz * sizeof(UC));
+      val1 |= mask;
+      val2 |= mask;
+      if (val1 != val2) {
+        return false;
+      }
+    }
+    return true;
+  }
 }
 
 #ifndef FLT_EVAL_METHOD
@@ -356,6 +492,52 @@ leading_zeroes(uint64_t input_num) {
 #endif
 }
 
+/* Helper C++14 constexpr generic implementation of countr_zero for 32-bit */
+fastfloat_really_inline FASTFLOAT_CONSTEXPR14 int
+countr_zero_generic_32(uint32_t input_num) {
+  if (input_num == 0) {
+    return 32;
+  }
+  int last_bit = 0;
+  if (!(input_num & 0x0000FFFF)) {
+    input_num >>= 16;
+    last_bit |= 16;
+  }
+  if (!(input_num & 0x00FF)) {
+    input_num >>= 8;
+    last_bit |= 8;
+  }
+  if (!(input_num & 0x0F)) {
+    input_num >>= 4;
+    last_bit |= 4;
+  }
+  if (!(input_num & 0x3)) {
+    input_num >>= 2;
+    last_bit |= 2;
+  }
+  if (!(input_num & 0x1)) {
+    last_bit |= 1;
+  }
+  return last_bit;
+}
+
+/* count trailing zeroes for 32-bit integers */
+fastfloat_really_inline FASTFLOAT_CONSTEXPR20 int
+countr_zero_32(uint32_t input_num) {
+  if (cpp20_and_in_constexpr()) {
+    return countr_zero_generic_32(input_num);
+  }
+#ifdef FASTFLOAT_VISUAL_STUDIO
+  unsigned long trailing_zero = 0;
+  if (_BitScanForward(&trailing_zero, input_num)) {
+    return (int)trailing_zero;
+  }
+  return 32;
+#else
+  return input_num == 0 ? 32 : __builtin_ctz(input_num);
+#endif
+}
+
 // slow emulation routine for 32-bit
 fastfloat_really_inline constexpr uint64_t emulu(uint32_t x, uint32_t y) {
   return x * (uint64_t)y;
@@ -400,8 +582,8 @@ full_multiplication(uint64_t a, uint64_t b) {
   // But MinGW on ARM64 doesn't have native support for 64-bit multiplications
   answer.high = __umulh(a, b);
   answer.low = a * b;
-#elif defined(FASTFLOAT_32BIT) ||                                              \
-    (defined(_WIN64) && !defined(__clang__) && !defined(_M_ARM64))
+#elif defined(FASTFLOAT_32BIT) || (defined(_WIN64) && !defined(__clang__) &&   \
+                                   !defined(_M_ARM64) && !defined(__GNUC__))
   answer.low = _umul128(a, b, &answer.high); // _umul128 not available on ARM64
 #elif defined(FASTFLOAT_64BIT) && defined(__SIZEOF_INT128__)
   __uint128_t r = ((__uint128_t)a) * b;
@@ -1126,7 +1308,12 @@ template <typename T> constexpr uint64_t int_luts<T>::min_safe_u64[];
 
 template <typename UC>
 fastfloat_really_inline constexpr uint8_t ch_to_digit(UC c) {
-  return int_luts<>::chdigit[static_cast<unsigned char>(c)];
+  // wchar_t and char can be signed, so we need to be careful.
+  using UnsignedUC = typename std::make_unsigned<UC>::type;
+  return int_luts<>::chdigit[static_cast<unsigned char>(
+      static_cast<UnsignedUC>(c) &
+      static_cast<UnsignedUC>(
+          -((static_cast<UnsignedUC>(c) & ~0xFFull) == 0)))];
 }
 
 fastfloat_really_inline constexpr size_t max_digits_u64(int base) {
@@ -1155,6 +1342,9 @@ static_assert(std::is_same<equiv_uint_t<std::float64_t>, uint64_t>::value,
 static_assert(
     std::numeric_limits<std::float64_t>::is_iec559,
     "std::float64_t must fulfill the requirements of IEC 559 (IEEE 754)");
+
+template <>
+struct binary_format<std::float64_t> : public binary_format<double> {};
 #endif // __STDCPP_FLOAT64_T__
 
 #ifdef __STDCPP_FLOAT32_T__
@@ -1163,6 +1353,9 @@ static_assert(std::is_same<equiv_uint_t<std::float32_t>, uint32_t>::value,
 static_assert(
     std::numeric_limits<std::float32_t>::is_iec559,
     "std::float32_t must fulfill the requirements of IEC 559 (IEEE 754)");
+
+template <>
+struct binary_format<std::float32_t> : public binary_format<float> {};
 #endif // __STDCPP_FLOAT32_T__
 
 #ifdef __STDCPP_FLOAT16_T__
@@ -1234,7 +1427,6 @@ constexpr chars_format adjust_for_feature_macros(chars_format fmt) {
       ;
 }
 } // namespace detail
-
 } // namespace fast_float
 
 #endif

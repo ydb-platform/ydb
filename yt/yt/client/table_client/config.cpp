@@ -154,15 +154,12 @@ void TChunkWriterConfig::Register(TRegistrar registrar)
         .Default(0.0001);
 
     registrar.Parameter("use_original_data_weight_in_samples", &TThis::UseOriginalDataWeightInSamples)
-        .Default(false);
+        .Default(true);
 
     registrar.Parameter("chunk_indexes", &TThis::ChunkIndexes)
         .DefaultNew();
 
     registrar.Parameter("slim", &TThis::Slim)
-        .DefaultNew();
-
-    registrar.Parameter("versioned_row_digest", &TThis::VersionedRowDigest)
         .DefaultNew();
 
     registrar.Parameter("testing_options", &TThis::TestingOptions)
@@ -469,15 +466,13 @@ void TChunkWriterOptions::Register(TRegistrar registrar)
         .Default(true);
     registrar.Parameter("cast_any_to_composite", &TThis::CastAnyToCompositeNode)
         .Default();
+    registrar.Parameter("cast_composite_to_any", &TThis::CastCompositeToAny)
+        .Default(false);
     registrar.Parameter("single_column_group_by_default", &TThis::SingleColumnGroupByDefault)
         .Default();
     registrar.Parameter("enable_columnar_value_statistics", &TThis::EnableColumnarValueStatistics)
         .Default(true);
     registrar.Parameter("enable_row_count_in_columnar_statistics", &TThis::EnableRowCountInColumnarStatistics)
-        .Default(true);
-    registrar.Parameter("enable_segment_meta_in_blocks", &TThis::EnableSegmentMetaInBlocks)
-        .Default(false);
-    registrar.Parameter("enable_column_meta_in_chunk_meta", &TThis::EnableColumnMetaInChunkMeta)
         .Default(true);
     registrar.Parameter("consider_min_row_range_data_weight", &TThis::ConsiderMinRowRangeDataWeight)
         .Default(true);
@@ -531,9 +526,6 @@ void TChunkWriterOptions::Register(TRegistrar registrar)
         if (config->ChunkFormat) {
             ValidateTableChunkFormatAndOptimizeFor(*config->ChunkFormat, config->OptimizeFor);
         }
-
-        THROW_ERROR_EXCEPTION_IF(!config->EnableColumnMetaInChunkMeta && !config->EnableSegmentMetaInBlocks,
-            "At least one of \"enable_column_meta_in_chunk_meta\" or \"enable_segment_meta_in_blocks\" must be true");
     });
 }
 
@@ -553,21 +545,11 @@ void TChunkWriterOptions::EnableValidationOptions(bool validateAnyIsValidYson)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TVersionedRowDigestConfig::Register(TRegistrar registrar)
-{
-    registrar.Parameter("enable", &TThis::Enable)
-        .Default(false);
-    registrar.Parameter("t_digest", &TThis::TDigest)
-        .DefaultNew();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 void TMinHashDigestConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("write_count", &TThis::WriteCount)
+    registrar.Parameter("write_timestamp_count", &TThis::WriteTimestampCount)
         .Default(100);
-    registrar.Parameter("delete_tombstone_count", &TThis::DeleteTombstoneCount)
+    registrar.Parameter("delete_timestamp_count", &TThis::DeleteTimestampCount)
         .Default(100);
 }
 

@@ -21,19 +21,19 @@
 #include <string>
 #include <vector>
 
-#include "arrow/array/concatenate.h"
-#include "arrow/compute/api_aggregate.h"
-#include "arrow/compute/kernel.h"
-#include "arrow/compute/kernels/aggregate_internal.h"
-#include "arrow/compute/kernels/aggregate_var_std_internal.h"
-#include "arrow/compute/kernels/common_internal.h"
-#include "arrow/compute/kernels/hash_aggregate_internal.h"
-#include "arrow/compute/row/grouper.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/int128_internal.h"
-#include "arrow/util/span.h"
-#include "arrow/util/tdigest.h"
-#include "arrow/visit_type_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/concatenate.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_aggregate.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernel.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/aggregate_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/aggregate_var_std_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/common_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/hash_aggregate_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/row/grouper.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int128_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/span.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/tdigest.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_type_inline.h"
 
 namespace arrow20::compute::internal {
 namespace {

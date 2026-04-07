@@ -62,8 +62,7 @@ namespace types
   template <class T>
   none<T, false>::operator bool() const
   {
-    return !is_none &&
-           builtins::functor::bool_{}(static_cast<const T &>(*this));
+    return !is_none && builtins::functor::bool_{}(static_cast<const T &>(*this));
   }
 
   template <class T>
@@ -136,15 +135,15 @@ namespace types
   }
 
   template <class T0, class T1>
-  decltype(operator_::mod(std::declval<T0>(), std::declval<T1>()))
-  operator%(none<T0> const &t0, T1 const &t1)
+  decltype(operator_::mod(std::declval<T0>(), std::declval<T1>())) operator%(none<T0> const &t0,
+                                                                             T1 const &t1)
   {
     return operator_::mod(t0.data, t1);
   }
 
   template <class T0, class T1>
-  decltype(operator_::mod(std::declval<T0>(), std::declval<T1>()))
-  operator%(T0 const &t0, none<T1> const &t1)
+  decltype(operator_::mod(std::declval<T0>(), std::declval<T1>())) operator%(T0 const &t0,
+                                                                             none<T1> const &t1)
   {
     return operator_::mod(t0, t1.data);
   }

@@ -3,6 +3,7 @@
 #include "client_common.h"
 
 #include <yt/yt/client/table_client/row_base.h>
+#include <yt/yt/client/table_client/schema.h>
 
 #include <yt/yt/client/query_client/query_statistics.h>
 
@@ -18,7 +19,7 @@ struct TLookupRequestOptions
     bool EnablePartialResult = false;
     std::optional<bool> UseLookupCache;
     TDetailedProfilingInfoPtr DetailedProfilingInfo;
-    //! Add |$timestamp:columnName| to result if readMode is latest_timestamp.
+    //! Adds |$timestamp:columnName| to result if readMode is latest_timestamp.
     NTableClient::TVersionedReadOptions VersionedReadOptions;
     std::optional<std::string> ExecutionPool;
 };
@@ -27,7 +28,12 @@ struct TLookupRowsOptionsBase
     : public TTabletReadOptions
     , public TLookupRequestOptions
     , public TMultiplexingBandOptions
-{ };
+{
+    TLookupRowsOptionsBase()
+    {
+        MultiplexingBand = NRpc::EMultiplexingBand::Interactive;
+    }
+};
 
 struct TLookupRowsOptions
     : public TLookupRowsOptionsBase
@@ -54,7 +60,14 @@ struct TMultiLookupOptions
     : public TTimeoutOptions
     , public TTabletReadOptionsBase
     , public TMultiplexingBandOptions
-{ };
+{
+    TMultiLookupOptions()
+    {
+        MultiplexingBand = NRpc::EMultiplexingBand::Interactive;
+    }
+
+    std::optional<std::string> ExecutionPool;
+};
 
 struct TExplainQueryOptions
     : public TSelectRowsOptionsBase

@@ -120,7 +120,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
 
     void ResolvePath() {
         auto request = MakeHolder<TNavigate>();
-        request->DatabaseName = NKikimr::CanonizePath(GetDatabaseName());
+        request->DatabaseName = GetDatabaseName();
 
         auto& entry = request->ResultSet.emplace_back();
         entry.Operation = TNavigate::OpTable;
@@ -179,7 +179,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
 
     void ResolveKeys() {
         auto request = MakeHolder<TResolve>();
-        request->DatabaseName = NKikimr::CanonizePath(GetDatabaseName());
+        request->DatabaseName = GetDatabaseName();
 
         request->ResultSet.emplace_back(std::move(KeyDesc));
         request->ResultSet.back().Access = NACLib::UpdateRow;
@@ -234,6 +234,9 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
 
         auto ev = MakeHolder<TEvDataShard::TEvUploadRowsRequest>();
         ev->Record.SetTableId(KeyDesc->TableId.PathId.LocalPathId);
+        if (Request != nullptr && Request->GetInternalToken() != nullptr) {
+            ev->Record.SetUserSID(Request->GetInternalToken()->GetUserSID());
+        }
 
         const auto timeout = request.operation_params().has_operation_timeout()
             ? Min(GetDuration(request.operation_params().operation_timeout()), MAX_TIMEOUT)

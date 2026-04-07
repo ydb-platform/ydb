@@ -1,0 +1,40 @@
+https://github.com/python/cpython/issues/127012
+
+--- contrib/tools/python3/Lib/importlib/resources/abc.py	(index)
++++ contrib/tools/python3/Lib/importlib/resources/abc.py	(working tree)
+@@ -82,11 +82,11 @@ class Traversable(Protocol):
+         with self.open('rb') as strm:
+             return strm.read()
+ 
+-    def read_text(self, encoding: Optional[str] = None) -> str:
++    def read_text(self, encoding: Optional[str] = None, errors: str ='strict') -> str:
+         """
+         Read contents of self as text
+         """
+-        with self.open(encoding=encoding) as strm:
++        with self.open(encoding=encoding, errors=errors) as strm:
+             return strm.read()
+ 
+     @abc.abstractmethod
+--- contrib/tools/python3/Lib/importlib/resources/_functional.py	(index)
++++ contrib/tools/python3/Lib/importlib/resources/_functional.py	(working tree)
+@@ -3,6 +3,7 @@
+ import warnings
+ 
+ from ._common import files, as_file
++from .abc import TraversalError
+ 
+ 
+ _MISSING = object()
+@@ -42,7 +43,10 @@ def is_resource(anchor, *path_names):
+ 
+     Otherwise returns ``False``.
+     """
+-    return _get_resource(anchor, path_names).is_file()
++    try:
++        return _get_resource(anchor, path_names).is_file()
++    except TraversalError:
++        return False
+ 
+ 
+ def contents(anchor, *path_names):

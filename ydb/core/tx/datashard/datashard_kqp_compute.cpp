@@ -2,7 +2,6 @@
 #include "range_ops.h"
 #include "datashard_user_db.h"
 
-#include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/kqp/runtime/kqp_read_table.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
 
@@ -15,7 +14,7 @@ using namespace NTable;
 using namespace NUdf;
 
 typedef IComputationNode* (*TCallableDatashardBuilderFunc)(TCallable& callable,
-    const TComputationNodeFactoryContext& ctx, TKqpDatashardComputeContext& computeCtx);
+    const TComputationNodeFactoryContext& ctx, TKqpDatashardComputeContext& computeCtx, const TString& userSID);
 
 struct TKqpDatashardComputationMap {
     TKqpDatashardComputationMap() {
@@ -27,13 +26,13 @@ struct TKqpDatashardComputationMap {
     THashMap<TString, TCallableDatashardBuilderFunc> Map;
 };
 
-TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx) {
+TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx, const TString& userSID) {
     MKQL_ENSURE_S(computeCtx);
     MKQL_ENSURE_S(computeCtx->Database);
 
     auto computeFactory = GetKqpBaseComputeFactory(computeCtx);
 
-    return [computeFactory, computeCtx]
+    return [computeFactory, computeCtx, userSID]
         (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
             if (auto compute = computeFactory(callable, ctx)) {
                 return compute;
@@ -42,7 +41,7 @@ TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContex
             const auto& datashardMap = Singleton<TKqpDatashardComputationMap>()->Map;
             auto it = datashardMap.find(callable.GetType()->GetName());
             if (it != datashardMap.end()) {
-                return it->second(callable, ctx, *computeCtx);
+                return it->second(callable, ctx, *computeCtx, userSID);
             }
 
             return nullptr;
@@ -240,7 +239,7 @@ bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidated
                                          adjustLimit(key.RangeLimits.ItemsLimit),
                                          adjustLimit(key.RangeLimits.BytesLimit),
                                          key.Reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward,
-                                         GetMvccVersion());
+                                         GetMvccVersion()).Ready;
 
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Run precharge on table " << tableInfo->Name
             << ", columns: [" << JoinSeq(", ", columnTags) << "]"

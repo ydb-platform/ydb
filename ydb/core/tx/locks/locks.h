@@ -7,6 +7,8 @@
 #include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
 
+#include <ydb/library/actors/async/event.h>
+
 #include <library/cpp/cache/cache.h>
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <util/generic/list.h>
@@ -38,6 +40,9 @@ public:
         ui64 Counter;
         ui64 CreateTs;
         ui64 Flags;
+        ui64 VictimQuerySpanId = 0;
+        ui64 BreakerQuerySpanId = 0;
+        ui32 BreakerNodeId = 0;
 
         TVector<TLockRange> Ranges;
         TVector<ui64> Conflicts;
@@ -48,6 +53,8 @@ public:
         TVector<TPathId> ReadTables;
         TVector<TPathId> WriteTables;
     };
+
+    virtual bool HasChanges() const = 0;
 
     virtual bool Load(TVector<TLockRow>& rows) = 0;
 
@@ -218,6 +225,8 @@ enum class ELockFlags : ui64 {
     Frozen = 1,
     WholeShard = 2,
     Persistent = 4,
+    Removed = 8,
+    Pessimistic = 16,
     PersistentMask = Frozen,
 };
 
@@ -246,6 +255,17 @@ inline ELockConflictFlags& operator|=(ELockConflictFlags& a, ELockConflictFlags 
 inline ELockConflictFlags& operator&=(ELockConflictFlags& a, ELockConflictFlags b) { return a = a & b; }
 inline ELockConflictFlags operator~(ELockConflictFlags c) { return ELockConflictFlags(~ELockConflictFlagsRaw(c)); }
 inline bool operator!(ELockConflictFlags c) { return ELockConflictFlagsRaw(c) == 0; }
+
+struct TConflictLockInfo {
+    ELockConflictFlags Flags = ELockConflictFlags::None;
+    ui64 BreakerQuerySpanId = 0;
+
+    TConflictLockInfo() = default;
+    TConflictLockInfo(ELockConflictFlags flags, ui64 breakerQuerySpanId = 0)
+        : Flags(flags)
+        , BreakerQuerySpanId(breakerQuerySpanId)
+    {}
+};
 
 // ELockRangeFlags type safe enum
 
@@ -302,6 +322,7 @@ public:
     bool Empty() const {
         return !(
             IsPersistent() ||
+            IsPessimistic() ||
             !ReadTables.empty() ||
             !WriteTables.empty() ||
             IsBroken());
@@ -325,11 +346,23 @@ public:
     bool IsBroken(const TRowVersion& at = TRowVersion::Max()) const { return GetCounter(at) == Max<ui64>(); }
     const std::optional<TRowVersion>& GetBreakVersion() const { return BreakVersion; }
 
+    void SetBreakerInfo(ui64 querySpanId, ui32 nodeId) {
+        if (BreakerQuerySpanId_ == 0 && querySpanId != 0) {
+            BreakerQuerySpanId_ = querySpanId;
+            BreakerNodeId_ = nodeId;
+        }
+    }
+    ui64 GetBreakerQuerySpanId() const { return BreakerQuerySpanId_; }
+    ui32 GetBreakerNodeId() const { return BreakerNodeId_; }
+    void ConsumeBreakerInfo() { BreakerConsumed_ = true; }
+    bool IsBreakerConsumed() const { return BreakerConsumed_; }
+
     size_t NumPoints() const { return Points.size(); }
     size_t NumRanges() const { return Ranges.size(); }
     bool IsShardLock() const { return !!(Flags & ELockFlags::WholeShard); }
     bool IsWriteLock() const { return !WriteTables.empty(); }
     bool IsPersistent() const { return !!(Flags & ELockFlags::Persistent); }
+    bool IsRemoved() const { return !!(Flags & ELockFlags::Removed); }
     bool HasUnpersistedRanges() const { return UnpersistedRanges; }
     //ui64 MemorySize() const { return 1; } // TODO
 
@@ -337,6 +370,8 @@ public:
 
     ui64 GetLockId() const { return LockId; }
     ui32 GetLockNodeId() const { return LockNodeId; }
+    ui64 GetVictimQuerySpanId() const { return VictimQuerySpanId; }
+    void SetVictimQuerySpanId(ui64 victimQuerySpanId) { VictimQuerySpanId = victimQuerySpanId; }
 
     TInstant GetCreationTime() const { return CreationTime; }
 
@@ -354,12 +389,12 @@ public:
 
     bool PersistRanges(ILocksDb* db);
 
-    bool AddConflict(TLockInfo* otherLock, ILocksDb* db);
+    bool AddConflict(TLockInfo* otherLock, ILocksDb* db, ui64 breakerQuerySpanId = 0);
     bool AddVolatileDependency(ui64 txId, ILocksDb* db);
     bool PersistConflicts(ILocksDb* db);
     void CleanupConflicts();
 
-    void RestoreInMemoryState(const ILocksDb::TLockRow& lockRow);
+    bool RestoreInMemoryState(const ILocksDb::TLockRow& lockRow);
     bool RestoreInMemoryRange(const ILocksDb::TLockRange& rangeRow);
     void RestorePersistentRange(const ILocksDb::TLockRange& rangeRow);
     void RestoreInMemoryConflict(TLockInfo* otherLock);
@@ -377,10 +412,18 @@ public:
     template<class TCallback>
     void ForAllConflicts(TCallback&& callback, ELockConflictFlags mask) const {
         for (auto& pr : ConflictLocks) {
-            if (!!(pr.second & mask)) {
+            if (!!(pr.second.Flags & mask)) {
                 callback(pr.first);
             }
         }
+    }
+
+    ui64 GetConflictBreakerQuerySpanId(TLockInfo* otherLock) const {
+        auto it = ConflictLocks.find(otherLock);
+        if (it != ConflictLocks.end()) {
+            return it->second.BreakerQuerySpanId;
+        }
+        return 0;
     }
 
     template<class TCallback>
@@ -395,6 +438,9 @@ public:
 
     bool IsFrozen() const { return !!(Flags & ELockFlags::Frozen); }
     void SetFrozen(ILocksDb* db = nullptr);
+
+    bool IsPessimistic() const { return !!(Flags & ELockFlags::Pessimistic); }
+    void SetPessimistic() { Flags |= ELockFlags::Pessimistic; }
 
     bool IsPersisting() const { return WaitPersistentCounter > 0; }
     void AddWaitPersistentCallback(ILocksDb* db);
@@ -427,6 +473,7 @@ private:
     ui64 Counter;
     TInstant CreationTime;
     ELockFlags Flags = ELockFlags::None;
+    ui64 VictimQuerySpanId = 0;
     THashSet<TPathId> ReadTables;
     THashSet<TPathId> WriteTables;
     TVector<TPointKey> Points;
@@ -435,14 +482,20 @@ private:
     bool InBrokenLocks = false;
 
     std::optional<TRowVersion> BreakVersion;
+    ui64 BreakerQuerySpanId_ = 0;
+    ui32 BreakerNodeId_ = 0;
+    bool BreakerConsumed_ = false;
 
-    // A set of locks we must break on commit
-    THashMap<TLockInfo*, ELockConflictFlags> ConflictLocks;
+    THashMap<TLockInfo*, TConflictLockInfo> ConflictLocks;  // Locks to break on commit
     absl::flat_hash_set<ui64> VolatileDependencies;
     TVector<TPersistentRange> PersistentRanges;
 
     ui64 LastOpId = 0;
     ui64 WaitPersistentCounter = 0;
+
+public:
+    TAsyncEvent OnBrokenEvent;
+    TAsyncEvent OnRemovedEvent;
 };
 
 struct TTableLocksReadListTag {};
@@ -471,7 +524,10 @@ public:
 
     TTableLocks(const TPathId& tableId)
         : TableId(tableId)
+        , RuntimeLocks(*this)
     {}
+
+    ~TTableLocks();
 
     template<class TTag>
     bool IsInList() const {
@@ -521,6 +577,7 @@ public:
     void ForEachRangeLock(TCallback&& callback) {
         Ranges.EachRange([&callback](const TRangeTreapTraits::TRange&, TLockInfo* lock) {
             callback(lock);
+            return true;
         });
     }
 
@@ -538,13 +595,156 @@ public:
         }
     }
 
+public:
+    class TRuntimeLockHolder;
+    class TRuntimeLockHolderList : public TIntrusiveList<TRuntimeLockHolder> {
+        friend TTableLocks;
+
+    public:
+        ~TRuntimeLockHolderList();
+
+    private:
+        THashMap<TLockInfo::TPtr, TRuntimeLockHolder*> LockTails;
+    };
+
+private:
+    class TRuntimeLockKeyComparator {
+    public:
+        using is_transparent = void;
+
+        TRuntimeLockKeyComparator(const TTableLocks& self)
+            : Self(self)
+        {}
+
+        bool operator()(TConstArrayRef<TCell> a, TConstArrayRef<TCell> b) const {
+            return Self.CompareRuntimeLockKeys(a, b) < 0;
+        }
+
+    private:
+        const TTableLocks& Self;
+    };
+
+    int CompareRuntimeLockKeys(TConstArrayRef<TCell> a, TConstArrayRef<TCell> b) const {
+        Y_ENSURE(a.size() <= KeyColumnTypes.size());
+        Y_ENSURE(b.size() <= KeyColumnTypes.size());
+        // Note: prefix is treated like a full range
+        // Note: we cannot really handle prefixes right now
+        return CompareTypedCellVectors(a.data(), b.data(), KeyColumnTypes.data(), std::min(a.size(), b.size()));
+    }
+
+private:
+    using TRuntimeLocks = std::map<TOwnedCellVec, TRuntimeLockHolderList, TRuntimeLockKeyComparator>;
+
+public:
+    class TRuntimeLockHolder
+        : private TIntrusiveListItem<TRuntimeLockHolder>
+    {
+        friend TTableLocks;
+        friend TIntrusiveList<TRuntimeLockHolder>;
+        friend TIntrusiveListItem<TRuntimeLockHolder>;
+
+    public:
+        TRuntimeLockHolder()
+            : Self(nullptr)
+        {}
+
+        ~TRuntimeLockHolder() {
+            Reset();
+        }
+
+        TRuntimeLockHolder(TRuntimeLockHolder&& rhs) noexcept
+            : Self(rhs.Self)
+            , Key(rhs.Key)
+            , Lock(std::move(rhs.Lock))
+        {
+            LinkBefore(&rhs);
+            rhs.Unlink();
+            rhs.Self = nullptr;
+            rhs.Lock = nullptr;
+            if (Self) {
+                Self->MovedRuntimeLock(Key, this, &rhs);
+            }
+        }
+
+        TRuntimeLockHolder& operator=(TRuntimeLockHolder&& rhs) {
+            if (this != &rhs) [[likely]] {
+                Reset();
+                Self = rhs.Self;
+                Key = rhs.Key;
+                Lock = std::move(rhs.Lock);
+                LinkBefore(&rhs);
+                rhs.Unlink();
+                rhs.Self = nullptr;
+                rhs.Lock = nullptr;
+                if (Self) {
+                    Self->MovedRuntimeLock(Key, this, &rhs);
+                }
+            }
+            return *this;
+        }
+
+        bool IsValid() const {
+            return Self && !Empty();
+        }
+
+        bool IsOwner() const {
+            if (IsValid()) {
+                Y_ENSURE(!Key->second.Empty());
+                return Key->second.Front() == this;
+            }
+
+            return false;
+        }
+
+        void Reset() {
+            if (Self && !Empty()) {
+                Self->RemoveRuntimeLock(Key, this);
+            }
+            Self = nullptr;
+        }
+
+        const TRuntimeLockHolder& Predecessor() const {
+            Y_ENSURE(IsValid());
+            Y_ENSURE(!IsOwner());
+            return *Prev()->Node();
+        }
+
+        const TLockInfo::TPtr& GetLock() const {
+            return Lock;
+        }
+
+    private:
+        TRuntimeLockHolder(TTableLocks* self, TRuntimeLocks::iterator key, TLockInfo::TPtr lock)
+            : Self(self)
+            , Key(key)
+            , Lock(std::move(lock))
+        {}
+
+    private:
+        TTableLocks* Self;
+        TRuntimeLocks::iterator Key;
+        TLockInfo::TPtr Lock;
+
+    public:
+        TAsyncEvent OnChangedEvent;
+    };
+
+    TRuntimeLockHolder AddRuntimeLock(TConstArrayRef<TCell> key, TLockInfo::TPtr lock);
+
+private:
+    void MovedRuntimeLock(TRuntimeLocks::iterator it, TRuntimeLockHolder* holder, TRuntimeLockHolder* was);
+    void RemoveRuntimeLock(TRuntimeLocks::iterator it, TRuntimeLockHolder* holder);
+
 private:
     const TPathId TableId;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TRangeTreap<TLockInfo*> Ranges;
     THashSet<TLockInfo*> ShardLocks;
     THashSet<TLockInfo*> WriteLocks;
+    TRuntimeLocks RuntimeLocks;
 };
+
+using TRuntimeLockHolder = TTableLocks::TRuntimeLockHolder;
 
 /// Owns and manages locks
 class TLockLocker {
@@ -673,15 +873,22 @@ public:
         CleanupPending.clear();
         CleanupCandidates.clear();
         PendingSubscribeLocks.clear();
+        PendingRestoreRemoveQueue.Clear();
+        PendingRestoreBreakQueue.Clear();
     }
 
     const THashMap<ui64, TLockInfo::TPtr>& GetLocks() const {
         return Locks;
     }
 
+    const THashMap<ui64, TLockInfo::TPtr>& GetRemovedLocks() const {
+        return RemovedLocks;
+    }
+
 private:
     const THolder<TLocksDataShard> Self;
     THashMap<ui64, TLockInfo::TPtr> Locks; // key is LockId
+    THashMap<ui64, TLockInfo::TPtr> RemovedLocks; // key is LockId
     THashMap<TPathId, TTableLocks::TPtr> Tables;
     THashSet<ui64> ShardLocks;
     // A list of locks that have ranges (from oldest to newest)
@@ -697,6 +904,9 @@ private:
     TPriorityQueue<TVersionedLockId> CleanupCandidates;
     TList<TPendingSubscribeLock> PendingSubscribeLocks;
     ui64 Counter = 0;
+
+    TIntrusiveList<TLockInfo, TLockInfoExpireListTag> PendingRestoreRemoveQueue;
+    TIntrusiveList<TLockInfo, TLockInfoExpireListTag> PendingRestoreBreakQueue;
 
     TTableLocks::TPtr GetTableLocks(const TTableId& table) const {
         auto it = Tables.find(table.PathId);
@@ -718,7 +928,22 @@ private:
 struct TLocksUpdate {
     ui64 LockTxId = 0;
     ui32 LockNodeId = 0;
+    // The current query's SpanId. Used as VictimQuerySpanId on the lock and as initial BreakerQuerySpanId on conflicts.
+    ui64 QuerySpanId = 0;
+    // Optional explicit override for breaker attribution, otherwise resolved from conflict data or QuerySpanId.
+    ui64 BreakerQuerySpanId = 0;
+    bool BreakerQuerySpanIdExplicitlySet = false;
+    // QuerySpanId captured at the moment a lock break is first detected (AddBreakLock).
+    ui64 ConflictBreakerQuerySpanId = 0;
     TLockInfo::TPtr Lock;
+
+    // Returns effective BreakerQuerySpanId: explicit override (commit path) if set,
+    // then conflict-derived SpanId (from AddBreakLock), then falls back to QuerySpanId.
+    ui64 GetEffectiveBreakerQuerySpanId() const {
+        if (BreakerQuerySpanId != 0) return BreakerQuerySpanId;
+        if (ConflictBreakerQuerySpanId != 0) return ConflictBreakerQuerySpanId;
+        return QuerySpanId;
+    }
 
     TStackVec<TPointKey, 4> PointLocks;
     TStackVec<TRangeKey, 4> RangeLocks;
@@ -768,14 +993,25 @@ struct TLocksUpdate {
 
     void AddBreakLock(TLockInfo* lock) {
         BreakLocks.PushBack(lock);
+        CaptureConflictBreakerQuerySpanId();
     }
 
     void AddBreakShardLocks(TTableLocks* table) {
         BreakShardLocks.PushBack(table);
+        CaptureConflictBreakerQuerySpanId();
     }
 
     void AddBreakRangeLocks(TTableLocks* table) {
         BreakRangeLocks.PushBack(table);
+        CaptureConflictBreakerQuerySpanId();
+    }
+
+    // Capture the current QuerySpanId as ConflictBreakerQuerySpanId
+    // the first time a lock break is detected during operation processing.
+    void CaptureConflictBreakerQuerySpanId() {
+        if (ConflictBreakerQuerySpanId == 0 && QuerySpanId != 0) {
+            ConflictBreakerQuerySpanId = QuerySpanId;
+        }
     }
 
     void FlattenBreakLocks() {
@@ -836,6 +1072,8 @@ enum class EEnsureCurrentLock {
     // map, but not yet fully compacted. New reads and especially writes may
     // cause inconsistencies or data corruption and cannot be performed.
     Abort,
+    // Current lock does not exist
+    Missing,
 };
 
 /// /sys/locks table logic
@@ -890,6 +1128,8 @@ public:
 
     std::pair<TVector<TLock>, TVector<ui64>> ApplyLocks();
     ui64 ExtractLockTxId(const TArrayRef<const TCell>& syslockKey) const;
+    TVector<ui64> ExtractVictimQuerySpanIds(const TVector<ui64>& lockIds) const;
+    TMaybe<ui64> GetVictimQuerySpanIdForLock(ui64 lockTxId) const;
     TLock GetLock(const TArrayRef<const TCell>& syslockKey) const;
     void EraseLock(ui64 lockId);
     void EraseLock(const TArrayRef<const TCell>& syslockKey);
@@ -910,6 +1150,8 @@ public:
     bool HasCurrentWriteLocks() const;
     bool HasWriteLocks(const TTableId& tableId) const;
 
+    TRuntimeLockHolder AddRuntimeLock(const TTableId& tableId, TConstArrayRef<TCell> key);
+
     /**
      * Ensures current update has a valid lock pointer
      *
@@ -921,7 +1163,7 @@ public:
      * to memory or other constraints. Returns Abort when operation must abort
      * early, e.g. because the given LockId cannot be reused.
      */
-    EEnsureCurrentLock EnsureCurrentLock();
+    EEnsureCurrentLock EnsureCurrentLock(bool createMissing = true);
 
     ui64 LocksCount() const { return Locker.LocksCount(); }
     ui64 BrokenLocksCount() const { return Locker.BrokenLocksCount(); }
@@ -955,10 +1197,47 @@ public:
 
     bool Load(ILocksDb& db);
 
+    /**
+     * Restores in-memory lock state migrated from previous generations
+     *
+     * May also enqueue some persistent changes to be applied later.
+     */
     void RestoreInMemoryLocks(THashMap<ui64, ILocksDb::TLockRow>&& rows);
+
+    /**
+     * Restores persistent lock state migrated from previous generations
+     *
+     * Returns true after performing some enqueued persistent changes, or false
+     * when there are no changes and the queue is empty. Caller needs to call
+     * this method until it returns false, possibly spanning multiple tablet
+     * transactions.
+     */
+    bool RestorePersistentState(ILocksDb* db);
 
     const THashMap<ui64, TLockInfo::TPtr>& GetLocks() const {
         return Locker.GetLocks();
+    }
+
+    const THashMap<ui64, TLockInfo::TPtr>& GetRemovedLocks() const {
+        return Locker.GetRemovedLocks();
+    }
+
+    TMaybe<ui64> GetCurrentBreakerQuerySpanId() const {
+        if (Update) {
+            ui64 effective = Update->GetEffectiveBreakerQuerySpanId();
+            if (effective != 0) {
+                return effective;
+            }
+        }
+        return Nothing();
+    }
+
+    // Override BreakerQuerySpanId for the current update.
+    void SetBreakerQuerySpanId(ui64 querySpanId) {
+        if (Update && querySpanId != 0) {
+            Update->BreakerQuerySpanId = querySpanId;
+            Update->BreakerQuerySpanIdExplicitlySet = true;
+        }
     }
 
 private:

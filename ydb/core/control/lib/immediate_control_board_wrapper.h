@@ -7,6 +7,7 @@ namespace NKikimr {
 class TControlWrapper {
     TIntrusivePtr<TControl> Control;
     friend class TControlBoard;
+    friend class TDynamicControlBoard;
 
 public:
     TControlWrapper(TAtomicBase defaultValue = 0)
@@ -19,6 +20,14 @@ public:
 
     operator i64() const {
         return Control->Get();
+    }
+
+    bool IsDefault() const {
+        return Control->IsDefault();
+    }
+
+    TAtomicBase GetDefault() const {
+        return Control->GetDefault();
     }
 
     i64 operator=(i64 value) {

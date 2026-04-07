@@ -67,6 +67,7 @@ public:
         }
         return result;
     }
+    TReplaceKeyTemplate() = default;
 
     TReplaceKeyTemplate(TArrayVecPtr columns, const ui64 position)
         : Columns(columns)
@@ -84,50 +85,32 @@ public:
 
     template <typename T>
     bool operator==(const TReplaceKeyTemplate<T>& key) const {
-        Y_ABORT_UNLESS(GetColumnsCount() == key.GetColumnsCount());
-
-        for (ui32 i = 0; i < GetColumnsCount(); ++i) {
-            auto cmp = CompareColumnValue(i, key, i);
-            if (std::is_neq(cmp)) {
-                return false;
-            }
-        }
-        return true;
+        return std::is_eq(Compare<false>(key));
     }
 
     template <typename T>
     std::partial_ordering operator<=>(const TReplaceKeyTemplate<T>& key) const {
-        Y_ABORT_UNLESS(GetColumnsCount() == key.GetColumnsCount());
-
-        for (ui32 i = 0; i < GetColumnsCount(); ++i) {
-            auto cmp = CompareColumnValue(i, key, i);
-            if (std::is_neq(cmp)) {
-                return cmp;
-            }
-        }
-        return std::partial_ordering::equivalent;
+        return Compare<false>(key);
     }
 
     template <typename T>
     std::partial_ordering CompareNotNull(const TReplaceKeyTemplate<T>& key) const {
-        Y_ABORT_UNLESS(GetColumnsCount() == key.GetColumnsCount());
-
-        for (ui32 i = 0; i < GetColumnsCount(); ++i) {
-            auto cmp = CompareColumnValueNotNull(i, key, i);
-            if (std::is_neq(cmp)) {
-                return cmp;
-            }
-        }
-        return std::partial_ordering::equivalent;
+        return Compare<true>(key);
     }
 
-    template <typename T>
-    std::partial_ordering ComparePartNotNull(const TReplaceKeyTemplate<T>& key, const ui32 size) const {
+    template <bool notNull, typename T>
+    std::partial_ordering Compare(const TReplaceKeyTemplate<T>& key) const {
+        Y_ABORT_UNLESS(GetColumnsCount() == key.GetColumnsCount());
+        return ComparePart<notNull>(key, GetColumnsCount());
+    }
+
+    template <bool notNull, typename T>
+    std::partial_ordering ComparePart(const TReplaceKeyTemplate<T>& key, const ui32 size) const {
         Y_ABORT_UNLESS(size <= key.GetColumnsCount());
         Y_ABORT_UNLESS(size <= GetColumnsCount());
 
         for (ui32 i = 0; i < size; ++i) {
-            auto cmp = CompareColumnValueNotNull(i, key, i);
+            const auto cmp = CompareColumnValue<notNull>(i, key, i);
             if (std::is_neq(cmp)) {
                 return cmp;
             }
@@ -135,16 +118,10 @@ public:
         return std::partial_ordering::equivalent;
     }
 
-    template <typename T>
-    std::partial_ordering CompareColumnValueNotNull(int column, const TReplaceKeyTemplate<T>& key, int keyColumn) const {
-        Y_DEBUG_ABORT_UNLESS(Column(column).type_id() == key.Column(keyColumn).type_id());
-        return TComparator::TypedCompare<true>(Column(column), Position, key.Column(keyColumn), key.GetPosition());
-    }
-
-    template <typename T>
+    template <bool notNull, typename T>
     std::partial_ordering CompareColumnValue(int column, const TReplaceKeyTemplate<T>& key, int keyColumn) const {
         Y_DEBUG_ABORT_UNLESS(Column(column).type_id() == key.Column(keyColumn).type_id());
-        return TComparator::TypedCompare<false>(Column(column), Position, key.Column(keyColumn), key.GetPosition());
+        return TComparator::TypedCompare<notNull>(Column(column), Position, key.Column(keyColumn), key.GetPosition());
     }
 
     ui64 GetColumnsCount() const {
@@ -333,6 +310,8 @@ public:
             HashPrecalculated = CalcHash();
         }
     }
+
+    TReplaceKeyHashable() = default;
 
     TReplaceKeyHashable(
         const std::vector<std::shared_ptr<arrow::Array>>& columns, const ui64 position, const std::vector<arrow::Type::type>& types)

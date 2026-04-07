@@ -78,12 +78,12 @@ private:
     const NKikimr::TKeyDesc& KeyDesc;
 };
 
-IActor* CreateLocalTableWriter(const TPathId& tablePathId, EWriterType type) {
+IActor* CreateLocalTableWriter(const TString& database, const TPathId& tablePathId, EWriterType type) {
     auto createResolverFn = [](const NKikimr::TKeyDesc& keyDesc) {
         return new TPartitionResolver(keyDesc);
     };
 
-    return CreateLocalTableWriter(tablePathId, MakeHolder<TParser>(), MakeHolder<TSerializer>(type), createResolverFn);
+    return CreateLocalTableWriter(database, tablePathId, MakeHolder<TParser>(), MakeHolder<TSerializer>(type), createResolverFn);
 }
 
 }

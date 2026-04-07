@@ -569,10 +569,8 @@ namespace NKikimr {
     // TEvVPut
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    struct TMessageRelevanceTracker {};
-
     struct TEventWithRelevanceTracker {
-        std::optional<std::weak_ptr<TMessageRelevanceTracker>> MessageRelevanceTracker;
+        std::optional<TMessageRelevance> MessageRelevanceTracker;
     };
 
     struct TEvBlobStorage::TEvVPut
@@ -593,10 +591,10 @@ namespace NKikimr {
 
         TEvVPut(const TLogoBlobID &logoBlobId, TRope buffer, const TVDiskID &vdisk,
                 const bool ignoreBlock, const ui64 *cookie, TInstant deadline,
-                NKikimrBlobStorage::EPutHandleClass cls)
+                NKikimrBlobStorage::EPutHandleClass cls, bool checksumming)
         {
             InitWithoutBuffer(logoBlobId, vdisk, ignoreBlock, cookie, deadline, cls);
-            StorePayload(std::move(buffer));
+            StorePayload(std::move(buffer), checksumming);
         }
 
         void InitWithoutBuffer(const TLogoBlobID &logoBlobId, const TVDiskID &vdisk, const bool ignoreBlock,
@@ -633,7 +631,7 @@ namespace NKikimr {
             return Record.HasBuffer() ? TRope(Record.GetBuffer()) : GetPayload(0);
         }
 
-        void StorePayload(TRope&& buffer);
+        void StorePayload(TRope&& buffer, bool checksumming);
 
         ui64 GetBufferBytes() const {
             ui64 sizeBytes = 0;
@@ -883,17 +881,16 @@ namespace NKikimr {
             return sum;
         }
 
-        void StorePayload(const TRcBuf &buffer);
-
+        void StorePayload(const TRcBuf &buffer, NKikimrBlobStorage::TVMultiPutItem *item, bool checksumming);
 
         TRope GetItemBuffer(ui64 itemIdx) const;
 
         void AddVPut(const TLogoBlobID &logoBlobId, const TRcBuf &buffer, ui64 *cookie, bool issueKeepFlag, bool ignoreBlock,
-                std::vector<std::pair<ui64, ui32>> *extraBlockChecks, NWilson::TTraceId traceId) {
+                std::vector<std::pair<ui64, ui32>> *extraBlockChecks, NWilson::TTraceId traceId, bool checksumming) {
             NKikimrBlobStorage::TVMultiPutItem *item = Record.AddItems();
             LogoBlobIDFromLogoBlobID(logoBlobId, item->MutableBlobID());
             item->SetFullDataSize(logoBlobId.BlobSize());
-            StorePayload(buffer);
+            StorePayload(buffer, item, checksumming);
             item->SetFullDataSize(logoBlobId.BlobSize());
             if (cookie) {
                 item->SetCookie(*cookie);
@@ -2584,9 +2581,10 @@ namespace NKikimr {
     {
         TEvVCheckReadinessResult() = default;
 
-        TEvVCheckReadinessResult(NKikimrProto::EReplyStatus status) {
+        TEvVCheckReadinessResult(NKikimrProto::EReplyStatus status, bool checksumming) {
             Record.SetStatus(status);
             Record.SetExtraBlockChecksSupport(true);
+            Record.SetChecksumming(checksumming);
         }
     };
 
@@ -2655,8 +2653,9 @@ namespace NKikimr {
     {
         TEvVBaldSyncLog() = default;
 
-        TEvVBaldSyncLog(const TVDiskID &vdisk) {
+        TEvVBaldSyncLog(const TVDiskID &vdisk, bool dropChunksExplicitly = false) {
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
+            Record.SetDropChunksExplicitly(dropChunksExplicitly);
         }
     };
 
@@ -2943,23 +2942,25 @@ namespace NKikimr {
 
         TEvVSyncFullResult(const NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TSyncState &syncState,
                 ui64 cookie, const TInstant &now, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel)
+                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel, NKikimrBlobStorage::EFullSyncProtocol protocol)
             : TEvVResultBasePB(now, counterPtr, histoPtr, channel)
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
             Record.SetCookie(cookie);
             SyncStateFromSyncState(syncState, Record.MutableSyncState());
+            Record.SetProtocol(protocol);
         }
 
         TEvVSyncFullResult(const NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, ui64 cookie,
                 const TInstant &now, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel)
+                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel, NKikimrBlobStorage::EFullSyncProtocol protocol)
             : TEvVResultBasePB(now, counterPtr, histoPtr, channel)
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
             Record.SetCookie(cookie);
+            Record.SetProtocol(protocol);
         }
 
         TString ToString() const override {
@@ -3247,7 +3248,27 @@ namespace NKikimr {
     public:
         ui32 MinHugeBlobInBytes;
 
-        TEvMinHugeBlobSizeUpdate(ui32 minHugeBlobInBytes) : MinHugeBlobInBytes(minHugeBlobInBytes) {  
+        TEvMinHugeBlobSizeUpdate(ui32 minHugeBlobInBytes) : MinHugeBlobInBytes(minHugeBlobInBytes) {
         };
+    };
+
+    ////////////////////////////////////////////////////////////////////////////
+    // TEvGetSkeletonState
+    ////////////////////////////////////////////////////////////////////////////
+    // Accesses internal state of the Skeleton actor, for test purposes
+    ////////////////////////////////////////////////////////////////////////////
+
+    class TEvGetSkeletonState : public TEventLocal<TEvGetSkeletonState,
+            TEvBlobStorage::EvGetSkeletonState> {};
+
+    ////////////////////////////////////////////////////////////////////////////
+    // TEvGetSkeletonStateResult
+    ////////////////////////////////////////////////////////////////////////////
+    class TEvGetSkeletonStateResult : public TEventLocal<TEvGetSkeletonStateResult,
+            TEvBlobStorage::EvGetSkeletonStateResult> {
+    public:
+        TActorId ChunkKeeperActorId;
+
+        TEvGetSkeletonStateResult(TActorId chunkKeeperActorId);
     };
 } // NKikimr

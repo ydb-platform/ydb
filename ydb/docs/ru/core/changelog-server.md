@@ -1,6 +1,122 @@
 # Список изменений {{ ydb-short-name }} Server
 
+## Версия 25.3 {#25-3}
+
+### Версия 25.3.1.25 {#25-3-1-25}
+
+Дата выхода: 3 апреля 2026.
+
+#### Функциональность
+
+* Добавлена поддержка конфигурации 2 ДЦ с синхронной записью данных (режим [`Bridge`](./concepts/bridge.md)); доступно в {{ ydb-short-name }} Enterprise.
+* Улучшения топиков:
+  * в Kafka API теперь можно создавать [компактифицированные](https://docs.confluent.io/kafka/design/log_compaction.html#ak-log-compaction) топики; YDB автоматически создаёт и удаляет внутреннего служебного потребителя, используемого для компактификации топика;
+  * API топиков расширен: в выдачу `DescribeConsumer` добавлены [новые параметры](./reference/ydb-sdk/topic.md), а [попартиционные метрики топиков можно отгружать в пользовательские квоты](./reference/observability/metrics/index.md#topics).
+* Реализованы [резервное копирование и восстановление](./reference/ydb-cli/export-import/file-structure.md?version=v25.3#topics) конфигурации топика в S3 и из S3.
+* Реализован [экспорт представлений](./reference/ydb-cli/export-import/file-structure.md#views) (`VIEW`) в S3 и из S3.
+
+#### Исправления ошибок
+
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/20238) состояние гонки при обновлении soft-лимита CPU.
+* [Исправлено поведение](https://github.com/ydb-platform/ydb/pull/18121), при котором `ALTER TABLE` мог завершаться с ошибкой для таблиц с векторным индексом.
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/18088) неконсистентные результаты в некоторых read-write транзакциях — конфликтующие записи больше не затирают незакоммиченные изменения.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/18234) нарушение сериализуемости в read-write транзакциях после рестартов шарда.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/20560) ошибка управления памятью при коммите смещения в топиках со включённым автоматическим партиционированием.
+* [Добавлены](https://github.com/ydb-platform/ydb/pull/18698) проверки включённого шифрования в zero-copy передаче.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/20519) ошибка, приводящая к зависанию VDisk в local recovery после ошибки `ChunkRead`.
+* [Исключено](https://github.com/ydb-platform/ydb/pull/18924) появление фантомных VDisk из-за гонок между операциями создания и удаления группы.
+* [Улучшено](https://github.com/ydb-platform/ydb/pull/17687) определение состояния PDisk — теперь используется фактическое состояние из BSC, что повышает точность healthcheck.
+* При завершении сессии через attach stream теперь [отправляется](https://github.com/ydb-platform/ydb/pull/22298) уведомление.
+* Сервис координации теперь корректно [возвращает](https://github.com/ydb-platform/ydb/pull/16901) код `SCHEME_ERROR` для несуществующих ресурсов вместо ошибочно использовавшегося кода `INTERNAL_ERROR`.
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/20157) ошибки работы с памятью и нарушения внутренней согласованности данных в Workload Manager и связанном с планировщиком коде.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/20432) проблема, из-за которой запросы информации о PDisk могли завершаться таймаутом, если целевой узел был отключён или недоступен.
+
+## Версия 25.2 {#25-2}
+
+### Версия 25.2.1.24 {#25-2-1-24}
+
+Дата выхода: 28 января 2026.
+
+#### Исправления ошибок
+
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/25112) [проблема](https://github.com/ydb-platform/ydb/issues/23858), из-за которой удаление [таблетки](./concepts/glossary.md#tablet) могло зависать
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/25145) [ошибка](https://github.com/ydb-platform/ydb/issues/20866) вызывающая ошибку, при изменении follower'a таблицы
+* Исправлен ряд ошибок, связанных с [changefeed](./concepts/glossary.md#changefeed):
+  * [Исправлена](https://github.com/ydb-platform/ydb/pull/25689) [ошибка](https://github.com/ydb-platform/ydb/issues/25524), из-за которой импорт таблицы с Utf8-ключом и включённым changefeed мог завершиться неудачно
+  * [Исправлена](https://github.com/ydb-platform/ydb/pull/25453) [ошибка](https://github.com/ydb-platform/ydb/issues/25454), когда импорт таблицы без потоков изменений мог завершаться сбоем из-за некорректного поиска файлов changefeed
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/26069) [ошибка](https://github.com/ydb-platform/ydb/issues/25869), которая могла приводить к сбоям при UPSERT-операциях в колоночных таблицах
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/26504) [ошибка](https://github.com/ydb-platform/ydb/issues/26225), вызывавшая сбой из-за обращения к уже освобождённой памяти
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/26657) [ошибка](https://github.com/ydb-platform/ydb/issues/23122) с дубликатами в уникальных вторичных индексах
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/26879) [ошибка](https://github.com/ydb-platform/ydb/issues/26565) неверного совпадения контрольных сумм при восстановлении сжатых бэкапов из S3
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/27528) [ошибка](https://github.com/ydb-platform/ydb/issues/27193), из-за которой некоторые запросы бенчмарка TPC-H 1000 могли завершаться с ошибкой
+* Исправлен ряд проблем, связанных с инициализацией кластера:
+  * [Исправлена](https://github.com/ydb-platform/ydb/pull/25678) [ошибка](https://github.com/ydb-platform/ydb/issues/25023), из-за которой инициализация кластера могла зависать при обязательной авторизации
+  * [Исправлена](https://github.com/ydb-platform/ydb/pull/28886) [проблема](https://github.com/ydb-platform/ydb/issues/27228) из-за которой создание новых баз данных сразу после развёртывания кластера было невозможно в течение нескольких минут
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/28655) [ошибка](https://github.com/ydb-platform/ydb/issues/28510), при которой мог возникать race condition и клиенты получали ошибку `Could not find correct token validator`, если использовались недавно выданные токены до обновления состояния `LoginProvider`
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/29940) [ошибка](https://github.com/ydb-platform/ydb/issues/29903), при которой именованное выражение, содержащее другое именованное выражение, приводило к некорректному бэкапу `VIEW`
+
+### Релиз кандидат 25.2.1.10 {#25-2-1-10-rc}
+
+Дата выхода: 21 сентября 2025.
+
+#### Функциональность
+
+* [Аналитические возможности](./concepts/analytics/index.md) доступны по умолчанию: [колоночные таблицы](./concepts/datamodel/table.md?version=v25.2#column-oriented-tables) могут создаваться без включения специальных флагов, с использованием сжатия LZ4 и хеш-партиционирования. Поддерживаемые операции включают широкий набор DML (UPDATE, DELETE, UPSERT, INSERT INTO ... SELECT) и CREATE TABLE AS SELECT. Интеграция с dbt, Apache Airflow, Jupyter, Superset и федеративные запросы к S3 позволяют строить сквозные аналитические пайплайны в YDB.
+* [Стоимостной оптимизатор](./concepts/query_execution/optimizer.md) работает по умолчанию для запросов, использующих хотя бы одну колоночную таблицу, но может быть включён принудительно и для остальных запросов. Стоимостной оптимизатор улучшает производительность выполнения запросов, вычисляя оптимальный порядок и тип соединений на основе статистики таблиц; поддерживаемые [hints](./dev/query-hints.md) позволяют тонко настраивать планы выполнения для сложных аналитических запросов.
+* Реализован [трансфер данных](./concepts/transfer.md?version=v25.2) – асинхронный механизм переноса данных из топика в таблицу. [Создание](./yql/reference/syntax/create-transfer.md?version=v25.2) экземпляра трансфера, его [изменение](./yql/reference/syntax/alter-transfer.md?version=v25.2) и [удаление](./yql/reference/syntax/drop-transfer.md?version=v25.2) осуществляется с использованием YQL. Для быстрого старта воспользуйтесь [инструкцией с примером](./recipes/transfer/quickstart.md?version=v25.2).
+* Добавлен [спиллинг](./concepts/query_execution/spilling.md), механизм управления памятью, при котором промежуточные данные, возникающие в результате выполнения запросов и превышающие доступный объём оперативной памяти узла, временно выгружаются во внешнее хранилище. Спиллинг обеспечивает выполнение пользовательских запросов, которые требуют обработки больших объёмов данных, превышающих доступную память узла.
+* Увеличено [максимальное время на выполнение одного запроса](./concepts/limits-ydb?version=v25.2) с 30 минут до 2 часов.
+* Добавлена поддержка Certificate Authority (CA) и [Yandex Cloud Identity and Access Management (IAM)](https://yandex.cloud/ru/docs/iam) аутентификации в [асинхронной репликации](./yql/reference/syntax/create-async-replication.md?version=v25.2).
+* Включены по умолчанию:
+
+  * [векторный индекс](./dev/vector-indexes.md?version=v25.2) для приближённого векторного поиска;
+  * поддержка в [YDB Topics Kafka API](./reference/kafka-api/index.md?version=v25.2) [клиентской балансировки читателей](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb), [компактифицированных топиков](https://docs.confluent.io/kafka/design/log_compaction.html) и [транзакций](https://www.confluent.io/blog/transactions-apache-kafka);
+  * поддержка [автопартиционирования топиков](./concepts/cdc.md?version=v25.2#topic-partitions) в CDC для строковых таблиц;
+  * поддержка автопартиционирования топиков для асинхронной репликации;
+  * поддержка параметризованного [типа Decimal](./yql/reference/types/primitive.md?version=v25.2#numeric);
+  * поддержка [типа DateTime64](./yql/reference/types/primitive.md?version=v25.2#datetime);
+  * автоудаление временных директорий и таблиц при экспорте в S3;
+  * поддержка [потока изменений](./concepts/cdc.md?version=v25.2) в операциях резервного копирования и восстановления;
+  * возможность [указания числа реплик](./yql/reference/syntax/alter_table/indexes.md?version=v25.2) для вторичного индекса;
+  * системные представления с [историей перегруженных партиций](./dev/system-views?version=v25.2#top-overload-partitions).
+
+#### Исправления ошибок
+
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/24265) ошибка в [Workload Manager](./dev/resource-consumption-management.md), из-за которой потребление CPU колоночными таблицами могло превышать установленные пределы.
+
 ## Версия 25.1 {#25-1}
+
+### Версия 25.1.4.7 {#25-1-4-7}
+
+Дата выхода: 15 сентября 2025.
+
+#### Функциональность
+
+* [Добавлена](https://github.com/ydb-platform/ydb/pull/21119) возможность использовать привычные инструменты потоковой обработки данных –  Kafka Connect, Confluent Schema Registry, Kafka Streams, Apache Flink, AKH через [Kafka API](./reference/kafka-api/index.md) при работе с YDB Topics. Теперь YDB Topics Kafka API поддерживает:
+  * клиентскую балансировку читателей – включается установкой флага `enable_kafka_native_balancing` в [конфигурации кластера](./reference/configuration/feature_flags.md). [Как работает балансировка читателей в Apache Kafka](https://www.confluent.io/blog/cooperative-rebalancing-in-kafka-streams-consumer-ksqldb). Теперь балансировка читателей в Kafka API YDB Topics будет работать точно так же,
+  * [компактифицированные топики](https://docs.confluent.io/kafka/design/log_compaction.html) – включается установкой флага `enable_topic_compactification_by_key`,
+  * [транзакции](https://www.confluent.io/blog/transactions-apache-kafka) – включается установкой флага `enable_kafka_transactions`.
+* [Добавлен](https://github.com/ydb-platform/ydb/pull/20982) [новый протокол](https://github.com/ydb-platform/ydb/issues/11064) в [Node Broker](./concepts/glossary.md#node-broker), устраняющий всплески сетевого трафика на больших кластерах (более 1000 серверов), связанного с рассылкой информации об узлах.
+
+#### YDB UI
+
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/17839) [ошибка](https://github.com/ydb-platform/ydb/issues/15230), из-за которой не все таблетки отображались на вкладке Tablets в разделе диагностики.
+* Исправлена [ошибка](https://github.com/ydb-platform/ydb/issues/18735), из-за которой на вкладке Storage в разделе диагностики базы данных отображались не только узлы хранения.
+* Исправлена [ошибка сериализации](https://github.com/ydb-platform/ydb-embedded-ui/issues/2164), которая могла приводить к падению при открытии статистики выполнения запроса.
+* Изменена логика перехода узлов в критическое состояние – заполненный на 75-99% CPU pool теперь вызывает предупреждение, а не критическое состояние.
+
+#### Производительность
+
+* [Оптимизирована](https://github.com/ydb-platform/ydb/pull/20197) обработка пустых входов при выполнении JOIN-операций.
+
+#### Исправления ошибок
+
+* [Добавлена](https://github.com/ydb-platform/ydb/pull/21918) поддержка в асинхронной репликации нового типа записи об изменениях — `reset`-записи (в дополнение к `update`- и `erase`-записям).
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/21836) [ошибка](https://github.com/ydb-platform/ydb/issues/21814), из-за которой экземпляр репликации с неуказанным параметром `COMMIT_INTERVAL` приводил к сбою процесса.
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/21652) редкие ошибки при чтении из топика во время балансировки партиций.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/22455) ошибка, из-за которой при удалении dedicated-базы данных системные таблетки базы могли остаться неудалёнными.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/22203) ошибка, из-за которой таблетки могли зависать при недостатки памяти на узлах. Теперь таблетки будут автоматически запускаться, как только на каком-либо из узлов освободится достаточное количество ресурсов.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/24278) ошибка, из-за которой при записи сообщений Kafka сохранялось только первое сообщение из батча, а остальные сообщения игнорировались.
 
 ### Релиз кандидат 25.1.2.7 {#25-1-2-7-rc}
 
@@ -9,30 +125,30 @@
 
 #### Функциональность
 
-* [Реализован](https://github.com/ydb-platform/ydb/pull/19504) [векторный индекс](./dev/vector-indexes.md) для приближённого векторного поиска. Для векторного поиска опубликованы рецепты для [YDB CLI и YQL](https://ydb.tech/docs/ru/recipes/vector-search/), а также примеры работы [на С++ и Python](https://ydb.tech/docs/ru/recipes/ydb-sdk/vector-search). Включается установкой флага `enable_vector_index` в [конфигурации кластера](./reference/configuration/index.md). Внимание! После включения флага откат на предыдущие версии {{ ydb-short-name }} невозможен.
-* [Добавлена](https://github.com/ydb-platform/ydb/issues/11454) поддержка {% if feature_async_replication %}[консистентной асинхронной репликации](./concepts/async-replication.md){% else %}консистентной асинхронной репликации{% endif %}.
-* Поддержаны запросы [BATCH UPDATE](.yql/reference/syntax/batch-update) и [BATCH DELETE](./yql/reference/syntax/batch-delete), позволяющие изменять большие строковые таблицы вне транзакционных ограничений. Включается установкой флага `enable_batch_updates` в конфигурации кластера.
-* Добавлен [механизм конфигурации V2](./devops/configuration-management/configuration-v2/config-overview), упрощающий развёртывание новых кластеров {{ ydb-short-name }} и дальнейшую работу с ними. [Сравнение](./devops/configuration-management/compare-configs) механизмов конфигурации V1 и V2.
-* Добавлена поддержка параметризованного [типа Decimal](./yql/reference/types/primitive.md#numeric).
+* [Реализован](https://github.com/ydb-platform/ydb/pull/19504) [векторный индекс](./dev/vector-indexes.md?version=v25.1) для приближённого векторного поиска. Для векторного поиска опубликованы рецепты для [YDB CLI и YQL](./recipes/vector-search?version=v25.1), а также примеры работы [на С++ и Python](./recipes/ydb-sdk/vector-search?version=v25.1).
+* [Добавлена](https://github.com/ydb-platform/ydb/issues/11454) поддержка [консистентной асинхронной репликации](./concepts/async-replication.md?version=v25.1).
+* Добавлен [механизм конфигурации V2](./devops/configuration-management/configuration-v2/config-overview?version=v25.1), упрощающий развёртывание новых кластеров {{ ydb-short-name }} и дальнейшую работу с ними. [Сравнение](./devops/configuration-management/compare-configs?version=v25.1) механизмов конфигурации V1 и V2.
+* Добавлена поддержка параметризованного [типа Decimal](./yql/reference/types/primitive.md?version=v25.1#numeric).
+* [Добавлена](https://github.com/ydb-platform/ydb/pull/8065) возможность не использовать оператор `DECLARE` для объявления типов параметров в запросах. Теперь типы параметров определяются автоматически на основе переданных значений.
 * Реализована клиентская балансировка партиций при чтении по [протоколу Kafka](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) (как у самой Kafka). Раньше балансировка происходила на сервере. Включается установкой флага `enable_kafka_native_balancing` в конфигурации кластера.
-* Добавлена поддержка [автопартиционирования топиков](./concepts/cdc.md#topic-partitions) в CDC для строковых таблиц. Включается установкой флага `enable_topic_autopartitioning_for_cdc` в конфигурации кластера.
-* [Добавлена](https://github.com/ydb-platform/ydb/pull/8264) возможность [изменить время хранения данных](./concepts/cdc.md#topic-options) в CDC-топике с использованием выражения `ALTER TOPIC`.
-* [Поддержан](https://github.com/ydb-platform/ydb/pull/7052) [формат DEBEZIUM_JSON](./concepts/cdc.md#debezium-json-record-structure) для потоков изменений (changefeed).
+* Добавлена поддержка [автопартиционирования топиков](./concepts/cdc.md?version=v25.1#topic-partitions) в CDC для строковых таблиц. Включается установкой флага `enable_topic_autopartitioning_for_cdc` в конфигурации кластера.
+* [Добавлена](https://github.com/ydb-platform/ydb/pull/8264) возможность [изменить время хранения данных](./concepts/cdc.md?version=v25.1#topic-options) в CDC-топике с использованием выражения `ALTER TOPIC`.
+* [Поддержан](https://github.com/ydb-platform/ydb/pull/7052) [формат DEBEZIUM_JSON](./concepts/cdc.md?version=v25.1#debezium-json-record-structure) для потоков изменений (changefeed).
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/19507) возможность создавать потоки изменений к индексным таблицам.
-* Добавлена возможность [указания числа реплик](./yql/reference/syntax/alter_table/indexes.md) для вторичного индекса. Включается установкой флага `enable_access_to_index_impl_tables` в конфигурации кластера.
+* Добавлена возможность [указания числа реплик](./yql/reference/syntax/alter_table/indexes.md?version=v25.1) для вторичного индекса. Включается установкой флага `enable_access_to_index_impl_tables` в конфигурации кластера.
 * В операциях резервного копирования и восстановления расширен состав поддерживаемых объектов. Включается установкой флагов, указанных в скобках:
   * [поддержка](https://github.com/ydb-platform/ydb/issues/7054) потока изменений (флаги `enable_changefeeds_export` и `enable_changefeeds_import`);
   * [поддержка](https://github.com/ydb-platform/ydb/issues/12724) представлений (`VIEW`) (флаг `enable_view_export`).
 * Добавлено автоудаление временных директорий и таблиц при экспорте в S3. Включается установкой флага `enable_export_auto_dropping` в конфигурации кластера.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/12909) автоматическая проверка целостности резервных копий при импорте, предотвращающая восстановление из повреждённых резервных копий и защищающая от потери данных.
-* [Добавлена](https://github.com/ydb-platform/ydb/pull/15570) возможность создания представлений, использующих [UDF](./yql/reference/builtins/basic.md#udf) в запросах.
-* Добавлены системные представления с информацией о [настройках прав доступа](./dev/system-views#auth), [истории перегруженных партиций](./dev/system-views#top-overload-partitions) - включается установкой флага `enable_followers_stats` в конфигурации кластера,  [истории партиций строковых таблиц со сломанными блокировками (TLI)](./dev/system-views#top-tli-partitions).
-* Добавлены новые параметры в операторы [CREATE USER](./yql/reference/syntax/create-user.md) и [ALTER USER](./yql/reference/syntax/alter-user.md):
+* [Добавлена](https://github.com/ydb-platform/ydb/pull/15570) возможность создания представлений, использующих [UDF](./yql/reference/builtins/basic.md?version=v25.1#udf) в запросах.
+* Добавлены системные представления с информацией о [настройках прав доступа](./dev/system-views?version=v25.1#auth), [истории перегруженных партиций](./dev/system-views?version=v25.1#top-overload-partitions) - включается установкой флага `enable_followers_stats` в конфигурации кластера,  [истории партиций строковых таблиц со сломанными блокировками (TLI)](./dev/system-views?version=v25.1#top-tli-partitions).
+* Добавлены новые параметры в операторы [CREATE USER](./yql/reference/syntax/create-user.md?version=v25.1) и [ALTER USER](./yql/reference/syntax/alter-user.md?version=v25.1):
   * `HASH` — возможность задания пароля в зашифрованном виде;
   * `LOGIN` и `NOLOGIN` — разблокировка и блокировка пользователя.
 * Повышена безопасность учётных записей:
-  * [Добавлена](https://github.com/ydb-platform/ydb/pull/11963) [проверка сложности пароля](./reference/configuration/auth_config#password-complexity) пользователя;
-  * [Реализована](https://github.com/ydb-platform/ydb/pull/12578) [автоматическая блокировка пользователя](./reference/configuration/auth_config#account-lockout) при исчерпании лимита попыток ввода пароля;
+  * [Добавлена](https://github.com/ydb-platform/ydb/pull/11963) [проверка сложности пароля](./reference/configuration/?version=v25.1#password-complexity) пользователя;
+  * [Реализована](https://github.com/ydb-platform/ydb/pull/12578) [автоматическая блокировка пользователя](./reference/configuration/?version=v25.1#account-lockout) при исчерпании лимита попыток ввода пароля;
   * [Добавлена](https://github.com/ydb-platform/ydb/pull/12983) возможность самостоятельной смены пароля пользователем.
 * [Реализована](https://github.com/ydb-platform/ydb/issues/9748) возможность переключения функциональных флагов во время работы сервера {{ ydb-short-name }}. Флаги, для которых в [proto-файле](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/feature_flags.proto#L60) не указан параметр `(RequireRestart) = true`, будут применяться без рестарта кластера.
 * Теперь самые старые (а не новые) блокировки [меняются на полношардовые](https://github.com/ydb-platform/ydb/pull/11329) при превышении количества блокировок на шардах.
@@ -40,7 +156,7 @@
 * [Реализована](https://github.com/ydb-platform/ydb/pull/12689) отмена волатильных транзакций со статусом ABORTED при плавном перезапуске даташардов.
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/6342) возможность удалить `NOT NULL`-ограничения на столбец в таблице с помощью запроса `ALTER TABLE ... ALTER COLUMN ... DROP NOT NULL`.
 * [Добавлено](https://github.com/ydb-platform/ydb/pull/9168) ограничение в 100 000 на число одновременных запросов на создание сессий в сервисе координации.
-* [Увеличено](https://github.com/ydb-platform/ydb/pull/14219) максимальное [число столбцов в первичном ключе](./concepts/limits-ydb.md?#schema-object) с 20 до 30.
+* [Увеличено](https://github.com/ydb-platform/ydb/pull/14219) максимальное [число столбцов в первичном ключе](./concepts/limits-ydb.md?version=v25.1#schema-object) с 20 до 30.
 * Улучшена диагностика и интроспекция ошибок, связанных с памятью ([#10419](https://github.com/ydb-platform/ydb/pull/10419), [#11968](https://github.com/ydb-platform/ydb/pull/11968)).
 * **_(Экспериментально)_** [Добавлен](https://github.com/ydb-platform/ydb/pull/14075) экспериментальный режим работы с более строгими проверками прав доступа. Включается установкой следующих флагов:
   * `enable_strict_acl_check` – не позволять выдавать права несуществующим пользователям и удалять пользователей, если им выданы права;
@@ -49,7 +165,7 @@
 
 #### Изменения с потерей обратной совместимости
 
-* Если вы используете запросы, в которых происходит обращение к именованным выражениям как к таблицам с помощью [AS_TABLE](./yql/reference/syntax/select/from_as_table), обновите [temporal over YDB](https://github.com/yandex/temporal-over-ydb) на версию [v1.23.0-ydb-compat](https://github.com/yandex/temporal-over-ydb/releases/tag/v1.23.0-ydb-compat) перед обновление YDB на текущую версию, чтобы избежать ошибок в выполнении таких запросов.
+* Если вы используете запросы, в которых происходит обращение к именованным выражениям как к таблицам с помощью [AS_TABLE](./yql/reference/syntax/select/from_as_table?version=v25.1), обновите [temporal over YDB](https://github.com/yandex/temporal-over-ydb) на версию [v1.23.0-ydb-compat](https://github.com/yandex/temporal-over-ydb/releases/tag/v1.23.0-ydb-compat) перед обновление YDB на текущую версию, чтобы избежать ошибок в выполнении таких запросов.
 
 #### YDB UI
 
@@ -69,7 +185,7 @@
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/6509) поддержка [свёртки констант](https://ru.wikipedia.org/wiki/%D0%A1%D0%B2%D1%91%D1%80%D1%82%D0%BA%D0%B0_%D0%BA%D0%BE%D0%BD%D1%81%D1%82%D0%B0%D0%BD%D1%82) в оптимизаторе запросов по умолчанию, что повышает производительность запросов за счёт вычисления константных выражений на этапе компиляции.
 * [Добавлен](https://github.com/ydb-platform/ydb/issues/6512) новый протокол гранулярного таймкаста, который позволит сократить время выполнения распределённых транзакций (замедление одного шарда не будет приводить к замедлению всех).
 * [Реализована](https://github.com/ydb-platform/ydb/issues/11561) функциональность сохранения состояния даташардов в памяти при перезапусках, что позволяет сохранить блокировки и повысить шансы на успешное выполнение транзакций. Это сокращает время выполнения длительных транзакций за счёт уменьшения числа повторных попыток.
-* [Реализована](https://github.com/ydb-platform/ydb/pull/15255) конвейерная обработка внутренних транзакций в [Node Broker](./concepts/glossary.md#node-broker), что ускорило запуск динамических узлов в кластере {{ ydb-short-name }}.
+* [Реализована](https://github.com/ydb-platform/ydb/pull/15255) конвейерная обработка внутренних транзакций в [Node Broker](./concepts/glossary?version=v25.1#node-broker), что ускорило запуск динамических узлов в кластере {{ ydb-short-name }}.
 * [Улучшена](https://github.com/ydb-platform/ydb/pull/15607) устойчивость Node Broker к повышенной нагрузке со стороны узлов кластера.
 * [Включены](https://github.com/ydb-platform/ydb/pull/19440) по умолчанию выгружаемые B-Tree-индексы вместо невыгружаемых SST-индексов, что позволяет сократить потребление памяти при хранении «холодных» данных.
 * [Оптимизировано](https://github.com/ydb-platform/ydb/pull/15264) потребление памяти узлами хранения.
@@ -80,12 +196,12 @@
 
 #### Исправления ошибок
 
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/9707) ошибка в настройке [Interconnect](./concepts/glossary.md#actor-system-interconnect), приводящая к снижению производительности.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/9707) ошибка в настройке [Interconnect](./concepts/glossary.md?version=v25.1#actor-system-interconnect), приводящая к снижению производительности.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/13993) ошибка «Out of memory» при удалении очень больших таблиц за счёт регулирования числа одновременно обрабатывающих данную операцию таблеток.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/9848) ошибка, возникавшая при указании одного и того же узла базы данных несколько раз в конфигурации для системных таблеток.
 * [Устранена](https://github.com/ydb-platform/ydb/pull/11059) ошибка длительного (секунды) чтения данных при частых операциях перешардирования таблицы.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/9723) ошибка чтения из асинхронных реплик, приводившая к сбою.
-* [Исправлены](https://github.com/ydb-platform/ydb/pull/9507) редкие зависания при первоначальном сканировании [CDC](./dev/cdc.md).
+* [Исправлены](https://github.com/ydb-platform/ydb/pull/9507) редкие зависания при первоначальном сканировании [CDC](./dev/cdc.md?version=v25.1).
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/11483) обработка незавершённых схемных транзакций в даташардах при перезапуске системы.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/10460) ошибка несогласованного чтения из топика при попытке явно подтвердить сообщение, прочитанное в рамках транзакции. Теперь пользователь при попытке подтвердить сообщение получит ошибку.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/12220) ошибка, из-за которой автопартиционирование некорректно работало при работе с топиком в транзакции.
@@ -95,15 +211,14 @@
 * [Улучшено](https://github.com/ydb-platform/ydb/pull/16420) построение вторичных индексов: при возникновении некоторых ошибок система ретраит процесс, а не прерывает его.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/16635) ошибка выполнения выражения `RETURNING` в запросах `INSERT INTO` и `UPSERT INTO`.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/16269) проблема зависания операции «Drop Tablet» в PQ tablet, особенно во время задержек в работе Interconnect.
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/16194) ошибка, возникавшая во время [компакшна](./concepts/glossary.md#compaction) VDisk.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/16194) ошибка, возникавшая во время [компакшна](./concepts/glossary.md?version=v25.1#compaction) VDisk.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/15233) проблема, из-за которой длительные сессии чтения топика завершались с ошибками «too big inflight».
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/15515) зависание при чтении топика, если хотя бы одна партиция не имела входящих данных, но читалась несколькими потребителями.
 * [Устранена](https://github.com/ydb-platform/ydb/pull/18614) редкая проблема перезагрузок PQ tablet.
 * [Устранена](https://github.com/ydb-platform/ydb/pull/18378) проблема, при которой после обновления версии кластера Hive запускались подписчики в датацентрах без работающих узлов баз данных.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/19057) ошибка `Failed to set up listener on port 9092 errno# 98 (Address already in use)`, возникавшая при обновлении версии.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/18905) ошибка, приводившая к segmentation fault при одновременном выполнении запроса к healthcheck и отключении узла кластера.
-* [Исправлен](https://github.com/ydb-platform/ydb/pull/18899) сбой в [партиционировании строковой таблицы](./concepts/datamodel/table.md#partitioning_row_table) при выборе разделённого ключа из образцов доступа, содержащих смешанные операции с полным ключом и префиксом ключа (например, точное чтение или чтение диапазона).
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/18647) [ошибка](https://github.com/ydb-platform/ydb/issues/17885), из-за которой тип индекса ошибочно определялся как `GLOBAL SYNC`, хотя в запросе явно указывался `UNIQUE`.
+* [Исправлен](https://github.com/ydb-platform/ydb/pull/18899) сбой в [партиционировании строковой таблицы](./concepts/datamodel/table.md?version=v25.1#partitioning_row_table) при выборе разделённого ключа из образцов доступа, содержащих смешанные операции с полным ключом и префиксом ключа (например, точное чтение или чтение диапазона).
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/16797) ошибка, из-за которой автопартиционирование топиков не работало, когда параметр конфигурации `max_active_partition` задавался с помощью выражения `ALTER TOPIC`.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/18938) ошибка, из-за которой `ydb scheme describe` возвращал список столбцов не в том порядке, в котором они были заданы при создании таблицы.
 
@@ -127,7 +242,7 @@
 * Исправлены зависания транзакций при работе с топиками при [перезагрузке](https://github.com/ydb-platform/ydb/issues/17843) или [удалении](https://github.com/ydb-platform/ydb/issues/17915) таблетки.
 * [Исправлены](https://github.com/ydb-platform/ydb/pull/18114) [проблемы](https://github.com/ydb-platform/ydb/issues/18071) с чтением сообщений больше 6Mb через [Kafka API](./reference/kafka-api).
 * [Устранена](https://github.com/ydb-platform/ydb/pull/18319) утечка памяти во время записи в [топик](./concepts/glossary#topic).
-* Исправлены ошибки обработки [nullable столбцов](https://github.com/ydb-platform/ydb/issues/15701) и [столбцов с типом UUID]((https://github.com/ydb-platform/ydb/issues/15697)) в строковых таблицах.
+* Исправлены ошибки обработки [nullable столбцов](https://github.com/ydb-platform/ydb/issues/15701) и [столбцов с типом UUID](https://github.com/ydb-platform/ydb/issues/15697) в строковых таблицах.
 
 ### Версия 24.4.4.2 {#24-4-4-2}
 
@@ -213,13 +328,13 @@
 * Добавлена [трассировка запросов](./reference/observability/tracing/setup) – инструмент, позволяющий детально посмотреть путь следования запроса по распределенной системе.
 * Добавлена поддержка [асинхронной репликации](./concepts/async-replication), которая позволяет синхронизировать данные между базами YDB почти в реальном времени. Также она может быть использована для миграции данных между базами с минимальным простоем работающих с ними приложений.
 * Добавлена поддержка [представлений (VIEW)](https://ydb.tech/docs/ru/concepts/datamodel/view), которая может быть включена администратором кластера с помощью настройки `enable_views` в [динамической конфигурации](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
-* В [федеративных запросах](./concepts/federated_query/) поддержаны новые внешние источники данных: MySQL, Microsoft SQL Server, Greenplum.
+* В [федеративных запросах](./concepts/query_execution/federated_query/) поддержаны новые внешние источники данных: MySQL, Microsoft SQL Server, Greenplum.
 * Разработана [документация](./devops/deployment-options/manual/federated-queries/connector-deployment) по разворачиванию YDB с функциональностью федеративных запросов (в ручном режиме).
 * Для Docker-контейнера с YDB добавлен параметр запуска `FQ_CONNECTOR_ENDPOINT`, позволяющий указать адрес коннектора ко внешним источникам данных. Добавлена возможность TLS-шифрования соединения с коннектором. Добавлена возможность вывода порта сервиса коннектора, локально работающего на том же хосте, что и динамический узел YDB.
 * Добавлен режим [автопартиционирования](./concepts/datamodel/topic#autopartitioning) топиков, в котором топики могут разбивать партиции в зависимости от нагрузки с сохранением гарантий порядка чтения сообщений и exactly once записи. Режим может быть включен администратором кластера с помощью настроек `enable_topic_split_merge` и `enable_pqconfig_transactions_at_scheme_shard` в [динамической конфигурации](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
 * Добавлены [транзакции](./concepts/transactions#topic-table-transactions) с участием [топиков](https://ydb.tech/docs/ru/concepts/datamodel/topic) и строковых таблиц. Таким образом, можно транзакционно перекладывать данные из таблиц в топики и в обратном направлении, а также между топиками, чтобы данные не терялись и не дублировались. Транзакции могут быть включены администратором кластера с помощью настроек `enable_topic_service_tx` и `enable_pqconfig_transactions_at_scheme_shard` в [динамической конфигурации](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
 * [Добавлена](https://github.com/ydb-platform/ydb/pull/7150) поддержка [CDC](./concepts/cdc) для синхронных вторичных индексов.
-* Добавлена возможность изменить период хранения записей в [CDC]((./concepts/cdc)) топиках.
+* Добавлена возможность изменить период хранения записей в [CDC](./concepts/cdc.md) топиках.
 * Добавлена поддержка [автоинкремента](./yql/reference/types/serial) для колонок, включенных в первичный ключ таблицы.
 * Добавлена запись в [аудитный лог](./security/audit-log) событий логина пользователей в YDB, событий завершения сессии пользователя в пользовательском интерфейсе, а также запроса бэкапа и восстановления из бэкапа.
 * Добавлено системное представление, позволяющее получить информацию о сессиях, установленных с базой данных, с помощью запроса.
@@ -232,7 +347,7 @@
 * Добавлены новые настройки парсинга для `timestamp`, `datetime` при чтении данных из S3.
 * Добавлена поддержка типа `Decimal` в [ключах партиционирования](https://ydb.tech/docs/ru/dev/primary-key/column-oriented#klyuch-particionirovaniya).
 * Улучшена диагностика проблем хранилища в HealthCheck.
-* **_(Экспериментально)_** Добавлен [стоимостной оптимизатор](./concepts/optimizer#stoimostnoj-optimizator-zaprosov) для сложных запросов, где участвуют [колоночные таблицы](./concepts/glossary#column-oriented-table). Оптимизатор рассматривает большое количество альтернативных планов выполнения и выбирает из них лучший на основе оценки стоимости каждого варианта. На текущий момент оптимизатор работает только с планами, где есть операции [JOIN](./yql/reference/syntax/join).
+* **_(Экспериментально)_** Добавлен [стоимостной оптимизатор](./concepts/query_execution/optimizer#stoimostnoj-optimizator-zaprosov) для сложных запросов, где участвуют [колоночные таблицы](./concepts/glossary#column-oriented-table). Оптимизатор рассматривает большое количество альтернативных планов выполнения и выбирает из них лучший на основе оценки стоимости каждого варианта. На текущий момент оптимизатор работает только с планами, где есть операции [JOIN](./yql/reference/syntax/join).
 * **_(Экспериментально)_** Реализована начальная версия [менеджера рабочей нагрузки](./dev/resource-consumption-management), который позволяет создавать пулы ресурсов с ограничениями по процессору, памяти и количеству активных запросов. Реализованы классификаторы ресурсов для отнесения запросов к определенному пулу ресурсов.
 * **_(Экспериментально)_** Реализован [автоматический выбор индекса](https://ydb.tech/docs/ru/dev/secondary-indexes#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) при выполнении запроса, который может быть включен администратором кластера с помощью настройки `index_auto_choose_mode` в `table_service_config` в [динамической конфигурации](./maintenance/manual/dynamic-config#obnovlenie-dinamicheskoj-konfiguracii).
 
@@ -288,7 +403,7 @@
 
 ### Функциональность
 
-* Добавлена возможность [задать приоритеты](./devops/deployment-options/manual/maintenance-without-downtime#priority) задачам обслуживания в [системе управления кластером](./concepts/glossary#cms).
+* Добавлена возможность [задать приоритеты](./devops/deployment-options/manual/maintenance.md) задачам обслуживания в [системе управления кластером](./concepts/glossary#cms).
 * Добавлена [настройка стабильных имён](reference/configuration/node_broker_config.md#node-broker-config) для узлов кластера в рамках тенанта.
 * Добавлено получение вложенных групп от [LDAP-сервера](./security/authentication.md#ldap), в [LDAP-конфигурации](reference/configuration/auth_config.md#ldap-auth-config) улучшен парсинг хостов и добавлена настройка для отключения встроенной аутентификацию по логину и паролю.
 * Добавлена возможность аутентификации [динамических узлов](./concepts/glossary#dynamic) по SSL-сертификату.
@@ -400,7 +515,7 @@
 * **_(Экспериментально)_** При записи сообщений в топик теперь можно передавать метаданные. Для включения этой функциональности добавьте `enable_topic_message_meta: true` в [конфигурационный файл](reference/configuration/index.md).
 * **_(Экспериментально)_** Добавлена возможность [чтения из топиков](reference/ydb-sdk/topic.md#read-tx) и запись в таблицу в рамках одной транзакции. Новая возможность упрощает сценарий переноса данных из топика в таблицу. Для её включения добавьте `enable_topic_service_tx: true` в конфигурационный файл.
 * **_(Экспериментально)_** Добавлена поддержка [совместимости с PostgreSQL](postgresql/intro.md). Новый механизм позволяет выполнять SQL запросы в PostgreSQL диалекте на инфраструктуре YDB с использованием сетевого протокола PostgreSQL. Можно использовать привычные инструменты работы с PostgreSQL, такие, как psql и драйверы (pq для Golang и psycopg2 для Python), а также разрабатывать запросы на привычном PostgreSQL синтаксисе с горизонтальной масштабируемостью и отказоустойчивость YDB.
-* **_(Экспериментально)_** Добавлена поддержка [федеративных запросов](concepts/federated_query/index.md). Она позволяет получать информацию из различных источников данных без их переноса в YDB. Поддерживается взаимодействие с ClickHouse, PostgreSQL, S3 через YQL-запросы без дублирования данных между системами.
+* **_(Экспериментально)_** Добавлена поддержка [федеративных запросов](concepts/query_execution/federated_query/index.md). Она позволяет получать информацию из различных источников данных без их переноса в YDB. Поддерживается взаимодействие с ClickHouse, PostgreSQL, S3 через YQL-запросы без дублирования данных между системами.
 
 ### Встроенный UI
 
@@ -475,7 +590,7 @@
 * Исключены неиспользуемые сообщения и методы из `QueryService`.
 * Добавлена сортировка по `Rack` в `/nodes` во `viewer backend`.
 * Исправлена ошибка, при которой запрос с сортировкой возвращает ошибку при убывании.
-* Исправлено взаимодействие `KQP` с `NodeWhiteboard`.
+* Исправлено взаимодействие `QP` с `NodeWhiteboard`.
 * Удалена поддержка старых форматов параметров.
 * Исправлена ошибка, при которой `DefineBox` не применялся для дисков, на которых есть статическая группа.
 * Исправлена ошибка `SIGSEGV` в диннодах при импорте `CSV` через `YDB CLI`.

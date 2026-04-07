@@ -17,7 +17,7 @@
 
 #include <sstream>
 
-#include "arrow/adapters/orc/options.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/adapters/orc/options.h"
 
 namespace arrow20 {
 

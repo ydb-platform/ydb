@@ -30,6 +30,7 @@
 #include <ydb/core/protos/console_tenant.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/kesus/tablet/events.h>
+#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/ticket_parser_settings.h>
@@ -133,7 +134,7 @@ namespace Tests {
         ui32 DynamicNodeCount = 0;
         std::optional<ui32> DataCenterCount;
         ui64 StorageGeneration = 0;
-        bool FetchPoolsGeneration = false;
+        bool FetchActualGeneration = false;
         NFake::TStorage CustomDiskParams;
         TControls Controls;
         TAppPrepare::TFnReg FrFactory = &DefaultFrFactory;
@@ -172,25 +173,26 @@ namespace Tests {
         TString MeteringFilePath;
         TString AwsRegion;
         NKqp::IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
+        NKqp::IDescribeSchemaSecretsServiceFactory::TPtr DescribeSchemaSecretsServiceFactory = std::make_shared<NKqp::TDescribeSchemaSecretsServiceFactory>();
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
         NMiniKQL::TComputationNodeFactory ComputationFactory;
         NYql::IYtGateway::TPtr YtGateway;
-        NYql::ISolomonGateway::TPtr SolomonGateway;
         NYql::IPqGateway::TPtr PqGateway;
         NYql::TTaskTransformFactory DqTaskTransformFactory;
         bool InitializeFederatedQuerySetupFactory = false;
         TString ServerCertFilePath;
-        bool Verbose = true;
+        bool Verbose = false;
         bool UseSectorMap = false;
         TVector<TIntrusivePtr<NFake::TProxyDS>> ProxyDSMocks;
         bool EnableStorage = true;
-        bool EnableStorageProxy = false;
 
         std::function<IActor*(const TTicketParserSettings&)> CreateTicketParser = NKikimr::CreateTicketParser;
         std::function<IActor*(const TTokenManagerSettings&)> CreateTokenManager = NKikimr::CreateTokenManager;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
+        std::shared_ptr<void> KqpLoggerScope;
 
+        TServerSettings& SetKqpLoggerScope(std::shared_ptr<void> value) { KqpLoggerScope = value; return *this; }
         TServerSettings& SetGrpcPort(ui16 value) { GrpcPort = value; return *this; }
         TServerSettings& SetGrpcHost(TString value) { GrpcHost = value; return *this; }
         TServerSettings& SetGrpcMaxMessageSize(int value) { GrpcMaxMessageSize = value; return *this; }
@@ -203,7 +205,7 @@ namespace Tests {
         TServerSettings& SetNodeCount(ui32 value) { NodeCount = value; return *this; }
         TServerSettings& SetDynamicNodeCount(ui32 value) { DynamicNodeCount = value; return *this; }
         TServerSettings& SetDataCenterCount(ui32 value) { DataCenterCount = value; return *this; }
-        TServerSettings& SetStorageGeneration(ui64 storageGeneration, bool fetchPoolsGeneration = false) { StorageGeneration = storageGeneration; FetchPoolsGeneration = fetchPoolsGeneration; return *this; }
+        TServerSettings& SetStorageGeneration(ui64 storageGeneration, bool fetchActualGeneration = false) { StorageGeneration = storageGeneration; FetchActualGeneration = fetchActualGeneration; return *this; }
         TServerSettings& SetCustomDiskParams(const NFake::TStorage& value) { CustomDiskParams = value; return *this; }
         TServerSettings& SetControls(const TControls& value) { Controls = value; return *this; }
         TServerSettings& SetFrFactory(const TAppPrepare::TFnReg& value) { FrFactory = value; return *this; }
@@ -238,10 +240,10 @@ namespace Tests {
         TServerSettings& SetMeteringFilePath(const TString& path) { EnableMetering = true; MeteringFilePath = path; return *this; }
         TServerSettings& SetAwsRegion(const TString& value) { AwsRegion = value; return *this; }
         TServerSettings& SetFederatedQuerySetupFactory(NKqp::IKqpFederatedQuerySetupFactory::TPtr value) { FederatedQuerySetupFactory = value; return *this; }
+        TServerSettings& SetDescribeSchemaSecretsServiceFactory(NKqp::IDescribeSchemaSecretsServiceFactory::TPtr value) { DescribeSchemaSecretsServiceFactory = value; return *this; }
         TServerSettings& SetCredentialsFactory(NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) { CredentialsFactory = std::move(credentialsFactory); return *this; }
         TServerSettings& SetComputationFactory(NMiniKQL::TComputationNodeFactory computationFactory) { ComputationFactory = std::move(computationFactory); return *this; }
         TServerSettings& SetYtGateway(NYql::IYtGateway::TPtr ytGateway) { YtGateway = std::move(ytGateway); return *this; }
-        TServerSettings& SetSolomonGateway(NYql::ISolomonGateway::TPtr solomonGateway) { SolomonGateway = std::move(solomonGateway); return *this; }
         TServerSettings& SetPqGateway(NYql::IPqGateway::TPtr pqGateway) { PqGateway = std::move(pqGateway); return *this; }
         TServerSettings& SetDqTaskTransformFactory(NYql::TTaskTransformFactory value) { DqTaskTransformFactory = std::move(value); return *this; }
         TServerSettings& SetInitializeFederatedQuerySetupFactory(bool value) { InitializeFederatedQuerySetupFactory = value; return *this; }
@@ -268,10 +270,6 @@ namespace Tests {
             DataStreamsAuthFactory = factory;
             return *this;
         }
-        TServerSettings& SetEnableOltpSink(bool withOltpSink) {
-            AppConfig->MutableTableServiceConfig()->SetEnableOltpSink(withOltpSink);
-            return *this;
-        }
         TServerSettings& SetEnableOlapSink(bool withOlapSink) {
             AppConfig->MutableTableServiceConfig()->SetEnableOlapSink(withOlapSink);
             return *this;
@@ -294,7 +292,6 @@ namespace Tests {
             ProxyDSMocks = proxyDSMocks;
             return *this;
         }
-        TServerSettings& SetEnableStorageProxy(bool value) { EnableStorageProxy = value; return *this; }
 
         TServerSettings& SetEnableStorage(bool enable) {
             EnableStorage = enable;
@@ -402,7 +399,6 @@ namespace Tests {
         const TServerSettings& GetSettings() const;
         const NScheme::TTypeRegistry* GetTypeRegistry();
         const NMiniKQL::IFunctionRegistry* GetFunctionRegistry();
-        const NYdb::TDriver& GetDriver() const;
         const NYdbGrpc::TGRpcServer& GetGRpcServer() const;
         const NYdbGrpc::TGRpcServer& GetTenantGRpcServer(const TString& tenant) const;
         TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> GetProcessMemoryInfoProvider() const;
@@ -422,6 +418,14 @@ namespace Tests {
         const bool UseStoragePools;
 
         std::shared_ptr<void> KqpLoggerScope;
+        // This Driver is used exclusively by TKqpFederatedQuerySetup
+        // (DO NOT USE IT IN A TSERVER), but is stored here in
+        // TServer to ensure it outlives TTestActorRuntime. During
+        // graceful shutdown, the Driver must be destroyed after all
+        // actors are gone; otherwise, lingering gRPC contexts or
+        // background operations can cause the gRPC client to hang
+        // or trigger use-after-free during its destruction.
+        std::shared_ptr<NYdb::TDriver> FederatedQuerySetupDriver_;
         THolder<TTestActorRuntime> Runtime;
         THolder<NYdb::TDriver> Driver;
         TIntrusivePtr<NBus::TBusMessageQueue> Bus;
@@ -612,15 +616,15 @@ namespace Tests {
         NMsgBusProxy::EResponseStatus CreateExtSubdomain(const TString &parent, const TString &description);
         NMsgBusProxy::EResponseStatus CreateExtSubdomain(const TString& parent, const NKikimrSubDomains::TSubDomainSettings &subdomain);
         NMsgBusProxy::EResponseStatus AlterExtSubdomain(const TString &parent, const NKikimrSubDomains::TSubDomainSettings &subdomain, TDuration timeout = TDuration::Seconds(5000));
-        NMsgBusProxy::EResponseStatus AlterUserAttributes(const TString &parent, const TString &name, const TVector<std::pair<TString, TString>>& addAttrs, const TVector<TString>& dropAttrs = {}, const TApplyIf& applyIf = {});
+        NMsgBusProxy::EResponseStatus AlterUserAttributes(const TString &parent, const TString &name, const TVector<std::pair<TString, TString>>& addAttrs, const TVector<TString>& dropAttrs = {}, const TApplyIf& applyIf = {}, const TString& userToken = "");
         NMsgBusProxy::EResponseStatus AlterSubdomain(const TString &parent, const TString &description, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus AlterSubdomain(const TString& parent, const NKikimrSubDomains::TSubDomainSettings &subdomain, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus DeleteSubdomain(const TString& parent, const TString &name);
         NMsgBusProxy::EResponseStatus ForceDeleteSubdomain(const TString& parent, const TString &name);
         NMsgBusProxy::EResponseStatus ForceDeleteUnsafe(const TString& parent, const TString &name);
 
-        NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const TString& scheme, TDuration timeout = TDuration::Seconds(5000));
-        NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout = TDuration::Seconds(5000));
+        NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const TString& scheme, TDuration timeout = TDuration::Seconds(5000), const TString& userToken = "");
+        NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout = TDuration::Seconds(5000), const TString& userToken = "");
         NMsgBusProxy::EResponseStatus CreateTableWithUniformShardedIndex(const TString& parent,
             const NKikimrSchemeOp::TTableDescription &table, const TString& indexName,
             const TVector<TString> indexColumns, NKikimrSchemeOp::EIndexType type,
@@ -693,9 +697,9 @@ namespace Tests {
         NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password);
 
         // ACL operations
-        NMsgBusProxy::EResponseStatus ModifyOwner(const TString& parent, const TString& name, const TString& owner);
+        NMsgBusProxy::EResponseStatus ModifyOwner(const TString& parent, const TString& name, const TString& owner, const TString& userToken = "");
         void TestModifyOwner(const TString& parent, const TString& name, const TString& owner);
-        NMsgBusProxy::EResponseStatus ModifyACL(const TString& parent, const TString& name, const TString& acl);
+        NMsgBusProxy::EResponseStatus ModifyACL(const TString& parent, const TString& name, const TString& acl, const TString& userToken = "");
         void TestModifyACL(const TString& parent, const TString& name, const TString& acl);
 
         NMsgBusProxy::EResponseStatus Grant(const TString& parent, const TString& name, const TString& subject, NACLib::EAccessRights rights);
@@ -707,7 +711,8 @@ namespace Tests {
         TAutoPtr<NMsgBusProxy::TBusResponse> HiveCreateTablet(ui32 domainUid, ui64 owner, ui64 owner_index, TTabletTypes::EType tablet_type,
                 const TVector<ui32>& allowed_node_ids, const TVector<TSubDomainKey>& allowed_domains = {}, const TChannelsBindings& binding = {});
 
-        TString SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TString query);
+        template <typename... TArgs>
+        TString SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TArgs&&... args);
         TString MarkNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx, bool up);
         TString KickNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx);
         bool WaitForTabletAlive(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout);
@@ -843,6 +848,8 @@ namespace Tests {
         ui32 Capacity() const;
 
         void CreateTenant(Ydb::Cms::CreateDatabaseRequest request, ui32 nodes = 1, TDuration timeout = TDuration::Seconds(30), bool acceptAlreadyExist = false);
+        void RemoveTenant(Ydb::Cms::RemoveDatabaseRequest request, TDuration timeout = TDuration::Seconds(30));
+        void RemoveTenant(const TString& path, TDuration timeout = TDuration::Seconds(30));
 
     private:
         TVector<ui32>& Nodes(const TString &name);

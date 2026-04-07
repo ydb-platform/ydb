@@ -141,15 +141,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
     }
 
-    Y_UNIT_TEST_TWIN(DistributedWriteShardRestartBeforePlan, UseSink) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+    Y_UNIT_TEST(DistributedWriteShardRestartBeforePlan) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000)
-            .SetAppConfig(appConfig);
+            .SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -204,34 +201,46 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         }
         capturedPlans.clear();
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(AwaitResponse(runtime, std::move(future))),
-            "ERROR: UNDETERMINED");
+        auto upsertResult = FormatResult(AwaitResponse(runtime, std::move(future)));
         Cerr << "!!! distributed write end" << Endl;
 
         runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
-        // Verify transaction was not committed
-        UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleExec(runtime, R"(
-                SELECT key, value FROM `/Root/table-1`
-                UNION ALL
-                SELECT key, value FROM `/Root/table-2`
-                ORDER BY key
-                )"),
-            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
-            "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
+        if (upsertResult == "ERROR: UNDETERMINED") {
+            // Verify transaction was not committed
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleExec(runtime, R"(
+                    SELECT key, value FROM `/Root/table-1`
+                    UNION ALL
+                    SELECT key, value FROM `/Root/table-2`
+                    ORDER BY key
+                    )"),
+                "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
+        } else if (upsertResult == "<empty>") {
+            // Verify transaction was fully committed
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleExec(runtime, R"(
+                    SELECT key, value FROM `/Root/table-1`
+                    UNION ALL
+                    SELECT key, value FROM `/Root/table-2`
+                    ORDER BY key
+                    )"),
+                "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
+                "{ items { uint32_value: 10 } items { uint32_value: 10 } }, "
+                "{ items { uint32_value: 20 } items { uint32_value: 20 } }");
+        } else {
+            UNIT_ASSERT_C(false, "Unexpected upsert result: " << upsertResult);
+        }
     }
 
-    Y_UNIT_TEST_TWIN(DistributedWriteShardRestartAfterExpectation, UseSink) {
+    Y_UNIT_TEST(DistributedWriteShardRestartAfterExpectation) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000)
-            .SetAppConfig(app);
+            .SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -295,23 +304,38 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         // Restart the first table shard
         RebootTablet(runtime, shard1, sender);
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(AwaitResponse(runtime, std::move(future))),
-            "ERROR: UNDETERMINED");
+        auto upsertResult = FormatResult(AwaitResponse(runtime, std::move(future)));
         Cerr << "!!! distributed write end" << Endl;
 
         runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
-        // Verify transaction was not committed
-        UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleExec(runtime, R"(
-                SELECT key, value FROM `/Root/table-1`
-                UNION ALL
-                SELECT key, value FROM `/Root/table-2`
-                ORDER BY key
-                )"),
-            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
-            "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
+        if (upsertResult == "ERROR: UNDETERMINED") {
+            // Verify transaction was not committed
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleExec(runtime, R"(
+                    SELECT key, value FROM `/Root/table-1`
+                    UNION ALL
+                    SELECT key, value FROM `/Root/table-2`
+                    ORDER BY key
+                    )"),
+                "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
+        } else if (upsertResult == "<empty>") {
+            // Verify transaction was fully committed
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleExec(runtime, R"(
+                    SELECT key, value FROM `/Root/table-1`
+                    UNION ALL
+                    SELECT key, value FROM `/Root/table-2`
+                    ORDER BY key
+                    )"),
+                "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
+                "{ items { uint32_value: 10 } items { uint32_value: 10 } }, "
+                "{ items { uint32_value: 20 } items { uint32_value: 20 } }");
+        } else {
+            UNIT_ASSERT_C(false, "Unexpected upsert result: " << upsertResult);
+        }
     }
 
     Y_UNIT_TEST(DistributedWriteEarlierSnapshotNotBlocked) {
@@ -390,15 +414,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
     }
 
-    Y_UNIT_TEST_TWIN(DistributedWriteLaterSnapshotBlockedThenCommit, UseSink) {
+    Y_UNIT_TEST(DistributedWriteLaterSnapshotBlockedThenCommit) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000)
-            .SetAppConfig(app);
+            .SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -482,12 +503,10 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
     Y_UNIT_TEST(DistributedWriteLaterSnapshotBlockedThenAbort) {
         TPortManager pm;
-        NKikimrConfig::TAppConfig app;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetDomainPlanResolution(1000)
-            .SetAppConfig(app);
+            .SetDomainPlanResolution(1000);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -543,11 +562,11 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         runtime.GetAppData(0).FeatureFlags.ClearEnableDataShardVolatileTransactions();
 
         // Start reading from table-2
-        TString sessionIdSnapshot = CreateSessionRPC(runtime, "/Root");
-        auto snapshotReadFuture = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+        TString snapshotSessionId, snapshotTxId;
+        auto snapshotReadFuture = KqpSimpleBeginSend(runtime, snapshotSessionId, R"(
             SELECT key, value FROM `/Root/table-2`
             ORDER BY key
-        )", sessionIdSnapshot, "", false /* commitTx */), "/Root");
+        )", "/Root");
 
         // Let some virtual time pass
         SimulateSleep(runtime, TDuration::Seconds(1));
@@ -556,19 +575,34 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         UNIT_ASSERT(!snapshotReadFuture.HasValue());
         UNIT_ASSERT(!future.HasValue());
 
-        // Reboot table-1 tablet and sleep a little, this will abort the write
+        // Reboot table-1 tablet and sleep a little, this may abort the write
         RebootTablet(runtime, shard1, sender);
         SimulateSleep(runtime, TDuration::Seconds(1));
 
-        // We expect aborted commit and read without that data
+        // We expect aborted commit and read without that data, or successful commit and read with the data
         UNIT_ASSERT(snapshotReadFuture.HasValue());
         UNIT_ASSERT(future.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(future.ExtractValue()),
-            "ERROR: UNDETERMINED");
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(snapshotReadFuture.ExtractValue()),
-            "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
+        auto upsertResult = FormatResult(future.ExtractValue());
+        auto readResult = KqpSimpleBeginWait(runtime, snapshotTxId, std::move(snapshotReadFuture));
+        if (upsertResult == "ERROR: UNDETERMINED") {
+            UNIT_ASSERT_VALUES_EQUAL(
+                readResult,
+                "{ items { uint32_value: 10 } items { uint32_value: 10 } }");
+        } else if (upsertResult == "<empty>") {
+            UNIT_ASSERT_VALUES_EQUAL(
+                readResult,
+                "{ items { uint32_value: 10 } items { uint32_value: 10 } }, "
+                "{ items { uint32_value: 20 } items { uint32_value: 20 } }");
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleContinue(runtime, snapshotSessionId, snapshotTxId, R"(
+                    SELECT key, value FROM `/Root/table-1`
+                    ORDER BY key
+                )", "/Root"),
+                "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                "{ items { uint32_value: 2 } items { uint32_value: 2 } }");
+        } else {
+            UNIT_ASSERT_C(false, "Unexpected upsert result: " << upsertResult);
+        }
     }
 
     Y_UNIT_TEST(DistributedWriteAsymmetricExecute) {
@@ -1692,7 +1726,7 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
 
         WaitForContent(server, sender, "/Root/table-1/Stream", {
             R"({"update":{},"newImage":{"value2":null,"value":1},"key":[1]})",
-            R"({"update":{},"newImage":{"value2":42,"value":2},"key":[2]})",
+            R"({"user":"<anonymous>","update":{},"newImage":{"value2":42,"value":2},"key":[2]})",
             R"({"update":{},"newImage":{"value2":42,"value":22},"key":[2],"oldImage":{"value2":42,"value":2}})",
         });
 
@@ -2202,17 +2236,14 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { uint32_value: 4 } items { uint32_value: 40 } }");
     }
 
-    Y_UNIT_TEST_TWIN(TwoAppendsMustBeVolatile, UseSink) {
+    Y_UNIT_TEST(TwoAppendsMustBeVolatile) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetNodeCount(2)
             .SetUseRealThreads(false)
             .SetDomainPlanResolution(100)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2281,16 +2312,13 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
     }
 
     // Regression test for KIKIMR-21156
-    Y_UNIT_TEST_TWIN(VolatileCommitOnBlobStorageFailure, UseSink) {
+    Y_UNIT_TEST(VolatileCommitOnBlobStorageFailure) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetDomainPlanResolution(1000)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2817,15 +2845,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         TTestActorRuntime::TEventObserverHolder Observer;
     };
 
-    Y_UNIT_TEST_TWIN(UpsertNoLocksArbiter, UseSink) {
+    Y_UNIT_TEST(UpsertNoLocksArbiter) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2875,15 +2900,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "{ items { int32_value: 31 } items { int32_value: 311 } }");
     }
 
-    Y_UNIT_TEST_TWIN(UpsertBrokenLockArbiter, UseSink) {
+    Y_UNIT_TEST(UpsertBrokenLockArbiter) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -2944,15 +2966,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "");
     }
 
-    Y_UNIT_TEST_TWIN(UpsertNoLocksArbiterRestart, UseSink) {
+    Y_UNIT_TEST(UpsertNoLocksArbiterRestart) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3019,15 +3038,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "ERROR: UNDETERMINED");
     }
 
-    Y_UNIT_TEST_TWIN(UpsertBrokenLockArbiterRestart, UseSink) {
+    Y_UNIT_TEST(UpsertBrokenLockArbiterRestart) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3095,15 +3111,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "ERROR: ABORTED");
     }
 
-    Y_UNIT_TEST_TWIN(UpsertDependenciesShardsRestart, UseSink) {
+    Y_UNIT_TEST(UpsertDependenciesShardsRestart) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3188,15 +3201,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         Cerr << "... split finished" << Endl;
     }
 
-    Y_UNIT_TEST_TWIN(DistributedUpsertRestartBeforePrepare, UseSink) {
+    Y_UNIT_TEST(DistributedUpsertRestartBeforePrepare) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3250,15 +3260,12 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
             "ERROR: UNAVAILABLE");
     }
 
-    Y_UNIT_TEST_TWIN(DistributedUpsertRestartAfterPrepare, UseSink) {
+    Y_UNIT_TEST(DistributedUpsertRestartAfterPrepare) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -3318,9 +3325,32 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         Cerr << "========= Restarting shard 1 =========" << Endl;
         GracefulRestartTablet(runtime, shards.at(0), sender);
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(runtime.WaitFuture(std::move(upsertFuture1))),
-            "ERROR: ABORTED");
+        auto upsertResult = FormatResult(runtime.WaitFuture(std::move(upsertFuture1)));
+
+        Cerr << "========= Checking table =========" << Endl;
+        if (upsertResult == "ERROR: ABORTED") {
+            // Verify transaction was not committed
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleExec(runtime, R"(
+                    SELECT key, value FROM `/Root/table`
+                    ORDER BY key
+                    )"),
+                "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                "{ items { uint32_value: 11 } items { uint32_value: 11 } }");
+        } else if (upsertResult == "<empty>") {
+            // Verify transaction was fully committed
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleExec(runtime, R"(
+                    SELECT key, value FROM `/Root/table`
+                    ORDER BY key
+                    )"),
+                "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
+                "{ items { uint32_value: 11 } items { uint32_value: 11 } }, "
+                "{ items { uint32_value: 12 } items { uint32_value: 12 } }");
+        } else {
+            UNIT_ASSERT_C(false, "Unexpected upsert result: " << upsertResult);
+        }
     }
 
     Y_UNIT_TEST(DistributedUpsertRestartAfterPlan) {
@@ -3389,30 +3419,42 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         Cerr << "========= Restarting shard 1 =========" << Endl;
         GracefulRestartTablet(runtime, shards.at(0), sender);
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            FormatResult(runtime.WaitFuture(std::move(upsertFuture1))),
-            "ERROR: ABORTED");
+        auto upsertResult = FormatResult(runtime.WaitFuture(std::move(upsertFuture1)));
 
         Cerr << "========= Checking table =========" << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(
-            KqpSimpleExec(runtime, R"(
-                SELECT key, value FROM `/Root/table`
-                ORDER BY key;
-            )"),
-            "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
-            "{ items { uint32_value: 11 } items { uint32_value: 11 } }");
+        if (upsertResult == "ERROR: ABORTED") {
+            // Verify transaction was not committed
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleExec(runtime, R"(
+                    SELECT key, value FROM `/Root/table`
+                    ORDER BY key
+                    )"),
+                "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                "{ items { uint32_value: 11 } items { uint32_value: 11 } }");
+        } else if (upsertResult == "<empty>") {
+            // Verify transaction was fully committed
+            Cerr << "========= Checking table =========" << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(
+                KqpSimpleExec(runtime, R"(
+                    SELECT key, value FROM `/Root/table`
+                    ORDER BY key
+                    )"),
+                "{ items { uint32_value: 1 } items { uint32_value: 1 } }, "
+                "{ items { uint32_value: 2 } items { uint32_value: 2 } }, "
+                "{ items { uint32_value: 11 } items { uint32_value: 11 } }, "
+                "{ items { uint32_value: 12 } items { uint32_value: 12 } }");
+        } else {
+            UNIT_ASSERT_C(false, "Unexpected upsert result: " << upsertResult);
+        }
     }
 
     // Regression test for KIKIMR-22506
-    Y_UNIT_TEST_TWIN(NotCachingAbortingDeletes, UseSink) {
+    Y_UNIT_TEST(NotCachingAbortingDeletes) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
-        NKikimrConfig::TAppConfig app;
-        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
-            .SetEnableDataShardVolatileTransactions(true)
-            .SetAppConfig(app);
+            .SetEnableDataShardVolatileTransactions(true);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();

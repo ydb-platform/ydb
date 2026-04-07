@@ -17,8 +17,7 @@
 
 #include <deque>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 class IArrayBuilder {
 public:
@@ -39,7 +38,7 @@ public:
 };
 
 inline const IArrayBuilder::TArrayDataItem* LookupArrayDataItem(const IArrayBuilder::TArrayDataItem* arrays, size_t arrayCount, ui64& idx) {
-    IArrayBuilder::TArrayDataItem lookup{ nullptr, idx };
+    IArrayBuilder::TArrayDataItem lookup{.Data = nullptr, .StartOffset = idx};
 
     auto it = std::lower_bound(arrays, arrays + arrayCount, lookup, [](const auto& left, const auto& right) {
         return left.StartOffset < right.StartOffset;
@@ -69,8 +68,9 @@ inline std::shared_ptr<arrow::DataType> GetArrowType(const ITypeInfoHelper& type
     return ARROW_RESULT(arrow::ImportType(&s));
 }
 
-class TArrayBuilderBase : public IArrayBuilder {
+class TArrayBuilderBase: public IArrayBuilder {
     using Self = TArrayBuilderBase;
+
 public:
     using Ptr = std::unique_ptr<TArrayBuilderBase>;
 
@@ -137,12 +137,12 @@ public:
     }
 
     inline void AddMany(const arrow::ArrayData& array, ui64 beginIndex, size_t count) {
-        TArrayDataItem item = { &array, 0 };
+        TArrayDataItem item = {.Data = &array, .StartOffset = 0};
         Self::AddMany(&item, 1, beginIndex, count);
     }
 
     inline void AddMany(const arrow::ArrayData& array, const ui64* indexes, size_t count) {
-        TArrayDataItem item = { &array, 0 };
+        TArrayDataItem item = {.Data = &array, .StartOffset = 0};
         Self::AddMany(&item, 1, indexes, count);
     }
 
@@ -237,6 +237,7 @@ public:
         CurrLen_ = 0;
         return result;
     }
+
 protected:
     virtual void DoAdd(NUdf::TUnboxedValuePod value) = 0;
     virtual void DoAdd(TBlockItem value) = 0;
@@ -333,13 +334,14 @@ protected:
     const size_t MaxLen_;
     const size_t MaxBlockSizeInBytes_;
     const TMaybe<ui8> MinFillPercentage_;
+
 private:
     size_t CurrLen_ = 0;
     size_t* TotalAllocated_ = nullptr;
 };
 
-template<typename TLayout, bool Nullable, typename TDerived>
-class TFixedSizeArrayBuilderBase : public TArrayBuilderBase {
+template <typename TLayout, bool Nullable, typename TDerived>
+class TFixedSizeArrayBuilderBase: public TArrayBuilderBase {
 public:
     TFixedSizeArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, const TParams& params)
         : TArrayBuilderBase(typeInfoHelper, std::move(arrowType), pool, maxLen, params)
@@ -407,7 +409,7 @@ public:
         static_cast<TDerived*>(this)->DoAddNotNull(value, count);
     }
 
-    void DoAdd(TInputBuffer &input) final {
+    void DoAdd(TInputBuffer& input) final {
         if constexpr (Nullable) {
             if (!input.PopChar()) {
                 DoAddNull();
@@ -451,7 +453,7 @@ public:
 
         const TLayout* values = array.GetValues<TLayout>(1);
         for (size_t i = beginIndex; i < beginIndex + count; ++i) {
-            ::new(DataPtr_ + GetCurrLen() + i - beginIndex) TLayout(values[i]);
+            ::new (DataPtr_ + GetCurrLen() + i - beginIndex) TLayout(values[i]);
         }
     }
 
@@ -465,7 +467,7 @@ public:
 
         const TLayout* values = array.GetValues<TLayout>(1);
         for (size_t i = 0; i < count; ++i) {
-            ::new(DataPtr_ + GetCurrLen() + i) TLayout(values[indexes[i]]);
+            ::new (DataPtr_ + GetCurrLen() + i) TLayout(values[indexes[i]]);
         }
     }
 
@@ -490,9 +492,10 @@ public:
         }
         return result;
     }
+
 protected:
-    void PlaceItem(TLayout&& value)  {
-        ::new(DataPtr_ + GetCurrLen()) TLayout(std::move(value));
+    void PlaceItem(TLayout&& value) {
+        ::new (DataPtr_ + GetCurrLen()) TLayout(std::move(value));
     }
 
     TLayout* DataPtr_ = nullptr;
@@ -517,7 +520,7 @@ private:
     ui8* NullPtr_ = nullptr;
 };
 
-template<typename TLayout, bool Nullable>
+template <typename TLayout, bool Nullable>
 class TFixedSizeArrayBuilder final: public TFixedSizeArrayBuilderBase<TLayout, Nullable, TFixedSizeArrayBuilder<TLayout, Nullable>> {
     using TSelf = TFixedSizeArrayBuilder<TLayout, Nullable>;
     using TBase = TFixedSizeArrayBuilderBase<TLayout, Nullable, TSelf>;
@@ -526,11 +529,13 @@ class TFixedSizeArrayBuilder final: public TFixedSizeArrayBuilderBase<TLayout, N
 public:
     TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
         : TBase(typeInfoHelper, std::move(arrowType), pool, maxLen, params)
-    {}
+    {
+    }
 
     TFixedSizeArrayBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
         : TBase(typeInfoHelper, type, pool, maxLen, params)
-    {}
+    {
+    }
 
     void DoAddNotNull(TUnboxedValuePod value) {
         this->PlaceItem(value.Get<TLayout>());
@@ -549,7 +554,7 @@ public:
     }
 };
 
-template<bool Nullable>
+template <bool Nullable>
 class TFixedSizeArrayBuilder<NYql::NDecimal::TInt128, Nullable> final: public TFixedSizeArrayBuilderBase<NYql::NDecimal::TInt128, Nullable, TFixedSizeArrayBuilder<NYql::NDecimal::TInt128, Nullable>> {
     using TSelf = TFixedSizeArrayBuilder<NYql::NDecimal::TInt128, Nullable>;
     using TBase = TFixedSizeArrayBuilderBase<NYql::NDecimal::TInt128, Nullable, TSelf>;
@@ -558,11 +563,13 @@ class TFixedSizeArrayBuilder<NYql::NDecimal::TInt128, Nullable> final: public TF
 public:
     TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
         : TBase(typeInfoHelper, std::move(arrowType), pool, maxLen, params)
-    {}
+    {
+    }
 
     TFixedSizeArrayBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
         : TBase(typeInfoHelper, type, pool, maxLen, params)
-    {}
+    {
+    }
 
     void DoAddNotNull(TUnboxedValuePod value) {
         this->PlaceItem(value.GetInt128());
@@ -581,7 +588,7 @@ public:
     }
 };
 
-template<bool Nullable>
+template <bool Nullable>
 class TResourceArrayBuilder final: public TFixedSizeArrayBuilderBase<TUnboxedValue, Nullable, TResourceArrayBuilder<Nullable>> {
     using TBase = TFixedSizeArrayBuilderBase<TUnboxedValue, Nullable, TResourceArrayBuilder<Nullable>>;
     using TParams = TArrayBuilderBase::TParams;
@@ -589,11 +596,13 @@ class TResourceArrayBuilder final: public TFixedSizeArrayBuilderBase<TUnboxedVal
 public:
     TResourceArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
         : TBase(typeInfoHelper, std::move(arrowType), pool, maxLen, params)
-    {}
+    {
+    }
 
     TResourceArrayBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
         : TBase(typeInfoHelper, type, pool, maxLen, params)
-    {}
+    {
+    }
 
     void DoAddNotNull(TUnboxedValuePod value) {
         this->PlaceItem(TUnboxedValue(value));
@@ -616,13 +625,13 @@ public:
 
     void DoAddNotNull(TBlockItem item, size_t count) {
         for (size_t i = 0; i < count; ++i) {
-            ::new(this->DataPtr_ + this->GetCurrLen() + i) TUnboxedValue(FromBlockItem(item));
+            ::new (this->DataPtr_ + this->GetCurrLen() + i) TUnboxedValue(FromBlockItem(item));
         }
     }
 };
 
-template<typename TStringType, bool Nullable, EPgStringType PgString = EPgStringType::None>
-class TStringArrayBuilder final : public TArrayBuilderBase {
+template <typename TStringType, bool Nullable, EPgStringType PgString = EPgStringType::None>
+class TStringArrayBuilder final: public TArrayBuilderBase {
     using TOffset = typename TStringType::offset_type;
 
 public:
@@ -719,7 +728,9 @@ public:
 
         const std::string_view str = value.AsStringRef();
         auto ptr = AddNoFill(str.size());
-        std::memcpy(ptr, str.data(), str.size());
+        if (str.data()) {
+            std::memcpy(ptr, str.data(), str.size());
+        }
     }
 
     void DoAdd(TInputBuffer& input) final {
@@ -733,7 +744,6 @@ public:
         TStringRef ref(str.data(), str.size());
         DoAdd(TBlockItem(ref));
     }
-
 
     void DoAddDefault() final {
         if constexpr (Nullable) {
@@ -764,15 +774,15 @@ public:
             }
 
             const ui8* begin = srcData + srcOffset[i];
-            const ui8* end   = srcData + srcOffset[i + 1];
+            const ui8* end = srcData + srcOffset[i + 1];
             const size_t strSize = end - begin;
 
-            size_t availBytes = std::max(dataLen, MaxBlockSizeInBytes_)  - dataLen;
+            size_t availBytes = std::max(dataLen, MaxBlockSizeInBytes_) - dataLen;
 
             for (;;) {
                 // try to append ith string
                 if (strSize <= availBytes) {
-                    if (begin == chunkEnd)  {
+                    if (begin == chunkEnd) {
                         chunkEnd = end;
                     } else {
                         DataBuilder_->UnsafeAppend(chunkStart, chunkEnd - chunkStart);
@@ -838,7 +848,7 @@ public:
         const ui8* chunkEnd = chunkStart;
         for (size_t i = beginIndex; i < beginIndex + count; ++i) {
             const ui8* begin = srcData + offsets[i];
-            const ui8* end   = srcData + offsets[i + 1];
+            const ui8* end = srcData + offsets[i + 1];
             const size_t strSize = end - begin;
 
             size_t availBytes = std::max(dataLen, MaxBlockSizeInBytes_) - dataLen;
@@ -905,7 +915,6 @@ public:
         }
     }
 
-
     TBlockArrayTree::Ptr DoBuildTree(bool finish) final {
         FlushChunk(finish);
         TBlockArrayTree::Ptr result = std::make_shared<TBlockArrayTree>();
@@ -954,7 +963,7 @@ private:
         std::shared_ptr<arrow::Buffer> offsets = OffsetsBuilder_->Finish();
         std::shared_ptr<arrow::Buffer> data = DataBuilder_->Finish();
 
-        Chunks_.push_back(arrow::ArrayData::Make(ArrowType_, length, { nullBitmap, offsets, data }));
+        Chunks_.push_back(arrow::ArrayData::Make(ArrowType_, length, {nullBitmap, offsets, data}));
         if (!finish) {
             Reserve();
         }
@@ -970,8 +979,8 @@ private:
     i32 TypeLen_ = 0;
 };
 
-template<bool Nullable, typename TDerived>
-class TTupleArrayBuilderBase : public TArrayBuilderBase {
+template <bool Nullable, typename TDerived>
+class TTupleArrayBuilderBase: public TArrayBuilderBase {
 public:
     TTupleArrayBuilderBase(const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
         : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen, params)
@@ -1077,7 +1086,7 @@ public:
         }
 
         Y_ABORT_UNLESS(length);
-        result->Payload.push_back(arrow::ArrayData::Make(ArrowType_, length, { nullBitmap }));
+        result->Payload.push_back(arrow::ArrayData::Make(ArrowType_, length, {nullBitmap}));
         static_cast<TDerived*>(this)->BuildChildrenTree(finish, result->Children);
 
         if (!finish) {
@@ -1101,8 +1110,8 @@ private:
     std::unique_ptr<TTypedBufferBuilder<ui8>> NullBuilder_;
 };
 
-template<bool Nullable>
-class TTupleArrayBuilder final : public TTupleArrayBuilderBase<Nullable, TTupleArrayBuilder<Nullable>> {
+template <bool Nullable>
+class TTupleArrayBuilder final: public TTupleArrayBuilderBase<Nullable, TTupleArrayBuilder<Nullable>> {
     using TBase = TTupleArrayBuilderBase<Nullable, TTupleArrayBuilder<Nullable>>;
     using TParams = TArrayBuilderBase::TParams;
 
@@ -1115,8 +1124,8 @@ public:
     }
 
     void AddToChildrenDefault() {
-        for (ui32 i = 0; i < Children_.size(); ++i) {
-            Children_[i]->AddDefault();
+        for (const auto& child : Children_) {
+            child->AddDefault();
         }
     }
 
@@ -1142,8 +1151,8 @@ public:
     }
 
     void AddToChildren(TInputBuffer& input) {
-        for (ui32 i = 0; i < Children_.size(); ++i) {
-            Children_[i]->Add(input);
+        for (const auto& child : Children_) {
+            child->Add(input);
         }
     }
 
@@ -1170,8 +1179,8 @@ public:
 
     void BuildChildrenTree(bool finish, std::vector<TArrayBuilderBase::TBlockArrayTree::Ptr>& resultChildren) {
         resultChildren.reserve(Children_.size());
-        for (ui32 i = 0; i < Children_.size(); ++i) {
-            resultChildren.emplace_back(Children_[i]->BuildTree(finish));
+        for (const auto& child : Children_) {
+            resultChildren.emplace_back(child->BuildTree(finish));
         }
     }
 
@@ -1179,8 +1188,8 @@ private:
     TVector<std::unique_ptr<TArrayBuilderBase>> Children_;
 };
 
-template<typename TDate, bool Nullable>
-class TTzDateArrayBuilder final : public TTupleArrayBuilderBase<Nullable, TTzDateArrayBuilder<TDate, Nullable>> {
+template <typename TDate, bool Nullable>
+class TTzDateArrayBuilder final: public TTupleArrayBuilderBase<Nullable, TTzDateArrayBuilder<TDate, Nullable>> {
     using TBase = TTupleArrayBuilderBase<Nullable, TTzDateArrayBuilder<TDate, Nullable>>;
     using TParams = TArrayBuilderBase::TParams;
     using TDateLayout = typename TDataType<TDate>::TLayout;
@@ -1242,8 +1251,7 @@ private:
     TFixedSizeArrayBuilder<ui16, false> TimezoneBuilder_;
 };
 
-
-class TExternalOptionalArrayBuilder final : public TArrayBuilderBase {
+class TExternalOptionalArrayBuilder final: public TArrayBuilderBase {
 public:
     TExternalOptionalArrayBuilder(std::unique_ptr<TArrayBuilderBase>&& inner, const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool,
                                   size_t maxLen, const TParams& params = {})
@@ -1338,7 +1346,7 @@ public:
         nullBitmap = MakeDenseBitmap(nullBitmap->data(), length, Pool_);
 
         Y_ABORT_UNLESS(length);
-        result->Payload.push_back(arrow::ArrayData::Make(ArrowType_, length, { nullBitmap }));
+        result->Payload.push_back(arrow::ArrayData::Make(ArrowType_, length, {nullBitmap}));
         result->Children.emplace_back(Inner_->BuildTree(finish));
 
         if (!finish) {
@@ -1360,11 +1368,13 @@ private:
     std::unique_ptr<TTypedBufferBuilder<ui8>> NullBuilder_;
 };
 
+template <bool IsNull>
 class TSingularBlockBuilder final: public TArrayBuilderBase {
 public:
     TSingularBlockBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool,
-                      size_t maxLen, const TParams& params = {})
-        : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen, params) {
+                          size_t maxLen, const TParams& params = {})
+        : TArrayBuilderBase(typeInfoHelper, type, pool, maxLen, params)
+    {
         Reserve();
     }
 
@@ -1377,10 +1387,11 @@ public:
     }
 
     void DoAdd(TInputBuffer& input) final {
-        Y_UNUSED(input.PopChar());
+        Y_UNUSED(input);
     }
 
-    void DoAddDefault() final {}
+    void DoAddDefault() final {
+    }
 
     void DoAddMany(const arrow::ArrayData& array, const ui8* sparseBitmap, size_t popCount) final {
         Y_UNUSED(array, sparseBitmap, popCount);
@@ -1397,7 +1408,7 @@ public:
     TBlockArrayTree::Ptr DoBuildTree(bool finish) final {
         TBlockArrayTree::Ptr result = std::make_shared<TBlockArrayTree>();
         Y_UNUSED(finish);
-        result->Payload.push_back(arrow::NullArray(GetCurrLen()).data());
+        result->Payload.push_back(NYql::NUdf::MakeSingularArray(IsNull, GetCurrLen()));
         return result;
     }
 
@@ -1418,11 +1429,12 @@ struct TBuilderTraits {
     template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot TOriginal>
     using TStrings = TStringArrayBuilder<TStringType, Nullable>;
     using TExtOptional = TExternalOptionalArrayBuilder;
-    template<bool Nullable>
+    template <bool Nullable>
     using TResource = TResourceArrayBuilder<Nullable>;
-    template<typename TTzDate, bool Nullable>
+    template <typename TTzDate, bool Nullable>
     using TTzDateReader = TTzDateArrayBuilder<TTzDate, Nullable>;
-    using TSingular = TSingularBlockBuilder;
+    template <bool IsNull>
+    using TSingular = TSingularBlockBuilder<IsNull>;
 
     constexpr static bool PassType = true;
 
@@ -1454,7 +1466,7 @@ struct TBuilderTraits {
         }
     }
 
-    template<typename TTzDate>
+    template <typename TTzDate>
     static std::unique_ptr<TResult> MakeTzDate(bool isOptional, const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TArrayBuilderParams& params) {
         if (isOptional) {
             return std::make_unique<TTzDateReader<TTzDate, true>>(type, typeInfoHelper, pool, maxLen, params);
@@ -1463,8 +1475,9 @@ struct TBuilderTraits {
         }
     }
 
+    template <bool IsNull>
     static std::unique_ptr<TResult> MakeSingular(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TArrayBuilderParams& params) {
-        return std::make_unique<TSingular>(type, typeInfoHelper, pool, maxLen, params);
+        return std::make_unique<TSingular<IsNull>>(type, typeInfoHelper, pool, maxLen, params);
     }
 };
 
@@ -1472,14 +1485,14 @@ inline std::unique_ptr<IArrayBuilder> MakeArrayBuilder(
     const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool,
     size_t maxBlockLength, const IPgBuilder* pgBuilder)
 {
-    return DispatchByArrowTraits<TBuilderTraits>(typeInfoHelper, type, pgBuilder, typeInfoHelper, pool, maxBlockLength, TArrayBuilderParams {});
+    return DispatchByArrowTraits<TBuilderTraits>(typeInfoHelper, type, pgBuilder, typeInfoHelper, pool, maxBlockLength, TArrayBuilderParams{});
 }
 
 inline std::unique_ptr<IArrayBuilder> MakeArrayBuilder(
     const ITypeInfoHelper& typeInfoHelper, const TType* type, arrow::MemoryPool& pool,
     size_t maxBlockLength, const IPgBuilder* pgBuilder, size_t* totalAllocated)
 {
-    return DispatchByArrowTraits<TBuilderTraits>(typeInfoHelper, type, pgBuilder, typeInfoHelper, pool, maxBlockLength, TArrayBuilderParams {.TotalAllocated = totalAllocated});
+    return DispatchByArrowTraits<TBuilderTraits>(typeInfoHelper, type, pgBuilder, typeInfoHelper, pool, maxBlockLength, TArrayBuilderParams{.TotalAllocated = totalAllocated});
 }
 
 inline std::unique_ptr<IArrayBuilder> MakeArrayBuilder(
@@ -1496,5 +1509,4 @@ inline std::unique_ptr<IScalarBuilder> MakeScalarBuilder(const ITypeInfoHelper& 
     return nullptr;
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

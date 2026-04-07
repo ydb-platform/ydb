@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.8.0)
+VERSION(1.9.0)
 
 LICENSE(Apache-2.0)
 
@@ -15,6 +15,7 @@ PY_SRCS(
     websocket/_app.py
     websocket/_cookiejar.py
     websocket/_core.py
+    websocket/_dispatcher.py
     websocket/_exceptions.py
     websocket/_handshake.py
     websocket/_http.py

@@ -34,7 +34,11 @@ public:
         SignatureAnubisOsirisPut = 20,
         SignatureAddBulkSst = 21,
         SignatureScrub = 22,
-        Max = 23
+        SignatureMetadata = 23,
+        SignatureDDiskChunkMap = 24,
+        SignaturePersistentBufferChunkMap = 25,
+        SignatureChunkKeeper = 26,
+        Max = 27,
     };
 
     TLogSignature(ui8 val = 0, bool hasCommit = false)
@@ -86,6 +90,10 @@ public:
             case SignatureAnubisOsirisPut:              return "SignatureAnubisOsirisPut";
             case SignatureAddBulkSst:                   return "SignatureAddBulkSst";
             case SignatureScrub:                        return "SignatureScrub";
+            case SignatureMetadata:                     return "SignatureMetadata";
+            case SignatureDDiskChunkMap:                return "SignatureDDiskChunkMap";
+            case SignaturePersistentBufferChunkMap:     return "SignaturePersistentBufferChunkMap";
+            case SignatureChunkKeeper:                  return "SignatureChunkKeeper";
             case Max:                                   return "Max";
         }
         return TStringBuilder() << "Unknown(" << static_cast<ui32>(Signature) << "(";

@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/testlib/actors/wait_events.h>  // for TWaitForFirstEvent
 
 #include <ydb/public/lib/value/value.h>
 
@@ -54,12 +55,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
     Y_UNIT_TEST(CreateAndWait) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
+        TTestEnv env(runtime);
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
         AsyncMkDir(runtime, ++txId, "MyRoot", "dir");
+        expectedDomainPaths += 1;
+
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot/dir",
             R"(Name: "USER_0")"
         );
+
+        expectedDomainPaths += 1;
 
         env.TestWaitNotification(runtime, {txId, txId - 1});
 
@@ -71,7 +80,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/dir"),
                            {NLs::PathExist,
                             NLs::PathVersionEqual(5),
-                            NLs::PathsInsideDomain(2),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
     }
 
@@ -127,17 +136,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         TTestEnv env(runtime,
             TTestEnvOptions()
                 .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
-                .EnableRealSystemViewPaths(false)
         );
         ui64 txId = 100;
 
         TestMkDir(runtime, ++txId, "/MyRoot", "dir");
+
+        TLocalPathId subdomainPathId = GetNextLocalPathId(runtime, txId);
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot/dir",
             R"(Name: "USER_0")"
         );
         TestDescribeResult(DescribePath(runtime, "/MyRoot/dir/USER_0"),
                            {NLs::PathExist,
-                            NLs::DomainKey(3, TTestTxConfig::SchemeShard),
+                            NLs::DomainKey(subdomainPathId, TTestTxConfig::SchemeShard),
                             NLs::DomainCoordinators({}),
                             NLs::DomainMediators({}),
                             NLs::DomainSchemeshard(0)});
@@ -646,7 +656,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         TTestEnv env(runtime,
             TTestEnvOptions()
                 .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
-                .EnableRealSystemViewPaths(false)
         );
         ui64 txId = 100;
 
@@ -754,7 +763,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER+0"),
                            {NLs::PathExist,
-                            NLs::ChildrenCount(1)});
+                            NLs::ChildrenCount(2)});
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER+0/Dir__!"),
                            {NLs::PathExist,
@@ -1389,14 +1398,19 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         TTestEnv env(runtime,
             TTestEnvOptions()
                 .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
-                .EnableRealSystemViewPaths(false)
         );
         ui64 txId = 100;
 
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
+        TLocalPathId subDomainPathId = GetNextLocalPathId(runtime, txId);
 
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
             R"(Name: "USER_0")"
         );
+
+        expectedDomainPaths += 1;
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
             Sprintf(R"(
@@ -1418,8 +1432,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         );
 
         env.TestWaitNotification(runtime, {txId, txId - 1});
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
-        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subDomainPathId));
+        UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subDomainPathId));
 
         ui64 tenantSchemeShard = 0;
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
@@ -1431,7 +1445,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
                     && tenantSchemeShard != (ui64)-1
                     && tenantSchemeShard != TTestTxConfig::SchemeShard);
 
+        auto initialSubDomainDesc = DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0");
+        ui64 expectedSubDomainPaths = initialSubDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
+
         TestMkDir(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", "dir");
+        expectedSubDomainPaths += 1;
+
         TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0/dir",
             R"(
                 Name: "table_1"
@@ -1441,12 +1460,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
                 UniformPartitionsCount: 2
             )"
         );
+        expectedSubDomainPaths += 1;
 
         env.TestWaitNotification(runtime, {txId, txId -1}, tenantSchemeShard);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot" ),
                            {NLs::PathExist,
-                            NLs::PathsInsideDomain(1),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
 
         const ui64 AdditionalHiveTablet = (ExternalHive ? 1 : 0);
@@ -1459,11 +1479,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/dir/table_1"),
                            {NLs::PathExist,
                             NLs::Finished,
-                            NLs::PathsInsideDomain(2),
+                            NLs::PathsInsideDomain(expectedSubDomainPaths),
                             NLs::ShardsInsideDomain(5 + AdditionalHiveTablet)});
 
         TestForceDropExtSubDomain(runtime, ++txId, "/MyRoot", "USER_0");
         env.TestWaitNotification(runtime, txId);
+
+        expectedDomainPaths -= 1;
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/dir/table_1"),
                            {NLs::PathNotExist});
@@ -1473,18 +1495,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::PathExist,
-                            NLs::PathsInsideDomain(0),
+                            NLs::PathsInsideDomain(expectedDomainPaths),
                             NLs::ShardsInsideDomain(0)});
 
         // env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 5));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 2));
-        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", subDomainPathId));
+        UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", subDomainPathId));
     }
 
     Y_UNIT_TEST_FLAG(DropWithDeadTenantHive, AlterDatabaseCreateHiveFirst) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst));
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
+        );
         ui64 txId = 100;
+
+        auto initialDomainDesc = DescribePath(runtime, "/MyRoot");
+        ui64 expectedDomainPaths = initialDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
 
         // EnableAlterDatabaseCreateHiveFirst = false puts extsubdomain's system tablets into the root hive control.
         // EnableAlterDatabaseCreateHiveFirst = true puts extsubdomain's tenant hive into the root hive control
@@ -1493,6 +1521,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
             R"(Name: "USER_0")"
         );
+
+        expectedDomainPaths += 1;
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
             Name: "USER_0"
@@ -1519,8 +1549,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
                 NLs::IsExternalSubDomain("USER_0"),
                 NLs::ExtractDomainHive(&tenantHiveId),
             });
-            TSubDomainKey subdomainKey(describe.GetPathDescription().GetDomainDescription().GetDomainKey());
-            subdomainPathId = TPathId(subdomainKey.GetSchemeShard(), subdomainKey.GetPathId());
+            const auto& domainKey = describe.GetPathDescription().GetDomainDescription().GetDomainKey();
+            subdomainPathId = TPathId::FromDomainKey(domainKey);
         }
 
         // check that there is a new path in the root schemeshard
@@ -1589,11 +1619,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         TestForceDropExtSubDomain(runtime, ++txId, "/MyRoot", "USER_0");
         env.TestWaitNotification(runtime, txId);
 
+        expectedDomainPaths -= 1;
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {NLs::PathNotExist});
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
             NLs::PathExist,
-            NLs::PathsInsideDomain(0),
+            NLs::PathsInsideDomain(expectedDomainPaths),
             NLs::ShardsInsideDomain(0)
         });
 
@@ -1625,7 +1657,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         TTestEnv env(runtime,
             TTestEnvOptions()
                 .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
-                .EnableRealSystemViewPaths(false)
         );
         ui64 txId = 100;
 
@@ -1660,7 +1691,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Self->Info.GetPathVersion(), prevParentVersion + 2);
 
             UNIT_ASSERT(bool(entry.ListNodeEntry));
-            UNIT_ASSERT_VALUES_EQUAL_C(entry.ListNodeEntry->Children.size(), 0, "extsubdomain exist: " << entry.ListNodeEntry->Children.at(0).Name);
+            UNIT_ASSERT_VALUES_EQUAL_C(entry.ListNodeEntry->Children.size(), 1, "extsubdomain exist: " << entry.ListNodeEntry->Children.at(0).Name);
         }
     }
 
@@ -1669,7 +1700,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
         TTestEnv env(runtime,
             TTestEnvOptions()
                 .EnableAlterDatabaseCreateHiveFirst(AlterDatabaseCreateHiveFirst)
-                .EnableRealSystemViewPaths(false)
         );
         ui64 txId = 100;
 
@@ -1722,7 +1752,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Self->Info.GetPathVersion(), prevParentVersion + 2);
 
             UNIT_ASSERT(bool(entry.ListNodeEntry));
-            UNIT_ASSERT_VALUES_EQUAL_C(entry.ListNodeEntry->Children.size(), 0, "extsubdomain exist: " << entry.ListNodeEntry->Children.at(0).Name);
+            UNIT_ASSERT_VALUES_EQUAL_C(entry.ListNodeEntry->Children.size(), 1, "extsubdomain exist: " << entry.ListNodeEntry->Children.at(0).Name);
         }
     }
 
@@ -2089,5 +2119,228 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
                             Columns { Name: "Value"      Type: "Utf8"}
                             KeyColumnNames: ["key"]
                 )", {NKikimrScheme::StatusQuotaExceeded});
+    }
+
+    Y_UNIT_TEST(AlterSchemeLimits_EnableAlterDatabase) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabase(true)
+        );
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "USER_0")"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                Name: "USER_0"
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                ExternalSchemeShard: true
+                StoragePools {
+                    Name: "/dc-1/users/tenant-1:hdd"
+                    Kind: "hdd"
+                }
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        // test what the parent knows about the subdomain
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("USER_0"),
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
+            NLs::ShardsInsideDomain(3),
+            NLs::PathsInsideDomain(0)
+        });
+
+        NSchemeShard::TSchemeLimits defaultLimits;
+        NSchemeShard::TSchemeLimits directlySetLimits;
+        directlySetLimits.MaxShards = 10;
+        directlySetLimits.MaxShardsInPath = 10;
+        directlySetLimits.MaxPaths = 10;
+        directlySetLimits.MaxChildrenInDir = 10;
+        NSchemeShard::TSchemeLimits alteredLimits;
+        alteredLimits.MaxShards = 7;
+        alteredLimits.MaxShardsInPath = 3;
+        alteredLimits.MaxPaths = 5;
+        alteredLimits.MaxChildrenInDir = 3;
+
+        // test that subdomain scheme limits are default
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::SchemeLimits(defaultLimits.AsProto()),
+        });
+
+        // change subdomain scheme limits the prehistoric way
+        SetSchemeshardSchemaLimits(runtime, directlySetLimits, tenantSchemeShard);
+
+        {
+            // test that the root knows about the subdomain
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+                NLs::PathExist,
+                NLs::SchemeLimits(defaultLimits.AsProto()),
+            });
+
+            // test that the subdomain scheme limits are changed to prehistoric
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"), {
+                NLs::PathExist,
+                NLs::SchemeLimits(directlySetLimits.AsProto())
+            });
+        }
+
+        TWaitForFirstEvent<TEvSchemeShard::TEvUpdateTenantSchemeShard> syncWaiter(runtime, [](const TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev) {
+            return ev.Get()->Get()->Record.HasSchemeLimits();
+        });
+
+        // change subdomain scheme limits with alter-extsubdomain
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            Sprintf(R"(
+                Name: "USER_0"
+                SchemeLimits {
+                    MaxShards: %lu
+                    MaxShardsInPath: %lu
+                    MaxPaths: %lu
+                    MaxChildrenInDir: %lu
+                }
+            )", alteredLimits.MaxShards, alteredLimits.MaxShardsInPath, alteredLimits.MaxPaths, alteredLimits.MaxChildrenInDir
+        ));
+        env.TestWaitNotification(runtime, txId);
+
+        syncWaiter.Wait();
+        syncWaiter.Stop();
+
+        {
+            // test that the root knows about the subdomain
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+                NLs::PathExist,
+                NLs::SchemeLimits(alteredLimits.AsProto()),
+            });
+
+            // test that the subdomain scheme limits are changed to altered limits
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"), {
+                NLs::PathExist,
+                NLs::SchemeLimits(alteredLimits.AsProto())
+            });
+        }
+    }
+
+    Y_UNIT_TEST(AlterSchemeLimits_NoEnableAlterDatabase) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime,
+            TTestEnvOptions()
+                .EnableAlterDatabase(false)
+        );
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(Name: "USER_0")"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            R"(
+                Name: "USER_0"
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                ExternalSchemeShard: true
+                StoragePools {
+                    Name: "/dc-1/users/tenant-1:hdd"
+                    Kind: "hdd"
+                }
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        // test what the parent knows about the subdomain
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("USER_0"),
+            NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
+            NLs::ShardsInsideDomain(3),
+            NLs::PathsInsideDomain(0)
+        });
+
+        NSchemeShard::TSchemeLimits defaultLimits;
+        NSchemeShard::TSchemeLimits directlySetLimits;
+        directlySetLimits.MaxShards = 10;
+        directlySetLimits.MaxShardsInPath = 10;
+        directlySetLimits.MaxPaths = 10;
+        directlySetLimits.MaxChildrenInDir = 10;
+        NSchemeShard::TSchemeLimits alteredLimits;
+        alteredLimits.MaxShards = 7;
+        alteredLimits.MaxShardsInPath = 3;
+        alteredLimits.MaxPaths = 5;
+        alteredLimits.MaxChildrenInDir = 3;
+
+        // test that subdomain scheme limits are default
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"), {
+            NLs::PathExist,
+            NLs::SchemeLimits(defaultLimits.AsProto()),
+        });
+
+        // change subdomain scheme limits the prehistoric way
+        SetSchemeshardSchemaLimits(runtime, directlySetLimits, tenantSchemeShard);
+
+        {
+            // test that the root knows about the subdomain
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+                NLs::PathExist,
+                NLs::SchemeLimits(defaultLimits.AsProto()),
+            });
+
+            // test that the subdomain scheme limits are changed to prehistoric
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"), {
+                NLs::PathExist,
+                NLs::SchemeLimits(directlySetLimits.AsProto())
+            });
+        }
+
+        TWaitForFirstEvent<TEvSchemeShard::TEvUpdateTenantSchemeShard> syncWaiter(runtime, [](const TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev) {
+            return (ev.Get()->Get()->Record.HasSchemeLimits() == false);
+        });
+
+        // try to change subdomain scheme limits with alter-extsubdomain
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot",
+            Sprintf(R"(
+                Name: "USER_0"
+                SchemeLimits {
+                    MaxShards: %lu
+                    MaxShardsInPath: %lu
+                    MaxPaths: %lu
+                    MaxChildrenInDir: %lu
+                }
+            )", alteredLimits.MaxShards, alteredLimits.MaxShardsInPath, alteredLimits.MaxPaths, alteredLimits.MaxChildrenInDir
+        ));
+        env.TestWaitNotification(runtime, txId);
+
+        syncWaiter.Wait();
+        syncWaiter.Stop();
+
+        // ...and that should not work.
+        // With EnableAlterDatabase=false, alter-extsubdomain will not overwrite limits directly set on the subdomain
+
+        {
+            // test that the root knows about the subdomain
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), {
+                NLs::PathExist,
+                NLs::SchemeLimits(alteredLimits.AsProto()),
+            });
+
+            // test that the subdomain scheme limits remain unchanged (directly set limits)
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0"), {
+                NLs::PathExist,
+                NLs::SchemeLimits(directlySetLimits.AsProto())
+            });
+        }
     }
 }

@@ -16,7 +16,8 @@ using namespace NYson;
 ////////////////////////////////////////////////////////////////////////////////
 
 class TJsonWriter
-    : public IJsonWriter
+    : public TYsonConsumerBase
+    , public IJsonWriter
 {
 public:
     TJsonWriter(IOutputStream* output, bool isPretty);
@@ -42,7 +43,6 @@ public:
     void OnBeginAttributes() override;
 
     void OnEndAttributes() override;
-    void OnRaw(TStringBuf yson, EYsonType type) override;
 
     void StartNextValue() override;
 
@@ -139,8 +139,8 @@ class TWebJsonConsumer
     : public TJsonConsumer
 {
 public:
-    static const i64 MaxSafeInteger = ((i64)1 << 53) - 1;
-    static const i64 MinSafeInteger = -MaxSafeInteger;
+    static constexpr i64 MaxSafeInteger = (static_cast<i64>(1) << 53) - 1;
+    static constexpr i64 MinSafeInteger = -MaxSafeInteger;
 
     TWebJsonConsumer(
         IJsonWriter* jsonWriter,
@@ -156,11 +156,10 @@ public:
     void OnUint64Scalar(ui64 value);
 
 private:
+    const TWebJsonFormatConfigPtr Config_;
+
     void SetUnsafeIntegerSerializationParameters();
     void ResetUnsafeIntegerSerializationParameters();
-
-private:
-    TWebJsonFormatConfigPtr Config_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -310,11 +309,6 @@ void TJsonWriter::OnBeginAttributes()
 void TJsonWriter::OnEndAttributes()
 {
     THROW_ERROR_EXCEPTION("TJsonWriter does not support attributes");
-}
-
-void TJsonWriter::OnRaw(TStringBuf /*yson*/, NYT::NYson::EYsonType /*type*/)
-{
-    THROW_ERROR_EXCEPTION("TJsonWriter does not support OnRaw()");
 }
 
 ui64 TJsonWriter::GetWrittenByteCount() const

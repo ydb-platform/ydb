@@ -1,14 +1,28 @@
 #include "kmeans_clusters.h"
 
+#include <ydb/public/api/protos/ydb_table.pb.h>
+
 #include <library/cpp/dot_product/dot_product.h>
 #include <library/cpp/l1_distance/l1_distance.h>
 #include <library/cpp/l2_distance/l2_distance.h>
+#include <ydb/library/yql/udfs/common/knn/knn-defines.h>
+#include <ydb/library/yql/udfs/common/knn/knn-distance.h>
+#include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
 
 #include <span>
 
 namespace NKikimr::NKMeans {
 
 namespace {
+    constexpr ui64 MinVectorDimension = 1;
+    constexpr ui64 MaxVectorDimension = 16384;
+    constexpr ui64 MinLevels = 1;
+    constexpr ui64 MaxLevels = 16;
+    constexpr ui64 MinClusters = 2;
+    constexpr ui64 MaxClusters = 2048;
+    constexpr ui64 MaxClustersPowLevels = ui64(1) << 30;
+    constexpr ui64 MaxVectorDimensionMultiplyClusters = ui64(4) << 20; // 4 bytes per dimension for float vector type ~= 16 MB
+
     bool ValidateSettingInRange(const TString& name, std::optional<ui64> value, ui64 minValue, ui64 maxValue, TString& error) {
         if (!value.has_value()) {
             error = TStringBuilder() << name << " should be set";
@@ -23,7 +37,8 @@ namespace {
         return false;
     };
 
-    Ydb::Table::VectorIndexSettings_Metric ParseDistance(const TString& distance, TString& error) {
+    Ydb::Table::VectorIndexSettings_Metric ParseDistance(const TString& distance_, TString& error) {
+        const TString distance = to_lower(distance_);
         if (distance == "cosine")
             return Ydb::Table::VectorIndexSettings::DISTANCE_COSINE;
         else if (distance == "manhattan")
@@ -31,23 +46,25 @@ namespace {
         else if (distance == "euclidean")
             return Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN;
         else {
-            error = TStringBuilder() << "Invalid distance: " << distance;
+            error = TStringBuilder() << "Invalid distance: " << distance_;
             return Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED;
         }
     };
-    
-    Ydb::Table::VectorIndexSettings_Metric ParseSimilarity(const TString& similarity, TString& error) {
+
+    Ydb::Table::VectorIndexSettings_Metric ParseSimilarity(const TString& similarity_, TString& error) {
+        const TString similarity = to_lower(similarity_);
         if (similarity == "cosine")
             return Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE;
         else if (similarity == "inner_product")
             return Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT;
         else {
-            error = TStringBuilder() << "Invalid similarity: " << similarity;
+            error = TStringBuilder() << "Invalid similarity: " << similarity_;
             return Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED;
         }
     };
-    
-    Ydb::Table::VectorIndexSettings_VectorType ParseVectorType(const TString& vectorType, TString& error) {
+
+    Ydb::Table::VectorIndexSettings_VectorType ParseVectorType(const TString& vectorType_, TString& error) {
+        const TString vectorType = to_lower(vectorType_);
         if (vectorType == "float")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
         else if (vectorType == "uint8")
@@ -57,43 +74,28 @@ namespace {
         else if (vectorType == "bit")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT;
         else {
-            error = TStringBuilder() << "Invalid vector_type: " << vectorType;
+            error = TStringBuilder() << "Invalid vector_type: " << vectorType_;
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED;
         }
     };
 
-    ui32 ParseUInt32(const TString& name, const TString& value, TString& error) {
+    ui32 ParseUInt32(const TString& name, const TString& value, ui64 minValue, ui64 maxValue, TString& error) {
         ui32 result = 0;
+        if (!TryFromString(value, result)) {
+            error = TStringBuilder() << "Invalid " << name << ": " << value;
+            return result;
+        }
+        ValidateSettingInRange(name, result, minValue, maxValue, error);
+        return result;
+    }
+
+    double ParseDouble(const TString& name, const TString& value, TString& error) {
+        double result = 0;
         if (!TryFromString(value, result)) {
             error = TStringBuilder() << "Invalid " << name << ": " << value;
         }
         return result;
     }
-}
-
-template <typename TRes>
-Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const float* lhs, const float* rhs, size_t length)
-{
-    auto r = TriWayDotProduct(lhs, rhs, length);
-    return {static_cast<TRes>(r.LL), static_cast<TRes>(r.LR), static_cast<TRes>(r.RR)};
-}
-
-template <typename TRes>
-Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const i8* lhs, const i8* rhs, size_t length)
-{
-    const auto ll = DotProduct(lhs, lhs, length);
-    const auto lr = DotProduct(lhs, rhs, length);
-    const auto rr = DotProduct(rhs, rhs, length);
-    return {static_cast<TRes>(ll), static_cast<TRes>(lr), static_cast<TRes>(rr)};
-}
-
-template <typename TRes>
-Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const ui8* lhs, const ui8* rhs, size_t length)
-{
-    const auto ll = DotProduct(lhs, lhs, length);
-    const auto lr = DotProduct(lhs, rhs, length);
-    const auto rr = DotProduct(rhs, rhs, length);
-    return {static_cast<TRes>(ll), static_cast<TRes>(lr), static_cast<TRes>(rr)};
 }
 
 // TODO(mbkkt) maybe compute floating sum in double? Needs benchmark
@@ -104,7 +106,7 @@ struct TMetric {
 };
 
 template <typename TCoord>
-struct TCosineSimilarity : TMetric<TCoord> {
+struct TCosineDistance : TMetric<TCoord> {
     using TSum = typename TMetric<TCoord>::TSum;
     // double used to avoid precision issues
     using TRes = double;
@@ -114,14 +116,10 @@ struct TCosineSimilarity : TMetric<TCoord> {
         return std::numeric_limits<TRes>::max();
     }
 
-    static auto Distance(const char* cluster, const char* embedding, ui32 dimensions)
+    static auto Distance(const TStringBuf cluster, const TStringBuf embedding)
     {
-        const auto r = CosineImpl<TRes>(reinterpret_cast<const TCoord*>(cluster),
-                                        reinterpret_cast<const TCoord*>(embedding), dimensions);
-        // sqrt(ll) * sqrt(rr) computed instead of sqrt(ll * rr) to avoid precision issues
-        const auto norm = std::sqrt(r.LL) * std::sqrt(r.RR);
-        const TRes similarity = norm != 0 ? static_cast<TRes>(r.LR) / static_cast<TRes>(norm) : 0;
-        return -similarity;
+        const TRes similarity = KnnDistance<TRes>::CosineSimilarity(cluster, embedding).value();
+        return 1 - similarity;
     }
 };
 
@@ -135,10 +133,9 @@ struct TL1Distance : TMetric<TCoord> {
         return std::numeric_limits<TRes>::max();
     }
 
-    static auto Distance(const char* cluster, const char* embedding, ui32 dimensions)
+    static auto Distance(const TStringBuf cluster, const TStringBuf embedding)
     {
-        const auto distance = L1Distance(reinterpret_cast<const TCoord*>(cluster),
-                                         reinterpret_cast<const TCoord*>(embedding), dimensions);
+        const auto distance = KnnDistance<TRes>::ManhattanDistance(cluster, embedding).value();
         return distance;
     }
 };
@@ -153,10 +150,9 @@ struct TL2Distance : TMetric<TCoord> {
         return std::numeric_limits<TRes>::max();
     }
 
-    static auto Distance(const char* cluster, const char* embedding, ui32 dimensions)
+    static auto Distance(const TStringBuf cluster, const TStringBuf embedding)
     {
-        const auto distance = L2SqrDistance(reinterpret_cast<const TCoord*>(cluster),
-                                            reinterpret_cast<const TCoord*>(embedding), dimensions);
+        const auto distance = KnnDistance<TRes>::EuclideanDistance(cluster, embedding).value();
         return distance;
     }
 };
@@ -171,10 +167,9 @@ struct TMaxInnerProductSimilarity : TMetric<TCoord> {
         return std::numeric_limits<TRes>::max();
     }
 
-    static auto Distance(const char* cluster, const char* embedding, ui32 dimensions)
+    static auto Distance(const TStringBuf cluster, const TStringBuf embedding)
     {
-        const TRes similarity = DotProduct(reinterpret_cast<const TCoord*>(cluster),
-                                           reinterpret_cast<const TCoord*>(embedding), dimensions);
+        const TRes similarity = KnnDistance<TRes>::DotProduct(cluster, embedding).value();
         return -similarity;
     }
 };
@@ -190,7 +185,7 @@ class TClusters: public IClusters {
 
     const ui32 Dimensions = 0;
     const ui32 MaxRounds = 0;
-    const ui8 TypeByte = 0;
+    const ui8 FormatByte = 0;
 
     TVector<TString> Clusters;
     TVector<ui64> ClusterSizes;
@@ -200,10 +195,10 @@ class TClusters: public IClusters {
     ui32 Round = 0;
 
 public:
-    TClusters(ui32 dimensions, ui32 maxRounds, ui8 typeByte)
+    TClusters(ui32 dimensions, ui32 maxRounds, ui8 formatByte)
         : Dimensions(dimensions)
         , MaxRounds(maxRounds)
-        , TypeByte(typeByte)
+        , FormatByte(formatByte)
     {
     }
 
@@ -248,7 +243,7 @@ public:
             return false;
         }
         for (const auto& cluster: newClusters) {
-            if (!IsExpectedSize(cluster)) {
+            if (!IsExpectedFormat(cluster)) {
                 return false;
             }
         }
@@ -329,14 +324,43 @@ public:
         return false;
     }
 
-    std::optional<ui32> FindCluster(TArrayRef<const char> embedding) override {
-        if (!IsExpectedSize(embedding)) {
+    void FindClusters(const TStringBuf embedding, std::vector<std::pair<ui32, double>>& clusters, size_t n, double skipRatio) override {
+        if (!IsExpectedFormat(embedding)) {
+            return;
+        }
+        clusters.clear();
+        for (ui32 i = 0; const auto& cluster : Clusters) {
+            auto cl = std::make_pair(i, (double)TMetric::Distance(cluster, embedding));
+            auto it = std::lower_bound(clusters.begin(), clusters.end(), cl, [](const std::pair<ui32, double>& a, const std::pair<ui32, double>& b) {
+                return a.second < b.second;
+            });
+            if (clusters.size() < n) {
+                clusters.insert(it, cl);
+            } else if (it != clusters.end()) {
+                clusters.insert(it, cl);
+                clusters.pop_back();
+            }
+            ++i;
+        }
+        if (skipRatio > 0 && clusters.size() > 1) {
+            double thresh = (clusters[0].second < 0 ? clusters[0].second/skipRatio : clusters[0].second*skipRatio);
+            for (ui32 i = 1; i < clusters.size(); i++) {
+                if (clusters[i].second > thresh) {
+                    clusters.resize(i);
+                    break;
+                }
+            }
+        }
+    }
+
+    std::optional<ui32> FindCluster(const TStringBuf embedding) override {
+        if (!IsExpectedFormat(embedding)) {
             return {};
         }
         auto min = TMetric::Init();
         std::optional<ui32> closest = {};
         for (size_t i = 0; const auto& cluster : Clusters) {
-            auto distance = TMetric::Distance(cluster.data(), embedding.data(), Dimensions);
+            auto distance = TMetric::Distance(cluster, embedding);
             if (distance < min) {
                 min = distance;
                 closest = i;
@@ -348,31 +372,60 @@ public:
 
     std::optional<ui32> FindCluster(TArrayRef<const TCell> row, ui32 embeddingPos) override {
         Y_ENSURE(embeddingPos < row.size());
-        return FindCluster(row.at(embeddingPos).AsRef());
+        return FindCluster(row.at(embeddingPos).AsBuf());
+    }
+
+    double CalcDistance(const TStringBuf a, const TStringBuf b) override {
+        return TMetric::Distance(a, b);
     }
 
     void AggregateToCluster(ui32 pos, const TArrayRef<const char>& embedding, ui64 weight) override {
         auto& aggregate = NextClusters.at(pos);
         auto* coords = aggregate.data();
-        Y_ENSURE(IsExpectedSize(embedding));
-        for (auto coord : this->GetCoords(embedding.data())) {
-            *coords++ += (TSum)coord * weight;
+        Y_ENSURE(IsExpectedFormat(embedding));
+
+        if (IsBitQuantized()) {
+            const ui8* data = reinterpret_cast<const ui8*>(embedding.data());
+            for (size_t i = 0; i < Dimensions; ++i) {
+                const bool coord = data[i / 8] & (1 << (i % 8));
+                *coords++ += (TSum)coord * weight;
+            }
+        } else {
+            for (const auto coord : this->GetCoords(embedding.data())) {
+                *coords++ += (TSum)coord * weight;
+            }
         }
         NextClusterSizes.at(pos) += weight;
     }
 
-    bool IsExpectedSize(const TArrayRef<const char>& data) override {
+    bool IsExpectedFormat(const TArrayRef<const char>& data) override {
+        if (!data.size() || FormatByte != data.back()) {
+            return false;
+        }
+
+        if (IsBitQuantized()) {
+            return data.size() >= 2 && Dimensions == (data.size() - 2) * 8 - data[data.size() - 2];
+        }
+
         return data.size() == 1 + sizeof(TCoord) * Dimensions;
     }
 
     TString GetEmptyRow() const override {
         TString str;
-        str.resize(1 + sizeof(TCoord) * Dimensions);
-        str[sizeof(TCoord) * Dimensions] = TypeByte;
+        const size_t bufferSize = NKnnVectorSerialization::GetBufferSize<TCoord>(Dimensions);
+        str.resize(bufferSize);
+        str[bufferSize - HeaderLen] = FormatByte;
+        if (IsBitQuantized()) {
+            str[bufferSize - HeaderLen - 1] = 8 - Dimensions % 8;
+        }
         return str;
     }
 
 private:
+    static constexpr bool IsBitQuantized() {
+        return std::is_same_v<TCoord, bool>;
+    }
+
     auto GetCoords(const char* coords) {
         return std::span{reinterpret_cast<const TCoord*>(coords), Dimensions};
     }
@@ -384,10 +437,24 @@ private:
     void Fill(TString& d, TSum* embedding, ui64& c) {
         Y_ENSURE(c > 0);
         const auto count = static_cast<TSum>(c);
-        auto data = GetData(d.MutRef().data());
-        for (auto& coord : data) {
-            coord = *embedding / count;
-            embedding++;
+
+        if (IsBitQuantized()) {
+            ui8* const data = reinterpret_cast<ui8*>(d.MutRef().data());
+            for (size_t i = 0; i < Dimensions; ++i) {
+                if (i % 8 == 0) {
+                    data[i / 8] = 0;
+                }
+                const bool bitValue = embedding[i] >= (count + 1) / 2;
+                if (bitValue) {
+                    data[i / 8] |= (1 << (i % 8));
+                }
+            }
+        } else {
+            auto data = GetData(d.MutRef().data());
+            for (auto& coord : data) {
+                coord = *embedding / count;
+                embedding++;
+            }
         }
     }
 };
@@ -397,22 +464,22 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
         return nullptr;
     }
 
-    const ui8 typeVal = (ui8)settings.vector_type();
     const ui32 dim = settings.vector_dimension();
 
     auto handleMetric = [&]<typename T>() -> std::unique_ptr<IClusters> {
+        constexpr ui8 formatByte = Format<T>;
         switch (settings.metric()) {
             case Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT:
-                return std::make_unique<TClusters<TMaxInnerProductSimilarity<T>>>(dim, maxRounds, typeVal);
+                return std::make_unique<TClusters<TMaxInnerProductSimilarity<T>>>(dim, maxRounds, formatByte);
             case Ydb::Table::VectorIndexSettings::SIMILARITY_COSINE:
             case Ydb::Table::VectorIndexSettings::DISTANCE_COSINE:
                 // We don't need to have separate implementation for distance,
                 // because clusters will be same as for similarity
-                return std::make_unique<TClusters<TCosineSimilarity<T>>>(dim, maxRounds, typeVal);
+                return std::make_unique<TClusters<TCosineDistance<T>>>(dim, maxRounds, formatByte);
             case Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN:
-                return std::make_unique<TClusters<TL1Distance<T>>>(dim, maxRounds, typeVal);
+                return std::make_unique<TClusters<TL1Distance<T>>>(dim, maxRounds, formatByte);
             case Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN:
-                return std::make_unique<TClusters<TL2Distance<T>>>(dim, maxRounds, typeVal);
+                return std::make_unique<TClusters<TL2Distance<T>>>(dim, maxRounds, formatByte);
             default:
                 error = TStringBuilder() << "Invalid metric: " << static_cast<int>(settings.metric());
                 return nullptr;
@@ -427,21 +494,76 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
             return handleMetric.template operator()<i8>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT:
-            error = TStringBuilder() << "Unsupported vector_type: " << Ydb::Table::VectorIndexSettings::VectorType_Name(settings.vector_type());
-            return nullptr;
+            return handleMetric.template operator()<bool>();
         default:
             error = TStringBuilder() << "Invalid vector_type: " << static_cast<int>(settings.vector_type());
             return nullptr;
     }
 }
 
+std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSettings settings, const TStringBuf& targetVector, ui32 maxRounds, TString& error) {
+    if (targetVector.empty()) {
+        error = "Target vector is empty";
+        return nullptr;
+    }
+
+    const auto setLinearType = [&](Ydb::Table::VectorIndexSettings::VectorType type, size_t elementSize, TStringBuf typeName) -> bool {
+        if (targetVector.size() < HeaderLen + elementSize) {
+            error = TStringBuilder() << "Target vector too short for " << typeName << " type";
+            return false;
+        }
+        settings.set_vector_type(type);
+        settings.set_vector_dimension((targetVector.size() - HeaderLen) / elementSize);
+        return true;
+    };
+
+    const ui8 formatByte = static_cast<ui8>(targetVector.back());
+    switch (formatByte) {
+        case EFormat::FloatVector:
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, sizeof(float), "float")) {
+                return nullptr;
+            }
+            break;
+        case EFormat::Uint8Vector:
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8, sizeof(ui8), "uint8")) {
+                return nullptr;
+            }
+            break;
+        case EFormat::Int8Vector:
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8, sizeof(i8), "int8")) {
+                return nullptr;
+            }
+            break;
+        case EFormat::BitVector: {
+            if (targetVector.size() < HeaderLen + 2) {
+                error = "Target vector too short for bit type";
+                return nullptr;
+            }
+            const ui8 paddingBits = static_cast<ui8>(targetVector[targetVector.size() - 2]);
+            const size_t payloadBits = (targetVector.size() - HeaderLen - 1) * 8;
+            if (payloadBits < paddingBits) {
+                error = "Invalid bit vector padding";
+                return nullptr;
+            }
+            settings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BIT);
+            settings.set_vector_dimension(payloadBits - paddingBits);
+            break;
+        }
+        default:
+            error = TStringBuilder() << "Unknown vector format byte: " << static_cast<int>(formatByte);
+            return nullptr;
+    }
+
+    return CreateClusters(settings, maxRounds, error);
+}
+
 bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& error) {
-    constexpr ui64 MinLevels = 1;
-    constexpr ui64 MaxLevels = 16;
-    constexpr ui64 MinClusters = 2;
-    constexpr ui64 MaxClusters = 2048;
-    constexpr ui64 MaxClustersPowLevels = ui64(1) << 30;
-    constexpr ui64 MaxVectorDimensionMultiplyClusters = ui64(4) << 20; // 4 bytes per dimension for float vector type ~= 16 MB
+    error = "";
+
+    if (auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count(); unknownCount > 0) {
+        error = TStringBuilder() << "vector index settings contain " << unknownCount << " unsupported parameter(s)";
+        return false;
+    }
 
     if (!settings.has_settings()) {
         error = TStringBuilder() << "vector index settings should be set";
@@ -452,19 +574,31 @@ bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& e
         return false;
     }
 
-    if (!ValidateSettingInRange("levels", 
-        settings.has_levels() ? std::optional<ui64>(settings.levels()) : std::nullopt, 
+    if (!ValidateSettingInRange("levels",
+        settings.has_levels() ? std::optional<ui64>(settings.levels()) : std::nullopt,
         MinLevels, MaxLevels,
         error))
     {
         return false;
     }
 
-    if (!ValidateSettingInRange("clusters", 
-        settings.has_clusters() ? std::optional<ui64>(settings.clusters()) : std::nullopt, 
+    if (!ValidateSettingInRange("clusters",
+        settings.has_clusters() ? std::optional<ui64>(settings.clusters()) : std::nullopt,
         MinClusters, MaxClusters,
         error))
     {
+        return false;
+    }
+
+    if (settings.has_overlap_clusters() &&
+        settings.overlap_clusters() > settings.clusters()) {
+        error = TStringBuilder() << "overlap_clusters should be less than or equal to clusters";
+        return false;
+    }
+
+    if (settings.has_overlap_ratio() &&
+        settings.overlap_ratio() < 0) {
+        error = TStringBuilder() << "overlap_ratio should be >= 0";
         return false;
     }
 
@@ -478,17 +612,20 @@ bool ValidateSettings(const Ydb::Table::KMeansTreeSettings& settings, TString& e
     }
 
     if (settings.settings().vector_dimension() * settings.clusters() > MaxVectorDimensionMultiplyClusters) {
-        error = TStringBuilder() << "Invalid vector_dimension*clusters: " << settings.settings().vector_dimension() << "*" << settings.clusters() 
+        error = TStringBuilder() << "Invalid vector_dimension*clusters: " << settings.settings().vector_dimension() << "*" << settings.clusters()
             << " should be less than " << MaxVectorDimensionMultiplyClusters;
         return false;
     }
 
+    error = "";
     return true;
 }
 
 bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& error) {
-    constexpr ui64 MinVectorDimension = 1;
-    constexpr ui64 MaxVectorDimension = 16384;
+    if (auto unknownCount = settings.GetReflection()->GetUnknownFields(settings).field_count(); unknownCount > 0) {
+        error = TStringBuilder() << "vector index settings contain " << unknownCount << " unsupported parameter(s)";
+        return false;
+    }
 
     if (!settings.has_metric() || settings.metric() == Ydb::Table::VectorIndexSettings::METRIC_UNSPECIFIED) {
         error = TStringBuilder() << "either distance or similarity should be set";
@@ -508,54 +645,101 @@ bool ValidateSettings(const Ydb::Table::VectorIndexSettings& settings, TString& 
         return false;
     }
 
-    if (!ValidateSettingInRange("vector_dimension", 
-        settings.has_vector_dimension() ? std::optional<ui64>(settings.vector_dimension()) : std::nullopt, 
+    if (!ValidateSettingInRange("vector_dimension",
+        settings.has_vector_dimension() ? std::optional<ui64>(settings.vector_dimension()) : std::nullopt,
         MinVectorDimension, MaxVectorDimension,
         error))
     {
+        Y_ASSERT(error);
         return false;
     }
 
+    error = "";
     return true;
 }
 
-Ydb::Table::KMeansTreeSettings FillSettings(const TVector<std::pair<TString, TString>>& settings, TString& error) {
-    Ydb::Table::KMeansTreeSettings result;
+bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& name, const TString& value, TString& error) {
+    error = "";
 
-    for (const auto& [name, value] : settings) {
-        if (name == "distance") {
-            if (result.mutable_settings()->has_metric()) {
-                error = "only one of distance or similarity should be set, not both";
-                return result;
-            }
-            result.mutable_settings()->set_metric(ParseDistance(value, error));
-        } else if (name == "similarity") {
-            if (result.mutable_settings()->has_metric()) {
-                error = "only one of distance or similarity should be set, not both";
-                return result;
-            }
-            result.mutable_settings()->set_metric(ParseSimilarity(value, error));
-        } else if (name =="vector_type") {
-            result.mutable_settings()->set_vector_type(ParseVectorType(value, error));
-        } else if (name =="vector_dimension") {
-            result.mutable_settings()->set_vector_dimension(ParseUInt32(name, value, error));
-        } else if (name =="clusters") {
-            result.set_clusters(ParseUInt32(name, value, error));
-        } else if (name =="levels") {
-            result.set_levels(ParseUInt32(name, value, error));
-        } else {
-            error = TStringBuilder() << "Unknown index setting: " << name;
-            return result;
+    const TString nameLower = to_lower(name);
+    if (nameLower == "distance") {
+        if (settings.mutable_settings()->has_metric()) {
+            error = "only one of distance or similarity should be set, not both";
+            return false;
         }
-
-        if (error) {
-            return result;
+        settings.mutable_settings()->set_metric(ParseDistance(value, error));
+    } else if (nameLower == "similarity") {
+        if (settings.mutable_settings()->has_metric()) {
+            error = "only one of distance or similarity should be set, not both";
+            return false;
         }
+        settings.mutable_settings()->set_metric(ParseSimilarity(value, error));
+    } else if (nameLower =="vector_type") {
+        settings.mutable_settings()->set_vector_type(ParseVectorType(value, error));
+    } else if (nameLower =="vector_dimension") {
+        settings.mutable_settings()->set_vector_dimension(ParseUInt32(name, value, MinVectorDimension, MaxVectorDimension, error));
+    } else if (nameLower =="clusters") {
+        settings.set_clusters(ParseUInt32(name, value, MinClusters, MaxClusters, error));
+    } else if (nameLower =="levels") {
+        settings.set_levels(ParseUInt32(name, value, MinLevels, MaxLevels, error));
+    } else if (nameLower == "overlap_clusters") {
+        settings.set_overlap_clusters(ParseUInt32(name, value, MinClusters, MaxClusters, error));
+    } else if (nameLower == "overlap_ratio") {
+        settings.set_overlap_ratio(ParseDouble(name, value, error));
+    } else {
+        error = TStringBuilder() << "Unknown index setting: " << name;
+        return false;
     }
 
-    ValidateSettings(result, error);
+    return !error;
+}
 
-    return result;
+void FilterOverlapRows(TVector<TSerializedCellVec>& rows, size_t distancePos, ui32 overlapClusters, double overlapRatio) {
+    if (rows.size() <= 1) {
+        return;
+    }
+    std::sort(rows.begin(), rows.end(), [&](const TSerializedCellVec& a, const TSerializedCellVec& b) {
+        auto da = a.GetCells().at(distancePos).AsValue<double>();
+        auto db = b.GetCells().at(distancePos).AsValue<double>();
+        return da < db;
+    });
+    if (rows.size() > overlapClusters) {
+        rows.resize(overlapClusters);
+    }
+    if (overlapRatio > 0) {
+        auto thresh = rows[0].GetCells().at(distancePos).AsValue<double>();
+        thresh = (thresh < 0 ? thresh/overlapRatio : thresh*overlapRatio);
+        for (size_t i = 1; i < rows.size(); i++) {
+            auto d = rows[i].GetCells().at(distancePos).AsValue<double>();
+            if (d > thresh) {
+                rows.resize(i);
+                break;
+            }
+        }
+    }
+}
+
+void FilterOverlapRows(TVector<std::pair<NTableIndex::NKMeans::TClusterId, double>>& rowClusters, ui32 overlapClusters, double overlapRatio) {
+    if (rowClusters.size() <= 1) {
+        return;
+    }
+    std::sort(rowClusters.begin(), rowClusters.end(),
+        [&](const std::pair<NTableIndex::NKMeans::TClusterId, double>& a,
+            const std::pair<NTableIndex::NKMeans::TClusterId, double>& b) {
+            return a.second < b.second;
+        });
+    if (rowClusters.size() > overlapClusters) {
+        rowClusters.resize(overlapClusters);
+    }
+    if (overlapRatio > 0) {
+        double thresh = (rowClusters[0].second < 0 ? rowClusters[0].second/overlapRatio : rowClusters[0].second*overlapRatio);
+        for (size_t i = 1; i < rowClusters.size(); i++) {
+            if (rowClusters[i].second > thresh) {
+                rowClusters.resize(i);
+                break;
+            }
+        }
+    }
 }
 
 }

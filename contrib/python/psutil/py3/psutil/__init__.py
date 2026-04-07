@@ -30,13 +30,13 @@ import sys
 import threading
 import time
 
-
 try:
     import pwd
 except ImportError:
     pwd = None
 
 from . import _common
+from . import _ntuples as _ntp
 from ._common import AIX
 from ._common import BSD
 from ._common import CONN_CLOSE
@@ -85,7 +85,6 @@ from ._common import ZombieProcess
 from ._common import debug
 from ._common import memoize_when_activated
 from ._common import wrap_numbers as _wrap_numbers
-
 
 if LINUX:
     # This is public API and it will be retrieved from _pslinux.py
@@ -150,8 +149,7 @@ __all__ = [
 
     "STATUS_RUNNING", "STATUS_IDLE", "STATUS_SLEEPING", "STATUS_DISK_SLEEP",
     "STATUS_STOPPED", "STATUS_TRACING_STOP", "STATUS_ZOMBIE", "STATUS_DEAD",
-    "STATUS_WAKING", "STATUS_LOCKED", "STATUS_WAITING", "STATUS_LOCKED",
-    "STATUS_PARKED",
+    "STATUS_WAKING", "STATUS_LOCKED", "STATUS_WAITING", "STATUS_PARKED",
 
     "CONN_ESTABLISHED", "CONN_SYN_SENT", "CONN_SYN_RECV", "CONN_FIN_WAIT1",
     "CONN_FIN_WAIT2", "CONN_TIME_WAIT", "CONN_CLOSE", "CONN_CLOSE_WAIT",
@@ -194,20 +192,18 @@ __all__.extend(_psplatform.__extra__all__)
 # Linux, FreeBSD
 if hasattr(_psplatform.Process, "rlimit"):
     # Populate global namespace with RLIM* constants.
-    from . import _psutil_posix
-
     _globals = globals()
     _name = None
-    for _name in dir(_psutil_posix):
+    for _name in dir(_psplatform.cext):
         if _name.startswith('RLIM') and _name.isupper():
-            _globals[_name] = getattr(_psutil_posix, _name)
+            _globals[_name] = getattr(_psplatform.cext, _name)
             __all__.append(_name)
     del _globals, _name
 
 AF_LINK = _psplatform.AF_LINK
 
 __author__ = "Giampaolo Rodola'"
-__version__ = "7.0.0"
+__version__ = "7.2.2"
 version_info = tuple(int(num) for num in __version__.split('.'))
 
 _timer = getattr(time, 'monotonic', time.time)
@@ -377,7 +373,11 @@ class Process:
         won't reuse the same PID after such a short period of time
         (0.01 secs). Technically this is inherently racy, but
         practically it should be good enough.
+
+        NOTE: unreliable on FreeBSD and OpenBSD as ctime is subject to
+        system clock updates.
         """
+
         if WINDOWS:
             # Use create_time() fast method in order to speedup
             # `process_iter()`. This means we'll get AccessDenied for
@@ -386,6 +386,11 @@ class Process:
             # https://github.com/giampaolo/psutil/issues/2366#issuecomment-2381646555
             self._create_time = self._proc.create_time(fast_only=True)
             return (self.pid, self._create_time)
+        elif LINUX or NETBSD or OSX:
+            # Use 'monotonic' process starttime since boot to form unique
+            # process identity, since it is stable over changes to system
+            # time.
+            return (self.pid, self._proc.create_time(monotonic=True))
         else:
             return (self.pid, self.create_time())
 
@@ -426,12 +431,12 @@ class Process:
         # on PID and creation time.
         if not isinstance(other, Process):
             return NotImplemented
-        if OPENBSD or NETBSD:  # pragma: no cover
-            # Zombie processes on Open/NetBSD have a creation time of
-            # 0.0. This covers the case when a process started normally
-            # (so it has a ctime), then it turned into a zombie. It's
-            # important to do this because is_running() depends on
-            # __eq__.
+        if OPENBSD or NETBSD or SUNOS:  # pragma: no cover
+            # Zombie processes on Open/NetBSD/illumos/Solaris have a
+            # creation time of 0.0.  This covers the case when a process
+            # started normally (so it has a ctime), then it turned into a
+            # zombie. It's important to do this because is_running()
+            # depends on __eq__.
             pid1, ident1 = self._ident
             pid2, ident2 = other._ident
             if pid1 == pid2:
@@ -593,10 +598,13 @@ class Process:
             return None
         ppid = self.ppid()
         if ppid is not None:
-            ctime = self.create_time()
+            # Get a fresh (non-cached) ctime in case the system clock
+            # was updated. TODO: use a monotonic ctime on platforms
+            # where it's supported.
+            proc_ctime = Process(self.pid).create_time()
             try:
                 parent = Process(ppid)
-                if parent.create_time() <= ctime:
+                if parent.create_time() <= proc_ctime:
                     return parent
                 # ...else ppid has been reused by another process
             except NoSuchProcess:
@@ -765,8 +773,11 @@ class Process:
 
     def create_time(self):
         """The process creation time as a floating point number
-        expressed in seconds since the epoch.
-        The return value is cached after first call.
+        expressed in seconds since the epoch (seconds since January 1,
+        1970, at midnight UTC). The return value, which is cached after
+        first call, is based on the system clock, which means it may be
+        affected by changes such as manual adjustments or time
+        synchronization (e.g. NTP).
         """
         if self._create_time is None:
             self._create_time = self._proc.create_time()
@@ -964,6 +975,10 @@ class Process:
         """
         self._raise_if_pid_reused()
         ppid_map = _ppid_map()
+        # Get a fresh (non-cached) ctime in case the system clock was
+        # updated. TODO: use a monotonic ctime on platforms where it's
+        # supported.
+        proc_ctime = Process(self.pid).create_time()
         ret = []
         if not recursive:
             for pid, ppid in ppid_map.items():
@@ -972,7 +987,7 @@ class Process:
                         child = Process(pid)
                         # if child happens to be older than its parent
                         # (self) it means child's PID has been reused
-                        if self.create_time() <= child.create_time():
+                        if proc_ctime <= child.create_time():
                             ret.append(child)
                     except (NoSuchProcess, ZombieProcess):
                         pass
@@ -998,7 +1013,7 @@ class Process:
                         child = Process(child_pid)
                         # if child happens to be older than its parent
                         # (self) it means child's PID has been reused
-                        intime = self.create_time() <= child.create_time()
+                        intime = proc_ctime <= child.create_time()
                         if intime:
                             ret.append(child)
                             stack.append(child_pid)
@@ -1147,7 +1162,7 @@ class Process:
         >>> psutil.Process().memory_info()._fields
         ('rss', 'vms', 'shared', 'text', 'lib', 'data', 'dirty', 'uss', 'pss')
         """
-        valid_types = list(_psplatform.pfullmem._fields)
+        valid_types = list(_ntp.pfullmem._fields)
         if memtype not in valid_types:
             msg = (
                 f"invalid memtype {memtype!r}; valid types are"
@@ -1156,7 +1171,7 @@ class Process:
             raise ValueError(msg)
         fun = (
             self.memory_info
-            if memtype in _psplatform.pmem._fields
+            if memtype in _ntp.pmem._fields
             else self.memory_full_info
         )
         metrics = fun()
@@ -1196,11 +1211,9 @@ class Process:
                         d[path] = list(map(lambda x, y: x + y, d[path], nums))
                     except KeyError:
                         d[path] = nums
-                nt = _psplatform.pmmap_grouped
-                return [nt(path, *d[path]) for path in d]
+                return [_ntp.pmmap_grouped(path, *d[path]) for path in d]
             else:
-                nt = _psplatform.pmmap_ext
-                return [nt(*x) for x in it]
+                return [_ntp.pmmap_ext(*x) for x in it]
 
     def open_files(self):
         """Return files opened by process as a list of
@@ -1326,25 +1339,42 @@ class Process:
             self._proc.kill()
 
     def wait(self, timeout=None):
-        """Wait for process to terminate and, if process is a children
+        """Wait for process to terminate, and if process is a children
         of os.getpid(), also return its exit code, else None.
         On Windows there's no such limitation (exit code is always
         returned).
 
-        If the process is already terminated immediately return None
+        If the process is already terminated, immediately return None
         instead of raising NoSuchProcess.
 
         If *timeout* (in seconds) is specified and process is still
-        alive raise TimeoutExpired.
+        alive, raise TimeoutExpired.
 
-        To wait for multiple Process(es) use psutil.wait_procs().
+        If *timeout=0* either return immediately or raise
+        TimeoutExpired (non-blocking).
+
+        To wait for multiple Process objects use psutil.wait_procs().
         """
-        if timeout is not None and not timeout >= 0:
-            msg = "timeout must be a positive integer"
+        if self.pid == 0:
+            msg = "can't wait for PID 0"
             raise ValueError(msg)
+        if timeout is not None:
+            if not isinstance(timeout, (int, float)):
+                msg = f"timeout must be an int or float (got {type(timeout)})"
+                raise TypeError(msg)
+            if timeout < 0:
+                msg = f"timeout must be positive or zero (got {timeout})"
+                raise ValueError(msg)
+
         if self._exitcode is not _SENTINEL:
             return self._exitcode
-        self._exitcode = self._proc.wait(timeout)
+
+        try:
+            self._exitcode = self._proc.wait(timeout)
+        except TimeoutExpired as err:
+            exc = TimeoutExpired(timeout, pid=self.pid, name=self._name)
+            raise exc from err
+
         return self._exitcode
 
 
@@ -1484,7 +1514,7 @@ def process_iter(attrs=None, ad_value=None):
 
     Every new Process instance is only created once and then cached
     into an internal table which is updated every time this is used.
-    Cache can optionally be cleared via `process_iter.clear_cache()`.
+    Cache can optionally be cleared via `process_iter.cache_clear()`.
 
     The sorting order in which processes are yielded is based on
     their PIDs.
@@ -1589,11 +1619,12 @@ def wait_procs(procs, timeout=None, callback=None):
     if timeout is not None and not timeout >= 0:
         msg = f"timeout must be a positive integer, got {timeout}"
         raise ValueError(msg)
-    gone = set()
-    alive = set(procs)
     if callback is not None and not callable(callback):
         msg = f"callback {callback!r} is not a callable"
         raise TypeError(msg)
+
+    gone = set()
+    alive = set(procs)
     if timeout is not None:
         deadline = _timer() + timeout
 
@@ -1736,7 +1767,7 @@ def _cpu_busy_time(times):
 def _cpu_times_deltas(t1, t2):
     assert t1._fields == t2._fields, (t1, t2)
     field_deltas = []
-    for field in _psplatform.scputimes._fields:
+    for field in _ntp.scputimes._fields:
         field_delta = getattr(t2, field) - getattr(t1, field)
         # CPU times are always supposed to increase over time
         # or at least remain the same and that's because time
@@ -1751,7 +1782,7 @@ def _cpu_times_deltas(t1, t2):
         # https://gitlab.com/procps-ng/procps/blob/v3.3.12/top/top.c#L5063
         field_delta = max(0, field_delta)
         field_deltas.append(field_delta)
-    return _psplatform.scputimes(*field_deltas)
+    return _ntp.scputimes(*field_deltas)
 
 
 def cpu_percent(interval=None, percpu=False):
@@ -1870,7 +1901,7 @@ def cpu_times_percent(interval=None, percpu=False):
             # make sure we don't return negative values or values over 100%
             field_perc = min(max(0.0, field_perc), 100.0)
             nums.append(field_perc)
-        return _psplatform.scputimes(*nums)
+        return _ntp.scputimes(*nums)
 
     # system-wide usage
     if not percpu:
@@ -1940,7 +1971,7 @@ if hasattr(_psplatform, "cpu_freq"):
                     min_ = mins / num_cpus
                     max_ = maxs / num_cpus
 
-                return _common.scpufreq(current, min_, max_)
+                return _ntp.scpufreq(current, min_, max_)
 
     __all__.append("cpu_freq")
 
@@ -2099,13 +2130,12 @@ def disk_io_counters(perdisk=False, nowrap=True):
         return {} if perdisk else None
     if nowrap:
         rawdict = _wrap_numbers(rawdict, 'psutil.disk_io_counters')
-    nt = getattr(_psplatform, "sdiskio", _common.sdiskio)
     if perdisk:
         for disk, fields in rawdict.items():
-            rawdict[disk] = nt(*fields)
+            rawdict[disk] = _ntp.sdiskio(*fields)
         return rawdict
     else:
-        return nt(*(sum(x) for x in zip(*rawdict.values())))
+        return _ntp.sdiskio(*(sum(x) for x in zip(*rawdict.values())))
 
 
 disk_io_counters.cache_clear = functools.partial(
@@ -2152,10 +2182,10 @@ def net_io_counters(pernic=False, nowrap=True):
         rawdict = _wrap_numbers(rawdict, 'psutil.net_io_counters')
     if pernic:
         for nic, fields in rawdict.items():
-            rawdict[nic] = _common.snetio(*fields)
+            rawdict[nic] = _ntp.snetio(*fields)
         return rawdict
     else:
-        return _common.snetio(*[sum(x) for x in zip(*rawdict.values())])
+        return _ntp.snetio(*[sum(x) for x in zip(*rawdict.values())])
 
 
 net_io_counters.cache_clear = functools.partial(
@@ -2237,7 +2267,7 @@ def net_if_addrs():
             while addr.count(separator) < 5:
                 addr += f"{separator}00"
 
-        nt = _common.snicaddr(fam, addr, mask, broadcast, ptp)
+        nt = _ntp.snicaddr(fam, addr, mask, broadcast, ptp)
 
         # On Windows broadcast is None, so we determine it via
         # ipaddress module.
@@ -2306,9 +2336,7 @@ if hasattr(_psplatform, "sensors_temperatures"):
                 elif critical and not high:
                     high = critical
 
-                ret[name].append(
-                    _common.shwtemp(label, current, high, critical)
-                )
+                ret[name].append(_ntp.shwtemp(label, current, high, critical))
 
         return dict(ret)
 
@@ -2352,9 +2380,12 @@ if hasattr(_psplatform, "sensors_battery"):
 
 
 def boot_time():
-    """Return the system boot time expressed in seconds since the epoch."""
-    # Note: we are not caching this because it is subject to
-    # system clock updates.
+    """Return the system boot time expressed in seconds since the epoch
+    (seconds since January 1, 1970, at midnight UTC). The returned
+    value is based on the system clock, which means it may be affected
+    by changes such as manual adjustments or time synchronization (e.g.
+    NTP).
+    """
     return _psplatform.boot_time()
 
 
@@ -2389,6 +2420,52 @@ if WINDOWS:
         Raise NoSuchProcess if no service with such name exists.
         """
         return _psplatform.win_service_get(name)
+
+
+# =====================================================================
+# --- malloc / heap
+# =====================================================================
+
+
+# Linux + glibc, Windows, macOS, FreeBSD, NetBSD
+if hasattr(_psplatform, "heap_info"):
+
+    def heap_info():
+        """Return low-level heap statistics from the C heap allocator
+        (glibc).
+
+        - `heap_used`: the total number of bytes allocated via
+          malloc/free. These are typically allocations smaller than
+          MMAP_THRESHOLD.
+
+        - `mmap_used`: the total number of bytes allocated via `mmap()`
+          or via large ``malloc()`` allocations.
+
+        - `heap_count` (Windows only): number of private heaps created
+          via `HeapCreate()`.
+        """
+        return _ntp.pheap(*_psplatform.heap_info())
+
+    def heap_trim():
+        """Request that the underlying allocator free any unused memory
+        it's holding in the heap (typically small `malloc()`
+        allocations).
+
+        In practice, modern allocators rarely comply, so this is not a
+        general-purpose memory-reduction tool and won't meaningfully
+        shrink RSS in real programs. Its primary value is in **leak
+        detection tools**.
+
+        Calling `heap_trim()` before taking measurements helps reduce
+        allocator noise, giving you a cleaner baseline so that changes
+        in `heap_used` come from the code you're testing, not from
+        internal allocator caching or fragmentation. Its effectiveness
+        depends on allocator behavior and fragmentation patterns.
+        """
+        _psplatform.heap_trim()
+
+    __all__.append("heap_info")
+    __all__.append("heap_trim")
 
 
 # =====================================================================

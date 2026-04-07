@@ -30,7 +30,11 @@ from fontTools.misc.fixedTools import floatToFixed as fl2fi
 from fontTools.misc.textTools import Tag, tostr
 from fontTools.ttLib import TTFont, newTable
 from fontTools.ttLib.tables._f_v_a_r import Axis, NamedInstance
-from fontTools.ttLib.tables._g_l_y_f import GlyphCoordinates, dropImpliedOnCurvePoints
+from fontTools.ttLib.tables._g_l_y_f import (
+    GlyphCoordinates,
+    dropImpliedOnCurvePoints,
+    USE_MY_METRICS,
+)
 from fontTools.ttLib.tables.ttProgram import Program
 from fontTools.ttLib.tables.TupleVariation import TupleVariation
 from fontTools.ttLib.tables import otTables as ot
@@ -378,25 +382,7 @@ def _add_gvar(font, masterModel, master_ttfs, tolerance=0.5, optimize=True):
                 continue
             var = TupleVariation(support, delta)
             if optimize:
-                delta_opt = iup_delta_optimize(
-                    delta, origCoords, endPts, tolerance=tolerance
-                )
-
-                if None in delta_opt:
-                    # Use "optimized" version only if smaller...
-                    var_opt = TupleVariation(support, delta_opt)
-
-                    axis_tags = sorted(
-                        support.keys()
-                    )  # Shouldn't matter that this is different from fvar...?
-                    tupleData, auxData = var.compile(axis_tags)
-                    unoptimized_len = len(tupleData) + len(auxData)
-                    tupleData, auxData = var_opt.compile(axis_tags)
-                    optimized_len = len(tupleData) + len(auxData)
-
-                    if optimized_len < unoptimized_len:
-                        var = var_opt
-
+                var.optimize(origCoords, endPts, tolerance=tolerance)
             gvar.variations[glyph].append(var)
 
 
@@ -487,6 +473,77 @@ def _merge_TTHinting(font, masterModel, master_ttfs):
         cvar = font["cvar"] = newTable("cvar")
         cvar.version = 1
         cvar.variations = variations
+
+
+def _has_inconsistent_use_my_metrics_flag(
+    master_glyf, glyph_name, flagged_components, expected_num_components
+) -> bool:
+    master_glyph = master_glyf.get(glyph_name)
+    # 'sparse' glyph master doesn't contribute. Besides when components don't match
+    # the VF build is going to fail anyway, so be lenient here.
+    if (
+        master_glyph is not None
+        and master_glyph.isComposite()
+        and len(master_glyph.components) == expected_num_components
+    ):
+        for i, base_glyph in flagged_components:
+            comp = master_glyph.components[i]
+            if comp.glyphName != base_glyph:
+                break
+            if not (comp.flags & USE_MY_METRICS):
+                return True
+    return False
+
+
+def _unset_inconsistent_use_my_metrics_flags(vf, master_fonts):
+    """Clear USE_MY_METRICS on composite components if inconsistent across masters.
+
+    If a composite glyph's component has USE_MY_METRICS set differently among
+    the masters, the flag is removed from the variable font's glyf table so that
+    advance widths are not determined by that single component's phantom points.
+    """
+    glyf = vf["glyf"]
+    master_glyfs = [m["glyf"] for m in master_fonts if "glyf" in m]
+    if not master_glyfs:
+        # Should not happen: at least the base master (as copied into vf) has glyf
+        return
+
+    for glyph_name in glyf.keys():
+        glyph = glyf[glyph_name]
+        if not glyph.isComposite():
+            continue
+
+        # collect indices of component(s) that carry the USE_MY_METRICS flag.
+        # This is supposed to be 1 component per composite, but you never know.
+        flagged_components = [
+            (i, comp.glyphName)
+            for i, comp in enumerate(glyph.components)
+            if (comp.flags & USE_MY_METRICS)
+        ]
+        if not flagged_components:
+            # Nothing to fix
+            continue
+
+        # Verify that for all master glyf tables that contribute this glyph, the
+        # corresponding component (same glyphName and index) also carries USE_MY_METRICS
+        # and unset the flag if not.
+        expected_num_components = len(glyph.components)
+        if any(
+            _has_inconsistent_use_my_metrics_flag(
+                master_glyf, glyph_name, flagged_components, expected_num_components
+            )
+            for master_glyf in master_glyfs
+        ):
+            comp_names = [name for _, name in flagged_components]
+            log.info(
+                "Composite glyph '%s' has inconsistent USE_MY_METRICS flags across "
+                "masters; clearing the flag on component%s %s",
+                glyph_name,
+                "s" if len(comp_names) > 1 else "",
+                comp_names if len(comp_names) > 1 else comp_names[0],
+            )
+            for i, _ in flagged_components:
+                glyph.components[i].flags &= ~USE_MY_METRICS
 
 
 _MetricsFields = namedtuple(
@@ -693,7 +750,7 @@ def _add_MVAR(font, masterModel, master_ttfs, axisTags):
     # and unilaterally/arbitrarily define a sentinel value to distinguish the case
     # when a post table is present in a given master simply because that's where
     # the glyph names in TrueType must be stored, but the underline values are not
-    # meant to be used for building MVAR's deltas. The value of -0x8000 (-36768)
+    # meant to be used for building MVAR's deltas. The value of -0x8000 (-32768)
     # the minimum FWord (int16) value, was chosen for its unlikelyhood to appear
     # in real-world underline position/thickness values.
     specialTags = {"unds": -0x8000, "undo": -0x8000}
@@ -789,7 +846,6 @@ def _merge_OTL(font, model, master_fonts, axisTags):
         GDEF = font["GDEF"].table
         assert GDEF.Version <= 0x00010002
     except KeyError:
-        font["GDEF"] = newTable("GDEF")
         GDEFTable = font["GDEF"] = newTable("GDEF")
         GDEF = GDEFTable.table = ot.GDEF()
         GDEF.GlyphClassDef = None
@@ -1079,7 +1135,6 @@ def drop_implied_oncurve_points(*masters: TTFont) -> int:
     https://developer.apple.com/fonts/TrueType-Reference-Manual/RM01/Chap1.html
     """
 
-    count = 0
     glyph_masters = defaultdict(list)
     # multiple DS source may point to the same TTFont object and we want to
     # avoid processing the same glyph twice as they are modified in-place
@@ -1204,6 +1259,10 @@ def build(
 
     if "DSIG" in vf:
         del vf["DSIG"]
+
+    # Clear USE_MY_METRICS composite flags if set inconsistently across masters.
+    if "glyf" in vf:
+        _unset_inconsistent_use_my_metrics_flags(vf, master_fonts)
 
     # TODO append masters as named-instances as well; needs .designspace change.
     fvar = _add_fvar(vf, ds.axes, ds.instances)
@@ -1483,9 +1542,14 @@ def main(args=None):
         vf_name_to_output_path[vfs_to_build[0].name] = options.outfile
     else:
         for vf in vfs_to_build:
-            filename = vf.filename if vf.filename is not None else vf.name + ".{ext}"
+            if vf.filename is not None:
+                # Only use basename to prevent path traversal attacks
+                filename = os.path.basename(vf.filename)
+            else:
+                filename = vf.name + ".{ext}"
             vf_name_to_output_path[vf.name] = os.path.join(output_dir, filename)
 
+    vf_names_to_build = {vf.name for vf in vfs_to_build}
     finder = MasterFinder(options.master_finder)
 
     vfs = build_many(
@@ -1493,6 +1557,7 @@ def main(args=None):
         finder,
         exclude=options.exclude,
         optimize=options.optimize,
+        skip_vf=lambda name: name not in vf_names_to_build,
         colr_layer_reuse=options.colr_layer_reuse,
         drop_implied_oncurves=options.drop_implied_oncurves,
     )

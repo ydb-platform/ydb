@@ -4,46 +4,47 @@
 #include <yql/essentials/core/sql_types/normalize_name.h>
 
 #include <util/string/split.h>
+#include <util/charset/utf8.h>
 
 namespace NYql::NDocs {
 
-    const RE2 NormalizedNameRegex(R"re([a-z_]{1,2}[a-z0-9]*)re");
+const RE2 NormalizedNameRegex(R"re([a-z_]{1,2}[a-z0-9]*)re");
 
-    bool IsNormalizedName(TStringBuf name) {
-        return RE2::FullMatch(name, NormalizedNameRegex);
+bool IsNormalizedName(TStringBuf name) {
+    return RE2::FullMatch(name, NormalizedNameRegex);
+}
+
+TMaybe<TString> NormalizedName(TString name) {
+    if (TMaybe<TIssue> issue = NormalizeName(TPosition(), name)) {
+        return Nothing();
     }
 
-    TMaybe<TString> NormalizedName(TString name) {
-        if (TMaybe<TIssue> issue = NormalizeName(TPosition(), name)) {
-            return Nothing();
-        }
-
-        if (!IsNormalizedName(name)) {
-            return Nothing();
-        }
-
-        return name;
+    if (!IsNormalizedName(name)) {
+        return Nothing();
     }
 
-    bool IsUDF(TStringBuf name) {
-        return name.Contains("::");
+    return name;
+}
+
+bool IsUDF(TStringBuf name) {
+    return name.Contains("::");
+}
+
+TMaybe<std::pair<TString, TString>> SplitUDF(TString name) {
+    if (!IsUDF(name)) {
+        return Nothing();
     }
 
-    TMaybe<std::pair<TString, TString>> SplitUDF(TString name) {
-        if (!IsUDF(name)) {
-            return Nothing();
-        }
+    TVector<TString> words;
+    words.reserve(2);
+    StringSplitter(name).SplitByString("::").Collect(&words);
+    YQL_ENSURE(words.size() == 2, "Invalid UDF pattern: " << name);
 
-        TVector<TString> words;
-        words.reserve(2);
-        StringSplitter(name).SplitByString("::").Collect(&words);
-        YQL_ENSURE(words.size() == 2, "Invalid UDF pattern: " << name);
+    TMaybe<TString> module = ToLowerUTF8(std::move(words[0]));
+    TMaybe<TString> function = ToLowerUTF8(std::move(words[1]));
+    YQL_ENSURE(module && function, "Unable to normalize " << name);
 
-        TMaybe<TString> module = NormalizedName(std::move(words[0]));
-        TMaybe<TString> function = NormalizedName(std::move(words[1]));
-        YQL_ENSURE(module && function, "Unable to normalize " << name);
-
-        return std::make_pair(*module, *function);
-    }
+    return std::make_pair(*module, *function);
+}
 
 } // namespace NYql::NDocs

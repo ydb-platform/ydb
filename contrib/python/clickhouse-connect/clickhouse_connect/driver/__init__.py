@@ -1,4 +1,6 @@
 import asyncio
+import warnings
+from concurrent.futures import ThreadPoolExecutor
 from inspect import signature
 from typing import Optional, Union, Dict, Any
 from urllib.parse import urlparse, parse_qs
@@ -8,7 +10,9 @@ from clickhouse_connect.driver.client import Client
 from clickhouse_connect.driver.common import dict_copy
 from clickhouse_connect.driver.exceptions import ProgrammingError
 from clickhouse_connect.driver.httpclient import HttpClient
-from clickhouse_connect.driver.asyncclient import AsyncClient
+from clickhouse_connect.driver.asyncclient import AsyncClient, DefaultThreadPoolExecutor, NEW_THREAD_POOL_EXECUTOR
+
+__all__ = ['Client', 'AsyncClient', 'create_client', 'create_async_client']
 
 
 # pylint: disable=too-many-arguments,too-many-locals,too-many-branches
@@ -75,7 +79,19 @@ def create_client(*,
     :param server_host_name  This is the server host name that will be checked against a TLS certificate for
       validity.  This option can be used if using an ssh_tunnel or other indirect means to an ClickHouse server
       where the `host` argument refers to the tunnel or proxy and not the actual ClickHouse server
+    :param tz_source Controls how the client determines the fallback timezone for DateTime columns without an
+      explicit timezone. "auto" (default) auto-detects based on DST safety of server timezone. "server" always
+      uses the server timezone. "local" always uses the local timezone.
+    :param apply_server_timezone Deprecated. Use tz_source instead.
+    :param tz_mode Controls timezone-aware behavior for UTC DateTime columns. "naive_utc" (default) returns
+      naive UTC timestamps. "aware" forces timezone-aware UTC datetimes. "schema" returns datetimes that
+      match the server's column definition which means timezone-aware when the column defines a timezone and naive
+      for bare DateTime columns.
+    :param utc_tz_aware Deprecated. Use tz_mode instead.
     :param autogenerate_session_id  If set, this will override the 'autogenerate_session_id' common setting.
+    :param form_encode_query_params  If True, query parameters will be sent as form-encoded data in the request body
+      instead of as URL parameters. This is useful for queries with large parameter sets that might exceed URL length
+      limits. Only available for query operations (not inserts). Default: False
     :return: ClickHouse Connect Client instance
     """
     if dsn:
@@ -131,8 +147,8 @@ def default_port(interface: str, secure: bool):
 
 
 async def create_async_client(*,
-                              host: str = None,
-                              username: str = None,
+                              host: Optional[str] = None,
+                              username: Optional[str] = None,
                               password: str = '',
                               database: str = '__default__',
                               interface: Optional[str] = None,
@@ -141,7 +157,8 @@ async def create_async_client(*,
                               dsn: Optional[str] = None,
                               settings: Optional[Dict[str, Any]] = None,
                               generic_args: Optional[Dict[str, Any]] = None,
-                              executor_threads: Optional[int] = None,
+                              executor_threads: int = 0,
+                              executor: Union[ThreadPoolExecutor, None, DefaultThreadPoolExecutor] = NEW_THREAD_POOL_EXECUTOR,
                               **kwargs) -> AsyncClient:
     """
     The preferred method to get an async ClickHouse Connect Client instance.
@@ -163,8 +180,11 @@ async def create_async_client(*,
     :param settings: ClickHouse server settings to be used with the session/every request
     :param generic_args: Used internally to parse DBAPI connection strings into keyword arguments and ClickHouse settings.
       It is not recommended to use this parameter externally
-    :param: executor_threads 'max_worker' threads used by the client ThreadPoolExecutor.  If not set, the default
+    :param executor_threads: 'max_worker' threads used by the client ThreadPoolExecutor.  If not set, the default
       of 4 + detected CPU cores will be used
+    :param executor: Optional `ThreadPoolExecutor` to use for async operations.  If not set, a new `ThreadPoolExecutor`
+      will be created with the number of threads specified by `executor_threads`.  If set to `None` it will use the
+      default executor of the event loop.
     :param kwargs -- Recognized keyword arguments (used by the HTTP client), see below
 
     :param compress: Enable compression for ClickHouse HTTP inserts and query results.  True will select the preferred
@@ -193,9 +213,33 @@ async def create_async_client(*,
     :param server_host_name  This is the server host name that will be checked against a TLS certificate for
       validity.  This option can be used if using an ssh_tunnel or other indirect means to an ClickHouse server
       where the `host` argument refers to the tunnel or proxy and not the actual ClickHouse server
+    :param tz_source Controls how the client determines the fallback timezone for DateTime columns without an
+      explicit timezone. "auto" (default) auto-detects based on DST safety of server timezone. "server" always
+      uses the server timezone. "local" always uses the local timezone.
+    :param apply_server_timezone Deprecated. Use tz_source instead.
+    :param tz_mode Controls timezone-aware behavior for UTC DateTime columns. "naive_utc" (default) returns
+      naive UTC timestamps. "aware" forces timezone-aware UTC datetimes. "schema" returns datetimes that
+      match the server's column definition which means timezone-aware when the column defines a timezone and naive
+      for bare DateTime columns.
+    :param utc_tz_aware Deprecated. Use tz_mode instead.
     :param autogenerate_session_id  If set, this will override the 'autogenerate_session_id' common setting.
+    :param form_encode_query_params  If True, query parameters will be sent as form-encoded data in the request body
+      instead of as URL parameters. This is useful for queries with large parameter sets that might exceed URL length
+      limits. Only available for query operations (not inserts). Default: False
     :return: ClickHouse Connect Client instance
     """
+
+    warnings.warn(
+        "The current async client is a thread-pool wrapper around the sync client. "
+        "A fully native async client is available for testing as a prerelease: "
+        "pip install 'clickhouse-connect[async]==0.12.0rc1'. "
+        "This prerelease branch is based on 0.11.0 and is gathering feedback ahead of 1.0.0, "
+        "where it will become the default async implementation. It is a drop-in replacement "
+        "with the same API surface. The main line includes additional updates that the native "
+        "client will receive when merged into 1.0.0.",
+        FutureWarning,
+        stacklevel=2,
+    )
 
     def _create_client():
         if 'autogenerate_session_id' not in kwargs:
@@ -205,4 +249,4 @@ async def create_async_client(*,
 
     loop = asyncio.get_running_loop()
     _client = await loop.run_in_executor(None, _create_client)
-    return AsyncClient(client=_client, executor_threads=executor_threads)
+    return AsyncClient(client=_client, executor_threads=executor_threads, executor=executor)

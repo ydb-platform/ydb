@@ -1,5 +1,7 @@
 #include "token.h"
 
+#include "tokenizer.h"
+
 #include <yt/yt/core/misc/error.h>
 
 #include <library/cpp/yt/string/guid.h>
@@ -97,6 +99,32 @@ void AppendYPathLiteral(TStringBuilderBase* builder, i64 value)
 bool IsSpecialCharacter(char ch)
 {
     return ch == '\\' || ch == '/' || ch == '@' || ch == '*' || ch == '&' || ch == '[' || ch == '{';
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TErrorOr<TYPath> TryEscapeNonAsciiYPathLiterals(const TYPath& unparsedYPath)
+{
+    // Fast path.
+    if (unparsedYPath.empty()) {
+        return {unparsedYPath};
+    }
+
+    try {
+        TTokenizer tokenizer(unparsedYPath);
+        TStringBuilder builder;
+        while (tokenizer.Advance() != ETokenType::EndOfStream) {
+            if (tokenizer.GetType() == ETokenType::Literal) {
+                AppendYPathLiteral(&builder, tokenizer.GetLiteralValue());
+            } else {
+                builder.AppendString(tokenizer.GetToken());
+            }
+        }
+
+        return {builder.Flush()};
+    } catch (const std::exception& e) {
+        return e;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

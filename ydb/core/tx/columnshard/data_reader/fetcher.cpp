@@ -10,7 +10,7 @@ void TPortionsDataFetcher::StartAssembledColumnsFetchingNoAllocation(TRequestInp
         std::vector<std::shared_ptr<IFetchingStep>> steps;
         steps.emplace_back(std::make_shared<TAskAccessorsStep>());
         steps.emplace_back(std::make_shared<TAskDataStep>(entityIds));
-        steps.emplace_back(std::make_shared<TAssembleDataStep>());
+        steps.emplace_back(std::make_shared<TAssembleDataStep>(entityIds));
         return std::make_shared<TScript>(
             std::move(steps), "ASSEMBLED_PARTIAL_PORTIONS_FETCHING_NO_ALLOCATION::" + ::ToString(input.GetConsumer()));
     }();
@@ -27,7 +27,7 @@ void TPortionsDataFetcher::StartAssembledColumnsFetching(TRequestInput&& input,
         steps.emplace_back(std::make_shared<TAskAccessorsStep>());
         steps.emplace_back(std::make_shared<TAskRawDataResourceStep>(entityIds));
         steps.emplace_back(std::make_shared<TAskDataStep>(entityIds));
-        steps.emplace_back(std::make_shared<TAssembleDataStep>());
+        steps.emplace_back(std::make_shared<TAssembleDataStep>(entityIds));
         steps.emplace_back(std::make_shared<TAskUsageResourceStep>(entityIds));
         return std::make_shared<TScript>(std::move(steps), "ASSEMBLED_PARTIAL_PORTIONS_FETCHING::" + ::ToString(input.GetConsumer()));
     }();

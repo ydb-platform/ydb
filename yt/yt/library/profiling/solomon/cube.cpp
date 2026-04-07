@@ -7,13 +7,29 @@
 
 #include <yt/yt/core/misc/error.h>
 
+#include <library/cpp/iterator/functools.h>
+
 #include <library/cpp/yt/assert/assert.h>
+
+#include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
 #include <type_traits>
 
 namespace NYT::NProfiling {
 
 using namespace NYTree;
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+struct TIntPoint
+{
+    TInstant Time;
+    i64 Value;
+};
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -226,16 +242,20 @@ int TCube<T>::ReadSensors(
     auto rateNameLabel = prepareNameLabel(".rate");
     auto globalHostLabel = consumer->PrepareLabel("host", "");
     auto hostLabel = consumer->PrepareLabel("host", options.Host.value_or(""));
-    auto ytAggrLabel = consumer->PrepareLabel("yt_aggr", "1");
+    auto ytAggrLegacyLabel = consumer->PrepareLabel("yt_aggr", "1");
+    TCompactFlatMap<ESummaryPolicy, std::pair<ui32, ui32>, 5> ytAggrLabelBySummaryPolicy({
+        {ESummaryPolicy::All, consumer->PrepareLabel("yt_aggr", "all")},
+        {ESummaryPolicy::Sum, consumer->PrepareLabel("yt_aggr", "sum")},
+        {ESummaryPolicy::Max, consumer->PrepareLabel("yt_aggr", "max")},
+        {ESummaryPolicy::Min, consumer->PrepareLabel("yt_aggr", "min")},
+        {ESummaryPolicy::Avg, consumer->PrepareLabel("yt_aggr", "avg")},
+    });
 
-    // Set allowAggregate to true to aggregate by host.
-    // Currently Monitoring supports only sum aggregation.
-    auto writeLabels = [&] (const auto& tagIds, std::pair<ui32, ui32> nameLabel, bool allowAggregate) {
-        consumer->OnLabelsBegin();
-
+    // Set appropriate |summaryPolicy| to aggregate by host.
+    auto writeLabelsInternal = [&] (const auto& tagIds, std::pair<ui32, ui32> nameLabel, ESummaryPolicy summaryPolicy) {
         consumer->OnLabel(nameLabel.first, nameLabel.second);
 
-        if (options.Global) {
+        if (options.Global && !options.ExportGlobalsAsMemOnly) {
             consumer->OnLabel(globalHostLabel.first, globalHostLabel.second);
         } else if (options.Host) {
             consumer->OnLabel(hostLabel.first, hostLabel.second);
@@ -243,8 +263,14 @@ int TCube<T>::ReadSensors(
 
         TCompactVector<bool, 8> replacedInstanceTags(options.InstanceTags.size());
 
-        if (allowAggregate && options.MarkAggregates && !options.Global) {
-            consumer->OnLabel(ytAggrLabel.first, ytAggrLabel.second);
+        if (options.MarkAggregates) {
+            if (options.EnableSolomonAggregates) {
+                auto ytAggrLabel = GetOrCrash(ytAggrLabelBySummaryPolicy, summaryPolicy);
+                consumer->OnLabel(ytAggrLabel.first, ytAggrLabel.second);
+            } else if (summaryPolicy == ESummaryPolicy::Sum && !options.Global) {
+                // By default support only sum aggregate except global sensors.
+                consumer->OnLabel(ytAggrLegacyLabel.first, ytAggrLegacyLabel.second);
+            }
         }
 
         for (auto tagId : tagIds) {
@@ -269,7 +295,11 @@ int TCube<T>::ReadSensors(
                 consumer->OnLabel(tag.first, tag.second);
             }
         }
+    };
 
+    auto writeLabels = [&] (const auto& tagIds, std::pair<ui32, ui32> nameLabel, ESummaryPolicy summaryPolicy) {
+        consumer->OnLabelsBegin();
+        writeLabelsInternal(tagIds, nameLabel, summaryPolicy);
         consumer->OnLabelsEnd();
     };
 
@@ -322,7 +352,7 @@ int TCube<T>::ReadSensors(
             continue;
         }
 
-        auto rangeValues = [&, window=&window] (auto cb) {
+        auto rangeValues = [&, window = &window] (auto cb) {
             for (const auto& [indices, time] : options.Times) {
                 if (!options.EnableSolomonAggregationWorkaround && skipSparse(*window, indices)) {
                     continue;
@@ -343,19 +373,23 @@ int TCube<T>::ReadSensors(
             }
         };
 
-        auto writeSummary = [&, tagIds=tagIds] (auto makeSummary) {
+        auto writeFlags = [&] {
+            consumer->OnMemOnly(options.MemOnly || (options.Global && options.ExportGlobalsAsMemOnly));
+        };
+
+        auto writeSummary = [&, tagIds = tagIds] (auto makeSummary) {
             bool omitSuffix = Any(options.SummaryPolicy & ESummaryPolicy::OmitNameLabelSuffix);
 
             auto writeMetric = [&] (
                 ESummaryPolicy policyBit,
                 std::pair<ui32, ui32> specificNameLabel,
-                bool aggregate,
                 NMonitoring::EMetricType type,
                 auto cb)
             {
                 if (Any(options.SummaryPolicy & policyBit)) {
                     consumer->OnMetricBegin(type);
-                    writeLabels(tagIds, omitSuffix ? nameLabel : specificNameLabel, aggregate);
+                    writeFlags();
+                    writeLabels(tagIds, omitSuffix ? nameLabel : specificNameLabel, policyBit);
 
                     rangeValues(cb);
 
@@ -366,13 +400,11 @@ int TCube<T>::ReadSensors(
             auto writeGaugeSummaryMetric = [&] (
                 ESummaryPolicy policyBit,
                 std::pair<ui32, ui32> specificNameLabel,
-                bool aggregate,
                 double (NMonitoring::TSummaryDoubleSnapshot::*valueGetter)() const)
             {
                 writeMetric(
                     policyBit,
                     specificNameLabel,
-                    aggregate,
                     NMonitoring::EMetricType::GAUGE,
                     [&] (auto value, auto time, const auto& /*indices*/) {
                         sensorCount += 1;
@@ -383,7 +415,6 @@ int TCube<T>::ReadSensors(
             writeMetric(
                 ESummaryPolicy::All,
                 nameLabel,
-                /*aggregate*/ true,
                 NMonitoring::EMetricType::DSUMMARY,
                 [&] (auto value, auto time, const auto& /*indices*/) {
                     sensorCount += 5;
@@ -393,19 +424,16 @@ int TCube<T>::ReadSensors(
             writeGaugeSummaryMetric(
                 ESummaryPolicy::Sum,
                 sumNameLabel,
-                /*aggregate*/ true,
                 &NMonitoring::TSummaryDoubleSnapshot::GetSum);
 
             writeGaugeSummaryMetric(
                 ESummaryPolicy::Min,
                 minNameLabel,
-                /*aggregate*/ false,
                 &NMonitoring::TSummaryDoubleSnapshot::GetMin);
 
             writeGaugeSummaryMetric(
                 ESummaryPolicy::Max,
                 maxNameLabel,
-                /*aggregate*/ false,
                 &NMonitoring::TSummaryDoubleSnapshot::GetMax);
 
             if (Any(options.SummaryPolicy & ESummaryPolicy::Avg)) {
@@ -420,7 +448,8 @@ int TCube<T>::ReadSensors(
                     if (empty) {
                         empty = false;
                         consumer->OnMetricBegin(NMonitoring::EMetricType::GAUGE);
-                        writeLabels(tagIds, omitSuffix ? nameLabel : avgNameLabel, false);
+                        writeFlags();
+                        writeLabels(tagIds, omitSuffix ? nameLabel : avgNameLabel, ESummaryPolicy::Avg);
                     }
 
                     sensorCount += 1;
@@ -434,6 +463,55 @@ int TCube<T>::ReadSensors(
             }
         };
 
+        if constexpr (std::is_same_v<T, TTimeHistogramSnapshot> || std::is_same_v<T, TRateHistogramSnapshot>) {
+            bool needToSplitHistogram =
+                (
+                    std::is_same_v<T, TTimeHistogramSnapshot> &&
+                    (options.ConvertCountersToRateGauge || options.EnableHistogramCompat) &&
+                    options.SplitRateHistogramIntoGauges
+                ) ||
+                (std::is_same_v<T, TRateHistogramSnapshot> && options.SplitRateHistogramIntoGauges);
+
+            if (needToSplitHistogram) {
+                if (options.RateDenominator < 0.1) {
+                    THROW_ERROR_EXCEPTION("Invalid rate denominator");
+                }
+                THashMap<double, std::vector<TIntPoint>> boundToValues;
+                // Histograms may have different numbers of buckets, merge them into map.
+                rangeValues([&] (auto value, auto time, const auto& /*indices*/) {
+                    for (const auto& [bound, value] : Zip(value.Bounds, value.Values)) {
+                        boundToValues[bound].push_back(TIntPoint{time, value});
+                    }
+                    if (value.Values.size() > value.Bounds.size()) {
+                        boundToValues[NMonitoring::HISTOGRAM_INF_BOUND].push_back(TIntPoint{time, value.Values[value.Bounds.size()]});
+                    } else {
+                        boundToValues[NMonitoring::HISTOGRAM_INF_BOUND].push_back(TIntPoint{time, 0});
+                    }
+                });
+
+                for (const auto& [bucket, values] : boundToValues) {
+                    consumer->OnMetricBegin(NMonitoring::EMetricType::GAUGE);
+                    writeFlags();
+
+                    consumer->OnLabelsBegin();
+                    writeLabelsInternal(tagIds, nameLabel, ESummaryPolicy::Sum);
+                    if (bucket == NMonitoring::HISTOGRAM_INF_BOUND) {
+                        consumer->OnLabel("bin", "inf");
+                    } else {
+                        consumer->OnLabel("bin", ToString(bucket));
+                    }
+                    consumer->OnLabelsEnd();
+                    for (const auto& [time, value] : values) {
+                        consumer->OnDouble(time, static_cast<double>(value) / options.RateDenominator);
+                    }
+                    consumer->OnMetricEnd();
+                }
+
+                sensorsEmitted += boundToValues.size();
+                continue;
+            }
+        }
+
         if constexpr (std::is_same_v<T, i64> || std::is_same_v<T, TDuration>) {
             if (options.ConvertCountersToRateGauge || options.ConvertCountersToDeltaGauge) {
                 consumer->OnMetricBegin(NMonitoring::EMetricType::GAUGE);
@@ -441,9 +519,10 @@ int TCube<T>::ReadSensors(
                 consumer->OnMetricBegin(NMonitoring::EMetricType::RATE);
             }
 
-            writeLabels(tagIds, (options.ConvertCountersToRateGauge && options.RenameConvertedCounters) ? rateNameLabel : nameLabel, true);
+            writeFlags();
+            writeLabels(tagIds, (options.ConvertCountersToRateGauge && options.RenameConvertedCounters) ? rateNameLabel : nameLabel, ESummaryPolicy::Sum);
 
-            rangeValues([&, window=&window] (auto value, auto time, const auto& indices) {
+            rangeValues([&, window = &window] (auto value, auto time, const auto& indices) {
                 sensorCount += 1;
                 if (options.ConvertCountersToRateGauge) {
                     if (options.RateDenominator < 0.1) {
@@ -479,9 +558,10 @@ int TCube<T>::ReadSensors(
         } else if constexpr (std::is_same_v<T, double>) {
             consumer->OnMetricBegin(NMonitoring::EMetricType::GAUGE);
 
-            writeLabels(tagIds, nameLabel, true);
+            writeFlags();
+            writeLabels(tagIds, nameLabel, ESummaryPolicy::Sum);
 
-            rangeValues([&, window=&window] (auto /* value */, auto time, const auto& indices) {
+            rangeValues([&, window = &window] (auto /* value */, auto time, const auto& indices) {
                 if (options.DisableDefault && !window->HasValue[indices.back()]) {
                     return;
                 }
@@ -512,9 +592,10 @@ int TCube<T>::ReadSensors(
         } else if constexpr (std::is_same_v<T, TTimeHistogramSnapshot>) {
             consumer->OnMetricBegin(NMonitoring::EMetricType::HIST);
 
-            writeLabels(tagIds, nameLabel, true);
+            writeFlags();
+            writeLabels(tagIds, nameLabel, ESummaryPolicy::Sum);
 
-            rangeValues([&, window=&window] (auto value, auto time, const auto& indices) {
+            rangeValues([&, window = &window] (auto value, auto time, const auto& indices) {
                 size_t n = value.Bounds.size();
                 auto hist = NMonitoring::TExplicitHistogramSnapshot::New(n + 1);
 
@@ -552,7 +633,8 @@ int TCube<T>::ReadSensors(
         } else if constexpr (std::is_same_v<T, TGaugeHistogramSnapshot>) {
             consumer->OnMetricBegin(NMonitoring::EMetricType::HIST);
 
-            writeLabels(tagIds, nameLabel, true);
+            writeFlags();
+            writeLabels(tagIds, nameLabel, ESummaryPolicy::Sum);
 
             rangeValues([&] (auto value, auto time, const auto& /*indices*/) {
                 size_t n = value.Bounds.size();
@@ -575,7 +657,8 @@ int TCube<T>::ReadSensors(
         } else if constexpr (std::is_same_v<T, TRateHistogramSnapshot>) {
             consumer->OnMetricBegin(NMonitoring::EMetricType::HIST);
 
-            writeLabels(tagIds, nameLabel, true);
+            writeFlags();
+            writeLabels(tagIds, nameLabel, ESummaryPolicy::Sum);
 
             rangeValues([&] (auto value, auto time, const auto& /*indices*/) {
                 size_t n = value.Bounds.size();
@@ -618,13 +701,35 @@ int TCube<T>::ReadSensorValues(
     TFluentAny fluent) const
 {
     int valuesRead = 0;
+
+    auto readHistogramValue = [&valuesRead] (TFluentAny fluent, const auto& value) {
+        std::vector<std::pair<double, i64>> hist;
+        size_t n = value.Bounds.size();
+        hist.reserve(n + 1);
+        for (size_t i = 0; i != n; ++i) {
+            auto bucketValue = i < value.Values.size() ? value.Values[i] : 0;
+            hist.emplace_back(value.Bounds[i], bucketValue);
+        }
+        hist.emplace_back(Max<double>(), n < value.Values.size() ? value.Values[n] : 0u);
+
+        fluent.DoListFor(hist, [] (TFluentList fluent, const auto& bar) {
+            fluent
+                .Item().BeginMap()
+                    .Item("bound").Value(bar.first)
+                    .Item("count").Value(bar.second)
+                .EndMap();
+        });
+        ++valuesRead;
+    };
+
     auto doReadValueForProjection = [&] (TFluentAny fluent, const TProjection& projection, const T& value) {
         if constexpr (std::is_same_v<T, i64> || std::is_same_v<T, TDuration>) {
             // NB(eshcherbin): Not much sense in returning rate here.
+            auto rollup = Rollup(projection, index);
             if constexpr (std::is_same_v<T, i64>) {
-                fluent.Value(Rollup(projection, index));
+                fluent.Value(rollup);
             } else {
-                fluent.Value(Rollup(projection, index).SecondsFloat());
+                fluent.Value(rollup.SecondsFloat());
             }
             ++valuesRead;
         } else if constexpr (std::is_same_v<T, double>) {
@@ -678,24 +783,11 @@ int TCube<T>::ReadSensorValues(
                     .EndMap();
             }
             ++valuesRead;
-        } else if constexpr (std::is_same_v<T, TTimeHistogramSnapshot> || std::is_same_v<T, TGaugeHistogramSnapshot> || std::is_same_v<T, TRateHistogramSnapshot>) {
-            std::vector<std::pair<double, i64>> hist;
-            size_t n = value.Bounds.size();
-            hist.reserve(n + 1);
-            for (size_t i = 0; i != n; ++i) {
-                auto bucketValue = i < value.Values.size() ? value.Values[i] : 0;
-                hist.emplace_back(value.Bounds[i], bucketValue);
-            }
-            hist.emplace_back(Max<double>(), n < value.Values.size() ? value.Values[n] : 0u);
-
-            fluent.DoListFor(hist, [] (TFluentList fluent, const auto& bar) {
-                fluent
-                    .Item().BeginMap()
-                        .Item("bound").Value(bar.first)
-                        .Item("count").Value(bar.second)
-                    .EndMap();
-            });
-            ++valuesRead;
+        } else if constexpr (std::is_same_v<T, TTimeHistogramSnapshot> || std::is_same_v<T, TRateHistogramSnapshot>) {
+            // NB(eshcherbin): Not much sense in returning rate here.
+            readHistogramValue(fluent, Rollup(projection, index));
+        } else if (std::is_same_v<T, TGaugeHistogramSnapshot>) {
+            readHistogramValue(fluent, value);
         } else {
             THROW_ERROR_EXCEPTION("Unexpected cube type");
         }
@@ -743,36 +835,42 @@ int TCube<T>::ReadSensorValues(
 template <class T>
 void TCube<T>::DumpCube(NProto::TCube *cube, const std::vector<TTagIdList>& extraProjections) const
 {
-    for (const auto& extraTags : extraProjections) {
-        for (const auto& [tagIds, window] : Projections_) {
-            auto projection = cube->add_projections();
-            for (auto tagId : tagIds) {
-                projection->add_tag_ids(tagId);
-            }
-            for (auto tagId : extraTags) {
-                projection->add_tag_ids(tagId);
-            }
+    for (const auto& extraTagIds : extraProjections) {
+        DumpCube(cube, extraTagIds);
+    }
+}
 
-            projection->set_has_value(window.HasValue[Index_]);
-            if constexpr (std::is_same_v<T, i64>) {
-                projection->set_counter(window.Values[Index_]);
-            } else if constexpr (std::is_same_v<T, TDuration>) {
-                projection->set_duration(window.Values[Index_].GetValue());
-            } else if constexpr (std::is_same_v<T, double>) {
-                projection->set_gauge(window.Values[Index_]);
-            } else if constexpr (std::is_same_v<T, TSummarySnapshot<double>>) {
-                ToProto(projection->mutable_summary(), window.Values[Index_]);
-            } else if constexpr (std::is_same_v<T, TSummarySnapshot<TDuration>>) {
-                ToProto(projection->mutable_timer(), window.Values[Index_]);
-            } else if constexpr (std::is_same_v<T, TTimeHistogramSnapshot>) {
-                ToProto(projection->mutable_time_histogram(), window.Values[Index_]);
-            } else if constexpr (std::is_same_v<T, TGaugeHistogramSnapshot>) {
-                ToProto(projection->mutable_gauge_histogram(), window.Values[Index_]);
-            } else if constexpr (std::is_same_v<T, TRateHistogramSnapshot>) {
-                ToProto(projection->mutable_rate_histogram(), window.Values[Index_]);
-            } else {
-                THROW_ERROR_EXCEPTION("Unexpected cube type");
-            }
+template <class T>
+void TCube<T>::DumpCube(NProto::TCube *cube, const TTagIdList& extraTagIds) const
+{
+    for (const auto& [tagIds, window] : Projections_) {
+        auto projection = cube->add_projections();
+        for (auto tagId : tagIds) {
+            projection->add_tag_ids(tagId);
+        }
+        for (auto tagId : extraTagIds) {
+            projection->add_tag_ids(tagId);
+        }
+
+        projection->set_has_value(window.HasValue[Index_]);
+        if constexpr (std::is_same_v<T, i64>) {
+            projection->set_counter(window.Values[Index_]);
+        } else if constexpr (std::is_same_v<T, TDuration>) {
+            projection->set_duration(window.Values[Index_].GetValue());
+        } else if constexpr (std::is_same_v<T, double>) {
+            projection->set_gauge(window.Values[Index_]);
+        } else if constexpr (std::is_same_v<T, TSummarySnapshot<double>>) {
+            ToProto(projection->mutable_summary(), window.Values[Index_]);
+        } else if constexpr (std::is_same_v<T, TSummarySnapshot<TDuration>>) {
+            ToProto(projection->mutable_timer(), window.Values[Index_]);
+        } else if constexpr (std::is_same_v<T, TTimeHistogramSnapshot>) {
+            ToProto(projection->mutable_time_histogram(), window.Values[Index_]);
+        } else if constexpr (std::is_same_v<T, TGaugeHistogramSnapshot>) {
+            ToProto(projection->mutable_gauge_histogram(), window.Values[Index_]);
+        } else if constexpr (std::is_same_v<T, TRateHistogramSnapshot>) {
+            ToProto(projection->mutable_rate_histogram(), window.Values[Index_]);
+        } else {
+            THROW_ERROR_EXCEPTION("Unexpected cube type %Qv", TypeName<T>());
         }
     }
 }

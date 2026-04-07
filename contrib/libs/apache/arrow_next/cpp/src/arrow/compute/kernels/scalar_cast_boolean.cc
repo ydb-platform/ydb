@@ -17,10 +17,10 @@
 
 // Cast types to boolean
 
-#include "arrow/array/builder_primitive.h"
-#include "arrow/compute/kernels/common_internal.h"
-#include "arrow/compute/kernels/scalar_cast_internal.h"
-#include "arrow/util/value_parsing.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/common_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/scalar_cast_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/value_parsing.h"
 
 namespace arrow20 {
 

@@ -15,10 +15,11 @@ public:
 
     TComputeActorAsyncInputHelperSync CreateInputHelper(const TString& logPrefix,
         ui64 index,
-        NDqProto::EWatermarksMode watermarksMode
+        NDqProto::EWatermarksMode watermarksMode,
+        TDuration watermarksIdleTimeout
     )
     {
-        return TComputeActorAsyncInputHelperSync(logPrefix, index, watermarksMode);
+        return TComputeActorAsyncInputHelperSync(logPrefix, index, watermarksMode, watermarksIdleTimeout);
     }
 
     const IDqAsyncInputBuffer* GetInputTransform(ui64, const TComputeActorAsyncInputHelperSync& inputTransformInfo) const
@@ -66,6 +67,7 @@ protected:
         }
 
         TaskRunner.Reset();
+        TBase::DoTerminateImpl();
     }
 
     void InvalidateMeminfo() override {
@@ -75,7 +77,7 @@ protected:
         }
     }
 
-    bool DoHandleChannelsAfterFinishImpl() override final{
+    bool DoHandleChannelsAfterFinishImpl() override final {
         Y_ABORT_UNLESS(this->Checkpoints);
 
         if (this->Checkpoints->HasPendingCheckpoint() && !this->Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
@@ -85,6 +87,15 @@ protected:
         // Send checkpoints to output channels.
         TBase::ProcessOutputsImpl(ERunStatus::Finished);
         return true;  // returns true, when channels were handled synchronously
+    }
+
+    void ExtraMonitoringInfo(TStringStream& str, const TCgiParameters&) override {
+        if (TaskRunner) {
+            str << Endl << "TaskRunner" << Endl
+                << "  LastFetchTime: " << TaskRunner->LastFetchTime << Endl
+                << "  LastFetchStatus: " << TaskRunner->LastFetchStatus << Endl
+                << "  OutputDebugString: " << TaskRunner->GetOutputDebugString() << Endl;
+        }
     }
 
 protected: //TDqComputeActorChannels::ICalbacks
@@ -109,10 +120,18 @@ protected: //TDqComputeActorChannels::ICalbacks
             channel->Push(std::move(batch));
         }
 
+        if (channelData.Proto.HasWatermark()) {
+            Y_ABORT_UNLESS(inputChannel->WatermarksMode != NDqProto::WATERMARKS_MODE_DISABLED);
+            const auto& watermarkRequest = channelData.Proto.GetWatermark();
+            const auto watermark = TInstant::MicroSeconds(watermarkRequest.GetTimestampUs());
+            channel->Push(watermark);
+        }
+
         if (channelData.Proto.HasCheckpoint()) {
             Y_ABORT_UNLESS(inputChannel->CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
             Y_ABORT_UNLESS(this->Checkpoints);
             const auto& checkpoint = channelData.Proto.GetCheckpoint();
+            auto guard = TBase::BindAllocator();
             inputChannel->Pause(checkpoint);
             this->Checkpoints->RegisterCheckpoint(checkpoint, channelData.Proto.GetChannelId());
         }
@@ -151,7 +170,13 @@ protected: //TDqComputeActorChannels::ICalbacks
 
 protected: //TDqComputeActorCheckpoints::ICallbacks
     bool ReadyToCheckpoint() const override final {
-        for (auto& [id, channelInfo] : this->InputChannelsMap) {
+        for (const auto& [_, sourceInfo] : this->SourcesMap) {
+            if (!sourceInfo.Buffer->Empty()) {
+                return false;
+            }
+        }
+
+        for (const auto& [_, channelInfo] : this->InputChannelsMap) {
             if (channelInfo.CheckpointingMode == NDqProto::CHECKPOINTING_MODE_DISABLED) {
                 continue;
             }
@@ -159,10 +184,23 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
             if (!channelInfo.IsPaused()) {
                 return false;
             }
+
             if (!channelInfo.Channel->Empty()) {
                 return false;
             }
         }
+
+        for (const auto& [_, transformInfo] : this->InputTransformsMap) {
+            const auto buffer = transformInfo.Buffer;
+            if (!buffer->Empty()) {
+                return false;
+            }
+
+            if (buffer->IsPending()) {
+                return false;
+            }
+        }
+
         return true;
     }
 
@@ -237,7 +275,12 @@ protected:
             TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(), execCtx.GetWakeupCallback(), execCtx.GetErrorCallback()));
         }
 
-        TaskRunner->Prepare(this->Task, limits, execCtx);
+        this->WatermarksTracker.SetNotifyHandler([this]() {
+            // This code is called from TaskRunner (either directly or from input transform/helper code), which is owned by sync CA, so `*this` must be alive at that point
+            this->ScheduleIdlenessCheck();
+        });
+
+        TaskRunner->Prepare(this->Task, limits, execCtx, &this->WatermarksTracker);
 
         for (auto& [channelId, channel] : this->InputChannelsMap) {
             channel.Channel = TaskRunner->GetInputChannel(channelId);
@@ -254,6 +297,9 @@ protected:
 
         for (auto& [channelId, channel] : this->OutputChannelsMap) {
             channel.Channel = TaskRunner->GetOutputChannel(channelId);
+            if (this->Task.GetDqChannelVersion() >= 2u && channel.HasPeer) {
+                channel.Channel->Bind(this->SelfId(), channel.PeerId);
+            }
         }
 
         for (auto& [outputIndex, transform] : this->OutputTransformsMap) {
@@ -284,6 +330,10 @@ protected:
 
     const IDqAsyncOutputBuffer* GetSink(ui64, const typename TBase::TAsyncOutputInfoBase& sinkInfo) const override final {
         return sinkInfo.Buffer.Get();
+    }
+
+    TDqComputeActorWatermarks *GetInputTransformWatermarksTracker(ui64 inputId) override {
+        return TaskRunner ? TaskRunner->GetInputTransformWatermarksTracker(inputId): nullptr;
     }
 
 protected:
@@ -322,12 +372,6 @@ protected:
             std::vector<typename TBase::TOutputChannelInfo::TDrainedChannelMessage> channelData = outputChannel.DrainChannel(drainPackSize);
             ui32 idx = 0;
             for (auto&& i : channelData) {
-                if (auto* w = i.GetWatermarkOptional()) {
-                    CA_LOG_I("Resume inputs by watermark");
-                    // This is excessive, inputs should be resumed after async CA received response with watermark from task runner.
-                    // But, let it be here, it's better to have the same code as in checkpoints
-                    TBase::ResumeInputsByWatermark(TInstant::MicroSeconds(w->GetTimestampUs()));
-                }
                 if (i.GetCheckpointOptional()) {
                     CA_LOG_I("Resume inputs by checkpoint");
                     TBase::ResumeInputsByCheckpoint();

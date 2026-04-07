@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(Worker) {
         };
 
         auto createWriterFn = [tablePathId = env.GetPathId("/Root/Table")]() {
-            return CreateLocalTableWriter(tablePathId);
+            return CreateLocalTableWriter("/Root", tablePathId);
         };
 
         auto worker = env.GetRuntime().Register(CreateWorker(env.GetSender(), std::move(createReaderFn), std::move(createWriterFn)));

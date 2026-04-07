@@ -249,7 +249,7 @@ static void *recv_fn(void *data)
 	struct io_uring_buf_ring *br = NULL;
 	struct io_uring ring;
 	unsigned int buf_len;
-	void *buf, *ptr;
+	void *buf = NULL, *ptr;
 	int ret, sock[NR_RDS], i;
 	int brflags, ring_setup = 0;
 
@@ -292,7 +292,7 @@ static void *recv_fn(void *data)
 		ptr += buf_len;
 	}
 	io_uring_buf_ring_advance(br, RECV_BIDS);
-	
+
 	for (i = 0; i < NR_RDS; i++) {
 		ret = recv_prep(&ring, &rds[i], &sock[i]);
 		if (ret) {
@@ -330,6 +330,7 @@ skip:
 		io_uring_free_buf_ring(&ring, br, RECV_BIDS, RECV_BGID);
 	if (ring_setup)
 		io_uring_queue_exit(&ring);
+	free(buf);
 err:
 	return (void *)(intptr_t)ret;
 }

@@ -13,14 +13,18 @@ class TDataUpserter:
     public NMetadata::NProvider::ISchemeDescribeController {
 private:
     mutable std::shared_ptr<TDataUpserter> SelfContainer;
+    const TString DatabaseName;
     std::vector<NMetadata::NCSIndex::TObject> Indexes;
     mutable TAtomicCounter AtomicCounter = 0;
     IDataUpsertController::TPtr ExternalController;
     std::shared_ptr<arrow::RecordBatch> Data;
 public:
-    TDataUpserter(std::vector<NMetadata::NCSIndex::TObject>&& indexes,
+    TDataUpserter(
+        const TString& databaseName,
+        std::vector<NMetadata::NCSIndex::TObject>&& indexes,
         IDataUpsertController::TPtr externalController, std::shared_ptr<arrow::RecordBatch> data)
-        : Indexes(std::move(indexes))
+        : DatabaseName(databaseName)
+        , Indexes(std::move(indexes))
         , ExternalController(externalController)
         , Data(data)
     {

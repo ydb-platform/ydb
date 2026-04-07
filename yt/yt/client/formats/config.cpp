@@ -364,6 +364,8 @@ void TArrowFormatConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("enable_tz_index", &TThis::EnableTzIndex)
         .Default(false);
+    registrar.Parameter("enable_complex_types", &TThis::EnableComplexTypes)
+        .Default(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

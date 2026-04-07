@@ -148,7 +148,8 @@ namespace NKikimr::NTestShard {
 
                 ProcessReadResult(r.GetCookie(), TStringBuilder() << "Status# " << NKikimrProto::EReplyStatus_Name(status)
                     << " Message# " << res.GetMessage(), status == NKikimrProto::OK ? EReadOutcome::OK :
-                    status == NKikimrProto::ERROR ? EReadOutcome::RETRY : EReadOutcome::ERROR, res.GetValue());
+                    status == NKikimrProto::ERROR || status == NKikimrProto::BLOCKED ? EReadOutcome::RETRY : EReadOutcome::ERROR,
+                    res.GetValue());
             } else {
                 WaitedReadRangesViaEvResponse--;
                 if (r.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
@@ -190,6 +191,7 @@ namespace NKikimr::NTestShard {
             const EReadOutcome outcome =
                 status == NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT        ? EReadOutcome::IMMEDIATE_RETRY :
                 status == NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR ? EReadOutcome::RETRY           :
+                status == NKikimrKeyValue::Statuses::RSTATUS_BLOCKED        ? EReadOutcome::RETRY           : 
                 status == NKikimrKeyValue::Statuses::RSTATUS_OK             ? EReadOutcome::OK              :
                                                                               EReadOutcome::ERROR;
 
@@ -326,6 +328,7 @@ namespace NKikimr::NTestShard {
                     Y_FAIL_S("ERROR from StateServer TabletId# " << TabletId);
 
                 case ::NTestShard::TStateServer::RACE:
+                    STLOG(PRI_ERROR, TEST_SHARD, TS22, "received RACE in TEvStateServerReadResult", (TabletId, TabletId));
                     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
                     PassAway();
                     return;
@@ -483,6 +486,7 @@ namespace NKikimr::NTestShard {
                     Y_FAIL_S("ERROR from StateServer TabletId# " << TabletId);
 
                 case ::NTestShard::TStateServer::RACE:
+                    STLOG(PRI_ERROR, TEST_SHARD, TS32, "received RACE in TEvStateServerWriteResult", (TabletId, TabletId));
                     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
                     PassAway();
                     return;
@@ -760,6 +764,7 @@ namespace NKikimr::NTestShard {
         }
 
         if (ok) {
+            ReadCounters.RecordOk();
             const TMonotonic now = TActivationContext::Monotonic();
             ReadLatency.Add(TActivationContext::Monotonic(), now - timestamp);
             ReadSpeed.Add(TActivationContext::Now(), sizeRead);

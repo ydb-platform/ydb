@@ -1,5 +1,5 @@
 #include "mkql_way.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
@@ -16,12 +16,14 @@ namespace {
 template <bool IsOptional>
 class TWayWrapper: public TMutableCodegeneratorNode<TWayWrapper<IsOptional>> {
     typedef TMutableCodegeneratorNode<TWayWrapper<IsOptional>> TBaseComputation;
+
 public:
     TWayWrapper(TComputationMutables& mutables, IComputationNode* varNode, EValueRepresentation kind, TComputationNodePtrVector&& literals)
         : TBaseComputation(mutables, kind)
         , VarNode(varNode)
         , Literals(std::move(literals))
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto& var = VarNode->GetValue(ctx);
@@ -39,7 +41,6 @@ public:
         const auto valueType = Type::getInt128Ty(context);
         const auto indexType = Type::getInt32Ty(context);
 
-
         const auto var = GetNodeValue(VarNode, ctx, block);
 
         const auto zero = ConstantInt::get(valueType, 0ULL);
@@ -56,10 +57,10 @@ public:
             block = good;
         }
 
-        const auto lshr = BinaryOperator::CreateLShr(var, ConstantInt::get(valueType, 122), "lshr",  block);
+        const auto lshr = BinaryOperator::CreateLShr(var, ConstantInt::get(valueType, 122), "lshr", block);
         const auto trunc = CastInst::Create(Instruction::Trunc, lshr, indexType, "trunc", block);
 
-        const auto check = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, trunc, ConstantInt::get(indexType , 0), "check", block);
+        const auto check = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, trunc, ConstantInt::get(indexType, 0), "check", block);
 
         const auto boxed = BasicBlock::Create(context, "boxed", ctx.Func);
         const auto embed = BasicBlock::Create(context, "embed", ctx.Func);
@@ -71,7 +72,7 @@ public:
 
         block = embed;
 
-        const auto dec = BinaryOperator::CreateSub(trunc, ConstantInt::get(indexType, 1), "dec",  block);
+        const auto dec = BinaryOperator::CreateSub(trunc, ConstantInt::get(indexType, 1), "dec", block);
         index->addIncoming(dec, block);
         BranchInst::Create(step, block);
 
@@ -104,14 +105,14 @@ public:
 private:
     void RegisterDependencies() const final {
         this->DependsOn(VarNode);
-        std::for_each(Literals.cbegin(), Literals.cend(),std::bind(&TWayWrapper<IsOptional>::DependsOn, this, std::placeholders::_1));
+        std::for_each(Literals.cbegin(), Literals.cend(), std::bind(&TWayWrapper<IsOptional>::DependsOn, this, std::placeholders::_1));
     }
 
-    IComputationNode *const VarNode;
+    IComputationNode* const VarNode;
     const TComputationNodePtrVector Literals;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapWay(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 argument");
@@ -140,5 +141,5 @@ IComputationNode* WrapWay(TCallable& callable, const TComputationNodeFactoryCont
     }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

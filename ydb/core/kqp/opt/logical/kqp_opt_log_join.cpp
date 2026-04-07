@@ -6,7 +6,6 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <yql/essentials/core/yql_cost_function.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -306,7 +305,10 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
     TString rightLabel = join.RightLabel().Maybe<TCoAtom>() ? TString(join.RightLabel().Cast<TCoAtom>().Value()) : "";
 
     TMaybeNode<TCoAtomList> lookupColumns;
-    if (auto read = rightReadMatch.Read.Maybe<TKqlReadTableBase>()) {
+
+    if (rightReadMatch.ExtractMembers) {
+        lookupColumns = rightReadMatch.ExtractMembers.Cast().Members();
+    } else if (auto read = rightReadMatch.Read.Maybe<TKqlReadTableBase>()) {
         lookupColumns = read.Columns().Cast();
     } else {
         auto readRanges = rightReadMatch.Read.Maybe<TKqlReadTableRangesBase>();
@@ -496,7 +498,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     size_t rightPrefixSize;
     TMaybeNode<TExprBase> rightPrefixExpr;
 
-    auto prefixLookup = RewriteReadToPrefixLookup(rightReadMatch->Read, ctx, kqpCtx, kqpCtx.Config->IdxLookupJoinsPrefixPointLimit);
+    auto prefixLookup = RewriteReadToPrefixLookup(rightReadMatch->Read, ctx, kqpCtx, kqpCtx.Config->GetIdxLookupJoinPointsLimit());
     if (prefixLookup) {
         lookupTable = prefixLookup->LookupTableName;
         indexName = prefixLookup->IndexName;
@@ -540,7 +542,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     }
 
     const bool useStreamIndexLookupJoin = (kqpCtx.IsDataQuery() || kqpCtx.IsGenericQuery())
-        && kqpCtx.Config->EnableKqpDataQueryStreamIdxLookupJoin;
+        && kqpCtx.Config->GetEnableKqpDataQueryStreamIdxLookupJoin();
 
     auto leftRowArg = Build<TCoArgument>(ctx, join.Pos())
         .Name("leftRowArg")
@@ -555,6 +557,8 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     ui32 fixedPrefix = 0;
     TSet<TString> deduplicateLeftColumns;
     TVector<TExprBase> prefixFilters;
+
+    TVector<const TItemExprType*> nullLookupMembersItems;
 
     for (auto& rightColumnName : rightTableDesc.Metadata->KeyColumnNames) {
         TExprNode::TPtr member;
@@ -648,10 +652,21 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
                 .Add(member)
                 .Done());
 
+        auto rightType = rightTableDesc.GetColumnType(rightColumnName);
+        YQL_ENSURE(rightType);
+        if (rightType->GetKind() == ETypeAnnotationKind::Data) {
+            rightType = ctx.MakeType<TOptionalExprType>(rightType);
+        }
+
+        nullLookupMembersItems.emplace_back(
+            ctx.MakeType<TItemExprType>(rightColumnName, rightType));
+
         if (leftColumn) {
             skipNullColumns.emplace_back(ctx.NewAtom(join.Pos(), rightColumnName));
         }
     }
+
+    const TTypeAnnotationNode* nullLookupMembers = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TStructExprType>(nullLookupMembersItems));
 
     if (lookupMembers.size() <= fixedPrefix) {
         return {};
@@ -754,30 +769,71 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         YQL_ENSURE(joinKeyPredicate.IsValid());
 
         auto leftRowTuple = Build<TExprList>(ctx, join.Pos())
+            .Add(leftRowArg)
             .Add<TCoOptionalIf>()
                 .Predicate(joinKeyPredicate.Cast())
                 .Value<TCoAsStruct>()
                     .Add(lookupMembers)
                     .Build()
                 .Build()
-            .Add(leftRowArg)
             .Done();
 
-        auto leftInput = Build<TCoFlatMap>(ctx, join.Pos())
-            .Input(leftData)
-            .Lambda()
-                .Args({leftRowArg})
-                .Body<TCoMap>()
-                    .Input(rightPrefixExpr.Cast())
-                    .Lambda()
-                        .Args({prefixRowArg})
-                        .Body(leftRowTuple)
+        TMaybeNode<TExprBase> leftInput;
+        if (fixedPrefix > 0) {
+            /*
+            When `fixedPrefix > 0`, it indicates a point predicate on the right table (e.g., `SELECT ... FROM b WHERE PK = $param`).
+
+            However, the predicate extraction logic cannot guarantee that the `rightPrefixExpr` will produce a
+            non-empty list of point or range conditions. It might happen if the predicate cointains NULLs (e.g. PK = NULL is always false)
+
+            This guarantee is critical for a LEFT JOIN. The join's correctness depends on knowing
+            if there is at least one matching row on the right side to determine if the result should be extended or filled with NULLs.
+            Therefore, we must explicitly check if the generated list from `rightPrefixExpr` is empty or not.
+            */
+            leftInput = Build<TCoFlatMap>(ctx, join.Pos())
+                .Input(leftData)
+                .Lambda()
+                    .Args({leftRowArg})
+                    .Body<TCoIf>()
+                        .Predicate<TCoCmpEqual>()
+                            .Left<TCoLength>().List(rightPrefixExpr.Cast()).Build()
+                            .Right<TCoUint64>().Literal().Value("0").Build().Build()
+                            .Build()
+                        .ThenValue<TCoAsList>()
+                            .Add<TExprList>()
+                                .Add(leftRowArg)
+                                .Add<TCoNothing>()
+                                    .OptionalType(NCommon::BuildTypeExpr(join.Pos(), *nullLookupMembers, ctx))
+                                    .Build()
+                                .Build()
+                            .Build()
+                        .ElseValue<TCoMap>()
+                            .Input(rightPrefixExpr.Cast())
+                            .Lambda()
+                                .Args({prefixRowArg})
+                                .Body(leftRowTuple)
+                                .Build()
+                            .Build()
                         .Build()
                     .Build()
-                .Build()
-            .Done();
+                .Done();
+        } else {
+            leftInput = Build<TCoFlatMap>(ctx, join.Pos())
+                .Input(leftData)
+                .Lambda()
+                    .Args({leftRowArg})
+                    .Body<TCoMap>()
+                        .Input(rightPrefixExpr.Cast())
+                        .Lambda()
+                            .Args({prefixRowArg})
+                            .Body(leftRowTuple)
+                            .Build()
+                        .Build()
+                    .Build()
+                .Done();
+        }
 
-        return BuildKqpStreamIndexLookupJoin(join, leftInput, indexName, *prefixLookup, *rightReadMatch, rightTableUnmatchedJoinKeys, ctx);
+        return BuildKqpStreamIndexLookupJoin(join, leftInput.Cast(), indexName, *prefixLookup, *rightReadMatch, rightTableUnmatchedJoinKeys, ctx);
     }
 
     auto leftDataDeduplicated = DeduplicateByMembers(leftData, filter, deduplicateLeftColumns, ctx, join.Pos());
@@ -907,7 +963,7 @@ TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const T
         useCBO = false;
     }
 
-    if (!useCBO && kqpCtx.IsScanQuery() && !kqpCtx.Config->EnableKqpScanQueryStreamIdxLookupJoin) {
+    if (!useCBO && kqpCtx.IsScanQuery() && !kqpCtx.Config->GetEnableKqpScanQueryStreamIdxLookupJoin()) {
         return node;
     }
 

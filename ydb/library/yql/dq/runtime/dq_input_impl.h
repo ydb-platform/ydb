@@ -1,5 +1,8 @@
 #pragma once
 
+#include <util/generic/overloaded.h>
+#include <ydb/library/yql/dq/runtime/dq_async_input.h>
+#include <ydb/library/yql/dq/runtime/dq_input_channel.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node.h>
@@ -163,14 +166,19 @@ public:
             static_cast<TDerived*>(this)->PopStats.TryPause();
         }
 
-        Batches.emplace_back(std::move(batch));
-        AddBatchCounts(space, rows);
+        Batches.emplace_back(std::in_place_type_t<TBatch>{}, std::move(batch), static_cast<ui64>(space), rows);
+        AddBatchCounts();
 
         return rows;
     }
 
+    void PushWatermark(TInstant watermark) {
+        Batches.emplace_back(watermark);
+        AddBatchCounts();
+    }
+
     [[nodiscard]]
-    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch) override {
+    bool Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>& watermark) override {
         Y_ABORT_UNLESS(batch.Width() == GetWidth());
         if (Empty()) {
             static_cast<TDerived*>(this)->PushStats.TryPause();
@@ -178,52 +186,46 @@ public:
         }
 
         batch.clear();
+        watermark = Nothing();
 
         auto& popStats = static_cast<TDerived*>(this)->PopStats;
 
         popStats.Resume(); //save timing before processing
 
-        auto [popBytes, popRows, batchesCount] = PopReadyCounts();
-        Y_ABORT_UNLESS(batchesCount > 0);
-        Y_ABORT_UNLESS(batchesCount <= Batches.size());
+        PopReadyCounts();
+        Y_ABORT_UNLESS(BeforeBarrier.BatchesCount > 0);
+        Y_ABORT_UNLESS(BeforeBarrier.BatchesCount <= Batches.size());
 
-        if (batchesCount != Batches.size()) {
+        ui64 popBytes = 0;
+        ui64 popRows = 0;
 
-            if (batch.IsWide()) {
-                while (batchesCount--) {
-                    auto& part = Batches.front();
-                    part.ForEachRowWide([&batch](NUdf::TUnboxedValue* values, ui32 width) {
-                        batch.PushRow(values, width);
-                    });
-                    Batches.pop_front();
-                }
-            } else {
-                while (batchesCount--) {
-                    auto& part = Batches.front();
-                    part.ForEachRow([&batch](NUdf::TUnboxedValue& value) {
-                        batch.emplace_back(std::move(value));
-                    });
-                    Batches.pop_front();
-                }
+        while (!Batches.empty() && BeforeBarrier.BatchesCount > 0) {
+            const auto end = std::visit(TOverloaded {
+                [&batch, &popBytes, &popRows](TBatch& part) -> bool {
+                    if (batch.IsWide()) {
+                        part.Batch.ForEachRowWide([&batch](NUdf::TUnboxedValue* values, ui32 width) {
+                            batch.PushRow(values, width);
+                        });
+                    } else {
+                        part.Batch.ForEachRow([&batch](NUdf::TUnboxedValue& value) {
+                            batch.emplace_back(std::move(value));
+                        });
+                    }
+                    popBytes += part.Bytes;
+                    popRows += part.Rows;
+                    return false;
+                },
+                [&watermark](TInstant newWatermark) -> bool {
+                    watermark = newWatermark;
+                    return true;
+                },
+            }, Batches.front());
+            Batches.pop_front();
+            BeforeBarrier.BatchesCount--;
+
+            if (end) {
+                break;
             }
-
-        } else {
-
-            if (batch.IsWide()) {
-                for (auto&& part : Batches) {
-                    part.ForEachRowWide([&batch](NUdf::TUnboxedValue* values, ui32 width) {
-                        batch.PushRow(values, width);
-                    });
-                }
-            } else {
-                for (auto&& part : Batches) {
-                    part.ForEachRow([&batch](NUdf::TUnboxedValue& value) {
-                        batch.emplace_back(std::move(value));
-                    });
-                }
-            }
-
-            Batches.clear();
         }
 
         StoredBytes -= popBytes;
@@ -235,7 +237,7 @@ public:
             popStats.Chunks++;
         }
 
-        Y_ABORT_UNLESS(!batch.empty());
+        Y_ABORT_UNLESS(!batch.empty() || !watermark.Empty());
         return true;
     }
 
@@ -253,18 +255,16 @@ public:
 
     [[nodiscard]]
     bool Empty() const override {
-        return Batches.empty() || IsPaused() && BeforeBarrier.Batches == 0;
+        return Batches.empty() || IsPaused() && BeforeBarrier.BatchesCount == 0;
     }
 
 private:
-    void AddBatchCounts(ui64 space, ui64 rows) {
+    void AddBatchCounts() {
         auto& barrier = PendingBarriers.empty() ? BeforeBarrier : PendingBarriers.back();
-        barrier.Batches ++;
-        barrier.Bytes += space;
-        barrier.Rows += rows;
+        barrier.BatchesCount++;
     }
 
-    std::tuple<ui64, ui64, ui64> PopReadyCounts() {
+    void PopReadyCounts() {
         if (!PendingBarriers.empty() && !IsPaused()) {
             // There were watermarks, but channel is not paused
             // Process data anyway and move watermarks behind
@@ -276,12 +276,6 @@ private:
             PendingBarriers.clear();
             PendingBarriers.emplace_back(TBarrier { .Barrier = lastBarrier });
         }
-        auto popBatches = BeforeBarrier.Batches;
-        auto popBytes = BeforeBarrier.Bytes;
-        auto popRows = BeforeBarrier.Rows;
-
-        BeforeBarrier.Clear();
-        return std::make_tuple(popBytes, popRows, popBatches);
     }
 
 public:
@@ -297,10 +291,14 @@ private:
             if (barrier.Barrier >= PauseBarrier) {
                 break;
             }
-            BeforeBarrier.Batches += barrier.Batches;
-            BeforeBarrier.Rows += barrier.Rows;
-            BeforeBarrier.Bytes += barrier.Bytes;
+            BeforeBarrier += barrier;
             PendingBarriers.pop_front();
+        }
+    }
+
+    void InsertDummyBarrier() {
+        if (PendingBarriers.empty() && PauseBarrier != TBarrier::NoBarrier) {
+            PendingBarriers.emplace_front(TBarrier { .Barrier = PauseBarrier });
         }
     }
 
@@ -315,7 +313,7 @@ public:
             return;
         }
         SkipWatermarksBeforeBarrier();
-        Y_ENSURE(!PendingBarriers.empty());
+        InsertDummyBarrier();
         Y_ENSURE(PendingBarriers.front().Barrier >= watermark);
     }
 
@@ -367,9 +365,16 @@ public:
     }
 
     void AddWatermark(TInstant watermark) override {
-        if (!PendingBarriers.empty() && PendingBarriers.back().Batches == 0 && !PendingBarriers.back().IsCheckpoint()) {
-            Y_ENSURE(PendingBarriers.back().Rows == 0);
-            Y_ENSURE(PendingBarriers.back().Bytes == 0);
+        if (watermark > TBarrier::MaxValidWatermark) {
+            watermark = TBarrier::MaxValidWatermark;
+        }
+        if (!PendingBarriers.empty() && watermark <= PauseBarrier) { // it is possible channel was paused by idle watermark, then real watermark less than the pausing watermark arrived; just ignore added watermark
+                                                                     // TODO: consider moving pausing barrier (watermark) backward
+            return;
+        }
+        Y_ENSURE(PendingBarriers.empty() || PendingBarriers.back().IsCheckpoint() || PendingBarriers.back().Barrier <= watermark);
+        if (!PendingBarriers.empty() && PendingBarriers.back().BatchesCount == 0 && !PendingBarriers.back().IsCheckpoint()) {
+            Y_ENSURE(PendingBarriers.back().Barrier <= watermark);
             PendingBarriers.back().Barrier = watermark;
         } else {
             PendingBarriers.emplace_back(TBarrier { .Barrier = watermark });
@@ -407,6 +412,7 @@ public:
         PendingBarriers.pop_front();
         // There can be watermarks before current barrier exposed by checkpoint removal
         SkipWatermarksBeforeBarrier();
+        InsertDummyBarrier();
     }
 
 protected:
@@ -416,10 +422,18 @@ protected:
     }
 
 protected:
+    struct TBatch {
+        NKikimr::NMiniKQL::TUnboxedValueBatch Batch;
+        ui64 Bytes;
+        ui64 Rows;
+    };
+    template<typename Type, NKikimr::NMiniKQL::EMemorySubPool MemoryPool = NKikimr::NMiniKQL::EMemorySubPool::Default>
+    using TMKQLList = std::list<Type, NKikimr::NMiniKQL::TMKQLAllocator<Type, MemoryPool>>;
+
     NKikimr::NMiniKQL::TType* const InputType = nullptr;
     const TMaybe<ui32> Width;
     const ui64 MaxBufferBytes = 0;
-    TList<NKikimr::NMiniKQL::TUnboxedValueBatch, NKikimr::NMiniKQL::TMKQLAllocator<NKikimr::NMiniKQL::TUnboxedValueBatch>> Batches;
+    TMKQLList<std::variant<TBatch, TInstant>> Batches;
     ui64 StoredBytes = 0;
     ui64 StoredRows = 0;
     bool Finished = false;
@@ -429,24 +443,19 @@ protected:
     struct TBarrier {
         static constexpr TInstant NoBarrier = TInstant::Zero();
         static constexpr TInstant CheckpointBarrier = TInstant::Max();
+        static constexpr TInstant MaxValidWatermark = TInstant::Max() - TDuration::MicroSeconds(1);
         TInstant Barrier = CheckpointBarrier;
-        ui64 Batches = 0;
-        ui64 Bytes = 0;
-        ui64 Rows = 0;
+        ui64 BatchesCount = 0;
         // watermark (!= TInstant::Max()) or checkpoint (TInstant::Max())
         bool IsCheckpoint() const {
             return Barrier == CheckpointBarrier;
         }
         TBarrier& operator+= (const TBarrier& other) {
-            Batches += other.Batches;
-            Bytes += other.Bytes;
-            Rows += other.Rows;
+            BatchesCount += other.BatchesCount;
             return *this;
         }
         void Clear() {
-            Batches = 0;
-            Bytes = 0;
-            Rows = 0;
+            BatchesCount = 0;
         }
     };
     std::deque<TBarrier> PendingBarriers; // barrier and counts after barrier

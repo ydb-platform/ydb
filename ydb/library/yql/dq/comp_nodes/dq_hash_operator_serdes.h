@@ -79,10 +79,18 @@ namespace NDqHashOperatorParams
 struct TDqHashOperatorParams
 {
     size_t InputWidth = 0;
+    bool IsStream = false;
+    bool EnableSpilling = false;
     TKeyTypes KeyTypes;
     std::vector<TType*> KeyItemTypes;
     std::vector<TType*> StateItemTypes;
     NDqHashOperatorCommon::TCombinerNodes Nodes;
+};
+
+enum class EOperatorKind
+{
+    Combiner,
+    Aggregator,
 };
 
 TDqHashOperatorParams ParseCommonDqHashOperatorParams(TCallable& callable, const TComputationNodeFactoryContext& ctx);

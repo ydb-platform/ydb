@@ -125,7 +125,7 @@ public:
                 Request.SetHeader(meta, "authorization", token);
             }
         }
-        meta.Timeout = GetClientTimeout();
+        meta.Timeout = NYdb::TDeadline::SafeDurationCast(GetClientTimeout());
         auto connection = Location.CreateGRpcServiceConnectionFromEndpoint<yandex::cloud::priv::ydb::v1::DatabaseService>(ControlPlaneName);
         connection->DoRequest(cpRequest, std::move(responseCb), &yandex::cloud::priv::ydb::v1::DatabaseService::Stub::AsyncListAll, meta);
     }

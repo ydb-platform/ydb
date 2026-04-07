@@ -11,11 +11,11 @@ void TestBidirectionalTextYqlUuidConversion(TStringBuf bytes, TStringBuf text)
 {
     std::array<char, UuidYqlTextSize> bytesToText;
     TextYqlUuidFromBytes(bytes, bytesToText.data());
-    EXPECT_EQ(TString(bytesToText.data(), bytesToText.size()), text);
+    EXPECT_EQ(TStringBuf(bytesToText.data(), bytesToText.size()), text);
 
     std::array<char, UuidBinarySize> textToBytes;
     TextYqlUuidToBytes(text, textToBytes.data());
-    EXPECT_EQ(TString(textToBytes.data(), textToBytes.size()), bytes);
+    EXPECT_EQ(TStringBuf(textToBytes.data(), textToBytes.size()), bytes);
 }
 
 TEST(TUuidConverterTest, TextYql)
@@ -45,7 +45,7 @@ TEST(TUuidConverterTest, InvalidTextYql)
 
 TEST(TUuidConverterTest, Guid)
 {
-    TString bytes = "\x01\x10\x20\x30\x40\x50\x60\x70\x80\x90\xa0\xb0\xc0\xd0\xe0\xf0";
+    TStringBuf bytes = "\x01\x10\x20\x30\x40\x50\x60\x70\x80\x90\xa0\xb0\xc0\xd0\xe0\xf0";
     auto guid = GuidFromBytes(bytes);
     std::array<char, UuidBinarySize> guidToBytes;
     GuidToBytes(guid, guidToBytes.data());

@@ -9,6 +9,5 @@ IComputationNode* WrapWideCombiner(TCallable& callable, const TComputationNodeFa
 IComputationNode* WrapWideLastCombiner(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapWideLastCombinerWithSpilling(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
-
+} // namespace NMiniKQL
+} // namespace NKikimr

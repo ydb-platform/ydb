@@ -78,4 +78,28 @@ namespace builtins
 } // namespace builtins
 PYTHONIC_NS_END
 
+#ifdef ENABLE_PYTHON_MODULE
+
+#include "pythonic/python/core.hpp"
+
+PYTHONIC_NS_BEGIN
+
+inline PyObject *to_python<builtins::functor::str>::convert(builtins::functor::str const &c)
+{
+  return (PyObject *)&PyUnicode_Type;
+}
+
+inline bool from_python<builtins::functor::str>::is_convertible(PyObject *obj)
+{
+  return obj == (PyObject *)&PyUnicode_Type;
+}
+
+inline builtins::functor::str from_python<builtins::functor::str>::convert(PyObject *obj)
+{
+  return {};
+}
+
+PYTHONIC_NS_END
+#endif
+
 #endif

@@ -4,7 +4,6 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_rotate_cdc_stream.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -65,18 +64,16 @@ void DoCreateIncrBackupTable(const TOperationId& opId, const TPath& dst, NKikimr
     
     for (auto& column : *desc.MutableColumns()) {
         column.SetNotNull(false);
+        if (column.HasDefaultFromSequence()) {
+            column.ClearDefaultFromSequence();
+        }
     }
     
-    auto* columnStatesCol = desc.AddColumns();
-    columnStatesCol->SetName("__ydb_incrBackupImpl_columnStates");
-    columnStatesCol->SetType("String");
-    columnStatesCol->SetNotNull(false);
+    auto* changeMetadataCol = desc.AddColumns();
+    changeMetadataCol->SetName("__ydb_incrBackupImpl_changeMetadata");
+    changeMetadataCol->SetType("String");
+    changeMetadataCol->SetNotNull(false);
     // TODO: cleanup all sequences
-
-    auto* col = desc.AddColumns();
-    col->SetName("__ydb_incrBackupImpl_deleted");
-    col->SetType("Bool");
-    col->SetNotNull(false);
 
     result.push_back(CreateNewTable(NextPartId(opId, result), outTx));
 }
@@ -96,9 +93,17 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
             std::decay_t<decltype(tablePath.Base()->GetChildren())>> == true,
         "Assume path children list is lexicographically sorted");
 
-    for (auto& [child, _] : tablePath.Base()->GetChildren()) {
-        if (child.EndsWith("_continuousBackupImpl")) {
-            lastStreamName = child;
+    for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+        if (childName.EndsWith("_continuousBackupImpl")) {
+            TPath childPath = tablePath.Child(childName);
+            if (!childPath.IsDeleted() && childPath.IsCdcStream()) {
+                if (context.SS->CdcStreams.contains(childPathId)) {
+                    const auto& streamInfo = context.SS->CdcStreams.at(childPathId);
+                    if (streamInfo->Format == NKikimrSchemeOp::ECdcStreamFormatProto) {
+                        lastStreamName = childName;
+                    }
+                }
+            }
         }
     }
 

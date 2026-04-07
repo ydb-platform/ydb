@@ -893,14 +893,18 @@ void TTable::AddSafe(TPartView partView)
     }
 }
 
-EReady TTable::Precharge(TRawVals minKey_, TRawVals maxKey_, TTagsRef tags,
+TPrechargeResult TTable::Precharge(TRawVals minKey_, TRawVals maxKey_, TTagsRef tags,
                          IPages* env, ui64 flg,
                          ui64 items, ui64 bytes,
                          EDirection direction,
                          TRowVersion snapshot,
                          TSelectStats& stats) const
 {
-    bool ready = true;
+    TPrechargeResult result = {
+        .Ready = true,
+        .ItemsPrecharged = 0,
+        .BytesPrecharged = 0,
+    };
     bool includeHistory = !snapshot.IsMax();
 
     if (items == Max<ui64>()) {
@@ -920,13 +924,17 @@ EReady TTable::Precharge(TRawVals minKey_, TRawVals maxKey_, TTagsRef tags,
             if (pos != run.end()) {
                 const auto* part = pos->Part.Get();
                 if ((flg & EHint::NoByKey) ||
-                    part->MightHaveKey(prefix.Get(part->Scheme->Groups[0].KeyTypes.size())))
+                    part->MightHaveKeyPrefix(prefix))
                 {
                     TRowId row1 = pos->Slice.BeginRowId();
                     TRowId row2 = pos->Slice.EndRowId() - 1;
-                    ready &= CreateCharge(env, *pos->Part, tags, includeHistory)
-                        ->Do(key, key, row1, row2, *Scheme->Keys, items, bytes)
-                        .Ready;
+                    auto const chargeResult = CreateCharge(env, *pos->Part, tags, includeHistory)
+                        ->Do(key, key, row1, row2, *Scheme->Keys, items, bytes);
+
+                    result.Ready &= chargeResult.Ready;
+                    result.ItemsPrecharged += chargeResult.ItemsPrecharged;
+                    result.BytesPrecharged += chargeResult.BytesPrecharged;
+
                     ++stats.Sieved;
                 } else {
                     ++stats.Weeded;
@@ -938,18 +946,24 @@ EReady TTable::Precharge(TRawVals minKey_, TRawVals maxKey_, TTagsRef tags,
         const TCelled maxKey(maxKey_, *Scheme->Keys, false);
 
         for (const auto& run : GetLevels()) {
+            TPrechargeResult chargeResult;
+
             switch (direction) {
                 case EDirection::Forward:
-                    ready &= ChargeRange(env, minKey, maxKey, run, *Scheme->Keys, tags, items, bytes, includeHistory);
+                    chargeResult = ChargeRange(env, minKey, maxKey, run, *Scheme->Keys, tags, items, bytes, includeHistory);
                     break;
                 case EDirection::Reverse:
-                    ready &= ChargeRangeReverse(env, maxKey, minKey, run, *Scheme->Keys, tags, items, bytes, includeHistory);
+                    chargeResult = ChargeRangeReverse(env, maxKey, minKey, run, *Scheme->Keys, tags, items, bytes, includeHistory);
                     break;
             }
+
+            result.Ready &= chargeResult.Ready;
+            result.ItemsPrecharged += chargeResult.ItemsPrecharged;
+            result.BytesPrecharged += chargeResult.BytesPrecharged;
         }
     }
 
-    return ready ? EReady::Data : EReady::Page;
+    return result;
 }
 
 void TTable::Update(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMemGlob> apart, TRowVersion rowVersion)
@@ -1075,6 +1089,33 @@ void TTable::UpdateTx(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMe
 
     if (TableObserver) {
         TableObserver->OnUpdateTx(rop, key, ops, txId);
+    }
+}
+
+void TTable::LockRowTx(ELockMode mode, TRawVals key, ui64 txId)
+{
+    auto& memTable = MemTable();
+    bool hadTxDataRef = memTable.GetTxIdStats().contains(txId);
+
+    if (ErasedKeysCache) {
+        const TCelled cells(key, *Scheme->Keys, true);
+        auto res = ErasedKeysCache->FindKey(cells);
+        if (res.second) {
+            ErasedKeysCache->InvalidateKey(res.first, cells);
+        }
+    }
+
+    MemTable().LockRow(mode, key, txId);
+
+    if (!hadTxDataRef) {
+        Y_DEBUG_ABORT_UNLESS(memTable.GetTxIdStats().contains(txId));
+        AddTxDataRef(txId);
+    } else {
+        Y_DEBUG_ABORT_UNLESS(TxDataRefs[txId] > 0);
+    }
+
+    if (TableObserver) {
+        TableObserver->OnLockRowTx(mode, key, txId);
     }
 }
 
@@ -1397,7 +1438,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
                 if (pos != run.end()) {
                     const auto* part = pos->Part.Get();
                     if ((flg & EHint::NoByKey) ||
-                        part->MightHaveKey(prefix.Get(part->Scheme->Groups[0].KeyTypes.size())))
+                        part->MightHaveKeyPrefix(prefix))
                     {
                         ++stats.Sieved;
                         TPartIter& it = tempIterators.emplace_back(part, tags, Scheme->Keys, env);
@@ -1478,13 +1519,29 @@ TSelectRowVersionResult TTable::SelectRowVersion(
 
     auto committed = TMergedTransactionMap::Create(visible, CommittedTransactions);
 
+    ELockMode lockMode = ELockMode::None;
+    ui64 lockTxId = 0;
+
+    auto augment = [&](const auto& value) {
+        TSelectRowVersionResult result(value);
+        if (lockMode != ELockMode::None) {
+            ITransactionMapSimplePtr c = committed;
+            // Lock is only valid as long as it's not committed or removed
+            if (!c.Find(lockTxId) && !RemovedTransactions.Contains(lockTxId)) {
+                result.LockMode = lockMode;
+                result.LockTxId = lockTxId;
+            }
+        }
+        return result;
+    };
+
     // Mutable has the newest data
     if (Mutable) {
         lastEpoch = Mutable->Epoch;
         if (auto it = TMemIter::Make(*Mutable, Mutable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
             if (it->IsValid()) {
-                if (auto rowVersion = it->SkipToCommitted(committed, observer)) {
-                    return *rowVersion;
+                if (auto info = it->SkipToCommitted(committed, observer, lockMode, lockTxId)) {
+                    return augment(info);
                 }
             }
         }
@@ -1498,8 +1555,8 @@ TSelectRowVersionResult TTable::SelectRowVersion(
             lastEpoch = MutableBackup->Epoch;
             if (auto it = TMemIter::Make(*MutableBackup, MutableBackup->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
                 if (it->IsValid()) {
-                    if (auto rowVersion = it->SkipToCommitted(committed, observer)) {
-                        return *rowVersion;
+                    if (auto info = it->SkipToCommitted(committed, observer, lockMode, lockTxId)) {
+                        return augment(info);
                     }
                 }
             }
@@ -1512,8 +1569,8 @@ TSelectRowVersionResult TTable::SelectRowVersion(
             lastEpoch = memTable->Epoch;
             if (auto it = TMemIter::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
                 if (it->IsValid()) {
-                    if (auto rowVersion = it->SkipToCommitted(committed, observer)) {
-                        return *rowVersion;
+                    if (auto info = it->SkipToCommitted(committed, observer, lockMode, lockTxId)) {
+                        return augment(info);
                     }
                 }
             }
@@ -1525,7 +1582,7 @@ TSelectRowVersionResult TTable::SelectRowVersion(
             if (pos != run.end()) {
                 const auto* part = pos->Part.Get();
                 if ((readFlags & EHint::NoByKey) ||
-                    part->MightHaveKey(prefix.Get(part->Scheme->Groups[0].KeyTypes.size())))
+                    part->MightHaveKeyPrefix(prefix))
                 {
                     TPartIter it(part, { }, Scheme->Keys, env);
                     it.SetBounds(pos->Slice);
@@ -1533,8 +1590,8 @@ TSelectRowVersionResult TTable::SelectRowVersion(
                     if (res == EReady::Data && ready) {
                         Y_ENSURE(lastEpoch > part->Epoch, "Ordering of epochs is incorrect");
                         lastEpoch = part->Epoch;
-                        if (auto rowVersion = it.SkipToCommitted(committed, observer)) {
-                            return *rowVersion;
+                        if (auto info = it.SkipToCommitted(committed, observer, lockMode, lockTxId)) {
+                            return augment(info);
                         }
                     }
                     ready = ready && bool(res);
@@ -1543,7 +1600,7 @@ TSelectRowVersionResult TTable::SelectRowVersion(
         }
     }
 
-    return ready ? EReady::Gone : EReady::Page;
+    return augment(ready ? EReady::Gone : EReady::Page);
 }
 
 void TTable::DebugDump(IOutputStream& str, IPages* env, const NScheme::TTypeRegistry& reg) const
@@ -1618,7 +1675,9 @@ void TPartStats::Add(const TPartView& partView)
     } else {
         FlatIndexBytes += partView->IndexesRawSize;
     }
-    ByKeyBytes += partView->ByKey ? partView->ByKey->Raw.size() : 0;
+    for (const auto& [_, bloom] : partView->ByKeyPrefixes) {
+        ByKeyBytes += bloom ? bloom->Raw.size() : 0;
+    }
     PlainBytes += partView->Stat.Bytes;
     CodedBytes += partView->Stat.Coded;
     RowsErase += partView->Stat.Drops;
@@ -1641,7 +1700,9 @@ bool TPartStats::Remove(const TPartView& partView)
     } else {
         NUtil::SubSafe(FlatIndexBytes, partView->IndexesRawSize);
     }
-    NUtil::SubSafe(ByKeyBytes, partView->ByKey ? partView->ByKey->Raw.size() : 0);
+    for (const auto& [_, bloom] : partView->ByKeyPrefixes) {
+        NUtil::SubSafe(ByKeyBytes, bloom ? bloom->Raw.size() : 0);
+    }
     NUtil::SubSafe(PlainBytes, partView->Stat.Bytes);
     NUtil::SubSafe(CodedBytes, partView->Stat.Coded);
     NUtil::SubSafe(RowsErase, partView->Stat.Drops);

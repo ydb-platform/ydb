@@ -316,6 +316,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TopSort(TExprBase node,
                 return node;
             }
         }
+        if (!path.QLFilter().Maybe<TCoVoid>()) {
+            return node;
+        }
         size += tableSize;
         rows += tableRows;
     }
@@ -456,6 +459,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TopSort(TExprBase node,
                         .Columns<TCoVoid>().Build()
                         .Ranges<TCoVoid>().Build()
                         .Stat<TCoVoid>().Build()
+                        .QLFilter<TCoVoid>().Build()
                     .Build()
                 .Build()
                 .Settings()

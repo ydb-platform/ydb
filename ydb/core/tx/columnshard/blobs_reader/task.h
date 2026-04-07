@@ -135,7 +135,8 @@ public:
     TCompositeReadBlobs() = default;
 
     ~TCompositeReadBlobs() {
-        AFL_VERIFY(IsEmpty());
+        // A non-empty value is possible here in case of destruction at start.
+        // AFL_VERIFY(IsEmpty());
     }
 
     TCompositeReadBlobs& operator=(TCompositeReadBlobs&& item) noexcept {

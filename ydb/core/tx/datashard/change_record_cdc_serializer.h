@@ -27,6 +27,7 @@ struct TChangeRecordSerializerOpts {
     bool VirtualTimestamps = false;
     ui64 ShardId = 0;
     bool Debug = false;
+    bool UserSIDs = false;
 
     static TChangeRecordSerializerOpts DebugOpts();
 };

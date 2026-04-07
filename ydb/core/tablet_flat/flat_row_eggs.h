@@ -39,6 +39,24 @@ namespace NTable {
         Reset   = 3,    /* Reset cell or row to default */
     };
 
+    /**
+     * Lock modes with higher strength have higher numerical values
+     *
+     * Bit mask values also have some assigned meaning:
+     *
+     * 001 = indicates key (unique index) columns cannot be modified by transactions
+     * 010 = indicates non-key columns cannot be modified by other transactions
+     * 100 = indicates row may be modified by the lock owner
+     */
+    enum class ELockMode : ui8 {
+        None = 0,
+        KeyShared = 1,      /* 001 = conflicts with Exclusive */
+        Shared = 3,         /* 011 = conflicts with Exclusive, NoKeyExclusive */
+        NoKeyExclusive = 5, /* 101 = conflicts with Exclusive, NoKeyExclusive, Shared */
+        Exclusive = 6,      /* 110 = conflicts with Exclusive, NoKeyExclusive, Shared, KeyShared */
+        Multi = 7,          /* 111 = multiple transactions with lock modes stored elsewhere */
+    };
+
     enum class ECellOp : ui8 { /* cell operation code */
         Empty   = 0,    /* Cell has no any valid state  */
         Set     = 1,    /* Set cell to exact value      */
@@ -71,22 +89,84 @@ namespace NTable {
         ui64 Ref = Max<ui64>();
     };
 
+    struct TSkipToCommittedResult {
+        TRowVersion RowVersion = TRowVersion::Min();
+        ui64 RowTxId = 0;
+        bool Valid = false;
+
+        TSkipToCommittedResult() = default;
+
+        TSkipToCommittedResult(const TRowVersion& rowVersion, ui64 rowTxId = 0)
+            : RowVersion(rowVersion)
+            , RowTxId(rowTxId)
+            , Valid(true)
+        {}
+
+        explicit operator bool() const {
+            return Valid;
+        }
+    };
+
     struct TSelectRowVersionResult {
         EReady Ready;
-        TRowVersion RowVersion;
+        TRowVersion RowVersion = TRowVersion::Min();
+        ui64 RowTxId = 0;
+        ELockMode LockMode = ELockMode::None;
+        ui64 LockTxId = 0;
 
-        TSelectRowVersionResult(EReady ready)
+        explicit TSelectRowVersionResult(EReady ready)
             : Ready(ready)
         { }
 
-        TSelectRowVersionResult(const TRowVersion& rowVersion)
+        explicit TSelectRowVersionResult(const TSkipToCommittedResult& result)
+            : Ready(result ? EReady::Data : EReady::Gone)
+            , RowVersion(result.RowVersion)
+            , RowTxId(result.RowTxId)
+        { }
+
+        explicit TSelectRowVersionResult(const TRowVersion& rowVersion, ui64 rowTxId = 0)
             : Ready(EReady::Data)
             , RowVersion(rowVersion)
+            , RowTxId(rowTxId)
         { }
 
         explicit operator bool() const {
             return Ready == EReady::Data;
         }
+    };
+
+    /**
+     * The container for the results of the precharge operation.
+     */
+    struct TPrechargeResult {
+        /**
+         * If true, all the necessary pages are already in the cache.
+         */
+        bool Ready;
+
+        /**
+         * The total number of rows precharged.
+         *
+         * @warning The value in this field will be set to an accurate value
+         *          only if the Ready field is set to true.
+         *
+         * @warning The value in this field is meant to be used as an approximation
+         *          of the total size of all items placed into the cache.
+         *          It may not be very accurate in some cases.
+         */
+        ui64 ItemsPrecharged;
+
+        /**
+         * The total number of bytes precharged.
+         *
+         * @warning The value in this field will be set to an accurate value
+         *          only if the Ready field is set to true.
+         *
+         * @warning The value in this field is meant to be used as an approximation
+         *          of the total size of all items placed into the cache.
+         *          It may not be very accurate in some cases.
+         */
+        ui64 BytesPrecharged;
     };
 
 #pragma pack(push, 1)

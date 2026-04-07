@@ -24,4 +24,4 @@ void FastPartialSort(RandomIt first, RandomIt middle, RandomIt last, Compare com
     ::miniselect::floyd_rivest_partial_sort(first, middle, last, compare);
 }
 
-}
+} // namespace NYql

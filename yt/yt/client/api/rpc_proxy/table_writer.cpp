@@ -69,8 +69,7 @@ public:
 
     TSignedWriteFragmentResultPtr GetWriteFragmentResult() const override
     {
-        YT_VERIFY(AsyncResult_.IsSet());
-        auto resultOrError = AsyncResult_.Get();
+        auto resultOrError = AsyncResult_.GetOrCrash();
         YT_VERIFY(resultOrError.IsOK());
         return resultOrError.Value();
     }

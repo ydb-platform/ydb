@@ -2,18 +2,17 @@
 #include <util/string/join.h>
 #include <util/generic/yexception.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 #define SWITCH_ENUM_TYPE_TO_STR(name, val) \
-    case val: return TStringBuf(#name);
+    case val:                              \
+        return TStringBuf(#name);
 
 TString ValidateModeAvailables() {
     return Join(", ",
-        ValidateModeAsStr(EValidateMode::None),
-        ValidateModeAsStr(EValidateMode::Lazy),
-        ValidateModeAsStr(EValidateMode::Greedy)
-    );
+                ValidateModeAsStr(EValidateMode::None),
+                ValidateModeAsStr(EValidateMode::Lazy),
+                ValidateModeAsStr(EValidateMode::Greedy));
 }
 
 TStringBuf ValidateModeAsStr(EValidateMode validateMode) {
@@ -63,5 +62,4 @@ EValidateDatumMode ToDatumValidateMode(EValidateMode validateMode) {
             return EValidateDatumMode::Expensive;
     }
 }
-} // namspace NUdf
-} // namspace NYql
+} // namespace NYql::NUdf

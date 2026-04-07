@@ -26,6 +26,16 @@
             ]
         },
         {
+            "Name": "TKiTruncateTable",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiTruncateTable!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "TablePath", "Type": "TCoAtom"}
+            ]
+        },
+        {
             "Name": "TKiAlterDatabase",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KiAlterDatabase!"},
@@ -275,7 +285,8 @@
                 {"Index": 3, "Name": "TypeId", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "Features", "Type": "TCoNameValueTupleList"},
                 {"Index": 5, "Name": "ExistingOk", "Type": "TCoAtom"},
-                {"Index": 6, "Name": "ReplaceIfExists", "Type":  "TCoAtom"}
+                {"Index": 6, "Name": "ReplaceIfExists", "Type":  "TCoAtom"},
+                {"Index": 7, "Name": "Ast", "Type": "TExprBase"}
             ]
         },
         {
@@ -288,7 +299,9 @@
                 {"Index": 2, "Name": "ObjectId", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "TypeId", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "Features", "Type": "TCoNameValueTupleList"},
-                {"Index": 5, "Name": "ResetFeatures", "Type": "TCoAtomList"}
+                {"Index": 5, "Name": "ResetFeatures", "Type": "TCoAtomList"},
+                {"Index": 6, "Name": "MissingOk", "Type": "TCoAtom"},
+                {"Index": 7, "Name": "Ast", "Type": "TExprBase"}
             ]
         },
         {
@@ -371,7 +384,8 @@
             "Children": [
                 {"Index": 0, "Name": "Value", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Columns", "Type": "TCoAtomList"},
-                {"Index": 2, "Name": "RowsLimit", "Type": "TCoAtom"}
+                {"Index": 2, "Name": "RowsLimit", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Discard", "Type": "TCoAtom"}
             ]
         },
         {
@@ -646,6 +660,41 @@
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "BackupCollection", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Prefix", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKiCreateSecret",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "TKiCreateSecret!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "Secret", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Value", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "InheritPermissions", "Type": "TCoAtom"},
+                {"Index": 5, "Name": "ValueParamName", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKiAlterSecret",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "TKiAlterSecret!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "Secret", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Value", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "ValueParamName", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKiDropSecret",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "TKiDropSecret!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "Secret", "Type": "TCoAtom"}
             ]
         }
     ]

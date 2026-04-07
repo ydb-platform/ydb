@@ -3,37 +3,35 @@
 
 #include <util/thread/singleton.h>
 
-
-namespace NYql {
-namespace NLog {
+namespace NYql::NLog {
 namespace {
 
 struct TThrowedLogContext {
     TString LocationWithLogContext; // separated with ': '
 };
 
-} // namspace
+} // namespace
 
 TStringBuf ToStringBuf(EContextKey key) {
     switch (key) {
-    case EContextKey::DateTime:
-        return "datetime";
-    case EContextKey::Level:
-        return "level";
-    case EContextKey::ProcessName:
-        return "procname";
-    case EContextKey::ProcessID:
-        return "pid";
-    case EContextKey::ThreadID:
-        return "tid";
-    case EContextKey::Component:
-        return "component";
-    case EContextKey::FileName:
-        return "filename";
-    case EContextKey::Line:
-        return "line";
-    case EContextKey::Path:
-        return "path";
+        case EContextKey::DateTime:
+            return "datetime";
+        case EContextKey::Level:
+            return "level";
+        case EContextKey::ProcessName:
+            return "procname";
+        case EContextKey::ProcessID:
+            return "pid";
+        case EContextKey::ThreadID:
+            return "tid";
+        case EContextKey::Component:
+            return "component";
+        case EContextKey::FileName:
+            return "filename";
+        case EContextKey::Line:
+            return "line";
+        case EContextKey::Path:
+            return "path";
     }
 }
 
@@ -50,7 +48,7 @@ void OutputLogCtx(IOutputStream* out, bool withBraces, bool skipSessionId) {
 
         bool isFirst = true;
         while (ctxItem != ctxList) {
-            for (const TString& name: *ctxItem) {
+            for (const TString& name : *ctxItem) {
                 if (!skipSessionId && !name.empty()) {
                     if (!isFirst) {
                         (*out) << '/';
@@ -92,7 +90,6 @@ TString ThrowedLogContextPath() {
     return std::move(tlc->LocationWithLogContext);
 }
 
-
 TAutoPtr<TLogElement> TContextPreprocessor::Preprocess(TAutoPtr<TLogElement> element)
 {
     TStringStream out;
@@ -113,5 +110,4 @@ void TYqlLogContextLocation::SetThrowedLogContextPath() const {
     tlc->LocationWithLogContext = ss.Str();
 }
 
-} // namespace NLog
-} // namespace NYql
+} // namespace NYql::NLog

@@ -27,8 +27,8 @@
 #include <string_view>
 #include <vector>
 
-#include "parquet/column_writer.h"
-#include "parquet/file_writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/column_writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/file_writer.h"
 
 namespace parquet20 {
 

@@ -5,6 +5,8 @@
 #include "blobstorage_pdisk_defs.h"
 #include "blobstorage_pdisk_data.h"
 
+#include <util/generic/overloaded.h>
+
 namespace NKikimr::NPDisk {
 
     class TRequestBase;
@@ -56,7 +58,7 @@ namespace NKikimr::NPDisk::NMeta {
         }, *m);
     }
 
-    // TMetadataPart -- a fragment of metadata (half-chunk) that has been read into memory, but not processed yet. 
+    // TMetadataPart -- a fragment of metadata (half-chunk) that has been read into memory, but not processed yet.
     struct TPart {
         TSlotKey Key;
         TMetadataHeader Header;

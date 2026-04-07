@@ -32,6 +32,17 @@ namespace NTest {
 
             return ui8(rop) < names.size() ? names[ui8(rop)] : "?error";
         }
+
+        static const char* Do(ELockMode mode)
+        {
+            static const std::array<const char*, 3> names{{
+                "None",
+                "Shared",
+                "Exclusive"
+            }};
+
+            return ui8(mode) < names.size() ? names[ui8(mode)] : "?error";
+        }
     };
 
     class TDumpValue {
@@ -142,6 +153,30 @@ namespace NTest {
             }
             for (const auto& op : ops) {
                 Out << "   > col " << op.Tag << ": " << TDumpValue(op.Value) << " <" << Endl;
+            }
+        }
+
+        void DoLockRowTx(ui32 tid, ELockMode mode, TKeys key, ui64 txId)
+        {
+            ui32 keyBytes = 0;
+
+            for (const auto& one : key) {
+                keyBytes += one.Size();
+            }
+
+            Updates++;
+            KeyBytes += keyBytes;
+            KeyItems += key.size();
+
+            Out
+                << " | LockRowTx " << tid
+                << ": " << TNames::Do(mode) << "." << unsigned(mode)
+                << ", " << key.size() << " keys (" << keyBytes << "b)"
+                << " txId " << txId
+                << Endl;
+
+            for (const auto& one : key) {
+                Out << "   > key: " << TDumpValue(one) << " <" << Endl;
             }
         }
 

@@ -46,11 +46,29 @@ Component LogsScroller(TLogBackendWithCapture& logBackend) {
         logBackend.GetLogLines([&](ELogPriority priority, const std::string& line) {
             // not very efficient, but it's OK.
             // TODO: currently it's impossible to have some words in paragraph colored
-            size_t dtLen = GetLenOfFormatDate8601Part();
-            size_t messageOffset = GetOffsetToLogMessage(priority);
+            const size_t dtLen = GetLenOfFormatDate8601Part();
 
-            TString withoutColor = TStringBuilder() << line.substr(0, dtLen - 1) << " "
-                << PriorityToString(priority) << line.substr(messageOffset, line.size() - 1);
+            TString withoutColor;
+            if (line.size() >= dtLen) {
+                // Try to find the separator ": " after the date, regardless of presence of ANSI colors
+                size_t searchFrom = dtLen; // after the YYYY-MM-DDTHH:MM:SS part
+                size_t colonPos = line.find(": ", searchFrom);
+                if (colonPos != std::string::npos) {
+                    // Keep everything from the colon onward (covers both colored and non-colored)
+                    withoutColor = TStringBuilder() << line.substr(0, dtLen - 1) << " "
+                        << PriorityToString(priority) << line.substr(colonPos);
+                }
+            }
+
+            if (withoutColor.empty()) {
+                // Fallback for lines not following the expected format (e.g. synthetic messages)
+                withoutColor = TString(line);
+            }
+
+            // Strip trailing newline/CR if present
+            while (!withoutColor.empty() && (withoutColor.back() == '\n' || withoutColor.back() == '\r')) {
+                withoutColor.pop_back();
+            }
 
             auto colorOpt = GetFtxuiLogColor(priority);
             logElements.push_back(paragraph(withoutColor)

@@ -58,7 +58,7 @@ bool TSchedulableActorBase::StartExecution(TMonotonic now) {
         }
     };
 
-    if (IsSchedulable && SchedulableTask->Query->GetSnapshot()) {
+    if (IsSchedulable) {
         // TODO: check heuristics if we should execute this task.
         Executed = SchedulableTask->TryIncreaseUsage();
         return Executed;
@@ -82,7 +82,9 @@ void TSchedulableActorBase::StopExecution(bool& forcedResume) {
         forcedResume = false;
         Executed = false;
 
-        SchedulableTask->Query->ResumeTasks(SchedulableTask->GetSpareUsage());
+        if (auto spareUsage = SchedulableTask->GetSpareUsage()) {
+            SchedulableTask->Query->ResumeTasks(spareUsage);
+        }
         // TODO: resume tasks for all queries from parent leaf pool
     } else if (Throttled) {
         Resume();
@@ -94,8 +96,7 @@ TDuration TSchedulableActorBase::CalculateDelay(TMonotonic) const {
 
     const auto query = SchedulableTask->Query;
     const auto snapshot = query->GetSnapshot();
-
-    const auto share = snapshot->FairShare;
+    const auto share = snapshot ? snapshot->FairShare : 1; // TODO: check if each query is allowed minimum fair-share?
 
     if (share < 1e-9) {
         return query->DelayParams->MaxDelay;

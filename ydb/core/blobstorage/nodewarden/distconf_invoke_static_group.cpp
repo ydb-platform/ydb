@@ -242,7 +242,6 @@ namespace NKikimr::NStorage {
         auto *ss = bsConfig->MutableServiceSet();
 
         bool changes = false;
-        ui32 pdiskUsageCount = 0;
 
         ui32 actualGroupGeneration = 0;
         for (const auto& group : ss->GetGroups()) {
@@ -256,12 +255,15 @@ namespace NKikimr::NStorage {
         for (size_t i = 0; i < ss->VDisksSize(); ++i) {
             if (const auto& vdisk = ss->GetVDisks(i); vdisk.HasVDiskID() && vdisk.HasVDiskLocation()) {
                 const TVDiskID currentVDiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
-                if (!currentVDiskId.SameExceptGeneration(vdiskId) ||
-                        vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
-                    continue;
+                if (!currentVDiskId.SameExceptGeneration(vdiskId)) {
+                    continue; // definitely incorrect group or position in group
+                }
+                if (isDropDonor && vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
+                    continue; // dropping donor and this entity is already destroyed
                 }
 
                 if (isDropDonor && !vdisk.HasDonorMode()) {
+                    // this is the active disk and we want to drop its donor
                     Y_ABORT_UNLESS(currentVDiskId.GroupGeneration == actualGroupGeneration);
                     auto *m = ss->MutableVDisks(i);
                     if (vdiskId.GroupGeneration) { // drop specific donor
@@ -283,23 +285,22 @@ namespace NKikimr::NStorage {
                 }
 
                 const auto& loc = vdisk.GetVDiskLocation();
-                if (loc.GetNodeID() != vslotId.GetNodeId() || loc.GetPDiskID() != vslotId.GetPDiskId()) {
-                    continue;
-                }
-                ++pdiskUsageCount;
-
-                if (loc.GetVDiskSlotID() != vslotId.GetVSlotId()) {
-                    continue;
+                if (loc.GetNodeID() != vslotId.GetNodeId() || loc.GetPDiskID() != vslotId.GetPDiskId() ||
+                        loc.GetVDiskSlotID() != vslotId.GetVSlotId()) {
+                    continue; // doesn't match our pdisk
                 }
 
+                // this must be the obsolete disk (donor has generation from the past, destroyed disks too)
                 Y_ABORT_UNLESS(currentVDiskId.GroupGeneration < actualGroupGeneration);
 
                 if (!isDropDonor) {
-                    --pdiskUsageCount;
+                    // destroying slot on this disk
                     ss->MutableVDisks()->DeleteSubrange(i--, 1);
                     changes = true;
-                } else if (vdisk.HasDonorMode()) {
-                    if (currentVDiskId == vdiskId || vdiskId.GroupGeneration == 0) {
+                } else {
+                    Y_ABORT_UNLESS(vdisk.HasDonorMode()); // we have already checked this case by now
+                    if (vdiskId.GroupGeneration == 0 || vdiskId.GroupGeneration == currentVDiskId.GroupGeneration) {
+                        // sign up this entity for destruction
                         auto *m = ss->MutableVDisks(i);
                         m->ClearDonorMode();
                         m->SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
@@ -309,12 +310,22 @@ namespace NKikimr::NStorage {
             }
         }
 
-        if (!isDropDonor && !pdiskUsageCount) {
+        bool unusedPDisk = true;
+        for (const auto& vdisk : ss->GetVDisks()) {
+            if (vdisk.HasVDiskLocation()) {
+                const auto& loc = vdisk.GetVDiskLocation();
+                if (loc.GetNodeID() == vslotId.GetNodeId() && loc.GetPDiskID() == vslotId.GetPDiskId()) {
+                    unusedPDisk = false;
+                    break;
+                }
+            }
+        }
+        if (unusedPDisk) {
             for (size_t i = 0; i < ss->PDisksSize(); ++i) {
                 if (const auto& pdisk = ss->GetPDisks(i); pdisk.HasNodeID() && pdisk.HasPDiskID() &&
                         pdisk.GetNodeID() == vslotId.GetNodeId() && pdisk.GetPDiskID() == vslotId.GetPDiskId()) {
+                    Y_ABORT_UNLESS(changes);
                     ss->MutablePDisks()->DeleteSubrange(i, 1);
-                    changes = true;
                     break;
                 }
             }

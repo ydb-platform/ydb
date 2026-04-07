@@ -9,14 +9,12 @@ PYTHONIC_NS_BEGIN
 namespace builtins
 {
   template <class T>
-  typename std::enable_if<std::is_integral<T>::value, T>::type
-  getattr(types::attr::REAL, T self)
+  std::enable_if_t<std::is_integral<T>::value, T> getattr(types::attr::REAL, T self)
   {
     return self;
   }
   template <class T>
-  typename std::enable_if<std::is_integral<T>::value, T>::type
-  getattr(types::attr::IMAG, T self)
+  std::enable_if_t<std::is_integral<T>::value, T> getattr(types::attr::IMAG, T self)
   {
     return T(0);
   }
@@ -31,13 +29,11 @@ PYTHONIC_NS_END
 PYTHONIC_NS_BEGIN
 
 template <class T>
-struct c_type_to_numpy_type
-    : c_type_to_numpy_type<decltype(std::declval<T>()())> {
+struct c_type_to_numpy_type : c_type_to_numpy_type<decltype(std::declval<T>()())> {
 };
 
 template <>
-struct c_type_to_numpy_type<long double>
-    : std::integral_constant<int, NPY_LONGDOUBLE> {
+struct c_type_to_numpy_type<long double> : std::integral_constant<int, NPY_LONGDOUBLE> {
 };
 
 template <>
@@ -49,13 +45,11 @@ struct c_type_to_numpy_type<float> : std::integral_constant<int, NPY_FLOAT> {
 };
 
 template <>
-struct c_type_to_numpy_type<std::complex<float>>
-    : std::integral_constant<int, NPY_CFLOAT> {
+struct c_type_to_numpy_type<std::complex<float>> : std::integral_constant<int, NPY_CFLOAT> {
 };
 
 template <>
-struct c_type_to_numpy_type<std::complex<double>>
-    : std::integral_constant<int, NPY_CDOUBLE> {
+struct c_type_to_numpy_type<std::complex<double>> : std::integral_constant<int, NPY_CDOUBLE> {
 };
 
 template <>
@@ -64,23 +58,19 @@ struct c_type_to_numpy_type<std::complex<long double>>
 };
 
 template <>
-struct c_type_to_numpy_type<signed long long>
-    : std::integral_constant<int, NPY_LONGLONG> {
+struct c_type_to_numpy_type<signed long long> : std::integral_constant<int, NPY_LONGLONG> {
 };
 
 template <>
-struct c_type_to_numpy_type<unsigned long long>
-    : std::integral_constant<int, NPY_ULONGLONG> {
+struct c_type_to_numpy_type<unsigned long long> : std::integral_constant<int, NPY_ULONGLONG> {
 };
 
 template <>
-struct c_type_to_numpy_type<signed long>
-    : std::integral_constant<int, NPY_LONG> {
+struct c_type_to_numpy_type<signed long> : std::integral_constant<int, NPY_LONG> {
 };
 
 template <>
-struct c_type_to_numpy_type<unsigned long>
-    : std::integral_constant<int, NPY_ULONG> {
+struct c_type_to_numpy_type<unsigned long> : std::integral_constant<int, NPY_ULONG> {
 };
 
 template <>
@@ -88,18 +78,15 @@ struct c_type_to_numpy_type<signed int> : std::integral_constant<int, NPY_INT> {
 };
 
 template <>
-struct c_type_to_numpy_type<unsigned int>
-    : std::integral_constant<int, NPY_UINT> {
+struct c_type_to_numpy_type<unsigned int> : std::integral_constant<int, NPY_UINT> {
 };
 
 template <>
-struct c_type_to_numpy_type<signed short>
-    : std::integral_constant<int, NPY_SHORT> {
+struct c_type_to_numpy_type<signed short> : std::integral_constant<int, NPY_SHORT> {
 };
 
 template <>
-struct c_type_to_numpy_type<unsigned short>
-    : std::integral_constant<int, NPY_USHORT> {
+struct c_type_to_numpy_type<unsigned short> : std::integral_constant<int, NPY_USHORT> {
 };
 
 template <>
@@ -107,13 +94,11 @@ struct c_type_to_numpy_type<char> : std::integral_constant<int, NPY_BYTE> {
 };
 
 template <>
-struct c_type_to_numpy_type<signed char>
-    : std::integral_constant<int, NPY_BYTE> {
+struct c_type_to_numpy_type<signed char> : std::integral_constant<int, NPY_BYTE> {
 };
 
 template <>
-struct c_type_to_numpy_type<unsigned char>
-    : std::integral_constant<int, NPY_UBYTE> {
+struct c_type_to_numpy_type<unsigned char> : std::integral_constant<int, NPY_UBYTE> {
 };
 
 template <>
@@ -131,12 +116,10 @@ struct c_type_to_numpy_type<bool> : std::integral_constant<int, NPY_BOOL> {
 #endif
 #endif
 
-#define PYTHONIC_INT_TO_PYTHON(TYPE)                                           \
-  inline PyObject *to_python<TYPE>::convert(TYPE l)                            \
-  {                                                                            \
-    return PyArray_Scalar(                                                     \
-        &l, PyArray_DescrFromType(c_type_to_numpy_type<TYPE>::value),          \
-        nullptr);                                                              \
+#define PYTHONIC_INT_TO_PYTHON(TYPE)                                                               \
+  inline PyObject *to_python<TYPE>::convert(TYPE l)                                                \
+  {                                                                                                \
+    return PyArray_Scalar(&l, PyArray_DescrFromType(c_type_to_numpy_type<TYPE>::value), nullptr);  \
   }
 
 PYTHONIC_INT_TO_PYTHON(char)
@@ -156,15 +139,14 @@ PYTHONIC_INT_TO_PYTHON(signed long long)
 
 #undef PYTHONIC_INT_TO_PYTHON
 
-#define PYTHONIC_INT_FROM_PYTHON(TYPE, NTYPE)                                  \
-  inline bool from_python<TYPE>::is_convertible(PyObject *obj)                 \
-  {                                                                            \
-    return PyInt_CheckExact(obj) ||                                            \
-           PyObject_TypeCheck(obj, &Py##NTYPE##ArrType_Type);                  \
-  }                                                                            \
-  inline TYPE from_python<TYPE>::convert(PyObject *obj)                        \
-  {                                                                            \
-    return PyInt_AsLong(obj);                                                  \
+#define PYTHONIC_INT_FROM_PYTHON(TYPE, NTYPE)                                                      \
+  inline bool from_python<TYPE>::is_convertible(PyObject *obj)                                     \
+  {                                                                                                \
+    return PyInt_CheckExact(obj) || PyObject_TypeCheck(obj, &Py##NTYPE##ArrType_Type);             \
+  }                                                                                                \
+  inline TYPE from_python<TYPE>::convert(PyObject *obj)                                            \
+  {                                                                                                \
+    return PyInt_AsLong(obj);                                                                      \
   }
 
 PYTHONIC_INT_FROM_PYTHON(unsigned char, UByte)

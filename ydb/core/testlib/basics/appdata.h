@@ -14,6 +14,7 @@
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/schemeshard_config.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/resource_broker.pb.h>
@@ -93,6 +94,8 @@ namespace NKikimr {
         void SetEnableDbCounters(bool value);
         void SetAwsRegion(const TString& value);
         void InitIcb(ui32 numNodes);
+        void InitDcb(ui32 numNodes);
+
 
         TIntrusivePtr<TChannelProfiles> Channels;
         NKikimrBlobStorage::TNodeWardenServiceSet BSConf;
@@ -115,6 +118,7 @@ namespace NKikimr {
         NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
         NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
         std::vector<TIntrusivePtr<NKikimr::TControlBoard>> Icb;
+        std::vector<TIntrusivePtr<NKikimr::TDynamicControlBoard>> Dcb;
 
     private:
         TAutoPtr<TMine> Mine;

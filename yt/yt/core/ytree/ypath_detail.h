@@ -16,6 +16,7 @@
 #include <yt/yt/core/yson/forwarding_consumer.h>
 
 #include <yt/yt/core/ytree/node.h>
+
 #include <yt/yt_proto/yt/core/ytree/proto/ypath.pb.h>
 
 #include <library/cpp/yt/misc/cast.h>
@@ -226,27 +227,32 @@ class TSupportsPermissions
 protected:
     virtual ~TSupportsPermissions() = default;
 
+    // Validates permissions for structural tree operations and general node access.
     // The last argument will be empty for contexts where authenticated user is known
     // a-priori (like in object proxies in master), otherwise it will be set to user name
     // (like in operation controller orchid).
+    // TODO(danilalexeev): YT-24575. Rename this to "ValidateStructuralPermissions".
     virtual void ValidatePermission(
         EPermissionCheckScope scope,
         EPermission permission,
         // TODO(babenko): replace with optional
         const std::string& user = {});
 
-    class TCachingPermissionValidator
+    // Validates permissions for operations on node content (attributes/data).
+    virtual void ValidateAdHocPermission(
+        EPermission permission,
+        // TODO(babenko): replace with optional
+        const std::string& user = {});
+
+    class TCachingAdHocPermissionValidator
     {
     public:
-        TCachingPermissionValidator(
-            TSupportsPermissions* owner,
-            EPermissionCheckScope scope);
+        TCachingAdHocPermissionValidator(TSupportsPermissions* owner);
 
         void Validate(EPermission permission, const std::string& user = {});
 
     private:
         TSupportsPermissions* const Owner_;
-        const EPermissionCheckScope Scope_;
 
         THashMap<TString, EPermissionSet> ValidatedPermissions_;
     };
@@ -267,10 +273,14 @@ class TSupportsAttributes
 protected:
     TSupportsAttributes();
 
-    IAttributeDictionary* GetCombinedAttributes();
+    const IAttributeDictionary& CombinedAttributes() const;
+    IAttributeDictionary* MutableCombinedAttributes();
 
-    //! Can be |nullptr|.
-    virtual IAttributeDictionary* GetCustomAttributes();
+    //! Always returns a valid dictionary.
+    //! If custom attributes are not supported then the latter is empty.
+    virtual const IAttributeDictionary& CustomAttributes() const;
+    //! May return null if custom attributes are not supported.
+    virtual IAttributeDictionary* MutableCustomAttributesOrNull();
 
     //! Can be |nullptr|.
     virtual ISystemAttributeProvider* GetBuiltinAttributeProvider();
@@ -334,7 +344,7 @@ private:
 
     using TCombinedAttributeDictionaryPtr = TIntrusivePtr<TCombinedAttributeDictionary>;
 
-    TCombinedAttributeDictionaryPtr CombinedAttributes_;
+    const TCombinedAttributeDictionaryPtr CombinedAttributes_;
 
     TFuture<NYson::TYsonString> DoFindAttribute(TStringBuf key);
 

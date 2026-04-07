@@ -58,9 +58,6 @@ public:
             partitioningParams->SetEachTopicPartitionGroupId(PartitionId1);
             partitioningParams->SetDqPartitionsCount(1);
 
-            TString serializedParams;
-            UNIT_ASSERT(params.SerializeToString(&serializedParams));
-
             auto [dqAsyncInput, dqAsyncInputAsActor] = CreateDqPqRdReadActor(
                 actor.TypeEnv,
                 std::move(settings),
@@ -69,7 +66,7 @@ public:
                 "query_1",
                 0,
                 {},
-                {{"pq", serializedParams}},
+                TVector<NPq::NProto::TDqReadTaskParams>{params},
                 Driver,
                 {},
                 actor.SelfId(),         // computeActorId
@@ -77,7 +74,8 @@ public:
                 actor.GetHolderFactory(),
                 MakeIntrusive<NMonitoring::TDynamicCounters>(),
                 freeSpace,
-                CreateMockPqGateway({.Runtime = CaSetup->Runtime.get()})
+                CreateMockPqGateway({.Runtime = CaSetup->Runtime.get()}),
+                true
             );
 
             actor.InitAsyncInput(dqAsyncInput, dqAsyncInputAsActor);
@@ -353,6 +351,20 @@ public:
         AssertDataWithWatermarks(expected, actual);
     }
 
+    void MockCoordinatorDistributionReset(NActors::TActorId coordinatorId) const {
+        CaSetup->Execute([&](TFakeActor& actor) {
+            auto event = new NFq::TEvRowDispatcher::TEvCoordinatorDistributionReset();
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, coordinatorId, event, 0));
+        });
+    }
+
+    void MockNoSession(NActors::TActorId rowDispatcherId, ui64 generation) const {
+        CaSetup->Execute([&](TFakeActor& actor) {
+            auto event = new NFq::TEvRowDispatcher::TEvNoSession();
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
+        });
+    }
+
 public:
     NYql::NPq::NProto::TDqPqTopicSource Settings = BuildPqTopicSourceSettings(
         "topic",
@@ -406,7 +418,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         StartSession(Settings);
 
         TInstant deadline = Now() + TDuration::Seconds(5);
-        auto future = CaSetup->AsyncInputPromises.FatalError.GetFuture();
+        auto future = CaSetup->AsyncInputPromises->FatalError.GetFuture();
         MockSessionError(RowDispatcherId1);
 
         bool failed = false;
@@ -890,6 +902,23 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
             };
             f.ReadMessages(expected);
         }
+    }
+
+    Y_UNIT_TEST_F(RebalanceAfterDistributionReset, TFixture) {
+        StartSession(Settings);
+        MockCoordinatorDistributionReset(CoordinatorId1);
+
+        auto req = ExpectCoordinatorRequest(CoordinatorId1);
+        MockCoordinatorResult(CoordinatorId1, {{RowDispatcherId2, PartitionId1}}, req->Cookie);
+        ExpectStartSession({}, RowDispatcherId2, 2);
+        MockAck(RowDispatcherId2, 2, PartitionId1);
+    }
+
+    Y_UNIT_TEST_F(ReInitAfterTEvNoSession, TFixture) {
+        StartSession(Settings);
+
+        MockNoSession(RowDispatcherId1, 1);
+        ExpectCoordinatorRequest(CoordinatorId1);
     }
 }
 

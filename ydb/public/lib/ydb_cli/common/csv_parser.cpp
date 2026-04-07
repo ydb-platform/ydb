@@ -271,10 +271,11 @@ public:
     }
 
     bool GetBool(const TString& token) const {
-        if (token == "true") {
+        TString tokenLowerCase = to_lower(token);
+        if (tokenLowerCase == "true") {
             return true;
         }
-        if (token == "false") {
+        if (tokenLowerCase == "false") {
             return false;
         }
         throw TCsvParseException() << "Expected bool value: \"true\" or \"false\", received: \"" << token << "\".";

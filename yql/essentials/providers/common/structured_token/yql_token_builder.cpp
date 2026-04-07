@@ -1,12 +1,13 @@
 #include "yql_token_builder.h"
 
+#include <utility>
+
 namespace NYql {
 TStructuredTokenBuilder::TStructuredTokenBuilder() {
-
 }
 
-TStructuredTokenBuilder::TStructuredTokenBuilder(const TStructuredToken& data)
-    : Data_(data)
+TStructuredTokenBuilder::TStructuredTokenBuilder(TStructuredToken data)
+    : Data_(std::move(data))
 {
 }
 
@@ -35,9 +36,20 @@ TStructuredTokenBuilder& TStructuredTokenBuilder::SetBasicAuthWithSecret(const T
     return *this;
 }
 
+TStructuredTokenBuilder& TStructuredTokenBuilder::SetIamAuth(const TString& serviceAccountId, const TString& resourceId) {
+    Data_.SetField("iam_sa_id", serviceAccountId);
+    Data_.SetField("iam_resource_id", resourceId);
+    return *this;
+}
+
 TStructuredTokenBuilder& TStructuredTokenBuilder::SetTokenAuthWithSecret(const TString& tokenReference, const TString& token) {
     Data_.SetField("token_ref", tokenReference);
     Data_.SetField("token", token);
+    return *this;
+}
+
+TStructuredTokenBuilder& TStructuredTokenBuilder::SetTransientTokenAuth(const TString& transientToken) {
+    Data_.SetField("transient_token", TString(transientToken));
     return *this;
 }
 
@@ -74,6 +86,9 @@ TStructuredTokenBuilder& TStructuredTokenBuilder::RemoveSecrets() {
     Data_.ClearField("basic_password");
     Data_.ClearField("sa_id_signature");
     Data_.ClearField("token");
+    if (Data_.HasField("transient_token")) {
+        Data_.SetField("transient_token", "");
+    }
     return *this;
 }
 
@@ -92,7 +107,7 @@ bool TStructuredTokenParser::HasServiceAccountIdAuth() const {
     return Data_.HasField("sa_id");
 }
 
-bool TStructuredTokenParser::GetServiceAccountIdAuth(TString& accountId, TString& accountIdSignature) const  {
+bool TStructuredTokenParser::GetServiceAccountIdAuth(TString& accountId, TString& accountIdSignature) const {
     TString accountIdSignatureReference;
     return GetServiceAccountIdAuth(accountId, accountIdSignature, accountIdSignatureReference);
 }
@@ -124,12 +139,30 @@ bool TStructuredTokenParser::HasIAMToken() const {
     return Data_.HasField("token");
 }
 
+bool TStructuredTokenParser::HasTransientToken() const {
+    return Data_.HasField("transient_token");
+}
+
 TString TStructuredTokenParser::GetIAMToken() const {
     return Data_.GetField("token");
 }
 
+TString TStructuredTokenParser::GetTransientToken() const {
+    return Data_.GetField("transient_token");
+}
+
 bool TStructuredTokenParser::IsNoAuth() const {
     return Data_.HasField("no_auth");
+}
+
+bool TStructuredTokenParser::GetIamAuth(TString& serviceAccountId, TString& resourceId) const {
+    serviceAccountId = Data_.GetField("iam_sa_id");
+    resourceId = Data_.GetField("iam_resource_id");
+    return true;
+}
+
+bool TStructuredTokenParser::HasIamAuth() const {
+    return Data_.HasField("iam_sa_id") && Data_.HasField("iam_resource_id");
 }
 
 void TStructuredTokenParser::ListReferences(TSet<TString>& references) const {
@@ -181,6 +214,19 @@ TString ComposeStructuredTokenJsonForServiceAccountWithSecret(const TString& ser
     return result.ToJson();
 }
 
+TString ComposeStructuredTokenJsonForBasicAuth(const TString& login, const TString& password) {
+    TStructuredTokenBuilder result;
+
+    // password is optional
+    if (login) {
+        result.SetBasicAuth(login, password);
+        return result.ToJson();
+    }
+
+    result.SetNoAuth();
+    return result.ToJson();
+}
+
 TString ComposeStructuredTokenJsonForBasicAuthWithSecret(const TString& login, const TString& passwordSecretName, const TString& password) {
     TStructuredTokenBuilder result;
 
@@ -205,4 +251,28 @@ TString ComposeStructuredTokenJsonForTokenAuthWithSecret(const TString& tokenSec
     return result.ToJson();
 }
 
+TString ComposeStructuredTokenJsonForTransientTokenAuth(const TString& transientToken) {
+    TStructuredTokenBuilder result;
+
+    if (transientToken) {
+        result.SetTransientTokenAuth(transientToken);
+        return result.ToJson();
+    }
+
+    result.SetNoAuth();
+    return result.ToJson();
 }
+
+TString ComposeStructuredTokenJsonForIamAuth(const TString& serviceAccountId, const TString& resourceId) {
+    TStructuredTokenBuilder result;
+
+    if (serviceAccountId && resourceId) {
+        result.SetIamAuth(serviceAccountId, resourceId);
+        return result.ToJson();
+    }
+
+    result.SetNoAuth();
+    return result.ToJson();
+}
+
+} // namespace NYql

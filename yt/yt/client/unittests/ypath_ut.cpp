@@ -3,6 +3,7 @@
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/client/ypath/rich.h>
+#include <yt/yt/client/ypath/rich_constrained.h>
 
 #include <yt/yt/client/chunk_client/helpers.h>
 
@@ -49,7 +50,7 @@ public:
         return ConvertToYsonString(data, NYson::EYsonFormat::Text);
     }
 
-    void Set(const TYPath& path, const TString& value)
+    void Set(const TYPath& path, const std::string& value)
     {
         SyncYPathSet(RootService, path, TYsonString(value));
     }
@@ -64,12 +65,12 @@ public:
         return TextifyYson(SyncYPathGet(RootService, path));
     }
 
-    std::vector<TString> List(const TYPath& path)
+    std::vector<std::string> List(const TYPath& path)
     {
         return SyncYPathList(RootService, path);
     }
 
-    void Check(const TYPath& path, const TString& expected)
+    void Check(const TYPath& path, const std::string& expected)
     {
         TYsonString output = Get(path);
         EXPECT_TRUE(
@@ -184,7 +185,7 @@ TEST_F(TYPathTest, Ls)
     auto result = List("");
     std::sort(result.begin(), result.end());
 
-    std::vector<TString> expected;
+    std::vector<std::string> expected;
     expected.push_back("a");
     expected.push_back("c");
     expected.push_back("d");
@@ -878,11 +879,45 @@ TEST_F(TYPathTest, RangesTypeHintsUint64)
         smallYpath.GetNewRanges(comparator, {NTableClient::EValueType::Int64, NTableClient::EValueType::Double}));
 }
 
+TEST_F(TYPathTest, RowIndexInRanges)
+{
+    auto hasRowIndex = [] (const auto& path) {
+        return TRichYPath::Parse(path).HasRowIndexInRanges();
+    };
+
+    EXPECT_TRUE(hasRowIndex("<ranges=[{exact={row_index=1}}]>//path/to/table"));
+
+    EXPECT_TRUE(hasRowIndex("<ranges=[{lower_limit={row_index=0}}]>//path/to/table"));
+    EXPECT_TRUE(hasRowIndex("<ranges=[{upper_limit={row_index=2}}]>//path/to/table"));
+    EXPECT_TRUE(hasRowIndex("<ranges=[{lower_limit={row_index=0};upper_limit={row_index=2}}]>//path/to/table"));
+
+    EXPECT_TRUE(hasRowIndex("<lower_limit={row_index=0}>//path/to/table"));
+    EXPECT_TRUE(hasRowIndex("<upper_limit={row_index=2}>//path/to/table"));
+    EXPECT_TRUE(hasRowIndex("<lower_limit={row_index=0};upper_limit={row_index=2}>//path/to/table"));
+
+    EXPECT_TRUE(hasRowIndex("<lower_limit={row_index=0;key=[42;43]};upper_limit={row_index=2;key=[45;47]}>//path/to/table"));
+    EXPECT_TRUE(hasRowIndex("<lower_limit={row_index=0};upper_limit={row_index=2}>//path/to/table"));
+
+    EXPECT_TRUE(hasRowIndex("<lower_limit={row_index=0};upper_limit={key=abc}>//path/to/table"));
+    EXPECT_TRUE(hasRowIndex("<lower_limit={key=abc};upper_limit={row_index=2}>//path/to/table"));
+
+    EXPECT_TRUE(hasRowIndex("//path/to/table[#1:#2]"));
+    EXPECT_TRUE(hasRowIndex("//path/to/table[#1]"));
+    EXPECT_TRUE(hasRowIndex("//path/to/table[#1,a:b]"));
+    EXPECT_TRUE(hasRowIndex("//path/to/table[#1:b]"));
+
+    EXPECT_FALSE(hasRowIndex("//path/to/table"));
+    EXPECT_FALSE(hasRowIndex("//path/to/table[a:b]"));
+    EXPECT_FALSE(hasRowIndex("//path/to/table[\"#1\"]"));
+    EXPECT_FALSE(hasRowIndex("<lower_limit={key=[0]};upper_limit={key=[2]}>//path/to/table"));
+    EXPECT_FALSE(hasRowIndex("<ranges=[{lower_limit={key=[0]};upper_limit={key=[2]}}]>//path/to/table"));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TRichYPathToStringTest
     : public ::testing::Test
-    , public ::testing::WithParamInterface<TString>
+    , public ::testing::WithParamInterface<std::string>
 { };
 
 TEST_P(TRichYPathToStringTest, TestRichYPathToString)
@@ -913,12 +948,12 @@ class TEmbeddedYPathOpsTest
     : public ::testing::Test
 {
 public:
-    static INodePtr ParseNode(const TString& data)
+    static INodePtr ParseNode(const std::string& data)
     {
         return ConvertToNode(TYsonString(data));
     }
 
-    static void ExpectEqual(INodePtr node, const TString& ysonString)
+    static void ExpectEqual(INodePtr node, const std::string& ysonString)
     {
         EXPECT_EQ(ConvertToYsonString(node, EYsonFormat::Text).AsStringBuf(), ysonString);
     }
@@ -956,6 +991,130 @@ TEST_F(TEmbeddedYPathOpsTest, attributes)
 
     EXPECT_THROW(GetNodeByYPath(node, "/home/dir1/@user_attr/bar"), std::exception);
     EXPECT_THROW(GetNodeByYPath(node, "/home/dir2/@account"), std::exception);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+inline constexpr char MyAttributeKey1[] = "my_attribute_1";
+inline constexpr char MyAttributeKey2[] = "my_attribute_2";
+inline constexpr char ClusterKey[] = "cluster";
+
+TEST(TConstraintRichYPathTest, AllowedAttributes)
+{
+    using TWhitelistAttributePath = TConstrainedRichYPath<TWhitelistAttributesValidator<MyAttributeKey1, MyAttributeKey2>>;
+    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TWhitelistAttributePath(TRichYPath("<a=b>//home/path"))), "YPath \"<\\\"a\\\"=\\\"b\\\";\\n>//home/path\" has unexpected attribute \"a\"");
+    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TWhitelistAttributePath(TRichYPath("<a=b;my_attribute_1=b>//home/path"))), "YPath \"<\\\"a\\\"=\\\"b\\\";\\n\\\"my_attribute_1\\\"=\\\"b\\\";\\n>//home/path\" has unexpected attribute \"a\"");
+    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TWhitelistAttributePath(TRichYPath("<a=b;my_attribute_1=b;my_attribute_2=b>//home/path"))), "YPath \"<\\\"a\\\"=\\\"b\\\";\\n\\\"my_attribute_1\\\"=\\\"b\\\";\\n\\\"my_attribute_2\\\"=\\\"b\\\";\\n>//home/path\" has unexpected attribute \"a\"");
+    Y_UNUSED(TWhitelistAttributePath(TRichYPath("<my_attribute_1=b>//home/path")));
+    Y_UNUSED(TWhitelistAttributePath(TRichYPath("<my_attribute_2=b>//home/path")));
+    Y_UNUSED(TWhitelistAttributePath(TRichYPath("<my_attribute_2=b;my_attribute_1=b>//home/path")));
+};
+
+TEST(TConstraintRichYPathTest, RequiredAttributes)
+{
+    using TRequiredAttributePath = TConstrainedRichYPath<TRequiredAttributesValidator<MyAttributeKey1, MyAttributeKey2>>;
+    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TRequiredAttributePath(TRichYPath("<a=b>//home/path"))), "YPath \"<\\\"a\\\"=\\\"b\\\";\\n>//home/path\" does not have attribute \"my_attribute_");
+    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TRequiredAttributePath(TRichYPath("<a=b;my_attribute_1=b>//home/path"))), "YPath \"<\\\"a\\\"=\\\"b\\\";\\n\\\"my_attribute_1\\\"=\\\"b\\\";\\n>//home/path\" does not have attribute \"my_attribute_2\"");
+    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(TRequiredAttributePath(TRichYPath("<my_attribute_2=b>//home/path"))), "YPath \"<\\\"my_attribute_2\\\"=\\\"b\\\";\\n>//home/path\" does not have attribute \"my_attribute_1\"");
+    Y_UNUSED(TRequiredAttributePath(TRichYPath("<my_attribute_1=b;my_attribute_2=b>//home/path")));
+    Y_UNUSED(TRequiredAttributePath(TRichYPath("<my_attribute_1=b;my_attribute_2=b;a=b>//home/path")));
+}
+
+TEST(TConstraintRichYPathTest, BasicMethods)
+{
+    using TRequiredAttributePath = TConstrainedRichYPath<TWhitelistAttributesValidator<MyAttributeKey1, ClusterKey>>;
+    auto path = TRequiredAttributePath("<my_attribute_1=b>//home/path");
+    EXPECT_EQ(path.GetPath(), "//home/path");
+    path.SetPath("//new/path");
+    EXPECT_EQ(path.GetPath(), "//new/path");
+
+    EXPECT_EQ(path.Attributes().Get<std::string>(MyAttributeKey1), "b");
+
+    path.SetAttribute(MyAttributeKey1, "hello");
+    EXPECT_EQ(path.Attributes().Get<std::string>(MyAttributeKey1), "hello");
+
+    path.RemoveAttribute(MyAttributeKey1);
+    EXPECT_THROW(path.Attributes().Get<std::string>(MyAttributeKey1), TErrorException);
+
+    path.SetCluster("primary");
+    EXPECT_EQ(path.GetCluster(), "primary");
+}
+
+TEST(TConstraintRichYPathTest, Serialization)
+{
+    using TRequiredAttributePath = TConstrainedRichYPath<TWhitelistAttributesValidator<MyAttributeKey1>>;
+    auto path = TRequiredAttributePath("<my_attribute_1=b>//home/path");
+    auto ysonString = ConvertToYsonString(path);
+
+    {
+        TRequiredAttributePath otherPath;
+        auto node = ConvertToNode(ysonString);
+        Deserialize(otherPath, node);
+        EXPECT_EQ(otherPath, path);
+    }
+
+    {
+        auto buf = ToString(ysonString);
+        TMemoryInput input(buf.data(), buf.size());
+        NYson::TYsonPullParser parser(&input, NYson::EYsonType::Node);
+        NYson::TYsonPullParserCursor cursor(&parser);
+
+        TRequiredAttributePath otherPath;
+        Deserialize(otherPath, &cursor);
+        EXPECT_EQ(otherPath, path);
+    }
+}
+
+TEST(TConstraintRichYPathTest, Context)
+{
+    using TRequiredAttributePath = TConstrainedRichYPath<TWhitelistAttributesValidator<MyAttributeKey1>>;
+    auto path = TRequiredAttributePath("<my_attribute_1=b>//home/path");
+    TStringStream stream;
+    TStreamSaveContext saveContext(&stream);
+
+    path.Save(saveContext);
+
+    TRequiredAttributePath otherPath;
+    TStreamLoadContext loadContext(&stream);
+    otherPath.Load(loadContext);
+
+    EXPECT_EQ(otherPath, path);
+}
+
+void AssignPathModifyAttributes(auto left, auto right) {
+    EXPECT_EQ(right.GetCluster(), std::nullopt);
+    left = right;
+    right.SetCluster("primary");
+    EXPECT_EQ(left.GetCluster(), std::nullopt);
+    EXPECT_EQ(right.GetCluster(), "primary");
+}
+
+TEST(TConstraintRichYPathTest, ModifyAttributesAfterAssign)
+{
+    using TWhiteListedAttributePath = TConstrainedRichYPath<TWhitelistAttributesValidator<ClusterKey>>;
+    AssignPathModifyAttributes(TRichYPath(), TRichYPath("//home/path"));
+    AssignPathModifyAttributes(TWhiteListedAttributePath(), TRichYPath("//home/path"));
+    AssignPathModifyAttributes(TRichYPath(), TWhiteListedAttributePath("//home/path"));
+    AssignPathModifyAttributes(TWhiteListedAttributePath(), TWhiteListedAttributePath("//home/path"));
+}
+
+template <typename T>
+void CopyPathModifyAttributes(auto right)
+{
+    EXPECT_EQ(right.GetCluster(), std::nullopt);
+    T left(right);
+    right.SetCluster("primary");
+    EXPECT_EQ(left.GetCluster(), std::nullopt);
+    EXPECT_EQ(right.GetCluster(), "primary");
+}
+
+TEST(TConstraintRichYPathTest, ModifyAttributesAfterCopy)
+{
+    using TWhiteListedAttributePath = TConstrainedRichYPath<TWhitelistAttributesValidator<ClusterKey>>;
+    CopyPathModifyAttributes<TRichYPath>(TRichYPath("//home/path"));
+    CopyPathModifyAttributes<TWhiteListedAttributePath>(TRichYPath("//home/path"));
+    CopyPathModifyAttributes<TRichYPath>(TWhiteListedAttributePath("//home/path"));
+    CopyPathModifyAttributes<TWhiteListedAttributePath>(TWhiteListedAttributePath("//home/path"));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

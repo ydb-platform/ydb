@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
 
 namespace arrow20 {
 

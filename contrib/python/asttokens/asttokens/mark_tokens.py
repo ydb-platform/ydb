@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#    http://www.apache.org/licenses/LICENSE-2.0
+#    https://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -400,7 +400,9 @@ class MarkTokens:
 
   def visit_num(self, node, first_token, last_token):
     # type: (AstNode, util.Token, util.Token) -> Tuple[util.Token, util.Token]
-    return self.handle_num(node, cast(ast.Num, node).n, first_token, last_token)
+    n = node.n  # type: ignore[union-attr] # ast.Num has been removed in python 3.14
+    assert isinstance(n, (complex, int, numbers.Number))
+    return self.handle_num(node, n, first_token, last_token)
 
   def visit_const(self, node, first_token, last_token):
     # type: (AstNode, util.Token, util.Token) -> Tuple[util.Token, util.Token]

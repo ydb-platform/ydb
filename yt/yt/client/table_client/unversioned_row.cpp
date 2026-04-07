@@ -70,7 +70,8 @@ TUnversionedOwningValue::TUnversionedOwningValue(const TUnversionedValue& other)
     , StringHolder_(nullptr)
 {
     if (IsStringLikeType(Value_.Type)) {
-        auto ref = TSharedRef::FromString(TString{Value_.Data.String, Value_.Length});
+        auto ref = TSharedMutableRef::Allocate<TOwningValueTag>(Value_.Length, {.InitializeStorage = false});
+        ::memcpy(ref.data(), Value_.Data.String, Value_.Length);
         Value_.Data.String = ref.data();
         StringHolder_ = ref.ReleaseHolder();
     }
@@ -109,6 +110,11 @@ TSharedRef TUnversionedOwningValue::GetStringRef() const
 {
     YT_VERIFY(IsStringLikeType(Value_.Type));
     return TSharedRef(Value_.Data.String, Value_.Length, StringHolder_);
+}
+
+TSharedRangeHolderPtr TUnversionedOwningValue::GetStringHolder() const
+{
+    return StringHolder_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -431,7 +437,7 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
         }
     }
 
-    if (Y_UNLIKELY(lhs.Type != rhs.Type)) {
+    if (lhs.Type != rhs.Type) [[unlikely]] {
         return TernaryCompare(lhs.Type, rhs.Type);
     }
 
@@ -457,27 +463,27 @@ int CompareRowValues(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
     }
 }
 
-bool operator == (const TUnversionedValue& lhs, const TUnversionedValue& rhs)
+bool operator==(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
 {
     return CompareRowValues(lhs, rhs) == 0;
 }
 
-bool operator <= (const TUnversionedValue& lhs, const TUnversionedValue& rhs)
+bool operator<=(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
 {
     return CompareRowValues(lhs, rhs) <= 0;
 }
 
-bool operator < (const TUnversionedValue& lhs, const TUnversionedValue& rhs)
+bool operator<(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
 {
     return CompareRowValues(lhs, rhs) < 0;
 }
 
-bool operator >= (const TUnversionedValue& lhs, const TUnversionedValue& rhs)
+bool operator>=(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
 {
     return CompareRowValues(lhs, rhs) >= 0;
 }
 
-bool operator > (const TUnversionedValue& lhs, const TUnversionedValue& rhs)
+bool operator>(const TUnversionedValue& lhs, const TUnversionedValue& rhs)
 {
     return CompareRowValues(lhs, rhs) > 0;
 }
@@ -516,54 +522,54 @@ int CompareRows(TUnversionedRow lhs, TUnversionedRow rhs, ui32 prefixLength)
         rhs.FirstNElements(std::min(rhs.GetCount(), prefixLength)));
 }
 
-bool operator == (TUnversionedRow lhs, TUnversionedRow rhs)
+bool operator==(TUnversionedRow lhs, TUnversionedRow rhs)
 {
     return CompareRows(lhs, rhs) == 0;
 }
 
-bool operator <= (TUnversionedRow lhs, TUnversionedRow rhs)
+bool operator<=(TUnversionedRow lhs, TUnversionedRow rhs)
 {
     return CompareRows(lhs, rhs) <= 0;
 }
 
-bool operator < (TUnversionedRow lhs, TUnversionedRow rhs)
+bool operator<(TUnversionedRow lhs, TUnversionedRow rhs)
 {
     return CompareRows(lhs, rhs) < 0;
 }
 
-bool operator >= (TUnversionedRow lhs, TUnversionedRow rhs)
+bool operator>=(TUnversionedRow lhs, TUnversionedRow rhs)
 {
     return CompareRows(lhs, rhs) >= 0;
 }
 
-bool operator > (TUnversionedRow lhs, TUnversionedRow rhs)
+bool operator>(TUnversionedRow lhs, TUnversionedRow rhs)
 {
     return CompareRows(lhs, rhs) > 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator == (TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
+bool operator==(TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
 {
     return CompareRows(lhs, rhs) == 0;
 }
 
-bool operator <= (TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
+bool operator<=(TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
 {
     return CompareRows(lhs, rhs) <= 0;
 }
 
-bool operator < (TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
+bool operator<(TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
 {
     return CompareRows(lhs, rhs) < 0;
 }
 
-bool operator >= (TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
+bool operator>=(TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
 {
     return CompareRows(lhs, rhs) >= 0;
 }
 
-bool operator > (TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
+bool operator>(TUnversionedRow lhs, const TUnversionedOwningRow& rhs)
 {
     return CompareRows(lhs, rhs) > 0;
 }
@@ -592,7 +598,7 @@ size_t GetUnversionedRowByteSize(ui32 valueCount)
     return sizeof(TUnversionedRowHeader) + sizeof(TUnversionedValue) * valueCount;
 }
 
-size_t GetDataWeight(TUnversionedRow row)
+i64 GetDataWeight(TUnversionedRow row)
 {
     if (!row) {
         return 0;
@@ -605,7 +611,7 @@ size_t GetDataWeight(TUnversionedRow row)
     return result;
 }
 
-size_t GetDataWeight(TRange<TUnversionedRow> rows)
+i64 GetDataWeight(TRange<TUnversionedRow> rows)
 {
     size_t result = 0;
     for (auto row : rows) {

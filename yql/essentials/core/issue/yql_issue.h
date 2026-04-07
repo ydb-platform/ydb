@@ -5,22 +5,22 @@
 #include <yql/essentials/public/issue/yql_issue_id.h>
 
 #ifdef _win_
-#ifdef GetMessage
-#undef GetMessage
-#endif
+    #ifdef GetMessage
+        #undef GetMessage
+    #endif
 #endif
 
 namespace NYql {
 
-extern const char IssueMapResource[14];
+extern const std::array<char, 14> IssueMapResource;
 using EYqlIssueCode = TIssuesIds::EIssueCode;
 
 inline ESeverity GetSeverity(EYqlIssueCode id) {
-    return GetSeverity<TIssuesIds, IssueMapResource>(id);
+    return GetSeverity<TIssuesIds, IssueMapResource.data()>(id);
 }
 
 inline TString GetMessage(EYqlIssueCode id) {
-    return GetMessage<TIssuesIds, IssueMapResource>(id);
+    return GetMessage<TIssuesIds, IssueMapResource.data()>(id);
 }
 
 inline TIssue& SetIssueCode(EYqlIssueCode id, TIssue& issue) {
@@ -48,6 +48,7 @@ inline TIssue YqlIssue(const TPosition& position, EYqlIssueCode id) {
     return YqlIssue(position, id, IssueCodeToString(id));
 }
 
-void CheckFatalIssues(TIssues& issues);
+// reportTarget allows to describe a way to report bugs (e.g. a GitHub issue)
+void CheckFatalIssues(TIssues& issues, const TString& reportTarget);
 
-}
+} // namespace NYql

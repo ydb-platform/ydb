@@ -188,6 +188,13 @@ struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplicati
 };
 
 template <>
+struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer>
+    : public TSchemeTxTraitsFallback
+{
+    constexpr inline static bool CreateDirsFromName = true;
+};
+
+template <>
 struct TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateSecret>
     : public TSchemeTxTraitsFallback
 {

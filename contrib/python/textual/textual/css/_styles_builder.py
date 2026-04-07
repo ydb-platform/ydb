@@ -22,6 +22,7 @@ from textual.css._help_text import (
     layout_property_help_text,
     offset_property_help_text,
     offset_single_axis_help_text,
+    position_help_text,
     property_invalid_value_help_text,
     scalar_help_text,
     scrollbar_size_property_help_text,
@@ -47,9 +48,12 @@ from textual.css.constants import (
     VALID_KEYLINE,
     VALID_OVERFLOW,
     VALID_OVERLAY,
+    VALID_POSITION,
     VALID_SCROLLBAR_GUTTER,
     VALID_STYLE_FLAGS,
     VALID_TEXT_ALIGN,
+    VALID_TEXT_OVERFLOW,
+    VALID_TEXT_WRAP,
     VALID_VISIBILITY,
 )
 from textual.css.errors import DeclarationError, StyleValueError
@@ -65,7 +69,15 @@ from textual.css.scalar import (
 from textual.css.styles import Styles
 from textual.css.tokenize import Token
 from textual.css.transition import Transition
-from textual.css.types import BoxSizing, Display, EdgeType, Overflow, Visibility
+from textual.css.types import (
+    BoxSizing,
+    Display,
+    EdgeType,
+    Overflow,
+    TextOverflow,
+    TextWrap,
+    Visibility,
+)
 from textual.geometry import Spacing, SpacingDimensions, clamp
 from textual.suggestions import get_suggestion
 
@@ -351,6 +363,52 @@ class StylesBuilder:
                     "visibility", valid_values=list(VALID_VISIBILITY), context="css"
                 )
 
+    def process_text_wrap(self, name: str, tokens: list[Token]) -> None:
+        for token in tokens:
+            name, value, _, _, location, _ = token
+            if name == "token":
+                value = value.lower()
+                if value in VALID_TEXT_WRAP:
+                    self.styles._rules["text_wrap"] = cast(TextWrap, value)
+                else:
+                    self.error(
+                        name,
+                        token,
+                        string_enum_help_text(
+                            "text-wrap",
+                            valid_values=list(VALID_TEXT_WRAP),
+                            context="css",
+                        ),
+                    )
+            else:
+                string_enum_help_text(
+                    "text-wrap", valid_values=list(VALID_TEXT_WRAP), context="css"
+                )
+
+    def process_text_overflow(self, name: str, tokens: list[Token]) -> None:
+        for token in tokens:
+            name, value, _, _, location, _ = token
+            if name == "token":
+                value = value.lower()
+                if value in VALID_TEXT_OVERFLOW:
+                    self.styles._rules["text_overflow"] = cast(TextOverflow, value)
+                else:
+                    self.error(
+                        name,
+                        token,
+                        string_enum_help_text(
+                            "text-overflow",
+                            valid_values=list(VALID_TEXT_OVERFLOW),
+                            context="css",
+                        ),
+                    )
+            else:
+                string_enum_help_text(
+                    "text-overflow",
+                    valid_values=list(VALID_TEXT_OVERFLOW),
+                    context="css",
+                )
+
     def _process_fractional(self, name: str, tokens: list[Token]) -> None:
         if not tokens:
             return
@@ -553,7 +611,9 @@ class StylesBuilder:
                     self.error(
                         name,
                         token,
-                        color_property_help_text(name, context="css", error=error),
+                        color_property_help_text(
+                            name, context="css", error=error, value=token.value
+                        ),
                     )
             elif token.name == "token":
                 try:
@@ -620,6 +680,17 @@ class StylesBuilder:
             x = self.styles.offset.x
             self.styles._rules["offset"] = ScalarOffset(x, y)
 
+    def process_position(self, name: str, tokens: list[Token]):
+        if not tokens:
+            return
+        if len(tokens) != 1:
+            self.error(name, tokens[0], offset_single_axis_help_text(name))
+        else:
+            token = tokens[0]
+            if token.value not in VALID_POSITION:
+                self.error(name, tokens[0], position_help_text(name))
+            self.styles._rules["position"] = token.value
+
     def process_layout(self, name: str, tokens: list[Token]) -> None:
         from textual.layouts.factory import MissingLayout, get_layout
 
@@ -668,10 +739,16 @@ class StylesBuilder:
                     self.error(
                         name,
                         token,
-                        color_property_help_text(name, context="css", error=error),
+                        color_property_help_text(
+                            name, context="css", error=error, value=token.value
+                        ),
                     )
             else:
-                self.error(name, token, color_property_help_text(name, context="css"))
+                self.error(
+                    name,
+                    token,
+                    color_property_help_text(name, context="css", value=token.value),
+                )
 
         if color is not None or alpha is not None:
             if alpha is not None:
@@ -1149,7 +1226,9 @@ class StylesBuilder:
                 self.error(
                     name,
                     color_token,
-                    color_property_help_text(name, context="css", error=error),
+                    color_property_help_text(
+                        name, context="css", error=error, value=color_token.value
+                    ),
                 )
         else:
             self.error(

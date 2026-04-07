@@ -10,7 +10,7 @@
 // non-const method, all threads accessing the same Status must use
 // external synchronization.
 
-#include "arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
 
 #include <cassert>
 #include <cstdlib>
@@ -19,7 +19,7 @@
 #  include <sstream>
 #endif
 
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 

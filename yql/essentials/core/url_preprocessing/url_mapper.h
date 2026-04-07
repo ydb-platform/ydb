@@ -3,6 +3,8 @@
 #include <library/cpp/regex/pcre/regexp.h>
 #include <util/generic/vector.h>
 
+#include <utility>
+
 namespace NYql {
 
 class TUrlMapper {
@@ -12,10 +14,11 @@ public:
 
 private:
     struct TCustomScheme {
-        TCustomScheme(const TString& pattern, const TString& url)
+        TCustomScheme(const TString& pattern, TString url)
             : Pattern(pattern)
-            , TargetUrlHolder(url)
-            , TargetUrlSubst(pattern.data()) {
+            , TargetUrlHolder(std::move(url))
+            , TargetUrlSubst(pattern.data())
+        {
             if (0 == TargetUrlSubst.ParseReplacement(TargetUrlHolder.data())) {
                 ythrow yexception() << "Bad url replacement: " << TargetUrlHolder;
             }
@@ -29,4 +32,4 @@ private:
     TVector<TCustomScheme> CustomSchemes_;
 };
 
-}
+} // namespace NYql

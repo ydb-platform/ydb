@@ -21,6 +21,9 @@ struct TCmsSentinelConfig {
         TDuration WaitForConfigStep;
         TDuration RelaxTime;
         bool PileupReplicas;
+        ui32 OverrideReplicasInRingCount;
+        ui32 OverrideRingsCount;
+        ui32 ReplicasSpecificVolume;
 
         void Serialize(NKikimrCms::TCmsConfig::TSentinelConfig::TStateStorageSelfHealConfig &config) const {
             config.SetEnable(Enable);
@@ -30,6 +33,9 @@ struct TCmsSentinelConfig {
             config.SetWaitForConfigStep(WaitForConfigStep.GetValue());
             config.SetRelaxTime(RelaxTime.GetValue());
             config.SetPileupReplicas(PileupReplicas);
+            config.SetOverrideReplicasInRingCount(OverrideReplicasInRingCount);
+            config.SetOverrideRingsCount(OverrideRingsCount);
+            config.SetReplicasSpecificVolume(ReplicasSpecificVolume);
         }
 
         void Deserialize(const NKikimrCms::TCmsConfig::TSentinelConfig::TStateStorageSelfHealConfig &config) {
@@ -40,6 +46,9 @@ struct TCmsSentinelConfig {
             WaitForConfigStep = TDuration::MicroSeconds(config.GetWaitForConfigStep());
             RelaxTime = TDuration::MicroSeconds(config.GetRelaxTime());
             PileupReplicas = config.GetPileupReplicas();
+            OverrideReplicasInRingCount = config.GetOverrideReplicasInRingCount();
+            OverrideRingsCount = config.GetOverrideRingsCount();
+            ReplicasSpecificVolume = config.GetReplicasSpecificVolume();
         }
     };
 
@@ -69,6 +78,8 @@ struct TCmsSentinelConfig {
 
     TStateStorageSelfHealConfig StateStorageSelfHealConfig;
 
+    TDuration InitialDeploymentGracePeriod;
+
     void Serialize(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {
         config.SetEnable(Enable);
         config.SetDryRun(DryRun);
@@ -91,6 +102,8 @@ struct TCmsSentinelConfig {
 
         SaveStateLimits(config);
         SaveEvictVDisksStatus(config);
+
+        config.SetInitialDeploymentGracePeriod(InitialDeploymentGracePeriod.GetValue());
     }
 
     void Deserialize(const NKikimrCms::TCmsConfig::TSentinelConfig &config) {
@@ -116,6 +129,8 @@ struct TCmsSentinelConfig {
         StateLimits.swap(newStateLimits);
 
         EvictVDisksStatus = LoadEvictVDisksStatus(config);
+
+        InitialDeploymentGracePeriod = TDuration::MicroSeconds(config.GetInitialDeploymentGracePeriod());
     }
 
     void SaveStateLimits(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {
@@ -248,6 +263,7 @@ struct TCmsLogConfig {
 };
 
 struct TCmsConfig {
+    bool DisableMaintenance = false;
     TDuration DefaultRetryTime;
     TDuration DefaultPermissionDuration;
     TDuration DefaultWalleCleanupPeriod = TDuration::Minutes(1);
@@ -266,6 +282,7 @@ struct TCmsConfig {
     }
 
     void Serialize(NKikimrCms::TCmsConfig &config) const {
+        config.SetDisableMaintenance(DisableMaintenance);
         config.SetDefaultRetryTime(DefaultRetryTime.GetValue());
         config.SetDefaultPermissionDuration(DefaultPermissionDuration.GetValue());
         config.SetInfoCollectionTimeout(InfoCollectionTimeout.GetValue());
@@ -276,6 +293,7 @@ struct TCmsConfig {
     }
 
     void Deserialize(const NKikimrCms::TCmsConfig &config) {
+        DisableMaintenance = config.GetDisableMaintenance();
         DefaultRetryTime = TDuration::MicroSeconds(config.GetDefaultRetryTime());
         DefaultPermissionDuration = TDuration::MicroSeconds(config.GetDefaultPermissionDuration());
         InfoCollectionTimeout = TDuration::MicroSeconds(config.GetInfoCollectionTimeout());

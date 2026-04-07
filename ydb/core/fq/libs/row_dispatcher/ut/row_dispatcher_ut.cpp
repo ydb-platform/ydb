@@ -8,6 +8,8 @@
 #include <ydb/core/testlib/actor_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 namespace {
 
@@ -31,7 +33,8 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
         const TString& /*topicPath*/,
         const TString& /*endpoint*/,
         const TString& /*database*/,
-        const NConfig::TRowDispatcherConfig& /*config*/,
+        const TRowDispatcherSettings& /*config*/,
+        const NKikimr::NMiniKQL::IFunctionRegistry* /*functionRegistry*/,
         NActors::TActorId /*rowDispatcherActorId*/,
         NActors::TActorId /*compileServiceActorId*/,
         ui32 /*partitionId*/,
@@ -39,8 +42,9 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
         std::shared_ptr<NYdb::ICredentialsProviderFactory> /*credentialsProviderFactory*/,
         const ::NMonitoring::TDynamicCounterPtr& /*counters*/,
         const ::NMonitoring::TDynamicCounterPtr& /*counters*/,
-        const NYql::IPqGateway::TPtr& /*pqGateway*/,
-        ui64 /*maxBufferSize*/) const override {
+        const NYql::IPqStaticGateway::TPtr& /*pqGateway*/,
+        ui64 /*maxBufferSize*/,
+        bool /*enableStreamingQueriesCounters*/) const override {
         auto actorId  = Runtime.AllocateEdgeActor();
         ActorIds.push(actorId);
         return actorId;
@@ -54,7 +58,9 @@ class TFixture : public NUnitTest::TBaseFixture {
     const ui64 NodesCount = 2;
 public:
     TFixture()
-    : Runtime(NodesCount) {}
+        : Runtime(NodesCount)
+        , FunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {}))
+    {}
 
     void SetUp(NUnitTest::TTestContext&) override {
         TIntrusivePtr<TTableNameserverSetup> nameserverTable(new TTableNameserverSetup());
@@ -74,7 +80,7 @@ public:
         NConfig::TRowDispatcherConfig config;
         config.SetEnabled(true);
         config.SetSendStatusPeriodSec(1);
-        NConfig::TRowDispatcherCoordinatorConfig& coordinatorConfig = *config.MutableCoordinator();
+        auto& coordinatorConfig = *config.MutableCoordinator();
         coordinatorConfig.SetCoordinationNodePath("RowDispatcher");
         auto& database = *coordinatorConfig.MutableDatabase();
         database.SetEndpoint("YDB_ENDPOINT");
@@ -92,7 +98,7 @@ public:
         ReadActorId2 = Runtime.AllocateEdgeActor();
         ReadActorId3 = Runtime.AllocateEdgeActor(1);
         TestActorFactory = MakeIntrusive<TTestActorFactory>(Runtime);
-        
+
         NYql::TPqGatewayServices pqServices(
             yqSharedResources->UserSpaceYdbDriver,
             nullptr,
@@ -103,14 +109,14 @@ public:
         RowDispatcher = Runtime.Register(NewRowDispatcher(
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
-            yqSharedResources,
             credentialsFactory,
             "Tenant",
             TestActorFactory,
+            FunctionRegistry.Get(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             MakeIntrusive<NMonitoring::TDynamicCounters>(),
             CreatePqNativeGateway(pqServices),
-            NActors::TActorId()
+            yqSharedResources->UserSpaceYdbDriver
             ).release());
 
         Runtime.EnableScheduleForActor(RowDispatcher);
@@ -185,6 +191,12 @@ public:
         Runtime.Send(new IEventHandle(RowDispatcher, topicSessionId, event.release()));
     }
     
+    void MockHeartbeat(ui64 partitionId, TActorId readActorId, ui64 generation) {
+        auto event = std::make_unique<NFq::TEvRowDispatcher::TEvHeartbeat>();
+        event->Record.SetPartitionId(partitionId);
+        Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, generation));
+    }
+
     void MockGetNextBatch(ui64 partitionId, TActorId readActorId, ui64 generation, ui64 seqNo = 2) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvGetNextBatch>();
         event->Record.SetPartitionId(partitionId);
@@ -240,6 +252,12 @@ public:
         UNIT_ASSERT(eventHolder.Get() != nullptr);
     }
 
+    void ExpectNoSession(NActors::TActorId readActorId, ui64 expectedGeneration) {
+        auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvNoSession>(readActorId);
+        UNIT_ASSERT(eventHolder.Get() != nullptr);
+        UNIT_ASSERT(eventHolder->Cookie == expectedGeneration);
+    }
+
     NActors::TActorId ExpectRegisterTopicSession() {
         auto actorId = TestActorFactory->PopActorId();
         return actorId;
@@ -258,6 +276,7 @@ public:
 
     TActorSystemStub actorSystemStub;
     NActors::TTestActorRuntime Runtime;
+    const NKikimr::NMiniKQL::IFunctionRegistry::TPtr FunctionRegistry;
     NActors::TActorId RowDispatcher;
     NActors::TActorId Coordinator1;
     NActors::TActorId Coordinator2;
@@ -512,6 +531,20 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         ProcessData(ReadActorId2, PartitionId0, new_session0);
         ProcessData(ReadActorId1, PartitionId1, session1);
         ProcessData(ReadActorId2, PartitionId1, session1);
+    }
+
+    Y_UNIT_TEST_F(HeartbeatAfterConsumerDeleted, TFixture) {
+        ui64 generation = 1;
+        
+        MockAddSession(Source1, {PartitionId0}, ReadActorId1, generation);
+        auto topicSessionId = ExpectRegisterTopicSession();
+        ExpectStartSessionAck(ReadActorId1, generation);
+        ExpectStartSession(topicSessionId);
+        
+        MockSessionError(topicSessionId, ReadActorId1, PartitionId0);
+
+        MockHeartbeat(PartitionId0, ReadActorId1, generation);
+        ExpectNoSession(ReadActorId1, generation);
     }
 }
 

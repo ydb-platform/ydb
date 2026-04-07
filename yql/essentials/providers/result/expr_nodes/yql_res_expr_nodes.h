@@ -5,8 +5,7 @@
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 
-namespace NYql {
-namespace NNodes {
+namespace NYql::NNodes {
 
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.decl.inl.h>
 
@@ -37,21 +36,24 @@ public:
 
 #include <yql/essentials/providers/result/expr_nodes/yql_res_expr_nodes.defs.inl.h>
 
-template<typename TParent>
-class TNodeBuilder<TParent, TResultDataSink> : TNodeBuilderBase
-{
+#include <utility>
+
+template <typename TParent>
+class TNodeBuilder<TParent, TResultDataSink>: TNodeBuilderBase {
 public:
-    typedef std::function<TParent& (const TResultDataSink&)> BuildFuncType;
-    typedef std::function<TExprBase (const TStringBuf& arg)> GetArgFuncType;
-    typedef TResultDataSink ResultType;
+    using BuildFuncType = std::function<TParent&(const TResultDataSink&)>;
+    using GetArgFuncType = std::function<TExprBase(const TStringBuf& arg)>;
+    using ResultType = TResultDataSink;
 
     TNodeBuilder(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc, GetArgFuncType getArgFunc)
         : TNodeBuilderBase(ctx, pos, getArgFunc)
-        , BuildFunc_(buildFunc) {}
+        , BuildFunc_(std::move(buildFunc))
+    {
+    }
 
     TParent& Build() {
         auto atom = this->Ctx_.NewAtom(this->Pos_, ResultProviderName);
-        auto node = this->Ctx_.NewCallable(this->Pos_, "DataSink", { atom });
+        auto node = this->Ctx_.NewCallable(this->Pos_, "DataSink", {atom});
         return BuildFunc_(TResultDataSink(node));
     }
 
@@ -59,5 +61,4 @@ private:
     BuildFuncType BuildFunc_;
 };
 
-} // namespace NNodes
-} // namespace NYql
+} // namespace NYql::NNodes

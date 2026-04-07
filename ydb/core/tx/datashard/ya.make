@@ -60,6 +60,8 @@ SRCS(
     datashard__get_state_tx.cpp
     datashard__init.cpp
     datashard__kqp_scan.cpp
+    datashard__lock_rows.cpp
+    datashard__lock_rows.h
     datashard__migrate_schemeshard.cpp
     datashard__mon_reset_schema_version.cpp
     datashard__monitoring.cpp
@@ -83,6 +85,8 @@ SRCS(
     datashard__write.cpp
     datashard_active_transaction.cpp
     datashard_active_transaction.h
+    datashard_cdc_stream_common.cpp
+    datashard_cdc_stream_common.h
     datashard_change_receiving.cpp
     datashard_change_sender_activation.cpp
     datashard_change_sending.cpp
@@ -176,11 +180,14 @@ SRCS(
     memory_state_migration.cpp
     move_index_unit.cpp
     move_table_unit.cpp
+    multi_txids.cpp
+    multi_txids.h
     operation.cpp
     operation.h
     plan_queue_unit.cpp
     prepare_data_tx_in_rs_unit.cpp
     prepare_distributed_erase_tx_in_rs_unit.cpp
+    prepare_index_validation_unit.cpp
     prepare_kqp_data_tx_in_rs_unit.cpp
     prepare_scheme_tx_in_rs_unit.cpp
     prepare_write_tx_in_rs_unit.cpp
@@ -211,20 +218,25 @@ SRCS(
     store_snapshot_tx_unit.cpp
     store_write_unit.cpp
     stream_scan_common.cpp
+    truncate_unit.cpp
     type_serialization.cpp
     upload_stats.cpp
+    validate_row_condition.cpp
     volatile_tx.cpp
     volatile_tx_mon.cpp
     wait_for_plan_unit.cpp
     wait_for_stream_clearance_unit.cpp
 
-    build_index/prefix_kmeans.cpp
+    build_index/fulltext.cpp
+    build_index/fulltext_dict.cpp
     build_index/kmeans_helper.cpp
+    build_index/filter_kmeans.cpp
     build_index/local_kmeans.cpp
-    build_index/sample_k.cpp
-    build_index/secondary_index.cpp
+    build_index/prefix_kmeans.cpp
     build_index/recompute_kmeans.cpp
     build_index/reshuffle_kmeans.cpp
+    build_index/sample_k.cpp
+    build_index/secondary_index.cpp
     build_index/unique_index.cpp
 )
 
@@ -267,6 +279,7 @@ PEERDIR(
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme
+    ydb/core/split
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/long_tx_service/public
@@ -275,6 +288,7 @@ PEERDIR(
     ydb/core/wrappers
     ydb/core/ydb_convert
     ydb/library/aclib
+    ydb/library/actors/async
     ydb/library/actors/core
     ydb/library/actors/http
     ydb/library/chunks_limiter
@@ -301,7 +315,6 @@ ELSE()
     SRCS(
         export_s3_buffer.cpp
         export_s3_uploader.cpp
-        extstorage_usage_config.cpp
         import_s3.cpp
     )
 ENDIF()
@@ -310,12 +323,12 @@ END()
 
 RECURSE_FOR_TESTS(
     build_index/ut
-    ut_background_compaction
+    ut_borrowed_compaction
     ut_change_collector
     ut_change_exchange
     ut_column_stats
     ut_compaction
-    ut_vacuum
+    ut_disk_quotas
     ut_erase_rows
     ut_export
     ut_external_blobs
@@ -327,6 +340,7 @@ RECURSE_FOR_TESTS(
     ut_kqp
     ut_kqp_errors
     ut_kqp_scan
+    ut_lock_rows
     ut_locks
     ut_minikql
     ut_minstep
@@ -340,9 +354,13 @@ RECURSE_FOR_TESTS(
     ut_rs
     ut_sequence
     ut_snapshot
+    ut_snapshot_isolation
     ut_stats
     ut_trace
+    ut_truncate
     ut_upload_rows
+    ut_vacuum
+    ut_validate_row_condition
     ut_volatile
     ut_write
 )

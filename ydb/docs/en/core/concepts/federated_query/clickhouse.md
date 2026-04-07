@@ -43,13 +43,17 @@ Where:
 - `clickhouse_datasource` is the identifier of the external data source;
 - `<table_name>` is the table's name within the external data source.
 
-## Limitations
+## Limitations {#limitations}
 
 There are several limitations when working with ClickHouse clusters:
 
 1. {% include [!](_includes/supported_requests.md) %}
 1. {% include [!](_includes/datetime_limits.md) %}
-1. {% include [!](_includes/predicate_pushdown.md) %}
+1. {% include [!](_includes/predicate_pushdown_preamble.md) %}
+
+   {% include [!](_includes/predicate_pushdown_examples.md) %}
+
+    Supported data types for filter pushdown:
 
     |{{ ydb-short-name }} Data Type|
     |----|
@@ -64,6 +68,7 @@ There are several limitations when working with ClickHouse clusters:
     |`Uint64`|
     |`Float`|
     |`Double`|
+    |`String`|
 
 ## Supported Data Types
 

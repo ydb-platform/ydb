@@ -12,11 +12,14 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/common/fields_wrappers.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/ptr.h>
 #include <util/generic/xrange.h>
 #include <util/string/builder.h>
+
+#include <utility>
 
 namespace {
 
@@ -26,9 +29,31 @@ ui32 PopFront(TDeque<ui32>& pendingItems) {
     return itemIdx;
 }
 
-bool IsPathTypeTable(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
-    return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable;
+bool IsPathTypeTransferrable(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
+    return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable
+        || item.SourcePathType == NKikimrSchemeOp::EPathTypeTableIndex
+        || item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable;
 }
+
+bool IsPathTypeSchemeObject(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
+    switch (item.SourcePathType) {
+    case NKikimrSchemeOp::EPathTypeView:
+    case NKikimrSchemeOp::EPathTypePersQueueGroup:
+    case NKikimrSchemeOp::EPathTypeReplication:
+    case NKikimrSchemeOp::EPathTypeTransfer:
+    case NKikimrSchemeOp::EPathTypeExternalDataSource:
+    case NKikimrSchemeOp::EPathTypeExternalTable:
+    case NKikimrSchemeOp::EPathTypeSysView:
+        return true;
+    default:
+        return false;
+    }
+}
+
+template <typename T>
+concept HasIncludeIndexData = requires(const T& t) {
+    { t.include_index_data() } -> std::same_as<bool>;
+};
 
 }
 
@@ -36,6 +61,44 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
+using namespace NBackup::NFieldsWrappers;
+// Erases encryption key from settings, if settings type supports it
+// Returns true if settings changed
+template <class TSettings, class = decltype(std::declval<TSettings>().encryption_settings())> // Function for TSettings that have encryption_settings()
+bool EraseEncryptionKeyFromSettingsProto(TString* serializedSettings) {
+    TSettings settings;
+    if (!settings.ParseFromString(*serializedSettings)) {
+        return false;
+    }
+    if (settings.encryption_settings().has_symmetric_key()) {
+        settings.mutable_encryption_settings()->clear_symmetric_key();
+        return settings.SerializeToString(serializedSettings);
+    }
+    return false;
+}
+
+template <class TSettings>
+bool EraseEncryptionKeyFromSettingsProto(...) {
+    return false;
+}
+
+void TSchemeShard::EraseEncryptionKey(NIceDb::TNiceDb& db, TExportInfo& exportInfo) {
+    bool erased = false;
+    switch (exportInfo.Kind) {
+    case TExportInfo::EKind::YT:
+        erased = EraseEncryptionKeyFromSettingsProto<Ydb::Export::ExportToYtSettings>(&exportInfo.Settings);
+        break;
+    case TExportInfo::EKind::S3:
+        erased = EraseEncryptionKeyFromSettingsProto<Ydb::Export::ExportToS3Settings>(&exportInfo.Settings);
+        break;
+    case TExportInfo::EKind::FS:
+        erased = EraseEncryptionKeyFromSettingsProto<Ydb::Export::ExportToFsSettings>(&exportInfo.Settings);
+        break;
+    }
+    if (erased) {
+        PersistExportMetadata(db, exportInfo);
+    }
+}
 
 struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
     TEvExport::TEvCreateExportRequest::TPtr Request;
@@ -110,41 +173,65 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         TExportInfo::TPtr exportInfo = nullptr;
 
-        switch (request.GetRequest().GetSettingsCase()) {
-        case NKikimrExport::TCreateExportRequest::kExportToYtSettings:
-            {
-                const auto& settings = request.GetRequest().GetExportToYtSettings();
-                exportInfo = new TExportInfo(id, uid, TExportInfo::EKind::YT, settings, domainPath.Base()->PathId, request.GetPeerName());
-
-                TString explain;
-                if (!FillItems(*exportInfo, settings, explain)) {
+        auto processExportSettings = [&]<typename TSettings>(const NKikimrExport::TCreateExportRequest& createExportRequest, TExportInfo::EKind kind, bool enableFeatureFlags) -> bool {
+            TSettings settings;
+            if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToS3Settings>) {
+                settings = createExportRequest.GetExportToS3Settings();
+                if (!settings.scheme()) {
+                    settings.set_scheme(Ydb::Export::ExportToS3Settings::HTTPS);
+                }
+            } else if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToYtSettings>) {
+                settings = createExportRequest.GetExportToYtSettings();
+            } else {
+                settings = createExportRequest.GetExportToFsSettings();
+            }
+            if constexpr (HasIncludeIndexData<TSettings>) {
+                if (settings.include_index_data() && !AppData()->FeatureFlags.GetEnableIndexMaterialization()) {
                     return Reply(
                         std::move(response),
-                        Ydb::StatusIds::BAD_REQUEST,
-                        TStringBuilder() << "Failed item check: " << explain
+                        Ydb::StatusIds::PRECONDITION_FAILED,
+                        "Index materialization is not enabled"
                     );
                 }
+            }
+            exportInfo = new TExportInfo(id, uid, kind, settings, domainPath.Base()->PathId, request.GetPeerName());
+            if constexpr (HasIncludeIndexData<TSettings>) {
+                exportInfo->IncludeIndexData = settings.include_index_data();
+            }
+            if (enableFeatureFlags) {
+                exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableChecksumsExport();
+                exportInfo->EnablePermissions = AppData()->FeatureFlags.GetEnablePermissionsExport();
+            }
+            TString explain;
+            if (!FillItems(*exportInfo, settings, explain)) {
+                return Reply(
+                    std::move(response),
+                    Ydb::StatusIds::BAD_REQUEST,
+                    TStringBuilder() << "Failed item check: " << explain
+                );
+            }
+            return false;
+        };
+
+        switch (request.GetRequest().GetSettingsCase()) {
+        case NKikimrExport::TCreateExportRequest::kExportToYtSettings:
+            if (processExportSettings.operator()<Ydb::Export::ExportToYtSettings>(request.GetRequest(), TExportInfo::EKind::YT, false)) {
+                return true;
             }
             break;
 
         case NKikimrExport::TCreateExportRequest::kExportToS3Settings:
-            {
-                auto settings = request.GetRequest().GetExportToS3Settings();
-                if (!settings.scheme()) {
-                    settings.set_scheme(Ydb::Export::ExportToS3Settings::HTTPS);
-                }
+            if (processExportSettings.operator()<Ydb::Export::ExportToS3Settings>(request.GetRequest(), TExportInfo::EKind::S3, true)) {
+                return true;
+            }
+            break;
 
-                exportInfo = new TExportInfo(id, uid, TExportInfo::EKind::S3, settings, domainPath.Base()->PathId, request.GetPeerName());
-                exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableChecksumsExport();
-                exportInfo->EnablePermissions = AppData()->FeatureFlags.GetEnablePermissionsExport();
-                TString explain;
-                if (!FillItems(*exportInfo, settings, explain)) {
-                    return Reply(
-                        std::move(response),
-                        Ydb::StatusIds::BAD_REQUEST,
-                        TStringBuilder() << "Failed item check: " << explain
-                    );
-                }
+        case NKikimrExport::TCreateExportRequest::kExportToFsSettings:
+            if (!AppData()->FeatureFlags.GetEnableFsBackups()) {
+                return Reply(std::move(response), Ydb::StatusIds::UNSUPPORTED, "The feature flag \"EnableFsBackups\" is disabled. The operation cannot be performed.");
+            }
+            if (processExportSettings.operator()<Ydb::Export::ExportToFsSettings>(request.GetRequest(), TExportInfo::EKind::FS, true)) {
+                return true;
             }
             break;
 
@@ -167,11 +254,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         exportInfo->StartTime = TAppData::TimeProvider->Now();
         Self->PersistExportState(db, *exportInfo);
 
-        Self->Exports[id] = exportInfo;
-        if (uid) {
-            Self->ExportsByUid[uid] = exportInfo;
-        }
-
+        Self->AddExport(exportInfo);
         Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), *exportInfo);
 
         Progress = true;
@@ -221,15 +304,12 @@ private:
 
     template <typename TSettings>
     bool FillItems(TExportInfo& exportInfo, const TSettings& settings, TString& explain) {
-        TString commonSourcePath = GetCommonSourcePath(settings);
-        if (commonSourcePath && commonSourcePath.back() != '/') {
-            commonSourcePath.push_back('/');
-        }
+        TVector<TExportInfo::TItem> indexItems;
+
         exportInfo.Items.reserve(settings.items().size());
         for (ui32 itemIdx : xrange(settings.items().size())) {
             const auto& item = settings.items(itemIdx);
-            const TString srcPath = commonSourcePath + item.source_path();
-            const TPath path = TPath::Resolve(srcPath, Self);
+            const TPath path = TPath::Resolve(item.source_path(), Self);
             {
                 TPath::TChecker checks = path.Check();
                 checks
@@ -237,6 +317,7 @@ private:
                     .NotDeleted()
                     .NotUnderDeleting()
                     .IsSupportedInExports()
+                    .NotAsyncReplicaTable()
                     .FailOnRestrictedCreateInTempZone();
 
                 if (!checks) {
@@ -245,8 +326,31 @@ private:
                 }
             }
 
-            exportInfo.Items.emplace_back(srcPath, path.Base()->PathId, path->PathType);
-            exportInfo.PendingItems.push_back(itemIdx);
+            exportInfo.Items.emplace_back(item.source_path(), path.Base()->PathId, path->PathType);
+            exportInfo.PendingItems.push_back(exportInfo.Items.size() - 1);
+
+            if (exportInfo.IncludeIndexData && path.Base()->IsTable()) {
+                for (const auto& [childName, childPathId] : path.Base()->GetChildren()) {
+                    TVector<TString> childParts;
+                    childParts.push_back(childName);
+
+                    auto childPath = path.Child(childName);
+                    if (childPath.IsDeleted() || !childPath.IsTableIndex()) {
+                        continue;
+                    }
+                    for (const auto& [implTableName, implTablePathId] : childPath.Base()->GetChildren()) {
+                        const auto implTableRelPath = JoinPath(ChildPath(childParts, implTableName));
+                        indexItems.emplace_back(implTableRelPath, implTablePathId, childPath->PathType, itemIdx);
+                    }
+                }
+            }
+        }
+
+        // Add materialized index items to the end
+        exportInfo.Items.reserve(exportInfo.Items.size() + indexItems.size());
+        for (auto& item : indexItems) {
+            exportInfo.Items.push_back(std::move(item));
+            exportInfo.PendingItems.push_back(exportInfo.Items.size() - 1);
         }
 
         return true;
@@ -366,7 +470,71 @@ private:
         Send(Self->SelfId(), BackupPropose(Self, txId, exportInfo, itemIdx));
     }
 
+    template <typename Func>
+    auto DispatchByExportKind(Func&& func, TExportInfo& exportInfo) {
+        switch (exportInfo.Kind) {
+        case TExportInfo::EKind::YT:
+            return func.template operator()<Ydb::Export::ExportToYtSettings>();
+        case TExportInfo::EKind::S3:
+            return func.template operator()<Ydb::Export::ExportToS3Settings>();
+        case TExportInfo::EKind::FS:
+            return func.template operator()<Ydb::Export::ExportToFsSettings>();
+        default:
+            Y_ABORT("Unknown export kind");
+        }
+    }
+
+    bool FillExportMetadata(TExportInfo& exportInfo, TString& issues) {
+        return DispatchByExportKind([&]<typename TSettings>() {
+            return FillExportMetadata<TSettings>(exportInfo, issues);
+        }, exportInfo);
+    }
+
     void UploadScheme(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
+        DispatchByExportKind([&]<typename TSettings>() {
+            return UploadScheme<TSettings>(exportInfo, itemIdx, ctx);
+        }, exportInfo);
+    }
+
+    bool UploadExportMetadata(TExportInfo& exportInfo, const TActorContext& ctx) {
+        return DispatchByExportKind([&]<typename TSettings>() {
+            return UploadExportMetadata<TSettings>(exportInfo, ctx);
+        }, exportInfo);
+    }
+
+    template <typename TSettings>
+    void UploadScheme(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
+        Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
+        auto& item = exportInfo.Items[itemIdx];
+        UploadScheme<Ydb::Export::ExportToYtSettings>(exportInfo, itemIdx, ctx); // Common code for all types of storage
+
+        if (IsPathTypeSchemeObject(item)) {
+            TSettings exportSettings;
+            Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
+            const auto databaseRoot = CanonizePath(Self->RootPathElements);
+
+            NBackup::TMetadata metadata;
+            metadata.SetVersion(exportInfo.EnableChecksums ? 1 : 0);
+            metadata.SetEnablePermissions(exportInfo.EnablePermissions);
+
+            TMaybe<NBackup::TEncryptionIV> iv;
+            if (exportSettings.has_encryption_settings()) {
+                iv = NBackup::TEncryptionIV::FromBinaryString(exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
+            }
+
+            item.SchemeUploader = ctx.Register(CreateSchemeUploader(
+                Self->SelfId(), exportInfo.Id, itemIdx, item.SourcePathId,
+                exportSettings, databaseRoot, metadata.Serialize(),
+                exportInfo.EnablePermissions, exportInfo.EnableChecksums,
+                iv
+            ));
+            Self->RunningExportSchemeUploaders.emplace(item.SchemeUploader);
+        }
+    }
+
+    template <>
+    void UploadScheme<Ydb::Export::ExportToYtSettings>(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
+        Y_UNUSED(ctx);
         Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
         auto& item = exportInfo.Items[itemIdx];
 
@@ -378,46 +546,24 @@ private:
         );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
-        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeView
-            || item.SourcePathType == NKikimrSchemeOp::EPathTypePersQueueGroup)
-        {
-            Ydb::Export::ExportToS3Settings exportSettings;
-            Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
-            const auto databaseRoot = CanonizePath(Self->RootPathElements);
-
-            NBackup::TMetadata metadata;
-            // to do: enable view checksum validation
-            constexpr bool EnableChecksums = false;
-            metadata.SetVersion(EnableChecksums ? 1 : 0);
-            metadata.SetEnablePermissions(exportInfo.EnablePermissions);
-
-            TMaybe<NBackup::TEncryptionIV> iv;
-            if (exportSettings.has_encryption_settings()) {
-                iv = NBackup::TEncryptionIV::FromBinaryString(exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
-            }
-
-            item.SchemeUploader = ctx.Register(CreateSchemeUploader(
-                Self->SelfId(), exportInfo.Id, itemIdx, item.SourcePathId,
-                exportSettings, databaseRoot, metadata.Serialize(), exportInfo.EnablePermissions,
-                iv
-            ));
-            Self->RunningExportSchemeUploaders.emplace(item.SchemeUploader);
-        }
     }
 
+    template <typename TSettings>
     bool FillExportMetadata(TExportInfo& exportInfo, TString& issues) {
-        if (exportInfo.Kind != TExportInfo::EKind::S3) {
-            return true;
-        }
-
-        Ydb::Export::ExportToS3Settings exportSettings;
+        TSettings exportSettings;
         Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
 
-        if (exportSettings.destination_prefix().empty()) { // No place to save backup metadata
+        const TString& destination = GetCommonDestination(exportSettings);
+        if (destination.empty()) { // No place to save backup metadata
             return true;
         }
 
-        TString commonDestinationPrefix = NBackup::NormalizeExportPrefix(exportSettings.destination_prefix());
+        TString commonDestinationPrefix;
+
+        // For FS, the concatenation of the base_path and the item path occurs in the DataShard
+        if constexpr (!std::is_same_v<TSettings, Ydb::Export::ExportToFsSettings>) {
+            commonDestinationPrefix = NBackup::NormalizeExportPrefix(destination);
+        }
 
         TMaybe<NBackup::TEncryptionIV> iv;
         if (exportSettings.has_encryption_settings()) {
@@ -433,7 +579,7 @@ private:
         const TString sourcePathRoot = exportSettings.source_path().empty() ? CanonizePath(Self->RootPathElements) : CanonizePath(exportSettings.source_path());
 
         for (ui32 itemIndex = 1; itemIndex <= static_cast<ui32>(exportSettings.items_size()); ++itemIndex) {
-            Ydb::Export::ExportToS3Settings::Item& exportItem = *exportSettings.mutable_items(itemIndex - 1);
+            auto& exportItem = *exportSettings.mutable_items(itemIndex - 1);
             NKikimrSchemeOp::TExportMetadata::TSchemaMappingItem& schemaMappingItem = *exportInfo.ExportMetadata.AddSchemaMapping();
 
             // remove source path prefix
@@ -445,8 +591,8 @@ private:
             schemaMappingItem.SetSourcePath(exportPath);
 
             TString destinationPrefix;
-            if (!exportItem.destination_prefix().empty()) {
-                TString& itemPrefix = *exportItem.mutable_destination_prefix();
+            if (!GetItemDestination(exportItem).empty()) {
+                TString& itemPrefix = MutableItemDestination(exportItem);
                 destinationPrefix = itemPrefix = NBackup::NormalizeItemPrefix(itemPrefix);
             } else {
                 std::stringstream itemPrefix;
@@ -459,7 +605,11 @@ private:
                 destinationPrefix = itemPrefix.str();
             }
             schemaMappingItem.SetDestinationPrefix(destinationPrefix);
-            exportItem.set_destination_prefix(TStringBuilder() << commonDestinationPrefix << '/' << destinationPrefix);
+            if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToFsSettings>) {
+                MutableItemDestination(exportItem) = destinationPrefix;
+            } else {
+                MutableItemDestination(exportItem) = TStringBuilder() << commonDestinationPrefix << '/' << destinationPrefix;
+            }
 
             if (iv) {
                 schemaMappingItem.SetIV(NBackup::TEncryptionIV::Combine(*iv, NBackup::EBackupFileType::Metadata, itemIndex, 0).GetBinaryString());
@@ -472,15 +622,19 @@ private:
         return true;
     }
 
-    bool UploadExportMetadata(TExportInfo& exportInfo, const TActorContext& ctx) { // returns true if we need to change state to UploadExportMetadata
-        if (exportInfo.Kind != TExportInfo::EKind::S3) {
-            return false;
-        }
+    template <>
+    bool FillExportMetadata<Ydb::Export::ExportToYtSettings>(TExportInfo& exportInfo, TString& issues) {
+        Y_UNUSED(exportInfo);
+        Y_UNUSED(issues);
+        return true;
+    }
 
-        Ydb::Export::ExportToS3Settings exportSettings;
+    template <typename TSettings>
+    bool UploadExportMetadata(TExportInfo& exportInfo, const TActorContext& ctx) { // returns true if we need to change state to UploadExportMetadata
+        TSettings exportSettings;
         Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
 
-        if (exportSettings.destination_prefix().empty()) { // No place to save backup metadata
+        if (GetCommonDestination(exportSettings).empty()) { // No place to save backup metadata
             return false;
         }
 
@@ -488,6 +642,13 @@ private:
             CreateExportMetadataUploader(Self->SelfId(), exportInfo.Id, exportSettings, exportInfo.ExportMetadata, exportInfo.EnableChecksums));
         Self->RunningExportSchemeUploaders.emplace(exportInfo.ExportMetadataUploader);
         return true;
+    }
+
+    template <>
+    bool UploadExportMetadata<Ydb::Export::ExportToYtSettings>(TExportInfo& exportInfo, const TActorContext& ctx) {
+        Y_UNUSED(exportInfo);
+        Y_UNUSED(ctx);
+        return false;
     }
 
     bool CancelTransferring(TExportInfo& exportInfo, ui32 itemIdx) {
@@ -694,12 +855,29 @@ private:
         }
     }
 
-    TMaybe<TString> GetIssues(const TPathId& itemPathId, TTxId backupTxId) {
+    TMaybe<TString> GetIssues(const TExportInfo& exportInfo, TTxId backupTxId, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
+        const auto& item = exportInfo.Items[itemIdx];
+        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
+            if (!Self->ColumnTables.contains(item.SourcePathId)) {
+                return TStringBuilder() << "Cannot find table: " << item.SourcePathId;
+            }
+
+            TColumnTableInfo::TPtr table = Self->ColumnTables.at(item.SourcePathId).GetPtr();
+            return GetIssues(table, item.SourcePathId, backupTxId);
+        }
+
+        auto itemPathId = ItemPathId(Self, exportInfo, itemIdx);
         if (!Self->Tables.contains(itemPathId)) {
             return TStringBuilder() << "Cannot find table: " << itemPathId;
         }
 
         TTableInfo::TPtr table = Self->Tables.at(itemPathId);
+        return GetIssues(table, itemPathId, backupTxId);
+    }
+
+    template <typename TTable>
+    TMaybe<TString> GetIssues(const TTable& table, const TPathId& itemPathId, TTxId backupTxId) {
         if (!table->BackupHistory.contains(backupTxId)) {
             return TStringBuilder() << "Cannot find backup: " << backupTxId << " for table: " << itemPathId;
         }
@@ -762,7 +940,7 @@ private:
                 const auto& item = exportInfo->Items.at(itemIdx);
 
                 if (item.WaitTxId == InvalidTxId) {
-                    if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable && item.State <= EState::Transferring) {
+                    if (IsPathTypeTransferrable(item) && item.State <= EState::Transferring) {
                         pendingTables.emplace_back(itemIdx);
                     } else {
                         UploadScheme(*exportInfo, itemIdx, ctx);
@@ -807,6 +985,7 @@ private:
             }
 
             Self->PersistExportState(db, *exportInfo);
+            Self->EraseEncryptionKey(db, *exportInfo);
             SendNotificationsIfFinished(exportInfo);
             break;
 
@@ -816,7 +995,7 @@ private:
                 for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
                     const auto& item = exportInfo->Items.at(itemIdx);
 
-                    if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable || item.State != EState::Dropping) {
+                    if (!IsPathTypeTransferrable(item) || item.State != EState::Dropping) {
                         continue;
                     }
 
@@ -846,6 +1025,7 @@ private:
         exportInfo->EndTime = TAppData::TimeProvider->Now();
 
         Self->PersistExportState(db, *exportInfo);
+        Self->EraseEncryptionKey(db, *exportInfo);
         SendNotificationsIfFinished(exportInfo);
         AuditLogExportEnd(*exportInfo, Self);
     }
@@ -883,13 +1063,13 @@ private:
                 return;
             }
             itemIdx = PopFront(exportInfo->PendingItems);
-            if (const auto type = exportInfo->Items.at(itemIdx).SourcePathType; type == NKikimrSchemeOp::EPathTypeTable) {
+            if (IsPathTypeTransferrable(exportInfo->Items.at(itemIdx))) {
                 TransferData(*exportInfo, itemIdx, txId);
             } else {
                 LOG_W("TExport::TTxProgress: OnAllocateResult allocated a needless txId for an item transferring"
                     << ": id# " << id
                     << ", itemIdx# " << itemIdx
-                    << ", type# " << type
+                    << ", type# " << exportInfo->Items.at(itemIdx).SourcePathType
                 );
                 return;
             }
@@ -1014,6 +1194,7 @@ private:
                     }
 
                     Cancel(*exportInfo, itemIdx, "unhappy propose");
+                    Self->EraseEncryptionKey(db, *exportInfo);
                 } else {
                     if (!exportInfo->IsInProgress()) {
                         return;
@@ -1044,6 +1225,7 @@ private:
                     exportInfo->Issue = record.GetReason();
                     exportInfo->State = EState::Cancelled;
                     exportInfo->EndTime = TAppData::TimeProvider->Now();
+                    Self->EraseEncryptionKey(db, *exportInfo);
                 }
 
                 Self->PersistExportState(db, *exportInfo);
@@ -1152,6 +1334,7 @@ private:
             Cancel(*exportInfo, itemIdx, "unsuccessful scheme upload");
 
             Self->PersistExportState(db, *exportInfo);
+            Self->EraseEncryptionKey(db, *exportInfo);
             return SendNotificationsIfFinished(exportInfo);
         }
 
@@ -1201,6 +1384,10 @@ private:
         Self->RunningExportSchemeUploaders.erase(std::exchange(exportInfo->ExportMetadataUploader, {}));
 
         if (!exportInfo->IsInProgress()) {
+            LOG_D("TExport::TTxProgress: IsInProgress"
+                << ": id# " << result.ExportId
+                << ", success# " << result.Success
+                << ", error# " << result.Error);
             return;
         }
 
@@ -1212,6 +1399,7 @@ private:
             exportInfo->Issue = result.Error;
 
             Self->PersistExportState(db, *exportInfo);
+            Self->EraseEncryptionKey(db, *exportInfo);
             return SendNotificationsIfFinished(exportInfo);
         }
 
@@ -1289,6 +1477,7 @@ private:
                 exportInfo->State = EState::Cancelled;
                 exportInfo->EndTime = TAppData::TimeProvider->Now();
                 exportInfo->Issue = issues;
+                Self->EraseEncryptionKey(db, *exportInfo);
                 break;
             }
 
@@ -1332,7 +1521,7 @@ private:
                 item.State = EState::Transferring;
                 Self->PersistExportItemState(db, *exportInfo, itemIdx);
 
-                if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable) {
+                if (IsPathTypeTransferrable(item)) {
                     tables.emplace_back(itemIdx);
                 } else {
                     UploadScheme(*exportInfo, itemIdx, ctx);
@@ -1353,10 +1542,11 @@ private:
             item.WaitTxId = InvalidTxId;
 
             bool itemHasIssues = false;
-            if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable) {
-                if (const auto issue = GetIssues(ItemPathId(Self, *exportInfo, itemIdx), txId)) {
+            if (IsPathTypeTransferrable(item)) {
+                if (const auto issue = GetIssues(*exportInfo, txId, itemIdx)) {
                     item.Issue = *issue;
                     Cancel(*exportInfo, itemIdx, "issues during backing up");
+                    Self->EraseEncryptionKey(db, *exportInfo);
                     itemHasIssues = true;
                 }
             }
@@ -1364,6 +1554,7 @@ private:
                 if (!AppData()->FeatureFlags.GetEnableExportAutoDropping()) {
                     exportInfo->State = EState::Done;
                     exportInfo->EndTime = TAppData::TimeProvider->Now();
+                    Self->EraseEncryptionKey(db, *exportInfo);
                 } else {
                     PrepareAutoDropping(Self, *exportInfo, db);
                 }
@@ -1393,11 +1584,6 @@ private:
                     return EndExport(exportInfo, EState::Done, db);
                 }
 
-                if (exportInfo->Uid) {
-                    Self->ExportsByUid.erase(exportInfo->Uid);
-                }
-
-                Self->Exports.erase(exportInfo->Id);
                 Self->PersistRemoveExport(db, *exportInfo);
             }
             return;

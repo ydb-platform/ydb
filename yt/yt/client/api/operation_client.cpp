@@ -21,6 +21,10 @@ void TListJobsContinuationTokenSerializer::Register(TRegistrar registrar)
         .Default(0)
         .DontSerializeDefault();
 
+    registrar.ExternalBaseClassParameter("collective_id", &TListJobsOptions::CollectiveId)
+        .Default()
+        .DontSerializeDefault();
+
     registrar.ExternalBaseClassParameter("job_competition_id", &TListJobsOptions::JobCompetitionId)
         .Default()
         .DontSerializeDefault();
@@ -66,6 +70,10 @@ void TListJobsContinuationTokenSerializer::Register(TRegistrar registrar)
         .DontSerializeDefault();
 
     registrar.ExternalBaseClassParameter("operation_incarnation", &TThat::OperationIncarnation)
+        .Default()
+        .DontSerializeDefault();
+
+    registrar.ExternalBaseClassParameter("monitoring_descriptor", &TThat::MonitoringDescriptor)
         .Default()
         .DontSerializeDefault();
 
@@ -331,6 +339,8 @@ void Serialize(const TJob& job, NYson::IYsonConsumer* consumer, TStringBuf idKey
             .OptionalItem("monitoring_descriptor", job.MonitoringDescriptor)
             .OptionalItem("is_stale", job.IsStale)
             .OptionalItem("job_cookie", job.JobCookie)
+            .OptionalItem("collective_member_rank", job.CollectiveMemberRank)
+            .OptionalItem("collective_id", job.CollectiveId)
             .OptionalItem("archive_features", job.ArchiveFeatures)
             .OptionalItem("operation_incarnation", job.OperationIncarnation)
             .OptionalItem("allocation_id", job.AllocationId)
@@ -351,7 +361,8 @@ void Serialize(const TJobTraceEvent& traceEvent, NYson::IYsonConsumer* consumer)
         .EndMap();
 }
 
-void Serialize(const TOperationEvent& operationEvent, NYson::IYsonConsumer* consumer) {
+void Serialize(const TOperationEvent& operationEvent, NYson::IYsonConsumer* consumer)
+{
     NYTree::BuildYsonFluently(consumer)
         .BeginMap()
             .Item("timestamp").Value(operationEvent.Timestamp)
@@ -359,6 +370,35 @@ void Serialize(const TOperationEvent& operationEvent, NYson::IYsonConsumer* cons
             .OptionalItem("incarnation", operationEvent.Incarnation)
             .OptionalItem("incarnation_switch_reason", operationEvent.IncarnationSwitchReason)
             .OptionalItem("incarnation_switch_info", operationEvent.IncarnationSwitchInfo)
+        .EndMap();
+}
+
+void Serialize(const TProcessTraceMeta& processTrace, NYson::IYsonConsumer* consumer)
+{
+    NYTree::BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("state").Value(processTrace.State)
+        .EndMap();
+}
+
+void Serialize(const TJobTraceMeta& jobTrace, NYson::IYsonConsumer* consumer)
+{
+    NYTree::BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("trace_id").Value(jobTrace.TraceId)
+            .Item("progress").Value(jobTrace.Progress)
+            .Item("health").Value(jobTrace.Health)
+            .DoIf(!jobTrace.ProcessTraceMetas.empty(), [&] (TFluentMap fluent) {
+                fluent.Item("process_trace_metas").Value(jobTrace.ProcessTraceMetas);
+            })
+        .EndMap();
+}
+
+void Serialize(const TCheckOperationPermissionResult& result, NYson::IYsonConsumer* consumer)
+{
+    NYTree::BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("action").Value(result.Action)
         .EndMap();
 }
 

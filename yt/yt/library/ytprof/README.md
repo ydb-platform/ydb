@@ -1,29 +1,29 @@
 # ytprof
 
-Библиотека YTProf реализует набор семплирующих профайлеров совместимых с инструментом визуализации [pprof](https://github.com/google/pprof/blob/master/doc/README.md).
+The YTProf library implements a set of sampling profilers compatible with the [pprof](https://github.com/google/pprof/blob/master/doc/README.md) visualization tool.
 
-Профайлер линкуется в исполняемый файл и запускает HTTP сервер на дебажном порту. HTTP вызовы отдают результат профилирования в формате pprof (сжатый gzip протобуф из [profiler.proto](https://a.yandex-team.ru/arc/trunk/arcadia/yt/yt/library/ytprof/profile.proto)).
+The profiler is linked into the executable and starts an HTTP server on the debug port. HTTP calls retrieve profiling results in the pprof format (compressed gzip protobuf from [profiler.proto](https://github.com/ytsaurus/ytsaurus/blob/main/yt/yt/library/ytprof/proto/profile.proto)).
 
-Файл с профилем является self contained, содержит внутри себя всю информацию о символах и номерах строк и не требует оригинального бинаря для просмотра.
+A profile file is self-contained and includes all symbol and line number information. The original binary is not necessary for viewing a profile.
 
-Для удобного просмотра исходного кода, нужно запускать pprof из корня аркадии с опцией `-trim_path='/-S/:/-B/'`.
+For convenient source code viewing, start pprof from the repository root directory with the `-trim_path='/-S/:/-B/'` option.
 
 ## Quick Start
 
-Работа с профайлером, на примере [example/main.cpp](https://a.yandex-team.ru/arc/trunk/arcadia/yt/yt/library/ytprof/example/main.cpp)
+Working with the profiler, using [example/main.cpp](https://github.com/ytsaurus/ytsaurus/blob/main/yt/yt/library/ytprof/example/main.cpp)
 
-(*) Если `ya` запускается через враппер `/usr/local/bin/ya`, то в `ya tool pprof` не работает интерактивный режим. Лучше удалить `/usr/local/bin/ya` со своей машины и использовать другой способ запуска.
+Note that if `ya` is started via the wrapper `/usr/local/bin/ya`, then interactive mode in `ya tool pprof` does not work. It is better to remove `/usr/local/bin/ya` from your host and use another startup method.
 
-```
-# Все команды выполняются из корня аркадии
+```bash
+# All commands run from Repository root
 
-# Собираем пример
+# Build the example
 ya make --build=profile yt/yt/library/ytprof/example
 
-# Запускаем пример в соседнем терминале на порту 10003
+# Run the example in a separate terminal on port 10003
 ./yt/yt/library/ytprof/example/example 10003
 
-# Смотрим потребление памяти
+# Check memory usage
 ya tool pprof -symbolize=none http://localhost:10003/heap
 Fetching profile over HTTP from http://localhost:10003/heap
 Saved profile in /home/prime/pprof/pprof.example.allocations.space.002.pb.gz
@@ -47,7 +47,7 @@ ROUTINE ======================== main in /home/prime/arc/yt/yt/library/ytprof/ex
          .          .     39:        while (true) {
          .          .     40:            THash<TString> hasher;
 
-# Смотрим потребление CPU в течении 15 секунд
+# Checking CPU usage for 15 seconds
 ya tool pprof -symbolize=none 'http://localhost:10003/profile?d=15'
 Fetching profile over HTTP from http://localhost:10003/profile?d=15
 Saved profile in /home/prime/pprof/pprof.example.sample.profile.004.pb.gz
@@ -122,90 +122,84 @@ ROUTINE ======================== main in /home/prime/arc/yt/yt/library/ytprof/ex
          .          .     58:
 ```
 
-## CPU профайлер
+## CPU profiler
 
-CPU профайлер реализован на основе сигнала SIGPROF. В выключенном состоянии
-профайлер никак не влияет на работу программы. В включенном состоянии ядро
-начинает посылать сигналы всем тредам процесса. Обработчик сигнала собирает текущий стек и пушит его в lock free очередь.
+The CPU profiler is based on the SIGPROF signal. When disabled, it does not affect the program. When enabled, the kernel starts sending signals to all process threads. The signal handler collects the current stack and pushes it into a lock-free queue.
 
-Для работы CPU профайлера нужно чтобы исполняемый файл был собран с опцией `--build=profile`. Добавление этой опции может замедлить исполнение на программы на несколько процентов, поэтому рекомендуется совмещать `--build=profile` с флагом `--thinlto`. Такая конфигурация должна работать на пару процентов быстрее, чем обычный `--build=release`.
+To use the CPU profiler, the executable must be built with `--build=profile`. Adding this option may slow the program by a few percent, so it's recommended to combine `--build=profile` with the `--thinlto` flag. This configuration should run a couple percent faster than regular `--build=release`.
 
-### CPU теги
+### CPU tags
 
-YTProf поддерживает теги. Теги позволяют фильтровать профиль в pprof с помощью команды
-`tagfocus`. Например, можно положить в тег id эксперимента или имя текущего пользователя.
+YTProf supports tags. Tags allow filtering the profile in pprof using the `tagfocus` command. For example, you can put an experiment id or the current username in the tag.
 
-`TCpuProfilerTagGuard` кладёт тег в TLS треда. Также есть возможность положить тег в `TTraceContext` запроса, чтобы он автоматически пробрасывался сквозь асинхронный код YT файберов.
+`TCpuProfilerTagGuard` sets a tag in the thread's TLS. You can also put a tag in the request's `TTraceContext` so it is automatically passed through asynchronous YT fibers code.
 
-### Тяжелые actions
+### Heavy actions
 
-Профайлер умеет тегировать семплы временем исполнения в YT тред пуле. Это позволяет находить код, который надолго заблокировал какой-то тред.
+The profiler can tag samples with execution time in the YT thread pool. This helps identify code that blocked a thread for a long time.
 
-- Можно включить теги, чтобы фильтровать в pprof `/profile?record_action_run_time=1`.
-- Можно сразу отфильтровать только семплы из долгих экшенов `/profile?action_min_exec_time=1s`
+- You can enable tags to filter in pprof: `/profile?record_action_run_time=1`
+- You can filter only samples from long actions: `/profile?action_min_exec_time=1s`
 
-```
-# После этого, можно отфильтровать семплы командой tagfocus.
+```bash
+# You can filter samples with the tagfocus command.
 (pprof) tagfocus=action_run_time_us=1000000:
-# И посмотреть список семплов.
+# View sample list.
 (pprof) traces
 ```
 
 ## Memory Profiler
 
-Для работы memory профайлера нужна поддержка в аллокаторе. На текущий момент, такая
-поддержка есть только в tcmalloc.
+To use the memory profiler, your allocator must support it. Currently, this support exists only in tcmalloc.
 
-Чтобы включить memory profiler, нужно:
+To enable the memory profiler:
 
-  1. Слинковаться с одной конфигураций tcmalloc, дописав в ya.make своей программы:
-  ```
-  ALLOCATOR(TCMALLOC)
-  ```
-  2. На раннем этапе инициализации приложения, до того как началось выделение больших пользовательских объектов
-  написать код конфигурации профайлера.
-  ```c++
-  #include <library/cpp/yt/backtrace/absl_unwinder/absl_unwinder.h>
-  #include <tcmalloc/malloc_extension.h>
+1. Link with a tcmalloc configuration by adding in your program's ya.make:
+   ```
+   ALLOCATOR(TCMALLOC)
+   ```
+2. At the application's initialization stage, before large user objects allocated, write the profiler configuration:
+   ```cpp
+   #include <library/cpp/yt/backtrace/absl_unwinder/absl_unwinder.h>
+   #include <tcmalloc/malloc_extension.h>
 
-  int main() {
-    NYT::NBacktrace::SetAbslStackUnwinder();
-    tcmalloc::MallocExtension::SetProfileSamplingInterval(2_MB);
+   int main() {
+       NYT::NBacktrace::SetAbslStackUnwinder();
+       tcmalloc::MallocExtension::SetProfileSamplingInterval(2_MB);
 
-    ...
-  }
-  ```
+       ...
+   }
+   ```
 
-tcmalloc поддерживает 4 вида профилей:
-- `heap` - снепшот текущего потребления памяти. Это основной профиль, который вам интересен.
-- `peak` - снепшот  потребления памяти в момент, когда приложение потребляло максимальный объем памяти. Профиль удобен, чтобы искать внезапный пик потребления, который уже ушёл.
-- `allocations` - профиль выделения памяти за интервал. Полезен для того, чтобы оптимизировать производительность. Код, который выделяет и освобождает вектор в горячем цикле, не будет виден в `heap` профиле потому что в каждый момент времени жив всего один блок памяти. Но будет виден в этом профиле.
-- `fragmentation` - профиль фрагментации памяти. Small объекты в tcmalloc
-выделяются из спанов. Спан - это массив small объектов одинакового размера. Спан не вернётся назад в общий пул памяти, пока не освободят все объекты в нём. В худшем случае, всю память могут занимать такие спаны с одним живым объектом внутри. Этот тип профиля позволяет находить, какие аллокации приводят к подобной проблеме.
+TCMalloc supports four profile types:
+- `heap` — snapshot of current memory usage. This is the main profile you're interested in.
+- `peak` — snapshot of memory usage at the peak. Useful when looking for a sudden spike that's already passed.
+- `allocations` — profile of allocations by given time interval. Helpful for optimizing performance. Code that frequently allocates and frees a vector in a hot loop will not be visible in the `heap` profile but will appear here.
+- `fragmentation` — profile of memory fragmentation. Small tcmalloc objects are allocated from spans. A span is an array of small objects of the same size. It doesn't return to the pool until all objects in it are freed. In the worst case, all memory may be occupied by spans with one live object inside. This profile type helps detect such allocations.
 
-Memory profiler работает в любом типе сборки, кроме сборки с санитайзерами.
+Memory profiler works in all build types except those with sanitizers.
 
 ## Spinlock Profiler
 
-ytprof поддерживает профилирование 2-х видов спинлоков.
-- `lock` - профиль спинлоков из `absl`. Эти спинлоки используются внутри tcmalloc.
-- `block` - профиль спинлоков из `library/cpp/yt/threading`
+ytprof supports profiling two types of spinlocks:
+- `lock` — profile of absl spinlocks. These are used inside tcmalloc.
+- `block` — profile of spinlocks from `library/cpp/yt/threading`.
 
-### Быстрые примеры для YT
+### Quick examples for YT
 
-```
-# Текущее потребление ноды
+```bash
+# Current node memory usage
 curl http://vla0-8040-co-node-arnold.vla.yp-c.yandex.net:10013/ytprof/heap > ../heap.pb.gz
-# Пиковое потребение ноды
+# Node peak memory usage
 curl 'http://vla2-8153-node-seneca-vla.vla.yp-c.yandex.net:10012/ytprof/peak' > ../peak.pb.gz
-# Профиль аллокаций ноды
+# Node allocation profile
 curl 'http://vla2-8153-node-seneca-vla.vla.yp-c.yandex.net:10012/ytprof/allocations?d=60' > ../allocations_node.pb.gz
-# CPU профиль мастера
+# Master CPU profile
 curl 'http://m002-hahn.sas.yp-c.yandex.net:10010/ytprof/profile' > ../profile.pb.gz
-# CPU профиль шедулера с повышенной частотой
+# Scheduler CPU profile at high frequency
 curl 'http://sas5-9718-scheduler-hahn.sas.yp-c.yandex.net:10011/ytprof/profile?freq=1000' > ../profile_1000.pb.gz
 
-# Смотрим профиль из корня аркадии. trim_path можно поправить, если исходники не находятся.
+# View the profile from the arcadia root. You can edit trim_path if sources aren't found.
 ya tool pprof -symbolize=none -trim_path='/-S/:/-B/:/home/teamcity/source/Yt_ArcRelease'  ../heap.pb.gz
 File: ytserver-node
 generated by ytprof 0.3
@@ -214,25 +208,25 @@ arc_revision=b6081b45d6f7f85ab6f9772f31c277fe01de886c
 build_type=profile
 Type: space
 Entering interactive mode (type "help" for commands, "o" for options)
-# Сохраняет svg файл. В нём проще всего найти интересные функции, чтобы потом смотреть на них более подробно
+# Save SVG file. It's easier to find interesting functions and then examine them in more detail
 (pprof) svg
-# Показывает топ функций. Удобно в cpu, в памяти скорее всего будет показывать функции аллокации
+# Show top functions. Useful in CPU profile, in memory profile it will probably show allocation functions
 (pprof) top
-# Сортирует не по потреблению в функции, а по потреблению в самой функции и всех её детях
+# Sort not by consumption in function, but by consumption in it and its children
 (pprof) sort=cum
-# Переключает вес семпла на штуки. По дефолту семплы взвешиваются в секундах или мегабайтах
+# Switch sample weight to units instead of seconds or megabytes
 (pprof) sample_index=0
-# Показывает код функции. Параметр - это регулярное выражение
+# Show function code. Parameter is a regex
 (pprof) list IOutputStream::Write
-# Фильтрует семплы по треду
+# Filter samples by thread
 (pprof) tagfocus=thread=StorageHeavy
-# Аллокации по размеру
+# Allocations by size
 (pprof) tagfocus=allocated_size=2mb:
-# Фильтрует экшены, которые бежали больше 10ms
+# Filter actions running longer than 10ms
 (pprof) tagfocus=action_run_time_us=10000:
-# Убирает фильтр
+# Remove filter
 (pprof) tagfocus=
-# Показывает сырые семплы
+# Show raw samples
 (pprof) traces
 ```
 

@@ -806,3 +806,46 @@ SELECT
 FROM my_table;
 ```
 
+
+## RANDOM_SAMPLE и RANDOM_VALUE
+
+#### Сигнатура
+
+Функции доступны начиная с версии [2025.04](../changelog/2025.04.md).
+
+```yql
+RANDOM_SAMPLE(T?, limit:Uint64)->List<T>
+RANDOM_SAMPLE(T, limit:Uint64)->List<T>
+RANDOM_VALUE(T)->T
+RANDOM_VALUE(T?)->Optional<T>
+```
+
+Выбрать не более `limit` случайных значений. `RANDOM_VALUE` эквивалентен `RANDOM_SAMPLE` с `limit=1`, за исключением того, что возвращает элемент, а не список. Вероятность каждого входного значения появиться в результирующем списке равняется в точности `limit/count(*)`.
+
+{% note info %}
+
+`RANDOM_SAMPLE` на пустой таблице без группировки по ключам возвращает пустой список, а не `NULL`.
+
+{% endnote %}
+
+
+#### Примеры
+
+```yql
+SELECT
+   RANDOM_SAMPLE(region, 5) as five_random_regions,
+   RANDOM_VALUE(region) as random_region
+FROM users
+```
+
+{% note warning %}
+
+Итоговый результат не детерминирован (нельзя сделать два запуска, получающих гарантированно один и тот же результат).
+
+{% endnote %}
+
+{% note warning %}
+
+В процессе вычисления агрегационная функция удерживает в памяти `limit` элементов. При использовании большого `limit` и элементов большого размера, вычисления могут упасть по превышению лимита памяти.
+
+{% endnote %}

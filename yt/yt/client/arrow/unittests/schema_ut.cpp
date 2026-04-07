@@ -55,10 +55,10 @@ TEST(TArrowSchemaConverterTest, ConvertSimpleTypes)
         TColumnSchema("f_float16", SimpleLogicalType(ESimpleLogicalValueType::Float)),
         TColumnSchema("f_float32", SimpleLogicalType(ESimpleLogicalValueType::Float)),
         TColumnSchema("f_float64", SimpleLogicalType(ESimpleLogicalValueType::Double)),
-        TColumnSchema("f_utf8", SimpleLogicalType(ESimpleLogicalValueType::String)),
-        TColumnSchema("f_large_utf8", SimpleLogicalType(ESimpleLogicalValueType::String)),
-        TColumnSchema("f_binary", SimpleLogicalType(ESimpleLogicalValueType::Any)),
-        TColumnSchema("f_large_binary", SimpleLogicalType(ESimpleLogicalValueType::Any)),
+        TColumnSchema("f_utf8", SimpleLogicalType(ESimpleLogicalValueType::Utf8)),
+        TColumnSchema("f_large_utf8", SimpleLogicalType(ESimpleLogicalValueType::Utf8)),
+        TColumnSchema("f_binary", SimpleLogicalType(ESimpleLogicalValueType::String)),
+        TColumnSchema("f_large_binary", SimpleLogicalType(ESimpleLogicalValueType::String)),
         TColumnSchema("f_decimal", DecimalLogicalType(35,18)),
         TColumnSchema("f_date32", SimpleLogicalType(ESimpleLogicalValueType::Int32)),
         TColumnSchema("f_date64", SimpleLogicalType(ESimpleLogicalValueType::Int64)),
@@ -87,14 +87,14 @@ TEST(TArrowSchemaConverterTest, ConvertComplexTypes)
     const auto expected = TTableSchema({
         TColumnSchema("f_array", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int32))),
         TColumnSchema("f_struct", StructLogicalType({
-            TStructField("nested_num", SimpleLogicalType(ESimpleLogicalValueType::Int32)),
-            TStructField("nested_struct", StructLogicalType({
-                TStructField("inner_list", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int32))),
-                TStructField("inner_num", SimpleLogicalType(ESimpleLogicalValueType::Int32))
-            })),
-        })),
+            TStructField("nested_num", "nested_num", SimpleLogicalType(ESimpleLogicalValueType::Int32)),
+            TStructField("nested_struct", "nested_struct", StructLogicalType({
+                TStructField("inner_list", "inner_list", ListLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int32))),
+                TStructField("inner_num", "inner_num", SimpleLogicalType(ESimpleLogicalValueType::Int32))
+            }, /*removedFieldStableNames*/ {})),
+        }, /*removedFieldStableNames*/ {})),
         TColumnSchema("f_map", DictLogicalType(
-            SimpleLogicalType(ESimpleLogicalValueType::String),
+            SimpleLogicalType(ESimpleLogicalValueType::Utf8),
             OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Uint64))
         )),
         TColumnSchema("f_opt", OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Int32)))

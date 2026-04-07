@@ -18,9 +18,31 @@ namespace {
 
 using NYql::SwapBytes;
 
+template <typename T>
+NUdf::TUnboxedValuePod MakeTzFromBytes(const NUdf::TUnboxedValue& data) {
+    static_assert(NUdf::TDataType<T>::Features & NUdf::EDataTypeFeatures::TzDateType);
+    using TLayout = NUdf::TDataType<T>::TLayout;
+
+    const auto& ref = data.AsStringRef();
+    if (ref.Size() != sizeof(TLayout) + sizeof(ui16)) {
+        return NUdf::TUnboxedValuePod();
+    }
+
+    TLayout value = SwapBytes(ReadUnaligned<TLayout>(ref.Data()));
+    auto tzId = SwapBytes(ReadUnaligned<ui16>(ref.Data() + ref.Size() - sizeof(ui16)));
+    if (NUdf::IsValidLayoutValue<T>(value) && IsValidTimezoneId(tzId)) {
+        auto ret = NUdf::TUnboxedValuePod(value);
+        ret.SetTimezoneId(tzId);
+        return ret;
+    }
+
+    return NUdf::TUnboxedValuePod();
+}
+
 template <bool IsOptional>
-class TFromBytesWrapper : public TMutableComputationNode<TFromBytesWrapper<IsOptional>> {
+class TFromBytesWrapper: public TMutableComputationNode<TFromBytesWrapper<IsOptional>> {
     typedef TMutableComputationNode<TFromBytesWrapper<IsOptional>> TBaseComputation;
+
 public:
     TFromBytesWrapper(TComputationMutables& mutables, IComputationNode* data, NUdf::TDataTypeId schemeType, ui32 param1, ui32 param2)
         : TBaseComputation(mutables)
@@ -47,150 +69,61 @@ public:
         }
 
         switch (SchemeType) {
-        case NUdf::EDataSlot::TzDate: {
-            const auto& ref = data.AsStringRef();
-            if (ref.Size() != 4) {
-                return NUdf::TUnboxedValuePod();
+            case NUdf::EDataSlot::TzDate:
+                return MakeTzFromBytes<NUdf::TTzDate>(data);
+            case NUdf::EDataSlot::TzDatetime:
+                return MakeTzFromBytes<NUdf::TTzDatetime>(data);
+            case NUdf::EDataSlot::TzTimestamp:
+                return MakeTzFromBytes<NUdf::TTzTimestamp>(data);
+            case NUdf::EDataSlot::TzDate32:
+                return MakeTzFromBytes<NUdf::TTzDate32>(data);
+            case NUdf::EDataSlot::TzDatetime64:
+                return MakeTzFromBytes<NUdf::TTzDatetime64>(data);
+            case NUdf::EDataSlot::TzTimestamp64:
+                return MakeTzFromBytes<NUdf::TTzTimestamp64>(data);
+
+            case NUdf::EDataSlot::JsonDocument: {
+                if (!NBinaryJson::IsValidBinaryJson(TStringBuf(data.AsStringRef()))) {
+                    return NUdf::TUnboxedValuePod();
+                }
+                return data.Release();
             }
 
-            auto tzId = SwapBytes(ReadUnaligned<ui16>(ref.Data() + ref.Size() - sizeof(ui16)));
-            auto value = SwapBytes(data.Get<ui16>());
-            if (value < NUdf::MAX_DATE && tzId < NTi::GetTimezones().size()) {
-                auto ret = NUdf::TUnboxedValuePod(value);
-                ret.SetTimezoneId(tzId);
-                return ret;
-            }
+            case NUdf::EDataSlot::Decimal: {
+                const auto& ref = data.AsStringRef();
+                if (ref.Size() != 15) {
+                    return NUdf::TUnboxedValuePod();
+                }
 
-            return NUdf::TUnboxedValuePod();
-        }
+                NYql::NDecimal::TInt128 v = 0;
+                ui8* p = (ui8*)&v;
+                memcpy(p, ref.Data(), 15);
+                p[0xF] = (p[0xE] & 0x80) ? 0xFF : 0x00;
+                if (NYql::NDecimal::IsError(v)) {
+                    return NUdf::TUnboxedValuePod();
+                }
 
-        case NUdf::EDataSlot::TzDatetime: {
-            const auto& ref = data.AsStringRef();
-            if (ref.Size() != 6) {
-                return NUdf::TUnboxedValuePod();
-            }
+                if (!NYql::NDecimal::IsNormal(v)) {
+                    return NUdf::TUnboxedValuePod(v);
+                }
 
-            auto tzId = SwapBytes(ReadUnaligned<ui16>(ref.Data() + ref.Size() - sizeof(ui16)));
-            auto value = SwapBytes(data.Get<ui32>());
-            if (value < NUdf::MAX_DATETIME && tzId < NTi::GetTimezones().size()) {
-                auto ret = NUdf::TUnboxedValuePod(value);
-                ret.SetTimezoneId(tzId);
-                return ret;
-            }
+                if (v >= DecimalBound) {
+                    return NUdf::TUnboxedValuePod(NYql::NDecimal::Inf());
+                }
 
-            return NUdf::TUnboxedValuePod();
-        }
+                if (v <= NegDecimalBound) {
+                    return NUdf::TUnboxedValuePod(-NYql::NDecimal::Inf());
+                }
 
-        case NUdf::EDataSlot::TzTimestamp: {
-            const auto& ref = data.AsStringRef();
-            if (ref.Size() != 10) {
-                return NUdf::TUnboxedValuePod();
-            }
-
-            auto tzId = SwapBytes(ReadUnaligned<ui16>(ref.Data() + ref.Size() - sizeof(ui16)));
-            auto value = SwapBytes(data.Get<ui64>());
-            if (value < NUdf::MAX_TIMESTAMP && tzId < NTi::GetTimezones().size()) {
-                auto ret = NUdf::TUnboxedValuePod(value);
-                ret.SetTimezoneId(tzId);
-                return ret;
-            }
-
-            return NUdf::TUnboxedValuePod();
-        }
-
-        case NUdf::EDataSlot::TzDate32: {
-            const auto& ref = data.AsStringRef();
-            if (ref.Size() != 6) {
-                return NUdf::TUnboxedValuePod();
-            }
-
-            auto tzId = SwapBytes(ReadUnaligned<ui16>(ref.Data() + ref.Size() - sizeof(ui16)));
-            auto value = SwapBytes(data.Get<i32>());
-            if (value >= NUdf::MIN_DATE32 && value <= NUdf::MAX_DATE32 && tzId < NTi::GetTimezones().size()) {
-                auto ret = NUdf::TUnboxedValuePod(value);
-                ret.SetTimezoneId(tzId);
-                return ret;
-            }
-
-            return NUdf::TUnboxedValuePod();
-        }
-
-        case NUdf::EDataSlot::TzDatetime64: {
-            const auto& ref = data.AsStringRef();
-            if (ref.Size() != 10) {
-                return NUdf::TUnboxedValuePod();
-            }
-
-            auto tzId = SwapBytes(ReadUnaligned<ui16>(ref.Data() + ref.Size() - sizeof(ui16)));
-            auto value = SwapBytes(data.Get<i64>());
-            if (value >= NUdf::MIN_DATETIME64 && value <= NUdf::MAX_DATETIME64 && tzId < NTi::GetTimezones().size()) {
-                auto ret = NUdf::TUnboxedValuePod(value);
-                ret.SetTimezoneId(tzId);
-                return ret;
-            }
-
-            return NUdf::TUnboxedValuePod();
-        }
-
-        case NUdf::EDataSlot::TzTimestamp64: {
-            const auto& ref = data.AsStringRef();
-            if (ref.Size() != 10) {
-                return NUdf::TUnboxedValuePod();
-            }
-
-            auto tzId = SwapBytes(ReadUnaligned<ui16>(ref.Data() + ref.Size() - sizeof(ui16)));
-            auto value = SwapBytes(data.Get<i64>());
-            if (value >= NUdf::MIN_TIMESTAMP64 && value <= NUdf::MAX_TIMESTAMP64 && tzId < NTi::GetTimezones().size()) {
-                auto ret = NUdf::TUnboxedValuePod(value);
-                ret.SetTimezoneId(tzId);
-                return ret;
-            }
-
-            return NUdf::TUnboxedValuePod();
-        }
-
-        case NUdf::EDataSlot::JsonDocument: {
-            if (!NBinaryJson::IsValidBinaryJson(TStringBuf(data.AsStringRef()))) {
-                return NUdf::TUnboxedValuePod();
-            }
-            return data.Release();
-        }
-
-        case NUdf::EDataSlot::Decimal: {
-            const auto& ref = data.AsStringRef();
-            if (ref.Size() != 15) {
-                return NUdf::TUnboxedValuePod();
-            }
-
-            NYql::NDecimal::TInt128 v = 0;
-            ui8* p = (ui8*)&v;
-            memcpy(p, ref.Data(), 15);
-            p[0xF] = (p[0xE] & 0x80) ? 0xFF : 0x00;
-            if (NYql::NDecimal::IsError(v)) {
-                return NUdf::TUnboxedValuePod();
-            }
-
-            if (!NYql::NDecimal::IsNormal(v)) {
                 return NUdf::TUnboxedValuePod(v);
             }
 
-            if (v >= DecimalBound) {
-                return NUdf::TUnboxedValuePod(NYql::NDecimal::Inf());
-            }
-
-            if (v <= NegDecimalBound) {
-                return NUdf::TUnboxedValuePod(-NYql::NDecimal::Inf());
-            }
-
-            return NUdf::TUnboxedValuePod(v);
-        }
-
-        default:
-            if (IsValidValue(SchemeType, data)) {
-                return data.Release();
-            } else {
-                return NUdf::TUnboxedValuePod();
-            }
+            default:
+                if (IsValidValue(SchemeType, data)) {
+                    return data.Release();
+                } else {
+                    return NUdf::TUnboxedValuePod();
+                }
         }
     }
 
@@ -206,7 +139,7 @@ private:
     NYql::NDecimal::TInt128 DecimalBound, NegDecimalBound;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapFromBytes(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2 || callable.GetInputsCount() == 4, "Expected 2 or 4 args");
@@ -237,5 +170,5 @@ IComputationNode* WrapFromBytes(TCallable& callable, const TComputationNodeFacto
     }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

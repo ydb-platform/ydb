@@ -34,7 +34,7 @@ public:
                 TStringBuilder() << "Index build process with id <" << BuildId << "> not found"
             );
         }
-        const auto& indexBuildInfo = *indexBuildInfoPtr->Get();
+        const auto& indexBuildInfo = *indexBuildInfoPtr->get();
         if (indexBuildInfo.DomainPathId != domainPathId) {
             return Reply(
                 Ydb::StatusIds::NOT_FOUND,
@@ -50,7 +50,9 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->PersistBuildIndexForget(db, indexBuildInfo);
+        if (!Self->PersistBuildIndexForget(db, indexBuildInfo)) {
+            return false;
+        }
 
         EraseBuildInfo(indexBuildInfo);
 

@@ -4,6 +4,6 @@
 
 namespace NSQLHighlight {
 
-    THighlighting MakeYQLsHighlighting();
+THighlighting MakeYQLsHighlighting();
 
 } // namespace NSQLHighlight

@@ -27,6 +27,8 @@ arrow::Result<TArrowCSV> TArrowCSVTable::Create(const std::vector<NYdb::NTable::
         if (tp.GetKind() == NYdb::TTypeParser::ETypeKind::Decimal) {
             columnInfo.Precision = tp.GetDecimal().Precision;
             columnInfo.Scale = tp.GetDecimal().Scale;
+        } else if (tp.GetKind() == NYdb::TTypeParser::ETypeKind::Primitive && tp.GetPrimitive() == NYdb::EPrimitiveType::Bool) {
+            columnInfo.IsBool = true;
         }
 
         convertedColumns.emplace_back(columnInfo);
@@ -59,7 +61,7 @@ arrow::Result<std::shared_ptr<arrow::DataType>> TArrowCSVTable::GetArrowType(con
     case NYdb::TTypeParser::ETypeKind::Primitive:
         switch (tp.GetPrimitive()) {
             case NYdb::EPrimitiveType::Bool:
-                return arrow::boolean();
+                return arrow::uint8();
             case NYdb::EPrimitiveType::Int8:
                 return arrow::int8();
             case NYdb::EPrimitiveType::Uint8:

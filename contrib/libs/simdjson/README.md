@@ -1,5 +1,3 @@
-
-[![Fuzzing Status](https://oss-fuzz-build-logs.storage.googleapis.com/badges/simdjson.svg)](https://bugs.chromium.org/p/oss-fuzz/issues/list?sort=-opened&can=1&q=proj:simdjson)
 [![][license img]][license] [![][licensemit img]][licensemit]
 
 
@@ -8,7 +6,8 @@
 simdjson : Parsing gigabytes of JSON per second
 ===============================================
 
-<img src="images/logo.png" width="10%" style="float: right">
+<img src="images/official_logo/logo_noir/SVG/logo_simdjson_noir.svg" width="40%" style="float: right">
+
 JSON is everywhere on the Internet. Servers spend a *lot* of time parsing it. We need a fresh
 approach. The simdjson library uses commonly available SIMD instructions and microparallel algorithms
 to parse JSON 4x  faster than RapidJSON and 25x faster than JSON for Modern C++.
@@ -64,9 +63,14 @@ Real-world usage
 - [WasmEdge](https://wasmedge.org)
 - [RonDB](https://github.com/logicalclocks/rondb)
 - [GreptimeDB](https://github.com/GreptimeTeam/greptimedb)
+- [mamba](https://github.com/mamba-org/mamba)
+- [Ladybird Browser](https://ladybird.org)
 
 
 If you are planning to use simdjson in a product, please work from one of our releases.
+
+
+
 
 Quick Start
 -----------
@@ -84,7 +88,7 @@ The simdjson library is easily consumable with a single .h and .cpp file.
    ```
 2. Create `quickstart.cpp`:
 
-```c++
+```cpp
 #include <iostream>
 #include "simdjson.h"
 using namespace simdjson;
@@ -109,15 +113,19 @@ Documentation
 Usage documentation is available:
 
 * [Basics](doc/basics.md) is an overview of how to use simdjson and its APIs.
+* [Builder](doc/builder.md) is an overview of how to efficiently write JSON strings using simdjson.
 * [Performance](doc/performance.md) shows some more advanced scenarios and how to tune for them.
 * [Implementation Selection](doc/implementation-selection.md) describes runtime CPU detection and
   how you can work with it.
 * [API](https://simdjson.github.io/simdjson/) contains the automatically generated API documentation.
+* [Compile-Time Parsing](doc/compile_time.md) presents our compile-time parsing function (C++26 only).
+
 
 Godbolt
 -------------
 
 Some users may want to browse code along with the compiled assembly. You want to check out the following lists of examples:
+* [C++26 reflection example](https://godbolt.org/z/K3Px64TqK)
 * [simdjson examples with errors handled through exceptions](https://godbolt.org/z/7G5qE4sr9)
 * [simdjson examples with errors without exceptions](https://godbolt.org/z/e9dWb9E4v)
 
@@ -180,6 +188,7 @@ We distinguish between "bindings" (which just wrap the C++ code) and a port to a
 - [JSON::SIMD](https://metacpan.org/pod/JSON::SIMD): Perl bindings; fully-featured JSON module that uses simdjson for decoding.
 - [gemmaJSON](https://github.com/sainttttt/gemmaJSON): Nim JSON parser based on simdjson bindings.
 - [simdjson-java](https://github.com/simdjson/simdjson-java): Java port.
+- [mruby-fast-json](https://github.com/Asmod4n/mruby-fast-json): mruby binding with high API coverage.
 
 About simdjson
 --------------
@@ -206,6 +215,21 @@ For the video inclined, <br />
 [![simdjson at QCon San Francisco 2019](http://img.youtube.com/vi/wlvKAT7SZIQ/0.jpg)](http://www.youtube.com/watch?v=wlvKAT7SZIQ)<br />
 (It was the best voted talk, we're kinda proud of it.)
 
+Citing this work
+-----------------
+
+If you use simdjson in published research, please cite the software library. A suitable BibTeX entry is:
+
+```bibtex
+@misc{simdjson,
+  title={{The simdjson library: Parsing Gigabytes of JSON per Second}},
+  author={Daniel Lemire and Geoff Langdale and John Keiser and Paul Dreik and Francisco Thiesen and others},
+  year={2019},
+  howpublished={Software library},
+  note={https://github.com/simdjson/simdjson}
+}
+```
+
 Funding
 -------
 
@@ -225,6 +249,13 @@ Contributing to simdjson
 
 Head over to [CONTRIBUTING.md](CONTRIBUTING.md) for information on contributing to simdjson, and
 [HACKING.md](HACKING.md) for information on source, building, and architecture/design.
+
+
+Stars
+------
+
+[![Star History Chart](https://api.star-history.com/svg?repos=simdjson/simdjson&type=Date)](https://www.star-history.com/#simdjson/simdjson&Date)
+
 
 License
 -------

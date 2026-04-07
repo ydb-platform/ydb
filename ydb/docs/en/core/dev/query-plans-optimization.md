@@ -1,8 +1,16 @@
 # Query plan optimization
 
-Before executing a query, it is essential to analyze its execution plan to detect and eliminate the reasons for possible excessive cluster resource consumption or abnormally high execution time. This article will discuss specific examples of query plan analysis.
+It's very useful to to analyze execution plans for queries in order to detect and eliminate the causes of possible inefficiencies. {{ ydb-short-name }} provides two types of query plans: logical plan and execution plan. Logical plan is better suited for analyzing complex queries with a large number of [JOIN](../yql/reference/syntax/select/join.md) operators. Execution plan is more detailed: it additionally shows the stages of the distributed plan and connectors between them, which makes it more convenient for analyzing simple OLTP queries.
 
-Let's consider the following query that searches for episodes by title:
+## Logical Query Plan
+
+You can get the logical plan via {{ ydb-short-name }} [CLI](../reference/ydb-cli/commands/explain-plan.md).
+
+This plan allows you to compare the query optimizer's predictions with the execution statistics. If the predictions differ significantly from the actual data at the execution stage, this may indicate that the optimizer has not built the most efficient plan for the current query. In this case, you can use [optimizer hints](query-hints.md) to create a more efficient plan.
+
+## Query Execution Plan
+
+To illustrate how to work with the execution plan, consider the following OLTP query that searches for a series by name:
 
 ```yql
 SELECT season_id, episode_id
@@ -14,7 +22,7 @@ Schema of the `episodes` table:
 
 ![episodes](../_assets/episodes_scheme.png)
 
-Let's build a plan for this query. You can do this via either UI or {{ ydb-short-name }} CLI:
+Let's build a query execution plan for this query. You can do this via either UI or {{ ydb-short-name }} CLI:
 
 {% list tabs group=tool %}
 

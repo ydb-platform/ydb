@@ -24,11 +24,13 @@ TBacktrace GetBacktrace(
 //! Symbolizes a backtrace invoking a given callback for each frame.
 /*!
  *  \param backtrace Backtrace to symbolize
- *  \param frameCallback Callback to invoke per each frame
+ *  \param writeCallback Callback to invoke for writing symbolized frames
+ *  \param startPC PC to start symbolization from (if null then start with the very first frame)
  */
 void SymbolizeBacktrace(
     TBacktrace backtrace,
-    const std::function<void(TStringBuf)>& frameCallback);
+    const std::function<void(TStringBuf)>& writeCallback,
+    void* startPC = nullptr);
 
 //! Symbolizes a backtrace to a string.
 /*!

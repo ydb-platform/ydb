@@ -185,6 +185,20 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
 
     TVector<TPathId> streams;
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
+        const auto tablePath = TPath::Resolve(item.GetPath(), context.SS);
+        {
+            auto checks = tablePath.Check();
+            checks
+                .IsResolved()
+                .NotDeleted()
+                .IsTable();
+            
+            if (!checks) {
+                result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+                return result;
+            }
+        }
+        
         std::pair<TString, TString> paths;
         TString err;
         if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {
@@ -207,6 +221,76 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
             return result;
         }
         streams.push_back(stream);
+    }
+
+    // Process indexes if they are not omitted
+    bool omitIndexes = bc->Description.GetIncrementalBackupConfig().GetOmitIndexes();
+    if (!omitIndexes) {
+        for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
+            const auto tablePath = TPath::Resolve(item.GetPath(), context.SS);
+            auto table = context.SS->Tables.at(tablePath.Base()->PathId);
+
+            std::pair<TString, TString> paths;
+            TString err;
+            if (!TrySplitPathByDb(item.GetPath(), bcPath.GetDomainPathString(), paths, err)) {
+                result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, err)};
+                return result;
+            }
+            auto& relativeItemPath = paths.second;
+
+            // Iterate through table's children to find indexes
+            for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
+                auto childPath = context.SS->PathsById.at(childPathId);
+
+                // Skip non-index children (CDC streams, etc.)
+                if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex) {
+                    continue;
+                }
+                
+                // Skip deleted indexes
+                if (childPath->Dropped()) {
+                    continue;
+                }
+
+                if (!IsSupportedIndex(childPathId, context)) continue;
+
+                // Get index implementation tables
+                auto indexPath = TPath::Init(childPathId, context.SS);
+                for (const auto& [implTableName, implTablePathId]: indexPath.Base()->GetChildren()) {
+                    // Build relative path to index impl table (relative to working dir)
+                    const TString indexImplTableRelPath = JoinPath({relativeItemPath, childName, implTableName});
+
+                    // Create AlterContinuousBackup for index impl table
+                    NKikimrSchemeOp::TModifyScheme modifyScheme;
+                    modifyScheme.SetWorkingDir(tx.GetWorkingDir());
+                    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterContinuousBackup);
+                    modifyScheme.SetInternal(true);
+
+                    auto& cb = *modifyScheme.MutableAlterContinuousBackup();
+                    cb.SetTableName(indexImplTableRelPath);  // Relative path: table1/index1/indexImplTable
+
+                    auto& ib = *cb.MutableTakeIncrementalBackup();
+
+                    TString dstPath = JoinPath({
+                        tx.GetBackupIncrementalBackupCollection().GetName(),
+                        tx.GetBackupIncrementalBackupCollection().GetTargetDir(),
+                        "__ydb_backup_meta",
+                        "indexes",
+                        relativeItemPath,
+                        childName,
+                        implTableName
+                    });
+
+                    ib.SetDstPath(dstPath);
+
+                    TPathId stream;
+                    if (!CreateAlterContinuousBackup(opId, modifyScheme, context, result, stream)) {
+                        return result;
+                    }
+                    streams.push_back(stream);
+                }
+            }
+        }
     }
 
     CreateLongIncrementalBackupOp(opId, bcPath, result, streams);

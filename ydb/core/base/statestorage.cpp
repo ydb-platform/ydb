@@ -75,9 +75,9 @@ void TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection, ui3
             selection->SelectedReplicas[idx] = ringGroup.Rings[idx].SelectReplica(hash);
         }
     } else { // NToSelect < total, first - select rings with walker, then select concrete node
-        TStateStorageRingWalker walker(hash, total);
-        for (ui32 idx : xrange(ringGroup.NToSelect))
-            selection->SelectedReplicas[idx] = ringGroup.Rings[walker.Next()].SelectReplica(hash);
+        for (ui32 idx = 0; ui32 ringIdx : TStateStorageRingWalker::Select(hash, total, ringGroup.NToSelect)) {
+            selection->SelectedReplicas[idx++] = ringGroup.Rings[ringIdx].SelectReplica(hash);
+        }
     }
 }
 
@@ -333,10 +333,11 @@ ERingGroupState GetRingGroupState(const NKikimrConfig::TDomainsConfig::TStateSto
             Y_ABORT("Unsupported ring group pile state");
     }
 }
-TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfoImpl(const char* namePrefix,
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfoImpl(const TString& namePrefix,
         const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
     char name[TActorId::MaxServiceIDLength];
-    strcpy(name, namePrefix);
+    Y_ABORT_UNLESS(namePrefix.size() < TActorId::MaxServiceIDLength - sizeof(ui32) * 2);
+    memcpy(name, namePrefix.c_str(), namePrefix.size());
     TIntrusivePtr<TStateStorageInfo> info = new TStateStorageInfo();
     info->ClusterStateGeneration = config.GetClusterStateGeneration();
     info->ClusterStateGuid = config.GetClusterStateGuid();
@@ -349,20 +350,19 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfoImpl(const char* namePrefi
         info->CompatibleVersions.push_back(version);
     }
 
-    const size_t offset = FindIndex(name, char()) + sizeof(ui32);
-    Y_ABORT_UNLESS(offset != NPOS && (offset) < TActorId::MaxServiceIDLength);
+    const size_t offset = namePrefix.size() + sizeof(ui32);
     const ui32 stateStorageGroup = 1;
     memcpy(name + offset - sizeof(ui32), reinterpret_cast<const char *>(&stateStorageGroup), sizeof(ui32));
     memset(name + offset, 0, TActorId::MaxServiceIDLength - offset);
     for (size_t i = 0; i < config.RingGroupsSize(); i++) {
         auto& ringGroup = config.GetRingGroups(i);
-        info->RingGroups.push_back({GetRingGroupState(ringGroup), ringGroup.GetWriteOnly(), ringGroup.GetNToSelect(), {}});
+        info->RingGroups.push_back({GetRingGroupState(ringGroup), ringGroup.GetWriteOnly(), ringGroup.GetNToSelect(), TBridgePileId::FromProto(&ringGroup, &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::GetBridgePileId), {}});
         CopyStateStorageRingInfo(ringGroup, info->RingGroups.back(), name, offset, ringGroup.GetRingGroupActorIdOffset());
         memset(name + offset, 0, TActorId::MaxServiceIDLength - offset);
     }
     if (config.HasRing()) {
         auto& ring = config.GetRing();
-        info->RingGroups.push_back({ERingGroupState::PRIMARY, false, ring.GetNToSelect(), {}});
+        info->RingGroups.push_back({ERingGroupState::PRIMARY, false, ring.GetNToSelect(), {}, {}});
         CopyStateStorageRingInfo(ring, info->RingGroups.back(), name, offset, ring.GetRingGroupActorIdOffset());
     }
     return info;

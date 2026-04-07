@@ -1,7 +1,7 @@
 #pragma once
 
-#include "cracked_page.h"
 #include "openid_connect.h"
+#include <ydb/mvp/core/cracked_page.h>
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/http/http_proxy.h>
@@ -30,9 +30,9 @@ struct TExtensionsSteps : public TQueue<std::unique_ptr<IExtension>> {
 };
 
 struct TExtensionContext : public TThrRefBase {
-    TActorId Sender;
+    NActors::TActorId Sender;
     TExtensionsSteps Steps;
-    THolder<TProxiedResponseParams> Params;
+    TProxiedResponseParams Params;
 
     void Reply(NHttp::THttpOutgoingResponsePtr httpResponse);
     void Reply();

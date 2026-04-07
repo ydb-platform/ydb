@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/file_writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/file_writer.h"
 
 #include <memory>
 #include <ostream>
@@ -23,15 +23,15 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/util/key_value_metadata.h"
-#include "arrow/util/logging.h"
-#include "parquet/column_writer.h"
-#include "parquet/encryption/encryption_internal.h"
-#include "parquet/encryption/internal_file_encryptor.h"
-#include "parquet/exception.h"
-#include "parquet/page_index.h"
-#include "parquet/platform.h"
-#include "parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/key_value_metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/column_writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/encryption_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/internal_file_encryptor.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/page_index.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
 
 using arrow20::MemoryPool;
 

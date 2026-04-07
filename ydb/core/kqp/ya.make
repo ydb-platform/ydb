@@ -79,5 +79,12 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     ut
-    tools/combiner_perf/bin
+    common/result_set_format/ut
 )
+
+IF (NOT OS_WINDOWS)
+    RECURSE_FOR_TESTS(
+        tools/combiner_perf/bin
+        tools/join_perf/bin
+    )
+ENDIF()

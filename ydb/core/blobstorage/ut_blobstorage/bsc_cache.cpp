@@ -16,7 +16,7 @@ struct TTestCtx : public TTestCtxBase {
         if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerNodeServiceSetUpdate::EventType) {
             return false;
         }
-        
+
         return true;
     }
 

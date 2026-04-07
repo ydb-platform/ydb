@@ -1,6 +1,5 @@
 #include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
-#include <ydb/services/ydb/ydb_keys_ut.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
@@ -25,11 +24,8 @@ using namespace NYdb::NTable;
 using namespace NKikimr::NDataStreams::V1;
 namespace YDS_V1 = Ydb::DataStreams::V1;
 namespace NYDS_V1 = NYdb::NDataStreams::V1;
-struct WithSslAndAuth : TKikimrTestSettings {
-    static constexpr bool SSL = true;
-    static constexpr bool AUTH = true;
-};
-using TKikimrWithGrpcAndRootSchemaSecure = NYdb::TBasicKikimrWithGrpcAndRootSchema<WithSslAndAuth>;
+
+using TKikimrWithGrpcAndRootSchemaSecure = NYdb::TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuthAndSsl>;
 
 static constexpr const char NON_CHARGEABLE_USER[] = "superuser@builtin";
 static constexpr const char NON_CHARGEABLE_USER_X[] = "superuser_x@builtin";
@@ -41,14 +37,8 @@ static constexpr const char DEFAULT_FOLDER_ID[] = "somefolder";
 template<class TKikimr, bool secure>
 class TDatastreamsTestServer {
 public:
-    TDatastreamsTestServer(bool autopartitioningEnabled = false) {
+    TDatastreamsTestServer() {
         NKikimrConfig::TAppConfig appConfig;
-
-        if (autopartitioningEnabled) {
-            appConfig.MutableFeatureFlags()->SetEnableTopicSplitMerge(true);
-            appConfig.MutableFeatureFlags()->SetEnablePQConfigTransactionsAtSchemeShard(true);
-            appConfig.MutableFeatureFlags()->SetEnableTopicServiceTx(true);
-        }
 
         appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
         appConfig.MutablePQConfig()->SetEnabled(true);
@@ -99,11 +89,11 @@ public:
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto driverConfig = TDriverConfig()
             .SetEndpoint(location)
-            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", TLOG_DEBUG).Release()));
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", TLOG_DEBUG).Release()))
+            .SetDatabase("/Root");
+
         if (secure) {
-            driverConfig.UseSecureConnection(TString(NYdbSslTestData::CaCrt));
-        } else {
-            driverConfig.SetDatabase("/Root/");
+            driverConfig.UseSecureConnection(TKikimrTestWithAuthAndSsl::GetCaCrt());
         }
 
         Driver = std::make_unique<TDriver>(std::move(driverConfig));
@@ -519,11 +509,13 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                             [streamName](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("labels"));
                                 auto& labels = map.find("labels")->second.GetMap();
-                                UNIT_ASSERT_VALUES_EQUAL(labels.size(), 2);
+                                UNIT_ASSERT_VALUES_EQUAL(labels.size(), 3);
                                 UNIT_ASSERT_VALUES_EQUAL(
                                     labels.find("datastreams_stream_name")->second.GetString(), streamName);
                                 UNIT_ASSERT_VALUES_EQUAL(
                                     labels.find("ydb_database")->second.GetString(), "root");
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    labels.find("Category")->second.GetString(), "Topic");
                             },
                             [](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("usage"));
@@ -561,11 +553,13 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                             [streamName](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("labels"));
                                 auto& labels = map.find("labels")->second.GetMap();
-                                UNIT_ASSERT_VALUES_EQUAL(labels.size(), 2);
+                                UNIT_ASSERT_VALUES_EQUAL(labels.size(), 3);
                                 UNIT_ASSERT_VALUES_EQUAL(
                                     labels.find("datastreams_stream_name")->second.GetString(), streamName);
                                 UNIT_ASSERT_VALUES_EQUAL(
                                     labels.find("ydb_database")->second.GetString(), "root");
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    labels.find("Category")->second.GetString(), "Topic");
                             },
                             [](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("usage"));
@@ -619,7 +613,6 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT(res.GetValue().IsSuccess());
         }
     }
-
 
     Y_UNIT_TEST(TestReservedConsumersMetering) {
         TInsecureDatastreamsTestServer testServer;
@@ -679,7 +672,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                     createPartitionStreamEvent->Confirm();
                 } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
                     destroyPartitionStreamEvent->Confirm();
-                } else if (auto* closeSessionEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
+                } else if (std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
                     break;
                 }
             }
@@ -703,11 +696,13 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                             [streamName](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("labels"));
                                 auto& labels = map.find("labels")->second.GetMap();
-                                UNIT_ASSERT_VALUES_EQUAL(labels.size(), 2);
+                                UNIT_ASSERT_VALUES_EQUAL(labels.size(), 3);
                                 UNIT_ASSERT_VALUES_EQUAL(
                                     labels.find("datastreams_stream_name")->second.GetString(), streamName);
                                 UNIT_ASSERT_VALUES_EQUAL(
                                     labels.find("ydb_database")->second.GetString(), "root");
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    labels.find("Category")->second.GetString(), "Topic");
                             },
                             [/*storageMb*/](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("usage"));
@@ -743,11 +738,13 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                             [streamName](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("labels"));
                                 auto& labels = map.find("labels")->second.GetMap();
-                                UNIT_ASSERT_VALUES_EQUAL(labels.size(), 2);
+                                UNIT_ASSERT_VALUES_EQUAL(labels.size(), 3);
                                 UNIT_ASSERT_VALUES_EQUAL(
                                     labels.find("datastreams_stream_name")->second.GetString(), streamName);
                                 UNIT_ASSERT_VALUES_EQUAL(
                                     labels.find("ydb_database")->second.GetString(), "root");
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    labels.find("Category")->second.GetString(), "Topic");
                             },
                             [](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("usage"));
@@ -767,7 +764,6 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                             });
         UNIT_ASSERT_VALUES_EQUAL(throughputSchemaFound, 9);
     }
-
 
     Y_UNIT_TEST(TestNonChargeableUser) {
         TSecureDatastreamsTestServer testServer;
@@ -1460,7 +1456,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 createPartitionStreamEvent->Confirm();
             } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*event)) {
                 destroyPartitionStreamEvent->Confirm();
-            } else if (auto* closeSessionEvent = std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
+            } else if (std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
                 break;
             }
         }
@@ -1618,7 +1614,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 createPartitionStreamEvent->Confirm();
             } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*event)) {
                 destroyPartitionStreamEvent->Confirm();
-            } else if (auto* closeSessionEvent = std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
+            } else if (std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
                 break;
             }
         }
@@ -1737,7 +1733,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 createPartitionStreamEvent->Confirm();
             } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*event)) {
                 destroyPartitionStreamEvent->Confirm();
-            } else if (auto* closeSessionEvent = std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
+            } else if (std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
                 UNIT_ASSERT(false);
                 break;
             } else {
@@ -2245,10 +2241,15 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         }
 
         {
+waitForNavCache:
             auto result = client.GetShardIterator(
                     streamName, "shard-000000",
                     YDS_V1::ShardIteratorType::TRIM_HORIZON
                 ).ExtractValueSync();
+            if (result.GetStatus() == EStatus::SCHEME_ERROR) { // permissions were cached
+                Sleep(TDuration::MilliSeconds(10));
+                goto waitForNavCache;
+            }
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             shardIterator = result.GetResult().shard_iterator();
@@ -2793,7 +2794,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
     }
 
     Y_UNIT_TEST(Test_AutoPartitioning_Describe) {
-        TInsecureDatastreamsTestServer testServer(true);
+        TInsecureDatastreamsTestServer testServer;
         SET_YDS_LOCALS;
 
         TString streamName = "test-topic";
@@ -3141,7 +3142,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
     }
 
     Y_UNIT_TEST(Test_Crreate_AutoPartitioning_Disabled) {
-        TInsecureDatastreamsTestServer testServer(true);
+        TInsecureDatastreamsTestServer testServer;
         SET_YDS_LOCALS;
 
         {

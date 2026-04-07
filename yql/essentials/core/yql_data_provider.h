@@ -2,6 +2,7 @@
 
 #include "yql_graph_transformer.h"
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
+#include <yql/essentials/core/layers/layers.h>
 
 #include <yql/essentials/public/udf/udf_validate.h>
 
@@ -13,15 +14,16 @@
 #include <util/generic/string.h>
 
 #include <functional>
+#include <utility>
 
 class IRandomProvider;
 class ITimeProvider;
 
-namespace NKikimr  {
-    namespace NMiniKQL {
-        class IFunctionRegistry;
-    }
+
+namespace NKikimr::NMiniKQL {
+class IFunctionRegistry;
 }
+
 
 namespace NYql {
 
@@ -33,11 +35,11 @@ struct TPinInfo {
     bool HideInBasicPlan;
 
     TPinInfo(const TExprNode* dataSource, const TExprNode* dataSink,
-        const TExprNode* key, const TString& displayName, bool hideInBasicPlan)
+        const TExprNode* key, TString  displayName, bool hideInBasicPlan)
         : DataSource(dataSource)
         , DataSink(dataSink)
         , Key(key)
-        , DisplayName(displayName)
+        , DisplayName(std::move(displayName))
         , HideInBasicPlan(hideInBasicPlan)
     {}
 };
@@ -90,7 +92,7 @@ class IOptimizationContext;
 
 class IDataProvider : public TThrRefBase {
 public:
-    virtual ~IDataProvider() {}
+    ~IDataProvider() override {}
 
     virtual TStringBuf GetName() const = 0;
 
@@ -115,6 +117,8 @@ public:
     virtual IGraphTransformer& GetConfigurationTransformer() = 0;
     virtual TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) = 0;
     virtual const THashMap<TString, TString>* GetClusterTokens() = 0;
+    virtual TMaybe<TString> ResolveClusterToken(const TString& cluster) = 0;
+    virtual const THashSet<TString>& GetValidClusters() = 0;
     virtual void AddCluster(const TString& name, const THashMap<TString, TString>& properties) = 0;
 
     //-- discovery & rewrite
@@ -162,6 +166,7 @@ public:
     virtual TExprNode::TPtr CleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) = 0;
     virtual TExprNode::TPtr OptimizePull(const TExprNode::TPtr& source, const TFillSettings& fillSettings, TExprContext& ctx,
         IOptimizationContext& optCtx) = 0;
+    virtual void RegisterWorldArg(const TExprNode::TPtr& arg, const TExprNode::TPtr& world) = 0;
 
     //-- execution
     virtual bool CanExecute(const TExprNode& node) = 0;
@@ -190,6 +195,12 @@ public:
     // ytflow
     virtual IYtflowIntegration* GetYtflowIntegration() = 0;
     virtual IYtflowOptimization* GetYtflowOptimization() = 0;
+
+    // layers
+    virtual NLayers::ILayersIntegrationPtr GetLayersIntegration() const = 0;
+
+    // query capture
+    virtual bool IsFullCaptureReady() = 0;
 };
 
 struct IPipelineConfigurator;

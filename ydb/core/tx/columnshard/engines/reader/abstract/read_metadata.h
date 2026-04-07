@@ -24,6 +24,7 @@ public:
 
 private:
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
+    YDB_ACCESSOR_DEF(bool, FakeSort);
     std::optional<ui64> FilteredCountLimit;
     std::optional<ui64> RequestedLimit;
     const ESorting Sorting = ESorting::ASC;   // Sorting inside returned batches
@@ -45,6 +46,7 @@ protected:
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
     ui64 TxId = 0;
     std::optional<ui64> LockId;
+    std::optional<NKikimrDataEvents::ELockMode> LockMode;
     EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::ALLOW_DUPLICATES;
 
 public:
@@ -52,6 +54,11 @@ public:
 
     ui64 GetTabletId() const {
         return TabletId;
+    }
+
+    bool NeedToDetectConflicts() const {
+        // do not detect conflicts for snapshot isolated transactions or txs with no lock
+        return LockId.has_value() && LockMode.value_or(NKikimrDataEvents::OPTIMISTIC) != NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION;
     }
 
     void SetRequestedLimit(const ui64 value) {

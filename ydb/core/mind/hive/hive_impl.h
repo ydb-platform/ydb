@@ -110,21 +110,13 @@ inline IOutputStream& operator <<(IOutputStream& out, NKikimr::NHive::TSequencer
     return out << sq.Next << "@[" << sq.Begin << ".." << sq.End << ')';
 }
 
-namespace std {
-    template <>
-    struct hash<NKikimr::TSubDomainKey> {
-        std::size_t operator()(const NKikimr::TSubDomainKey& key) const {
-            return key.Hash();
-        }
-    };
-}
-
 namespace NKikimr {
 namespace NHive {
 
 TResourceRawValues ResourceRawValuesFromMetrics(const NKikimrTabletBase::TMetrics& metrics);
 NKikimrTabletBase::TMetrics MetricsFromResourceRawValues(const TResourceRawValues& values);
 TResourceRawValues ResourceRawValuesFromMetrics(const NKikimrHive::TTabletMetrics& tabletMetrics);
+TResourceRawValues ResourceRawValuesFromMetrics(const TMetrics& tabletMetrics);
 TString GetResourceValuesText(const NKikimrTabletBase::TMetrics& values);
 TString GetResourceValuesText(const TTabletInfo& tablet);
 TString GetResourceValuesText(const TResourceRawValues& values);
@@ -135,6 +127,7 @@ TString GetResourceValuesHtml(const TResourceRawValues& values);
 NJson::TJsonValue GetResourceValuesJson(const TResourceRawValues& values);
 NJson::TJsonValue GetResourceValuesJson(const TResourceRawValues& values, const TResourceRawValues& maximum);
 TString GetResourceValuesHtml(const NKikimrTabletBase::TMetrics& values);
+TString GetResourceValuesHtml(const TMetrics& values);
 NJson::TJsonValue GetResourceValuesJson(const NKikimrTabletBase::TMetrics& values);
 ui64 GetReadThroughput(const NKikimrTabletBase::TMetrics& values);
 ui64 GetWriteThroughput(const NKikimrTabletBase::TMetrics& values);
@@ -177,6 +170,7 @@ protected:
     friend class THiveStorageBalancer;;
     friend struct TNodeInfo;
     friend struct TLeaderTabletInfo;
+    friend class TReassignTabletsActor;
 
     friend class TTxInitScheme;
     friend class TTxDeleteBase;
@@ -245,6 +239,9 @@ protected:
     friend class TTxProcessUpdateFollowers;
     friend class TTxMonEvent_StopDomain;
     friend class TTxUpdatePiles;
+    friend class TTxSetDown;
+    friend class TTxProcessTabletMetrics;
+    friend class TTxUpdateLastReassign;
 
     friend class TDeleteTabletActor;
 
@@ -253,9 +250,11 @@ protected:
     bool IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     bool IsItPossibleToStartBalancer(EBalancerType balancerType);
     void StartHiveBalancer(TBalancerSettings&& settings);
-    void StartHiveDrain(TDrainTarget target, TDrainSettings settings);
+    THiveDrain* StartHiveDrain(TDrainTarget target, TDrainSettings settings);
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     void StartHiveStorageBalancer(TStorageBalancerSettings settings);
+    void StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description);
+    void StartReassignActor(std::vector<TReassignOperation> operations);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     NJson::TJsonValue GetBalancerProgressJson();
     ITransaction* CreateDeleteTablet(TEvHive::TEvDeleteTablet::TPtr& ev);
@@ -288,7 +287,7 @@ protected:
     ITransaction* CreateResumeTabletByTenant(TTabletId tabletId);
     ITransaction* CreateStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external = false);
     ITransaction* CreateUpdateTabletMetrics(TEvHive::TEvTabletMetrics::TPtr& ev);
-    ITransaction* CreateReassignGroups(TTabletId tabletId, const TActorId& actorToNotify, const std::bitset<MAX_TABLET_CHANNELS>& channelProfileNewGroup);
+    ITransaction* CreateReassignGroups(TTabletId tabletId, const TActorId& actorToNotify, const std::bitset<MAX_TABLET_CHANNELS>& channelProfileNewGroup, bool async);
     ITransaction* CreateReassignGroupsOnDecommit(ui32 groupId, std::unique_ptr<IEventHandle> reply);
     ITransaction* CreateLockTabletExecution(const NKikimrHive::TEvLockTabletExecution& rec, const TActorId& sender, const ui64 cookie);
     ITransaction* CreateUnlockTabletExecution(const NKikimrHive::TEvUnlockTabletExecution& rec, const TActorId& sender, const ui64 cookie);
@@ -303,7 +302,7 @@ protected:
     ITransaction* CreateReleaseTablets(TEvHive::TEvReleaseTablets::TPtr event);
     ITransaction* CreateReleaseTabletsReply(TEvHive::TEvReleaseTabletsReply::TPtr event);
     ITransaction* CreateConfigureSubdomain(TEvHive::TEvConfigureHive::TPtr event);
-    ITransaction* CreateSwitchDrainOn(TNodeId nodeId, TDrainSettings settings, const TActorId& initiator, ui64 seqNo = 0);
+    ITransaction* CreateSwitchDrainOn(TNodeId nodeId, TDrainSettings settings, const TActorId& initiator, ui64 seqNo = 0, ui64 cookie = 0);
     ITransaction* CreateSwitchDrainOff(TDrainTarget target, TDrainSettings settings, NKikimrProto::EReplyStatus status, ui32 movements);
     ITransaction* CreateTabletOwnersReply(TEvHive::TEvTabletOwnersReply::TPtr event);
     ITransaction* CreateRequestTabletOwners(TEvHive::TEvRequestTabletOwners::TPtr event);
@@ -314,6 +313,8 @@ protected:
     ITransaction* CreateDeleteNode(TNodeId nodeId);
     ITransaction* CreateConfigureScaleRecommender(TEvHive::TEvConfigureScaleRecommender::TPtr event);
     ITransaction* CreateUpdatePiles();
+    ITransaction* CreateSetDown(TEvHive::TEvSetDown::TPtr& event);
+    ITransaction* CreateProcessTabletMetrics();
 
 public:
     TDomainsView DomainsView;
@@ -332,6 +333,7 @@ protected:
     TPipeTracker PipeTracker;
     NTabletPipe::TClientRetryPolicy PipeRetryPolicy;
     std::unordered_map<TNodeId, TNodeInfo> Nodes;
+    std::unordered_map<TSegmentId, TIntrusiveList<TNodeInfo, TSegmentNodesTag>> NodeSegments;
     std::unordered_map<TTabletId, TLeaderTabletInfo> Tablets;
     std::unordered_map<TOwnerIdxType::TValueType, TTabletId> OwnerToTablet;
     std::unordered_map<TTabletCategoryId, TTabletCategoryInfo> TabletCategories;
@@ -349,9 +351,10 @@ protected:
 
     bool AreWeRootHive() const { return RootHiveId == HiveId; }
     bool AreWeSubDomainHive() const { return RootHiveId != HiveId; }
+    std::optional<TActorId> GetPipeToTenantHive(const TNodeInfo* node);
 
     struct TAggregateMetrics {
-        NKikimrTabletBase::TMetrics Metrics;
+        TMetrics Metrics;
         ui64 Counter = 0;
 
         void IncreaseCount(ui64 value = 1) {
@@ -363,14 +366,14 @@ protected:
             --Counter;
         }
 
-        void AggregateDiff(const NKikimrTabletBase::TMetrics& before, const NKikimrTabletBase::TMetrics& after, const TTabletInfo* tablet) {
+        void AggregateDiff(const TMetrics& before, const TMetrics& after, const TTabletInfo* tablet) {
             AggregateMetricsDiff(Metrics, before, after, tablet);
         }
 
-        NKikimrTabletBase::TMetrics GetAverage() const {
-            NKikimrTabletBase::TMetrics metrics;
+        TMetrics GetAverage() const {
+            TMetrics metrics;
             if (Counter > 0) {
-                metrics.CopyFrom(Metrics);
+                metrics = Metrics;
                 DivideMetrics(metrics, Counter);
             }
             return metrics;
@@ -415,6 +418,7 @@ protected:
     bool LogTabletMovesScheduled = false;
     bool ProcessStorageBalancerScheduled = false;
     bool ProcessFollowerUpdatesScheduled = false;
+    bool ProcessTabletMetricsScheduled = false;
     TResourceRawValues TotalRawResourceValues = {};
     TResourceNormalizedValues TotalNormalizedResourceValues = {};
     TInstant LastResourceChangeReaction;
@@ -436,6 +440,7 @@ protected:
     std::queue<TTabletId> StopTenantTabletsQueue;
     std::queue<TTabletId> ResumeTenantTabletsQueue;
     bool NotEnoughResources = false;
+    std::queue<TFullTabletId> ProcessTabletMetricsQueue;
 
     struct TPendingCreateTablet {
         NKikimrHive::TEvCreateTablet CreateTablet;
@@ -449,7 +454,6 @@ protected:
     ui64 UpdateTabletMetricsInProgress = 0;
     static constexpr ui64 MAX_UPDATE_TABLET_METRICS_IN_PROGRESS = 10000; // 10K
     i64 DeleteTabletInProgress = 0;
-    static constexpr i64 MAX_DELETE_TABLET_IN_PROGRESS = 100;
     std::queue<TTabletId> DeleteTabletQueue;
 
     TString BootStateBooting = "Booting";
@@ -472,6 +476,8 @@ protected:
     std::unordered_map<TTabletTypes::EType, NKikimrHive::TDataCentersPreference> DefaultDataCentersPreference;
     std::unordered_map<TDataCenterId, TDataCenterInfo> DataCenters;
     std::unordered_set<TNodeId> ConnectedNodes;
+    TString LastReassignStatus;
+    ui32 ReassignsRunning = 0;
 
     // normalized to be sorted list of unique values
     std::vector<TTabletTypes::EType> BalancerIgnoreTabletTypes; // built from CurrentConfig
@@ -609,6 +615,9 @@ protected:
     void Handle(TEvNodeWardenStorageConfig::TPtr& ev);
     void HandleInit(TEvNodeWardenStorageConfig::TPtr& ev);
     void Handle(TEvPrivate::TEvUpdateBalanceCounters::TPtr& ev);
+    void Handle(TEvHive::TEvRequestDrainInfo::TPtr& ev);
+    void Handle(TEvHive::TEvSetDown::TPtr& ev);
+    void Handle(TEvPrivate::TEvProcessTabletMetrics::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
@@ -693,6 +702,8 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void UpdateCounterTabletChannelHistorySize();
     void UpdateCounterNodesDown(i64 nodesDownDiff);
     void UpdateCounterNodesFrozen(i64 nodesFrozenDiff);
+    void UpdateCounterDeleteTabletQueueSize();
+    void UpdateCounterTabletsDeleting();
     void RecordTabletMove(const TTabletMoveInfo& info);
     bool DomainHasNodes(const TSubDomainKey &domainKey) const;
     void ProcessBootQueue();
@@ -703,15 +714,15 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void ProcessStorageBalancer();
     const TVector<i64>& GetTabletTypeAllowedMetricIds(TTabletTypes::EType type) const;
     static const TVector<i64>& GetDefaultAllowedMetricIdsForType(TTabletTypes::EType type);
-    static bool IsValidMetrics(const NKikimrTabletBase::TMetrics& metrics);
-    static bool IsValidMetricsCPU(const NKikimrTabletBase::TMetrics& metrics);
-    static bool IsValidMetricsMemory(const NKikimrTabletBase::TMetrics& metrics);
-    static bool IsValidMetricsNetwork(const NKikimrTabletBase::TMetrics& metrics);
+    static bool IsValidMetrics(const TMetrics& metrics);
+    static bool IsValidMetricsCPU(const TMetrics& metrics);
+    static bool IsValidMetricsMemory(const TMetrics& metrics);
+    static bool IsValidMetricsNetwork(const TMetrics& metrics);
     void UpdateTotalResourceValues(
             const TNodeInfo* node,
             const TTabletInfo* tablet,
-            const NKikimrTabletBase::TMetrics& before,
-            const NKikimrTabletBase::TMetrics& after,
+            const TMetrics& before,
+            const TMetrics& after,
             NKikimr::NHive::TResourceRawValues deltaRaw,
             NKikimr::NHive::TResourceNormalizedValues deltaNormalized);
     void FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo* info, const NKikimrHive::TEvRequestHiveInfo& req);
@@ -736,8 +747,9 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects);
     void ProcessPendingStopTablet();
     void ProcessPendingResumeTablet();
-    bool IsAllowedPile(TBridgePileId pile) const;
+    bool IsPrimaryPile(TBridgePileId pile) const; // NOTE: this counts promoted pile as primary
     TBridgePileInfo& GetPile(TBridgePileId pileId);
+    const TBridgePileInfo* FindPile(TBridgePileId pileId) const;
     void UpdatePiles();
 
     ui32 GetEventPriority(IEventHandle* ev);
@@ -1032,6 +1044,14 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
         return TDuration::MilliSeconds(CurrentConfig.GetBalanceCountersRefreshFrequency());
     }
 
+    i64 GetMaxDeleteTabletInProgress() const {
+        return static_cast<i64>(CurrentConfig.GetMaxDeleteTabletInProgress());
+    }
+
+    TDuration GetDataCenterChangeReactionPeriod() const {
+        return TDuration::Seconds(CurrentConfig.GetDataCenterChangeReactionPeriod());
+    }
+
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);
     static ui64 GetRestartsPerPeriod(const google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);
     static bool IsSystemTablet(TTabletTypes::EType type);
@@ -1050,6 +1070,7 @@ protected:
     double GetUsage() const;
     // If the scatter is considered okay, returns nullopt. Otherwise, returns the resource that should be better balanced.
     std::optional<EResourceToBalance> CheckScatter(const TResourceNormalizedValues& scatterByResource) const;
+    void EnqueueUpdateMetrics(TTabletInfo* tablet);
 
     struct THiveStats {
         struct TNodeStat {
@@ -1077,19 +1098,22 @@ protected:
     THiveStats GetStats() const;
     template<std::forward_iterator TIter>
     THiveStats GetStats(TIter begin, TIter end) const;
+    void RemoveNodeFromSegments(TNodeInfo* node);
+    void RemoveNodeFromSegments(TNodeId nodeId);
+    void UpdateNodeSegments(TNodeInfo* node);
     void RemoveSubActor(ISubActor* subActor);
     bool StopSubActor(TSubActorId subActorId);
     void WaitToMoveTablets(TActorId actor);
     const NKikimrLocal::TLocalConfig &GetLocalConfig() const { return LocalConfig; }
-    NKikimrTabletBase::TMetrics GetDefaultResourceValuesForObject(TFullObjectId objectId);
-    NKikimrTabletBase::TMetrics GetDefaultResourceValuesForTabletType(TTabletTypes::EType type);
-    NKikimrTabletBase::TMetrics GetDefaultResourceValuesForProfile(TTabletTypes::EType type, const TString& resourceProfile);
+    TMetrics GetDefaultResourceValuesForObject(TFullObjectId objectId);
+    TMetrics GetDefaultResourceValuesForTabletType(TTabletTypes::EType type);
+    TMetrics GetDefaultResourceValuesForProfile(TTabletTypes::EType type, const TString& resourceProfile);
     static void AggregateMetricsMax(NKikimrTabletBase::TMetrics& aggregate, const NKikimrTabletBase::TMetrics& value);
-    static void AggregateMetricsDiff(NKikimrTabletBase::TMetrics& aggregate,
-            const NKikimrTabletBase::TMetrics& before,
-            const NKikimrTabletBase::TMetrics& after,
+    static void AggregateMetricsDiff(TMetrics& aggregate,
+            const TMetrics& before,
+            const TMetrics& after,
             const TTabletInfo* tablet);
-    static void DivideMetrics(NKikimrTabletBase::TMetrics& metrics, ui64 divider);
+    static void DivideMetrics(TMetrics& metrics, ui64 divider);
     TVector<TTabletId> UpdateStoragePools(const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters>& groups);
     void InitDefaultChannelBind(TChannelBind& bind);
     void RequestPoolsInformation();

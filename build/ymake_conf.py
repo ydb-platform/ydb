@@ -111,11 +111,16 @@ class Platform(object):
         self.is_armv6hf = self.arch in ('armv6hf',)
         self.is_armv7hf = self.arch in ('armv7ahf', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv5te = self.arch in ('armv5te_arm968e_s',)
+        self.is_arm_aml403 = self.arch == 'arm_aml403'
+        self.is_arm64_aml403 = self.arch == 'arm64_aml403'
 
         self.is_rv32imc = self.arch in ('riscv32_imc', 'riscv32_esp')
         self.is_rv32imc_zicsr = self.arch in ('riscv32_imc_zicsr',)
+        self.is_rv32imc_zicsr_zifencei = self.arch in ('riscv32_imc_zicsr_zifencei',)
 
-        self.is_riscv32 = self.is_rv32imc or self.is_rv32imc_zicsr
+        self.is_riscv32 = self.is_rv32imc or self.is_rv32imc_zicsr or self.is_rv32imc_zicsr_zifencei
+        self.is_riscv64 = self.arch == 'riscv64_aw'
+        self.is_riscv64_aw = self.arch == 'riscv64_aw'
 
         self.is_nds32 = self.arch in ('nds32le_elf_mculib_v5f',)
         self.is_tc32 = self.arch in ('tc32_elf',)
@@ -153,10 +158,10 @@ class Platform(object):
 
         self.is_32_bit = (
             self.is_x86 or
-            self.is_armv5te or self.is_armv6 or self.is_armv7 or self.is_armv7em or self.is_armv8m or
+            self.is_armv5te or self.is_armv6 or self.is_armv7 or self.is_armv7em or self.is_armv8m or self.is_arm_aml403 or
             self.is_riscv32 or self.is_nds32 or self.is_xtensa or self.is_tc32 or self.is_wasm32
         )
-        self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc or self.is_wasm64
+        self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc or self.is_wasm64 or self.is_riscv64 or self.is_arm64_aml403
 
         assert self.is_32_bit or self.is_64_bit
         assert not (self.is_32_bit and self.is_64_bit)
@@ -238,11 +243,15 @@ class Platform(object):
             (self.is_armv7em, 'ARCH_ARM7EM'),
             (self.is_armv5te, 'ARCH_ARM5TE'),
             (self.is_arm, 'ARCH_ARM'),
+            (self.is_arm_aml403, 'ARCH_ARM_AML403'),
+            (self.is_arm64_aml403, 'ARCH_ARM64_AML403'),
             (self.is_linux_armv8 or self.is_macos_arm64, 'ARCH_AARCH64'),
             (self.is_powerpc, 'ARCH_PPC64LE'),
             (self.is_power8le, 'ARCH_POWER8LE'),
             (self.is_power9le, 'ARCH_POWER9LE'),
             (self.is_riscv32, 'ARCH_RISCV32'),
+            (self.is_riscv64, 'ARCH_RISCV64'),
+            (self.is_riscv64_aw, 'ARCH_RISCV64_AW'),
             (self.is_xtensa_hifi4, 'ARCH_XTENSA_HIFI4'),
             (self.is_xtensa_hifi5, 'ARCH_XTENSA_HIFI5'),
             (self.is_xtensa_esp32s3, 'ARCH_XTENSA_ESP32S3'),
@@ -257,7 +266,7 @@ class Platform(object):
 
     @property
     def library_path_variables(self):
-        return ['LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH']
+        return ['DYLD_LIBRARY_PATH']
 
     def find_in_dict(self, dict_, default=None):
         if dict_ is None:
@@ -460,6 +469,10 @@ def preset(key, default=None):
     return opts().presets.get(key, default)
 
 
+def remove_preset(key):
+    opts().presets.pop(key, None)
+
+
 def is_positive(key):
     return is_positive_str(preset(key, ''))
 
@@ -500,6 +513,53 @@ def select_multiple(selectors):
     for enabled, value in selectors:
         if enabled:
             yield value
+
+
+def get_target_triple(target):
+    target_triple = select(
+        default=None,
+        selectors=[
+            (target.is_freebsd and target.is_x86_64, 'x86_64-freebsd-unknown'),
+
+            (target.is_linux and target.is_x86_64, 'x86_64-linux-gnu'),
+            (target.is_linux and target.is_armv8, 'aarch64-linux-gnu'),
+            (target.is_linux and target.is_armv6 and target.armv6_float_abi == 'hard', 'armv6-linux-gnueabihf'),
+            (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'hard', 'armv7-linux-gnueabihf'),
+            (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'softfp', 'armv7-linux-gnueabi'),
+            (target.is_linux and target.is_powerpc, 'powerpc64le-linux-gnu'),
+
+            (target.is_iossim and target.is_x86_64, 'x86_64-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
+            (target.is_iossim and target.is_x86, 'i386-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
+            (target.is_iossim and target.is_armv8, 'arm64-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
+            (not target.is_iossim and target.is_ios and target.is_armv8, 'arm64-apple-ios{}'.format(IOS_VERSION_MIN)),
+            (not target.is_iossim and target.is_ios and target.is_armv7, 'armv7-apple-ios{}'.format(IOS_VERSION_MIN)),
+
+            (target.is_apple and target.is_x86, 'i386-apple-darwin14'),
+            (target.is_apple and target.is_x86_64, 'x86_64-apple-darwin14'),
+            (target.is_apple and target.is_macos_arm64, 'arm64-apple-macos11'),
+            (target.is_apple and target.is_armv7, 'armv7-apple-darwin14'),
+            (target.is_apple and target.is_armv8, 'arm64-apple-darwin14'),
+
+            (target.is_yocto and target.is_armv7, 'arm-poky-linux-gnueabi'),
+
+            (target.is_android and target.is_x86, 'i686-linux-android'),
+            (target.is_android and target.is_x86_64, 'x86_64-linux-android'),
+            (target.is_android and target.is_armv7, 'armv7a-linux-androideabi'),
+            (target.is_android and target.is_armv8, 'aarch64-linux-android'),
+
+            (target.is_emscripten and target.is_wasm32, 'wasm32-unknown-emscripten'),
+            (target.is_emscripten and target.is_wasm64, 'wasm64-unknown-emscripten'),
+
+            (target.is_windows and target.is_x86_64, 'x86_64-pc-win32'),
+        ],
+    )
+
+    if target.is_android:
+        # Android NDK allows specification of API level in target triple, e.g.:
+        # armv7a-linux-androideabi16, aarch64-linux-android21
+        target_triple += str(target.android_api)
+
+    return target_triple
 
 
 def unique(it):
@@ -648,11 +708,6 @@ class Build(object):
             emit('DISTBUILD', 'yes')
         elif self.build_system != 'ymake':
             raise ConfigureError()
-
-        python_bin = preset('BUILD_PYTHON_BIN', '$(PYTHON)/python')
-
-        emit('YMAKE_PYTHON', python_bin)
-        emit('YMAKE_UNPICKLER', python_bin, '$ARCADIA_ROOT/build/plugins/_unpickler.py')
 
     @property
     def is_release(self):
@@ -1012,10 +1067,6 @@ class ToolchainOptions(object):
         # 'match_root' at this point contains real name for references via toolchain
         self.name_marker = '$(%s)' % self.params.get('match_root', self._name.upper())
 
-        self.arch_opt = self.params.get('arch_opt', [])
-        self.triplet_opt = self.params.get('triplet_opt', {})
-        self.target_opt = self.params.get('target_opt', [])
-
         # default C++ standard is set here, some older toolchains might need to redefine it in ya.conf.json
         self.cxx_std = self.params.get('cxx_std', 'c++20')
 
@@ -1163,7 +1214,7 @@ class GnuToolchain(Toolchain):
         host = build.host
         target = build.target
 
-        self.c_flags_platform = list(tc.target_opt)
+        self.c_flags_platform = []
 
         self.default_os_sdk_root = get_os_sdk(target)
 
@@ -1182,6 +1233,8 @@ class GnuToolchain(Toolchain):
                     '$MACOS_SDK_RESOURCE_GLOBAL/usr/bin',
                     '$GO_FAKE_XCRUN_RESOURCE_GLOBAL',
                 ])
+            elif target.is_android:
+                self.env_go['PATH'] = ['{}/llvm-toolchain/bin'.format(self.tc.name_marker), '/usr/bin']
 
         self.swift_flags_platform = []
         self.swift_lib_path = None
@@ -1207,55 +1260,15 @@ class GnuToolchain(Toolchain):
             ])
 
         if self.tc.is_clang:
-            target_triple = self.tc.triplet_opt.get(target.arch, None)
-            if not target_triple:
-                target_triple = select(default=None, selectors=[
-                    (target.is_freebsd and target.is_x86_64, 'x86_64-freebsd-unknown'),
-
-                    (target.is_linux and target.is_x86_64, 'x86_64-linux-gnu'),
-                    (target.is_linux and target.is_armv8, 'aarch64-linux-gnu'),
-                    (target.is_linux and target.is_armv6 and target.armv6_float_abi == 'hard', 'armv6-linux-gnueabihf'),
-                    (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'hard', 'armv7-linux-gnueabihf'),
-                    (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'softfp', 'armv7-linux-gnueabi'),
-                    (target.is_linux and target.is_powerpc, 'powerpc64le-linux-gnu'),
-
-                    (target.is_iossim and target.is_x86_64, 'x86_64-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
-                    (target.is_iossim and target.is_x86, 'i386-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
-                    (target.is_iossim and target.is_armv8, 'arm64-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
-                    (not target.is_iossim and target.is_ios and target.is_armv8, 'arm64-apple-ios{}'.format(IOS_VERSION_MIN)),
-                    (not target.is_iossim and target.is_ios and target.is_armv7, 'armv7-apple-ios{}'.format(IOS_VERSION_MIN)),
-
-                    (target.is_apple and target.is_x86, 'i386-apple-darwin14'),
-                    (target.is_apple and target.is_x86_64, 'x86_64-apple-darwin14'),
-                    (target.is_apple and target.is_macos_arm64, 'arm64-apple-macos11'),
-                    (target.is_apple and target.is_armv7, 'armv7-apple-darwin14'),
-                    (target.is_apple and target.is_armv8, 'arm64-apple-darwin14'),
-
-                    (target.is_yocto and target.is_armv7, 'arm-poky-linux-gnueabi'),
-
-                    (target.is_android and target.is_x86, 'i686-linux-android'),
-                    (target.is_android and target.is_x86_64, 'x86_64-linux-android'),
-                    (target.is_android and target.is_armv7, 'armv7a-linux-androideabi'),
-                    (target.is_android and target.is_armv8, 'aarch64-linux-android'),
-
-                    (target.is_emscripten and target.is_wasm32, 'wasm32-unknown-emscripten'),
-                    (target.is_emscripten and target.is_wasm64, 'wasm64-unknown-emscripten'),
-                ])
-
-            if target.is_android:
-                # Android NDK allows specification of API level in target triple, e.g.:
-                # armv7a-linux-androideabi16, aarch64-linux-android21
-                target_triple += str(target.android_api)
-
+            # gcc does not support multiple targets within the same compiler build,
+            # hence this logic is only relevant for clang
+            target_triple = get_target_triple(target)
             if target_triple:
                 self.c_flags_platform.append('--target={}'.format(target_triple))
 
         if self.tc.isystem:
             for root in list(self.tc.isystem):
                 self.c_flags_platform.extend(['-isystem', root])
-
-        if target.is_android:
-            self.c_flags_platform.extend(['-isystem', '{}/sources/cxx-stl/llvm-libc++abi/include'.format(self.tc.name_marker)])
 
         if target.is_cortex_a9:
             self.c_flags_platform.append('-mcpu=cortex-a9')
@@ -1292,10 +1305,13 @@ class GnuToolchain(Toolchain):
             # to reduce code size
             self.c_flags_platform.append('-mthumb')
 
-        if target.is_arm or target.is_powerpc:
-            # On linux, ARM and PPC default to unsigned char
-            # However, Arcadia requires char to be signed
-            self.c_flags_platform.append('-fsigned-char')
+        if target.is_arm_aml403:
+            self.c_flags_platform.append('-march=armv8-a -marm')
+            self.setup_amlogic_rtos_sdk()
+
+        if target.is_arm64_aml403:
+            self.c_flags_platform.append('-march=armv8-a -mcpu=cortex-a35')
+            self.setup_amlogic64_rtos_sdk()
 
         if target.is_rv32imc:
             self.c_flags_platform.append('-march=rv32imc')
@@ -1303,11 +1319,18 @@ class GnuToolchain(Toolchain):
         if target.is_rv32imc_zicsr:
             self.c_flags_platform.append('-march=rv32imc_zicsr')
 
+        if target.is_rv32imc_zicsr_zifencei:
+            self.c_flags_platform.append('-march=rv32imc_zicsr_zifencei')
+
+        if target.is_riscv64_aw:
+            self.c_flags_platform.append('-march=rv64gcxthead -mcmodel=medany -mabi=lp64d')
+            self.setup_allwinner_rtos_sdk()
+
         if self.tc.is_clang or self.tc.is_gcc and self.tc.version_at_least(8, 2):
             target_flags = select(default=[], selectors=[
                 (target.is_linux and target.is_power8le, ['-mcpu=power8', '-mtune=power8', '-maltivec']),
                 (target.is_linux and target.is_power9le, ['-mcpu=power9', '-mtune=power9', '-maltivec']),
-                (target.is_linux and target.is_armv8, ['-march=armv8a']),
+                (target.is_linux and target.is_armv8, ['-march=armv8-a']),
                 (target.is_macos, ['-mmacosx-version-min={}'.format(MACOS_VERSION_MIN)]),
                 (target.is_ios and not target.is_iossim, ['-mios-version-min={}'.format(IOS_VERSION_MIN)]),
                 (target.is_iossim, ['-mios-simulator-version-min={}'.format(IOS_VERSION_MIN)]),
@@ -1351,6 +1374,17 @@ class GnuToolchain(Toolchain):
         self.c_flags_platform.append('--sysroot')
         self.c_flags_platform.append(var)
 
+    def setup_amlogic_rtos_sdk(self):
+        self.platform_projects.insert(0, 'build/internal/platform/amlogic_rtos')
+
+    def setup_amlogic64_rtos_sdk(self):
+        self.platform_projects.insert(0, 'build/internal/platform/amlogic64_rtos')
+
+    def setup_allwinner_rtos_sdk(self):
+        self.platform_projects.insert(0, 'build/internal/platform/allwinner_rtos')
+        self.c_flags_platform.append('-isysroot')
+        self.c_flags_platform.append('${ALLWINNER_RTOS_SDK_RESOURCE_GLOBAL}/rtos/include')
+
     def setup_apple_sdk(self, target):
         if not self.tc.os_sdk_local:
             self.setup_apple_arcadia_sdk(target)
@@ -1388,7 +1422,10 @@ class GnuToolchain(Toolchain):
 
     def setup_sdk(self, project, var):
         self.platform_projects.append(project)
-        self.c_flags_platform.append('--sysroot={}'.format(var))
+        if is_positive('MUSL'):
+            self.c_flags_platform.append('--sysroot=/nowhere')
+        else:
+            self.c_flags_platform.append('--sysroot={}'.format(var))
         self.swift_flags_platform += ['-sdk', var]
 
     def setup_xcode_sdk(self, project, var):
@@ -1434,6 +1471,18 @@ class GnuCompiler(Compiler):
         self.target = self.build.target
         self.tc = tc
 
+        self.debug_info_flags = [
+            '-g'
+        ]
+        if self.tc.is_clang and self.tc.version_at_least(14):
+            # DTCC-1231: Clang 14 has switched to DWARFv5 by defaulg
+            self.debug_info_flags.append('-fdebug-default-version=4')
+        if self.tc.is_clang and self.target.is_linux:
+            self.debug_info_flags.append('-ggnu-pubnames')
+            if self.build.is_release:
+                # Clang's more accurate debug info for sampling-PGO purposes. PGO only makes sense in release builds
+                self.debug_info_flags.append('-fdebug-info-for-profiling')
+
         self.c_foptions = [
             # Enable standard-conforming behavior and generate duplicate symbol error in case of duplicated global constants.
             # See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85678#c0
@@ -1443,6 +1492,20 @@ class GnuCompiler(Compiler):
             '-ffunction-sections',
             '-fdata-sections'
         ]
+
+        if self.target.is_arm or self.target.is_powerpc:
+            self.c_foptions += [
+                # On linux, ARM and PPC default to unsigned char
+                # However, Arcadia requires char to be signed
+                '-fsigned-char',
+            ]
+
+        if self.tc.is_clang and self.tc.version_at_least(14):
+            self.c_foptions += [
+                # Explicitly enable sized deallocations though they were enabled in clang-19 / -std=c++14.
+                # See: https://releases.llvm.org/19.1.0/tools/clang/docs/ReleaseNotes.html
+                '-fsized-deallocation',
+            ]
 
         if is_positive('NO_CXX_EXCEPTIONS'):
             self.c_foptions.append('-fno-exceptions')
@@ -1465,17 +1528,13 @@ class GnuCompiler(Compiler):
             self.c_foptions.append('-mlongcalls')
 
         if self.tc.is_clang:
-            self.c_foptions += [
-                # Set up output colorization
-                '-fcolor-diagnostics',
-                # Enable aligned allocation
-                '-faligned-allocation',
-            ]
+            # Set up output colorization
+            self.c_foptions.append('-fcolor-diagnostics')
+            if not is_positive('NO_CXX_ALIGNED_ALLOCATION') and self.tc.version_at_least(4):
+                # Enable aligned allocation, unless explicitly disabled
+                self.c_foptions.append('-faligned-allocation')
         elif self.tc.is_gcc:
-            if self.target.is_xtensa or self.target.is_tc32:
-                # Xtensa and tc32 toolchains does not support this flag
-                pass
-            else:
+            if self.tc.version_at_least(4, 9):
                 self.c_foptions += [
                     # Set up output colorization
                     '-fdiagnostics-color=always',
@@ -1525,7 +1584,7 @@ class GnuCompiler(Compiler):
             self.c_defines.append('-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE')
 
         self.c_flags = ['$CL_DEBUG_INFO', '$CL_DEBUG_INFO_DISABLE_CACHE__NO_UID__']
-        self.c_flags += self.tc.arch_opt + ['-pipe']
+        self.c_flags += ['-pipe']
 
         self.sfdl_flags = ['-E', '-C', '-x', 'c++']
 
@@ -1570,13 +1629,9 @@ class GnuCompiler(Compiler):
                 '-Wno-undefined-var-template',
             ]
 
-        elif self.tc.is_gcc:
-            if self.target.is_xtensa:
-                # Xtensa toolchain does not support this flags
-                pass
-            else:
-                self.c_foptions.append('-fno-delete-null-pointer-checks')
-                self.c_foptions.append('-fabi-version=8')
+        elif self.tc.is_gcc and self.host.is_riscv64_aw is None and self.host.is_arm_aml403 is None:
+            self.c_foptions.append('-fno-delete-null-pointer-checks')
+            self.c_foptions.append('-fabi-version=8')
 
     def configure_build_type(self):
         if self.build.is_valgrind:
@@ -1616,6 +1671,7 @@ class GnuCompiler(Compiler):
 
         emit('C_COMPILER', '"{}"'.format(self.tc.c_compiler))
         emit('OPTIMIZE', self.optimize)
+        emit('_DEBUG_INFO_FLAGS', self.debug_info_flags)
         emit('_C_FLAGS', self.c_flags)
         emit('_C_FOPTIONS', self.c_foptions)
         emit('_STD_CXX_VERSION', preset('USER_STD_CXX_VERSION') or self.tc.cxx_std)
@@ -1785,7 +1841,7 @@ class LD(Linker):
         dwarf_tool = self.tc.dwarf_tool
         if dwarf_tool is None and self.tc.is_clang and (self.target.is_macos or self.target.is_ios):
             dsymutil = '{}/bin/{}dsymutil'.format(self.tc.name_marker, '' if self.tc.version_at_least(7) else 'llvm-')
-            dwarf_tool = '${YMAKE_PYTHON} ${input:"build/scripts/run_llvm_dsymutil.py"} ' + dsymutil
+            dwarf_tool = '${YMAKE_PYTHON3} ${input:"build/scripts/run_llvm_dsymutil.py"} ' + dsymutil
             if self.tc.version_at_least(5, 0):
                 dwarf_tool += ' -flat'
 
@@ -2039,7 +2095,6 @@ class MSVCCompiler(MSVC, Compiler):
             # enable standard conforming mode
             '/permissive-'
         ]
-        flags += self.tc.arch_opt
 
         c_warnings = [
             "/WX",
@@ -2049,7 +2104,15 @@ class MSVCCompiler(MSVC, Compiler):
         c_warnings += ['/wd{}'.format(code) for code in warns_disabled]
         cxx_warnings = []
 
+        c_flags_platform = []
+
         if self.tc.use_clang:
+            # gcc does not support multiple targets within the same compiler build,
+            # hence this logic is only relevant for clang
+            target_triple = get_target_triple(target)
+            if target_triple:
+                c_flags_platform.append('--target={}'.format(target_triple))
+
             if not self.tc.is_system_cxx:
                 flags += [
                     # Allow <windows.h> to be included via <Windows.h> in case-sensitive file-systems.
@@ -2096,6 +2159,10 @@ class MSVCCompiler(MSVC, Compiler):
                 '-Wno-invalid-offsetof',
                 '-Wno-undefined-var-template',
                 '-Wno-vla-cxx-extension',  # https://github.com/llvm/llvm-project/issues/62836
+                '-Wno-deprecated-literal-operator',
+                '-Wno-explicit-specialization-storage-class',
+                '-Wno-missing-template-arg-list-after-template-kw',
+                '-Wno-nontrivial-memcall',
             ]
 
         defines.append('/D_WIN32_WINNT={0}'.format(WINDOWS_VERSION_MIN))
@@ -2124,6 +2191,7 @@ class MSVCCompiler(MSVC, Compiler):
         emit('C_COMPILER_UNQUOTED', '"{}"'.format(self.tc.c_compiler))
         emit('MASM_COMPILER_UNQUOTED', '"{}"'.format(self.tc.masm_compiler))
         emit('MASM_COMPILER_OLD_UNQUOTED', self.tc.masm_compiler)
+        emit('C_FLAGS_PLATFORM', c_flags_platform)
         append('C_DEFINES', defines)
         append('C_WARNING_OPTS', c_warnings)
         emit('_CXX_DEFINES', cxx_defines)
@@ -2304,6 +2372,7 @@ class Setting(object):
     def emit(self):
         if not self.from_user or self.rewrite:
             emit(self.key, self.value)
+            remove_preset(self.key)
 
     no_value = object()
 
@@ -2320,16 +2389,17 @@ class Cuda(object):
         self.cuda_root = Setting('CUDA_ROOT')
         self.cuda_target_root = Setting('CUDA_TARGET_ROOT')
         self.cuda_version = Setting('CUDA_VERSION', auto=self.auto_cuda_version, convert=self.convert_major_version, rewrite=True)
-        self.cuda_architectures = Setting('CUDA_ARCHITECTURES', auto=self.auto_cuda_architectures, rewrite=True)
+        self.cuda_architectures = Setting('CUDA_ARCHITECTURES', auto=self.auto_cuda_architectures, convert=self.augment_cuda_architectures, rewrite=True)
         self.use_arcadia_cuda = Setting('USE_ARCADIA_CUDA', auto=self.auto_use_arcadia_cuda, convert=to_bool)
         self.use_arcadia_cuda_host_compiler = Setting('USE_ARCADIA_CUDA_HOST_COMPILER', auto=self.auto_use_arcadia_cuda_host_compiler, convert=to_bool)
+        self.cuda_sanitize = Setting('CUDA_SANITIZE', auto=False, convert=to_bool)
         self.cuda_use_clang = Setting('CUDA_USE_CLANG', auto=False, convert=to_bool)
         self.cuda_host_compiler = Setting('CUDA_HOST_COMPILER', auto=self.auto_cuda_host_compiler)
         self.cuda_host_compiler_env = Setting('CUDA_HOST_COMPILER_ENV')
         self.cuda_host_msvc_version = Setting('CUDA_HOST_MSVC_VERSION')
-        self.cuda_nvcc_flags = Setting('CUDA_NVCC_FLAGS', auto=[])
+        self.cuda_nvcc_flags = Setting('CUDA_NVCC_FLAGS', auto=[], convert=self.filter_nvcc_flags, rewrite=True)
 
-        self.peerdirs = ['build/platform/cuda']
+        self.peerdirs = ['build/internal/platform/cuda']
 
         self.nvcc_flags = [
             # Compress fatbinary to reduce size of .nv_fatbin and prevent problems with linking
@@ -2348,7 +2418,17 @@ class Cuda(object):
             # Set paths explicitly
             "--dont-use-profile",
             "--libdevice-directory=$CUDA_ROOT/nvvm/libdevice",
+
+            # --keep is necessary to prevent nvcc from embedding nvcc pid in generated
+            # symbols.  It makes nvcc use the original file name as the prefix in the
+            # generated files (otherwise it also prepends tmpxft_{pid}_00000000-5), and
+            # cicc derives the module name from its {input}.cpp1.ii file name.
+            "--keep",
+            "--keep-dir=${BINDIR}",
         ]
+
+        self.nvcc_gencode_flags = []
+        self.legacy_cuda_architectures = set()
 
         if not self.have_cuda.value:
             return
@@ -2369,6 +2449,8 @@ class Cuda(object):
             if self.build.target.is_linux_x86_64 and self.build.tc.is_clang:
                 # TODO(somov): Эта настройка должна приезжать сюда автоматически из другого места
                 self.nvcc_flags.append('-I$OS_SDK_ROOT/usr/include/x86_64-linux-gnu')
+
+        self.cuda_nvcc_flags.calculate_value()
 
     def print_(self):
         self.print_variables()
@@ -2391,6 +2473,7 @@ class Cuda(object):
         self.cuda_architectures.emit()
         self.use_arcadia_cuda.emit()
         self.use_arcadia_cuda_host_compiler.emit()
+        self.cuda_sanitize.emit()
         self.cuda_use_clang.emit()
         self.cuda_host_compiler.emit()
         self.cuda_host_compiler_env.emit()
@@ -2401,6 +2484,7 @@ class Cuda(object):
         emit('NVCC_OLD_UNQUOTED', self.build.host.exe('$CUDA_ROOT', 'bin', 'nvcc'))
         emit('NVCC_OLD', '${quo:NVCC_OLD_UNQUOTED}')
         emit('NVCC_FLAGS', self.nvcc_flags, '$CUDA_NVCC_FLAGS')
+        emit('NVCC_GENCODE_FLAGS', self.nvcc_gencode_flags)
         emit('NVCC_OBJ_EXT', '.o' if not self.build.target.is_windows else '.obj')
         emit('NVCC_ENV', '${env:_NVCC_ENV}')
         emit('_NVCC_ENV', 'PATH=$CUDA_ROOT/nvvm/bin:$CUDA_ROOT/bin')
@@ -2412,14 +2496,20 @@ class Cuda(object):
         else:
             emit('NVCC_STD_VER', '20')
 
+        emit('CUDAFE', '"{}"'.format(self.build.host.exe('$CUDA_ROOT', 'bin', 'cudafe++')))
+        emit('FATBINARY', '"{}"'.format(self.build.host.exe('$CUDA_ROOT', 'bin', 'fatbinary')))
+
     def print_macros(self):
         mtime = ' '
         custom_pid = ' '
         if self.build.host_target[1].is_linux:
             mtime = ' --mtime ${tool:"tools/mtime0"} '
             custom_pid = '--custom-pid ${tool:"tools/custom_pid"} '
+        sanitize = ' '
+        if self.cuda_sanitize.value:
+            sanitize = '--y_sanitize '
         if not self.cuda_use_clang.value:
-            cmd = '$YMAKE_PYTHON ${input:"build/scripts/compile_cuda.py"}' + mtime + custom_pid + '$NVCC $NVCC_STD $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $SRCFLAGS ${hide;input:"build/platform/cuda/cuda_runtime_include.h"} $NVCC_ENV $CUDA_HOST_COMPILER_ENV ${hide;kv:"p CC"} ${hide;kv:"pc light-green"}'  # noqa E501
+            cmd = '$YMAKE_PYTHON3 ${input:"build/scripts/compile_cuda.py"}' + mtime + custom_pid + sanitize + '$NVCC $NVCC_STD $NVCC_FLAGS $NVCC_GENCODE_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $SRCFLAGS ${hide;input:"build/internal/platform/cuda/cuda_runtime_include.h"} $NVCC_ENV $CUDA_HOST_COMPILER_ENV ${hide;kv:"p CU"} ${hide;kv:"pc light-green"}'  # noqa E501
         else:
             cmd = '$CXX_COMPILER --cuda-path=$CUDA_ROOT $C_FLAGS_PLATFORM -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} $CXXFLAGS $SRCFLAGS $TOOLCHAIN_ENV ${hide;kv:"p CU"} ${hide;kv:"pc green"}'  # noqa E501
 
@@ -2440,7 +2530,7 @@ class Cuda(object):
             if not self.cuda_version.from_user:
                 return False
 
-        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6', '12.8', '12.9'):
+        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6', '12.6.2', '12.6.3', '12.8', '12.9', '13.0'):
             return True
         elif self.cuda_version.value in ('10.2', '11.4.19') and target.is_linux_armv8:
             return True
@@ -2450,13 +2540,13 @@ class Cuda(object):
     def auto_have_cuda(self):
         if is_positive('MUSL'):
             return False
-        if self.build.is_sanitized:
+        if self.build.is_sanitized and not self.cuda_sanitize.value:
             return False
         return self.cuda_root.from_user or self.use_arcadia_cuda.value and self.have_cuda_in_arcadia()
 
     def auto_cuda_version(self):
         if self.use_arcadia_cuda.value:
-            return '12.6'
+            return '12.9'
 
         if not self.have_cuda.value:
             return None
@@ -2477,32 +2567,87 @@ class Cuda(object):
         else:
             return value
 
+    # Filter `-gencode` flags out of CUDA_NVCC_FLAGS
+    # TODO Remove after migration to CUDA_ARCHITECTURES
+    def filter_nvcc_flags(self, value):
+        self.legacy_cuda_architectures = set()
+        self.nvcc_gencode_flags = []
+        nvcc_flags = []
+
+        gencode = False
+
+        for flag in value.split(' '):
+            spec = None
+
+            if gencode:
+                self.nvcc_gencode_flags.append(flag)
+                spec = flag
+                gencode = False
+            elif flag.startswith('-gencode') or flag.startswith('--generate-code'):
+                self.nvcc_gencode_flags.append(flag)
+
+                if flag in ('-gencode', '--generate-code'):
+                    gencode = True
+                    continue
+
+                _, spec = flag.split('=', 1)
+            else:
+                nvcc_flags.append(flag)
+                continue
+
+            _, arch = spec.rsplit('=', 1)
+            self.legacy_cuda_architectures.add(arch)
+
+        return nvcc_flags
+
+    # Augment CUDA_ARCHITECTURES with values mined from `-gencode` flags
+    # TODO Remove after migration to CUDA_ARCHITECTURES
+    def augment_cuda_architectures(self, value):
+        cuda_architectures = set(value.split(':'))
+
+        if not cuda_architectures.issuperset(self.legacy_cuda_architectures):
+            extra_architectures = self.legacy_cuda_architectures.difference(cuda_architectures)
+            logger.warning('Adding extra architectures mined from CUDA_NVCC_FLAGS (%s) to CUDA_ARCHITECTURES', ':'.join(sorted(extra_architectures)))
+            cuda_architectures.update(self.legacy_cuda_architectures)
+
+        return ':'.join(sorted(cuda_architectures))
+
     def auto_cuda_architectures(self):
-        # empty list does not mean "no architectures"
-        # it means "no restriction -- any available architecture"
+        if self.legacy_cuda_architectures:
+            logger.warning('Using architectures mined from CUDA_NVCC_FLAGS (%s) for CUDA_ARCHITECTURES', ':'.join(sorted(self.legacy_cuda_architectures)))
+            return ':'.join(sorted(self.legacy_cuda_architectures))
 
-        host, target = self.build.host_target
-        if not target.is_linux_x86_64:
-            # do not impose any restrictions, when build not for "linux 64-bit"
-            return ''
+        architectures = []
 
-        # Equality to CUDA 11.4 is rather strict comparison
-        # TODO: find out how we can relax check (e.g. to include more version of CUDA toolkit)
-        if self.cuda_version.value == '11.4':
-            # * use output of CUDA 11.4 `nvcc --help`
-            # * drop support for '53', '62', '72' and '87'
-            #   (these devices run only on arm64)
-            # * drop support for '37'
-            #   the single place it's used in Arcadia is https://a.yandex-team.ru/arcadia/sdg/sdc/third_party/cub/common.mk?rev=r13268523#L69
-            return ':'.join(
-                ['sm_35',
-                 'sm_50', 'sm_52',
-                 'sm_60', 'sm_61',
-                 'sm_70', 'sm_75',
-                 'sm_80', 'sm_86',
-                 'compute_86'])
-        else:
-            return ''
+        version = tuple(map(int, self.cuda_version.value.split('.')))
+
+        if version < (12, 0):
+            architectures.append('sm_35')
+
+        if version < (13, 0):
+            architectures.extend(['sm_50', 'sm_52', 'sm_60', 'sm_61', 'sm_70'])
+
+        architectures.append('sm_75')
+
+        if version >= (11, 0):
+            architectures.append('sm_80')
+
+        if version >= (11, 1):
+            architectures.append('sm_86')
+
+        if version >= (11, 8):
+            architectures.extend(['sm_89', 'sm_90'])
+
+        if version >= (12, 0):
+            architectures.append('sm_90a')
+
+        if version >= (12, 8):
+            architectures.extend(['sm_100', 'sm_100a', 'sm_120', 'sm_120a'])
+
+        if version >= (12, 9):
+            architectures.extend(['sm_100f', 'sm_103', 'sm_103a', 'sm_103f', 'sm_120f'])
+
+        return ':'.join(architectures)
 
     def auto_use_arcadia_cuda(self):
         return not self.cuda_root.from_user
@@ -2572,10 +2717,10 @@ class CuDNN(object):
         self.cudnn_version = Setting('CUDNN_VERSION', auto=self.auto_cudnn_version)
 
     def have_cudnn(self):
-        return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0', '8.9.7', '9.0.0')
+        return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0', '8.9.7', '9.0.0', '9.10.2', '9.12.0')
 
     def auto_cudnn_version(self):
-        return '9.0.0'
+        return '9.12.0'
 
     def print_(self):
         if self.cuda.have_cuda.value and self.have_cudnn():

@@ -1,5 +1,6 @@
 #include "aggregator_impl.h"
 
+#include <ydb/core/statistics/aggregator/analyze_actor.h>
 #include <ydb/core/statistics/database/database.h>
 #include <ydb/core/statistics/service/service.h>
 
@@ -43,12 +44,7 @@ void TStatisticsAggregator::OnActivateExecutor(const TActorContext& ctx) {
 
     auto appData = AppData(ctx);
     Y_ABORT_UNLESS(appData);
-    PropagateIntervalDedicated = TDuration::Seconds(
-        appData->StatisticsConfig.GetBaseStatsPropagateIntervalSecondsDedicated());
-    PropagateIntervalServerless = TDuration::Seconds(
-        appData->StatisticsConfig.GetBaseStatsPropagateIntervalSecondsServerless());
-    // Start with the dedicated interval, switch to the serverless one if needed.
-    PropagateInterval = PropagateIntervalDedicated;
+    StatisticsConfig = appData->StatisticsConfig;
 
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     Execute(CreateTxInitSchema(), ctx);
@@ -59,9 +55,11 @@ void TStatisticsAggregator::DefaultSignalTabletActive(const TActorContext& ctx) 
 }
 
 void TStatisticsAggregator::SubscribeForConfigChanges(const TActorContext& ctx) {
-    ui32 configKind = (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem;
     ctx.Send(NConsole::MakeConfigsDispatcherID(ctx.SelfID.NodeId()),
-        new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({configKind}));
+        new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
+            (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem,
+            (ui32)NKikimrConsole::TConfigItem::StatisticsConfigItem,
+        }));
 }
 
 void TStatisticsAggregator::HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
@@ -81,6 +79,9 @@ void TStatisticsAggregator::HandleConfig(NConsole::TEvConsole::TEvConfigNotifica
             InitializeStatisticsTable();
         }
     }
+
+    StatisticsConfig = config.GetStatisticsConfig();
+
     auto response = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(record);
     Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
@@ -237,16 +238,11 @@ void TStatisticsAggregator::Handle(TEvPrivate::TEvFastPropagateCheck::TPtr&) {
 void TStatisticsAggregator::Handle(TEvPrivate::TEvPropagate::TPtr&) {
     SA_LOG_T("[" << TabletID() << "] EvPropagate");
 
-    if (BaseStatistics.size() > 1) {
-        // We are in a shared database, switch to a bigger propagation interval.
-        PropagateInterval = PropagateIntervalServerless;
-    }
-
     if (EnableStatistics) {
         PropagateStatistics();
     }
 
-    Schedule(PropagateInterval, new TEvPrivate::TEvPropagate());
+    Schedule(GetPropagateInterval(), new TEvPrivate::TEvPropagate());
 }
 
 void TStatisticsAggregator::Handle(TEvStatistics::TEvPropagateStatisticsResponse::TPtr& ev) {
@@ -361,7 +357,7 @@ void TStatisticsAggregator::PropagateStatistics() {
         ssIds.push_back(ssId);
     }
 
-    auto timeout = PropagateInterval * 3 / 5;
+    auto timeout = GetPropagateInterval() * 3 / 5;
     Schedule(timeout, new TEvPrivate::TEvPropagateTimeout);
 
     ++CurPropagationSeq;
@@ -416,9 +412,10 @@ size_t TStatisticsAggregator::PropagatePart(const std::vector<TNodeId>& nodeIds,
         auto* entry = record->AddEntries();
         entry->SetSchemeShardId(ssId);
         auto itStats = BaseStatistics.find(ssId);
-        if (itStats != BaseStatistics.end()) {
-            entry->SetStats(itStats->second);
-            size += itStats->second.size();
+        if (itStats != BaseStatistics.end() && itStats->second.Committed) {
+            const auto& stats = *itStats->second.Committed;
+            entry->SetStats(stats);
+            size += stats.size();
         } else {
             entry->SetStats(TString()); // stats are not sent from SS yet
         }
@@ -427,6 +424,18 @@ size_t TStatisticsAggregator::PropagatePart(const std::vector<TNodeId>& nodeIds,
     Send(NStat::MakeStatServiceID(leadingNodeId), propagate.release(), 0, cookie);
 
     return index;
+}
+
+TDuration TStatisticsAggregator::GetPropagateInterval() {
+    if (BaseStatistics.size() > 1) {
+        // We are in a shared database, switch to a bigger propagation interval.
+        return TDuration::Seconds(
+            StatisticsConfig.GetBaseStatsPropagateIntervalSecondsServerless());
+    } else {
+        // Otherwise use the dedicated interval.
+        return TDuration::Seconds(
+            StatisticsConfig.GetBaseStatsPropagateIntervalSecondsDedicated());
+    }
 }
 
 void TStatisticsAggregator::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -501,6 +510,14 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev) {
     Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 
+void TStatisticsAggregator::PassAway() {
+    if (AnalyzeActorId) {
+        Send(AnalyzeActorId, new TEvents::TEvPoison());
+    }
+
+    IActor::PassAway();
+}
+
 void TStatisticsAggregator::Handle(TEvPrivate::TEvResolve::TPtr&) {
     Resolve();
 }
@@ -528,6 +545,71 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAggregateKeepAlive::TPtr& e
     Schedule(KeepAliveTimeout, new TEvPrivate::TEvAckTimeout(++KeepAliveSeqNo));
 }
 
+void TStatisticsAggregator::Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr& ev) {
+    SaveQueryActorId = {};
+
+    if (ev->Get()->Success) {
+        if (!StatisticsToSave.empty()) {
+            // There are some more pending statistics items to save.
+            SaveStatisticsToTable();
+        } else if (!AnalyzeActorId) {
+            // If we saved everything and the analyze actor has already finished,
+            // finish the traversal.
+            DispatchFinishTraversalTx(NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+        }
+    } else {
+        NYql::TIssue error(TStringBuilder() << "Could not save statistics for "
+            "table id: " << TraversalPathId.LocalPathId);
+        DispatchFinishTraversalTx(NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR, {error});
+    }
+}
+
+void TStatisticsAggregator::Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr&) {
+    NYql::TIssue error(TStringBuilder() << "Could not find table id: "
+        << TraversalPathId.LocalPathId << ", deleted its statistics");
+    DispatchFinishTraversalTx(NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR, {error});
+}
+
+void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeActorResult::TPtr& ev) {
+    if (ev->Sender != AnalyzeActorId) {
+        return;
+    }
+
+    if (ev->Get()->Final) {
+        AnalyzeActorId = {};
+    }
+
+    using EStatus = TEvStatistics::TEvAnalyzeActorResult::EStatus;
+    switch (ev->Get()->Status) {
+    case EStatus::Success:
+        std::move(
+            ev->Get()->Statistics.begin(), ev->Get()->Statistics.end(),
+            std::back_inserter(StatisticsToSave));
+        SaveStatisticsToTable();
+        return;
+    case EStatus::TableNotFound:
+        DeleteStatisticsFromTable();
+        return;
+    case EStatus::InternalError:
+        DispatchFinishTraversalTx(
+            NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR, std::move(ev->Get()->Issues));
+        return;
+    }
+}
+
+void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeCancel::TPtr& ev) {
+    const auto& operationId = ev->Get()->Record.GetOperationId();
+    if (operationId != ForceTraversalOperationId) {
+        SA_LOG_N("Got unexpected TEvAnalyzeCancel with"
+            << " operationId: " << operationId.Quote()
+            << ", expected: " << ForceTraversalOperationId.Quote() << ", ignoring");
+        return;
+    }
+
+    SA_LOG_D("Got TEvAnalyzeCancel, operationId: " << operationId.Quote());
+    DispatchFinishTraversalTx(NKikimrStat::TEvAnalyzeResponse::STATUS_CANCELLED);
+}
+
 void TStatisticsAggregator::InitializeStatisticsTable() {
     if (!EnableColumnStatistics) {
         return;
@@ -540,8 +622,6 @@ void TStatisticsAggregator::InitializeStatisticsTable() {
 }
 
 void TStatisticsAggregator::Navigate() {
-    Y_ABORT_UNLESS(NavigateType == ENavigateType::Traversal  && !NavigateAnalyzeOperationId
-                || NavigateType == ENavigateType::Analyze && NavigateAnalyzeOperationId);
     Y_ABORT_UNLESS(NavigatePathId);
 
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
@@ -551,14 +631,13 @@ void TStatisticsAggregator::Navigate() {
     entry.Operation = TNavigate::OpTable;
 
     auto request = std::make_unique<TNavigate>();
+    request->DatabaseName = NavigateDatabase;
     request->ResultSet.emplace_back(entry);
 
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.release()));
 }
 
 void TStatisticsAggregator::Resolve() {
-    Y_ABORT_UNLESS(NavigateType == ENavigateType::Traversal  && !NavigateAnalyzeOperationId
-                || NavigateType == ENavigateType::Analyze && NavigateAnalyzeOperationId);
     Y_ABORT_UNLESS(NavigatePathId);
 
     ++ResolveRound;
@@ -569,6 +648,7 @@ void TStatisticsAggregator::Resolve() {
         NavigatePathId, range, TKeyDesc::ERowOperation::Read, KeyColumnTypes, Columns);
 
     auto request = std::make_unique<NSchemeCache::TSchemeCacheRequest>();
+    request->DatabaseName = NavigateDatabase;
     request->ResultSet.emplace_back(std::move(keyDesc));
 
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request.release()));
@@ -579,6 +659,10 @@ void TStatisticsAggregator::ScanNextDatashardRange() {
     Y_FAIL();
 
     if (DatashardRanges.empty()) {
+        for (auto& [tag, sketch] : CountMinSketches) {
+            TString strSketch(sketch->AsStringBuf());
+            StatisticsToSave.emplace_back(tag, EStatType::COUNT_MIN_SKETCH, std::move(strSketch));
+        }
         SaveStatisticsToTable();
         return;
     }
@@ -597,34 +681,45 @@ void TStatisticsAggregator::ScanNextDatashardRange() {
 }
 
 void TStatisticsAggregator::SaveStatisticsToTable() {
+    constexpr ui64 MAX_BATCH_SIZE = 30_MB;
+
     if (!IsStatisticsTableCreated) {
         PendingSaveStatistics = true;
+        return;
+    }
+    if (SaveQueryActorId) {
+        // Next query will be dispatched when the current SaveQuery actor finishes.
         return;
     }
 
     PendingSaveStatistics = false;
 
-    std::vector<ui32> columnTags;
-    std::vector<TString> data;
-    auto count = CountMinSketches.size();
-    if (count == 0) {
+    size_t dataSize = 0;
+    std::vector<TStatisticsItem> items;
+    while (!StatisticsToSave.empty()) {
+        auto& item = StatisticsToSave.front();
+        if (!items.empty() && dataSize + item.Data.size() > MAX_BATCH_SIZE) {
+            break;
+        }
+        dataSize += item.Data.size();
+        items.push_back(std::move(item));
+        StatisticsToSave.pop_front();
+    };
+
+    if (items.empty()) {
+        Send(SelfId(), new TEvStatistics::TEvSaveStatisticsQueryResponse(
+            Ydb::StatusIds::SUCCESS, {}, TraversalPathId));
         return;
     }
-    columnTags.reserve(count);
-    data.reserve(count);
+    size_t itemsSize = items.size();
 
-    for (auto& [tag, sketch] : CountMinSketches) {
-        auto itColumnName = ColumnNames.find(tag);
-        if (itColumnName == ColumnNames.end()) {
-            continue;
-        }
-        columnTags.push_back(tag);
-        TString strSketch(sketch->AsStringBuf());
-        data.push_back(strSketch);
-    }
-
-    Register(CreateSaveStatisticsQuery(SelfId(), Database,
-        TraversalPathId, EStatType::COUNT_MIN_SKETCH, std::move(columnTags), std::move(data)));
+    SaveQueryActorId = Register(
+        CreateSaveStatisticsQuery(SelfId(), Database, TraversalPathId, std::move(items)));
+    SA_LOG_D("[" << TabletID() << "] Dispatched SaveStatisticsQuery"
+        << ", actor id: " << SaveQueryActorId
+        << ", items size: " << itemsSize
+        << ", data size: " << HumanReadableSize(dataSize, ESizeFormat::SF_BYTES)
+        << ", items left: " << StatisticsToSave.size());
 }
 
 void TStatisticsAggregator::DeleteStatisticsFromTable() {
@@ -638,100 +733,99 @@ void TStatisticsAggregator::DeleteStatisticsFromTable() {
     Register(CreateDeleteStatisticsQuery(SelfId(), Database, TraversalPathId));
 }
 
-void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db) {
-    Y_UNUSED(db);
+void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActorContext& ctx) {
     if (ForceTraversals.empty()) {
         SA_LOG_T("[" << TabletID() << "] ScheduleNextAnalyze. Empty ForceTraversals");
         return;
     }
     SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze");
+    Y_ABORT_UNLESS(!TraversalPathId);
+    Y_ABORT_UNLESS(!AnalyzeActorId);
 
     for (TForceTraversalOperation& operation : ForceTraversals) {
         for (TForceTraversalTable& operationTable : operation.Tables) {
-            if (operationTable.Status == TForceTraversalTable::EStatus::None) {
-                std::optional<bool> isColumnTable = IsColumnTable(operationTable.PathId);
-                if (!isColumnTable) {
-                    ForceTraversalOperationId = operation.OperationId;
-                    TraversalPathId = operationTable.PathId;
+            if (operationTable.Status == TForceTraversalTable::EStatus::None
+                || (operationTable.Status == TForceTraversalTable::EStatus::AnalyzeStarted
+                    && operation.RequestingActorReattached)) {
+                std::optional<bool> isKnown = IsKnownTable(operationTable.PathId);
+                if (!isKnown.has_value()) {
+                    SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. "
+                        << "Don't start analyze for table " << operationTable.PathId
+                        << " as there is still no info from its SchemeShard");
+                    continue;
+                }
+
+                ForceTraversalOperationId = operation.OperationId;
+                TraversalDatabase = operation.DatabaseName;
+                TraversalPathId = operationTable.PathId;
+
+                if (!*isKnown) {
+                    SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. "
+                        << "table " << operationTable.PathId
+                        << " was deleted, deleting its statistics");
                     DeleteStatisticsFromTable();
                     return;
                 }
 
-                if (*isColumnTable) {
-                    NavigateAnalyzeOperationId = operation.OperationId;
-                    NavigatePathId = operationTable.PathId;
-                    Navigate();
-                    return;
-                } else {
-                    SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. Skip analyze for datashard table " << operationTable.PathId);
-                    UpdateForceTraversalTableStatus(TForceTraversalTable::EStatus::AnalyzeFinished, operation.OperationId, operationTable,  db);
-                    return;
-                }
+                TraversalStartTime = TInstant::Now();
+                LastTraversalWasForce = true;
+
+                UpdateForceTraversalTableStatus(
+                    TForceTraversalTable::EStatus::AnalyzeStarted, operation.OperationId, operationTable, db);
+
+                // operation.Types field is not used, TAnalyzeActor will determine suitable
+                // statistic types itself.
+                auto analyzeActorConfig = TAnalyzeActor::TConfig{
+                    .MaxTotalScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxTotalScanActorsInFlight(),
+                    .MaxPerNodeScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxPerNodeScanActorsInFlight(),
+                };
+                AnalyzeActorId = ctx.Register(new TAnalyzeActor(
+                    SelfId(), operation.OperationId, operation.DatabaseName, operationTable.PathId,
+                    operationTable.ColumnTags, analyzeActorConfig));
+                SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. "
+                    << "operationId: " << operation.OperationId.Quote()
+                    << ", started analyzing table: " << operationTable.PathId
+                    << ", AnalyzeActorId: " << AnalyzeActorId);
+
+                return;
             }
         }
 
-        SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. All the force traversal tables sent the requests. OperationId=" << operation.OperationId);
+        SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. All the force traversal tables sent the requests. OperationId=" << operation.OperationId.Quote());
         continue;
     }
 
     SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. All the force traversal operations sent the requests.");
 }
 
-void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
-    SA_LOG_D("[" << TabletID() << "] ScheduleNextTraversal");
+void TStatisticsAggregator::ScheduleNextBackgroundTraversal(NIceDb::TNiceDb& db) {
+    SA_LOG_D("[" << TabletID() << "] ScheduleNextBackgroundTraversal");
+    Y_ABORT_UNLESS(!TraversalPathId);
 
+    TString databaseName;
     TPathId pathId;
 
-    if (!LastTraversalWasForce) {
-        LastTraversalWasForce = true;
-
-        if (ForceTraversals.empty()) {
-            SA_LOG_D("[" << TabletID() << "] ScheduleNextTraversal. No force traversals.");
-        } else {
-            for (TForceTraversalOperation& operation : ForceTraversals) {
-                for (TForceTraversalTable& operationTable : operation.Tables) {
-                    if (operationTable.Status == TForceTraversalTable::EStatus::AnalyzeFinished) {
-                        UpdateForceTraversalTableStatus(TForceTraversalTable::EStatus::TraversalStarted, operation.OperationId, operationTable,  db);
-                        pathId = operationTable.PathId;
-                        break;
-                    }
-                }
-
-                if (!pathId) {
-                    SA_LOG_D("[" << TabletID() << "] ScheduleNextTraversal. All the force traversal tables sent the requests. OperationId=" << operation.OperationId);
-                    continue;
-                }
-
-                ForceTraversalOperationId = operation.OperationId;
-                break;
-            }
-
-            if (!pathId) {
-                SA_LOG_D("[" << TabletID() << "] ScheduleNextTraversal. All the force traversal operations sent the requests.");
-            }
-        }
-    }
-
-    if (!pathId && !ScheduleTraversalsByTime.Empty()){
-        LastTraversalWasForce = false;
-
+    if (!ScheduleTraversalsByTime.Empty()){
         auto* oldestTable = ScheduleTraversalsByTime.Top();
         if (TInstant::Now() < oldestTable->LastUpdateTime + ScheduleTraversalPeriod) {
-            SA_LOG_T("[" << TabletID() << "] A schedule traversal is skiped. "
+            SA_LOG_T("[" << TabletID() << "] Background traversal is skipped. "
                 << "The oldest table " << oldestTable->PathId << " update time " << oldestTable->LastUpdateTime << " is too fresh.");
             return;
         }
 
+        databaseName = ""; // it's intentional, because ScheduleTraversalsByTime is filled by SchemeShards
         pathId = oldestTable->PathId;
     }
 
     if (!pathId) {
-        SA_LOG_E("[" << TabletID() << "] No traversal from schemeshard.");
+        SA_LOG_T("[" << TabletID() << "] No traversal request to send.");
         return;
     }
 
+    TraversalDatabase = databaseName;
     TraversalPathId = pathId;
     TraversalStartTime = TInstant::Now();
+    LastTraversalWasForce = false;
 
     std::optional<bool> isColumnTable = IsColumnTable(pathId);
     if (!isColumnTable){
@@ -741,16 +835,14 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
 
     // Datashard traversal is temporary disabled
     if (!*isColumnTable) {
-        SA_LOG_D("[" << TabletID() << "] ScheduleNextTraversal. Skip traversal for datashard table " << pathId);
+        SA_LOG_D("[" << TabletID() << "] ScheduleNextBackgroundTraversal. Skip traversal for datashard table " << pathId);
         DeleteStatisticsFromTable();
         return;
     }
 
     TraversalIsColumnTable = *isColumnTable;
 
-    SA_LOG_D("[" << TabletID() << "] Start "
-        << LastTraversalWasForceString()
-        << " traversal navigate for path " << pathId);
+    SA_LOG_D("[" << TabletID() << "] Start background traversal navigate for path " << pathId);
 
     StartTraversal(db);
 }
@@ -761,11 +853,12 @@ void TStatisticsAggregator::StartTraversal(NIceDb::TNiceDb& db) {
     TraversalStartKey = TSerializedCellVec();
     PersistStartKey(db);
 
+    NavigateDatabase = TraversalDatabase;
     NavigatePathId = TraversalPathId;
     Navigate();
 }
 
-void TStatisticsAggregator::FinishTraversal(NIceDb::TNiceDb& db) {
+void TStatisticsAggregator::FinishTraversal(NIceDb::TNiceDb& db, bool finishAllForceTraversalTables) {
     auto pathId = TraversalPathId;
 
     auto pathIt = ScheduleTraversals.find(pathId);
@@ -782,14 +875,20 @@ void TStatisticsAggregator::FinishTraversal(NIceDb::TNiceDb& db) {
 
     auto forceTraversalOperation = CurrentForceTraversalOperation();
     if (forceTraversalOperation) {
-        auto operationTable = CurrentForceTraversalTable();
-
-        UpdateForceTraversalTableStatus(TForceTraversalTable::EStatus::TraversalFinished, forceTraversalOperation->OperationId, *operationTable,  db);
-
-        bool tablesRemained = std::any_of(forceTraversalOperation->Tables.begin(), forceTraversalOperation->Tables.end(),
-        [](const TForceTraversalTable& elem) { return elem.Status != TForceTraversalTable::EStatus::TraversalFinished;});
-        if (!tablesRemained) {
+        if (finishAllForceTraversalTables) {
             DeleteForceTraversalOperation(ForceTraversalOperationId, db);
+        } else {
+            auto operationTable = CurrentForceTraversalTable();
+
+            UpdateForceTraversalTableStatus(
+                TForceTraversalTable::EStatus::TraversalFinished,
+                forceTraversalOperation->OperationId, *operationTable,  db);
+
+            bool tablesRemained = std::any_of(forceTraversalOperation->Tables.begin(), forceTraversalOperation->Tables.end(),
+            [](const TForceTraversalTable& elem) { return elem.Status != TForceTraversalTable::EStatus::TraversalFinished;});
+            if (!tablesRemained) {
+                DeleteForceTraversalOperation(ForceTraversalOperationId, db);
+            }
         }
     }
 
@@ -797,7 +896,7 @@ void TStatisticsAggregator::FinishTraversal(NIceDb::TNiceDb& db) {
 }
 
 TString TStatisticsAggregator::LastTraversalWasForceString() const {
-    return LastTraversalWasForce ? "force" : "schedule";
+    return LastTraversalWasForce ? "force" : "background";
 }
 
 TStatisticsAggregator::TForceTraversalOperation* TStatisticsAggregator::CurrentForceTraversalOperation() {
@@ -815,12 +914,23 @@ TStatisticsAggregator::TForceTraversalOperation* TStatisticsAggregator::ForceTra
     }
 }
 
+std::optional<bool> TStatisticsAggregator::IsKnownTable(const TPathId& pathId) const {
+    if (ScheduleTraversals.contains(pathId)) {
+        return true;
+    }
+    if (!BaseStatistics.contains(pathId.OwnerId)) {
+        // no info from the corresponding schemeshard yet
+        return std::nullopt;
+    }
+    return false;
+}
+
 std::optional<bool> TStatisticsAggregator::IsColumnTable(const TPathId& pathId) const {
     auto itPath = ScheduleTraversals.find(pathId);
     if (itPath != ScheduleTraversals.end()) {
         bool ret = itPath->second.IsColumnTable;
         SA_LOG_D("[" << TabletID() << "] IsColumnTable. Path " << pathId << " is "
-            << (ret ? "column" : "data") << " table.");
+            << (ret ? "column" : "datashard") << " table.");
         return ret;
     } else {
         SA_LOG_E("[" << TabletID() << "] IsColumnTable. traversal path " << pathId << " is not known to schemeshard");
@@ -871,6 +981,7 @@ void TStatisticsAggregator::PersistSysParam(NIceDb::TNiceDb& db, ui64 id, const 
 }
 
 void TStatisticsAggregator::PersistTraversal(NIceDb::TNiceDb& db) {
+    PersistSysParam(db, Schema::SysParam_TraversalTableDatabase, ToString(TraversalDatabase));
     PersistSysParam(db, Schema::SysParam_TraversalTableOwnerId, ToString(TraversalPathId.OwnerId));
     PersistSysParam(db, Schema::SysParam_TraversalTableLocalPathId, ToString(TraversalPathId.LocalPathId));
     PersistSysParam(db, Schema::SysParam_TraversalStartTime, ToString(TraversalStartTime.MicroSeconds()));
@@ -887,12 +998,20 @@ void TStatisticsAggregator::PersistGlobalTraversalRound(NIceDb::TNiceDb& db) {
 
 void TStatisticsAggregator::ResetTraversalState(NIceDb::TNiceDb& db) {
     ForceTraversalOperationId.clear();
+    TraversalDatabase = "";
     TraversalPathId = {};
     TraversalStartTime = TInstant::MicroSeconds(0);
+    if (AnalyzeActorId) {
+        Send(AnalyzeActorId, new TEvents::TEvPoison());
+        AnalyzeActorId = {};
+    }
+    SaveQueryActorId = {};
     PersistTraversal(db);
 
     TraversalStartKey = TSerializedCellVec();
     PersistStartKey(db);
+
+    StatisticsToSave.clear();
 
     for (auto& [tag, _] : CountMinSketches) {
         db.Table<Schema::ColumnStatistics>().Key(tag).Delete();
@@ -910,15 +1029,6 @@ void TStatisticsAggregator::ResetTraversalState(NIceDb::TNiceDb& db) {
     ResolveRound = 0;
     HiveRequestRound = 0;
     TraversalRound = 0;
-}
-
-TString TStatisticsAggregator::GetNavigateTypeString() const {
-    switch (NavigateType) {
-    case Analyze:
-        return "Analyze";
-    case Traversal:
-        return "Traversal";
-    }
 }
 
 TString TStatisticsAggregator::TForceTraversalTable::GetStatusString() const {
@@ -1037,16 +1147,15 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
             }
 
             str << Endl;
-            str << "NavigateType: " << GetNavigateTypeString() << Endl;
-            str << "NavigateAnalyzeOperationId: " << NavigateAnalyzeOperationId << Endl;
             str << "NavigatePathId: " << NavigatePathId << Endl;
 
             str << Endl;
-            str << "ForceTraversalOperationId: " << ForceTraversalOperationId << Endl;
+            str << "ForceTraversalOperationId: " << ForceTraversalOperationId.Quote() << Endl;
             if (ForceTraversalOperationId) {
                 auto forceTraversal = CurrentForceTraversalOperation();
                 str << "  CreatedAt: " << forceTraversal->CreatedAt << Endl;
                 str << ", ReplyToActorId: " << forceTraversal->ReplyToActorId << Endl;
+                str << ", RequestingActorReattached: " << forceTraversal->RequestingActorReattached << Endl;
                 str << ", Types: " << forceTraversal->Types << Endl;
                 str << ", Tables size: " << forceTraversal->Tables.size() << Endl;
                 str << ", Tables: " << Endl;
@@ -1056,12 +1165,14 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
                     str << "    Table[" << i << "] PathId: " << table.PathId << Endl;
                     str << "        Status: " << table.GetStatusString() << Endl;
                     str << "        AnalyzedShards size: " << table.AnalyzedShards.size() << Endl;
-                    str << "        ColumnTags: " << table.ColumnTags << Endl;
+                    str << "        ColumnTags: " << JoinVectorIntoString(table.ColumnTags, ",") << Endl;
                 }
             }
+            str << "AnalyzeActorId: " << AnalyzeActorId << Endl;
 
             str << Endl;
             str << "TraversalStartTime: " << TraversalStartTime.ToStringUpToSeconds() << Endl;
+            str << "TraversalDatabase: " << TraversalDatabase << Endl;
             str << "TraversalPathId: " << TraversalPathId << Endl;
             str << "TraversalIsColumnTable: " << TraversalIsColumnTable << Endl;
             str << "TraversalStartKey: " << TraversalStartKey.GetBuffer() << Endl;
@@ -1081,8 +1192,11 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
     ui64 totalRowCount = 0;
     ui64 totalBytesSize = 0;
     for (const auto& [_, serializedStats] : BaseStatistics) {
+        if (!serializedStats.Committed) {
+            continue;
+        }
         NKikimrStat::TSchemeShardStats stats;
-        Y_PROTOBUF_SUPPRESS_NODISCARD stats.ParseFromString(serializedStats);
+        Y_PROTOBUF_SUPPRESS_NODISCARD stats.ParseFromString(*serializedStats.Committed);
         for (const auto& entry: stats.GetEntries()) {
             totalRowCount += entry.GetRowCount();
             totalBytesSize += entry.GetBytesSize();

@@ -1,0 +1,40 @@
+--- a/src/core/lib/surface/call.cc
++++ b/src/core/lib/surface/call.cc
+@@ -97,6 +97,8 @@
+ #include "src/core/lib/transport/metadata_batch.h"
+ #include "src/core/lib/transport/transport.h"
+ 
++#include <util/system/yassert.h>
++
+ grpc_core::TraceFlag grpc_call_error_trace(false, "call_error");
+ grpc_core::TraceFlag grpc_compression_trace(false, "compression");
+ grpc_core::TraceFlag grpc_call_trace(false, "call");
+@@ -1729,7 +1731,7 @@
+ 
+   InternalRef("completion");
+   if (!is_notify_tag_closure) {
+-    GPR_ASSERT(grpc_cq_begin_op(cq_, notify_tag));
++    Y_ABORT_UNLESS(grpc_cq_begin_op(cq_, notify_tag));
+   }
+   bctl->set_pending_ops(pending_ops);
+ 
+--- a/src/core/ext/filters/client_channel/lb_policy/subchannel_list.h
++++ b/src/core/ext/filters/client_channel/lb_policy/subchannel_list.h
+@@ -21,6 +21,7 @@
+ 
+ #include <inttypes.h>
+ #include <string.h>
++#include <util/system/compiler.h> // Y_NO_SANITIZE
+ 
+ #include <memory>
+ #include <util/generic/string.h>
+@@ -360,7 +361,7 @@
+ SubchannelList<SubchannelListType, SubchannelDataType>::SubchannelList(
+     LoadBalancingPolicy* policy, const char* tracer,
+     ServerAddressList addresses,
+-    LoadBalancingPolicy::ChannelControlHelper* helper, const ChannelArgs& args)
++    LoadBalancingPolicy::ChannelControlHelper* helper, const ChannelArgs& args) Y_NO_SANITIZE("undefined")
+     : DualRefCounted<SubchannelListType>(tracer),
+       policy_(policy),
+       tracer_(tracer) {
+

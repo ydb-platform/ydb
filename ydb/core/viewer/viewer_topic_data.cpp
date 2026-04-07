@@ -40,7 +40,7 @@ void TTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
 
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
                     error << "Access denied to topuc: '" << TopicPath << "'";
-                    return ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", error));
+                    return ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", error));
 
                 default:
                     return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Got unknown error type trying to describe topic"));
@@ -61,7 +61,7 @@ void TTopicData::HandleDescribe(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
                 break;
             case NKikimr::NTopicHelpers::EAuthResult::AccessDenied:
             case NKikimr::NTopicHelpers::EAuthResult::TokenRequired:
-                return ReplyAndPassAway(GetHTTPFORBIDDEN("text/plain", authError));
+                return ReplyAndPassAway(GETHTTPACCESSDENIED("text/plain", authError));
         }
     }
     if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
@@ -202,7 +202,11 @@ void TTopicData::FillProtoResponse(ui64 maxTotalSize) {
             if (codec == nullptr) {
                 return ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Message decompression failed"));
             }
-            setData(*messageProto, std::move(codec->Decompress(dataChunk.GetData())));
+            try {
+                setData(*messageProto, std::move(codec->Decompress(dataChunk.GetData())));
+            } catch (const std::exception& e) {
+                setData(*messageProto, ">>> Message decompression failed <<<");
+            }
         } else {
             setData(*messageProto, std::move(*dataChunk.MutableData()));
         }

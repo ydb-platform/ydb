@@ -9,6 +9,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
+    ydb/core/tx/columnshard/engines/storage/indexes/helper
     ydb/core/formats/arrow/serializer
     ydb/core/kqp/runtime
     ydb/core/protos
@@ -27,12 +28,8 @@ PEERDIR(
     yql/essentials/public/issue
     yql/essentials/sql/settings
     yql/essentials/sql/v1
-    yql/essentials/sql/v1/lexer/antlr3
-    yql/essentials/sql/v1/lexer/antlr3_ansi
     yql/essentials/sql/v1/lexer/antlr4
     yql/essentials/sql/v1/lexer/antlr4_ansi
-    yql/essentials/sql/v1/proto_parser/antlr3
-    yql/essentials/sql/v1/proto_parser/antlr3_ansi
     yql/essentials/sql/v1/proto_parser/antlr4
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
 )

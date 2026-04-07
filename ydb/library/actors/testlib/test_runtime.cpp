@@ -12,6 +12,8 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+#include <ydb/library/actors/util/mutex_guarded_deterministic_random_provider.h>
 #include <ydb/library/actors/util/queue_oneone_inplace.h>
 
 #include <util/generic/maybe.h>
@@ -36,7 +38,7 @@ namespace {
 namespace NActors {
     ui64 TScheduledEventQueueItem::NextUniqueId = 0;
 
-    void PrintEvent(TAutoPtr<IEventHandle>& ev, const TTestActorRuntimeBase* runtime) {
+    void PrintEvent(IEventHandle* ev, const TTestActorRuntimeBase* runtime) {
         Cerr << "mailbox: " << ev->GetRecipientRewrite().Hint() << ", type: " << Sprintf("%08x", ev->GetTypeRewrite())
             << ", from " << ev->Sender.LocalId();
         TString name = runtime->GetActorName(ev->Sender);
@@ -55,6 +57,14 @@ namespace NActors {
             Cerr << " : EMPTY";
 
         Cerr << "\n";
+    }
+
+    void PrintEvent(std::unique_ptr<IEventHandle>& ev, const TTestActorRuntimeBase* runtime) {
+        PrintEvent(ev.get(), runtime);
+    }
+
+    void PrintEvent(TAutoPtr<IEventHandle>& ev, const TTestActorRuntimeBase* runtime) {
+        PrintEvent(ev.Get(), runtime);
     }
 
     TTestActorRuntimeBase::TNodeDataBase::TNodeDataBase() {
@@ -367,11 +377,12 @@ namespace NActors {
         }
 
         // for actorsystem
-        bool SpecificSend(TAutoPtr<IEventHandle>& ev) override {
+        bool SpecificSend(std::unique_ptr<IEventHandle>& ev) override {
             return Send(ev);
         }
 
-        bool Send(TAutoPtr<IEventHandle>& ev) override {
+        bool Send(std::unique_ptr<IEventHandle>& evUniq) override {
+            TAutoPtr<IEventHandle> ev = evUniq.release();
             TGuard<TMutex> guard(Runtime->Mutex);
             bool verbose = (Runtime->CurrentDispatchContext ? !Runtime->CurrentDispatchContext->Options->Quiet : true) && VERBOSE;
             if (Runtime->BlockedOutput.find(ev->Sender) != Runtime->BlockedOutput.end()) {
@@ -382,7 +393,6 @@ namespace NActors {
                 Cerr << "Got event at " << TInstant::MicroSeconds(Runtime->CurrentTimestamp) << ", ";
                 PrintEvent(ev, Runtime);
             }
-
             if (!Runtime->EventFilterFunc(*Runtime, ev)) {
                 ui32 nodeId = ev->GetRecipientRewrite().NodeId();
                 Y_ABORT_UNLESS(nodeId != 0);
@@ -501,7 +511,7 @@ namespace NActors {
         SingleSysEnv = true;
     }
 
-    TTestActorRuntimeBase::TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads)
+    TTestActorRuntimeBase::TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads, bool useRdmaAllocator)
         : ScheduledCount(0)
         , ScheduledLimit(100000)
         , MainThreadId(TThread::CurrentThreadId())
@@ -510,11 +520,12 @@ namespace NActors {
         , NodeCount(nodeCount)
         , DataCenterCount(dataCenterCount)
         , UseRealThreads(useRealThreads)
+        , UseRdmaAllocator(useRdmaAllocator)
         , LocalId(0)
         , DispatchCyclesCount(0)
         , DispatchedEventsCount(0)
         , NeedMonitoring(false)
-        , RandomProvider(CreateDeterministicRandomProvider(DefaultRandomSeed))
+        , RandomProvider(CreateMutexGuardedDeterministicRandomProvider(DefaultRandomSeed))
         , TimeProvider(new TTimeProvider(*this))
         , MonotonicTimeProvider(new TMonotonicTimeProvider(*this))
         , ShouldContinue()
@@ -896,6 +907,10 @@ namespace NActors {
 
     ui32 TTestActorRuntimeBase::GetNodeCount() const {
         return NodeCount;
+    }
+
+    void TTestActorRuntimeBase::ResetFirstNodeId() {
+        NextNodeId = 1;
     }
 
     ui64 TTestActorRuntimeBase::AllocateLocalId() {
@@ -1758,6 +1773,11 @@ namespace NActors {
             setup->Executors[0].Reset(new TExecutorPoolStub(this, nodeIndex, node, 0));
         }
 
+        if (UseRdmaAllocator) {
+            auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+            setup->RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(memPool);
+        }
+
         InitActorSystemSetup(*setup, node);
 
         return setup;
@@ -1880,8 +1900,8 @@ namespace NActors {
         Y_ABORT("Don't use this method.");
     }
 
-    TActorSystem* TTestActorRuntimeBase::GetActorSystem(ui32 nodeId) {
-        auto it = Nodes.find(GetNodeId(nodeId));
+    TActorSystem* TTestActorRuntimeBase::GetActorSystem(ui32 nodeIdx) {
+        auto it = Nodes.find(GetNodeId(nodeIdx));
         Y_ABORT_UNLESS(it != Nodes.end());
         return it->second->ActorSystem.Get();
     }

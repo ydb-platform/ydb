@@ -3,7 +3,6 @@
 #include "yql_yt_op_tracker.h"
 
 #include <yt/yql/providers/yt/gateway/lib/session.h>
-#include <yt/yql/providers/yt/gateway/lib/transaction_cache.h>
 #include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
 
 #include <yql/essentials/core/yql_execution.h>
@@ -35,18 +34,20 @@ struct TSession: public TSessionBase {
     ~TSession() = default;
 
     void Close();
-    NYT::TNode CreateSpecWithDesc(const TVector<std::pair<TString, TString>>& code = {}) const;
     NYT::TNode CreateTableAttrs() const;
 
     void EnsureInitializedSemaphore(const TYtSettings::TConstPtr& settings);
     void InitLocalCalcSemaphore(const TYtSettings::TConstPtr& settings);
 
-    const TOperationProgressWriter ProgressWriter_;
+    template <typename TCallable>
+    [[nodiscard]]
+    ::NThreading::TFuture<::NThreading::TFutureType<::TFunctionResult<TCallable>>> Async(TCallable&& func) {
+        return TAsyncQueue::Async(Queue_, std::move(func));
+    }
+
     const TStatWriter StatWriter_;
-    const TYqlOperationOptions OperationOptions_;
-    const TIntrusivePtr<ITimeProvider> TimeProvider_;
     const bool DeterministicMode_;
-    TAsyncQueue::TPtr Queue_;
+    TAsyncQueue::TWeakPtr Queue_;
     TOperationTracker::TPtr OpTracker_;
     NThreading::TAsyncSemaphore::TPtr OperationSemaphore;
     TMutex Mutex_;
@@ -54,8 +55,12 @@ struct TSession: public TSessionBase {
 
     TTransactionCache TxCache_;
 
+    const TQContext QContext_;
+    const IYtFullCapture::TPtr FullCapture_;
+
 private:
     void StopQueueAndTracker();
+    TAsyncQueue::TPtr QueueOwned_;
 };
 
 } // NNative

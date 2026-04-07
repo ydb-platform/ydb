@@ -20,6 +20,8 @@ from textual._xterm_parser import XTermParser
 from textual.driver import Driver
 from textual.drivers._writer_thread import WriterThread
 from textual.geometry import Size
+from textual.message import Message
+from textual.messages import InBandWindowResize
 
 if TYPE_CHECKING:
     from textual.app import App
@@ -59,6 +61,8 @@ class LinuxDriver(Driver):
         # need to know that we came in here via a SIGTSTP; this flag helps
         # keep track of this.
         self._must_signal_resume = False
+        self._in_band_window_resize = False
+        self._mouse_pixels = False
 
         # Put handlers for SIGTSTP and SIGCONT in place. These are necessary
         # to support the user pressing Ctrl+Z (or whatever the dev might
@@ -131,9 +135,32 @@ class LinuxDriver(Driver):
         # Note: E.g. lxterminal understands 1000h, but not the urxvt or sgr
         #       extensions.
 
+    def _enable_mouse_pixels(self) -> None:
+        """Enable mouse reporting as pixels."""
+        if not self._mouse:
+            return
+        self.write("\x1b[?1016h")
+        self._mouse_pixels = True
+
     def _enable_bracketed_paste(self) -> None:
         """Enable bracketed paste mode."""
         self.write("\x1b[?2004h")
+
+    def _query_in_band_window_resize(self) -> None:
+        self.write("\x1b[?2048$p")
+
+    def _enable_in_band_window_resize(self) -> None:
+        self.write("\x1b[?2048h")
+
+    def _enable_line_wrap(self) -> None:
+        self.write("\x1b[?7h")
+
+    def _disable_line_wrap(self) -> None:
+        self.write("\x1b[?7l")
+
+    def _disable_in_band_window_resize(self) -> None:
+        if self._in_band_window_resize:
+            self.write("\x1b[?2048l")
 
     def _disable_bracketed_paste(self) -> None:
         """Disable bracketed paste mode."""
@@ -210,7 +237,8 @@ class LinuxDriver(Driver):
         self._writer_thread.start()
 
         def on_terminal_resize(signum, stack) -> None:
-            send_size_event()
+            if not self._in_band_window_resize:
+                send_size_event()
 
         signal.signal(signal.SIGWINCH, on_terminal_resize)
 
@@ -246,14 +274,15 @@ class LinuxDriver(Driver):
         self.write("\x1b[?25l")  # Hide cursor
         self.write("\x1b[?1004h")  # Enable FocusIn/FocusOut.
         self.write("\x1b[>1u")  # https://sw.kovidgoyal.net/kitty/keyboard-protocol/
-        # Disambiguate escape codes https://sw.kovidgoyal.net/kitty/keyboard-protocol/#progressive-enhancement
-        self.write("\x1b[=1;u")
+
         self.flush()
         self._key_thread = Thread(target=self._run_input_thread)
         send_size_event()
         self._key_thread.start()
         self._request_terminal_sync_mode_support()
+        self._query_in_band_window_resize()
         self._enable_bracketed_paste()
+        self._disable_line_wrap()
 
         # Appears to fix an issue enabling mouse support in iTerm 3.5.0
         self._enable_mouse_support()
@@ -270,7 +299,7 @@ class LinuxDriver(Driver):
     def _request_terminal_sync_mode_support(self) -> None:
         """Writes an escape sequence to query the terminal support for the sync protocol."""
         # Terminals should ignore this sequence if not supported.
-        # Apple terminal doesn't, and writes a single 'p' in to the terminal,
+        # Apple terminal doesn't, and writes a single 'p' into the terminal,
         # so we will make a special case for Apple terminal (which doesn't support sync anyway).
         if not self.input_tty:
             return
@@ -330,6 +359,8 @@ class LinuxDriver(Driver):
     def stop_application_mode(self) -> None:
         """Stop application mode, restore state."""
         self._disable_bracketed_paste()
+        self._enable_line_wrap()
+        self._disable_in_band_window_resize()
         self.disable_input()
 
         if self.attrs_before is not None:
@@ -341,6 +372,7 @@ class LinuxDriver(Driver):
         # Disable the Kitty keyboard protocol. This must be done before leaving
         # the alt screen. https://sw.kovidgoyal.net/kitty/keyboard-protocol/
         self.write("\x1b[<u")
+
         # Alt screen false, show cursor
         self.write("\x1b[?1049l")
         self.write("\x1b[?25h")
@@ -401,9 +433,9 @@ class LinuxDriver(Driver):
                         # This can occur if the stdin is piped
                         break
                     for event in feed(unicode_data):
-                        self.process_event(event)
+                        self.process_message(event)
             for event in tick():
-                self.process_event(event)
+                self.process_message(event)
 
         try:
             while not self.exit_event.is_set():
@@ -416,5 +448,22 @@ class LinuxDriver(Driver):
             try:
                 for event in feed(""):
                     pass
-            except ParseError:
+            except (EOFError, ParseError):
                 pass
+
+    def process_message(self, message: Message) -> None:
+        # intercept in-band window resize
+        if isinstance(message, InBandWindowResize):
+            if message.supported:
+                self._in_band_window_resize = True
+                if message.enabled:
+                    # Supported and enabled
+                    super().process_message(message)
+                else:
+                    # Supported, but not enabled
+                    self._enable_in_band_window_resize()
+                    super().process_message(InBandWindowResize(True, True))
+                self._enable_mouse_pixels()
+                return
+
+        super().process_message(message)

@@ -53,7 +53,7 @@ public:
         return state;
     }
 
-    void Continue(const TChecksumState& state) override {
+    void SetState(const TChecksumState& state) override {
         const auto& sha256State = state.GetSha256State();
         SHA256_Init(&Context);
         FillArrayFromProto(Context.h, sha256State.GetH());

@@ -55,10 +55,10 @@ namespace utils
 
   template <typename T, typename... Iters>
   struct iterator_min<T, Iters...> {
-    using type = typename std::conditional<
-        std::is_same<typename std::iterator_traits<T>::iterator_category,
-                     std::forward_iterator_tag>::value,
-        std::forward_iterator_tag, typename iterator_min<Iters...>::type>::type;
+    using type =
+        std::conditional_t<std::is_same<typename std::iterator_traits<T>::iterator_category,
+                                        std::forward_iterator_tag>::value,
+                           std::forward_iterator_tag, typename iterator_min<Iters...>::type>;
   };
 } // namespace utils
 PYTHONIC_NS_END

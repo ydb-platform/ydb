@@ -4,13 +4,12 @@
 
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
-#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/conclusion/result.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
-class IDataSource;
+class TPortionDataSource;
 }
 
 namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering {
@@ -24,42 +23,23 @@ public:
 
 class TEvRequestFilter: public NActors::TEventLocal<TEvRequestFilter, NColumnShard::TEvPrivate::EvRequestFilter> {
 private:
-    YDB_READONLY_DEF(TString, ExternalTaskId);
     NArrow::TSimpleRow MinPK;
     NArrow::TSimpleRow MaxPK;
-    YDB_READONLY_DEF(ui64, SourceId);
+    YDB_READONLY_DEF(ui64, PortionId);
     YDB_READONLY_DEF(ui64, RecordsCount);
     TSnapshot MaxVersion;
     YDB_READONLY_DEF(std::shared_ptr<IFilterSubscriber>, Subscriber);
     YDB_READONLY_DEF(std::shared_ptr<const TAtomicCounter>, AbortionFlag);
 
 public:
-    TEvRequestFilter(const IDataSource& source, const std::shared_ptr<IFilterSubscriber>& subscriber);
+    TEvRequestFilter(const TPortionDataSource& source, const std::shared_ptr<IFilterSubscriber>& subscriber);
 
-    TSnapshot GetMaxVersion() const {
-        return MaxVersion;
-    }
-};
+    // Test-only constructor that doesn't require TPortionDataSource
+    TEvRequestFilter(const NArrow::TSimpleRow& minPK, const NArrow::TSimpleRow& maxPK, const ui64 portionId,
+        const ui64 recordsCount, const TSnapshot& maxVersion, const std::shared_ptr<IFilterSubscriber>& subscriber,
+        const std::shared_ptr<const TAtomicCounter>& abortionFlag);
 
-class TEvFilterConstructionResult
-    : public NActors::TEventLocal<TEvFilterConstructionResult, NColumnShard::TEvPrivate::EvFilterConstructionResult> {
-private:
-    using TFilters = THashMap<TDuplicateMapInfo, NArrow::TColumnFilter>;
-    TConclusion<TFilters> Result;
-
-public:
-    TEvFilterConstructionResult(TConclusion<TFilters>&& result)
-        : Result(std::move(result))
-    {
-    }
-
-    const TConclusion<TFilters>& GetConclusion() const {
-        return Result;
-    }
-
-    TFilters&& ExtractResult() {
-        return Result.DetachResult();
-    }
+    TSnapshot GetMaxVersion() const;
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

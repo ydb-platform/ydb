@@ -1,0 +1,3 @@
+$p = 'http_test://' || 'foo.txt';
+pragma file('foo.txt',$p);
+select FileContent('foo.txt');

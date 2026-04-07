@@ -65,6 +65,22 @@ namespace NCloudEvents {
     template<typename TProtoEvent>
     void TFiller<TProtoEvent>::FillDetails() {
         Ev.mutable_details()->set_name(EventInfo.QueueName);
+        /*
+            Historically, the queue’s “internal” name has also served as its identifier.
+
+            In a Yandex.Cloud installation, this queue name is actually the queue’s resource_id.
+
+            If you look closely at the current file, you can see that the ResourceId value is passed
+            in the Authorization section. However, it’s important to understand that, logically,
+            the protobuf field resource_id refers to identifying the resource itself and
+            is used for permission checks. The queue_id field, on the other hand, logically means
+            this is an identifier not of the resource in general, but specifically of the queue.
+            So even though these two values are the same, they represent completely different things conceptually.
+
+            In addition, there is also a real need to single out the queue’s own identifier.
+            This arose due to the specifics of how cloud events are processed by cloud subsystems.
+        */
+        Ev.mutable_details()->set_queue_id(EventInfo.ResourceId);
 
         auto convertLabels = [](const TString& str) -> THashMap<TBasicString<char>, NJson::TJsonValue> {
             NJson::TJsonValue json;
@@ -99,18 +115,10 @@ namespace NCloudEvents {
             TString jsonEv;
             google::protobuf::util::JsonPrintOptions printOpts;
             printOpts.preserve_proto_field_names = true;
+            printOpts.always_print_primitive_fields = true;
             auto status = google::protobuf::util::MessageToJsonString(ev, &jsonEv, printOpts);
             Y_ASSERT(status.ok());
             writer->Write(jsonEv);
-        } else {
-            TString jsonEv;
-            google::protobuf::util::JsonPrintOptions printOpts;
-            printOpts.preserve_proto_field_names = true;
-            auto status = google::protobuf::util::MessageToJsonString(ev, &jsonEv, printOpts);
-            std::cerr << "==================================================================" << std::endl;
-            std::cerr << "status.ok() = " << status.ok() << std::endl;
-            std::cerr << jsonEv << std::endl;
-            std::cerr << "==================================================================" << std::endl;
         }
     }
 
@@ -141,7 +149,7 @@ namespace NCloudEvents {
             AUDIT_PART("component", componentName)
             AUDIT_PART("id", evInfo.Id)
             AUDIT_PART("operation", evInfo.Type)
-            AUDIT_PART("status", TString(evInfo.Issue.empty() ? "SUCCESS" : "ERROR"))
+            AUDIT_PART("status", evInfo.Issue.empty() ? "SUCCESS" : "ERROR")
             AUDIT_PART("reason", evInfo.Issue, !evInfo.Issue.empty())
             AUDIT_PART("remote_address", evInfo.RemoteAddress)
             AUDIT_PART("subject", evInfo.UserSID)

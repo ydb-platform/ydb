@@ -1,0 +1,49 @@
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+SELECT
+    o_year,
+    Sum(
+        CASE
+            WHEN nation == 'BRAZIL' THEN volume
+            ELSE $to_decimal(0)
+        END
+    ) / (Sum(volume) + $to_decimal_max_precision("0.000000000001")) AS mkt_share
+FROM (
+    SELECT
+        DateTime::GetYear(CAST(o_orderdate AS Timestamp)) AS o_year,
+        l_extendedprice * ($to_decimal(1) - l_discount) AS volume,
+        n2.n_name AS nation
+    FROM
+        `/Root/part` as part
+    ,
+        `/Root/supplier` as supplier
+    ,
+        `/Root/lineitem` as lineitem
+    ,
+        `/Root/orders` as orders
+    ,
+        `/Root/customer` as customer
+    ,
+        `/Root/nation` AS n1
+    ,
+        `/Root/nation` AS n2
+    ,
+        `/Root/region` as region
+    WHERE
+        p_partkey == l_partkey
+        AND s_suppkey == l_suppkey
+        AND l_orderkey == o_orderkey
+        AND o_custkey == c_custkey
+        AND c_nationkey == n1.n_nationkey
+        AND n1.n_regionkey == r_regionkey
+        AND r_name == 'AMERICA'
+        AND s_nationkey == n2.n_nationkey
+        AND o_orderdate BETWEEN Date('1995-01-01') AND Date('1996-12-31')
+        AND p_type == 'ECONOMY ANODIZED STEEL'
+) AS all_nations
+GROUP BY
+    o_year
+ORDER BY
+    o_year
+;

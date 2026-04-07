@@ -126,13 +126,13 @@ std::unique_ptr<IHeterogenousFilterConsumer> CreateFilteringConsumerImpl(
                 // But just in case, let async writer do the job on concatenating these segments.
                 asyncYson = AsyncWriter_.Finish();
             } else {
-                asyncYson = asyncSegments.front().ApplyUnique(BIND([] (std::pair<TYsonString, bool>&& pair) {
+                asyncYson = asyncSegments.front().AsUnique().Apply(BIND([] (std::pair<TYsonString, bool>&& pair) {
                     return std::move(pair.first);
                 }));
             }
 
             // Second, perform actual filtration.
-            auto asyncFilteredYson = asyncYson.ApplyUnique(BIND([paths = std::move(Paths_), sync = Sync_] (TYsonString&& yson) {
+            auto asyncFilteredYson = asyncYson.AsUnique().Apply(BIND([paths = std::move(Paths_), sync = Sync_] (TYsonString&& yson) {
                 // Note the special case when there are no matches. Ideally we would like to not emit
                 // our attribute at all, but the possibility to do so depends on whether we are in sync or async case.
                 //
@@ -164,7 +164,7 @@ std::unique_ptr<IHeterogenousFilterConsumer> CreateFilteringConsumerImpl(
                     THROW_ERROR_EXCEPTION("Unexpected unset future in synchronous attribute filtering");
                 }
 
-                auto&& filteredYsonOrError = asyncFilteredYson.Get();
+                auto&& filteredYsonOrError = asyncFilteredYson.GetOrCrash();
                 filteredYsonOrError.ThrowOnError();
 
                 auto filteredYson = std::move(filteredYsonOrError.Value());
@@ -333,6 +333,31 @@ TAttributeFilter::TKeyToFilter TAttributeFilter::Normalize() const
     }
 
     return result;
+}
+
+void TAttributeFilter::Remove(const std::vector<IAttributeDictionary::TKey>& keys)
+{
+    std::erase_if(
+        Keys_,
+        [&] (const auto& key) {
+            return std::find(keys.begin(), keys.end(), key) != keys.end();
+        }
+    );
+    auto keyPaths = keys | std::views::transform([] (const auto& key) {
+        return "/" + ToYPathLiteral(key);
+    });
+
+    std::erase_if(
+        Paths_,
+        [&] (const auto& path) {
+            for (const auto& keyPath : keyPaths) {
+                if (path.StartsWith(std::string_view(keyPath))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    );
 }
 
 std::unique_ptr<TAttributeFilter::IFilteringConsumer> TAttributeFilter::CreateFilteringConsumer(

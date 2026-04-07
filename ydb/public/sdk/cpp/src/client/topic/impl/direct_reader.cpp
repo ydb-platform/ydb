@@ -212,7 +212,7 @@ void TDirectReadSessionManager::StartPartitionSession(TDirectReadPartitionSessio
     Locations.emplace(partitionSession.PartitionSessionId, partitionSession.Location);
 }
 
-// Delete a partition session from a node (TDirectReadSession), and if there are no more
+// Delete partition session from the node (TDirectReadSession), and if there are no more
 // partition sessions on the node, drop connection to it.
 void TDirectReadSessionManager::DeletePartitionSession(TPartitionSessionId partitionSessionId, TNodeSessionsMap::iterator it) {
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeletePartitionSession " << partitionSessionId);
@@ -228,7 +228,7 @@ void TDirectReadSessionManager::DeletePartitionSession(TPartitionSessionId parti
             NodeSessions.erase(it);
         }
     } else {
-        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeletePartitionSession " << partitionSessionId << " not found in NodeSessions");
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeletePartitionSession " << partitionSessionId << " could not LockShared");
     }
     if (directReadSessionContextPtr) {
         directReadSessionContextPtr->Cancel();
@@ -276,25 +276,6 @@ void TDirectReadSessionManager::UpdatePartitionSession(TPartitionSessionId parti
         .NextDirectReadId = next,
         .LastDirectReadId = last,
     });
-}
-
-TDirectReadSessionContextPtr TDirectReadSessionManager::ErasePartitionSession(TPartitionSessionId partitionSessionId) {
-    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "ErasePartitionSession " << partitionSessionId);
-
-    auto locIt = Locations.find(partitionSessionId);
-    Y_ABORT_UNLESS(locIt != Locations.end());
-    auto nodeId = locIt->second.GetNodeId();
-
-    auto sessionIt = NodeSessions.find(nodeId);
-    Y_ABORT_UNLESS(sessionIt != NodeSessions.end());
-    TDirectReadSessionContextPtr directReadSessionContextPtr = sessionIt->second;
-
-    // Still need to Cancel the TCallbackContext<TDirectReadSession>.
-    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "ErasePartitionSession " << partitionSessionId << " erase");
-    NodeSessions.erase(sessionIt);
-    Locations.erase(partitionSessionId);
-
-    return directReadSessionContextPtr;
 }
 
 void TDirectReadSessionManager::StopPartitionSession(TPartitionSessionId partitionSessionId) {
@@ -536,23 +517,23 @@ void TDirectReadSession::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t c
 
         if (!IsErrorMessage(*ServerMessage)) {
             if (ServerMessage->server_message_case() != TDirectReadServerMessage::kDirectReadResponse) {
-                LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "XXXXX subsession got message = " << ServerMessage->ShortDebugString());
+                LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "subsession got message = " << ServerMessage->ShortDebugString());
             } else {
                 const auto& data = ServerMessage->direct_read_response().partition_data();
                 const auto partitionSessionId = ServerMessage->direct_read_response().partition_session_id();
                 auto partitionSessionIt = PartitionSessions.find(partitionSessionId);
                 if (partitionSessionIt == PartitionSessions.end()) {
-                    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "XXXXX subsession got message = DirectReadResponse partitionSessionId=" << partitionSessionId << " not found");
+                    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "subsession got message = DirectReadResponse partitionSessionId=" << partitionSessionId << " not found");
                 }
                 if (data.batches_size() == 0) {
-                    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "XXXXX subsession got message = DirectReadResponse EMPTY");
+                    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "subsession got message = DirectReadResponse EMPTY");
                 } else {
                     const auto& firstBatch = data.batches(0);
                     const auto firstOffset = firstBatch.message_data(0).offset();
                     const auto& lastBatch = data.batches(data.batches_size() - 1);
                     const auto lastOffset = lastBatch.message_data(lastBatch.message_data_size() - 1).offset();
                     auto partitionId = partitionSessionIt == PartitionSessions.end() ? -1 : partitionSessionIt->second.PartitionId;
-                    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "XXXXX subsession got message = DirectReadResponse"
+                    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "subsession got message = DirectReadResponse"
                         << " partitionSessionId = " << partitionSessionId
                         << " partitionId = " << partitionId
                         << " directReadId = " << ServerMessage->direct_read_response().direct_read_id()
@@ -807,7 +788,7 @@ void TDirectReadSession::WriteToProcessorImpl(TDirectReadClientMessage&& req) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     if (Processor) {
-        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "XXXXX subsession send message = " << req.ShortDebugString());
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "subsession send message = " << req.ShortDebugString());
         Processor->Write(std::move(req));
     }
 }

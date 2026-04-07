@@ -1,6 +1,5 @@
 #include "check_lexers.h"
 
-
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
@@ -16,6 +15,37 @@
 
 namespace NSQLTranslationV1 {
 
+namespace {
+
+std::tuple<
+    bool,
+    TVector<NSQLTranslation::TParsedToken>,
+    NYql::TIssues>
+Tokenize(NSQLTranslation::ILexer& lexer, const TString& query) {
+    bool isOk;
+    TVector<NSQLTranslation::TParsedToken> tokens;
+    NYql::TIssues issues;
+
+    isOk = lexer.Tokenize(query, "", [&](auto token) {
+        tokens.emplace_back(std::move(token));
+    }, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS);
+
+    return {isOk, std::move(tokens), std::move(issues)};
+}
+
+NYql::TIssuePtr Group(TString name, bool isOk, const NYql::TIssues& issues) {
+    TString message = name + " is " + (isOk ? "OK" : "FAIL");
+
+    NYql::TIssuePtr grouping = new NYql::TIssue(std::move(message));
+    for (const NYql::TIssue& issue : issues) {
+        grouping->AddSubIssue(new NYql::TIssue(issue));
+    }
+
+    return grouping;
+}
+
+} // namespace
+
 bool CheckLexers(NYql::TPosition pos, const TString& query, NYql::TIssues& issues) {
     NSQLTranslationV1::TLexers lexers;
     NSQLTranslation::TTranslationSettings settings;
@@ -23,34 +53,39 @@ bool CheckLexers(NYql::TPosition pos, const TString& query, NYql::TIssues& issue
         return false;
     }
 
+    if (settings.PgParser) {
+        return true;
+    }
+
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
     lexers.Antlr4Pure = NSQLTranslationV1::MakeAntlr4PureLexerFactory();
     lexers.Antlr4PureAnsi = NSQLTranslationV1::MakeAntlr4PureAnsiLexerFactory();
-    auto lexerMain = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, true, NSQLTranslationV1::ELexerFlavor::Default);
-    auto lexerPure = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, true, NSQLTranslationV1::ELexerFlavor::Pure);
+    auto lexerMain = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, NSQLTranslationV1::ELexerFlavor::Default);
+    auto lexerPure = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, NSQLTranslationV1::ELexerFlavor::Pure);
     auto lexerRegex = NSQLTranslationV1::MakeRegexLexerFactory(settings.AnsiLexer)->MakeLexer();
-    TVector<NSQLTranslation::TParsedToken> mainTokens;
-    if (!lexerMain->Tokenize(query, "", [&](auto token) { mainTokens.push_back(token);}, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+
+    auto [isMainOk, mainTokens, mainIssues] = Tokenize(*lexerMain, query);
+    auto [isPureOk, pureTokens, pureIssues] = Tokenize(*lexerPure, query);
+    auto [isRegexOk, regexTokens, regexIssues] = Tokenize(*lexerRegex, query);
+
+    if (!(isMainOk == isPureOk && isPureOk == isRegexOk)) {
+        NYql::TIssue issue(pos, "Main, Pure, Lexer statuses differ");
+        issue.AddSubIssue(Group("Main", isMainOk, std::move(mainIssues)));
+        issue.AddSubIssue(Group("Pure", isPureOk, std::move(pureIssues)));
+        issue.AddSubIssue(Group("Regex", isRegexOk, std::move(regexIssues)));
         return false;
     }
 
-    TVector<NSQLTranslation::TParsedToken> pureTokens;
-    if (!lexerPure->Tokenize(query, "", [&](auto token) { pureTokens.push_back(token);}, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
-        return false;
-    }
-
-    TVector<NSQLTranslation::TParsedToken> regexTokens;
-    if (!lexerRegex->Tokenize(query, "", [&](auto token) { regexTokens.push_back(token);}, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
-        return false;
+    if (!isMainOk) { // The lexer behaviour on invalid input is implementation defined
+        return true;
     }
 
     bool hasErrors = false;
     auto check = [&](const char* name, const TVector<NSQLTranslation::TParsedToken>& otherTokens) {
         if (mainTokens.size() != otherTokens.size()) {
             hasErrors = true;
-            issues.AddIssue(NYql::TIssue(pos, TStringBuilder () << "Mismatch token count, main: " <<
-                mainTokens.size() << ", " << name << ": " << otherTokens.size() << "\n"));
+            issues.AddIssue(NYql::TIssue(pos, TStringBuilder() << "Mismatch token count, main: " << mainTokens.size() << ", " << name << ": " << otherTokens.size() << "\n"));
         }
 
         TStringBuilder textBuilder;
@@ -79,4 +114,4 @@ bool CheckLexers(NYql::TPosition pos, const TString& query, NYql::TIssues& issue
     return !hasErrors;
 }
 
-}
+} // namespace NSQLTranslationV1

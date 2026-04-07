@@ -57,7 +57,9 @@ namespace NYT::NPhoenix::NDetail {
     template <> \
     struct TPhoenixTypeInitializer__<type> \
     { \
-        YT_STATIC_INITIALIZER(::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<type, false>()); \
+        YT_STATIC_INITIALIZER({ \
+            ::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<type, false>(); \
+        }); \
     }
 
 #define PHOENIX_DEFINE_TEMPLATE_TYPE(type, typeArgs) \
@@ -67,7 +69,9 @@ namespace NYT::NPhoenix::NDetail {
     template <> \
     struct TPhoenixTypeInitializer__<type<PP_DEPAREN(typeArgs)>> \
     { \
-        YT_STATIC_INITIALIZER(::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<type<PP_DEPAREN(typeArgs)>, true>()); \
+        YT_STATIC_INITIALIZER({ \
+            ::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<type<PP_DEPAREN(typeArgs)>, true>(); \
+        }); \
     }
 
 #define PHOENIX_DEFINE_OPAQUE_TYPE(type) \
@@ -83,20 +87,28 @@ namespace NYT::NPhoenix::NDetail {
     template <> \
     struct TPhoenixTypeInitializer__<type> \
     { \
-        YT_STATIC_INITIALIZER(::NYT::NPhoenix::NDetail::RegisterOpaqueTypeDescriptorImpl<type>()); \
+        YT_STATIC_INITIALIZER({ \
+            ::NYT::NPhoenix::NDetail::RegisterOpaqueTypeDescriptorImpl<type>(); \
+        }); \
     }
 
 #define PHOENIX_REGISTER_FIELD(fieldTag, fieldName, ...) \
     registrar.template Field<fieldTag, &TThis::fieldName>(#fieldName) __VA_ARGS__ ()
 
-#define PHOENIX_REGISTER_DELETED_FIELD(fieldTag, fieldType, fieldName, version) \
+#define PHOENIX_REGISTER_DELETED_FIELD(fieldTag, fieldType, fieldName, version, ...) \
     registrar \
         .template VirtualField<fieldTag>(#fieldName, [] (TThis* /*this_*/, auto& context) { \
             Load<fieldType>(context); \
         }) \
-        .BeforeVersion(version)()
+        .BeforeVersion(version) __VA_ARGS__ ()
 
 ////////////////////////////////////////////////////////////////////////////////
+
+// COMPAT(coteeq): Older snapshots are broken: they have virtual fields in schema,
+// but these fields may not be physically serialized. As we need to check
+// the version manually inside the load callback, we need to be able to capture the version.
+template <class TThis, class TContext>
+using TScheduledFieldLoadHandler = std::function<void(TThis*, TContext&)>;
 
 template <class TThis, class TContext>
 using TFieldMissingHandler = void (*)(TThis*, TContext&);
@@ -394,7 +406,7 @@ public:
         , SaveHandler_(saveHandler)
     { }
 
-    TVirtualFieldSaveRegistrar(TVirtualFieldSaveRegistrar<TThis, TContext>&& other)
+    TVirtualFieldSaveRegistrar(TVirtualFieldSaveRegistrar<TThis, TContext>&& other) noexcept
         : This_(other.This_)
         , Context_(other.Context_)
         , SaveHandler_(other.SaveHandler_)
@@ -602,7 +614,7 @@ public:
         , LoadHandler_(loadHandler)
     { }
 
-    TVirtualFieldLoadRegistrar(TVirtualFieldLoadRegistrar<TThis, TContext>&& other)
+    TVirtualFieldLoadRegistrar(TVirtualFieldLoadRegistrar<TThis, TContext>&& other) noexcept
         : This_(other.This_)
         , Context_(other.Context_)
         , Name_(other.Name_)
@@ -756,7 +768,7 @@ void LoadImpl(TThis* this_, TContext& context)
 template <class TThis, class TContext>
 struct TRuntimeFieldDescriptor
 {
-    TFieldLoadHandler<TThis, TContext> LoadHandler = nullptr;
+    TScheduledFieldLoadHandler<TThis, TContext> LoadHandler;
     TFieldMissingHandler<TThis, TContext> MissingHandler = nullptr;
 };
 
@@ -826,18 +838,23 @@ public:
         : Descriptor_(descriptor)
     { }
 
-    auto SinceVersion(auto /*version*/) &&
+    using TVersion = typename TTraits<TThis>::TVersion;
+
+    auto SinceVersion(TVersion version) &&
     {
+        MinVersion_ = version;
         return *this;
     }
 
-    auto BeforeVersion(auto /*version*/) &&
+    auto BeforeVersion(TVersion version) &&
     {
+        BeforeVersion_ = version;
         return *this;
     }
 
-    auto InVersions(auto /*filter*/) &&
+    auto InVersions(TVersionFilter<TThis> filter) &&
     {
+        VersionFilter_ = filter;
         return *this;
     }
 
@@ -854,10 +871,33 @@ public:
     }
 
     void operator()() &&
-    { }
+    {
+        bool haveSimpleFilter =
+            MinVersion_ != static_cast<TVersion>(std::numeric_limits<int>::min()) ||
+            BeforeVersion_ != static_cast<TVersion>(std::numeric_limits<int>::max());
+
+        YT_VERIFY(
+            !haveSimpleFilter || !VersionFilter_,
+            "Cannot specify SinceVersion/BeforeVersion and InVersions at the same time");
+
+        Descriptor_->LoadHandler = [
+            since = MinVersion_,
+            before = BeforeVersion_,
+            filter = VersionFilter_,
+            underlyingHandler = Descriptor_->LoadHandler
+        ] (TThis* this_, TContext& context) {
+            auto version = context.GetVersion();
+            if (since <= version && version < before && (!filter || filter(version))) {
+                underlyingHandler(this_, context);
+            }
+        };
+    }
 
 private:
     TRuntimeFieldDescriptor* const Descriptor_;
+    TVersion MinVersion_ = static_cast<TVersion>(std::numeric_limits<int>::min());
+    TVersion BeforeVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
+    TVersionFilter<TThis> VersionFilter_ = nullptr;
 };
 
 template <class TThis, class TContext>
@@ -947,7 +987,7 @@ template <class TThis, class TContext>
 struct TRuntimeTypeLoadSchedule
     : public TRuntimeTypeLoadScheduleBase
 {
-    std::vector<TFieldLoadHandler<TThis, TContext>> LoadFieldHandlers;
+    std::vector<TScheduledFieldLoadHandler<TThis, TContext>> LoadFieldHandlers;
     std::vector<TFieldMissingHandler<TThis, TContext>> MissingFieldHandlers;
 };
 
@@ -1095,7 +1135,7 @@ struct TSerializer
     static void Load(C& context, TIntrusivePtr<T>& ptr)
     {
         T* rawPtr = nullptr;
-        LoadImpl</*Inplace*/ false>(context, rawPtr);
+        LoadImpl</*Inplace*/ false, /*UseRefCountedConstructor*/ std::is_final_v<T>>(context, rawPtr);
         ptr.Reset(rawPtr);
     }
 
@@ -1103,14 +1143,14 @@ struct TSerializer
     static void InplaceLoad(C& context, const TIntrusivePtr<T>& ptr)
     {
         T* rawPtr = ptr.Get();
-        LoadImpl</*Inplace*/ true>(context, rawPtr);
+        LoadImpl</*Inplace*/ true, /*UseRefCountedConstructor*/ false>(context, rawPtr);
     }
 
     template <class T, class C>
     static void Load(C& context, std::unique_ptr<T>& ptr)
     {
         T* rawPtr = nullptr;
-        LoadImpl</*Inplace*/ false>(context, rawPtr);
+        LoadImpl</*Inplace*/ false, /*UseRefCountedConstructor*/ false>(context, rawPtr);
         ptr.reset(rawPtr);
     }
 
@@ -1118,31 +1158,31 @@ struct TSerializer
     static void InplaceLoad(C& context, const std::unique_ptr<T>& ptr)
     {
         T* rawPtr = ptr.get();
-        LoadImpl</*Inplace*/ true>(context, rawPtr);
+        LoadImpl</*Inplace*/ true, /*UseRefCountedConstructor*/ false>(context, rawPtr);
     }
 
     template <class T, class C>
     static void Load(C& context, T*& rawPtr)
     {
         rawPtr = nullptr;
-        LoadImpl</*Inplace*/ false>(context, rawPtr);
+        LoadImpl</*Inplace*/ false, /*UseRefCountedConstructor*/ false>(context, rawPtr);
     }
 
     template <class T, class C>
     static void InplaceLoad(C& context, T* rawPtr)
     {
-        LoadImpl</*Inplace*/ true>(context, rawPtr);
+        LoadImpl</*Inplace*/ true, /*UseRefCountedConstructor*/ false>(context, rawPtr);
     }
 
     template <class T, class C>
     static void Load(C& context, TWeakPtr<T>& ptr)
     {
         T* rawPtr = nullptr;
-        LoadImpl</*Inplace*/ false>(context, rawPtr);
+        LoadImpl</*Inplace*/ false, /*UseRefCountedConstructor*/ std::is_final_v<T>>(context, rawPtr);
         ptr.Reset(rawPtr);
     }
 
-    template <bool Inplace, class T, class C>
+    template <bool Inplace, bool UseRefCountedConstructor, class T, class C>
     static void LoadImpl(C& context, T*& rawPtr)
     {
         using TBase = typename TPolymorphicTraits<T>::TBase;
@@ -1170,12 +1210,16 @@ struct TSerializer
                     auto tag = LoadSuspended<TTypeTag>(context);
                     const auto& descriptor = ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTagOrThrow(tag);
                     rawPtr = descriptor.template ConstructOrThrow<T>();
+                } else if constexpr (UseRefCountedConstructor) {
+                    rawPtr = static_cast<T*>(TRefCountedFactory<T>::ConcreteConstructor());
                 } else {
                     using TFactory = typename TFactoryTraits<T>::TFactory;
                     static_assert(TFactory::ConcreteConstructor);
                     rawPtr = static_cast<T*>(TFactory::ConcreteConstructor());
                 }
-                context.RegisterConstructedObject(rawPtr);
+                if constexpr (std::derived_from<T, TRefCounted> || UseRefCountedConstructor) {
+                    context.Deleters_.push_back([=] { Unref(rawPtr); });
+                }
             }
 
             TBase* basePtr = rawPtr;

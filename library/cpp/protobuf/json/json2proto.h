@@ -134,7 +134,7 @@ namespace NProtobufJson {
         bool UseJsonEnumValue = false;
 
         /// Transforms will be applied only to string values (== protobuf fields of string / bytes type).
-        TVector<TStringTransformPtr> StringTransforms;
+        TVector<TStringTransformPtr> StringTransforms = {};
 
         /// Cast string json values to protobuf field type
         bool CastFromString = false;
@@ -163,7 +163,7 @@ namespace NProtobufJson {
         bool VectorizeScalars = false;
 
         /// Custom spliter non array value to repeated fields.
-        TValueVectorizer ValueVectorizer;
+        TValueVectorizer ValueVectorizer = {};
 
         /// Allow js-style comments (both // and /**/)
         bool AllowComments = false;

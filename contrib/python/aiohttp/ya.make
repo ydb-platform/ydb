@@ -2,11 +2,12 @@
 
 PY3_LIBRARY()
 
-VERSION(3.9.5)
+VERSION(3.10.6)
 
 LICENSE(Apache-2.0)
 
 PEERDIR(
+    contrib/python/aiohappyeyeballs
     contrib/python/aiosignal
     contrib/python/attrs
     contrib/python/frozenlist

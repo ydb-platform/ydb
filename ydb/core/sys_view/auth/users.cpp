@@ -15,15 +15,15 @@ namespace NKikimr::NSysView::NAuth {
 using namespace NSchemeShard;
 using namespace NActors;
 
-class TUsersScan : public TScanActorBase<TUsersScan> {
+class TUsersScan : public TScanActorWithoutBackPressure<TUsersScan> {
 public:
-    using TBase = TScanActorBase<TUsersScan>;
+    using TBase = TScanActorWithoutBackPressure<TUsersScan>;
 
     TUsersScan(const NActors::TActorId& ownerId, ui32 scanId,
-        const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken)
-        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
+        : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
         , UserToken(std::move(userToken))
     {
     }
@@ -31,7 +31,7 @@ public:
     STFUNC(StateScan) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvSchemeShard::TEvListUsersResult, Handle);
-            hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, Handle);
+            sFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleAck);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, TBase::HandleAbortExecution);
             cFunc(TEvents::TEvWakeup::EventType, TBase::HandleTimeout);
@@ -43,25 +43,23 @@ public:
     }
 
 protected:
-    void ProceedToScan() override {
-        TBase::Become(&TUsersScan::StateScan);
-
+    void StartScan() final {
         //NOTE: here is the earliest point when Base::DatabaseOwner is already set
         bool isClusterAdmin = IsAdministrator(AppData(), UserToken.Get());
         bool isDatabaseAdmin = (AppData()->FeatureFlags.GetEnableDatabaseAdmin() && IsDatabaseAdministrator(UserToken.Get(), TBase::DatabaseOwner));
         IsAdmin = isClusterAdmin || isDatabaseAdmin;
 
-        if (TBase::AckReceived) {
-            StartScan();
-        }
-    }
-
-    void Handle(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr&) {
-        StartScan();
-    }
-
-    void StartScan() {
         auto request = MakeHolder<TEvSchemeShard::TEvListUsers>();
+        if (!IsAdmin) {
+            if (UserToken && UserToken->GetUserSID()) {
+                request->Record.SetUser(UserToken->GetUserSID());
+            } else { // non-admins users without sid can't read any data
+                auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
+                FillBatch(*batch, NKikimrScheme::TEvListUsersResult());
+                TBase::SendBatch(std::move(batch));
+                return;
+            }
+        }
 
         LOG_TRACE_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
             "Sending list users request " << request->Record.ShortUtf8DebugString());
@@ -73,7 +71,7 @@ protected:
         const auto& record = ev->Get()->Record;
 
         LOG_TRACE_S(ctx, NKikimrServices::SYSTEM_VIEWS,
-            "Got list users response " <<   record.ShortUtf8DebugString());
+            "Got list users response " << record.ShortUtf8DebugString());
 
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
 
@@ -144,8 +142,8 @@ protected:
                         : TCell());
                     break;
                 case Schema::AuthUsers::PasswordHash::ColumnId:
-                    cells.push_back(user->HasPasswordHash()
-                        ? TCell(user->GetPasswordHash().data(), user->GetPasswordHash().size())
+                    cells.push_back(user->HasPasswordHashes()
+                        ? TCell(user->GetPasswordHashes().data(), user->GetPasswordHashes().size())
                         : TCell());
                     break;
                 default:
@@ -176,11 +174,11 @@ private:
 };
 
 THolder<NActors::IActor> CreateUsersScan(const NActors::TActorId& ownerId, ui32 scanId,
-    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
-    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TUsersScan>(ownerId, scanId, sysViewInfo, tableRange, columns, std::move(userToken));
+    return MakeHolder<TUsersScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns, std::move(userToken));
 }
 
 }

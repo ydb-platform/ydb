@@ -294,7 +294,7 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
 
         step.Drop();
         Steps->Execute();
-    } else if (auto *msg = ev.CastAsLocal<TEvTablet::TEvLeaseDropped>()) {
+    } else if (ev.CastAsLocal<TEvTablet::TEvLeaseDropped>()) {
         if (LeaseWaiter != ev.Sender) {
             return OpResultUnhandled;
         }

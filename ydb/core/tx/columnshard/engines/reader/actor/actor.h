@@ -32,7 +32,7 @@ private:
 public:
     virtual void PassAway() override;
 
-    TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId,
+    TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId, const TActorId& scanDiagnosticsActorId,
         const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const TComputeShardingPolicy& computeShardingPolicy,
@@ -85,6 +85,8 @@ private:
 
     void AddRow(const TConstArrayRef<TCell>& row) override;
 
+    NKqp::TScanStatistics GetScanStats();
+
     TOwnedCellVec ConvertLastKey(const std::shared_ptr<arrow::RecordBatch>& lastReadKey);
 
     class TScanStatsOwner: public NKqp::TEvKqpCompute::IShardScanStats {
@@ -124,6 +126,7 @@ private:
     const TActorId ColumnShardActorId;
     const TActorId ReadBlobsActorId;
     const TActorId ScanComputeActorId;
+    const TActorId ScanDiagnosticsActorId;
     std::optional<TMonotonic> AckReceivedInstant;
     TActorId ScanActorId;
     TActorId BlobCacheActorId;
@@ -152,6 +155,7 @@ private:
     bool Finished = false;
     ui32 BuildResultCounter = 0;
     std::optional<TMonotonic> LastResultInstant;
+    THashMap<TString, ui64> PreviousPerStepBytesMeasurement;
 
     class TBlobStats {
     private:

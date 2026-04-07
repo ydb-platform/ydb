@@ -5,8 +5,8 @@
 
 namespace NSQLComplete {
 
-    INameService::TPtr MakeUnionNameService(
-        TVector<INameService::TPtr> children,
-        IRanking::TPtr ranking);
+INameService::TPtr MakeUnionNameService(
+    TVector<INameService::TPtr> children,
+    IRanking::TPtr ranking);
 
 } // namespace NSQLComplete

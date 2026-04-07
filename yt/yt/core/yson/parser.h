@@ -3,6 +3,8 @@
 #include "public.h"
 #include "detail.h"
 
+#include <yt/yt/core/ytree/public.h>
+
 #include <library/cpp/yt/memory/ref.h>
 
 namespace NYT::NYson {
@@ -64,6 +66,12 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 void ParseYsonStringBuffer(TStringBuf buffer, EYsonType type, IYsonConsumer* consumer, TYsonParserConfig config = {});
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Identifies the node type from a yson of `EYsonType::Node` type without attributes.
+// Returns the node type and the trimmed buffer for further parsing.
+std::pair<NYTree::ENodeType, TStringBuf> ParseYsonStringNodeType(TStringBuf buffer);
 
 ////////////////////////////////////////////////////////////////////////////////
 

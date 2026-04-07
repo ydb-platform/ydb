@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/common/command.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/tx.h>
 
 #include <library/cpp/logger/priority.h>
 
@@ -11,10 +12,10 @@ namespace NYdb::NTPCC {
 constexpr int DEFAULT_WAREHOUSE_COUNT = 10;
 constexpr TDuration DEFAULT_RUN_DURATION = TDuration::Minutes(120);
 
-constexpr int DEFAULT_MAX_SESSIONS = 100; // TODO
+constexpr int DEFAULT_MAX_SESSIONS = 0; // autodetect based on number of database compute CPUs
 
 constexpr int DEFAULT_THREAD_COUNT = 0; // autodetect based on WAREHOUSES_PER_CPU_CORE
-constexpr int DEFAULT_LOAD_THREAD_COUNT = 10; // TODO: autodetect
+constexpr int DEFAULT_LOAD_THREAD_COUNT = 0; // autodetect based on number of database compute CPUs
 
 constexpr ELogPriority DEFAULT_LOG_LEVEL = TLOG_INFO;
 
@@ -55,6 +56,7 @@ struct TRunConfig {
     TString Path;
 
     EFormat Format = EFormat::Pretty;
+    NQuery::TTxSettings TxMode = NQuery::TTxSettings::SerializableRW();
 
     TString JsonResultPath;
 
@@ -65,8 +67,10 @@ struct TRunConfig {
     int DriverCount = 0;
     ELogPriority LogPriority = static_cast<ELogPriority>(DEFAULT_LOG_LEVEL);
     bool NoDelays = false;
+    bool HighResHistogram = false;
     bool ExtendedStats = false;
     bool NoTui = false;
+    bool Compact = false;
     EDisplayMode DisplayMode = EDisplayMode::None;
 
     // instead of actual transaction just async sleep and return SUCCESS

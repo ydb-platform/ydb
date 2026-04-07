@@ -33,6 +33,7 @@ class TJsonQuery : public TViewerPipeClient {
     TDuration StatsPeriod;
     TDuration KeepAlive = TDuration::MilliSeconds(10000);
     TInstant LastSendTime;
+    TInstant QueryStartTime;
     TInstant Deadline;
     static constexpr TDuration WakeupPeriod = TDuration::Seconds(1);
 
@@ -117,6 +118,8 @@ private:
             beginTx->mutable_stale_read_only();
         } else if (mode == "snapshot-read-only") {
             beginTx->mutable_snapshot_read_only();
+        } else if (mode == "snapshot-read-write") {
+            beginTx->mutable_snapshot_read_write();
         } else {
             return; // Don't set transaction control for unknown modes
         }
@@ -250,6 +253,16 @@ private:
         }
     }
 
+    std::optional<TString> GetUserSID() const {
+        if (const auto tokenString = GetRequest().GetUserTokenObject()) {
+            if (NACLibProto::TUserToken userToken; userToken.ParseFromString(tokenString)) {
+                return userToken.GetUserSID();
+            }
+        }
+
+        return std::nullopt;
+    }
+
 public:
     ESchemaType StringToSchemaType(const TString& schemaStr) {
         if (schemaStr == "classic") {
@@ -268,7 +281,6 @@ public:
     }
 
     void InitConfig(const TCgiParameters& params) {
-        Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), 60000)); // override default timeout to 60 seconds
         if (params.Has("query")) {
             Query = params.Get("query");
         }
@@ -331,6 +343,11 @@ public:
         if (params.Has("stats_period")) {
             StatsPeriod = TDuration::MilliSeconds(std::clamp<ui64>(FromStringWithDefault<ui64>(params.Get("stats_period"), StatsPeriod.MilliSeconds()), 1000, 600000));
         }
+        if (Streaming == EStreamingType::None || params.Has("timeout")) {
+            Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), 60000)); // override default timeout to 60 seconds
+        } else {
+            Timeout = TDuration::Max(); // no timeout for streaming queries by default
+        }
     }
 
     TJsonQuery(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
@@ -375,7 +392,6 @@ public:
         if (Streaming != EStreamingType::None && QueryId.empty()) {
             QueryId = CreateGuidAsString();
         }
-        Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
         if (Timeout) {
             Deadline = TActivationContext::Now() + Timeout;
         }
@@ -384,6 +400,7 @@ public:
         if (Timeout || KeepAlive || Long || Action == "fetch-long-query") {
             Schedule(WakeupPeriod, new TEvents::TEvWakeup());
         }
+        QueryStartTime = TActivationContext::Now();
         LastSendTime = TActivationContext::Now();
     }
 
@@ -411,13 +428,7 @@ public:
 
     void Cancelled() {
         CancelQuery();
-        PassAway();
-    }
-
-    void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
-        if (ev->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
-            Cancelled();
-        }
+        TBase::Cancelled();
     }
 
     void PassAway() override {
@@ -442,8 +453,9 @@ public:
             cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
             hFunc(NKqp::TEvGetScriptExecutionOperationResponse, HandleReply);
             hFunc(NKqp::TEvFetchScriptResultsResponse, HandleReply);
-            hFunc(TEvents::TEvUndelivered, Undelivered);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            default:
+                return TBase::StateWork(ev);
         }
     }
 
@@ -487,6 +499,7 @@ public:
                     SelfId(),
                     Database,
                     ExecutionId,
+                    GetUserSID(),
                     FetchResultSetIndex,
                     FetchResultRowsOffset,
                     std::min<i64>(FetchResultRowsLimit, LimitRows),
@@ -510,11 +523,8 @@ public:
             event->Record.SetApplicationName("ydb-ui");
             event->Record.SetClientAddress(request.GetRemoteAddr());
             event->Record.SetClientUserAgent(TString(request.GetHeader("User-Agent")));
-            if (TString tokenString = request.GetUserTokenObject()) {
-                NACLibProto::TUserToken userToken;
-                if (userToken.ParseFromString(tokenString)) {
-                    event->Record.SetUserSID(userToken.GetUserSID());
-                }
+            if (const auto userSID = GetUserSID()) {
+                event->Record.SetUserSID(*userSID);
             }
             CreateSessionResponse = MakeRequest<NKqp::TEvKqp::TEvCreateSessionResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
         }
@@ -629,7 +639,7 @@ public:
         } else {
             CreateSessionResponse.Error("FailedToCreateSession");
             NYdb::NIssue::TIssue issue;
-            issue.SetMessage("Failed to create session");
+            issue.SetMessage(TStringBuilder() << "Failed to create session (" << ev->Get()->Record.GetError() << ")");
             issue.SetCode(ev->Get()->Record.GetYdbStatus(), NYdb::NIssue::ESeverity::Error);
             NJson::TJsonValue json;
             TString message;
@@ -653,8 +663,76 @@ public:
     }
 
 private:
+    std::string WriteTime(ui32 value) {
+        ui32 hour, min, sec;
+
+        Y_ASSERT(value < 86400);
+        hour = value / 3600;
+        value -= hour * 3600;
+        min = value / 60;
+        sec = value - min * 60;
+
+        return TStringBuilder() << LeftPad(hour, 2, '0') << ':' << LeftPad(min, 2, '0') << ':' << LeftPad(sec, 2, '0');
+    }
+
+    std::string FormatDate32(const std::chrono::sys_time<NYdb::TWideDays>& tp) {
+        auto value = tp.time_since_epoch().count();
+
+        i32 year;
+        ui32 month;
+        ui32 day;
+        if (!NKikimr::NMiniKQL::SplitDate32(value, year, month, day)) {
+            return TStringBuilder() << "Error: failed to split Date32: " << value;
+        }
+
+        return TStringBuilder() << year << "-" << LeftPad(month, 2, '0') << '-' << LeftPad(day, 2, '0');
+    }
+
+    std::string FormatDatetime64(const std::chrono::sys_time<NYdb::TWideSeconds>& tp) {
+        auto value = tp.time_since_epoch().count();
+
+        if (Y_UNLIKELY(NUdf::MIN_DATETIME64 > value || value > NUdf::MAX_DATETIME64)) {
+            return TStringBuilder() << "Error: value out of range for Datetime64: " << value << " (min: " << NUdf::MIN_DATETIME64 << ", max: " << NUdf::MAX_DATETIME64 << ")";
+        }
+
+        auto date = value / 86400;
+        value -= date * 86400;
+        if (value < 0) {
+            date -= 1;
+            value += 86400;
+        }
+
+        return TStringBuilder() << FormatDate32(std::chrono::sys_time<NYdb::TWideDays>(NYdb::TWideDays(date))) << 'T' << WriteTime(value) << 'Z';
+    }
+
+    std::string FormatTimestamp64(const std::chrono::sys_time<NYdb::TWideMicroseconds>& tp) {
+        auto value = tp.time_since_epoch().count();
+
+        if (Y_UNLIKELY(NUdf::MIN_TIMESTAMP64 > value || value > NUdf::MAX_TIMESTAMP64)) {
+            return TStringBuilder() << "Error: value out of range for Timestamp64: " << value << " (min: " << NUdf::MIN_TIMESTAMP64 << ", max: " << NUdf::MAX_TIMESTAMP64 << ")";
+        }
+        auto date = value / 86400000000ll;
+        value -= date * 86400000000ll;
+        if (value < 0) {
+            date -= 1;
+            value += 86400000000ll;
+        }
+
+        TStringBuilder out;
+        out << FormatDate32(std::chrono::sys_time<NYdb::TWideDays>(NYdb::TWideDays(date)));
+        out << 'T';
+
+        const ui32 time = static_cast<ui32>(value / 1000000ull);
+        value -= time * 1000000ull;
+        out << WriteTime(time);
+        if (value) {
+            out << '.' << LeftPad(value, 6, '0');
+        }
+        return out << 'Z';
+    }
+
     NJson::TJsonValue ColumnPrimitiveValueToJsonValue(NYdb::TValueParser& valueParser) {
-        switch (const auto primitive = valueParser.GetPrimitiveType()) {
+        switch (valueParser.GetPrimitiveType()) {
             case NYdb::EPrimitiveType::Bool:
                 return valueParser.GetBool();
             case NYdb::EPrimitiveType::Int8:
@@ -688,11 +766,11 @@ private:
             case NYdb::EPrimitiveType::Interval:
                 return TStringBuilder() << valueParser.GetInterval();
             case NYdb::EPrimitiveType::Date32:
-                return std::format("{:%FT%TZ}", valueParser.GetDate32());
+                return FormatDate32(valueParser.GetDate32());
             case NYdb::EPrimitiveType::Datetime64:
-                return std::format("{:%FT%TZ}", valueParser.GetDatetime64());
+                return FormatDatetime64(valueParser.GetDatetime64());
             case NYdb::EPrimitiveType::Timestamp64:
-                return std::format("{:%FT%TZ}", valueParser.GetTimestamp64());
+                return FormatTimestamp64(valueParser.GetTimestamp64());
             case NYdb::EPrimitiveType::Interval64:
                 return valueParser.GetInterval64().count();
             case NYdb::EPrimitiveType::TzDate:
@@ -914,8 +992,14 @@ private:
     }
 
     void HandleReply(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
-        QueryResponse.Event("StreamData");
         NKikimrKqp::TEvExecuterStreamData& data(ev->Get()->Record);
+        if (QueryResponse.Span) {
+            QueryResponse.Span.Event("StreamData", {
+                {"result_idx", static_cast<i64>(data.GetQueryResultIndex())},
+                {"seq", static_cast<i64>(data.GetSeqNo())},
+                {"rows", static_cast<i64>(data.GetResultSet().rows_size())},
+            });
+        }
 
         if (TotalRows < LimitRows) {
             int rowsAvailable = LimitRows - TotalRows;
@@ -936,11 +1020,17 @@ private:
 
         THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         if (TotalRows >= LimitRows) {
+            if (QueryResponse.Span) {
+                QueryResponse.Span.Event("LimitReached", {
+                    {"limit_rows", static_cast<i64>(LimitRows)},
+                    {"total_rows", static_cast<i64>(TotalRows)},
+                });
+            }
             ack->Record.SetEnough(true);
         }
         Send(ev->Sender, ack.Release());
-
     }
+
     void HandleReply(NKqp::TEvGetScriptExecutionOperationResponse::TPtr& ev) {
         GetOperationResponse->Set(std::move(ev));
 
@@ -1004,6 +1094,7 @@ private:
                     SelfId(),
                     Database,
                     ExecutionId,
+                    GetUserSID(),
                     FetchResultSetIndex,
                     FetchResultRowsOffset,
                     std::min<i64>(FetchResultRowsLimit, LimitRows),
@@ -1054,6 +1145,7 @@ private:
                     SelfId(),
                     Database,
                     ExecutionId,
+                    GetUserSID(),
                     FetchResultSetIndex,
                     FetchResultRowsOffset,
                     std::min<i64>(FetchResultRowsLimit, LimitRows - TotalRows),
@@ -1067,6 +1159,7 @@ private:
                     SelfId(),
                     Database,
                     ExecutionId,
+                    GetUserSID(),
                     FetchResultSetIndex,
                     FetchResultRowsOffset,
                     std::min<i64>(FetchResultRowsLimit, LimitRows - TotalRows),
@@ -1122,13 +1215,13 @@ private:
 
     void CheckOperationStatus() {
         if (!GetOperationResponse.has_value() || GetOperationResponse->IsDone()) {
-            GetOperationResponse = MakeRequest<NKqp::TEvGetScriptExecutionOperationResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvGetScriptExecutionOperation(Database, *OperationId));
+            GetOperationResponse = MakeRequest<NKqp::TEvGetScriptExecutionOperationResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvGetScriptExecutionOperation(Database, *OperationId, GetUserSID()));
         }
     }
 
     void HandleWakeup() {
         auto now = TActivationContext::Now();
-        if (Timeout && (now - LastSendTime > Timeout)) {
+        if (Timeout && (now - QueryStartTime > Timeout)) {
             return ReplyWithTimeoutError();
         }
         if (KeepAlive && (now - LastSendTime > KeepAlive)) {
@@ -1408,8 +1501,9 @@ public:
                       * `online-read-only`
                       * `stale-read-only`
                       * `snapshot-read-only`
+                      * `snapshot-read-write`
                 type: string
-                enum: [serializable-read-write, online-read-only, stale-read-only, snapshot-read-only]
+                enum: [serializable-read-write, online-read-only, stale-read-only, snapshot-read-only, snapshot-read-write]
                 required: false
               - name: output_chunk_max_size
                 in: query
@@ -1436,10 +1530,9 @@ public:
                 default: true
               - name: timeout
                 in: query
-                description: timeout in ms
+                description: timeout in ms, for synchronous queries it's 60s by default, for streaming queries it's off by default
                 type: integer
                 required: false
-                default: 60000
               - name: ui64
                 in: query
                 description: return ui64 as number to avoid 56-bit js rounding

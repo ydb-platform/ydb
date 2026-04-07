@@ -1,13 +1,42 @@
 #include "actor.h"
 
 #include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/columnshard/blobs_reader/read_coordinator.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/actor.h>
-
 #include <yql/essentials/core/issue/yql_issue.h>
 
 namespace NKikimr::NOlap::NReader {
+
+NKqp::TScanStatistics TColumnShardScan::GetScanStats() {
+    TVector<NKqp::TPerStepScanStatistics> timesPerStep = [&] {
+        auto cnt = ScanCountersPool.ReadStepsCounters();
+        TVector<NKqp::TPerStepScanStatistics> timesPerStep;
+        for (auto& [k,v ] : cnt) {
+            NKqp::TPerStepScanStatistics stats;
+            stats.StepName = k;
+            stats.IntegralExecutionDuration = v.ExecutionDuration;
+            stats.IntegralWaitDuration = v.WaitDuration;
+            ui64& prevBytes = PreviousPerStepBytesMeasurement[k];
+            ui64 thisBytes = v.RawBytesRead;
+            stats.DeltaRawBytesRead = thisBytes - prevBytes;
+            prevBytes = thisBytes;
+            timesPerStep.emplace_back(stats);
+        }
+        return timesPerStep;
+    }();
+    Sort(timesPerStep, [](const auto& l, const auto& r){
+        return l.StepName < r.StepName;
+    });
+    NKqp::TScanStatistics stats;
+    int index = 0;
+    for(auto& v: timesPerStep) {
+        stats.emplace(index, std::move(v));
+        index++;
+    }
+    return stats;
+}
 
 LWTRACE_USING(YDB_CS_READER);
 
@@ -20,8 +49,8 @@ void TColumnShardScan::PassAway() {
     IActor::PassAway();
 }
 
-TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
+TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TActorId& scanComputeActorId, const TActorId& scanDiagnosticsActorId,
+    const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const TComputeShardingPolicy& computeShardingPolicy,
     ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId, TDuration timeout,
     const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
@@ -31,6 +60,7 @@ TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TAc
     , ColumnDataManager(columnDataManager)
     , ColumnShardActorId(columnShardActorId)
     , ScanComputeActorId(scanComputeActorId)
+    , ScanDiagnosticsActorId(scanDiagnosticsActorId)
     , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
     , ScanId(scanId)
     , TxId(txId)
@@ -105,6 +135,7 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
 }
 
 void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
+    auto ackProcessingGuard = ScanCountersPool.GetResultsForReplyGuard();
     StartWaitTime = TInstant::Now();
     auto g = Stats->MakeGuard("ack", IS_INFO_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN));
 
@@ -410,8 +441,20 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
     LastResultInstant = TMonotonic::Now();
 
     Result->CpuTime = ScanCountersPool.GetExecutionDuration();
+    Result->CurrentStats = GetScanStats();
     Result->WaitTime = WaitTime;
     Result->RawBytes = ScanCountersPool.GetRawBytes();
+
+    if (AppDataVerified().ColumnShardConfig.GetCombineChunksInResult() && Result->ArrowBatch) {
+        for (const auto& column : Result->ArrowBatch->columns()) {
+            if (column->num_chunks() > 1) {
+                Result->ArrowBatch = Result->ArrowBatch->CombineChunks().ValueOr(Result->ArrowBatch);
+                break;
+            }
+        }
+    }
+
+    Result->ArrowBatch = NArrow::ClaimMemoryOwnership(Result->ArrowBatch);
 
     LWPROBE(SendResult, TabletId, ScanId, TxId, Result->GetRowsCount(), (Result->ArrowBatch ? NArrow::GetTableDataSize(Result->ArrowBatch) : 0), Result->CpuTime, Result->WaitTime, TInstant::Now() - LastSend, Result->Finished);
     Send(ScanComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery);   // TODO: FlagSubscribeOnSession ?
@@ -439,6 +482,10 @@ void TColumnShardScan::SendScanError(const TString& reason) {
 }
 
 void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish status) {
+    if (AppDataVerified().ColumnShardConfig.GetEnableDiagnostics()) {
+        auto scanIteratorDiagnostics = ScanIterator->DebugString(true);
+        Send(ScanDiagnosticsActorId, std::make_unique<NColumnShard::TEvPrivate::TEvReportScanIteratorDiagnostics>(RequestCookie, std::move(scanIteratorDiagnostics)));
+    }
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan " << ScanActorId << " finished for tablet " << TabletId);
     Send(ColumnShardActorId, new NColumnShard::TEvPrivate::TEvReadFinished(RequestCookie, TxId));
     AFL_VERIFY(StartInstant);

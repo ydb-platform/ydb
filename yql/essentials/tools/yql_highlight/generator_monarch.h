@@ -4,6 +4,6 @@
 
 namespace NSQLHighlight {
 
-    IGenerator::TPtr MakeMonarchGenerator();
+IGenerator::TPtr MakeMonarchGenerator();
 
 } // namespace NSQLHighlight

@@ -7,8 +7,8 @@
 
 namespace NYql {
 
-class TTestHttpServer::TImpl : public THttpServer::ICallBack {
-    class TRequestProcessor : public THttpClientRequestEx {
+class TTestHttpServer::TImpl: public THttpServer::ICallBack {
+    class TRequestProcessor: public THttpClientRequestEx {
     public:
         explicit TRequestProcessor(TImpl* parent)
             : Parent_(parent)
@@ -46,20 +46,20 @@ class TTestHttpServer::TImpl : public THttpServer::ICallBack {
             auto reply = Parent_->ProcessNextRequest(r);
 
             switch (reply.Code) {
-            case HTTP_OK:
-                Output() << "HTTP/1.1 200 Ok\r\n";
-                break;
+                case HTTP_OK:
+                    Output() << "HTTP/1.1 200 Ok\r\n";
+                    break;
 
-            case HTTP_NOT_MODIFIED:
-                Output() << "HTTP/1.1 304 Not modified\r\n";
-                break;
+                case HTTP_NOT_MODIFIED:
+                    Output() << "HTTP/1.1 304 Not modified\r\n";
+                    break;
 
-            case HTTP_FORBIDDEN:
-                Output() << "HTTP/1.1 403 Forbidden\r\n";
-                break;
+                case HTTP_FORBIDDEN:
+                    Output() << "HTTP/1.1 403 Forbidden\r\n";
+                    break;
 
-            default:
-                return true;
+                default:
+                    return true;
             }
 
             if (reply.ETag) {
@@ -94,7 +94,6 @@ public:
         : HttpServer_(this, THttpServer::TOptions(port))
         , Port_(port)
     {
-
     }
 
     TClientRequest* CreateClient() override {
@@ -129,7 +128,8 @@ private:
 };
 
 TTestHttpServer::TTestHttpServer(int port)
-    : Impl_(new TImpl(port)) {
+    : Impl_(new TImpl(port))
+{
 }
 
 TTestHttpServer::~TTestHttpServer() {
@@ -148,4 +148,4 @@ void TTestHttpServer::SetRequestHandler(TRequestHandler handler) {
     return Impl_->SetRequestHandler(std::move(handler));
 }
 
-}
+} // namespace NYql

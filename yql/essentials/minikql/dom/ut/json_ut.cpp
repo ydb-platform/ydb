@@ -10,7 +10,7 @@ using namespace NYql::NDom;
 using namespace NKikimr;
 
 constexpr char json[] =
-R"(
+    R"(
 {
     "Fullname": [
         {
@@ -1972,57 +1972,57 @@ R"(
 constexpr auto Steps = 10000U;
 
 Y_UNIT_TEST_SUITE(TJsonTests) {
-    Y_UNIT_TEST(TestValidate) {
-        UNIT_ASSERT(IsValidJson(json));
+Y_UNIT_TEST(TestValidate) {
+    UNIT_ASSERT(IsValidJson(json));
 
-        UNIT_ASSERT(!IsValidJson("[123}"));
-        UNIT_ASSERT(!IsValidJson("[123],[456]"));
-        UNIT_ASSERT(!IsValidJson(R"({"c" : "scm"])"));
-        UNIT_ASSERT(!IsValidJson(""));
-        UNIT_ASSERT(!IsValidJson(R"({"c",})"));
-        UNIT_ASSERT(!IsValidJson(R"({null : "scm"})"));
-        UNIT_ASSERT(!IsValidJson(R"({'one': 1})"));
-    }
-
-    Y_UNIT_TEST(TestPerfValidate) {
-        const auto t = TInstant::Now();
-        for (auto i = 0U; i < Steps; ++i) {
-            UNIT_ASSERT(IsValidJson(json));
-        }
-        const auto time = TInstant::Now() - t;
-        Cerr << "Time is " << time << Endl;
-    }
-
-    Y_UNIT_TEST(TestPerfParse) {
-        NMiniKQL::TScopedAlloc alloc(__LOCATION__);
-        NMiniKQL::TMemoryUsageInfo memInfo("Memory");
-        NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
-        NMiniKQL::TDefaultValueBuilder builder(holderFactory);
-
-        std::array<NUdf::TUnboxedValue, Steps> v;
-
-        const auto t = TInstant::Now();
-        for (auto& i : v) {
-            UNIT_ASSERT(i = TryParseJsonDom(json, &builder));
-        }
-        const auto time = TInstant::Now() - t;
-        Cerr << "Time is " << time << Endl;
-    }
-
-    Y_UNIT_TEST(TestPerfSerialize) {
-        NMiniKQL::TScopedAlloc alloc(__LOCATION__);
-        NMiniKQL::TMemoryUsageInfo memInfo("Memory");
-        NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
-        NMiniKQL::TDefaultValueBuilder builder(holderFactory);
-
-        const auto dom = TryParseJsonDom(json, &builder);
-        std::array<NUdf::TUnboxedValue, Steps> v;
-
-        const auto t = TInstant::Now();
-        for (auto& i : v) {
-            UNIT_ASSERT(i = builder.NewString(SerializeJsonDom(dom)));
-        }
-        const auto time = TInstant::Now() - t;
-        Cerr << "Time is " << time << Endl;
-    }
+    UNIT_ASSERT(!IsValidJson("[123}"));
+    UNIT_ASSERT(!IsValidJson("[123],[456]"));
+    UNIT_ASSERT(!IsValidJson(R"({"c" : "scm"])"));
+    UNIT_ASSERT(!IsValidJson(""));
+    UNIT_ASSERT(!IsValidJson(R"({"c",})"));
+    UNIT_ASSERT(!IsValidJson(R"({null : "scm"})"));
+    UNIT_ASSERT(!IsValidJson(R"({'one': 1})"));
 }
+
+Y_UNIT_TEST(TestPerfValidate) {
+    const auto t = TInstant::Now();
+    for (auto i = 0U; i < Steps; ++i) {
+        UNIT_ASSERT(IsValidJson(json));
+    }
+    const auto time = TInstant::Now() - t;
+    Cerr << "Time is " << time << Endl;
+}
+
+Y_UNIT_TEST(TestPerfParse) {
+    NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+    NMiniKQL::TMemoryUsageInfo memInfo("Memory");
+    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
+    NMiniKQL::TDefaultValueBuilder builder(holderFactory);
+
+    std::array<NUdf::TUnboxedValue, Steps> v;
+
+    const auto t = TInstant::Now();
+    for (auto& i : v) {
+        UNIT_ASSERT(i = TryParseJsonDom(json, &builder));
+    }
+    const auto time = TInstant::Now() - t;
+    Cerr << "Time is " << time << Endl;
+}
+
+Y_UNIT_TEST(TestPerfSerialize) {
+    NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+    NMiniKQL::TMemoryUsageInfo memInfo("Memory");
+    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
+    NMiniKQL::TDefaultValueBuilder builder(holderFactory);
+
+    const auto dom = TryParseJsonDom(json, &builder);
+    std::array<NUdf::TUnboxedValue, Steps> v;
+
+    const auto t = TInstant::Now();
+    for (auto& i : v) {
+        UNIT_ASSERT(i = builder.NewString(SerializeJsonDom(dom)));
+    }
+    const auto time = TInstant::Now() - t;
+    Cerr << "Time is " << time << Endl;
+}
+} // Y_UNIT_TEST_SUITE(TJsonTests)

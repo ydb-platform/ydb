@@ -4,6 +4,8 @@
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/iam.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -472,6 +474,21 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
             }));
     }
 
+    static TCommonClientSettings MakeSettings(TCommonClientSettings&& settings, const TIamCredentials& credentials) {
+        const auto& serviceControl = AppData()->ReplicationConfig.GetIamServiceControl();
+
+        TIamServiceParams iamParams;
+        iamParams.SystemServiceAccountCredentials = CreateIamCredentialsProviderFactory();
+        iamParams.Endpoint = serviceControl.GetEndpoint();
+        iamParams.ServiceId = serviceControl.GetServiceId();
+        iamParams.MicroserviceId = serviceControl.GetMicroserviceId();
+        iamParams.ResourceType = serviceControl.GetResourceType();
+        iamParams.ResourceId = credentials.GetResourceId();
+        iamParams.TargetServiceAccountId = credentials.GetServiceAccountId();
+
+        return settings.CredentialsProviderFactory(CreateIamServiceCredentialsProviderFactory(iamParams));
+    }
+
 public:
     template <typename... Args>
     explicit TYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert, Args&&... args)
@@ -527,6 +544,10 @@ IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ss
 }
 
 IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert, const TStaticCredentials& credentials) {
+    return new TYdbProxy(endpoint, database, ssl, caCert, credentials);
+}
+
+IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ssl, const TString& caCert, const TIamCredentials& credentials) {
     return new TYdbProxy(endpoint, database, ssl, caCert, credentials);
 }
 

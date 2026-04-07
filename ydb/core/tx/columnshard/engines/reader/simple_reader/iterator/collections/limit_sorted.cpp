@@ -27,27 +27,30 @@ std::shared_ptr<NCommon::IDataSource> TScanWithLimitCollection::DoTryExtractNext
         NextSource = std::move(localNext);
         AFL_VERIFY(Cleared || Aborted || GetSourcesInFlightCount() == FetchingInFlightSources.size())("in_flight", GetSourcesInFlightCount())(
                                                   "fetching", FetchingInFlightSources.size());
-        AFL_VERIFY(FetchingInFlightSources.emplace(result->GetSourceId()).second);
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoTryExtractNext")("source_id", result->GetSourceId());
+        AFL_VERIFY(FetchingInFlightSources.emplace(result->GetSourceIdx()).second);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoTryExtractNext")("source_idx", result->GetSourceIdx());
         return result;
     }
 }
 
 void TScanWithLimitCollection::DoOnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoOnSourceFinished")("source_id", source->GetSourceId())("limit", Limit)(
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "DoOnSourceFinished")("source_idx", source->GetSourceIdx())("limit", Limit)(
         "max", GetMaxInFlight())("in_flight_limit", InFlightLimit)("count", GetSourcesInFlightCount());
-    if (!source->GetAs<IDataSource>()->GetResultRecordsCount() && InFlightLimit < GetMaxInFlight()) {
-        InFlightLimit = 2 * InFlightLimit;
+    if (source->GetAs<IDataSource>()->GetResultRecordsCount() < Limit && InFlightLimit < GetMaxInFlight()) {
+        InFlightLimit = Min(2 * InFlightLimit, GetMaxInFlight());
     }
     AFL_VERIFY(Cleared || Aborted || GetSourcesInFlightCount() == FetchingInFlightSources.size())("in_flight", GetSourcesInFlightCount())(
                                               "fetching", FetchingInFlightSources.size());
-    AFL_VERIFY(FetchingInFlightSources.erase(source->GetSourceId()) || Cleared || Aborted)("source_id", source->GetSourceId());
+    AFL_VERIFY(FetchingInFlightSources.erase(source->GetSourceIdx()) || Cleared || Aborted)("source_idx", source->GetSourceIdx());
 }
 
 TScanWithLimitCollection::TScanWithLimitCollection(
     const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor)
     : TBase(context, std::move(sourcesConstructor))
     , Limit((ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust()) {
+    if (HasAppData()) {
+        InFlightLimit = AppData()->ColumnShardConfig.GetLimitSortedStartInFlight();
+    }
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

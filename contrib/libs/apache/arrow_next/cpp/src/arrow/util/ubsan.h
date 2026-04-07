@@ -24,7 +24,7 @@
 #include <memory>
 #include <type_traits>
 
-#include "arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
 
 namespace arrow20 {
 namespace util {

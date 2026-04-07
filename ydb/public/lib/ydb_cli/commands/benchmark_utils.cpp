@@ -32,6 +32,34 @@ namespace NYdb::NConsoleClient::BenchmarkUtils {
 
 using namespace NYdb;
 
+NQuery::TTxControl GetTxControl(ETxMode txMode) {
+    if (txMode == ETxMode::NoTx) {
+        return NQuery::TTxControl::NoTx();
+    }
+
+    NQuery::TTxSettings txSettings;
+    switch (txMode) {
+    case ETxMode::SerializableRW:
+        txSettings = NQuery::TTxSettings::SerializableRW();
+        break;
+    case ETxMode::OnlineRO:
+        txSettings = NQuery::TTxSettings::OnlineRO();
+        break;
+    case ETxMode::StaleRO:
+        txSettings = NQuery::TTxSettings::StaleRO();
+        break;
+    case ETxMode::SnapshotRO:
+        txSettings = NQuery::TTxSettings::SnapshotRO();
+        break;
+    case ETxMode::SnapshotRW:
+        txSettings = NQuery::TTxSettings::SnapshotRW();
+        break;
+    default:
+        Y_UNREACHABLE();
+    }
+    return NQuery::TTxControl::BeginTx(txSettings).CommitTx();
+}
+
 TTestInfo::TTestInfo(std::vector<TTiming>&& timings)
     : Timings(std::move(timings))
 {
@@ -150,7 +178,13 @@ private:
     YDB_ACCESSOR_DEF(TString, DeadlineName);
     YDB_ACCESSOR_DEF(TString, ExecStats);
     TQueryBenchmarkResult::TRawResults RawResults;
+    // Limit rows stored per result index
+    size_t MaxRowsPerResultIndex = DefaultMaxRowsPerResultIndex;
 public:
+    void SetMaxRowsPerResultIndex(size_t maxRows) {
+        MaxRowsPerResultIndex = maxRows;
+    }
+
     TQueryBenchmarkResult::TRawResults&& ExtractRawResults() {
         return std::move(RawResults);
     }
@@ -232,7 +266,18 @@ public:
             }
 
             if (streamPart.HasResultSet()) {
-                RawResults[rsIndex].emplace_back(streamPart.ExtractResultSet());
+                auto resultSet = streamPart.ExtractResultSet();
+                size_t rowsInThisPart = resultSet.RowsCount();
+
+                // Track total rows read and store only first MaxRowsPerResultIndex rows
+                auto& resultData = RawResults[rsIndex];
+
+                // Store result set if we haven't reached the limit yet
+                if (resultData.TotalRowsRead < MaxRowsPerResultIndex) {
+                    resultData.ResultSets.emplace_back(std::move(resultSet));
+                }
+
+                resultData.TotalRowsRead += rowsInThisPart;
             }
         }
         if (execStats) {
@@ -301,16 +346,19 @@ TQueryBenchmarkResult ExecuteImpl(const TString& query, TStringBuf expected, NQu
         return *error;
     }
     THolder<TQueryResultScanner> composite;
-    const auto resStatus = client.RetryQuerySync([&composite, &benchmarkSettings, &query, &settings](NQuery::TQueryClient& qc) -> TStatus {
+    const auto txMode = benchmarkSettings.TxMode;
+    const auto resStatus = client.RetryQuerySync([&composite, &benchmarkSettings, &query, &settings, txMode](NQuery::TQueryClient& qc) -> TStatus {
+        auto txControl = GetTxControl(txMode);
         auto it = qc.StreamExecuteQuery(
             query,
-            NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+            txControl,
             settings).GetValueSync();
         if (!it.IsSuccess()) {
             return it;
         }
         composite = MakeHolder<TQueryResultScanner>();
         composite->SetDeadlineName(benchmarkSettings.Deadline.Name);
+        composite->SetMaxRowsPerResultIndex(benchmarkSettings.MaxRowsPerResultIndex);
         return composite->Scan(it, benchmarkSettings.PlanFileName);
     }, benchmarkSettings.RetrySettings);
     return ConstructResultByStatus(resStatus, composite, expected, benchmarkSettings);
@@ -560,8 +608,8 @@ bool CompareValue(IOutputStream& errStream, const NYdb::TValue& v, TStringBuf vE
 
 TString TQueryBenchmarkResult::CalcHash() const {
     MD5 hasher;
-    for (const auto& [i, results]: RawResults) {
-        for (const auto& result: results) {
+    for (const auto& [i, resultData]: RawResults) {
+        for (const auto& result: resultData.ResultSets) {
             hasher.Update(FormatResultSetYson(result, NYson::EYsonFormat::Binary));
         }
     }
@@ -589,9 +637,15 @@ size_t GetBenchmarkTableWidth() {
 }
 
 void TQueryBenchmarkResult::CompareWithExpected(TStringBuf expected, size_t resultSetIndex) {
-    const auto& queryResult = RawResults.at(resultSetIndex);
+    const auto& resultData = RawResults.at(resultSetIndex);
+    const auto& resultSets = resultData.ResultSets;
     auto expectedLines = StringSplitter(expected).Split('\n').SkipEmpty().ToList<TString>();
     if (expectedLines.empty()) {
+        return;
+    }
+    if (resultSets.empty()) {
+        TStringOutput errStream(DiffErrors);
+        errStream << "Result " << resultSetIndex << ": expected " << (expectedLines.size() - 1) << " rows, but got empty result" << Endl;
         return;
     }
 
@@ -599,16 +653,16 @@ void TQueryBenchmarkResult::CompareWithExpected(TStringBuf expected, size_t resu
     TStringOutput warnStream(DiffWarrnings);
     auto columns = static_cast<TVector<TString>>(NCsvFormat::CsvSplitter(expectedLines.front()));
     bool schemeOk = true;
-    if (queryResult.front().ColumnsCount() != columns.size()) {
-        errStream << "Result " << resultSetIndex << ": incorrect scheme, " << queryResult.front().ColumnsCount() << " columns in result, but " << columns.size() << " expected." << Endl;
+    if (resultSets.front().ColumnsCount() != columns.size()) {
+        errStream << "Result " << resultSetIndex << ": incorrect scheme, " << resultSets.front().ColumnsCount() << " columns in result, but " << columns.size() << " expected." << Endl;
         schemeOk = false;
     }
-    auto parser = MakeHolder<TResultSetParser>(queryResult.front());
+    auto parser = MakeHolder<TResultSetParser>(resultSets.front());
     for (size_t c = 0; c < columns.size(); ++c) {
         if (parser->ColumnIndex(columns[c]) < 0) {
             if (c < parser->ColumnsCount()) {
-                warnStream << "Result " << resultSetIndex << ": scheme warning, column " << columns[c] << " not found in result. By position will be used " << queryResult.front().GetColumnsMeta()[c].Name << Endl;
-                columns[c] = queryResult.front().GetColumnsMeta()[c].Name;
+                warnStream << "Result " << resultSetIndex << ": scheme warning, column " << columns[c] << " not found in result. By position will be used " << resultSets.front().GetColumnsMeta()[c].Name << Endl;
+                columns[c] = resultSets.front().GetColumnsMeta()[c].Name;
             } else {
                 errStream << "Result " << resultSetIndex << ": incorrect scheme, column " << columns[c] << " not found in result." << Endl;
                 schemeOk = false;
@@ -617,7 +671,7 @@ void TQueryBenchmarkResult::CompareWithExpected(TStringBuf expected, size_t resu
     }
     if (!schemeOk) {
         TVector<TString> rCols;
-        for (const auto& c: queryResult.front().GetColumnsMeta()) {
+        for (const auto& c: resultSets.front().GetColumnsMeta()) {
             rCols.emplace_back(c.Name);
         }
         errStream << "Result " << resultSetIndex << " columns: " << JoinSeq(", ", rCols) << Endl;
@@ -625,7 +679,7 @@ void TQueryBenchmarkResult::CompareWithExpected(TStringBuf expected, size_t resu
     }
 
     size_t resultRowsCount = 0;
-    for (const auto& rs: queryResult) {
+    for (const auto& rs : resultSets) {
         resultRowsCount += rs.RowsCount();
     }
     if (expectedLines.back() == "...") {
@@ -642,8 +696,8 @@ void TQueryBenchmarkResult::CompareWithExpected(TStringBuf expected, size_t resu
     TVector<TVector<TString>> diffs;
     size_t resNum = 1;
     for (auto expectedLine = expectedLines.begin() + 1; expectedLine != expectedLines.end(); ++expectedLine) {
-        while (!parser->TryNextRow() && resNum < queryResult.size()) {
-            parser = MakeHolder<TResultSetParser>(queryResult[resNum++]);
+        while (!parser->TryNextRow() && resNum < resultSets.size()) {
+            parser = MakeHolder<TResultSetParser>(resultSets[resNum++]);
         }
         NCsvFormat::CsvSplitter splitter(*expectedLine);
         TVector<TString> lineDiff(columns.size() + 1, "NoExp!");

@@ -3,6 +3,8 @@
 
 #include <util/generic/map.h>
 
+#include <utility>
+
 namespace NYql {
 
 namespace {
@@ -12,9 +14,10 @@ struct TPinAttrs {
     ui32 ProviderId = 0;
     ui32 PinId = 0;
 
-    TPinAttrs(const TPinInfo& info)
-        : Info(info)
-    {}
+    explicit TPinAttrs(TPinInfo info)
+        : Info(std::move(info))
+    {
+    }
 };
 
 struct TNodeInfo {
@@ -33,13 +36,14 @@ struct TNodeInfo {
         , Node(node)
         , Provider(nullptr)
         , IsVisible(true)
-    {}
+    {
+    }
 };
 
 struct TBasicNode {
     ui64 Id = 0;
     ui32 Level = 0;
-    enum class EType : ui32 {
+    enum class EType: ui32 {
         Unknown,
         Operation,
         Input,
@@ -77,7 +81,8 @@ struct TBasicLink {
     TBasicLink(ui64 source, ui64 target)
         : Source(source)
         , Target(target)
-    {}
+    {
+    }
 };
 
 struct TLevelContext {
@@ -87,11 +92,13 @@ struct TLevelContext {
 
     TLevelContext()
         : Node(nullptr)
-    {}
+    {
+    }
 
-    TLevelContext(TBasicNode* node)
+    explicit TLevelContext(TBasicNode* node)
         : Node(node)
-    {}
+    {
+    }
 };
 
 struct TProviderInfo {
@@ -105,7 +112,8 @@ struct TProviderInfo {
         : Id(id)
         , Node(node)
         , Provider(provider)
-    {}
+    {
+    }
 };
 
 using TProviderInfoMap = TMap<TString, TProviderInfo>;
@@ -176,13 +184,14 @@ ui32 FillLevels(THashMap<ui32, TLevelContext>& basicNodesMap, ui32 current, THas
     return ctx.Node->Level;
 }
 
-}
+} // namespace
 
-class TPlanBuilder : public IPlanBuilder {
+class TPlanBuilder: public IPlanBuilder {
 public:
-    TPlanBuilder(TTypeAnnotationContext& types)
+    explicit TPlanBuilder(TTypeAnnotationContext& types)
         : Types_(types)
-    {}
+    {
+    }
 
     void WritePlan(NYson::TYsonWriter& writer, const TExprNode::TPtr& root, const TPlanSettings& settings) override {
         if (!root) {
@@ -198,7 +207,8 @@ public:
         writer.OnBeginMap();
         writer.OnKeyedItem("Operations");
         writer.OnBeginList();
-        VisitNode(root, nodes, order);
+        TNodeOnNodeOwnedMap worldMap;
+        VisitNode(root, nodes, order, worldMap);
         ui32 lastId = 0;
         TVector<TBasicNode> basicNodes;
         TVector<TBasicLink> basicLinks;
@@ -287,17 +297,17 @@ public:
             writer.OnStringScalar(basicNode.DisplayName);
             writer.OnKeyedItem("type");
             switch (basicNode.Type) {
-            case TBasicNode::EType::Operation:
-                writer.OnStringScalar("op");
-                break;
-            case TBasicNode::EType::Input:
-                writer.OnStringScalar("in");
-                break;
-            case TBasicNode::EType::Output:
-                writer.OnStringScalar("out");
-                break;
-            default:
-                YQL_ENSURE(false, "Unsupported node type");
+                case TBasicNode::EType::Operation:
+                    writer.OnStringScalar("op");
+                    break;
+                case TBasicNode::EType::Input:
+                    writer.OnStringScalar("in");
+                    break;
+                case TBasicNode::EType::Output:
+                    writer.OnStringScalar("out");
+                    break;
+                default:
+                    YQL_ENSURE(false, "Unsupported node type");
             }
             writer.OnEndMap();
         }
@@ -320,7 +330,7 @@ public:
         writer.OnEndMap();
     }
 
-    void VisitCallable(const TExprNode::TPtr& node, TNodeMap<TNodeInfo>& nodes, TExprNode::TListType& order) {
+    void VisitCallable(const TExprNode::TPtr& node, TNodeMap<TNodeInfo>& nodes, TExprNode::TListType& order, TNodeOnNodeOwnedMap& worldMap) {
         if (nodes.cend() != nodes.find(node.Get())) {
             return;
         }
@@ -333,37 +343,44 @@ public:
         auto& info = nodes.emplace(node.Get(), TNodeInfo(translatedId, node.Get())).first->second;
         TExprNode::TListType& dependencies = info.Dependencies;
         if (node->Content() == CommitName) {
-            dependencies.push_back(node->Child(0));
+            dependencies.push_back(node->HeadPtr());
             auto dataSinkName = node->Child(1)->Child(0)->Content();
             auto datasink = Types_.DataSinkMap.FindPtr(dataSinkName);
             YQL_ENSURE(datasink);
             info.Provider = (*datasink).Get();
             info.IsVisible = dataSinkName != ResultProviderName;
-        }
-        else if (node->ChildrenSize() >= 2 && node->Child(1)->IsCallable("DataSource")) {
+        } else if (node->Content() == SeqName) {
+            auto world = node->HeadPtr();
+            dependencies.push_back(world);
+            for (size_t i = 1; i < node->ChildrenSize(); ++i) {
+                YQL_ENSURE(node->Child(i)->IsLambda());
+                worldMap[&node->Child(i)->Head().Head()] = world;
+                world = node->Child(i)->TailPtr();
+                dependencies.push_back(world);
+            }
+            info.IsVisible = false;
+        } else if (node->ChildrenSize() >= 2 && node->Child(1)->IsCallable("DataSource")) {
             auto dataSourceName = node->Child(1)->Child(0)->Content();
             auto datasource = Types_.DataSourceMap.FindPtr(dataSourceName);
             YQL_ENSURE(datasource);
             info.Provider = (*datasource).Get();
             info.IsVisible = (*datasource)->GetPlanFormatter().GetDependencies(*node, dependencies, true);
-        }
-        else if (node->ChildrenSize() >= 2 && node->Child(1)->IsCallable("DataSink")) {
+        } else if (node->ChildrenSize() >= 2 && node->Child(1)->IsCallable("DataSink")) {
             auto dataSinkName = node->Child(1)->Child(0)->Content();
             auto datasink = Types_.DataSinkMap.FindPtr(dataSinkName);
             YQL_ENSURE(datasink);
             info.Provider = (*datasink).Get();
             info.IsVisible = (*datasink)->GetPlanFormatter().GetDependencies(*node, dependencies, true);
-        }
-        else if (node->IsCallable("DqStage") ||
-            node->IsCallable("DqPhyStage") ||
-            node->IsCallable("DqQuery!") ||
-            node->ChildrenSize() >= 1 && node->Child(0)->IsCallable("TDqOutput")) {
+        } else if (node->IsCallable("DqStage") ||
+                   node->IsCallable("DqPhyStage") ||
+                   node->IsCallable("DqQuery!") ||
+                   node->ChildrenSize() >= 1 && node->Child(0)->IsCallable("TDqOutput")) {
             auto provider = Types_.DataSinkMap.FindPtr(DqProviderName);
             YQL_ENSURE(provider);
             info.Provider = (*provider).Get();
             info.IsVisible = (*provider)->GetPlanFormatter().GetDependencies(*node, dependencies, true);
         } else {
-            for (auto dataSource: Types_.DataSources) {
+            for (auto dataSource : Types_.DataSources) {
                 if (dataSource->GetPlanFormatter().HasCustomPlan(*node)) {
                     info.Provider = dataSource.Get();
                     info.IsVisible = dataSource->GetPlanFormatter().GetDependencies(*node, dependencies, true);
@@ -372,7 +389,7 @@ public:
             }
 
             if (!info.Provider) {
-                for (auto dataSink: Types_.DataSinks) {
+                for (auto dataSink : Types_.DataSinks) {
                     if (dataSink->GetPlanFormatter().HasCustomPlan(*node)) {
                         info.Provider = dataSink.Get();
                         info.IsVisible = dataSink->GetPlanFormatter().GetDependencies(*node, dependencies, true);
@@ -389,34 +406,41 @@ public:
             }
         }
 
+        for (auto& child : dependencies) {
+            if (auto w = worldMap.find(child.Get()); w != worldMap.end()) {
+                child = w->second;
+            }
+        }
+
         for (const auto& child : dependencies) {
-            VisitNode(child, nodes, order);
+            VisitNode(child, nodes, order, worldMap);
         }
 
         order.push_back(node);
     }
 
     void VisitNode(const TExprNode::TPtr& node, TNodeMap<TNodeInfo>& nodes,
-        TExprNode::TListType& order) {
+                   TExprNode::TListType& order, TNodeOnNodeOwnedMap& worldMap) {
         switch (node->Type()) {
-        case TExprNode::Atom:
-        case TExprNode::List:
-        case TExprNode::World:
-        case TExprNode::Lambda:
-        case TExprNode::Argument:
-        case TExprNode::Arguments:
-            return;
-        case TExprNode::Callable:
-            VisitCallable(node, nodes, order);
-            break;
+            case TExprNode::Atom:
+            case TExprNode::List:
+            case TExprNode::World:
+            case TExprNode::Lambda:
+            case TExprNode::Argument:
+            case TExprNode::Arguments:
+                return;
+            case TExprNode::Callable:
+                VisitCallable(node, nodes, order, worldMap);
+                break;
         }
     }
 
     void GatherDependencies(const TExprNode& node,
-        const TNodeMap<TNodeInfo>& nodes, TSet<ui64>& dependsOn) {
+                            const TNodeMap<TNodeInfo>& nodes, TSet<ui64>& dependsOn) {
         const auto info = nodes.find(&node);
-        if (nodes.cend() == info)
+        if (nodes.cend() == info) {
             return;
+        }
 
         if (info->second.IsVisible) {
             dependsOn.insert(info->second.NodeId);
@@ -447,7 +471,7 @@ public:
                         continue;
                     }
 
-                    auto inputKey = TPinKey{ input.ProviderId, input.PinId, TBasicNode::EType::Input };
+                    auto inputKey = TPinKey{.ProviderId = input.ProviderId, .PinId = input.PinId, .Type = TBasicNode::EType::Input};
                     if (allInputs.contains(inputKey)) {
                         continue;
                     }
@@ -471,7 +495,7 @@ public:
                         continue;
                     }
 
-                    auto outputKey = TPinKey{ output.ProviderId, output.PinId, TBasicNode::EType::Output };
+                    auto outputKey = TPinKey{.ProviderId = output.ProviderId, .PinId = output.PinId, .Type = TBasicNode::EType::Output};
                     if (allOutputs.contains(outputKey)) {
                         continue;
                     }
@@ -516,7 +540,7 @@ public:
             basicNodes.push_back(basicNode);
 
             for (auto& input : info.Inputs) {
-                auto inputKey = TPinKey{ input.ProviderId, input.PinId, TBasicNode::EType::Input };
+                auto inputKey = TPinKey{.ProviderId = input.ProviderId, .PinId = input.PinId, .Type = TBasicNode::EType::Input};
                 auto foundInput = allInputs.FindPtr(inputKey);
                 if (foundInput) {
                     basicLinks.push_back(TBasicLink(*foundInput, info.NodeId));
@@ -524,7 +548,7 @@ public:
             }
 
             for (auto& output : info.Outputs) {
-                auto outputKey = TPinKey{ output.ProviderId, output.PinId, TBasicNode::EType::Output };
+                auto outputKey = TPinKey{.ProviderId = output.ProviderId, .PinId = output.PinId, .Type = TBasicNode::EType::Output};
                 auto foundOutput = allOutputs.FindPtr(outputKey);
                 if (foundOutput) {
                     basicLinks.push_back(TBasicLink(info.NodeId, *foundOutput));
@@ -543,7 +567,7 @@ public:
 
         THashMap<ui32, TLevelContext> basicNodesMap;
         for (auto& node : basicNodes) {
-            basicNodesMap.insert({ node.Id, TLevelContext(&node) });
+            basicNodesMap.insert({node.Id, TLevelContext(&node)});
         }
 
         for (auto& link : basicLinks) {
@@ -637,7 +661,7 @@ public:
     }
 
     void WritePins(const TString& tag, const TVector<TPinInfo>& pins, NYson::TYsonWriter& writer,
-        TVector<TPinAttrs>& pinAttrs, TProviderInfoMap& providers) {
+                   TVector<TPinAttrs>& pinAttrs, TProviderInfoMap& providers) {
         if (!pins.empty()) {
             UpdateProviders(providers, pins);
             writer.OnKeyedItem(tag);
@@ -687,4 +711,4 @@ TAutoPtr<IPlanBuilder> CreatePlanBuilder(TTypeAnnotationContext& types) {
     return new TPlanBuilder(types);
 }
 
-}
+} // namespace NYql

@@ -13,16 +13,62 @@
 #include "log.h"
 #include "probes.h"
 #include "ask.h"
+#include "subsystems/stats.h"
 #include "thread_context.h"
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/datetime.h>
+#include <ydb/library/actors/interconnect/events_local.h>
 #include <util/generic/hash.h>
+#include <util/system/backtrace.h>
 #include <util/system/rwlock.h>
 #include <util/random/random.h>
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+#include <ydb/library/actors/util/rc_buf.h>
 
 namespace NActors {
 
+    namespace {
+        template<class TCallback>
+        void ForEachSubSystem(std::vector<std::unique_ptr<ISubSystem>>& subsystems, TCallback&& callback) {
+            for (const auto& subsystem : subsystems) {
+                if (subsystem) {
+                    callback(*subsystem);
+                }
+            }
+        }
+    }
+
     LWTRACE_USING(ACTORLIB_PROVIDER);
+
+    namespace {
+        ui32 ExtractCurrentSenderActivityIndex() {
+            if (!TlsActivationContext) {
+                return Max<ui32>();
+            }
+
+            const TActorContext& ctx = TActivationContext::AsActorContext();
+            if (IActor* actor = ctx.Mailbox.FindActor(ctx.SelfID.LocalId())) {
+                return actor->GetActivityType().GetIndex();
+            }
+            if (IActor* actor = ctx.Mailbox.FindAlias(ctx.SelfID.LocalId())) {
+                return actor->GetActivityType().GetIndex();
+            }
+            return Max<ui32>();
+        }
+
+        TString ExtractForwardedEventTypeName(const IEventHandle& ev) {
+            if (ev.HasEvent()) {
+                return ev.GetTypeName();
+            }
+            return Sprintf("0x%08" PRIx32, ev.Type);
+        }
+
+        TString ExtractCurrentStackTrace() {
+            TBackTrace backTrace;
+            backTrace.Capture();
+            return backTrace.PrintToString();
+        }
+    } // namespace
 
     TActorSetupCmd::TActorSetupCmd()
         : MailboxType(TMailboxType::HTSwap)
@@ -70,6 +116,38 @@ namespace NActors {
         }
     };
 
+    TRdmaAllocatorWithFallback::TRdmaAllocatorWithFallback(std::shared_ptr<NInterconnect::NRdma::IMemPool>  memPool) noexcept
+        : RdmaMemPool(memPool)
+    {}
+
+    TRcBuf TRdmaAllocatorWithFallback::AllocRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept {
+        std::optional<TRcBuf> buf = TryAllocRdmaRcBuf<false>(size, headRoom, tailRoom);
+        if (!buf) {
+            return GetDefaultRcBufAllocator()->AllocRcBuf(size, headRoom, tailRoom);
+        }
+        return buf.value();
+    }
+
+    TRcBuf TRdmaAllocatorWithFallback::AllocPageAlignedRcBuf(size_t size, size_t tailRoom) noexcept {
+        std::optional<TRcBuf> buf = TryAllocRdmaRcBuf<true>(size, 0, tailRoom);
+        if (!buf) {
+            return GetDefaultRcBufAllocator()->AllocPageAlignedRcBuf(size, tailRoom);
+        }
+        return buf.value();
+    }
+
+    template<bool pageAligned>
+    std::optional<TRcBuf> TRdmaAllocatorWithFallback::TryAllocRdmaRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept {
+        std::optional<TRcBuf> buf = RdmaMemPool->AllocRcBuf(size + headRoom + tailRoom,
+            pageAligned ? NInterconnect::NRdma::IMemPool::PAGE_ALIGNED : NInterconnect::NRdma::IMemPool::EMPTY);
+        if (!buf) {
+            return {};
+        }
+        buf->TrimFront(size + tailRoom);
+        buf->TrimBack(size);
+        return buf;
+    }
+
     TActorSystem::TActorSystem(THolder<TActorSystemSetup>& setup, void* appData,
                                TIntrusivePtr<NLog::TSettings> loggerSettings)
         : NodeId(setup->NodeId)
@@ -80,12 +158,17 @@ namespace NActors {
         , CurrentTimestamp(0)
         , CurrentMonotonic(0)
         , CurrentIDCounter(RandomNumber<ui64>())
+        , RcBufAllocator(setup->RcBufAllocator ? setup->RcBufAllocator.get() : GetDefaultRcBufAllocator())
         , SystemSetup(setup.Release())
         , DefSelfID(NodeId, "actorsystem")
         , AppData0(appData)
         , LoggerSettings0(loggerSettings)
     {
         ServiceMap.Reset(new TServiceMap());
+        SubSystems = std::move(SystemSetup->SubSystems);
+        if (!GetSubSystem<TActorSystemStatsSubSystem>()) {
+            RegisterSubSystem(MakeActorSystemStatsSubSystem(CpuManager.Get()));
+        }
     }
 
     TActorSystem::~TActorSystem() {
@@ -173,6 +256,10 @@ namespace NActors {
             bool WriteString(const TString *s) override {
                 return WriteAliasedRaw(s->data(), s->size());
             }
+
+            NProtoBuf::io::CodedOutputStream *GetCodedOutputStream() override {
+                return nullptr;
+            }
         };
 
         TSerializerChecker checker;
@@ -187,7 +274,7 @@ namespace NActors {
     }
 
     template <TActorSystem::TEPSendFunction EPSpecificSend>
-    bool TActorSystem::GenericSend(TAutoPtr<IEventHandle> ev) const {
+    bool TActorSystem::GenericSend(std::unique_ptr<IEventHandle>&& ev) const {
         if (Y_UNLIKELY(!ev))
             return false;
 
@@ -211,7 +298,30 @@ namespace NActors {
             Y_ENSURE(ev->Recipient == recipient,
                 "Event rewrite from " << ev->Recipient << " to " << recipient << " would be lost via interconnect");
             recipient = InterconnectProxy(recpNodeId);
-            ev->Rewrite(TEvInterconnect::EvForward, recipient);
+            if (ev->Flags & IEventHandle::FlagSubscribeOnSession) {
+                const TActorId sender = ev->Sender;
+                const ui64 cookie = ev->Cookie;
+                const ui32 flags = ev->Flags & ~IEventHandle::FlagSubscribeOnSession;
+                const TActorId forwardOnNondeliveryRecipient = ev->GetForwardOnNondeliveryRecipient();
+                const TActorId* forwardOnNondelivery = forwardOnNondeliveryRecipient
+                    ? &forwardOnNondeliveryRecipient
+                    : nullptr;
+                auto traceId = ev->TraceId.Clone();
+                const ui32 activityIndex = ExtractCurrentSenderActivityIndex();
+                const bool collectTrace = SystemSetup->InterconnectCollectSubscriptionStackTrace;
+                const TString eventTypeName = collectTrace
+                    ? ExtractForwardedEventTypeName(*ev)
+                    : TString();
+                const TString stackTrace = collectTrace
+                    ? ExtractCurrentStackTrace()
+                    : TString();
+                auto wrapped = std::make_unique<IEventHandle>(recipient, sender,
+                    new TEvForwardSubscribeSession(ev.release(), activityIndex, eventTypeName, stackTrace),
+                    flags, cookie, forwardOnNondelivery, std::move(traceId));
+                ev = std::move(wrapped);
+            } else {
+                ev->Rewrite(TEvInterconnect::EvForward, recipient);
+            }
         }
         if (recipient.IsService()) {
             TActorId target = ServiceMap->LookupLocal(recipient);
@@ -243,30 +353,30 @@ namespace NActors {
             }
         }
         if (ev) {
-            Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
+            Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown));
         }
         return false;
     }
 
     template
-    bool TActorSystem::GenericSend<&IExecutorPool::Send>(TAutoPtr<IEventHandle> ev) const;
+    bool TActorSystem::GenericSend<&IExecutorPool::Send>(std::unique_ptr<IEventHandle>&& ev) const;
     template
-    bool TActorSystem::GenericSend<&IExecutorPool::SpecificSend>(TAutoPtr<IEventHandle> ev) const;
+    bool TActorSystem::GenericSend<&IExecutorPool::SpecificSend>(std::unique_ptr<IEventHandle>&& ev) const;
 
     bool TActorSystem::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie) const {
         return this->Send(new IEventHandle(recipient, DefSelfID, ev, flags, cookie));
     }
 
-    bool TActorSystem::SpecificSend(TAutoPtr<IEventHandle> ev) const {
-        return this->GenericSend<&IExecutorPool::SpecificSend>(ev);
+    bool TActorSystem::SpecificSend(std::unique_ptr<IEventHandle>&& ev) const {
+        return this->GenericSend<&IExecutorPool::SpecificSend>(std::move(ev));
     }
 
-    bool TActorSystem::SpecificSend(TAutoPtr<IEventHandle> ev, ESendingType sendingType) const {
+    bool TActorSystem::SpecificSend(std::unique_ptr<IEventHandle>&& ev, ESendingType sendingType) const {
         if (!TlsThreadContext) {
-            return this->GenericSend<&IExecutorPool::Send>(ev);
+            return this->GenericSend<&IExecutorPool::Send>(std::move(ev));
         } else {
             ESendingType previousType = TlsThreadContext->ExchangeSendingType(sendingType);
-            bool isSent = this->GenericSend<&IExecutorPool::SpecificSend>(ev);
+            bool isSent = this->GenericSend<&IExecutorPool::SpecificSend>(std::move(ev));
             TlsThreadContext->SetSendingType(previousType);
             return isSent;
         }
@@ -357,23 +467,13 @@ namespace NActors {
         return ServiceMap->RegisterLocalService(serviceId, actorId);
     }
 
-    void TActorSystem::GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
-        CpuManager->GetPoolStats(poolId, poolStats, statsCopy);
-    }
-
-    void TActorSystem::GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy, TVector<TExecutorThreadStats>& sharedStatsCopy) const {
-        CpuManager->GetPoolStats(poolId, poolStats, statsCopy, sharedStatsCopy);
-    }
-
-    THarmonizerStats TActorSystem::GetHarmonizerStats() const {
-        return CpuManager->GetHarmonizerStats();
-
-    }
-
     void TActorSystem::Start() {
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start");
-        Y_ABORT_UNLESS(StartExecuted == false);
-        StartExecuted = true;
+        Y_ABORT_UNLESS(!StartExecuted.exchange(true));
+
+        ForEachSubSystem(SubSystems, [this](ISubSystem& subsystem) {
+            subsystem.OnBeforeStart(*this);
+        });
 
         ScheduleQueue.Reset(new NSchedulerQueue::TQueueType());
         TVector<NSchedulerQueue::TReader*> scheduleReaders;
@@ -413,17 +513,23 @@ namespace NActors {
         CpuManager->Start();
         Send(MakeSchedulerActorId(), new TEvSchedulerInitialize(scheduleReaders, &CurrentTimestamp, &CurrentMonotonic));
         Scheduler->Start();
+
+        ForEachSubSystem(SubSystems, [this](ISubSystem& subsystem) {
+            subsystem.OnAfterStart(*this);
+        });
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: started");
     }
 
     void TActorSystem::Stop() {
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Stop");
-        if (StopExecuted || !StartExecuted) {
+        if (!StartExecuted.load() || StopExecuted.exchange(true)) {
             ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Stop: already stopped");
             return;
         }
 
-        StopExecuted = true;
+        ForEachSubSystem(SubSystems, [this](ISubSystem& subsystem) {
+            subsystem.OnBeforeStop(*this);
+        });
 
         for (auto&& fn : std::exchange(DeferredPreStop, {})) {
             fn();
@@ -433,28 +539,31 @@ namespace NActors {
         CpuManager->PrepareStop();
         Scheduler->Stop();
         CpuManager->Shutdown();
+
+        ForEachSubSystem(SubSystems, [this](ISubSystem& subsystem) {
+            subsystem.OnAfterStop(*this);
+        });
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Stop: stopped");
     }
 
     void TActorSystem::Cleanup() {
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Cleanup");
         Stop();
-        if (CleanupExecuted || !StartExecuted) {
+        if (!StartExecuted.load() || CleanupExecuted.exchange(true)) {
             ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Cleanup: already cleaned up");
             return;
         }
-        CleanupExecuted = true;
         CpuManager->Cleanup();
         Scheduler.Destroy();
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Cleanup: cleaned up");
     }
 
-    void TActorSystem::GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const {
-        CpuManager->GetExecutorPoolState(poolId, state);
+    float TActorSystem::GetPoolMaxThreadsCount(ui32 poolId) const {
+        return CpuManager->GetExecutorPool(poolId)->GetMaxThreadCount();
     }
 
-    void TActorSystem::GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const {
-        CpuManager->GetExecutorPoolStates(states);
+    TVector<IExecutorPool*> TActorSystem::GetBasicExecutorPools() const {
+        return CpuManager->GetBasicExecutorPools();
     }
 
 }

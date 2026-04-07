@@ -100,21 +100,41 @@ size_t THttpParser<THttpRequest>::AdvancePartial(size_t len) {
         switch (Stage) {
             case EParseStage::Method:
                 if (ProcessData(Method, data, ' ', MaxMethodSize)) {
+                    if (!IsValidMethod(Method)) {
+                        Method = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::URL;
                 }
                 break;
             case EParseStage::URL:
                 if (ProcessData(URL, data, ' ', MaxURLSize)) {
+                    if (!IsValidURL(URL)) {
+                        URL = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::Protocol;
                 }
                 break;
             case EParseStage::Protocol:
                 if (ProcessData(Protocol, data, '/', MaxProtocolSize)) {
+                    if (!IsValidProtocol(Protocol)) {
+                        Protocol = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::Version;
                 }
                 break;
             case EParseStage::Version:
                 if (ProcessData(Version, data, "\r\n", MaxVersionSize)) {
+                    if (!IsValidVersion(Version)) {
+                        Version = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::Header;
                     Headers = data;
                 }
@@ -188,21 +208,41 @@ size_t THttpParser<THttpResponse>::AdvancePartial(size_t len) {
         switch (Stage) {
             case EParseStage::Protocol:
                 if (ProcessData(Protocol, data, '/', MaxProtocolSize)) {
+                    if (!IsValidProtocol(Protocol)) {
+                        Protocol = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::Version;
                 }
                 break;
             case EParseStage::Version:
                 if (ProcessData(Version, data, ' ', MaxVersionSize)) {
+                    if (!IsValidVersion(Version)) {
+                        Version = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::Status;
                 }
                 break;
             case EParseStage::Status:
                 if (ProcessData(Status, data, ' ', MaxStatusSize)) {
+                    if (!IsValidStatus(Status)) {
+                        Status = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::Message;
                 }
                 break;
             case EParseStage::Message:
                 if (ProcessData(Message, data, "\r\n", MaxMessageSize)) {
+                    if (!IsValidMessage(Message)) {
+                        Message = {};
+                        Stage = EParseStage::Error;
+                        break;
+                    }
                     Stage = EParseStage::Header;
                     Headers = TStringBuf(data.data(), size_t(0));
                 }
@@ -258,22 +298,29 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseString(TStringBuf d
     }
     THttpOutgoingResponsePtr response = new THttpOutgoingResponse(this);
     response->InitResponse(parser.Protocol, parser.Version, parser.Status, parser.Message);
-    if (parser.IsDone() && parser.HasBody()) {
-        if (parser.ContentType && !Endpoint->CompressContentTypes.empty()) {
-            TStringBuf contentType = Trim(parser.ContentType.Before(';'), ' ');
-            if (Count(Endpoint->CompressContentTypes, contentType) != 0) {
-                if (response->EnableCompression()) {
-                    headers.Erase("Content-Length"); // we will need new length after compression
-                }
-            }
+    bool compress = false;
+    if (parser.ContentType && !Endpoint->CompressContentTypes.empty()) {
+        TStringBuf contentType = Trim(parser.ContentType.Before(';'), ' ');
+        if (Count(Endpoint->CompressContentTypes, contentType) != 0) {
+            compress = true;
         }
+    }
+    headers.Erase("Content-Encoding"); // we decompress and recompress again, maybe with different algo
+    if (parser.IsDone() && parser.HasBody()) {
         headers.Erase("Transfer-Encoding"); // we erase transfer-encoding because we convert body to content-length
+        headers.Erase("Content-Length"); // we will need new length after compression
         response->Set(headers);
+        if (compress) {
+            response->EnableCompression();
+        }
         response->SetBody(parser.Body);
     } else if (parser.HasHeaders()) {
         response->Set(headers);
         if (parser.ExpectedBody() && !headers.IsChunkedEncoding() && !response->ContentLength) {
             response->Set<&THttpResponse::ContentLength>("0"); // workaround for buggy responses
+        }
+        if (compress) {
+            response->EnableCompression();
         }
         if (parser.HasCompletedHeaders()) {
             response->FinishHeader(); // for partial responses (data follows later)
@@ -320,9 +367,63 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseTemporaryRedirect(T
     return response;
 }
 
+THttpIncomingRequest::THttpIncomingRequest()
+    : Endpoint(std::make_shared<THttpEndpointInfo>())
+{}
+
+THttpIncomingRequest::THttpIncomingRequest(std::shared_ptr<THttpEndpointInfo> endpoint, const THttpConfig::SocketAddressType& address)
+    : Endpoint(std::move(endpoint))
+    , Address(address)
+{}
+
+THttpIncomingRequest::THttpIncomingRequest(std::shared_ptr<THttpEndpointInfo> endpoint, const THttpConfig::SocketAddressType& address, const TString& mTlsClientCertificate)
+    : Endpoint(std::move(endpoint))
+    , Address(address)
+    , MTlsClientCertificate(mTlsClientCertificate)
+{}
+
+THttpIncomingRequest::THttpIncomingRequest(TStringBuf content, std::shared_ptr<THttpEndpointInfo> endpoint, const THttpConfig::SocketAddressType& address)
+    : THttpParser(content)
+    , Endpoint(std::move(endpoint))
+    , Address(address)
+{}
+
+void THttpIncomingRequest::Clear() {
+    THttpRequestParser::Clear();
+    MTlsClientCertificate.clear();
+}
+
+bool THttpIncomingRequest::IsConnectionClose() const {
+    if (Connection.empty()) {
+        return Version == "1.0";
+    } else {
+        return TEqNoCase()(Connection, "close");
+    }
+}
+
+TStringBuf THttpIncomingRequest::GetConnection() const {
+    if (!Connection.empty()) {
+        if (TEqNoCase()(Connection, "keep-alive")) {
+            return "keep-alive";
+        }
+        if (TEqNoCase()(Connection, "close")) {
+            return "close";
+        }
+    }
+    return Version == "1.0" ? "close" : "keep-alive";
+}
+
 THttpIncomingResponse::THttpIncomingResponse(THttpOutgoingRequestPtr request)
     : Request(request)
 {}
+
+THttpOutgoingRequestPtr THttpIncomingResponse::GetRequest() const {
+    return Request;
+}
+
+bool THttpIncomingResponse::IsConnectionClose() const {
+    return Request->IsConnectionClose() || TEqNoCase()(Connection, "close");
+}
 
 THttpOutgoingResponsePtr THttpIncomingRequest::ConstructResponse(TStringBuf status, TStringBuf message) {
     TStringBuf version = Version;
@@ -412,8 +513,86 @@ THttpOutgoingDataChunkPtr THttpOutgoingResponse::CreateIncompleteDataChunk() {
     return new THttpOutgoingDataChunk(this);
 }
 
-THttpIncomingRequestPtr THttpIncomingRequest::Duplicate() {
-    THttpIncomingRequestPtr request = new THttpIncomingRequest(*this);
+bool THttpOutgoingResponse::IsConnectionClose() const {
+    if (!Connection.empty()) {
+        return TEqNoCase()(Connection, "close");
+    } else {
+        return Request->IsConnectionClose();
+    }
+}
+
+bool THttpOutgoingResponse::IsNeedBody() const {
+    return GetRequest()->Method != "HEAD" && Status != "204" && Status != "202";
+}
+
+bool THttpOutgoingResponse::EnableCompression() {
+    TStringBuf acceptEncoding = Request->AcceptEncoding;
+    std::vector<TStringBuf> encodings;
+    TStringBuf encoding;
+    while (acceptEncoding.NextTok(',', encoding)) {
+        encoding = Trim(encoding, ' ');
+        if (Count(ALLOWED_CONTENT_ENCODINGS, encoding) != 0) {
+            encodings.push_back(encoding);
+        }
+    }
+    if (!encodings.empty()) {
+        SetContentEncoding(encodings.front());
+        return true;
+    }
+    return false;
+}
+
+void THttpOutgoingResponse::SetBody(TStringBuf body) {
+    if (CompressContext) {
+        TString compressedBody = CompressContext.Compress(body, true);
+        THttpRenderer<THttpResponse>::SetBody(compressedBody); // set compressed body into stream
+        Body = Content = body; // replace local copy with uncompressed content
+    } else {
+        THttpRenderer<THttpResponse>::SetBody(body);
+    }
+}
+
+void THttpOutgoingResponse::SetBody(const TString& body) {
+    if (CompressContext) {
+        TString compressedBody = CompressContext.Compress(body, true);
+        THttpRenderer<THttpResponse>::SetBody(compressedBody); // set compressed body into stream
+        Body = Content = body; // replace local copy with uncompressed content
+    } else {
+        THttpRenderer<THttpResponse>::SetBody(body);
+    }
+}
+
+THttpIncomingRequestPtr THttpOutgoingResponse::GetRequest() const {
+    return Request;
+}
+
+THttpIncomingRequestPtr THttpIncomingRequest::Duplicate(const THeaders& extraHeaders) const {
+    THttpIncomingRequestPtr request = new THttpIncomingRequest(Endpoint, Address);
+    request->Append(Method.Data(), Method.Size());
+    request->Append(' ');
+    request->Append(URL.Data(), URL.Size());
+    request->Append(' ');
+    request->Append(Protocol.Data(), Protocol.Size());
+    request->Append('/');
+    request->Append(Version.Data(), Version.Size());
+    request->Append('\r');
+    request->Append('\n');
+    THeadersBuilder headers(Headers);
+    headers.Erase("Transfer-Encoding"); // we do not want to copy chunked encoding
+    for (const auto& [key, value] : extraHeaders.Headers) {
+        if (value) {
+            headers.Set(key, value);
+        } else {
+            headers.Erase(key);
+        }
+    }
+    auto renderedHeaders = headers.Render();
+    request->Append(renderedHeaders.data(), renderedHeaders.size());
+    request->Append('\r');
+    request->Append('\n');
+    if (Body) {
+        request->Append(Body.Data(), Body.Size());
+    }
     request->Reparse();
     request->Timer.Reset();
     return request;
@@ -422,12 +601,15 @@ THttpIncomingRequestPtr THttpIncomingRequest::Duplicate() {
 THttpOutgoingRequestPtr THttpIncomingRequest::Forward(TStringBuf baseUrl) const {
     TStringBuf newScheme;
     TStringBuf newHost;
-    TStringBuf emptyUri; // it supposed to be be empty
-    if (!CrackURL(baseUrl, newScheme, newHost, emptyUri)) {
+    TStringBuf newUrl;
+    if (!CrackURL(baseUrl, newScheme, newHost, newUrl)) {
         // TODO(xenoxeno)
         Y_ABORT("Invalid URL specified");
     }
-    THttpOutgoingRequestPtr request = new THttpOutgoingRequest(Method, newScheme, newHost, GetURL(), Protocol, Version);
+    if (!newUrl) {
+        newUrl = URL;
+    }
+    THttpOutgoingRequestPtr request = new THttpOutgoingRequest(Method, newScheme, newHost, newUrl, Protocol, Version);
     THeadersBuilder newHeaders(Headers);
     newHeaders.Erase("Accept-Encoding");
     newHeaders.Erase("Host"); // host being set by THttpOutgoingRequest constructor
@@ -439,32 +621,72 @@ THttpOutgoingRequestPtr THttpIncomingRequest::Forward(TStringBuf baseUrl) const 
     return request;
 }
 
-THttpIncomingResponsePtr THttpIncomingResponse::Duplicate(THttpOutgoingRequestPtr request) {
-    THttpIncomingResponsePtr response = new THttpIncomingResponse(*this);
+THttpIncomingResponsePtr THttpIncomingResponse::Duplicate(THttpOutgoingRequestPtr request, const THeaders& extraHeaders) {
+    THttpIncomingResponsePtr response = new THttpIncomingResponse(request);
+    response->Append(Protocol.Data(), Protocol.Size());
+    response->Append('/');
+    response->Append(Version.Data(), Version.Size());
+    response->Append(' ');
+    response->Append(Status.Data(), Status.Size());
+    response->Append(' ');
+    response->Append(Message.Data(), Message.Size());
+    response->Append('\r');
+    response->Append('\n');
+    THeadersBuilder headers(Headers);
+    headers.Erase("Transfer-Encoding"); // we do not want to copy chunked encoding
+    headers.Erase("Content-Encoding"); // body is already decompressed during parsing
+    if (ContentLength || ContentEncoding || TransferEncoding) {
+        headers.Set("Content-Length", ToString(Body.Size())); // update to match actual (decompressed) body size
+    }
+    for (const auto& [key, value] : extraHeaders.Headers) {
+        if (value) {
+            headers.Set(key, value);
+        } else {
+            headers.Erase(key);
+        }
+    }
+    auto renderedHeaders = headers.Render();
+    response->Append(renderedHeaders.data(), renderedHeaders.size());
+    response->Append('\r');
+    response->Append('\n');
+    if (Body) {
+        response->Append(Body.Data(), Body.Size());
+    }
     response->Reparse();
-    response->Request = request;
     return response;
 }
 
-THttpOutgoingResponsePtr THttpOutgoingResponse::Duplicate(THttpIncomingRequestPtr request) {
+THttpOutgoingResponsePtr THttpOutgoingResponse::Duplicate(THttpIncomingRequestPtr request, const THeaders& extraHeaders) {
     THeadersBuilder headers(Headers);
     if (!headers.Has("X-Worker-Name")) {
         if (!request->Endpoint->WorkerName.empty()) {
             headers.Set("X-Worker-Name", request->Endpoint->WorkerName);
         }
     }
+    for (const auto& [key, value] : extraHeaders.Headers) {
+        if (value) {
+            headers.Set(key, value);
+        } else {
+            headers.Erase(key);
+        }
+    }
     THttpOutgoingResponsePtr response = new THttpOutgoingResponse(request);
     response->InitResponse(Protocol, Version, Status, Message);
-    if (Body) {
-        if (ContentType && !request->Endpoint->CompressContentTypes.empty()) {
-            TStringBuf contentType = Trim(ContentType.Before(';'), ' ');
-            if (Count(request->Endpoint->CompressContentTypes, contentType) != 0) {
-                if (response->EnableCompression()) {
-                    headers.Erase("Content-Length"); // we will need new length after compression
-                }
-            }
+    bool compress = false;
+    if (ContentType && !request->Endpoint->CompressContentTypes.empty()) {
+        TStringBuf contentType = Trim(ContentType.Before(';'), ' ');
+        if (Count(request->Endpoint->CompressContentTypes, contentType) != 0) {
+            compress = true;
         }
+    }
+    headers.Erase("Content-Encoding"); // we decompress and recompress again, maybe with different algo
+    headers.Erase("Transfer-Encoding"); // we erase transfer-encoding because we convert body to content-length
+    if (Body) {
+        headers.Erase("Content-Length"); // we will need new length after compression
         response->Set(headers);
+        if (compress) {
+            response->EnableCompression();
+        }
         response->SetBody(Body);
     } else {
         response->Set(headers);
@@ -505,14 +727,14 @@ THttpIncomingResponsePtr THttpOutgoingResponse::Reverse(THttpOutgoingRequestPtr 
 THttpOutgoingDataChunk::THttpOutgoingDataChunk(THttpOutgoingResponsePtr response, TStringBuf data)
     : Response(std::move(response))
 {
-    if (data) {
-        if (Response->ContentEncoding == "deflate") {
-            SetData(CompressDeflate(data));
-        } else {
-            SetData(data);
-        }
+    if (Response->CompressContext && !data.empty()) {
+        SetData(Response->CompressContext.Compress(data, false));
     } else {
-        SetEndOfData();
+        if (!data.empty()) {
+            SetData(data);
+        } else {
+            SetEndOfData();
+        }
     }
 }
 
@@ -520,10 +742,27 @@ THttpOutgoingDataChunk::THttpOutgoingDataChunk(THttpOutgoingResponsePtr response
     : Response(std::move(response))
 {}
 
+void THttpOutgoingDataChunk::SetEndOfData() {
+    if (Response->CompressContext) {
+        TString trailing = Response->CompressContext.Compress({}, true);
+        if (trailing) {
+            AddData(trailing);
+        }
+    }
+    AddData({});
+}
+
+THttpOutgoingResponsePtr THttpOutgoingDataChunk::GetResponse() const {
+    return Response;
+}
+
+THttpIncomingRequestPtr THttpOutgoingDataChunk::GetRequest() const {
+    return Response->GetRequest();
+}
+
 THttpOutgoingResponsePtr THttpIncomingResponse::Reverse(THttpIncomingRequestPtr request) {
     THttpOutgoingResponsePtr response = new THttpOutgoingResponse(request);
-    response->Assign(Data(), Size());
-    response->Reparse();
+    response->Assign(AsStringBuf());
     return response;
 }
 
@@ -554,8 +793,7 @@ THttpOutgoingRequest::THttpOutgoingRequest(TStringBuf method, TStringBuf url, TS
 
 THttpOutgoingRequestPtr THttpOutgoingRequest::CreateRequestString(const TString& data) {
     THttpOutgoingRequestPtr request = new THttpOutgoingRequest();
-    request->Assign(data.data(), data.size());
-    request->Reparse();
+    request->Assign(data);
     return request;
 }
 
@@ -595,9 +833,22 @@ THttpOutgoingRequestPtr THttpOutgoingRequest::CreateHttpRequest(TStringBuf metho
     return request;
 }
 
-THttpOutgoingRequestPtr THttpOutgoingRequest::Duplicate() {
-    THttpOutgoingRequestPtr request = new THttpOutgoingRequest(*this);
-    request->Reparse();
+THttpOutgoingRequestPtr THttpOutgoingRequest::Duplicate(const THeaders& extraHeaders) {
+    THttpOutgoingRequestPtr request = new THttpOutgoingRequest();
+    request->Secure = Secure;
+    request->InitRequest(Method, URL, Protocol, Version);
+    THeadersBuilder headers(Headers);
+    for (const auto& [key, value] : extraHeaders.Headers) {
+        if (value) {
+            headers.Set(key, value);
+        } else {
+            headers.Erase(key);
+        }
+    }
+    request->Set(headers);
+    if (Body) {
+        request->SetBody(Body);
+    }
     return request;
 }
 
@@ -606,6 +857,14 @@ THttpIncomingRequestPtr THttpOutgoingRequest::Reverse() {
     request->Assign(Data(), Size());
     request->Reparse();
     return request;
+}
+
+bool THttpOutgoingRequest::IsConnectionClose() const {
+    return TEqNoCase()(Connection, "close");
+}
+
+TString THttpOutgoingRequest::GetDestination() {
+    return Secure ? (TStringBuilder() << "https://" << Host) : (TStringBuilder() << "http://" << Host);
 }
 
 THttpOutgoingResponse::THttpOutgoingResponse(THttpIncomingRequestPtr request)
@@ -730,7 +989,7 @@ size_t THeaders::Parse(TStringBuf headers) {
     for (TStringBuf param = headers.NextTok("\r\n"); !param.empty(); param = headers.NextTok("\r\n")) {
         TStringBuf name = param.NextTok(":");
         param.SkipPrefix(" ");
-        Headers[name] = param;
+        Headers.insert({name, param});
     }
     return headers.begin() - start;
 }
@@ -796,8 +1055,13 @@ void THeadersBuilder::Set(TStringBuf name, TStringBuf data) {
     if (it != Headers.end()) {
         it->second = Data.back().second; // update existing header
     } else {
-        Headers[Data.back().first] = Data.back().second; // add new header
+        Headers.insert({Data.back().first, Data.back().second}); // add new header
     }
+}
+
+void THeadersBuilder::Add(TStringBuf name, TStringBuf data) {
+    Data.emplace_back(name, data);
+    Headers.insert({Data.back().first, Data.back().second}); // add new header
 }
 
 void THeadersBuilder::Erase(TStringBuf name) {

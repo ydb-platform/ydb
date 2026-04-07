@@ -53,23 +53,21 @@ class TestWatermarks(TestYdsBase):
         client.create_yds_connection(
             name=YDS_CONNECTION, database=os.getenv("YDB_DATABASE"), endpoint=os.getenv("YDB_ENDPOINT"), shared_reading=shared_reading
         )
-        self.init_topics(f"test_watermarks_{"shared" if shared_reading else "no_shared"}")
+        self.init_topics(f"test_watermarks_{'shared' if shared_reading else 'no_shared'}")
 
-        ts = "ts" if shared_reading else "write_time"
-        watermark_expr = ", WATERMARK AS (Unwrap(CAST(ts AS Timestamp) - Interval(\"PT0.1S\")))" if shared_reading else ""
+        ts = "CAST(ts AS Timestamp)" if shared_reading else "SystemMetadata('write_time')"
 
         sql = Rf'''
             USE {YDS_CONNECTION};
             -- Cannot guarantee writing to a specific partition
             PRAGMA dq.MaxTasksPerStage="1";
             PRAGMA dq.WatermarksMode="default";
-            PRAGMA dq.WatermarksGranularityMs="500";
             PRAGMA dq.WatermarksLateArrivalDelayMs="100";
 
             $input =
                 SELECT
                     {self.input_topic}.*,
-                    SystemMetadata("write_time") as write_time
+                    {ts} as hopTime
                 FROM {self.input_topic}
                 WITH(
                     FORMAT=json_each_row,
@@ -77,7 +75,8 @@ class TestWatermarks(TestYdsBase):
                         ts String NOT NULL,
                         pass Uint64
                     )
-                    {watermark_expr}
+                    , WATERMARK = {ts} - Interval("PT0.1S")
+                    , WATERMARK_GRANULARITY = "PT0.5S"
                 );
 
             $output =
@@ -85,7 +84,7 @@ class TestWatermarks(TestYdsBase):
                     AGGREGATE_LIST(ts) AS result
                 FROM $input
                 WHERE pass > 0
-                GROUP BY HoppingWindow(CAST({ts} AS Timestamp), "PT0.5S", "PT1S");
+                GROUP BY HoppingWindow(hopTime, "PT0.5S", "PT1S");
 
             INSERT INTO {self.output_topic}
             SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
@@ -103,6 +102,77 @@ class TestWatermarks(TestYdsBase):
         time.sleep(2)
 
         self.write_stream(['{"ts": "1970-01-01T00:00:44Z", "pass": 0}'])
+        expected = [
+            '{"result":["1970-01-01T00:00:42Z"]}',
+            '{"result":["1970-01-01T00:00:42Z"]}',
+        ]
+        assert self.read_stream(len(expected)) == expected
+
+        stop_yds_query(client, query_id)
+
+        if shared_reading:
+            issues = str(client.describe_query(query_id).result.query.transient_issue)
+            assert "Row dispatcher will use the predicate:" in issues, issues
+            issues = str(client.describe_query(query_id).result.query.transient_issue)
+            assert "Row dispatcher will use watermark expr:" in issues, issues
+
+    @yq_v1
+    @pytest.mark.parametrize("shared_reading", [False, True], ids=["no_shared", "shared"])
+    @pytest.mark.parametrize("tasks", [1, 2])
+    def test_idle_watermarks(self, kikimr: StreamingOverKikimr, client: FederatedQueryClient, shared_reading: bool, tasks: int):
+        client.create_yds_connection(
+            name=YDS_CONNECTION, database=os.getenv("YDB_DATABASE"), endpoint=os.getenv("YDB_ENDPOINT"), shared_reading=shared_reading
+        )
+        self.init_topics(f"test_idle_watermarks_{'shared' if shared_reading else 'no_shared'}", partitions_count=2)
+
+        ts = "CAST(ts AS Timestamp)" if shared_reading else "SystemMetadata('write_time')"
+
+        sql = Rf'''
+            USE {YDS_CONNECTION};
+            -- Cannot guarantee writing to a specific partition
+            PRAGMA dq.MaxTasksPerStage="{tasks}";
+            PRAGMA dq.WatermarksMode="default";
+            PRAGMA dq.WatermarksLateArrivalDelayMs="100";
+
+            $input =
+                SELECT
+                    {self.input_topic}.*,
+                    {ts} as hopTime
+                FROM {self.input_topic}
+                WITH(
+                    FORMAT=json_each_row,
+                    SCHEMA(
+                        ts String NOT NULL,
+                        pass Uint64
+                    )
+                    , WATERMARK = {ts} - Interval("PT0.1S")
+                    , WATERMARK_IDLE_TIMEOUT = "PT0.2S"
+                    , WATERMARK_GRANULARITY = "PT0.5S"
+                );
+
+            $output =
+                SELECT
+                    AGGREGATE_LIST(ts) AS result
+                FROM $input
+                WHERE pass > 0
+                GROUP BY HoppingWindow(hopTime, "PT0.5S", "PT1S");
+
+            INSERT INTO {self.output_topic}
+            SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
+            FROM $output;
+        '''
+
+        query_id = start_yds_query(kikimr, client, sql)
+
+        self.write_stream([
+            '{"ts": "1970-01-01T00:00:42Z", "pass": 1}',
+            '{"ts": "1970-01-01T00:00:42Z", "pass": 0}',
+        ], partition_key=b'1')
+        assert self.read_stream(1) == []
+
+        time.sleep(2)
+
+        self.write_stream(['{"ts": "1970-01-01T00:00:44Z", "pass": 0}'], partition_key=b'1')
         expected = [
             '{"result":["1970-01-01T00:00:42Z"]}',
             '{"result":["1970-01-01T00:00:42Z"]}',

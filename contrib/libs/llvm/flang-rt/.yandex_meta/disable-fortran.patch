@@ -1,0 +1,13 @@
+diff --git a/flang-rt/CMakeLists.txt b/flang-rt/CMakeLists.txt
+index d048ac4b3e5a..231428b20be6 100644
+--- a/flang-rt/CMakeLists.txt
++++ b/flang-rt/CMakeLists.txt
+@@ -55,7 +55,7 @@ if (CMAKE_VERSION VERSION_LESS "3.24")
+     set(CMAKE_Fortran_LINKER_WRAPPER_FLAG_SEP ",")
+   endif ()
+ endif ()
+-enable_language(Fortran)
++# enable_language(Fortran)
+ 
+ 
+ list(APPEND CMAKE_MODULE_PATH

@@ -33,7 +33,7 @@ enum class EOutputColumnSource {
     Other,
 };
 
-//Mixin columns for calculating measures
+// Mixin columns for calculating measures
 enum class EMeasureInputDataSpecialColumns {
     Classifier = 0,
     MatchNumber = 1,
@@ -57,10 +57,10 @@ struct TRowPatternFactor {
     ui64 QuantityMin;
     ui64 QuantityMax;
     bool Greedy;
-    bool Output; //include in output with ALL ROW PER MATCH
+    bool Output; // include in output with ALL ROW PER MATCH
     bool Unused; // optimization flag; is true when the variable is not used in defines and measures
 };
 
 THashSet<TString> GetPatternVars(const TRowPattern&);
 
-}//namespace NYql::NMatchRecognize
+} // namespace NYql::NMatchRecognize

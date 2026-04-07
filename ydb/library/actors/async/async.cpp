@@ -7,9 +7,7 @@ namespace NActors::NDetail {
 
     void TActorAsyncHandlerPromise::unhandled_exception() noexcept {
         try {
-            std::rethrow_exception(std::current_exception());
-        } catch (const std::exception& e) {
-            if (!Actor.OnUnhandledExceptionSafe(e)) {
+            if (!Actor.OnUnhandledExceptionSafe(std::current_exception())) {
                 std::terminate();
             }
         } catch (...) {

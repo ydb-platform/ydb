@@ -41,8 +41,8 @@ TObjectId TSaveContext::FindObjectId(void* basePtr, std::optional<std::type_inde
 
 TLoadContext::~TLoadContext()
 {
-    for (const auto& deletor : Deletors_) {
-        deletor();
+    for (const auto& deleter : Deleters_) {
+        deleter();
     }
 }
 

@@ -8,22 +8,20 @@
 
 #ifndef NDEBUG
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using TMkqlLocation = TSourceLocation;
 
-}
-}
+} // namespace NKikimr::NMiniKQL
 
-#define __MKQL_LOCATION__ __LOCATION__
-#   define MKQL_MEM_TAKE3(MemInfo, Mem, Size) \
+    #define __MKQL_LOCATION__ __LOCATION__
+    #define MKQL_MEM_TAKE3(MemInfo, Mem, Size) \
         ::NKikimr::NMiniKQL::Take(MemInfo, (Mem), (Size), __MKQL_LOCATION__)
-#   define MKQL_MEM_TAKE4(MemInfo, Mem, Size, Location) \
+    #define MKQL_MEM_TAKE4(MemInfo, Mem, Size, Location) \
         ::NKikimr::NMiniKQL::Take(MemInfo, (Mem), (Size), Location)
-#   define MKQL_MEM_RETURN(MemInfo, Mem, Size) \
+    #define MKQL_MEM_RETURN(MemInfo, Mem, Size) \
         ::NKikimr::NMiniKQL::Return(MemInfo, (Mem), (Size))
-#   define MKQL_MEM_RETURN_PTR(MemInfo, Mem) \
+    #define MKQL_MEM_RETURN_PTR(MemInfo, Mem) \
         ::NKikimr::NMiniKQL::Return(MemInfo, (Mem))
 #else
 
@@ -32,29 +30,34 @@ namespace NMiniKQL {
 
 using TMkqlLocation = int;
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr
 
-#define __MKQL_LOCATION__ 0
-#   define MKQL_MEM_TAKE3(MemInfo, Mem, Size) \
-        Y_UNUSED(MemInfo); Y_UNUSED(Mem); Y_UNUSED(Size);
-#   define MKQL_MEM_TAKE4(MemInfo, Mem, Size, Location) \
-    Y_UNUSED(MemInfo); Y_UNUSED(Mem); Y_UNUSED(Size); Y_UNUSED(Location);
-#   define MKQL_MEM_RETURN(MemInfo, Mem, Size) \
-        Y_UNUSED(MemInfo); Y_UNUSED(Mem); Y_UNUSED(Size);
-#   define MKQL_MEM_RETURN_PTR(MemInfo, Mem) \
-        Y_UNUSED(MemInfo); Y_UNUSED(Mem);
+    #define __MKQL_LOCATION__ 0
+    #define MKQL_MEM_TAKE3(MemInfo, Mem, Size) \
+        Y_UNUSED(MemInfo);                     \
+        Y_UNUSED(Mem);                         \
+        Y_UNUSED(Size);
+    #define MKQL_MEM_TAKE4(MemInfo, Mem, Size, Location) \
+        Y_UNUSED(MemInfo);                               \
+        Y_UNUSED(Mem);                                   \
+        Y_UNUSED(Size);                                  \
+        Y_UNUSED(Location);
+    #define MKQL_MEM_RETURN(MemInfo, Mem, Size) \
+        Y_UNUSED(MemInfo);                      \
+        Y_UNUSED(Mem);                          \
+        Y_UNUSED(Size);
+    #define MKQL_MEM_RETURN_PTR(MemInfo, Mem) \
+        Y_UNUSED(MemInfo);                    \
+        Y_UNUSED(Mem);
 #endif
 
 #define GET_MKQL_MEM_TAKE(_1, _2, _3, _4, IMPL, ...) IMPL
 #define MKQL_MEM_TAKE(...) Y_PASS_VA_ARGS(GET_MKQL_MEM_TAKE(__VA_ARGS__, MKQL_MEM_TAKE4, MKQL_MEM_TAKE3)(__VA_ARGS__))
 
+namespace NKikimr::NMiniKQL {
 
-namespace NKikimr {
-namespace NMiniKQL {
-
-class TMemoryUsageInfo : public TThrRefBase
-{
+class TMemoryUsageInfo: public TThrRefBase {
 public:
 #if !defined(NDEBUG)
     using TAllocatorLocation = std::variant<TMkqlLocation, THolder<TBackTrace>>;
@@ -67,7 +70,7 @@ public:
 #endif // NDEBUG
 
     explicit TMemoryUsageInfo(const TStringBuf& title);
-    ~TMemoryUsageInfo();
+    ~TMemoryUsageInfo() override;
 
     void AllowMissing();
     void CheckOnExit(bool check);
@@ -139,13 +142,12 @@ inline void Return(TMemoryUsageInfo* memInfo, const void* mem)
 }
 #endif
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 
 template <>
 inline void Out<NKikimr::NMiniKQL::TMemoryUsageInfo>(
-        IOutputStream& out,
-        const NKikimr::NMiniKQL::TMemoryUsageInfo& memInfo)
+    IOutputStream& out,
+    const NKikimr::NMiniKQL::TMemoryUsageInfo& memInfo)
 {
     memInfo.PrintTo(out);
 }

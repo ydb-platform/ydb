@@ -17,8 +17,8 @@
 
 #include <sstream>
 
-#include "arrow/extension/bool8.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension/bool8.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20::extension {
 

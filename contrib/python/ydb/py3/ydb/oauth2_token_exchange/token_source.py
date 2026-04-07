@@ -8,7 +8,7 @@ from datetime import datetime
 try:
     import jwt
 except ImportError:
-    jwt = None
+    jwt = None  # type: ignore
 
 
 class Token(abc.ABC):
@@ -75,7 +75,7 @@ class JwtTokenSource(TokenSource):
         now = time.time()
         now_utc = datetime.utcfromtimestamp(now)
         exp_utc = datetime.utcfromtimestamp(now + self._token_ttl_seconds)
-        payload = {
+        payload: typing.Dict[str, typing.Any] = {
             "iat": now_utc,
             "exp": exp_utc,
         }

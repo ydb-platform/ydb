@@ -1,5 +1,6 @@
 #include "ls_checks.h"
 
+#include <google/protobuf/text_format.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
@@ -448,66 +449,62 @@ TCheckFunc UserAttrsHas(TUserAttrs attrs) {
 }
 
 void IsTable(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
-    const auto& pathDescr = record.GetPathDescription();
-    const auto& selfPath = pathDescr.GetSelf();
-    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeTable);
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeTable);
+}
+
+void IsColumnTable(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeColumnTable);
 }
 
 void IsExternalTable(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
-    const auto& pathDescr = record.GetPathDescription();
-    const auto& selfPath = pathDescr.GetSelf();
-    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeExternalTable);
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeExternalTable);
 }
 
 void IsExternalDataSource(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
-    const auto& pathDescr = record.GetPathDescription();
-    const auto& selfPath = pathDescr.GetSelf();
-    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeExternalDataSource);
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeExternalDataSource);
 }
 
 void IsView(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
-    const auto& pathDescr = record.GetPathDescription();
-    const auto& selfPath = pathDescr.GetSelf();
-    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeView);
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeView);
 }
 
 void IsResourcePool(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
-    const auto& pathDescr = record.GetPathDescription();
-    const auto& selfPath = pathDescr.GetSelf();
-    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeResourcePool);
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeResourcePool);
 }
 
 void IsBackupCollection(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
-    const auto& pathDescr = record.GetPathDescription();
-    const auto& selfPath = pathDescr.GetSelf();
-    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeBackupCollection);
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeBackupCollection);
 }
 
 void IsSysView(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
-    const auto& pathDescr = record.GetPathDescription();
-    const auto& selfPath = pathDescr.GetSelf();
-    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeSysView);
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeSysView);
 }
 
 void IsSecret(const NKikimrScheme::TEvDescribeSchemeResult& record) {
-    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
-    const auto& pathDescr = record.GetPathDescription();
-    const auto& selfPath = pathDescr.GetSelf();
-    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeSecret);
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeSecret);
 }
 
 void IsStreamingQuery(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeStreamingQuery);
+}
+
+void IsDirectory(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeDir);
+}
+
+void IsReplication(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeReplication);
+}
+
+void IsTransfer(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    CheckPathType(record, NKikimrSchemeOp::EPathTypeTransfer);
+}
+
+void CheckPathType(const NKikimrScheme::TEvDescribeSchemeResult& record, NKikimrSchemeOp::EPathType pathType) {
     UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
     const auto& pathDescr = record.GetPathDescription();
     const auto& selfPath = pathDescr.GetSelf();
-    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeStreamingQuery);
+    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), pathType);
 }
 
 TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount) {
@@ -825,10 +822,15 @@ TCheckFunc SchemeLimits(const NKikimrSubDomains::TSchemeLimits& expected) {
         const auto& domain = record.GetPathDescription().GetDomainDescription();
         const auto& actual = domain.GetSchemeLimits();
 
-        UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(actual, expected),
-            "scheme limits mismatch, domain with id " << domain.GetDomainKey().GetPathId()
-                << " has limits: " << actual.ShortDebugString().Quote()
-                << ", but expected limits are: " << expected.ShortDebugString().Quote()
+        TString diff;
+        google::protobuf::util::MessageDifferencer differencer;
+        differencer.ReportDifferencesToString(&diff);
+        //NOTE: because SetSchemeshardSchemaLimits mangles ExtraPathSymbolsAllowed's default value
+        differencer.IgnoreField(NKikimrSubDomains::TSchemeLimits::descriptor()->FindFieldByName("ExtraPathSymbolsAllowed"));
+        UNIT_ASSERT_C(differencer.Compare(actual, expected),
+            "scheme limits mismatch, subdomain PathId " << domain.GetDomainKey().GetPathId() << " limits"
+            << " differ from the expected ones: "
+            << diff
         );
     };
 }
@@ -919,6 +921,41 @@ TCheckFunc KMeansTreeDescription(Ydb::Table::VectorIndexSettings_Metric metric,
     };
 }
 
+TCheckFunc SpecializedIndexDescription(const TString& proto) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        switch (record.GetPathDescription().GetTableIndex().GetSpecializedIndexDescriptionCase()) {
+            case NKikimrSchemeOp::TIndexDescription::kVectorIndexKmeansTreeDescription: {
+                auto actual = record.GetPathDescription().GetTableIndex().GetVectorIndexKmeansTreeDescription().GetSettings();
+                Ydb::Table::KMeansTreeSettings expected;
+                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(proto, &expected));
+                UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(actual, expected),
+                    TStringBuilder() << "Expected"
+                        << expected.ShortDebugString()
+                        << " but got "
+                        << actual.ShortDebugString());
+                break;
+            }
+            case NKikimrSchemeOp::TIndexDescription::kFulltextIndexDescription: {
+                auto actual = record.GetPathDescription().GetTableIndex().GetFulltextIndexDescription().GetSettings();
+                Ydb::Table::FulltextIndexSettings expected;
+                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(proto, &expected));
+                UNIT_ASSERT_C(google::protobuf::util::MessageDifferencer::Equals(actual, expected),
+                    TStringBuilder() << "Expected"
+                        << expected.ShortDebugString()
+                        << " but got "
+                        << actual.ShortDebugString());
+                break;
+            }
+            case NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET: {
+                UNIT_ASSERT_C(proto == "SPECIALIZEDINDEXDESCRIPTION_NOT_SET",
+                    TStringBuilder() << "Expected"
+                        << proto
+                        << " but got SPECIALIZEDINDEXDESCRIPTION_NOT_SET");
+                break;
+            }
+        }
+    };
+}
 
 TCheckFunc SequenceName(const TString& name) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
@@ -983,6 +1020,12 @@ TCheckFunc StreamState(NKikimrSchemeOp::ECdcStreamState state) {
 TCheckFunc StreamVirtualTimestamps(bool value) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetVirtualTimestamps(), value);
+    };
+}
+
+TCheckFunc StreamUserSIDs(bool value) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetUserSIDs(), value);
     };
 }
 
@@ -1145,6 +1188,18 @@ void NoMaxPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record) 
     UNIT_ASSERT(!record.GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy().HasMaxPartitionsCount());
 }
 
+TCheckFunc MinTopicPartitionsCountEqual(ui32 count) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy().GetMinPartitionCount(), count);
+    };
+}
+
+TCheckFunc MaxTopicPartitionsCountEqual(ui32 count) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig().GetPartitionStrategy().GetMaxPartitionCount(), count);
+    };
+}
+
 TCheckFunc PartitioningByLoadStatus(bool status) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetTable().GetPartitionConfig().GetPartitioningPolicy().GetSplitByLoadSettings().GetEnabled(), status);
@@ -1229,6 +1284,12 @@ TCheckFunc HasTtlDisabled() {
 TCheckFunc IsBackupTable(bool value) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(value, record.GetPathDescription().GetTable().GetIsBackup());
+    };
+}
+
+TCheckFunc IsRestoreTable(bool value) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(value, record.GetPathDescription().GetTable().GetIsRestore());
     };
 }
 
@@ -1360,7 +1421,7 @@ void CheckRight(const NKikimrScheme::TEvDescribeSchemeResult& record, const TStr
             }
         }
 
-        UNIT_ASSERT_C(!(has ^ mustHave), "" << record.GetPath() << "ace check fail"
+        UNIT_ASSERT_C(!(has ^ mustHave), "" << record.GetPath() << " ace check fail"
             << ", got " << src.ShortDebugString()
             << ", required " << (mustHave ? "" : "no ") << required.ShortDebugString());
     }

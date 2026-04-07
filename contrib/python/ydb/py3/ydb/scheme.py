@@ -2,7 +2,13 @@
 import abc
 import enum
 from abc import abstractmethod
+from typing import Generic, TYPE_CHECKING
+
 from . import issues, operation, settings as settings_impl, _apis
+from ._typing import DriverT
+
+if TYPE_CHECKING:
+    from .driver import Driver as SyncDriver  # noqa: F401
 
 
 @enum.unique
@@ -28,6 +34,8 @@ class SchemeEntryType(enum.IntEnum):
     EXTERNAL_DATA_SOURCE = 19
     VIEW = 20
     RESOURCE_POOL = 21
+    TRANSFER = 23
+    SYS_VIEW = 24
 
     @classmethod
     def _missing_(cls, value):
@@ -124,7 +132,7 @@ class SchemeEntryType(enum.IntEnum):
         return entry == SchemeEntryType.EXTERNAL_DATA_SOURCE
 
     @staticmethod
-    def is_external_view(entry):
+    def is_view(entry):
         """
         :param entry: A scheme entry to check
         :return: True if scheme entry is a view and False otherwise
@@ -132,12 +140,28 @@ class SchemeEntryType(enum.IntEnum):
         return entry == SchemeEntryType.VIEW
 
     @staticmethod
-    def is_external_resource_pool(entry):
+    def is_resource_pool(entry):
         """
         :param entry: A scheme entry to check
         :return: True if scheme entry is a resource pool and False otherwise
         """
         return entry == SchemeEntryType.RESOURCE_POOL
+
+    @staticmethod
+    def is_topic(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is a topic and False otherwise
+        """
+        return entry == SchemeEntryType.TOPIC
+
+    @staticmethod
+    def is_sysview(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is a system view and False otherwise
+        """
+        return entry == SchemeEntryType.SYS_VIEW
 
 
 class SchemeEntry(object):
@@ -244,6 +268,12 @@ class SchemeEntry(object):
         :return: True if scheme entry is a resource pool and False otherwise
         """
         return SchemeEntryType.is_resource_pool(self.type)
+
+    def is_sysview(self):
+        """
+        :return: True if scheme entry is a system view and False otherwise
+        """
+        return SchemeEntryType.is_sysview(self.type)
 
 
 class Directory(SchemeEntry):
@@ -470,10 +500,12 @@ class ISchemeClient(abc.ABC):
         pass
 
 
-class BaseSchemeClient(ISchemeClient):
+class BaseSchemeClient(ISchemeClient, Generic[DriverT]):
     __slots__ = ("_driver",)
 
-    def __init__(self, driver):
+    _driver: DriverT
+
+    def __init__(self, driver: DriverT) -> None:
         self._driver = driver
 
     def make_directory(self, path, settings=None):
@@ -530,7 +562,7 @@ class BaseSchemeClient(ISchemeClient):
         )
 
 
-class SchemeClient(BaseSchemeClient):
+class SchemeClient(BaseSchemeClient["SyncDriver"]):
     def async_make_directory(self, path, settings=None):
         return self._driver.future(
             _make_directory_request_factory(path),

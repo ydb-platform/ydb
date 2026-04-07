@@ -15,6 +15,8 @@ struct TKqpQueryStats {
     ui64 ReadSetsCount = 0;
     ui64 MaxShardProgramSize = 0;
     ui64 MaxShardReplySize = 0;
+    ui64 LocksBrokenAsBreaker = 0;
+    ui64 LocksBrokenAsVictim = 0;
 
     TVector<NYql::NDqProto::TDqExecutionStats> Executions;
 
@@ -34,6 +36,9 @@ void CollectQueryStats(const TActorContext& ctx, const TKqpQueryStats* queryStat
     TDuration queryDuration, const TString& queryText,
     const TString& userSID, ui64 parametersSize, const TString& database,
     const NKikimrKqp::EQueryType type, ui64 requestUnits);
+
+void SendVictimStats(const TActorContext& ctx, ui64 locksBrokenAsVictim,
+    const TString& victimQueryText, const TString& database);
 
 ui64 CalcRequestUnit(const NKqpProto::TKqpStatsQuery& stats);
 ui64 CalcRequestUnit(const TKqpQueryStats& stats);

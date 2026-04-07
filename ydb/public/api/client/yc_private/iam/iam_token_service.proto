@@ -4,6 +4,7 @@ package yandex.cloud.priv.iam.v1;
 
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
+import "ydb/public/api/client/yc_private/accessservice/sensitive.proto";
 import "ydb/public/api/client/yc_private/iam/iam_token_service_subject.proto";
 import "ydb/public/api/client/yc_private/iam/yandex_passport_cookie.proto";
 import "ydb/public/api/client/yc_private/iam/oauth_request.proto";
@@ -35,8 +36,8 @@ service IamTokenService {
 
 message CreateIamTokenRequest {
   oneof identity {
-    string yandex_passport_oauth_token = 1;
-    string jwt = 2;
+    string yandex_passport_oauth_token = 1 [(sensitive) = true];
+    string jwt = 2 [(sensitive) = true];
     string iam_cookie = 3;
     YandexPassportCookies yandex_passport_cookies = 4;
   }
@@ -67,7 +68,7 @@ message CreateIamTokenForComputeInstanceRequest {
 }
 
 message CreateIamTokenResponse {
-  string iam_token = 1;
+  string iam_token = 1 [(sensitive) = true];
   google.protobuf.Timestamp issued_at = 4;
   google.protobuf.Timestamp expires_at = 2;
   ts.Subject subject = 3;

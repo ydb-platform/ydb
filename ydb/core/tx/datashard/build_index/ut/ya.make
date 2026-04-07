@@ -4,9 +4,10 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(1)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -27,6 +28,10 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    ut_filter_kmeans.cpp
+    ut_fulltext.cpp
+    ut_fulltext_dict.cpp
+    ut_helpers.cpp
     ut_local_kmeans.cpp
     ut_prefix_kmeans.cpp
     ut_recompute_kmeans.cpp

@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.0.51)
+VERSION(3.0.52)
 
 LICENSE(BSD-3-Clause)
 
@@ -152,6 +152,7 @@ PY_SRCS(
     prompt_toolkit/search.py
     prompt_toolkit/selection.py
     prompt_toolkit/shortcuts/__init__.py
+    prompt_toolkit/shortcuts/choice_input.py
     prompt_toolkit/shortcuts/dialogs.py
     prompt_toolkit/shortcuts/progress_bar/__init__.py
     prompt_toolkit/shortcuts/progress_bar/base.py

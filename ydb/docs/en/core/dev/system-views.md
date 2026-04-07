@@ -47,6 +47,7 @@ Table structure:
 | `CoordinatedTxCompleted` | Number of completed [distributed transactions](../concepts/glossary.md#transactions). | `Uint64` | Cumulative |
 | `TxRejectedByOverload` | Number of transactions cancelled due to [overload](../troubleshooting/performance/queries/overloaded-errors.md). | `Uint64` | Cumulative |
 | `TxRejectedByOutOfStorage` | Number of transactions cancelled due to lack of storage space. | `Uint64` | Cumulative |
+| `TxCompleteLag` | Transaction execution delay (how much transactions lag behind their scheduled time). | `Interval` | Instant |
 | `LastTtlRunTime` | Launch time of the last TTL erasure procedure | `Timestamp` | Instant |
 | `LastTtlRowsProcessed` | Number of rows checked during the last TTL erasure procedure | `Uint64` | Instant |
 | `LastTtlRowsErased` | Number of rows deleted during the last TTL erasure procedure | `Uint64` | Instant |
@@ -227,6 +228,19 @@ Table structure:
 | `SumDeleteRows` | Total number of rows deleted.<br/>Type: `Uint64`. |
 | `MinDeleteRows` | Minimum number of rows deleted.<br/>Type: `Uint64`. |
 | `MaxDeleteRows` | Maximum number of rows deleted.<br/>Type: `Uint64`. |
+| `LocksBrokenAsBreaker` | Number of locks that this query broke.<br/>Type: `Uint64`. |
+| `LocksBrokenAsVictim` | Number of this query's locks that were broken.<br/>Type: `Uint64`. |
+
+{% note info %}
+
+These lock statistics do not include:
+
+- Locks broken due to schema changes, TTL, async replication
+- Locks broken due to partition splits or merges
+- Locks broken during tablet restarts
+- Locks broken when committing interactive transactions (when COMMIT is executed as a separate statement)
+
+{% endnote %}
 
 ### Example queries {#query-metrics-examples}
 

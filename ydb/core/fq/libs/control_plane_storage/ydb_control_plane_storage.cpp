@@ -341,7 +341,12 @@ void TYdbControlPlaneStorageActor::AfterTablesCreated() {
 
 bool TControlPlaneStorageUtils::IsSuperUser(const TString& user) const
 {
-    return AnyOf(Config->Proto.GetSuperUsers(), [&user](const auto& superUser) {
+    return IsSuperUser(Config, user);
+}
+
+bool TControlPlaneStorageUtils::IsSuperUser(const std::shared_ptr<::NFq::TControlPlaneStorageConfig>& config, const TString& user)
+{
+    return AnyOf(config->Proto.GetSuperUsers(), [&user](const auto& superUser) {
         return superUser == user;
     });
 }
@@ -382,7 +387,7 @@ std::pair<TAsyncStatus, std::shared_ptr<std::vector<NYdb::TResultSet>>> TDbReque
     auto resultSet = std::make_shared<std::vector<NYdb::TResultSet>>();
 
     std::shared_ptr<int> retryCount = std::make_shared<int>();
-    auto handler = [=, requestCounters=requestCounters](TSession& session) mutable {
+    auto handler = [retryCount, query, params, debugInfo, transactionMode, retryOnTli, resultSet, actorSystem, requestCounters=requestCounters](TSession& session) mutable {
         if (*retryCount != 0) {
             requestCounters.IncRetry();
         }
@@ -428,7 +433,7 @@ TAsyncStatus TDbRequester::Validate(
     const TValidationQuery& validatonItem = validators[item];
     CollectDebugInfo(validatonItem.Query, validatonItem.Params, session, debugInfo);
     auto result = session.ExecuteDataQuery(validatonItem.Query, item == 0 ? TTxControl::BeginTx(transactionMode) : TTxControl::Tx(**transaction), validatonItem.Params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
-    return result.Apply([=, this, validator=validatonItem.Validator, query=validatonItem.Query] (const TFuture<TDataQueryResult>& future) {
+    return result.Apply([transaction, actorSystem, successFinish, item, session, debugInfo, validator=validatonItem.Validator, query=validatonItem.Query, validators] (const TFuture<TDataQueryResult>& future) {
         NYdb::NTable::TDataQueryResult result = future.GetValue();
         *transaction = result.GetTransaction();
         auto status = static_cast<TStatus>(result);
@@ -459,10 +464,10 @@ TAsyncStatus TDbRequester::Write(
     NActors::TActorSystem* const actorSystem = TActivationContext::ActorSystem();
     std::shared_ptr<int> retryCount = std::make_shared<int>();
     auto transaction = std::make_shared<std::optional<TTransaction>>();
-    auto writeHandler = [=, retryOnTli=retryOnTli] (TSession session) {
+    auto writeHandler = [query, transaction, params, debugInfo, hasValidators=!validators.empty(), transactionMode, actorSystem, retryOnTli=retryOnTli] (TSession session) {
         CollectDebugInfo(query, params, session, debugInfo);
-        auto result = session.ExecuteDataQuery(query, validators ? TTxControl::Tx(**transaction).CommitTx() : TTxControl::BeginTx(transactionMode).CommitTx(), params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
-        return result.Apply([=] (const TFuture<TDataQueryResult>& future) {
+        auto result = session.ExecuteDataQuery(query, hasValidators ? TTxControl::Tx(**transaction).CommitTx() : TTxControl::BeginTx(transactionMode).CommitTx(), params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
+        return result.Apply([query, actorSystem, retryOnTli] (const TFuture<TDataQueryResult>& future) {
             NYdb::NTable::TDataQueryResult result = future.GetValue();
             auto status = static_cast<TStatus>(result);
             if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist
@@ -478,13 +483,13 @@ TAsyncStatus TDbRequester::Write(
         });
     };
 
-    auto handler = [=, this, requestCounters=requestCounters] (TSession session) mutable {
+    auto handler = [actorSystem, writeHandler, validators, transaction, debugInfo, retryCount, requestCounters=requestCounters] (TSession session) mutable {
         if (*retryCount != 0) {
             requestCounters.IncRetry();
         }
         ++(*retryCount);
         std::shared_ptr<bool> successFinish = std::make_shared<bool>();
-        return Validate(actorSystem, transaction, 0, validators, session, successFinish, debugInfo).Apply([=](const auto& future) {
+        return Validate(actorSystem, transaction, 0, validators, session, successFinish, debugInfo).Apply([successFinish, writeHandler, session, actorSystem](const auto& future) {
             try {
                 auto status = future.GetValue();
                 if (!status.IsSuccess()) {
@@ -494,7 +499,7 @@ TAsyncStatus TDbRequester::Write(
                     return future;
                 }
                 return writeHandler(session);
-            } catch (const NYql::TCodeLineException& exception) {
+            } catch (const NKikimr::TCodeLineException& exception) {
                 if (exception.Code == TIssuesIds::INTERNAL_ERROR) {
                     CPS_LOG_AS_E(*actorSystem, "Validation: " << CurrentExceptionMessage());
                 } else {
@@ -516,6 +521,7 @@ TAsyncStatus TDbRequester::Write(
 }
 
 NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask(
+    TDbPool::TPtr dbPool,
     const TPickTaskParams& taskParams,
     const TRequestCounters& requestCounters,
     TDebugInfoPtr debugInfo,
@@ -523,9 +529,9 @@ NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask(
     const TVector<TValidationQuery>& validators,
     TTxSettings transactionMode)
 {
-    return ReadModifyWrite(taskParams.ReadQuery, taskParams.ReadParams,
+    return ReadModifyWrite(dbPool, taskParams.ReadQuery, taskParams.ReadParams,
         taskParams.PrepareParams, requestCounters, debugInfo, validators, transactionMode, taskParams.RetryOnTli)
-            .Apply([=, responseTasks=responseTasks, queryId = taskParams.QueryId](const auto& future) {
+            .Apply([responseTasks=responseTasks, queryId=taskParams.QueryId](const auto& future) {
                 const auto status = future.GetValue();
                 if (responseTasks && !status.IsSuccess()) {
                     responseTasks->SafeEraseTaskBlocking(queryId);
@@ -534,6 +540,7 @@ NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask(
 }
 
 TAsyncStatus TDbRequester::ReadModifyWrite(
+    TDbPool::TPtr dbPool,
     const TString& readQuery,
     const NYdb::TParams& readParams,
     const std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)>& prepare,
@@ -548,7 +555,7 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
     auto resultSets = std::make_shared<std::vector<NYdb::TResultSet>>();
     auto transaction = std::make_shared<std::optional<TTransaction>>();
 
-    auto readModifyWriteHandler = [=](TSession session) {
+    auto readModifyWriteHandler = [readQuery, readParams, debugInfo, resultSets, transaction, transactionMode, validators, actorSystem, retryCount, retryOnTli, prepare](TSession session) {
         CollectDebugInfo(readQuery, readParams, session, debugInfo);
         auto readResult = session.ExecuteDataQuery(readQuery, validators ? TTxControl::Tx(**transaction) : TTxControl::BeginTx(transactionMode), readParams, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
         auto readResultStatus = readResult.Apply([resultSets, transaction, actorSystem, readQuery] (const TFuture<TDataQueryResult>& future) {
@@ -565,11 +572,11 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
             return status;
         });
 
-        TFuture<std::pair<TString, NYdb::TParams>> resultPrepare = readResultStatus.Apply([=](const auto& future) {
+        TFuture<std::pair<TString, NYdb::TParams>> resultPrepare = readResultStatus.Apply([prepare, resultSets](const auto& future) {
             return future.GetValue().IsSuccess() ? prepare(*resultSets) : make_pair(TString(""), NYdb::TParamsBuilder{}.Build());
         });
 
-        return resultPrepare.Apply([=, actorSystem=actorSystem](const auto& future) mutable {
+        return resultPrepare.Apply([readResultStatus, transaction, session, debugInfo, retryOnTli, actorSystem=actorSystem](const auto& future) mutable {
             if (!readResultStatus.GetValue().IsSuccess()) {
                 return readResultStatus;
             }
@@ -605,7 +612,7 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
                     }
                     return status;
                 });
-            } catch (const NYql::TCodeLineException& exception) {
+            } catch (const NKikimr::TCodeLineException& exception) {
                 if (exception.Code == TIssuesIds::INTERNAL_ERROR) {
                     CPS_LOG_AS_E(*actorSystem, "Validation: " << CurrentExceptionMessage());
                 } else {
@@ -622,14 +629,14 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
         });
     };
 
-    auto handler = [=, this, requestCounters=requestCounters] (TSession session) mutable {
+    auto handler = [actorSystem, transaction, validators, retryCount, debugInfo, requestCounters=requestCounters, readModifyWriteHandler] (TSession session) mutable {
         if (*retryCount != 0) {
             requestCounters.IncRetry();
         }
         ++(*retryCount);
 
         std::shared_ptr<bool> successFinish = std::make_shared<bool>();
-        return Validate(actorSystem, transaction, 0, validators, session, successFinish, debugInfo).Apply([=](const auto& future) {
+        return Validate(actorSystem, transaction, 0, validators, session, successFinish, debugInfo).Apply([actorSystem, successFinish, session, readModifyWriteHandler](const auto& future) {
             try {
                 auto status = future.GetValue();
                 if (!status.IsSuccess()) {
@@ -639,7 +646,7 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
                     return future;
                 }
                 return readModifyWriteHandler(session);
-            } catch (const NYql::TCodeLineException& exception) {
+            } catch (const NKikimr::TCodeLineException& exception) {
                 if (exception.Code == TIssuesIds::INTERNAL_ERROR) {
                     CPS_LOG_AS_E(*actorSystem, "Validation: " << CurrentExceptionMessage());
                 } else {
@@ -656,7 +663,7 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
         });
     };
     TPromise<NYdb::TStatus> promise = NewPromise<NYdb::TStatus>();
-    TActivationContext::AsActorContext().Register(new TDbRequest(DbPool, promise, handler));
+    TActivationContext::AsActorContext().Register(new TDbRequest(dbPool, promise, handler));
     return promise.GetFuture();
 }
 

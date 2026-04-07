@@ -25,17 +25,17 @@
 #include <atomic>
 
 #if defined(_unix_)
-#include <pthread.h>
+    #include <pthread.h>
 #endif
 
-#include <errno.h>
-
+#include <cerrno>
+#include <utility>
 
 namespace NYql {
 
 namespace {
 
-constexpr const char CleanupLockFilename[] = ".cleanup_lock";
+constexpr const char* CleanupLockFilename = ".cleanup_lock";
 
 struct TFileObject {
     TString Name;
@@ -46,24 +46,25 @@ struct TFileObject {
 TFsPath ToFilePath(const TString& path)
 {
     if (path.empty()) {
-        char tempDir[MAX_PATH];
-        if (MakeTempDir(tempDir, nullptr) != 0)
-            ythrow yexception() << "FileStorage: Can't create temporary directory " << tempDir;
-        return tempDir;
+        std::array<char, MAX_PATH> tempDir;
+        if (MakeTempDir(tempDir.data(), nullptr) != 0) {
+            ythrow yexception() << "FileStorage: Can't create temporary directory " << tempDir.data();
+        }
+        return tempDir.data();
     }
     return path;
 }
 
-constexpr char FileLocksDir[] = "locks";
+constexpr const char* FileLocksDir = "locks";
 
 constexpr size_t MaxLockPathInStorage = 4096;
 } // namespace
 
-TFileLink::TFileLink(const TFsPath& path, const TString& storageFileName, ui64 size, const TString& md5, bool deleteOnDestroy)
-    : Path_(path)
-    , StorageFileName_(storageFileName)
+TFileLink::TFileLink(TFsPath path, TString storageFileName, ui64 size, TString md5, bool deleteOnDestroy)
+    : Path_(std::move(path))
+    , StorageFileName_(std::move(storageFileName))
     , Size_(size)
-    , Md5_(md5)
+    , Md5_(std::move(md5))
     , DeleteOnDestroy_(deleteOnDestroy)
 {
 }
@@ -119,7 +120,7 @@ public:
     public:
         inline TAtforkReinit() {
 #if defined(_bionic_)
-//no pthread_atfork on android libc
+// no pthread_atfork on android libc
 #elif defined(_unix_)
             pthread_atfork(nullptr, nullptr, ProcessReinit);
 #endif
@@ -187,10 +188,10 @@ public:
         }
         TAtforkReinit::Get().Register(this);
         YQL_LOG(INFO) << "FileStorage initialized in " << StorageDir_.GetPath().Quote()
-            << ", temporary dir: " << ProcessTempDir_.GetPath().Quote()
-            << ", locks dir:" << FileLocksDir_.GetPath().Quote()
-            << ", files: " << CurrentFiles_.load()
-            << ", total size: " << CurrentSize_.load();
+                      << ", temporary dir: " << ProcessTempDir_.GetPath().Quote()
+                      << ", locks dir:" << FileLocksDir_.GetPath().Quote()
+                      << ", files: " << CurrentFiles_.load()
+                      << ", total size: " << CurrentSize_.load();
     }
 
     ~TImpl() {
@@ -255,8 +256,8 @@ public:
         }
 
         YQL_LOG(INFO) << "Using " << (newFileAdded ? "new" : "existing") << " storage file " << result->GetStorageFileName().Quote()
-            << ", temp path: " << result->GetPath().GetPath().Quote()
-            << ", size: " << result->GetSize();
+                      << ", temp path: " << result->GetPath().GetPath().Quote()
+                      << ", size: " << result->GetSize();
 
         if (newFileAdded) {
             Cleanup();
@@ -338,7 +339,7 @@ public:
     }
 
     TString GetTempName() {
-        with_lock(RndLock_) {
+        with_lock (RndLock_) {
             return Rnd_.GenGuid();
         }
     }
@@ -353,7 +354,7 @@ private:
 
         ui32 oldPid;
 
-        for (const TString& name: names) {
+        for (const TString& name : names) {
             TFsPath childPath(StorageDir_ / name);
             TFileStat stat(childPath, true);
             if (stat.IsFile()) {
@@ -373,11 +374,11 @@ private:
                             childPath.ForceDelete();
                         } else {
                             YQL_LOG(WARN) << "Not cleaning dead process dir " << childPath
-                                << ": " << "directory is still locked, skipping";
+                                          << ": " << "directory is still locked, skipping";
                         }
                     } catch (...) {
                         YQL_LOG(WARN) << "Error cleaning dead process dir " << childPath
-                             << ": " << CurrentExceptionMessage();
+                                      << ": " << CurrentExceptionMessage();
                     }
                 }
             }
@@ -388,9 +389,7 @@ private:
     }
 
     bool NeedToCleanup() const {
-        return Dirty_.load()
-            || static_cast<ui64>(CurrentFiles_.load()) > MaxFiles_
-            || static_cast<ui64>(CurrentSize_.load()) > MaxSize_;
+        return Dirty_.load() || static_cast<ui64>(CurrentFiles_.load()) > MaxFiles_ || static_cast<ui64>(CurrentSize_.load()) > MaxSize_;
     }
 
     void Cleanup() {
@@ -416,40 +415,40 @@ private:
         ui64 actualFiles = 0;
         ui64 actualSize = 0;
 
-        for (const TString& name: names) {
+        for (const TString& name : names) {
             TFsPath childPath(StorageDir_ / name);
             TFileStat stat(childPath, true);
             if (stat.IsFile()) {
-                files.push_back(TFileObject{name, stat.MTime, stat.Size});
+                files.push_back(TFileObject{.Name = name, .MTime = stat.MTime, .Size = stat.Size});
                 ++actualFiles;
                 actualSize += stat.Size;
             }
         }
 
-        // sort files to get older files first
-        Sort(files, [](const TFileObject& f1, const TFileObject& f2) {
-            if (f1.MTime == f2.MTime) {
-                return f1.Name.compare(f2.Name) < 0;
-            }
-            return f1.MTime < f2.MTime;
-        });
+        if (actualFiles > MaxFiles_ || actualSize > MaxSize_) {
+            // sort files to get older files first
+            Sort(files, [](const TFileObject& f1, const TFileObject& f2) {
+                if (f1.MTime == f2.MTime) {
+                    return f1.Name.compare(f2.Name) < 0;
+                }
+                return f1.MTime < f2.MTime;
+            });
 
-        ui64 filesThreshold = MaxFiles_ / 2;
-        ui64 sizeThreshold = MaxSize_ / 2;
+            for (const TFileObject& f : files) {
+                if (actualFiles <= MaxFiles_ && actualSize <= MaxSize_) {
+                    break;
+                }
 
-        for (const TFileObject& f: files) {
-            if (actualFiles <= filesThreshold && actualSize <= sizeThreshold) {
-                break;
-            }
-
-            YQL_LOG(INFO) << "Removing file from cache (name: " << f.Name
-                    << ", size: " << f.Size
-                    << ", mtime: " << f.MTime << ")";
-            if (!NFs::Remove(StorageDir_ / f.Name)) {
-                YQL_LOG(WARN) << "Failed to remove file " << f.Name.Quote() << ": " << LastSystemErrorText();
-            } else {
-                --actualFiles;
-                actualSize -= f.Size;
+                YQL_LOG(INFO) << "Removing file from cache (name: " << f.Name
+                              << ", size: " << f.Size
+                              << ", mtime: " << f.MTime << ")";
+                if (!NFs::Remove(StorageDir_ / f.Name)) {
+                    YQL_LOG(WARN) << "Failed to remove file " << f.Name.Quote() << ": " << LastSystemErrorText();
+                } else {
+                    --actualFiles;
+                    Y_ENSURE(actualSize >= f.Size);
+                    actualSize -= f.Size;
+                }
             }
         }
 
@@ -459,7 +458,7 @@ private:
 
     void ResetAtFork() {
         RndLock_.Release();
-        with_lock(RndLock_) {
+        with_lock (RndLock_) {
             Rnd_.ResetSeed();
         }
         // Force cleanup on next file add, because other processes may change the state
@@ -492,13 +491,11 @@ TStorage::~TStorage()
 {
 }
 
-TFsPath TStorage::GetRoot() const
-{
+TFsPath TStorage::GetRoot() const {
     return Impl_->GetRoot();
 }
 
-TFsPath TStorage::GetTemp() const
-{
+TFsPath TStorage::GetTemp() const {
     return Impl_->GetTemp();
 }
 
@@ -526,13 +523,11 @@ bool TStorage::RemoveFromStorage(const TString& existingStorageFileName)
     return Impl_->RemoveFromStorage(existingStorageFileName);
 }
 
-ui64 TStorage::GetOccupiedSize() const
-{
+ui64 TStorage::GetOccupiedSize() const {
     return Impl_->GetOccupiedSize();
 }
 
-size_t TStorage::GetCount() const
-{
+size_t TStorage::GetCount() const {
     return Impl_->GetCount();
 }
 
@@ -540,4 +535,4 @@ TString TStorage::GetTempName()
 {
     return Impl_->GetTempName();
 }
-} // NYql
+} // namespace NYql

@@ -22,14 +22,6 @@ using TVersionedNodeId = TVersionedObjectId;
 
 extern const TLockId NullLockId;
 
-// TODO(cherepashka): remove after corresponding compat in 25.1 will be removed.
-DEFINE_ENUM(ECompatLockMode,
-    ((None)      (0))
-    ((Snapshot)  (1))
-    ((Shared)    (2))
-    ((Exclusive) (3))
-);
-
 // NB: The order is from weakest to strongest.
 DEFINE_ENUM_WITH_UNDERLYING_TYPE(ELockMode, i8,
     ((None)      (0))

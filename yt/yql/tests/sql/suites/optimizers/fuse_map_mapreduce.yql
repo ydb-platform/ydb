@@ -1,6 +1,6 @@
 USE plato;
 
-pragma yt.EnableFuseMapToMapReduce="true";
+pragma yt.FuseMapToMapReduce="normal";
 
 SELECT
     key,

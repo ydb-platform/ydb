@@ -30,13 +30,11 @@ namespace numpy
   } // namespace
 
   template <class E, class F>
-  types::ndarray<
-      typename __combined<typename E::dtype, typename F::dtype>::type,
-      types::pshape<long>>
+  types::ndarray<typename __combined<typename E::dtype, typename F::dtype>::type,
+                 types::pshape<long>>
   union1d(E const &e, F const &f)
   {
-    std::set<typename __combined<typename E::dtype, typename F::dtype>::type>
-        res;
+    std::set<typename __combined<typename E::dtype, typename F::dtype>::type> res;
     _union1d(e.begin(), e.end(), res, utils::int_<E::value>());
     _union1d(f.begin(), f.end(), res, utils::int_<F::value>());
     return {res};

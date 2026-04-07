@@ -93,9 +93,9 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , BackgroundController(Counters.GetBackgroundControllerCounters())
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
-    , SysLocks(this) {
+    , SysLocks(this)
+    , SpaceWatcher(std::unique_ptr<TSpaceWatcher>(new TSpaceWatcher(this), std::default_delete<TSpaceWatcher>())) {
     AFL_VERIFY(TabletActivityImpl->Inc() == 1);
-    SpaceWatcher = new TSpaceWatcher(this);
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {
@@ -176,15 +176,14 @@ NOlap::TSnapshot TColumnShard::GetMaxReadVersion() const {
     auto plannedTx = ProgressTxController->GetPlannedTx();
     if (plannedTx) {
         // We may only read just before the first transaction in the queue
-        auto maxReadVersion = TRowVersion(plannedTx->Step, plannedTx->TxId).Prev();
-        return NOlap::TSnapshot(maxReadVersion.Step, maxReadVersion.TxId);
+        auto firstPlannedSnapshot = NOlap::TSnapshot(plannedTx->Step, plannedTx->TxId);
+        return firstPlannedSnapshot.GetPreviousSnapshot();
+    } else {
+        // the same snapshot is used by bulk upsert and aborts
+        // aborts are fine, but be careful with bulk upsert,
+        // it must correctly break conflicting serializable txs
+        return GetCurrentSnapshotForInternalModification();
     }
-    ui64 step = LastPlannedStep;
-    if (MediatorTimeCastEntry) {
-        ui64 mediatorStep = MediatorTimeCastEntry->Get(TabletID());
-        step = Max(step, mediatorStep);
-    }
-    return NOlap::TSnapshot(step, Max<ui64>());
 }
 
 ui64 TColumnShard::GetOutdatedStep() const {
@@ -195,19 +194,26 @@ ui64 TColumnShard::GetOutdatedStep() const {
     return step;
 }
 
-NOlap::TSnapshot TColumnShard::GetMinReadSnapshot() const {
+NOlap::TSnapshot TColumnShard::GetMinSnapshotForNewReads() const {
     ui64 delayMillisec = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStaleness().MilliSeconds();
     ui64 passedStep = GetOutdatedStep();
     ui64 minReadStep = (passedStep > delayMillisec ? passedStep - delayMillisec : 0);
-
-    if (auto ssClean = InFlightReadsTracker.GetSnapshotToClean()) {
-        if (ssClean->GetPlanStep() < minReadStep) {
-            Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(ssClean->GetPlanStep()));
-            return *ssClean;
-        }
-    }
     Counters.GetRequestsTracingCounters()->OnDefaultMinSnapshotInstant(TInstant::MilliSeconds(minReadStep));
-    return NOlap::TSnapshot::MaxForPlanStep(minReadStep);
+    return NOlap::TSnapshot(minReadStep, 0);
+}
+
+bool TColumnShard::MayStartScanAt(const NOlap::TSnapshot& snapshot) const {
+    return GetMinSnapshotForNewReads() <= snapshot || InFlightReadsTracker.HasLiveSnapshot(snapshot);
+}
+
+NOlap::TSnapshotHolders TColumnShard::GetSnapshotHolders() const {
+    auto minSnapshotForNewReads = GetMinSnapshotForNewReads();
+    // all snapshots younger than minSnapshotForNewReads may be considered as "potentially in flight".
+    // meaning that at any moment a scan may come with any snapshot in [minScanSnapshot, maxScanSnapshot],
+    // so we will get a live snapshot at that moment.
+    // that is said, we need here only snapshots that are older than minSnapshotForNewReads.
+    auto inFlightTxs = InFlightReadsTracker.GetLiveSnapshots(minSnapshotForNewReads);
+    return NOlap::TSnapshotHolders(minSnapshotForNewReads, std::move(inFlightTxs));
 }
 
 void TColumnShard::UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc) {
@@ -255,6 +261,10 @@ void TColumnShard::RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, 
         }
         case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable: {
             RunMoveTable(body.GetMoveTable(), version, txc);
+            return;
+        }
+        case NKikimrTxColumnShard::TSchemaTxBody::kCopyTable: {
+            RunCopyTable(body.GetCopyTable(), version, txc);
             return;
         }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET: {
@@ -323,7 +333,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     {
         THashSet<NTiers::TExternalStorageId> usedTiers;
-        TTableInfo table(TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId));
+        TTableInfo table({TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId)});
         if (tableProto.HasTtlSettings()) {
             const auto& ttlSettings = tableProto.GetTtlSettings();
             *tableVerProto.MutableTtlSettings() = ttlSettings;
@@ -402,7 +412,7 @@ void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProt
     }
 
     LOG_S_DEBUG("DropTable for pathId: " << pathId << " at tablet " << TabletID());
-    TablesManager.DropTable(*internalPathId, version, db);
+    TablesManager.DropTable(schemeShardLocalPathId, *internalPathId, version, db);
 }
 
 void TColumnShard::RunMoveTable(const NKikimrTxColumnShard::TMoveTable& proto, const NOlap::TSnapshot& /*version*/,
@@ -418,6 +428,13 @@ void TColumnShard::RunMoveTable(const NKikimrTxColumnShard::TMoveTable& proto, c
     TablesManager.MoveTableProgress(db, srcPathId, dstPathId);
 }
 
+void TColumnShard::RunCopyTable(const NKikimrTxColumnShard::TCopyTable& proto, const NOlap::TSnapshot& version,
+                                 NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+    const auto srcPathId = TSchemeShardLocalPathId::FromRawValue(proto.GetSrcPathId());
+    const auto dstPathId = TSchemeShardLocalPathId::FromRawValue(proto.GetDstPathId());
+    TablesManager.CopyTableProgress(db, version, srcPathId, dstPathId);
+}
 
 void TColumnShard::RunAlterStore(const NKikimrTxColumnShard::TAlterStore& proto, const NOlap::TSnapshot& version,
     NTabletFlatExecutor::TTransactionContext& txc) {
@@ -494,7 +511,7 @@ void TColumnShard::SetupCompaction(const std::set<TInternalPathId>& pathIds) {
     if (BackgroundController.GetCompactionsCount()) {
         return;
     }
-    const ui64 priority = TablesManager.GetPrimaryIndexSafe().GetCompactionPriority(DataLocksManager, pathIds, BackgroundController.GetWaitingPriorityOptional());
+    const ui64 priority = TablesManager.GetPrimaryIndexSafe().GetCompactionPriority(pathIds, BackgroundController.GetWaitingPriorityOptional());
     if (priority) {
         BackgroundController.UpdateWaitingPriority(priority);
         if (pathIds.size()) {
@@ -620,31 +637,40 @@ public:
 };
 
 void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard) {
+    if (BackgroundController.GetCompactionsCount()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "skip_start_compaction")("reason", "compaction_in_progress");
+        return;
+    }
     Counters.GetCSCounters().OnSetupCompaction();
     BackgroundController.ResetWaitingPriority();
 
-    auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(DataLocksManager);
-    if (!indexChanges) {
+    auto indexChangesList = TablesManager.MutablePrimaryIndex().StartCompaction(DataLocksManager);
+
+    if (indexChangesList.empty()) {
         LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
         return;
     }
 
-    auto& compaction = *VerifyDynamicCast<NOlap::NCompaction::TGeneralCompactColumnEngineChanges*>(indexChanges.get());
-    compaction.SetActivityFlag(GetTabletActivity());
-    compaction.SetQueueGuard(guard);
-    compaction.Start(*this);
+    const ui64 compactionStageMemoryLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetCompactionStageMemoryLimit() : NOlap::TGlobalLimits::GeneralCompactionMemoryLimit;
+    for (const auto& indexChanges : indexChangesList) {
+        AFL_VERIFY(indexChanges);
+        auto& compaction = *VerifyDynamicCast<NOlap::NCompaction::TGeneralCompactColumnEngineChanges*>(indexChanges.get());
+        compaction.SetActivityFlag(GetTabletActivity());
+        compaction.SetQueueGuard(guard);
+        compaction.Start(*this);
 
-    auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
-    static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
-        NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("COMPACTION", NOlap::TGlobalLimits::GeneralCompactionMemoryLimit);
-    auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
-    NOlap::NDataFetcher::TRequestInput rInput(compaction.GetSwitchedPortions(), actualIndexInfo,
-        NOlap::NBlobOperations::EConsumer::GENERAL_COMPACTION, compaction.GetTaskIdentifier(), processGuard);
-    auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
-    NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
-        std::make_shared<TCompactionExecutor>(
-            TabletID(), SelfId(), indexChanges, actualIndexInfo, Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl),
-        env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+        auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
+        static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
+            NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("COMPACTION", compactionStageMemoryLimit);
+        auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
+        NOlap::NDataFetcher::TRequestInput rInput(compaction.GetSwitchedPortions(), actualIndexInfo,
+            NOlap::NBlobOperations::EConsumer::GENERAL_COMPACTION, compaction.GetTaskIdentifier(), processGuard);
+        auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
+        NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
+            std::make_shared<TCompactionExecutor>(
+                TabletID(), SelfId(), indexChanges, actualIndexInfo, Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl),
+            env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+    }
 }
 
 class TDataAccessorsSubscriberBase: public NOlap::IDataAccessorRequestsSubscriber {
@@ -757,10 +783,11 @@ bool TColumnShard::SetupTtl() {
     }
 
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
+    const ui64 tieringStageMemoryLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringStageMemoryLimit() : 1000000000;
     for (auto&& i : indexChanges) {
         i->Start(*this);
         static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
-            NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("TTL", 1000000000);
+            NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("TTL", tieringStageMemoryLimit);
         auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
         NOlap::NDataFetcher::TRequestInput rInput(
             i->GetPortionsInfo(), actualIndexInfo, NOlap::NBlobOperations::EConsumer::TTL, i->GetTaskIdentifier(), processGuard);
@@ -789,22 +816,23 @@ void TColumnShard::SetupCleanupPortions() {
     }
     if (BackgroundController.IsCleanupPortionsActive()) {
         ACFL_DEBUG("background", "cleanup_portions")("skip_reason", "in_progress");
+        Counters.GetCSCounters().OnSetupCleanupSkippedByInProgress();
         return;
     }
 
-    const NOlap::TSnapshot minReadSnapshot = GetMinReadSnapshot();
-    const auto& pathsToDrop = TablesManager.GetPathsToDrop(minReadSnapshot);
+    const auto snapshotHolders = GetSnapshotHolders();
+    const auto& pathsToDrop = TablesManager.GetPathsToDrop(snapshotHolders);
 
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(minReadSnapshot, pathsToDrop, DataLocksManager);
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(snapshotHolders, pathsToDrop, DataLocksManager);
     if (!changes) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;
     }
     changes->Start(*this);
-
+    const ui64 cleanupPortionsStageMemoryLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetCleanupPortionsStageMemoryLimit() : 1000000000;
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
     static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
-        NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("CLEANUP_PORTIONS", 1000000000);
+        NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("CLEANUP_PORTIONS", cleanupPortionsStageMemoryLimit);
     auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
     NOlap::NDataFetcher::TRequestInput rInput(changes->GetPortionsToAccess(), actualIndexInfo,
         NOlap::NBlobOperations::EConsumer::CLEANUP_PORTIONS, changes->GetTaskIdentifier(), processGuard);
@@ -822,8 +850,9 @@ void TColumnShard::SetupCleanupTables() {
         return;
     }
 
+    const auto snapshotHolders = GetSnapshotHolders();
     THashSet<TInternalPathId> pathIdsEmptyInInsertTable;
-    for (auto&& i : TablesManager.GetPathsToDrop(GetMinReadSnapshot())) {
+    for (auto&& i : TablesManager.GetPathsToDrop(snapshotHolders)) {
         pathIdsEmptyInInsertTable.emplace(i);
     }
 
@@ -980,17 +1009,13 @@ void TColumnShard::Handle(TEvPrivate::TEvGarbageCollectionFinished::TPtr& ev, co
 void TColumnShard::Die(const TActorContext& ctx) {
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "tablet_die");
     AFL_VERIFY(TabletActivityImpl->Dec() == 0);
-    OverloadSubscribers.NotifyAllOverloadSubscribers(SelfId(), TabletID());
     CleanupActors(ctx);
     NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
     UnregisterMediatorTimeCast();
     NYDBTest::TControllers::GetColumnShardController()->OnTabletStopped(*this);
-    if (SpaceWatcherId == TActorId{}) {
-        delete SpaceWatcher;
-        SpaceWatcher = nullptr;
-    } else {
-        Send(SpaceWatcherId, new NActors::TEvents::TEvPoison);
-    }
+    Send(SpaceWatcherId, new NActors::TEvents::TEvPoison);
+    Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
+        std::make_unique<NOverload::TEvOverloadColumnShardDied>(NOverload::TColumnShardInfo{.ColumnShardId = SelfId(), .TabletId = TabletID()}));
     IActor::Die(ctx);
 }
 
@@ -1010,21 +1035,17 @@ void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TAct
 
 void TColumnShard::Handle(TEvTxProcessing::TEvReadSet::TPtr& ev, const TActorContext& ctx) {
     const ui64 txId = ev->Get()->Record.GetTxId();
+    const ui64 tabletDest = ev->Get()->Record.GetTabletProducer();
     if (!GetProgressTxController().GetTxOperatorOptional(txId)) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set_ignored")("proto", ev->Get()->Record.DebugString());
-        Send(MakePipePerNodeCacheID(false),
-            new TEvPipeCache::TEvForward(
-                new TEvTxProcessing::TEvReadSetAck(ev->Get()->Record.GetStep(), txId, TabletID(), ev->Get()->Record.GetTabletProducer(), TabletID(), 0),
-                ev->Get()->Record.GetTabletProducer(), true),
-            IEventHandle::FlagTrackDelivery, txId);
+        TEvWriteCommitSyncTransactionOperator::SendBrokenFlagAck(*this, ev->Get()->Record.GetStep(), txId, tabletDest);
         return;
     }
     auto op = GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSyncTransactionOperator>(txId);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "read_set")("proto", ev->Get()->Record.DebugString())("lock_id", op->GetLockId());
     NKikimrTx::TReadSetData data;
     AFL_VERIFY(data.ParseFromArray(ev->Get()->Record.GetReadSet().data(), ev->Get()->Record.GetReadSet().size()));
-    auto tx = op->CreateReceiveBrokenFlagTx(
-        *this, ev->Get()->Record.GetTabletProducer(), data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT);
+    auto tx = op->CreateReceiveBrokenFlagTx(*this, tabletDest, data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT);
     Execute(tx.release(), ctx);
 }
 
@@ -1229,6 +1250,7 @@ private:
     std::vector<TPortionConstructorV2> Portions;
 
     virtual void DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override {
+        TMemoryProfileGuard mpg("TAccessorsParsingTask::Execute");
         std::vector<std::shared_ptr<NOlap::TPortionDataAccessor>> accessors;
         accessors.reserve(Portions.size());
         for (auto&& i : Portions) {

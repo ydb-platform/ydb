@@ -2,6 +2,9 @@
 #include "formatters_common.h"
 
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_parameters.h>
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/ydb_convert/table_description.h>
@@ -15,6 +18,7 @@
 #include <library/cpp/protobuf/json/proto2json.h>
 
 #include <util/generic/yexception.h>
+#include <util/string/builder.h>
 
 namespace NKikimr {
 namespace NSysView {
@@ -22,6 +26,7 @@ namespace NSysView {
 using namespace NKikimrSchemeOp;
 using namespace Ydb::Table;
 using namespace NYdb;
+namespace NIndexParameters = NKikimr::NOlap::NIndexes::NIndexParameters;
 
 namespace {
     const ui64 defaultSizeToSplit = 2ul << 30; // 2048 Mb
@@ -514,6 +519,9 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
     Stream << "\tINDEX ";
     EscapeName(index.name(), Stream);
     std::optional<KMeansTreeSettings> kMeansTreeSettings;
+    std::optional<FulltextIndexSettings> fulltextIndexSettings;
+    bool isLocalBloomFilter = false;
+    bool isLocalBloomNgramFilter = false;
     switch (index.type_case()) {
         case TableIndex::kGlobalIndex: {
             Stream << " GLOBAL SYNC ON ";
@@ -530,6 +538,30 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         case TableIndex::kGlobalVectorKmeansTreeIndex: {
             Stream << " GLOBAL USING vector_kmeans_tree ON ";
             kMeansTreeSettings = index.global_vector_kmeans_tree_index().vector_settings();
+            break;
+        }
+        case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
+            Stream << " GLOBAL USING fulltext_plain ON ";
+            fulltextIndexSettings = index.global_fulltext_plain_index().fulltext_settings();
+            break;
+        }
+        case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
+            Stream << " GLOBAL USING fulltext_relevance ON ";
+            fulltextIndexSettings = index.global_fulltext_relevance_index().fulltext_settings();
+            break;
+        }
+        case Ydb::Table::TableIndex::kGlobalJsonIndex: {
+            Stream << " GLOBAL USING json ON ";
+            break;
+        }
+        case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
+            Stream << " LOCAL USING bloom_filter ON ";
+            isLocalBloomFilter = true;
+            break;
+        }
+        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
+            Stream << " LOCAL USING bloom_ngram_filter ON ";
+            isLocalBloomNgramFilter = true;
             break;
         }
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
@@ -620,7 +652,103 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             del = ", ";
         }
 
+        if (kMeansTreeSettings->overlap_clusters() != 0) {
+            Stream << del << "overlap_clusters=" << kMeansTreeSettings->overlap_clusters();
+            del = ", ";
+        }
+
+        if (kMeansTreeSettings->overlap_ratio() != 0) {
+            Stream << del << "overlap_ratio=\"" << kMeansTreeSettings->overlap_ratio() << "\"";
+            del = ", ";
+        }
+
         Stream << ")";
+    }
+
+    if (fulltextIndexSettings) {
+        Stream << " WITH (";
+
+        Y_ENSURE(fulltextIndexSettings->columns().size() == 1);
+        auto analyzers = fulltextIndexSettings->columns().at(0).analyzers();
+        Y_ENSURE(analyzers.has_tokenizer());
+        Stream << "tokenizer=";
+        switch (analyzers.tokenizer()) {
+            case Ydb::Table::FulltextIndexSettings_Tokenizer_WHITESPACE:
+                Stream << "whitespace";
+                break;
+            case Ydb::Table::FulltextIndexSettings_Tokenizer_STANDARD:
+                Stream << "standard";
+                break;
+            case Ydb::Table::FulltextIndexSettings_Tokenizer_KEYWORD:
+                Stream << "keyword";
+                break;
+            default:
+                ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::FulltextIndexSettings::Tokenizer");
+        }
+        if (analyzers.has_language()) {
+            Stream << ", language=" << analyzers.language();
+        }
+        if (analyzers.has_use_filter_lowercase()) {
+            Stream << ", use_filter_lowercase=" << (analyzers.use_filter_lowercase() ? "true" : "false");
+        }
+        if (analyzers.has_use_filter_stopwords()) {
+            Stream << ", use_filter_stopwords=" << (analyzers.use_filter_stopwords() ? "true" : "false");
+        }
+        if (analyzers.has_use_filter_ngram()) {
+            Stream << ", use_filter_ngram=" << (analyzers.use_filter_ngram() ? "true" : "false");
+        }
+        if (analyzers.has_use_filter_edge_ngram()) {
+            Stream << ", use_filter_edge_ngram=" << (analyzers.use_filter_edge_ngram() ? "true" : "false");
+        }
+        if (analyzers.has_filter_ngram_min_length()) {
+            Stream << ", filter_ngram_min_length=" << analyzers.filter_ngram_min_length();
+        }
+        if (analyzers.has_filter_ngram_max_length()) {
+            Stream << ", filter_ngram_max_length=" << analyzers.filter_ngram_max_length();
+        }
+        if (analyzers.has_use_filter_length()) {
+            Stream << ", use_filter_length=" << (analyzers.use_filter_length() ? "true" : "false");
+        }
+        if (analyzers.has_filter_length_min()) {
+            Stream << ", filter_length_min=" << analyzers.filter_length_min();
+        }
+        if (analyzers.has_filter_length_max()) {
+            Stream << ", filter_length_max=" << analyzers.filter_length_max();
+        }
+
+        Stream << ")";
+    }
+
+    if (isLocalBloomFilter) {
+        const auto& settings = index.local_bloom_filter_index();
+        if (settings.has_false_positive_probability()) {
+            Stream << " WITH ("
+                   << NIndexParameters::FalsePositiveProbability << "=" << settings.false_positive_probability()
+                   << ")";
+        }
+    }
+
+    if (isLocalBloomNgramFilter) {
+        const auto& settings = index.local_bloom_ngram_filter_index();
+        TStringBuilder with;
+        const char* sep = "";
+        if (settings.ngram_size()) {
+            with << sep << NIndexParameters::NGrammSize << "=" << settings.ngram_size();
+            sep = ", ";
+        }
+
+        if (settings.has_false_positive_probability()) {
+            with << sep << NIndexParameters::FalsePositiveProbability << "=" << settings.false_positive_probability();
+            sep = ", ";
+        }
+
+        if (settings.has_case_sensitive()) {
+            with << sep << NIndexParameters::CaseSensitive << "=" << (settings.case_sensitive() ? "true" : "false");
+        }
+
+        if (!with.empty()) {
+            Stream << " WITH (" << with << ")";
+        }
     }
 }
 
@@ -665,8 +793,20 @@ bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
         }
     }
 
+    TString cacheMode;
+    if (familyDesc.HasColumnCacheMode()) {
+        switch (familyDesc.GetColumnCacheMode()) {
+            case NKikimrSchemeOp::ColumnCacheModeRegular:
+                cacheMode = "regular";
+                break;
+            case NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory:
+                cacheMode = "in_memory";
+                break;
+        }
+    }
+
     if (familyName == "default") {
-        if (!dataName && !compression) {
+        if (!dataName && !compression && !cacheMode) {
             return false;
         }
     }
@@ -685,6 +825,11 @@ bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
 
     if (compression) {
         Stream << del << "COMPRESSION = " << "\"" << compression << "\"";
+        del = ", ";
+    }
+
+    if (cacheMode) {
+        Stream << del << "CACHE_MODE = " << "\"" << cacheMode << "\"";
     }
 
     Stream << ")";
@@ -1001,6 +1146,11 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
         del = ", ";
     }
 
+    if (cdcStream.GetUserSIDs()) {
+        Stream << del << "USER_SIDS = TRUE";
+        del = ", ";
+    }
+
     if (cdcStream.HasAwsRegion() && !cdcStream.GetAwsRegion().empty()) {
         Stream << del << "AWS_REGION = \'" << cdcStream.GetAwsRegion() << "\'";
         del = ", ";
@@ -1034,7 +1184,7 @@ void TCreateTableFormatter::Format(const TString& tablePath, const NKikimrScheme
         }
     }
 
-    if (cdcStream.GetState() == NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan) {
+    if (cdcStream.GetState() == NKikimrSchemeOp::ECdcStreamState::ECdcStreamStateScan || cdcStream.HasScanProgress()) {
         Stream << del << "INITIAL_SCAN = TRUE";
     }
 
@@ -1230,12 +1380,7 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
 
     try {
         for (const auto& column: columns) {
-            const TFamilyDescription* family = nullptr;
-            if (column.second->HasColumnFamilyId()) {
-                family = families.at(column.second->GetColumnFamilyId());
-            }
-
-            FormatAlterColumn(fullPath, *column.second, family);
+            FormatAlterColumn(fullPath, *column.second);
         }
     } catch (const TFormatFail& ex) {
         return TFormatResult(ex.Status, ex.Error);
@@ -1282,16 +1427,46 @@ void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc)
     EscapeName(olapColumnDesc.GetName(), Stream);
     Stream << " " << olapColumnDesc.GetType();
 
-    if (olapColumnDesc.HasColumnFamilyName()) {
-        Stream << " FAMILY ";
-        EscapeName(olapColumnDesc.GetColumnFamilyName(), Stream);
-    }
     if (olapColumnDesc.GetNotNull()) {
         Stream << " NOT NULL";
     }
 
     if (olapColumnDesc.HasStorageId() && !olapColumnDesc.GetStorageId().empty()) {
         ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: STORAGE_ID");
+    }
+
+    if (olapColumnDesc.HasDataAccessorConstructor()) {
+        const auto& dataAccessorConstructor = olapColumnDesc.GetDataAccessorConstructor();
+        if (dataAccessorConstructor.GetClassName() == NArrow::NAccessor::TGlobalConst::DictionaryAccessorName) {
+            Stream << " ENCODING (DICT)";
+        } else if (dataAccessorConstructor.GetClassName() == NArrow::NAccessor::TGlobalConst::PlainDataAccessorName) {
+            Stream << " ENCODING (OFF)";
+        }
+    }
+
+    if (olapColumnDesc.HasSerializer()) {
+        Stream << " COMPRESSION (";
+        auto compression = olapColumnDesc.GetSerializer();
+        if (compression.HasArrowCompression()) {
+            if (compression.GetArrowCompression().HasCodec()) {
+                Stream << "algorithm=";
+                switch (compression.GetArrowCompression().GetCodec()) {
+                    case NKikimrSchemeOp::ColumnCodecPlain:
+                        Stream << "off";
+                        break;
+                    case NKikimrSchemeOp::ColumnCodecLZ4:
+                        Stream << "lz4";
+                        break;
+                    case NKikimrSchemeOp::ColumnCodecZSTD:
+                        Stream << "zstd";
+                        break;
+                }
+            }
+            if (compression.GetArrowCompression().HasLevel()) {
+                Stream << ", level=" << compression.GetArrowCompression().GetLevel();
+            }
+        }
+        Stream << ')';
     }
 }
 
@@ -1458,7 +1633,7 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDataLifeCycle& 
     }
 }
 
-void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKikimrSchemeOp::TOlapColumnDescription& columnDesc, const TFamilyDescription* family) {
+void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKikimrSchemeOp::TOlapColumnDescription& columnDesc) {
     TStringStream paramsStr;
     TString del = "";
 
@@ -1483,7 +1658,8 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
     if (columnDesc.HasDataAccessorConstructor()) {
         const auto& dataAccessorConstructor = columnDesc.GetDataAccessorConstructor();
         if (columnDesc.GetDataAccessorConstructor().HasClassName()
-                && !columnDesc.GetDataAccessorConstructor().GetClassName().empty()) {
+                && !columnDesc.GetDataAccessorConstructor().GetClassName().empty()
+                && columnDesc.GetDataAccessorConstructor().GetClassName() == NArrow::NAccessor::TGlobalConst::SubColumnsDataAccessorName) {
             paramsStr << del;
             EscapeName("DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME", paramsStr);
             paramsStr << "=";
@@ -1557,54 +1733,6 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
         }
     }
 
-    if (columnDesc.HasDictionaryEncoding()) {
-        paramsStr << del;
-        EscapeName("ENCODING.DICTIONARY.ENABLED", paramsStr);
-        paramsStr << "=";
-        EscapeValue(columnDesc.GetDictionaryEncoding().GetEnabled(), paramsStr);
-        del = ", ";
-    }
-
-    if (columnDesc.HasSerializer()) {
-        const auto& serializer = columnDesc.GetSerializer();
-        if (serializer.HasClassName() && !serializer.GetClassName().empty()) {
-            bool hasDiff = false;
-            if (family && serializer.HasArrowCompression()) {
-                const auto& arrowCompression = serializer.GetArrowCompression();
-                if (arrowCompression.HasCodec() && (!family->HasColumnCodec() || arrowCompression.GetCodec() != family->GetColumnCodec())) {
-                    hasDiff = true;
-                }
-                if (arrowCompression.HasLevel() && (!family->HasColumnCodecLevel() || arrowCompression.GetLevel() != family->GetColumnCodecLevel())) {
-                    hasDiff = true;
-                }
-            }
-            if (hasDiff) {
-                paramsStr << del;
-                EscapeName("SERIALIZER.CLASS_NAME", paramsStr);
-                paramsStr << "=";
-                EscapeValue(serializer.GetClassName(), paramsStr);
-                del = ", ";
-                if (serializer.HasArrowCompression()) {
-                    const auto& arrowCompression = serializer.GetArrowCompression();
-                    if (arrowCompression.HasCodec()) {
-                        paramsStr << del;
-                        EscapeName("COMPRESSION.TYPE", paramsStr);
-                        paramsStr << "=";
-                        EscapeValue(NArrow::CompressionToString(arrowCompression.GetCodec()), paramsStr);
-                        del = ", ";
-                    }
-                    if (arrowCompression.HasLevel()) {
-                        paramsStr << del;
-                        EscapeName("COMPRESSION.LEVEL", paramsStr);
-                        paramsStr << "=";
-                        EscapeValue(arrowCompression.GetLevel(), paramsStr);
-                        del = ", ";
-                    }
-                }
-            }
-        }
-    }
-
     TString params = paramsStr.Str();
     if (params.empty()) {
         return;
@@ -1638,7 +1766,7 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
                     TStringBuilder() << "Unsupported number of columns for BLOOM_FILTER index: " << bloomFilter.GetColumnIds().size());
             }
             const auto& columnName = columns.at(bloomFilter.GetColumnIds(0))->GetName();
-            json["column_name"] = columnName;
+            json[NIndexParameters::ColumnName] = columnName;
 
             if (bloomFilter.HasDataExtractor()) {
                 const auto& dataExtractor = bloomFilter.GetDataExtractor();
@@ -1661,7 +1789,7 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
             }
 
             if (bloomFilter.HasFalsePositiveProbability()) {
-                json["false_positive_probability"] = bloomFilter.GetFalsePositiveProbability();
+                json[NIndexParameters::FalsePositiveProbability] = bloomFilter.GetFalsePositiveProbability();
             }
 
             EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);
@@ -1675,7 +1803,7 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
 
             if (maxIndex.HasColumnId()) {
                 const auto& columnName = columns.at(maxIndex.GetColumnId())->GetName();
-                json["column_name"] = columnName;
+                json[NIndexParameters::ColumnName] = columnName;
             } else {
                 ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
                     TStringBuilder() << "ColumnId have to be in MAX index description");
@@ -1707,7 +1835,7 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
 
             if (bloomNGrammFilter.HasColumnId()) {
                 const auto& columnName = columns.at(bloomNGrammFilter.GetColumnId())->GetName();
-                json["column_name"] = columnName;
+                json[NIndexParameters::ColumnName] = columnName;
             } else {
                 ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED,
                     TStringBuilder() << "ColumnId have to be in BLOOM_NGRAMM_FILTER index description");
@@ -1732,20 +1860,17 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
                     json["bits_storage_type"] = bitsStorage.GetClassName();
                 }
             }
-            if (bloomNGrammFilter.HasRecordsCount()) {
-                json["records_count"] = bloomNGrammFilter.GetRecordsCount();
-            }
+
             if (bloomNGrammFilter.HasNGrammSize()) {
-                json["ngramm_size"] = bloomNGrammFilter.GetNGrammSize();
+                json[NIndexParameters::NGrammSize] = bloomNGrammFilter.GetNGrammSize();
             }
-            if (bloomNGrammFilter.HasFilterSizeBytes()) {
-                json["filter_size_bytes"] = bloomNGrammFilter.GetFilterSizeBytes();
+
+            if (bloomNGrammFilter.HasFalsePositiveProbability()) {
+                json[NIndexParameters::FalsePositiveProbability] = bloomNGrammFilter.GetFalsePositiveProbability();
             }
-            if (bloomNGrammFilter.HasHashesCount()) {
-                json["hashes_count"] = bloomNGrammFilter.GetHashesCount();
-            }
+
             if (bloomNGrammFilter.HasCaseSensitive()) {
-                json["case_sensitive"] = bloomNGrammFilter.GetCaseSensitive();
+                json[NIndexParameters::CaseSensitive] = bloomNGrammFilter.GetCaseSensitive();
             }
 
             EscapeValue(NJson::WriteJson(json, /*formatOutput*/ false), Stream);

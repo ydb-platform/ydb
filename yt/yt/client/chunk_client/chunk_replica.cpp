@@ -72,6 +72,7 @@ void ToProto(NProto::TConfirmChunkReplicaInfo* value, TChunkReplicaWithLocation 
 
     value->set_replica(replica.Value_);
     ToProto(value->mutable_location_uuid(), replica.ChunkLocationUuid_);
+    value->set_location_index(ToProto<ui32>(replica.ChunkLocationIndex_));
 }
 
 void FromProto(TChunkReplicaWithLocation* replica, NProto::TConfirmChunkReplicaInfo value)
@@ -80,6 +81,12 @@ void FromProto(TChunkReplicaWithLocation* replica, NProto::TConfirmChunkReplicaI
 
     replica->Value_ = value.replica();
     replica->ChunkLocationUuid_ = FromProto<TChunkLocationUuid>(value.location_uuid());
+    // COMPAT(cherepashka)
+    if (value.has_location_index()) {
+        replica->ChunkLocationIndex_ = FromProto<TChunkLocationIndex>(value.location_index());
+    } else {
+        replica->ChunkLocationIndex_ = InvalidChunkLocationIndex;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -91,6 +98,7 @@ void FormatValue(TStringBuilderBase* builder, TChunkReplicaWithLocation replica,
         builder->AppendFormat("/%v", replica.GetReplicaIndex());
     }
     builder->AppendFormat("@%v", replica.GetChunkLocationUuid());
+    builder->AppendFormat("(%v)", replica.GetChunkLocationIndex());
 }
 
 void FormatValue(TStringBuilderBase* builder, TChunkReplicaWithMedium replica, TStringBuf /*spec*/)

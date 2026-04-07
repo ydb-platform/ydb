@@ -1,9 +1,8 @@
 #include "mkql_wide_filter.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/utils/cast.h>
-
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -20,45 +19,53 @@ protected:
         , Predicate(predicate)
         , FilterByField(GetPasstroughtMap(TComputationNodePtrVector{Predicate}, Items).front())
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
-    {}
+    {
+    }
 
     NYql::NUdf::TUnboxedValue** GetFields(TComputationContext& ctx) const {
         return ctx.WideFields.data() + WideFieldsIndex;
     }
 
-    void PrepareArguments(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    void PrepareArguments(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         auto** fields = GetFields(ctx);
 
         for (auto i = 0U; i < Items.size(); ++i) {
-            if (Predicate == Items[i] || Items[i]->GetDependencesCount() > 0U)
+            if (Predicate == Items[i] || Items[i]->GetDependentsCount() > 0U) {
                 fields[i] = &Items[i]->RefValue(ctx);
-            else
+            } else {
                 fields[i] = output[i];
+            }
         }
     }
 
-    void FillOutputs(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    void FillOutputs(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         auto** fields = GetFields(ctx);
 
-        for (auto i = 0U; i < Items.size(); ++i)
-            if (const auto out = output[i])
-                if (Predicate == Items[i] || Items[i]->GetDependencesCount() > 0U)
+        for (auto i = 0U; i < Items.size(); ++i) {
+            if (const auto out = output[i]) {
+                if (Predicate == Items[i] || Items[i]->GetDependentsCount() > 0U) {
                     *out = *fields[i];
+                }
+            }
+        }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    template<bool ReplaceOriginalGetter = true>
+    template <bool ReplaceOriginalGetter = true>
     Value* GenGetPredicate(const TCodegenContext& ctx,
-        std::conditional_t<ReplaceOriginalGetter, ICodegeneratorInlineWideNode::TGettersList, const ICodegeneratorInlineWideNode::TGettersList>& getters,
-        BasicBlock*& block) const {
-        if (FilterByField)
+                           std::conditional_t<ReplaceOriginalGetter, ICodegeneratorInlineWideNode::TGettersList, const ICodegeneratorInlineWideNode::TGettersList>& getters,
+                           BasicBlock*& block) const {
+        if (FilterByField) {
             return CastInst::Create(Instruction::Trunc, getters[*FilterByField](ctx, block), Type::getInt1Ty(ctx.Codegen.GetContext()), "predicate", block);
+        }
 
-        for (auto i = 0U; i < Items.size(); ++i)
-            if (Predicate == Items[i] || Items[i]->GetDependencesCount() > 0U) {
+        for (auto i = 0U; i < Items.size(); ++i) {
+            if (Predicate == Items[i] || Items[i]->GetDependentsCount() > 0U) {
                 EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getters[i](ctx, block));
-                if constexpr (ReplaceOriginalGetter)
-                    getters[i] = [node=Items[i]](const TCodegenContext& ctx, BasicBlock*& block){ return GetNodeValue(node, ctx, block); };
+                if constexpr (ReplaceOriginalGetter) {
+                    getters[i] = [node = Items[i]](const TCodegenContext& ctx, BasicBlock*& block) { return GetNodeValue(node, ctx, block); };
+                }
             }
+        }
 
         const auto pred = GetNodeValue(Predicate, ctx, block);
         return CastInst::Create(Instruction::Trunc, pred, Type::getInt1Ty(ctx.Codegen.GetContext()), "predicate", block);
@@ -73,22 +80,25 @@ protected:
     const ui32 WideFieldsIndex;
 };
 
-class TWideFilterWrapper : public TStatelessWideFlowCodegeneratorNode<TWideFilterWrapper>,  public TBaseWideFilterWrapper {
-using TBaseComputation = TStatelessWideFlowCodegeneratorNode<TWideFilterWrapper>;
+class TWideFilterWrapper: public TStatelessWideFlowCodegeneratorNode<TWideFilterWrapper>, public TBaseWideFilterWrapper {
+    using TBaseComputation = TStatelessWideFlowCodegeneratorNode<TWideFilterWrapper>;
+
 public:
     TWideFilterWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* predicate)
         : TBaseComputation(flow)
         , TBaseWideFilterWrapper(mutables, flow, std::move(items), predicate)
-    {}
+    {
+    }
 
-    EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         auto** fields = GetFields(ctx);
 
         while (true) {
             PrepareArguments(ctx, output);
 
-            if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
+            if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result) {
                 return result;
+            }
 
             if (Predicate->GetValue(ctx).Get<bool>()) {
                 FillOutputs(ctx, output);
@@ -134,29 +144,32 @@ private:
     }
 };
 
-class TWideFilterWithLimitWrapper : public TStatefulWideFlowCodegeneratorNode<TWideFilterWithLimitWrapper>,  public TBaseWideFilterWrapper {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideFilterWithLimitWrapper>;
+class TWideFilterWithLimitWrapper: public TStatefulWideFlowCodegeneratorNode<TWideFilterWithLimitWrapper>, public TBaseWideFilterWrapper {
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideFilterWithLimitWrapper>;
+
 public:
     TWideFilterWithLimitWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* limit,
-            TComputationExternalNodePtrVector&& items, IComputationNode* predicate)
+                                TComputationExternalNodePtrVector&& items, IComputationNode* predicate)
         : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
         , TBaseWideFilterWrapper(mutables, flow, std::move(items), predicate)
         , Limit(limit)
-    {}
+    {
+    }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (state.IsInvalid()) {
             state = Limit->GetValue(ctx);
         } else if (!state.Get<ui64>()) {
             return EFetchResult::Finish;
         }
 
-        auto **fields = GetFields(ctx);
+        auto** fields = GetFields(ctx);
         while (true) {
             PrepareArguments(ctx, output);
 
-            if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
+            if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result) {
                 return result;
+            }
 
             if (Predicate->GetValue(ctx).Get<bool>()) {
                 FillOutputs(ctx, output);
@@ -237,31 +250,35 @@ private:
     IComputationNode* const Limit;
 };
 
-template<bool Inclusive>
-class TWideTakeWhileWrapper : public TStatefulWideFlowCodegeneratorNode<TWideTakeWhileWrapper<Inclusive>>,  public TBaseWideFilterWrapper {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideTakeWhileWrapper<Inclusive>>;
+template <bool Inclusive>
+class TWideTakeWhileWrapper: public TStatefulWideFlowCodegeneratorNode<TWideTakeWhileWrapper<Inclusive>>, public TBaseWideFilterWrapper {
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideTakeWhileWrapper<Inclusive>>;
+
 public:
-     TWideTakeWhileWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items,
-            IComputationNode* predicate)
+    TWideTakeWhileWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items,
+                          IComputationNode* predicate)
         : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
         , TBaseWideFilterWrapper(mutables, flow, std::move(items), predicate)
-    {}
+    {
+    }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (!state.IsInvalid()) {
             return EFetchResult::Finish;
         }
 
         PrepareArguments(ctx, output);
 
-        auto **fields = GetFields(ctx);
+        auto** fields = GetFields(ctx);
 
-        if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
+        if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result) {
             return result;
+        }
 
         const bool predicate = Predicate->GetValue(ctx).Get<bool>();
-        if (!predicate)
+        if (!predicate) {
             state = NUdf::TUnboxedValuePod();
+        }
 
         if (Inclusive || predicate) {
             FillOutputs(ctx, output);
@@ -301,7 +318,7 @@ public:
         block = stop;
 
         new StoreInst(GetEmpty(context), statePtr, block);
-        result->addIncoming(ConstantInt::get(resultType, static_cast<i32>(Inclusive ? EFetchResult::One: EFetchResult::Finish)), block);
+        result->addIncoming(ConstantInt::get(resultType, static_cast<i32>(Inclusive ? EFetchResult::One : EFetchResult::Finish)), block);
 
         BranchInst::Create(done, block);
 
@@ -318,33 +335,36 @@ private:
     }
 };
 
-template<bool Inclusive>
-class TWideSkipWhileWrapper : public TStatefulWideFlowCodegeneratorNode<TWideSkipWhileWrapper<Inclusive>>,  public TBaseWideFilterWrapper {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideSkipWhileWrapper<Inclusive>>;
+template <bool Inclusive>
+class TWideSkipWhileWrapper: public TStatefulWideFlowCodegeneratorNode<TWideSkipWhileWrapper<Inclusive>>, public TBaseWideFilterWrapper {
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideSkipWhileWrapper<Inclusive>>;
+
 public:
-     TWideSkipWhileWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* predicate)
+    TWideSkipWhileWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* predicate)
         : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
         , TBaseWideFilterWrapper(mutables, flow, std::move(items), predicate)
-    {}
+    {
+    }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (!state.IsInvalid()) {
             return Flow->FetchValues(ctx, output);
         }
 
-        auto **fields = GetFields(ctx);
+        auto** fields = GetFields(ctx);
 
         do {
             PrepareArguments(ctx, output);
-            if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
+            if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result) {
                 return result;
+            }
         } while (Predicate->GetValue(ctx).Get<bool>());
 
         state = NUdf::TUnboxedValuePod();
 
-        if constexpr (Inclusive)
+        if constexpr (Inclusive) {
             return Flow->FetchValues(ctx, output);
-        else {
+        } else {
             FillOutputs(ctx, output);
             return EFetchResult::One;
         }
@@ -394,7 +414,7 @@ private:
     }
 };
 
-template<bool TakeOrSkip, bool Inclusive>
+template <bool TakeOrSkip, bool Inclusive>
 IComputationNode* WrapWideWhile(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     const auto width = GetWideComponentsCount(AS_TYPE(TFlowType, callable.GetType()->GetReturnType()));
     MKQL_ENSURE(callable.GetInputsCount() == width + 2U, "Expected 3 or more args.");
@@ -405,7 +425,7 @@ IComputationNode* WrapWideWhile(TCallable& callable, const TComputationNodeFacto
     TComputationExternalNodePtrVector args;
     args.reserve(width);
     ui32 index = 0U;
-    std::generate_n(std::back_inserter(args), width, [&](){ return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
+    std::generate_n(std::back_inserter(args), width, [&]() { return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
 
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
         if constexpr (TakeOrSkip) {
@@ -418,7 +438,7 @@ IComputationNode* WrapWideWhile(TCallable& callable, const TComputationNodeFacto
     THROW yexception() << "Expected wide flow.";
 }
 
-}
+} // namespace
 
 IComputationNode* WrapWideFilter(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     const auto width = GetWideComponentsCount(AS_TYPE(TFlowType, callable.GetType()->GetReturnType()));
@@ -429,7 +449,7 @@ IComputationNode* WrapWideFilter(TCallable& callable, const TComputationNodeFact
     TComputationExternalNodePtrVector args;
     args.reserve(width);
     ui32 index = 0U;
-    std::generate_n(std::back_inserter(args), width, [&](){ return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
+    std::generate_n(std::back_inserter(args), width, [&]() { return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
 
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
         if (const auto last = callable.GetInputsCount() - 1U; last == width + 1U) {
@@ -459,6 +479,5 @@ IComputationNode* WrapWideSkipWhileInclusive(TCallable& callable, const TComputa
     return WrapWideWhile<false, true>(callable, ctx);
 }
 
-
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

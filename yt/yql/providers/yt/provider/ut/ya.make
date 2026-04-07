@@ -8,6 +8,7 @@ SRCS(
     yql_yt_dq_integration_ut.cpp
     yql_yt_epoch_ut.cpp
     yql_yt_cbo_ut.cpp
+    yql_lineage_ut.cpp
 )
 
 PEERDIR(

@@ -4,8 +4,16 @@
 
 namespace NYql::NFmr {
 
-NProto::TTableDataServiceGroupDeletionRequest TTableDataServiceGroupDeletionRequestToProto(const std::vector<TString>& groups);
+NProto::TTableDataServicePutResponse TableDataServicePutResponseToProto(bool putResponse);
 
-std::vector<TString> TTableDataServiceGroupDeletionRequestFromProto(const NProto::TTableDataServiceGroupDeletionRequest& protoRequest);
+bool TableDataServicePutResponseFromProto(const NProto::TTableDataServicePutResponse& protoPutResponse);
+
+NProto::TTableDataServiceGetResponse TableDataServiceGetResponseToProto(const TMaybe<TString>& getResponse);
+
+TMaybe<TString> TableDataServiceGetResponseFromProto(const NProto::TTableDataServiceGetResponse& protoGetResponse);
+
+NProto::TTableDataServiceGroupDeletionRequest TableDataServiceGroupDeletionRequestToProto(const std::vector<TString>& groups);
+
+std::vector<TString> TableDataServiceGroupDeletionRequestFromProto(const NProto::TTableDataServiceGroupDeletionRequest& protoRequest);
 
 } // namespace NYql::NFmr

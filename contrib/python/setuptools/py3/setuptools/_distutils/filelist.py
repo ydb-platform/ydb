@@ -4,10 +4,14 @@ Provides the FileList class, used for poking about the filesystem
 and building lists of files.
 """
 
+from __future__ import annotations
+
 import fnmatch
 import functools
 import os
 import re
+from collections.abc import Iterable
+from typing import Literal, overload
 
 from ._log import log
 from .errors import DistutilsInternalError, DistutilsTemplateError
@@ -29,19 +33,19 @@ class FileList:
         filtering applied)
     """
 
-    def __init__(self, warn=None, debug_print=None):
+    def __init__(self, warn: object = None, debug_print: object = None) -> None:
         # ignore argument to FileList, but keep them for backwards
         # compatibility
-        self.allfiles = None
-        self.files = []
+        self.allfiles: Iterable[str] | None = None
+        self.files: list[str] = []
 
-    def set_allfiles(self, allfiles):
+    def set_allfiles(self, allfiles: Iterable[str]) -> None:
         self.allfiles = allfiles
 
-    def findall(self, dir=os.curdir):
+    def findall(self, dir: str | os.PathLike[str] = os.curdir) -> None:
         self.allfiles = findall(dir)
 
-    def debug_print(self, msg):
+    def debug_print(self, msg: object) -> None:
         """Print 'msg' to stdout if the global DEBUG (taken from the
         DISTUTILS_DEBUG environment variable) flag is true.
         """
@@ -52,13 +56,13 @@ class FileList:
 
     # Collection methods
 
-    def append(self, item):
+    def append(self, item: str) -> None:
         self.files.append(item)
 
-    def extend(self, items):
+    def extend(self, items: Iterable[str]) -> None:
         self.files.extend(items)
 
-    def sort(self):
+    def sort(self) -> None:
         # Not a strict lexical sort!
         sortable_files = sorted(map(os.path.split, self.files))
         self.files = []
@@ -67,7 +71,7 @@ class FileList:
 
     # Other miscellaneous utility methods
 
-    def remove_duplicates(self):
+    def remove_duplicates(self) -> None:
         # Assumes list has been sorted!
         for i in range(len(self.files) - 1, 0, -1):
             if self.files[i] == self.files[i - 1]:
@@ -105,7 +109,7 @@ class FileList:
 
         return (action, patterns, dir, dir_pattern)
 
-    def process_template_line(self, line):  # noqa: C901
+    def process_template_line(self, line: str) -> None:  # noqa: C901
         # Parse the line: split it up, make sure the right number of words
         # is there, and return the relevant words.  'action' is always
         # defined: it's the first word of the line.  Which of the other
@@ -193,8 +197,38 @@ class FileList:
             )
 
     # Filtering/selection methods
-
-    def include_pattern(self, pattern, anchor=True, prefix=None, is_regex=False):
+    @overload
+    def include_pattern(
+        self,
+        pattern: str,
+        anchor: bool = True,
+        prefix: str | None = None,
+        is_regex: Literal[False] = False,
+    ) -> bool: ...
+    @overload
+    def include_pattern(
+        self,
+        pattern: str | re.Pattern[str],
+        anchor: bool = True,
+        prefix: str | None = None,
+        *,
+        is_regex: Literal[True],
+    ) -> bool: ...
+    @overload
+    def include_pattern(
+        self,
+        pattern: str | re.Pattern[str],
+        anchor: bool,
+        prefix: str | None,
+        is_regex: Literal[True],
+    ) -> bool: ...
+    def include_pattern(
+        self,
+        pattern: str | re.Pattern,
+        anchor: bool = True,
+        prefix: str | None = None,
+        is_regex: bool = False,
+    ) -> bool:
         """Select strings (presumably filenames) from 'self.files' that
         match 'pattern', a Unix-style wildcard (glob) pattern.  Patterns
         are not quite the same as implemented by the 'fnmatch' module: '*'
@@ -235,7 +269,38 @@ class FileList:
                 files_found = True
         return files_found
 
-    def exclude_pattern(self, pattern, anchor=True, prefix=None, is_regex=False):
+    @overload
+    def exclude_pattern(
+        self,
+        pattern: str,
+        anchor: bool = True,
+        prefix: str | None = None,
+        is_regex: Literal[False] = False,
+    ) -> bool: ...
+    @overload
+    def exclude_pattern(
+        self,
+        pattern: str | re.Pattern[str],
+        anchor: bool = True,
+        prefix: str | None = None,
+        *,
+        is_regex: Literal[True],
+    ) -> bool: ...
+    @overload
+    def exclude_pattern(
+        self,
+        pattern: str | re.Pattern[str],
+        anchor: bool,
+        prefix: str | None,
+        is_regex: Literal[True],
+    ) -> bool: ...
+    def exclude_pattern(
+        self,
+        pattern: str | re.Pattern,
+        anchor: bool = True,
+        prefix: str | None = None,
+        is_regex: bool = False,
+    ) -> bool:
         """Remove strings (presumably filenames) from 'files' that match
         'pattern'.  Other parameters are the same as for
         'include_pattern()', above.
@@ -294,7 +359,7 @@ class _UniqueDirs(set):
         return filter(cls(), items)
 
 
-def findall(dir=os.curdir):
+def findall(dir: str | os.PathLike[str] = os.curdir):
     """
     Find all files under 'dir' and return the list of full filenames.
     Unless dir is '.', return full filenames with dir prepended.

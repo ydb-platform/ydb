@@ -39,10 +39,11 @@ inline ui32 EntropyFromId(TObjectId id)
     return id.Parts32[0];
 }
 
+// TODO(h0pless): Replace TVersion with TLogicalVersion.
 inline NHydra::TVersion VersionFromId(TObjectId id)
 {
     YT_ASSERT(!IsSequoiaId(id));
-    return NHydra::TVersion::FromRevision(RevisionFromId(id));
+    return NHydra::TLogicalVersion::FromRevision(RevisionFromId(id));
 }
 
 inline NTransactionClient::TTimestamp TimestampFromId(TObjectId id)

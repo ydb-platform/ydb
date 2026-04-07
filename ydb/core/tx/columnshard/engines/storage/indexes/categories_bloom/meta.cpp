@@ -89,8 +89,9 @@ public:
     }
 };
 
-std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*recordsCount*/) const {
-    std::vector<std::shared_ptr<IPortionDataChunk>> result;
+std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
+    TChunkedBatchReader& reader, const ui32 /*recordsCount*/) const {
+    std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> result;
     ui32 chunkIdx = 0;
     for (reader.Start(); reader.IsCorrect(); reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount())) {
         std::deque<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> dataOwners;
@@ -117,11 +118,15 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TCh
                         NArrow::NHash::TXX64::CalcForAll(arr, i, pred);
                     }
                 },
-                [&](const std::string_view data, const ui64 hashBase) {
+                [&](const NArrow::NAccessor::TBinaryJsonValueView& data, const ui64 hashBase) {
+                    auto view = data.GetScalarOptional();
+                    if (!view.has_value()) {
+                        return;
+                    }
                     auto& filterBits = filtersBuilder.MutableFilter(hashBase);
                     const ui32 size = filterBits.Size();
                     for (ui64 i = 0; i < HashesCount; ++i) {
-                        const ui64 hash = NArrow::NHash::TXX64::CalcSimple(data, i);
+                        const ui64 hash = NArrow::NHash::TXX64::CalcSimple(view.value(), i);
                         filterBits.Set(hash % size);
                     }
                 });
@@ -131,7 +136,7 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TCh
         std::vector<TString> filterDescriptions;
         ui32 filtersSumSize = 0;
         for (auto&& i : filtersBuilder.MutableBuilders()) {
-            filterDescriptions.emplace_back(GetBitsStorageConstructor()->Build(std::move(i.MutableFilter()))->SerializeToString());
+            filterDescriptions.emplace_back(GetBitsStorageConstructor()->SerializeToString(std::move(i.MutableFilter())));
             filtersSumSize += filterDescriptions.back().size();
             auto* category = protoDescription.AddCategories();
             category->SetFilterSize(filterDescriptions.back().size());
@@ -172,8 +177,8 @@ TConclusion<std::shared_ptr<IIndexHeader>> TIndexMeta::DoBuildHeader(const TChun
     return std::make_shared<TCompositeBloomHeader>(std::move(proto), IIndexHeader::ReadHeaderSize(data.GetDataVerified(), true).DetachResult());
 }
 
-bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-    const NArrow::NSSA::TIndexCheckOperation& op) const {
+bool TIndexMeta::DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+    const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const {
     AFL_VERIFY(!!category);
     AFL_VERIFY(op.GetOperation() == EOperation::Equals)("op", op.DebugString());
     AFL_VERIFY(op.GetCaseSensitive());
@@ -208,7 +213,8 @@ bool TIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescrip
             return false;
         }
     }
-    FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
+    FalsePositiveProbability = bFilter.HasFalsePositiveProbability() ? bFilter.GetFalsePositiveProbability()
+                                                                     : NDefaults::FalsePositiveProbability;
     for (auto&& i : bFilter.GetColumnIds()) {
         AddColumnId(i);
     }

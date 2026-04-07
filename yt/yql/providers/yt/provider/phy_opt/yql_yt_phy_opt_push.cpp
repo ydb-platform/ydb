@@ -30,7 +30,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushMergeLimitToInput(T
         return node;
     }
 
-    if (AnyOf(section.Paths(), [](const TYtPath& path) { return !path.Ranges().Maybe<TCoVoid>().IsValid(); })) {
+    if (AnyOf(section.Paths(), [](const TYtPath& path) { return !path.Ranges().Maybe<TCoVoid>().IsValid() || !path.QLFilter().Maybe<TCoVoid>().IsValid(); })) {
         return node;
     }
 
@@ -381,7 +381,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushDownYtMapOverSorted
         return node;
     }
     auto path = section.Paths().Item(0);
-    if (!path.Columns().Maybe<TCoVoid>() || !path.Ranges().Maybe<TCoVoid>()) {
+    if (!path.Columns().Maybe<TCoVoid>() || !path.Ranges().Maybe<TCoVoid>() || !path.QLFilter().Maybe<TCoVoid>()) {
         return node;
     }
     auto maybeMerge = path.Table().Maybe<TYtOutput>().Operation().Maybe<TYtMerge>();
@@ -450,6 +450,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushDownYtMapOverSorted
             .Columns<TCoVoid>().Build()
             .Ranges<TCoVoid>().Build()
             .Stat<TCoVoid>().Build()
+            .QLFilter<TCoVoid>().Build()
             .Done();
         paths.push_back(std::move(newPath));
     }

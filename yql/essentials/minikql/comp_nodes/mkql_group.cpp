@@ -17,9 +17,9 @@ template <bool WithHandler>
 class TGroupingCoreWrapper: public TMutableComputationNode<TGroupingCoreWrapper<WithHandler>> {
     using TSelf = TGroupingCoreWrapper;
     typedef TMutableComputationNode<TSelf> TBaseComputation;
-public:
 
-    class TSplitStreamValue : public TComputationValue<TSplitStreamValue> {
+public:
+    class TSplitStreamValue: public TComputationValue<TSplitStreamValue> {
     public:
         using TBase = TComputationValue<TSplitStreamValue>;
 
@@ -115,7 +115,7 @@ public:
         NUdf::TUnboxedValue Value;
     };
 
-    class TGroupStreamValue : public TComputationValue<TGroupStreamValue> {
+    class TGroupStreamValue: public TComputationValue<TGroupStreamValue> {
     public:
         using TBase = TComputationValue<TGroupStreamValue>;
 
@@ -150,14 +150,14 @@ public:
     };
 
     TGroupingCoreWrapper(TComputationMutables& mutables,
-        IComputationNode* stream,
-        IComputationExternalNode* keyExtractorItem,
-        IComputationNode* keyExtractorResult,
-        IComputationExternalNode* groupSwitchKey,
-        IComputationExternalNode* groupSwitchItem,
-        IComputationNode* groupSwitchResult,
-        IComputationExternalNode* handlerItem,
-        IComputationNode* handlerResult)
+                         IComputationNode* stream,
+                         IComputationExternalNode* keyExtractorItem,
+                         IComputationNode* keyExtractorResult,
+                         IComputationExternalNode* groupSwitchKey,
+                         IComputationExternalNode* groupSwitchItem,
+                         IComputationNode* groupSwitchResult,
+                         IComputationExternalNode* handlerItem,
+                         IComputationNode* handlerResult)
         : TBaseComputation(mutables)
         , Stream(stream)
         , KeyExtractorItemNode(keyExtractorItem)
@@ -200,7 +200,7 @@ private:
     IComputationNode* const HandlerResultNode;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapGroupingCore(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 6 || callable.GetInputsCount() == 8, "Expected 6 or 8 args");
@@ -239,5 +239,5 @@ IComputationNode* WrapGroupingCore(TCallable& callable, const TComputationNodeFa
         nullptr);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

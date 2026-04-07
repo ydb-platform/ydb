@@ -11,6 +11,7 @@ PEERDIR(
 
 SRCS(
     align.h
+    blob_header_mode.h
     blobstorage_cost_tracker.cpp
     blobstorage_dblogcutter.cpp
     blobstorage_dblogcutter.h
@@ -44,7 +45,10 @@ SRCS(
     vdisk_hulllogctx.h
     vdisk_log.cpp
     vdisk_log.h
+    vdisk_log_context.cpp
+    vdisk_log_context.h
     vdisk_lsnmngr.h
+    vdisk_events_quoter.h
     vdisk_mon.h
     vdisk_mongroups.cpp
     vdisk_mongroups.h

@@ -161,7 +161,7 @@ protected:
     TCompactVector<std::string, 4> ResponseInfos_;
 
     NCompression::ECodec ResponseCodec_ = NCompression::ECodec::None;
-    // COMPAT(danilalexeev)
+    // COMPAT(danilalexeev): legacy RPC codecs
     bool ResponseBodySerializedWithCompression_ = false;
 
     TSingleShotCallbackList<void()> RepliedList_;

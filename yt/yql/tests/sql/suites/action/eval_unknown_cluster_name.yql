@@ -1,0 +1,7 @@
+/* ytfile can not */
+/* custom error: Unknown cluster: bad_cluster */
+
+$bad_cluster = "bad_cluster";
+USE yt:$bad_cluster;
+
+SELECT * FROM Input;

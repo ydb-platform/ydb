@@ -1,4 +1,5 @@
 PRAGMA SeqMode;
+PRAGMA config.flags('DisableEarlyExpandSeq');
 
 DEFINE SUBQUERY $a() AS
     $r = (

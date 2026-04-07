@@ -7,6 +7,7 @@
 #include "flat_sausage_slicer.h"
 #include "flat_executor_gclogic.h"
 #include "flat_executor_counters.h"
+#include "flat_executor_backup.h"
 #include "util_fmt_abort.h"
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/tablet.h>
@@ -56,6 +57,83 @@ namespace NTabletFlatExecutor {
         using TGcLogic = TExecutorGCLogic;
         using TEvCommit = TEvTablet::TEvCommit;
 
+        class TBackupLogic {
+        public:
+            void Start(IOps *ops, TActorId owner, TActorId changelogWriter, ui64 inFlightBytesLimit) {
+                Ops = ops;
+                Owner = owner;
+                Writer = changelogWriter;
+                InFlightBytesLimit = inFlightBytesLimit;
+                Running = true;
+            }
+
+            void Stop() {
+                if (Running) {
+                    Ops->Send(Writer, new TEvents::TEvPoisonPill);
+                }
+                *this = TBackupLogic();
+            }
+
+            bool IsRunning() const {
+                return Running;
+            }
+
+            bool ShouldBackupCommit(const TLogCommit &commit) const {
+                if (!Running) {
+                    return false;
+                }
+
+                if (InFlightOverflow) {
+                    return false;
+                }
+
+                return commit.Type == ECommit::Redo;
+            }
+
+            void BackupCommit(const TLogCommit &commit) {
+                if (!ShouldBackupCommit(commit)) {
+                    return;
+                }
+
+                auto ev = MakeHolder<NBackup::TEvWriteChangelog>(commit.Step, commit.Embedded, commit.Refs);
+                ui64 evSize = ev->GetTotalSize();
+                if (evSize <= InFlightBytesLimit - InFlightBytes) {
+                    InFlightBytes += evSize;
+                    Ops->Send(Writer, ev.Release());
+                } else {
+                    InFlightOverflow = true;
+                    auto error = TStringBuilder()
+                        << "Backup changelog in flight bytes limit exceeded: "
+                        << "InFlightBytes# " << InFlightBytes << ", "
+                        << "evSize# " << evSize << ", "
+                        << "InFlightBytesLimit# " << InFlightBytesLimit;
+                    TActivationContext::Send(new IEventHandle(Owner, Writer, new NBackup::TEvChangelogFailed(error)));
+                }
+            }
+
+            void OnProcessedBytes(ui64 bytes) {
+                Y_ENSURE(InFlightBytes >= bytes);
+                InFlightBytes -= bytes;
+            }
+
+            void OnSnapshotCompleted(NBackup::TEvSnapshotCompleted::TPtr& ev) {
+                Ops->Send(Writer, ev->ReleaseBase().Release());
+            }
+
+            TActorId GetWriter() const {
+                return Writer;
+            }
+
+        private:
+            IOps* Ops = nullptr;
+            TActorId Owner;
+            TActorId Writer;
+            bool Running = false;
+            ui64 InFlightBytes = 0;
+            ui64 InFlightBytesLimit = Max<ui64>();
+            bool InFlightOverflow = false;
+        };
+
         TCommitManager(NBoot::TSteppedCookieAllocatorFactory &steppedCookieAllocatorFactory, TIntrusivePtr<NSnap::TWaste> waste, TGcLogic *logic)
             : Tablet(steppedCookieAllocatorFactory.Tablet)
             , Gen(steppedCookieAllocatorFactory.Gen)
@@ -86,6 +164,12 @@ namespace NTabletFlatExecutor {
             MonCo = monCo;
 
             *Step0 = Head = Tail = 1;
+        }
+
+        void Stop()
+        {
+            Y_ENSURE(Ops, "Commit manager is not started");
+            BackupLogic.Stop();
         }
 
         void SetTactic(ETactic tactic) noexcept { Tactic = tactic; }
@@ -165,6 +249,8 @@ namespace NTabletFlatExecutor {
 
         void SendCommitEv(TLogCommit &commit)
         {
+            BackupLogic.BackupCommit(commit);
+
             const bool snap = (commit.Type == ECommit::Snap);
 
             auto *ev = new TEvCommit(Tablet, Gen, commit.Step, { commit.Step - 1 }, snap);
@@ -198,10 +284,10 @@ namespace NTabletFlatExecutor {
         TGcLogic * const GcLogic = nullptr;
         TMonCo * MonCo = nullptr;
         TAutoPtr<NPageCollection::TSteppedCookieAllocator> Turns_;
-
     public:
         TAutoPtr<NPageCollection::TSteppedCookieAllocator> Annex;
         NPageCollection::TSlicer Turns;
+        TBackupLogic BackupLogic;
     };
 
 }

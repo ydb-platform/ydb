@@ -4,7 +4,7 @@
 #include "events.h"
 
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
@@ -24,6 +24,7 @@ namespace NKikimr::NDataStreams::V1 {
         TString Key;
         TString ExplicitHash;
         TString Ip;
+        TString ChoosePartitionKey;
     };
 
     TString GetSerializedData(const TPutRecordsItem& item) {
@@ -108,6 +109,7 @@ namespace NKikimr::NDataStreams::V1 {
                 w->SetData(GetSerializedData(item));
                 w->SetPartitionKey(item.Key);
                 w->SetExplicitHash(item.ExplicitHash);
+                w->SetChoosePartitionKey(item.ChoosePartitionKey);
                 w->SetDisableDeduplication(true);
                 w->SetCreateTimeMS(TInstant::Now().MilliSeconds());
                 w->SetUncompressedSize(item.Data.size());
@@ -312,7 +314,7 @@ namespace NKikimr::NDataStreams::V1 {
         entry.Path = NKikimr::SplitPath(this->GetTopicPath());
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
         entry.SyncVersion = true;
-        schemeCacheRequest->DatabaseName = CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
+        schemeCacheRequest->DatabaseName = this->Request_->GetDatabaseName().GetOrElse("");
         schemeCacheRequest->ResultSet.emplace_back(entry);
         ctx.Send(MakeSchemeCacheID(), MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
     }
@@ -450,7 +452,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         TString hashKey = NPQ::AsKeyBound(GetHashKey(record));
         auto* partition = chooser->GetPartition(hashKey);
-        items[partition->PartitionId].push_back(TPutRecordsItem{record.data(), record.partition_key(), record.explicit_hash_key(), Ip});
+        items[partition->PartitionId].push_back(TPutRecordsItem{record.data(), record.partition_key(), record.explicit_hash_key(), Ip, hashKey});
         PartitionToActor[partition->PartitionId].RecordIndexes.push_back(index);
     }
 

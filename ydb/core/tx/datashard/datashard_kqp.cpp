@@ -267,7 +267,7 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLoc
         auto lock = sysLocks.GetLock(lockKey);
         if (lock.Generation != lockProto.GetGeneration() || lock.Counter != lockProto.GetCounter()) {
             LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "ValidateLocks: broken lock " << lockProto.GetLockId() << " expected " << lockProto.GetGeneration() << ":" << lockProto.GetCounter() << " found " << lock.Generation << ":" << lock.Counter);
-            brokenLocks.push_back(lockProto);
+            brokenLocks.emplace_back(lockProto);
         }
     }
 
@@ -825,7 +825,6 @@ void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, T
     }
 
     if (NeedCommitLocks(kqpLocks->GetOp())) {
-        // We assume locks have been validated earlier
         for (const auto& lockProto : kqpLocks->GetLocks()) {
             if (lockProto.GetDataShard() != origin) {
                 continue;

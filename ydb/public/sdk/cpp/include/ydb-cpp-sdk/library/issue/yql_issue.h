@@ -3,7 +3,6 @@
 #include <util/generic/ptr.h>
 #include <util/generic/yexception.h>
 #include <util/stream/output.h>
-#include <util/stream/str.h>
 #include <util/system/types.h>
 #include <util/str_stl.h>
 
@@ -183,11 +182,7 @@ public:
 
     void PrintTo(IOutputStream& out, bool oneLine = false) const;
 
-    std::string ToString(bool oneLine = false) const {
-        TStringStream out;
-        PrintTo(out, oneLine);
-        return out.Str();
-    }
+    std::string ToString(bool oneLine = false) const;
 
     // Unsafe method. Doesn't call SanitizeNonAscii(Message)
     std::string* MutableMessage() {
@@ -295,11 +290,7 @@ public:
             const std::string& programFilename,
             const std::string& programText) const;
 
-    inline std::string ToString(bool oneLine = false) const {
-        TStringStream out;
-        PrintTo(out, oneLine);
-        return out.Str();
-    }
+    std::string ToString(bool oneLine = false) const;
 
     std::string ToOneLineString() const {
         return ToString(true);

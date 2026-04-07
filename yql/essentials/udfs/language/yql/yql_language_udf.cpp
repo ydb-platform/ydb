@@ -8,7 +8,7 @@
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
-#include <yql/essentials/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <library/cpp/protobuf/util/simple_reflection.h>
@@ -19,17 +19,17 @@ using namespace NSQLTranslation;
 using namespace NSQLTranslationV1;
 using namespace NSQLv1Generated;
 
-class TRuleFreqTranslation : public TSqlTranslation
-{
+class TRuleFreqTranslation: public TSqlTranslation {
 public:
-    TRuleFreqTranslation(TContext& ctx)
+    explicit TRuleFreqTranslation(TContext& ctx)
         : TSqlTranslation(ctx, ctx.Settings.Mode)
-    {}
+    {
+    }
 };
 
 class TRuleFreqVisitor {
 public:
-    TRuleFreqVisitor(TContext& ctx)
+    explicit TRuleFreqVisitor(TContext& ctx)
         : Translation_(ctx)
     {
         KeywordNames_ = NSQLReflect::LoadLexerGrammar().KeywordNames;
@@ -75,7 +75,6 @@ public:
                 continue;
             }
 
-
             Freqs_[std::make_pair(fullName, fieldFullName)] += 1;
         }
 
@@ -106,49 +105,54 @@ private:
 
     void VisitHint(const TRule_table_hint& msg, const TString& parent) {
         switch (msg.Alt_case()) {
-        case TRule_table_hint::kAltTableHint1: {
-            const auto& alt = msg.GetAlt_table_hint1();
-            const TString id = Id(alt.GetRule_an_id_hint1(), Translation_);
-            Freqs_[std::make_pair(parent, id)] += 1;
-            break;
-        }
-        case TRule_table_hint::kAltTableHint2: {
-            const auto& alt = msg.GetAlt_table_hint2();
-            Freqs_[std::make_pair(parent, alt.GetToken1().GetValue())] += 1;
-            break;
-        }
-        case TRule_table_hint::kAltTableHint3: {
-            const auto& alt = msg.GetAlt_table_hint3();
-            Freqs_[std::make_pair(parent, alt.GetToken1().GetValue())] += 1;
-            break;
-        }
-        case TRule_table_hint::kAltTableHint4: {
-            const auto& alt = msg.GetAlt_table_hint4();
-            Freqs_[std::make_pair(parent, alt.GetToken1().GetValue())] += 1;
-            break;
-        }
-        case TRule_table_hint::ALT_NOT_SET:
-            return;
+            case TRule_table_hint::kAltTableHint1: {
+                const auto& alt = msg.GetAlt_table_hint1();
+                const TString id = Id(alt.GetRule_an_id_hint1(), Translation_);
+                Freqs_[std::make_pair(parent, id)] += 1;
+                break;
+            }
+            case TRule_table_hint::kAltTableHint2: {
+                const auto& alt = msg.GetAlt_table_hint2();
+                Freqs_[std::make_pair(parent, alt.GetToken1().GetValue())] += 1;
+                break;
+            }
+            case TRule_table_hint::kAltTableHint3: {
+                const auto& alt = msg.GetAlt_table_hint3();
+                Freqs_[std::make_pair(parent, alt.GetToken1().GetValue())] += 1;
+                break;
+            }
+            case TRule_table_hint::kAltTableHint4: {
+                const auto& alt = msg.GetAlt_table_hint4();
+                Freqs_[std::make_pair(parent, alt.GetToken1().GetValue())] += 1;
+                break;
+            }
+            case TRule_table_hint::kAltTableHint5: {
+                const auto& alt = msg.GetAlt_table_hint5();
+                Freqs_[std::make_pair(parent, alt.GetToken1().GetValue())] += 1;
+                break;
+            }
+            case TRule_table_hint::ALT_NOT_SET:
+                return;
         }
     }
 
     void VisitHints(const TRule_table_hints& msg, const TString& parent) {
         auto& block = msg.GetBlock2();
         switch (block.Alt_case()) {
-        case TRule_table_hints::TBlock2::kAlt1: {
-            VisitHint(block.GetAlt1().GetRule_table_hint1(), parent);
-            break;
-        }
-        case TRule_table_hints::TBlock2::kAlt2: {
-            VisitHint(block.GetAlt2().GetRule_table_hint2(), parent);
-            for (const auto& x : block.GetAlt2().GetBlock3()) {
-                VisitHint(x.GetRule_table_hint2(), parent);
+            case TRule_table_hints::TBlock2::kAlt1: {
+                VisitHint(block.GetAlt1().GetRule_table_hint1(), parent);
+                break;
             }
+            case TRule_table_hints::TBlock2::kAlt2: {
+                VisitHint(block.GetAlt2().GetRule_table_hint2(), parent);
+                for (const auto& x : block.GetAlt2().GetBlock3()) {
+                    VisitHint(x.GetRule_table_hint2(), parent);
+                }
 
-            break;
-        }
-        case TRule_table_hints::TBlock2::ALT_NOT_SET:
-            return;
+                break;
+            }
+            case TRule_table_hints::TBlock2::ALT_NOT_SET:
+                return;
         }
     }
 
@@ -167,7 +171,7 @@ private:
         }
     }
 
-    template<typename TUnaryCasualExprRule>
+    template <typename TUnaryCasualExprRule>
     void VisitUnaryCasualSubexpr(const TUnaryCasualExprRule& msg) {
         const auto& block = msg.GetBlock1();
         TString func;
@@ -249,14 +253,14 @@ private:
         const auto& alt = msg.GetAlt_atom_expr7();
         module = Id(alt.GetRule_an_id_or_type1(), Translation_);
         switch (alt.GetBlock3().Alt_case()) {
-        case TRule_atom_expr::TAlt7::TBlock3::kAlt1:
-            func = Id(alt.GetBlock3().GetAlt1().GetRule_id_or_type1(), Translation_);
-            break;
-        case TRule_atom_expr::TAlt7::TBlock3::kAlt2: {
-            return false;
-        }
-        case TRule_atom_expr::TAlt7::TBlock3::ALT_NOT_SET:
-            Y_ABORT("Unsigned number: you should change implementation according to grammar changes");
+            case TRule_atom_expr::TAlt7::TBlock3::kAlt1:
+                func = Id(alt.GetBlock3().GetAlt1().GetRule_id_or_type1(), Translation_);
+                break;
+            case TRule_atom_expr::TAlt7::TBlock3::kAlt2: {
+                return false;
+            }
+            case TRule_atom_expr::TAlt7::TBlock3::ALT_NOT_SET:
+                Y_ABORT("Unsigned number: you should change implementation according to grammar changes");
         }
 
         return true;
@@ -270,14 +274,14 @@ private:
         const auto& alt = msg.GetAlt_in_atom_expr6();
         module = Id(alt.GetRule_an_id_or_type1(), Translation_);
         switch (alt.GetBlock3().Alt_case()) {
-        case TRule_in_atom_expr::TAlt6::TBlock3::kAlt1:
-            func = Id(alt.GetBlock3().GetAlt1().GetRule_id_or_type1(), Translation_);
-            break;
-        case TRule_in_atom_expr::TAlt6::TBlock3::kAlt2: {
-            return false;
-        }
-        case TRule_in_atom_expr::TAlt6::TBlock3::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            case TRule_in_atom_expr::TAlt6::TBlock3::kAlt1:
+                func = Id(alt.GetBlock3().GetAlt1().GetRule_id_or_type1(), Translation_);
+                break;
+            case TRule_in_atom_expr::TAlt6::TBlock3::kAlt2: {
+                return false;
+            }
+            case TRule_in_atom_expr::TAlt6::TBlock3::ALT_NOT_SET:
+                Y_ABORT("You should change implementation according to grammar changes");
         }
 
         return true;
@@ -306,7 +310,8 @@ bool GetParseTree(
     NYql::TIssues& issues,
     NSQLTranslationV1::TLexers& lexers,
     NSQLTranslationV1::TParsers& parsers,
-    google::protobuf::Message*& message)
+    google::protobuf::Message*& message,
+    bool isAmbiguityError = false)
 {
     if (!ParseTranslationSettings(query, settings, issues)) {
         return false;
@@ -314,7 +319,7 @@ bool GetParseTree(
 
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-    auto lexer = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, true);
+    auto lexer = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer);
     auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
         Y_UNUSED(token);
     };
@@ -323,8 +328,8 @@ bool GetParseTree(
         return false;
     }
 
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(isAmbiguityError);
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(isAmbiguityError);
     message = NSQLTranslationV1::SqlAST(
         parsers,
         query,
@@ -332,7 +337,6 @@ bool GetParseTree(
         issues,
         NSQLTranslation::SQL_MAX_PARSER_ERRORS,
         settings.AnsiLexer,
-        /* antlr4Parser = */ true,
         settings.Arena);
 
     return static_cast<bool>(message);
@@ -402,7 +406,8 @@ SIMPLE_UDF(TRuleFreq, TOptional<TRuleFreqResult>(TAutoMap<char*>)) {
     }
 }
 
-SIMPLE_UDF(TTestSyntax, TOptional<char*>(TAutoMap<char*>)) try {
+SIMPLE_UDF(TTestSyntax, TOptional<char*>(TAutoMap<char*>))
+try {
     const TString query(args[0].AsStringRef());
 
     google::protobuf::Arena arena;
@@ -414,7 +419,7 @@ SIMPLE_UDF(TTestSyntax, TOptional<char*>(TAutoMap<char*>)) try {
     NSQLTranslationV1::TParsers parsers;
 
     google::protobuf::Message* tree;
-    if (!GetParseTree(query, settings, issues, lexers, parsers, tree)) {
+    if (!GetParseTree(query, settings, issues, lexers, parsers, tree, /*isAmbiguityError=*/true)) {
         return valueBuilder->NewString(issues.ToString());
     }
 
@@ -424,10 +429,8 @@ SIMPLE_UDF(TTestSyntax, TOptional<char*>(TAutoMap<char*>)) try {
 }
 
 SIMPLE_MODULE(TYqlLangModule,
-    TObfuscate,
-    TRuleFreq,
-    TTestSyntax
-);
+              TObfuscate,
+              TRuleFreq,
+              TTestSyntax);
 
 REGISTER_MODULES(TYqlLangModule);
-

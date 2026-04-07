@@ -17,6 +17,7 @@ namespace NKikimr {
         TActorId HugeKeeperId;
         TActorId DefragId;
         TActorId SyncLogId;
+        TActorId ChunkKeeperId;
     };
 
     using TShredCtxPtr = std::shared_ptr<TShredCtx>;

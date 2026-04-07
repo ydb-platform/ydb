@@ -124,6 +124,42 @@ TEST_TF(TypeBasics, TzTimestamp) {
     ASSERT_TRUE(t->IsTzTimestamp());
 }
 
+TEST_TF(TypeBasics, Date32) {
+    auto t = f.Date32();
+    ASSERT_EQ(t->GetTypeName(), NTi::ETypeName::Date32);
+    ASSERT_TRUE(t->IsDate32());
+}
+
+TEST_TF(TypeBasics, Datetime64) {
+    auto t = f.Datetime64();
+    ASSERT_EQ(t->GetTypeName(), NTi::ETypeName::Datetime64);
+    ASSERT_TRUE(t->IsDatetime64());
+}
+
+TEST_TF(TypeBasics, Timestamp64) {
+    auto t = f.Timestamp64();
+    ASSERT_EQ(t->GetTypeName(), NTi::ETypeName::Timestamp64);
+    ASSERT_TRUE(t->IsTimestamp64());
+}
+
+TEST_TF(TypeBasics, TzDate32) {
+    auto t = f.TzDate32();
+    ASSERT_EQ(t->GetTypeName(), NTi::ETypeName::TzDate32);
+    ASSERT_TRUE(t->IsTzDate32());
+}
+
+TEST_TF(TypeBasics, TzDatetime64) {
+    auto t = f.TzDatetime64();
+    ASSERT_EQ(t->GetTypeName(), NTi::ETypeName::TzDatetime64);
+    ASSERT_TRUE(t->IsTzDatetime64());
+}
+
+TEST_TF(TypeBasics, TzTimestamp64) {
+    auto t = f.TzTimestamp64();
+    ASSERT_EQ(t->GetTypeName(), NTi::ETypeName::TzTimestamp64);
+    ASSERT_TRUE(t->IsTzTimestamp64());
+}
+
 TEST_TF(TypeBasics, Interval) {
     auto t = f.Interval();
     ASSERT_EQ(t->GetTypeName(), NTi::ETypeName::Interval);

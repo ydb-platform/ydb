@@ -1,0 +1,25 @@
+/* postgres can not */
+
+$input = (SELECT 1 AS key, '1' AS value);
+
+$x = (select * from $input order by value);
+select * from $x;
+
+select * from (select * from $input order by value);
+
+select * from (select 1 from $input as a join $input as b using(key) order by a.value);
+
+select * from (
+select * from $input
+union all
+select * from $input order by key
+);
+
+select * from (
+SELECT
+    key, prefix,
+    COUNT(*) AS cnt,
+    grouping(key, prefix) as agrouping
+FROM $input
+GROUP BY ROLLUP (key as key, Substring(value, 1, 1) as prefix)
+ORDER BY key);

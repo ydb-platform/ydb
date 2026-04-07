@@ -10,8 +10,10 @@
 #include <yt/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
 #include <yt/yql/providers/yt/lib/hash/yql_hash_builder.h>
 #include <yt/yql/providers/yt/provider/yql_yt_helpers.h>
+#include <yt/yql/providers/yt/provider/yql_yt_layers_integration.h>
 #include <yt/yql/providers/yt/provider/phy_opt/yql_yt_phy_opt_helper.h>
 
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/transform/yql_exec.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
@@ -107,7 +109,8 @@ public:
         AddHandler({TYtReduce::CallableName()}, RequireForTransientOp(), Hndl(&TYtDataSinkExecTransformer::HandleReduce));
         AddHandler({TYtOutput::CallableName()}, RequireFirst(), Pass());
         AddHandler({TYtPublish::CallableName()}, RequireAllOf({TYtPublish::idx_World, TYtPublish::idx_Input}), Hndl(&TYtDataSinkExecTransformer::HandlePublish));
-        AddHandler({TYtDropTable::CallableName()}, RequireFirst(), Hndl(&TYtDataSinkExecTransformer::HandleDrop));
+        AddHandler({TYtCreateView::CallableName(), TYtDropTable::CallableName(), TYtDropView::CallableName()}, RequireFirst(),
+            Hndl(&TYtDataSinkExecTransformer::HandleIsolatedOp));
         AddHandler({TCoCommit::CallableName()}, RequireFirst(), Hndl(&TYtDataSinkExecTransformer::HandleCommit));
         AddHandler({TYtEquiJoin::CallableName()}, RequireSequenceOf({TYtEquiJoin::idx_World, TYtEquiJoin::idx_Input}),
             Hndl(&TYtDataSinkExecTransformer::HandleEquiJoin));
@@ -150,6 +153,7 @@ private:
         const IYtGateway::TRunResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, bool markFinished)
     {
         if (markFinished && !TYtDqProcessWrite::Match(input.Get())) {
+            state->FullHybridExecution = false;
             PushHybridStats(state, "YtExecution", input->Content());
         }
         auto outSection = TYtOutputOpBase(input).Output();
@@ -262,10 +266,64 @@ private:
         NCommon::FillSecureParams(optimizedNode, *State_->Types, secureParams);
 
         auto config = State_->Configuration->GetSettingsForNode(*input);
-        const auto queryCacheMode = config->QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable);
+
+        YQL_CLOG(DEBUG, ProviderYt) << "Executing " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
+
+        auto cypressPaths = BuildLayersPaths(optimizedNode, cluster, State_->Types->LayersRegistry,State_->LayersIntegration_, config, ctx);
+        if (!cypressPaths) {
+            return SyncError();
+        }
+        auto& snapshots = State_->LayersSnapshots[cluster];
+        TVector<TString> needSnapshots;
+        for (const auto& path: *cypressPaths) {
+            if (!snapshots.contains(path)) {
+                needSnapshots.emplace_back(path);
+            }
+        }
+        if (needSnapshots.size()) {
+            auto snapshotResult = State_->Gateway->SnapshotLayers(
+                IYtGateway::TSnapshotLayersOptions(State_->SessionId)
+                    .Cluster(cluster)
+                    .Layers(needSnapshots)
+                    .Config(config)
+            );
+            return WrapFutureCallback(snapshotResult,
+                [input, needSnapshots, state=State_, cluster](const IYtGateway::TLayersSnapshotResult& res, const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&)
+                {
+                    auto& snapshots = state->LayersSnapshots[cluster];
+                    for (size_t i = 0; i < needSnapshots.size(); ++i) {
+                        snapshots[needSnapshots[i]] = res.Data[i];
+                    }
+                    input->SetState(TExprNode::EState::ExecutionRequired);
+                    return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+                }
+            );
+        }
+
+        TVector<std::pair<TString, ui64>> snaphsotsResult(Reserve(cypressPaths->size()));
+        TVector<TString> finalCypressPaths(Reserve(cypressPaths->size()));
+        for (const auto& path: *cypressPaths) {
+            auto ptr = snapshots.FindPtr(path);
+            YQL_ENSURE(ptr);
+            snaphsotsResult.emplace_back(*ptr);
+            finalCypressPaths.emplace_back(ptr->first);
+        }
+
+        auto queryCacheMode = config->QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable);
+        TMaybe<TString> parentOutputHash;
         if (queryCacheMode != EQueryCacheMode::Disable) {
             if (!hasNonDeterministicFunctions) {
-                operationHash = TYtNodeHashCalculator(State_, cluster, config).GetHash(*optimizedNode);
+                TYtNodeHashCalculator hashCalculator(State_, cluster, config);
+                parentOutputHash = hashCalculator.GetParentOutputHash(*input);
+                operationHash = hashCalculator.GetHash(*optimizedNode);
+                if (!operationHash.empty()) {
+                    THashBuilder builder;
+                    builder << TYtNodeHashCalculator::MakeSalt(settings, cluster) << operationHash << snaphsotsResult.size();
+                    for (size_t i = 0; i < snaphsotsResult.size(); ++i) {
+                        builder << snaphsotsResult[i].first << snaphsotsResult[i].second;
+                    }
+                    operationHash = builder.Finish();
+                }
             }
             YQL_CLOG(DEBUG, ProviderYt) << "Operation hash: " << HexEncode(operationHash).Quote()
                 << ", cache mode: " << queryCacheMode;
@@ -300,8 +358,6 @@ private:
             }
         }
 
-        YQL_CLOG(DEBUG, ProviderYt) << "Executing " << input->Content() << " (UniqueId=" << input->UniqueId() << ")";
-
         return State_->Gateway->Run(optimizedNode, ctx,
             IYtGateway::TRunOptions(State_->SessionId)
                 .UserDataBlocks(files)
@@ -312,10 +368,12 @@ private:
                 .Config(std::move(config))
                 .OptLLVM(State_->Types->OptLLVM.GetOrElse(TString()))
                 .OperationHash(operationHash)
+                .OutputHash(parentOutputHash)
                 .SecureParams(secureParams)
                 .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
                 .LangVer(State_->Types->LangVer)
                 .AdditionalSecurityTags(addSecTags)
+                .LayersPaths(std::move(finalCypressPaths))
             );
     }
 
@@ -365,6 +423,7 @@ private:
                 output = input->HeadPtr();
                 break;
             case TExprNode::EState::Error: {
+                State_->FullHybridExecution = false;
                 PushHybridStats(State_, "Fallback", input->TailPtr()->Content());
                 if (State_->Configuration->HybridDqExecutionFallback.Get().GetOrElse(true)) {
                     output = input->TailPtr();
@@ -451,10 +510,8 @@ private:
             }));
     }
 
-    TStatusCallbackPair HandleDrop(const TExprNode::TPtr& input, TExprContext& ctx) {
+    TStatusCallbackPair HandleIsolatedOp(const TExprNode::TPtr& input, TExprContext& ctx) {
         input->SetState(TExprNode::EState::ExecutionInProgress);
-
-        auto drop = TYtDropTable(input);
 
         auto newWorld = ctx.ShallowCopy(*input->Child(0));
         newWorld->SetTypeAnn(input->Child(0)->GetTypeAnn());
@@ -762,6 +819,7 @@ private:
             const auto clusterStr = op.DataSink().Cluster().StringValue();
             const auto config = State_->Configuration->GetSettingsForNode(*input);
             const auto tmpFolder = GetTablesTmpFolder(*config, clusterStr);
+            const ui64 nativeTypeCompat = config->NativeYtTypeCompatibility.Get(clusterStr).GetOrElse(NTCF_LEGACY);
 
             delegatedNode = input->ChildPtr(TYtDqProcessWrite::idx_Input);
 
@@ -783,6 +841,7 @@ private:
                 auto rowSpec = TYqlRowSpecInfo(tmpTable.RowSpec());
                 NYT::TNode spec;
                 rowSpec.FillCodecNode(spec[YqlRowSpecAttribute]);
+                UpdateNativeYtTypeFlags(spec, nativeTypeCompat);
                 outSpec = NYT::TNode::CreateMap()(TString{YqlIOSpecTables}, NYT::TNode::CreateList().Add(spec));
                 type = NCommon::TypeToYsonNode(rowSpec.GetExtendedType(ctx));
             }

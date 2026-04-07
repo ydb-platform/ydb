@@ -11,8 +11,8 @@ PYTHONIC_NS_BEGIN
 namespace numpy
 {
   template <class dtype>
-  types::ndarray<typename dtype::type, types::pshape<long, long>>
-  tri(long N, long M, long k, dtype d)
+  types::ndarray<typename dtype::type, types::pshape<long, long>> tri(long N, long M, long k,
+                                                                      dtype d)
   {
     if (M == -1)
       M = N;

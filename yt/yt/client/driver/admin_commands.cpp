@@ -45,6 +45,13 @@ void TBuildSnapshotCommand::Register(TRegistrar registrar)
             return command->Options.WaitForSnapshotCompletion;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "enable_automaton_read_only_barrier",
+        [] (TThis* command) -> auto& {
+            return command->Options.EnableAutomatonReadOnlyBarrier;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TBuildSnapshotCommand::DoExecute(ICommandContextPtr context)
@@ -79,6 +86,13 @@ void TBuildMasterSnapshotsCommand::Register(TRegistrar registrar)
         "retry",
         [] (TThis* command) -> auto& {
             return command->Options.Retry;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "enable_automaton_read_only_barrier",
+        [] (TThis* command) -> auto& {
+            return command->Options.EnableAutomatonReadOnlyBarrier;
         })
         .Optional(/*init*/ false);
 }
@@ -149,6 +163,19 @@ void TMasterExitReadOnlyCommand::Register(TRegistrar registrar)
 void TMasterExitReadOnlyCommand::DoExecute(ICommandContextPtr context)
 {
     WaitFor(context->GetClient()->MasterExitReadOnly(Options))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TResetDynamicallyPropagatedMasterCellsCommand::Register(TRegistrar /*registrar*/)
+{ }
+
+void TResetDynamicallyPropagatedMasterCellsCommand::DoExecute(ICommandContextPtr context)
+{
+    WaitFor(context->GetClient()->ResetDynamicallyPropagatedMasterCells(Options))
         .ThrowOnError();
 
     ProduceEmptyOutput(context);

@@ -13,11 +13,20 @@ struct TParsedColumnGroupSpec {
     bool IsEmpty() const;
 };
 
+struct TSplittedYsonByColumnGroups {
+    std::unordered_map<TString, TString> SplittedYsonByColumnGroups; // columnGroupName -> All data in yson corresponding to it
+    ui64 RecordsCount; // number of rows in yson
+};
+
 TParsedColumnGroupSpec GetColumnGroupsFromSpec(const TString& serializedColumnGroupsSpec);
 
-std::unordered_map<TString, TString> SplitYsonByColumnGroups(const TString& ysonInputs, const TParsedColumnGroupSpec& columnGroupsSpec);
+TSplittedYsonByColumnGroups SplitYsonByColumnGroups(const TString& ysonInputs, const TParsedColumnGroupSpec& columnGroupsSpec);
 
-TString GetYsonUnion(const std::vector<TString>& ysonRows);
+TSplittedYsonByColumnGroups SplitYsonByColumnGroupsRaw(TStringBuf tableContent, const TParsedColumnGroupSpec& columnGroupsSpec);
+
+TString GetYsonUnion(const std::vector<TString>& ysonRows, const std::vector<TString>& neededColumns);
+
+TString GetYsonUnionRaw(const std::vector<TString>& ysonInputs, const std::vector<TString>& neededColumns);
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -26,7 +35,7 @@ public:
     TColumnGroupSplitterYsonConsumer(
         const std::vector<NYT::NYson::IYsonConsumer*>& columnGroupConsumers,
         const THashMap<TString, ui64>& columnGroups,
-        ui64 groupsNum
+        ui64& recordsCount
     );
 
     virtual void OnStringScalar(TStringBuf value) final;
@@ -44,13 +53,14 @@ public:
     virtual void OnBeginAttributes() final;
     virtual void OnEndAttributes() final;
     virtual void OnRaw(TStringBuf yson, NYson::EYsonType type) final;
-private:
 
+private:
     std::vector<NYT::NYson::IYsonConsumer*> ColumnGroupConsumers_;
-    const THashMap<TString, ui64> ColumnGroups_;
+    const THashMap<TString, ui64>& ColumnGroups_;
     ui64 MapDepth_ = 0;
     ui64 ConsumerIndex_ = 0;
     const ui64 GroupsNum_;
+    ui64& RecordsCount_;
 };
 
 } // namespace NYql::NFmr

@@ -15,15 +15,15 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/extension/json.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension/json.h"
 
 #include <string>
 
-#include "arrow/extension_type.h"
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/type_fwd.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension_type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20::extension {
 

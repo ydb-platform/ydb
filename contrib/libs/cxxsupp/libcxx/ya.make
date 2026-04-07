@@ -2,6 +2,9 @@
 
 LIBRARY()
 
+# Ensure this library is mutually exclusive with "system stl" mode
+NO_BUILD_IF(USE_STL_SYSTEM)
+
 LICENSE(
     Apache-2.0 AND
     Apache-2.0 WITH LLVM-exception AND
@@ -14,9 +17,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2024-09-20)
+VERSION(2025-06-20)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/6d66ac51a49af7ee46f1ccac45d312352d8b942e.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/7157f33c6c88143acb8bc02bc26a0d6786136419.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/cxxsupp/libcxx/include
@@ -26,7 +29,7 @@ ADDINCL(
 CXXFLAGS(-D_LIBCPP_BUILDING_LIBRARY)
 
 IF (OS_ANDROID)
-    SET(CXX_RT "libcxxabi_dynamic")
+    SET(CXX_RT "libcxxabi")
 ELSEIF (OS_IOS)
     SET(CXX_RT "libcxxabi_dynamic")
     # Yet take builtins library from Arcadia
@@ -143,7 +146,6 @@ SRCS(
     src/ios.cpp
     src/ios.instantiations.cpp
     src/iostream.cpp
-    src/legacy_pointer_safety.cpp
     src/locale.cpp
     src/memory.cpp
     src/memory_resource.cpp

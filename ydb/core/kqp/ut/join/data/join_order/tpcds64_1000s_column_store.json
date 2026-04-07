@@ -67,105 +67,85 @@
                                                   "args":
                                                     [
                                                       {
-                                                        "op_name":"InnerJoin (MapJoin)",
+                                                        "op_name":"InnerJoin (Map)",
                                                         "args":
                                                           [
                                                             {
-                                                              "op_name":"InnerJoin (MapJoin)",
+                                                              "op_name":"InnerJoin (Map)",
                                                               "args":
                                                                 [
                                                                   {
-                                                                    "op_name":"InnerJoin (MapJoin)",
+                                                                    "op_name":"InnerJoin (Grace)",
                                                                     "args":
                                                                       [
                                                                         {
-                                                                          "op_name":"InnerJoin (Grace)",
+                                                                          "op_name":"HashShuffle",
                                                                           "args":
                                                                             [
                                                                               {
-                                                                                "op_name":"HashShuffle",
-                                                                                "args":
-                                                                                  [
-                                                                                    {
-                                                                                      "op_name":"TableFullScan",
-                                                                                      "table":"customer_address"
-                                                                                    }
-                                                                                  ]
-                                                                              },
+                                                                                "op_name":"TableFullScan",
+                                                                                "table":"customer_address"
+                                                                              }
+                                                                            ]
+                                                                        },
+                                                                        {
+                                                                          "op_name":"HashShuffle",
+                                                                          "args":
+                                                                            [
                                                                               {
-                                                                                "op_name":"HashShuffle",
+                                                                                "op_name":"InnerJoin (Grace)",
                                                                                 "args":
                                                                                   [
                                                                                     {
-                                                                                      "op_name":"InnerJoin (Grace)",
+                                                                                      "op_name":"HashShuffle",
                                                                                       "args":
                                                                                         [
                                                                                           {
-                                                                                            "op_name":"HashShuffle",
-                                                                                            "args":
-                                                                                              [
-                                                                                                {
-                                                                                                  "op_name":"TableFullScan",
-                                                                                                  "table":"customer_demographics"
-                                                                                                }
-                                                                                              ]
-                                                                                          },
+                                                                                            "op_name":"TableFullScan",
+                                                                                            "table":"customer_address"
+                                                                                          }
+                                                                                        ]
+                                                                                    },
+                                                                                    {
+                                                                                      "op_name":"HashShuffle",
+                                                                                      "args":
+                                                                                        [
                                                                                           {
-                                                                                            "op_name":"HashShuffle",
+                                                                                            "op_name":"InnerJoin (Map)",
                                                                                             "args":
                                                                                               [
                                                                                                 {
-                                                                                                  "op_name":"InnerJoin (MapJoin)",
+                                                                                                  "op_name":"InnerJoin (Map)",
                                                                                                   "args":
                                                                                                     [
                                                                                                       {
-                                                                                                        "op_name":"InnerJoin (MapJoin)",
+                                                                                                        "op_name":"InnerJoin (Grace)",
                                                                                                         "args":
                                                                                                           [
                                                                                                             {
-                                                                                                              "op_name":"InnerJoin (Grace)",
+                                                                                                              "op_name":"HashShuffle",
                                                                                                               "args":
                                                                                                                 [
                                                                                                                   {
-                                                                                                                    "op_name":"TableFullScan",
-                                                                                                                    "table":"customer"
-                                                                                                                  },
-                                                                                                                  {
-                                                                                                                    "op_name":"HashShuffle",
+                                                                                                                    "op_name":"InnerJoin (Grace)",
                                                                                                                     "args":
                                                                                                                       [
                                                                                                                         {
-                                                                                                                          "op_name":"InnerJoin (Grace)",
+                                                                                                                          "op_name":"TableFullScan",
+                                                                                                                          "table":"customer"
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                          "op_name":"HashShuffle",
                                                                                                                           "args":
                                                                                                                             [
                                                                                                                               {
-                                                                                                                                "op_name":"HashShuffle",
-                                                                                                                                "args":
-                                                                                                                                  [
-                                                                                                                                    {
-                                                                                                                                      "op_name":"TableFullScan",
-                                                                                                                                      "table":"customer_demographics"
-                                                                                                                                    }
-                                                                                                                                  ]
-                                                                                                                              },
-                                                                                                                              {
-                                                                                                                                "op_name":"HashShuffle",
+                                                                                                                                "op_name":"InnerJoin (Map)",
                                                                                                                                 "args":
                                                                                                                                   [
                                                                                                                                     {
                                                                                                                                       "op_name":"InnerJoin (Grace)",
                                                                                                                                       "args":
                                                                                                                                         [
-                                                                                                                                          {
-                                                                                                                                            "op_name":"HashShuffle",
-                                                                                                                                            "args":
-                                                                                                                                              [
-                                                                                                                                                {
-                                                                                                                                                  "op_name":"TableFullScan",
-                                                                                                                                                  "table":"customer_address"
-                                                                                                                                                }
-                                                                                                                                              ]
-                                                                                                                                          },
                                                                                                                                           {
                                                                                                                                             "op_name":"HashShuffle",
                                                                                                                                             "args":
@@ -183,7 +163,7 @@
                                                                                                                                                         "args":
                                                                                                                                                           [
                                                                                                                                                             {
-                                                                                                                                                              "op_name":"InnerJoin (MapJoin)",
+                                                                                                                                                              "op_name":"InnerJoin (Map)",
                                                                                                                                                               "args":
                                                                                                                                                                 [
                                                                                                                                                                   {
@@ -201,8 +181,22 @@
                                                                                                                                                     ]
                                                                                                                                                 }
                                                                                                                                               ]
+                                                                                                                                          },
+                                                                                                                                          {
+                                                                                                                                            "op_name":"HashShuffle",
+                                                                                                                                            "args":
+                                                                                                                                              [
+                                                                                                                                                {
+                                                                                                                                                  "op_name":"TableFullScan",
+                                                                                                                                                  "table":"customer_demographics"
+                                                                                                                                                }
+                                                                                                                                              ]
                                                                                                                                           }
                                                                                                                                         ]
+                                                                                                                                    },
+                                                                                                                                    {
+                                                                                                                                      "op_name":"TableFullScan",
+                                                                                                                                      "table":"date_dim"
                                                                                                                                     }
                                                                                                                                   ]
                                                                                                                               }
@@ -213,16 +207,26 @@
                                                                                                                 ]
                                                                                                             },
                                                                                                             {
-                                                                                                              "op_name":"TableFullScan",
-                                                                                                              "table":"date_dim"
+                                                                                                              "op_name":"HashShuffle",
+                                                                                                              "args":
+                                                                                                                [
+                                                                                                                  {
+                                                                                                                    "op_name":"TableFullScan",
+                                                                                                                    "table":"customer_demographics"
+                                                                                                                  }
+                                                                                                                ]
                                                                                                             }
                                                                                                           ]
                                                                                                       },
                                                                                                       {
                                                                                                         "op_name":"TableFullScan",
-                                                                                                        "table":"store"
+                                                                                                        "table":"date_dim"
                                                                                                       }
                                                                                                     ]
+                                                                                                },
+                                                                                                {
+                                                                                                  "op_name":"TableFullScan",
+                                                                                                  "table":"date_dim"
                                                                                                 }
                                                                                               ]
                                                                                           }
@@ -231,22 +235,18 @@
                                                                                   ]
                                                                               }
                                                                             ]
-                                                                        },
-                                                                        {
-                                                                          "op_name":"TableFullScan",
-                                                                          "table":"date_dim"
                                                                         }
                                                                       ]
                                                                   },
                                                                   {
                                                                     "op_name":"TableFullScan",
-                                                                    "table":"date_dim"
+                                                                    "table":"promotion"
                                                                   }
                                                                 ]
                                                             },
                                                             {
                                                               "op_name":"TableFullScan",
-                                                              "table":"promotion"
+                                                              "table":"store"
                                                             }
                                                           ]
                                                       }
@@ -257,7 +257,7 @@
                                                   "args":
                                                     [
                                                       {
-                                                        "op_name":"InnerJoin (MapJoin)",
+                                                        "op_name":"InnerJoin (Map)",
                                                         "args":
                                                           [
                                                             {
@@ -281,7 +281,7 @@
                                       "args":
                                         [
                                           {
-                                            "op_name":"InnerJoin (MapJoin)",
+                                            "op_name":"InnerJoin (Map)",
                                             "args":
                                               [
                                                 {
@@ -371,105 +371,85 @@
                                                   "args":
                                                     [
                                                       {
-                                                        "op_name":"InnerJoin (MapJoin)",
+                                                        "op_name":"InnerJoin (Map)",
                                                         "args":
                                                           [
                                                             {
-                                                              "op_name":"InnerJoin (MapJoin)",
+                                                              "op_name":"InnerJoin (Map)",
                                                               "args":
                                                                 [
                                                                   {
-                                                                    "op_name":"InnerJoin (MapJoin)",
+                                                                    "op_name":"InnerJoin (Grace)",
                                                                     "args":
                                                                       [
                                                                         {
-                                                                          "op_name":"InnerJoin (Grace)",
+                                                                          "op_name":"HashShuffle",
                                                                           "args":
                                                                             [
                                                                               {
-                                                                                "op_name":"HashShuffle",
-                                                                                "args":
-                                                                                  [
-                                                                                    {
-                                                                                      "op_name":"TableFullScan",
-                                                                                      "table":"customer_address"
-                                                                                    }
-                                                                                  ]
-                                                                              },
+                                                                                "op_name":"TableFullScan",
+                                                                                "table":"customer_address"
+                                                                              }
+                                                                            ]
+                                                                        },
+                                                                        {
+                                                                          "op_name":"HashShuffle",
+                                                                          "args":
+                                                                            [
                                                                               {
-                                                                                "op_name":"HashShuffle",
+                                                                                "op_name":"InnerJoin (Grace)",
                                                                                 "args":
                                                                                   [
                                                                                     {
-                                                                                      "op_name":"InnerJoin (Grace)",
+                                                                                      "op_name":"HashShuffle",
                                                                                       "args":
                                                                                         [
                                                                                           {
-                                                                                            "op_name":"HashShuffle",
-                                                                                            "args":
-                                                                                              [
-                                                                                                {
-                                                                                                  "op_name":"TableFullScan",
-                                                                                                  "table":"customer_demographics"
-                                                                                                }
-                                                                                              ]
-                                                                                          },
+                                                                                            "op_name":"TableFullScan",
+                                                                                            "table":"customer_address"
+                                                                                          }
+                                                                                        ]
+                                                                                    },
+                                                                                    {
+                                                                                      "op_name":"HashShuffle",
+                                                                                      "args":
+                                                                                        [
                                                                                           {
-                                                                                            "op_name":"HashShuffle",
+                                                                                            "op_name":"InnerJoin (Map)",
                                                                                             "args":
                                                                                               [
                                                                                                 {
-                                                                                                  "op_name":"InnerJoin (MapJoin)",
+                                                                                                  "op_name":"InnerJoin (Map)",
                                                                                                   "args":
                                                                                                     [
                                                                                                       {
-                                                                                                        "op_name":"InnerJoin (MapJoin)",
+                                                                                                        "op_name":"InnerJoin (Grace)",
                                                                                                         "args":
                                                                                                           [
                                                                                                             {
-                                                                                                              "op_name":"InnerJoin (Grace)",
+                                                                                                              "op_name":"HashShuffle",
                                                                                                               "args":
                                                                                                                 [
                                                                                                                   {
-                                                                                                                    "op_name":"TableFullScan",
-                                                                                                                    "table":"customer"
-                                                                                                                  },
-                                                                                                                  {
-                                                                                                                    "op_name":"HashShuffle",
+                                                                                                                    "op_name":"InnerJoin (Grace)",
                                                                                                                     "args":
                                                                                                                       [
                                                                                                                         {
-                                                                                                                          "op_name":"InnerJoin (Grace)",
+                                                                                                                          "op_name":"TableFullScan",
+                                                                                                                          "table":"customer"
+                                                                                                                        },
+                                                                                                                        {
+                                                                                                                          "op_name":"HashShuffle",
                                                                                                                           "args":
                                                                                                                             [
                                                                                                                               {
-                                                                                                                                "op_name":"HashShuffle",
-                                                                                                                                "args":
-                                                                                                                                  [
-                                                                                                                                    {
-                                                                                                                                      "op_name":"TableFullScan",
-                                                                                                                                      "table":"customer_demographics"
-                                                                                                                                    }
-                                                                                                                                  ]
-                                                                                                                              },
-                                                                                                                              {
-                                                                                                                                "op_name":"HashShuffle",
+                                                                                                                                "op_name":"InnerJoin (Map)",
                                                                                                                                 "args":
                                                                                                                                   [
                                                                                                                                     {
                                                                                                                                       "op_name":"InnerJoin (Grace)",
                                                                                                                                       "args":
                                                                                                                                         [
-                                                                                                                                          {
-                                                                                                                                            "op_name":"HashShuffle",
-                                                                                                                                            "args":
-                                                                                                                                              [
-                                                                                                                                                {
-                                                                                                                                                  "op_name":"TableFullScan",
-                                                                                                                                                  "table":"customer_address"
-                                                                                                                                                }
-                                                                                                                                              ]
-                                                                                                                                          },
                                                                                                                                           {
                                                                                                                                             "op_name":"HashShuffle",
                                                                                                                                             "args":
@@ -487,7 +467,7 @@
                                                                                                                                                         "args":
                                                                                                                                                           [
                                                                                                                                                             {
-                                                                                                                                                              "op_name":"InnerJoin (MapJoin)",
+                                                                                                                                                              "op_name":"InnerJoin (Map)",
                                                                                                                                                               "args":
                                                                                                                                                                 [
                                                                                                                                                                   {
@@ -505,8 +485,22 @@
                                                                                                                                                     ]
                                                                                                                                                 }
                                                                                                                                               ]
+                                                                                                                                          },
+                                                                                                                                          {
+                                                                                                                                            "op_name":"HashShuffle",
+                                                                                                                                            "args":
+                                                                                                                                              [
+                                                                                                                                                {
+                                                                                                                                                  "op_name":"TableFullScan",
+                                                                                                                                                  "table":"customer_demographics"
+                                                                                                                                                }
+                                                                                                                                              ]
                                                                                                                                           }
                                                                                                                                         ]
+                                                                                                                                    },
+                                                                                                                                    {
+                                                                                                                                      "op_name":"TableFullScan",
+                                                                                                                                      "table":"date_dim"
                                                                                                                                     }
                                                                                                                                   ]
                                                                                                                               }
@@ -517,16 +511,26 @@
                                                                                                                 ]
                                                                                                             },
                                                                                                             {
-                                                                                                              "op_name":"TableFullScan",
-                                                                                                              "table":"date_dim"
+                                                                                                              "op_name":"HashShuffle",
+                                                                                                              "args":
+                                                                                                                [
+                                                                                                                  {
+                                                                                                                    "op_name":"TableFullScan",
+                                                                                                                    "table":"customer_demographics"
+                                                                                                                  }
+                                                                                                                ]
                                                                                                             }
                                                                                                           ]
                                                                                                       },
                                                                                                       {
                                                                                                         "op_name":"TableFullScan",
-                                                                                                        "table":"store"
+                                                                                                        "table":"date_dim"
                                                                                                       }
                                                                                                     ]
+                                                                                                },
+                                                                                                {
+                                                                                                  "op_name":"TableFullScan",
+                                                                                                  "table":"date_dim"
                                                                                                 }
                                                                                               ]
                                                                                           }
@@ -535,22 +539,18 @@
                                                                                   ]
                                                                               }
                                                                             ]
-                                                                        },
-                                                                        {
-                                                                          "op_name":"TableFullScan",
-                                                                          "table":"date_dim"
                                                                         }
                                                                       ]
                                                                   },
                                                                   {
                                                                     "op_name":"TableFullScan",
-                                                                    "table":"date_dim"
+                                                                    "table":"promotion"
                                                                   }
                                                                 ]
                                                             },
                                                             {
                                                               "op_name":"TableFullScan",
-                                                              "table":"promotion"
+                                                              "table":"store"
                                                             }
                                                           ]
                                                       }
@@ -561,7 +561,7 @@
                                                   "args":
                                                     [
                                                       {
-                                                        "op_name":"InnerJoin (MapJoin)",
+                                                        "op_name":"InnerJoin (Map)",
                                                         "args":
                                                           [
                                                             {
@@ -585,7 +585,7 @@
                                       "args":
                                         [
                                           {
-                                            "op_name":"InnerJoin (MapJoin)",
+                                            "op_name":"InnerJoin (Map)",
                                             "args":
                                               [
                                                 {

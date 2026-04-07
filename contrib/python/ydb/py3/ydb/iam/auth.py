@@ -10,7 +10,7 @@ import os
 try:
     import jwt
 except ImportError:
-    jwt = None
+    jwt = None  # type: ignore[assignment]
 
 try:
     from yandex.cloud.iam.v1 import iam_token_service_pb2_grpc
@@ -32,7 +32,7 @@ except ImportError:
 try:
     import requests
 except ImportError:
-    requests = None
+    requests = None  # type: ignore
 
 
 DEFAULT_METADATA_URL = "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token"
@@ -185,7 +185,6 @@ class MetadataUrlCredentials(credentials.AbstractExpiringTokenCredentials):
             "Check that metadata service configured properly since we failed to fetch it from metadata_url."
         )
         self._metadata_url = DEFAULT_METADATA_URL if metadata_url is None else metadata_url
-        self._tp.submit(self._refresh)
 
     @tracing.with_trace()
     def _make_token_request(self):

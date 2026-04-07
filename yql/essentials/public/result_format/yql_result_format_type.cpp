@@ -4,10 +4,10 @@
 namespace NYql::NResult {
 
 namespace {
-    NYT::TNode MakeDataType(const TString& name) {
-        return NYT::TNode().Add("DataType").Add(name);
-    }
+NYT::TNode MakeDataType(const TString& name) {
+    return NYT::TNode().Add("DataType").Add(name);
 }
+} // namespace
 
 void ParseType(const NYT::TNode& typeNode, ITypeVisitor& visitor) {
     CHECK(typeNode.IsList());
@@ -196,7 +196,7 @@ void ParseType(const NYT::TNode& typeNode, ITypeVisitor& visitor) {
         CHECK(typeNode.AsList()[1].IsString());
         CHECK(typeNode.AsList()[2].IsString());
         visitor.OnPg(typeNode.AsList()[1].AsString(), typeNode.AsList()[2].AsString());
-     } else {
+    } else {
         ythrow TUnsupportedException() << "Unexpected type name: " << name;
     }
 }
@@ -355,8 +355,7 @@ void TTypeBuilder::OnInterval64() {
 }
 
 void TTypeBuilder::OnDecimal(ui32 precision, ui32 scale) {
-    Top() = NYT::TNode().Add("DataType").Add("Decimal")
-        .Add(ToString(precision)).Add(ToString(scale));
+    Top() = NYT::TNode().Add("DataType").Add("Decimal").Add(ToString(precision)).Add(ToString(scale));
 }
 
 NYT::TNode& TTypeBuilder::Top() {
@@ -431,7 +430,6 @@ void TTypeBuilder::OnBeginDict() {
     Top() = NYT::TNode().Add("DictType");
     Stack_.push_back(&Top());
 }
-
 
 void TTypeBuilder::OnDictKey() {
     Push();
@@ -715,4 +713,4 @@ void TThrowingTypeVisitor::Do() {
 void TEmptyTypeVisitor::Do() {
 }
 
-}
+} // namespace NYql::NResult

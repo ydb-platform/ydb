@@ -78,7 +78,7 @@ PyType_Slot FrameParametersSlots[] = {
 };
 
 PyType_Spec FrameParametersSpec = {
-    "zstd.FrameParameters",
+    "zstandard.backend_c.FrameParameters",
     sizeof(FrameParametersObject),
     0,
     Py_TPFLAGS_DEFAULT,

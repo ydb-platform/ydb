@@ -3,7 +3,7 @@
 #include "defs.h"
 
 #if defined(PROFILE_MEMORY_ALLOCATIONS)
-#   include <library/cpp/monlib/dynamic_counters/counters.h>
+    #include <library/cpp/monlib/dynamic_counters/counters.h>
 #endif
 
 #include <yql/essentials/utils/chunked_buffer.h>
@@ -21,7 +21,7 @@ void InitializeGlobalPagedBufferCounters(::NMonitoring::TDynamicCounterPtr root)
 
 class TPagedBuffer;
 
-class TBufferPage : private TNonCopyable {
+class TBufferPage: private TNonCopyable {
     friend class TPagedBuffer;
     static const size_t DefaultPageCapacity;
 
@@ -77,8 +77,8 @@ static constexpr bool IsValidPageAllocSize(size_t size) {
     return size <= std::numeric_limits<ui32>::max() && sizeof(TBufferPage) < size;
 }
 
-class TPagedBuffer : private TNonCopyable {
-  public:
+class TPagedBuffer: private TNonCopyable {
+public:
     using TPtr = std::shared_ptr<TPagedBuffer>;
     using TConstPtr = std::shared_ptr<const TPagedBuffer>;
 
@@ -105,7 +105,7 @@ class TPagedBuffer : private TNonCopyable {
         }
     }
 
-    template<typename TFunc>
+    template <typename TFunc>
     inline void ForEachPage(TFunc f) const {
         if (!Head_) {
             return;
@@ -143,7 +143,7 @@ class TPagedBuffer : private TNonCopyable {
         return sizeWithReserve - HeadReserve_;
     }
 
-    template<typename TContainer>
+    template <typename TContainer>
     inline void CopyTo(TContainer& out) const {
         ForEachPage([&out](const char* data, size_t len) {
             out.insert(out.end(), data, data + len);
@@ -247,6 +247,7 @@ class TPagedBuffer : private TNonCopyable {
     }
 
     static NYql::TChunkedBuffer AsChunkedBuffer(const TConstPtr& buf);
+
 private:
     void AppendPage();
 

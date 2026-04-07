@@ -16,7 +16,7 @@ std::optional<std::vector<NArrow::TSerializedBatch>> TBuildSlicesTask::BuildSlic
         return std::vector<NKikimr::NArrow::TSerializedBatch>();
     }
     const auto splitSettings = NYDBTest::TControllers::GetColumnShardController()->GetBlobSplitSettings();
-    NArrow::TBatchSplitttingContext context(splitSettings.GetMaxBlobSize());
+    NArrow::TBatchSplittingContext context(splitSettings.GetMaxBlobSize());
     context.SetFieldsForSpecialKeys(WriteData.GetPrimaryKeySchema());
     auto splitResult = NArrow::SplitByBlobSize(OriginalBatch, context);
     if (splitResult.IsFail()) {
@@ -76,6 +76,9 @@ private:
         for (auto&& i : Portions) {
             portions.emplace_back(i.ExtractPortion());
         }
+        if (putResult->GetPutStatus() != NKikimrProto::OK) {
+            WriteResult.SetErrorMessage("cannot put blob (write controller): " + ::ToString(putResult->GetPutStatus()), true);
+        }
         NColumnShard::TInsertedPortions pack({ WriteResult }, std::move(portions));
         auto result =
             std::make_unique<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(putResult->GetPutStatus(), Action, std::move(pack));
@@ -106,7 +109,7 @@ void TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
             Context.GetTabletActorId())("write_id", WriteData.GetWriteMeta().GetWriteId())("path_id", WriteData.GetWriteMeta().GetPathId());
     if (!Context.IsActive()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "abort_execution");
-        ReplyError("execution aborted", NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
+        ReplyError(TStringBuilder{} << "execution aborted, reason " << Context.GetErrorMessage(), NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
         return;
     }
     if (!OriginalBatch) {

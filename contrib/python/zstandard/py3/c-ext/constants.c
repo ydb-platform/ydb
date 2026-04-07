@@ -25,7 +25,7 @@ void constants_module_init(PyObject *mod) {
     version = PyUnicode_FromString(PYTHON_ZSTANDARD_VERSION);
     PyModule_AddObject(mod, "__version__", version);
 
-    ZstdError = PyErr_NewException("zstd.ZstdError", NULL, NULL);
+    ZstdError = PyErr_NewException("zstandard.backend_c.ZstdError", NULL, NULL);
     PyModule_AddObject(mod, "ZstdError", ZstdError);
 
     PyModule_AddIntConstant(mod, "FLUSH_BLOCK", 0);

@@ -31,6 +31,9 @@ def add_options(p):
 
 
 def create_request(args):
+    if args.dry_run:
+        raise Exception('Option --dry-run is not allowed for this command')
+
     request = common.create_bsc_request(args)
 
     if args.disk_management_mode is not None:

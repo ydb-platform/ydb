@@ -1,7 +1,10 @@
 LIBRARY()
 
 SRCS(
+    defs.cpp
     defs.h
+    flat_backup.cpp
+    flat_backup.h
     flat_boot_lease.cpp
     flat_boot_misc.cpp
     flat_comp.cpp
@@ -20,6 +23,8 @@ SRCS(
     flat_executor.h
     flat_executor_backup.cpp
     flat_executor_backup.h
+    flat_executor_backup_common.cpp
+    flat_executor_backup_common.h
     flat_executor_bootlogic.cpp
     flat_executor_bootlogic.h
     flat_executor_borrowlogic.cpp
@@ -32,6 +37,8 @@ SRCS(
     flat_executor_gclogic.cpp
     flat_executor_gclogic.h
     flat_bio_actor.cpp
+    flat_executor_recovery.cpp
+    flat_executor_recovery.h
     flat_executor_snapshot.cpp
     flat_executor_tx_env.cpp
     flat_executor_tx_env.h
@@ -87,6 +94,8 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(flat_comp_gen.h)
 GENERATE_ENUM_SERIALIZATION(flat_executor_compaction_logic.h)
+GENERATE_ENUM_SERIALIZATION(flat_executor_recovery.h)
+GENERATE_ENUM_SERIALIZATION(flat_executor_vacuum_logic.h)
 GENERATE_ENUM_SERIALIZATION(flat_page_iface.h)
 GENERATE_ENUM_SERIALIZATION(flat_part_loader.h)
 GENERATE_ENUM_SERIALIZATION(flat_row_eggs.h)
@@ -110,8 +119,11 @@ PEERDIR(
     library/cpp/containers/stack_vector
     library/cpp/digest/crc32c
     library/cpp/html/pcdata
+    library/cpp/http/io
+    library/cpp/json/writer
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
+    library/cpp/openssl/crypto
     ydb/core/base
     ydb/core/control/lib
     ydb/core/protos

@@ -1,4 +1,4 @@
-# {{ ydb-short-name }} SDK code recipes
+# {{ ydb-short-name }} SDK and frameworks code recipes
 
 This section contains code recipes in different programming languages for a variety of tasks that are common when working with the {{ ydb-short-name }} SDK.
 
@@ -38,6 +38,7 @@ Table of contents:
   - [Enable logging](debug-logs.md)
   - [Enable metrics in Prometheus](debug-prometheus.md)
   - [Enable tracing in Jaeger](debug-jaeger.md)
+  - [Enable tracing in OpenTelemetry](debug-otel.md)
 
 See also:
 

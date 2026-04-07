@@ -2,11 +2,13 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/base/fulltext.h>
 
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
-
+#include <ydb/library/yql/dq/comp_nodes/type_utils.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
 #include <cstdlib>
 
 namespace NKikimr {
@@ -425,7 +427,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
     compiler->AddCallable("BlockHashJoinCore",
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            YQL_ENSURE(node.ChildrenSize() == 5, "BlockHashJoinCore should have 5 arguments");
+            YQL_ENSURE(node.ChildrenSize() == 8, "BlockHashJoinCore should have 8 arguments");
 
             // Compile input streams
             auto leftInput = MkqlBuildExpr(*node.Child(0), buildCtx);
@@ -436,17 +438,17 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             YQL_ENSURE(joinKindNode->IsAtom(), "Join kind should be atom");
             auto joinKindStr = joinKindNode->Content();
 
-            EJoinKind joinKind;
+            NMiniKQL::EJoinKind joinKind;
             if (joinKindStr == "Inner") {
-                joinKind = EJoinKind::Inner;
+                joinKind = NMiniKQL::EJoinKind::Inner;
             } else if (joinKindStr == "Left") {
-                joinKind = EJoinKind::Left;
+                joinKind = NMiniKQL::EJoinKind::Left;
             } else if (joinKindStr == "LeftSemi") {
-                joinKind = EJoinKind::LeftSemi;
+                joinKind = NMiniKQL::EJoinKind::LeftSemi;
             } else if (joinKindStr == "LeftOnly") {
-                joinKind = EJoinKind::LeftOnly;
+                joinKind = NMiniKQL::EJoinKind::LeftOnly;
             } else if (joinKindStr == "Cross") {
-                joinKind = EJoinKind::Cross;
+                joinKind = NMiniKQL::EJoinKind::Cross;
             } else {
                 YQL_ENSURE(false, "Unsupported join kind: " << joinKindStr);
             }
@@ -469,16 +471,40 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             auto returnType = NCommon::BuildType(*node.GetTypeAnn(), ctx.PgmBuilder(), errorStream);
             YQL_ENSURE(returnType, "Failed to build return type: " << errorStream.Str());
 
-            // Use the specialized DqBlockHashJoin method
+            auto graceJoinRenames = [&]{
+                auto wideStreamComponentsSize = [](TRuntimeNode node)->int {
+                    return AS_TYPE(TMultiType, AS_TYPE(TStreamType,node.GetStaticType())->GetItemType())->GetElementsCount();
+                };
+                TDqUserRenames renames{};
+                for(int index = 0; index < wideStreamComponentsSize(leftInput) - 1; ++index) {
+                    renames.emplace_back(index, EJoinSide::kLeft);
+                }
+                if (joinKind != NMiniKQL::EJoinKind::LeftSemi && joinKind != NMiniKQL::EJoinKind::LeftOnly) {
+                    for(int index = 0; index < wideStreamComponentsSize(rightInput) - 1; ++index) {
+                        renames.emplace_back(index, EJoinSide::kRight);       
+                    }
+                }
+                return TGraceJoinRenames::FromDq(renames);
+            }();
+
+
+            NMiniKQL::TBlockHashJoinSettings settings;
+            for (const auto& setting : node.Child(7)->Children()) {
+                if (setting->Child(0)->Content() == "BuildSide") {
+                    if (setting->Child(1)->Content() == "Left") {
+                        settings.BuildSide = NMiniKQL::EBuildSide::Left;
+                    }
+                }
+            }
             return ctx.PgmBuilder().DqBlockHashJoin(leftInput, rightInput, joinKind,
-                leftKeyColumns, rightKeyColumns, returnType);
+                leftKeyColumns, rightKeyColumns, graceJoinRenames.Left, graceJoinRenames.Right, returnType, settings);
         });
 
     compiler->AddCallable(TDqPhyHashCombine::CallableName(), [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
         TDqPhyHashCombine hc(&node);
         const auto flow = MkqlBuildExpr(*node.Child(0U), buildCtx);
         i64 memLimit = 0LL;
-        TryFromString<i64>(node.Child(1U)->Content(), memLimit);
+        const bool isAggregate = !TryFromString<i64>(node.Child(1U)->Content(), memLimit);
         memLimit = std::abs(memLimit);
         const auto keyExtractor = [&](TRuntimeNode::TList items) {
             return MkqlBuildWideLambda(*node.Child(2U), buildCtx, items);
@@ -496,8 +522,29 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             keys.insert(keys.cend(), state.cbegin(), state.cend());
             return MkqlBuildWideLambda(*node.Child(5U), buildCtx, keys);
         };
-        return ctx.PgmBuilder().DqHashCombine(flow, memLimit, keyExtractor, init, update, finish);
+        if (isAggregate) {
+            const auto initLambda = node.Child(3U);
+            const bool isStatePersistable = initLambda->GetTypeAnn()->IsPersistable();
+            return ctx.PgmBuilder().DqHashAggregate(flow, isStatePersistable, keyExtractor, init, update, finish);
+        } else {
+            return ctx.PgmBuilder().DqHashCombine(flow, memLimit, keyExtractor, init, update, finish);
+        }
     });
+
+    compiler->AddCallable("FulltextAnalyze",
+        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+            YQL_ENSURE(node.ChildrenSize() == 3, "FulltextAnalyze should have 3 arguments: text, settings and mode");
+
+            auto textArg = MkqlBuildExpr(*node.Child(0), buildCtx);
+            auto settingsArg = MkqlBuildExpr(*node.Child(1), buildCtx);
+
+            auto modeNode = node.Child(2);
+            YQL_ENSURE(modeNode->IsAtom(), "FulltextAnalyze mode should be an atom");
+            ui32 modeValue = FromString<ui32>(modeNode->Content());
+            auto modeArg = ctx.PgmBuilder().NewDataLiteral<ui32>(modeValue);
+
+            return ctx.PgmBuilder().FulltextAnalyze(textArg, settingsArg, modeArg);
+        });
 
     return compiler;
 }

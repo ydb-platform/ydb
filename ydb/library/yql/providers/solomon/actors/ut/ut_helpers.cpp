@@ -50,6 +50,7 @@ void InitAsyncOutput(
             0,
             NYql::NDq::TCollectStatsLevel::None,
             "TxId-42",
+            777,
             secureParams,
             &actor.GetAsyncOutputCallbacks(),
             counters,
@@ -58,32 +59,6 @@ void InitAsyncOutput(
 
         actor.InitAsyncOutput(dqAsyncOutput, dqAsyncOutputAsActor);
     });
-}
-
-void CleanupSolomon(TString cloudId, TString folderId, TString service, bool isCloud) {
-    const auto solomonPort = TString(getenv("SOLOMON_HTTP_PORT"));
-    TSimpleHttpClient httpClient("localhost", std::stoi(solomonPort));
-    TStringStream str;
-    TStringBuilder builder;
-    builder << "/cleanup";
-    if (isCloud) {
-        builder << "?folderId=" << folderId << "&service=" << service;
-    } else {
-        builder << "?project=" << cloudId << "&cluster=" << folderId << "&service=" << service;
-    }
-
-    DoWithRetry(
-        [&]{ httpClient.DoPost(builder, "", &str); },
-        TRetryOptions(3, TDuration::Seconds(1)),
-        true);
-}
-
-TString GetSolomonMetrics(TString folderId, TString service) {
-    const auto solomonPort = TString(getenv("SOLOMON_HTTP_PORT"));
-    TSimpleHttpClient httpClient("localhost", std::stoi(solomonPort));
-    TStringStream str;
-    httpClient.DoGet("/metrics/get?folderId=" + folderId + "&service=" + service, &str);
-    return TString(str.Str());
 }
 
 NSo::NProto::TDqSolomonShard BuildSolomonShardSettings(bool isCloud) {

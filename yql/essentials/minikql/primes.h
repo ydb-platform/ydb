@@ -4,4 +4,4 @@ namespace NKikimr {
 
 unsigned long FindNearestPrime(unsigned long num);
 
-}
+} // namespace NKikimr

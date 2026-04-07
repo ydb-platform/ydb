@@ -12,7 +12,11 @@ namespace NKikimr::NStorage {
             const std::unordered_map<ui32, ui32>& selfHealNodesState,
             TBridgePileId pileId,
             std::unordered_set<ui32>& usedNodes,
-            const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig);
+            const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig,
+            ui32 overrideReplicasInRingCount,
+            ui32 overrideRingsCount,
+            ui32 replicasSpecificVolume
+        );
         bool IsGoodConfig() const;
         void AddRingGroup(NKikimrConfig::TDomainsConfig::TStateStorage *ss);
 
@@ -41,5 +45,8 @@ namespace NKikimr::NStorage {
         ui32 RingsInGroupCount = 1;
         ui32 ReplicasInRingCount = 1;
         ui32 NToSelect = 1;
+        ui32 OverrideReplicasInRingCount = 0;
+        ui32 OverrideRingsCount = 0;
+        ui32 ReplicasSpecificVolume = 200;
     };
 }

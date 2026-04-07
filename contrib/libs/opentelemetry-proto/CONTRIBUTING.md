@@ -21,6 +21,20 @@ for general information about the project.
 After making any changes to .proto files make sure to generate all
 implementation by running `make gen-all`.
 
+## Style-Guide
+
+OpenTelemetry follows the [protocol buffer style guide](https://protobuf.dev/programming-guides/style/) with the following clarifications:
+
+- All Messages and fields should be documented via comments.
+- Field comments should document purpose or behavior with active verbs, or
+  a simple definition noun phrase (similar to a dictionary entry).
+  - valid: "Represents ..."
+    valid: "Additional attributes that describe the scope."
+  - not-valid: "used to represent..."
+- Message and field comments may reference the field or message by name.
+  - valid: "AnyValue ..."
+  - valid: "The value ..."
+
 ## Further Help
 
 If you have any questions or need assistance while contributing, feel free to reach out to the [`#otel-specification`](https://cloud-native.slack.com/archives/C01N7PP1THC) Slack channel.  

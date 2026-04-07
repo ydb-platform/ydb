@@ -17,6 +17,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 
+#include <utility>
 #include <variant>
 
 namespace NYql::NJsonPath {
@@ -25,11 +26,11 @@ using TJsonNodes = TSmallVec<TValue>;
 
 class TResult {
 public:
-    TResult(TJsonNodes&& nodes);
+    TResult(TJsonNodes&& nodes); // NOLINT(google-explicit-constructor)
 
-    TResult(const TJsonNodes& nodes);
+    TResult(const TJsonNodes& nodes); // NOLINT(google-explicit-constructor)
 
-    TResult(TIssue&& issue);
+    TResult(TIssue&& issue); // NOLINT(google-explicit-constructor)
 
     const TJsonNodes& GetNodes() const;
 
@@ -47,16 +48,16 @@ class TArraySubscript {
 public:
     TArraySubscript(i64 from, TPosition fromPos)
         : From_(from)
-        , FromPos_(fromPos)
+        , FromPos_(std::move(fromPos))
         , HasTo_(false)
     {
     }
 
     TArraySubscript(i64 from, TPosition fromPos, i64 to, TPosition toPos)
         : From_(from)
-        , FromPos_(fromPos)
+        , FromPos_(std::move(fromPos))
         , To_(to)
-        , ToPos_(toPos)
+        , ToPos_(std::move(toPos))
         , HasTo_(true)
     {
     }
@@ -95,7 +96,7 @@ using TVariablesMap = THashMap<TString, TValue>;
 class TExecutor {
 public:
     TExecutor(
-        const TJsonPathPtr path,
+        TJsonPathPtr path,
         const TJsonNodes& input,
         const TVariablesMap& variables,
         const NUdf::IValueBuilder* valueBuilder);
@@ -195,4 +196,4 @@ private:
     const NUdf::IValueBuilder* ValueBuilder_;
 };
 
-}
+} // namespace NYql::NJsonPath

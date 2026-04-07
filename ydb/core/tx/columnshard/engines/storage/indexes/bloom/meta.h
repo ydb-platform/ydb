@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 
 namespace NKikimr::NOlap::NIndexes {
 
@@ -13,7 +14,7 @@ public:
 private:
     using TBase = TSkipBitmapIndex;
     std::shared_ptr<arrow::Schema> ResultSchema;
-    double FalsePositiveProbability = 0.1;
+    double FalsePositiveProbability = NDefaults::FalsePositiveProbability;
     ui32 HashesCount = 0;
     static inline auto Registrator = TFactory::TRegistrator<TBloomIndexMeta>(GetClassNameStatic());
     void Initialize();
@@ -26,21 +27,23 @@ private:
 
 protected:
     virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const override;
-    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoBuildIndexImpl(
+    virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(
         TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const override;
 
-    virtual bool DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-        const NArrow::NSSA::TIndexCheckOperation& op) const override;
+    virtual bool DoCheckValueImpl(const IBitsStorageViewer& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+        const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo&) const override;
 
 public:
     TBloomIndexMeta() = default;
-    TBloomIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const ui32 columnId, const double fpProbability,
-        const TReadDataExtractorContainer& dataExtractor, const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor)
-        : TBase(indexId, indexName, columnId, storageId, dataExtractor, bitsStorageConstructor)
-        , FalsePositiveProbability(fpProbability) {
+    TBloomIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const bool inheritPortionStorage,
+        const ui32 columnId, const double fpProbability, const TReadDataExtractorContainer& dataExtractor,
+        const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor)
+        : TBase(indexId, indexName, columnId, storageId, inheritPortionStorage, dataExtractor, bitsStorageConstructor)
+        , FalsePositiveProbability(fpProbability)
+    {
         Initialize();
     }
 

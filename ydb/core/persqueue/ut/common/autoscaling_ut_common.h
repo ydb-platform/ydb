@@ -1,6 +1,7 @@
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
 
@@ -35,16 +36,21 @@ TEvTx* CreateRequest(ui64 txId, NKikimrSchemeOp::TModifyScheme&& tx);
 
 ui64 DoRequest(TTopicSdkTestSetup& setup, ui64& txId, NKikimrSchemeOp::TPersQueueGroupDescription& scheme);
 ui64 DoRequest(NActors::TTestActorRuntime& runtime, ui64& txId, NKikimrSchemeOp::TPersQueueGroupDescription& scheme);
+ui64 DoRequest(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& dir, NKikimrSchemeOp::TPersQueueGroupDescription& scheme);
 
 ui64 SplitPartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partition, TString boundary);
 ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const ui32 partition, TString boundary);
 ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& topic, const ui32 partition, TString boundary);
+ui64 SplitPartition(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& dir, const TString& topic, const ui32 partition, TString boundary);
+ui64 SplitPartitions(NActors::TTestActorRuntime& runtime, ui64& txId, const TString& dir, const TString& topic, const std::map<ui32, TString>& partitionBoundaries);
 
 void MergePartition(TTopicSdkTestSetup& setup, ui64& txId, const ui32 partitionLeft, const ui32 partitionRight);
 
 TWriteMessage Msg(const TString& data, ui64 seqNo);
 
-TTopicSdkTestSetup CreateSetup();
+TTopicSdkTestSetup CreateSetup(
+    NActors::NLog::EPriority priority = NActors::NLog::PRI_DEBUG,
+    bool enableTopicPartitionSplitBasedOnKllSketch = false);
 
 std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition = std::nullopt, TString topic = TString{TEST_TOPIC}, bool useCodec = true);
 
@@ -126,5 +132,11 @@ struct ITestReadSession {
 };
 
 std::shared_ptr<ITestReadSession> CreateTestReadSession(TestReadSessionSettings settings);
+
+TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime, const TString& databasePath, const TString& topicPath);
+THolder<NDescriber::TEvDescribeTopicsResponse> GetDescriberResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
+ui64 GetPQRBTabletId(NActors::TTestActorRuntime& runtime, const TString& database, const TString& topic);
+void ReloadPQRBTablet(NActors::TTestActorRuntime& runtime, const TString& database, const TString& topic);
+
 
 }

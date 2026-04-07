@@ -214,10 +214,10 @@ void SendAuditLog(const NActors::TActorSystem* sys, TAuditLogParts&& parts)
 // Service interface implementation
 //
 
-THolder<NActors::IActor> CreateAuditWriter(TAuditLogBackends&& logBackends)
+std::unique_ptr<NActors::IActor> CreateAuditWriter(TAuditLogBackends&& logBackends)
 {
     AUDIT_LOG_ENABLED.store(true);
-    return MakeHolder<TAuditLogActor>(std::move(logBackends));
+    return std::make_unique<TAuditLogActor>(std::move(logBackends));
 }
 
 static void EscapeNonUtf8(TString& s) {

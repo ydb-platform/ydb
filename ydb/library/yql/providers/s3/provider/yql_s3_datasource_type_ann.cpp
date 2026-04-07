@@ -1,15 +1,14 @@
 #include "yql_s3_provider_impl.h"
 
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
-
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
@@ -291,7 +290,7 @@ bool EnsureParquetTypeSupported(TPositionHandle position, const TTypeAnnotationN
 
 class TS3DataSourceTypeAnnotationTransformer : public TVisitorTransformerBase {
 public:
-    TS3DataSourceTypeAnnotationTransformer(TS3State::TPtr state)
+    explicit TS3DataSourceTypeAnnotationTransformer(TS3State::TPtr state)
         : TVisitorTransformerBase(true)
         , State_(state)
     {
@@ -438,11 +437,11 @@ public:
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (const auto* filterLambdaType = filterLambda->GetTypeAnn()) {
+        if (const auto filterLambdaType = filterLambda->GetTypeAnn()) {
             if (filterLambdaType->GetKind() != ETypeAnnotationKind::Data) {
                 return IGraphTransformer::TStatus::Error;
             }
-            const TDataExprType* dataExprType = static_cast<const TDataExprType*>(filterLambdaType);
+            auto dataExprType = filterLambdaType->Cast<TDataExprType>();
             if (dataExprType->GetSlot() != EDataSlot::Bool) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -453,6 +452,8 @@ public:
     }
 
     TStatus HandleRead(const TExprNode::TPtr& input, TExprContext& ctx) {
+        State_->Configuration->CheckDisabledPragmas(ctx);
+
         if (!EnsureMinMaxArgsCount(*input, 6U, 7U, ctx)) {
             return TStatus::Error;
         }
@@ -461,7 +462,8 @@ public:
             return TStatus::Error;
         }
 
-        if (!EnsureSpecificDataSource(*input->Child(TS3ReadObject::idx_DataSource), S3ProviderName, ctx)) {
+        const auto* dataSourceNode = input->Child(TS3ReadObject::idx_DataSource);
+        if (!EnsureSpecificDataSource(*dataSourceNode, S3ProviderName, ctx)) {
             return TStatus::Error;
         }
 
@@ -487,11 +489,35 @@ public:
 
         std::vector<TString> partitionedBy;
         TString projection;
-        const auto useCoro = State_->Configuration->SourceCoroActor.Get();
+        const auto useCoro = State_->Configuration->SourceCoroActor.GetOrDefault();
         {
             TS3Object s3Object(input->Child(TS3ReadObject::idx_Object));
             auto format = s3Object.Format().Ref().Content();
             const TStructExprType* structRowType = rowType->Cast<TStructExprType>();
+
+            const auto& clusterSettings = State_->Configuration->Clusters.at(TS3DataSource(dataSourceNode).Cluster().StringValue());
+            if (clusterSettings.Url.StartsWith("file://")) {
+                bool hasErrors = false;
+
+                if (!useCoro) {
+                    ctx.AddError(TIssue(ctx.GetPosition(dataSourceNode->Pos()), "Reading from files is not supported with disabled pragma s3.SourceCoroActor, to read from files use: PRAGMA s3.SourceCoroActor = \"TRUE\""));
+                    hasErrors = true;
+                }
+
+                if (State_->Configuration->AsyncDecompressing.GetOrDefault()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(dataSourceNode->Pos()), "Reading from files is not supported with enabled pragma s3.AsyncDecompressing, to read from files use: PRAGMA s3.AsyncDecompressing = \"FALSE\""));
+                    hasErrors = true;
+                }
+
+                if (IsIn({"raw", "json_list"}, format)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(dataSourceNode->Pos()), TStringBuilder() << "Reading from files is not supported with format '" << format << "'"));
+                    hasErrors = true;
+                }
+
+                if (hasErrors) {
+                    return TStatus::Error;
+                }
+            }
 
             THashSet<TStringBuf> columns;
             for (const TItemExprType* item : structRowType->GetItems()) {
@@ -530,7 +556,7 @@ public:
                 return TStatus::Error;
             }
 
-            if (!NS3Util::ValidateS3ReadSchema(rowTypeNode.Pos(), format, structRowType, !useCoro || *useCoro, ctx)) {
+            if (!NS3Util::ValidateS3ReadSchema(rowTypeNode.Pos(), format, structRowType, useCoro, ctx)) {
                 return TStatus::Error;
             }
 
@@ -551,7 +577,7 @@ public:
             return TStatus::Error;
         }
 
-        if (objectNode->Child(TS3Object::idx_Format)->Content() == "parquet" && (!useCoro || *useCoro)) {
+        if (objectNode->Child(TS3Object::idx_Format)->Content() == "parquet" && useCoro) {
             YQL_ENSURE(State_->Types->ArrowResolver);
             bool allTypesSupported = true;
             for (const auto& item : rowType->Cast<TStructExprType>()->GetItems()) {
@@ -804,6 +830,7 @@ public:
             {
                 return TStatus::Error;
             }
+
             if (haveProjection && !havePartitionedBy) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Object::idx_Settings)->Pos()), "Missing partitioned_by setting for projection"));
                 return TStatus::Error;
@@ -823,11 +850,12 @@ public:
         input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
         return TStatus::Ok;
     }
+
 private:
     const TS3State::TPtr State_;
 };
 
-}
+} // anonymous namespace
 
 THolder<TVisitorTransformerBase> CreateS3DataSourceTypeAnnotationTransformer(TS3State::TPtr state) {
     return MakeHolder<TS3DataSourceTypeAnnotationTransformer>(state);

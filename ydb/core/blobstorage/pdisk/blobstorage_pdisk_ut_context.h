@@ -16,7 +16,7 @@ public:
     TString Path;
 
     using EDiskMode = NPDisk::NSectorMap::EDiskMode;
-    TTestContext(bool useSectorMap, EDiskMode diskMode = EDiskMode::DM_NONE, ui64 diskSize = 0);
+    TTestContext(bool useSectorMap, EDiskMode diskMode = EDiskMode::DM_NONE, ui64 diskSize = 0, const TString& usePath = {});
 
     const char *GetDir() {
         return TempDir ? TempDir->Name().c_str() : nullptr;

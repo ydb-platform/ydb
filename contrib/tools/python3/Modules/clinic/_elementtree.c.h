@@ -3,10 +3,11 @@ preserve
 [clinic start generated code]*/
 
 #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-#  include "pycore_gc.h"            // PyGC_Head
-#  include "pycore_runtime.h"       // _Py_ID()
+#  include "pycore_gc.h"          // PyGC_Head
+#  include "pycore_runtime.h"     // _Py_SINGLETON()
 #endif
-
+#include "pycore_abstract.h"      // _PyNumber_Index()
+#include "pycore_modsupport.h"    // _PyArg_UnpackKeywords()
 
 PyDoc_STRVAR(_elementtree_Element_append__doc__,
 "append($self, subelement, /)\n"
@@ -1235,4 +1236,4 @@ skip_optional:
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=ec30550fd83b2791 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=bd28eba33d9c1f25 input=a9049054013a1b77]*/

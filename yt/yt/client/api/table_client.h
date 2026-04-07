@@ -6,6 +6,7 @@
 #include <yt/yt/client/table_client/chunk_stripe_statistics.h>
 #include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/schema.h>
+#include <yt/yt/client/table_client/constrained_schema.h>
 
 #include <yt/yt/client/chaos_client/replication_card.h>
 
@@ -123,10 +124,13 @@ struct TAlterTableOptions
 {
     std::optional<NTableClient::TTableSchema> Schema;
     std::optional<NTableClient::TMasterTableSchemaId> SchemaId;
+    std::optional<NTableClient::TConstrainedTableSchema> ConstrainedSchema;
+    std::optional<NTableClient::TColumnNameToConstraintMap> Constraints;
     std::optional<bool> Dynamic;
     std::optional<NTabletClient::TTableReplicaId> UpstreamReplicaId;
     std::optional<NTableClient::ETableSchemaModification> SchemaModification;
     std::optional<NChaosClient::TReplicationProgress> ReplicationProgress;
+    std::optional<NTransactionClient::TTimestamp> ClipTimestamp;
 };
 
 struct TTrimTableOptions
@@ -305,6 +309,7 @@ struct TGetColumnarStatisticsOptions
     NChunkClient::TFetcherConfigPtr FetcherConfig;
     NTableClient::EColumnarStatisticsFetcherMode FetcherMode = NTableClient::EColumnarStatisticsFetcherMode::FromNodes;
     bool EnableEarlyFinish = true;
+    bool EnableReadSizeEstimation = false;
 };
 
 struct TPartitionTablesOptions
@@ -315,7 +320,8 @@ struct TPartitionTablesOptions
     NChunkClient::TFetcherConfigPtr FetcherConfig;
     NChunkClient::TChunkSliceFetcherConfigPtr ChunkSliceFetcherConfig;
     NTableClient::ETablePartitionMode PartitionMode = NTableClient::ETablePartitionMode::Unordered;
-    i64 DataWeightPerPartition;
+    std::optional<i64> DataWeightPerPartition;
+    std::optional<i64> CompressedDataSizePerPartition;
     std::optional<int> MaxPartitionCount;
     bool AdjustDataWeightPerPartition = true;
     bool EnableKeyGuarantee = false;
@@ -323,11 +329,7 @@ struct TPartitionTablesOptions
     //! Whether to return cookies that can be fed to CreateTablePartitionReader.
     bool EnableCookies = false;
 
-    //! COMPAT(apollo1321): remove in 25.2 release.
-    bool UseNewSlicingImplementationInOrderedPool = true;
-
-    //! COMPAT(apollo1321): remove in 25.2 release.
-    bool UseNewSlicingImplementationInUnorderedPool = true;
+    bool OmitInaccessibleRows = false;
 };
 
 struct TReadTablePartitionOptions
@@ -502,6 +504,18 @@ struct ITableClient
      */
     virtual TFuture<ITablePartitionReaderPtr> CreateTablePartitionReader(
         const TTablePartitionCookiePtr& cookie,
+        const TReadTablePartitionOptions& options = {}) = 0;
+
+    /// Creates table reader with format serialization.
+    virtual TFuture<IFormattedTableReaderPtr> CreateFormattedTableReader(
+        const NYPath::TRichYPath& path,
+        const NYson::TYsonString& format,
+        const TTableReaderOptions& options = {}) = 0;
+
+    /// Creates partition table reader with format serialization.
+    virtual TFuture<IFormattedTableReaderPtr> CreateFormattedTablePartitionReader(
+        const TTablePartitionCookiePtr& cookie,
+        const NYson::TYsonString& format,
         const TReadTablePartitionOptions& options = {}) = 0;
 };
 

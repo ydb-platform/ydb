@@ -24,7 +24,7 @@ class ColumnTableHelper:
 
     def get_portion_stat_by_tier(self) -> dict[str, dict[str, int]]:
         results = self.ydb_client.query(
-            f"select TierName, sum(Rows) as Rows, count(*) as Portions from `{self.path}/.sys/primary_index_portion_stats` group by TierName"
+            f"select TierName, sum(Rows) as Rows, count(*) as Portions from `{self.path}/.sys/primary_index_portion_stats` where Activity = 1 group by TierName"
         )
         return {
             row["TierName"]: {"Rows": row["Rows"], "Portions": row["Portions"]}
@@ -54,7 +54,7 @@ class ColumnTableHelper:
             """
         )
 
-    def _coollect_volumes_column(self, column_name: str) -> tuple[int, int]:
+    def _collect_volumes_column(self, column_name: str) -> tuple[int, int]:
         query = f'SELECT * FROM `{self.path}/.sys/primary_index_stats` WHERE Activity == 1 AND EntityName = \"{column_name}\"'
         result_set = self.ydb_client.query(query)
         raw_bytes, bytes = 0, 0
@@ -66,12 +66,12 @@ class ColumnTableHelper:
 
     def get_volumes_column(self, column_name: str) -> tuple[int, int]:
         pred_raw_bytes, pred_bytes = 0, 0
-        raw_bytes, bytes = self._coollect_volumes_column(column_name)
+        raw_bytes, bytes = self._collect_volumes_column(column_name)
         while pred_raw_bytes != raw_bytes and pred_bytes != bytes:
             pred_raw_bytes = raw_bytes
             pred_bytes = bytes
-            time.sleep(10)
-            raw_bytes, bytes = self._coollect_volumes_column(column_name)
+            time.sleep(5)
+            raw_bytes, bytes = self._collect_volumes_column(column_name)
         logging.info(f"Table `{self.path}`, volumes `{column_name}` ({raw_bytes}, {bytes})")
         return raw_bytes, bytes
 
@@ -79,3 +79,85 @@ class ColumnTableHelper:
         portions = self.get_portion_stat_by_tier()
         logger.info(f"portions: {portions}, blobs: {self.get_blob_stat_by_tier()}")
         return "__DEFAULT" in portions
+
+    def dump_primary_index_stats(self):
+        logger.info(f"{self.path} primary_index_stats:")
+        query = f'SELECT * FROM `{self.path}/.sys/primary_index_stats`'
+        result_set = self.ydb_client.query(query)
+        for result in result_set:
+            for rows in result.rows:
+                logger.info(f"line: {rows}")
+
+    def _collect_volumes_column_extra(self, column_name):
+        query = f'SELECT * FROM `{self.path}/.sys/primary_index_stats` WHERE Activity == 1 AND EntityName = \"{column_name}\"'
+        result_set = self.ydb_client.query(query)
+        rows = []
+        for result in result_set:
+            for row in result.rows:
+                rows.append(row)
+        return rows
+
+    def _extract_volumes(self, rows, column_name):
+        raw_bytes, bytes = 0, 0
+        for row in rows:
+            if row["EntityName"] != column_name:
+                continue
+            raw_bytes += row["RawBytes"]
+            bytes += row["BlobRangeSize"]
+        return raw_bytes, bytes
+
+    def get_volumes_column_extra(self, column_name: str) -> tuple[int, int]:
+        pred_raw_bytes, pred_bytes = 0, 0
+        rows = self._collect_volumes_column_extra(column_name)
+        raw_bytes, bytes = self._extract_volumes(rows, column_name)
+        while pred_raw_bytes != raw_bytes and pred_bytes != bytes:
+            pred_raw_bytes = raw_bytes
+            pred_bytes = bytes
+            time.sleep(5)
+            rows = self._collect_volumes_column_extra(column_name)
+            raw_bytes, bytes = self._extract_volumes(rows, column_name)
+        return raw_bytes, bytes, rows
+
+    def dump_stats(self, rows):
+        logger.info(f"{self.path} dump_stats:")
+        for row in rows:
+            logger.info(f"line: {row}")
+
+    def _collect_columns_bytes(self, col1: str, col2: str):
+        query = f'SELECT * FROM `{self.path}/.sys/primary_index_stats` WHERE Activity == 1 AND (EntityName = \"{col1}\" OR EntityName = \"{col2}\")'
+        result_set = self.ydb_client.query(query)
+        portions = {}
+        for result in result_set:
+            for row in result.rows:
+                if row["PortionId"] in portions:
+                    if row["EntityName"] in portions[row["PortionId"]]:
+                        portions[row["PortionId"]][row["EntityName"]]["BlobRangeSize"] += row["BlobRangeSize"]
+                    else:
+                        portions[row["PortionId"]][row["EntityName"]] = {"BlobRangeSize": row["BlobRangeSize"]}
+                else:
+                    portions[row["PortionId"]] = {row["EntityName"]: {"BlobRangeSize": row["BlobRangeSize"]}}
+
+        cols = {col1: {"BlobRangeSize": 0}, col2: {"BlobRangeSize": 0}}
+
+        for portion in portions.values():
+            if col1 in portion and col2 in portion:
+                cols[col1]["BlobRangeSize"] += portion[col1]["BlobRangeSize"]
+                cols[col2]["BlobRangeSize"] += portion[col2]["BlobRangeSize"]
+
+        return cols
+
+    @staticmethod
+    def is_equal(cols1, cols2):
+        for col in cols1:
+            if cols1[col]["BlobRangeSize"] != cols2[col]["BlobRangeSize"]:
+                return False
+        return True
+
+    def get_columns_bytes(self, col1: str, col2: str):
+        pred_cols = self._collect_columns_bytes(col1, col2)
+        cols = self._collect_columns_bytes(col1, col2)
+        while not ColumnTableHelper.is_equal(cols, pred_cols):
+            time.sleep(1)
+        cols = self._collect_columns_bytes(col1, col2)
+        logging.info(f"Table `{self.path}`, volumes `{cols})")
+        return cols

@@ -276,6 +276,12 @@ public:
 
                     UpdateChannelsBinding(*tablet, db);
 
+                    for (auto& [_, dc] : Self->DataCenters) {
+                        for (const auto& followerGroup : tablet->FollowerGroups) {
+                            dc.Followers.erase({TabletId, followerGroup.Id});
+                        }
+                    }
+
                     auto itFollowerGroup = tablet->FollowerGroups.begin();
                     for (const auto& srcFollowerGroup : FollowerGroups) {
                         TFollowerGroup* followerGroup;
@@ -436,14 +442,14 @@ public:
 
         NKikimrTabletBase::TMetrics resourceValues;
 
-        resourceValues.CopyFrom(Self->GetDefaultResourceValuesForTabletType(tablet.Type));
+        Self->GetDefaultResourceValuesForTabletType(tablet.Type).ToProto(&resourceValues);
         BLOG_D("THive::TTxCreateTablet::Execute; Default resources after merge for type " << tablet.Type << ": {" << resourceValues.ShortDebugString() << "}");
         if (IsValidObjectId(tablet.ObjectId)) {
-            resourceValues.MergeFrom(Self->GetDefaultResourceValuesForObject(tablet.ObjectId));
+            Self->GetDefaultResourceValuesForObject(tablet.ObjectId).ToProto(&resourceValues);
             BLOG_D("THive::TTxCreateTablet::Execute; Default resources after merge for object " << tablet.ObjectId << ": {" << resourceValues.ShortDebugString() << "}");
         }
         // TODO: provide Hive with resource profile used by the tablet instead of default one.
-        resourceValues.MergeFrom(Self->GetDefaultResourceValuesForProfile(tablet.Type, "default"));
+        Self->GetDefaultResourceValuesForProfile(tablet.Type, "default").ToProto(&resourceValues);
         BLOG_D("THive::TTxCreateTablet::Execute; Default resources after merge for profile 'default': {" << resourceValues.ShortDebugString() << "}");
         if (resourceValues.ByteSize() == 0) {
             resourceValues.SetStorage(1ULL << 30); // 1 GB

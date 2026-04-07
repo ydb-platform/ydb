@@ -25,13 +25,14 @@ python .github/scripts/telegram/parse_and_send_team_issues.py \
 ## Message Format
 
 ```
-🔇 **07-09-24 new muted tests for [team-name](https://github.com/orgs/ydb-platform/teams/team-name)** #team-name
+🔇 **07-09-24 new muted tests in `main` for [team-name](https://github.com/orgs/ydb-platform/teams/team-name)** #teamname
+
+ 🎯 `Issue Title` [#12345](https://github.com/...)
+ 🎯 `Another Issue Title` [#12346](https://github.com/...)
+
+📊 **[Total muted tests: 150](https://datalens.yandex/4un3zdm0zcnyr?owner_team=team-name) 🔴+5 muted /🟢-2 unmuted**
 
 fyi: @responsible1 @responsible2
-
- - 🎯 [Issue URL](Issue URL) - `Issue Title`
- - 🎯 [Issue URL](Issue URL) - `Issue Title`
-
 ```
 
 ## Team Channels Configuration

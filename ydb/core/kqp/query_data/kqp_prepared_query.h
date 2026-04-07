@@ -64,6 +64,10 @@ public:
         return Proto->GetEnableShuffleElimination();
     }
 
+    ui32 DqChannelVersion() const {
+        return Proto->GetDqChannelVersion();
+    }
+
     const NKqpProto::TKqpPhyStage& GetStages(size_t index) const {
         return Proto->GetStages(index);
     }

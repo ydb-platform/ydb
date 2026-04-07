@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import inspect
 
 from rich.syntax import Syntax
@@ -57,7 +59,7 @@ class PageScreen(Screen):
         Binding(
             "c",
             "show_code",
-            "show code",
+            "Code",
             tooltip="Show the code used to generate this screen",
         )
     ]

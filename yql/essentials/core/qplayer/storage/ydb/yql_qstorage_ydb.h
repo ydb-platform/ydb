@@ -1,3 +1,5 @@
+#pragma once
+
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
 
 namespace NYql {
@@ -15,4 +17,4 @@ struct TYdbQStorageSettings {
 
 IQStoragePtr MakeYdbQStorage(const TYdbQStorageSettings& settings);
 
-}
+} // namespace NYql

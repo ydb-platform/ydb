@@ -2,13 +2,13 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for PQGroupReserve
+#include "schemeshard_pq_helpers.h"  // for PQGroupReserve
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/mind/hive/hive.h>
-#include <ydb/core/persqueue/config/config.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/public/config.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/public/utils.h>
 
 #include <ydb/services/lib/sharding/sharding.h>
@@ -107,7 +107,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         }
     }
 
-    bool splitMergeEnabled = AppData()->FeatureFlags.GetEnableTopicSplitMerge() && NKikimr::NPQ::SplitMergeEnabled(op.GetPQTabletConfig());
+    bool splitMergeEnabled = NKikimr::NPQ::SplitMergeEnabled(op.GetPQTabletConfig());
 
     TString prevBound;
     for (ui32 i = 0; i < partitionCount; ++i) {
@@ -176,19 +176,20 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         return nullptr;
     }
 
-    const TPathElement::TPtr dbRootEl = context.SS->PathsById.at(context.SS->RootPathId());
-    if (dbRootEl->UserAttrs->Attrs.contains("cloud_id")) {
-        auto cloudId = dbRootEl->UserAttrs->Attrs.at("cloud_id");
-        tabletConfig.SetYcCloudId(cloudId);
+    const auto& attrs = context.SS->PathsById.at(context.SS->RootPathId())->UserAttrs->Attrs;
+    if (auto it = attrs.find("cloud_id"); it != attrs.end()) {
+        tabletConfig.SetYcCloudId(it->second);
     }
-    if (dbRootEl->UserAttrs->Attrs.contains("folder_id")) {
-        auto folderId = dbRootEl->UserAttrs->Attrs.at("folder_id");
-        tabletConfig.SetYcFolderId(folderId);
+    if (auto it = attrs.find("folder_id"); it != attrs.end()) {
+        tabletConfig.SetYcFolderId(it->second);
     }
-    if (dbRootEl->UserAttrs->Attrs.contains("database_id")) {
-        auto databaseId = dbRootEl->UserAttrs->Attrs.at("database_id");
-        tabletConfig.SetYdbDatabaseId(databaseId);
+    if (auto it = attrs.find("database_id"); it != attrs.end()) {
+        tabletConfig.SetYdbDatabaseId(it->second);
     }
+    if (auto it = attrs.find("monitoring_project_id"); it != attrs.end()) {
+        tabletConfig.SetMonitoringProjectId(it->second);
+    }
+
     const TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
     tabletConfig.SetYdbDatabasePath(databasePath);
 
@@ -277,7 +278,7 @@ class TCreatePQ: public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<NPQState::TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return MakeHolder<TPQDoneWithCloudEvents>(OperationId, Transaction);
         default:
             return nullptr;
         }
@@ -333,7 +334,7 @@ public:
             }
 
             if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
+                FinishWithError(result.Get(), Transaction, checks.GetStatus(), checks.GetError(), context);
                 return result;
             }
         }
@@ -365,11 +366,11 @@ public:
             }
 
             if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
                 if (dstPath.IsResolved()) {
                     result->SetPathCreateTxId(ui64(dstPath.Base()->CreateTxId));
                     result->SetPathId(dstPath.Base()->PathId.LocalPathId);
                 }
+                FinishWithError(result.Get(), Transaction, checks.GetStatus(), checks.GetError(), context);
                 return result;
             }
         }
@@ -377,7 +378,7 @@ public:
         TString errStr;
 
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusPreconditionFailed, errStr, context);
             return result;
         }
 
@@ -385,7 +386,7 @@ public:
             context, createDEscription, status, errStr);
 
         if (!pqGroup.Get()) {
-            result->SetError(status, errStr);
+            FinishWithError(result.Get(), Transaction, status, errStr, context);
             return result;
         }
 
@@ -410,11 +411,11 @@ public:
                 .PQReservedStorageLimit(reserve.Storage);
 
             if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
                 if (dstPath.IsResolved()) {
                     result->SetPathCreateTxId(ui64(dstPath.Base()->CreateTxId));
                     result->SetPathId(dstPath.Base()->PathId.LocalPathId);
                 }
+                FinishWithError(result.Get(), Transaction, checks.GetStatus(), checks.GetError(), context);
                 return result;
             }
         }
@@ -425,8 +426,8 @@ public:
         const ui32 tabletProfileId = 0;
         TChannelsBindings tabletChannelsBinding;
         if (!context.SS->ResolvePqChannels(tabletProfileId, dstPath.GetPathIdForDomain(), tabletChannelsBinding)) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter,
-                             "Unable to construct channel binding for PQ with the storage pool");
+            FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter,
+                             "Unable to construct channel binding for PQ with the storage pool", context);
             return result;
         }
 
@@ -441,7 +442,7 @@ public:
                 auto errStr = Sprintf("ExplicitChannelProfiles has %u channels, should be [3 .. %lu]",
                                     ecps.size(),
                                     NHive::MAX_TABLET_CHANNELS);
-                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter, errStr, context);
                 return result;
             }
 
@@ -456,8 +457,8 @@ public:
                 dstPath.GetPathIdForDomain(),
                 pqChannelsBinding);
             if (!resolved) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                                "Unable to construct channel binding for PersQueue with the storage pool");
+                FinishWithError(result.Get(), Transaction, NKikimrScheme::StatusInvalidParameter,
+                                "Unable to construct channel binding for PersQueue with the storage pool", context);
                 return result;
             }
 
@@ -526,8 +527,8 @@ public:
             }
         }
 
+        // Activate main tx state machine
         context.OnComplete.ActivateTx(OperationId);
-
         context.DbChanges.PersistTxState(OperationId);
 
         if (!acl.empty()) {

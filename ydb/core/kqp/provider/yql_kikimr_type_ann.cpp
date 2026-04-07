@@ -1,6 +1,7 @@
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_type_ann_pg.h"
 
+#include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
 
@@ -13,15 +14,34 @@
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource_type_ann.h>
+#include <ydb/library/yql/dq/opt/dq_opt_stat.h>
+#include <ydb/services/metadata/optimization/abstract.h>
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <util/generic/is_in.h>
+
+#include <functional>
 
 namespace NYql {
 namespace {
 
 using namespace NCommon;
 using namespace NNodes;
+
+static const TSet<TString> REPLICATION_AND_TRANSFER_SECRETS_SETTINGS = [] {
+    static const TSet<TString> settings = {
+        "token_secret",
+        "password_secret",
+        "initial_token_secret",
+    };
+
+    TSet<TString> result;
+    for (const auto& setting : settings) {
+        result.insert(setting + "_name");
+        result.insert(setting + "_path");
+    }
+    return result;
+}();
 
 const TTypeAnnotationNode* GetExpectedRowType(const TKikimrTableDescription& tableDesc,
     const TVector<TString>& columns, const TPosition& pos, TExprContext& ctx)
@@ -56,7 +76,7 @@ const TTypeAnnotationNode* GetExpectedRowType(const TKikimrTableDescription& tab
 }
 
 IGraphTransformer::TStatus ConvertTableRowType(TExprNode::TPtr& input, const TKikimrTableDescription& tableDesc,
-    TExprContext& ctx)
+    TExprContext& ctx, const TTypeAnnotationContext& typeCtx)
 {
     YQL_ENSURE(input->GetTypeAnn());
 
@@ -93,7 +113,7 @@ IGraphTransformer::TStatus ConvertTableRowType(TExprNode::TPtr& input, const TKi
             break;
     }
 
-    auto convertStatus = TryConvertTo(input, *expectedType, ctx);
+    auto convertStatus = TryConvertTo(input, *expectedType, ctx, typeCtx);
 
     if (convertStatus.Level == IGraphTransformer::TStatus::Error) {
         ctx.AddError(TIssue(pos, TStringBuilder()
@@ -203,8 +223,21 @@ private:
                 auto tupleAnn = ctx.MakeType<TTupleExprType>(children);
                 node.Ptr()->SetTypeAnn(tupleAnn);
 
-                YQL_ENSURE(tableDesc->Metadata->ColumnOrder.size() == tableDesc->Metadata->Columns.size());
-                return Types.SetColumnOrder(node.Ref(), TColumnOrder(tableDesc->Metadata->ColumnOrder), ctx);
+                const auto& cols = tableDesc->Metadata->Columns;
+
+                TColumnOrder columnOrder;
+                size_t buildInProgressColumns = 0;
+
+                for (const auto& name : tableDesc->Metadata->ColumnOrder) {
+                    if (auto it = cols.find(name); it != cols.end() && it->second.IsBuildInProgress) {
+                        ++buildInProgressColumns;
+                    } else {
+                        columnOrder.AddColumn(name);
+                    }
+                }
+
+                YQL_ENSURE(columnOrder.Size() + buildInProgressColumns == tableDesc->Metadata->Columns.size());
+                return Types.SetColumnOrder(node.Ref(), columnOrder, ctx);
             }
 
             case TKikimrKey::Type::TableList:
@@ -273,6 +306,10 @@ private:
             {
                 return TStatus::Ok;
             }
+            case TKikimrKey::Type::Secret:
+            {
+                return TStatus::Ok;
+            }
         }
 
         return TStatus::Error;
@@ -338,6 +375,131 @@ namespace {
         return NKikimr::NScheme::TTypeInfo(typeId);
     }
 
+    const TTypeAnnotationNode* GetColumnTypeFromMetadata(const TKikimrColumnMetadata& column, TExprContext& ctx) {
+        const TTypeAnnotationNode* type;
+        switch (column.TypeInfo.GetTypeId()) {
+            case NKikimr::NScheme::NTypeIds::Pg: {
+                type = ctx.MakeType<TPgExprType>(NKikimr::NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetPgTypeDesc()));
+                break;
+            }
+            case NKikimr::NScheme::NTypeIds::Decimal: {
+                const NKikimr::NScheme::TDecimalType& decimal = column.TypeInfo.GetDecimalType();
+                type = ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, ToString(decimal.GetPrecision()), ToString(decimal.GetScale()));
+                if (!column.NotNull)
+                    type = ctx.MakeType<TOptionalExprType>(type);
+                break;
+            }
+            default: {
+                type = ctx.MakeType<TDataExprType>(NKikimr::NUdf::GetDataSlot(column.Type));
+                if (!column.NotNull)
+                    type = ctx.MakeType<TOptionalExprType>(type);
+                break;
+            }
+        }
+        return type;
+    }
+
+    std::optional<IGraphTransformer::TStatus> ValidateDefaultColumn(const TTypeAnnotationNode* columnType, const TTypeAnnotationNode* defaultType,
+        const TExprBase& defaultExpr, TPositionHandle pos, const TString& name, const TKikimrTableDescription* table, TExprContext& ctx,
+        const TTypeAnnotationContext& typesCtx, std::function<void(TExprNode::TPtr)> onRepeat, const bool columnNotNull)
+    {
+        if (!defaultType) {
+            return std::nullopt;
+        }
+
+        if (defaultType->HasNull() || IsPgNullExprNode(defaultExpr)) {
+            if (columnNotNull) {
+                if (table) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                        << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                        << " Column: \"" << name
+                        << "\". Default expr is nullable or optional, but column has not null constraint."));
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Default expr " << name
+                        << " is nullable or optional, but column has not null constraint."));
+                }
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (defaultExpr.Maybe<TCoNull>().IsValid()) {
+                if (table) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                        << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                        << " Column: \"" << name
+                        << "\". Default expr with null is not supported. Use DROP DEFAULT to replace the default value by null."));
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                        << "Default expr " << name << " is null, but default expr with null is not supported. Try to set the column without DEFAULT clause instead."));
+                }
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        if (!columnType) {
+            return std::nullopt;
+        }
+
+        auto type = &RemoveOptionality(*columnType);
+        auto defaultTypeUnwrapped = &RemoveOptionality(*defaultType);
+
+        const auto typeMismatchMessage = [&]() {
+            if (table) {
+                return TStringBuilder()
+                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                    << " Column: \"" << name
+                    << "\". Default value type mismatch, expected: " << (*type) << ", actual: " << (*defaultTypeUnwrapped);
+            } else {
+                return TStringBuilder()
+                    << "Default expr " << name
+                    << " type mismatch, expected: " << (*type) << ", actual: " << (*defaultTypeUnwrapped);
+            }
+        };
+
+        if (defaultTypeUnwrapped->GetKind() != type->GetKind()) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), typeMismatchMessage()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        bool skipAnnotationValidation = false;
+        if (defaultTypeUnwrapped->GetKind() == ETypeAnnotationKind::Pg) {
+            auto defaultPgType = defaultTypeUnwrapped->Cast<TPgExprType>();
+            if (defaultPgType->GetName() == "unknown") {
+                skipAnnotationValidation = true;
+            }
+        }
+
+        auto defaultExprPtr = defaultExpr.Ptr();
+        if (!skipAnnotationValidation && !IsSameAnnotation(*defaultTypeUnwrapped, *type)) {
+            auto status = TryConvertTo(defaultExprPtr, *columnType, ctx, typesCtx);
+            if (status == IGraphTransformer::TStatus::Error) {
+                ctx.AddError(TIssue(ctx.GetPosition(pos), typeMismatchMessage()));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (status == IGraphTransformer::TStatus::Repeat) {
+                auto evaluatedExpr = ctx.Builder(defaultExprPtr->Pos())
+                    .Callable("EvaluateExpr")
+                    .Add(0, defaultExprPtr)
+                    .Seal()
+                    .Build();
+                onRepeat(std::move(evaluatedExpr));
+                return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+            }
+        }
+
+        if (NDq::IsConstantExpr(defaultExprPtr) && !NDq::IsLiteralDataExpr(TExprBase(defaultExprPtr))) {
+            auto evaluatedExpr = ctx.Builder(defaultExprPtr->Pos())
+                .Callable("EvaluateExpr")
+                .Add(0, defaultExprPtr)
+                .Seal()
+                .Build();
+            onRepeat(std::move(evaluatedExpr));
+            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+        }
+
+        return std::nullopt;
+    }
+
     bool ValidateColumnDataType(const TDataExprType* type, const TExprBase& typeNode, const TString& columnName,
             TExprContext& ctx) {
         auto columnTypeError = GetColumnTypeErrorFn(ctx);
@@ -363,62 +525,31 @@ namespace {
         return true;
     }
 
-    bool ParseConstraintNode(TExprContext& ctx, TKikimrColumnMetadata& columnMeta, const TExprList& columnTuple, TCoNameValueTuple constraint, bool& needEval, bool isAlter = false) {
+    bool ParseConstraintNode(TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TKikimrColumnMetadata& columnMeta, const TExprList& columnTuple,
+        TCoNameValueTuple constraint, bool& needEval, bool isAlter = false) {
         auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
         auto typeNode = columnTuple.Item(1);
 
         auto columnName = TString(nameNode.Value());
         auto columnType = typeNode.Ref().GetTypeAnn();
         auto type = columnType->Cast<TTypeExprType>()->GetType();
-        auto isOptional = type->GetKind() == ETypeAnnotationKind::Optional;
-        auto actualType = !isOptional ? type : type->Cast<TOptionalExprType>()->GetItemType();
+        auto actualType = &RemoveOptionality(*type);
         if (constraint.Name() == "default") {
             auto defaultType = constraint.Value().Ref().GetTypeAnn();
-            YQL_ENSURE(constraint.Value().IsValid());
+            YQL_ENSURE(defaultType && constraint.Value().IsValid());
+
             TExprBase constrValue = constraint.Value().Cast();
 
-            const bool isNull = IsPgNullExprNode(constrValue) || defaultType->HasNull();
-            if (isNull && columnMeta.NotNull) {
-                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
-                    << " is nullable or optional, but column has not null constraint. "));
-                return false;
-            }
-
-            // unwrap optional
-            if (defaultType->GetKind() == ETypeAnnotationKind::Optional) {
-                defaultType = defaultType->Cast<TOptionalExprType>()->GetItemType();
-            }
-
-            if (defaultType->GetKind() != actualType->GetKind()) {
-                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
-                    << " type mismatch, expected: " << (*actualType) << ", actual: " << *(defaultType)));
-                return false;
-            }
-
-            bool skipAnnotationValidation = false;
-            if (defaultType->GetKind() == ETypeAnnotationKind::Pg) {
-                auto defaultPgType = defaultType->Cast<TPgExprType>();
-                if (defaultPgType->GetName() == "unknown") {
-                    skipAnnotationValidation = true;
-                }
-            }
-
-            if (!skipAnnotationValidation && !IsSameAnnotation(*defaultType, *actualType)) {
-                auto constrPtr = constraint.Value().Cast().Ptr();
-                auto status = TryConvertTo(constrPtr, *type, ctx);
-                if (status == IGraphTransformer::TStatus::Error) {
-                    ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), TStringBuilder() << "Default expr " << columnName
-                        << " type mismatch, expected: " << (*actualType) << ", actual: " << *(defaultType)));
-                    return false;
-                } else if (status == IGraphTransformer::TStatus::Repeat) {
-                    auto evaluatedExpr = ctx.Builder(constrPtr->Pos())
-                        .Callable("EvaluateExpr")
-                        .Add(0, constrPtr)
-                        .Seal()
-                        .Build();
-
-                    constraint.Ptr()->ChildRef(TCoNameValueTuple::idx_Value) = evaluatedExpr;
+            if (auto status = ValidateDefaultColumn(type, defaultType, constraint.Value().Cast(), constraint.Pos(),
+                columnName, nullptr, ctx, typeCtx, [&](TExprNode::TPtr expr) {
+                    constraint.Ptr()->ChildRef(TCoNameValueTuple::idx_Value) = std::move(expr);
                     needEval = true;
+                }, columnMeta.NotNull))
+            {
+                if (*status == IGraphTransformer::TStatus::Error) {
+                    return false;
+                }
+                if (*status == IGraphTransformer::TStatus::Repeat) {
                     return true;
                 }
             }
@@ -431,8 +562,7 @@ namespace {
             }
 
             columnMeta.SetDefaultFromLiteral();
-            auto err = FillLiteralProto(constrValue, actualType, columnMeta.DefaultFromLiteral);
-            if (err) {
+            if (auto err = FillLiteralProto(constrValue, actualType, columnMeta.DefaultFromLiteral)) {
                 ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()), err.value()));
                 return false;
             }
@@ -517,7 +647,7 @@ private:
                 }
 
                 TExprNode::TPtr node = value.Ptr();
-                if (TryConvertTo(node, *expectedType, ctx) == TStatus::Error) {
+                if (TryConvertTo(node, *expectedType, ctx, Types) == TStatus::Error) {
                     ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
                         << "Failed to convert input columns types to scheme types"));
                     return TStatus::Error;
@@ -717,7 +847,7 @@ private:
             }
         }
 
-        auto status = ConvertTableRowType(node.Ptr()->ChildRef(TKiWriteTable::idx_Input), *table, ctx);
+        auto status = ConvertTableRowType(node.Ptr()->ChildRef(TKiWriteTable::idx_Input), *table, ctx, Types);
         if (status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -835,7 +965,7 @@ private:
 
 
         auto updateBody = node.Update().Body().Ptr();
-        auto status = ConvertTableRowType(updateBody, *table, ctx);
+        auto status = ConvertTableRowType(updateBody, *table, ctx, Types);
         if (status != IGraphTransformer::TStatus::Ok) {
             if (status == IGraphTransformer::TStatus::Repeat) {
                 updateLambda = Build<TCoLambda>(ctx, node.Update().Pos())
@@ -880,7 +1010,87 @@ private:
         return TStatus::Ok;
     }
 
-virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) override {
+    bool ParseColumnExtra(const TExprList& columnTuple, TKikimrColumnMetadata& columnMeta, TExprContext& ctx) {
+        for (size_t itemId = 3; itemId < columnTuple.Size(); ++itemId) {
+            auto columnItem = columnTuple.Item(itemId);
+            if (!columnItem.Maybe<TExprList>()) {
+                continue;
+            }
+            const auto exprs = columnItem.Cast<TExprList>();
+            if (exprs.Size() > 1 && exprs.Item(0).Cast<TCoAtom>().Value() == "columnCompression") {
+                columnMeta.Compression = TColumnCompression();
+                const auto settings = exprs.Item(1).Cast<TExprList>();
+                for (const auto setting : settings) {
+                    const auto sKV = setting.Cast<TExprList>();
+                    const auto key = sKV.Item(0).Cast<TCoAtom>().Value();
+                    const auto& settingVal = sKV.Item(1).Ref();
+                    if (key == "algorithm" && settingVal.IsCallable("String")) {
+                        columnMeta.Compression->Algorithm = settingVal.Child(0)->Content();
+                    } else if (key == "level" && (settingVal.IsCallable("Uint64") || settingVal.IsCallable("Int64"))) {
+                        columnMeta.Compression->Level = FromString<i64>(settingVal.Child(0)->Content());
+                    } else {
+                        ctx.AddError(TIssue(ctx.GetPosition(columnItem.Pos()), TStringBuilder()
+                            << "Only algorithm and level settings supported for column COMPRESSION."));
+                        return false;
+                    }
+                }
+            } else if (exprs.Size() > 1 && exprs.Item(0).Cast<TCoAtom>().Value() == "columnEncoding") {
+                columnMeta.Encoding = TColumnEncodingsList{};
+                auto encodingList = exprs.Item(1).Cast<TExprList>();
+
+                if (encodingList.Empty()) {
+                    columnMeta.Encoding->push_back(TColumnEncoding{.Type = TColumnEncoding::EEncodingType::UNDEFINED});
+                } else if (encodingList.Size() > 1) {
+                    ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+                    return false;
+                } else {
+                    auto config = encodingList.Item(0).Cast<TExprList>();
+                    if (config.Size() != 1) {
+                        ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+                        return false;
+                    }
+
+                    TString encodingName;
+                    auto pair = config.Item(0).Cast<TExprList>();
+                    if (pair.Size() >= 2 && pair.Item(0).Cast<TCoAtom>().Value() == "name" && encodingName.empty()) {
+                        encodingName = to_lower(TString(pair.Item(1).Cast<TCoAtom>().Value()));
+                    } else {
+                        ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+                        return false;
+                    }
+
+                    if (encodingName == "dict") {
+                        if (!SessionCtx->Config().FeatureFlags.GetEnableCsDictionaryEncoding()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                                << "ENCODING(DICT) is disabled."));
+                            return false;
+                        }
+                        columnMeta.Encoding->push_back(TColumnEncoding{.Type = TColumnEncoding::EEncodingType::DICTIONARY});
+                    } else if (encodingName == "off") {
+                        columnMeta.Encoding->push_back(TColumnEncoding{.Type = TColumnEncoding::EEncodingType::PLAIN});
+                    } else {
+                        ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), "Invalid column encoding parameters"));
+                        return false;
+                    }
+                }
+            } else {
+                const auto families = columnItem.Cast<TCoAtomList>();
+                if (families.Size() > 1) {
+                    ctx.AddError(TIssue(ctx.GetPosition(columnItem.Pos()), TStringBuilder()
+                        << " Column: \"" << columnMeta.Name
+                        << "\". Several column families for a single column are not yet supported"));
+                    return false;
+                }
+                for (const auto family : families) {
+                    columnMeta.Families.push_back(TString(family.Value()));
+                }
+            }
+        }
+
+        return true;
+    }
+
+    virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) override {
         TString cluster = TString(create.DataSink().Cluster());
         TString table = TString(create.Table());
         TString tableType = TString(create.TableType());
@@ -918,11 +1128,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             auto columnType = typeNode.Ref().GetTypeAnn();
             YQL_ENSURE(columnType && columnType->GetKind() == ETypeAnnotationKind::Type);
 
-            auto type = columnType->Cast<TTypeExprType>()->GetType();
-
-            auto isOptional = type->GetKind() == ETypeAnnotationKind::Optional;
-            auto actualType = !isOptional ? type : type->Cast<TOptionalExprType>()->GetItemType();
-
+            auto actualType = &RemoveOptionality(*columnType->Cast<TTypeExprType>()->GetType());
             if (actualType->GetKind() != ETypeAnnotationKind::Data
                 && actualType->GetKind() != ETypeAnnotationKind::Pg
             ) {
@@ -948,7 +1154,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                 for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                     bool needEval = false;
-                    if (!ParseConstraintNode(ctx, columnMeta, columnTuple, constraint, needEval)) {
+                    if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval)) {
                         return TStatus::Error;
                     }
 
@@ -959,11 +1165,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 }
             }
 
-            if (columnTuple.Size() > 3) {
-                auto families = columnTuple.Item(3).Cast<TCoAtomList>();
-                for (auto family : families) {
-                    columnMeta.Families.push_back(TString(family.Value()));
-                }
+            if (!ParseColumnExtra(columnTuple, columnMeta, ctx)) {
+                return TStatus::Error;
             }
 
             meta->ColumnOrder.push_back(columnName);
@@ -972,6 +1175,22 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
                     << "Duplicate column: " << columnName << "."));
                 return TStatus::Error;
+            }
+        }
+
+        if (meta->TableType == ETableType::Table) {
+            for (auto&& setting : create.TableSettings()) {
+                if (setting.Name().Value() == "storeType") {
+                    const TMaybe<TString> storeType = TString(setting.Value().Cast<TCoAtom>().Value());
+                    if (storeType) {
+                        const auto& val = to_lower(storeType.GetRef());
+                        if (val == "column") {
+                            meta->StoreType = EStoreType::Column;
+                        }
+                    }
+
+                    break;
+                }
             }
         }
 
@@ -987,8 +1206,47 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 indexType = TIndexDescription::EType::GlobalSyncUnique;
             } else if (type == "globalVectorKmeansTree") {
                 indexType = TIndexDescription::EType::GlobalSyncVectorKMeansTree;
+            } else if (type == "globalFulltextPlain") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
+                    return TStatus::Error;
+                }
+                indexType = TIndexDescription::EType::GlobalFulltextPlain;
+            } else if (type == "globalFulltextRelevance") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
+                    return TStatus::Error;
+                }
+                indexType = TIndexDescription::EType::GlobalFulltextRelevance;
+            } else if (type == "globalJson") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableJsonIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "JSON index support is disabled"));
+                    return TStatus::Error;
+                }
+                indexType = TIndexDescription::EType::GlobalJson;
+            } else if (type == "localBloomFilter") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Local bloom filter index support is disabled"));
+                    return TStatus::Error;
+                }
+
+                indexType = TIndexDescription::EType::LocalBloomFilter;
+            } else if (type == "localBloomNgramFilter") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Local bloom ngram filter index support is disabled"));
+                    return TStatus::Error;
+                }
+
+                indexType = TIndexDescription::EType::LocalBloomNgramFilter;
             } else {
                 YQL_ENSURE(false, "Unknown index type: " << type);
+            }
+
+            if (indexType == TIndexDescription::EType::LocalBloomNgramFilter &&
+                meta->StoreType != EStoreType::Column) {
+                ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                    "Local bloom ngram indexes are supported only for column tables"));
+                return TStatus::Error;
             }
 
             TVector<TString> indexColums;
@@ -1012,18 +1270,139 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 dataColums.emplace_back(TString(dataCol.Value()));
             }
 
-            TIndexDescription::TSpecializedIndexDescription specializedIndexDescription;
-            if (indexType == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                TVector<std::pair<TString, TString>> settings(::Reserve(index.IndexSettings().Size()));
-                for (const auto& indexSetting : index.IndexSettings()) {
-                    settings.emplace_back(indexSetting.Name().Value(), indexSetting.Value().Cast<TCoAtom>().StringValue());
-                }
+            NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
+            NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
+            TIndexDescription::TLocalBloomFilterDescription localBloomFilterDescription;
+            TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDescription;
+            // fulltext index has per-column analyzers settings, single value for now
+            fulltextIndexDescription.mutable_settings()->add_columns()->set_column(
+                indexColums.empty() ? "<none>" : indexColums.back()
+            );
+            for (const auto& indexSetting : index.IndexSettings()) {
+                const auto& name = indexSetting.Name();
+                const auto& value = indexSetting.Value().Cast<TCoAtom>();
+
                 TString error;
-                *specializedIndexDescription.emplace<NKikimrKqp::TVectorIndexKmeansTreeDescription>()
-                     .MutableSettings() = NKikimr::NKMeans::FillSettings(settings, error);
+                switch (indexType) {
+                    case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                        NKikimr::NKMeans::FillSetting(
+                            *vectorIndexKmeansTreeDescription.MutableSettings(),
+                            name.StringValue(), value.StringValue(), error);
+                        break;
+                    }
+                    case TIndexDescription::EType::GlobalFulltextPlain:
+                    case TIndexDescription::EType::GlobalFulltextRelevance: {
+                        NKikimr::NFulltext::FillSetting(
+                            *fulltextIndexDescription.MutableSettings(),
+                            name.StringValue(), value.StringValue(), error);
+                        break;
+                    }
+                    case TIndexDescription::EType::LocalBloomFilter: {
+                        FillLocalBloomFilterSetting(
+                            localBloomFilterDescription,
+                            name.StringValue(), value.StringValue(), error);
+                        break;
+                    }
+                    case TIndexDescription::EType::LocalBloomNgramFilter: {
+                        FillLocalBloomNgramFilterSetting(
+                            localBloomNgramFilterDescription,
+                            name.StringValue(), value.StringValue(), error);
+                        break;
+                    }
+                    default:
+                        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder()
+                            << "Unknown index setting: " << name.StringValue()));
+                        return IGraphTransformer::TStatus::Error;
+                }
                 if (error) {
-                    ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), error));
+                    ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), error));
                     return IGraphTransformer::TStatus::Error;
+                }
+            }
+
+            TIndexDescription::TSpecializedIndexDescription specializedIndexDescription;
+            switch (indexType) {
+                case TIndexDescription::EType::GlobalSync:
+                case TIndexDescription::EType::GlobalAsync:
+                case TIndexDescription::EType::GlobalSyncUnique:
+                case TIndexDescription::EType::GlobalJson:
+                    // no specialized index description
+                    // no settings validation
+                    break;
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                    TString error;
+                    if (!NKikimr::NKMeans::ValidateSettings(vectorIndexKmeansTreeDescription.GetSettings(), error)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    specializedIndexDescription = std::move(vectorIndexKmeansTreeDescription);
+                    break;
+                }
+                case TIndexDescription::EType::GlobalFulltextPlain: {
+                    TString error;
+                    if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), error)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    specializedIndexDescription = std::move(fulltextIndexDescription);
+                    break;
+                }
+                case TIndexDescription::EType::GlobalFulltextRelevance: {
+                    TString error;
+                    if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), error)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    specializedIndexDescription = std::move(fulltextIndexDescription);
+                    break;
+                }
+                case TIndexDescription::EType::LocalBloomFilter:
+                    if (!dataColums.empty()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                            "Local bloom index does not support data columns"));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    if (meta->StoreType == EStoreType::Column) {
+                        // Column-store: keep existing restriction of exactly 1 column
+                        if (indexColums.size() != 1) {
+                            ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                                "Local bloom index on column tables requires exactly one index column"));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                    } else {
+                        // Row-store: columns must be a left-prefix of PK
+                        if (indexColums.empty()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                                "Local bloom index requires at least one PK prefix column"));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        if (indexColums.size() > meta->KeyColumnNames.size()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                                "Bloom filter prefix columns exceed the number of primary key columns"));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        for (size_t i = 0; i < indexColums.size(); ++i) {
+                            if (indexColums[i] != meta->KeyColumnNames[i]) {
+                                ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), TStringBuilder()
+                                    << "Bloom filter column '" << indexColums[i]
+                                    << "' does not match PK column '" << meta->KeyColumnNames[i]
+                                    << "' at position " << i));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                        }
+                    }
+
+                    specializedIndexDescription = std::move(localBloomFilterDescription);
+                    break;
+                case TIndexDescription::EType::LocalBloomNgramFilter: {
+                    if (indexColums.size() != 1 || !dataColums.empty()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.Pos()),
+                            "Local bloom ngram index requires exactly one index column and does not support data columns"));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    specializedIndexDescription = std::move(localBloomNgramFilterDescription);
+                    break;
                 }
             }
 
@@ -1241,7 +1620,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         TExprNode::TPtr keyNode = boundaries.Item(j).Ptr();
                         TString content(keyNode->Child(0)->Content());
                         if (keyNode->GetTypeAnn()->Cast<TDataExprType>()->GetSlot() != keyTypes[j]->GetSlot()) {
-                            if (TryConvertTo(keyNode, *keyTypes[j], ctx) == TStatus::Error) {
+                            if (TryConvertTo(keyNode, *keyTypes[j], ctx, Types) == TStatus::Error) {
                                 ctx.AddError(TIssue(ctx.GetPosition(keyNode->Pos()), TStringBuilder()
                                     << "Failed to convert value \"" << content
                                     << "\" to a corresponding key column type"));
@@ -1375,10 +1754,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                     auto typeNode = columnTuple.Item(1);
                     auto columnType = typeNode.Ref().GetTypeAnn();
                     YQL_ENSURE(columnType && columnType->GetKind() == ETypeAnnotationKind::Type);
-                    auto type = columnType->Cast<TTypeExprType>()->GetType();
-                    auto actualType = (type->GetKind() == ETypeAnnotationKind::Optional) ?
-                        type->Cast<TOptionalExprType>()->GetItemType() : type;
-
+                    auto actualType = &RemoveOptionality(*columnType->Cast<TTypeExprType>()->GetType());
 
                     if (actualType->GetKind() != ETypeAnnotationKind::Data
                         && actualType->GetKind() != ETypeAnnotationKind::Pg)
@@ -1401,7 +1777,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                         for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                             bool needEval = false;
-                            if (!ParseConstraintNode(ctx, columnMeta, columnTuple, constraint, needEval, true)) {
+                            if (!ParseConstraintNode(ctx, Types, columnMeta, columnTuple, constraint, needEval, true)) {
                                 return TStatus::Error;
                             }
 
@@ -1415,15 +1791,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                     columnMeta.TypeInfo = GetColumnTypeInfo(actualType);
                     columnMeta.Type = GetColumnTypeName(actualType, columnMeta.TypeInfo);
 
-                    if (columnTuple.Size() > 3) {
-                        auto families = columnTuple.Item(3);
-                        if (families.Cast<TCoAtomList>().Size() > 1) {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                                << " Column: \"" << name
-                                << "\". Several column families for a single column are not yet supported"));
-                            return TStatus::Error;
-                        }
+                    if (!ParseColumnExtra(columnTuple, columnMeta, ctx)) {
+                        return TStatus::Error;
                     }
                 }
             } else if (name == "dropColumns") {
@@ -1516,9 +1885,145 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                                 << "changeColumnConstraints can get exactly one token \\in {\"set_not_null\", \"drop_not_null\"}"));
                             return TStatus::Error;
                         }
+                    } else if (alterColumnAction == "setDefaultValue") {
+                        if (!SessionCtx->Config().FeatureFlags.GetEnableSetDropDefaultValue()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                << "\". Set/drop default value is not enabled."));
+                            return TStatus::Error;
+                        }
+
+                        if (table->Metadata->Kind == EKikimrTableKind::Olap) {
+                            ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
+                                "Default values are not supported in column tables"));
+                            return TStatus::Error;
+                        }
+
+                        auto* column = table->Metadata->Columns.FindPtr(name);
+                        if (column && column->IsDefaultFromSequence()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                << " Column: \"" << name
+                                << "\". Cannot set default for a serial/sequence column"));
+                            return TStatus::Error;
+                        }
+
+                        auto defaultExpr = alterColumnList.Item(1);
+                        const auto defaultType = defaultExpr.Ref().GetTypeAnn();
+
+                        if (!defaultType) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                << " Column: \"" << name
+                                << "\". Cannot determine type of default value expression"));
+                            return TStatus::Error;
+                        }
+
+                        const TTypeAnnotationNode* columnType = table->GetColumnType(name);
+                        if (!columnType && column) {
+                            columnType = GetColumnTypeFromMetadata(*column, ctx);
+                        }
+
+                        if (auto status = ValidateDefaultColumn(columnType, defaultType, defaultExpr, nameNode.Pos(), name, table, ctx, Types, [&](TExprNode::TPtr expr) {
+                            alterColumnList.Ptr()->ChildRef(1) = std::move(expr);
+                            ctx.Step.Repeat(TExprStep::ExprEval);
+                        }, column ? column->NotNull : false))
+                        {
+                            return *status;
+                        }
+                    } else if (alterColumnAction == "dropDefault") {
+                        if (!SessionCtx->Config().FeatureFlags.GetEnableSetDropDefaultValue()) {
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                << "\". Set/drop default value is not enabled."));
+                            return TStatus::Error;
+                        }
+
+                        auto* column = table->Metadata->Columns.FindPtr(name);
+                        if (table->Metadata->Kind == EKikimrTableKind::Olap) {
+                            ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
+                                "Default values are not supported in column tables"));
+                            return TStatus::Error;
+                        }
+
+                        if (column) {
+                            if (!column->IsDefaultKindDefined()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                    << " Column: \"" << name
+                                    << "\" has no default to drop"));
+                                return TStatus::Error;
+                            }
+                            if (column->IsDefaultFromSequence()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                    << " Column: \"" << name
+                                    << "\". Cannot drop default for a serial/sequence column"));
+                                return TStatus::Error;
+                            }
+                        }
+                    } else if (alterColumnAction == "changeCompression") {
+                        const auto settings = alterColumnList.Item(1).Cast<TExprList>();
+                        for (const auto setting : settings) {
+                            const auto sKV = setting.Cast<TExprList>();
+                            const auto key = sKV.Item(0).Cast<TCoAtom>().Value();
+                            const auto& settingVal = sKV.Item(1).Ref();
+                            if (!((key == "algorithm" && settingVal.IsCallable("String")) ||
+                                (key == "level" && (settingVal.IsCallable("Uint64") || settingVal.IsCallable("Int64"))))) {
+                                ctx.AddError(TIssue(ctx.GetPosition(sKV.Pos()), TStringBuilder()
+                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                    << " Column: \"" << name
+                                    << "\". Setting: \"" << key
+                                    << "\". Only algorithm and level settings supported for column COMPRESSION"));
+                                return TStatus::Error;
+                            }
+                        }
+                    } else if (alterColumnAction == "changeEncoding") {
+                        const auto encodingList = alterColumnList.Item(1).Cast<TExprList>();
+                        if (!encodingList.Empty()) {
+                            if (encodingList.Size() > 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                    << " Column: \"" << name << "\". Invalid column encoding parameters"));
+                                return TStatus::Error;
+                            }
+
+                            auto config = encodingList.Item(0).Cast<TExprList>();
+                            if (config.Size() != 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                    << " Column: \"" << name << "\". Invalid column encoding parameters"));
+                                return TStatus::Error;
+                            }
+
+                            TString encodingName;
+                            auto pair = config.Item(0).Cast<TExprList>();
+                            if (pair.Size() >= 2 && pair.Item(0).Cast<TCoAtom>().Value() == "name" && encodingName.empty()) {
+                                encodingName = to_lower(TString(pair.Item(1).Cast<TCoAtom>().Value()));
+                            } else {
+                                ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                    << " Column: \"" << name << "\". Invalid column encoding parameters"));
+                                return TStatus::Error;
+                            }
+
+                            if (encodingName == "dict") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableCsDictionaryEncoding()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                                        << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                        << " Column: \"" << name << "\". ENCODING(DICT) is disabled."));
+                                    return TStatus::Error;
+                                }
+                            } else if (encodingName != "off") {
+                                ctx.AddError(TIssue(ctx.GetPosition(encodingList.Pos()), TStringBuilder()
+                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                                    << " Column: \"" << name << "\". Invalid column encoding parameters"));
+                                return TStatus::Error;
+                            }
+                        }
                     } else {
                         ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
-                                TStringBuilder() << "Unsupported action to alter column"));
+                                TStringBuilder() << "Unsupported action to alter column: " << alterColumnAction));
                         return TStatus::Error;
                     }
                 }
@@ -1546,17 +2051,19 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 auto nameNode = action.Value().Cast<TCoAtom>();
                 auto name = TString(nameNode.Value());
 
-                const auto& indexes = table->Metadata->Indexes;
+                if (table->Metadata->StoreType != EStoreType::Column) {
+                    const auto& indexes = table->Metadata->Indexes;
 
-                auto cmp = [name](const TIndexDescription& desc) {
-                    return name == desc.Name;
-                };
+                    auto cmp = [name](const TIndexDescription& desc) {
+                        return name == desc.Name;
+                    };
 
-                if (std::find_if(indexes.begin(), indexes.end(), cmp) == indexes.end()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                        << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                        << " Index: \"" << name << "\" does not exist"));
-                    return TStatus::Error;
+                    if (std::find_if(indexes.begin(), indexes.end(), cmp) == indexes.end()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
+                            << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
+                            << " Index: \"" << name << "\" does not exist"));
+                        return TStatus::Error;
+                    }
                 }
             } else if (name != "addColumnFamilies"
                     && name != "alterColumnFamilies"
@@ -1564,7 +2071,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                     && name != "addChangefeed"
                     && name != "dropChangefeed"
                     && name != "renameIndexTo"
-                    && name != "alterIndex")
+                    && name != "alterIndex"
+                    && name != "compact")
             {
                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                     TStringBuilder() << "Unknown alter table action: " << name));
@@ -1624,9 +2132,9 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
     static bool CheckConsumerSettings(const TCoNameValueTupleList& settings, TExprContext& ctx) {
         for (const auto& setting : settings) {
-            auto name = setting.Name().Value();
-            auto val = TString(setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value());
+            const auto name = setting.Name().Value();
             if (name == "setSupportedCodecs") {
+                auto val = TString(setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value());
                 auto codecsList = GetTopicCodecsFromString(val);
                 if (codecsList.empty()) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
@@ -1793,19 +2301,24 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleCreateReplication(TKiCreateReplication node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
-            "connection_string",
-            "endpoint",
-            "database",
-            "token",
-            "token_secret_name",
-            "user",
-            "password",
-            "password_secret_name",
-            "ca_cert",
-            "consistency_level",
-            "commit_interval",
-        };
+        static const THashSet<TString> supportedSettings = [] {
+            THashSet<TString> settings = {
+               "connection_string",
+                "endpoint",
+                "database",
+                "token",
+                "user",
+                "password",
+                "service_account_id",
+                "initial_token",
+                "resource_id",
+                "ca_cert",
+                "consistency_level",
+                "commit_interval",
+            };
+            settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
+            return settings;
+        }();
 
         if (!CheckReplicationSettings(node.ReplicationSettings(), supportedSettings, ctx)) {
             return TStatus::Error;
@@ -1821,19 +2334,24 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleAlterReplication(TKiAlterReplication node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
-            "connection_string",
-            "endpoint",
-            "database",
-            "token",
-            "token_secret_name",
-            "user",
-            "password",
-            "password_secret_name",
-            "ca_cert",
-            "state",
-            "failover_mode",
-        };
+        static const THashSet<TString> supportedSettings = [] {
+            THashSet<TString> settings = {
+                "connection_string",
+                "endpoint",
+                "database",
+                "token",
+                "user",
+                "password",
+                "service_account_id",
+                "initial_token",
+                "resource_id",
+                "ca_cert",
+                "state",
+                "failover_mode",
+            };
+            settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
+            return settings;
+        }();
 
         if (!CheckReplicationSettings(node.ReplicationSettings(), supportedSettings, ctx)) {
             return TStatus::Error;
@@ -1854,22 +2372,28 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleCreateTransfer(TKiCreateTransfer node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
-            "connection_string",
-            "endpoint",
-            "database",
-            "token",
-            "token_secret_name",
-            "user",
-            "password",
-            "password_secret_name",
-            "ca_cert",
-            "commit_interval",
-            "flush_interval",
-            "batch_size_bytes",
-            "consumer",
-            "directory",
-        };
+        static const THashSet<TString> supportedSettings = [] {
+            THashSet<TString> settings = {
+                "connection_string",
+                "endpoint",
+                "database",
+                "token",
+                "user",
+                "password",
+                "service_account_id",
+                "initial_token",
+                "resource_id",
+                "ca_cert",
+                "commit_interval",
+                "flush_interval",
+                "batch_size_bytes",
+                "consumer",
+                "directory",
+                "metrics_level",
+            };
+            settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
+            return settings;
+        }();
 
         if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {
             return TStatus::Error;
@@ -1885,22 +2409,28 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleAlterTransfer(TKiAlterTransfer node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
-            "connection_string",
-            "endpoint",
-            "database",
-            "token",
-            "token_secret_name",
-            "user",
-            "password",
-            "password_secret_name",
-            "ca_cert",
-            "state",
-            "failover_mode",
-            "flush_interval",
-            "batch_size_bytes",
-            "directory"
-        };
+        static const THashSet<TString> supportedSettings = [] {
+            THashSet<TString> settings = {
+                "connection_string",
+                "endpoint",
+                "database",
+                "token",
+                "user",
+                "password",
+                "service_account_id",
+                "initial_token",
+                "resource_id",
+                "ca_cert",
+                "state",
+                "failover_mode",
+                "flush_interval",
+                "batch_size_bytes",
+                "directory",
+                "metrics_level",
+            };
+            settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
+            return settings;
+        }();
 
         if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {
             return TStatus::Error;
@@ -1925,6 +2455,18 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         return TStatus::Ok;
     }
 
+    virtual TStatus HandleTruncateTable(NNodes::TKiTruncateTable node, TExprContext& ctx) override {
+        // there is will be checking on feature flag
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+
+        if (!node.TablePath().Value()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.TablePath().Pos()), "TablePath can't be empty."));
+            return TStatus::Error;
+        }
+
+        return TStatus::Ok;
+    }
+
     virtual TStatus HandleAlterDatabase(NNodes::TKiAlterDatabase node, TExprContext& ctx) override {
         if (!SessionCtx->Config().FeatureFlags.GetEnableAlterDatabase()) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
@@ -1933,11 +2475,11 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         }
 
         if (!node.DatabasePath().Value()) {
-                ctx.AddError(TIssue(ctx.GetPosition(node.DatabasePath().Pos()), "DatabasePath can't be empty."));
+            ctx.AddError(TIssue(ctx.GetPosition(node.DatabasePath().Pos()), "DatabasePath can't be empty."));
             return TStatus::Error;
         }
 
-        const THashSet<TString> supportedSettings = {
+        static const THashSet<TString> supportedSettings = {
             "owner", "MAX_SHARDS", "MAX_SHARDS_IN_PATH", "MAX_PATHS", "MAX_CHILDREN_IN_DIR"
         };
 
@@ -1981,7 +2523,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleCreateUser(TKiCreateUser node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
+        static const THashSet<TString> supportedSettings = {
             "password",
             "hash",
             "passwordEncrypted",
@@ -2021,7 +2563,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleAlterUser(TKiAlterUser node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
+        static const THashSet<TString> supportedSettings = {
             "password",
             "hash",
             "passwordEncrypted",
@@ -2072,22 +2614,51 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         return TStatus::Ok;
     }
 
-    virtual TStatus HandleUpsertObject(TKiUpsertObject node, TExprContext& /*ctx*/) override {
+    template <typename TNode>
+    TStatus ValidateObjectNodeAnnotation(const TNode& node, TExprContext& ctx) {
+        const auto typeId = node.TypeId().Value();
+        NKikimr::NMetadata::IClassBehaviour::TPtr cBehaviour(NKikimr::NMetadata::IClassBehaviour::TFactory::Construct(typeId));
+        YQL_ENSURE(cBehaviour, "Unsupported object type: \"" << typeId << "\"");
+
+        if (const auto optimizationManager = cBehaviour->ConstructOptimizationManager()) {
+            return optimizationManager->ValidateObjectNodeAnnotation(node.Ptr(), ctx);
+        }
+
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleUpsertObject(TKiUpsertObject node, TExprContext& ctx) override {
+        if (const auto status = ValidateObjectNodeAnnotation(node, ctx); status != TStatus::Ok) {
+            return status;
+        }
+
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
 
-    virtual TStatus HandleCreateObject(TKiCreateObject node, TExprContext& /*ctx*/) override {
+    virtual TStatus HandleCreateObject(TKiCreateObject node, TExprContext& ctx) override {
+        if (const auto status = ValidateObjectNodeAnnotation(node, ctx); status != TStatus::Ok) {
+            return status;
+        }
+
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
 
-    virtual TStatus HandleAlterObject(TKiAlterObject node, TExprContext& /*ctx*/) override {
+    virtual TStatus HandleAlterObject(TKiAlterObject node, TExprContext& ctx) override {
+        if (const auto status = ValidateObjectNodeAnnotation(node, ctx); status != TStatus::Ok) {
+            return status;
+        }
+
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
 
-    virtual TStatus HandleDropObject(TKiDropObject node, TExprContext& /*ctx*/) override {
+    virtual TStatus HandleDropObject(TKiDropObject node, TExprContext& ctx) override {
+        if (const auto status = ValidateObjectNodeAnnotation(node, ctx); status != TStatus::Ok) {
+            return status;
+        }
+
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
@@ -2322,9 +2893,10 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     TStatus HandleCreateBackupCollection(TKiCreateBackupCollection node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {
+        static const THashSet<TString> supportedSettings = {
             "incremental_backup_enabled",
             "storage",
+            "omit_indexes",
         };
 
         if (!CheckBackupCollectionSettings(node.BackupCollectionSettings(), supportedSettings, ctx)) {
@@ -2341,7 +2913,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     TStatus HandleAlterBackupCollection(TKiAlterBackupCollection node, TExprContext& ctx) override {
-        const THashSet<TString> supportedSettings = {};
+        static const THashSet<TString> supportedSettings = {};
 
         if (!CheckBackupCollectionSettings(node.BackupCollectionSettings(), supportedSettings, ctx)) {
             return TStatus::Error;
@@ -2372,6 +2944,21 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     TStatus HandleRestore(TKiRestore node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleCreateSecret(TKiCreateSecret node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleAlterSecret(TKiAlterSecret node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleDropSecret(TKiDropSecret node, TExprContext&) override {
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }

@@ -47,7 +47,7 @@ public:
 
         const auto it = ChoicesMap.find(choice);
         if (it == ChoicesMap.end()) {
-            auto error = yexception() << "Value '" << choice << "' is not allowed " << (OptionName ? TStringBuilder() << "for option " << OptionName : TStringBuilder()) << ", available variants:";
+            auto error = yexception() << "Value '" << choice << "' is not allowed" << (OptionName ? TStringBuilder() << " for option " << OptionName : TStringBuilder()) << ", available variants:";
             for (const auto& [value, _] : ChoicesMap) {
                 error << " " << value;
             }
@@ -120,8 +120,6 @@ void ModifyLogPriorities(std::unordered_map<NKikimrServices::EServiceKikimr, NAc
 void InitLogSettings(const NKikimrConfig::TLogConfig& logConfig, NActors::TTestActorRuntimeBase& runtime);
 
 TChoices<NActors::NLog::EPriority> GetLogPrioritiesMap(const TString& optionName);
-
-void SetupSignalActions();
 
 void PrintResultSet(EResultOutputFormat format, IOutputStream& output, const Ydb::ResultSet& resultSet);
 

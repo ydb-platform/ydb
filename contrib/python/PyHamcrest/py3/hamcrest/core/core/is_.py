@@ -1,33 +1,63 @@
-from __future__ import absolute_import
+from typing import Optional, Type, TypeVar, overload, Any
+
+from hamcrest.core.base_matcher import BaseMatcher
+from hamcrest.core.description import Description
+from hamcrest.core.helpers.wrap_matcher import is_matchable_type, wrap_matcher
+from hamcrest.core.matcher import Matcher
+
+from .isinstanceof import instance_of
+
 __author__ = "Jon Reid"
 __copyright__ = "Copyright 2011 hamcrest.org"
 __license__ = "BSD, see License.txt"
 
-from hamcrest.core.base_matcher import BaseMatcher
-from hamcrest.core.helpers.wrap_matcher import wrap_matcher, is_matchable_type
-from .isinstanceof import instance_of
+T = TypeVar("T")
 
 
-class Is(BaseMatcher):
-
-    def __init__(self, matcher):
+class Is(BaseMatcher[T]):
+    def __init__(self, matcher: Matcher[T]) -> None:
         self.matcher = matcher
 
-    def matches(self, item, mismatch_description=None):
+    def matches(self, item: T, mismatch_description: Optional[Description] = None) -> bool:
         return self.matcher.matches(item, mismatch_description)
 
-    def describe_mismatch(self, item, mismatch_description):
+    def describe_mismatch(self, item: T, mismatch_description: Description) -> None:
         return self.matcher.describe_mismatch(item, mismatch_description)
 
-    def describe_to(self, description):
+    def describe_to(self, description: Description):
         description.append_description_of(self.matcher)
 
 
-def wrap_value_or_type(x):
+@overload
+def _wrap_value_or_type(x: Type) -> Matcher[object]:
+    ...
+
+
+@overload
+def _wrap_value_or_type(x: T) -> Matcher[T]:
+    ...
+
+
+def _wrap_value_or_type(x):
     if is_matchable_type(x):
         return instance_of(x)
     else:
         return wrap_matcher(x)
+
+
+@overload
+def is_(x: Type) -> Matcher[Any]:
+    ...
+
+
+@overload
+def is_(x: Matcher[T]) -> Matcher[T]:
+    ...
+
+
+@overload
+def is_(x: T) -> Matcher[T]:
+    ...
 
 
 def is_(x):
@@ -73,4 +103,4 @@ def is_(x):
     depending on context.
 
     """
-    return Is(wrap_value_or_type(x))
+    return Is(_wrap_value_or_type(x))

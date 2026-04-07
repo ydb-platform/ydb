@@ -6,7 +6,7 @@ namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TChunkStripeStatistics operator + (
+TChunkStripeStatistics operator+(
     const TChunkStripeStatistics& lhs,
     const TChunkStripeStatistics& rhs)
 {
@@ -20,7 +20,7 @@ TChunkStripeStatistics operator + (
     return result;
 }
 
-TChunkStripeStatistics& operator += (
+TChunkStripeStatistics& operator+=(
     TChunkStripeStatistics& lhs,
     const TChunkStripeStatistics& rhs)
 {
@@ -54,6 +54,17 @@ void Serialize(const TChunkStripeStatistics& statistics, NYson::IYsonConsumer* c
             .OptionalItem("max_block_size", statistics.MaxBlockSize)
             .OptionalItem("compressed_data_size", statistics.CompressedDataSize)
         .EndMap();
+}
+
+void FormatValue(TStringBuilderBase* builder, const TChunkStripeStatistics& statistics, TStringBuf /*spec*/)
+{
+    builder->AppendFormat("{ChunkCount: %v, DataWeight: %v, RowCount: %v, ValueCount: %v, MaxBlockSize: %v, CompressedDataSize: %v}",
+        statistics.ChunkCount,
+        statistics.DataWeight,
+        statistics.RowCount,
+        statistics.ValueCount,
+        statistics.MaxBlockSize,
+        statistics.CompressedDataSize);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

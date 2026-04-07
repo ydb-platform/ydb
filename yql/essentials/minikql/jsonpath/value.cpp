@@ -379,5 +379,4 @@ void TValue::UnpackInnerValue() {
     }
 }
 
-}
-
+} // namespace NYql::NJsonPath

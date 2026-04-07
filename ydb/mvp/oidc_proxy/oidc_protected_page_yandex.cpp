@@ -1,10 +1,12 @@
-#include <ydb/library/actors/http/http.h>
-#include <ydb/library/security/util.h>
-#include <ydb/mvp/core/mvp_tokens.h>
-#include <ydb/mvp/core/appdata.h>
-#include <ydb/mvp/core/mvp_log.h>
 #include "context.h"
 #include "oidc_protected_page_yandex.h"
+
+#include <ydb/mvp/core/appdata.h>
+#include <ydb/mvp/core/mvp_log.h>
+#include <ydb/mvp/core/mvp_tokens.h>
+
+#include <ydb/library/actors/http/http.h>
+#include <ydb/library/security/util.h>
 
 namespace NMVP {
 namespace NOIDC {
@@ -65,7 +67,7 @@ void THandlerSessionServiceCheckYandex::StartOidcProcess(const NActors::TActorCo
     }
     NYdbGrpc::TCallMeta meta;
     SetHeader(meta, "authorization", token);
-    meta.Timeout = TDuration::Seconds(10);
+    meta.Timeout = std::chrono::seconds(10);
     connection->DoRequest(request, std::move(responseCb), &yandex::cloud::priv::oauth::v1::SessionService::Stub::AsyncCheck, meta);
 }
 
@@ -83,20 +85,6 @@ bool THandlerSessionServiceCheckYandex::NeedSendSecureHttpRequest(const NHttp::T
     return false;
 }
 
-}  // NOIDC
+} // NOIDC
 
-template<>
-TString SecureShortDebugString(const yandex::cloud::priv::oauth::v1::CheckSessionRequest& request) {
-    yandex::cloud::priv::oauth::v1::CheckSessionRequest copy = request;
-    copy.clear_cookie_header();
-    return copy.ShortDebugString();
-}
-
-template<>
-TString SecureShortDebugString(const yandex::cloud::priv::oauth::v1::CheckSessionResponse& request) {
-    yandex::cloud::priv::oauth::v1::CheckSessionResponse copy = request;
-    copy.mutable_iam_token()->set_iam_token(NKikimr::MaskTicket(copy.iam_token().iam_token()));
-    return copy.ShortDebugString();
-}
-
-}  // NMVP
+} // NMVP

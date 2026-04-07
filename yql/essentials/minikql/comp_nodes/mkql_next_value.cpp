@@ -18,10 +18,11 @@ using namespace NYql::NUdf;
 
 namespace {
 
-class TNextValueStringWrapper : public TMutableComputationNode<TNextValueStringWrapper> {
+class TNextValueStringWrapper: public TMutableComputationNode<TNextValueStringWrapper> {
     using TSelf = TNextValueStringWrapper;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
+
 public:
     TNextValueStringWrapper(TComputationMutables& mutables, IComputationNode* source, EDataSlot slot)
         : TBaseComputation(mutables)
@@ -74,5 +75,5 @@ IComputationNode* WrapNextValue(TCallable& callable, const TComputationNodeFacto
     return new TNextValueStringWrapper(ctx.Mutables, source, from);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

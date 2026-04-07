@@ -15,6 +15,8 @@ struct TShardConfig
 
     std::optional<TDuration> GridStep;
 
+    bool StripSensorsNamePrefix;
+
     REGISTER_YSON_STRUCT(TShardConfig);
 
     static void Register(TRegistrar registrar);
@@ -42,13 +44,20 @@ struct TSolomonExporterConfig
     bool RenameConvertedCounters;
     bool ConvertCountersToDeltaGauge;
     bool EnableHistogramCompat;
+    bool SplitRateHistogramIntoGauges;
     bool ReportTimestampsForRateMetrics;
 
     bool ExportSummary;
+    bool ExportSummaryAsSum;
     bool ExportSummaryAsMax;
+    bool ExportSummaryAsMin;
     bool ExportSummaryAsAvg;
 
     bool MarkAggregates;
+    // Enable support of all available solomon aggregation methods.
+    bool EnableSolomonAggregates;
+    // Export all global metrics as memonly.
+    bool ExportGlobalsAsMemOnly;
 
     bool StripSensorsNamePrefix;
 

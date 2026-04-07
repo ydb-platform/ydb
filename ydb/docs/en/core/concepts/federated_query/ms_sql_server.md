@@ -40,13 +40,15 @@ where:
 - `ms_sql_server_datasource` - the external data source identifier;
 - `<table_name>` - the table name within the external data source.
 
-## Limitations
+## Limitations {#limitations}
 
 When working with Microsoft SQL Server clusters, there are a number of limitations:
 
 1. {% include [!](_includes/supported_requests.md) %}
 2. {% include [!](_includes/datetime_limits.md) %}
-3. {% include [!](_includes/predicate_pushdown.md) %}
+3. {% include [!](_includes/predicate_pushdown_preamble.md) %}
+
+   {% include [!](_includes/predicate_pushdown_examples.md) %}
 
     |{{ ydb-short-name }} Data Type|
     |----|

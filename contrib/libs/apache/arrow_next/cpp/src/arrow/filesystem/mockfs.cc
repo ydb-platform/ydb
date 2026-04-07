@@ -26,17 +26,17 @@
 #include <variant>
 #include <vector>
 
-#include "arrow/buffer.h"
-#include "arrow/buffer_builder.h"
-#include "arrow/filesystem/mockfs.h"
-#include "arrow/filesystem/path_util.h"
-#include "arrow/filesystem/util_internal.h"
-#include "arrow/io/interfaces.h"
-#include "arrow/io/memory.h"
-#include "arrow/util/async_generator.h"
-#include "arrow/util/future.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/windows_fixup.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer_builder.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/mockfs.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/path_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/interfaces.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/memory.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/async_generator.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/future.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/windows_fixup.h"
 
 namespace arrow20 {
 namespace fs {

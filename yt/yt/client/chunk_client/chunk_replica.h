@@ -27,6 +27,8 @@ public:
     // NB: Will be assigned to generic medium.
     explicit TChunkReplicaWithMedium(TChunkReplica replica);
 
+    std::strong_ordering operator<=>(const TChunkReplicaWithMedium& other) const = default;
+
     NNodeTrackerClient::TNodeId GetNodeId() const;
     int GetReplicaIndex() const;
     int GetMediumIndex() const;
@@ -70,20 +72,26 @@ class TChunkReplicaWithLocation
 {
 public:
     TChunkReplicaWithLocation();
-    TChunkReplicaWithLocation(TChunkReplicaWithMedium replica, TChunkLocationUuid locationUuid);
+    TChunkReplicaWithLocation(
+        TChunkReplicaWithMedium replica,
+        TChunkLocationUuid locationUuid,
+        NNodeTrackerClient::TChunkLocationIndex locationIndex);
     TChunkReplicaWithLocation(
         NNodeTrackerClient::TNodeId nodeId,
         int replicaIndex,
         int mediumIndex,
-        TChunkLocationUuid locationUuid);
+        TChunkLocationUuid locationUuid,
+        NNodeTrackerClient::TChunkLocationIndex locationIndex);
 
     TChunkLocationUuid GetChunkLocationUuid() const;
+    NNodeTrackerClient::TChunkLocationIndex GetChunkLocationIndex() const;
 
     friend void ToProto(NProto::TConfirmChunkReplicaInfo* value, TChunkReplicaWithLocation replica);
     friend void FromProto(TChunkReplicaWithLocation* replica, NProto::TConfirmChunkReplicaInfo value);
 
 private:
     TChunkLocationUuid ChunkLocationUuid_;
+    NNodeTrackerClient::TChunkLocationIndex ChunkLocationIndex_;
 };
 
 void FormatValue(TStringBuilderBase* builder, TChunkReplicaWithLocation replica, TStringBuf spec);

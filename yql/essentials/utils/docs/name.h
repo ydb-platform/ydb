@@ -6,14 +6,14 @@
 
 namespace NYql::NDocs {
 
-    extern const RE2 NormalizedNameRegex;
+extern const RE2 NormalizedNameRegex;
 
-    bool IsNormalizedName(TStringBuf name);
+bool IsNormalizedName(TStringBuf name);
 
-    TMaybe<TString> NormalizedName(TString name);
+TMaybe<TString> NormalizedName(TString name);
 
-    bool IsUDF(TStringBuf name);
+bool IsUDF(TStringBuf name);
 
-    TMaybe<std::pair<TString, TString>> SplitUDF(TString name);
+TMaybe<std::pair<TString, TString>> SplitUDF(TString name);
 
 } // namespace NYql::NDocs

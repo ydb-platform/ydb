@@ -1,15 +1,23 @@
 #include <library/cpp/yt/error/error.h>
+#include <library/cpp/yson/node/node_io.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/interface/client.h>
-#include <yt/yql/providers/yt/fmr/utils/yql_yt_client.h>
+#include <yt/cpp/mapreduce/client/client.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 #include "yql_yt_job_service_impl.h"
+#include "yql_yt_table_write_distributed_session.h"
 
 namespace NYql::NFmr {
 
 namespace {
+
+NYT::IRawClientPtr GetRawClient(const NYT::IClientPtr& client) {
+    auto concreteClient = dynamic_cast<NYT::NDetail::TClient*>(client.Get());
+    YQL_ENSURE(concreteClient, "Cannot cast IClient to TClient");
+    return concreteClient->GetRawClient();
+}
 
 class TFmrYtJobService: public IYtJobService {
 public:
@@ -18,9 +26,10 @@ public:
         const TClusterConnection& clusterConnection,
         const TYtReaderSettings& readerSettings
     ) override {
+
         auto richPath = ytTablePart.RichPath;
+        NormalizeRichPath(richPath);
         YQL_ENSURE(richPath.Cluster_);
-        TFmrTableId fmrId(*richPath.Cluster_, richPath.Path_);
         auto client = CreateClient(clusterConnection);
         auto transaction = client->AttachTransaction(GetGuid(clusterConnection.TransactionId));
 
@@ -35,15 +44,67 @@ public:
     NYT::TRawTableWriterPtr MakeWriter(
         const TYtTableRef& ytTable,
         const TClusterConnection& clusterConnection,
-        const TYtWriterSettings& writerSetttings
+        const TYtWriterSettings& writerSettings
     ) override {
         auto client = CreateClient(clusterConnection);
         auto transaction = client->AttachTransaction(GetGuid(clusterConnection.TransactionId));
         auto writerOptions = NYT::TTableWriterOptions();
-        if (writerSetttings.MaxRowWeight) {
-            writerOptions.Config(NYT::TNode()("max_row_weight", *writerSetttings.MaxRowWeight));
+        if (writerSettings.MaxRowWeight) {
+            writerOptions.Config(NYT::TNode()("max_row_weight", *writerSettings.MaxRowWeight));
         }
-        return transaction->CreateRawWriter(ytTable.RichPath, NYT::TFormat::YsonBinary(), writerOptions);
+        auto richPath = ytTable.RichPath;
+        NormalizeRichPath(richPath);
+        richPath.Append(true);
+        return transaction->CreateRawWriter(richPath, NYT::TFormat::YsonBinary(), writerOptions);
+    }
+
+    IWriteDistributedSession::TPtr StartDistributedWriteSession(
+        const TYtTableRef& ytTable,
+        ui64 cookieCount,
+        const TClusterConnection& clusterConnection,
+        const TStartDistributedWriteOptions& options) override
+    {
+        auto client = CreateClient(clusterConnection);
+
+        NYT::TStartDistributedWriteTableOptions startOptions;
+        startOptions.SessionTimeout(options.Timeout);
+
+        auto transaction = client->AttachTransaction(GetGuid(clusterConnection.TransactionId));
+        auto sessionWithCookies = transaction->StartDistributedWriteTableSession(
+            ytTable.RichPath,
+            cookieCount,
+            startOptions);
+
+        TTableWriteDistributedSessionOptions sessionOptions{.PingInterval = options.PingInterval};
+        return MakeIntrusive<TTableWriteDistributedSession>(
+            sessionWithCookies.Session_,
+            TVector<NYT::TDistributedWriteTableCookie>(sessionWithCookies.Cookies_),
+            sessionOptions,
+            clusterConnection);
+    }
+
+    std::unique_ptr<NYT::IOutputStreamWithResponse> GetDistributedWriter(
+        const TString& cookieYson,
+        const TClusterConnection& clusterConnection
+    ) override {
+        auto client = CreateClient(clusterConnection);
+        auto raw = GetRawClient(client);
+
+        NYT::TDistributedWriteTableCookie cookie(NYT::NodeFromYsonString(cookieYson));
+        NYT::TTableFragmentWriterOptions options;
+        return raw->WriteTableFragment(cookie, NYT::TFormat::YsonBinary(), options);
+    }
+
+    void Create(
+        const TYtTableRef& ytTable,
+        const TClusterConnection& clusterConnection,
+        const NYT::TNode& attributes
+    ) override {
+        auto client = CreateClient(clusterConnection);
+        auto richPath = ytTable.RichPath;
+        NormalizeRichPath(richPath);
+        auto transaction = client->AttachTransaction(GetGuid(clusterConnection.TransactionId));
+        transaction->Create(richPath.Path_, NYT::NT_TABLE, NYT::TCreateOptions().Recursive(true).IgnoreExisting(true).Attributes(attributes));
     }
 };
 

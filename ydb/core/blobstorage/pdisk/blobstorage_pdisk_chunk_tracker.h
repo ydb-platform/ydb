@@ -232,8 +232,12 @@ public:
         str << "\n</table>";
     }
 
-    ui32 ColorFlagLimit(TOwner id, NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+    ui32 ColorFlagLimit(TOwner id, NKikimrBlobStorage::TPDiskSpaceColor::E color) const {
         return QuotaForOwner[id].ColorFlagLimit(color);
+    }
+
+    double GetOccupancyForColor(NKikimrBlobStorage::TPDiskSpaceColor::E color) const {
+        return ColorLimits.GetOccupancyForColor(color, Total);
     }
 };
 
@@ -250,6 +254,7 @@ using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
     THolder<TQuotaRecord> SharedQuota;
     THolder<TPerOwnerQuotaTracker> OwnerQuota;
     TKeeperParams Params;
+    TColorLimits ColorLimits;
 
     TColor::E ColorBorder = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
     double ColorBorderOccupancy = 0;
@@ -264,8 +269,6 @@ public:
     // OwnerBeginUser - per-VDisk qouta
 
     const i64 SysReserveSize = 5;
-    const i64 CommonStaticLogSize = 70;
-    i64 MaxCommonLogChunks = 200;
 
     TChunkTracker()
         : GlobalQuota(new TPerOwnerQuotaTracker())
@@ -275,6 +278,7 @@ public:
 
     bool Reset(const TKeeperParams &params, const TColorLimits &limits, TString &outErrorReason) {
         Params = params;
+        ColorLimits = limits;
 
         GlobalQuota->Reset(params.TotalChunks, limits);
         i64 unappropriated = params.TotalChunks;
@@ -293,7 +297,7 @@ public:
             return false;
         }
 
-        i64 staticLog = params.HasStaticGroups ? CommonStaticLogSize : 0;
+        i64 staticLog = params.HasStaticGroups ? params.CommonStaticLogChunks : 0;
         unappropriated += GlobalQuota->AddSystemOwner(OwnerCommonStaticLog, staticLog, "Common Log Static Group Bonus");
         if (unappropriated < 0) {
             outErrorReason = (TStringBuilder() << "Error adding OwnerCommonStaticLog quota, size# " << staticLog
@@ -301,9 +305,8 @@ public:
             return false;
         }
 
-        MaxCommonLogChunks = params.MaxCommonLogChunks;
         if (params.SeparateCommonLog) {
-            i64 commonLog = MaxCommonLogChunks;
+            i64 commonLog = params.MaxCommonLogChunks;
             if (commonLog + staticLog < params.CommonLogSize) {
                 commonLog = params.CommonLogSize - staticLog;
             }
@@ -365,7 +368,7 @@ public:
         }
 
         ColorBorder = params.SpaceColorBorder;
-        ColorBorderOccupancy = chunkLimits.GetOccupancyForColor(ColorBorder, GlobalQuota->GetHardLimit(OwnerBeginUser));
+        ColorBorderOccupancy = OwnerQuota->GetOccupancyForColor(ColorBorder);
         return true;
     }
 
@@ -435,6 +438,17 @@ public:
 
     i64 GetTotalHardLimit() const {
         return SharedQuota->GetHardLimit();
+    }
+
+    TColor::E GetPDiskCapacityAlert() const {
+        double occupancy;
+        TColor::E sharedColor = SharedQuota->EstimateSpaceColor(0, &occupancy);
+        if (Params.SeparateCommonLog) {
+            TColor::E commonLogColor = GlobalQuota->EstimateSpaceColor(OwnerSystem, 0, &occupancy);
+            return Max(sharedColor, commonLogColor);
+        } else {
+            return sharedColor;
+        }
     }
     /////////////////////////////////////////////////////
 
@@ -587,7 +601,7 @@ public:
         OwnerQuota->PrintHTML(str, SharedQuota.Get(), &ColorBorder, &ColorBorderOccupancy);
     }
 
-    ui32 ColorFlagLimit(TOwner owner, NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+    ui32 ColorFlagLimit(TOwner owner, NKikimrBlobStorage::TPDiskSpaceColor::E color) const {
         if (IsOwnerUser(owner)) {
             return OwnerQuota->ColorFlagLimit(owner, color);
         } else {
@@ -605,6 +619,15 @@ public:
                     break;
             }
         }
+    }
+
+    void SetExpectedOwnerCount(size_t newOwnerCount) {
+        OwnerQuota->SetExpectedOwnerCount(newOwnerCount);
+    }
+
+    void SetColorBorder(NKikimrBlobStorage::TPDiskSpaceColor::E colorBorder) {
+        ColorBorder = colorBorder;
+        ColorBorderOccupancy = OwnerQuota->GetOccupancyForColor(ColorBorder);
     }
 };
 

@@ -8,6 +8,7 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
+    ydb/core/kqp/ut/common
     ydb/core/metering
     ydb/core/testlib/default
     ydb/core/tx
@@ -18,7 +19,9 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    ut_calc_progress_percent.cpp
     ut_schemeshard_build_index_helpers.cpp
+    ut_fulltext_build.cpp
     ut_index_build.cpp
     ut_vector_index_build.cpp
 )

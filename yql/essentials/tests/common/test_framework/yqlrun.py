@@ -1,3 +1,4 @@
+import errno
 import os
 import shutil
 import yatest.common
@@ -23,10 +24,29 @@ FIX_DIR_PREFIXES = {
 }
 
 
+def safe_symlink(src, dst):
+    """
+    If dst is an existing directory, creates a symlink inside it with the basename of src.
+    If dst is a file path (does not exist or is not a directory), creates the symlink at dst.
+    If the link already exists, does nothing.
+    """
+    # If dst is an existing directory, append basename of src
+    if os.path.isdir(dst):
+        link_path = os.path.join(dst, os.path.basename(src))
+    else:
+        link_path = dst
+
+    try:
+        os.symlink(src, link_path)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
+
+
 class YQLRun(object):
 
     def __init__(self, udfs_dir=None, prov='yt', use_sql2yql=False, keep_temp=True, binary=None, gateway_config=None,
-                 fs_config=None, extra_args=[], cfg_dir=None, support_udfs=True, langver=None):
+                 fs_config=None, extra_args=[], cfg_dir=None, support_udfs=True, langver=None, fuzz_universal=False):
         if binary is None:
             self.yqlrun_binary = yql_utils.yql_binary_path(os.getenv('YQL_YQLRUN_PATH') or 'yql/tools/yqlrun/yqlrun')
         else:
@@ -82,11 +102,13 @@ class YQLRun(object):
             self.gateway_config.SqlCore.TranslationFlags.extend(flags)
 
         self.langver = langver
+        self.fuzz_universal = fuzz_universal
 
     def yql_exec(self, program=None, program_file=None, files=None, urls=None,
                  run_sql=False, verbose=False, check_error=True, tables=None, pretty_plan=True,
-                 wait=True, parameters={}, extra_env={}, require_udf_resolver=False, scan_udfs=True, langver=None):
-        del pretty_plan
+                 wait=True, parameters={}, extra_env={}, require_udf_resolver=False, scan_udfs=True, langver=None,
+                 attrs={}):
+        del pretty_plan, attrs
 
         res_dir = self.res_dir
 
@@ -107,11 +129,16 @@ class YQLRun(object):
         syntax_version = yql_utils.get_syntax_version(program)
         ansi_lexer = yql_utils.ansi_lexer_enabled(program)
 
+        binary = self.yqlrun_binary
+
         if run_sql and self.use_sql2yql:
+            binary = self.sql2yql_binary
+
             orig_sql = program_file + '.orig_sql'
             shutil.copy2(program_file, orig_sql)
+
             cmd = [
-                self.sql2yql_binary,
+                binary,
                 orig_sql,
                 '--yql',
                 '--output=' + program_file,
@@ -170,7 +197,7 @@ class YQLRun(object):
         if prov != 'pure':
             cmd += '--tmp-dir=%(res_dir)s ' % locals()
 
-        if self.udfs_path is not None:
+        if self.udfs_path is not None and "--test-partial-typecheck" not in self.extra_args:
             cmd += '--udfs-dir=%(udfs_dir)s ' % locals()
 
         if ansi_lexer:
@@ -190,6 +217,9 @@ class YQLRun(object):
 
         cmd += '--mounts=' + yql_utils.get_mount_config_file() + ' '
         cmd += '--validate-result-format '
+        cmd += '--fuzz-untyped-lambda '
+        if self.fuzz_universal:
+            cmd += '--fuzz-universal '
 
         if files:
             for f in files:
@@ -210,7 +240,7 @@ class YQLRun(object):
                     copy_dest = os.path.join(res_dir, f)
                     if not os.path.exists(os.path.dirname(copy_dest)):
                         os.makedirs(os.path.dirname(copy_dest))
-                    shutil.copy2(
+                    safe_symlink(
                         real_path,
                         copy_dest,
                     )
@@ -232,9 +262,9 @@ class YQLRun(object):
                     else:
                         copy_dest = res_dir
                         files[f] = os.path.basename(files[f])
-                    shutil.copy2(path_to_copy, copy_dest)
+                    safe_symlink(path_to_copy, copy_dest)
                 else:
-                    shutil.copy2(files[f], res_dir)
+                    safe_symlink(files[f], res_dir)
                     files[f] = os.path.basename(files[f])
             cmd += yql_utils.get_cmd_for_files('--file', files)
 
@@ -250,7 +280,9 @@ class YQLRun(object):
             for name in self.tables:
                 cmd += '--table=yt.%s@%s ' % (name, self.tables[name].yqlrun_file)
 
-        if "--lineage" not in self.extra_args and "--peephole" not in self.extra_args:
+        if "--lineage" not in self.extra_args and \
+           "--test-partial-typecheck" not in self.extra_args and \
+           "--peephole" not in self.extra_args:
             if optimize_only:
                 cmd += '-O '
             else:
@@ -299,17 +331,59 @@ class YQLRun(object):
             yql_utils.log('GDB launch command:')
             yql_utils.log('(cd "%s" && %s ya tool gdb --args %s)' % (res_dir, env_setters, cmd.replace(udfs_dir, debug_udfs_dir)))
 
-        proc_result = yatest.common.process.execute(cmd.strip().split(), check_exit_code=False, cwd=res_dir, env=env)
+        stderr_file = res_file_path('stderr.txt')
+        with open(stderr_file, 'w') as stderr:
+            proc_result = yatest.common.process.execute(
+                command=cmd.strip().split(),
+                stderr=stderr,
+                check_exit_code=False,
+                cwd=res_dir,
+                env=env,
+            )
+
         if proc_result.exit_code != 0 and check_error:
             with open(err_file, 'r') as f:
                 err_file_text = f.read()
-            assert 0, \
-                'Command\n%(command)s\n finished with exit code %(code)d, stderr:\n\n%(stderr)s\n\nerror file:\n%(err_file)s' % {
-                    'command': cmd,
-                    'code': proc_result.exit_code,
-                    'stderr': proc_result.std_err,
-                    'err_file': err_file_text
-                }
+
+            yql_utils.skip_on_ubsan_known_failure(err_file_text)
+
+            with open(stderr_file, 'r') as f:
+                stderr_file_text = f.read()
+
+            def truncated(s, limit=8):
+                lines = s.split('\n')
+                if limit < len(lines):
+                    lines = ['..[snippet truncated]..'] + lines[-limit:]
+                return '\n'.join(lines)
+
+            err_file_text = truncated(err_file_text)
+            stderr_file_text = truncated(stderr_file_text)
+
+            assert False, (
+                'binary %(binary)s exited with code %(code)d\n'
+                '\n'
+                'Res    File: %(results_file)s\n'
+                'Opt    File: %(opt_file)s\n'
+                'Plan   File: %(plan_file)s\n'
+                'Err    File: %(err_file)s\n'
+                'StdErr File: %(stderr_file)s\n'
+                '\n'
+                '%(stderr_file_text)s\n'
+                '\n'
+                '%(err_file_text)s\n'
+                '\n'
+                'See a full command in a Log file below:'
+            ) % {
+                'binary': os.path.basename(binary),
+                'code': proc_result.exit_code,
+                'results_file': results_file,
+                'opt_file': opt_file,
+                'plan_file': plan_file,
+                'stderr_file': stderr_file,
+                'stderr_file_text': stderr_file_text,
+                'err_file': err_file,
+                'err_file_text': err_file_text,
+            }
 
         if os.path.exists(results_file) and os.stat(results_file).st_size == 0:
             os.unlink(results_file)  # kikimr yql-exec compatibility

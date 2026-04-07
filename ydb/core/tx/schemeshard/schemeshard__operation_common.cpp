@@ -1,6 +1,6 @@
 #include "schemeshard__operation_common.h"
 
-#include "schemeshard__shred_manager.h"
+#include "schemeshard__tenant_shred_manager.h"
 
 #include <ydb/core/blob_depot/events.h>
 #include <ydb/core/blockstore/core/blockstore.h>
@@ -23,7 +23,8 @@ THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr target
     const auto& shard = context.SS->ShardInfos[shardIdx];
 
     if (shard.TabletType == ETabletType::BlockStorePartition ||
-        shard.TabletType == ETabletType::BlockStorePartition2)
+        shard.TabletType == ETabletType::BlockStorePartition2 ||
+        shard.TabletType == ETabletType::BlockStorePartitionDirect)
     {
         auto it = context.SS->BlockStoreVolumes.FindPtr(targetPath->PathId);
         Y_ABORT_UNLESS(it, "Missing BlockStoreVolume while creating BlockStorePartition tablet");
@@ -83,7 +84,8 @@ THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr target
     if (shard.TabletType == ETabletType::BlockStorePartition   ||
         shard.TabletType == ETabletType::BlockStorePartition2 ||
         shard.TabletType == ETabletType::RTMRPartition) {
-        // Partitions should never be booted by local
+        // These partitions should never be booted by local.
+        // BlockStorePartitionDirect is intentionally omitted and may be booted local for now.
         ev->Record.SetTabletBootMode(NKikimrHive::TABLET_BOOT_MODE_EXTERNAL);
     }
 
@@ -728,7 +730,7 @@ void AckAllSchemaChanges(const TOperationId &operationId, TTxState &txState, TOp
     }
 }
 
-bool CheckPartitioningChangedForTableModification(TTxState &txState, TOperationContext &context) {
+bool CheckPartitioningChangedForTableModificationImpl(TTxState &txState, TOperationContext &context) {
     Y_ABORT_UNLESS(context.SS->Tables.contains(txState.TargetPathId));
     TTableInfo::TPtr table = context.SS->Tables.at(txState.TargetPathId);
 
@@ -745,6 +747,34 @@ bool CheckPartitioningChangedForTableModification(TTxState &txState, TOperationC
 
     // Any new partitions?
     return !shardIdxsLeft.empty();
+}
+
+bool CheckPartitioningChangedForColumnTableModificationImpl(TTxState &txState, TOperationContext &context) {
+    Y_ABORT_UNLESS(context.SS->ColumnTables.contains(txState.TargetPathId));
+    auto table = context.SS->ColumnTables.at(txState.TargetPathId);
+
+    THashSet<TShardIdx> shardIdxsLeft;
+    for (auto& shard : table->GetOwnedColumnShardsVerified()) {
+        TShardIdx shardIdx = TShardIdx::BuildFromProto(shard).DetachResult();
+        shardIdxsLeft.insert(shardIdx);
+    }
+
+    for (auto& shardOp : txState.Shards) {
+        // Is this shard still on the list of partitions?
+        if (shardIdxsLeft.erase(shardOp.Idx) == 0)
+            return true;
+    }
+
+    // Any new partitions?
+    return !shardIdxsLeft.empty();
+}
+
+bool CheckPartitioningChangedForTableModification(TTxState &txState, TOperationContext &context) {
+    TPath dstPath = TPath::Init(txState.TargetPathId, context.SS);
+    if (dstPath->IsColumnTable()) {
+        return CheckPartitioningChangedForColumnTableModificationImpl(txState, context);
+    }
+    return CheckPartitioningChangedForTableModificationImpl(txState, context);
 }
 
 void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &txState, TOperationContext &context) {
@@ -783,6 +813,8 @@ void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxFinalizeBuildIndex) {
         commonShardOp = TTxState::ConfigureParts;
+    } else if (txState.TxType == TTxState::TxPrepareIndexValidation) {
+        commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxDropTableIndexAtMainTable) {
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxUpdateMainTableOnIndexMove) {
@@ -802,6 +834,8 @@ void UpdatePartitioningForTableModification(TOperationId operationId, TTxState &
     } else if (txState.TxType == TTxState::TxRotateCdcStreamAtTable) {
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxRestoreIncrementalBackupAtTable) {
+        commonShardOp = TTxState::ConfigureParts;
+    } else if (txState.TxType == TTxState::TxTruncateTable) {
         commonShardOp = TTxState::ConfigureParts;
     } else {
         Y_ABORT("UNREACHABLE");
@@ -973,7 +1007,7 @@ void UpdatePartitioningForCopyTable(TOperationId operationId, TTxState &txState,
         newShardsIdx.push_back(part.ShardIdx);
     }
     context.SS->SetPartitioning(txState.TargetPathId, dstTableInfo, std::move(newPartitioning));
-    if (context.SS->EnableShred && context.SS->ShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
+    if (context.SS->EnableShred && context.SS->TenantShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
         context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
     }
 
@@ -1029,7 +1063,7 @@ TVector<TTableShardInfo> ApplyPartitioningCopyTable(const TShardInfo &templateDa
 }
 
 // NTableState::TProposedWaitParts
-//
+// Must be in sync with NTableState::TMoveTableProposedWaitParts
 TProposedWaitParts::TProposedWaitParts(TOperationId id, TTxState::ETxState nextState)
     : OperationId(id)
     , NextState(nextState)
@@ -1038,6 +1072,7 @@ TProposedWaitParts::TProposedWaitParts(TOperationId id, TTxState::ETxState nextS
     IgnoreMessages(DebugHint(),
         { TEvHive::TEvCreateTabletReply::EventType
         , TEvDataShard::TEvProposeTransactionResult::EventType
+        , TEvColumnShard::TEvProposeTransactionResult::EventType
         , TEvPrivate::TEvOperationPlan::EventType }
     );
 }
@@ -1325,3 +1360,51 @@ void AbortUnsafeDropOperation(const TOperationId& opId, const TTxId& txId, TOper
 
 }
 }
+
+namespace NKikimr::NSchemeShard::NTableIndexVersion {
+
+TVector<TPathId> SyncChildIndexVersions(
+    TPathElement::TPtr path,
+    TTableInfo::TPtr table,
+    ui64 targetVersion,
+    TOperationId operationId,
+    TOperationContext& context,
+    NIceDb::TNiceDb& db,
+    bool skipPlannedToDrop)
+{
+    Y_UNUSED(table);
+    TVector<TPathId> publishedIndexes;
+
+    for (const auto& [childName, childPathId] : path->GetChildren()) {
+        if (!context.SS->PathsById.contains(childPathId)) {
+            continue;
+        }
+        auto childPath = context.SS->PathsById.at(childPathId);
+        if (!childPath->IsTableIndex() || childPath->Dropped()) {
+            continue;
+        }
+        if (skipPlannedToDrop && childPath->PlannedToDrop()) {
+            continue;
+        }
+        if (!context.SS->Indexes.contains(childPathId)) {
+            continue;
+        }
+        auto index = context.SS->Indexes.at(childPathId);
+        if (index->AlterVersion < targetVersion) {
+            index->AlterVersion = targetVersion;
+            // If there's ongoing alter operation, also update alterData version to converge
+            if (index->AlterData && index->AlterData->AlterVersion < targetVersion) {
+                index->AlterData->AlterVersion = targetVersion;
+                context.SS->PersistTableIndexAlterData(db, childPathId);
+            }
+            context.SS->PersistTableIndexAlterVersion(db, childPathId, index);
+            context.SS->ClearDescribePathCaches(childPath);
+            context.OnComplete.PublishToSchemeBoard(operationId, childPathId);
+            publishedIndexes.push_back(childPathId);
+        }
+    }
+
+    return publishedIndexes;
+}
+
+}  // NKikimr::NSchemeShard::NTableIndexVersion

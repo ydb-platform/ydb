@@ -15,6 +15,7 @@
 #include <ydb/core/blobstorage/base/transparent.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <ydb/core/blobstorage/common/immediate_control_defaults.h>
+#include <ydb/core/retro_tracing_impl/lazy_retro_span.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/core/base/appdata_fwd.h>
@@ -37,7 +38,8 @@ const ui64 UnconfiguredBufferSizeLimit = 32 << 20;
 
 const TDuration ProxyEstablishSessionsTimeout = TDuration::Seconds(5);
 
-const ui64 DsPutWakeupMs = 60000;
+const TDuration DsMinimumDelayBetweenPutWakeups = TDuration::Seconds(1);
+const TDuration DsMaximumDelayBetweenPutWakeups = TDuration::Seconds(60);
 
 const ui64 BufferSizeThreshold = 1 << 20;
 
@@ -194,6 +196,9 @@ public:
         TMaybe<TGroupStat::EKind> LatencyQueueKind = {};
 
         std::optional<ui32> ForceGroupGeneration; // work only with this specific group generation and nothing else
+        bool DoSendDeathNote = true; // unschedules DSProxy timeout on termination, be careful with disabling
+
+        std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher = std::nullopt;
     };
 
     struct TTypeSpecificParameters {
@@ -217,10 +222,13 @@ public:
         , RequestStartTime(params.Common.Now)
         , Source(params.Common.Source)
         , Cookie(params.Common.Cookie)
+        , RelevanceOwner(std::make_shared<TMessageRelevanceTracker>())
+        , ExternalRelevanceWatcher(std::move(params.Common.ExternalRelevanceWatcher))
         , LatencyQueueKind(params.Common.LatencyQueueKind)
         , RacingDomains(&Info->GetTopology())
         , ExecutionRelay(std::move(params.Common.ExecutionRelay))
         , ForceGroupGeneration(params.Common.ForceGroupGeneration)
+        , DoSendDeathNote(params.Common.DoSendDeathNote)
     {
         if (ParentSpan) {
             const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();
@@ -231,7 +239,14 @@ public:
             Span.Attribute("RestartCounter", RestartCounter);
             Span.Attribute("database", AppData()->TenantName);
             Span.Attribute("storagePool", Info->GetStoragePoolName());
-            params.Common.Event->ToSpan(Span);
+            params.Common.Event->ToSpan(*Span.GetWilsonSpanPtr());
+        } else if (ParentSpan.GetRetroSpanPtr()) {
+            const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();
+            Span = TLazyRetroSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(TWilson::BlobStorage,
+                    parentTraceId.GetTimeToLive(), true), "DSProxy.RTX");
+        } else {
+            // Span = TLazyRetroSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(TWilson::BlobStorage, Max<ui32>(), true),
+            //         "DSProxy.RTX");
         }
 
         Y_ABORT_UNLESS(CostModel);
@@ -288,6 +303,8 @@ public:
     static double GetTotalTimeMs(const NKikimrBlobStorage::TTimestamps& timestamps);
     static double GetVDiskTimeMs(const NKikimrBlobStorage::TTimestamps& timestamps);
 
+    bool CheckForExternalCancellation();
+
 private:
     void CheckPostponedQueue();
 
@@ -297,8 +314,8 @@ protected:
     TIntrusivePtr<TBlobStorageGroupProxyMon> Mon;
     TIntrusivePtr<TStoragePoolCounters> PoolCounters;
     TLogContext LogCtx;
-    NWilson::TSpan ParentSpan;
-    NWilson::TSpan Span;
+    TLazyRetroSpan ParentSpan;
+    TLazyRetroSpan Span;
     TStackVec<std::pair<TDiskResponsivenessTracker::TDiskId, TDuration>, 16> Responsiveness;
     TString ErrorReason;
     TMaybe<TStoragePoolCounters::EHandleClass> RequestHandleClass;
@@ -309,11 +326,13 @@ protected:
     const ui32 RestartCounter = 0;
     std::shared_ptr<const TCostModel> CostModel;
     const TMonotonic RequestStartTime;
+    THashMap<ui32, TActorId> NodeSubscriptions;
 
 private:
     const TActorId Source;
     const ui64 Cookie;
-    std::shared_ptr<TMessageRelevanceTracker> MessageRelevanceTracker = std::make_shared<TMessageRelevanceTracker>();
+    TMessageRelevanceOwner RelevanceOwner;
+    std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher;
     ui32 RequestsInFlight = 0;
     std::unique_ptr<IEventBase> Response;
     const TMaybe<TGroupStat::EKind> LatencyQueueKind;
@@ -326,6 +345,7 @@ private:
     bool FirstResponse = true;
     std::optional<ui32> ForceGroupGeneration;
     ui32 RacingGeneration = 0;
+    bool DoSendDeathNote;
 };
 
 void Encrypt(char *destination, const char *source, size_t shift, size_t sizeBytes, const TLogoBlobID &id,
@@ -359,6 +379,7 @@ struct TBlobStorageGroupPutParameters {
     bool EnableRequestMod3x3ForMinLatency;
     TAccelerationParams AccelerationParams;
     TDuration LongRequestThreshold;
+    TDuration MaxTimeout = TDuration::Seconds(60);
 };
 IActor* CreateBlobStorageGroupPutRequest(TBlobStorageGroupPutParameters params);
 
@@ -378,6 +399,8 @@ struct TBlobStorageGroupMultiPutParameters {
     bool EnableRequestMod3x3ForMinLatency;
     TAccelerationParams AccelerationParams;
     TDuration LongRequestThreshold;
+    TDuration MaxTimeout = TDuration::Seconds(60);
+    bool ReduceInterpileTraffic;
 
     static ui32 CalculateRestartCounter(TBatchedVec<TEvBlobStorage::TEvPut::TPtr>& events) {
         ui32 maxRestarts = 0;
@@ -524,6 +547,7 @@ struct TBlobStorageProxyControlWrappers {
     TMemorizableControlWrapper EnableVPatch;
 
     TMemorizableControlWrapper LongRequestThresholdMs = LongRequestThresholdDefaultControl;
+    TMemorizableControlWrapper MaxPutTimeoutSeconds = MaxPutTimeoutDefaultControl;
 
 #define DEVICE_TYPE_SEPECIFIC_MEMORIZABLE_CONTROLS(prefix)              \
     TMemorizableControlWrapper prefix = prefix##DefaultControl;         \

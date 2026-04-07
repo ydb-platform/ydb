@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(4.59.1)
+VERSION(4.62.1)
 
 LICENSE(MIT)
 
@@ -23,6 +23,7 @@ PY_SRCS(
     fontTools/__main__.py
     fontTools/afmLib.py
     fontTools/agl.py
+    fontTools/annotations.py
     fontTools/cffLib/CFF2ToCFF.py
     fontTools/cffLib/CFFToCFF2.py
     fontTools/cffLib/__init__.py
@@ -48,6 +49,11 @@ PY_SRCS(
     fontTools/designspaceLib/split.py
     fontTools/designspaceLib/statNames.py
     fontTools/designspaceLib/types.py
+    fontTools/diff/__init__.py
+    fontTools/diff/__main__.py
+    fontTools/diff/color.py
+    fontTools/diff/diff.py
+    fontTools/diff/utils.py
     fontTools/encodings/MacRoman.py
     fontTools/encodings/StandardEncoding.py
     fontTools/encodings/__init__.py
@@ -83,6 +89,7 @@ PY_SRCS(
     fontTools/misc/dictTools.py
     fontTools/misc/eexec.py
     fontTools/misc/encodingTools.py
+    fontTools/misc/enumTools.py
     fontTools/misc/etree.py
     fontTools/misc/filenames.py
     fontTools/misc/filesystem/__init__.py
@@ -200,8 +207,6 @@ PY_SRCS(
     fontTools/ttLib/tables/F_F_T_M_.py
     fontTools/ttLib/tables/F__e_a_t.py
     fontTools/ttLib/tables/G_D_E_F_.py
-    fontTools/ttLib/tables/G_M_A_P_.py
-    fontTools/ttLib/tables/G_P_K_G_.py
     fontTools/ttLib/tables/G_P_O_S_.py
     fontTools/ttLib/tables/G_S_U_B_.py
     fontTools/ttLib/tables/G_V_A_R_.py
@@ -211,10 +216,8 @@ PY_SRCS(
     fontTools/ttLib/tables/J_S_T_F_.py
     fontTools/ttLib/tables/L_T_S_H_.py
     fontTools/ttLib/tables/M_A_T_H_.py
-    fontTools/ttLib/tables/M_E_T_A_.py
     fontTools/ttLib/tables/M_V_A_R_.py
     fontTools/ttLib/tables/O_S_2f_2.py
-    fontTools/ttLib/tables/S_I_N_G_.py
     fontTools/ttLib/tables/S_T_A_T_.py
     fontTools/ttLib/tables/S_V_G_.py
     fontTools/ttLib/tables/S__i_l_f.py
@@ -309,7 +312,12 @@ PY_SRCS(
     fontTools/unicodedata/__init__.py
     fontTools/varLib/__init__.py
     fontTools/varLib/__main__.py
-    fontTools/varLib/avar.py
+    fontTools/varLib/avar/__init__.py
+    fontTools/varLib/avar/__main__.py
+    fontTools/varLib/avar/build.py
+    fontTools/varLib/avar/map.py
+    fontTools/varLib/avar/plan.py
+    fontTools/varLib/avar/unbuild.py
     fontTools/varLib/avarPlanner.py
     fontTools/varLib/builder.py
     fontTools/varLib/cff.py

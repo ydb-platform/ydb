@@ -24,6 +24,7 @@ PEERDIR(
     ydb/core/kqp/runtime
 
     ydb/library/yql/dq/comp_nodes
+    ydb/library/yql/dq/comp_nodes/ut/utils
 
     contrib/libs/llvm16/lib/IR
     contrib/libs/llvm16/lib/ExecutionEngine/MCJIT
@@ -56,6 +57,7 @@ SRCS(
     subprocess.cpp
     streams.cpp
     tpch_last.cpp
+    fs_utils.cpp
 )
 
 END()

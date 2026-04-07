@@ -2,7 +2,7 @@
 #include "read_balancer_log.h"
 #include "partition_scale_manager_graph_cmp.h"
 
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 #include <fmt/format.h>
 #include <algorithm>
 #include <ranges>
@@ -32,12 +32,17 @@ TString TPartitionScaleManager::LogPrefix() const {
     return TStringBuilder() << "[TPartitionScaleManager: " << TopicName << "] ";
 }
 
-void TPartitionScaleManager::HandleScaleStatusChange(const ui32 partitionId, NKikimrPQ::EScaleStatus scaleStatus, TMaybe<NKikimrPQ::TPartitionScaleParticipants> participants, const TActorContext& ctx) {
+void TPartitionScaleManager::HandleScaleStatusChange(const ui32 partitionId, NKikimrPQ::EScaleStatus scaleStatus,
+    TMaybe<NKikimrPQ::TPartitionScaleParticipants> participants,
+    TMaybe<TString> splitBoundary,
+    const TActorContext& ctx) {
+    PQ_LOG_D("Handle HandleScaleStatusChange. Scale status: " << NKikimrPQ::EScaleStatus_Name(scaleStatus));
     if (scaleStatus == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
         PQ_LOG_D("::HandleScaleStatusChange need to split partition " << partitionId);
         TPartitionScaleOperationInfo op{
             .PartitionId = partitionId,
             .PartitionScaleParticipants = std::move(participants),
+            .SplitBoundary = std::move(splitBoundary)
         };
         PartitionsToSplit.insert_or_assign(partitionId, std::move(op));
         TrySendScaleRequest(ctx);
@@ -54,6 +59,7 @@ void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
 
     auto splitMergeRequest = BuildScaleRequest(ctx);
     if (splitMergeRequest.Empty()) {
+        PQ_LOG_D("splitMergeRequest empty");
         return;
     }
 
@@ -90,9 +96,14 @@ std::vector<TPartitionScaleManager::TPartitionsToSplitMap::const_iterator> TPart
     // try to avoid gaps by using partitions with smaller children id
     auto proj = [](const auto& it) {
         const TPartitionScaleOperationInfo& info = it->second;
-        const auto& childPartitionIds = info.PartitionScaleParticipants->GetChildPartitionIds();
-        ui32 minChildPartitionId = childPartitionIds.empty() ? info.PartitionId : std::ranges::min(childPartitionIds);
-        return std::make_tuple(minChildPartitionId, info.PartitionId);
+        if (info.PartitionScaleParticipants.Defined()) {
+            const auto& childPartitionIds = info.PartitionScaleParticipants->GetChildPartitionIds();
+            if (!childPartitionIds.empty()) {
+                ui32 minChildPartitionId = std::ranges::min(childPartitionIds);
+                return std::make_tuple(minChildPartitionId, info.PartitionId);
+            }
+        }
+        return std::make_tuple(info.PartitionId, info.PartitionId);
     };
     std::vector<TPartitionScaleManager::TPartitionsToSplitMap::const_iterator> result;
     result.reserve(PartitionsToSplit.size());
@@ -232,7 +243,7 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
     if (node->DirectChildren.empty()) {
         auto from = node->From;
         auto to = node->To;
-        auto mid = MiddleOf(from, to);
+        auto mid = splitParameters.SplitBoundary.GetOrElse(MiddleOf(from, to));
         if (mid.empty()) {
             PQ_LOG_ERROR("wrong partition key range. Can't get mid. Partition# " << partitionId);
             return {.Split = Nothing(), .Remove = true};
@@ -279,10 +290,11 @@ void TPartitionScaleManager::HandleScaleRequestResult(TPartitionScaleRequest::TE
     auto result = ev->Get();
     PQ_LOG_D("HandleScaleRequestResult scale request result: " << result->Status);
     if (result->Status == TEvTxUserProxy::TResultStatus::ExecComplete) {
+        RequestTimeout = TDuration::Zero();
+        Backoff.Reset();
         TrySendScaleRequest(ctx);
     } else {
-        ui64 newTimeout = RequestTimeout.MilliSeconds() == 0 ? MIN_SCALE_REQUEST_REPEAT_SECONDS_TIMEOUT + RandomNumber<ui64>(50) : RequestTimeout.MilliSeconds() * 2;
-        RequestTimeout = TDuration::MilliSeconds(std::min(newTimeout, static_cast<ui64>(MAX_SCALE_REQUEST_REPEAT_SECONDS_TIMEOUT)));
+        RequestTimeout = Backoff.Next();
         ctx.Schedule(RequestTimeout, new TEvents::TEvWakeup(TRY_SCALE_REQUEST_WAKE_UP_TAG));
     }
 }

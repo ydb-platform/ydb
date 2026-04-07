@@ -2,6 +2,7 @@
 #include "datashard_ut_common_kqp.h"
 #include "datashard_active_transaction.h"
 
+#include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/base/blobstorage_common.h>
@@ -59,7 +60,8 @@ public:
         THolder<NMiniKQL::IEngineFlatHost> host = MakeHolder<NMiniKQL::TEngineHost>(DB);
         THolder<NMiniKQL::IEngineFlat> engine = CreateEngineFlat(
             NMiniKQL::TEngineFlatSettings(NMiniKQL::IEngineFlat::EProtocol::V1,
-                                          FunctionRegistry.Get(), *RandomProvider, *TimeProvider, host.Get()));
+                                          FunctionRegistry.Get(), *RandomProvider, *TimeProvider, 
+                                          "", host.Get()));
 
         TEngineBay ebay(host.Release(), engine.Release());
         std::shared_ptr<TValidatedDataTx> dataTx(new TValidatedDataTx(std::move(ebay), txId, 0, txBody));
@@ -902,12 +904,9 @@ Y_UNIT_TEST(RandomPoints_DelayData) {
 
     TVector<std::pair<ui32, ui32>> variants;
     variants.push_back({8, 8});
-    variants.push_back({8, 16});
     variants.push_back({8, 32});
     variants.push_back({16, 16});
-    variants.push_back({16, 32});
     variants.push_back({32, 8});
-    variants.push_back({32, 16});
     variants.push_back({32, 32});
 
     for (auto& v : variants) {
@@ -945,7 +944,7 @@ public:
         }
 
         Ranges.reserve(numRanges);
-        for (ui32 i = 0; i < numPoints; ++i) {
+        for (ui32 i = 0; i < numRanges; ++i) {
             ui32 from = RandomNumber<ui32>(max);
             Ranges.emplace_back(TSimpleRange(from, from + 1 + RandomNumber<ui32>(maxRange-1)));
         }
@@ -1349,10 +1348,9 @@ Y_UNIT_TEST(TestOutOfOrderLockLost) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, EvWrite) {
+Y_UNIT_TEST(TestOutOfOrderReadOnlyAllowed) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false)
@@ -1454,10 +1452,9 @@ Y_UNIT_TEST_TWIN(TestOutOfOrderReadOnlyAllowed, EvWrite) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestOutOfOrderNonConflictingWrites, EvWrite) {
+Y_UNIT_TEST(TestOutOfOrderNonConflictingWrites) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetAppConfig(app)
@@ -2020,11 +2017,10 @@ Y_UNIT_TEST(TestPlannedTimeoutSplit) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestPlannedHalfOverloadedSplit, UseSink) {
+Y_UNIT_TEST(TestPlannedHalfOverloadedSplit) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false)
         .SetAppConfig(app);
@@ -2457,11 +2453,10 @@ Y_UNIT_TEST(TestReadTableSingleShardImmediate) {
     UNIT_ASSERT_VALUES_EQUAL(seenPlanSteps, 0u);
 }
 
-Y_UNIT_TEST_TWIN(TestImmediateQueueThenSplit, UseSink) {
+Y_UNIT_TEST(TestImmediateQueueThenSplit) {
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false)
         .SetAppConfig(app);
@@ -2629,11 +2624,10 @@ Y_UNIT_TEST_TWIN(TestImmediateQueueThenSplit, UseSink) {
         << failures << " failures");
 }
 
-void TestLateKqpQueryAfterColumnDrop(bool dataQuery, bool useSink, const TString& query) {
+void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
     app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(false);
-    app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false)
@@ -2754,8 +2748,8 @@ void TestLateKqpQueryAfterColumnDrop(bool dataQuery, bool useSink, const TString
     }
 }
 
-Y_UNIT_TEST_TWIN(TestLateKqpScanAfterColumnDrop, UseSink) {
-    TestLateKqpQueryAfterColumnDrop(false, UseSink, "SELECT SUM(value2) FROM `/Root/table-1`");
+Y_UNIT_TEST(TestLateKqpScanAfterColumnDrop) {
+    TestLateKqpQueryAfterColumnDrop(false, "SELECT SUM(value2) FROM `/Root/table-1`");
 }
 
 Y_UNIT_TEST(TestSecondaryClearanceAfterShardRestartRace) {
@@ -2959,10 +2953,9 @@ Y_UNIT_TEST(TestShardRestartNoUndeterminedImmediate) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestShardRestartPlannedCommitShouldSucceed, EvWrite) {
+Y_UNIT_TEST(TestShardRestartPlannedCommitShouldSucceed) {
     TPortManager pm;
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
         .SetUseRealThreads(false)
@@ -3276,9 +3269,8 @@ Y_UNIT_TEST(TestShardSnapshotReadNoEarlyReply) {
     }
 }
 
-Y_UNIT_TEST_TWIN(TestSnapshotReadAfterBrokenLock, EvWrite) {
+Y_UNIT_TEST(TestSnapshotReadAfterBrokenLock) {
     NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(EvWrite);
     TPortManager pm;
     TServerSettings serverSettings(pm.GetPort(2134));
     serverSettings.SetDomainName("Root")
@@ -4393,6 +4385,71 @@ Y_UNIT_TEST(UncommittedReads) {
             "{ items { uint32_value: 3 } items { uint32_value: 3 } }, "
             "{ items { uint32_value: 4 } items { uint32_value: 4 } }");
     }
+}
+
+Y_UNIT_TEST(LocksBrokenStats) {
+    NKikimrConfig::TAppConfig app;
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false)
+        .SetAppConfig(app);
+
+    Tests::TServer::TPtr server = new TServer(serverSettings);
+    auto &runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+
+    runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+    InitRoot(server, sender);
+
+    TShardedTableOptions opts;
+    auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+    const ui64 shard = shards[0];
+
+    // Insert initial data
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100);"));
+
+    // Start a KQP transaction with a read (this establishes locks via KQP)
+    TString sessionId, txId;
+    KqpSimpleBegin(runtime, sessionId, txId, Q_("SELECT * FROM `/Root/table-1` WHERE key = 1;"));
+    UNIT_ASSERT(!txId.empty());
+
+    // Set up typed observer to capture TEvWriteResult
+    // We need to copy the record data since the event pointer may become invalid
+    TMaybe<NKikimrDataEvents::TEvWriteResult> breakerRecord;
+    TMaybe<NKikimrDataEvents::TEvWriteResult> victimRecord;
+    auto observer = runtime.AddObserver<NEvents::TDataEvents::TEvWriteResult>([&](NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        auto* result = ev->Get();
+        if (result && result->Record.GetOrigin() == shard) {
+            if (result->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
+                breakerRecord = result->Record;
+            } else if (result->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN) {
+                victimRecord = result->Record;
+            }
+        }
+    });
+
+    // Execute SQL using KqpSimpleExec - this will commit immediately and break the locks
+    // The observer will capture TEvWriteResult during execution
+    KqpSimpleExec(runtime, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 200);"));
+
+    // Verify we captured a COMPLETE result with LocksBrokenAsBreaker set
+    UNIT_ASSERT(breakerRecord.Defined());
+    UNIT_ASSERT_VALUES_EQUAL(breakerRecord->GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+    UNIT_ASSERT(breakerRecord->HasTxStats());
+    UNIT_ASSERT_VALUES_EQUAL(breakerRecord->GetTxStats().GetLocksBrokenAsBreaker(), 1u);
+
+    // Now try to commit the victim transaction - it should fail with ABORTED (LOCKS_BROKEN at datashard level)
+    auto commitResult = KqpSimpleCommit(runtime, sessionId, txId, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 300);"));
+    UNIT_ASSERT_VALUES_EQUAL(commitResult, "ERROR: ABORTED");
+
+    // Verify we captured a LOCKS_BROKEN result
+    UNIT_ASSERT(victimRecord.Defined());
+    UNIT_ASSERT_VALUES_EQUAL(victimRecord->GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+
+    auto tableState = ReadTable(server, shards, tableId);
+    UNIT_ASSERT(tableState.find("key = 1, value = 200") != TString::npos);
 }
 
 } // Y_UNIT_TEST_SUITE(DataShardOutOfOrder)

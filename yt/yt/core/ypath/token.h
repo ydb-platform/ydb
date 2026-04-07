@@ -35,6 +35,11 @@ TString ToYPathLiteral(const TStrongTypedef<T, TTag>& value);
 void AppendYPathLiteral(TStringBuilderBase* builder, TStringBuf value);
 void AppendYPathLiteral(TStringBuilderBase* builder, i64 value);
 
+// Parses a string supposedly containing a ypath and for all literal tokens
+// escapes bytes that fall outside of [33, 126] range.
+// Returns an equivalent escaped ypath on success or a parse error otherwise.
+TErrorOr<TYPath> TryEscapeNonAsciiYPathLiterals(const TYPath& unparsedYPath);
+
 TStringBuf ExtractListIndex(TStringBuf token);
 int ParseListIndex(TStringBuf token);
 std::optional<int> TryAdjustListIndex(int index, int count);

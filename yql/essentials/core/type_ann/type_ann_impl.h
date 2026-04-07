@@ -7,13 +7,13 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/ast/yql_expr_types.h>
 
-namespace NYql {
-namespace NTypeAnnImpl {
+
+namespace NYql::NTypeAnnImpl {
 
     struct TContext {
         TExprContext& Expr;
 
-        TContext(TExprContext& expr);
+        explicit TContext(TExprContext& expr);
     };
 
     struct TExtContext : public TContext {
@@ -23,6 +23,9 @@ namespace NTypeAnnImpl {
         bool LoadUdfMetadata(const TVector<IUdfResolver::TFunction*>& functions);
         void RegisterResolvedImport(const IUdfResolver::TImport& import);
     };
+
+    const TTypeAnnotationNode* ParseTypeCached(const TString& typeStr, TExprContext& ctx, TTypeAnnotationContext& typeCtx);
+    TExprNodeBuilder& AddChildren(TExprNodeBuilder& builder, ui32 index, const TExprNode::TPtr& input);
 
     // Implemented in type_ann_join.cpp
     IGraphTransformer::TStatus JoinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
@@ -42,5 +45,4 @@ namespace NTypeAnnImpl {
     TMaybe<ui32> FindOrReportMissingMember(TStringBuf memberName, TPositionHandle pos, const TStructExprType& structType, TExprContext& ctx);
 
     TExprNode::TPtr MakeNothingData(TExprContext& ctx, TPositionHandle pos, TStringBuf data);
-} // namespace NTypeAnnImpl
-} // namespace NYql
+} // namespace NYql::NTypeAnnImpl

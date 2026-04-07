@@ -1,6 +1,14 @@
 items:
+  - name: Quick start
+    href: olap_quickstart.md
   - name: Dataset import
     href: datasets/index.md
     include:
       mode: link
       path: datasets/toc_p.yaml
+  - name: Practical guides
+    include:
+      mode: link
+      path: practical-guides/toc_p.yaml
+  - name: Limitations
+    href: limitations.md

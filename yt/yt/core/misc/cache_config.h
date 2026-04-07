@@ -33,7 +33,7 @@ struct TSlruCacheConfig
     //! re-enabled again (i.e. the value of this field is ignored).
     bool EnableGhostCaches;
 
-    static TSlruCacheConfigPtr CreateWithCapacity(i64 capacity);
+    static TSlruCacheConfigPtr CreateWithCapacity(i64 capacity, int shardCount = 1);
 
     REGISTER_YSON_STRUCT(TSlruCacheConfig);
 
@@ -88,6 +88,8 @@ DEFINE_REFCOUNTED_TYPE(TSlruCacheDynamicConfig)
 struct TAsyncExpiringCacheConfig
     : public virtual NYTree::TYsonStruct
 {
+    size_t ShardCount;
+
     //! Time since last finished Get() after which an entry is removed.
     TDuration ExpireAfterAccessTime;
 

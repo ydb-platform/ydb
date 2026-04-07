@@ -1408,6 +1408,16 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
     return node;
 }
 
+bool IsOptimizerToFlowOverIteratorWithDependsAllowed(const TTypeAnnotationContext& types) {
+    static const char Flag[] = "ToFlowOverIteratorWithDepends";
+    return IsOptimizerEnabled<Flag>(types) && !IsOptimizerDisabled<Flag>(types);
+}
+
+bool IsOptimizerToFlowOverCollectAllowed(const TTypeAnnotationContext& types) {
+    static const char Flag[] = "ToFlowOverCollect";
+    return IsOptimizerEnabled<Flag>(types) && !IsOptimizerDisabled<Flag>(types);
+}
+
 }
 
 void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
@@ -2076,12 +2086,32 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map[TCoMember::CallableName()] = map[TCoNth::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-        YQL_ENSURE(optCtx.Types);
-        static const char optName[] = "MemberNthOverFlatMap";
-        if (IsOptimizerDisabled<optName>(*optCtx.Types)) {
-            return node;
+    map["ToFlow"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (IsOptimizerToFlowOverIteratorWithDependsAllowed(*optCtx.Types)) {
+            const auto head = node->HeadPtr();
+            if (head->IsCallable("Iterator") && optCtx.IsSingleUsage(*head)) {
+                YQL_CLOG(DEBUG, Core) << "ToFlow over Iterator with depends";
+                auto newChildren = node->ChildrenList();
+                const auto headChildren = head->ChildrenList();
+                newChildren.front() = headChildren.front();
+                for (size_t i = 1; i < headChildren.size(); i++) {
+                    newChildren.push_back(headChildren[i]);
+                }
+                return ctx.ChangeChildren(*node, std::move(newChildren));
+            }
         }
+        if (IsOptimizerToFlowOverCollectAllowed(*optCtx.Types)) {
+            const auto head = node->HeadPtr();
+            if (head->IsCallable("Collect") && optCtx.IsSingleUsage(*head) &&
+                head->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow) {
+                YQL_CLOG(DEBUG, Core) << "Drop ToFlow over Collect";
+                return head->HeadPtr();
+            }
+        }
+        return node;
+    };
+
+    map[TCoMember::CallableName()] = map[TCoNth::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (!optCtx.IsSingleUsage(node->Head())) {
             return node;
         }
@@ -2107,6 +2137,20 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
                     .Build();
             }
         }
+        return node;
+    };
+
+    map["ToMutDict"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        Y_UNUSED(ctx);
+        if (!optCtx.IsSingleUsage(node->Head())) {
+            return node;
+        }
+
+        if (node->Head().IsCallable("FromMutDict")) {
+            YQL_CLOG(DEBUG, Core) << "Skip " << node->Content() << " over " << node->Head().Content();
+            return node->Head().HeadPtr();
+        }
+
         return node;
     };
 }

@@ -83,6 +83,8 @@ def post_install(self):
     with self.yamakes["grpc++_reflection"] as m:
         m.PEERDIR.remove("contrib/libs/grpc/src/protos/src/proto/grpc/reflection/v1alpha")
         m.PEERDIR.add("contrib/libs/grpc/src/proto/grpc/reflection/v1alpha")
+        m.PEERDIR.remove("contrib/libs/grpc/src/protos/src/proto/grpc/reflection/v1")
+        m.PEERDIR.add("contrib/libs/grpc/src/proto/grpc/reflection/v1")
         m.ADDINCL.remove("contrib/libs/grpc/protos")
 
     with self.yamakes["grpcpp_channelz"] as m:
@@ -92,15 +94,25 @@ def post_install(self):
 
     # fix induced deps
     for name, module in self.yamakes.items():
+        if "-DPROTOBUF_USE_DLLS" in module.CFLAGS:
+            module.CFLAGS.remove("-DPROTOBUF_USE_DLLS")
         addincls = getattr(module, "ADDINCL", None)
         source_addincl = ArcPath("contrib/libs/grpc", build=False)
         build_addincl = ArcPath("contrib/libs/grpc", build=True)
         if addincls and source_addincl in addincls:
             addincls.add(build_addincl)
 
-    xxhash = os.path.join(self.dstdir, "third_party/xxhash")
-    if os.path.exists(xxhash) and os.path.isdir(xxhash):
-        shutil.rmtree(xxhash, ignore_errors=True)
+    # unbundle third_party/utf_range manually merged into upb library
+    with self.yamakes["third_party/upb"] as upb:
+        # fmt: off
+        upb.SRCS = [
+            src
+            for src in upb.SRCS
+            if "utf8_range" not in src
+        ]
+        # fmt: on
+        upb.PEERDIR.add("contrib/restricted/google/utf8_range")
+        upb.ADDINCL.add("contrib/restricted/google/utf8_range")
 
     with self.yamakes["."] as m:
         # fmt: off
@@ -123,6 +135,7 @@ grpc = CMakeNinjaNixProject(
         "src/proto/grpc/core/ya.make",
         "src/proto/grpc/channelz/ya.make",
         "src/proto/grpc/health/v1/ya.make",
+        "src/proto/grpc/reflection/v1/ya.make",
         "src/proto/grpc/reflection/v1alpha/ya.make",
         "src/proto/grpc/status/ya.make",
     ],
@@ -146,6 +159,9 @@ grpc = CMakeNinjaNixProject(
         # third_party libraries
         "address_sorting",
         "upb",
+        "upb_json_lib",
+        "upb_textformat_lib",
+        "utf8_range_lib",
     ],
     put={
         "grpc": ".",
@@ -156,12 +172,17 @@ grpc = CMakeNinjaNixProject(
         # third_party libraries
         "address_sorting": "third_party/address_sorting",
         "upb": "third_party/upb",
+        "utf8_range_lib": "third_party/utf8_range",
     },
     put_with={
         "grpc": ["grpc++", "gpr"],
+        "upb": ["upb_json_lib", "upb_textformat_lib"],
     },
     unbundle_from={
         "xxhash": "third_party/xxhash",
+        "utf8_validity": "third_party/upb/third_party/utf8_range",
+        "utf8_range": "third_party/utf8_range",
+        "utf8_range_lib": "third_party/utf8_range",
     },
     copy_sources=[
         "include/**/*.h",
@@ -175,6 +196,9 @@ grpc = CMakeNinjaNixProject(
         "src/core/lib/iomgr/resolve_address_windows.h",
         "src/core/lib/iomgr/socket_windows.h",
         "src/core/lib/iomgr/tcp_windows.h",
+        "src/core/lib/event_engine/cf_engine/*.h",
+        "src/core/lib/event_engine/nameser.h",
+        "src/core/lib/event_engine/windows/grpc_polled_fd_windows.h",
         "src/core/lib/event_engine/windows/windows_endpoint.h",
         "src/core/lib/event_engine/windows/windows_engine.h",
         "src/core/lib/event_engine/windows/windows_listener.h",
@@ -197,6 +221,8 @@ grpc = CMakeNinjaNixProject(
         "src/proto/grpc/testing/",
     ],
     disable_includes=[
+        # if OPENSSL_VERSION_NUMBER >= 0x30000000L
+        "openssl/param_build.h",
         "src/core/lib/profiling/stap_probes.h",
         # ifdef GRPC_UV
         "uv.h",

@@ -18,7 +18,7 @@ are available at `Read the Docs <https://fonttools.readthedocs.io/>`_.
 Installation
 ~~~~~~~~~~~~
 
-FontTools requires `Python <http://www.python.org/download/>`__ 3.9
+FontTools requires `Python <http://www.python.org/download/>`__ 3.10
 or later. We try to follow the same schedule of minimum Python version support as
 NumPy (see `NEP 29 <https://numpy.org/neps/nep-0029-deprecation_policy.html>`__).
 
@@ -109,7 +109,7 @@ are required to unlock the extra features named "ufo", etc.
 
   * `unicodedata2 <https://pypi.python.org/pypi/unicodedata2>`__:
     ``unicodedata`` backport for Python 3.x updated to the latest Unicode
-    version 15.0.
+    version 17.0.
 
   *Extra:* ``unicode``
 
@@ -124,7 +124,11 @@ are required to unlock the extra features named "ufo", etc.
     for Python, which internally uses `NumPy <https://pypi.python.org/pypi/numpy>`__
     arrays and hence is very fast;
   * `munkres <https://pypi.python.org/pypi/munkres>`__: a pure-Python
-    module that implements the Hungarian or Kuhn-Munkres algorithm.
+    module that implements the Hungarian or Kuhn-Munkres algorithm. Slower than
+    SciPy, but useful for minimalistic systems where adding SciPy is undesirable.
+
+  This ensures both performance (via SciPy) and minimal footprint (via Munkres)
+  are possible.
 
   To plot the results to a PDF or HTML format, you also need to install:
 
@@ -167,7 +171,7 @@ are required to unlock the extra features named "ufo", etc.
 
   Simplify TrueType glyphs by merging overlapping contours and components.
 
-  * `skia-pathops <https://pypi.python.org/pypy/skia-pathops>`__: Python
+  * `skia-pathops <https://pypi.python.org/pypi/skia-pathops>`__: Python
     bindings for the Skia library's PathOps module, performing boolean
     operations on paths (union, intersection, etc.).
 

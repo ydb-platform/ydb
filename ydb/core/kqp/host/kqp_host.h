@@ -32,12 +32,17 @@ public:
         TMaybe<bool> DocumentApiRestricted;
         TMaybe<bool> UsePgParser;
         TMaybe<TSqlVersion> SyntaxVersion;
+        i32 RuntimeParameterSizeLimit = 0;
+        bool RuntimeParameterSizeLimitSatisfied = false;
+        TMaybe<NSQLTranslation::EYqlSelect> YqlSelect;
 
         TString ToString() const {
             return TStringBuilder() << "TExecSettings{"
                 << " DocumentApiRestricted: " << DocumentApiRestricted
                 << " UsePgParser: " << UsePgParser
                 << " SyntaxVersion: " << SyntaxVersion
+                << " RuntimeParameterSizeLimit: " << RuntimeParameterSizeLimit
+                << " RuntimeParameterSizeLimitSatisfied: " << RuntimeParameterSizeLimitSatisfied
                 << " }";
         }
     };

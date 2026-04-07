@@ -8,11 +8,17 @@ TSolomonConfiguration::TSolomonConfiguration()
 {
     REGISTER_SETTING(*this, _EnableReading);
     REGISTER_SETTING(*this, _EnableRuntimeListing);
+    REGISTER_SETTING(*this, _EnableSolomonClientPostApi);
     REGISTER_SETTING(*this, _TruePointsFindRange);
-    REGISTER_SETTING(*this, MetricsQueuePageSize);
-    REGISTER_SETTING(*this, MetricsQueuePrefetchSize);
+    REGISTER_SETTING(*this, _MaxListingPageSize);
+    REGISTER_SETTING(*this, Auth)
+        .ValueSetter([this](const TString&, const TString& value) {
+            Auth = value;
+            for (auto& token: Tokens) {
+                token.second = ComposeStructuredTokenJsonForServiceAccount("", "", value);
+            }
+        });
     REGISTER_SETTING(*this, MetricsQueueBatchCountLimit);
-    REGISTER_SETTING(*this, SolomonClientDefaultReplica);
     REGISTER_SETTING(*this, ComputeActorBatchSize);
     REGISTER_SETTING(*this, MaxApiInflight);
 }

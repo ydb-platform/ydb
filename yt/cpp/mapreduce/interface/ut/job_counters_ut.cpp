@@ -9,7 +9,7 @@ using namespace NYT;
 
 TEST(TJobCountersTest, Full)
 {
-    const TString input = R"""(
+    const TStringBuf input = R"""(
         {
             "completed" = {
                 "total" = 6;

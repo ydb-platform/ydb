@@ -1,6 +1,7 @@
 #pragma once
 
 #include "read_balancer.h"
+#include "read_balancer__metrics.h"
 #include "read_balancer__schema.h"
 
 #include <ydb/core/tablet/tablet_exception.h>
@@ -33,7 +34,7 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                 return false;
 
             while (!dataRowset.EndOfSet()) { //found out topic info
-                Y_ABORT_UNLESS(!Self->Inited);
+                AFL_ENSURE(!Self->Inited)("tablet_id", Self->TabletID());
                 Self->PathId  = dataRowset.GetValue<Schema::Data::PathId>();
                 Self->Topic   = dataRowset.GetValue<Schema::Data::Topic>();
                 Self->Path    = dataRowset.GetValue<Schema::Data::Path>();
@@ -50,17 +51,15 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                 TString config = dataRowset.GetValueOrDefault<Schema::Data::Config>("");
                 if (!config.empty()) {
                     bool res = Self->TabletConfig.ParseFromString(config);
-                    Y_ABORT_UNLESS(res);
+                    AFL_ENSURE(res)("tablet_id", Self->TabletID())("path", Self->Path)("topic", Self->Topic);
 
                     Migrate(Self->TabletConfig);
-                    Self->Consumers.clear();
-                    for (auto& consumer : Self->TabletConfig.GetConsumers()) {
-                        Self->Consumers[consumer.GetName()];
-                    }
                     Self->PartitionGraph = MakePartitionGraph(Self->TabletConfig);
+                    Self->UpdateActivePartitions();
 
                     if (SplitMergeEnabled(Self->TabletConfig)) {
-                        Self->PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Self->Topic, Self->Path, Self->DatabasePath, Self->PathId, Self->Version, Self->TabletConfig, Self->PartitionGraph);
+                        // TODO DatabasePath is not initialized yet
+                        Self->PartitionsScaleManager = std::make_unique<TPartitionScaleManager>(Self->Topic, Self->Path, Self->DatabaseInfo.DatabasePath, Self->PathId, Self->Version, Self->TabletConfig, Self->PartitionGraph);
                     }
                     Self->UpdateConfigCounters();
                 }
@@ -76,8 +75,8 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
                 ui64 tabletId = partsRowset.GetValue<Schema::Partitions::TabletId>();
 
                 partitionsInfo[part] = {tabletId};
-                Self->AggregatedStats.AggrStats(part, partsRowset.GetValue<Schema::Partitions::DataSize>(),
-                                                partsRowset.GetValue<Schema::Partitions::UsedReserveSize>());
+                Self->TopicMetricsHandler->InitializePartitions(part, partsRowset.GetValue<Schema::Partitions::DataSize>(),
+                    partsRowset.GetValue<Schema::Partitions::UsedReserveSize>());
 
                 if (!partsRowset.Next())
                     return false;

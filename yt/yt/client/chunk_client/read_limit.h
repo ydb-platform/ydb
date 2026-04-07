@@ -28,8 +28,8 @@ public:
     explicit TLegacyReadLimit(const NTableClient::TLegacyOwningKey& key);
     explicit TLegacyReadLimit(NTableClient::TLegacyOwningKey&& key);
 
-    TLegacyReadLimit& operator= (const NProto::TReadLimit& protoLimit);
-    TLegacyReadLimit& operator= (NProto::TReadLimit&& protoLimit);
+    TLegacyReadLimit& operator=(const NProto::TReadLimit& protoLimit);
+    TLegacyReadLimit& operator=(NProto::TReadLimit&& protoLimit);
 
     TLegacyReadLimit GetSuccessor() const;
 
@@ -102,8 +102,8 @@ public:
 
     explicit TLegacyReadRange(const NProto::TReadRange& range);
     explicit TLegacyReadRange(NProto::TReadRange&& range);
-    TLegacyReadRange& operator= (const NProto::TReadRange& range);
-    TLegacyReadRange& operator= (NProto::TReadRange&& range);
+    TLegacyReadRange& operator=(const NProto::TReadRange& range);
+    TLegacyReadRange& operator=(NProto::TReadRange&& range);
 
     DEFINE_BYREF_RW_PROPERTY(TLegacyReadLimit, LowerLimit);
     DEFINE_BYREF_RW_PROPERTY(TLegacyReadLimit, UpperLimit);
@@ -174,7 +174,7 @@ public:
     //! semantics of such method is weird.
     TReadLimit Invert() const;
 
-    bool operator == (const TReadLimit& other) const;
+    bool operator==(const TReadLimit& other) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -206,7 +206,7 @@ public:
         const NProto::TReadRange& range,
         int keyLength = 0);
 
-    bool operator == (const TReadRange& other) const;
+    bool operator==(const TReadRange& other) const;
 
     //! Creates a range such that no row fits in it.
     static TReadRange MakeEmpty();

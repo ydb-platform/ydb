@@ -2,18 +2,20 @@
 
 namespace NYql::NFmr {
 
-TString GetBinaryYson(const TString& textYsonContent) {
-    TStringStream binaryYsonInputStream;
-    TStringStream textYsonInputStream(textYsonContent);
-    NYson::ReformatYsonStream(&textYsonInputStream, &binaryYsonInputStream, NYson::EYsonFormat::Binary, ::NYson::EYsonType::ListFragment);
-    return binaryYsonInputStream.ReadAll();
+TString GetBinaryYson(const TString& textYsonContent, NYson::EYsonType nodeType) {
+    TString result;
+    TStringInput textYsonInput(textYsonContent);
+    TStringOutput binaryYsonOutput(result);
+    NYson::ReformatYsonStream(&textYsonInput, &binaryYsonOutput, NYson::EYsonFormat::Binary, nodeType);
+    return result;
 }
 
 TString GetTextYson(const TString& binaryYsonContent) {
-    TStringStream binaryYsonInputStream(binaryYsonContent);
-    TStringStream textYsonInputStream;
-    NYson::ReformatYsonStream(&binaryYsonInputStream, &textYsonInputStream, NYson::EYsonFormat::Text, ::NYson::EYsonType::ListFragment);
-    return textYsonInputStream.ReadAll();
+    TString result;
+    TStringInput binaryYsonInput(binaryYsonContent);
+    TStringOutput textYsonOutput(result);
+    NYson::ReformatYsonStream(&binaryYsonInput, &textYsonOutput, NYson::EYsonFormat::Text, ::NYson::EYsonType::ListFragment);
+    return result;
 }
 
 } // namespace NYql::NFmr

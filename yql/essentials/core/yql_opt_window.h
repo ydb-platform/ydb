@@ -1,4 +1,7 @@
 #pragma once
+
+#include "yql_window_frame_settings.h"
+
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 
 namespace NYql {
@@ -9,42 +12,8 @@ TExprNode::TPtr ExpandCalcOverWindow(const TExprNode::TPtr& node, TExprContext& 
 TExprNodeList ExtractCalcsOverWindow(const TExprNode::TPtr& node, TExprContext& ctx);
 TExprNode::TPtr RebuildCalcOverWindowGroup(TPositionHandle pos, const TExprNode::TPtr& input, const TExprNodeList& calcs, TExprContext& ctx);
 
-enum EFrameType {
-    FrameByRows,
-    FrameByRange,
-    FrameByGroups,
-};
-
 using NNodes::TCoWinOnBase;
 using NNodes::TCoFrameBound;
-
-bool IsUnbounded(const NNodes::TCoFrameBound& bound);
-bool IsCurrentRow(const NNodes::TCoFrameBound& bound);
-
-class TWindowFrameSettings {
-public:
-    static TWindowFrameSettings Parse(const TExprNode& node, TExprContext& ctx);
-    static TMaybe<TWindowFrameSettings> TryParse(const TExprNode& node, TExprContext& ctx);
-
-    // This two functions can only be used for FrameByRows or FrameByGroups
-    TMaybe<i32> GetFirstOffset() const;
-    TMaybe<i32> GetLastOffset() const;
-
-    TCoFrameBound GetFirst() const;
-    TCoFrameBound GetLast() const;
-
-    bool IsNonEmpty() const { return NeverEmpty_; }
-    bool IsCompact() const { return Compact_; }
-    EFrameType GetFrameType() const { return Type_; }
-private:
-    EFrameType Type_ = FrameByRows;
-    TExprNode::TPtr First_;
-    TMaybe<i32> FirstOffset_;
-    TExprNode::TPtr Last_;
-    TMaybe<i32> LastOffset_;
-    bool NeverEmpty_ = false;
-    bool Compact_ = false;
-};
 
 struct TSessionWindowParams {
     TSessionWindowParams()

@@ -49,6 +49,8 @@ protected:
     const TSerializedTableRange TableRange;
     const TSerializedTableRange RequestedRange;
     const ui64 K;
+    bool SkipForeign = false;
+    NTable::TPos IsForeignPos = 0;
 
     ui64 TabletId = 0;
     ui64 BuildId = 0;
@@ -66,6 +68,8 @@ protected:
     const TAutoPtr<TEvDataShard::TEvSampleKResponse> Response;
     const TActorId ResponseActorId;
 
+    std::unique_ptr<IClusters> Clusters;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SAMPLE_K_SCAN_ACTOR;
@@ -73,7 +77,7 @@ public:
 
     TSampleKScan(ui64 tabletId, const TUserTable& table, NKikimrTxDataShard::TEvSampleKRequest& request,
                  const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvSampleKResponse>&& response,
-                 const TSerializedTableRange& range)
+                 const TSerializedTableRange& range, std::unique_ptr<IClusters>&& clusters)
         : TActor(&TThis::StateWork)
         , ScanTags(BuildTags(table, request.GetColumns()))
         , KeyTypes(table.KeyColumnTypes)
@@ -85,8 +89,19 @@ public:
         , Sampler(request.GetK(), request.GetSeed(), request.GetMaxProbability())
         , Response(std::move(response))
         , ResponseActorId(responseActorId)
+        , Clusters(std::move(clusters))
     {
         LOG_I("Create " << Debug());
+
+        NTable::TPos pos = 0;
+        for (const auto& col: request.GetColumns()) {
+            if (col == NTableIndex::NKMeans::IsForeignColumn) {
+                SkipForeign = true;
+                IsForeignPos = pos;
+                break;
+            }
+            pos++;
+        }
 
         auto scanRange = Intersect(KeyTypes, RequestedRange.ToTableRange(), TableRange.ToTableRange());
 
@@ -126,9 +141,33 @@ public:
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 
-        Sampler.Add([&row](){
-            return TSerializedCellVec::Serialize(*row);
-        });
+        if (Clusters && !Clusters->IsExpectedFormat(row.Get(0).AsRef())) {
+            // Skip rows with invalid vector format
+            return EScan::Feed;
+        }
+
+        if (SkipForeign) {
+            bool foreign = row.Get(IsForeignPos).AsValue<bool>();
+            if (foreign) {
+                // Skip rows from "non-domestic" clusters to not affect K-means centroids
+                return EScan::Feed;
+            }
+            TVector<TCell> cells;
+            NTable::TPos pos = 0;
+            for (const auto& cell: *row) {
+                if (pos != IsForeignPos) {
+                    cells.push_back(cell);
+                }
+                pos++;
+            }
+            Sampler.Add([&cells](){
+                return TSerializedCellVec::Serialize(cells);
+            });
+        } else {
+            Sampler.Add([&row](){
+                return TSerializedCellVec::Serialize(*row);
+            });
+        }
 
         if (Sampler.GetMaxProbability() == 0) {
             return EScan::Final;
@@ -338,14 +377,23 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
             }
         }
 
+        // 3. Validating vector index settings
+        std::unique_ptr<IClusters> clusters;
+        if (request.HasSettings()) {
+            TString error;
+            clusters = NKikimr::NKMeans::CreateClusters(request.GetSettings(), 0, error);
+            if (!clusters) {
+                badRequest(error);
+            }
+        }
+
         if (trySendBadRequest()) {
             return;
         }
 
-        // 3. Creating scan
+        // 4. Creating scan
         TAutoPtr<NTable::IScan> scan = new TSampleKScan(TabletID(), userTable,
-            request, ev->Sender, std::move(response),
-            requestedRange);
+            request, ev->Sender, std::move(response), requestedRange, std::move(clusters));
 
         StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
     } catch (const std::exception& exc) {

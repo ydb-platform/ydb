@@ -11,6 +11,7 @@
 #include <yt/yt/build/build.h>
 
 #include <yt/yt/core/concurrency/scheduler.h>
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 
 #include <yt/yt/core/ytree/fluent.h>
 
@@ -87,8 +88,15 @@ void TGetVersionCommand::DoExecute(ICommandContextPtr context)
 
 // These features are guaranteed to be deployed before or with this code.
 constexpr auto StaticFeatures = std::to_array<std::pair<TStringBuf, bool>>({
+    {"structured_web_json", true},
     {"user_tokens_metadata", true},
 });
+
+#ifdef OPENSOURCE
+constexpr bool FlowPipelinesListEnabled = false;
+#else
+constexpr bool FlowPipelinesListEnabled = true;
+#endif
 
 void TGetSupportedFeaturesCommand::DoExecute(ICommandContextPtr context)
 {
@@ -106,6 +114,12 @@ void TGetSupportedFeaturesCommand::DoExecute(ICommandContextPtr context)
     for (auto staticFeature : StaticFeatures) {
         features->AddChild(TString(staticFeature.first), BuildYsonNodeFluently().Value(staticFeature.second));
     }
+    features->AddChild(
+        "flow_pipelines",
+        BuildYsonNodeFluently()
+            .BeginMap()
+                .Item("pipeline_list_enabled").Value(FlowPipelinesListEnabled)
+            .EndMap());
     features->AddChild(
         "require_password_in_authentication_commands",
         BuildYsonNodeFluently().Value(context->GetConfig()->RequirePasswordInAuthenticationCommands));
@@ -167,22 +181,22 @@ void TCheckPermissionCommand::DoExecute(ICommandContextPtr context)
                             .EndMap();
                     });
             })
-            .DoIf(response.RlAcl.has_value(), [&] (auto fluent) {
+            .DoIf(response.RowLevelAcl.has_value(), [&] (auto fluent) {
                 fluent
-                    .Item("rl_acl")
-                    .DoListFor(*response.RlAcl, [&] (auto fluent, const auto& rlAce) {
+                    .Item("row_level_acl")
+                    .DoListFor(*response.RowLevelAcl, [&] (auto fluent, const auto& rowLevelAce) {
                         fluent
                             .Item().BeginMap()
-                                .Item(TSerializableAccessControlEntry::ExpressionKey).Value(rlAce.Expression)
-                                // NB(coteeq): The DoIf will try to hide the whole inapplicable_expression_mode
+                                .Item(TSerializableAccessControlEntry::RowAccessPredicateKey).Value(rowLevelAce.RowAccessPredicate)
+                                // NB(coteeq): The DoIf will try to hide the whole inapplicable_row_access_predicate_mode
                                 // mechanism from too curious users.
-                                // EInapplicableExpressionMode::Ignore is not a good choice in the common case
+                                // EInapplicableRowAccessPredicateMode::Ignore is not a good choice in the common case
                                 // from security perspective, but it may be necessary to be able to have
                                 // tables with completely different schemas in one directory.
-                                .DoIf(rlAce.InapplicableExpressionMode != EInapplicableExpressionMode::Fail, [&] (auto fluent) {
+                                .DoIf(rowLevelAce.InapplicableRowAccessPredicateMode != EInapplicableRowAccessPredicateMode::Fail, [&] (auto fluent) {
                                     fluent
-                                        .Item(TSerializableAccessControlEntry::InapplicableExpressionModeKey)
-                                        .Value(rlAce.InapplicableExpressionMode);
+                                        .Item(TSerializableAccessControlEntry::InapplicableRowAccessPredicateModeKey)
+                                        .Value(rowLevelAce.InapplicableRowAccessPredicateMode);
                                 })
                             .EndMap();
                     });
@@ -254,6 +268,27 @@ void TTransferPoolResourcesCommand::DoExecute(ICommandContextPtr context)
         SourcePool,
         DestinationPool,
         PoolTree,
+        ResourceDelta,
+        Options))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TTransferBundleResourcesCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("source_bundle", &TThis::SourceBundle);
+    registrar.Parameter("destination_bundle", &TThis::DestinationBundle);
+    registrar.Parameter("resource_delta", &TThis::ResourceDelta);
+}
+
+void TTransferBundleResourcesCommand::DoExecute(ICommandContextPtr context)
+{
+    WaitFor(context->GetClient()->TransferBundleResources(
+        SourceBundle,
+        DestinationBundle,
         ResourceDelta,
         Options))
         .ThrowOnError();
@@ -423,7 +458,7 @@ void TExecuteBatchCommand::DoExecute(ICommandContextPtr context)
         callbacks.push_back(BIND(&TRequestExecutor::Run, executor));
     }
 
-    auto results = WaitFor(RunWithBoundedConcurrency(std::move(callbacks), Options.Concurrency))
+    auto results = WaitFor(CancelableRunWithBoundedConcurrency(std::move(callbacks), Options.Concurrency))
         .ValueOrThrow();
 
     ProduceSingleOutput(context, "results", [&] (NYson::IYsonConsumer* consumer) {

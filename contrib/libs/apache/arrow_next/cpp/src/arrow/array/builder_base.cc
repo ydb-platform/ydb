@@ -15,22 +15,22 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/array/builder_base.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_base.h"
 
 #include <cstdint>
 #include <type_traits>
 #include <vector>
 
-#include "arrow/array/array_base.h"
-#include "arrow/array/builder_dict.h"
-#include "arrow/array/data.h"
-#include "arrow/array/util.h"
-#include "arrow/buffer.h"
-#include "arrow/builder.h"
-#include "arrow/scalar.h"
-#include "arrow/status.h"
-#include "arrow/util/logging.h"
-#include "arrow/visit_type_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_base.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_dict.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/data.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/builder.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_type_inline.h"
 
 namespace arrow20 {
 

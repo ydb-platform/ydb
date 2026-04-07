@@ -1469,7 +1469,9 @@
   ],
   "refresh": "",
   "schemaVersion": 39,
-  "tags": [],
+  "tags": [
+    "ydb"
+  ],
   "templating": {
     "list": [
       {
@@ -1494,8 +1496,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Replication factor",
-  "uid": "rd_replication-factor",
-  "version": 18,
+  "title": "Distributed Storage Replication Factor",
+  "uid": "ydb-distributed-storage-replication",
+  "version": 1,
   "weekStart": ""
 }

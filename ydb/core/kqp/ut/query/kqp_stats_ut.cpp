@@ -1,3 +1,4 @@
+#include <ydb/core/base/hive.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -157,6 +158,9 @@ void MultiTxStatsFull(
         std::function<Iterator(TKikimrRunner&, ECollectQueryStatsMode, const TString&)> getResult) {
     auto app = NKikimrConfig::TAppConfig();
     app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+    app.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimization(true);
+    app.MutableTableServiceConfig()->SetExtractPredicateParameterListSizeLimit(10000);
+    app.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms(true);
     TKikimrRunner kikimr(app);
     auto it = getResult(kikimr, ECollectQueryStatsMode::Full, R"(
         SELECT * FROM `/Root/EightShard` WHERE Key BETWEEN 150 AND 266 ORDER BY Data LIMIT 4;
@@ -177,9 +181,9 @@ void MultiTxStatsFull(
     UNIT_ASSERT(res.PlanJson);
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(*res.PlanJson, &plan, true);
-    Cout << plan;
+    Cerr << plan << Endl;
     auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort");
-    UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 2);
+    UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 1);
 }
 
 Y_UNIT_TEST(MultiTxStatsFullYql) {
@@ -190,10 +194,8 @@ Y_UNIT_TEST(MultiTxStatsFullScan) {
     MultiTxStatsFull<NYdb::NTable::TScanQueryPartIterator>(GetScanStreamIterator);
 }
 
-Y_UNIT_TEST_TWIN(DeferredEffects, UseSink) {
-    NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-    auto kikimr = DefaultKikimrRunner({}, app);
+Y_UNIT_TEST(DeferredEffects) {
+    auto kikimr = DefaultKikimrRunner();
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
     TString planJson;
@@ -237,7 +239,7 @@ Y_UNIT_TEST_TWIN(DeferredEffects, UseSink) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
-    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), UseSink ? 2 : 3);
+    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 2);
 
     result = session.ExecuteDataQuery(R"(
         SELECT * FROM `/Root/TwoShard`;
@@ -247,7 +249,7 @@ Y_UNIT_TEST_TWIN(DeferredEffects, UseSink) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
-    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), UseSink ? 2 : 3);
+    UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 2);
 
     auto ru = result.GetResponseMetadata().find(NYdb::YDB_CONSUMED_UNITS_HEADER);
     UNIT_ASSERT(ru != result.GetResponseMetadata().end());
@@ -255,10 +257,8 @@ Y_UNIT_TEST_TWIN(DeferredEffects, UseSink) {
     UNIT_ASSERT(std::atoi(ru->second.c_str()) > 1);
 }
 
-Y_UNIT_TEST_TWIN(DataQueryWithEffects, UseSink) {
-    NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-    auto kikimr = DefaultKikimrRunner({}, app);
+Y_UNIT_TEST(DataQueryWithEffects) {
+    auto kikimr = DefaultKikimrRunner();
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -275,13 +275,8 @@ Y_UNIT_TEST_TWIN(DataQueryWithEffects, UseSink) {
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
 
-    if (UseSink) {
-        auto node = FindPlanNodeByKv(plan, "Node Type", "Stage");
-        UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 1);
-    } else {
-        auto node = FindPlanNodeByKv(plan, "Node Type", "Upsert-ConstantExpr");
-        UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 2);
-    }
+    auto node = FindPlanNodeByKv(plan, "Node Type", "Stage");
+    UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 1);
 }
 
 Y_UNIT_TEST(DataQueryMulti) {
@@ -489,12 +484,12 @@ Y_UNIT_TEST(SelfJoin) {
 }
 
 Y_UNIT_TEST(SysViewClientLost) {
-    TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false));    
+    TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false));
 
     auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
     auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
 
-    kikimr.RunCall( [&] { 
+    kikimr.RunCall( [&] {
         CreateLargeTable(kikimr, 500000, 10, 100, 5000, 1);
         return true;
     });
@@ -515,12 +510,12 @@ Y_UNIT_TEST(SysViewClientLost) {
         SELECT COUNT(*) FROM `/Root/LargeTable` WHERE SUBSTRING(DataText, 50, 5) = "22222";
     )";
     TString timeoutedRequest = timeoutedRequestStream.Str();
-    
+
     auto settings = TStreamExecScanQuerySettings();
     settings.ClientTimeout(TDuration::MilliSeconds(50));
     auto resultFuture = kikimr.RunInThreadPool([&]{
         return db.StreamExecuteScanQuery(timeoutedRequest).GetValueSync();});
-    
+
     TDispatchOptions opts;
     opts.FinalEvents.emplace_back([&updateCount](IEventHandle&) {
         return updateCount > 0;
@@ -617,10 +612,8 @@ Y_UNIT_TEST(SysViewCancelled) {
     }
 }
 
-Y_UNIT_TEST_TWIN(OneShardLocalExec, UseSink) {
-    NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-    auto kikimr = DefaultKikimrRunner({}, app);
+Y_UNIT_TEST(OneShardLocalExec) {
+    auto kikimr = DefaultKikimrRunner();
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -658,41 +651,44 @@ Y_UNIT_TEST_TWIN(OneShardLocalExec, UseSink) {
     UNIT_ASSERT_VALUES_EQUAL(counters.NonLocalSingleNodeReqCount->Val(), 0);
 }
 
-Y_UNIT_TEST_QUAD(OneShardNonLocalExec, UseSink, EnableParallelPointReadConsolidation) {
-    NKikimrConfig::TAppConfig app;
-    app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-    app.MutableTableServiceConfig()->SetEnableParallelPointReadConsolidation(EnableParallelPointReadConsolidation);
-    TKikimrRunner kikimr(TKikimrSettings(app).SetNodeCount(2));
+Y_UNIT_TEST(OneShardNonLocalExec) {
+    TKikimrRunner kikimr(TKikimrSettings().SetNodeCount(2));
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
-    auto monPort = kikimr.GetTestServer().GetRuntime()->GetMonPort();
 
     auto firstNodeId = kikimr.GetTestServer().GetRuntime()->GetFirstNodeId();
+    Cerr << "OneShardNonLocalExec: firstNodeId=" << firstNodeId
+         << " nodeCount=" << kikimr.GetTestServer().GetRuntime()->GetNodeCount() << Endl;
 
     TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
 
     auto expectedTotalSingleNodeReqCount = counters.TotalSingleNodeReqCount->Val();
     auto expectedNonLocalSingleNodeReqCount = counters.NonLocalSingleNodeReqCount->Val();
 
-    auto drainNode = [monPort](size_t nodeId, bool undrain = false) {
-        TNetworkAddress addr("localhost", monPort);
-        TSocket s(addr);
-        TString url;
+    auto drainNode = [runtime = kikimr.GetTestServer().GetRuntime()](size_t nodeId, bool undrain = false) {
+        Cerr << "drainNode: nodeId=" << nodeId << " undrain=" << undrain << Endl;
+        auto sender = runtime->AllocateEdgeActor();
+        IEventBase* ev = nullptr;
         if (undrain) {
-            url = "/tablets/app?TabletID=72057594037968897&node=" + std::to_string(nodeId) + "&page=SetDown&down=0";
+            ev = new TEvHive::TEvSetDown(nodeId, false);
         } else {
-            url = "/tablets/app?TabletID=72057594037968897&node=" + std::to_string(nodeId) + "&page=DrainNode";
+            ev = new TEvHive::TEvDrainNode(nodeId);
         }
-        SendMinimalHttpRequest(s, "localhost", url);
-        TSocketInput si(s);
-        THttpInput input(&si);
-        TString firstLine = input.FirstLine();
-
-        const auto httpCode = ParseHttpRetCode(firstLine);
-        UNIT_ASSERT_VALUES_EQUAL(httpCode, 200);
+        runtime->SendToPipe(72057594037968897, sender, ev, 0, GetPipeConfigWithRetries());
+        if (undrain) {
+            TAutoPtr<IEventHandle> handle;
+            runtime->GrabEdgeEventRethrow<TEvHive::TEvSetDownReply>(handle, TDuration::Seconds(30));
+            Cerr << "drainNode: undrain completed" << Endl;
+        } else {
+            TAutoPtr<IEventHandle> handle;
+            auto drainResponse = runtime->GrabEdgeEventRethrow<TEvHive::TEvDrainNodeResult>(handle, TDuration::Seconds(30));
+            Cerr << "drainNode: completed, status=" << (drainResponse ? static_cast<int>(drainResponse->Record.GetStatus()) : -1)
+                 << " movements=" << (drainResponse ? drainResponse->Record.GetMovements() : -1) << Endl;
+        }
     };
 
     auto waitTablets = [&session](size_t nodeId) mutable {
+        Cerr << "waitTablets: waiting for all tablets on nodeId=" << nodeId << Endl;
         TDescribeTableSettings describeTableSettings =
             TDescribeTableSettings()
                 .WithTableStatistics(true)
@@ -700,7 +696,7 @@ Y_UNIT_TEST_QUAD(OneShardNonLocalExec, UseSink, EnableParallelPointReadConsolida
                 .WithShardNodesInfo(true);
 
         bool done = false;
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 5; i++) {
             std::unordered_set<ui32> nodeIds;
             auto res = session.DescribeTable("Root/EightShard", describeTableSettings)
                 .ExtractValueSync();
@@ -712,11 +708,17 @@ Y_UNIT_TEST_QUAD(OneShardNonLocalExec, UseSink, EnableParallelPointReadConsolida
             for (const auto& s : res.GetTableDescription().GetPartitionStats()) {
                 nodeIds.emplace(s.LeaderNodeId);
             }
+            Cerr << "waitTablets: attempt " << i << ", tablet leader nodes: {";
+            for (auto it = nodeIds.begin(); it != nodeIds.end(); ++it) {
+                if (it != nodeIds.begin()) Cerr << ", ";
+                Cerr << *it;
+            }
+            Cerr << "}, expecting nodeId=" << nodeId << Endl;
             if (nodeIds.size() == 1 && *nodeIds.begin() == nodeId) {
                 done = true;
                 break;
             }
-            Sleep(TDuration::Seconds(1));
+            Sleep(TDuration::Seconds(5));
         }
         UNIT_ASSERT_C(done, "unable to wait tablets move on specific node");
     };
@@ -881,7 +883,7 @@ Y_UNIT_TEST_TWIN(CreateTableAsStats, IsOlap) {
     auto settings = NYdb::NQuery::TExecuteQuerySettings()
         .StatsMode(NYdb::NQuery::EStatsMode::Full);
 
-    {    
+    {
         auto result = client.ExecuteQuery(Sprintf(R"(
             CREATE TABLE `/Root/Destination` (
                 PRIMARY KEY (Col1)
@@ -916,11 +918,21 @@ Y_UNIT_TEST_TWIN(CreateTableAsStats, IsOlap) {
         auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         Cerr << stats.DebugString() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 24);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().rows(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().bytes(), 24);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).partitions_count(), 1);
+
+        if (IsOlap) {
+            // size of serialized may be a little different (because of arrow)
+            UNIT_ASSERT_GE(stats.query_phases(0).table_access(0).updates().bytes(), 400);
+            UNIT_ASSERT_LE(stats.query_phases(0).table_access(0).updates().bytes(), 500);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().bytes(), 40);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).partitions_count(), 0);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().bytes(), 24);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).reads().bytes(), 24);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(1).partitions_count(), 1);
+        }
     }
 
     {

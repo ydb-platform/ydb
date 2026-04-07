@@ -1,5 +1,5 @@
 #include "kafka_init_producer_id_actor.h"
-#include "kafka_init_producer_id_actor_sql.cpp"
+#include "kafka_init_producer_id_actor_sql.h"
 #include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 #include <ydb/core/kafka_proxy/kqp_helper.h>
@@ -247,7 +247,7 @@ namespace NKafka {
     // params builders
     NYdb::TParams TKafkaInitProducerIdActor::BuildSelectOrDeleteByTransactionalIdParams() {
         NYdb::TParamsBuilder params;
-        params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+        params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
         params.AddParam("$TransactionalId").Utf8(*TransactionalId).Build();
 
         return params.Build();
@@ -255,7 +255,7 @@ namespace NKafka {
 
     NYdb::TParams TKafkaInitProducerIdActor::BuildInsertNewProducerStateParams() {
         NYdb::TParamsBuilder params;
-        params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+        params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
         params.AddParam("$TransactionalId").Utf8(*TransactionalId).Build();
         params.AddParam("$ProducerEpoch").Int16(0).Build();
         params.AddParam("$UpdatedAt").Datetime(TInstant::Now()).Build();
@@ -265,7 +265,7 @@ namespace NKafka {
 
     NYdb::TParams TKafkaInitProducerIdActor::BuildUpdateProducerStateParams(ui16 newProducerEpoch) {
         NYdb::TParamsBuilder params;
-        params.AddParam("$Database").Utf8(Kqp->DataBase).Build();
+        params.AddParam("$Database").Utf8(Context->DatabasePath).Build();
         params.AddParam("$TransactionalId").Utf8(*TransactionalId).Build();
         params.AddParam("$ProducerEpoch").Int16(newProducerEpoch).Build();
         params.AddParam("$UpdatedAt").Datetime(TInstant::Now()).Build();

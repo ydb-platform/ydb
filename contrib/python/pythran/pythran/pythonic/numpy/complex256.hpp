@@ -33,4 +33,29 @@ namespace numpy
 } // namespace numpy
 PYTHONIC_NS_END
 
+#ifdef ENABLE_PYTHON_MODULE
+
+#include "numpy/arrayscalars.h"
+#include "pythonic/python/core.hpp"
+
+PYTHONIC_NS_BEGIN
+
+inline PyObject *to_python<numpy::functor::complex256>::convert(numpy::functor::complex256 const &c)
+{
+  return (PyObject *)&PyCLongDoubleArrType_Type;
+}
+
+inline bool from_python<numpy::functor::complex256>::is_convertible(PyObject *obj)
+{
+  return obj == (PyObject *)&PyCLongDoubleArrType_Type;
+}
+
+inline numpy::functor::complex256 from_python<numpy::functor::complex256>::convert(PyObject *obj)
+{
+  return {};
+}
+
+PYTHONIC_NS_END
+#endif
+
 #endif

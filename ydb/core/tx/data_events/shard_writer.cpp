@@ -41,7 +41,7 @@ namespace NKikimr::NEvWrite {
 
     TShardWriter::TShardWriter(const ui64 shardId, const ui64 tableId, const ui64 schemaVersion, const TString& dedupId, const IShardInfo::TPtr& data,
         const NWilson::TProfileSpan& parentSpan, TWritersController::TPtr externalController, const ui32 writePartIdx,
-        const std::optional<TDuration> timeout)
+        const std::optional<TDuration> timeout, const TString& userSID)
         : ShardId(shardId)
         , WritePartIdx(writePartIdx)
         , TableId(tableId)
@@ -52,12 +52,13 @@ namespace NKikimr::NEvWrite {
         , LeaderPipeCache(MakePipePerNodeCacheID(false))
         , ActorSpan(parentSpan.BuildChildrenSpan("ShardWriter"))
         , Timeout(timeout)
-        , RetryBySubscription(AppData()->FeatureFlags.GetEnableCSOverloadsSubscriptionRetries())
-    {
+        , RetryBySubscription(AppData()->FeatureFlags.GetEnableCsOverloadsSubscriptionRetries())
+        , UserSID(userSID) {
     }
 
     void TShardWriter::SendWriteRequest() {
         auto ev = MakeHolder<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        ev->SetUserSID(UserSID);
         DataForShard->Serialize(*ev, TableId, SchemaVersion);
         if (Timeout) {
             ev->Record.SetTimeoutSeconds(Timeout->Seconds());
@@ -91,6 +92,8 @@ namespace NKikimr::NEvWrite {
             }
         }
 
+        LastOverloadSeqNo = 0;
+
         auto gPassAway = PassAwayGuard();
         if (ydbStatus != NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
             auto statusInfo = NEvWrite::NErrorCodes::TOperator::GetStatusInfo(ydbStatus).DetachResult();
@@ -102,9 +105,6 @@ namespace NKikimr::NEvWrite {
             return;
         }
 
-        if (RetryBySubscription) {
-            LastOverloadSeqNo = 0;
-        }
         ExternalController->OnSuccess(ShardId, 0, WritePartIdx);
     }
 
@@ -112,13 +112,20 @@ namespace NKikimr::NEvWrite {
         const auto& record = ev->Get()->Record;
 
         AFL_VERIFY(RetryBySubscription);
-        AFL_VERIFY(record.GetSeqNo() == LastOverloadSeqNo)("event_seq_no", record.GetSeqNo())("last_overload_seq_no", LastOverloadSeqNo);
+        AFL_VERIFY(record.GetSeqNo() <= LastOverloadSeqNo)("event_seq_no", record.GetSeqNo())("last_overload_seq_no", LastOverloadSeqNo);
         AFL_VERIFY(record.GetTabletID() == ShardId)("ev_tablet_id", record.GetTabletID())("shard_id", ShardId);
+        if (record.GetSeqNo() != LastOverloadSeqNo) {
+            return;
+        }
 
         if (!RetryWriteRequest(false)) {
             auto gPassAway = PassAwayGuard();
             const TString errMsg = TStringBuilder() << "Shard " << ShardId << " is still overloaded after " << NumRetries << " retries";
             ExternalController->OnFail(Ydb::StatusIds::OVERLOADED, errMsg);
+            ExternalController->GetCounters()->OnRetryBySubscribeOnOverloadLimitExceeded();
+            LastOverloadSeqNo = 0;
+        } else {
+            ExternalController->GetCounters()->OnRetryBySubscribeOnOverload();
         }
     }
 
@@ -139,6 +146,8 @@ namespace NKikimr::NEvWrite {
         } else {
             ExternalController->OnFail(Ydb::StatusIds::UNDETERMINED, errMsg);
         }
+
+        LastOverloadSeqNo = 0;
     }
 
     void TShardWriter::Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
@@ -168,18 +177,11 @@ namespace NKikimr::NEvWrite {
     }
 
     bool TShardWriter::IsMaxRetriesReached() const {
-        return NumRetries >= MaxRetriesPerShard;
+        return NumRetries >= GetMaxRetriesPerShard();
     }
-
-    void TShardWriter::Die(const NActors::TActorContext& ctx) {
-        if (RetryBySubscription && LastOverloadSeqNo) {
-            SendToTablet(MakeHolder<TEvColumnShard::TEvOverloadUnsubscribe>(LastOverloadSeqNo));
-            LastOverloadSeqNo = 0;
-        }
-
-        Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
-
-        TBase::Die(ctx);
+    
+    ui32 TShardWriter::GetMaxRetriesPerShard() const {
+        return AppData() ? AppData()->ColumnShardConfig.GetProxyMaxRetriesPerShard() : MaxRetriesPerShard;
     }
 
     void TShardWriter::PassAway() {

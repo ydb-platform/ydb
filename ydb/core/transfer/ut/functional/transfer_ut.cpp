@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                 CREATE TRANSFER %s
                 FROM %s TO %s USING $l
                 WITH (
-                    CONNECTION_STRING = "grp§c://localhost:2135"
+                    CONNECTION_STRING = "grp§c://localhost:2135/?database=/Root"
                 )
             )", testCase.TransferName.data(), testCase.TopicName.data(), testCase.TableName.data()));
 
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                 CREATE TRANSFER %s
                 FROM %s TO %s USING $l
                 WITH (
-                    CONNECTION_STRING = "grpc://domain-not-exists-localhost.com.moc:2135"
+                    CONNECTION_STRING = "grpc://domain-not-exists-localhost.com.moc:2135/?database=/Root"
                 )
             )", testCase.TransferName.data(), testCase.TopicName.data(), testCase.TableName.data()));
 
@@ -992,6 +992,46 @@ Y_UNIT_TEST_SUITE(Transfer)
         CreateTransferSourceNotExists(true);
     }
 
+    void CreateTransferSourceDirNotExists(bool localTopic)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8 NOT NULL,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = ROW
+                );
+            )");
+
+        auto settings = MainTestCase::CreateTransferSettings::WithLocalTopic(localTopic);
+        settings.TopicName = "dir_not_exists/topic_name";
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", settings);
+
+        testCase.CheckTransferStateError("Discovery error:");
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+    }
+
+    Y_UNIT_TEST(CreateTransferSourceDirNotExists) {
+        CreateTransferSourceDirNotExists(false);
+    }
+
+    Y_UNIT_TEST(CreateTransferSourceDirNotExists_LocalTopic) {
+        CreateTransferSourceDirNotExists(true);
+    }
+
     void TransferSourceDropped(bool localTopic)
     {
         MainTestCase testCase;
@@ -1519,7 +1559,6 @@ Y_UNIT_TEST_SUITE(Transfer)
             )");
         testCase.CreateTopic(1);
 
-        testCase.CreateDirectory("/local/subdir");
         testCase.CreateTransfer(TStringBuilder() << "subdir/" << testCase.TransferName, Sprintf(R"(
                 $l = ($x) -> {
                     return [
@@ -1539,7 +1578,7 @@ Y_UNIT_TEST_SUITE(Transfer)
     {
         auto id = RandomNumber<ui16>();
         auto username = TStringBuilder() << "u" << id;
-        auto secretName = TStringBuilder() << "s" << id;
+        auto secret = TStringBuilder() << "s" << id;
 
         MainTestCase permissionSetup;
         permissionSetup.CreateUser(username);
@@ -1547,8 +1586,8 @@ Y_UNIT_TEST_SUITE(Transfer)
 
         MainTestCase testCase(username);
         testCase.ExecuteDDL(Sprintf(R"(
-                CREATE OBJECT %s (TYPE SECRET) WITH value="%s@builtin"
-            )", secretName.data(), username.data()));
+                CREATE SECRET %s WITH (value="%s@builtin")
+            )", secret.data(), username.data()));
 
         permissionSetup.ExecuteDDL(Sprintf(R"(
                 CREATE TABLE `%s` (
@@ -1573,7 +1612,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                         |>
                     ];
                 };
-            )", MainTestCase::CreateTransferSettings::WithSecretName(secretName));
+            )", MainTestCase::CreateTransferSettings::WithSecret(secret));
 
         testCase.Write({"Message-1"});
 

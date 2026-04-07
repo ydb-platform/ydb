@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/protos/pqdata_transaction.pb.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 
 
@@ -51,7 +52,8 @@ void MakePQTabletConfig(const TOperationContext& context,
                                 const TString& cloudId,
                                 const TString& folderId,
                                 const TString& databaseId,
-                                const TString& databasePath)
+                                const TString& databasePath,
+                                const TString& monitoringProjectId)
 {
     ParsePQTabletConfig(config, pqGroup);
 
@@ -63,6 +65,7 @@ void MakePQTabletConfig(const TOperationContext& context,
     config.SetYcFolderId(folderId);
     config.SetYdbDatabaseId(databaseId);
     config.SetYdbDatabasePath(databasePath);
+    config.SetMonitoringProjectId(monitoringProjectId);
 
     if (pqGroup.AlterData) {
         config.SetVersion(pqGroup.AlterData->AlterVersion);
@@ -161,6 +164,7 @@ THolder<TEvPersQueue::TEvProposeTransaction> MakeEvProposeTransaction(
         const TString& folderId,
         const TString& databaseId,
         const TString& databasePath,
+        const TString& monitoringProjectId,
         TTxState::ETxType txType,
         const TOperationContext& context
     )
@@ -178,50 +182,11 @@ THolder<TEvPersQueue::TEvProposeTransaction> MakeEvProposeTransaction(
                        cloudId,
                        folderId,
                        databaseId,
-                       databasePath);
+                       databasePath,
+                       monitoringProjectId);
     if (bootstrapConfig) {
         Y_ABORT_UNLESS(txType == TTxState::TxCreatePQGroup);
         event->PreSerializedData += bootstrapConfig->GetPreSerializedProposeTransaction();
-    }
-
-    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Propose configure PersQueue" <<
-                ", message: " << event->Record.ShortUtf8DebugString());
-
-    return event;
-}
-
-THolder<TEvPersQueue::TEvUpdateConfig> MakeEvUpdateConfig(
-        TTxId txId,
-        const TTopicInfo& pqGroup,
-        const TTopicTabletInfo& pqShard,
-        const TString& topicName,
-        const TString& topicPath,
-        const std::optional<TBootstrapConfigWrapper>& bootstrapConfig,
-        const TString& cloudId,
-        const TString& folderId,
-        const TString& databaseId,
-        const TString& databasePath,
-        TTxState::ETxType txType,
-        const TOperationContext& context
-    )
-{
-    auto event = MakeHolder<TEvPersQueue::TEvUpdateConfigBuilder>();
-    event->Record.SetTxId(ui64(txId));
-
-    MakePQTabletConfig(context,
-                       *event->Record.MutableTabletConfig(),
-                       pqGroup,
-                       pqShard,
-                       topicName,
-                       topicPath,
-                       cloudId,
-                       folderId,
-                       databaseId,
-                       databasePath);
-    if (bootstrapConfig) {
-        Y_ABORT_UNLESS(txType == TTxState::TxCreatePQGroup);
-        event->PreSerializedData += bootstrapConfig->GetPreSerializedUpdateConfig();
     }
 
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -418,18 +383,22 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                 "pqGroup is null"
                     << ", pathId " << txState->TargetPathId);
 
-    const TPathElement::TPtr dbRootEl = context.SS->PathsById.at(context.SS->RootPathId());
+    const auto& attrs = context.SS->PathsById.at(context.SS->RootPathId())->UserAttrs->Attrs;
     TString cloudId;
-    if (dbRootEl->UserAttrs->Attrs.contains("cloud_id")) {
-        cloudId = dbRootEl->UserAttrs->Attrs.at("cloud_id");
+    if (auto it = attrs.find("cloud_id"); it != attrs.end()) {
+        cloudId = it->second;
     }
     TString folderId;
-    if (dbRootEl->UserAttrs->Attrs.contains("folder_id")) {
-        folderId = dbRootEl->UserAttrs->Attrs.at("folder_id");
+    if (auto it = attrs.find("folder_id"); it != attrs.end()) {
+        folderId = it->second;
     }
     TString databaseId;
-    if (dbRootEl->UserAttrs->Attrs.contains("database_id")) {
-        databaseId = dbRootEl->UserAttrs->Attrs.at("database_id");
+    if (auto it = attrs.find("database_id"); it != attrs.end()) {
+        databaseId = it->second;
+    }
+    TString monitoringProjectId;
+    if (auto it = attrs.find("monitoring_project_id"); it != attrs.end()) {
+        monitoringProjectId = it->second;
     }
 
     TString databasePath = TPath::Init(context.SS->RootPathId(), context.SS).PathString();
@@ -482,9 +451,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                             << ", Partitions size: " << pqShard->Partitions.size()
                             << ", at schemeshard: " << ssId);
 
-            THolder<NActors::IEventBase> event;
-            if (context.SS->EnablePQConfigTransactionsAtSchemeShard) {
-                event = MakeEvProposeTransaction(OperationId.GetTxId(),
+            THolder<NActors::IEventBase> event = MakeEvProposeTransaction(OperationId.GetTxId(),
                                                     *pqGroup,
                                                     *pqShard,
                                                     topicName,
@@ -494,22 +461,9 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                                                     folderId,
                                                     databaseId,
                                                     databasePath,
+                                                    monitoringProjectId,
                                                     txState->TxType,
                                                     context);
-            } else {
-                event = MakeEvUpdateConfig(OperationId.GetTxId(),
-                                            *pqGroup,
-                                            *pqShard,
-                                            topicName,
-                                            topicPath.PathString(),
-                                            bootstrapConfig,
-                                            cloudId,
-                                            folderId,
-                                            databaseId,
-                                            databasePath,
-                                            txState->TxType,
-                                            context);
-            }
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "Propose configure PersQueue"

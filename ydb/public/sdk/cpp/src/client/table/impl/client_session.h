@@ -1,9 +1,14 @@
 #pragma once
 
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/src/client/impl/internal/rpc_request_settings/settings.h>
+#undef INCLUDE_YDB_INTERNAL_H
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
+
 #include <ydb/public/sdk/cpp/src/client/impl/session/kqp_session_common.h>
 #include <ydb/public/sdk/cpp/src/client/impl/endpoints/endpoints.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
@@ -54,6 +59,7 @@ public:
         NThreading::TPromise<TCreateSessionResult>& promise,
         std::shared_ptr<TTableClient::TImpl> client,
         const TCreateSessionSettings& settings,
+        const TRpcRequestSettings& rpcSettings,
         ui32 counter, bool needUpdateActiveSessionCounter);
 
 private:

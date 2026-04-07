@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(25.2)
+VERSION(26.0.1)
 
 LICENSE(MIT)
 
@@ -86,7 +86,7 @@ PY_SRCS(
     pip/_internal/models/index.py
     pip/_internal/models/installation_report.py
     pip/_internal/models/link.py
-    pip/_internal/models/pylock.py
+    pip/_internal/models/release_control.py
     pip/_internal/models/scheme.py
     pip/_internal/models/search_scope.py
     pip/_internal/models/selection_prefs.py
@@ -105,19 +105,17 @@ PY_SRCS(
     pip/_internal/operations/build/build_tracker.py
     pip/_internal/operations/build/metadata.py
     pip/_internal/operations/build/metadata_editable.py
-    pip/_internal/operations/build/metadata_legacy.py
     pip/_internal/operations/build/wheel.py
     pip/_internal/operations/build/wheel_editable.py
-    pip/_internal/operations/build/wheel_legacy.py
     pip/_internal/operations/check.py
     pip/_internal/operations/freeze.py
     pip/_internal/operations/install/__init__.py
-    pip/_internal/operations/install/editable_legacy.py
     pip/_internal/operations/install/wheel.py
     pip/_internal/operations/prepare.py
     pip/_internal/pyproject.py
     pip/_internal/req/__init__.py
     pip/_internal/req/constructors.py
+    pip/_internal/req/pep723.py
     pip/_internal/req/req_dependency_group.py
     pip/_internal/req/req_file.py
     pip/_internal/req/req_install.py
@@ -155,8 +153,8 @@ PY_SRCS(
     pip/_internal/utils/logging.py
     pip/_internal/utils/misc.py
     pip/_internal/utils/packaging.py
+    pip/_internal/utils/pylock.py
     pip/_internal/utils/retry.py
-    pip/_internal/utils/setuptools_build.py
     pip/_internal/utils/subprocess.py
     pip/_internal/utils/temp_dir.py
     pip/_internal/utils/unpacking.py
@@ -223,6 +221,7 @@ PY_SRCS(
     pip/_vendor/packaging/licenses/_spdx.py
     pip/_vendor/packaging/markers.py
     pip/_vendor/packaging/metadata.py
+    pip/_vendor/packaging/pylock.py
     pip/_vendor/packaging/requirements.py
     pip/_vendor/packaging/specifiers.py
     pip/_vendor/packaging/tags.py
@@ -426,20 +425,42 @@ RESOURCE_FILES(
     .dist-info/METADATA
     .dist-info/entry_points.txt
     .dist-info/top_level.txt
+    pip/_vendor/README.rst
+    pip/_vendor/cachecontrol/LICENSE.txt
     pip/_vendor/cachecontrol/py.typed
+    pip/_vendor/certifi/LICENSE
     pip/_vendor/certifi/cacert.pem
     pip/_vendor/certifi/py.typed
+    pip/_vendor/dependency_groups/LICENSE.txt
     pip/_vendor/dependency_groups/py.typed
+    pip/_vendor/distlib/LICENSE.txt
+    pip/_vendor/distro/LICENSE
     pip/_vendor/distro/py.typed
+    pip/_vendor/idna/LICENSE.md
     pip/_vendor/idna/py.typed
+    pip/_vendor/msgpack/COPYING
+    pip/_vendor/packaging/LICENSE
+    pip/_vendor/packaging/LICENSE.APACHE
+    pip/_vendor/packaging/LICENSE.BSD
     pip/_vendor/packaging/py.typed
+    pip/_vendor/pkg_resources/LICENSE
+    pip/_vendor/platformdirs/LICENSE
     pip/_vendor/platformdirs/py.typed
+    pip/_vendor/pygments/LICENSE
+    pip/_vendor/pyproject_hooks/LICENSE
     pip/_vendor/pyproject_hooks/py.typed
+    pip/_vendor/requests/LICENSE
+    pip/_vendor/resolvelib/LICENSE
     pip/_vendor/resolvelib/py.typed
+    pip/_vendor/rich/LICENSE
     pip/_vendor/rich/py.typed
+    pip/_vendor/tomli/LICENSE
     pip/_vendor/tomli/py.typed
+    pip/_vendor/tomli_w/LICENSE
     pip/_vendor/tomli_w/py.typed
+    pip/_vendor/truststore/LICENSE
     pip/_vendor/truststore/py.typed
+    pip/_vendor/urllib3/LICENSE.txt
     pip/_vendor/vendor.txt
     pip/py.typed
 )

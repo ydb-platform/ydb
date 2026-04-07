@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardCheckProposeSize) {
         // Drop down its min-value limit to be able to set it as low as test needs.
         TControlWrapper MaxCommitRedoMB;
         {
-            runtime.GetAppData().Icb->RegisterSharedControl(MaxCommitRedoMB, "TabletControls.MaxCommitRedoMB");
+            TControlBoard::RegisterSharedControl(MaxCommitRedoMB, runtime.GetAppData().Icb->TabletControls.MaxCommitRedoMB);
             MaxCommitRedoMB.Reset(200, 1, 4096);
         }
 
@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardCheckProposeSize) {
         // Drop down its min-value limit to be able to set it as low as test needs.
         TControlWrapper MaxCommitRedoMB;
         {
-            runtime.GetAppData().Icb->RegisterSharedControl(MaxCommitRedoMB, "TabletControls.MaxCommitRedoMB");
+            TControlBoard::RegisterSharedControl(MaxCommitRedoMB, runtime.GetAppData().Icb->TabletControls.MaxCommitRedoMB);
             MaxCommitRedoMB.Reset(200, 1, 4096);
         }
 

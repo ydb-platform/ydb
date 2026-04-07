@@ -24,4 +24,28 @@ TMaybe<TTopicPartitionsSet> GetTopicPartitionsSet(const google::protobuf::Any& d
     return Nothing();
 }
 
+std::vector<TTopicPartitionsSet> GetTopicPartitionsSets(const NDqProto::TDqTask& dqTask) {
+    if (auto partitionSet = GetTopicPartitionsSet(dqTask.GetMeta())) {
+        return {std::move(*partitionSet)};
+    }
+
+    std::vector<TTopicPartitionsSet> result;
+    result.reserve(dqTask.ReadRangesSize());
+    for (const auto& readRange : dqTask.GetReadRanges()) {
+        NPq::NProto::TDqReadTaskParams readTaskParams;
+        if (!readTaskParams.ParseFromString(readRange)) {
+            return {};
+        }
+
+        const auto& params = readTaskParams.GetPartitioningParams();
+        result.push_back({
+            .EachTopicPartitionGroupId = params.GetEachTopicPartitionGroupId(),
+            .DqPartitionsCount = params.GetDqPartitionsCount(),
+            .TopicPartitionsCount = params.GetTopicPartitionsCount()
+        });
+    }
+
+    return result;
+}
+
 } // namespace NYql::NPq

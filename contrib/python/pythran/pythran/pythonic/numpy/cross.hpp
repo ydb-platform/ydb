@@ -16,8 +16,8 @@ namespace numpy
     void operator()(Out obegin, Out oend, E ebegin, F fbegin)
     {
       while (obegin != oend) {
-        _cross<N - 1, En, Fn>{}((*obegin).begin(), (*obegin).end(),
-                                (*ebegin).begin(), (*fbegin).begin());
+        _cross<N - 1, En, Fn>{}((*obegin).begin(), (*obegin).end(), (*ebegin).begin(),
+                                (*fbegin).begin());
         ++obegin, ++ebegin, ++fbegin;
       }
     }
@@ -102,41 +102,38 @@ namespace numpy
   };
 
   template <class E, class F>
-  types::ndarray<
-      typename __combined<typename E::dtype, typename F::dtype>::type,
-      types::array_tuple<long, E::value>>
+  types::ndarray<typename __combined<typename E::dtype, typename F::dtype>::type,
+                 types::array_tuple<long, E::value>>
   cross(E const &e, F const &f)
   {
-    using dtype =
-        typename __combined<typename E::dtype, typename F::dtype>::type;
+    using dtype = typename __combined<typename E::dtype, typename F::dtype>::type;
     types::array_tuple<long, E::value> out_shape;
-    sutils::copy_shape<0, 0>(out_shape, e,
-                             utils::make_index_sequence<E::value - 1>());
+    sutils::copy_shape<0, 0>(out_shape, e, std::make_index_sequence<E::value - 1>());
     if (e.template shape<E::value - 1>() == 2) {
       if (f.template shape<F::value - 1>() == 2) {
         out_shape[E::value - 1] = 1;
-        types::ndarray<dtype, types::array_tuple<long, E::value>> out{
-            out_shape, types::none_type{}};
+        types::ndarray<dtype, types::array_tuple<long, E::value>> out{out_shape,
+                                                                      types::none_type{}};
         _cross<E::value, 2, 2>{}(out.begin(), out.end(), e.begin(), f.begin());
         return out;
       } else {
         out_shape[E::value - 1] = 3;
-        types::ndarray<dtype, types::array_tuple<long, E::value>> out{
-            out_shape, types::none_type{}};
+        types::ndarray<dtype, types::array_tuple<long, E::value>> out{out_shape,
+                                                                      types::none_type{}};
         _cross<E::value, 2, 3>{}(out.begin(), out.end(), e.begin(), f.begin());
         return out;
       }
     } else {
       if (f.template shape<F::value - 1>() == 2) {
         out_shape[E::value - 1] = 3;
-        types::ndarray<dtype, types::array_tuple<long, E::value>> out{
-            out_shape, types::none_type{}};
+        types::ndarray<dtype, types::array_tuple<long, E::value>> out{out_shape,
+                                                                      types::none_type{}};
         _cross<E::value, 3, 2>{}(out.begin(), out.end(), e.begin(), f.begin());
         return out;
       } else {
         out_shape[E::value - 1] = 3;
-        types::ndarray<dtype, types::array_tuple<long, E::value>> out{
-            out_shape, types::none_type{}};
+        types::ndarray<dtype, types::array_tuple<long, E::value>> out{out_shape,
+                                                                      types::none_type{}};
         _cross<E::value, 3, 3>{}(out.begin(), out.end(), e.begin(), f.begin());
         return out;
       }

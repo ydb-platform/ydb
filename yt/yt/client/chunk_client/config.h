@@ -178,6 +178,9 @@ struct TReplicationReaderConfig
     //! Enable fetching blocks from peers suggested by seeds.
     bool FetchFromPeers;
 
+    //! Enable fetching node descriptors from seeds.
+    bool FetchNodeDescriptors;
+
     //! Timeout after which a node forgets about the peer.
     //! Only makes sense if the reader is equipped with peer descriptor.
     TDuration PeerExpirationTimeout;
@@ -378,6 +381,9 @@ struct TReplicationWriterConfig
     //! Acquiring resources for putting blocks before invoking PutBlocks.
     bool UseProbePutBlocks;
 
+    //! If |true| data node will preallocate disk space before writing.
+    bool PreallocateDiskSpace;
+
     int GetDirectUploadNodeCount();
 
     REGISTER_YSON_STRUCT(TReplicationWriterConfig);
@@ -498,8 +504,15 @@ struct TChunkFragmentReaderConfig
     //! Upper bound on count of simultaneously requested fragments within a reading session.
     i64 MaxInflightFragmentCount;
 
-    // If |true| will request full blocks and store them in a cache for further access.
+    //! If |true| will request full blocks and cache them for future access.
     bool PrefetchWholeBlocks;
+
+    //! If |true| instead of accessing fragments from disk will access whole blocks and cache them for future access.
+    //! NB: Currently supported only for journal hunk chunks.
+    bool ReadAndCacheWholeBlocks;
+    //! Used in case the option above is |true|. Will precache this number of blocks following the requested one.
+    //! NB: Currently supported only for journal hunk chunks.
+    int BlockCountToPrecache;
 
     REGISTER_YSON_STRUCT(TChunkFragmentReaderConfig);
 

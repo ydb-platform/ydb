@@ -4,7 +4,7 @@ self: super: with self; {
     version = "0.9.0";
 
     src = fetchFromGitHub {
-      owner = "martinmoene";
+      owner = "nonstd-lite";
       repo = "expected-lite";
       rev = "v${version}";
       hash = "sha256-LRXxUaDQT5q9dXK2uYFvCgEuGWEHKr95lfdGTGjke0g=";

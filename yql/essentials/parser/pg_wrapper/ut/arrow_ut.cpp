@@ -15,7 +15,7 @@ extern "C" {
 namespace {
 
 template <bool IsFixedSizeReader>
-void checkResult(const char ** expected, auto result, NYql::NUdf::IBlockReader* reader, auto out_fun) {
+void checkResult(const char** expected, auto result, NYql::NUdf::IBlockReader* reader, auto out_fun) {
     const auto& data = result->data();
 
     for (int i = 0; i < data->length; i++) {
@@ -32,13 +32,12 @@ void checkResult(const char ** expected, auto result, NYql::NUdf::IBlockReader* 
             }
             UNIT_ASSERT_VALUES_EQUAL(
                 TString(DatumGetCString(DirectFunctionCall1(out_fun, item))),
-                expected[i]
-            );
+                expected[i]);
         }
     }
 }
 
-} // namespace {
+} // namespace
 
 namespace NYql {
 
@@ -63,10 +62,9 @@ Y_UNIT_TEST(TestPgFloatToNumeric) {
     UNIT_ASSERT_VALUES_EQUAL(value, "-711.56");
 }
 
-
 Y_UNIT_TEST(PgConvertNumericDouble) {
     TArenaMemoryContext arena;
- 
+
     arrow::DoubleBuilder builder;
     ARROW_OK(builder.Append(1.1));
     ARROW_OK(builder.Append(31.37));
@@ -78,10 +76,9 @@ Y_UNIT_TEST(PgConvertNumericDouble) {
     ARROW_OK(builder.Finish(&array));
 
     auto result = PgConvertNumeric<double>(array);
-    
+
     const char* expected[] = {
-        "1.1", "31.37", nullptr, "-1.337", "0", "1.234111"
-    };
+        "1.1", "31.37", nullptr, "-1.337", "0", "1.234111"};
 
     NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
     checkResult<false>(expected, result, &reader, numeric_out);
@@ -96,8 +93,7 @@ Y_UNIT_TEST(PgConvertNumericDecimal128Scale1) {
     arrow::Decimal128Builder builder(type);
 
     const char* expected[] = {
-        "12345.0", "-12345.0", nullptr
-    };
+        "12345.0", "-12345.0", nullptr};
 
     ARROW_OK(builder.Append(arrow::Decimal128::FromString("12345.0").ValueOrDie()));
     ARROW_OK(builder.Append(arrow::Decimal128::FromString("-12345.0").ValueOrDie()));
@@ -121,8 +117,7 @@ Y_UNIT_TEST(PgConvertNumericDecimal128ScaleNegative) {
     arrow::Decimal128Builder builder(type);
 
     const char* expected[] = {
-        "12345678000", "-12345678000", nullptr
-    };
+        "12345678000", "-12345678000", nullptr};
 
     ARROW_OK(builder.Append(arrow::Decimal128::FromString("12345678").ValueOrDie()));
     ARROW_OK(builder.Append(arrow::Decimal128::FromString("-12345678").ValueOrDie()));
@@ -146,8 +141,7 @@ Y_UNIT_TEST(PgConvertNumericDecimal128Scale2) {
     arrow::Decimal128Builder builder(type);
 
     const char* expected[] = {
-        "123.45", "-123.45", nullptr
-    };
+        "123.45", "-123.45", nullptr};
 
     ARROW_OK(builder.Append(arrow::Decimal128::FromString("123.45").ValueOrDie()));
     ARROW_OK(builder.Append(arrow::Decimal128::FromString("-123.45").ValueOrDie()));
@@ -171,8 +165,7 @@ Y_UNIT_TEST(PgConvertNumericDecimal128Scale3) {
     arrow::Decimal128Builder builder(type);
 
     const char* expected[] = {
-        "0.123", "-0.123", nullptr
-    };
+        "0.123", "-0.123", nullptr};
 
     ARROW_OK(builder.Append(arrow::Decimal128::FromString("0.123").ValueOrDie()));
     ARROW_OK(builder.Append(arrow::Decimal128::FromString("-0.123").ValueOrDie()));
@@ -196,8 +189,7 @@ Y_UNIT_TEST(PgConvertNumericDecimal128Scale4) {
     arrow::Decimal128Builder builder(type);
 
     const char* expected[] = {
-        "123.4567", "-123.4567", nullptr
-    };
+        "123.4567", "-123.4567", nullptr};
 
     ARROW_OK(builder.Append(arrow::Decimal128::FromString("123.4567").ValueOrDie()));
     ARROW_OK(builder.Append(arrow::Decimal128::FromString("-123.4567").ValueOrDie()));
@@ -221,8 +213,7 @@ Y_UNIT_TEST(PgConvertNumericDecimal128Scale5) {
     arrow::Decimal128Builder builder(type);
 
     const char* expected[] = {
-        "12.34567", "-12.34567", nullptr
-    };
+        "12.34567", "-12.34567", nullptr};
 
     ARROW_OK(builder.Append(arrow::Decimal128::FromReal(12.34567, precision, scale).ValueOrDie()));
     ARROW_OK(builder.Append(arrow::Decimal128::FromReal(-12.34567, precision, scale).ValueOrDie()));
@@ -248,8 +239,7 @@ Y_UNIT_TEST(PgConvertNumericDecimal128BigScale3) {
     const char* expected[] = {
         "36893488147419103.245", "-36893488147419103.245",
         "46116860184273879.041", "-46116860184273879.041",
-        nullptr
-    };
+        nullptr};
 
     ARROW_OK(builder.Append(arrow::Decimal128::FromString("36893488147419103.245").ValueOrDie()));
     ARROW_OK(builder.Append(arrow::Decimal128::FromString("-36893488147419103.245").ValueOrDie()));
@@ -275,8 +265,7 @@ Y_UNIT_TEST(PgConvertNumericDecimal128BigScale1) {
     arrow::Decimal128Builder builder(type);
 
     const char* expected[] = {
-        "3868562622766813359059763.2", "-3868562622766813359059763.2", nullptr
-    };
+        "3868562622766813359059763.2", "-3868562622766813359059763.2", nullptr};
 
     ARROW_OK(builder.Append(arrow::Decimal128::FromString("3868562622766813359059763.2").ValueOrDie()));
     ARROW_OK(builder.Append(arrow::Decimal128::FromString("-3868562622766813359059763.2").ValueOrDie()));
@@ -293,7 +282,7 @@ Y_UNIT_TEST(PgConvertNumericDecimal128BigScale1) {
 
 Y_UNIT_TEST(PgConvertNumericInt) {
     TArenaMemoryContext arena;
- 
+
     arrow::Int64Builder builder;
     ARROW_OK(builder.Append(11));
     ARROW_OK(builder.Append(3137));
@@ -308,8 +297,7 @@ Y_UNIT_TEST(PgConvertNumericInt) {
     const auto& data = result->data();
 
     const char* expected[] = {
-        "11", "3137", nullptr, "-1337", "0"
-    };
+        "11", "3137", nullptr, "-1337", "0"};
 
     NYql::NUdf::TStringBlockReader<arrow::BinaryType, true> reader;
     checkResult<false>(expected, result, &reader, numeric_out);
@@ -338,8 +326,7 @@ Y_UNIT_TEST(PgConvertDate32Date) {
     UNIT_ASSERT_VALUES_EQUAL(result->length(), 6);
 
     const char* expected[] = {
-        "1998-01-01", nullptr, "2001-01-01", "1998-01-01", "2000-01-02", "2002-01-01"
-    };
+        "1998-01-01", nullptr, "2001-01-01", "1998-01-01", "2000-01-02", "2002-01-01"};
 
     NUdf::TFixedSizeBlockReader<ui64, true> reader;
     checkResult<true>(expected, result, &reader, date_out);

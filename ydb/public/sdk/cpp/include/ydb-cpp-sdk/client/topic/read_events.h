@@ -57,6 +57,21 @@ protected:
 template<>
 void TPrintable<TPartitionSession>::DebugString(TStringBuilder& res, bool) const;
 
+struct TPartitionSessionControl: public TPartitionSession {
+    //! Commit offsets range.
+    //! Can be used from TDataReceivedEvent or TDeferredCommit.
+    virtual void Commit(uint64_t startOffset, uint64_t endOffset) = 0;
+
+    //! Confirm partition session creation from TStartPartitionSessionEvent.
+    virtual void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) = 0;
+
+    //! Confirm partition session destruction from TStopPartitionSessionEvent.
+    virtual void ConfirmDestroy() = 0;
+
+    //! Confirm partition session end from TEndPartitionSessionEvent.
+    virtual void ConfirmEnd(std::span<const uint32_t> childIds) = 0;
+};
+
 //! Events for read session.
 struct TReadSessionEvent {
     class TPartitionSessionAccessor {
@@ -73,7 +88,7 @@ struct TReadSessionEvent {
 
     //! Event with new data.
     //! Contains batch of messages from single partition session.
-    struct TDataReceivedEvent : public TPartitionSessionAccessor, public TPrintable<TDataReceivedEvent> {
+    struct TDataReceivedEvent: public TPartitionSessionAccessor, public TPrintable<TDataReceivedEvent> {
         struct TMessageInformation {
             TMessageInformation(uint64_t offset,
                                 std::string producerId,
@@ -95,7 +110,7 @@ struct TReadSessionEvent {
             std::string MessageGroupId;
         };
 
-        class TMessageBase : public TPrintable<TMessageBase> {
+        class TMessageBase: public TPrintable<TMessageBase> {
         public:
             TMessageBase(const std::string& data, TMessageInformation info);
 
@@ -249,7 +264,7 @@ struct TReadSessionEvent {
         //! This means that from now the first available
         //! message offset in current partition
         //! for current consumer is this offset.
-        //! All messages before are committed and futher never be available.
+        //! All messages before are committed and further never be available.
         uint64_t GetCommittedOffset() const {
             return CommittedOffset;
         }
@@ -452,4 +467,4 @@ void TPrintable<TSessionClosedEvent>::DebugString(TStringBuilder& ret, bool prin
 
 std::string DebugString(const TReadSessionEvent::TEvent& event);
 
-}
+} // namespace NYdb::NTopic

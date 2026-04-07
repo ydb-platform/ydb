@@ -5,13 +5,15 @@
 
 namespace NKikimr::NPQ {
 
-NWilson::TSpan GenerateSpan(const TStringBuf name, NJaegerTracing::TSamplingThrottlingControl& tracingControl)
+NWilson::TSpan GenerateSpan(const TStringBuf name, NJaegerTracing::TSamplingThrottlingControl& tracingControl, NWilson::TTraceId&& traceId)
 {
     NJaegerTracing::TRequestDiscriminator discriminator;
     discriminator.RequestType = NJaegerTracing::ERequestType::TOPIC_PROPOSE_TRANSACTION;
     discriminator.Database = {};
 
-    NWilson::TTraceId traceId = tracingControl.HandleTracing(discriminator, {});
+    if (!traceId) {
+        traceId = tracingControl.HandleTracing(discriminator, {});
+    }
 
     if (traceId) {
         return {TWilsonTopic::TopicTopLevel, std::move(traceId), TString(name), NWilson::EFlags::AUTO_END};

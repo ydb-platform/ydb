@@ -270,6 +270,7 @@ public:
         TString path = setup.GetWorkingDir() + "/" + setup.GetTableName();
 
         auto request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
+        request->Record.SetDatabaseName(Request.GetTableSetup().GetWorkingDir());
         request->Record.MutableDescribePath()->SetPath(path);
 
         ctx.Send(MakeTxProxyID(), request.release());
@@ -593,7 +594,7 @@ public:
 
     void HandlePoison(const TActorContext& ctx) {
         LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TLoad# " << Tag
-            << " actor recieved PoisonPill, going to die with subactorsCount# " << LoadActors.size());
+            << " actor received PoisonPill, going to die with subactorsCount# " << LoadActors.size());
         Stop(ctx);
     }
 

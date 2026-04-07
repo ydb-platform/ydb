@@ -64,9 +64,11 @@ private:
 
     // state functions
     STFUNC(StateInit);
+    STFUNC(StateDatabaseResolve);
     STFUNC(StateWork);
 
     void Cleanup(const TActorContext& ctx);
+    void SwitchToDatabaseResolve(const TActorContext& ctx);
     void SwitchToWork(const TActorContext& ctx);
     void Reset();
 
@@ -84,6 +86,8 @@ private:
     void Handle(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvResolveResourceIdResult::TPtr& ev, const TActorContext& ctx);
+    void HandleDatabaseResolve(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvUpdateTenantNodes::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvProcessQueues::TPtr& ev, const TActorContext& ctx);
@@ -115,7 +119,10 @@ private:
     void StopWorker(ui32 nodeId, const TWorkerId& id);
     void RemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     bool MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
+    TReplication::ITarget* FindTarget(const TWorkerId& id) const;
     void UpdateLag(const TWorkerId& id, TDuration lag);
+    void UpdateStats(const TWorkerId& id, const NKikimrReplication::TWorkerStats& stats);
+    void UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorkerStatus::EStatus status);
     void ProcessCreateStreamQueue(const TActorContext& ctx);
     void ProcessDropStreamQueue(const TActorContext& ctx);
 
@@ -133,7 +140,9 @@ private:
     class TTxCreateDstResult;
     class TTxAlterDstResult;
     class TTxDropDstResult;
+    class TTxResolveDatabaseResult;
     class TTxResolveSecretResult;
+    class TTxResolveResourceIdResult;
     class TTxWorkerError;
     class TTxAssignTxId;
     class TTxHeartbeat;
@@ -155,7 +164,9 @@ private:
     void RunTxCreateDstResult(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx);
     void RunTxAlterDstResult(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx);
     void RunTxDropDstResult(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);
+    void RunTxResolveDatabaseResult(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);
     void RunTxResolveSecretResult(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx);
+    void RunTxResolveResourceIdResult(TEvPrivate::TEvResolveResourceIdResult::TPtr& ev, const TActorContext& ctx);
     void RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx);
     void RunTxAssignTxId(const TActorContext& ctx);
     void RunTxHeartbeat(const TActorContext& ctx);
@@ -189,6 +200,8 @@ private:
     TSysParams SysParams;
     THashMap<ui64, TReplication::TPtr> Replications;
     THashMap<TPathId, TReplication::TPtr> ReplicationsByPathId;
+    THashMap<ui64, ui8> UnresolvedDatabaseReplications;
+    static constexpr ui8 ResolveDatabaseAttemptsLimit = 5;
 
     TActorId DiscoveryCache;
     TNodesManager NodesManager;

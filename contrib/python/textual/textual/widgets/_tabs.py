@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import rich.repr
-from rich.console import RenderableType
 from rich.style import Style
 from rich.text import Text, TextType
 
@@ -22,6 +21,9 @@ from textual.renderables.bar import Bar
 from textual.widget import Widget
 from textual.widgets import Static
 
+if TYPE_CHECKING:
+    from textual.content import Content, ContentType
+
 
 class Underline(Widget):
     """The animated underline beneath tabs."""
@@ -30,10 +32,13 @@ class Underline(Widget):
     Underline {
         width: 1fr;
         height: 1;
-    }
-    Underline > .underline--bar {
-        background: $foreground 10%;
-        color: $accent;
+        & > .underline--bar {
+            color: $block-cursor-background;
+            background: $foreground 10%;
+        }
+        &:ansi {
+            text-style: dim;
+        }
     }
     """
 
@@ -91,27 +96,24 @@ class Tab(Static):
     DEFAULT_CSS = """
     Tab {
         width: auto;
-        height: 2;
-        padding: 1 1 0 2;
+        height: 1;
+        padding: 0 1;
         text-align: center;
-        color: $text-disabled;
-    }
-    Tab.-active {
-        text-style: bold;
-        color: $text;
-    }
-    Tab:hover {
-        text-style: bold;
-    }
-    Tab.-active:hover {
-        color: $text;
-    }
-    Tab:disabled {
-        color: $text-disabled;
-        text-opacity: 50%;
-    }
-    Tab.-hidden {
-        display: none;
+        color: $foreground 50%;
+
+        &:hover {
+            color: $foreground;
+        }
+        &:disabled {
+            color: $foreground 25%;
+        }
+
+        &.-active {
+            color: $foreground;
+        }
+        &.-hidden {
+            display: none;
+        }
     }
     """
 
@@ -148,7 +150,7 @@ class Tab(Static):
 
     def __init__(
         self,
-        label: TextType,
+        label: ContentType,
         *,
         id: str | None = None,
         classes: str | None = None,
@@ -163,23 +165,23 @@ class Tab(Static):
             disabled: Whether the tab is disabled or not.
         """
         super().__init__(id=id, classes=classes, disabled=disabled)
-        self._label: Text
+        self._label: Content
         # Setter takes Text or str
         self.label = label  # type: ignore[assignment]
 
     @property
-    def label(self) -> Text:
+    def label(self) -> Content:
         """The label for the tab."""
         return self._label
 
     @label.setter
-    def label(self, label: TextType) -> None:
-        self._label = Text.from_markup(label) if isinstance(label, str) else label
+    def label(self, label: ContentType) -> None:
+        self._label = self.render_str(label)
         self.update(self._label)
 
-    def update(self, renderable: RenderableType = "") -> None:
+    def update(self, content: ContentType = "") -> None:
         self.post_message(self.Relabelled(self))
-        return super().update(renderable)
+        return super().update(self.render_str(content))
 
     @property
     def label_text(self) -> str:
@@ -201,23 +203,52 @@ class Tabs(Widget, can_focus=True):
     DEFAULT_CSS = """
     Tabs {
         width: 100%;
-        height: 3;
-    }
-    Tabs > #tabs-scroll {
-        overflow: hidden;
-    }
-    Tabs #tabs-list {
-       width: auto;
-       min-height: 2;
-    }
-    Tabs #tabs-list-bar, Tabs #tabs-list {
-        width: auto;
-        height: auto;
-        min-width: 100%;
-        overflow: hidden hidden;
-    }
-    Tabs:focus .underline--bar {
-        background: $foreground 20%;
+        height: 2;
+        &:focus {
+            .underline--bar {
+                background: $foreground 30%;
+            }
+            & .-active {
+                text-style: $block-cursor-text-style;
+                color: $block-cursor-foreground;
+                background: $block-cursor-background;
+            }
+        }
+
+        & > #tabs-scroll {
+            overflow: hidden;
+        }
+
+        #tabs-list {
+            width: auto;
+        }
+        #tabs-list-bar, #tabs-list {
+            width: auto;
+            height: auto;
+            min-width: 100%;
+            overflow: hidden hidden;
+        }
+        &:ansi {
+            #tabs-list {
+                text-style: dim;
+            }
+            & #tabs-list > .-active {
+                text-style: not dim;
+            }
+            &:focus {
+                #tabs-list > .-active {
+                    text-style: bold not dim;
+                }
+            }
+            & .underline--bar {
+                color: ansi_bright_blue;
+                background: ansi_default;
+            }
+            & .-active {
+                color: transparent;
+                background: transparent;
+            }
+        }
     }
     """
 
@@ -495,7 +526,7 @@ class Tabs(Widget, can_focus=True):
         underline = self.query_one(Underline)
         underline.highlight_start = 0
         underline.highlight_end = 0
-        self.call_after_refresh(self.post_message, self.Cleared(self))
+        self.post_message(self.Cleared(self))
         self.active = ""
         return AwaitComplete(self.query("#tabs-list > Tab").remove())
 
@@ -527,10 +558,12 @@ class Tabs(Widget, can_focus=True):
         async def do_remove() -> None:
             """Perform the remove after refresh so the underline bar gets new positions."""
             await remove_tab.remove()
-            if next_tab is not None:
-                self.active = next_tab.id or ""
             if not self.query("#tabs-list > Tab"):
                 self.active = ""
+            elif next_tab is not None:
+                self.active = next_tab.id or ""
+            else:
+                self._highlight_active(animate=False)
 
         return AwaitComplete(do_remove())
 

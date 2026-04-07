@@ -2,7 +2,6 @@
 
 #include <util/generic/scope.h>
 
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 
@@ -10,16 +9,15 @@ namespace NFq::NRowDispatcher {
 
 //// TTypeParser
 
-TTypeParser::TTypeParser(const TSourceLocation& location, const TCountersDesc& counters)
+TTypeParser::TTypeParser(const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters)
     : Alloc(location, NKikimr::TAlignedPagePoolCounters(counters.CountersRoot, counters.MkqlCountersName), true, false)
-    , FunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {}))
+    , FunctionRegistry(functionRegistry)
     , TypeEnv(std::make_unique<NKikimr::NMiniKQL::TTypeEnvironment>(Alloc))
     , ProgramBuilder(std::make_unique<NKikimr::NMiniKQL::TProgramBuilder>(*TypeEnv, *FunctionRegistry))
 {}
 
 TTypeParser::~TTypeParser() {
     with_lock (Alloc) {
-        FunctionRegistry.Reset();
         TypeEnv.reset();
         ProgramBuilder.reset();
     }
@@ -57,13 +55,18 @@ void TTopicParserBase::TStats::Clear() {
 
 //// TTopicParserBase
 
-TTopicParserBase::TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location, const TCountersDesc& counters)
-    : TTypeParser(location, counters)
+TTopicParserBase::TTopicParserBase(IParsedDataConsumer::TPtr consumer, const TSourceLocation& location, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TCountersDesc& counters)
+    : TTypeParser(location, functionRegistry, counters)
     , Consumer(std::move(consumer))
 {}
 
 void TTopicParserBase::Refresh(bool force) {
     Y_UNUSED(force);
+}
+
+TStatus TTopicParserBase::ChangeConsumer(IParsedDataConsumer::TPtr consumer) {
+    Consumer = std::move(consumer);
+    return TStatus::Success();
 }
 
 void TTopicParserBase::FillStatistics(TFormatHandlerStatistic& statistic) {

@@ -75,4 +75,54 @@
 
   {% endlist %}
 
+- JavaScript
+
+  ```javascript
+  import { Driver } from '@ydbjs/core'
+  import { CoordinationClient } from '@ydbjs/coordination'
+
+  const driver = new Driver('grpc://localhost:2136/local')
+  const client = new CoordinationClient(driver)
+
+  await using session = await client.createSession('/local/my-app')
+  await using lock = await session.mutex('job-lock').lock()
+  await doWork(lock.signal)
+
+  // For long lived applications
+
+  for await (let session of client.openSession('/local/my-app')) {
+    let mutex = session.mutex('job-lock')
+
+    try {
+      // Blocks until the lock is acquired.
+      await using lock = await mutex.lock()
+
+      await doWork(lock.signal)
+    } catch {
+      if (session.signal.aborted) continue // session expired, retry
+      throw error
+    }
+
+    break
+  }
+  ```
+
+- Java
+
+  ```java
+  CoordinationClient client = CoordinationClient.newClient(transport);
+  client.createNode(nodePath).join().expectSuccess();
+
+  try (CoordinationSession session = client.createSession(nodePath)) {
+      session.connect().join().expectSuccess();
+      SemaphoreLease lease = session.acquireEphemeralSemaphore(semaphoreName, true, Duration.ofMinutes(5))
+              .join().getValue();
+      try {
+          // монопольная работа с ресурсом
+      } finally {
+          lease.release().join();
+      }
+  }
+  ```
+
 {% endlist %}

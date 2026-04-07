@@ -1,8 +1,8 @@
 #include "kqp_operator.h"
 
-#include <yql/essentials/core/yql_cost_function.h>
-#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
-#include <ydb/library/yql/dq/opt/dq_opt_stat.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_predicate_selectivity.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_stat_kqp.h>
 
 /***
  * All the methods to compute metadata and statistics are collected in this file
@@ -14,8 +14,7 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 using namespace NYql;
 using namespace NYql::NDq;
-
-TVector<TInfoUnit> ConvertKeyColumns(TIntrusivePtr<NYql::TOptimizerStatistics::TKeyColumns> keyColumns, const TVector<TInfoUnit>& outputColumns) {
+TVector<TInfoUnit> ConvertKeyColumns(TIntrusivePtr<NKikimr::NKqp::TOptimizerStatistics::TKeyColumns> keyColumns, const TVector<TInfoUnit>& outputColumns) {
     if (!keyColumns) {
         return {};
     }
@@ -363,7 +362,7 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     TVector<TString> unionOfAliases;
     ComputeAlisesForJoin(GetLeftInput(), GetRightInput(), leftAliases, rightAliases, unionOfAliases);
     
-    EJoinAlgoType joinAlgo = Props.JoinAlgo.has_value() ? *Props.JoinAlgo : EJoinAlgoType::Undefined;
+    NKqp::EJoinAlgoType joinAlgo = Props.JoinAlgo.has_value() ? *Props.JoinAlgo : NKqp::EJoinAlgoType::Undefined;
 
     auto hints = ctx.KqpCtx.GetOptimizerHints();
     auto CBOStats = ctx.CBOCtx.ComputeJoinStatsV2(*leftStats, 
@@ -429,7 +428,7 @@ void TOpJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
         *rightStats, 
         leftJoinKeys, 
         rightJoinKeys,
-        Props.JoinAlgo.has_value() ? *Props.JoinAlgo : EJoinAlgoType::Undefined,
+        Props.JoinAlgo.has_value() ? *Props.JoinAlgo : NKqp::EJoinAlgoType::Undefined,
         ConvertToJoinKind(JoinKind),
         FindCardHint(unionOfAliases, *hints.CardinalityHints),
         false,

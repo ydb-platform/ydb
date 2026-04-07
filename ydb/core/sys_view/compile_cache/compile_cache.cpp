@@ -281,7 +281,6 @@ private:
 
     void Handle(NKqp::TEvKqp::TEvListQueryCacheQueriesResponse::TPtr& ev) {
         auto& record = ev->Get()->Record;
-        LastResponse = std::move(record);
 
         // Check for error status (e.g., tenant mismatch for serverless)
         if (record.HasStatus() && record.GetStatus() != Ydb::StatusIds::SUCCESS) {
@@ -291,6 +290,7 @@ private:
             return;
         }
 
+        LastResponse = std::move(record);
         ProcessRows();
     }
 

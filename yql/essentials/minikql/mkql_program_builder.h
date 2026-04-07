@@ -114,7 +114,8 @@ inline bool HasSpillingFlag(const TCallable& callable) {
     xx(SystemPython3_10, 16, systempython3_10, false) \
     xx(SystemPython3_11, 17, systempython3_11, false) \
     xx(SystemPython3_12, 18, systempython3_12, false) \
-    xx(SystemPython3_13, 19, systempython3_13, false)
+    xx(SystemPython3_13, 19, systempython3_13, false) \
+    xx(SystemPython3_14, 20, systempython3_14, false)
 // clang-format on
 
 enum class EScriptType {
@@ -256,7 +257,8 @@ public:
     TRuntimeNode Ascending(TRuntimeNode data);
     TRuntimeNode Descending(TRuntimeNode data);
 
-    TRuntimeNode ToFlow(TRuntimeNode stream);
+    // FIXME: Drop the default argument value, when all the callers are adjusted.
+    TRuntimeNode ToFlow(TRuntimeNode stream, const TArrayRef<const TRuntimeNode>& dependentNodes = {});
     TRuntimeNode FromFlow(TRuntimeNode flow);
     TRuntimeNode Steal(TRuntimeNode input);
 
@@ -482,7 +484,7 @@ public:
                                 const TArrayRef<const ui32>& leftColumns, const TArrayRef<const ui32>& rightColumns,
                                 const TArrayRef<const ui32>& requiredColumns, const TArrayRef<const ui32>& keyColumns,
                                 ui64 memLimit, std::optional<ui32> sortedTableOrder,
-                                EAnyJoinSettings anyJoinSettings, const ui32 tableIndexField,
+                                EAnyJoinSettings anyJoinSettings, ui32 tableIndexField,
                                 TType* returnType);
     TRuntimeNode GraceJoinCommon(const TStringBuf& funcName, TRuntimeNode flowLeft, TRuntimeNode flowRight, EJoinKind joinKind,
                                  const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& rightKeyColumns,

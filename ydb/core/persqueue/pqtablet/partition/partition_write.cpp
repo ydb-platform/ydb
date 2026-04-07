@@ -1164,7 +1164,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     auto& sourceIdBatch = parameters.SourceIdBatch;
     auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);
 
-    AutopartitioningManager->OnWrite(p.Msg.SourceId, p.Msg.Data.size());
+    AutopartitioningManager->OnWrite(p.Msg.SourceId, p.Msg.Data.size(), p.Msg.ChoosePartitionKey);
 
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
     //check already written

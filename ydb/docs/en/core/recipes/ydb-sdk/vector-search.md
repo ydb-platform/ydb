@@ -1,29 +1,29 @@
 # Vector search
 
-This section contains code recipes in several programming languages for [vector search](../../concepts/vector_search.md) tasks using the {{ ydb-short-name }} SDK.
+This section contains code recipes in different programming languages for [vector search](../../concepts/vector_search.md) tasks using the {{ ydb-short-name }} SDK.
 
 The following operations are covered in detail:
 
 * [Connecting to YDB](#connect-ydb)
-* [Creating a table to store vectors](#create-table)
-* [Inserting vectors into a table](#insert-vectors)
+* [Creating a table for storing vectors](#create-table)
+* [Inserting vectors into the table](#insert-vectors)
 * [Adding a vector index](#add-vector-index)
 * [Searching for nearest vectors](#search-by-vector)
 
-This recipe builds a text store with the following structure:
+This recipe creates a text store with the following structure:
 
-|Field|Description|
-|---|---|
-|`id`|Text identifier|
-|`document`|Text|
-|`embedding`|Vector representation of the text|
+| Field | Description |
+|-------|-------------|
+| `id` | Text identifier |
+| `document` | Text |
+| `embedding` | Vector representation of the text |
 
-The recipe assumes `embedding` is already available.
+The recipe assumes that `embedding` is already available.
 
 ## Connecting to {{ ydb-short-name }} {#connect-ydb}
 
 This section describes the minimum steps required to run queries in {{ ydb-short-name }}.
-For more on connecting to {{ ydb-short-name }}, see [{#T}](./init.md).
+For more information on connecting to {{ ydb-short-name }}, see [{#T}](./init.md).
 
 {% list tabs %}
 
@@ -85,15 +85,15 @@ First, create a table to store documents and their vector representations.
 
 Table structure:
 
-|Column|Type|Description|
-|---|----|------|
-|`id`|`Utf8`|Document identifier|
-|`document`|`Utf8`|Document text|
-|`embedding`|`String`|Vector representation of the document|
+| Column name | Data type | Description |
+|-------------|-----------|-------------|
+| `id` | `Utf8` | Document identifier |
+| `document` | `Utf8` | Document text |
+| `embedding` | `String` | Vector representation of the document |
 
 {% note warning %}
 
-Vectors are stored using the `String` type. See [exact vector search](../../yql/reference/udf/list/knn.md#data-types) for details.
+The `String` type is used to store vectors. For details, see the [exact vector search](../../yql/reference/udf/list/knn.md#data-types) documentation.
 
 {% endnote %}
 
@@ -342,7 +342,7 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
 
     {% note info %}
 
-    `ConvertVectorToBytes` assumes a [little-endian](https://en.wikipedia.org/wiki/Endianness) CPU on the client, for example x86\_64. Adapt the function if your byte order differs.
+    The `ConvertVectorToBytes` function assumes a [little-endian](https://en.wikipedia.org/wiki/Endianness) byte order on the client (e.g. x86_64). If a different byte order is used, adapt the `ConvertVectorToBytes` function accordingly.
 
     {% endnote %}
 
@@ -510,9 +510,9 @@ Available strategies:
 * `distance=euclidean`;
 * `distance=manhattan`.
 
-Each strategy selects the function used for later search. See [distance and similarity functions](../../yql/reference/udf/list/knn.md#fuctions-distance).
+Each strategy defines the function used for subsequent search. For details on these functions, see [distance and similarity functions](../../yql/reference/udf/list/knn.md#functions-distance).
 
-Parameters for `vector_kmeans_tree` indexes are documented under [vector indexes](../../dev/vector-indexes.md#kmeans-tree-type).
+Parameters for the `vector_kmeans_tree` index type are described in the [vector index](../../dev/vector-indexes.md#kmeans-tree-type) documentation.
 
 
 {% list tabs %}
@@ -658,8 +658,8 @@ Parameters for `vector_kmeans_tree` indexes are documented under [vector indexes
 
 ## Vector search {#search-by-vector}
 
-Document search by vector uses a YQL query that specifies a similarity or distance function.
-Available values:
+Vector search uses a special YQL query where you define a similarity or distance function.
+Supported values:
 
 * `CosineSimilarity`;
 * `InnerProductSimilarity`;
@@ -667,11 +667,11 @@ Available values:
 * `ManhattanDistance`;
 * `EuclideanDistance`.
 
-See [distance and similarity functions](../../yql/reference/udf/list/knn.md#fuctions-distance) for details.
+For details, see [distance and similarity functions](../../yql/reference/udf/list/knn.md#functions-distance).
 
-You can pass an index name; if set, the query adds `VIEW index_name` so the vector index is used.
+You can specify the index name. If set, the query will include the `VIEW index_name` expression so that the vector index is used for search.
 
-The method returns a list of dicts with `id`, `document`, and `score` (similarity or distance to the query vector).
+The method returns a list of dictionaries with the fields `id`, `document`, and `score` (a number indicating similarity or distance to the query vector).
 
 {% list tabs %}
 
@@ -1005,14 +1005,14 @@ The method returns a list of dicts with `id`, `document`, and `score` (similarit
 
 ## Full example {#full-example}
 
-This example combines the steps above:
+The following example combines all the steps above:
 
-1. Drop an existing table
-2. Create a new table
-3. Insert objects
-4. Nearest-neighbor search without an index
-5. Add a vector index
-6. Nearest-neighbor search with the index
+1. Dropping the existing table.
+2. Creating a new table.
+3. Inserting items.
+4. Searching for nearest vectors without an index.
+5. Adding a vector index.
+6. Searching for nearest vectors with the index.
 
 {% list tabs %}
 
@@ -1223,9 +1223,9 @@ This example combines the steps above:
     [score=0.9878783822059631] 3: vector 3
     ```
 
-    The table is created, nine documents are inserted, and vector similarity search runs successfully both before and after adding the vector index.
+    The table was created, 9 documents were added, and vector similarity search ran successfully both before and after adding the vector index.
 
-    Full sample code: [vector_search.py](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/python/examples/vector_search/vector_search.py).
+    Full source code is available at this [link](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/python/examples/vector_search/vector_search.py).
 
 - C++
 
@@ -1278,6 +1278,6 @@ This example combines the steps above:
     }
     ```
 
-    Full sample code: [vector_index_builtin](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/vector_index_builtin).
+    Full source code is available at this [link](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/vector_index_builtin).
 
 {% endlist %}

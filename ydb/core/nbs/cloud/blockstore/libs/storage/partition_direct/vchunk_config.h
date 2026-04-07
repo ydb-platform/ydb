@@ -31,6 +31,9 @@ struct TVChunkConfig
     // Translates location to host index.
     [[nodiscard]] ui8 GetHostIndex(ELocation location) const;
 
+    // Translates host index to PBuffer location.
+    [[nodiscard]] ELocation GetPBufferLocation(ui8 hostIndex) const;
+
     // Makes dictionary for translation host index to location.
     [[nodiscard]] THashMap<ui8, ELocation> GetPBuffersMap() const;
 };

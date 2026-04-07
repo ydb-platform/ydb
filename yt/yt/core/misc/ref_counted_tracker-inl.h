@@ -129,7 +129,7 @@ Y_FORCE_INLINE TRefCountedTracker* TRefCountedTracker::Get()
 #define INCREMENT_COUNTER(fallback, name, delta) \
     auto index = cookie.Underlying(); \
     YT_ASSERT(index >= 0); \
-    if (Y_UNLIKELY(index >= RefCountedTrackerLocalSlotsSize())) { \
+    if (index >= RefCountedTrackerLocalSlotsSize()) [[unlikely]] { \
         Get()->fallback; \
     } else { \
         RefCountedTrackerLocalSlotsBegin()[index].name += delta; \

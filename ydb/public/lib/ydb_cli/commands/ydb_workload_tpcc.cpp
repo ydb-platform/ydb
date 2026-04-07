@@ -9,6 +9,7 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/tx.h>
 
+#include <library/cpp/getopt/small/completer.h>
 #include <util/generic/serialized_enum.h>
 #include <util/system/info.h>
 
@@ -124,6 +125,10 @@ void TCommandTPCCImport::Config(TConfig& config) {
         'w', "warehouses", TStringBuilder() << "Number of warehouses")
             .RequiredArgument("INT").StoreResult(&RunConfig->WarehouseCount).DefaultValue(RunConfig->WarehouseCount);
 
+    config.Opts->AddLongOption(
+        "compact", "Compact tables after importing data"
+    ).NoArgument().StoreTrue(&RunConfig->Compact);
+
     // TODO: detect automatically
     config.Opts->AddLongOption(
         "threads", TStringBuilder() << "Number of threads loading the data (default: auto)")
@@ -210,9 +215,16 @@ void TCommandTPCCRun::Config(TConfig& config) {
         "threads", TStringBuilder() << "Number of threads executing queries (default: auto)")
             .RequiredArgument("INT").StoreResult(&RunConfig->ThreadCount);
 
-    config.Opts->AddLongOption(
-        'f', "format", TStringBuilder() << "Output format: " << GetEnumAllNames<NTPCC::TRunConfig::EFormat>())
-            .OptionalArgument("STRING").StoreResult(&RunConfig->Format).DefaultValue(RunConfig->Format);
+    {
+        TVector<NLastGetopt::NComp::TChoice> formatChoices;
+        for (auto val : GetEnumAllValues<NTPCC::TRunConfig::EFormat>()) {
+            formatChoices.emplace_back(ToString(val));
+        }
+        config.Opts->AddLongOption(
+            'f', "format", TStringBuilder() << "Output format: " << GetEnumAllNames<NTPCC::TRunConfig::EFormat>())
+                .OptionalArgument("STRING").StoreResult(&RunConfig->Format).DefaultValue(RunConfig->Format)
+                .Completer(NLastGetopt::NComp::Choice(std::move(formatChoices)));
+    }
 
     config.Opts->AddLongOption(
         "no-tui", TStringBuilder() << "Disable TUI, which is enabled by default in interactive mode")
@@ -251,7 +263,8 @@ void TCommandTPCCRun::Config(TConfig& config) {
                     return NQuery::TTxSettings::SnapshotRW();
                 }
                 throw yexception() << "Invalid transaction mode: " << value << ". Valid values are: serializable-rw, snapshot-rw";
-            }).DefaultValue("serializable-rw");
+            }).DefaultValue("serializable-rw")
+            .ChoicesWithCompletion({{"serializable-rw", "Serializable read-write"}, {"snapshot-rw", "Snapshot read-write"}});
 
     auto simulateOpt = config.Opts->AddLongOption(
         "simulate", TStringBuilder() << "Simulate transaction execution (delay is simulated transaction latency ms)")
@@ -356,7 +369,8 @@ void TCommandTPCC::Config(TConfig& config) {
 
     config.Opts->AddLongOption(
         'p', "path", TStringBuilder() << "Database path where benchmark tables are located")
-            .RequiredArgument("STRING").StoreResult(&RunConfig->Path);
+            .RequiredArgument("STRING").StoreResult(&RunConfig->Path)
+            .SchemePathCompletionForDir();
 }
 
 } // namespace NYdb::NConsoleClient

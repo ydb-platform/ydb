@@ -14,6 +14,13 @@ namespace NKikimr::NStorage {
                 connected.push_back(nodeId);
             }
 
+            ui32 numConnected = 0;
+            ui32 numDisconnected = 0;
+            for (const auto& [nodeId, node] : AllNodeIds) {
+                ++(AllBoundNodes.contains(node) ? numConnected : numDisconnected);
+            }
+            MajorityOfNodesConnected = numConnected > numDisconnected;
+
             // recalculate global and local pile quorums
             Y_ABORT_UNLESS(StorageConfig);
             GlobalQuorum = HasNodeQuorum(*StorageConfig, connected, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr, true);

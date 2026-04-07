@@ -172,6 +172,7 @@ public:
     NCommon::TConfSetting<bool, Static> KeepWorldDepForFillOp;
     NCommon::TConfSetting<ui32, Static> CostBasedOptimizerPartial;
     NCommon::TConfSetting<bool, Static> OmitInaccessibleRows;
+    NCommon::TConfSetting<NSize::TSize, Static> _MinJobStateSizeToPassViaFile;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;

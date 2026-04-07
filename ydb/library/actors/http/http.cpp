@@ -634,6 +634,10 @@ THttpIncomingResponsePtr THttpIncomingResponse::Duplicate(THttpOutgoingRequestPt
     response->Append('\n');
     THeadersBuilder headers(Headers);
     headers.Erase("Transfer-Encoding"); // we do not want to copy chunked encoding
+    headers.Erase("Content-Encoding"); // body is already decompressed during parsing
+    if (ContentLength || ContentEncoding || TransferEncoding) {
+        headers.Set("Content-Length", ToString(Body.Size())); // update to match actual (decompressed) body size
+    }
     for (const auto& [key, value] : extraHeaders.Headers) {
         if (value) {
             headers.Set(key, value);

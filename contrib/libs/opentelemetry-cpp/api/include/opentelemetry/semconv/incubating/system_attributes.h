@@ -192,8 +192,8 @@ static constexpr const char *kFree = "free";
 
 /**
   @deprecated
-  {"note": "Removed, report shared memory usage with @code metric.system.memory.shared @endcode
-  metric", "reason": "uncategorized"}
+  {"note": "Removed, report shared memory usage with @code metric.system.memory.linux.shared
+  @endcode metric", "reason": "uncategorized"}
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kShared = "shared";
 

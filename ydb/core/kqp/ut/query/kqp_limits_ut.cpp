@@ -134,6 +134,78 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         }
     }
 
+    Y_UNIT_TEST(ManyBatchesInflight) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableStreamWrite(false);
+
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetQueryClient();
+
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE `/Root/DataShard` (
+                    owner_id Uint64,
+                    local_path_id Uint64,
+                    stat_type Uint32,
+                    column_tag Uint32,
+                    data String,
+                    PRIMARY KEY (owner_id, local_path_id, stat_type, column_tag)
+                );)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const ui32 count = 700;
+
+            auto paramsBuilder = NYdb::TParamsBuilder();
+            paramsBuilder.AddParam("$owner_id").Uint64((1ULL << 62ULL)).Build();
+            paramsBuilder.AddParam("$local_path_id").Uint64((1ULL << 62ULL)).Build();
+
+            auto& statTypes = paramsBuilder.AddParam("$stat_types").BeginList();
+            auto& columnTags = paramsBuilder.AddParam("$column_tags").BeginList();
+            auto& data = paramsBuilder.AddParam("$data").BeginList();
+
+            for (ui32 i = 0; i < count; ++i) {
+                statTypes.AddListItem().Uint32(RandomNumber<ui32>());
+                columnTags.AddListItem().OptionalUint32(RandomNumber<ui32>());
+                data.AddListItem().String(TString(i % 2 == 0 ? 100000 : 100, 'a'));
+            }
+
+            statTypes.EndList().Build();
+            columnTags.EndList().Build();
+            data.EndList().Build();
+
+            auto params = paramsBuilder.Build();
+
+            auto result = db.ExecuteQuery(R"(
+                DECLARE $owner_id AS Uint64;
+                DECLARE $local_path_id AS Uint64;
+                DECLARE $stat_types AS List<Uint32>;
+                DECLARE $column_tags AS List<Optional<Uint32>>;
+                DECLARE $data AS List<String>;
+
+                $to_struct = ($t) -> {
+                    RETURN <|
+                        owner_id:$owner_id,
+                        local_path_id:$local_path_id,
+                        stat_type:$t.0,
+                        column_tag:$t.1,
+                        data:$t.2,
+                    |>;
+                };
+
+                UPSERT INTO `/Root/DataShard`
+                    (owner_id, local_path_id, stat_type, column_tag, data)
+                SELECT owner_id, local_path_id, stat_type, column_tag, data FROM
+                AS_TABLE(ListMap(ListZip($stat_types, $column_tags, $data), $to_struct));
+            )", NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(KqpMkqlMemoryLimitException) {
         TKikimrRunner kikimr;
         CreateLargeTable(kikimr, 10, 10, 1'000'000, 1);

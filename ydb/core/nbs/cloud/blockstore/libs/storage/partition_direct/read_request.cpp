@@ -76,6 +76,18 @@ void TReadRequestExecutor::Run()
         return;
     }
 
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "TReadRequestExecutor. Reading from location %s",
+        ToString(*location).c_str());
+
+    auto onReadResponse = [self = shared_from_this()]   //
+        (const NThreading::TFuture<TDBGReadBlocksResponse>& f)
+    {
+        self->OnReadResponse(f.GetValue());
+    };
+
     auto future = IsDDisk(*location) ? DirectBlockGroup->ReadBlocksFromDDisk(
                                            VChunkConfig.VChunkIndex,
                                            VChunkConfig.GetHostIndex(*location),
@@ -89,10 +101,7 @@ void TReadRequestExecutor::Run()
                                            hint.VChunkRange,
                                            Request->Sglist,
                                            NWilson::TTraceId(TraceId));
-
-    future.Subscribe([self = shared_from_this()]   //
-                     (const NThreading::TFuture<TDBGReadBlocksResponse>& f)
-                     { self->OnReadResponse(f.GetValue()); });
+    future.Subscribe(std::move(onReadResponse));
 }
 
 NThreading::TFuture<TReadRequestExecutor::TResponse>
@@ -108,6 +117,13 @@ void TReadRequestExecutor::OnReadResponse(
         Reply(response.Error);
         return;
     }
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "TReadRequestExecutor: OnReadResponse failed %d trying. Error: %s",
+        TryNumber,
+        FormatError(response.Error).c_str());
 
     ++TryNumber;
     Run();

@@ -192,7 +192,7 @@ bool TTableDataServiceBlockIterator::NextBlock(TIndexedBlock& out) {
         if (groupYsons.size() == 1 && NeededColumns_.empty()) {
             unionYson = std::move(groupYsons[0]);
         } else {
-            unionYson = GetYsonUnion(groupYsons, NeededColumns_);
+            unionYson = GetYsonUnionRaw(groupYsons, NeededColumns_);
         }
 
         TParserFragmentListIndex parser(unionYson, KeyColumns_);

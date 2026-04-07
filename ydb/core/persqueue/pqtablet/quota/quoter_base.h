@@ -44,9 +44,9 @@ public:
 
 
 class TPartitionQuoterBase : public TBaseTabletActor<TPartitionQuoterBase>
-                           , private TConstantLogPrefix {
+                           , protected TConstantLogPrefix {
 
-const TDuration WAKE_UP_TIMEOUT = TDuration::MilliSeconds(50);
+const TDuration WAKE_UP_TIMEOUT = TDuration::Seconds(1);
 
 public:
     TPartitionQuoterBase(

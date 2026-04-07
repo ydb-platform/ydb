@@ -91,6 +91,7 @@ void EnsureScriptSpecificTypes(
         case EScriptType::SystemPython3_11:
         case EScriptType::SystemPython3_12:
         case EScriptType::SystemPython3_13:
+        case EScriptType::SystemPython3_14:
             return TPythonTypeChecker().Walk(funcType, nodeStack);
         case EScriptType::Javascript:
             return TJavascriptTypeChecker().Walk(funcType, nodeStack);
@@ -304,6 +305,7 @@ bool IsSystemPython(EScriptType type) {
            type == EScriptType::SystemPython3_11 ||
            type == EScriptType::SystemPython3_12 ||
            type == EScriptType::SystemPython3_13 ||
+           type == EScriptType::SystemPython3_14 ||
            type == EScriptType::Python ||
            type == EScriptType::Python2;
 }
@@ -1471,7 +1473,7 @@ TRuntimeNode TProgramBuilder::ForwardList(TRuntimeNode stream) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::ToFlow(TRuntimeNode stream) {
+TRuntimeNode TProgramBuilder::ToFlow(TRuntimeNode stream, const TArrayRef<const TRuntimeNode>& dependentNodes) {
     const auto type = stream.GetStaticType();
     MKQL_ENSURE(type->IsStream() || type->IsList() || type->IsOptional(), "Expected stream, list or optional.");
     TType* itemType;
@@ -1485,6 +1487,11 @@ TRuntimeNode TProgramBuilder::ToFlow(TRuntimeNode stream) {
 
     TCallableBuilder callableBuilder(Env_, __func__, NewFlowType(itemType));
     callableBuilder.Add(stream);
+    if constexpr (RuntimeVersion >= 75U) {
+        for (auto node : dependentNodes) {
+            callableBuilder.Add(node);
+        }
+    }
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
@@ -4236,7 +4243,7 @@ TRuntimeNode TProgramBuilder::WideMap(TRuntimeNode flowOrStream, const TWideLamb
         TCallableBuilder callableBuilder(Env_, __func__, NewStreamType(NewMultiType(tupleItems)));
         return fillCallableBuilder(callableBuilder, flowOrStream);
     } else {
-        Y_UNREACHABLE();
+        MKQL_ENSURE(false, "Unreachable");
     }
 }
 

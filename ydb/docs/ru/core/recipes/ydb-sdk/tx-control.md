@@ -12,108 +12,120 @@
 
 - Go
 
-  {% cut "database/sql" %}
+  {% list tabs %}
 
-  ```go
-  package main
+  - Native SDK
 
-  import (
-    "context"
-    "database/sql"
-    "fmt"
-    "os"
+    ```go
+    package main
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-  )
+    import (
+      "context"
+      "fmt"
+      "os"
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/query"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      row, err := db.Query().QueryRow(ctx, "SELECT 1",
+        query.WithTxControl(query.ImplicitTxControl()),
+      )
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+      // работа с row
+      _ = row
     }
-    defer nativeDriver.Close(ctx)
+    ```
 
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    defer connector.Close()
+  - database/sql
 
-    db := sql.OpenDB(connector)
-    defer db.Close()
+    ```go
+    package main
 
-    // ImplicitTx - запрос без явной транзакции (авто-коммит)
-    row := db.QueryRowContext(ctx, "SELECT 1")
-    var result int
-    if err := row.Scan(&result); err != nil {
-      fmt.Printf("unexpected error: %v", err)
-    }
-  }
-  ```
+    import (
+      "context"
+      "database/sql"
+      "fmt"
+      "os"
 
-  {% endcut %}
-
-  ```go
-  package main
-
-  import (
-    "context"
-    "fmt"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/query"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      "github.com/ydb-platform/ydb-go-sdk/v3"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      defer connector.Close()
+
+      db := sql.OpenDB(connector)
+      defer db.Close()
+
+      // ImplicitTx - запрос без явной транзакции (авто-коммит)
+      row := db.QueryRowContext(ctx, "SELECT 1")
+      var result int
+      if err := row.Scan(&result); err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
     }
-    defer db.Close(ctx)
-    row, err := db.Query().QueryRow(ctx, "SELECT 1",
-      query.WithTxControl(query.ImplicitTxControl()),
-    )
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
-    }
-    // работа с row
-    _ = row
-  }
-  ```
+    ```
+
+  {% endlist %}
 
 - Java
 
-  {% cut "JDBC" %}
+  {% list tabs %}
 
-  Функционал находится в разработке.
+  - Native SDK
 
-  {% endcut %}
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-  ```java
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.NONE))
+        );
+        // работа с reader
+    }
+    ```
 
-  // ...
-  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.NONE))
-      );
-      // работа с reader
-  }
-  ```
+  - JDBC
+
+    На стороне JDBC неявный режим связан с авто-коммитом (`Connection.setAutoCommit(true)` по умолчанию): каждый отдельный запрос оформляется как отдельная транзакция и фиксируется автоматически. При `setAutoCommit(false)` границы задаются явными `commit`/`rollback`.
+
+    В **текущей реализации** {{ ydb-short-name }} JDBC-драйвера для **одиночных** вызовов при **чтении** режим **snapshot** включается, если на `Connection` вызван **`setReadOnly(true)`**. Для запросов **с записью** применяется **Serializable Read/Write** (на соединении не должен быть включён режим только чтения).
+
+    В **Spring** атрибут **`@Transactional(readOnly = true)`** при старте транзакции приводит к вызову `Connection.setReadOnly(true)` на соединении, поэтому для read-only-сценариев snapshot выбирается автоматически. Hibernate, JOOQ и другие обёртки над JDBC используют то же соединение — флаг read-only нужно выставлять так же явно (или через транзакционные настройки фреймворка, если они прокидывают его в `Connection`).
+
+  {% endlist %}
 
 - Python
 
@@ -211,9 +223,9 @@
   var response = await queryClient.Exec("SELECT 1");
   ```
 
-- Js/Ts
+- JavaScript
 
-  ```typescript
+  ```javascript
   import { sql } from '@ydbjs/query';
 
   // ...
@@ -249,121 +261,129 @@
 
 - Go
 
-  {% cut "database/sql" %}
+  {% list tabs %}
 
-  ```go
-  package main
+  - Native SDK
 
-  import (
-    "context"
-    "database/sql"
-    "fmt"
-    "os"
+    ```go
+    package main
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/retry"
-  )
+    import (
+      "context"
+      "fmt"
+      "os"
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/query"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      row, err := db.Query().QueryRow(ctx, "SELECT 1",
+        query.WithTxControl(query.SerializableReadWriteTxControl(query.CommitTx())),
+      )
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+      // работа с row
+      _ = row
     }
-    defer nativeDriver.Close(ctx)
+    ```
 
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    defer connector.Close()
+  - database/sql
 
-    db := sql.OpenDB(connector)
-    defer db.Close()
+    ```go
+    package main
 
-    err = retry.DoTx(ctx, db,
-      func(ctx context.Context, tx *sql.Tx) error {
-        row := tx.QueryRowContext(ctx, "SELECT 1")
-        var result int
-        return row.Scan(&result)
-      },
-      retry.WithIdempotent(true),
-      // Режим Serializable Read-Write используется по умолчанию для транзакций
-      // Либо его можно установить явно как приведено ниже
-      retry.WithTxOptions(&sql.TxOptions{
-        Isolation: sql.LevelSerializable,
-        ReadOnly:  false,
-      }),
+    import (
+      "context"
+      "database/sql"
+      "fmt"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/retry"
     )
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      defer connector.Close()
+
+      db := sql.OpenDB(connector)
+      defer db.Close()
+
+      err = retry.DoTx(ctx, db,
+        func(ctx context.Context, tx *sql.Tx) error {
+          row := tx.QueryRowContext(ctx, "SELECT 1")
+          var result int
+          return row.Scan(&result)
+        },
+        retry.WithIdempotent(true),
+        // Режим Serializable Read-Write используется по умолчанию для транзакций
+        // Либо его можно установить явно как приведено ниже
+        retry.WithTxOptions(&sql.TxOptions{
+          Isolation: sql.LevelSerializable,
+          ReadOnly:  false,
+        }),
+      )
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
     }
-  }
-  ```
+    ```
 
-  {% endcut %}
-
-  ```go
-  package main
-
-  import (
-    "context"
-    "fmt"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/query"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-    )
-    if err != nil {
-      panic(err)
-    }
-    defer db.Close(ctx)
-    row, err := db.Query().QueryRow(ctx, "SELECT 1",
-      query.WithTxControl(query.SerializableReadWriteTxControl(query.CommitTx())),
-    )
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
-    }
-    // работа с row
-    _ = row
-  }
-  ```
+  {% endlist %}
 
 - Java
 
-  {% cut "JDBC" %}
+  {% list tabs %}
 
-  Функционал находится в разработке.
+  - Native SDK
 
-  {% endcut %}
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-  ```java
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.TxMode;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW))
+        );
+        // Работа с reader
+    }
+    ```
 
-  // ...
-  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW))
-      );
-      // Работа с reader
-  }
-  ```
+  - JDBC
+
+    Для **одиночных** вызовов через JDBC в текущей реализации драйвера используется **Serializable Read/Write** — в том числе при работе из Spring Boot, ORM и других обёрток над JDBC. Режим **snapshot** для чтений задаётся через **`setReadOnly(true)`** (см. [ImplicitTx](#implicittx)). Семантика авто-коммита и явных транзакций описана там же.
+
+  {% endlist %}
 
 - Python
 
@@ -517,7 +537,7 @@
   var response = await queryClient.Exec("SELECT 1");
   ```
 
-- Js/Ts
+- JavaScript
 
   ```typescript
   import { sql } from '@ydbjs/query';
@@ -580,120 +600,128 @@
 
 - Go
 
-  {% cut "database/sql" %}
+  {% list tabs %}
 
-  ```go
-  package main
+  - Native SDK
 
-  import (
-    "context"
-    "database/sql"
-    "fmt"
-    "os"
+    ```go
+    package main
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/retry"
-    "github.com/ydb-platform/ydb-go-sdk/v3/table"
-  )
+    import (
+      "context"
+      "fmt"
+      "os"
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/query"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      row, err := db.Query().QueryRow(ctx, "SELECT 1",
+        query.WithTxControl(
+          query.OnlineReadOnlyTxControl(query.WithInconsistentReads()),
+        ),
+      )
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+      // работа с row
+      _ = row
     }
-    defer nativeDriver.Close(ctx)
+    ```
 
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    defer connector.Close()
+  - database/sql
 
-    db := sql.OpenDB(connector)
-    defer db.Close()
+    ```go
+    package main
 
-    err = retry.Do(
-      ydb.WithTxControl(ctx, table.OnlineReadOnlyTxControl(table.WithInconsistentReads())),
-      db,
-      func(ctx context.Context, conn *sql.Conn) error {
-        row := conn.QueryRowContext(ctx, "SELECT 1")
-        var result int
-        return row.Scan(&result)
-      },
-      retry.WithIdempotent(true),
+    import (
+      "context"
+      "database/sql"
+      "fmt"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/retry"
+      "github.com/ydb-platform/ydb-go-sdk/v3/table"
     )
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      defer connector.Close()
+
+      db := sql.OpenDB(connector)
+      defer db.Close()
+
+      err = retry.Do(
+        ydb.WithTxControl(ctx, table.OnlineReadOnlyTxControl(table.WithInconsistentReads())),
+        db,
+        func(ctx context.Context, conn *sql.Conn) error {
+          row := conn.QueryRowContext(ctx, "SELECT 1")
+          var result int
+          return row.Scan(&result)
+        },
+        retry.WithIdempotent(true),
+      )
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
     }
-  }
-  ```
+    ```
 
-  {% endcut %}
-
-  ```go
-  package main
-
-  import (
-    "context"
-    "fmt"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/query"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-    )
-    if err != nil {
-      panic(err)
-    }
-    defer db.Close(ctx)
-    row, err := db.Query().QueryRow(ctx, "SELECT 1",
-      query.WithTxControl(
-        query.OnlineReadOnlyTxControl(query.WithInconsistentReads()),
-      ),
-    )
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
-    }
-    // работа с row
-    _ = row
-  }
-  ```
+  {% endlist %}
 
 - Java
 
-  {% cut "JDBC" %}
+  {% list tabs %}
 
-  Функционал находится в разработке.
+  - Native SDK
 
-  {% endcut %}
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-  ```java
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.TxMode;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.ONLINE_RO))
+        );
+        // Работа с reader
+    }
+    ```
 
-  // ...
-  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.ONLINE_RO))
-      );
-      // Работа с reader
-  }
-  ```
+  - JDBC
+
+    Режим Online Read-Only из Query API для **одиночных** вызовов через JDBC **отдельно не задаётся**. Для чтения в **snapshot** вызовите **`Connection.setReadOnly(true)`** (в Spring — `@Transactional(readOnly = true)`). Запись — см. [ImplicitTx](#implicittx).
+
+  {% endlist %}
 
 - Python
 
@@ -789,7 +817,7 @@
   var response = await queryClient.ReadAllRows("SELECT 1", txMode: TransactionMode.OnlineRo);
   ```
 
-- Js/Ts
+- JavaScript
 
   ```typescript
   import { sql } from '@ydbjs/query';
@@ -841,118 +869,126 @@
 
 - Go
 
-  {% cut "database/sql" %}
+  {% list tabs %}
 
-  ```go
-  package main
+  - Native SDK
 
-  import (
-    "context"
-    "database/sql"
-    "fmt"
-    "os"
+    ```go
+    package main
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/retry"
-    "github.com/ydb-platform/ydb-go-sdk/v3/table"
-  )
+    import (
+      "context"
+      "fmt"
+      "os"
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/query"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      row, err := db.Query().QueryRow(ctx, "SELECT 1",
+        query.WithTxControl(query.StaleReadOnlyTxControl()),
+      )
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+      // работа с row
+      _ = row
     }
-    defer nativeDriver.Close(ctx)
+    ```
 
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    defer connector.Close()
+  - database/sql
 
-    db := sql.OpenDB(connector)
-    defer db.Close()
+    ```go
+    package main
 
-    err = retry.Do(
-      ydb.WithTxControl(ctx, table.StaleReadOnlyTxControl()),
-      db,
-      func(ctx context.Context, conn *sql.Conn) error {
-        row := conn.QueryRowContext(ctx, "SELECT 1")
-        var result int
-        return row.Scan(&result)
-      },
-      retry.WithIdempotent(true),
+    import (
+      "context"
+      "database/sql"
+      "fmt"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/retry"
+      "github.com/ydb-platform/ydb-go-sdk/v3/table"
     )
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      defer connector.Close()
+
+      db := sql.OpenDB(connector)
+      defer db.Close()
+
+      err = retry.Do(
+        ydb.WithTxControl(ctx, table.StaleReadOnlyTxControl()),
+        db,
+        func(ctx context.Context, conn *sql.Conn) error {
+          row := conn.QueryRowContext(ctx, "SELECT 1")
+          var result int
+          return row.Scan(&result)
+        },
+        retry.WithIdempotent(true),
+      )
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
     }
-  }
-  ```
+    ```
 
-  {% endcut %}
-
-  ```go
-  package main
-
-  import (
-    "context"
-    "fmt"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/query"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-    )
-    if err != nil {
-      panic(err)
-    }
-    defer db.Close(ctx)
-    row, err := db.Query().QueryRow(ctx, "SELECT 1",
-      query.WithTxControl(query.StaleReadOnlyTxControl()),
-    )
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
-    }
-    // работа с row
-    _ = row
-  }
-  ```
+  {% endlist %}
 
 - Java
 
-  {% cut "JDBC" %}
+  {% list tabs %}
 
-  Функционал находится в разработке.
+  - Native SDK
 
-  {% endcut %}
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-  ```java
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.TxMode;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.STALE_RO))
+        );
+        // Работа с reader
+    }
+    ```
 
-  // ...
-  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.STALE_RO))
-      );
-      // Работа с reader
-  }
-  ```
+  - JDBC
+
+    Режим Stale Read-Only из Query API для **одиночных** вызовов через JDBC **отдельно не задаётся**. Для чтения в **snapshot** вызовите **`Connection.setReadOnly(true)`** (в Spring — `@Transactional(readOnly = true)`). Запись — см. [ImplicitTx](#implicittx).
+
+  {% endlist %}
 
 - Python
 
@@ -1049,7 +1085,7 @@
   var response = await queryClient.ReadAllRows("SELECT 1", txMode: TransactionMode.StaleRo);
   ```
 
-- Js/Ts
+- JavaScript
 
   ```typescript
   import { sql } from '@ydbjs/query';
@@ -1092,116 +1128,124 @@
 
 - Go
 
-  {% cut "database/sql" %}
+  {% list tabs %}
 
-  ```go
-  package main
+  - Native SDK
 
-  import (
-    "context"
-    "database/sql"
-    "fmt"
-    "os"
+    ```go
+    package main
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/retry"
-  )
+    import (
+      "context"
+      "fmt"
+      "os"
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/query"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      row, err := db.Query().QueryRow(ctx, "SELECT 1",
+        query.WithTxControl(query.SnapshotReadOnlyTxControl()),
+      )
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+      // работа с row
+      _ = row
     }
-    defer nativeDriver.Close(ctx)
+    ```
 
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    defer connector.Close()
+  - database/sql
 
-    db := sql.OpenDB(connector)
-    defer db.Close()
+    ```go
+    package main
 
-    // Snapshot Read-Only — обеспечивает согласованное чтение данных на определённый момент времени
-    err = retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
-      row := tx.QueryRowContext(ctx, "SELECT 1")
-      var result int
-      return row.Scan(&result)
-    }, retry.WithIdempotent(true), retry.WithTxOptions(&sql.TxOptions{
-      Isolation: sql.LevelSnapshot,
-      ReadOnly:  true,
-    }))
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
-    }
-  }
-  ```
+    import (
+      "context"
+      "database/sql"
+      "fmt"
+      "os"
 
-  {% endcut %}
-
-  ```go
-  package main
-
-  import (
-    "context"
-    "fmt"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/query"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/retry"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      defer connector.Close()
+
+      db := sql.OpenDB(connector)
+      defer db.Close()
+
+      // Snapshot Read-Only — обеспечивает согласованное чтение данных на определённый момент времени
+      err = retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
+        row := tx.QueryRowContext(ctx, "SELECT 1")
+        var result int
+        return row.Scan(&result)
+      }, retry.WithIdempotent(true), retry.WithTxOptions(&sql.TxOptions{
+        Isolation: sql.LevelSnapshot,
+        ReadOnly:  true,
+      }))
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
     }
-    defer db.Close(ctx)
-    row, err := db.Query().QueryRow(ctx, "SELECT 1",
-      query.WithTxControl(query.SnapshotReadOnlyTxControl()),
-    )
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
-    }
-    // работа с row
-    _ = row
-  }
-  ```
+    ```
+
+  {% endlist %}
 
 - Java
 
-  {% cut "JDBC" %}
+  {% list tabs %}
 
-  Функционал находится в разработке.
+  - Native SDK
 
-  {% endcut %}
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-  ```java
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.TxMode;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO))
+        );
+        // Работа с reader
+    }
+    ```
 
-  // ...
-  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO))
-      );
-      // Работа с reader
-  }
-  ```
+  - JDBC
+
+    Для **одиночных** вызовов **только на чтение** через JDBC режим **snapshot** включается, когда на соединении выставлен **`Connection.setReadOnly(true)`** (в Spring — **`@Transactional(readOnly = true)`** прокидывает это в драйвер при открытии транзакции). Подробнее — в разделе [ImplicitTx](#implicittx).
+
+  {% endlist %}
 
 - Python
 
@@ -1297,7 +1341,7 @@
   var response = await queryClient.ReadAllRows("SELECT 1", TransactionMode.SnapshotRo);
   ```
 
-- Js/Ts
+- JavaScript
 
   ```typescript
   import { sql } from '@ydbjs/query';
@@ -1343,117 +1387,125 @@
 
 - Go
 
-  {% cut "database/sql" %}
+  {% list tabs %}
 
-  ```go
-  package main
+  - Native SDK
 
-  import (
-    "context"
-    "database/sql"
-    "fmt"
-    "os"
+    ```go
+    package main
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/retry"
-  )
+    import (
+      "context"
+      "fmt"
+      "os"
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/query"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      row, err := db.Query().QueryRow(ctx, "SELECT 1",
+        query.WithTxControl(query.SnapshotReadWriteTxControl(query.CommitTx())),
+      )
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+      // работа с row
+      _ = row
     }
-    defer nativeDriver.Close(ctx)
+    ```
 
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    defer connector.Close()
+  - database/sql
 
-    db := sql.OpenDB(connector)
-    defer db.Close()
+    ```go
+    package main
 
-    // Snapshot Read-Write — обеспечивает согласованное чтение данных на определённый момент времени
-    // с возможностью записи
-    err = retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
-      row := tx.QueryRowContext(ctx, "SELECT 1")
-      var result int
-      return row.Scan(&result)
-    }, retry.WithIdempotent(true), retry.WithTxOptions(&sql.TxOptions{
-      Isolation: sql.LevelSnapshot,
-      ReadOnly:  false,
-    }))
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
-    }
-  }
-  ```
+    import (
+      "context"
+      "database/sql"
+      "fmt"
+      "os"
 
-  {% endcut %}
-
-  ```go
-  package main
-
-  import (
-    "context"
-    "fmt"
-    "os"
-
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    "github.com/ydb-platform/ydb-go-sdk/v3/query"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/retry"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      defer connector.Close()
+
+      db := sql.OpenDB(connector)
+      defer db.Close()
+
+      // Snapshot Read-Write — обеспечивает согласованное чтение данных на определённый момент времени
+      // с возможностью записи
+      err = retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
+        row := tx.QueryRowContext(ctx, "SELECT 1")
+        var result int
+        return row.Scan(&result)
+      }, retry.WithIdempotent(true), retry.WithTxOptions(&sql.TxOptions{
+        Isolation: sql.LevelSnapshot,
+        ReadOnly:  false,
+      }))
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
     }
-    defer db.Close(ctx)
-    row, err := db.Query().QueryRow(ctx, "SELECT 1",
-      query.WithTxControl(query.SnapshotReadWriteTxControl(query.CommitTx())),
-    )
-    if err != nil {
-      fmt.Printf("unexpected error: %v", err)
-    }
-    // работа с row
-    _ = row
-  }
-  ```
+    ```
+
+  {% endlist %}
 
 - Java
 
-  {% cut "JDBC" %}
+  {% list tabs %}
 
-  Функционал находится в разработке.
+  - Native SDK
 
-  {% endcut %}
+    ```java
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-  ```java
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.TxMode;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
+    // ...
+    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        QueryReader reader = retryCtx.supplyResult(
+            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RW))
+        );
+        // Работа с reader
+    }
+    ```
 
-  // ...
-  try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      QueryReader reader = retryCtx.supplyResult(
-          session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RW))
-      );
-      // Работа с reader
-  }
-  ```
+  - JDBC
+
+    Режим Snapshot Read-Write из Query API для **одиночных** вызовов через JDBC **отдельно не задаётся**; для запросов с записью в текущей реализации драйвера используется **Serializable Read/Write** (см. [ImplicitTx](#implicittx) и [Serializable](#serializable)).
+
+  {% endlist %}
 
 - Python
 
@@ -1592,7 +1644,7 @@
   var response = await queryClient.ReadAllRows("SELECT 1", TransactionMode.SnapshotRw);
   ```
 
-- Js/Ts
+- JavaScript
 
   ```typescript
   import { sql } from '@ydbjs/query';

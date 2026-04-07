@@ -17,6 +17,7 @@
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/common/key.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/persqueue/pqtablet/blob/header.h>
 #include <ydb/core/persqueue/pqtablet/quota/quota.h>
@@ -1268,6 +1269,10 @@ private:
         TActorId ActorId;
         NKikimrPQ::TAggregatedCounters::TMLPConsumerCounters Metrics;
         bool UseForReading = true;
+        ui64 LockedMessageCount = 0;
+        ui64 DelayedMessageCount = 0;
+        ui64 MessageCount = 0;
+
     };
     std::unordered_map<TString, TMLPConsumerInfo> MLPConsumers;
 

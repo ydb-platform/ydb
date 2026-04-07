@@ -149,7 +149,7 @@ public:
         SetAresSocketCallback();
     }
 
-    void Initialize()
+    void InitializeRefCounted()
     {
         ResolverThread_ = New<TResolverThread>(this);
         ShutdownCookie_ = RegisterShutdownCallback(
@@ -501,7 +501,7 @@ private:
 
     void Shutdown()
     {
-        if (Y_UNLIKELY(ShuttingDown_.exchange(true, std::memory_order::relaxed))) { // (d)
+        if (ShuttingDown_.exchange(true, std::memory_order::relaxed)) [[unlikely]] { // (d)
             return;
         }
         std::atomic_thread_fence(std::memory_order::seq_cst); // (e)
@@ -816,9 +816,7 @@ private:
 
 IDnsResolverPtr CreateAresDnsResolver(TAresDnsResolverConfigPtr config)
 {
-    auto resolver =  New<TAresDnsResolver>(std::move(config));
-    resolver->Initialize();
-    return resolver;
+    return New<TAresDnsResolver>(std::move(config));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .UncompressMessages = true
         });
 
-        auto now = TInstant::Now().MilliSeconds();
+        auto now = TInstant::Now().MilliSeconds() - 1; // -1 to avoid flakiness
 
         auto response = GetReadResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);

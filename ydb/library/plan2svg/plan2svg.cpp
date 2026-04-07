@@ -2540,7 +2540,10 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
 void TPlan::PrintStage(TStringBuilder& builder, std::shared_ptr<TStage>& stage, TConnection* c) {
 
     if (stage->Connections.size() > 1) {
-        builder << SvgRect(Config.HeaderLeft + stage->IndentX, GAP_Y, INDENT_X, "100%", "stage");
+        builder
+            << "<g data-group='g" << stage->GroupId << "' class='selectable'><title>Stage " << (stage->External ? "E" : ToString(stage->PhysicalStageId)) << "</title>" << Endl
+            << SvgRect(Config.HeaderLeft + stage->IndentX, GAP_Y, INDENT_X, "100%", "stage")
+            << "</g>" << Endl;
     }
 
     builder << "<svg class='slimable' data-stage='inner " << stage->PhysicalStageId << "' data-height='" << stage->Height << "' width='" << Config.Width << "' height='" << stage->Height << "' x='0' y='" << GAP_Y << "'>" << Endl;
@@ -2648,6 +2651,8 @@ void TPlanVisualizer::LoadPlans(const TString& plans, bool simplified) {
     NJson::TJsonValue jsonNode;
     if (NJson::ReadJsonTree(plans, &jsonConfig, &jsonNode)) {
         if (auto* topNode = jsonNode.GetValueByPath(simplified ? "SimplifiedPlan" : "Plan")) {
+            LoadPlans(*topNode);
+        } else if (auto* topNode = jsonNode.GetValueByPath(simplified ? "queries.[0].SimplifiedPlan" : "queries.[0].Plan")) {
             LoadPlans(*topNode);
         }
     }

@@ -8,6 +8,8 @@ SRCS(
     command.cpp
     command_utils.cpp
     common.cpp
+    completion_generator.cpp
+    completion.cpp
     config.cpp
     log.cpp
     csv_parser.cpp
@@ -35,6 +37,7 @@ SRCS(
     recursive_remove.cpp
     retry_func.cpp
     root.cpp
+    scheme_path_completer.cpp
     scheme_printers.cpp
     sys.cpp
     tabbed_table.cpp

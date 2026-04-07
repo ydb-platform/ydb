@@ -1,37 +1,164 @@
-name: Alert Queued Jobs
+name: Telegram Alerts
+
+# Digest schedule is driven by telegram_notification_config.json (schedule_utc_hours).
+# send_digest.py checks the current hour itself — no need to duplicate hours here.
+# Weekly trend runs automatically every Monday 08:00 UTC.
 
 on:
   schedule:
-    # Run every 30 minutes
     - cron: '*/30 * * * *'
-  # Can also be triggered manually
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "What to send"
+        type: choice
+        options:
+          - digest
+          - trend-week
+          - trend-month
+          - all
+        default: digest
+      force:
+        description: "Force digest regardless of schedule hour"
+        type: boolean
+        default: false
+      profile:
+        description: "Digest: run only this profile ID (leave empty for all active)"
+        type: string
+        default: ""
+      dry_run:
+        description: "Print messages without sending"
+        type: boolean
+        default: false
+
+concurrency:
+  group: telegram-alerts
+  cancel-in-progress: false
 
 jobs:
   check-queued-jobs:
+    name: Alert queued jobs
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
-    
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install requests
-        
-    - name: Run queued jobs checker and send to Telegram
-      env:
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
-        GH_ALERTS_TG_LOGINS: ${{ vars.GH_ALERTS_TG_LOGINS }}
-      run: |
-        python .github/scripts/telegram/alert_queued_jobs.py \
-          --chat-id 3017506311 \
-          --send-when-all-good \
-          --notify-on-api-errors \
-          --blacklist "${{ vars.GH_ALERTS_RUNS_BLACK_LIST }}"
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Run queued jobs checker and send to Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
+          GH_ALERTS_TG_LOGINS: ${{ vars.GH_ALERTS_TG_LOGINS }}
+        run: |
+          python .github/scripts/telegram/alert_queued_jobs.py \
+            --chat-id 3017506311 \
+            --send-when-all-good \
+            --notify-on-api-errors \
+            --blacklist "${{ vars.GH_ALERTS_RUNS_BLACK_LIST }}"
+
+  send-digest:
+    name: Send mute digest
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'schedule'
+      || inputs.mode == 'digest'
+      || inputs.mode == 'all'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup YDB access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+
+      - name: Install dependencies
+        run: python3 -m pip install "ydb[yc]" requests matplotlib numpy
+
+      - name: Send digest
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
+          TG_TEAM_CHANNELS: ${{ vars.TG_TEAM_CHANNELS }}
+          YDB_QA_CONFIG: ${{ vars.YDB_QA_CONFIG }}
+        run: |
+          ARGS=""
+          if [ "${{ inputs.force }}" = "true" ]; then
+            ARGS="$ARGS --force"
+          fi
+          if [ -n "${{ inputs.profile }}" ]; then
+            ARGS="$ARGS --profile ${{ inputs.profile }}"
+          fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          python3 .github/scripts/telegram/send_digest.py \
+            --config .github/config/telegram_notification_config.json \
+            $ARGS
+
+  send-trend:
+    name: Send mute trend report
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'schedule'
+      || inputs.mode == 'trend-week'
+      || inputs.mode == 'trend-month'
+      || inputs.mode == 'all'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup YDB access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+
+      - name: Install dependencies
+        run: python3 -m pip install "ydb[yc]" requests matplotlib numpy
+
+      - name: Determine period
+        id: period
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            DAY_OF_WEEK=$(date -u +%u)
+            if [ "$DAY_OF_WEEK" = "1" ]; then
+              echo "value=week" >> "$GITHUB_OUTPUT"
+              echo "run=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "run=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            PERIOD="${{ inputs.mode }}"
+            PERIOD="${PERIOD#trend-}"
+            [ "$PERIOD" = "all" ] && PERIOD="week"
+            echo "value=$PERIOD" >> "$GITHUB_OUTPUT"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Send trend report
+        if: steps.period.outputs.run == 'true'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
+          TG_TEAM_CHANNELS: ${{ vars.TG_TEAM_CHANNELS }}
+        run: |
+          args=(
+            --period-update "${{ steps.period.outputs.value }}"
+            --bot-token "$TELEGRAM_BOT_TOKEN"
+            --team-channels "$TG_TEAM_CHANNELS"
+            --delay 2
+          )
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            args+=(--dry-run)
+          fi
+          python3 .github/scripts/telegram/parse_and_send_team_issues.py "${args[@]}"

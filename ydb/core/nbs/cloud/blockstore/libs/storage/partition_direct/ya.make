@@ -51,5 +51,6 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    partition_ut
     ut
 )

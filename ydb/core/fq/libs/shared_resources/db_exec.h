@@ -28,7 +28,7 @@ public:
     virtual TAsyncStatus Execute(NYdb::NTable::TSession& session) = 0;
     void Throw(const TString& message);
 
-    NDbPool::TDbPool::TPtr DbPool;
+    NDbPool::TDbPoolPtr DbPool;
     std::weak_ptr<TDbExecutable> SelfHolder;
     NYql::TIssues Issues;
     NYql::TIssues InternalIssues;
@@ -44,7 +44,7 @@ void ParseProto(TDbExecutable& executable, TProto& proto, TResultSetParser& pars
     }
 }
 
-inline TAsyncStatus Exec(NDbPool::TDbPool::TPtr dbPool, TDbExecutable::TPtr executable,
+inline TAsyncStatus Exec(NDbPool::TDbPoolPtr dbPool, TDbExecutable::TPtr executable,
                                                                     const TString& tablePathPrefix) {
     executable->DbPool = dbPool;
     executable->SelfHolder = executable;

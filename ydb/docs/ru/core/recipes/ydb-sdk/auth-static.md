@@ -50,13 +50,7 @@
 
 - Java
 
-<<<<<<< HEAD
-  ```java
-  public void work(String connectionString, String username, String password) {
-      AuthProvider authProvider = new StaticCredentials(username, password);
-=======
   {% list tabs %}
->>>>>>> 3aaf064311c (dev: update java snippets (#36547))
 
   - Native SDK
 

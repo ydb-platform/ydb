@@ -151,6 +151,8 @@ namespace {
 };
 
 class TYtDqIntegration: public TDqIntegrationBase {
+    static constexpr ui64 DefaultMaxPartitions = 1000;
+
 public:
     TYtDqIntegration(TYtState::TWeakPtr state)
         : State_(state)
@@ -247,7 +249,7 @@ public:
             }
         }
 
-        auto maxTasks = settings.MaxPartitions;
+        auto maxTasks = settings.MaxPartitions.GetOrElse(DefaultMaxPartitions);
         ui64 maxDataSizePerJob = 0;
         if (ytState->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false)) {
             TVector<TYtPathInfo::TPtr> paths;

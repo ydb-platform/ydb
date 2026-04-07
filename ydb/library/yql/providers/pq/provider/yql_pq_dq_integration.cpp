@@ -31,12 +31,14 @@ using namespace NNodes;
 namespace {
 
 class TPqDqIntegration : public TDqIntegrationBase {
+    static constexpr ui64 DefaultMaxPartitions = 10000;
+
 public:
     explicit TPqDqIntegration(const TPqState::TPtr& state)
         : State_(state.Get())
     {}
 
-    ui64 PartitionTopicRead(const TPqTopic& topic, size_t maxPartitions, TVector<TString>& partitions, bool streamingTopicRead) {
+    ui64 PartitionTopicRead(const TPqTopic& topic, TMaybe<ui32> maxPartitions, TVector<TString>& partitions, bool streamingTopicRead) {
         size_t topicPartitionsCount = 0;
         for (auto kv : topic.Props()) {
             auto key = kv.Name().Value();
@@ -45,11 +47,14 @@ public:
             }
         }
         YQL_ENSURE(topicPartitionsCount > 0);
-        if (!streamingTopicRead && maxPartitions == TDqSettings::TDefault::MaxTasksPerStage) {
-            maxPartitions = 1;
+        if (!streamingTopicRead && !maxPartitions) {
+            maxPartitions = 1;      // Reading in table mode - 1 task by default.
+        }
+        if (!maxPartitions) {
+            maxPartitions = DefaultMaxPartitions;
         }
 
-        const size_t tasks = Min(maxPartitions, topicPartitionsCount);
+        const size_t tasks = Min(*maxPartitions, static_cast<ui32>(topicPartitionsCount));
         partitions.reserve(tasks);
         for (size_t i = 0; i < tasks; ++i) {
             NPq::NProto::TDqReadTaskParams params;
@@ -223,7 +228,7 @@ public:
         return watermarksSettings;
     }
 
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t, TExprContext& ctx) override {
+    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, TMaybe<size_t>, TExprContext& ctx) override {
         if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) {
             auto settings = maybeDqSource.Cast().Settings();
             if (auto maybeTopicSource = TMaybeNode<TDqPqTopicSource>(settings.Raw())) {

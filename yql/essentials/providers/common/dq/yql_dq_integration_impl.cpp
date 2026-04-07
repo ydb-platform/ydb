@@ -55,7 +55,7 @@ bool TDqIntegrationBase::CanFallback() {
     return false;
 }
 
-void TDqIntegrationBase::FillSourceSettings(const TExprNode&, ::google::protobuf::Any&, TString&, size_t, TExprContext&) {
+void TDqIntegrationBase::FillSourceSettings(const TExprNode&, ::google::protobuf::Any&, TString&, TMaybe<size_t>, TExprContext&) {
 }
 
 TMaybe<IDqIntegration::TSourceWatermarksSettings> TDqIntegrationBase::ExtractSourceWatermarksSettings(const TExprNode& /*node*/, const ::google::protobuf::Any& /*settings*/, const TString& /*sourceType*/) {

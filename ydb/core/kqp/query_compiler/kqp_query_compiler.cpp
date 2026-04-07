@@ -1582,12 +1582,9 @@ private:
         // Partitioning
         TVector<TString> partitionParams;
         TString clusterName;
-        // In runtime, number of tasks with Sources is limited by 2x of node count
-        // We prepare a lot of partitions and distribute them between these tasks
-        // Constraint of 1 task per partition is NOT valid anymore
-        auto maxTasksPerStage = Config->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
+
         IDqIntegration::TPartitionSettings pSettings;
-        pSettings.MaxPartitions = maxTasksPerStage;
+        pSettings.MaxPartitions = Config->MaxTasksPerStage.Get();
         pSettings.CanFallback = false;
         pSettings.DataSizePerJob = Config->DataSizePerPartition.Get().GetOrElse(NYql::TDqSettings::TDefault::DataSizePerJob);
         dqIntegration->Partition(*source, partitionParams, &clusterName, ctx, pSettings);
@@ -1604,7 +1601,7 @@ private:
 
             google::protobuf::Any& settings = *externalSource.MutableSettings();
             TString& sourceType = *externalSource.MutableType();
-            dqIntegration->FillSourceSettings(*source, settings, sourceType, maxTasksPerStage, ctx);
+            dqIntegration->FillSourceSettings(*source, settings, sourceType, Config->MaxTasksPerStage.Get(), ctx);
 
             if (settings.Is<NDqProto::TDqIntegrationCommonSettings>()) {
                 NDqProto::TDqIntegrationCommonSettings commonSettings;

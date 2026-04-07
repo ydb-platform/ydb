@@ -25,7 +25,7 @@ The JDBC driver for {{ ydb-short-name }} supports the following configuration pr
 
 {% note info %}
 
-The values of the `saKeyFile`, `tokenFile`, or `secureConnectionCertificate` properties can be either absolute paths from the file system root or relative paths from the user's home directory. Examples: 
+The values of the `saKeyFile`, `tokenFile`, or `secureConnectionCertificate` properties can be either absolute paths from the file system root or relative paths from the user's home directory. Examples:
 
 * `saKeyFile=~/mysakey1.json`
 

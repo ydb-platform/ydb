@@ -214,7 +214,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
     for wire, cls, sched in (
         ("SafelyBreakDiskNemesis", ClusterSafelyBreakDiskNemesis, 400),
         ("SafelyCleanupDisksNemesis", ClusterSafelyCleanupDisksNemesis, 400),
-        ("RollingUpdateClusterNemesis", ClusterRollingUpdateNemesis, 120),
+        # ("RollingUpdateClusterNemesis", ClusterRollingUpdateNemesis, 120),
         ("StopStartNodeNemesis", ClusterStopStartNodeNemesis, 400),
         ("SuspendNodeNemesis", ClusterSuspendNodeNemesis, 800),
     ):

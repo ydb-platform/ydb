@@ -72,6 +72,11 @@ void TDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
     Manager->MutableCategoryVerified(evData->GetCategory()).UnregisterProcess(evData->GetInternalProcessId());
 }
 
+void TDistributor::HandleMain(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
+    Y_UNUSED(Manager->DrainTasks());
+    TBase::Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup(1));
+}
+
 void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
     auto& event = *ev->Get();
     const TDuration d = TMonotonic::Now() - event.GetConstructInstant();

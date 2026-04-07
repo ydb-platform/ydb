@@ -163,8 +163,8 @@ def main():
         return
 
     elif args.command == "run":
-        # Expose /sensors (monlib) on mon_port; main API stays on app_port.
-        # Second Flask app + thread: no conflict as long as mon_port != app_port.
+        # Expose /sensors (monlib) on nemesis_mon_port; main API stays on app_port.
+        # Second Flask app + thread: no conflict as long as nemesis_mon_port != app_port.
         monitor.setup_page(settings.app_host, settings.nemesis_mon_port)
         # threaded=True is important for concurrent request handling
         from ydb.tests.stability.nemesis.app import app

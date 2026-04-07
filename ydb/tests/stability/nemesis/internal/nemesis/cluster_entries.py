@@ -34,7 +34,7 @@ from ydb.tests.stability.nemesis.internal.nemesis.runners import (
     ClusterKillTenantSlotBrokerNemesis,
     ClusterKillTxAllocatorNemesis,
     ClusterReBalanceTabletsNemesis,
-    ClusterRollingUpdateNemesis,
+    # ClusterRollingUpdateNemesis,
     ClusterSafelyBreakDiskNemesis,
     ClusterSafelyCleanupDisksNemesis,
     ClusterSerialKillNodeNemesis,

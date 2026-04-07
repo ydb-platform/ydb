@@ -1726,7 +1726,7 @@ namespace NSchemeShardUT_Private {
                 // Check if full-key bloom is enabled
                 // Full-key bloom is represented as a prefix entry with length = key column count
                 for (ui32 j = 0; j < d.ByKeyFilterPrefixesSize(); ++j) {
-                    if (d.GetByKeyFilterPrefixes(j) == keyColumnCount && keyColumnCount > 0) {
+                    if (d.GetByKeyFilterPrefixes(j).GetPrefixLength() == keyColumnCount && keyColumnCount > 0) {
                         return true;
                     }
                 }

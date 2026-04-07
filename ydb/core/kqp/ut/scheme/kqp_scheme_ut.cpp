@@ -1617,8 +1617,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto cfg = getPartitionConfig();
             UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0), 1);
-            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1), 2);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetPrefixLength(), 2);
         }
 
         // KEY_BLOOM_FILTER = DISABLED disables all bloom filters on the table
@@ -1638,7 +1638,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto cfg = getPartitionConfig();
             UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
         }
 
         execScheme(R"(
@@ -1649,8 +1649,23 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto cfg = getPartitionConfig();
             UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0), 1);
-            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1), 2);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetPrefixLength(), 2);
+        }
+
+        // ALTER TABLE ADD INDEX with custom false_positive_probability
+        execScheme(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+            ADD INDEX idx_bloom3 LOCAL USING bloom_filter ON (Key1) WITH (false_positive_probability=0.05);
+        )");
+        {
+            auto cfg = getPartitionConfig();
+            // prefix 1 already existed, FPP should be updated to 0.05
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_DOUBLES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetFalsePositiveProbability(), 0.05, 1e-9);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetPrefixLength(), 2);
         }
 
         // KEY_BLOOM_FILTER = DISABLED clears all bloom filters including ByKeyFilterPrefixes
@@ -1683,6 +1698,21 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             --!syntax_v1
             ALTER TABLE `/Root/T`
             ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key1) COVER (Value);
+        )");
+        // false_positive_probability must be in (0, 1)
+        auto expectBadRequest = [&](const TString& q) {
+            auto result = session.ExecuteSchemeQuery(q).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        };
+        expectBadRequest(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+            ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key1) WITH (false_positive_probability=0);
+        )");
+        expectBadRequest(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+            ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key1) WITH (false_positive_probability=1);
         )");
     }
 

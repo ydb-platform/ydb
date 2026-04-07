@@ -295,7 +295,9 @@ namespace NTest {
 
             NPage::TConf conf{ last, 8291, family->Large };
 
-            conf.ByKeyFilterPrefixes = Base->GetScheme().GetTableInfo(table)->ByKeyFilterPrefixes;
+            for (const auto& p : Base->GetScheme().GetTableInfo(table)->ByKeyFilterPrefixes) {
+                conf.ByKeyFilterPrefixes.push_back(NPage::TConf::TByKeyFilterPrefix{p.PrefixLength, p.FalsePositiveProbability});
+            }
             conf.MaxRows = subset->MaxRows();
             conf.MinRowVersion = subset->MinRowVersion();
             conf.SmallEdge = family->Small;

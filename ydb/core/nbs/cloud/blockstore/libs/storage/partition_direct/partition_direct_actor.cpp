@@ -241,7 +241,9 @@ void TPartitionActor::StateInit(TAutoPtr<NActors::IEventHandle>& ev)
 
 bool TPartitionActor::HaveStoredTabletInfo()
 {
-    return NFs::Exists(GetDDiskConnectionsFilePath(TabletID()));
+    // TODO FIX this after implementation tabltet's local database - NBS-7078
+    return false;
+    // return NFs::Exists(GetDDiskConnectionsFilePath(TabletID()));
 }
 
 TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(

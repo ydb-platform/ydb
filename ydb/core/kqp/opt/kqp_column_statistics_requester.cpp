@@ -133,7 +133,7 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
                 return;
             }
 
-            THashMap<TString, TOptimizerStatistics::TColumnStatMap> columnStatisticsByTableName;
+            THashMap<TString, NYql::TOptimizerStatistics::TColumnStatMap> columnStatisticsByTableName;
 
             for (auto&& stat: response.StatResponses) {
                 auto meta = tableMetaByPathId[stat.Req.PathId];
@@ -164,10 +164,10 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
 
     addStatRequest(
         NStat::EStatType::COUNT_MIN_SKETCH, CMColumnsByTableName,
-        [](const TColumnStatistics& stats) { return !!stats.CountMinSketch; });
+        [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; });
     addStatRequest(
         NStat::EStatType::EQ_WIDTH_HISTOGRAM, HistColumnsByTableName,
-        [](const TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
+        [](const NYql::TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
 
     if (futures.empty()) {
         return IGraphTransformer::TStatus::Ok;

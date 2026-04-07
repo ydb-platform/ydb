@@ -1,28 +1,28 @@
 # Nemesis App
 
-Приложение для инъекции неисправностей (fault injection) в YDB кластер.
+Fault injection application for YDB clusters.
 
-## Режимы работы
+## Operating Modes
 
-- **orchestrator** — планирование chaos-сценариев, диспетчеризация на агенты, UI, liveness/safety wardens на оркестраторе.
-- **agent** — запуск nemesis runner’ов на хосте, локальные safety-проверки по логам; состояние процессов с оркестратора опрашивается по HTTP.
+- **orchestrator** — chaos scenario planning, dispatch to agents, UI, liveness/safety wardens on the orchestrator.
+- **agent** — runs nemesis runners on the host, local safety checks via logs; process state is polled from the orchestrator over HTTP.
 
-## Конфигурация
+## Configuration
 
-Переменные окружения (или аргументы CLI для `install` / `run`, см. `nemesis --help`):
+Environment variables (or CLI arguments for `install` / `run`, see `nemesis --help`):
 
-| Параметр | Описание | По умолчанию |
-|----------|----------|--------------|
-| `NEMESIS_TYPE` | Режим: `orchestrator` или `agent` | `orchestrator` |
-| `APP_HOST` | Адрес привязки HTTP | `::` |
-| `APP_PORT` | Порт приложения | `31434` |
-| `MON_PORT` | Порт мониторинга (warden / health) | `8765` |
-| `STATIC_LOCATION` | Каталог статики UI (оркестратор) | `static` |
-| `YAML_CONFIG_LOCATION` | Путь к `cluster.yaml` | — |
-| `NEMESIS_INSTALL_ROOT` | Корень установки на удалённых хостах (`rsync`, `ExecStart` в unit) | `/Berkanavt/nemesis` |
-| `KIKIMR_LOGS_DIRECTORY` | Каталог логов Kikimr для safety wardens на агенте | `/Berkanavt/kikimr/logs/` |
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `NEMESIS_TYPE` | Mode: `orchestrator` or `agent` | `orchestrator` |
+| `APP_HOST` | HTTP bind address | `::` |
+| `APP_PORT` | Application port | `31434` |
+| `MON_PORT` | Monitoring port (warden / health) | `8765` |
+| `STATIC_LOCATION` | UI static files directory (orchestrator) | `static` |
+| `YAML_CONFIG_LOCATION` | Path to `cluster.yaml` | — |
+| `NEMESIS_INSTALL_ROOT` | Installation root on remote hosts (`rsync`, `ExecStart` in unit) | `/Berkanavt/nemesis` |
+| `KIKIMR_LOGS_DIRECTORY` | Kikimr logs directory for agent safety wardens | `/Berkanavt/kikimr/logs/` |
 
-Для установки с нестандартными путями:
+For installation with non-standard paths:
 
 ```bash
 ./nemesis install --yaml-config-location /path/to/cluster.yaml \
@@ -30,127 +30,127 @@
   --kikimr-logs-directory /var/log/kikimr/
 ```
 
-## Установка на кластер и запуск
+## Cluster Installation and Startup
 
 ```bash
-# Из директории с бинарником nemesis
+# From the directory containing the nemesis binary
 ./nemesis --yaml-config-location /your/path/to/config.yaml install
 ```
 
-Первый хост из `cluster.yaml` становится orchestrator, остальные — агентами.
+The first host from `cluster.yaml` becomes the orchestrator, the rest become agents.
 
-Порт по умолчанию: **31434** (настраивается через `APP_PORT`).
+Default port: **31434** (configurable via `APP_PORT`).
 
-## Остановка сервисов
+## Stopping Services
 
 ```bash
 ./nemesis stop
 ```
 
-## Структура `internal/`
+## `internal/` Structure
 
-- **Общее** (и orchestrator, и agent): `config.py`, `models.py`, `event_loop.py`, `nemesis/catalog.py`, `nemesis/chaos_dispatch.py`.
-- **`internal/nemesis/runners/`** — все runner-классы (акторы nemesis). `__init__.py` реэкспортирует все классы для удобного импорта.
-- **`internal/nemesis/cluster_entries.py`** — кластерные nemesis-записи (tablet kills, daemon kills, disk ops, datacenter/bridge pile), вынесены из `catalog.py` для читаемости.
-- **`internal/nemesis/catalog.py`** — главный реестр `NEMESIS_TYPES`, UI-группы, `build_all_planners()` и API-хелперы. Импортирует core-runner'ы из `runners/` и кластерные записи из `cluster_entries.py`.
-- **`internal/agent/`** — только агент: `agent_warden_checker.py`, `nemesis/runner.py` (`NemesisManager`).
-- **`internal/orchestrator/`** — только оркестратор: `install.py`, `orchestrator_warden_checker.py`, `nemesis/` (расписание, `chaos_state`, планировщики). Состояние оркестратора (hosts, healthcheck, chaos store) живёт в `routers/orchestrator_router.py`.
+- **Shared** (both orchestrator and agent): `config.py`, `models.py`, `event_loop.py`, `nemesis/catalog.py`, `nemesis/chaos_dispatch.py`.
+- **`internal/nemesis/runners/`** — all runner classes (nemesis actors). `__init__.py` re-exports all classes for convenient imports.
+- **`internal/nemesis/cluster_entries.py`** — cluster nemesis entries (tablet kills, daemon kills, disk ops, datacenter/bridge pile), extracted from `catalog.py` for readability.
+- **`internal/nemesis/catalog.py`** — main registry `NEMESIS_TYPES`, UI groups, `build_all_planners()` and API helpers. Imports core runners from `runners/` and cluster entries from `cluster_entries.py`.
+- **`internal/agent/`** — agent only: `agent_warden_checker.py`, `nemesis/runner.py` (`NemesisManager`).
+- **`internal/orchestrator/`** — orchestrator only: `install.py`, `orchestrator_warden_checker.py`, `nemesis/` (scheduling, `chaos_state`, planners). Orchestrator state (hosts, healthcheck, chaos store) lives in `routers/orchestrator_router.py`.
 
-## UI и API-модели
+## UI and API Models
 
-Статические ответы для UI описаны датаклассами в `internal/models.py` (`ProcessInfo`, `ProcessTypeRow`, `WardenCheckReport`, и т.д.). Эндпоинты возвращают те же поля, что и раньше, в виде JSON.
+Static responses for the UI are described by dataclasses in `internal/models.py` (`ProcessInfo`, `ProcessTypeRow`, `WardenCheckReport`, etc.). Endpoints return the same fields as before, as JSON.
 
-## Результаты запусков на агенте
+## Agent Execution Results
 
-Завершение и логи процессов на агенте **не пушатся** на оркестратор. Состояние снимается опросом с оркестратора: `GET /api/hosts/processes` (агрегирует `GET /api/processes` по хостам).
+Process completion and logs on the agent are **not pushed** to the orchestrator. State is retrieved by polling from the orchestrator: `GET /api/hosts/processes` (aggregates `GET /api/processes` across hosts).
 
-## Логирование nemesis runner’ов
+## Nemesis Runner Logging
 
-Сообщения исполняемых на агенте nemesis пишутся в логгер `ydb.tests.stability.nemesis.execution`. `NemesisManager` на время выполнения вешает на него потоковый handler для сбора логов в UI; **корневой логгер не трогается**.
+Messages from nemesis runners executing on the agent are written to the `ydb.tests.stability.nemesis.execution` logger. `NemesisManager` attaches a thread-local handler to it during execution for collecting logs in the UI; **the root logger is not modified**.
 
-## UI в браузере
+## Browser UI
 
 `http://<orchestrator_host>:31434/static/index.html`
 
 ---
 
-## Расширение: свой nemesis
+## Extension: Custom Nemesis
 
-Реестр и UI-группы: **`internal/nemesis/catalog.py`** (`NEMESIS_TYPES`, `NEMESIS_UI_GROUPS`).
-Кластерные nemesis-записи: **`internal/nemesis/cluster_entries.py`** (`all_nemesis_type_entries()`).
-Все runner-классы реэкспортируются из **`internal/nemesis/runners/__init__.py`**.
+Registry and UI groups: **`internal/nemesis/catalog.py`** (`NEMESIS_TYPES`, `NEMESIS_UI_GROUPS`).
+Cluster nemesis entries: **`internal/nemesis/cluster_entries.py`** (`all_nemesis_type_entries()`).
+All runner classes are re-exported from **`internal/nemesis/runners/__init__.py`**.
 
-### Как выполняется nemesis
+### How Nemesis Execution Works
 
-1. **Оркестратор** по расписанию или вручную вызывает планировщик (`ChaosOrchestratorStore` → `NemesisPlannerBase`), получает список `DispatchCommand`.
-2. Команды уходят на агенты: **HTTP `POST /api/processes`** с телом `{ type, action, payload }` (см. `internal/orchestrator/nemesis/schedule_loop.py`, `chaos_dispatch.py`).
-3. **Агент** в `routers/agent_router.py` берёт `runner` из `NEMESIS_TYPES[type]` и запускает **`inject_fault` / `extract_fault`** в потоке через `NemesisManager` (`internal/agent/nemesis/runner.py`).
+1. The **orchestrator** invokes the planner on schedule or manually (`ChaosOrchestratorStore` → `NemesisPlannerBase`), obtaining a list of `DispatchCommand`.
+2. Commands are sent to agents: **HTTP `POST /api/processes`** with body `{ type, action, payload }` (see `internal/orchestrator/nemesis/schedule_loop.py`, `chaos_dispatch.py`).
+3. The **agent** in `routers/agent_router.py` takes the `runner` from `NEMESIS_TYPES[type]` and runs **`inject_fault` / `extract_fault`** in a thread via `NemesisManager` (`internal/agent/nemesis/runner.py`).
 
-Тело сценария всегда на **агенте**; оркестратор только планирует **какой** тип, **на каком** хосте и **какой** payload.
+The scenario body always runs on the **agent**; the orchestrator only plans **which** type, on **which** host, and **what** payload.
 
-### Принцип локального исполнения
+### Local Execution Principle
 
-Все runner'ы выполняют fault injection **локально** на хосте агента через `subprocess` (systemctl, kill, iptables, ip route и т.д.). **SSH к удалённым хостам не используется** — оркестратор отвечает за выбор целевого хоста и диспетчеризацию команды на нужного агента.
+All runners perform fault injection **locally** on the agent host via `subprocess` (systemctl, kill, iptables, ip route, etc.). **SSH to remote hosts is not used** — the orchestrator is responsible for selecting the target host and dispatching the command to the appropriate agent.
 
-| Категория runner'а | Планировщик | Что делает агент |
-|--------------------|-------------|------------------|
-| Одиночный хост (kill node/slot, stop/start, suspend, rolling update) | `DefaultRandomHostPlanner` / `PinnedFirstHostPlanner` / `SerialStaggeredInjectPlanner` | Убивает / останавливает / сигналит **локальный** процесс kikimr |
-| Datacenter (stop nodes, iptables, route unreach) | `DataCenterFanoutPlanner` — рассылает inject на **все** хосты в выбранном DC | Каждый агент останавливает / блокирует **свои** локальные сервисы |
-| Bridge pile (stop nodes, iptables, route unreach) | `BridgePileFanoutPlanner` — рассылает inject на **все** хосты в выбранном pile | Каждый агент останавливает / блокирует **свои** локальные сервисы |
-| Cluster API (tablet kill, hive, disk break) | `DefaultRandomHostPlanner` | Вызывает gRPC / HTTP API кластера (не SSH) |
+| Runner Category | Planner | What the Agent Does |
+|-----------------|---------|---------------------|
+| Single host (kill node/slot, stop/start, suspend, rolling update) | `DefaultRandomHostPlanner` / `PinnedFirstHostPlanner` / `SerialStaggeredInjectPlanner` | Kills / stops / signals the **local** kikimr process |
+| Datacenter (stop nodes, iptables, route unreach) | `DataCenterFanoutPlanner` — dispatches inject to **all** hosts in the selected DC | Each agent stops / blocks its **own** local services |
+| Bridge pile (stop nodes, iptables, route unreach) | `BridgePileFanoutPlanner` — dispatches inject to **all** hosts in the selected pile | Each agent stops / blocks its **own** local services |
+| Cluster API (tablet kill, hive, disk break) | `DefaultRandomHostPlanner` | Calls cluster gRPC / HTTP API (no SSH) |
 
-### Регистрация типа
+### Registering a Type
 
-1. Добавьте класс актора, наследник **`MonitoredAgentActor`** (как `NetworkNemesis` / `KillNodeNemesis`): реализуйте **`inject_fault`** и **`extract_fault`**, при необходимости читайте `payload` из dispatch.
-2. Заведите **строковый id** процесса (константа, как `NETWORK_NEMESIS` в `network_planner.py`).
-3. В **`NEMESIS_TYPES`** добавьте запись:
-   - **`runner`**: экземпляр актора;
-   - **`schedule`**: интервал по умолчанию для UI (секунды);
-   - **`ui_group`**: id группы в **`NEMESIS_UI_GROUPS`** (описание для `/api/process_types/grouped`; неизвестная группа попадёт под «Other», если не добавить описание);
-   - **`planner_cls`**: класс планировщика **или отсутствие ключа** (см. ниже).
+1. Add an actor class inheriting from **`MonitoredAgentActor`** (like `NetworkNemesis` / `KillNodeNemesis`): implement **`inject_fault`** and **`extract_fault`**, reading `payload` from dispatch if needed.
+2. Create a **string id** for the process (a constant, like `NETWORK_NEMESIS` in `network_planner.py`).
+3. In **`NEMESIS_TYPES`** add an entry:
+   - **`runner`**: actor instance;
+   - **`schedule`**: default interval for the UI (seconds);
+   - **`ui_group`**: group id in **`NEMESIS_UI_GROUPS`** (description for `/api/process_types/grouped`; an unknown group will fall under "Other" if no description is added);
+   - **`planner_cls`**: planner class **or omit the key** (see below).
 
-### Без своего планировщика
+### Without a Custom Planner
 
-**Не указывайте `planner_cls`** в записи `NEMESIS_TYPES`. Тогда `build_all_planners()` подставит **`DefaultRandomHostPlanner`** (`internal/orchestrator/nemesis/default_planner.py`):
+**Do not specify `planner_cls`** in the `NEMESIS_TYPES` entry. Then `build_all_planners()` will use **`DefaultRandomHostPlanner`** (`internal/orchestrator/nemesis/default_planner.py`):
 
-- на каждый тик расписания выбирается **случайный** хост из кластера и шлётся **inject** с **пустым** `PAYLOAD_INJECT`;
-- при **выключении** расписания **extract по списку затронутых хостов не планируется** (планировщик никого не «помнит»);
-- ручной inject/extract из UI по-прежнему уходит на выбранный хост.
+- on each schedule tick a **random** host from the cluster is selected and an **inject** with an **empty** `PAYLOAD_INJECT` is sent;
+- when the schedule is **disabled**, **extract is not planned for the list of affected hosts** (the planner does not "remember" anyone);
+- manual inject/extract from the UI still goes to the selected host.
 
-Этого достаточно, если сценарий **без памяти между тиками** и **без массового extract** при отключении расписания (например, одноразовый удар по случайной ноде с пустым payload, если актор сам всё делает локально).
+This is sufficient if the scenario has **no memory between ticks** and **no bulk extract** when the schedule is disabled (e.g., a one-shot hit on a random node with an empty payload, if the actor does everything locally).
 
-### Со своим планировщиком
+### With a Custom Planner
 
-Нужен, если требуется, например:
+Needed when, for example:
 
-- вести **множество затронутых хостов** и при **отключении** расписания сделать **extract на всех**;
-- на одном тике **несколько** команд или **своя** логика выбора хостов (не «один случайный»);
-- **разные** `PAYLOAD_INJECT` / `PAYLOAD_EXTRACT` (как у сетевого nemesis).
+- you need to track a **set of affected hosts** and upon **disabling** the schedule perform **extract on all of them**;
+- a single tick requires **multiple** commands or **custom** host selection logic (not "one random");
+- **different** `PAYLOAD_INJECT` / `PAYLOAD_EXTRACT` (like the network nemesis).
 
-Шаги:
+Steps:
 
-1. Подкласс **`NemesisPlannerBase`** (`internal/orchestrator/nemesis/nemesis_planner_base.py`): задайте **`nemesis_type`**, **`PAYLOAD_INJECT`**, **`PAYLOAD_EXTRACT`**, реализуйте **`scheduled_tick`**, **`_drain_tracked_hosts`**, **`_register_inject`**, **`_register_extract`** (ориентир — `network_planner.py`, `kill_node_planner.py`).
-2. В **`NEMESIS_TYPES`** укажите **`planner_cls`: ВашPlanner`** (класс, не экземпляр — его создаёт `build_all_planners()`).
+1. Subclass **`NemesisPlannerBase`** (`internal/orchestrator/nemesis/nemesis_planner_base.py`): set **`nemesis_type`**, **`PAYLOAD_INJECT`**, **`PAYLOAD_EXTRACT`**, implement **`scheduled_tick`**, **`_drain_tracked_hosts`**, **`_register_inject`**, **`_register_extract`** (reference — `network_planner.py`, `kill_node_planner.py`).
+2. In **`NEMESIS_TYPES`** specify **`planner_cls`: YourPlanner`** (class, not instance — it is created by `build_all_planners()`).
 
-### Кратко: когда обходиться без планировщика
+### Summary: When to Use the Default Planner
 
-| Нужно | Достаточно `DefaultRandomHostPlanner` (без `planner_cls`) |
-|--------|--------------------------------------------------------|
-| Один inject на случайный хост за тик, payload не важен / фиксирован в акторе | Да |
-| Помнить «кого задели» и при выключении расписания сделать extract всем | Нет, свой planner |
-| Нестандартный выбор хостов / несколько команд за тик | Нет, свой planner |
+| Requirement | `DefaultRandomHostPlanner` sufficient (no `planner_cls`)? |
+|-------------|----------------------------------------------------------|
+| One inject to a random host per tick, payload is irrelevant / fixed in the actor | Yes |
+| Remember "who was affected" and extract all when schedule is disabled | No, custom planner needed |
+| Non-standard host selection / multiple commands per tick | No, custom planner needed |
 
 ---
 
-## Расширение: liveness и safety checks
+## Extension: Liveness and Safety Checks
 
-Единый интерфейс регистрации safety-проверок — **`SafetyCheckSpec`** (`internal/safety_warden_execution.py`). И агент, и оркестратор используют один и тот же датакласс и один и тот же pipeline исполнения:
+Unified safety check registration interface — **`SafetyCheckSpec`** (`internal/safety_warden_execution.py`). Both agent and orchestrator use the same dataclass and the same execution pipeline:
 
 ```
 specs → collect_safety_warden_pairs(specs) → build_safety_runs(specs) → run_in_executor
 ```
 
-Каталоги: **`internal/agent/agent_warden_catalog.py`** (`collect_agent_safety_check_specs`), **`internal/orchestrator/orchestrator_warden_catalog.py`** (`collect_orchestrator_cluster_safety_specs`). Список проверок до запуска в UI/API не отдаётся — строки появляются в **`GET /api/hosts/warden/results`** после **`Run Checks`**.
+Catalogs: **`internal/agent/agent_warden_catalog.py`** (`collect_agent_safety_check_specs`), **`internal/orchestrator/orchestrator_warden_catalog.py`** (`collect_orchestrator_cluster_safety_specs`). The list of checks is not exposed in the UI/API before execution — rows appear in **`GET /api/hosts/warden/results`** after **`Run Checks`**.
 
 ### SafetyCheckSpec
 
@@ -159,44 +159,44 @@ specs → collect_safety_warden_pairs(specs) → build_safety_runs(specs) → ru
 class SafetyCheckSpec:
     name: str
     description: str = ""
-    build_pairs: Optional[Callable[[], List[Tuple[str, Any]]]] = None   # фабрика → несколько wardens
-    build_warden: Optional[Callable[[], Any]] = None                    # один warden
+    build_pairs: Optional[Callable[[], List[Tuple[str, Any]]]] = None   # factory → multiple wardens
+    build_warden: Optional[Callable[[], Any]] = None                    # single warden
 ```
 
-Укажите **ровно одно** из `build_pairs` / `build_warden`:
+Specify **exactly one** of `build_pairs` / `build_warden`:
 
-- **`build_pairs`** — фабрика, возвращающая `[(slot_name, warden), ...]`. Используется для агентских log-фабрик, которые порождают несколько wardens за раз.
-- **`build_warden`** — возвращает один warden; `name` спека используется как `slot_name`.
+- **`build_pairs`** — factory returning `[(slot_name, warden), ...]`. Used for agent log factories that produce multiple wardens at once.
+- **`build_warden`** — returns a single warden; the spec's `name` is used as `slot_name`.
 
-Оба вида wardens должны реализовывать `list_of_safety_violations() -> list`.
+Both kinds of wardens must implement `list_of_safety_violations() -> list`.
 
-### Где что выполняется
+### Where Each Check Runs
 
-| Категория | Где исполняется | Как попадает в отчёт |
-|-----------|-----------------|----------------------|
-| **Liveness** | Только **оркестратор**: подпроцесс `nemesis liveness` (набор из `ORCHESTRATOR_LIVENESS_CHECKS`, исполнение `run_orchestrator_liveness_cli_batch` в `orchestrator_warden_execution.py`) | `_orchestrator` в `GET /api/hosts/warden/results` |
-| **Safety (agent)** | Каждый **агент** локально (`AgentWardenChecker`, фоновый asyncio + `run_in_executor`, проверки параллельно). Спеки из `collect_agent_safety_check_specs(ctx)` | По каждому хосту в том же JSON |
-| **Safety (orchestrator cluster)** | **Оркестратор** (`OrchestratorWardenChecker`): спеки из `collect_orchestrator_cluster_safety_specs(cluster)`, тот же `build_safety_runs` pipeline | В `_orchestrator.safety_checks` |
-| **Safety (orchestrator aggregated)** | **Оркестратор**: кортеж `ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS` (агрегация по агентам — `unified_agent_verify_failed_aggregated.py`) | В `_orchestrator.safety_checks` |
+| Category | Where it runs | How it appears in the report |
+|----------|---------------|------------------------------|
+| **Liveness** | **Orchestrator** only: subprocess `nemesis liveness` (set from `ORCHESTRATOR_LIVENESS_CHECKS`, execution via `run_orchestrator_liveness_cli_batch` in `orchestrator_warden_execution.py`) | `_orchestrator` in `GET /api/hosts/warden/results` |
+| **Safety (agent)** | Each **agent** locally (`AgentWardenChecker`, background asyncio + `run_in_executor`, checks run in parallel). Specs from `collect_agent_safety_check_specs(ctx)` | Per host in the same JSON |
+| **Safety (orchestrator cluster)** | **Orchestrator** (`OrchestratorWardenChecker`): specs from `collect_orchestrator_cluster_safety_specs(cluster)`, same `build_safety_runs` pipeline | In `_orchestrator.safety_checks` |
+| **Safety (orchestrator aggregated)** | **Orchestrator**: tuple `ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS` (cross-agent aggregation — `unified_agent_verify_failed_aggregated.py`) | In `_orchestrator.safety_checks` |
 
-Агенты **liveness не запускают** (в отчёте по хосту блок liveness пустой).
+Agents **do not run liveness checks** (the liveness block in the per-host report is empty).
 
-### Добавить liveness check
+### Adding a Liveness Check
 
-1. В **`internal/orchestrator/orchestrator_warden_catalog.py`** добавьте элемент в кортеж **`ORCHESTRATOR_LIVENESS_CHECKS`**: **`OrchestratorLivenessCheck`** с **`name`**, **`description`**, **`build=lambda c: ...`**.
-2. Команда **`nemesis liveness`** вызывает **`run_orchestrator_liveness_cli_batch`** — дублировать список не нужно.
+1. In **`internal/orchestrator/orchestrator_warden_catalog.py`** add an element to the **`ORCHESTRATOR_LIVENESS_CHECKS`** tuple: an **`OrchestratorLivenessCheck`** with **`name`**, **`description`**, **`build=lambda c: ...`**.
+2. The **`nemesis liveness`** command calls **`run_orchestrator_liveness_cli_batch`** — no need to duplicate the list.
 
-Исполнение: бинарь на оркестраторе вызывает `nemesis liveness`, внутри — тот же каталог.
+Execution: the binary on the orchestrator calls `nemesis liveness`, which uses the same catalog internally.
 
-### Добавить safety check
+### Adding a Safety Check
 
-Зависит от **location** (`agent` / `orchestrator`).
+Depends on the **location** (`agent` / `orchestrator`).
 
-**Agent** — проверка с доступом к **локальным** логам / dmesg и т.п.:
+**Agent** — check with access to **local** logs / dmesg, etc.:
 
-1. В **`internal/agent/agent_warden_catalog.py`** добавьте `SafetyCheckSpec` в список, возвращаемый **`collect_agent_safety_check_specs(ctx)`**.
-2. Для фабрики, порождающей несколько wardens, используйте **`build_pairs`** (см. `kikimr_start_logs_safety_warden_factory`).
-3. Для одиночного warden используйте **`build_warden`** (см. `UnifiedAgentVerifyFailedSafetyWarden`).
+1. In **`internal/agent/agent_warden_catalog.py`** add a `SafetyCheckSpec` to the list returned by **`collect_agent_safety_check_specs(ctx)`**.
+2. For a factory producing multiple wardens, use **`build_pairs`** (see `kikimr_start_logs_safety_warden_factory`).
+3. For a single warden, use **`build_warden`** (see `UnifiedAgentVerifyFailedSafetyWarden`).
 
 ```python
 SafetyCheckSpec(
@@ -206,9 +206,9 @@ SafetyCheckSpec(
 )
 ```
 
-**Orchestrator (cluster)** — проверка по кластеру (PDisks, таблеты и т.п.):
+**Orchestrator (cluster)** — cluster-wide check (PDisks, tablets, etc.):
 
-1. В **`internal/orchestrator/orchestrator_warden_catalog.py`** добавьте `SafetyCheckSpec` в список, возвращаемый **`collect_orchestrator_cluster_safety_specs(cluster)`**. Кластер захватывается замыканием в `build_warden`.
+1. In **`internal/orchestrator/orchestrator_warden_catalog.py`** add a `SafetyCheckSpec` to the list returned by **`collect_orchestrator_cluster_safety_specs(cluster)`**. The cluster is captured by the closure in `build_warden`.
 
 ```python
 SafetyCheckSpec(
@@ -218,8 +218,8 @@ SafetyCheckSpec(
 )
 ```
 
-**Orchestrator (aggregated)** — агрегация safety-ответов агентов:
+**Orchestrator (aggregated)** — aggregation of agent safety responses:
 
-1. Элемент в **`ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS`** с **`agent_source_class_name`** и **`impl`**. Ожидание агентов — **`OrchestratorWardenChecker._wait_for_agent_safety_completion_async`**, вызов — **`run_orchestrator_aggregated_safety`**.
+1. Add an element to **`ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS`** with **`agent_source_class_name`** and **`impl`**. Agent waiting — **`OrchestratorWardenChecker._wait_for_agent_safety_completion_async`**, invocation — **`run_orchestrator_aggregated_safety`**.
 
-Для новых агрегаторов: в **`safety_checks`** ищите строку по **`name`** (точное совпадение или первый токен — см. **`UnifiedAgentVerifyFailedAggregated._row_matches_class`**).
+For new aggregators: in **`safety_checks`** search for the row by **`name`** (exact match or first token — see **`UnifiedAgentVerifyFailedAggregated._row_matches_class`**).

@@ -48,8 +48,8 @@ def collect_orchestrator_cluster_safety_specs(
 @dataclass(frozen=True)
 class OrchestratorAggregatedSafetyCheck:
     """
-    Агрегат по safety-ответам агентов.
-    agent_source_class_name — имя класса warden на агенте; совпадение см. UnifiedAgentVerifyFailedAggregated._row_matches_class.
+    Aggregate over agent safety responses.
+    agent_source_class_name — warden class name on the agent; matching logic see UnifiedAgentVerifyFailedAggregated._row_matches_class.
     """
 
     name: str
@@ -81,7 +81,7 @@ ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS: Tuple[OrchestratorAggregatedSafetyCheck, 
 
 @dataclass(frozen=True)
 class OrchestratorLivenessCheck:
-    """Liveness на оркестраторе; build(cluster) -> warden с list_of_liveness_violations (property)."""
+    """Orchestrator-side liveness check; build(cluster) -> warden with list_of_liveness_violations (property)."""
 
     name: str
     description: str

@@ -1773,12 +1773,15 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
             ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=BLOOM_FILTER,
                 FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.01}`);
         )");
+
         ExecQuery(kikimr, UseQueryService, R"(
             ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION = UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
         )");
+
         ExecQuery(kikimr, UseQueryService, R"(
             ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);
         )");
+
         csController->WaitActualization(TDuration::Seconds(10));
 
         const ui64 skipBefore = csController->GetIndexesSkippingOnSelect().Val();
@@ -1790,6 +1793,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
             FROM `/Root/olapStore/olapTable`
             WHERE resource_id = 'nonexistent_value'
         )").GetValueSync();
+
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         CompareYson(StreamResultToYson(it), R"([[0u;]])");
 
@@ -1829,6 +1833,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
             ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=BLOOM_FILTER,
                 FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.01}`);
         )");
+
         ExecQuery(kikimr, UseQueryService, R"(
             ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
         )");
@@ -1842,22 +1847,15 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
             FROM `/Root/olapTable`
             WHERE level = -1
         )").GetValueSync();
+
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         CompareYson(StreamResultToYson(it), R"([[0u;]])");
 
         const ui64 skipAfter = csController->GetIndexesSkippingOnSelect().Val();
         const ui64 approveAfter = csController->GetIndexesApprovedOnSelect().Val();
 
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            approveAfter - approveBefore,
-            0,
-            TStringBuilder() << "Bloom index must not be approved for predicate on non-indexed column. before="
-                << approveBefore << ", after=" << approveAfter);
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            skipAfter - skipBefore,
-            0,
-            TStringBuilder() << "Bloom index must not be checked for predicate on non-indexed column. before="
-                << skipBefore << ", after=" << skipAfter);
+        UNIT_ASSERT_VALUES_EQUAL_C(approveAfter - approveBefore, 0, TStringBuilder() << "Bloom index must not be approved for predicate on non-indexed column. before=" << approveBefore << ", after=" << approveAfter);
+        UNIT_ASSERT_VALUES_EQUAL_C(skipAfter - skipBefore, 0, TStringBuilder() << "Bloom index must not be checked for predicate on non-indexed column. before=" << skipBefore << ", after=" << skipAfter);
     }
 
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestCompatibilityWithOtherIndices, EUseQueryService) {
@@ -1879,14 +1877,17 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
             ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id_bf, TYPE=BLOOM_FILTER,
                 FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.01}`);
         )");
+
         ExecQuery(kikimr, UseQueryService, R"(
             ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_uid_bf, TYPE=BLOOM_FILTER,
                 FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.01}`);
         )");
+
         ExecQuery(kikimr, UseQueryService, R"(
             ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id_ngram, TYPE=BLOOM_NGRAMM_FILTER,
                 FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "false_positive_probability" : 0.01, "case_sensitive" : false}`);
         )");
+
         ExecQuery(kikimr, UseQueryService, R"(
             ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
         )");
@@ -1897,6 +1898,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
             FROM `/Root/olapTable`
             WHERE resource_id = 'nonexistent_value' AND uid = 'missing_uid'
         )").GetValueSync();
+
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         CompareYson(StreamResultToYson(it), R"([[0u;]])");
 
@@ -1904,11 +1906,10 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         auto indexes = tableDesc->Record.GetPathDescription().GetColumnTableDescription().GetSchema().GetIndexes();
         std::unordered_set<TString> expectedIndexNames{"index_resource_id_bf", "index_uid_bf", "index_resource_id_ngram"};
         UNIT_ASSERT_VALUES_EQUAL_C(indexes.size(), expectedIndexNames.size(), "Unexpected number of indexes on /Root/olapTable");
-        for (const auto& index : indexes) {
-            UNIT_ASSERT_C(
-                expectedIndexNames.erase(index.GetName()),
-                TStringBuilder() << "Unexpected index in schema: " << index.GetName());
+        for (auto&& index : indexes) {
+            UNIT_ASSERT_C(expectedIndexNames.erase(index.GetName()), TStringBuilder() << "Unexpected index in schema: " << index.GetName());
         }
+
         UNIT_ASSERT_C(expectedIndexNames.empty(), "Some expected indexes were not found in schema");
     }
 
@@ -1945,6 +1946,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
                 FROM `/Root/olapStore/olapTable`
                 WHERE resource_id = 'nonexistent_value'
             )").GetValueSync();
+
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             CompareYson(StreamResultToYson(it), "[[0u;]]");
         };
@@ -1961,12 +1963,15 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
             ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id_bf_probe, TYPE=BLOOM_FILTER,
                 FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.01}`);
         )");
+
         ExecQuery(kikimr, UseQueryService, R"(
             ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION = UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
         )");
+
         ExecQuery(kikimr, UseQueryService, R"(
             ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);
         )");
+
         csController->WaitActualization(TDuration::Seconds(10));
 
         const ui64 skipBeforeWithIndex = csController->GetIndexesSkippingOnSelect().Val();
@@ -1975,13 +1980,8 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         const ui64 skipAfterWithIndex = csController->GetIndexesSkippingOnSelect().Val();
         const ui64 approveAfterWithIndex = csController->GetIndexesApprovedOnSelect().Val();
 
-        UNIT_ASSERT_C(
-            skipAfterWithIndex > skipBeforeWithIndex,
-            TStringBuilder() << "Expected bloom filter to skip portions in appropriate scenario. before="
-                << skipBeforeWithIndex << ", after=" << skipAfterWithIndex);
-        UNIT_ASSERT_C(
-            skipAfterWithIndex + approveAfterWithIndex > skipBeforeWithIndex + approveBeforeWithIndex,
-            "Expected bloom filter index to be checked after creation");
+        UNIT_ASSERT_C(skipAfterWithIndex > skipBeforeWithIndex, TStringBuilder() << "Expected bloom filter to skip portions in appropriate scenario. before=" << skipBeforeWithIndex << ", after=" << skipAfterWithIndex);
+        UNIT_ASSERT_C(skipAfterWithIndex + approveAfterWithIndex > skipBeforeWithIndex + approveBeforeWithIndex, "Expected bloom filter index to be checked after creation");
     }
 
     Y_UNIT_TEST(TestIndicesWorkOnSupportedDataTypes) {
@@ -2012,10 +2012,12 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
             ALTER OBJECT `/Root/indexTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_uid_bf, TYPE=BLOOM_FILTER,
                 FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.01}`);
         )");
+
         ExecQuery(kikimr, UseQueryService, R"(
             ALTER OBJECT `/Root/indexTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_resource_bf, TYPE=BLOOM_FILTER,
                 FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.01}`);
         )");
+
         ExecQuery(kikimr, UseQueryService, R"(
             ALTER OBJECT `/Root/indexTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_message_ngram, TYPE=BLOOM_NGRAMM_FILTER,
                 FEATURES=`{"column_name" : "message", "ngramm_size" : 3, "false_positive_probability" : 0.01, "case_sensitive" : false}`);
@@ -2055,10 +2057,12 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
             --!syntax_v1
             SELECT COUNT(*) FROM `/Root/indexTypesTable` WHERE uid = "uid_2"
         )", "[[1u;]]");
+
         checkCount(R"(
             --!syntax_v1
             SELECT COUNT(*) FROM `/Root/indexTypesTable` WHERE resource_id = "res_b"
         )", "[[2u;]]");
+
         checkCount(R"(
             --!syntax_v1
             SELECT COUNT(*) FROM `/Root/indexTypesTable` WHERE message LIKE "%ta%"
@@ -2068,9 +2072,10 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         auto indexes = tableDesc->Record.GetPathDescription().GetColumnTableDescription().GetSchema().GetIndexes();
         std::unordered_set<TString> expectedIndexNames{"idx_uid_bf", "idx_resource_bf", "idx_message_ngram"};
         UNIT_ASSERT_VALUES_EQUAL(indexes.size(), expectedIndexNames.size());
-        for (const auto& index : indexes) {
+        for (auto&& index : indexes) {
             UNIT_ASSERT(expectedIndexNames.erase(index.GetName()));
         }
+
         UNIT_ASSERT(expectedIndexNames.empty());
     }
 
@@ -2121,6 +2126,7 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
             FROM `/Root/indexUnsupportedTypesTable`
             WHERE level = 20
         )").GetValueSync();
+
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         CompareYson(StreamResultToYson(it), "[[1u;]]");
 

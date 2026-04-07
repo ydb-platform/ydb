@@ -1,15 +1,8 @@
 #include "ddisk_data_copier.h"
 
-#include "direct_block_group_mock.h"
-
-#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service_mock.h>
-
-#include <ydb/core/testlib/actors/test_runtime.h>
+#include "base_test_fixture.h"
 
 #include <library/cpp/testing/unittest/registar.h>
-
-#include <util/random/fast.h>
 
 using namespace NKikimr;
 using namespace NThreading;
@@ -20,121 +13,13 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
 
-TString GenerateRandomString(size_t size)
+struct TFixture: public TBaseFixture
 {
-    TReallyFastRng32 rng(42);
-    TString result;
-    result.reserve(size + sizeof(ui64));
-    while (result.size() < size) {
-        ui64 value = rng.GenRand64();
-        result +=
-            TStringBuf(reinterpret_cast<const char*>(&value), sizeof(value));
-    }
-    result.resize(size);
-    return result;
-}
-
-struct TFixture: public NUnitTest::TBaseFixture
-{
-    const ui64 BlocksPerCopy = CopyRangeSize / DefaultBlockSize;
-    const ELocation FreshDDisk = ELocation::DDisk1;
-    const TLocationMask DDiskMask =
-        TLocationMask::MakeDDisk(true, true, true, true, false);
-    const TLocationMask PBuffersMask = TLocationMask::MakePrimaryPBuffers();
-    const TVChunkConfig VChunkConfig{
-        .VChunkIndex = 100,
-        .PrimaryHost0 = 0,
-        .PrimaryHost1 = 1,
-        .PrimaryHost2 = 2,
-        .HandOffHost0 = 3,
-        .HandOffHost1 = 4};
-
-    std::unique_ptr<NActors::TTestActorRuntime> Runtime;
-    TPartitionDirectServiceMockPtr PartitionDirectService;
-    TDirectBlockGroupMockPtr DirectBlockGroup;
-    TBlocksDirtyMap DirtyMap{DefaultBlockSize, VChunkSize / DefaultBlockSize};
     TDDiskDataCopierPtr Copier;
 
-    TBlockRange64 ExpectedRange;
-    TString RangeData;
-    TPromise<TDBGReadBlocksResponse> ReadPromise =
-        NewPromise<TDBGReadBlocksResponse>();
-    TPromise<TDBGWriteBlocksResponse> WritePromise =
-        NewPromise<TDBGWriteBlocksResponse>();
-
-    void Init()
+    void Init() override
     {
-        Runtime = std::make_unique<NActors::TTestActorRuntime>();
-        Runtime->Initialize(TTestActorRuntime::TEgg{
-            .App0 = new TAppData(
-                0,
-                0,
-                0,
-                0,
-                {},
-                nullptr,
-                nullptr,
-                nullptr,
-                nullptr),
-            .Opaque = nullptr,
-            .KeyConfigGenerator = nullptr,
-            .Icb = {},
-            .Dcb = {}});
-
-        PartitionDirectService =
-            std::make_shared<TPartitionDirectServiceMock>();
-        PartitionDirectService->VolumeConfig = std::make_shared<TVolumeConfig>(
-            "disk-1",
-            DefaultBlockSize,
-            65536,
-            1024);
-        DirtyMap.UpdateConfig(DDiskMask.Include(PBuffersMask), {});
-
-        DirectBlockGroup = std::make_shared<TDirectBlockGroupMock>();
-        DirectBlockGroup->ReadBlocksFromDDiskHandler = [&]   //
-            (ui32 vChunkIndex,
-             ui8 hostIndex,
-             TBlockRange64 range,
-             const TGuardedSgList& guardedSglist,
-             NWilson::TTraceId traceId)
-        {
-            Y_UNUSED(traceId);
-
-            UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
-            UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.PrimaryHost0, hostIndex);
-            UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
-
-            RangeData = GenerateRandomString(CopyRangeSize);
-            SgListCopy(
-                TBlockDataRef{RangeData.data(), RangeData.size()},
-                guardedSglist.Acquire().Get());
-
-            return ReadPromise.GetFuture();
-        };
-
-        DirectBlockGroup->WriteBlocksToDDiskHandler = [&]   //
-            (ui32 vChunkIndex,
-             ui8 hostIndex,
-             TBlockRange64 range,
-             const TGuardedSgList& guardedSglist,
-             NWilson::TTraceId traceId)
-        {
-            Y_UNUSED(traceId);
-
-            UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.VChunkIndex, vChunkIndex);
-            UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.PrimaryHost1, hostIndex);
-            UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
-
-            TString copiedData;
-            copiedData.resize(CopyRangeSize);
-            SgListCopy(
-                guardedSglist.Acquire().Get(),
-                TBlockDataRef{copiedData.data(), copiedData.size()});
-
-            UNIT_ASSERT_VALUES_EQUAL(RangeData, copiedData);
-
-            return WritePromise.GetFuture();
-        };
+        TBaseFixture::Init();
 
         Copier = std::make_shared<TDDiskDataCopier>(
             Runtime->GetActorSystem(0),

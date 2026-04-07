@@ -15,6 +15,7 @@ PEERDIR(
 )
 
 SRCS(
+    kqp_opt_cbo_latency_predictor.cpp
     kqp_opt_conflict_rules_collector.cpp
     kqp_opt_join.cpp
     kqp_opt_join_cbo_factory.cpp

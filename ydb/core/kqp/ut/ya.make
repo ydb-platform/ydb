@@ -24,6 +24,7 @@ RECURSE_FOR_TESTS(
     runtime
     sysview
     tli
+    topics
     tx
     view
     yql

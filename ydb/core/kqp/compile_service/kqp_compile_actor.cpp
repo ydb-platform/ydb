@@ -361,6 +361,10 @@ private:
         prepareSettings.IsInternalCall = QueryId.Settings.IsInternalCall;
         prepareSettings.RuntimeParameterSizeLimit = QueryId.Settings.RuntimeParameterSizeLimit;
         prepareSettings.RuntimeParameterSizeLimitSatisfied = QueryId.Settings.RuntimeParameterSizeLimitSatisfied;
+        // For NEW RBO YqlSelect is force.
+        if (EnableNewRBO) {
+            prepareSettings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        }
 
         switch (QueryId.Settings.Syntax) {
             case Ydb::Query::Syntax::SYNTAX_YQL_V1:

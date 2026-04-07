@@ -73,11 +73,9 @@ struct TIndexDescription {
     };
 
     struct TLocalBloomNgramFilterDescription {
-        ui32 NgramSize = 0;
-        ui32 HashesCount = 0;
-        ui32 FilterSizeBytes = 0;
-        ui32 RecordsCount = 0;
-        bool CaseSensitive = true;
+        std::optional<ui32> NgramSize;
+        std::optional<double> FalsePositiveProbability;
+        std::optional<bool> CaseSensitive;
     };
 
     enum class EType : ui32 {

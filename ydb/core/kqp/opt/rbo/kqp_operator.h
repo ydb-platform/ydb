@@ -54,6 +54,8 @@ struct TOrderEnforcer {
     TVector<TSortElement> SortElements;
 };
 
+enum ESortDir : ui32 { None = 0x00, Asc = 0x01, Desc = 0x02 };
+
 /**
  * Per-operator physical plan properties
  * TODO: Make this more generic and extendable
@@ -244,6 +246,9 @@ public:
     TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
             const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TPhysicalOpProps& props,
             TPositionHandle pos);
+    TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
+            const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const ESortDir sortDireciont,
+            const TPhysicalOpProps& props, TPositionHandle pos);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
@@ -260,9 +265,11 @@ public:
     TVector<TString> Columns;
     TVector<TInfoUnit> OutputIUs;
     NYql::EStorageType StorageType;
+    // TODO: put it in read settings.
     TExprNode::TPtr TableCallable;
     TExprNode::TPtr OlapFilterLambda;
     TExprNode::TPtr Limit;
+    ESortDir SortDir{ESortDir::None};
 };
 
 class TMapElement {

@@ -50,6 +50,13 @@ public:
         const TGuardedSgList& data,
         NWilson::TSpan& span) override;
 
+    NThreading::TFuture<TEvWriteResult> WriteToDDisk(
+        const THostConnection& connection,
+        const NKikimr::NDDisk::TBlockSelector& selector,
+        const NKikimr::NDDisk::TWriteInstruction instruction,
+        const TGuardedSgList& data,
+        NWilson::TSpan& span) override;
+
     NThreading::TFuture<TEvSyncWithPersistentBufferResult> SyncWithPBuffer(
         const THostConnection& pbufferConnection,
         const THostConnection& ddiskConnection,

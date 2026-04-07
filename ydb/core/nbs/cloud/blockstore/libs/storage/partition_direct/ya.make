@@ -13,7 +13,9 @@ SRCS(
     flush_request.cpp
     load_actor_adapter.cpp
     part_initschema.cpp
-    part_readwritemeta.cpp
+    part_loadstate.cpp
+    part_storevolumeconfig.cpp
+    part_storepartitionids.cpp
     part_database.cpp
     partition_direct_actor.cpp
     partition_direct.cpp

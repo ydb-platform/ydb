@@ -24,18 +24,13 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TDiskIds
-{
-    TVector<NKikimr::NBsController::TDDiskId> DdiskIds;
-    TVector<NKikimr::NBsController::TDDiskId> PersistentBufferDDiskIds;
-};
-
-using TPartitionIds = TVector<TDiskIds>;
-
 class TPartitionActor
     : public NActors::TActor<TPartitionActor>
     , public TTabletBase<TPartitionActor>
 {
+    using TDirectBlockGroupsConnections =
+        ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupsConnections;
+
     enum EState
     {
         STATE_BOOT,
@@ -105,17 +100,12 @@ private:
     void HandleUpdateVolumeConfig(
         const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
         const NActors::TActorContext& ctx);
-    void Start(const NActors::TActorContext& ctx, TPartitionIds ids);
-
-    bool HaveStoredTabletInfo();
-
-    void LoadTabletInfo(const NActors::TActorContext& ctx, TPartitionIds& ids);
-
-    void StoreTabletInfo(
+    void Start(
         const NActors::TActorContext& ctx,
-        const TPartitionIds& ids);
+        TDirectBlockGroupsConnections directBlockGroupsConnections);
 
-    TVector<IDirectBlockGroupPtr> CreateDirectBlockGroups(TPartitionIds ids);
+    TVector<IDirectBlockGroupPtr> CreateDirectBlockGroups(
+        TDirectBlockGroupsConnections directBlockGroupsConnections);
 
     BLOCKSTORE_PARTITION_TRANSACTIONS(
         BLOCKSTORE_IMPLEMENT_TRANSACTION,

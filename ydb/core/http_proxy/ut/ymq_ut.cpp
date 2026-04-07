@@ -2552,4 +2552,56 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         }
     }
 
+    Y_UNIT_TEST_F(TestMoveMessagesToDLQ, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto json1 = CreateQueue({{"QueueName", "queue-1.fifo"}, {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}});
+        auto attributes1 = GetQueueAttributes({
+            {"QueueUrl", GetByPath<TString>(json1, "QueueUrl")},
+            {"AttributeNames", NJson::TJsonArray{"QueueArn"}}
+        });
+        auto queueArn1 = GetByPath<TString>(attributes1, "Attributes.QueueArn");
+
+        auto queueName = "ExampleQueueName.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"ReceiveMessageWaitTimeSeconds", "3"},
+                {"VisibilityTimeout", "1"},
+
+                {"RedrivePolicy", TStringBuilder() << "{\"deadLetterTargetArn\":\"" << queueArn1 << "\", \"maxReceiveCount\": 1}"},
+            }}
+        });
+
+        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        SendMessage({
+            {"QueueUrl", resultQueueUrl},
+            {"MessageBody", "MessageBody-0"},
+            {"MessageGroupId", "MessageGroupId-0"},
+            {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+        });
+        {
+            auto json = ReceiveMessage({
+                {"QueueUrl", resultQueueUrl},
+                {"WaitTimeSeconds", 1},
+                {"VisibilityTimeout", 1}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], "MessageBody-0");
+        }
+
+        // Wait for the message to be moved to the DLQ.
+        Sleep(TDuration::Seconds(5));
+
+        {
+            // Reading from DLQ queue should return the message.
+            auto json = ReceiveMessage({
+                {"QueueUrl", GetByPath<TString>(json1, "QueueUrl")},
+                {"WaitTimeSeconds", 1}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], "MessageBody-0");
+        }
+    }
 } // Y_UNIT_TEST_SUITE(TestYmqHttpProxy)

@@ -52,6 +52,8 @@ private:
 private:
     TDLQMoverSettings Settings;
     const bool IsSQSCompatibility;
+
+    TString SQSUserName;
     TString SQSQueueName;
 
     TString ProducerId;

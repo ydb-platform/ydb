@@ -135,7 +135,7 @@ private:
             new TCreateQueueSchemaActorV2(accountName, TQueuePath(cfg.GetRoot(), accountName, queueName),
                                           Request(), SelfId(), RequestId_, customQueueName, FolderId_, IsCloud(),
                                           cfg.GetEnableQueueAttributesValidation(), UserCounters_, QuoterResources_,
-                                          TagsJson_, UserSID_, MaskedToken_, AuthType_, Request().GetSourceAddress())
+                                          TagsJson_, UserSID_, MaskedToken_, AuthType_, Request().GetSourceAddress(), UserName_)
         );
     }
 

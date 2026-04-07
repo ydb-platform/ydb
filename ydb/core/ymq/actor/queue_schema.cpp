@@ -48,7 +48,8 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TString& accountName,
                                                      const TString& userSid,
                                                      const TString& maskedToken,
                                                      const TString& authType,
-                                                     const TString& sourceAddress)
+                                                     const TString& sourceAddress,
+                                                     const TString& userName)
     : AccountName_(accountName)
     , QueuePath_(path)
     , Request_(req)
@@ -67,6 +68,7 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TString& accountName,
     , MaskedToken_(maskedToken)
     , AuthType_(authType)
     , SourceAddress_(sourceAddress)
+    , UserName_(userName)
 {
     IsFifo_ = AsciiHasSuffixIgnoreCase(IsCloudMode_ ? CustomQueueName_ : QueuePath_.QueueName, ".fifo");
 
@@ -535,7 +537,7 @@ void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir
     if (ValidatedAttributes_.RedrivePolicy.TargetQueueName) {
         consumer->SetDeadLetterPolicyEnabled(true);
         consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
-        consumer->SetDeadLetterQueue(TString::Join("sqs://", AccountName_, '/', *ValidatedAttributes_.RedrivePolicy.TargetQueueName));
+        consumer->SetDeadLetterQueue(TString::Join("sqs://", UserName_, '/', *ValidatedAttributes_.RedrivePolicy.TargetQueueName));
     }
 
     Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));

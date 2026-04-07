@@ -63,12 +63,13 @@ class TActionActor
     : public TActorBootstrapped<TDerived>
 {
 public:
-    TActionActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, EAction action, THolder<IReplyCallback> cb)
+    TActionActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, EAction action, THolder<IReplyCallback> cb, bool isInternal = false)
         : Action_(action)
         , RequestId_(sourceSqsRequest.GetRequestId())
         , Cb_(std::move(cb))
         , Shards_(1)
         , SourceSqsRequest_(sourceSqsRequest)
+        , IsInternal_(isInternal)
     {
         Y_ABORT_UNLESS(RequestId_);
     }
@@ -166,7 +167,7 @@ public:
             this->Schedule(TDuration::MilliSeconds(cfg.GetRequestTimeoutMs()), new TEvWakeup(REQUEST_TIMEOUT_WAKEUP_TAG), TimeoutCookie_.Get());
         }
 
-        if (IsCloud()) {
+        if (IsCloud() && !IsInternal_) {
             if (!FolderId_) {
                 MakeError(MutableErrorDesc(), NErrors::INVALID_CLIENT_TOKEN_ID, "Failed to parse cloud_id/folder_id.");
                 SendReplyAndDie();
@@ -608,6 +609,11 @@ private:
 
     template<class TReq>
     void FillAuthInformation(const TReq& request) {
+        if (IsInternal_) {
+            UserName_ = SourceSqsRequest_.GetUserName();
+            return;
+        }
+
         SecurityToken_ = ExtractSecurityToken(request);
         UserName_ = request.GetAuth().GetUserName();
         FolderId_ = request.GetAuth().GetFolderId();
@@ -953,6 +959,7 @@ protected:
     bool NeedReportYmqActionInflyCounter = false;
     TSchedulerCookieHolder TimeoutCookie_;
     NKikimrClient::TSqsRequest SourceSqsRequest_;
+    bool IsInternal_ = false;
 
     TMigrationFeatureFlags FeatureFlags_;
 };

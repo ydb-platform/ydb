@@ -539,6 +539,7 @@ message TSqsRequest {
     }
     optional string RequestId = 30;
     optional bool RequestRateLimit = 31 [default = true];
+    optional string UserName = 32;
 }
 
 message TSqsResponse {

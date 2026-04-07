@@ -16,7 +16,9 @@ TMaxTasksGraph InitGraph(size_t maxChannelsCount, size_t snapshotSize) {
     for (size_t i = 0; i < snapshot.size(); ++i) {
         snapshot.at(i).SetNodeId(i);
     }
-    graph.AddNodes(snapshot);
+    if (snapshotSize) {
+        graph.AddNodes(snapshot);
+    }
     return graph;
 }
 

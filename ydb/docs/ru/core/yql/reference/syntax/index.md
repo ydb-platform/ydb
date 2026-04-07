@@ -45,7 +45,7 @@
 
 {% if feature_batch_operations %}
 
-* [BATCH UPDATE](batch-update.md)
+* [BATCH UPDATE](batch-update.md);
 * [BATCH DELETE](batch-delete.md)
 
 {% endif %}

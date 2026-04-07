@@ -3,7 +3,7 @@
 #include <util/random/random.h>
 #include <util/string/builder.h>
 
-namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+namespace NYdb::NBS {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -36,4 +36,4 @@ TVector<TExecutorPtr> TExecutorPool::GetExecutors(ui32 count) const
     return executors;
 }
 
-}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect
+}   // namespace NYdb::NBS

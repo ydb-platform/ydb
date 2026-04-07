@@ -1,10 +1,16 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
+#include "executor.h"
 
-namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+#include <util/generic/vector.h>
+
+#include <memory>
+
+namespace NYdb::NBS {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+using TExecutorPtr = std::shared_ptr<TExecutor>;
 
 class TExecutorPool
 {
@@ -21,4 +27,4 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-}   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect
+}   // namespace NYdb::NBS

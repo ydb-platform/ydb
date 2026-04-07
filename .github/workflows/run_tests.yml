@@ -351,14 +351,7 @@ jobs:
           > "$BLACKLIST_FILE"
           while IFS= read -r path; do
             [ -z "$path" ] && continue
-            path=$(echo "$path" | xargs)
-            [ -z "$path" ] && continue
             echo "- path: $path" >> "$BLACKLIST_FILE"
-            if [ -d "$path" ]; then
-              find "$path" -mindepth 1 -type d | sort | while IFS= read -r subdir; do
-                echo "- path: $subdir" >> "$BLACKLIST_FILE"
-              done
-            fi
           done <<< "$BLACKLIST_PATHS"
           echo "blacklist_file=$BLACKLIST_FILE" >> $GITHUB_OUTPUT
           echo "Blacklist file created at $BLACKLIST_FILE with content:"

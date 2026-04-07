@@ -31,3 +31,4 @@ jobs:
       build_preset: ${{ matrix.build_preset }}
       blacklist_paths: |
         ydb/tests/compatibility
+        ydb/tests/compatibility/*

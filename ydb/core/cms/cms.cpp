@@ -957,6 +957,10 @@ bool TCms::CheckSysTabletsNode(const TActionOptions &opts,
 void TCms::SortActionsBySysTabletPriority(
     TPermissionRequest &request) const
 {
+    if (ClusterInfo->HostsWithSysTablets.empty()) {
+        return;
+    }
+
     auto *actions = request.MutableActions();
     std::partition(actions->begin(), actions->end(),
         [this](const TAction &action) {

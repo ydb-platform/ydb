@@ -449,6 +449,7 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
             all_issues_with_contet[content['id']]['owner'] = owner
             all_issues_with_contet[content['id']]['tests'] = []
             all_issues_with_contet[content['id']]['branches'] = parsed.branches
+            all_issues_with_contet[content['id']]['build_type'] = parsed.build_type
 
             for test in parsed.tests:
                 all_issues_with_contet[content['id']]['tests'].append(test)
@@ -462,13 +463,15 @@ def get_muted_tests_from_issues():
     issues = get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID)
     muted_tests = {}
     
-    # First, collect all issues for each test
+    # First, collect all issues for each (test, build_type) key
     for issue in issues:
         if issues[issue]["state"] != 'CLOSED':
+            bt = issues[issue].get('build_type') or DEFAULT_BUILD_TYPE
             for test in issues[issue]['tests']:
-                if test not in muted_tests:
-                    muted_tests[test] = []
-                muted_tests[test].append(
+                key = (test, bt)
+                if key not in muted_tests:
+                    muted_tests[key] = []
+                muted_tests[key].append(
                     {
                         'url': issues[issue]['url'],
                         'createdAt': issues[issue]['createdAt'],
@@ -476,6 +479,7 @@ def get_muted_tests_from_issues():
                         'status': issues[issue]['status'],
                         'state': issues[issue]['state'],
                         'branches': issues[issue]['branches'],
+                        'build_type': bt,
                         'id': issue,
                     }
                 )

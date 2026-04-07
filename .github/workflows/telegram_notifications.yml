@@ -55,7 +55,7 @@ jobs:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
 
       - name: Install dependencies
-        run: python3 -m pip install ydb "ydb[yc]" requests matplotlib numpy
+        run: python3 -m pip install "ydb[yc]" requests matplotlib numpy
 
       - name: Send digest
         env:
@@ -95,7 +95,7 @@ jobs:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
 
       - name: Install dependencies
-        run: python3 -m pip install ydb "ydb[yc]" requests matplotlib numpy
+        run: python3 -m pip install "ydb[yc]" requests matplotlib numpy
 
       - name: Determine period
         id: period

@@ -689,9 +689,10 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', b
 
     for test_from_file in tests_from_file:
         full_name = test_from_file['full_name']
-        if full_name in muted_tests_in_issues:
+        issue_key = (full_name, build_type)
+        if issue_key in muted_tests_in_issues:
             logging.info(
-                f"test {full_name} already have issue, {muted_tests_in_issues[full_name][0]['url']}"
+                f"test {full_name} ({build_type}) already have issue, {muted_tests_in_issues[issue_key][0]['url']}"
             )
             continue
 
@@ -854,7 +855,7 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', b
             f.write("\n")
             
         with open(os.environ['GITHUB_OUTPUT'], 'a') as gh_out:
-            gh_out.write(f"created_issues_file={file_path}")
+            gh_out.write(f"created_issues_file={file_path}\n")
             
         print(f"Result saved to env variable GITHUB_OUTPUT by key created_issues_file")
 

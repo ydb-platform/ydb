@@ -256,15 +256,23 @@ def convert_mapping_to_table_data(test_to_issue_mapping):
     table_data = []
 
     for test_name, issues in test_to_issue_mapping.items():
-        if issues:
-            sorted_issues = sorted(issues, key=lambda x: x.get('created_at', 0), reverse=True)
-            latest_issue = sorted_issues[0]
+        if not issues:
+            continue
 
+        # Group issues by build_type, then pick the latest per group
+        by_build_type = {}
+        for issue in issues:
+            bt = issue.get('build_type', DEFAULT_BUILD_TYPE)
+            existing = by_build_type.get(bt)
+            if existing is None or issue.get('created_at', 0) > existing.get('created_at', 0):
+                by_build_type[bt] = issue
+
+        for bt, latest_issue in by_build_type.items():
             for branch in latest_issue['branches']:
                 table_data.append({
                     'full_name': test_name,
                     'branch': branch,
-                    'build_type': latest_issue.get('build_type', DEFAULT_BUILD_TYPE),
+                    'build_type': bt,
                     'github_issue_url': latest_issue['url'],
                     'github_issue_title': latest_issue['title'],
                     'github_issue_number': latest_issue['issue_number'],

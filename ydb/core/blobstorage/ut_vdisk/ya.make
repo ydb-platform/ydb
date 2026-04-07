@@ -5,6 +5,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(20)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:4)
 
 SRCS(
     defaults.h

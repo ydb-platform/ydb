@@ -90,7 +90,7 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
                                          arrow::MemoryPool& arrowMemoryPool,
                                          TMaybe<NUdf::TSourcePosition>& notConsumedLinear)
     // NOLINTNEXTLINE(modernize-avoid-c-arrays)
-    : TComputationContextLLVM{holderFactory, opts.Stats, std::make_unique<NUdf::TUnboxedValue[]>(mutables.CurValueIndex), builder}
+    : TComputationContextLLVM{.HolderFactory = holderFactory, .Stats = opts.Stats, .MutableValues = std::make_unique<NUdf::TUnboxedValue[]>(mutables.CurValueIndex), .Builder = builder}
     , RandomProvider(opts.RandomProvider)
     , TimeProvider(opts.TimeProvider)
     , ArrowMemoryPool(arrowMemoryPool)

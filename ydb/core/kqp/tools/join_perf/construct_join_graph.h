@@ -25,7 +25,8 @@ struct TJoinDescription {
 bool IsBlockJoin(ETestedJoinAlgo algo);
 
 THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJoinAlgo algo, TJoinDescription descr,
-                                                     bool withSpiller = true);
+                                                     bool withSpiller = true,
+                                                     TBlockHashJoinSettings joinSettings = {});
 
 i32 ResultColumnCount(ETestedJoinAlgo algo, TJoinDescription descr);
 } // namespace NKikimr::NMiniKQL

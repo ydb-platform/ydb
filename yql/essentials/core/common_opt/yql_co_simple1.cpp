@@ -2972,7 +2972,7 @@ TExprNode::TPtr MergeCalcOverWindowFrames(const TExprNode::TPtr& frames, TExprCo
         if (frameIt == merged.UniqIndexes.end()) {
             YQL_ENSURE(merged.UniqIndexes.size() == merged.Frames.size());
             merged.UniqIndexes[frameSpec] = merged.Frames.size();
-            TWinOnContent content{std::move(args), winOn->Pos()};
+            TWinOnContent content{.Args=std::move(args), .Pos=winOn->Pos()};
             merged.Frames.emplace_back(std::move(content));
             ++uniqFrameSpecs;
         } else {
@@ -3011,7 +3011,7 @@ TExprNodeList DedupCalcOverWindowsOnSamePartitioning(const TExprNodeList& calcs,
         if (calc.Frames().Size() == 0 && calc.SessionColumns().Size() == 0) {
             continue;
         }
-        TDedupKey key{calc.Keys().Raw(), calc.SortSpec().Raw(), calc.SessionSpec().Raw()};
+        TDedupKey key{.Keys=calc.Keys().Raw(), .SortSpec=calc.SortSpec().Raw(), .SessionSpec=calc.SessionSpec().Raw()};
 
         auto it = uniqueIndexes.find(key);
         if (it == uniqueIndexes.end()) {
@@ -3777,8 +3777,8 @@ TExprNode::TPtr OptimizeDistinctFrom(const TExprNode::TPtr& node, TExprContext& 
         return ctx.RenameNode(*node, Not ? "==" : "!=");
     }
 
-    if (leftType->GetKind() == ETypeAnnotationKind::Null && rightType->GetKind() != ETypeAnnotationKind::Optional ||
-        rightType->GetKind() == ETypeAnnotationKind::Null && leftType->GetKind() != ETypeAnnotationKind::Optional) {
+    if (leftType->GetKind() == ETypeAnnotationKind::Null && !rightType->IsOptionalOrNull() ||
+        rightType->GetKind() == ETypeAnnotationKind::Null && !leftType->IsOptionalOrNull()) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " with Null and non-Optional args";
         return MakeBool<!Not>(node->Pos(), ctx);
     }

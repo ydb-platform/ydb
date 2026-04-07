@@ -825,7 +825,8 @@
             "Match": {"Type": "Callable", "Name": "FulltextAnalyze"},
             "Children": [
                 {"Index": 0, "Name": "Text", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Settings", "Type": "TCoAtom"}
+                {"Index": 1, "Name": "Settings", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Mode", "Type": "TCoAtom"}
             ]
         },
         {
@@ -1023,7 +1024,8 @@
             "Base": "TKqpBooleanSublink",
             "Match" : {"Type": "Callable", "Name": "KqpInSublink"},
             "Children" : [
-                {"Index": 2, "Name": "InTuple", "Type": "TExprBase"}
+                {"Index": 2, "Name": "OuterType", "Type": "TExprBase"},
+                {"Index": 3, "Name": "InLambda", "Type": "TExprBase"}
             ]
         },
         {

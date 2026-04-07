@@ -147,7 +147,7 @@ TNamedFunction TSqlMatchRecognizeClause::ParseOneMeasure(const TRule_row_pattern
     // Each measure must be a lambda, that accepts 2 args:
     // - List<InputTableColumns + _yql_Classifier, _yql_MatchNumber>
     // - Struct that maps row pattern variables to ranges in the queue
-    return {std::move(callable), std::move(measureName)};
+    return {.Callable = std::move(callable), .Name = std::move(measureName)};
 }
 
 TVector<TNamedFunction> TSqlMatchRecognizeClause::ParseMeasures(const TRule_row_pattern_measure_list* node) {
@@ -178,7 +178,7 @@ TNodePtr TSqlMatchRecognizeClause::ParseRowsPerMatch(TPosition pos, const TRule_
                 return NYql::NMatchRecognize::ERowsPerMatch::AllRows;
             }
             case TRule_row_pattern_rows_per_match::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }();
     return BuildQuotedAtom(pos, "RowsPerMatch_" + ToString(result));
@@ -189,18 +189,18 @@ TNodePtr TSqlMatchRecognizeClause::ParseAfterMatchSkipTo(TPosition pos, const TR
     auto varPos = pos;
     const auto result = [&]() -> TMaybe<NYql::NMatchRecognize::TAfterMatchSkipTo> {
         if (!node) {
-            return NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::PastLastRow, ""};
+            return NYql::NMatchRecognize::TAfterMatchSkipTo{.To = NYql::NMatchRecognize::EAfterMatchSkipTo::PastLastRow, .Var = ""};
         }
         switch (node->GetAltCase()) {
             case TRule_row_pattern_skip_to::kAltRowPatternSkipTo1: {
                 const auto& skipTo = node->GetAlt_row_pattern_skip_to1();
                 skipToPos = GetPos(skipTo.GetToken1());
-                return NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::NextRow, ""};
+                return NYql::NMatchRecognize::TAfterMatchSkipTo{.To = NYql::NMatchRecognize::EAfterMatchSkipTo::NextRow, .Var = ""};
             }
             case TRule_row_pattern_skip_to::kAltRowPatternSkipTo2: {
                 const auto& skipTo = node->GetAlt_row_pattern_skip_to2();
                 skipToPos = GetPos(skipTo.GetToken1());
-                return NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::PastLastRow, ""};
+                return NYql::NMatchRecognize::TAfterMatchSkipTo{.To = NYql::NMatchRecognize::EAfterMatchSkipTo::PastLastRow, .Var = ""};
             }
             case TRule_row_pattern_skip_to::kAltRowPatternSkipTo3: {
                 const auto& skipTo = node->GetAlt_row_pattern_skip_to3();
@@ -212,7 +212,7 @@ TNodePtr TSqlMatchRecognizeClause::ParseAfterMatchSkipTo(TPosition pos, const TR
                     Ctx_.Error(varPos) << "Unknown pattern variable in AFTER MATCH SKIP TO FIRST";
                     return {};
                 }
-                return NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::ToFirst, std::move(var)};
+                return NYql::NMatchRecognize::TAfterMatchSkipTo{.To = NYql::NMatchRecognize::EAfterMatchSkipTo::ToFirst, .Var = std::move(var)};
             }
             case TRule_row_pattern_skip_to::kAltRowPatternSkipTo4: {
                 const auto& skipTo = node->GetAlt_row_pattern_skip_to4();
@@ -224,7 +224,7 @@ TNodePtr TSqlMatchRecognizeClause::ParseAfterMatchSkipTo(TPosition pos, const TR
                     Ctx_.Error(varPos) << "Unknown pattern variable in AFTER MATCH SKIP TO LAST";
                     return {};
                 }
-                return NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::ToLast, std::move(var)};
+                return NYql::NMatchRecognize::TAfterMatchSkipTo{.To = NYql::NMatchRecognize::EAfterMatchSkipTo::ToLast, .Var = std::move(var)};
             }
             case TRule_row_pattern_skip_to::kAltRowPatternSkipTo5: {
                 const auto& skipTo = node->GetAlt_row_pattern_skip_to5();
@@ -236,10 +236,10 @@ TNodePtr TSqlMatchRecognizeClause::ParseAfterMatchSkipTo(TPosition pos, const TR
                     Ctx_.Error(varPos) << "Unknown pattern variable in AFTER MATCH SKIP TO";
                     return {};
                 }
-                return NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::To, std::move(var)};
+                return NYql::NMatchRecognize::TAfterMatchSkipTo{.To = NYql::NMatchRecognize::EAfterMatchSkipTo::To, .Var = std::move(var)};
             }
             case TRule_row_pattern_skip_to::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }();
     if (!result) {
@@ -327,7 +327,7 @@ TNodePtr TSqlMatchRecognizeClause::ParsePatternFactor(TPosition pos, const TRule
                 return BuildPattern(pos, std::move(result));
             }
             case TRule_row_pattern_primary::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }();
     if (!primary) {
@@ -377,7 +377,7 @@ TNodePtr TSqlMatchRecognizeClause::ParsePatternFactor(TPosition pos, const TRule
                 return std::tuple{quantity, quantity, true, output, false};
             }
             case TRule_row_pattern_quantifier::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }();
     return BuildPatternFactor(pos, std::move(primary), std::move(quantifier));
@@ -444,7 +444,7 @@ TNamedFunction TSqlMatchRecognizeClause::ParseOneDefinition(const TRule_row_patt
     // - List<input table rows>
     // - A struct that maps row pattern variables to ranges in the queue
     // - An index of the current row
-    return {std::move(callable), std::move(defineName)};
+    return {.Callable = std::move(callable), .Name = std::move(defineName)};
 }
 
 TVector<TNamedFunction> TSqlMatchRecognizeClause::ParseDefinitions(const TRule_row_pattern_definition_list& node) {

@@ -77,7 +77,7 @@ public:
         auto hedgingResponseHandler = New<THedgingResponseHandler>(this, false);
 
         auto requestControl = PrimaryChannel_->Send(
-            Request_,
+            Request_->Clone(),
             std::move(hedgingResponseHandler),
             SendOptions_);
 

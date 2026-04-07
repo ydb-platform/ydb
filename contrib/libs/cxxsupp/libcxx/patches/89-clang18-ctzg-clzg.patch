@@ -1,8 +1,17 @@
 diff --git a/include/__bit/countl.h b/include/__bit/countl.h
-index 9c37749..e53b7c3 100644
+index 0759140..11f3531 100644
 --- a/include/__bit/countl.h
 +++ b/include/__bit/countl.h
-@@ -24,10 +24,46 @@ _LIBCPP_PUSH_MACROS
+@@ -17,15 +17,55 @@
+ #  pragma GCC system_header
+ #endif
+ 
++#if !__has_builtin(__builtin_clzg) || defined(__CUDACC__)
++  #include <__bit/rotate.h>
++#endif
++
+ _LIBCPP_PUSH_MACROS
+ #include <__undef_macros>
  
  _LIBCPP_BEGIN_NAMESPACE_STD
  
@@ -18,7 +27,7 @@ index 9c37749..e53b7c3 100644
 +
  template <class _Tp>
  _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX14 int __countl_zero(_Tp __t) _NOEXCEPT {
-   static_assert(__libcpp_is_unsigned_integer<_Tp>::value, "__countl_zero requires an unsigned integer type");
+   static_assert(__is_unsigned_integer_v<_Tp>, "__countl_zero requires an unsigned integer type");
 +#if __has_builtin(__builtin_clzg)
    return __builtin_clzg(__t, numeric_limits<_Tp>::digits);
 +#else  // __has_builtin(__builtin_clzg)
@@ -50,10 +59,19 @@ index 9c37749..e53b7c3 100644
  
  #if _LIBCPP_STD_VER >= 20
 diff --git a/include/__bit/countr.h b/include/__bit/countr.h
-index f871759..124d3c0 100644
+index f6c9869..ff85f71 100644
 --- a/include/__bit/countr.h
 +++ b/include/__bit/countr.h
-@@ -24,10 +24,40 @@ _LIBCPP_PUSH_MACROS
+@@ -17,15 +17,49 @@
+ #  pragma GCC system_header
+ #endif
+ 
++#if !__has_builtin(__builtin_clzg) || defined(__CUDACC__)
++  #include <__bit/rotate.h>
++#endif
++
+ _LIBCPP_PUSH_MACROS
+ #include <__undef_macros>
  
  _LIBCPP_BEGIN_NAMESPACE_STD
  
@@ -69,7 +87,7 @@ index f871759..124d3c0 100644
 +
  template <class _Tp>
  [[__nodiscard__]] _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR int __countr_zero(_Tp __t) _NOEXCEPT {
-   static_assert(is_unsigned<_Tp>::value, "__countr_zero only works with unsigned types");
+   static_assert(__is_unsigned_integer_v<_Tp>, "__countr_zero only works with unsigned types");
 +#if __has_builtin(__builtin_ctzg)
    return __builtin_ctzg(__t, numeric_limits<_Tp>::digits);
 +#else  // __has_builtin(__builtin_ctzg)
@@ -95,10 +113,10 @@ index f871759..124d3c0 100644
  
  #if _LIBCPP_STD_VER >= 20
 diff --git a/include/__bit/popcount.h b/include/__bit/popcount.h
-index 622c8ef..42adf04 100644
+index 8d9ba09..dc56198 100644
 --- a/include/__bit/popcount.h
 +++ b/include/__bit/popcount.h
-@@ -24,10 +24,37 @@ _LIBCPP_PUSH_MACROS
+@@ -21,10 +21,37 @@ _LIBCPP_PUSH_MACROS
  
  _LIBCPP_BEGIN_NAMESPACE_STD
  
@@ -114,7 +132,7 @@ index 622c8ef..42adf04 100644
 +
  template <class _Tp>
  [[__nodiscard__]] _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR int __popcount(_Tp __t) _NOEXCEPT {
-   static_assert(is_unsigned<_Tp>::value, "__popcount only works with unsigned types");
+   static_assert(__is_unsigned_integer_v<_Tp>, "__popcount only works with unsigned types");
 +#  if __has_builtin(__builtin_popcountg)
    return __builtin_popcountg(__t);
 +#  else  // __has_builtin(__builtin_popcountg)

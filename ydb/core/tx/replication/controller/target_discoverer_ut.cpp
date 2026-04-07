@@ -3,6 +3,7 @@
 #include "target_table.h"
 #include "target_transfer.h"
 
+#include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
 #include <ydb/core/tx/replication/ut_helpers/test_topic.h>

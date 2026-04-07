@@ -1,4 +1,5 @@
 import "ydb/core/protos/pqconfig.proto";
+import "ydb/core/protos/pqdata_transaction.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/library/actors/protos/actors.proto";
@@ -108,6 +109,8 @@ message TPersQueuePartitionRequest {
 
         optional bool EnableKafkaDeduplication = 18 [ default = false ];
         optional int32 ProducerEpoch = 19;  // For idempotent producer in Kafka protocol
+
+        optional bytes ChoosePartitionKey = 20; // Bytes that are used to choose partition for the message
     }
 
     message TCmdUpdateWriteTimestamp {
@@ -267,7 +270,7 @@ message TPersQueueRequest {
 
     //only one from data, meta or fetch request must be set.
     optional string SecurityToken = 5 [(Ydb.sensitive) = true];
-    optional string Ticket = 6; //if set, check for acl
+    optional string Ticket = 6 [(Ydb.sensitive) = true]; // if set, check for acl
 
     optional string RequestId = 100; //for logging
 }

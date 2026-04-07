@@ -1784,11 +1784,9 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(DataColumnWrite, UseSink) {
+    Y_UNIT_TEST(DataColumnWrite) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
-
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();

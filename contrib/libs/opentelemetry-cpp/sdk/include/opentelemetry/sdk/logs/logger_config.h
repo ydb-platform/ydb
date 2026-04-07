@@ -49,9 +49,9 @@ public:
   static LoggerConfig Default();
 
 private:
-  explicit LoggerConfig(const bool disabled = false) : disabled_(disabled) {}
+  explicit LoggerConfig(const bool enabled = true) : enabled_(enabled) {}
 
-  bool disabled_;
+  bool enabled_;
 };
 }  // namespace logs
 }  // namespace sdk

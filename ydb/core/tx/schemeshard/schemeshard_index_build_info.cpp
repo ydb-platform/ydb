@@ -38,6 +38,7 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
             // no specialized index description
             Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
             break;
@@ -318,6 +319,7 @@ bool TIndexBuildInfo::IsValidState(EState value)
         case EState::Applying:
         case EState::Unlocking:
         case EState::AlterSequence:
+        case EState::PrepareValidation:
         case EState::Done:
         case EState::Cancellation_Applying:
         case EState::Cancellation_Unlocking:
@@ -336,7 +338,9 @@ bool TIndexBuildInfo::IsValidSubState(ESubState value)
 {
     switch (value) {
         case ESubState::None:
+        case ESubState::PrepareValidation:
         case ESubState::UniqIndexValidation:
+        case ESubState::UniqConsistentValidation:
         case ESubState::FulltextIndexStats:
         case ESubState::FulltextIndexDictionary:
         case ESubState::FulltextIndexBorders:

@@ -5,4 +5,5 @@
 ../../core                  \
 ../../library               \
 ../../public                \
-../../services
+../../services              \
+../../tests

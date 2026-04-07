@@ -7,12 +7,16 @@ import os
 import re
 import sys
 import traceback
-from codeowners import CodeOwners
 from enum import Enum
 from operator import attrgetter
 from typing import List, Dict
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from get_test_history import get_test_history
+
+_ANALYTICS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'analytics'))
+if _ANALYTICS_DIR not in sys.path:
+    sys.path.insert(0, _ANALYTICS_DIR)
+from testowners_utils import get_testowners_for_tests  # noqa: E402
 
 
 def load_owner_area_mapping():
@@ -357,10 +361,7 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     # get testowners
     all_tests = [test for status in status_order for test in status_test.get(status)]
         
-    dir = os.path.dirname(__file__)
-    git_root = f"{dir}/../../.."
-    codeowners = f"{git_root}/.github/TESTOWNERS"
-    get_codeowners_for_tests(codeowners, all_tests)
+    get_testowners_for_tests(all_tests)
     
     # statuses for history
     status_for_history = [TestStatus.FAIL, TestStatus.MUTE, TestStatus.ERROR]
@@ -563,20 +564,6 @@ def write_summary(summary: TestSummary):
 
     if summary_fn:
         fp.close()
-
-
-def get_codeowners_for_tests(codeowners_file_path, tests_data):
-    with open(codeowners_file_path, 'r') as file:
-        data = file.read()
-        owners_odj = CodeOwners(data)
-
-        tests_data_with_owners = []
-        for test in tests_data:
-            target_path = test.classname
-            owners = owners_odj.of(target_path)
-            test.owners = joined_owners = ";;".join(
-                [(":".join(x)) for x in owners])
-            tests_data_with_owners.append(test)
 
 
 def iter_build_results_files(path):

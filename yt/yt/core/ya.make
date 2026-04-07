@@ -61,7 +61,6 @@ SRCS(
     GLOBAL concurrency/configure_fiber_manager.cpp
     concurrency/coroutine.cpp
     concurrency/delayed_executor.cpp
-    concurrency/execution_stack.cpp
     concurrency/fair_share_action_queue.cpp
     concurrency/fair_share_invoker_pool.cpp
     concurrency/fair_share_invoker_queue.cpp
@@ -80,6 +79,7 @@ SRCS(
     concurrency/notify_manager.cpp
     concurrency/periodic_executor.cpp
     concurrency/periodic_yielder.cpp
+    concurrency/pooled_execution_stack.cpp
     concurrency/pollable_detail.cpp
     concurrency/prioritized_invoker.cpp
     concurrency/profiling_helpers.cpp
@@ -393,6 +393,12 @@ PEERDIR(
     yt/yt/library/tracing
     yt/yt/library/numeric
 )
+
+IF (YT_CUSTOM_INTERNAL_BUILD)
+    PEERDIR(
+        yt/yt/core/yt_custom_internal_specific
+    )
+ENDIF()
 
 IF (OS_WINDOWS)
     PEERDIR(

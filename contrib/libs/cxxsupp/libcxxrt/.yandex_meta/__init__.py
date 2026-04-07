@@ -5,6 +5,7 @@ from devtools.yamaker.project import CMakeNinjaNixProject
 
 EXCEPTION_ONLY_SRCS = ["exception.cc"]
 NOEXCEPT_ONLY_SRCS = ["noexception.cc"]
+RTTI_ONLY_SRCS = ["dynamic_cast.cc"]
 
 
 def post_install(self):
@@ -30,12 +31,23 @@ def post_install(self):
         for src in NOEXCEPT_ONLY_SRCS:
             if src in libcxxrt.SRCS:
                 libcxxrt.SRCS.remove(src)
+        for src in RTTI_ONLY_SRCS:
+            libcxxrt.SRCS.remove(src)
         libcxxrt.after(
             "SRCS",
             Switch(
                 {
                     "NO_CXX_EXCEPTIONS": Linkable(SRCS=NOEXCEPT_ONLY_SRCS),
                     "default": Linkable(SRCS=EXCEPTION_ONLY_SRCS),
+                }
+            ),
+        )
+        libcxxrt.after(
+            "SRCS",
+            Switch(
+                {
+                    "NO_CXX_RTTI": Linkable(BUILD_ONLY_IF="NO_CXX_EXCEPTIONS"),
+                    "default": Linkable(SRCS=RTTI_ONLY_SRCS),
                 }
             ),
         )

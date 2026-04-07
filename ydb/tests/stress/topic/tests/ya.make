@@ -1,4 +1,5 @@
 PY3TEST()
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_WORKLOAD_PATH="ydb/tests/stress/topic/workload_topic")
@@ -14,6 +15,7 @@ IF (SANITIZER_TYPE)
     ENV(YDB_STRESS_TEST_LIMIT_MEMORY=1)
 ENDIF()
 
+FORK_SUBTESTS()
 
 DEPENDS(
     ydb/apps/ydb
@@ -23,7 +25,7 @@ DEPENDS(
 PEERDIR(
     ydb/tests/library
     ydb/tests/library/stress
+    ydb/tests/stress/topic/workload
 )
-
 
 END()

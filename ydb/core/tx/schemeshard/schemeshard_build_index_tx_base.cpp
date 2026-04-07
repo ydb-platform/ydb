@@ -233,6 +233,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
     case TIndexBuildInfo::EState::CreateBuild:
     case TIndexBuildInfo::EState::LockBuild:
     case TIndexBuildInfo::EState::AlterSequence:
+    case TIndexBuildInfo::EState::PrepareValidation:
         index.SetState(Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA);
         index.SetProgress(indexInfo.CalcProgressPercent());
         break;
@@ -307,6 +308,9 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance:
             *index.mutable_global_fulltext_relevance_index() = Ydb::Table::GlobalFulltextRelevanceIndex();
+            break;
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson:
+            *index.mutable_global_json_index() = Ydb::Table::GlobalJsonIndex();
             break;
         default:
             Y_ENSURE(false, InvalidIndexType(info.IndexType));

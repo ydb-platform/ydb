@@ -479,6 +479,47 @@ void TCreateQueueSchemaActorV2::RegisterMakeDirActor(const TString& workingDir, 
     Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
 }
 
+void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir, const TString& dirName) {
+    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
+
+    auto topicDir = TString::Join(workingDir, '/', dirName);
+
+    trans->SetWorkingDir(topicDir);
+    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup);
+
+    auto *pqgroup = trans->MutableCreatePersQueueGroup();
+    pqgroup->SetName("streamImpl");
+    pqgroup->SetTotalGroupCount(1);
+
+    auto * config = pqgroup->MutablePQTabletConfig();
+    config->SetTopicName("streamImpl");
+    config->SetTopicPath(TString::Join(topicDir, '/', "streamImpl"));
+    config->MutablePartitionConfig()->SetLifetimeSeconds(*ValidatedAttributes_.MessageRetentionPeriod);
+    if (ValidatedAttributes_.ContentBasedDeduplication) {
+        config->SetContentBasedDeduplication(*ValidatedAttributes_.ContentBasedDeduplication);
+    }
+
+    auto* consumer = config->AddConsumers();
+    consumer->SetName(ConsumerName);
+    consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
+    consumer->SetKeepMessageOrder(IsFifo_);
+    if (ValidatedAttributes_.DelaySeconds) {
+        consumer->SetDefaultDelayMessageTimeMs(SecondsToMs(*ValidatedAttributes_.DelaySeconds));
+    }
+    if (ValidatedAttributes_.VisibilityTimeout) {
+        consumer->SetDefaultProcessingTimeoutSeconds(*ValidatedAttributes_.VisibilityTimeout);
+    }
+    if (ValidatedAttributes_.ReceiveMessageWaitTimeSeconds) {
+        consumer->SetDefaultReceiveMessageWaitTimeMs(SecondsToMs(*ValidatedAttributes_.ReceiveMessageWaitTimeSeconds));
+    }
+    if (ValidatedAttributes_.RedrivePolicy.MaxReceiveCount) {
+        consumer->SetMaxProcessingAttempts(*ValidatedAttributes_.RedrivePolicy.MaxReceiveCount);
+    }
+
+    Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
+}
+
 void TCreateQueueSchemaActorV2::RequestLeaderTabletId() {
     RLOG_SQS_TRACE("Requesting leader tablet id for path id " << TableWithLeaderPathId_.second);
     THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
@@ -531,6 +572,10 @@ void TCreateQueueSchemaActorV2::CreateComponents() {
             AddRPSQuota();
             break;
         }
+        case ECreateComponentsStep::MakeTopic: {
+            RegisterMakeTopicActor(QueuePath_.GetQueuePath(), VersionName_);
+            break;
+        }
         case ECreateComponentsStep::Commit: {
             CommitNewVersion();
             break;
@@ -568,6 +613,8 @@ void TCreateQueueSchemaActorV2::Step() {
             } else {
                 if (Cfg().GetQuotingConfig().GetEnableQuoting() && Cfg().GetQuotingConfig().HasKesusQuoterConfig()) {
                     CurrentCreationStep_ = ECreateComponentsStep::AddQuoterResource;
+                } else if (FeatureFlags_.EnableSQSMigrationTopicCreation_) {
+                    CurrentCreationStep_ = ECreateComponentsStep::MakeTopic;
                 } else {
                     CurrentCreationStep_ = ECreateComponentsStep::Commit;
                 }
@@ -595,12 +642,22 @@ void TCreateQueueSchemaActorV2::Step() {
         case ECreateComponentsStep::DiscoverLeaderTabletId: {
             if (Cfg().GetQuotingConfig().GetEnableQuoting() && Cfg().GetQuotingConfig().HasKesusQuoterConfig()) {
                 CurrentCreationStep_ = ECreateComponentsStep::AddQuoterResource;
+            } else if (FeatureFlags_.EnableSQSMigrationTopicCreation_) {
+                CurrentCreationStep_ = ECreateComponentsStep::MakeTopic;
             } else {
                 CurrentCreationStep_ = ECreateComponentsStep::Commit;
             }
             break;
         }
         case ECreateComponentsStep::AddQuoterResource: {
+            if (FeatureFlags_.EnableSQSMigrationTopicCreation_) {
+                CurrentCreationStep_ = ECreateComponentsStep::MakeTopic;
+            } else {
+                CurrentCreationStep_ = ECreateComponentsStep::Commit;
+            }
+            break;
+        }
+        case ECreateComponentsStep::MakeTopic: {
             CurrentCreationStep_ = ECreateComponentsStep::Commit;
             break;
         }
@@ -748,6 +805,7 @@ TString TCreateQueueSchemaActorV2::GenerateCommitQueueParamsQuery() {
             (let defaultMaxQueuesCount  (Parameter 'DEFAULT_MAX_QUEUES_COUNT (DataType 'Uint64)))
             (let userName               (Parameter 'USER_NAME         (DataType 'Utf8String)))
             (let tags                   (Parameter 'TAGS              (DataType 'Utf8String)))
+            (let topicCreated           (Parameter 'TOPIC_CREATED     (DataType 'Bool)))
     )__";
 
     if (isCloudEventsEnabled) {
@@ -892,7 +950,8 @@ TString TCreateQueueSchemaActorV2::GenerateCommitQueueParamsQuery() {
                 '('DlqName dlqName)
                 '('MasterTabletId masterTabletId)
                 '('TablesFormat tablesFormat)
-                '('Tags tags)))
+                '('Tags tags)
+                '('TopicCreated topicCreated)))
 
             (let eventsUpdate '(
                 '('CustomQueueName customName)
@@ -912,7 +971,8 @@ TString TCreateQueueSchemaActorV2::GenerateCommitQueueParamsQuery() {
                 '('MaxReceiveCount maxReceiveCount)
                 '('DlqArn dlqArn)
                 '('DlqName dlqName)
-                '('VisibilityTimeout visibility)))
+                '('VisibilityTimeout visibility)
+                '('TopicCreated topicCreated)))
 
             (let willCommit
                 (And
@@ -1073,7 +1133,8 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
             .Utf8("CLOUD_EVENT_USER_MASKED_TOKEN", MaskedToken_)
             .Utf8("CLOUD_EVENT_AUTHTYPE", AuthType_)
             .Utf8("CLOUD_EVENT_PEERNAME", SourceAddress_)
-            .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_);
+            .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_)
+            .Bool("TOPIC_CREATED", FeatureFlags_.EnableSQSMigrationTopicCreation_);
     } else {
         TParameters(trans->MutableParams()->MutableProto())
             .Utf8("NAME", QueuePath_.QueueName)
@@ -1100,7 +1161,8 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
             .Uint64("MAX_RECEIVE_COUNT", ValidatedAttributes_.RedrivePolicy.MaxReceiveCount ? *ValidatedAttributes_.RedrivePolicy.MaxReceiveCount : 0)
             .Uint64("DEFAULT_MAX_QUEUES_COUNT", Cfg().GetAccountSettingsDefaults().GetMaxQueuesCount())
             .Utf8("USER_NAME", QueuePath_.UserName)
-            .Utf8("TAGS", TagsJson_);
+            .Utf8("TAGS", TagsJson_)
+            .Bool("TOPIC_CREATED", FeatureFlags_.EnableSQSMigrationTopicCreation_);
     }
 
     Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
@@ -1599,6 +1661,12 @@ void TDeleteQueueSchemaActorV2::NextAction() {
             Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
             break;
         }
+        case EDeleting::RemoveTopic: {
+            Register(new TMiniKqlExecutionActor(
+                SelfId(), RequestId_, MakeRemoveTopicEvent(GetVersionedQueueDir(QueuePath_, Version_), "streamImpl"), false, QueuePath_, GetTransactionCounters(UserCounters_))
+            );
+            break;
+        }
         case EDeleting::RemoveTables: {
             Y_ABORT_UNLESS(!Tables_.empty());
 
@@ -1641,6 +1709,10 @@ void TDeleteQueueSchemaActorV2::NextAction() {
 void TDeleteQueueSchemaActorV2::DoSuccessOperation() {
     switch (DeletionStep_) {
         case EDeleting::EraseQueueRecord: {
+            DeletionStep_ = EDeleting::RemoveTopic;
+            break;
+        }
+        case EDeleting::RemoveTopic: {
             if (TablesFormat_ == 0) {
                 DeletionStep_ = EDeleting::RemoveTables;
             } else {
@@ -1684,8 +1756,8 @@ void TDeleteQueueSchemaActorV2::DoSuccessOperation() {
             DeletionStep_ = EDeleting::Finish;
             break;
         }
-        default: {
-            Y_VERIFY_S(false, "incorrect queue deletion step: " << DeletionStep_); // unreachable
+        case EDeleting::Finish: {
+            break;
         }
     }
 

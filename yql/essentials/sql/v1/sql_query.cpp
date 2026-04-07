@@ -876,7 +876,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     break;
                 }
                 case TRule_alter_user_stmt_TBlock4::ALT_NOT_SET:
-                    Y_UNREACHABLE();
+                    YQL_ENSURE(false, "Unreachable");
             }
 
             AddStatementToBlocks(blocks, stmt);
@@ -979,7 +979,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     break;
                 }
                 case TRule_alter_group_stmt_TBlock4::ALT_NOT_SET:
-                    Y_UNREACHABLE();
+                    YQL_ENSURE(false, "Unreachable");
             }
 
             AddStatementToBlocks(blocks, stmt);
@@ -1770,7 +1770,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     break;
                 }
                 case TRule_alter_backup_collection_stmt_TBlock3::ALT_NOT_SET:
-                    Y_UNREACHABLE();
+                    YQL_ENSURE(false, "Unreachable");
             }
 
             auto database = addDatabase ? TAlterBackupCollectionParameters::EDatabase::Add : dropDatabase ? TAlterBackupCollectionParameters::EDatabase::Drop
@@ -2143,7 +2143,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     break;
                 }
                 case TRule_alter_database_action::ALT_NOT_SET:
-                    Y_UNREACHABLE();
+                    YQL_ENSURE(false, "Unreachable");
             }
 
             const TPosition pos = Ctx_.Pos();
@@ -2408,7 +2408,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 
     Ctx_.IncrementMonCounter("sql_features", internalStatementName);
@@ -2684,8 +2684,18 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
 
             break;
         }
+        case TRule_alter_table_action::kAltAlterTableAction23: {
+            // ALTER COLUMN id SET ENCODING(...)
+            const auto& alterRule = node.GetAlt_alter_table_action23().GetRule_alter_table_alter_column_set_encoding1();
+
+            if (!AlterTableAlterColumnSetEncoding(alterRule, params)) {
+                return false;
+            }
+
+            break;
+        }
         case TRule_alter_table_action::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
     return true;
 }
@@ -2740,7 +2750,7 @@ bool TSqlQuery::AlterExternalTableAction(const TRule_alter_external_table_action
         }
 
         case TRule_alter_external_table_action::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
     return true;
 }
@@ -2960,7 +2970,7 @@ bool TSqlQuery::AlterTableAlterIndex(const TRule_alter_table_alter_index& node, 
             break;
         }
         case TRule_alter_table_alter_index_action::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 
     return true;
@@ -3017,7 +3027,7 @@ bool TSqlQuery::AlterSequenceAction(const TRule_alter_sequence_action& node, TSe
             break;
         }
         case TRule_alter_sequence_action::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 
     return true;
@@ -3089,6 +3099,23 @@ bool TSqlQuery::AlterTableAlterColumnDropDefault(const TRule_alter_table_alter_c
     return true;
 }
 
+bool TSqlQuery::AlterTableAlterColumnSetEncoding(const TRule_alter_table_alter_column_set_encoding& node, TAlterTableParameters& params) {
+    TString name = Id(node.GetRule_an_id3(), *this);
+    TPosition pos(Context().Pos());
+    auto encoding = ColumnEncoding(node.GetRule_encoding5(), *this);
+    if (!encoding) {
+        return false;
+    }
+
+    params.AlterColumns.push_back({
+        .Pos = std::move(pos),
+        .Name = std::move(name),
+        .TypeOfChange = TColumnSchema::ETypeOfChange::SetEncoding,
+        .ColumnEncoding = std::move(encoding),
+    });
+    return true;
+}
+
 bool TSqlQuery::AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params) {
     TSqlExpression expr(*this);
     return CreateChangefeed(node.GetRule_changefeed2(), expr, params.AddChangefeeds);
@@ -3115,7 +3142,7 @@ bool TSqlQuery::AlterTableAlterChangefeed(const TRule_alter_table_alter_changefe
         }
 
         case TRule_changefeed_alter_settings::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 
     return true;
@@ -3171,7 +3198,7 @@ THashMap<TString, TPragmaDescr>::value_type TableElemExt(TString name, PragmaSta
     TString normalizedName(name);
     TMaybe<TIssue> err = NormalizeName({}, normalizedName);
     Y_ABORT_UNLESS(err.Empty(), "%s", err->GetMessage().c_str());
-    return {std::move(normalizedName), TPragmaDescr{std::move(name), std::move(cb)}};
+    return {std::move(normalizedName), TPragmaDescr{.CanonicalName = std::move(name), .Cb = std::move(cb)}};
 }
 
 #define TABLE_ELEM(name, param, value) TableElemExt(name, SetCtxField((&TContext::param), (value)))
@@ -3801,11 +3828,11 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
         }
 
         if (*literal == "disable") {
-            ctx.SetYqlSelectMode(EYqlSelectMode::Disable);
+            ctx.SetYqlSelectMode(EYqlSelect::Disable);
         } else if (*literal == "auto") {
-            ctx.SetYqlSelectMode(EYqlSelectMode::Auto);
+            ctx.SetYqlSelectMode(EYqlSelect::Auto);
         } else if (*literal == "force") {
-            ctx.SetYqlSelectMode(EYqlSelectMode::Force);
+            ctx.SetYqlSelectMode(EYqlSelect::Force);
         } else {
             query.Error() << "Unexpected literal '" << *literal << "' for: " << pragma
                           << ", expected 'disable', 'auto' or 'force'";
@@ -3814,7 +3841,6 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
 
         return TNodePtr();
     }),
-
     TableElemExt("FailOnNonPersistableFlattenAndAggrExprs", [](CB_SIG) -> TMaybe<TNodePtr> {
         auto& ctx = query.Context();
 
@@ -3853,6 +3879,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     PAIRED_TABLE_ELEM("SimpleColumns", SimpleColumns),
     PAIRED_TABLE_ELEM("DebugPositions", DebugPositions),
     PAIRED_TABLE_ELEM("WindowNewPipeline", WindowNewPipeline),
+    PAIRED_TABLE_ELEM("YqlSelectAllowUnnamedGroupByExpr", YqlSelectAllowUnnamedGroupByExpr),
     PAIRED_TABLE_ELEM("CoalesceJoinKeysOnQualifiedAll", CoalesceJoinKeysOnQualifiedAll),
     PAIRED_TABLE_ELEM("PullUpFlatMapOverJoin", PragmaPullUpFlatMapOverJoin),
     PAIRED_TABLE_ELEM("FilterPushdownOverJoinOptionalSide", FilterPushdownOverJoinOptionalSide),
@@ -4191,7 +4218,7 @@ TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
             }
 
             case TRule_delete_stmt_TBlock5::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -4269,7 +4296,7 @@ TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
         }
 
         case TRule_update_stmt_TBlock4::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 }
 
@@ -4280,7 +4307,7 @@ TSourcePtr TSqlQuery::Build(const TRule_set_clause_choice& stmt) {
         case TRule_set_clause_choice::kAltSetClauseChoice2:
             return Build(stmt.GetAlt_set_clause_choice2().GetRule_multiple_column_assignment1());
         case TRule_set_clause_choice::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 }
 
@@ -4504,7 +4531,7 @@ static bool BuildColumnFeatures(std::map<TString, TDeferredAtom>& result, const 
         case TRule_type_name_or_bind::kAltTypeNameOrBind2:
             return false;
         case TRule_type_name_or_bind::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 
     result["NAME"] = TDeferredAtom(pos, columnName);
@@ -4540,7 +4567,7 @@ bool TSqlQuery::ParseTableStoreFeatures(std::map<TString, TDeferredAtom>& result
             break;
         }
         case TRule_alter_table_store_action::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
     return true;
 }

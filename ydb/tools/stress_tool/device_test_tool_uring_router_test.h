@@ -14,10 +14,23 @@
 #include <util/system/spinlock.h>
 
 #include <atomic>
+#include <cerrno>
 #include <cstring>
 #include <thread>
 #include <sys/uio.h>
 #include <unistd.h>
+
+#ifdef _linux_
+#include <sys/ioctl.h>
+
+#if !defined(_musl_)
+#include <linux/fs.h>
+#endif
+
+#ifndef BLKDISCARD
+#define BLKDISCARD _IO(0x12,119)
+#endif
+#endif
 
 #include "device_test_tool.h"
 
@@ -155,6 +168,7 @@ public:
         DeviceStates.resize(Cfg.NumDevices());
         for (ui32 d = 0; d < Cfg.NumDevices(); ++d) {
             DeviceStates[d] = MakeHolder<TDeviceState>();
+            TrimDeviceBeforeRun(d);
             InitDevice(d);
         }
     }
@@ -209,6 +223,37 @@ public:
     }
 
 private:
+    void TrimDeviceBeforeRun(ui32 deviceIdx) const {
+#ifdef _linux_
+        const TString& path = Cfg.Paths[deviceIdx];
+        bool isBlockDevice = false;
+        ui64 deviceSizeBytes = 0;
+        DetectFileParameters(path, deviceSizeBytes, isBlockDevice);
+
+        if (!isBlockDevice) {
+            Cerr << "Warning: skip BLKDISCARD for non-block path# " << path.Quote() << Endl;
+            return;
+        }
+
+        TFileHandle file(path.c_str(), OpenExisting | RdWr | Sync);
+        Y_VERIFY_S(file.IsOpen(), "Failed to open path for BLKDISCARD, path# " << path.Quote());
+
+        ui64 range[2] = {0, deviceSizeBytes};
+        if (ioctl((FHANDLE)file, BLKDISCARD, &range)) {
+            const int errorId = errno;
+            if (errorId == EOPNOTSUPP || errorId == ENOTTY) {
+                Cerr << "Warning: skip BLKDISCARD for path# " << path.Quote()
+                     << " errno# " << errorId << " strerror# " << strerror(errorId) << Endl;
+                return;
+            }
+            Y_VERIFY_S(false, "BLKDISCARD failed, path# " << path.Quote()
+                << " errno# " << errorId << " strerror# " << strerror(errorId));
+        }
+#else
+        Y_UNUSED(deviceIdx);
+#endif
+    }
+
     void InitDevice(ui32 deviceIdx) {
         auto& dev = *DeviceStates[deviceIdx];
         dev.BuffSize = BuffSize;

@@ -371,6 +371,8 @@ struct TPDiskTest : public TPerfTest {
             options.SectorMap = Cfg.SectorMaps[deviceIdx];
             options.EnableSmallDiskOptimization = false;
             diskSize = Cfg.SectorMaps[deviceIdx]->DeviceSize;
+        } else {
+            options.TrimEntireDevice = true;
         }
         FormatPDisk(Cfg.Paths[deviceIdx], diskSize, 4 << 10, ChunkSize, PDiskGuids[deviceIdx],
             chunkKey, logKey, sysLogKey, NPDisk::YdbDefaultPDiskSequence, "Info", options);

@@ -1,13 +1,8 @@
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
-/* custom error: muted */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
-SELECT
-    Ensure(0, FALSE, 'muted: sql panic')
-;
-/*
 $ssr = (
     SELECT
         s_store_id,
@@ -21,16 +16,16 @@ $ssr = (
             ss_sold_date_sk AS date_sk,
             ss_ext_sales_price AS sales_price,
             ss_net_profit AS profit,
-            CAST(0 AS Decimal (7, 2)) AS return_amt,
-            CAST(0 AS Decimal (7, 2)) AS net_loss
+            0 AS return_amt,
+            0 AS net_loss
         FROM
             plato.store_sales
         UNION ALL
         SELECT
             sr_store_sk AS store_sk,
             sr_returned_date_sk AS date_sk,
-            CAST(0 AS Decimal (7, 2)) AS sales_price,
-            CAST(0 AS Decimal (7, 2)) AS profit,
+            0 AS sales_price,
+            0 AS profit,
             sr_return_amt AS return_amt,
             sr_net_loss AS net_loss
         FROM
@@ -63,16 +58,16 @@ $csr = (
             cs_sold_date_sk AS date_sk,
             cs_ext_sales_price AS sales_price,
             cs_net_profit AS profit,
-            CAST(0 AS Decimal (7, 2)) AS return_amt,
-            CAST(0 AS Decimal (7, 2)) AS net_loss
+            0 AS return_amt,
+            0 AS net_loss
         FROM
             plato.catalog_sales
         UNION ALL
         SELECT
             cr_catalog_page_sk AS page_sk,
             cr_returned_date_sk AS date_sk,
-            CAST(0 AS Decimal (7, 2)) AS sales_price,
-            CAST(0 AS Decimal (7, 2)) AS profit,
+            0 AS sales_price,
+            0 AS profit,
             cr_return_amount AS return_amt,
             cr_net_loss AS net_loss
         FROM
@@ -105,16 +100,16 @@ $wsr = (
             ws_sold_date_sk AS date_sk,
             ws_ext_sales_price AS sales_price,
             ws_net_profit AS profit,
-            CAST(0 AS Decimal (7, 2)) AS return_amt,
-            CAST(0 AS Decimal (7, 2)) AS net_loss
+            0 AS return_amt,
+            0 AS net_loss
         FROM
             plato.web_sales
         UNION ALL
         SELECT
             ws_web_site_sk AS wsr_web_site_sk,
             wr_returned_date_sk AS date_sk,
-            CAST(0 AS Decimal (7, 2)) AS sales_price,
-            CAST(0 AS Decimal (7, 2)) AS profit,
+            0 AS sales_price,
+            0 AS profit,
             wr_return_amt AS return_amt,
             wr_net_loss AS net_loss
         FROM
@@ -181,4 +176,3 @@ ORDER BY
     channel,
     id
 LIMIT 100;
-*/

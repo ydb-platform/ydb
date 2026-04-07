@@ -20,9 +20,9 @@ PEERDIR(
     yql/essentials/udfs/common/json2
 )
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:16)
 ELSE()
     SIZE(MEDIUM)
@@ -32,6 +32,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_program.cpp
+    ut_snapshot_holders.cpp
     ut_script.cpp
     helper.cpp
 )

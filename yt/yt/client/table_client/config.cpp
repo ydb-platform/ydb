@@ -547,9 +547,9 @@ void TChunkWriterOptions::EnableValidationOptions(bool validateAnyIsValidYson)
 
 void TMinHashDigestConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("write_count", &TThis::WriteCount)
+    registrar.Parameter("write_timestamp_count", &TThis::WriteTimestampCount)
         .Default(100);
-    registrar.Parameter("delete_tombstone_count", &TThis::DeleteTombstoneCount)
+    registrar.Parameter("delete_timestamp_count", &TThis::DeleteTimestampCount)
         .Default(100);
 }
 

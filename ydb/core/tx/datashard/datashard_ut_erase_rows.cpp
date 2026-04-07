@@ -395,7 +395,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
 
     Y_UNIT_TEST(EraseRowsCdc) {
         TPortManager pm;
-        
+
         NKikimrPQ::TPQConfig pqConfig;
         pqConfig.SetEnabled(true);
         pqConfig.SetEnableProtoSourceIdInfo(true);
@@ -413,7 +413,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
         serverSettings.SetUseRealThreads(true)
             .SetDomainName(databaseName)
             .SetGrpcPort(pm.GetPort(2135));
-        
+
         TServer::TPtr server = new TServer(serverSettings);
         server->EnableGRpc(serverSettings.GrpcPort);
         auto& runtime = *server->GetRuntime();
@@ -452,7 +452,13 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
         UNIT_ASSERT_STRINGS_EQUAL(StripInPlace(content), "key = 3, value = 2020-04-15T00:00:00.000000Z");
 
         // open client
-        auto client = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(server->GetDriver(), NYdb::NPersQueue::TPersQueueClientSettings().Database(databaseName));
+        TString endpoint = "localhost:" + ToString(serverSettings.GrpcPort);
+        auto driverConfig = NYdb::TDriverConfig()
+            .SetEndpoint(endpoint)
+            .SetDatabase("/" + serverSettings.DomainName);
+        auto driver = NYdb::TDriver(driverConfig);
+
+        auto client = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(driver, NYdb::NPersQueue::TPersQueueClientSettings().Database(databaseName));
 
         // add consumer
         const TString consumerName{"user"};
@@ -471,7 +477,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
         );
 
         // fetch stream
-        
+
         ui32 reads = 0;
         while (reads < 2) {
             auto ev = reader->GetEvent(true);
@@ -491,7 +497,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
                     TString itemUser = itemJson["user"].GetString();
                     UNIT_ASSERT_VALUES_EQUAL(itemUser, "ttl@system");
                 }
-            } 
+            }
             else if (auto* create = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*ev)) {
                 pStream = create->GetPartitionStream();
                 create->Confirm();

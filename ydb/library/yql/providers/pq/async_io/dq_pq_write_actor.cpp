@@ -171,7 +171,7 @@ public:
         IDqComputeActorAsyncOutput::ICallbacks* callbacks,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 freeSpace,
-        const IPqGateway::TPtr& pqGateway,
+        const IPqStaticGateway::TPtr& pqGateway,
         bool enableStreamingQueriesCounters,
         bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag)
         : TActor<TDqPqWriteActor>(&TDqPqWriteActor::StateFunc)
@@ -557,7 +557,7 @@ private:
     std::queue<TString> Buffer;
     std::queue<TAckInfo> WaitingAcks; // Size of items which are waiting for acks (used to update free space)
     std::queue<std::tuple<ui64, NDqProto::TCheckpoint>> DeferredCheckpoints;
-    IPqGateway::TPtr PqGateway;
+    IPqStaticGateway::TPtr PqGateway;
     ui64 TaskId;
     bool Inited = false;
     bool EnableDeduplication = false;
@@ -574,7 +574,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     IDqComputeActorAsyncOutput::ICallbacks* callbacks,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    IPqGateway::TPtr pqGateway,
+    IPqStaticGateway::TPtr pqGateway,
     bool enableStreamingQueriesCounters,
     i64 freeSpace,
     bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag)
@@ -600,7 +600,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
     return {actor, actor};
 }
 
-void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters, bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag) {
+void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters, bool enableStreamingQueriesPqSinkDeduplicationFeatureFlag) {
     factory.RegisterSink<NPq::NProto::TDqPqTopicSink>("PqSink",
         [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), counters, pqGateway, enableStreamingQueriesCounters, enableStreamingQueriesPqSinkDeduplicationFeatureFlag](
             NPq::NProto::TDqPqTopicSink&& settings,

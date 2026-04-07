@@ -1,5 +1,7 @@
 #pragma once
 
+#include "topic_workload_writer_producer_common.h"
+
 #include "topic_workload_keyed_writer.h"
 
 #include <library/cpp/containers/concurrent_hash/concurrent_hash.h>
@@ -7,11 +9,10 @@
 #include <library/cpp/unified_agent_client/clock.h>
 
 #include <util/generic/string.h>
-#include <queue>
 
 namespace NYdb::NConsoleClient {
 
-class TTopicWorkloadKeyedWriterProducer {
+class TTopicWorkloadKeyedWriterProducer : public TTopicWorkloadWriterProducerCommon {
 public:
     TTopicWorkloadKeyedWriterProducer(
         const TTopicWorkloadKeyedWriterParams& params,
@@ -21,26 +22,21 @@ public:
         const NUnifiedAgent::TClock& clock
     );
 
-    void Close();
+    void Close() override;
 
     void SetProducer(std::shared_ptr<NYdb::NTopic::IProducer> producer);
 
-    void WaitForContinuationToken(const TDuration& timeout);
-
     void Send(const TInstant& createTimestamp,
-              std::optional<NYdb::NTable::TTransaction> transaction);
+              std::optional<NYdb::NTable::TTransaction> transaction) override;
 
-    bool HasContinuationTokens();
+    ui64 GetCurrentMessageId() const override;
 
-    NYdb::NTopic::TContinuationToken GetContinuationToken();
+    size_t InflightMessagesCnt() const override;
 
-    ui64 GetCurrentMessageId() const;
+    void HandleAckEvent(NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event) override;
+    void HandleSessionClosed(const NYdb::NTopic::TSessionClosedEvent& event) override;
 
-    size_t InflightMessagesCnt() const;
-
-    void HandleAckEvent(NYdb::NTopic::TWriteSessionEvent::TAcksEvent& event);
-    void HandleSessionClosed(const NYdb::NTopic::TSessionClosedEvent& event);
-    void HandleReadyToAcceptEvent(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent& event);
+    void WaitForContinuationToken(const TDuration&) override;
 
 private:
     std::string GetKey() const;
@@ -51,7 +47,6 @@ private:
     const TString ProducerId_;
     const std::string SessionId_;
     std::mutex Lock_;
-    std::queue<NYdb::NTopic::TContinuationToken> ContinuationTokens_;
     TConcurrentHashMap<ui64, TInstant> InflightMessagesCreateTs_;
     std::atomic<ui64> InflightMessagesCount_{};
 
@@ -60,8 +55,6 @@ private:
     const NUnifiedAgent::TClock Clock_;
     std::string KeyPrefix_;
     ui64 KeyId_ = 0;
-
-    std::condition_variable ContinuationTokenCondition_;
 };
 
 } // namespace NYdb::NConsoleClient

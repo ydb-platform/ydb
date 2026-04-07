@@ -52,7 +52,7 @@ private:
 
 class TLineageScanner {
 public:
-    TLineageScanner(const TExprNode& root, const TTypeAnnotationContext& ctx, TExprContext& exprCtx, bool standalone)
+    TLineageScanner(const TExprNode& root, TTypeAnnotationContext& ctx, TExprContext& exprCtx, bool standalone)
         : Root_(root)
         , Ctx_(ctx)
         , ExprCtx_(exprCtx)
@@ -67,6 +67,7 @@ public:
     }
 
     TString Process() {
+        auto startTime = TInstant::Now();
         VisitExpr(Root_, [&](const TExprNode& node) {
             for (auto& p : Ctx_.DataSources) {
                 if (p->IsRead(node)) {
@@ -171,6 +172,8 @@ public:
 
         writer.OnEndList();
         writer.OnEndMap();
+        Ctx_.LineageStats.Duration = (TInstant::Now() - startTime).MicroSeconds();
+        Ctx_.LineageStats.Memory = Allocator_->GetAllocatedSize();
         return s.Str();
     }
 
@@ -221,7 +224,7 @@ private:
     };
 
     static TFieldLineage ReplaceTransforms(const TFieldLineage& src, ETransformsType newTransforms) {
-        return {src.InputIndex, src.Field, (src.Transforms == ETransformsType::Copy && newTransforms == ETransformsType::Copy) ? newTransforms : ETransformsType::None};
+        return {.InputIndex = src.InputIndex, .Field = src.Field, .Transforms = (src.Transforms == ETransformsType::Copy && newTransforms == ETransformsType::Copy) ? newTransforms : ETransformsType::None};
     }
     using TFieldLineageSet = THashSet<TFieldLineage, TFieldLineage::TFieldHash, TEqualTo<TFieldLineage>, TStdIAllocator<TFieldLineage>>;
 
@@ -602,7 +605,9 @@ private:
 
             for (const auto& i : structType->GetItems()) {
                 auto& res = (*lineage.Fields).try_emplace(i->GetName(), TFieldsLineage(Allocator_.get())).first->second;
-                res.Items = allLineage;
+                TFieldLineageSet items(allLineage);
+                // FIXME: switch back to assign operator when crash in it will be fixed, check YQL-21022
+                std::swap(res.Items, items);
             }
         }
     }
@@ -723,6 +728,17 @@ private:
             for (const auto& field : fields) {
                 (*lineage.Fields).insert_or_assign(field, source);
             }
+        }
+        if (const TExprNode::TPtr outputColumnsSetting = GetSetting(*node.Child(3), "output_columns")) {
+            TSet<TStringBuf> outMembers;
+            const auto& settingsList = outputColumnsSetting->ChildPtr(1)->ChildrenList();
+            Transform(settingsList.begin(),
+                      settingsList.end(),
+                      std::inserter(outMembers, outMembers.begin()),
+                      [](const auto& x) { return x->Content(); });
+            EraseNodesIf(*lineage.Fields, [&outMembers](auto& iter) {
+                return !outMembers.contains(iter.first);
+            });
         }
     }
 
@@ -1096,9 +1112,9 @@ private:
 
 private:
     const TExprNode& Root_;
-    const TTypeAnnotationContext& Ctx_;
+    TTypeAnnotationContext& Ctx_;
     TExprContext& ExprCtx_;
-    std::unique_ptr<IAllocator> Allocator_;
+    std::unique_ptr<ILimitingAllocator> Allocator_;
     TNodeMapLimited<IDataProvider*> Reads_, Writes_;
     ui32 NextReadId_ = 0;
     ui32 NextWriteId_ = 0;
@@ -1134,7 +1150,7 @@ void IterateTwoLists(NYT::TNode::TListType& listFirst, NYT::TNode::TListType& li
 
 } // namespace
 
-TString CalculateLineage(const TExprNode& root, const TTypeAnnotationContext& ctx, TExprContext& exprCtx, bool standalone) {
+TString CalculateLineage(const TExprNode& root, TTypeAnnotationContext& ctx, TExprContext& exprCtx, bool standalone) {
     TLineageScanner scanner(root, ctx, exprCtx, standalone);
     return scanner.Process();
 }

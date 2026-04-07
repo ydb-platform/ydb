@@ -37,6 +37,7 @@ protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const override {
         return Last;
     }
+    virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionAccessorConstructor& portionInfo) const override;
     virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(
         TString&& data, const ui32 rawBytes, const TSimpleColumnInfo& columnInfo) const override {
         TColumnRecord cRecord = Record;
@@ -69,6 +70,12 @@ public:
             Last = column->GetScalar(column->GetRecordsCount() - 1);
         }
         Record.BlobRange.Size = data.size();
+    }
+
+    TChunkPreparation(const TString& data, const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& column, const TChunkAddress& address,
+        const TSimpleColumnInfo& columnInfo, std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> additionalAccessorData)
+        : TChunkPreparation(data, column, address, columnInfo) {
+        Record.MutableMeta().SetAdditionalAccessorData(std::move(additionalAccessorData));
     }
 };
 

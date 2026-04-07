@@ -13,7 +13,7 @@
 --   $lookback_days — окно по last_run_timestamp в марте (дни). По умолчанию 15.
 --   Ограничиваем чтение test_runs_column по run_timestamp, иначе запрос даёт channel spilling (20Gb+).
 
-$lookback_days = 60;
+$lookback_days = 10;
 $run_ts_cutoff = $lookback_days + 10;  -- окно для скана runs (коммиты из марты не старше $lookback_days, runs — с запасом)
 
 -- Один последний запуск на (pr_number, branch): job с максимальным last_run_timestamp

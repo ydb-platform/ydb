@@ -1,0 +1,13 @@
+pragma yt.UseQLFilter;
+
+select a
+from plato.Input
+where b == cast("nan" as double);
+
+select a
+from plato.Input
+where b == cast("-inf" as double);
+
+select a
+from plato.Input
+where b == cast("+inf" as double);

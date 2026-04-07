@@ -3,7 +3,6 @@ import os
 from devtools.yamaker.modules import Linkable, Switch
 from devtools.yamaker.project import NixProject
 
-
 # libidn contains some weird proxy headers
 # intended to emulate glibc compatibility layer.
 #

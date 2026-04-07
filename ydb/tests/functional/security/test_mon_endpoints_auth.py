@@ -1,214 +1,6 @@
 # -*- coding: utf-8 -*-
-import os
-import subprocess
-import urllib3
-
 import pytest
 import requests
-
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-
-def generate_certificates(certs_tmp_dir):
-    ca_key = os.path.join(certs_tmp_dir, 'server_ca.key')
-    ca_crt = os.path.join(certs_tmp_dir, 'server_ca.crt')
-
-    subprocess.run(['openssl', 'genrsa', '-out', ca_key, '2048'], check=True, capture_output=True)
-
-    subprocess.run(
-        [
-            'openssl',
-            'req',
-            '-x509',
-            '-new',
-            '-nodes',
-            '-key',
-            ca_key,
-            '-sha256',
-            '-days',
-            '3650',
-            '-out',
-            ca_crt,
-            '-subj',
-            '/CN=Monitoring CA/O=YDB/C=RU',
-        ],
-        check=True,
-        capture_output=True,
-    )
-
-    # Generate server certificate with localhost in SAN
-    server_key = os.path.join(certs_tmp_dir, 'server.key')
-    server_crt = os.path.join(certs_tmp_dir, 'server.crt')
-    server_csr = os.path.join(certs_tmp_dir, 'server.csr')
-    server_conf = os.path.join(certs_tmp_dir, 'server.conf')
-
-    subprocess.run(['openssl', 'genrsa', '-out', server_key, '2048'], check=True, capture_output=True)
-
-    # Create OpenSSL config file with v3_req section and SAN
-    with open(server_conf, 'w') as f:
-        f.write('[req]\n')
-        f.write('distinguished_name = req_distinguished_name\n')
-        f.write('req_extensions = v3_req\n')
-        f.write('\n')
-        f.write('[req_distinguished_name]\n')
-        f.write('\n')
-        f.write('[v3_req]\n')
-        f.write('subjectAltName=DNS:localhost,DNS:test-server,IP:127.0.0.1\n')
-
-    # Generate CSR
-    subprocess.run(
-        [
-            'openssl',
-            'req',
-            '-new',
-            '-key',
-            server_key,
-            '-out',
-            server_csr,
-            '-subj',
-            '/CN=test-server/O=YDB/C=RU',
-            '-config',
-            server_conf,
-        ],
-        check=True,
-        capture_output=True,
-    )
-
-    # Generate server certificate signed by CA
-    subprocess.run(
-        [
-            'openssl',
-            'x509',
-            '-req',
-            '-in',
-            server_csr,
-            '-CA',
-            ca_crt,
-            '-CAkey',
-            ca_key,
-            '-CAcreateserial',
-            '-out',
-            server_crt,
-            '-days',
-            '3650',
-            '-sha256',
-            '-extensions',
-            'v3_req',
-            '-extfile',
-            server_conf,
-        ],
-        check=True,
-        capture_output=True,
-    )
-
-    return {
-        'server_cert': server_crt,
-        'server_key': server_key,
-    }
-
-
-def create_ydb_configurator(
-    certificates,
-    enforce_user_token_requirement=True,
-    require_counters_authentication=None,
-    require_healthcheck_authentication=None,
-):
-    cluster_config = {
-        'default_clusteradmin': 'root@builtin',
-        'enforce_user_token_requirement': enforce_user_token_requirement,
-    }
-    config_generator = KikimrConfigGenerator(**cluster_config)
-
-    if 'grpc_config' not in config_generator.yaml_config:
-        config_generator.yaml_config['grpc_config'] = {}
-    config_generator.yaml_config['grpc_config']['cert'] = certificates['server_cert']
-    config_generator.yaml_config['grpc_config']['key'] = certificates['server_key']
-
-    config_generator.monitoring_tls_cert_path = certificates['server_cert']
-    config_generator.monitoring_tls_key_path = certificates['server_key']
-
-    config_generator.yaml_config['domains_config']['security_config']['database_allowed_sids'] = ['database@builtin']
-    config_generator.yaml_config['domains_config']['security_config']['viewer_allowed_sids'] = ['viewer@builtin']
-    config_generator.yaml_config['domains_config']['security_config']['monitoring_allowed_sids'] = [
-        'monitoring@builtin'
-    ]
-    assert (
-        'administration_allowed_sids' in config_generator.yaml_config['domains_config']['security_config']
-        and len(config_generator.yaml_config['domains_config']['security_config']['administration_allowed_sids']) > 0
-    ), "administration_allowed_sids was supposed to be set due to default_clusteradmin"
-
-    if require_counters_authentication is not None or require_healthcheck_authentication is not None:
-        if 'monitoring_config' not in config_generator.yaml_config:
-            config_generator.yaml_config['monitoring_config'] = {}
-        if require_counters_authentication is not None:
-            config_generator.yaml_config['monitoring_config'][
-                'require_counters_authentication'
-            ] = require_counters_authentication
-        if require_healthcheck_authentication is not None:
-            config_generator.yaml_config['monitoring_config'][
-                'require_healthcheck_authentication'
-            ] = require_healthcheck_authentication
-
-    return config_generator
-
-
-@pytest.fixture(scope='module')
-def certificates(tmp_path_factory):
-    certs_tmp_dir = tmp_path_factory.mktemp('monitoring_certs_')
-    return generate_certificates(str(certs_tmp_dir))
-
-
-@pytest.fixture(scope='module')
-def ydb_cluster_with_enforce_user_token(certificates):
-    configurator = create_ydb_configurator(
-        certificates,
-        enforce_user_token_requirement=True,
-    )
-    cluster = KiKiMR(configurator)
-    cluster.start()
-    yield cluster
-    cluster.stop()
-
-
-@pytest.fixture(scope='module')
-def ydb_cluster_without_enforce_user_token(certificates):
-    configurator = create_ydb_configurator(
-        certificates,
-        enforce_user_token_requirement=False,
-    )
-    cluster = KiKiMR(configurator)
-    cluster.start()
-    yield cluster
-    cluster.stop()
-
-
-@pytest.fixture(scope='module')
-def ydb_cluster_with_require_counters_auth(certificates):
-    configurator = create_ydb_configurator(
-        certificates,
-        enforce_user_token_requirement=True,
-        require_counters_authentication=True,
-    )
-    cluster = KiKiMR(configurator)
-    cluster.start()
-    yield cluster
-    cluster.stop()
-
-
-@pytest.fixture(scope='module')
-def ydb_cluster_with_require_healthcheck_auth(certificates):
-    configurator = create_ydb_configurator(
-        certificates,
-        enforce_user_token_requirement=True,
-        require_healthcheck_authentication=True,
-    )
-    cluster = KiKiMR(configurator)
-    cluster.start()
-    yield cluster
-    cluster.stop()
 
 
 EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN = {
@@ -458,6 +250,16 @@ def _test_endpoint(endpoint_url, endpoint_path, token, expected_status):
     ), f"Expected {endpoint_path} with token={token_desc} to return {expected_status}, got {response.status_code}"
 
 
+def _test_endpoints_via_node_proxy(cluster, node_index, path_suffix, expected_statuses_by_token):
+    node = cluster.nodes[node_index]
+    base_url = f'https://{node.host}:{node.mon_port}'
+    node_id = node.node_id
+    full_path = f'/node/{node_id}{path_suffix}'
+    endpoint_url = f'{base_url}{full_path}'
+    for token, expected_status in expected_statuses_by_token.items():
+        _test_endpoint(endpoint_url, full_path, token, expected_status)
+
+
 def _test_endpoints(cluster, expected_results):
     host = cluster.nodes[1].host
     mon_port = cluster.nodes[1].mon_port
@@ -551,3 +353,80 @@ def test_with_require_healthcheck_authentication(ydb_cluster_with_require_health
         },  # checks this just in case
     }
     _test_endpoints(ydb_cluster_with_require_healthcheck_auth, EXPECTED_RESULTS_WITH_REQUIRE_HEALTHCHECK_AUTH)
+
+
+PUBLIC_ENDPOINTS_LIST = [
+    '/actors/tablet_counters_aggregator',
+    '/counters',
+    '/counters/hosts',
+    '/followercounters',
+    '/labeledcounters',
+    '/ping',
+    '/status',
+    '/viewer/capabilities',
+    '/monitoring/',  # built-in authorization page, so it returns 200
+]
+
+
+def test_public_endpoints_list_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
+    expected_results = {
+        endpoint_path: {
+            None: 200,
+            'user@builtin': 200,
+            'database@builtin': 200,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        }
+        for endpoint_path in PUBLIC_ENDPOINTS_LIST
+    }
+    _test_endpoints(ydb_cluster_with_enforce_user_token, expected_results)
+
+
+# These endpoints downgrade access level to public when specific parameters are provided.
+def test_public_endpoints_with_params_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token,
+        {
+            # Enabled feature flag `require_healthcheck_authentication` forbids public access.
+            '/healthcheck?format=prometheus': {
+                None: 200,
+                'user@builtin': 200,
+                'database@builtin': 200,
+                'viewer@builtin': 200,
+                'monitoring@builtin': 200,
+                'root@builtin': 200,
+            },
+            # Enabled feature flag `require_healthcheck_authentication` forbids public access.
+            '/healthcheck?database=%2FRoot': {
+                None: 200,
+                'user@builtin': 403,
+                'database@builtin': 403,
+                'viewer@builtin': 403,
+                'monitoring@builtin': 200,
+                'root@builtin': 200,
+            },
+        },
+    )
+
+
+# Built-in authorization page, so it returns 200
+@pytest.mark.parametrize('node_index', [1])
+def test_node_proxy_monitoring_builtin_auth_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+    node_index,
+):
+    all_ok = {
+        None: 200,
+        'user@builtin': 200,
+        'database@builtin': 200,
+        'viewer@builtin': 200,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    }
+    _test_endpoints_via_node_proxy(
+        ydb_cluster_with_enforce_user_token,
+        node_index,
+        '/monitoring',
+        all_ok,
+    )

@@ -4,6 +4,8 @@ import random
 import string
 import time
 
+import ydb
+
 from ydb.tests.fq.streaming.common import StreamingTestBase
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
 
@@ -202,19 +204,28 @@ class TestStreamingInYdb(StreamingTestBase):
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         self.wait_completed_checkpoints(kikimr, path)
 
-        restart_node_id = None
-        for node_id in kikimr.cluster.nodes:
-            count = self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
-            if count:
-                restart_node_id = node_id
+        def restart_node():
+            restart_node_id = None
+            for node_id in kikimr.cluster.nodes:
+                count = self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
+                if count:
+                    restart_node_id = node_id
+            assert restart_node_id is not None
+            logger.debug(f"Restart node {restart_node_id}")
+            node = kikimr.cluster.nodes[restart_node_id]
+            node.stop()
+            node.start()
 
-        logger.debug(f"Restart node {restart_node_id}")
-        node = kikimr.cluster.nodes[restart_node_id]
-        node.stop()
-        node.start()
-
+        restart_node()
         self.write_stream(['{"value": "value2"}'], endpoint=endpoint)
         expected_data = ['value2']
+        self.wait_completed_checkpoints(kikimr, path)
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        self.wait_completed_checkpoints(kikimr, path)
+
+        restart_node()
+        self.write_stream(['{"value": "value3"}'], endpoint=endpoint)
+        expected_data = ['value3']
         self.wait_completed_checkpoints(kikimr, path)
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
         self.wait_completed_checkpoints(kikimr, path)
@@ -563,3 +574,26 @@ class TestStreamingInYdb(StreamingTestBase):
         assert len(readed_data) == 10
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
+
+    @pytest.mark.parametrize(
+        "kikimr",
+        [
+            {"enable_shared_reading_in_streaming_queries": False},
+            {"enable_shared_reading_in_streaming_queries": True},
+        ],
+        indirect=["kikimr"],
+    )
+    def test_check_shared_reading_disabled(self, kikimr, entity_name, request):
+        cfg = request.node.callspec.params["kikimr"]
+        enable_shared_reading_in_streaming_queries = cfg["enable_shared_reading_in_streaming_queries"]
+        source_name = entity_name("MyEDS")
+
+        if enable_shared_reading_in_streaming_queries:
+            self.create_source(kikimr, source_name, shared=True)
+            kikimr.ydb_client.query(f"DROP EXTERNAL DATA SOURCE `{source_name}`;")
+        else:
+            with pytest.raises(
+                ydb.issues.GenericError,
+                match=r"SHARED_READING in External data source is not supported",
+            ):
+                self.create_source(kikimr, source_name, shared=True)

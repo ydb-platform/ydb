@@ -671,7 +671,8 @@
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "Secret", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Value", "Type": "TCoAtom"},
-                {"Index": 4, "Name": "InheritPermissions", "Type": "TCoAtom"}
+                {"Index": 4, "Name": "InheritPermissions", "Type": "TCoAtom"},
+                {"Index": 5, "Name": "ValueParamName", "Type": "TCoAtom"}
             ]
         },
         {
@@ -682,7 +683,8 @@
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "Secret", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Value", "Type": "TCoAtom"}
+                {"Index": 3, "Name": "Value", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "ValueParamName", "Type": "TCoAtom"}
             ]
         },
         {

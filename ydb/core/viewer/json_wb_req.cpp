@@ -89,7 +89,6 @@ void InitViewerBSGroupInfoJsonHandler(TJsonHandlers& jsonHandlers) {
     yaml.SetParameters(GetWhiteboardRequestParameters());
     yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<TJsonBSGroupInfo::TResponseType>());
     jsonHandlers.AddHandler("/viewer/bsgroupinfo", new THttpHandler<TJsonBSGroupInfo>(yaml));
-    TWhiteboardInfo<NKikimrWhiteboard::TEvBSGroupStateResponse>::InitMerger();
 }
 
 void InitViewerNodeInfoJsonHandler(TJsonHandlers& jsonHandlers) {
@@ -102,7 +101,6 @@ void InitViewerNodeInfoJsonHandler(TJsonHandlers& jsonHandlers) {
     yaml.SetParameters(GetWhiteboardRequestParameters());
     yaml.SetResponseSchema(TProtoToYaml::ProtoToYamlSchema<TJsonNodeInfo::TResponseType>());
     jsonHandlers.AddHandler("/viewer/nodeinfo", new THttpHandler<TJsonNodeInfo>(yaml));
-    TWhiteboardInfo<NKikimrWhiteboard::TEvNodeStateResponse>::InitMerger();
 }
 
 void InitViewerPDiskInfoJsonHandler(TJsonHandlers& jsonHandlers) {
@@ -228,4 +226,4 @@ void InitViewerVDiskInfoJsonHandler(TJsonHandlers& jsonHandlers) {
     jsonHandlers.AddHandler("/viewer/vdiskinfo", new THttpHandler<TJsonVDiskInfo>(yaml));
 }
 
-}
+} // namespace NKikimr::NViewer

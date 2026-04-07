@@ -132,8 +132,10 @@ bool TPartitionQuoterBase::CanExaust(TInstant now) {
 }
 
 void TPartitionQuoterBase::ProcessPartitionTotalQuotaQueue() {
-    if (!PartitionTotalQuotaTracker)
+    if (!PartitionTotalQuotaTracker) {
         return;
+    }
+    LOG_D("Waiting for the quota of partition " << WaitingTotalPartitionQuotaRequests.size() << " of the request");
     while (!WaitingTotalPartitionQuotaRequests.empty() && CanExaust(ActorContext().Now())) {
         auto& request = WaitingTotalPartitionQuotaRequests.front();
         ApproveQuota(request);

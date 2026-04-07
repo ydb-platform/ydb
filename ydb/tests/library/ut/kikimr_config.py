@@ -24,10 +24,10 @@ def test_kikimr_config_generator_generic_connector_config():
 
 
 def test_kikimr_config_generator_nbs_config():
-    nbs_database = "/Root/NBS"
+    nbs_database_name = "/Root/NBS"
     cfg_gen = KikimrConfigGenerator(
         enable_nbs=True,
-        nbs_database=nbs_database
+        nbs_database_name=nbs_database_name
     )
     yaml_config = cfg_gen.yaml_config
 
@@ -37,7 +37,7 @@ def test_kikimr_config_generator_nbs_config():
 
     # Check NBS storage config
     nbs_storage_config = yaml_config["nbs_config"]["nbs_storage_config"]
-    assert nbs_storage_config["scheme_shard_dir"] == nbs_database
+    assert nbs_storage_config["scheme_shard_dir"] == nbs_database_name
     assert nbs_storage_config["folder_id"] == "testFolder"
     assert nbs_storage_config["ssd_system_channel_pool_kind"] == "hdd"
     assert nbs_storage_config["ssd_log_channel_pool_kind"] == "hdd"
@@ -48,7 +48,7 @@ def test_kikimr_config_generator_nbs_config():
 
 
 def test_kikimr_config_generator_nbs_config_default_database():
-    # Test with default nbs_database value
+    # Test with default nbs_database_name value
     cfg_gen = KikimrConfigGenerator(enable_nbs=True)
     yaml_config = cfg_gen.yaml_config
 

@@ -16,7 +16,6 @@
 
 #include "src/core/lib/gprpp/validation_errors.h"
 
-#include <algorithm>
 #include <utility>
 
 #include "y_absl/status/status.h"
@@ -42,8 +41,14 @@ bool ValidationErrors::FieldHasErrors() const {
   return field_errors_.find(y_absl::StrJoin(fields_, "")) != field_errors_.end();
 }
 
-y_absl::Status ValidationErrors::status(y_absl::string_view prefix) const {
+y_absl::Status ValidationErrors::status(y_absl::StatusCode code,
+                                      y_absl::string_view prefix) const {
   if (field_errors_.empty()) return y_absl::OkStatus();
+  return y_absl::Status(code, message(prefix));
+}
+
+TString ValidationErrors::message(y_absl::string_view prefix) const {
+  if (field_errors_.empty()) return "";
   std::vector<TString> errors;
   for (const auto& p : field_errors_) {
     if (p.second.size() > 1) {
@@ -54,8 +59,7 @@ y_absl::Status ValidationErrors::status(y_absl::string_view prefix) const {
           y_absl::StrCat("field:", p.first, " error:", p.second[0]));
     }
   }
-  return y_absl::InvalidArgumentError(
-      y_absl::StrCat(prefix, ": [", y_absl::StrJoin(errors, "; "), "]"));
+  return y_absl::StrCat(prefix, ": [", y_absl::StrJoin(errors, "; "), "]");
 }
 
 }  // namespace grpc_core

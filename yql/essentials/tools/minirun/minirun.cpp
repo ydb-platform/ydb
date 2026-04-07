@@ -12,18 +12,10 @@ public:
         GetRunOptions().UseRepeatableRandomAndTimeProviders = true;
         GetRunOptions().ResultsFormat = NYson::EYsonFormat::Pretty;
         GetRunOptions().OptimizeLibs = false;
+        GetRunOptions().CustomTests = true;
 
         GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
             opts.AddLongOption("ndebug", "Do not show debug info in error output").NoArgument().SetFlag(&GetRunOptions().NoDebug);
-        });
-        GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
-            opts.AddLongOption("test-format", "Compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported)").NoArgument().SetFlag(&GetRunOptions().TestSqlFormat);
-        });
-        GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
-            opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument().SetFlag(&GetRunOptions().ValidateResultFormat);
-        });
-        GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
-            opts.AddLongOption("test-partial-typecheck", "Check partial AST typecheck").NoArgument().SetFlag(&GetRunOptions().TestPartialTypecheck);
         });
 
         GetRunOptions().SetSupportedGateways({TString{PureProviderName}});

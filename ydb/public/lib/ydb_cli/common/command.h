@@ -47,6 +47,7 @@ public:
     TString Name;
     TVector<TString> Aliases;
     TString Description;
+    TString CompletionDescription;
     bool Visible = true;
     bool Hidden = false;
     bool Dangerous = false;
@@ -446,6 +447,10 @@ public:
     void MarkDangerous();
     void UseOnlyExplicitProfile();
 
+    const TString& GetCompletionDescription() const {
+        return CompletionDescription ? CompletionDescription : Description;
+    }
+
 protected:
     virtual void Config(TConfig& config);
     virtual void SaveParseResult(TConfig& config);
@@ -465,6 +470,9 @@ private:
     void CheckForExecutableOptions(TConfig& config);
 
     constexpr static int DESCRIPTION_ALIGNMENT = 28;
+
+    friend class TYdbCommandAutoCompletionWrapper;
+    friend class TYdbCommandTreeAutoCompletionWrapper;
 };
 
 class TClientCommandTree : public TClientCommand {
@@ -503,6 +511,8 @@ protected:
 
     TMap<TString, std::unique_ptr<TClientCommand>> SubCommands;
     TMap<TString, TString> Aliases;
+
+    friend class TYdbCommandTreeAutoCompletionWrapper;
 };
 
 class TCommandWithPath {

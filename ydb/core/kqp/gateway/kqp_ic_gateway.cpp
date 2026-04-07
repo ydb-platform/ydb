@@ -615,7 +615,7 @@ public:
     void Bootstrap() {
         auto ctx = MakeIntrusive<TUserRequestContext>();
         ctx->DatabaseId = DatabaseId;
-        IActor* actor = CreateKqpSchemeExecuter(PhyTx, QueryType, SelfId(), RequestType, Database, UserToken, ClientAddress, false /* temporary */, false /* createTmpDir */, false /* isCreateTableAs */, TString() /* sessionId */, ctx);
+        IActor* actor = CreateKqpSchemeExecuter(PhyTx, QueryType, nullptr, SelfId(), RequestType, Database, UserToken, ClientAddress, false /* temporary */, false /* createTmpDir */, false /* isCreateTableAs */, TString() /* tempDirName */, ctx);
         Register(actor);
         Become(&TThis::WaitState);
     }
@@ -1893,7 +1893,6 @@ public:
         request.Transactions.emplace_back(queryHolder.GetPhyTx(0), params);
 
         YQL_ENSURE(!request.Transactions.empty());
-        YQL_ENSURE(request.DataShardLocks.empty());
         YQL_ENSURE(!request.NeedTxId);
         YQL_ENSURE(ContainOnlyLiteralStages(request));
 
@@ -1909,7 +1908,6 @@ public:
 
     TFuture<TExecPhysicalResult> ExecuteLiteral(TExecPhysicalRequest&& request, TQueryData::TPtr params, ui32 txIndex) override {
         YQL_ENSURE(!request.Transactions.empty());
-        YQL_ENSURE(request.DataShardLocks.empty());
         YQL_ENSURE(!request.NeedTxId);
         YQL_ENSURE(ContainOnlyLiteralStages(request));
         auto promise = NewPromise<TExecPhysicalResult>();

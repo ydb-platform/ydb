@@ -1049,7 +1049,7 @@ protected:
         doneEvent.WaitI();
     }
 
-    void TrimSync(ui32 size, ui64 offset) override {
+    void TrimSync(ui64 size, ui64 offset) override {
         Y_VERIFY_S(!ReadOnly, PCtx->PDiskLogPrefix);
         IAsyncIoOperation* op = IoContext->CreateAsyncIoOperation(nullptr, {}, nullptr);
         IoContext->PreparePTrim(op, size, offset);
@@ -1135,7 +1135,7 @@ protected:
         CompletionThreads->ScheduleHackForLogReader(completionAction);
     }
 
-    void TrimAsync(ui32 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId) override {
+    void TrimAsync(ui64 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId) override {
         Y_VERIFY_S(completionAction, PCtx->PDiskLogPrefix);
         if (!IsInitialized || QuitCounter.IsBlocked()) {
             return;

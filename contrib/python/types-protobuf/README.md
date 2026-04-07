@@ -20,8 +20,8 @@ for more details. The source for this package can be found in the
 directory.
 
 This package was tested with the following type checkers:
-* [mypy](https://github.com/python/mypy/) 1.18.2
-* [pyright](https://github.com/microsoft/pyright) 1.1.407
+* [mypy](https://github.com/python/mypy/) 1.19.1
+* [pyright](https://github.com/microsoft/pyright) 1.1.408
 
 It was generated from typeshed commit
-[`0153c409f1966e910ddba9543f35c86bbc21001d`](https://github.com/python/typeshed/commit/0153c409f1966e910ddba9543f35c86bbc21001d).
+[`9e6b58fad088ca14346e6f7ffd80b9d84b83aed1`](https://github.com/python/typeshed/commit/9e6b58fad088ca14346e6f7ffd80b9d84b83aed1).

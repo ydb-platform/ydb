@@ -3095,7 +3095,7 @@ public:
     }
 
     TString ResolveCluster(const TStringBuf schemaname, TString name) {
-        if (NYql::NPg::GetStaticColumns().contains(NPg::TTableInfoKey{"pg_catalog", name})) {
+        if (NYql::NPg::GetStaticColumns().contains(NPg::TTableInfoKey{.Schema = "pg_catalog", .Name = name})) {
             return "pg_catalog";
         }
 
@@ -3154,7 +3154,7 @@ public:
         const auto cluster = ResolveCluster(schemaname, TString(relname));
         const auto sinkOrSource = BuildClusterSinkOrSourceExpression(isSink, cluster);
         const auto key = BuildTableKeyExpression(relname, cluster, isScheme);
-        return {sinkOrSource, key};
+        return {.SinkOrSource = sinkOrSource, .Key = key};
     }
 
     TAstNode* BuildPgObjectExpression(const TStringBuf objectName, const TStringBuf objectType) {
@@ -3181,7 +3181,7 @@ public:
         const auto cluster = ResolveCluster(schemaname, TString(objectName));
         const auto sinkOrSource = BuildClusterSinkOrSourceExpression(true, cluster);
         const auto key = BuildPgObjectExpression(objectName, pgObjectType);
-        return {sinkOrSource, key};
+        return {.SinkOrSource = sinkOrSource, .Key = key};
     }
 
     TReadWriteKeyExprs ParseWriteRangeVar(const RangeVar* value,
@@ -3231,7 +3231,7 @@ public:
         }
 
         if (view) {
-            return TFromDesc{view->Source, alias, colnames.empty() ? view->ColNames : colnames, false};
+            return TFromDesc{.Source = view->Source, .Alias = alias, .ColNames = colnames.empty() ? view->ColNames : colnames, .InjectRead = false};
         }
 
         TString schemaname = value->schemaname;
@@ -3257,7 +3257,7 @@ public:
                 if (!s) {
                     return {};
                 }
-                return TFromDesc{s, alias, colnames, true};
+                return TFromDesc{.Source = s, .Alias = alias, .ColNames = colnames, .InjectRead = true};
             }
         }
 
@@ -3284,10 +3284,10 @@ public:
                                                             L(A("Void")),
                                                             QL());
         return TFromDesc{
-            readExpr,
-            alias,
-            colnames,
-            /* injectRead */ true,
+            .Source = readExpr,
+            .Alias = alias,
+            .ColNames = colnames,
+            .InjectRead = true,
         };
     }
 
@@ -3400,7 +3400,7 @@ public:
             return {};
         }
 
-        return TFromDesc{func, alias, colnames, injectRead};
+        return TFromDesc{.Source = func, .Alias = alias, .ColNames = colnames, .InjectRead = injectRead};
     }
 
     TMaybe<TFromDesc> ParseRangeSubselect(const RangeSubselect* value) {
@@ -3430,7 +3430,7 @@ public:
             return {};
         }
 
-        return TFromDesc{ParseSelectStmt(CAST_NODE(SelectStmt, value->subquery), {.Inner = true}), alias, colnames, false};
+        return TFromDesc{.Source = ParseSelectStmt(CAST_NODE(SelectStmt, value->subquery), {.Inner = true}), .Alias = alias, .ColNames = colnames, .InjectRead = false};
     }
 
     TAstNode* ParseNullTestExpr(const NullTest* value, const TExprSettings& settings) {
@@ -6033,7 +6033,7 @@ public:
             }
         }
 
-        Builder_.InsertValues(NPg::TTableInfoKey{"pg_catalog", tableName}, colNames, data);
+        Builder_.InsertValues(NPg::TTableInfoKey{.Schema = "pg_catalog", .Name = tableName}, colNames, data);
         return true;
     }
 

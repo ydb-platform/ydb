@@ -1,5 +1,6 @@
 RECURSE_FOR_TESTS(
     ut_auditsettings
+    ut_topic_cloud_events
     ut_background_cleaning
     ut_backup
     ut_backup_collection
@@ -91,7 +92,6 @@ SRCS(
     schemeshard__borrowed_compaction.cpp
     schemeshard__clean_pathes.cpp
     schemeshard__conditional_erase.cpp
-    schemeshard__shred_manager.cpp
     schemeshard__delete_tablet_reply.cpp
     schemeshard__describe_scheme.cpp
     schemeshard__find_subdomain_path_id.cpp
@@ -218,6 +218,7 @@ SRCS(
     schemeshard__operation_move_tables.cpp
     schemeshard__operation_part.cpp
     schemeshard__operation_part.h
+    schemeshard__operation_prepare_index_validation.cpp
     schemeshard__operation_restore_backup_collection.cpp
     schemeshard__operation_rmdir.cpp
     schemeshard__operation_rotate_cdc_stream.cpp
@@ -238,6 +239,7 @@ SRCS(
     schemeshard__unmark_restore_tables.cpp
     schemeshard__upgrade_access_database.cpp
     schemeshard__upgrade_schema.cpp
+    schemeshard__user_hashes_migration.cpp
     schemeshard_audit_log.cpp
     schemeshard_audit_log_fragment.cpp
     schemeshard_backup.cpp
@@ -309,6 +311,7 @@ SRCS(
     schemeshard_path_describer.cpp
     schemeshard_path_element.cpp
     schemeshard_path_element.h
+    schemeshard_pq_helpers.cpp
     schemeshard_pq_helpers.h
     schemeshard_schema.h
     schemeshard_self_pinger.cpp
@@ -332,10 +335,6 @@ SRCS(
     schemeshard_validate_ttl.cpp
     schemeshard_xxport__helpers.cpp
     user_attributes.cpp
-    schemeshard__operation_create_set_constraint.cpp
-    schemeshard__operation_create_set_constraint_check.cpp
-    schemeshard__operation_create_set_constraint_finalize.cpp
-    schemeshard__operation_create_set_constraint_lock.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_subop_state_types.h)
@@ -374,10 +373,12 @@ PEERDIR(
     ydb/core/persqueue/public
     ydb/core/persqueue/public/partition_index_generator
     ydb/core/persqueue/public/partition_key_range
+    ydb/core/persqueue/public/cloud_events
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/resource_pools
     ydb/core/scheme
+    ydb/core/split
     ydb/core/statistics
     ydb/core/sys_view/common
     ydb/core/sys_view/partition_stats

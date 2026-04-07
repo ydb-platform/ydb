@@ -2,6 +2,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/kikimr/events.h>
 #include <ydb/core/nbs/cloud/blockstore/public/api/protos/io.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/public/api/protos/partition.pb.h>
 
 #include <ydb/core/base/events.h>
 
@@ -31,21 +32,7 @@ struct TEvService
 
     BLOCKSTORE_DECLARE_PROTO_EVENTS(WriteBlocks)
     BLOCKSTORE_DECLARE_PROTO_EVENTS(ReadBlocks)
-
-    struct TEvGetLoadActorAdapterActorIdRequest
-        : public NActors::TEventLocal<
-              TEvGetLoadActorAdapterActorIdRequest,
-              EvGetLoadActorAdapterActorIdRequest>
-    {
-    };
-
-    struct TEvGetLoadActorAdapterActorIdResponse
-        : public NActors::TEventLocal<
-              TEvGetLoadActorAdapterActorIdResponse,
-              EvGetLoadActorAdapterActorIdResponse>
-    {
-        TString ActorId;
-    };
+    BLOCKSTORE_DECLARE_PROTO_EVENTS(GetLoadActorAdapterActorId)
 };
 
 }   // namespace NYdb::NBS::NBlockStore

@@ -86,9 +86,10 @@ class ConfigClient(object):
 
                 time.sleep(self.__retry_sleep_seconds)
 
-    def replace_config(self, main_config):
+    def replace_config(self, main_config, dry_run=False):
         request = config_api.ReplaceConfigRequest()
         request.replace = main_config
+        request.dry_run = dry_run
         return self.invoke(request, 'ReplaceConfig')
 
     def fetch_all_configs(self, transform=None):

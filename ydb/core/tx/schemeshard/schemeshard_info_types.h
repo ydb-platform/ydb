@@ -2758,6 +2758,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            case NKikimrSchemeOp::EIndexTypeGlobalJson:
                 // no specialized index description
                 Y_ASSERT(description.empty());
                 break;
@@ -2831,6 +2832,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            case NKikimrSchemeOp::EIndexTypeGlobalJson:
                 // no specialized index description
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:

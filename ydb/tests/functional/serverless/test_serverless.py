@@ -60,9 +60,9 @@ CLUSTER_CONFIG = dict(
     },
     column_shard_config={
         'disabled_on_scheme_shard': False,
+        'max_read_staleness_ms': 200
     },
     table_service_config={
-        'enable_oltp_sink': True,
     },
 )
 

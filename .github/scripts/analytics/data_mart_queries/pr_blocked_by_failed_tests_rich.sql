@@ -19,7 +19,7 @@
 
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
-$pr_check_lookback_days = 70;
+$pr_check_lookback_days = 10;
 $regression_window_days = 4;
 
 -- PR-check failures in the last $pr_check_lookback_days days (branch, full_name, run_timestamp)
@@ -120,7 +120,6 @@ $all_failures_with_pr_base = (
         base.run_timestamp AS run_timestamp,
         base.branch AS branch,
         base.status_description AS status_description,
-        base.stderr AS stderr,
         base.stderr AS stderr,
         ListHead(
             Unicode::SplitToList(
@@ -241,7 +240,6 @@ $all_failures_with_pr = (
         f.branch AS branch,
         f.status_description AS status_description,
         f.stderr AS stderr,
-        f.stderr AS stderr,
         f.pr_number AS pr_number,
         f.attempt_number AS attempt_number,
         CASE WHEN f.job_id = l.last_job_id THEN 1 ELSE 0 END AS is_last_run_in_pr
@@ -308,12 +306,14 @@ SELECT
     CAST(COALESCE(pr_number, '0') AS String) AS pr_number,
     CAST(COALESCE(job_id, 0) AS Uint64) AS job_id,
     CAST(COALESCE('https://github.com/ydb-platform/ydb/actions/runs/' || CAST(job_id AS UTF8), 'FALLBACK_URL') AS String) AS run_url,
-    run_timestamp AS last_run_timestamp,
+    last_run_timestamp AS last_run_timestamp,
     CAST(branch AS Utf8) AS branch,
     CAST('relwithdebinfo' AS String) AS build_type,
     CAST(COALESCE(status_description, '') AS String) AS status_description,
     CAST(COALESCE(stderr, '') AS Utf8) AS stderr,
     CAST(COALESCE(attempt_number, 1) AS Int32) AS attempt_number,
-    1 AS is_last_run_in_pr
+    is_last_run_in_pr
 FROM
-    $failures_in_last_pr_run;
+    $last_run_per_test_pr
+WHERE
+    rn = 1;

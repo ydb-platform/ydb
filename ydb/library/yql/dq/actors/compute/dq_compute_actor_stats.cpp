@@ -142,6 +142,7 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
                 }
                 break;
             case TCollectStatsLevel::Full:
+            case TCollectStatsLevel::Profile:
                 {
                     TDqInputChannelStats pushStats;
                     TDqAsyncStats popStats;
@@ -181,6 +182,7 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
                     MergeMinTs(startTime, pushStats.FirstMessageTs);
                 }
                 break;
+            /*
             case TCollectStatsLevel::Profile:
                 for (auto& [channelId, inputChannel] : inputChannels) {
                     const auto& pushStats = inputChannel->GetPushStats();
@@ -198,6 +200,7 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
                     MergeMinTs(startTime, pushStats.FirstMessageTs);
                 }
                 break;
+            */
         }
     }
 
@@ -235,6 +238,7 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
                 }
                 break;
             case TCollectStatsLevel::Full:
+            case TCollectStatsLevel::Profile:
                 {
                     TDqAsyncStats pushStats;
                     TDqOutputChannelStats popStats;
@@ -285,6 +289,7 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
                     MergeMaxTs(finishTime, popStats.LastMessageTs);
                 }
                 break;
+            /*
             case TCollectStatsLevel::Profile:
                 for (auto& [channelId, outputChannel] : outputChannels) {
                     const auto& popStats = outputChannel->GetPopStats();
@@ -309,6 +314,7 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
                     MergeMaxTs(finishTime, popStats.LastMessageTs);
                 }
                 break;
+            */
         }
     }
 

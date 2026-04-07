@@ -1690,16 +1690,51 @@ namespace NSchemeShardUT_Private {
         NKikimrProto::EReplyStatus status = LocalSchemeTx(runtime, tabletId, "", true, scheme, err);
         UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
         //Cdbg << scheme << "\n";
+
+        // Find the table info to get key column count
+        ui32 keyColumnCount = 0;
+        for (ui32 i = 0; i < scheme.DeltaSize(); ++i) {
+            const auto& d = scheme.GetDelta(i);
+            if (d.GetDeltaType() == NTabletFlatScheme::TAlterRecord::AddTable &&
+                d.GetTableId() == table)
+            {
+                // Count key columns by counting subsequent AddColumnToKey deltas for this table
+                for (ui32 j = i + 1; j < scheme.DeltaSize(); ++j) {
+                    const auto& dj = scheme.GetDelta(j);
+                    if (dj.GetDeltaType() == NTabletFlatScheme::TAlterRecord::AddTable) {
+                        // Stop at the next table definition
+                        break;
+                    }
+                    if (dj.GetDeltaType() == NTabletFlatScheme::TAlterRecord::AddColumnToKey &&
+                        dj.GetTableId() == table)
+                    {
+                        keyColumnCount++;
+                    }
+                }
+                break;
+            }
+        }
+
+        // With unified system, ByKeyFilter is now stored as a ByKeyFilterPrefixes entry
+        // with prefix length = key column count
         for (ui32 i = 0; i < scheme.DeltaSize(); ++i) {
             const auto& d = scheme.GetDelta(i);
             if (d.GetDeltaType() == NTabletFlatScheme::TAlterRecord::SetTable &&
                 d.GetTableId() == table &&
-                d.HasByKeyFilter())
+                d.ByKeyFilterPrefixesSize() > 0)
             {
-                return d.GetByKeyFilter();
+                // Check if full-key bloom is enabled
+                // Full-key bloom is represented as a prefix entry with length = key column count
+                for (ui32 j = 0; j < d.ByKeyFilterPrefixesSize(); ++j) {
+                    if (d.GetByKeyFilterPrefixes(j) == keyColumnCount && keyColumnCount > 0) {
+                        return true;
+                    }
+                }
+                return false;
             }
         }
-        UNIT_ASSERT_C(false, "ByKeyFilter delta record not found");
+
+        // No SetTable delta found with ByKeyFilterPrefixes - bloom is disabled
         return false;
     }
 
@@ -1869,8 +1904,8 @@ namespace NSchemeShardUT_Private {
         return tableDescription;
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction *UpgradeSubDomainRequest(ui64 txId, const TString &parentPath, const TString &name) {
-        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
+    TEvSchemeShard::TEvModifySchemeTransaction *UpgradeSubDomainRequest(ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name) {
+        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, schemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomain);
         transaction->SetWorkingDir(parentPath);
@@ -1878,9 +1913,23 @@ namespace NSchemeShardUT_Private {
         return evTx;
     }
 
+    void AsyncUpgradeSubDomain(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name) {
+        auto evTx = UpgradeSubDomainRequest(schemeShard, txId, parentPath, name);
+        AsyncSend(runtime, schemeShard, evTx);
+    }
+
     void AsyncUpgradeSubDomain(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name) {
-        auto evTx = UpgradeSubDomainRequest(txId, parentPath, name);
-        AsyncSend(runtime, TTestTxConfig::SchemeShard, evTx);
+        AsyncUpgradeSubDomain(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name);
+    }
+
+    void TestUpgradeSubDomain(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name, const TVector<TExpectedResult> &expectedResults) {
+        AsyncUpgradeSubDomain(runtime, schemeShard, txId, parentPath, name);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
+    void TestUpgradeSubDomain(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name) {
+        AsyncUpgradeSubDomain(runtime, schemeShard, txId, parentPath, name);
+        TestModificationResults(runtime, txId, {{TEvSchemeShard::EStatus::StatusAccepted, ""}});
     }
 
     void TestUpgradeSubDomain(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name, const TVector<TExpectedResult> &expectedResults) {
@@ -1893,8 +1942,8 @@ namespace NSchemeShardUT_Private {
         TestModificationResults(runtime, txId, {{TEvSchemeShard::EStatus::StatusAccepted, ""}});
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction *UpgradeSubDomainDecisionRequest(ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
-        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
+    TEvSchemeShard::TEvModifySchemeTransaction *UpgradeSubDomainDecisionRequest(ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
+        auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, schemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomainDecision);
         transaction->SetWorkingDir(parentPath);
@@ -1903,9 +1952,23 @@ namespace NSchemeShardUT_Private {
         return evTx;
     }
 
+    void AsyncUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
+        auto evTx = UpgradeSubDomainDecisionRequest(schemeShard, txId, parentPath, name, decision);
+        AsyncSend(runtime, schemeShard, evTx);
+    }
+
     void AsyncUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
-        auto evTx = UpgradeSubDomainDecisionRequest(txId, parentPath, name, decision);
-        AsyncSend(runtime, TTestTxConfig::SchemeShard, evTx);
+        AsyncUpgradeSubDomainDecision(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, decision);
+    }
+
+    void TestUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name, const TVector<TExpectedResult> &expectedResults, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
+        AsyncUpgradeSubDomainDecision(runtime, schemeShard, txId, parentPath, name, decision);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
+    void TestUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 schemeShard, ui64 txId, const TString &parentPath, const TString &name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {
+        AsyncUpgradeSubDomainDecision(runtime, schemeShard, txId, parentPath, name, decision);
+        TestModificationResults(runtime, txId, {{TEvSchemeShard::EStatus::StatusAccepted, ""}});
     }
 
     void TestUpgradeSubDomainDecision(TTestActorRuntime &runtime, ui64 txId, const TString &parentPath, const TString &name, const TVector<TExpectedResult> &expectedResults, NKikimrSchemeOp::TUpgradeSubDomain::EDecision decision) {

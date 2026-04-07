@@ -1,0 +1,58 @@
+--- contrib/libs/grpc/src/core/lib/experiments/experiments.cc	(index)
++++ contrib/libs/grpc/src/core/lib/experiments/experiments.cc	(working tree)
+@@ -278,7 +278,7 @@ const ExperimentMetadata g_experiment_metadata[] = {
+      additional_constraints_rfc_max_concurrent_streams, false, true},
+     {"round_robin_delegate_to_pick_first",
+      description_round_robin_delegate_to_pick_first,
+-     additional_constraints_round_robin_delegate_to_pick_first, true, true},
++     additional_constraints_round_robin_delegate_to_pick_first, false, false},
+     {"rstpit", description_rstpit, additional_constraints_rstpit, false, true},
+     {"schedule_cancellation_over_write",
+      description_schedule_cancellation_over_write,
+@@ -574,7 +574,7 @@ const ExperimentMetadata g_experiment_metadata[] = {
+      additional_constraints_rfc_max_concurrent_streams, false, true},
+     {"round_robin_delegate_to_pick_first",
+      description_round_robin_delegate_to_pick_first,
+-     additional_constraints_round_robin_delegate_to_pick_first, true, true},
++     additional_constraints_round_robin_delegate_to_pick_first, false, false},
+     {"rstpit", description_rstpit, additional_constraints_rstpit, false, true},
+     {"schedule_cancellation_over_write",
+      description_schedule_cancellation_over_write,
+@@ -870,7 +870,7 @@ const ExperimentMetadata g_experiment_metadata[] = {
+      additional_constraints_rfc_max_concurrent_streams, false, true},
+     {"round_robin_delegate_to_pick_first",
+      description_round_robin_delegate_to_pick_first,
+-     additional_constraints_round_robin_delegate_to_pick_first, true, true},
++     additional_constraints_round_robin_delegate_to_pick_first, false, false},
+     {"rstpit", description_rstpit, additional_constraints_rstpit, false, true},
+     {"schedule_cancellation_over_write",
+      description_schedule_cancellation_over_write,
+--- contrib/libs/grpc/src/core/lib/experiments/experiments.h	(index)
++++ contrib/libs/grpc/src/core/lib/experiments/experiments.h	(working tree)
+@@ -102,7 +102,7 @@ inline bool IsRegisteredMethodLookupInTransportEnabled() { return true; }
+ inline bool IsRegisteredMethodsMapEnabled() { return false; }
+ inline bool IsRfcMaxConcurrentStreamsEnabled() { return false; }
+ #define GRPC_EXPERIMENT_IS_INCLUDED_ROUND_ROBIN_DELEGATE_TO_PICK_FIRST
+-inline bool IsRoundRobinDelegateToPickFirstEnabled() { return true; }
++inline bool IsRoundRobinDelegateToPickFirstEnabled() { return false; }
+ inline bool IsRstpitEnabled() { return false; }
+ inline bool IsScheduleCancellationOverWriteEnabled() { return false; }
+ #define GRPC_EXPERIMENT_IS_INCLUDED_SEPARATE_PING_FROM_KEEPALIVE
+@@ -175,7 +175,7 @@ inline bool IsRegisteredMethodLookupInTransportEnabled() { return true; }
+ inline bool IsRegisteredMethodsMapEnabled() { return false; }
+ inline bool IsRfcMaxConcurrentStreamsEnabled() { return false; }
+ #define GRPC_EXPERIMENT_IS_INCLUDED_ROUND_ROBIN_DELEGATE_TO_PICK_FIRST
+-inline bool IsRoundRobinDelegateToPickFirstEnabled() { return true; }
++inline bool IsRoundRobinDelegateToPickFirstEnabled() { return false; }
+ inline bool IsRstpitEnabled() { return false; }
+ inline bool IsScheduleCancellationOverWriteEnabled() { return false; }
+ #define GRPC_EXPERIMENT_IS_INCLUDED_SEPARATE_PING_FROM_KEEPALIVE
+@@ -247,7 +247,7 @@ inline bool IsRegisteredMethodLookupInTransportEnabled() { return true; }
+ inline bool IsRegisteredMethodsMapEnabled() { return false; }
+ inline bool IsRfcMaxConcurrentStreamsEnabled() { return false; }
+ #define GRPC_EXPERIMENT_IS_INCLUDED_ROUND_ROBIN_DELEGATE_TO_PICK_FIRST
+-inline bool IsRoundRobinDelegateToPickFirstEnabled() { return true; }
++inline bool IsRoundRobinDelegateToPickFirstEnabled() { return false; }
+ inline bool IsRstpitEnabled() { return false; }
+ inline bool IsScheduleCancellationOverWriteEnabled() { return false; }
+ #define GRPC_EXPERIMENT_IS_INCLUDED_SEPARATE_PING_FROM_KEEPALIVE

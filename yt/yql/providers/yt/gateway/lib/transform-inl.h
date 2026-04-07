@@ -172,9 +172,7 @@ TCallableVisitFunc TGatewayTransformer<TExecContextPtr>::operator()(TInternName 
                     const ui32 epoch = AS_VALUE(TDataLiteral, tuple->GetValue(6))->AsValue().Get<ui32>();
 
                     auto specNode = NYT::NodeFromYsonString(specStr);
-                    if (isTemporary || isAnonymous) {
-                        UpdateNativeYtTypeFlags(specNode, nativeYtTypeFlags);
-                    }
+                    UpdateNativeYtTypeFlags(specNode, nativeYtTypeFlags);
                     specStr = NYT::NodeToCanonicalYsonString(specNode);
 
                     tables[i].TableOptions = TYtTableOptions{.IsTemporary = isTemporary, .IsAnonymous = isAnonymous, .Epoch = epoch};
@@ -195,7 +193,7 @@ TCallableVisitFunc TGatewayTransformer<TExecContextPtr>::operator()(TInternName 
                     } else if (useSkiff) {
                         tables[i].Format = SingleTableSpecToInputSkiff(specNode, structColumns, false, false, false);
                     } else {
-                        if (ensureOldTypesOnly && specNode.HasKey(YqlRowSpecAttribute)) {
+                        if (ensureOldTypesOnly && specNode.HasKey(YqlRowSpecAttribute) && ExecCtx_->CheckSpecDoesntUseNativeYtTypes_) {
                             EnsureSpecDoesntUseNativeYtTypes(specNode, tablePath, true);
                         }
                         NYT::TNode formatNode("yson");

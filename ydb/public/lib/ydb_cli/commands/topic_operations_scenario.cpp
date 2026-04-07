@@ -206,6 +206,10 @@ void TTopicOperationsScenario::CreateTopic(const TString& topic,
         settings.AddAttribute("_cleanup_policy", "compact");
     }
 
+    if (PartitionsPerTablet.Defined()) {
+        settings.AddAttribute("_partitions_per_tablet", ToString(*PartitionsPerTablet));
+    }
+
     for (unsigned consumerIdx = 0; consumerIdx < consumerCount; ++consumerIdx) {
         settings
             .BeginAddConsumer(TCommandWorkloadTopicDescribe::GenerateConsumerName(ConsumerPrefix, consumerIdx))
@@ -412,6 +416,24 @@ bool TTopicOperationsScenario::AnyOutgoingMessages() const
     WRITE_LOG(Log, ELogPriority::TLOG_EMERG, "No messages were written.");
 
     return false;
+}
+
+void TTopicOperationsScenario::ConfigMetadataMonitoringOptions(TClientCommand::TConfig& config)
+{
+    config.Opts->AddLongOption("configure-consumers", "Number of consumers to continuously add and remove from the topic")
+        .Optional()
+        .Hidden()
+        .DefaultValue(0)
+        .StoreResult(&ConfigConsumerCount);
+    config.Opts->AddLongOption("describe-topic", "Continuously call DescribeTopic method to monitor topic metadata")
+        .Optional()
+        .Hidden()
+        .DefaultValue(false)
+        .StoreTrue(&NeedDescribeTopic);
+    config.Opts->AddLongOption("describe-consumer", "Consumer name for which DescribeConsumer method will be called continuously")
+        .Optional()
+        .Hidden()
+        .StoreResult(&DescribeConsumerName);
 }
 
 }

@@ -3,6 +3,7 @@
 #include <util/generic/deque.h>
 #include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
+#include <util/system/env.h>
 
 #include <library/cpp/openssl/method/io.h>
 #include <library/cpp/resource/resource.h>
@@ -180,10 +181,9 @@ namespace {
             Y_ENSURE(X509_VERIFY_PARAM_set1_host(param, VerifyCert_->Hostname_.data(), VerifyCert_->Hostname_.size()));
             SSL_set_tlsext_host_name(ssl, VerifyCert_->Hostname_.data()); // TLS extenstion: SNI
 
-            SSL_CTX_set_cert_store(Ctx.Get(), GetBuiltinOpenSslX509Store().Release());
+            SSL_CTX_set_cert_store(Ctx.Get(), GetDefaultOpenSslX509Store().Release());
 
-            Y_ENSURE_EX(1 == SSL_CTX_set_default_verify_paths(Ctx.Get()),
-                        TSslError());
+            // FIXME: This piece seems redundant, but users are unknown.
             // it is OK to ignore result of SSL_CTX_load_verify_locations():
             // Dir "/etc/ssl/certs/" may be missing
             SSL_CTX_load_verify_locations(Ctx.Get(),
@@ -230,7 +230,7 @@ namespace {
         TSslContextPtr Ctx;
         TSslPtr Ssl;
     };
-}
+} // namespace
 
 struct TOpenSslClientIO::TImpl: public TSslIO {
     inline TImpl(IInputStream* in, IOutputStream* out, const TOptions& opts)
@@ -270,6 +270,8 @@ namespace NPrivate {
     }
 }
 
+namespace {
+
 class TBuiltinCerts {
 public:
     TBuiltinCerts() {
@@ -296,9 +298,7 @@ public:
         Y_ENSURE_EX(!Certs.empty(), TSslError());
     }
 
-    TOpenSslX509StorePtr GetX509Store() const {
-        TOpenSslX509StorePtr store(X509_STORE_new());
-
+    void AddCerts(const TOpenSslX509StorePtr& store) const {
         for (const TX509Ptr& c : Certs) {
             if (0 == X509_STORE_add_cert(store.Get(), c.Get())) {
                 int err = GetLastSslError();
@@ -309,14 +309,29 @@ public:
                 }
             }
         }
-
-        return store;
     }
 
 private:
     TDeque<TX509Ptr> Certs;
 };
 
+} // namespace
+
 TOpenSslX509StorePtr GetBuiltinOpenSslX509Store() {
-    return Singleton<TBuiltinCerts>()->GetX509Store();
+    TOpenSslX509StorePtr store(X509_STORE_new());
+    Singleton<TBuiltinCerts>()->AddCerts(store);
+    return store;
+}
+
+TOpenSslX509StorePtr GetDefaultOpenSslX509Store() {
+    TOpenSslX509StorePtr store(X509_STORE_new());
+
+    if (!TryGetEnv("SSL_CERT_FILE") && !TryGetEnv("SSL_CERT_DIR")) {
+        Singleton<TBuiltinCerts>()->AddCerts(store);
+    }
+
+    Y_ENSURE_EX(1 == X509_STORE_set_default_paths(store.Get()),
+        TSslError());
+
+    return store;
 }

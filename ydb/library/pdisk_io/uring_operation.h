@@ -64,6 +64,28 @@ public:
 
     ui64 GetTotalSize() const { return TotalSize; }
 
+    ui64 GetDiskOffset() const { return DiskOffset; }
+
+    const void* GetIovBase() const {
+#if defined(__linux__)
+        return Iov.iov_base;
+#else
+        return nullptr;
+#endif
+    }
+
+    // Reset all submission/completion state so the object can be reused from a pool.
+    // Must be called before PrepareIov() when recycling an operation.
+    void ResetSubmissionState() {
+        Result = 0;
+        OperationType = ENOT_SET;
+        TotalSize = 0;
+        DiskOffset = 0;
+#if defined(__linux__)
+        Iov = {};
+#endif
+    }
+
 private:
     // Filled by TUringRouter on completion
     i32 Result = 0;  // io_uring cqe->res: bytes transferred on success, -errno on failure
@@ -72,8 +94,9 @@ private:
 
     EOperationType OperationType = ENOT_SET;
 
-    // never changes after set: needed in case of short read/write to have
-    // initially requested size
+    // Set once per I/O submission (by PrepareIov); preserved across short read/write
+    // retries (AdvanceIov) so completion logic knows the originally requested size.
+    // Reset to 0 by ResetSubmissionState() when the op is recycled.
     ui64 TotalSize = 0;
 
     ui64 DiskOffset = 0;

@@ -1,6 +1,3 @@
-/* dqfile can not */
-/* hybridfile can not - missing langver support */
-/* custom error: :38:5: Error: No such column: nation */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
@@ -12,7 +9,7 @@ FROM (
     SELECT
         n_name AS nation,
         DateTime::GetYear(CAST(o_orderdate AS Timestamp)) AS o_year,
-        l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity AS amount
+        l_extendedprice * ($to_decimal(1) - l_discount) - ps_supplycost * l_quantity AS amount
     FROM
         `/Root/part` as part
     ,

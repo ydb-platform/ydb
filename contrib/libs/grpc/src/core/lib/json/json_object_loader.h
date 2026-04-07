@@ -23,10 +23,10 @@
 #include <memory>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
-#include <utility>
 #include <vector>
 
 #include "y_absl/meta/type_traits.h"
+#include "y_absl/status/status.h"
 #include "y_absl/status/statusor.h"
 #include "y_absl/strings/numbers.h"
 #include "y_absl/strings/str_cat.h"
@@ -253,14 +253,14 @@ class LoadMap : public LoaderInterface {
   virtual const LoaderInterface* ElementLoader() const = 0;
 };
 
-// Load an optional of some type.
-class LoadOptional : public LoaderInterface {
+// Load a wrapped value of some type.
+class LoadWrapped : public LoaderInterface {
  public:
   void LoadInto(const Json& json, const JsonArgs& args, void* dst,
                 ValidationErrors* errors) const override;
 
  protected:
-  ~LoadOptional() = default;
+  ~LoadWrapped() = default;
 
  private:
   virtual void* Emplace(void* dst) const = 0;
@@ -392,7 +392,7 @@ class AutoLoader<std::map<TString, T>> final : public LoadMap {
 
 // Specializations of AutoLoader for y_absl::optional<>.
 template <typename T>
-class AutoLoader<y_absl::optional<T>> final : public LoadOptional {
+class AutoLoader<y_absl::optional<T>> final : public LoadWrapped {
  public:
   void* Emplace(void* dst) const final {
     return &static_cast<y_absl::optional<T>*>(dst)->emplace();
@@ -410,7 +410,7 @@ class AutoLoader<y_absl::optional<T>> final : public LoadOptional {
 
 // Specializations of AutoLoader for std::unique_ptr<>.
 template <typename T>
-class AutoLoader<std::unique_ptr<T>> final : public LoadOptional {
+class AutoLoader<std::unique_ptr<T>> final : public LoadWrapped {
  public:
   void* Emplace(void* dst) const final {
     auto& p = *static_cast<std::unique_ptr<T>*>(dst);
@@ -419,6 +419,26 @@ class AutoLoader<std::unique_ptr<T>> final : public LoadOptional {
   }
   void Reset(void* dst) const final {
     static_cast<std::unique_ptr<T>*>(dst)->reset();
+  }
+  const LoaderInterface* ElementLoader() const final {
+    return LoaderForType<T>();
+  }
+
+ private:
+  ~AutoLoader() = default;
+};
+
+// Specializations of AutoLoader for RefCountedPtr<>.
+template <typename T>
+class AutoLoader<RefCountedPtr<T>> final : public LoadWrapped {
+ public:
+  void* Emplace(void* dst) const final {
+    auto& p = *static_cast<RefCountedPtr<T>*>(dst);
+    p = MakeRefCounted<T>();
+    return p.get();
+  }
+  void Reset(void* dst) const final {
+    static_cast<RefCountedPtr<T>*>(dst)->reset();
   }
   const LoaderInterface* ElementLoader() const final {
     return LoaderForType<T>();
@@ -486,7 +506,7 @@ class Vec<T, 0> {
 
 // Given a list of elements, and a destination object, load the elements into
 // the object from some parsed JSON.
-// Returns false if the JSON object was not of type Json::Type::OBJECT.
+// Returns false if the JSON object was not of type Json::Type::kObject.
 bool LoadObject(const Json& json, const JsonArgs& args, const Element* elements,
                 size_t num_elements, void* dst, ValidationErrors* errors);
 
@@ -590,18 +610,9 @@ y_absl::StatusOr<T> LoadFromJson(
   ValidationErrors errors;
   T result{};
   json_detail::LoaderForType<T>()->LoadInto(json, args, &result, &errors);
-  if (!errors.ok()) return errors.status(error_prefix);
-  return std::move(result);
-}
-
-template <typename T>
-y_absl::StatusOr<RefCountedPtr<T>> LoadRefCountedFromJson(
-    const Json& json, const JsonArgs& args = JsonArgs(),
-    y_absl::string_view error_prefix = "errors validating JSON") {
-  ValidationErrors errors;
-  auto result = MakeRefCounted<T>();
-  json_detail::LoaderForType<T>()->LoadInto(json, args, result.get(), &errors);
-  if (!errors.ok()) return errors.status(error_prefix);
+  if (!errors.ok()) {
+    return errors.status(y_absl::StatusCode::kInvalidArgument, error_prefix);
+  }
   return std::move(result);
 }
 

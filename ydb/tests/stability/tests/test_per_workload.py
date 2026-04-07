@@ -2,7 +2,6 @@ import pytest
 import allure
 from ydb.tests.library.stability.run_stress import StressRunExecutor
 from ydb.tests.library.stability.workload_executor_parallel import ParallelWorkloadTestBase
-from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.library.stability.utils.utils import get_external_param
 from all_workloads import get_all_stress_names, get_stress_util
 
@@ -23,7 +22,7 @@ class TestPerWorkload(ParallelWorkloadTestBase):
 
     def test_stress_util(self, stress_name, nemesis_enabled: bool, stress_executor: StressRunExecutor, binary_deployer):
         allure.dynamic.title(f'{stress_name}[nemesis_{nemesis_enabled}]')
-        stress_util = get_stress_util(stress_name, ["--database", f"/{YdbCluster.ydb_database}"])
+        stress_util = get_stress_util(stress_name, ["--database", f"/{self.ydb_database}"])
 
         stress_dict = {}
         stress_dict[stress_name] = stress_util

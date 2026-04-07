@@ -55,6 +55,14 @@ public:
         return quantileDigest.SerializeAsString();
     }
 
+    void MergeWith(const IQuantileDigestPtr& other) override
+    {
+        const auto* otherDigest = dynamic_cast<const TTDigestAdaptor*>(other.Get());
+        YT_VERIFY(otherDigest);
+
+        UnderlyingDigest_ += otherDigest->UnderlyingDigest_;
+    }
+
 private:
     TDigest UnderlyingDigest_;
 };

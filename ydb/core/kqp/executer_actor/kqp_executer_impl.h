@@ -152,7 +152,6 @@ public:
         , AggregationSettings(executerConfig.TableServiceConfig.GetAggregationConfig())
         , StatementResultIndex(statementResultIndex)
         , BlockTrackingMode(executerConfig.GetBlockTrackingMode())
-        , VerboseMemoryLimitException(executerConfig.MutableConfig->VerboseMemoryLimitException.load())
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
         , TasksGraph(Database, Request.Transactions, Request.TxAlloc, partitionPrunerConfig, AggregationSettings, Counters, BufferActorId, UserToken)
@@ -239,14 +238,13 @@ protected:
 
         // Prune partitions here outside of TasksGraph - in all possible cases.
         for (auto& [_, stageInfo] : TasksGraph.GetStagesInfo()) {
-            if (TxManager) {
-                if (stageInfo.Meta.ShardKey) {
-                    TxManager->SetPartitioning(stageInfo.Meta.TableId, stageInfo.Meta.ShardKey->Partitioning);
-                }
-                for (const auto& indexMeta : stageInfo.Meta.IndexMetas) {
-                    if (indexMeta.ShardKey) {
-                        TxManager->SetPartitioning(indexMeta.TableId, indexMeta.ShardKey->Partitioning);
-                    }
+            AFL_ENSURE(TxManager);
+            if (stageInfo.Meta.ShardKey) {
+                TxManager->SetPartitioning(stageInfo.Meta.TableId, stageInfo.Meta.ShardKey->Partitioning);
+            }
+            for (const auto& indexMeta : stageInfo.Meta.IndexMetas) {
+                if (indexMeta.ShardKey) {
+                    TxManager->SetPartitioning(indexMeta.TableId, indexMeta.ShardKey->Partitioning);
                 }
             }
 
@@ -284,19 +282,6 @@ protected:
                     if (isFullScan && readSettings.ItemsLimit) {
                         // TODO: is it correct condition - shouldn't be: `!readSettings.ItemsLimit` ?
                         Counters->Counters->FullScansExecuted->Inc();
-                    }
-                }
-            }
-            // Write tasks to datashard (obsolete)
-            else if (!stageInfo.Meta.ShardOperations.empty() && stage.SinksSize() == 0) {
-                for (const auto& op : stage.GetTableOps()) {
-                    switch (op.GetTypeCase()) {
-                        case NKqpProto::TKqpPhyTableOperation::kUpsertRows:
-                        case NKqpProto::TKqpPhyTableOperation::kDeleteRows: {
-                            stageInfo.Meta.PrunedPartitions.emplace_back(PartitionPruner->PruneEffect(op, stageInfo));
-                        }
-                        default:
-                            break; // skip here - there will be an error when we will build tasks.
                     }
                 }
             } else {
@@ -353,10 +338,7 @@ protected:
             (trace_id, TraceId()));
 
         for (const auto& [_, nodeId] : reply.ShardsToNodes) {
-            ParticipantNodes.emplace(nodeId);
-            if (TxManager) {
-                TxManager->AddParticipantNode(nodeId);
-            }
+            TxManager->AddParticipantNode(nodeId);
         }
 
         TasksGraph.ResolveShards(std::move(reply.ShardsToNodes));
@@ -758,7 +740,8 @@ protected:
                 return;
             }
 
-            case NYql::NDqProto::COMPUTE_STATE_EXECUTING: {
+            case NYql::NDqProto::COMPUTE_STATE_EXECUTING:
+            case NYql::NDqProto::COMPUTE_STATE_FINISHED: {
                 if (populateChannels) {
                     auto& task = TasksGraph.GetTask(taskId);
                     THashMap<TActorId, THashSet<ui64>> updates;
@@ -1290,7 +1273,6 @@ protected:
             .BlockTrackingMode = BlockTrackingMode,
             .ArrayBufferMinFillPercentage = ArrayBufferMinFillPercentage,
             .BufferPageAllocSize = BufferPageAllocSize,
-            .VerboseMemoryLimitException = VerboseMemoryLimitException,
             .Query = Query,
             .CheckpointCoordinator = CheckpointCoordinatorId,
             .EnableWatermarks = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks(),
@@ -1361,7 +1343,7 @@ protected:
 protected:
     TString TraceId() const {
         if (ExecuterSpan) {
-            return ExecuterSpan.GetTraceId().GetHexTraceId();
+            return ExecuterSpan.GetTraceId().GetHexTraceIdLowerCase();
         }
         return TString();
     }
@@ -1546,8 +1528,6 @@ protected:
 
     void PassAway() override {
         YQL_ENSURE(AlreadyReplied && ResponseEv);
-
-        ResponseEv->ParticipantNodes = std::move(ParticipantNodes);
 
         // Fill response stats
         {
@@ -1807,13 +1787,9 @@ protected:
 
     ui32 StatementResultIndex;
 
-    // Track which nodes (by shards) have been involved during execution
-    THashSet<ui32> ParticipantNodes;
-
     bool AlreadyReplied = false;
 
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
-    const bool VerboseMemoryLimitException;
     TMaybe<ui8> ArrayBufferMinFillPercentage;
     TMaybe<size_t> BufferPageAllocSize;
 
@@ -1857,7 +1833,8 @@ IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const std::optional<TLlvmSettings>& llvmSettings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService);
+    const std::optional<TLlvmSettings>& llvmSettings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
+    const IKqpTransactionManagerPtr& txManager);
 
 } // namespace NKqp
 } // namespace NKikimr

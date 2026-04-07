@@ -3085,6 +3085,10 @@
             }
         }
     ],
+    "test.TestViewer.test_viewer_acl_write_invalid": {
+        "status_code": 403,
+        "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: Token is not in correct format\n</p></body></html>"
+    },
     "test.TestViewer.test_viewer_autocomplete": {
         "dedicated_db": {
             "/Root": {
@@ -4531,6 +4535,18 @@
             "Source": 1,
             "Status": "StatusSuccess"
         }
+    },
+    "test.TestViewer.test_viewer_domain_peers": {
+        "FieldsAvailable": "0000011110111010000000000110101000011",
+        "FieldsRequired": "0000000000010000000000000000001000001",
+        "FoundNodes": "1",
+        "Nodes": [
+            {
+                "ConnectStatus": "Grey",
+                "NodeId": 1
+            }
+        ],
+        "TotalNodes": "1"
     },
     "test.TestViewer.test_viewer_groups_group_by_capacity_alert": [
         {
@@ -12802,206 +12818,6 @@
         }
     },
     "test.TestViewer.test_viewer_tenantinfo": {
-        "TenantInfo": [
-            {
-                "AliveNodes": 1,
-                "CoresTotal": "not-zero-number",
-                "CoresUsed": "not-zero-number",
-                "CreateTime": "not-zero-number-text",
-                "Id": "1",
-                "MemoryLimit": "not-zero-number-text",
-                "MemoryStats": {},
-                "Metrics": {},
-                "Name": "/Root",
-                "NetworkUtilization": "number",
-                "NetworkWriteThroughput": "text",
-                "NodeIds": [
-                    1
-                ],
-                "Overall": "Green",
-                "Owner": "root",
-                "PoolStats": [
-                    {
-                        "Name": "System",
-                        "Threads": 2,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "User",
-                        "Threads": 3,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "Batch",
-                        "Threads": 2,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "IO",
-                        "Threads": 1,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "IC",
-                        "Threads": 1,
-                        "Usage": "number"
-                    }
-                ],
-                "State": "RUNNING",
-                "Type": "Domain"
-            },
-            {
-                "AliveNodes": 1,
-                "CoresTotal": "not-zero-number",
-                "CoresUsed": "not-zero-number",
-                "DatabaseQuotas": {},
-                "Id": "38",
-                "MemoryLimit": "not-zero-number-text",
-                "MemoryStats": {},
-                "Metrics": "not-empty-object",
-                "Name": "/Root/dedicated_db",
-                "NetworkUtilization": "number",
-                "NetworkWriteThroughput": "text",
-                "NodeIds": [
-                    50000
-                ],
-                "Overall": "Green",
-                "Owner": "root",
-                "PoolStats": [
-                    {
-                        "Name": "System",
-                        "Threads": 2,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "User",
-                        "Threads": 3,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "Batch",
-                        "Threads": 2,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "IO",
-                        "Threads": 1,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "IC",
-                        "Threads": 1,
-                        "Usage": "number"
-                    }
-                ],
-                "Resources": {
-                    "Allocated": [
-                        {
-                            "Count": 1,
-                            "Kind": "hdd",
-                            "Type": "storage"
-                        }
-                    ],
-                    "Required": [
-                        {
-                            "Count": 1,
-                            "Kind": "hdd",
-                            "Type": "storage"
-                        }
-                    ]
-                },
-                "State": "RUNNING",
-                "StateStats": [
-                    {
-                        "Count": 10,
-                        "VolatileState": "TABLET_VOLATILE_STATE_RUNNING"
-                    }
-                ],
-                "Type": "Dedicated"
-            },
-            {
-                "CoresUsed": "not-zero-number",
-                "DatabaseQuotas": {},
-                "Id": "40",
-                "Metrics": "not-empty-object",
-                "Name": "/Root/serverless_db",
-                "Overall": "Green",
-                "Owner": "root",
-                "ResourceId": "39",
-                "State": "RUNNING",
-                "StateStats": [
-                    {
-                        "Count": 7,
-                        "VolatileState": "TABLET_VOLATILE_STATE_RUNNING"
-                    }
-                ],
-                "Type": "Serverless"
-            },
-            {
-                "AliveNodes": 1,
-                "CoresTotal": "not-zero-number",
-                "CoresUsed": "not-zero-number",
-                "DatabaseQuotas": {},
-                "Id": "39",
-                "MemoryLimit": "not-zero-number-text",
-                "MemoryStats": {},
-                "Metrics": "not-empty-object",
-                "Name": "/Root/shared_db",
-                "NetworkUtilization": "number",
-                "NetworkWriteThroughput": "text",
-                "NodeIds": [
-                    50001
-                ],
-                "Overall": "Green",
-                "Owner": "root",
-                "PoolStats": [
-                    {
-                        "Name": "System",
-                        "Threads": 2,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "User",
-                        "Threads": 3,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "Batch",
-                        "Threads": 2,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "IO",
-                        "Threads": 1,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "IC",
-                        "Threads": 1,
-                        "Usage": "number"
-                    }
-                ],
-                "Resources": {
-                    "Allocated": [
-                        {
-                            "Count": 1,
-                            "Kind": "hdd",
-                            "Type": "storage"
-                        }
-                    ]
-                },
-                "State": "RUNNING",
-                "StateStats": [
-                    {
-                        "Count": 10,
-                        "VolatileState": "TABLET_VOLATILE_STATE_RUNNING"
-                    }
-                ],
-                "Type": "Shared"
-            }
-        ]
-    },
-    "test.TestViewer.test_viewer_tenantinfo_db": {
         "/Root": {
             "TenantInfo": [
                 {
@@ -13595,6 +13411,7 @@
             }
         ]
     },
+    "test.TestViewer.test_waiting_for_cluster_ready": {},
     "test.TestViewer.test_whoami_database": {
         "status_code": 403,
         "text": "<html><body><h1>403 Forbidden</h1></body></html>"

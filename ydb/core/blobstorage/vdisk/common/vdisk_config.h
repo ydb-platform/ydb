@@ -135,6 +135,7 @@ namespace NKikimr {
         TControlWrapper HullCompFullCompPeriodSec;
         TControlWrapper HullCompThrottlerBytesRate;
         TControlWrapper DefragThrottlerBytesRate;
+        TControlWrapper MaxActiveCompactionsPerPDisk;
         double HullCompReadBatchEfficiencyThreshold;
         ui64 AnubisOsirisMaxInFly;
         EBlobHeaderMode BlobHeaderMode;
@@ -278,6 +279,9 @@ namespace NKikimr {
         TControlWrapper MaxInProgressSyncCount;
         TControlWrapper EnablePhantomFlagStorage;
         TControlWrapper PhantomFlagStorageLimit;
+
+        ///////////// CHUNK Keeper //////////////////
+        TControlWrapper EnableChunkKeeper;
 
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;

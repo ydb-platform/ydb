@@ -25,6 +25,7 @@ void TGRpcCmsService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         requestType,                                                                                     \
         YDB_API_DEFAULT_COUNTER_BLOCK(cms, methodName),                                                  \
         auditMode,                                                                                       \
+        EEmptyDatabaseMode::EmptyDatabaseAllowed,                                                        \
         COMMON,                                                                                          \
         operationCallClass,                                                                              \
         GRpcRequestProxyId_,                                                                             \

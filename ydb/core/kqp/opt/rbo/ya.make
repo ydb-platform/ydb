@@ -16,6 +16,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/kqp/common
+    ydb/core/kqp/opt/cbo
     ydb/core/kqp/opt/logical
     ydb/core/kqp/opt/peephole
     ydb/core/kqp/opt/physical

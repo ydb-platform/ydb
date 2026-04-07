@@ -2,6 +2,7 @@
 #include "mkql_window_frames_collector_params_deserializer.h"
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/utils/runtime_dispatch.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/core/sql_types/window_frame_bounds.h>
@@ -817,6 +818,11 @@ IComputationNode* WrapPreserveStream(TCallable& callable, const TComputationNode
 // ###### Wrappers that are used by CoreWinFramesCollector API #######
 // #############################################################################
 
+template <bool IsRange, bool IsIncremental, bool ReturnSingleElement>
+IComputationNode* MakeWinFrameWithDeps(TCallable& callable, const TComputationNodeFactoryContext& ctx, unsigned reqArgs, TResourceType* resourceType, IComputationNode* resource, ui64 handle) {
+    return MakeNodeWithDeps<TWinFrame<IsRange, IsIncremental, ReturnSingleElement>>(callable, ctx, reqArgs, resourceType, resource, handle);
+}
+
 IComputationNode* WrapWinFramesCollector(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 3, "WinFramesCollector: Expected 3 args");
     auto stream = LocateNode(ctx.NodeLocator, callable, 0);
@@ -848,36 +854,7 @@ IComputationNode* WrapWinFrame(TCallable& callable, const TComputationNodeFactor
     auto isRange = AS_VALUE(TDataLiteral, callable.GetInput(3))->AsValue().Get<bool>();
     bool isSingleElement = AS_VALUE(TDataLiteral, callable.GetInput(4))->AsValue().Get<bool>();
 
-    // Instantiate the correct template specialization based on runtime values
-    if (isRange) {
-        if (IsIncremental) {
-            if (isSingleElement) {
-                return MakeNodeWithDeps<TWinFrame</*IsRange=*/true, /*IsIncremental=*/true, /*ReturnSingleElement=*/true>>(callable, ctx, reqArgs, resourceType, resource, handle);
-            } else {
-                return MakeNodeWithDeps<TWinFrame</*IsRange=*/true, /*IsIncremental=*/true, /*ReturnSingleElement=*/false>>(callable, ctx, reqArgs, resourceType, resource, handle);
-            }
-        } else {
-            if (isSingleElement) {
-                return MakeNodeWithDeps<TWinFrame</*IsRange=*/true, /*IsIncremental=*/false, /*ReturnSingleElement=*/true>>(callable, ctx, reqArgs, resourceType, resource, handle);
-            } else {
-                return MakeNodeWithDeps<TWinFrame</*IsRange=*/true, /*IsIncremental=*/false, /*ReturnSingleElement=*/false>>(callable, ctx, reqArgs, resourceType, resource, handle);
-            }
-        }
-    } else {
-        if (IsIncremental) {
-            if (isSingleElement) {
-                return MakeNodeWithDeps<TWinFrame</*IsRange=*/false, /*IsIncremental=*/true, /*ReturnSingleElement=*/true>>(callable, ctx, reqArgs, resourceType, resource, handle);
-            } else {
-                return MakeNodeWithDeps<TWinFrame</*IsRange=*/false, /*IsIncremental=*/true, /*ReturnSingleElement=*/false>>(callable, ctx, reqArgs, resourceType, resource, handle);
-            }
-        } else {
-            if (isSingleElement) {
-                return MakeNodeWithDeps<TWinFrame</*IsRange=*/false, /*IsIncremental=*/false, /*ReturnSingleElement=*/true>>(callable, ctx, reqArgs, resourceType, resource, handle);
-            } else {
-                return MakeNodeWithDeps<TWinFrame</*IsRange=*/false, /*IsIncremental=*/false, /*ReturnSingleElement=*/false>>(callable, ctx, reqArgs, resourceType, resource, handle);
-            }
-        }
-    }
+    return YQL_RUNTIME_DISPATCH(MakeWinFrameWithDeps, 3, isRange, IsIncremental, isSingleElement, callable, ctx, reqArgs, resourceType, resource, handle);
 }
 
 } // namespace NMiniKQL

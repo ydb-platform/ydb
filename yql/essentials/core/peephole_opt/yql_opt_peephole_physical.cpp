@@ -3198,8 +3198,33 @@ TExprNode::TPtr ExpandMux(const TExprNode::TPtr& node, TExprContext& ctx) {
     return node;
 }
 
-TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
+bool IsOptimizerExpandLMapOrShuffleByKeysViaBlockAllowed(const TTypeAnnotationContext& types) {
+    static const char Flag[] = "ExpandLMapOrShuffleByKeysViaBlock";
+    return IsOptimizerEnabled<Flag>(types) && !IsOptimizerDisabled<Flag>(types);
+}
+
+TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
+    if (IsOptimizerExpandLMapOrShuffleByKeysViaBlockAllowed(types)) {
+        return ctx.Builder(node->Pos())
+            .Callable("Block")
+                .Lambda(0)
+                    .Param("parent")
+                    .Callable("Collect")
+                        .Apply(0, node->Tail())
+                            .With(0)
+                                .Callable("Iterator")
+                                    .Add(0, node->HeadPtr())
+                                    .Callable(1, "DependsOn")
+                                        .Arg(0, "parent")
+                                    .Seal()
+                                .Seal()
+                            .Done()
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal().Build();
+    }
     return ctx.Builder(node->Pos())
         .Callable("Collect")
             .Apply(0, node->Tail())
@@ -3210,6 +3235,25 @@ TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprCont
                 .Done()
             .Seal()
         .Seal().Build();
+}
+
+bool IsExpandLMapOrShuffleByKeysPromoted(const TTypeAnnotationContext& types) {
+    static const char Flag[] = "PromoteExpandLMapOrShuffleByKeys";
+    return IsOptimizerEnabled<Flag>(types) && !IsOptimizerDisabled<Flag>(types);
+}
+
+TExprNode::TPtr ExpandLMapOrShuffleByKeysAtCommonStage(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    if (IsExpandLMapOrShuffleByKeysPromoted(types)) {
+        return ExpandLMapOrShuffleByKeys(node, ctx, types);
+    }
+    return node;
+}
+
+TExprNode::TPtr ExpandLMapOrShuffleByKeysAtFinalStage(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    if (!IsExpandLMapOrShuffleByKeysPromoted(types)) {
+        return ExpandLMapOrShuffleByKeys(node, ctx, types);
+    }
+    return node;
 }
 
 TExprNode::TPtr ExpandDemux(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -6225,10 +6269,6 @@ private:
 
     // Rewrite if present via BlockIf + BlockExists + BlockValidUnwrap.
     TExprNode::TPtr RewriteIfPresent(TIfPresentCallableView ifPresentView, TRewritesMap& rewrites, const TNodeSet& nonStrictNodes) {
-        // Block Coalesce and block exists between two scalars are available only since 63 version.
-        if constexpr (NKikimr::NMiniKQL::RuntimeVersion < 63U) {
-            return nullptr;
-        }
         // Check that lambda return type is valid.
         if (!IsSupportedAsBlockType(ifPresentView.Lambda()->Pos(), *ifPresentView.Lambda()->GetTypeAnn(), Ctx_, Types_, true)) {
             YQL_CLOG(TRACE, CorePeepHole) << Log(ifPresentView.Lambda().Get()) << "Lambda return type is not supported";
@@ -8834,6 +8874,12 @@ TExprNode::TPtr ExpandSqlEqual(const TExprNode::TPtr& node, TExprContext& ctx) {
         return ReduceLeftArg<true, Equals, IsDistinct>(*node, ctx);
     } else if (ETypeAnnotationKind::Optional == rKind) {
         return ReduceRightArg<true, Equals, IsDistinct>(*node, ctx);
+    } else if (ETypeAnnotationKind::Pg == lKind && ETypeAnnotationKind::Null == rKind ||
+               ETypeAnnotationKind::Null == lKind && ETypeAnnotationKind::Pg == rKind) {
+        if constexpr (IsDistinct) {
+            const auto pgArg = ETypeAnnotationKind::Pg == lKind ? node->HeadPtr() : node->TailPtr();
+            return ctx.WrapByCallableIf(Equals, "Not", ctx.NewCallable(node->Pos(), "Exists", {pgArg}));
+        }
     }
 
     return node;
@@ -9322,6 +9368,9 @@ struct TPeepHoleRules {
         {"CalcOverWindow", &ExpandCalcOverWindow},
         {"CalcOverSessionWindow", &ExpandCalcOverWindow},
         {"CalcOverWindowGroup", &ExpandCalcOverWindow},
+        {"LMap", &ExpandLMapOrShuffleByKeysAtCommonStage},
+        {"OrderedLMap", &ExpandLMapOrShuffleByKeysAtCommonStage},
+        {"ShuffleByKeys", &ExpandLMapOrShuffleByKeysAtCommonStage},
     };
 
     const TPeepHoleOptimizerMap SimplifyStageRules = {
@@ -9365,9 +9414,6 @@ struct TPeepHoleRules {
         {"OrderedFilter", &ExpandFilter<>},
         {"TakeWhile", &ExpandFilter<false>},
         {"SkipWhile", &ExpandFilter<true>},
-        {"LMap", &ExpandLMapOrShuffleByKeys},
-        {"OrderedLMap", &ExpandLMapOrShuffleByKeys},
-        {"ShuffleByKeys", &ExpandLMapOrShuffleByKeys},
         {"Nth", &OptimizeNth},
         {"Member", &OptimizeMember},
         {"Condense1", &OptimizeCondense1},
@@ -9397,6 +9443,9 @@ struct TPeepHoleRules {
     };
 
     const TExtPeepHoleOptimizerMap FinalStageExtRules = {
+        {"LMap", &ExpandLMapOrShuffleByKeysAtFinalStage},
+        {"OrderedLMap", &ExpandLMapOrShuffleByKeysAtFinalStage},
+        {"ShuffleByKeys", &ExpandLMapOrShuffleByKeysAtFinalStage},
         {"Exists", &OptimizeExists},
         {"ExpandMap", &OptimizeExpandMap},
         {"NarrowFlatMap", &OptimizeNarrowFlatMap},

@@ -26,8 +26,6 @@ public:
 
     TShardIdToInfoMap Prune(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo, bool& isFullScan);
 
-    TShardIdToInfoMap PruneEffect(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo);
-
     // Places all ranges from all partitions under shard id of the first or last extracted range from source.
     std::pair<ui64 /* shardId */, TShardInfo> MakeVirtualTablePartition(const NKqpProto::TKqpReadRangesSource& source, const TStageInfo& stageInfo);
 
@@ -82,18 +80,6 @@ TShardIdToInfoMap PrunePartitions(const NKqpProto::TKqpPhyOpReadOlapRanges& read
 TShardIdToInfoMap PrunePartitions(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
     const TPartitionPrunerConfig& prunerConfig, bool& isFullScan);
-
-TShardIdToInfoMap PruneEffectPartitions(const NKqpProto::TKqpPhyOpUpsertRows& effect, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const TPartitionPrunerConfig& prunerConfig);
-
-TShardIdToInfoMap PruneEffectPartitions(const NKqpProto::TKqpPhyOpDeleteRows& effect, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const TPartitionPrunerConfig& prunerConfig);
-
-TShardIdToInfoMap PruneEffectPartitions(const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo,
-    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const TPartitionPrunerConfig& prunerConfig);
 
 TPhysicalShardReadSettings ExtractReadSettings(
     const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo,

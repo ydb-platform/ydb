@@ -2589,7 +2589,7 @@ public:
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY:
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT: {
                 TString text = QueryState->ExtractQueryText();
-                if (IsQueryAllowedToLog(text)) {
+                if (!NKikimr::IsQueryWithSensitiveInfo(text)) {
                     auto userSID = QueryState->UserToken->GetUserSID();
                     CollectQueryStats(TlsActivationContext->AsActorContext(), stats, queryDuration, text,
                         userSID, QueryState->ParametersSize, database, type, requestUnits);

@@ -4,6 +4,84 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 Y_UNIT_TEST_SUITE(Util) {
+    Y_UNIT_TEST(IsQueryWithSensitiveInfo) {
+        UNIT_ASSERT(!NKikimr::IsQueryWithSensitiveInfo("SELECT 1"));
+        UNIT_ASSERT(!NKikimr::IsQueryWithSensitiveInfo("CREATE TABLE t (id Int32, PRIMARY KEY(id))"));
+        UNIT_ASSERT(!NKikimr::IsQueryWithSensitiveInfo(""));
+
+        UNIT_ASSERT(NKikimr::IsQueryWithSensitiveInfo("CREATE SECRET my_secret WITH (VALUE = '123')"));
+        UNIT_ASSERT(NKikimr::IsQueryWithSensitiveInfo("create secret my_secret with (value = '123')"));
+        UNIT_ASSERT(NKikimr::IsQueryWithSensitiveInfo("ALTER SECRET my_secret SET VALUE '123'"));
+        UNIT_ASSERT(NKikimr::IsQueryWithSensitiveInfo("DROP SECRET my_secret"));
+
+        UNIT_ASSERT(NKikimr::IsQueryWithSensitiveInfo("CREATE USER user1 PASSWORD 'p@ss'"));
+        UNIT_ASSERT(NKikimr::IsQueryWithSensitiveInfo("create user user1 password 'p@ss'"));
+        UNIT_ASSERT(NKikimr::IsQueryWithSensitiveInfo("ALTER USER user1 PASSWORD 'new'"));
+    }
+
+    Y_UNIT_TEST(IsQueryWithSensitiveInfoFalsePositives) {
+        // False positive: marker word appears inside a SQL comment
+        UNIT_ASSERT(NKikimr::IsQueryWithSensitiveInfo("SELECT 1 -- secret comment"));
+        UNIT_ASSERT(NKikimr::IsQueryWithSensitiveInfo("SELECT 1 /* password hint */"));
+
+        // False positive: table name contains a sensitive marker as a substring
+        UNIT_ASSERT(NKikimr::IsQueryWithSensitiveInfo("CREATE TABLE tableWithSecrets (id Int32, PRIMARY KEY(id))"));
+    }
+
+    Y_UNIT_TEST(IsQueryWithSensitiveInfoMultiline) {
+        UNIT_ASSERT(NKikimr::IsQueryWithSensitiveInfo(
+            "CREATE\n"
+            "SECRET\n"
+            "x\n"
+            "WITH (VALUE = '123')"));
+    }
+
+    Y_UNIT_TEST(ProtectQueryForLoggingIfSensitive) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            NKikimr::ProtectQueryForLoggingIfSensitive("SELECT 1"),
+            "SELECT 1");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            NKikimr::ProtectQueryForLoggingIfSensitive("CREATE TABLE t (id Int32, PRIMARY KEY(id))"),
+            "CREATE TABLE t (id Int32, PRIMARY KEY(id))");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            NKikimr::ProtectQueryForLoggingIfSensitive("CREATE SECRET s WITH (VALUE = '123')"),
+            "Query text is hidden due to a sensitive marker: secret");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            NKikimr::ProtectQueryForLoggingIfSensitive("CREATE USER u PASSWORD 'p'"),
+            "Query text is hidden due to a sensitive marker: password");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            NKikimr::ProtectQueryForLoggingIfSensitive("create Secret s with (value = '123')"),
+            "Query text is hidden due to a sensitive marker: secret");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            NKikimr::ProtectQueryForLoggingIfSensitive("ALTER USER u PASSWORD 'new'"),
+            "Query text is hidden due to a sensitive marker: password");
+    }
+
+    Y_UNIT_TEST(ProtectQueryForLoggingIfSensitiveFalsePositives) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            NKikimr::ProtectQueryForLoggingIfSensitive("SELECT 1 -- secret comment"),
+            "Query text is hidden due to a sensitive marker: secret");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            NKikimr::ProtectQueryForLoggingIfSensitive("CREATE TABLE tableWithSecrets (id Int32, PRIMARY KEY(id))"),
+            "Query text is hidden due to a sensitive marker: secret");
+    }
+
+    Y_UNIT_TEST(ProtectQueryForLoggingIfSensitiveMultiline) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            NKikimr::ProtectQueryForLoggingIfSensitive(
+                "CREATE\n"
+                "SECRET\n"
+                "x\n"
+                "WITH (VALUE = '123')"),
+            "Query text is hidden due to a sensitive marker: secret");
+    }
+
     Y_UNIT_TEST(MaskTicket) {
         TString ticket = "my_secret_abaabaabaaba";
         UNIT_ASSERT_VALUES_EQUAL(NKikimr::MaskTicket(ticket), "my_s****aaba (47A7C701)");

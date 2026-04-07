@@ -2048,7 +2048,7 @@ public:
 
             auto* actor = CreateKqpBufferWriterActor(std::move(settings));
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);
-        } else if (txCtx->EnableOltpSink.value_or(false) && txCtx->BufferActorId) {
+        } else if (txCtx->EnableOltpSink.value_or(false) && txCtx->BufferActorId && !isRollback) {
             txCtx->TxManager->SetTopicOperations(std::move(request.TopicOperations));
             txCtx->TxManager->AddTopicsToShards();
         }

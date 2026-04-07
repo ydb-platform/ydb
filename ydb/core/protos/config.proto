@@ -1822,7 +1822,7 @@ message TImmediateControlsConfig {
             MaxValue: 10,
             DefaultValue: 1 }];
     }
-    optional TQuoterControls QuoterControls = 16;
+    optional TQuoterControls QuoterControls = 21;
 };
 
 message TMeteringConfig {

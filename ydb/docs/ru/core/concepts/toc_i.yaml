@@ -37,3 +37,5 @@ items:
   href: bridge.md
 - name: Трансфер данных
   href: transfer.md
+- name: Потоковые запросы
+  href: streaming-query.md

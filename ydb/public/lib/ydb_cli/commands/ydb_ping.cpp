@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 
+#include <library/cpp/getopt/small/completer.h>
 #include <library/cpp/threading/future/wait/wait.h>
 #include <library/cpp/time_provider/monotonic.h>
 
@@ -84,9 +85,15 @@ void TCommandPing::Config(TConfig& config) {
         'i', "interval", TStringBuilder() << "<interval> ms between pings, default " << DEFAULT_INTERVAL_MS)
             .RequiredArgument("INTERVAL").StoreResult(&IntervalMs);
 
+    TVector<NLastGetopt::NComp::TChoice> kindChoices;
+    for (size_t i = 0; i < PingKindDescriptions.size(); ++i) {
+        EPingKind kind = static_cast<EPingKind>(i);
+        kindChoices.emplace_back(ToString(kind), PingKindDescriptions[i]);
+    }
     config.Opts->AddLongOption(
         'k', "kind", pingKindsDescription.Str())
-            .OptionalArgument("STRING").StoreResult(&PingKind);
+            .RequiredArgument("STRING").StoreResult(&PingKind)
+            .Completer(NLastGetopt::NComp::Choice(std::move(kindChoices)));
 }
 
 void TCommandPing::Parse(TConfig& config) {

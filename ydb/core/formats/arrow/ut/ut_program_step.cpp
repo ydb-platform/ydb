@@ -579,7 +579,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         }
         {
             auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1, 3}), TColumnChainInfo(1003), std::make_shared<TSimpleFunction>(EOperation::Equal),
-                std::make_shared<TLogicEquals>(false)).DetachResult();
+                std::make_shared<TCompareKernel>(false, TIndexCheckOperation::EOperation::Equals)).DetachResult();
             builder.Add(proc);
         }
         {

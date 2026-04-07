@@ -3,7 +3,6 @@
 #include "kqp_info_unit.h"
 #include "kqp_rbo_context.h"
 #include "kqp_plan_props.h"
-#include "kqp_operator.h"
 
 namespace NKikimr {
 namespace NKqp {
@@ -19,6 +18,5 @@ template <class T> void AddUnique(TVector<T>& toAdd, TVector<T>& target) {
         }
     }
 }
-
 }
 }

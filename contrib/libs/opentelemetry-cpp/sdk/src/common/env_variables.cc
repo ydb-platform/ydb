@@ -26,7 +26,7 @@ namespace sdk
 namespace common
 {
 
-bool GetRawEnvironmentVariable(const char *env_var_name, std::string &value)
+static bool GetRawEnvironmentVariable(const char *env_var_name, std::string &value)
 {
 #if !defined(NO_GETENV)
   const char *endpoint_from_env = nullptr;

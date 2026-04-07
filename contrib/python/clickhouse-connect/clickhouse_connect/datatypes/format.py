@@ -5,9 +5,6 @@ from typing import Dict, Type, Sequence, Optional
 from clickhouse_connect.datatypes.base import ClickHouseType, type_map, ch_read_formats, ch_write_formats
 from clickhouse_connect.driver.exceptions import ProgrammingError
 
-json_re = re.compile('json', re.IGNORECASE)
-
-
 def set_default_formats(*args, **kwargs):
     fmt_map = format_map(_convert_arguments(*args, **kwargs))
     ch_read_formats.update(fmt_map)
@@ -26,7 +23,6 @@ def clear_default_format(pattern: str):
 
 
 def set_write_format(pattern: str, fmt: str):
-    pattern = json_re.sub('object', pattern)
     for ch_type in _matching_types(pattern):
         ch_write_formats[ch_type] = fmt
 

@@ -7,6 +7,8 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_data_provider.h>
 
+#include <yql/essentials/public/udf_meta/udf_meta.h>
+
 namespace NYql {
 
 enum class ETypeCheckMode {
@@ -37,8 +39,9 @@ TExprNode::TPtr ParseAndAnnotate(
 TAutoPtr<IGraphTransformer> CreatePartialTypeAnnotationTransformer(
     TAutoPtr<IGraphTransformer> callableTransformer, TTypeAnnotationContext& types);
 
-bool PartialAnnonateTypes(TAstNode* astRoot, TLangVersion langver, TIssues& issues,
-    std::function<TIntrusivePtr<IDataProvider>(TTypeAnnotationContext&)> configProviderFactory);
+bool PartialAnnonateTypes(TAstNode* astRoot, TLangVersion langver, const IUdfMeta* udfMeta, TIssues& issues,
+    std::function<TIntrusivePtr<IDataProvider>(TTypeAnnotationContext&)> configProviderFactory,
+    std::function<const TTypeAnnotationNode* (TStringBuf, TExprContext&)> typeParser);
 
 void CheckFatalTypeError(IGraphTransformer::TStatus status);
 

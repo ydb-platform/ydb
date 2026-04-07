@@ -36,9 +36,11 @@
 
   {% include [install/cmd_php.md](install/cmd_php.md) %}
 
-- Node.JS
+- JavaScript
 
-  {% include [install/cmd_nodejs.md](install/cmd_nodejs.md) %}
+  {% include [install/cmd_npm.md](install/cmd_npm.md) %}
+
+  Минимальная поддерживаемая версия [Node.js®](https://nodejs.org/en/download) не ниже 20.19.
 
 - Rust
 

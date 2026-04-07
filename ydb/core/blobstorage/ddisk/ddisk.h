@@ -98,6 +98,10 @@ namespace NKikimr::NDDisk {
             pb->SetOffsetInBytes(OffsetInBytes);
             pb->SetSize(Size);
         }
+
+        void Print(IOutputStream& os) const {
+            os << "{VChunkIndex:" << VChunkIndex << " OffsetInBytes:" << OffsetInBytes << " Size:" << Size << "}";
+        }
     };
 
     struct TWriteInstruction {
@@ -364,6 +368,20 @@ struct TPersistentBufferFormat {
                 pbId->SetDDiskSlotId(std::get<2>(id));
             }
         }
+
+        TEvWritePersistentBuffers(const TQueryCredentials& creds, const TBlockSelector& selector, ui64 lsn,
+                const TWriteInstruction& instruction, const std::vector<NKikimrBlobStorage::NDDisk::TDDiskId>& persistentBufferIds,
+                ui32 replyTimeoutMicroseconds) {
+            creds.Serialize(Record.MutableCredentials());
+            selector.Serialize(Record.MutableSelector());
+            Record.SetLsn(lsn);
+            Record.SetReplyTimeoutMicroseconds(replyTimeoutMicroseconds);
+            instruction.Serialize(Record.MutableInstruction());
+            for (auto id : persistentBufferIds) {
+                auto* pbId = Record.AddPersistentBufferIds();
+                *pbId = id;
+            }
+        }
     };
 
     DECLARE_DDISK_EVENT(ReadPersistentBuffer) {
@@ -570,6 +588,10 @@ struct TPersistentBufferFormat {
     };
 
     IActor *CreateDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
+        TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
+        TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+
+    IActor *CreatePersistentBufferActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
         TPersistentBufferFormat&& pbFormat, TDDiskConfig&& ddiskConfig,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
 

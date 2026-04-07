@@ -904,6 +904,16 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
 
     result.SetWriteBytesQuota(TotalPartitionWriteSpeed);
 
+    auto setMLPConsumerState = [&](auto* clientInfo, const auto& consumerName) {
+        auto it = MLPConsumers.find(consumerName);
+        if (it != MLPConsumers.end()) {
+            clientInfo->SetUseForReading(it->second.UseForReading);
+            clientInfo->SetMLPLockedMessageCount(it->second.LockedMessageCount);
+            clientInfo->SetMLPDelayedMessageCount(it->second.DelayedMessageCount);
+            clientInfo->SetMLPMessageCount(it->second.MessageCount);
+        }
+    };
+
     TVector<ui64> resSpeed;
     resSpeed.resize(4);
     ui64 maxQuota = 0;
@@ -925,11 +935,14 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             if (requiredConsumers.contains(userInfo.User)) {
                 auto* clientInfo = result.AddConsumerResult();
                 clientInfo->SetConsumer(userInfo.User);
-                clientInfo->set_errorcode(NPersQueue::NErrorCode::EErrorCode::OK);
+                clientInfo->SetErrorCode(NPersQueue::NErrorCode::EErrorCode::OK);
                 clientInfo->SetCommitedOffset(userInfo.Offset);
                 if (userInfo.CommittedMetadata.has_value()) {
                     clientInfo->SetCommittedMetadata(*userInfo.CommittedMetadata);
                 }
+
+                setMLPConsumerState(clientInfo, userInfo.User);
+
                 requiredConsumers.extract(userInfo.User);
             }
             continue;
@@ -992,10 +1005,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             auto lastOffsetHasBeenCommited = LastOffsetHasBeenCommited(userInfo);
             clientInfo->SetReadingFinished(lastOffsetHasBeenCommited);
 
-            auto mit = MLPConsumers.find(userInfo.User);
-            if (mit != MLPConsumers.end()) {
-                clientInfo->SetUseForReading(mit->second.UseForReading);
-            }
+            setMLPConsumerState(clientInfo, userInfo.User);
         }
     }
 
@@ -4318,9 +4328,12 @@ ui32 TPartition::NextChannel(bool isHead, ui32 blobSize) {
 
 void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorContext& ctx) {
     const ui64 cookie = ev->Get()->Cookie;
-    LOG_D("Got quota." <<
-            " Topic: \"" << TopicName() << "\"." <<
-            " Partition: " << Partition << ": Cookie: " << cookie
+    LOG_D("Got quota."
+         << " Topic: \"" << TopicName() << "\"."
+         << " Partition: " << Partition
+         << ": Cookie: " << cookie
+         << " AccountWaitTime: " << ev->Get()->AccountQuotaWaitTime
+         << " PartitionWaitTime: " << ev->Get()->PartitionQuotaWaitTime
     );
 
     // Search for proper request

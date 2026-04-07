@@ -355,9 +355,9 @@ TRuntimeNode TKqpProgramBuilder::KqpIndexLookupJoin(const TRuntimeNode& input, c
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode settings)
+TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode settings, TRuntimeNode mode)
 {
-    // Validate text argument - should be a String or Utf8 or optional String or Utf8
+    // Validate text argument — String, Utf8, Json, JsonDocument (or optional of those)
     const auto& textType = text.GetStaticType();
     const TDataType* textDataType = nullptr;
 
@@ -371,11 +371,23 @@ TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode
         textDataType = static_cast<const TDataType*>(textType);
     }
 
-    MKQL_ENSURE(textDataType->GetSchemeType() == NScheme::NTypeIds::String
-        || textDataType->GetSchemeType() == NScheme::NTypeIds::Utf8, "Expected String or Utf8 for text column.");
+    const auto textSchemeType = textDataType->GetSchemeType();
+    switch (textSchemeType) {
+        case NScheme::NTypeIds::String:
+        case NScheme::NTypeIds::Utf8:
+        case NScheme::NTypeIds::Json:
+        case NScheme::NTypeIds::JsonDocument:
+            break;
+        default:
+            MKQL_ENSURE(false, "Expected String, Utf8, Json, or JsonDocument for text column.");
+    }
 
     // Return type: List<Struct<__ydb_token:String or Utf8,__ydb_freq:Uint32>>
-    auto stringType = TDataType::Create(textDataType->GetSchemeType(), Env);
+    const auto tokenSchemeType = (textSchemeType == NScheme::NTypeIds::Json
+        || textSchemeType == NScheme::NTypeIds::JsonDocument)
+        ? NScheme::NTypeIds::String
+        : textSchemeType;
+    auto stringType = TDataType::Create(tokenSchemeType, Env);
     auto freqType = TDataType::Create(NUdf::TDataType<ui32>::Id, GetTypeEnvironment());
     TStructTypeBuilder rowTypeBuilder(GetTypeEnvironment());
     rowTypeBuilder.Add(NTableIndex::NFulltext::FreqColumn, freqType);
@@ -389,9 +401,16 @@ TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode
     const auto& settingsTypeData = static_cast<const TDataType&>(*settingsType);
     MKQL_ENSURE(settingsTypeData.GetSchemeType() == NScheme::NTypeIds::String, "Expected string for settings.");
 
+    // Validate mode argument - should be Uint32
+    const auto& modeType = mode.GetStaticType();
+    MKQL_ENSURE(modeType->IsData(), "Expected data type for mode.");
+    const auto& modeTypeData = static_cast<const TDataType&>(*modeType);
+    MKQL_ENSURE(modeTypeData.GetSchemeType() == NUdf::TDataType<ui32>::Id, "Expected Uint32 for mode.");
+
     TCallableBuilder callableBuilder(Env, __func__, listType);
     callableBuilder.Add(text);
     callableBuilder.Add(settings);
+    callableBuilder.Add(mode);
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

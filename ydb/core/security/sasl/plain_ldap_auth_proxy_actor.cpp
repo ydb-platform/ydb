@@ -27,7 +27,9 @@ public:
     }
 
     virtual void Bootstrap(const TActorContext &ctx) override final {
-        ProcessAuthMsg(ctx);
+        if (!ProcessAuthMsg(ctx)) {
+            return;
+        }
 
         auto event = std::make_unique<TEvLdapAuthProvider::TEvAuthenticateRequest>(TString(AuthcId), TString(Passwd));
         ctx.Send(MakeLdapAuthProviderID(), event.release());

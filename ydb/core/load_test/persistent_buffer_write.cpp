@@ -123,7 +123,7 @@ public:
         DDiskNodeId = ddiskId.GetNodeId();
         DDiskPDiskId = ddiskId.GetPDiskId();
         DDiskSlotId = ddiskId.GetDDiskSlotId();
-        DDiskServiceId = MakeBlobStorageDDiskId(DDiskNodeId, DDiskPDiskId, DDiskSlotId);
+        DDiskServiceId = MakeBlobStoragePersistentBufferId(DDiskNodeId, DDiskPDiskId, DDiskSlotId);
 
         Credentials.TabletId = Tag ? Tag : 1;
         Credentials.Generation = 1;

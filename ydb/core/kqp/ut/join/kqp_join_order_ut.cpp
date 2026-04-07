@@ -846,6 +846,10 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         CheckJoinCardinality("queries/test_join_hint1.sql", "stats/basic.json", "InnerJoin (Grace)", 10e6, false, ColumnStore);
     }
 
+    Y_UNIT_TEST_TWIN(TestJoinHint1BlockHash, ColumnStore) {
+        CheckJoinCardinality("queries/test_join_hint1_block_hash.sql", "stats/basic.json", "InnerJoin (BlockHash)", 10e6, false, ColumnStore);
+    }
+
     Y_UNIT_TEST_TWIN(TestJoinHint2, ColumnStore) {
         CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (Map)", 1, false, ColumnStore);
     }

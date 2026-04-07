@@ -108,7 +108,7 @@ bool IsSystemError(const TError& error)
 
 TFileDescriptorGuard::TFileDescriptorGuard(TFileDescriptor fd) noexcept
     : FD_(fd)
-{}
+{ }
 
 TFileDescriptorGuard::~TFileDescriptorGuard()
 {
@@ -146,7 +146,7 @@ TFileDescriptor TFileDescriptorGuard::Release() noexcept
 void TFileDescriptorGuard::Reset() noexcept
 {
     if (FD_ != -1) {
-        YT_VERIFY(TryClose(FD_, false));
+        YT_VERIFY(TryClose(FD_, /*ignoreBadFD*/ false));
         FD_ = -1;
     }
 }
@@ -384,6 +384,15 @@ bool IsUserspaceThread(size_t tid)
 #else
     Y_UNUSED(tid);
     return false;
+#endif
+}
+
+std::string GetCurrentProcessName()
+{
+#ifdef __linux__
+    return std::string(Trim(TUnbufferedFileInput("/proc/self/comm").ReadAll(), "\n"));
+#else
+    return "(unknown)";
 #endif
 }
 

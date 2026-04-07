@@ -1,8 +1,7 @@
 {
     "test.TestViewer.test_async_replication_describe": {
         "create_result": {
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "describe_result": {
             "connection_params": {
@@ -116,8 +115,7 @@
     },
     "test.TestViewer.test_pqrb_tablet": {
         "response_create_topic": {
-            "status": "SUCCESS",
-            "version": "not-zero-number"
+            "status": "SUCCESS"
         },
         "response_tablet_info": {
             "ResponseTime": "not-zero-number-text",
@@ -1617,12 +1615,10 @@
             "Truncated": false
         },
         "insert": {
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "update": {
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         }
     },
     "test.TestViewer.test_transfer_describe": {
@@ -1719,16 +1715,13 @@
             "transformation_lambda": "$__ydb_transfer_lambda = ($x) -> { return [<| id: $x._offset, message: $x._data |>]; };\n"
         },
         "table_result": {
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "topic_result": {
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "transfer_result": {
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         }
     },
     "test.TestViewer.test_viewer_acl": {
@@ -3117,8 +3110,7 @@
                     ],
                     "Total": 5
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/dedicated_db": {
                 "Result": {
@@ -3138,8 +3130,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/serverless_db": {
                 "Result": {
@@ -3155,8 +3146,7 @@
                     ],
                     "Total": 2
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/shared_db": {
                 "Result": {
@@ -3176,8 +3166,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "no-database": {
                 "Result": {
@@ -3197,8 +3186,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             }
         },
         "empty": {
@@ -3228,8 +3216,7 @@
                     ],
                     "Total": 5
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/dedicated_db": {
                 "Result": {
@@ -3249,8 +3236,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/serverless_db": {
                 "Result": {
@@ -3266,8 +3252,7 @@
                     ],
                     "Total": 2
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/shared_db": {
                 "Result": {
@@ -3287,8 +3272,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "no-database": {
                 "Result": {
@@ -3308,8 +3292,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             }
         },
         "root": {
@@ -3339,8 +3322,7 @@
                     ],
                     "Total": 5
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/dedicated_db": {
                 "Result": {
@@ -3360,8 +3342,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/serverless_db": {
                 "Result": {
@@ -3377,8 +3358,7 @@
                     ],
                     "Total": 2
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/shared_db": {
                 "Result": {
@@ -3398,8 +3378,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "no-database": {
                 "Result": {
@@ -3419,34 +3398,29 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             }
         },
         "root_dedicated_db": {
             "/Root": {
                 "Error": [
                     "Failed to collect information from CacheResult"
-                ],
-                "Version": 2
+                ]
             },
             "/Root/dedicated_db": {
                 "Error": [
                     "Failed to collect information from CacheResult"
-                ],
-                "Version": 2
+                ]
             },
             "/Root/serverless_db": {
                 "Error": [
                     "Failed to collect information from CacheResult"
-                ],
-                "Version": 2
+                ]
             },
             "/Root/shared_db": {
                 "Error": [
                     "Failed to collect information from CacheResult"
-                ],
-                "Version": 2
+                ]
             },
             "no-database": {
                 "Result": {
@@ -3466,8 +3440,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             }
         },
         "tab": {
@@ -3497,8 +3470,7 @@
                     ],
                     "Total": 5
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/dedicated_db": {
                 "Result": {
@@ -3518,8 +3490,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/serverless_db": {
                 "Result": {
@@ -3535,8 +3506,7 @@
                     ],
                     "Total": 2
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/shared_db": {
                 "Result": {
@@ -3556,8 +3526,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "no-database": {
                 "Result": {
@@ -3577,8 +3546,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             }
         },
         "table1": {
@@ -3608,8 +3576,7 @@
                     ],
                     "Total": 5
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/dedicated_db": {
                 "Result": {
@@ -3629,8 +3596,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/serverless_db": {
                 "Result": {
@@ -3646,8 +3612,7 @@
                     ],
                     "Total": 2
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "/Root/shared_db": {
                 "Result": {
@@ -3667,8 +3632,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             },
             "no-database": {
                 "Result": {
@@ -3688,8 +3652,7 @@
                     ],
                     "Total": 3
                 },
-                "Success": true,
-                "Version": 2
+                "Success": true
             }
         }
     },
@@ -4535,6 +4498,18 @@
             "Source": 1,
             "Status": "StatusSuccess"
         }
+    },
+    "test.TestViewer.test_viewer_domain_peers": {
+        "FieldsAvailable": "0000011110111010000000000110101000011",
+        "FieldsRequired": "0000000000010000000000000000001000001",
+        "FoundNodes": "1",
+        "Nodes": [
+            {
+                "ConnectStatus": "Grey",
+                "NodeId": 1
+            }
+        ],
+        "TotalNodes": "1"
     },
     "test.TestViewer.test_viewer_groups_group_by_capacity_alert": [
         {
@@ -7842,8 +7817,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/dedicated_db": {
             "result": [
@@ -7861,8 +7835,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/serverless_db": {
             "result": [
@@ -7880,8 +7853,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/shared_db": {
             "result": [
@@ -7899,8 +7871,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "no-database": {
             "result": [
@@ -7918,8 +7889,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         }
     },
     "test.TestViewer.test_viewer_query_event_stream": {
@@ -7931,8 +7901,7 @@
                         "node_id": "not-zero-number",
                         "query_id": "text",
                         "session_id": "text"
-                    },
-                    "version": 10
+                    }
                 },
                 "event": "SessionCreated"
             },
@@ -8010,8 +7979,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/serverless_db": {
             "result": [
@@ -8042,8 +8010,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/shared_db": {
             "result": [
@@ -8074,8 +8041,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         }
     },
     "test.TestViewer.test_viewer_query_from_table_different_schemas": {
@@ -8118,8 +8084,7 @@
                     "three"
                 ]
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "multi": {
             "result": [
@@ -8150,8 +8115,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "ydb": {
             "result": [
@@ -8168,8 +8132,7 @@
                     "name": "three"
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "ydb2": {
             "result": [
@@ -8200,8 +8163,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         }
     },
     "test.TestViewer.test_viewer_query_issue_13757": {
@@ -8224,8 +8186,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/dedicated_db": {
             "result": [
@@ -8246,8 +8207,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/serverless_db": {
             "result": [
@@ -8268,8 +8228,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/shared_db": {
             "result": [
@@ -8290,8 +8249,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "no-database": {
             "result": [
@@ -8312,8 +8270,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         }
     },
     "test.TestViewer.test_viewer_query_issue_13945": {
@@ -8333,8 +8290,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/dedicated_db": {
             "result": [
@@ -8352,8 +8308,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/serverless_db": {
             "result": [
@@ -8371,8 +8326,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "/Root/shared_db": {
             "result": [
@@ -8390,8 +8344,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         },
         "no-database": {
             "result": [
@@ -8409,8 +8362,7 @@
                     ]
                 }
             ],
-            "status": "SUCCESS",
-            "version": 10
+            "status": "SUCCESS"
         }
     },
     "test.TestViewer.test_viewer_query_long": {
@@ -8444,8 +8396,7 @@
                         ]
                     ]
                 }
-            ],
-            "version": 10
+            ]
         },
         "fetch_by_execution_id": {
             "execution_id": "text",
@@ -8476,8 +8427,7 @@
                         ]
                     ]
                 }
-            ],
-            "version": 10
+            ]
         },
         "fetch_by_operation_id": {
             "execution_id": "text",
@@ -8509,8 +8459,7 @@
                         ]
                     ]
                 }
-            ],
-            "version": 10
+            ]
         },
         "fetch_error_no_id": {
             "status_code": 400,
@@ -12806,206 +12755,6 @@
         }
     },
     "test.TestViewer.test_viewer_tenantinfo": {
-        "TenantInfo": [
-            {
-                "AliveNodes": 1,
-                "CoresTotal": "not-zero-number",
-                "CoresUsed": "not-zero-number",
-                "CreateTime": "not-zero-number-text",
-                "Id": "1",
-                "MemoryLimit": "not-zero-number-text",
-                "MemoryStats": {},
-                "Metrics": {},
-                "Name": "/Root",
-                "NetworkUtilization": "number",
-                "NetworkWriteThroughput": "text",
-                "NodeIds": [
-                    1
-                ],
-                "Overall": "Green",
-                "Owner": "root",
-                "PoolStats": [
-                    {
-                        "Name": "System",
-                        "Threads": 2,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "User",
-                        "Threads": 3,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "Batch",
-                        "Threads": 2,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "IO",
-                        "Threads": 1,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "IC",
-                        "Threads": 1,
-                        "Usage": "number"
-                    }
-                ],
-                "State": "RUNNING",
-                "Type": "Domain"
-            },
-            {
-                "AliveNodes": 1,
-                "CoresTotal": "not-zero-number",
-                "CoresUsed": "not-zero-number",
-                "DatabaseQuotas": {},
-                "Id": "38",
-                "MemoryLimit": "not-zero-number-text",
-                "MemoryStats": {},
-                "Metrics": "not-empty-object",
-                "Name": "/Root/dedicated_db",
-                "NetworkUtilization": "number",
-                "NetworkWriteThroughput": "text",
-                "NodeIds": [
-                    50000
-                ],
-                "Overall": "Green",
-                "Owner": "root",
-                "PoolStats": [
-                    {
-                        "Name": "System",
-                        "Threads": 2,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "User",
-                        "Threads": 3,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "Batch",
-                        "Threads": 2,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "IO",
-                        "Threads": 1,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "IC",
-                        "Threads": 1,
-                        "Usage": "number"
-                    }
-                ],
-                "Resources": {
-                    "Allocated": [
-                        {
-                            "Count": 1,
-                            "Kind": "hdd",
-                            "Type": "storage"
-                        }
-                    ],
-                    "Required": [
-                        {
-                            "Count": 1,
-                            "Kind": "hdd",
-                            "Type": "storage"
-                        }
-                    ]
-                },
-                "State": "RUNNING",
-                "StateStats": [
-                    {
-                        "Count": 10,
-                        "VolatileState": "TABLET_VOLATILE_STATE_RUNNING"
-                    }
-                ],
-                "Type": "Dedicated"
-            },
-            {
-                "CoresUsed": "not-zero-number",
-                "DatabaseQuotas": {},
-                "Id": "40",
-                "Metrics": "not-empty-object",
-                "Name": "/Root/serverless_db",
-                "Overall": "Green",
-                "Owner": "root",
-                "ResourceId": "39",
-                "State": "RUNNING",
-                "StateStats": [
-                    {
-                        "Count": 7,
-                        "VolatileState": "TABLET_VOLATILE_STATE_RUNNING"
-                    }
-                ],
-                "Type": "Serverless"
-            },
-            {
-                "AliveNodes": 1,
-                "CoresTotal": "not-zero-number",
-                "CoresUsed": "not-zero-number",
-                "DatabaseQuotas": {},
-                "Id": "39",
-                "MemoryLimit": "not-zero-number-text",
-                "MemoryStats": {},
-                "Metrics": "not-empty-object",
-                "Name": "/Root/shared_db",
-                "NetworkUtilization": "number",
-                "NetworkWriteThroughput": "text",
-                "NodeIds": [
-                    50001
-                ],
-                "Overall": "Green",
-                "Owner": "root",
-                "PoolStats": [
-                    {
-                        "Name": "System",
-                        "Threads": 2,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "User",
-                        "Threads": 3,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "Batch",
-                        "Threads": 2,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "IO",
-                        "Threads": 1,
-                        "Usage": "number"
-                    },
-                    {
-                        "Name": "IC",
-                        "Threads": 1,
-                        "Usage": "number"
-                    }
-                ],
-                "Resources": {
-                    "Allocated": [
-                        {
-                            "Count": 1,
-                            "Kind": "hdd",
-                            "Type": "storage"
-                        }
-                    ]
-                },
-                "State": "RUNNING",
-                "StateStats": [
-                    {
-                        "Count": 10,
-                        "VolatileState": "TABLET_VOLATILE_STATE_RUNNING"
-                    }
-                ],
-                "Type": "Shared"
-            }
-        ]
-    },
-    "test.TestViewer.test_viewer_tenantinfo_db": {
         "/Root": {
             "TenantInfo": [
                 {

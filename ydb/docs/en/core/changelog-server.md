@@ -1,5 +1,36 @@
 # {{ ydb-short-name }} Server changelog
 
+## Version 25.3 {#25-3}
+
+### Version 25.3.1.25 {#25-3-1-25}
+
+Release date: April 3, 2026.
+
+#### Functionality
+
+* Added support for two–data center configuration with synchronous data writes (Bridge mode). Available in {{ ydb-short-name }} Enterprise.
+* Topic improvements:
+  * In Kafka API [compacted ](https://docs.confluent.io/kafka/design/log_compaction.html#ak-log-compaction) topics can now be created, and YDB automatically creates and removes the internal service consumer used for topic compaction;
+  * Topic APIs were extended with new `DescribeConsumer`  and [per-partition topic metrics can now be exported into user quotas](./reference/observability/metrics/index.md#topics).
+* Implemented [backup and restore](./reference/ydb-cli/export-import/file-structure.md?version=v25.3#topics) of topic configuration to and from S3;
+* Implemented [backup and restore](./reference/ydb-cli/export-import/file-structure.md#views) (`VIEW`) в S3 и из S3.
+
+#### Bug Fixes
+
+* [Fixed ](https://github.com/ydb-platform/ydb/pull/20238) a race condition when updating the CPU soft limit.
+* [Fixed behavior ](https://github.com/ydb-platform/ydb/pull/18121), where `ALTER TABLE` could fail for tables with a vector index.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/18088) nconsistent results in some read-write transactions — conflicting writes no longer overwrite uncommitted changes.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/18234) serializability violations in read-write transactions after shard restarts.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/20560) a memory management issue when committing offsets in topics with automatic partitioning enabled.
+* [Added ](https://github.com/ydb-platform/ydb/pull/18698) checks for enabled encryption in zero-copy transfers.
+* [Fixed ](https://github.com/ydb-platform/ydb/pull/20519) an issue that could cause a VDisk to hang in local recovery after a ChunkRead error.
+* [Eliminated](https://github.com/ydb-platform/ydb/pull/18924) появление фантомных VDisk из-за гонок между операциями создания и удаления группы.
+* [Улучшено](https://github.com/ydb-platform/ydb/pull/17687) phantom VDisks caused by races between group creation and deletion operations.
+* When a session ends via attach stream, a notification is now [sent](https://github.com/ydb-platform/ydb/pull/22298).
+* The coordination service now correctly [returns](https://github.com/ydb-platform/ydb/pull/16901) `SCHEME_ERROR` for non-existent resources instead of the incorrect `INTERNAL_ERROR` code.
+* [Fixed ](https://github.com/ydb-platform/ydb/pull/20157) memory handling issues and internal data consistency violations in Workload Manager and related scheduler code.
+* [Fixed ](https://github.com/ydb-platform/ydb/pull/20432) an issue where PDisk info requests could time out when the target node was disabled or unavailable.
+
 ## Version 25.2 {#25-2}
 
 ### Version 25.2.1.24 {#25-2-1-24}
@@ -96,7 +127,6 @@ Release date: July 14, 2025.
 
 * [Implemented](https://github.com/ydb-platform/ydb/issues/19504) a [vector index](./dev/vector-indexes.md?version=v25.1) for approximate vector similarity search.
 * [Added](https://github.com/ydb-platform/ydb/issues/11454) support for [consistent asynchronous replication](./concepts/async-replication.md?version=v25.1).
-* Implemented [BATCH UPDATE](./yql/reference/syntax/batch-update?version=v25.1) and [BATCH DELETE](./yql/reference/syntax/batch-delete?version=v25.1) statements, allowing the application of changes to large row-oriented tables outside of transactional constraints. This mode is enabled by setting the `enable_batch_updates` flag in the cluster configuration.
 * Added [configuration mechanism V2](./devops/configuration-management/configuration-v2/config-overview?version=v25.1) that simplifies the deployment of new {{ ydb-short-name }} clusters and further work with them. [Comparison](./devops/configuration-management/compare-configs?version=v25.1) of configuration mechanisms V1 and V2.
 * Added support for the parameterized [Decimal type](./yql/reference/types/primitive.md?version=v25.1#numeric).
 * [Added](https://github.com/ydb-platform/ydb/pull/8065) the ability to omit the `DECLARE` operator for query parameter type declarations. Parameter types are now automatically inferred from the provided values.

@@ -1,3 +1,4 @@
+// NOLINTBEGIN(modernize-use-designated-initializers)
 {{"pg_catalog", "pg_default_acl"}, ERelKind::Relation, 826},
 {{"pg_catalog", "pg_tablespace"}, ERelKind::Relation, 1213},
 {{"pg_catalog", "pg_shdepend"}, ERelKind::Relation, 1214},
@@ -207,3 +208,4 @@
 {{"information_schema", "_pg_user_mappings"}, ERelKind::View, 13550},
 {{"information_schema", "user_mapping_options"}, ERelKind::View, 13555},
 {{"information_schema", "user_mappings"}, ERelKind::View, 13560},
+// NOLINTEND(modernize-use-designated-initializers)

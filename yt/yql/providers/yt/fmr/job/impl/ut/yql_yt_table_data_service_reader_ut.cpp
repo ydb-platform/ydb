@@ -6,10 +6,12 @@
 
 namespace NYql::NFmr {
 
-TString originalTableContent = "{\"key\"=\"075\";\"subkey\"=\"1\";\"value\"=\"abc\"};\n"
+TString originalTextTableContent = "{\"key\"=\"075\";\"subkey\"=\"1\";\"value\"=\"abc\"};\n"
                             "{\"key\"=\"800\";\"subkey\"=\"2\";\"value\"=\"ddd\"};\n"
                             "{\"key\"=\"020\";\"subkey\"=\"3\";\"value\"=\"q\"};\n"
                             "{\"key\"=\"150\";\"subkey\"=\"4\";\"value\"=\"qzz\"};\n";
+
+TString originalTableContent = GetBinaryYson(originalTextTableContent);
 
 Y_UNIT_TEST_SUITE(FmrReaderTests) {
     Y_UNIT_TEST(ReadAllOneChunk) {
@@ -28,7 +30,7 @@ Y_UNIT_TEST_SUITE(FmrReaderTests) {
         TFmrTableDataServiceReader reader("tableId", tableRanges, tableDataServicePtr, {}, TString(), readerSettings);
 
         auto readTableContent = reader.ReadAll();
-        UNIT_ASSERT_NO_DIFF(GetTextYson(readTableContent), originalTableContent);
+        UNIT_ASSERT_NO_DIFF(GetTextYson(readTableContent), originalTextTableContent);
     }
 
     Y_UNIT_TEST(ReadAllMultipleChunks) {
@@ -49,7 +51,7 @@ Y_UNIT_TEST_SUITE(FmrReaderTests) {
         TFmrTableDataServiceReader reader("tableId", tableRanges, tableDataServicePtr, {}, TString(), readerSettings);
 
         auto readTableContent = reader.ReadAll();
-        UNIT_ASSERT_NO_DIFF(GetTextYson(readTableContent), originalTableContent * 3);
+        UNIT_ASSERT_NO_DIFF(GetTextYson(readTableContent), originalTextTableContent * 3);
     }
 
     Y_UNIT_TEST(ReadAllMultipleChunksBigReadAhead) {
@@ -70,7 +72,7 @@ Y_UNIT_TEST_SUITE(FmrReaderTests) {
         TFmrTableDataServiceReader reader("tableId", tableRanges, tableDataServicePtr, {}, TString(), readerSettings);
 
         auto readTableContent = reader.ReadAll();
-        UNIT_ASSERT_NO_DIFF(GetTextYson(readTableContent), originalTableContent * 3);
+        UNIT_ASSERT_NO_DIFF(GetTextYson(readTableContent), originalTextTableContent * 3);
     }
 }
 

@@ -27,6 +27,22 @@ struct TDBGWriteBlocksResponse
     NProto::TError Error;
 };
 
+struct TDBGWriteBlocksToManyPBuffersResponse
+{
+    struct TSinglePersistentBufferResult
+    {
+        ui8 HostId{};
+        NProto::TError Error;
+    };
+
+    static TDBGWriteBlocksToManyPBuffersResponse MakeOverallError(
+        EWellKnownResultCodes code,
+        TString reason);
+
+    TVector<TSinglePersistentBufferResult> Responses;
+    NProto::TError OverallError;
+};
+
 struct TDBGFlushResponse
 {
     TVector<NProto::TError> Errors;
@@ -71,6 +87,15 @@ struct TAggregatedListPBufferResponse
     TMap<ui8, TListPBufferMetaVector> Meta;
 };
 
+struct TDDiskIdLess
+{
+    using TDDiskId = NKikimrBlobStorage::NDDisk::TDDiskId;
+    bool operator()(const TDDiskId& lhs, const TDDiskId& rhs) const;
+};
+
+using TDDiskIdToHostIndex =
+    TMap<NKikimrBlobStorage::NDDisk::TDDiskId, ui8, TDDiskIdLess>;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // Abstract base interface for DirectBlockGroup implementations
@@ -98,11 +123,28 @@ public:
         const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) = 0;
 
+    virtual NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToDDisk(
+        ui32 vChunkIndex,
+        ui8 hostIndex,
+        TBlockRange64 range,
+        const TGuardedSgList& guardedSglist,
+        NWilson::TTraceId traceId) = 0;
+
     virtual NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
         ui32 vChunkIndex,
         ui8 hostIndex,
         ui64 lsn,
         TBlockRange64 range,
+        const TGuardedSgList& guardedSglist,
+        NWilson::TTraceId traceId) = 0;
+
+    virtual NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
+    WriteBlocksToManyPBuffers(
+        ui32 vChunkIndex,
+        std::vector<ui8> hostIndexes,
+        ui64 lsn,
+        TBlockRange64 range,
+        ui32 replyTimeoutMicroseconds,
         const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) = 0;
 
@@ -174,11 +216,28 @@ public:
         const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) override;
 
+    NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToDDisk(
+        ui32 vChunkIndex,
+        ui8 hostIndex,
+        TBlockRange64 range,
+        const TGuardedSgList& guardedSglist,
+        NWilson::TTraceId traceId) override;
+
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
         ui32 vChunkIndex,
         ui8 hostIndex,
         ui64 lsn,
         TBlockRange64 range,
+        const TGuardedSgList& guardedSglist,
+        NWilson::TTraceId traceId) override;
+
+    NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
+    WriteBlocksToManyPBuffers(
+        ui32 vChunkIndex,
+        std::vector<ui8> hostIndexes,
+        ui64 lsn,
+        TBlockRange64 range,
+        ui32 replyTimeoutMicroseconds,
         const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) override;
 
@@ -228,6 +287,11 @@ private:
     void DoListPBuffers();
     void OnPBuffersListed(const TAggregatedListPBufferResponse& response);
 
+    void OnWriteBlocksToManyPBuffersResponse(
+        const NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult&
+            response,
+        NThreading::TPromise<TDBGWriteBlocksToManyPBuffersResponse> promise);
+
     void DoRestore(
         NThreading::TPromise<TDBGRestoreResponse> promise,
         ui32 vChunkIndex);
@@ -240,6 +304,7 @@ private:
 
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PBufferConnections;
+    TDDiskIdToHostIndex PBufferIdToHostIndex;
 
     bool Initialized = false;
     NThreading::TPromise<void> ConnectionEstablishedPromise =

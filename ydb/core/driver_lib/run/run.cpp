@@ -2197,7 +2197,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     return sil;
 }
 
-void TKikimrRunner::Start() {
+void TKikimrRunner::KikimrStart() {
     for (auto plugin: Plugins) {
         plugin->Start();
     }
@@ -2235,7 +2235,7 @@ void TKikimrRunner::Start() {
     ThreadSigmask(SIG_UNBLOCK);
 }
 
-void TKikimrRunner::Stop(bool graceful) {
+void TKikimrRunner::KikimrStop(bool graceful) {
     Y_UNUSED(graceful);
 
     bool enableReleaseNodeNameOnGracefulShutdown = AppData->FeatureFlags.GetEnableReleaseNodeNameOnGracefulShutdown();
@@ -2472,11 +2472,11 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
 
     TIntrusivePtr<TKikimrRunner> runner = TKikimrRunner::CreateKikimrRunner(runConfig, std::move(factories));
     if (runner) {
-        runner->Start();
+        runner->KikimrStart();
         runner->BusyLoop();
         // exit busy loop by a signal
         Cout << "Shutting YDB server down" << Endl;
-        runner->Stop(false);
+        runner->KikimrStop(false);
     }
 
     return 0;

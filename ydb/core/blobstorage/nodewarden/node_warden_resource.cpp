@@ -360,5 +360,5 @@ void TNodeWarden::Handle(TEvNodeWardenListLocalDDisks::TPtr ev) {
             res->Infos.emplace_back(ddId, MakeBlobStoragePersistentBufferId(ddId));
         }
     }
-    Send(ev->Sender, res.release());
+    Send(ev->Sender, res.release(), 0, ev->Cookie);
 }

@@ -14,6 +14,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <ydb/core/util/stlog.h>
 
 #include <util/generic/queue.h>
 #include <util/system/types.h>
@@ -51,6 +52,7 @@ namespace NKikimr {
 
             void Handle(TEvNodeWardenListLocalDDisksResult::TPtr& ev) {
                 auto cookie = ev->Cookie;
+                STLOG(PRI_DEBUG, BS_DDISK, BSDD18, "TPersistentBufferMonActor::Handle(TEvNodeWardenListLocalDDisksResult)", (cookie, cookie));
                 auto it = Inflight.find(cookie);
                 Y_ABORT_UNLESS(it != Inflight.end());
                 auto& inflight = it->second;
@@ -70,7 +72,8 @@ namespace NKikimr {
                 const ui64 cookie = ++NextCookie;
                 Inflight[cookie] = {ev->Sender, ev->Cookie, ev->Get()->SubRequestId};
                 auto nwId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-                Send(nwId, new TEvNodeWardenListLocalDDisks(), cookie);
+                Send(nwId, new TEvNodeWardenListLocalDDisks(), 0, cookie);
+                STLOG(PRI_DEBUG, BS_DDISK, BSDD18, "TPersistentBufferMonActor::Handle(TEvHttpInfo)", (cookie, cookie));
             }
 
             STRICT_STFUNC(StateFunc,

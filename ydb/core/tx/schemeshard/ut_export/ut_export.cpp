@@ -3553,6 +3553,88 @@ state: STATE_ENABLED
         )");
     }
 
+    void IndexMaterializationFulltext(TTestEnv& env, TTestBasicRuntime& runtime, TS3Mock& s3Mock, ui16 s3Port, const TString& indexDesc) {
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "value" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            %s
+        )", indexDesc.c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              include_index_data: true
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", s3Port));
+
+        env.TestWaitNotification(runtime, txId);
+
+        auto desc = DescribePrivatePath(runtime, "/MyRoot/Table/index");
+        const auto& tableIndex = desc.GetPathDescription().GetTableIndex();
+        const auto indexType = tableIndex.GetType();
+        const TVector<TString> indexColumns(tableIndex.GetKeyColumnNames().begin(), tableIndex.GetKeyColumnNames().end());
+
+        for (const auto implTable : NTableIndex::GetImplTables(indexType, indexColumns)) {
+            UNIT_ASSERT(s3Mock.GetData().FindPtr(TStringBuilder() << "/index/" << implTable << "/scheme.pb"));
+        }
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalFulltextPlain) {
+        EnvOptions().EnableIndexMaterialization(true);
+        IndexMaterializationFulltext(Env(), Runtime(), S3Mock(), S3Port(), R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobalFulltextPlain
+              FulltextIndexDescription {
+                Settings {
+                  columns: {
+                    column: "value"
+                    analyzers: {
+                      tokenizer: STANDARD
+                      use_filter_lowercase: true
+                    }
+                  }
+                }
+              }
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalFulltextRelevance) {
+        EnvOptions().EnableIndexMaterialization(true);
+        IndexMaterializationFulltext(Env(), Runtime(), S3Mock(), S3Port(), R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobalFulltextRelevance
+              FulltextIndexDescription {
+                Settings {
+                  columns: {
+                    column: "value"
+                    analyzers: {
+                      tokenizer: STANDARD
+                      use_filter_lowercase: true
+                    }
+                  }
+                }
+              }
+            }
+        )");
+    }
+
     Y_UNIT_TEST(IndexMaterializationTwoTables) {
         EnvOptions().EnableIndexMaterialization(true);
         auto& env = Env();

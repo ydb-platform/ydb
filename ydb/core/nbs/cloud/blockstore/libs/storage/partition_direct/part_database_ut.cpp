@@ -19,9 +19,9 @@ bool LoadState(
     TMaybe<TDirectBlockGroupsConnections>& directBlockGroupsConnections)
 {
     TPartitionDatabase partitionDb(db);
-    return partitionDb.ReadVolumeConfig(volumeConfig)
-        && partitionDb.ReadDirectBlockGroupsConnections(
-            directBlockGroupsConnections);
+    return partitionDb.ReadVolumeConfig(volumeConfig) &&
+           partitionDb.ReadDirectBlockGroupsConnections(
+               directBlockGroupsConnections);
 }
 
 NKikimrBlockStore::TVolumeConfig MakeSampleVolumeConfig()
@@ -56,18 +56,22 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
     Y_UNIT_TEST(ShouldInitSchema)
     {
         TTestExecutor executor;
-        executor.WriteTx([&](NKikimr::NTable::TDatabase& db) {
-            TPartitionDatabase partitionDb(db);
-            partitionDb.InitSchema();
-        });
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.InitSchema();
+            });
 
-        executor.ReadTx([&](NKikimr::NTable::TDatabase& db) {
-            TMaybe<NKikimrBlockStore::TVolumeConfig> volumeConfig;
-            TMaybe<TDirectBlockGroupsConnections> connections;
-            UNIT_ASSERT(LoadState(db, volumeConfig, connections));
-            UNIT_ASSERT(!volumeConfig.Defined());
-            UNIT_ASSERT(!connections.Defined());
-        });
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TMaybe<NKikimrBlockStore::TVolumeConfig> volumeConfig;
+                TMaybe<TDirectBlockGroupsConnections> connections;
+                UNIT_ASSERT(LoadState(db, volumeConfig, connections));
+                UNIT_ASSERT(!volumeConfig.Defined());
+                UNIT_ASSERT(!connections.Defined());
+            });
     }
 
     Y_UNIT_TEST(ShouldStoreAndReadVolumeConfig)
@@ -75,22 +79,32 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
         TTestExecutor executor;
         const auto written = MakeSampleVolumeConfig();
 
-        executor.WriteTx([&](NKikimr::NTable::TDatabase& db) {
-            TPartitionDatabase partitionDb(db);
-            partitionDb.InitSchema();
-            partitionDb.StoreVolumeConfig(written);
-        });
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.InitSchema();
+                partitionDb.StoreVolumeConfig(written);
+            });
 
-        executor.ReadTx([&](NKikimr::NTable::TDatabase& db) {
-            TMaybe<NKikimrBlockStore::TVolumeConfig> volumeConfig;
-            TMaybe<TDirectBlockGroupsConnections> connections;
-            UNIT_ASSERT(LoadState(db, volumeConfig, connections));
-            UNIT_ASSERT(volumeConfig.Defined());
-            UNIT_ASSERT(!connections.Defined());
-            UNIT_ASSERT_VALUES_EQUAL(written.GetDiskId(), volumeConfig->GetDiskId());
-            UNIT_ASSERT_VALUES_EQUAL(written.GetBlockSize(), volumeConfig->GetBlockSize());
-            UNIT_ASSERT_VALUES_EQUAL(written.GetVersion(), volumeConfig->GetVersion());
-        });
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TMaybe<NKikimrBlockStore::TVolumeConfig> volumeConfig;
+                TMaybe<TDirectBlockGroupsConnections> connections;
+                UNIT_ASSERT(LoadState(db, volumeConfig, connections));
+                UNIT_ASSERT(volumeConfig.Defined());
+                UNIT_ASSERT(!connections.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    written.GetDiskId(),
+                    volumeConfig->GetDiskId());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    written.GetBlockSize(),
+                    volumeConfig->GetBlockSize());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    written.GetVersion(),
+                    volumeConfig->GetVersion());
+            });
     }
 
     Y_UNIT_TEST(ShouldStoreAndReadPartitionIdsAsDirectBlockGroupsConnections)
@@ -98,50 +112,60 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
         TTestExecutor executor;
         const auto written = MakeSampleDirectBlockGroupsConnections();
 
-        executor.WriteTx([&](NKikimr::NTable::TDatabase& db) {
-            TPartitionDatabase partitionDb(db);
-            partitionDb.InitSchema();
-            partitionDb.StoreDirectBlockGroupsConnections(written);
-        });
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.InitSchema();
+                partitionDb.StoreDirectBlockGroupsConnections(written);
+            });
 
-        executor.ReadTx([&](NKikimr::NTable::TDatabase& db) {
-            TMaybe<NKikimrBlockStore::TVolumeConfig> volumeConfig;
-            TMaybe<TDirectBlockGroupsConnections> connections;
-            UNIT_ASSERT(LoadState(db, volumeConfig, connections));
-            UNIT_ASSERT(!volumeConfig.Defined());
-            UNIT_ASSERT(connections.Defined());
-            UNIT_ASSERT_VALUES_EQUAL(
-                written.SerializeAsString(),
-                connections->SerializeAsString());
-        });
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TMaybe<NKikimrBlockStore::TVolumeConfig> volumeConfig;
+                TMaybe<TDirectBlockGroupsConnections> connections;
+                UNIT_ASSERT(LoadState(db, volumeConfig, connections));
+                UNIT_ASSERT(!volumeConfig.Defined());
+                UNIT_ASSERT(connections.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    written.SerializeAsString(),
+                    connections->SerializeAsString());
+            });
     }
 
     Y_UNIT_TEST(ShouldLoadStateAfterStoreVolumeConfigAndStorePartitionIds)
     {
         TTestExecutor executor;
         const auto volumeWritten = MakeSampleVolumeConfig();
-        const auto connectionsWritten = MakeSampleDirectBlockGroupsConnections();
+        const auto connectionsWritten =
+            MakeSampleDirectBlockGroupsConnections();
 
-        executor.WriteTx([&](NKikimr::NTable::TDatabase& db) {
-            TPartitionDatabase partitionDb(db);
-            partitionDb.InitSchema();
-            partitionDb.StoreVolumeConfig(volumeWritten);
-            partitionDb.StoreDirectBlockGroupsConnections(connectionsWritten);
-        });
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.InitSchema();
+                partitionDb.StoreVolumeConfig(volumeWritten);
+                partitionDb.StoreDirectBlockGroupsConnections(
+                    connectionsWritten);
+            });
 
-        executor.ReadTx([&](NKikimr::NTable::TDatabase& db) {
-            TMaybe<NKikimrBlockStore::TVolumeConfig> volumeConfig;
-            TMaybe<TDirectBlockGroupsConnections> connections;
-            UNIT_ASSERT(LoadState(db, volumeConfig, connections));
-            UNIT_ASSERT(volumeConfig.Defined());
-            UNIT_ASSERT(connections.Defined());
-            UNIT_ASSERT_VALUES_EQUAL(
-                volumeWritten.GetDiskId(),
-                volumeConfig->GetDiskId());
-            UNIT_ASSERT_VALUES_EQUAL(
-                connectionsWritten.SerializeAsString(),
-                connections->SerializeAsString());
-        });
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TMaybe<NKikimrBlockStore::TVolumeConfig> volumeConfig;
+                TMaybe<TDirectBlockGroupsConnections> connections;
+                UNIT_ASSERT(LoadState(db, volumeConfig, connections));
+                UNIT_ASSERT(volumeConfig.Defined());
+                UNIT_ASSERT(connections.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    volumeWritten.GetDiskId(),
+                    volumeConfig->GetDiskId());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    connectionsWritten.SerializeAsString(),
+                    connections->SerializeAsString());
+            });
     }
 }
 

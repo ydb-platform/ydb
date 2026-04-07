@@ -234,19 +234,8 @@ void TPartitionActor::Start(
 {
     LOG_INFO(ctx, NKikimrServices::NBS_PARTITION, "starting partition_direct");
 
-<<<<<<< HEAD
-    auto directBlockGroups = CreateDirectBlockGroups(std::move(ids));
-=======
-    DiskId = VolumeConfig.GetDiskId();
-    BlockSize = VolumeConfig.GetBlockSize();
-    BlockCount = 0;
-    for (const auto& p: VolumeConfig.GetPartitions()) {
-        BlockCount += p.GetBlockCount();
-    }
-
     auto directBlockGroups =
         CreateDirectBlockGroups(std::move(directBlockGroupsConnections));
->>>>>>> save and restore using tablet local db
 
     auto nbsService = GetNbsService();
     Y_ABORT_UNLESS(nbsService);
@@ -314,14 +303,6 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
             auto* directBlockGroupConnections =
                 ids.AddDirectBlockGroupConnections();
             const auto& response = msg->Record.GetResponses()[i];
-<<<<<<< HEAD
-            Y_ABORT_UNLESS(response.GetDirectBlockGroupId() == i);
-
-            TVector<NBsController::TDDiskId>& ddiskIds = ids[i].DdiskIds;
-            TVector<NBsController::TDDiskId>& persistentBufferDDiskIds =
-                ids[i].PersistentBufferDDiskIds;
-=======
->>>>>>> save and restore using tablet local db
             for (const auto& node: response.GetNodes()) {
                 auto* connection =
                     directBlockGroupConnections->AddConnections();
@@ -385,13 +366,16 @@ void TPartitionActor::HandleUpdateVolumeConfig(
         return;
     }
 
-<<<<<<< HEAD
-    // Store volume config
-    VolumeConfig.CopyFrom(msg->Record.GetVolumeConfig());
-    Y_ABORT_UNLESS(VolumeConfig.PartitionsSize() == 1);
-=======
-    ExecuteTx(ctx, CreateTx<TStoreVolumeConfig>(msg->Record.GetVolumeConfig()));
->>>>>>> save and restore using tablet local db
+    const auto& volumeConfig = msg->Record.GetVolumeConfig();
+    Y_ABORT_UNLESS(volumeConfig.PartitionsSize() == 1);
+
+    LOG_INFO(
+        TActivationContext::AsActorContext(),
+        NKikimrServices::NBS_PARTITION,
+        "Handle UpdateVolumeConfig request VolumeConfig: %s",
+        volumeConfig.DebugString().data());
+
+    ExecuteTx(ctx, CreateTx<TStoreVolumeConfig>(volumeConfig));
 
     // Send response back to volume
     auto response = std::make_unique<
@@ -408,9 +392,6 @@ void TPartitionActor::HandleUpdateVolumeConfig(
             << ", txId: " << response->Record.GetTxId() << ", status: OK");
 
     ctx.Send(ev->Sender, response.release());
-
-    // TODO: make separate state
-    AllocateDDiskBlockGroup(ctx);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

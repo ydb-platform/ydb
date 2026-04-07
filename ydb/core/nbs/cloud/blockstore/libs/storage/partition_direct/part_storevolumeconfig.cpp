@@ -39,9 +39,10 @@ void TPartitionActor::CompleteStoreVolumeConfig(
     const TActorContext& ctx,
     TTxPartition::TStoreVolumeConfig& args)
 {
-    Y_UNUSED(ctx);
-
     VolumeConfig = args.VolumeConfig;
+    Y_ABORT_UNLESS(VolumeConfig.PartitionsSize() == 1);
+
+    AllocateDDiskBlockGroup(ctx);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

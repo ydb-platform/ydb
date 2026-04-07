@@ -231,7 +231,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
     #     "runner": ClusterHardRebootHostNemesis(),
     #     "schedule": 700,
     #     "ui_group": _UI_GROUP,
-    #     "planner_factory": _pinned_planner_factory,
+    #      should be executed on any host except the first
     # }
 
     # --- topology-conditional (datacenter / bridge pile) --------------------

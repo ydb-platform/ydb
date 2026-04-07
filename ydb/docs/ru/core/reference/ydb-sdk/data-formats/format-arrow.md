@@ -1,6 +1,6 @@
 # Формат Apache Arrow
 
-Данные возвращаются в колоночном формате [Apache Arrow](https://arrow.apache.org/) (стандарт [IPC](https://arrow.apache.org/docs/5.0/format/Columnar.html#serialization-and-interprocess-communication-ipc) версии 5.0) и не преобразовываются на стороне SDK, что позволяет эффективно обрабатывать большие объёмы данных.
+Данные возвращаются в колоночном формате [Apache Arrow](https://arrow.apache.org/) (стандарт [IPC](https://arrow.apache.org/docs/5.0/format/Columnar.html#serialization-and-interprocess-communication-ipc) версии 5.0) и не преобразуются на стороне SDK, что позволяет эффективно обрабатывать большие объёмы данных.
 
 Этот формат рекомендуется для:
 
@@ -94,7 +94,7 @@
 | `Void` | `struct<>` | Сингулярный тип |
 | `EmptyList` | `struct<>` | Сингулярный тип |
 | `EmptyDict` | `struct<>` | Сингулярный тип |
-| `Tagged<T>` | `T` |  Раскрытие с потерей именования |
+| `Tagged<T>` | `T` | Раскрытие с потерей именования |
 | `Optional<T>` | `struct<opt: T>` | Если тип `T` является `Variant`, `Optional`, `Pg` или сингулярным |
 | `Optional<T>` | `T` | Для остальных типов |
 
@@ -121,7 +121,7 @@
 
 Наличие двух схем обусловлено тем, что YQL-типы и Arrow-типы не всегда имеют взаимно однозначное соответствие.
 
-## Примеры использования в SDK {#sdk-examples}
+## Примеры использования Apache Arrow в SDK {#sdk-examples}
 
 {% list tabs group=lang %}
 

@@ -320,7 +320,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         UNIT_ASSERT_VALUES_EQUAL(csController->GetIndexesApprovedOnSelect().Val(), init_approved);
 
-        CompareYson(runSelect(R"(
+        CompareYson(runDMLQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_nulls` WHERE `null_value` > "Value_500000";
         )"), "[[0u]]");
 

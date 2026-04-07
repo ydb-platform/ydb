@@ -191,7 +191,7 @@ private:
             }
         } else {
             // Skip checking parent partitions,
-            // but still eunqueu to enforce proper order.
+            // but still equeue messages to enforce proper order.
         }
         absl::flat_hash_set<TString> unresolvedDeduplicationIds;
         unresolvedDeduplicationIds.reserve(messageIndices.size());
@@ -226,7 +226,7 @@ private:
     }
 
 
-    void SendRequests(const TString messageDeduplicationId, TDeduplicationInfo& info) {
+    void SendRequests(const TString& messageDeduplicationId, TDeduplicationInfo& info) {
         for (auto& parentPartition : ParentPartitions) {
             const ui64 tabletId = parentPartition.TabletId;
             auto& tabletInfo = TabletInfo[tabletId];

@@ -24,7 +24,7 @@ namespace NKikimr::NPQ {
     namespace NPrivate {
         enum class EBypassMode {
             Disabled,
-            Pending, // wait for queue
+            Pending, // wait for deduplication responses, but stop sending requests for new messages
             Enabled,
         };
     }

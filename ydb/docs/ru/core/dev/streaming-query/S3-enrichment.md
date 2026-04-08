@@ -11,7 +11,7 @@
 
 {% endnote %}
 
-Справочник хранится в S3 и подключается через [внешний источник данных](../../concepts/federated_query/s3/external_data_source.md).
+Справочник хранится в S3 и подключается через [внешний источник данных](../../concepts/query_execution/federated_query/s3/external_data_source.md).
 
 ## Подготовка источников данных
 

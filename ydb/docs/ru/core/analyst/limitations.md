@@ -229,7 +229,7 @@ WHERE e.user_id = p.user_id
 
 ## Импорт данных с помощью федеративных запросов
 
-{{ydb-short-name}} поддерживает [федеративные запросы](../concepts/federated_query/index.md) к внешним источникам данных (таким как ClickHouse, PostgreSQL и др.). Этот механизм предназначен для быстрой ad-hoc аналитики и объединения данных «на лету», но не является оптимальным инструментом для массовой и регулярной загрузки больших объёмов данных (ETL/ELT). При использовании федеративных запросов для импорта вы можете столкнуться с ограничениями по поддерживаемым типам данных и выполнению запросов.
+{{ydb-short-name}} поддерживает [федеративные запросы](../concepts/query_execution/federated_query/index.md) к внешним источникам данных (таким как ClickHouse, PostgreSQL и др.). Этот механизм предназначен для быстрой ad-hoc аналитики и объединения данных «на лету», но не является оптимальным инструментом для массовой и регулярной загрузки больших объёмов данных (ETL/ELT). При использовании федеративных запросов для импорта вы можете столкнуться с ограничениями по поддерживаемым типам данных и выполнению запросов.
 
 ### Решение
 
@@ -240,12 +240,12 @@ WHERE e.user_id = p.user_id
 
 Список ограничений:
 
-- [ClickHouse](../concepts/federated_query/clickhouse.md#ogranicheniya)
-- [Greenplum](../concepts/federated_query/greenplum.md#ogranicheniya)
-- [Microsoft SQL Server](../concepts/federated_query/ms_sql_server.md#ogranicheniya)
-- [MySQL](../concepts/federated_query/mysql.md#ogranicheniya)
-- [PostgreSQL](../concepts/federated_query/postgresql.md#ogranicheniya)
-- [YDB](../concepts/federated_query/ydb.md#ogranicheniya)
+- [ClickHouse](../concepts/query_execution/federated_query/clickhouse.md#ogranicheniya)
+- [Greenplum](../concepts/query_execution/federated_query/greenplum.md#ogranicheniya)
+- [Microsoft SQL Server](../concepts/query_execution/federated_query/ms_sql_server.md#ogranicheniya)
+- [MySQL](../concepts/query_execution/federated_query/mysql.md#ogranicheniya)
+- [PostgreSQL](../concepts/query_execution/federated_query/postgresql.md#ogranicheniya)
+- [YDB](../concepts/query_execution/federated_query/ydb.md#ogranicheniya)
 
 ```sql
 -- Параметры (для примера — как переменные)

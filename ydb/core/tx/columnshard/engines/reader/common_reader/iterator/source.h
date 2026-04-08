@@ -19,6 +19,8 @@
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/util/evlog/log.h>
 
+#include <library/cpp/lwtrace/shuttle.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap {
@@ -39,26 +41,10 @@ private:
     std::optional<TMonotonic> CurrentNodeStart;
 
     std::optional<TFetchingScriptCursor> CursorStep;
-    TString PrevCategoryName;
-    TString PrevExecutionResult;
+    YDB_ACCESSOR_DEF(TString, PrevCategoryName);
+    YDB_ACCESSOR_DEF(TString, PrevExecutionResult);
 
 public:
-    const TString& GetPrevCategoryName() const {
-        return PrevCategoryName;
-    }
-
-    void SetPrevCategoryName(const TString& name) {
-        PrevCategoryName = name;
-    }
-
-    const TString& GetPrevExecutionResult() const {
-        return PrevExecutionResult;
-    }
-
-    void SetPrevExecutionResult(const TString& result) {
-        PrevExecutionResult = result;
-    }
-
     void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals);
 
     void OnFinishProgramStepExecution();

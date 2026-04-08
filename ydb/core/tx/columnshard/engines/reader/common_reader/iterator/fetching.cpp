@@ -41,7 +41,6 @@ TConclusion<bool> TStepAction::DoExecuteImpl() {
         AFL_VERIFY(!FinishedFlag);
         FinishedFlag = true;
     }
-    
     return FinishedFlag;
 }
 
@@ -86,11 +85,13 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         auto signals = GetSignals(iterator->GetCurrentNodeId());
 
         const auto& currentCategoryName = iterator->GetCurrentNode().GetSignalCategoryName();
-        const TString tracingName = source->GetExecutionContext().GetPrevCategoryName() + " - " + currentCategoryName;
-        const TDuration durationMs = source->GetAndResetWaitDuration();
-        LWTRACK(ProgramChainStart, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-                source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(),
-                tracingName, iterator->GetCurrentNodeId(), durationMs, source->GetRecordsCount());
+        if (LWPROBE_ENABLED(ProgramChainStart)) {
+            const TString tracingName = source->GetExecutionContext().GetPrevCategoryName() + " - " + currentCategoryName;
+            const TDuration durationMs = source->GetAndResetWaitDuration();
+            LWTRACK(ProgramChainStart, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+                    source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(),
+                    tracingName, iterator->GetCurrentNodeId(), durationMs, source->GetRecordsCount());
+        }
 
         const TMonotonic start = TMonotonic::Now();
         auto conclusion = source->GetExecutionContext().GetExecutionVisitorVerified()->Execute();
@@ -99,16 +100,18 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         signals->AddExecutionDuration(executionDurationMs);
         source->AddExecutionDuration(executionDurationMs);
         
-        TString currentExecutionResult = conclusion.IsFail() ? "Fail" : ToString(*conclusion);
-        const TString tracingExecutionResult = source->GetExecutionContext().GetPrevExecutionResult() + " - " + currentExecutionResult;
-        const TDuration finishDurationMs = source->GetAndResetWaitDuration();
-        ui64 bytesProcessed = 0;
-        LWTRACK(ProgramChainFinish, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-                source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(),
-                tracingName, iterator->GetCurrentNodeId(), finishDurationMs,
-                executionDurationMs, source->GetRecordsCount(), bytesProcessed, tracingExecutionResult);
-        source->MutableExecutionContext().SetPrevCategoryName(currentCategoryName);
-        source->MutableExecutionContext().SetPrevExecutionResult(currentExecutionResult);
+        if (LWPROBE_ENABLED(ProgramChainFinish)) {
+            const TString tracingName = source->GetExecutionContext().GetPrevCategoryName() + " - " + currentCategoryName;
+            TString currentExecutionResult = conclusion.IsFail() ? "Fail" : ToString(*conclusion);
+            const TString tracingExecutionResult = source->GetExecutionContext().GetPrevExecutionResult() + " - " + currentExecutionResult;
+            const TDuration finishDurationMs = source->GetAndResetWaitDuration();
+            LWTRACK(ProgramChainFinish, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+                    source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(),
+                    tracingName, iterator->GetCurrentNodeId(), finishDurationMs,
+                    executionDurationMs, source->GetRecordsCount(), tracingExecutionResult);
+            source->MutableExecutionContext().SetPrevCategoryName(currentCategoryName);
+            source->MutableExecutionContext().SetPrevExecutionResult(currentExecutionResult);
+        }
         
         if (conclusion.IsFail()) {
             source->MutableExecutionContext().OnFailedProgramStepExecution();

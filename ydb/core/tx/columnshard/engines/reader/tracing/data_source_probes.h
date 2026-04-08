@@ -19,8 +19,8 @@ namespace NKikimr::NOlap::NReader {
         NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "programNodeId", "durationMs", "recordsCount")) \
     PROBE(ProgramChainFinish, \
         GROUPS("DataSource"), \
-        TYPES(ui64, ui64, ui64, ui64, ui32, TString, ui32, TDuration, TDuration, ui32, ui64, TString), \
-        NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "programNodeId", "durationMs", "executionDurationMs", "recordsCount", "bytesProcessed", "executionResult")) \
+        TYPES(ui64, ui64, ui64, ui64, ui32, TString, ui32, TDuration, TDuration, ui32, TString), \
+        NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "programNodeId", "durationMs", "executionDurationMs", "recordsCount", "executionResult")) \
     PROBE(AssemblerStepStart, \
         GROUPS("DataSource"), \
         TYPES(ui64, ui64, ui64, ui64, ui32, TString, TDuration, ui32, ui32), \

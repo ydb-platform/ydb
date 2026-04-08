@@ -19,7 +19,6 @@
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
-
 using namespace NKafka;
 using namespace NYdb;
 using namespace NYdb::NTable;
@@ -5249,7 +5248,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         writer->Write(std::move(msg4));
         writer->Close();
 
-        // KikimrServer->AppData и там каунтеры. Посмотреть сколько нод
+        // check values before commit
         {
             auto describeConsumerSettings = NTopic::TDescribeConsumerSettings().IncludeStats(true);
             auto result =  pqClient.DescribeConsumer(topicName, consumerName, describeConsumerSettings).GetValueSync();
@@ -5283,89 +5282,47 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
             i32 lastReadOffset = partition.GetPartitionConsumerStats()->GetLastReadOffset();
             i32 committedOffset = partition.GetPartitionConsumerStats()->GetCommittedOffset();
-            // Cerr << "Here" <<stats.size();
             UNIT_ASSERT_VALUES_EQUAL(lastReadOffset, committedOffset);
         }
-        // Sleep(TDuration::Seconds(10));
-        // auto sender = testServer.KikimrServer->GetRuntime()->AllocateEdgeActor();
-        // testServer.KikimrServer->GetRuntime()->Send(MakeKafkaMetricsServiceID(), sender, new TEvKafka::TEvGetCountersRequest());
-
-        // TAutoPtr<IEventHandle> handle;
-        // auto ev = testServer.KikimrServer->GetRuntime()->GrabEdgeEvents<TEvKafka::TEvGetCountersResponse>(handle, TDuration::Seconds(1));
-
-
         NSchemeCache::TDescribeResult::TPtr result = new NSchemeCache::TDescribeResult{};
         result->SetPath("/Root");
-
         TVector<TString> attrs = {"folder_id", "cloud_id", "database_id"};
         auto ua = result->MutablePathDescription()->AddUserAttributes();
         ua->SetKey("folder_id");
         ua->SetValue("somefolder");
-
         ua->SetKey("cloud_id");
         ua->SetValue("somecloud");
-
         ua->SetKey("database_id");
         ua->SetValue("root");
 
-
-        //  ->GetSubgroup("database", "/Root")
-        //             ->GetSubgroup("cloud_id", "somecloud")
-        //             ->GetSubgroup("folder_id", "somefolder")
-        //             ->GetSubgroup("database_id", "root")
-        //             ->GetSubgroup("topic", topic)
         NSchemeCache::TDescribeResult::TCPtr cres = result;
-
-        // // Отправка события обновления схемы
         auto event = MakeHolder<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, "/Root", TPathId{}, cres);
-
         NKikimr::NFlatTests::TFlatMsgBusClient kikimrClient(*(testServer.KikimrServer->ServerSettings));
-        auto record = kikimrClient.Ls(fullTopicName)->Record;
-        auto pathDescr = record.GetPathDescription();
-        auto g = pathDescr.GetPersQueueGroup();
-        auto tabletId = g.GetPartitions(0).GetTabletId();
+        auto record = kikimrClient.Ls(fullTopicName)->Record.GetPathDescription().GetPersQueueGroup();
+        auto tabletId = record.GetPartitions(0).GetTabletId();
 
         auto* runtime = testServer.KikimrServer->GetRuntime();
         TActorId pipeClient = runtime->ConnectToPipe(tabletId, runtime->AllocateEdgeActor(), 0, GetPipeConfigWithRetries());
         runtime->SendToPipe(tabletId, runtime->AllocateEdgeActor(), event.Release(), 0, GetPipeConfigWithRetries(), pipeClient);
-
-        // {
-        //     // TDispatchOptions options;
-        //     // options.FinalEvents.emplace_back(TEvTxProxySchemeCache::EvWatchNotifyUpdated);
-        //     // runtime->DispatchEvents(options);
-        //     TDispatchOptions options;
-        //     options.FinalEvents.emplace_back(TEvTxProxySchemeCache::EvWatchNotifyUpdated);
-        //     auto processedCountersEvent = runtime->DispatchEvents(options);
-        //     UNIT_ASSERT_VALUES_EQUAL(processedCountersEvent, true);
-        // }
-        // {
-        //     auto* runtime = testServer.KikimrServer->GetRuntime();
-        //     TDispatchOptions options;
-        //     options.FinalEvents.emplace_back(TEvPersQueue::EvPeriodicTopicStats);
-        //     runtime->DispatchEvents(options);
-        // }
-
-        // // Ждем обработки
-        // {
-        //     TDispatchOptions options;
-        //     options.FinalEvents.emplace_back(TEvPersQueue::EvPeriodicTopicStats);
-        //     runtime->DispatchEvents(options);
-        // }
-
-        // 3. Небольшая задержка для гарантии обновления метрик
-        Sleep(TDuration::Seconds(10));
-
+        Sleep(TDuration::Seconds(50));
         Cerr << TInstant::Now() << "Getting counters" << Endl;
         auto counters = testServer.KikimrServer->GetRuntime()->GetAppData(0).Counters;
         auto dbGroup = GetServiceCounters(counters, "topics", false);
         TStringStream countersStr;
         dbGroup->OutputPlainText(countersStr);
         TString countersString = countersStr.Str();
-
-        Cerr << countersString << Endl;
-        std::ofstream out("counters_output.txt");
-        out << countersString;
-        out.close();
+        auto group = dbGroup->GetSubgroup("host", "")
+                                ->GetSubgroup("database", "/Root")
+                                ->GetSubgroup("cloud_id", "somecloud")
+                                ->GetSubgroup("folder_id", "somefolder")
+                                ->GetSubgroup("database_id", "root")
+                                ->GetSubgroup("topic", "topic")
+                                ->GetSubgroup("consumer", "my-consumer");
+        auto read_lag = group->GetNamedCounter("name", "topic.read.lag_messages", false)->Val();
+        auto committed_lag = group->GetNamedCounter("name", "topic.committed_lag_messages", false)->Val();
+        Cerr << ">>>>> COUNTERS: " << countersString << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(committed_lag, 2);
+        UNIT_ASSERT_VALUES_EQUAL(read_lag, 2);
     }
 
     Y_UNIT_TEST(ProduceMetrics) {

@@ -271,6 +271,11 @@ protected:
     virtual bool GetEnableHtapTx() const;
     virtual bool GetAllowOlapDataQuery() const;
 
+    /// Called from SetUp after TTopicSdkTestSetup::MakeServerSettings() and HTAP-related setters.
+    virtual void AugmentServerSettings(NKikimr::Tests::TServerSettings& settings);
+    /// Called from CreateTopicWriteSession before CreateWriteSession (Topic API write_session_meta).
+    virtual void AugmentWriteSessionSettings(NTopic::TWriteSessionSettings& settings);
+
     size_t GetPQCacheRenameKeysCount();
 
     enum class EClientType {

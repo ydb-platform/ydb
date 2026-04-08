@@ -22,6 +22,7 @@ SRCS(
     describe_topic_ut.cpp
     local_partition_ut.cpp
     topic_to_table_ut.cpp
+    topic_tx_skip_conflict_ut.cpp
 )
 
 RESOURCE(

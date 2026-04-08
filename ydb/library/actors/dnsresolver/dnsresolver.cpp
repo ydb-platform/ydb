@@ -544,17 +544,18 @@ namespace NDnsResolver {
             name = AddTrailingDot(std::move(name), Options.AddTrailingDot);
             auto result = std::make_unique<TEvDns::TEvGetHostByNameResult>();
 
-            struct addrinfo hints, *res;
+            struct addrinfo hints, *res = nullptr;
             memset(&hints, 0, sizeof(hints));
             hints.ai_family = family;
             hints.ai_socktype = Options.ForceTcp ? SOCK_STREAM : SOCK_DGRAM;
+
+            Y_DEFER { freeaddrinfo(res); };
 
             result->Status = getaddrinfo(name.c_str(), nullptr, &hints, &res);
             if (result->Status != 0) {
                 result->ErrorText = gai_strerror(result->Status);
                 return result;
             }
-            Y_DEFER { freeaddrinfo(res); };
 
             for (auto *node = res; node; node = node->ai_next) {
                 switch (node->ai_family) {

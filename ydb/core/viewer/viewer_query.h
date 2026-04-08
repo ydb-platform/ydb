@@ -118,8 +118,6 @@ private:
             beginTx->mutable_stale_read_only();
         } else if (mode == "snapshot-read-only") {
             beginTx->mutable_snapshot_read_only();
-        } else if (mode == "snapshot-read-write") {
-            beginTx->mutable_snapshot_read_write();
         } else {
             return; // Don't set transaction control for unknown modes
         }
@@ -1507,9 +1505,8 @@ public:
                       * `online-read-only`
                       * `stale-read-only`
                       * `snapshot-read-only`
-                      * `snapshot-read-write`
                 type: string
-                enum: [serializable-read-write, online-read-only, stale-read-only, snapshot-read-only, snapshot-read-write]
+                enum: [serializable-read-write, online-read-only, stale-read-only, snapshot-read-only]
                 required: false
               - name: output_chunk_max_size
                 in: query

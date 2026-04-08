@@ -899,7 +899,7 @@ private:
 
     void Handle(TEvPrivate::TEvCheckPartitionCount::TPtr&) {
         PartitionCountCheckScheduled = false;
-        if (Clusters.empty() || FinishedByOffsets) {
+        if (Clusters.empty()) {
             return;
         }
 

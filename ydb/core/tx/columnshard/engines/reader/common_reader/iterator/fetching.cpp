@@ -25,7 +25,6 @@ bool TStepAction::DoApply(IDataReader& owner) {
 
 TConclusion<bool> TStepAction::DoExecuteImpl() {
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("step_action"));
-    
     if (Source->GetContext()->IsAborted()) {
         AFL_VERIFY(!FinishedFlag);
         FinishedFlag = true;
@@ -85,7 +84,7 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         auto signals = GetSignals(iterator->GetCurrentNodeId());
 
         const auto& currentCategoryName = iterator->GetCurrentNode().GetSignalCategoryName();
-        if (LWPROBE_ENABLED(ProgramChainStart)) {
+        if (LWPROBE_ENABLED(ProgramChainStart) || source->GetDataSourceOrbit().HasShuttles()) {
             const TString tracingName = source->GetExecutionContext().GetPrevCategoryName() + " - " + currentCategoryName;
             const TDuration durationMs = source->GetAndResetWaitDuration();
             LWTRACK(ProgramChainStart, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
@@ -100,7 +99,7 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         signals->AddExecutionDuration(executionDurationMs);
         source->AddExecutionDuration(executionDurationMs);
         
-        if (LWPROBE_ENABLED(ProgramChainFinish)) {
+        if (LWPROBE_ENABLED(ProgramChainFinish) || source->GetDataSourceOrbit().HasShuttles()) {
             const TString tracingName = source->GetExecutionContext().GetPrevCategoryName() + " - " + currentCategoryName;
             TString currentExecutionResult = conclusion.IsFail() ? "Fail" : ToString(*conclusion);
             const TString tracingExecutionResult = source->GetExecutionContext().GetPrevExecutionResult() + " - " + currentExecutionResult;

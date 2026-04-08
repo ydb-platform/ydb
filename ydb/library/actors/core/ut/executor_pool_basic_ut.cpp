@@ -302,7 +302,7 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         UNIT_ASSERT_VALUES_EQUAL(stats[0].MailboxPushedOutBySoftPreemption, 0);
     }
 
-    Y_UNIT_TEST(GetExecutorPoolStateWithoutHarmonizerUsesMaxLimitForPossibleMaxLimit) {
+    Y_UNIT_TEST(GetExecutorPoolStateWithoutHarmonizerUsesMinAndMaxLimits) {
         TBasicExecutorPoolConfig config;
         config.Threads = 4;
         config.MinThreadCount = 1;
@@ -318,7 +318,7 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         executorPool.GetExecutorPoolState(state);
 
         UNIT_ASSERT_VALUES_EQUAL(state.CurrentLimit, executorPool.GetThreadCount());
-        UNIT_ASSERT_VALUES_EQUAL(state.MinLimit, executorPool.GetDefaultThreadCount());
+        UNIT_ASSERT_VALUES_EQUAL(state.MinLimit, executorPool.GetMinThreadCount());
         UNIT_ASSERT_VALUES_EQUAL(state.MaxLimit, executorPool.GetMaxThreadCount());
         UNIT_ASSERT_VALUES_EQUAL(state.PossibleMaxLimit, state.MaxLimit);
     }

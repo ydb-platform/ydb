@@ -557,7 +557,7 @@ namespace NActors {
     void TBasicExecutorPool::GetExecutorPoolState(TExecutorPoolState &poolState) const {
         poolState.CurrentLimit = GetThreadCount();
         poolState.MaxLimit = GetMaxThreadCount();
-        poolState.MinLimit = GetDefaultThreadCount();
+        poolState.MinLimit = GetMinThreadCount();
 
         if (Harmonizer) {
             TPoolHarmonizerStats stats = Harmonizer->GetPoolStats(PoolId);

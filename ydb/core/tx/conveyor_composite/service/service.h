@@ -29,7 +29,6 @@ private:
     void HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev);
     void HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev);
     void HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& ev);
-    void HandleMain(NActors::TEvents::TEvWakeup::TPtr& ev);
 
     void AddProcess(const ui64 processId, const TCPULimitsConfig& cpuLimits);
 
@@ -50,7 +49,6 @@ public:
             hFunc(TEvInternal::TEvTaskProcessedResult, HandleMain);
             hFunc(TEvExecution::TEvRegisterProcess, HandleMain);
             hFunc(TEvExecution::TEvUnregisterProcess, HandleMain);
-            hFunc(NActors::TEvents::TEvWakeup, HandleMain);
             default:
                 AFL_ERROR(NKikimrServices::TX_CONVEYOR)("problem", "unexpected event for task executor")("ev_type", ev->GetTypeName());
                 break;

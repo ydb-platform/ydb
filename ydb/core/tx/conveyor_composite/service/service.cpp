@@ -26,7 +26,6 @@ void TDistributor::Bootstrap() {
     AFL_NOTICE(NKikimrServices::TX_CONVEYOR)("name", ConveyorName)("action", "conveyor_registered")("config", Config.DebugString())(
         "actor_id", SelfId())("manager", Manager->DebugString());
     Become(&TDistributor::StateMain);
-    TBase::Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup(1));
 }
 
 void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) {
@@ -70,11 +69,6 @@ void TDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
     LWPROBE(UnregisterProcess, ConveyorName, ToString(event.GetCategory()), event.GetInternalProcessId());
     auto* evData = ev->Get();
     Manager->MutableCategoryVerified(evData->GetCategory()).UnregisterProcess(evData->GetInternalProcessId());
-}
-
-void TDistributor::HandleMain(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
-    Y_UNUSED(Manager->DrainTasks());
-    TBase::Schedule(TDuration::Seconds(1), new NActors::TEvents::TEvWakeup(1));
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {

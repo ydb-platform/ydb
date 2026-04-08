@@ -428,7 +428,18 @@ private:
             return joinTree;
         }
 
-        auto bestJoinOrder = solver.Solve(hints);
+        std::shared_ptr<TJoinOptimizerNodeInternal> bestJoinOrder;
+        try {
+            bestJoinOrder = solver.Solve(hints);
+        } catch (const std::exception& e) {
+            YQL_CLOG(WARN, CoreDq) << "CBO hard timeout exceeded, falling back to default join order: " << e.what();
+            ExprCtx.AddWarning(YqlIssue(
+                {}, TIssuesIds::CBO_ENUM_LIMIT_REACHED,
+                TStringBuilder() << "Cost based optimizer timed out and was disabled for this query."
+            ));
+            ComputeStatistics(joinTree, this->Pctx);
+            return joinTree;
+        }
         if (postEnumerationShuffleElimination) {
             Y_ENSURE(OrderingsFSM != nullptr);
 

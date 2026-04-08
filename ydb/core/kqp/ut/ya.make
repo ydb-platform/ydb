@@ -19,6 +19,7 @@ RECURSE_FOR_TESTS(
     scheme
     service
     spilling
+    stream_lookup
     sysview
     tx
     view

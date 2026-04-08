@@ -758,7 +758,7 @@ namespace NKikimr::NDDisk {
         reply->InMemoryCacheSize = PersistentBufferInMemoryCacheSize;
         reply->InMemoryCacheLimit = PersistentBufferFormat.MaxInMemoryCache;
         if (ev->Get()->DescribeTablets) {
-            for (auto [k, v] : PersistentBuffers) {
+            for (auto& [k, v] : PersistentBuffers) {
                 reply->TabletInfos.emplace_back(std::get<0>(k), std::get<1>(k),
                     v.Records.begin()->first, v.Records.rbegin()->first,
                     v.Records.begin()->second.Timestamp, v.Records.rbegin()->second.Timestamp);

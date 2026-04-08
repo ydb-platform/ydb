@@ -2158,7 +2158,6 @@ void TMonPersistentBufferInitializer::InitializeServices(NActors::TActorSystemSe
     IActor *actor = CreateMonPersistentBufferActor(Config, *appData);
     setup->LocalServices.emplace_back(MakeMonPersistentBufferID(NodeId),
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId));
-    // FIXME: correct service id
 }
 
 // TPersQueueL2CacheInitializer

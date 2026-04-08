@@ -42,11 +42,7 @@ namespace NKikimr {
                     ui64 syncLogMaxEntryPointSize);
 
             void Init(std::shared_ptr<IActorNotify> notifier, std::shared_ptr<ILoggerCtx> loggerCtx,
-                    const TActorId& selfId) {
-                Notifier = std::move(notifier);
-                LoggerCtx = std::move(loggerCtx);
-                SelfId = selfId;
-            }
+                    const TActorId& selfId);
 
             bool HasDelayedActions() const { return DelayedActions.HasActions(); }
             bool GetDeleteChunkAndClear() { return std::exchange(DelayedActions.DeleteChunk, false); }

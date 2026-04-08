@@ -529,6 +529,12 @@ namespace NKikimr {
                 ChunksToDelete.push_back(pb.GetChunksToDeleteDelayed(i));
             }
 
+            if (pb.HasPhantomFlagStorageData()) {
+                TPhantomFlagStorageData data;
+                data.Deserialize(pb.GetPhantomFlagStorageData());
+                SyncLogPtr->UpdatePhantomFlagStorageData(std::move(data));
+            }
+
             return true;
         }
 

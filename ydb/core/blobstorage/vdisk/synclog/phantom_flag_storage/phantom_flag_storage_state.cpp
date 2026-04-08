@@ -63,10 +63,9 @@ void TPhantomFlagStorageState::ProcessBlobRecordFromSyncLog(const TLogoBlobRec* 
 
 void TPhantomFlagStorageState::ProcessBlobRecordFromNeighbour(ui32 orderNumber, const TLogoBlobRec* blobRec) {
     if (blobRec->Ingress.IsKeep(GType)) {
+        Thresholds.AddBlob(orderNumber, blobRec->LogoBlobID());
         if (IsPersistent) {
             AddItemToWriteBuffer(TPhantomFlagStorageItem::CreateThreshold(orderNumber, blobRec->LogoBlobID()));
-        } else {
-            Thresholds.AddBlob(orderNumber, blobRec->LogoBlobID());
         }
     }
 }
@@ -238,6 +237,7 @@ void TPhantomFlagStorageState::FlushWriteBuffer() {
     auto ev = std::make_unique<TEvPhantomFlagStorageWriteItems>(std::move(WriteBuffer));
     TActivationContext::Send(new IEventHandle(ProcessorId, TActorId{}, ev.release()));
     WriteBufferSize = 0;
+    WriteBufferFlushTimestamp = TActivationContext::Monotonic();
 }
 
 void TPhantomFlagStorageState::FlushWriteBufferIfNeeded() {

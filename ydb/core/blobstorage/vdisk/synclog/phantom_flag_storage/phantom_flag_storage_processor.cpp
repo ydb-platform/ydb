@@ -45,6 +45,7 @@ private:
 
     STRICT_STFUNC(StateWork,
         hFunc(TEvChunkKeeperAllocateResult, Handle)
+        hFunc(TEvChunkKeeperFreeResult, Handle)
         hFunc(NPDisk::TEvChunkWriteResult, Handle)
         hFunc(NPDisk::TEvChunkReadResult, Handle)
         hFunc(TEvPhantomFlagStorageWriteItems, Handle)
@@ -125,12 +126,12 @@ private:
         RequestInFlight = false;
         switch (ev->Get()->Status) {
         case NKikimrProto::OK: {
-            ProcessQueues();
+            Data.Chunks.erase(ev->Get()->ChunkIdx);
             break;
         }
         default:
             // retry
-            AllocateNewChunk();
+            DeleteChunk(ev->Get()->ChunkIdx);
             return;
         }
     }
@@ -139,11 +140,11 @@ private:
         CHECK_PDISK_RESPONSE(Ctx.SyncLogCtx->VCtx, ev, TActivationContext::AsActorContext());
         RequestInFlight = false;
         ui32 chunkIdx = ev->Get()->ChunkIdx;
-        Data.Chunks[chunkIdx].DataSize += PendingWrite.size();
+        ui32 bufferSize = ev->Get()->PartsPtr->ByteSize();
+        Data.Chunks[chunkIdx].DataSize += bufferSize;
         if (chunkIdx == TailChunkIdx) {
-            TailAvailableSize -= PendingWrite.size();
+            TailAvailableSize -= bufferSize;
         }
-        PendingWrite.clear();
         CommitState();
         ProcessQueues();
     }
@@ -169,6 +170,7 @@ private:
 
     void SelectTailChunk() {
         TailChunkIdx.reset();
+        TailAvailableSize = 0;
         for (const auto& [chunkIdx, chunk] : Data.Chunks) {
             if (Data.ChunkSize - chunk.DataSize > TailAvailableSize) {
                 TailChunkIdx.emplace(chunkIdx);
@@ -211,12 +213,12 @@ private:
         }
 
         while (!WriteQueue.empty()) {
-            TPhantomFlagStorageItem item = WriteQueue.front();
-            WriteQueue.pop_front();
+            const TPhantomFlagStorageItem& item = WriteQueue.front();
             if (TailAvailableSize < PendingWrite.size() + item.SerializedSize()) {
                 break;
             }
             item.Serialize(&PendingWrite);
+            WriteQueue.pop_front();
         }
 
         if (!PendingWrite.empty()) {

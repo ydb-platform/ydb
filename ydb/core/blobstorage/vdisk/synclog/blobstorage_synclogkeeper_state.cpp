@@ -57,6 +57,19 @@ namespace NKikimr {
             SyncedMask.set(SelfOrderNumber, true);
         }
 
+        void TSyncLogKeeperState::Init(std::shared_ptr<IActorNotify> notifier,
+                std::shared_ptr<ILoggerCtx> loggerCtx, const TActorId& selfId) {
+            Notifier = std::move(notifier);
+            LoggerCtx = std::move(loggerCtx);
+            SelfId = selfId;
+
+            TPhantomFlagStorageData phantomFlagStorageData = SyncLogPtr->GetPhantomFlagStorageData();
+            if (!phantomFlagStorageData.Chunks.empty()) {
+                PhantomFlagStorageState.InitializePersistent(std::move(phantomFlagStorageData), SelfId, 
+                        SlCtx->ChunkKeeperId);
+            }
+        }
+
         // Calculate first lsn in recovery log we must keep
         ui64 TSyncLogKeeperState::CalculateFirstLsnToKeep() const {
             // calculate first lsn for data

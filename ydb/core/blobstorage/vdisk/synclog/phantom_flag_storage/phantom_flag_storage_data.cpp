@@ -69,7 +69,6 @@ void TPhantomFlagStorageItem::Serialize(TString* buffer) const {
             buffer->append(reinterpret_cast<const char*>(&threshold), sizeof(threshold));
         },
     }, Data);
-    buffer->append(reinterpret_cast<const char*>(this), SerializedSize());
 }
 
 TPhantomFlagStorageItem TPhantomFlagStorageItem::DeserializeFromRaw(const char* data) {

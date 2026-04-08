@@ -16,7 +16,7 @@ enum EPhantomFlagStorageItem : ui8 {
     Threshold = 0b10,
     // all types other than Flag and Threshold must contain ui32 field
     // equal to the total serialized size of structure (including Type)
-    // in the beggining of byte serialization, for compatibility reasons 
+    // in the beginning of byte serialization, for compatibility reasons 
 };
 
 class TPhantomFlagStorageItem {

@@ -38,7 +38,7 @@ on:
         type: string
         default: ''
       blacklist_paths:
-        description: 'Newline-separated list of paths to blacklist (each path will be expanded with its subdirectories)'
+        description: 'Newline-separated list of paths or patterns to blacklist; provide all required paths/patterns explicitly'
         required: false
         type: string
         default: ''

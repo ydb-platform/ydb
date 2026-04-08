@@ -38,8 +38,7 @@ public:
                                const TString& userSid,
                                const TString& maskedToken,
                                const TString& authType,
-                               const TString& sourceAddress,
-                               const TString& userName);
+                               const TString& sourceAddress);
 
     ~TCreateQueueSchemaActorV2();
 
@@ -148,7 +147,6 @@ private:
     const TString MaskedToken_;
     const TString AuthType_;
     const TString SourceAddress_;
-    const TString UserName_;
 
     ui64 RequiredShardsCount_ = 0;
     ui64 CreatedShardsCount_ = 0;

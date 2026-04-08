@@ -30,6 +30,4 @@ IActor* CreateProxyActionActor(const NKikimrClient::TSqsRequest& req, THolder<IR
 
 IActor* CreatePingActor(THolder<IPingReplyCallback> cb, const TString& requestId);
 
-IActor* CreateSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb);
-
 } // namespace NKikimr::NSQS

@@ -48,8 +48,7 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TString& accountName,
                                                      const TString& userSid,
                                                      const TString& maskedToken,
                                                      const TString& authType,
-                                                     const TString& sourceAddress,
-                                                     const TString& userName)
+                                                     const TString& sourceAddress)
     : AccountName_(accountName)
     , QueuePath_(path)
     , Request_(req)
@@ -68,7 +67,6 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TString& accountName,
     , MaskedToken_(maskedToken)
     , AuthType_(authType)
     , SourceAddress_(sourceAddress)
-    , UserName_(userName)
 {
     IsFifo_ = AsciiHasSuffixIgnoreCase(IsCloudMode_ ? CustomQueueName_ : QueuePath_.QueueName, ".fifo");
 

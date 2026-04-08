@@ -271,10 +271,10 @@ bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedI
     }
 
     {
-        if (!db.LoadColumns(PathId, [&](TColumnChunkLoadContextV2&& loadContext) {
+        if (!db.LoadColumns([&](TColumnChunkLoadContextV2&& loadContext) {
                 auto* constructor = constructors.GetConstructorVerified(loadContext.GetPortionId());
                 constructor->AddBuildInfo(loadContext.CreateBuildInfo());
-            })) {
+            }, PathId)) {
             return false;
         }
     }

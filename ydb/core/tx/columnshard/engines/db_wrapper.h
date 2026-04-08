@@ -44,7 +44,13 @@ public:
     virtual void WriteColumn(
         const TPortionDataAccessor& acc, const TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) = 0;
     virtual void EraseColumn(const TPortionInfo& portion, const TColumnRecord& row) = 0;
-    virtual bool LoadColumns(const std::optional<TInternalPathId> pathId, const std::function<void(TColumnChunkLoadContextV2&&)>& callback) = 0;
+    virtual bool LoadColumns(
+        const std::function<void(TColumnChunkLoadContextV2&&)>& callback,
+        const std::optional<TInternalPathId> prefixPathId = std::nullopt,
+        const std::optional<ui64> fromPortionId = std::nullopt,
+        const std::optional<TInternalPathId> toPathId = std::nullopt,
+        const std::optional<ui64> toPortionId = std::nullopt
+    ) = 0;
 
     virtual void WritePortion(const std::vector<TUnifiedBlobId>& blobIds, const NOlap::TPortionInfo& portion) = 0;
     virtual void CommitPortion(const NOlap::TPortionInfo& portion, const TSnapshot& commitSnapshot) = 0;
@@ -59,8 +65,10 @@ public:
     virtual void EraseIndex(const TPortionInfo& portion, const TIndexChunk& row) = 0;
     virtual bool LoadIndexes(
         const std::function<void(const TInternalPathId pathId, const ui64 portionId, TIndexChunkLoadContext&&)>& callback,
-        const std::optional<TInternalPathId> pathId = std::nullopt,
-        const std::optional<ui64> portionId = std::nullopt
+        const std::optional<TInternalPathId> prefixPathId = std::nullopt,
+        const std::optional<ui64> prefixPortionId = std::nullopt,
+        const std::optional<TInternalPathId> toPathId = std::nullopt,
+        const std::optional<ui64> toPortionId = std::nullopt
     ) = 0;
 
     virtual void WriteCounter(ui32 counterId, ui64 value) = 0;
@@ -90,14 +98,22 @@ public:
     void WriteColumns(const NOlap::TPortionInfo& portion, const NKikimrTxColumnShard::TIndexPortionAccessor& proto,
         const NKikimrTxColumnShard::TIndexPortionBlobsInfo& protoBlobs) override;
     void EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) override;
-    bool LoadColumns(const std::optional<TInternalPathId> pathId, const std::function<void(TColumnChunkLoadContextV2&&)>& callback) override;
+    bool LoadColumns(
+        const std::function<void(TColumnChunkLoadContextV2&&)>& callback,
+        const std::optional<TInternalPathId> prefixPathId = std::nullopt,
+        const std::optional<ui64> fromPortionId = std::nullopt,
+        const std::optional<TInternalPathId> toPathId = std::nullopt,
+        const std::optional<ui64> toPortionId = std::nullopt
+    ) override;
 
     virtual void WriteIndex(const TPortionDataAccessor& acc, const TPortionInfo& portion, const TIndexChunk& row) override;
     virtual void EraseIndex(const TPortionInfo& portion, const TIndexChunk& row) override;
     virtual bool LoadIndexes(
         const std::function<void(const TInternalPathId pathId, const ui64 portionId, TIndexChunkLoadContext&&)>& callback,
-        const std::optional<TInternalPathId> pathId = std::nullopt,
-        const std::optional<ui64> portionId = std::nullopt
+        const std::optional<TInternalPathId> prefixPathId = std::nullopt,
+        const std::optional<ui64> prefixPortionId = std::nullopt,
+        const std::optional<TInternalPathId> toPathId = std::nullopt,
+        const std::optional<ui64> toPortionId = std::nullopt
     ) override;
 
     void WriteCounter(ui32 counterId, ui64 value) override;

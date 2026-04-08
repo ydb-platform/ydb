@@ -103,7 +103,8 @@ public:
         const TCurlInitConfig& config = TCurlInitConfig(),
         TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr,
         TString data = {})
-        : UserHeaders(std::move(headers))
+        : Headers(std::move(headers))
+        , InitHeadersSize(Headers.Fields.size())
         , Method(method)
         , Offset(offset)
         , SizeLimit(sizeLimit)
@@ -168,7 +169,7 @@ public:
         curl_easy_setopt(Handle, CURLOPT_LOW_SPEED_LIMIT, Config.LowSpeedLimit);
         curl_easy_setopt(Handle, CURLOPT_ERRORBUFFER, ErrorBuffer.data());
 
-        Headers = UserHeaders;
+        Headers.Fields.resize(InitHeadersSize);
 
         if (Headers.Options.CurlSignature) {
             if (Headers.Options.AwsSigV4) {
@@ -305,8 +306,8 @@ private:
         return res;
     };
 
-    const IHTTPGateway::THeaders UserHeaders;
     IHTTPGateway::THeaders Headers;
+    const size_t InitHeadersSize;
     const EMethod Method;
     const size_t Offset;
     const size_t SizeLimit;

@@ -330,7 +330,23 @@ NYql::NNodes::TCoUtf8 RemoveJsonPathUnnecessaryQuote(const NYql::NNodes::TCoUtf8
     return node;
 }
 
-TExprBase UnwrapOptionalTKqpOlapApplyColumnArg(const TExprBase& node) {
+TExprBase UnwrapOptionalTKqpOlapApplyColumnArg(const TExprBase& node, TExprContext& ctx) {
+    // This is a special case - (just (member $input 'colname)).
+    if (auto maybeUnaryOp = node.Maybe<TKqpOlapFilterUnaryOp>()) {
+        const auto unaryOp = maybeUnaryOp.Cast();
+        if (unaryOp.Operator().StringValue() == "just") {
+            if (auto maybeColumnArg = unaryOp.Arg().Maybe<TKqpOlapApplyColumnArg>()) {
+                // We want to rewrite it to - (just ('colname)).
+                // clang-format off
+                return Build<TKqpOlapFilterUnaryOp>(ctx, node.Pos())
+                    .Operator().Value("just", TNodeFlags::Default).Build()
+                    .Arg(maybeColumnArg.Cast().ColumnName())
+                .Done();
+                // clang-format on
+            }
+        }
+    }
+
     if (const auto& maybeColumnArg = node.Maybe<TKqpOlapApplyColumnArg>()) {
         return maybeColumnArg.Cast().ColumnName();
     }
@@ -408,8 +424,8 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
             if (const auto params = ExtractBinaryFunctionParameters(arithmetic, argument, ctx, pos, allowApply)) {
                 return Build<TKqpOlapFilterBinaryOp>(ctx, pos)
                         .Operator().Value(arithmetic.Ref().Content(), TNodeFlags::Default).Build()
-                        .Left(UnwrapOptionalTKqpOlapApplyColumnArg(params->first))
-                        .Right(UnwrapOptionalTKqpOlapApplyColumnArg(params->second))
+                        .Left(UnwrapOptionalTKqpOlapApplyColumnArg(params->first, ctx))
+                        .Right(UnwrapOptionalTKqpOlapApplyColumnArg(params->second, ctx))
                         .OpType(ExpandType(node.Pos(), *(arithmetic.Ptr()->GetTypeAnn()), ctx))
                         .Done();
             }
@@ -422,7 +438,7 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
                 YQL_ENSURE(oper.to_lower());
                 return Build<TKqpOlapFilterUnaryOp>(ctx, pos)
                         .Operator().Value(oper, TNodeFlags::Default).Build()
-                        .Arg(UnwrapOptionalTKqpOlapApplyColumnArg(params.front()))
+                        .Arg(UnwrapOptionalTKqpOlapApplyColumnArg(params.front(), ctx))
                         .Done();
             }
         }
@@ -568,8 +584,8 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
 
     return Build<TKqpOlapFilterBinaryOp>(ctx, pos)
         .Operator().Value(compareOperator, TNodeFlags::Default).Build()
-        .Left(UnwrapOptionalTKqpOlapApplyColumnArg(parameter.first))
-        .Right(UnwrapOptionalTKqpOlapApplyColumnArg(parameter.second))
+        .Left(UnwrapOptionalTKqpOlapApplyColumnArg(parameter.first, ctx))
+        .Right(UnwrapOptionalTKqpOlapApplyColumnArg(parameter.second, ctx))
         .OpType(ExpandType(predicate.Pos(), *(predicate.Ptr()->GetTypeAnn()), ctx))
         .Done();
 }
@@ -631,8 +647,8 @@ TMaybeNode<TExprBase> ComparisonPushdown(const std::vector<std::pair<TExprBase, 
         for (ui32 j = 0; j < i; ++j) {
             andConditions.emplace_back(Build<TKqpOlapFilterBinaryOp>(ctx, pos)
                 .Operator().Value("eq", TNodeFlags::Default).Build()
-                .Left(UnwrapOptionalTKqpOlapApplyColumnArg(parameters[j].first))
-                .Right(UnwrapOptionalTKqpOlapApplyColumnArg(parameters[j].second))
+                .Left(UnwrapOptionalTKqpOlapApplyColumnArg(parameters[j].first, ctx))
+                .Right(UnwrapOptionalTKqpOlapApplyColumnArg(parameters[j].second, ctx))
                 .Done());
         }
 

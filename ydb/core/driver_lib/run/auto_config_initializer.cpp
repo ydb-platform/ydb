@@ -287,10 +287,10 @@ namespace NKikimr::NAutoConfigInitializer {
             assignPool(batchExecutor, "Batch", 10, false);
             assignPool(icExecutor, "IC", 40, true);
 
-            batchExecutor->SetForcedForeignSlots(1);
-            userExecutor->SetForcedForeignSlots(2);
-            icExecutor->SetForcedForeignSlots(2);
-            systemExecutor->SetForcedForeignSlots(2);
+            batchExecutor->SetForcedForeignSlots(0);
+            userExecutor->SetForcedForeignSlots(cpuCount - 1);
+            icExecutor->SetForcedForeignSlots(Min(1, cpuCount - 1));
+            systemExecutor->SetForcedForeignSlots(Min(1, cpuCount - 1));
 
             if (cpuCount >= 2) {
                 userExecutor->AddAdjacentPools(2);

@@ -138,8 +138,7 @@ protected:
                 input.Cast(),
                 false,
                 TDuration::MilliSeconds(TDqSettings::TDefault::WatermarksLateArrivalDelayMs),
-                KqpCtx.Config->EnableWatermarks,
-                false
+                KqpCtx.Config->EnableWatermarks
             );
         } else {
             NDq::TSpillingSettings spillingSettings(KqpCtx.Config->GetEnabledSpillingNodes());

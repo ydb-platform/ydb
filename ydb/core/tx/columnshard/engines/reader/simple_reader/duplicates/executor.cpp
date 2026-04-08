@@ -95,6 +95,13 @@ private:
             return;
         }
 
+        if (result.HasRemovedData()) {
+            TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
+                new NPrivate::TEvFilterConstructionResult(
+                    TConclusionStatus::Fail(TStringBuilder{} << "Has removed accessors data, count " << result.GetRemovedData().size()), Request.GetGlobalContext().MakeResultInFlightGuard()));
+            return;
+        }
+
         ui64 mem = 0;
         for (const auto& accessor : result.ExtractPortionsVector()) {
             mem += accessor->GetColumnRawBytes(Request.GetGlobalContext().GetFetchingColumnIds(), false);

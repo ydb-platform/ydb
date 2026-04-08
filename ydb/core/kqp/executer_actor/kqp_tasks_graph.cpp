@@ -180,6 +180,7 @@ void TKqpTasksGraph::FillKqpTasksGraphStages(const TVector<IKqpGateway::TPhysica
                 if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
                     meta.TableId = MakeTableId(input.GetStreamLookup().GetTable());
                     meta.TablePath = input.GetStreamLookup().GetTable().GetPath();
+                    meta.AccessCheckOperations.insert(TKeyDesc::ERowOperation::Read);
                     meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
                     YQL_ENSURE(meta.TableConstInfo);
                     meta.TableKind = meta.TableConstInfo->TableKind;
@@ -188,6 +189,7 @@ void TKqpTasksGraph::FillKqpTasksGraphStages(const TVector<IKqpGateway::TPhysica
                 if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorResolve) {
                     meta.TableId = MakeTableId(input.GetVectorResolve().GetTable());
                     meta.TablePath = input.GetVectorResolve().GetTable().GetPath();
+                    meta.AccessCheckOperations.insert(TKeyDesc::ERowOperation::Read);
                     meta.TableConstInfo = tx.Body->GetTableConstInfoById()->Map.at(meta.TableId);
                     YQL_ENSURE(meta.TableConstInfo);
                     meta.TableKind = meta.TableConstInfo->TableKind;
@@ -1086,6 +1088,9 @@ void TKqpTasksGraph::FillChannelDesc(NDqProto::TChannel& channelDesc, const TCha
     channelDesc.SetEnableSpilling(enableSpilling);
     channelDesc.SetCheckpointingMode(channel.CheckpointingMode);
     channelDesc.SetWatermarksMode(channel.WatermarksMode);
+    if (channel.WatermarksIdleTimeoutUs) {
+        channelDesc.SetWatermarksIdleTimeoutUs(*channel.WatermarksIdleTimeoutUs);
+    }
 
     const auto& resultChannelProxies = GetMeta().ResultChannelProxies;
 
@@ -1386,6 +1391,9 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
         case NYql::NDq::TTaskInputType::Source:
             inputDesc.MutableSource()->SetType(input.SourceType);
             inputDesc.MutableSource()->SetWatermarksMode(input.WatermarksMode);
+            if (input.WatermarksIdleTimeoutUs) {
+                inputDesc.MutableSource()->SetWatermarksIdleTimeoutUs(*input.WatermarksIdleTimeoutUs);
+            }
             if (Y_LIKELY(input.Meta.SourceSettings)) {
                 enableMetering = true;
                 YQL_ENSURE(input.Meta.SourceSettings->HasTable());
@@ -1601,6 +1609,11 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<IKqpGateway::TPhysicalT
             channel.DstStageId = TStageId(txId, protoInfo.GetDstStageId());
             channel.DstTask = protoInfo.GetDstTaskId();
             channel.InMemory = protoInfo.GetInMemory();
+            channel.CheckpointingMode = protoInfo.GetCheckpointingMode();
+            channel.WatermarksMode = protoInfo.GetWatermarksMode();
+            if (protoInfo.HasWatermarksIdleTimeoutUs()) {
+                channel.WatermarksIdleTimeoutUs = protoInfo.GetWatermarksIdleTimeoutUs();
+            }
         }
 
         return channel;
@@ -1642,6 +1655,10 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<IKqpGateway::TPhysicalT
 
                     const auto& sourceInfo = inputInfo.GetSource();
                     newInput.SourceType = sourceInfo.GetType();
+                    newInput.WatermarksMode = sourceInfo.GetWatermarksMode();
+                    if (sourceInfo.HasWatermarksIdleTimeoutUs()) {
+                        newInput.WatermarksIdleTimeoutUs = sourceInfo.GetWatermarksIdleTimeoutUs();
+                    }
                     if (sourceInfo.HasSettings()) {
                         newInput.SourceSettings = sourceInfo.GetSettings();
                     }
@@ -1905,6 +1922,10 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 partitionsCount = originStageInfo.Tasks.size();
                 unknownAffectedShardCount = true;
                 intros.push_back("Resetting compute tasks count because input " + ToString(inputIndex) + " is VectorResolve - " + ToString(partitionsCount));
+                break;
+            }
+            case NKqpProto::TKqpPhyConnection::kSequencer: {
+                partitionsCount = originStageInfo.Tasks.size();
                 break;
             }
             default:
@@ -2487,13 +2508,22 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
             input.ConnectionInfo = NYql::NDq::TSourceInput{};
             input.SourceSettings = externalSource.GetSettings();
             input.SourceType = externalSource.GetType();
+            if (externalSource.HasWatermarksSettings()) {
+                const auto& watermarksSettings = externalSource.GetWatermarksSettings();
+                input.WatermarksMode = NYql::NDqProto::EWatermarksMode::WATERMARKS_MODE_DEFAULT;
+                if (watermarksSettings.HasIdleTimeoutUs()) {
+                    input.WatermarksIdleTimeoutUs = watermarksSettings.GetIdleTimeoutUs();
+                }
+            }
         }
 
         FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
 
+        TString queryPath = "default";
         if (GetMeta().UserRequestContext && GetMeta().UserRequestContext->StreamingQueryPath) {
-            task.Meta.TaskParams.emplace("query_path", GetMeta().UserRequestContext->StreamingQueryPath);
+            queryPath = GetMeta().UserRequestContext->StreamingQueryPath;
         }
+        task.Meta.TaskParams.emplace("query_path", queryPath);
 
         tasksIds.push_back(task.Id);
     }
@@ -2837,10 +2867,11 @@ void TKqpTasksGraph::BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTas
             // "fq.restart_count"
         }
     }
-
+    TString queryPath = "default";
     if (GetMeta().UserRequestContext && GetMeta().UserRequestContext->StreamingQueryPath) {
-        task.Meta.TaskParams.emplace("query_path", GetMeta().UserRequestContext->StreamingQueryPath);
+        queryPath = GetMeta().UserRequestContext->StreamingQueryPath;
     }
+    task.Meta.TaskParams.emplace("query_path", queryPath);
 
     auto& output = task.Outputs[sink.GetOutputIndex()];
     output.Type = TTaskOutputType::Sink;

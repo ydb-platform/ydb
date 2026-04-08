@@ -106,7 +106,9 @@ namespace NKikimr::NTestShard {
                 if (NextWriteTimestamp <= now) {
                     if (Settings.HasPatchRequestsFractionPPM() && !ConfirmedKeys.empty() &&
                             RandomNumber(1'000'000u) < Settings.GetPatchRequestsFractionPPM()) {
-                        IssuePatch();
+                        if (!IssuePatch()) {
+                            IssueWrite();
+                        }
                     } else {
                         IssueWrite();
                     }

@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/tx/replication/service)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 PEERDIR(
     ydb/core/tx/datashard/ut_common

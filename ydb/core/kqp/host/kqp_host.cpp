@@ -1818,7 +1818,7 @@ private:
         TypesCtx->AddDataSink(NYql::GenericProviderName, NYql::CreateGenericDataSink(state));
     }
 
-    void InitYtProvider() {
+    void InitYtProvider(TVector<std::function<TFuture<void>()>>& finalizers) {
         if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::YtProviderName))) {
             return;
         }
@@ -1844,9 +1844,9 @@ private:
         TypesCtx->AddDataSource(YtProviderName, CreateYtDataSource(ytState));
         TypesCtx->AddDataSink(YtProviderName, CreateYtDataSink(ytState));
 
-        DataProvidersFinalizer = [ytGateway = FederatedQuerySetup->YtGateway, sessionId](const NYql::IGraphTransformer::TStatus&) {
+        finalizers.emplace_back([ytGateway = FederatedQuerySetup->YtGateway, sessionId]() {
             return ytGateway->CloseSession(NYql::IYtGateway::TCloseSessionOptions(sessionId));
-        };
+        });
     }
 
     void InitPgProvider() {
@@ -1867,7 +1867,7 @@ private:
         solomonState->SupportRtmrMode = false;
         solomonState->WriteThroughDqIntegration = true;
         solomonState->Types = TypesCtx.Get();
-        solomonState->Gateway = FederatedQuerySetup->SolomonGateway;
+        solomonState->Gateway = NYql::CreateSolomonGateway(FederatedQuerySetup->SolomonGatewayConfig);
         solomonState->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
         solomonState->DqIntegration = NYql::CreateSolomonDqIntegration(solomonState);
         solomonState->Configuration->Init(FederatedQuerySetup->SolomonGatewayConfig, TypesCtx);
@@ -1877,7 +1877,7 @@ private:
         TypesCtx->AddDataSink(NYql::SolomonProviderName, NYql::CreateSolomonDataSink(solomonState));
     }
 
-    void InitPqProvider() {
+    void InitPqProvider(TVector<std::function<TFuture<void>()>>& finalizers) {
         if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))) {
             return;
         }
@@ -1891,7 +1891,7 @@ private:
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
         state->Configuration->Init(FederatedQuerySetup->PqGatewayConfig, TypesCtx, state->DbResolver, state->DatabaseIds);
-        state->Gateway = FederatedQuerySetup->PqGateway;
+        state->Gateway = FederatedQuerySetup->PqGatewayFactory->CreatePqGateway();
         state->DqIntegration = NYql::CreatePqDqIntegration(state);
         state->Gateway->OpenSession(sessionId, "username");
 
@@ -1901,6 +1901,10 @@ private:
 
         TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));
         TypesCtx->AddDataSink(NYql::PqProviderName, NYql::CreatePqDataSink(state, state->Gateway));
+
+        finalizers.emplace_back([pqGateway = state->Gateway, sessionId]() {
+            return pqGateway->CloseSession(sessionId);
+        });
     }
 
     void Init(EKikimrQueryType queryType) {
@@ -1941,14 +1945,24 @@ private:
         if (addExternalDataSources && FederatedQuerySetup) {
             InitS3Provider(queryType);
             InitGenericProvider();
+            InitSolomonProvider();
+
+            TVector<std::function<TFuture<void>()>> finalizers;
             if (FederatedQuerySetup->YtGateway) {
-                InitYtProvider();
+                InitYtProvider(finalizers);
             }
-            if (FederatedQuerySetup->SolomonGateway) {
-                InitSolomonProvider();
+            if (FederatedQuerySetup->PqGatewayFactory) {
+                InitPqProvider(finalizers);
             }
-            if (FederatedQuerySetup->PqGateway) {
-                InitPqProvider();
+
+            if (!finalizers.empty()) {
+                DataProvidersFinalizer = [finalizers = std::move(finalizers)](const NYql::IGraphTransformer::TStatus&) {
+                    TVector<TFuture<void>> futures;
+                    for (const auto& f : finalizers) {
+                        futures.push_back(f());
+                    }
+                    return WaitAll(futures);
+                };
             }
             TypesCtx->StreamLookupJoin = Config->EnableDqSourceStreamLookupJoin;
         }

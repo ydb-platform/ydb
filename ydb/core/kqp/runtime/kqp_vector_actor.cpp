@@ -230,6 +230,10 @@ private:
                 auto & clusterIds = (IsPrefixed || ResolvedLevel > 0 ? CurClusterIds : RootClusterIds);
                 for (size_t rowNum: LevelClusters[cluster]) {
                     auto embedding = PendingRows[rowNum].GetElement(Settings.GetVectorColumnIndex());
+                    if (!embedding.IsString() && !embedding.IsEmbedded()) {
+                        // Skip invalid values, the only legitimate one here is NULL
+                        continue;
+                    }
                     clusters->FindClusters(embedding.AsStringRef(), TmpClusters, OverlapClusters, OverlapRatio);
                     for (auto& cluster: TmpClusters) {
                         NextClusters[rowNum].push_back(std::make_pair(clusterIds[cluster.first], cluster.second));

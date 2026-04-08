@@ -4,6 +4,9 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 FORK_SUBTESTS()
 SPLIT_FACTOR(20)
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 TEST_SRCS(
     test_async_replication.py

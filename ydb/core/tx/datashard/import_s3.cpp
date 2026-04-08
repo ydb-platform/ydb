@@ -1011,7 +1011,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             Retry();
         } else {
             if constexpr (std::is_same_v<T, Aws::S3::S3Error>) {
-                Finish(false, TStringBuilder() << "S3 error: " << error.GetMessage().c_str());
+                Finish(false, TStringBuilder() << "S3 error: " << error);
             } else {
                 Finish(false, error);
             }

@@ -39,4 +39,58 @@
    }
    ```
 
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    def coordination_service_workflow(driver: ydb.Driver, node_path: str, semaphore_name: str):
+        client = driver.coordination_client
+
+        client.create_node(node_path)
+
+        with client.session(node_path) as session:
+            with session.semaphore(semaphore_name) as semaphore:
+                print("Some exclusive work")
+
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import os
+    import ydb
+
+    async def coordination_service_workflow(driver: ydb.aio.Driver, node_path: str, semaphore_name: str):
+        client = driver.coordination_client
+        await client.create_node(node_path)
+        async with client.session(node_path) as session:
+            async with session.semaphore(semaphore_name) as semaphore:
+                print("Some exclusive work")
+    ```
+
+  {% endlist %}
+
+- Java
+
+  ```java
+  CoordinationClient client = CoordinationClient.newClient(transport);
+  client.createNode(nodePath).join().expectSuccess();
+
+  try (CoordinationSession session = client.createSession(nodePath)) {
+      session.connect().join().expectSuccess();
+      SemaphoreLease lease = session.acquireEphemeralSemaphore(semaphoreName, true, Duration.ofMinutes(5))
+              .join().getValue();
+      try {
+          // монопольная работа с ресурсом
+      } finally {
+          lease.release().join();
+      }
+  }
+  ```
+
 {% endlist %}

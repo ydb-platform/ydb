@@ -636,7 +636,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             UploadId.Clear(); // force getting info after restart
             Retry();
         } else {
-            Error = error.GetMessage().c_str();
+            Error = TStringBuilder() << "S3 error: " << error;
             PassAway();
         }
     }
@@ -659,7 +659,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         } else {
             Y_ENSURE(Error);
             Error = TStringBuilder() << *Error << " Additionally, 'AbortMultipartUpload' has failed: "
-                << error.GetMessage();
+                << error;
             PassAway();
         }
     }
@@ -692,7 +692,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         if (CanRetry(error)) {
             Retry();
         } else {
-            Finish(false, TStringBuilder() << "S3 error: " << error.GetMessage().c_str());
+            Finish(false, TStringBuilder() << "S3 error: " << error);
         }
     }
 

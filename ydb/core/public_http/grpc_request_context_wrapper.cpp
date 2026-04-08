@@ -58,15 +58,17 @@ namespace NKikimr::NPublicHttp {
 
     TVector<TStringBuf> TGrpcRequestContextWrapper::GetPeerMetaValues(TStringBuf key) const {
         if (key == "x-ydb-database"sv) {
-            return { RequestContext.GetDb() };
+            MetaValueCache = RequestContext.GetDb();
+            return { TStringBuf(MetaValueCache) };
         }
 
         if (key == "x-ydb-fq-project"sv) {
-            return { LongProject };
+            return { TStringBuf(LongProject) };
         }
 
         if (key == "x-ydb-auth-ticket"sv) {
-            return { RequestContext.GetToken() };
+            MetaValueCache = RequestContext.GetToken();
+            return { TStringBuf(MetaValueCache) };
         }
 
         return { };

@@ -12,6 +12,7 @@ ENDIF()
 FORK_SUBTESTS()
 
 PEERDIR(
+    ydb/core/persqueue/public
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
 )
 

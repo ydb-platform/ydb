@@ -1,14 +1,12 @@
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/txusage_fixture.h>
-
+#include <ydb/core/persqueue/public/constants.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <string>
 
 namespace NYdb::inline Dev::NTopic::NTests::NTxUsage {
 
 namespace {
 
-constexpr const char* TRACK_PRODUCER_ID_IN_TX_META_KEY = "track_producer_id_in_tx";
-
-/// Session meta `track_producer_id_in_tx` for Topic API write session (see write_session_actor).
 enum class ETrackProducerIdInTxMeta {
     Absent,
     True,
@@ -204,9 +202,9 @@ protected:
 
     void AugmentWriteSessionSettings(NTopic::TWriteSessionSettings& options) override {
         if constexpr (TrackProducerIdInTxMeta == ETrackProducerIdInTxMeta::True) {
-            options.AppendSessionMeta(TRACK_PRODUCER_ID_IN_TX_META_KEY, "true");
+            options.AppendSessionMeta(std::string{NKikimr::NPQ::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX}, "true");
         } else if constexpr (TrackProducerIdInTxMeta == ETrackProducerIdInTxMeta::False) {
-            options.AppendSessionMeta(TRACK_PRODUCER_ID_IN_TX_META_KEY, "false");
+            options.AppendSessionMeta(std::string{NKikimr::NPQ::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX}, "false");
         }
     }
 };

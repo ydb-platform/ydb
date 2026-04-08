@@ -8,6 +8,7 @@
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/base/wilson_tracing_control.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/base/feature_flags.h>
@@ -38,8 +39,6 @@ using ECodec = std::conditional_t<UseMigrationProtocol, Ydb::PersQueue::V1::Code
 static constexpr ui64 MAX_METADATA_SIZE_PER_MESSAGE = 4096;
 
 static constexpr auto PARTITION_KEY_META_KEY = "__partition_key";
-// Topic API (StreamWriteMessage::InitRequest::write_session_meta) only; forwarded to NPQ::TPartitionWriterOpts::TrackProducerId.
-static constexpr auto TRACK_PRODUCER_ID_IN_TX_SESSION_META_KEY = "track_producer_id_in_tx";
 
 template <bool UseMigrationProtocol>
 ECodec<UseMigrationProtocol> CodecByName(const TString& codec) {
@@ -749,7 +748,7 @@ void TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const 
 
     if constexpr (!UseMigrationProtocol) {
         for (const auto& item : InitRequest.write_session_meta()) {
-            if (item.first == TRACK_PRODUCER_ID_IN_TX_SESSION_META_KEY) {
+            if (item.first == WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX) {
                 bool trackProducerId = opts.TrackProducerId;
                 if (TryFromString<bool>(item.second, trackProducerId)) {
                     opts.WithTrackProducerId(trackProducerId);

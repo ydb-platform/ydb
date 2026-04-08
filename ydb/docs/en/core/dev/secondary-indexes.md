@@ -8,7 +8,7 @@ To use a similar feature with any field or combination of fields, additional ind
 
 In transactional systems, indexes are used to limit or avoid performance degradation and increase of query cost as your data grows.
 
-This article describes the main operations with secondary indexes and gives references to detailed information on each operation. For more information about various types of secondary indexes and their specifics, see [Secondary indexes](../concepts/secondary_indexes.md) in the Concepts section.
+This article describes the main operations with secondary indexes and gives references to detailed information on each operation. For more information about various types of secondary indexes and their specifics, see [Secondary indexes](../concepts/query_execution/secondary_indexes.md) in the Concepts section.
 
 ## Creating secondary indexes {#create}
 
@@ -99,7 +99,7 @@ Currently, deleting data is possible only using a synchronous secondary index. T
 
 ## Atomic replacement of a secondary index {#atomic-index-replacement}
 
-You can atomically replace a secondary index. This can be useful if you want your index to become [covering](../concepts/secondary_indexes.md#covering). This operation is totally transparent for your running applications: when you replace the index, the compiled queries are invalidated.
+You can atomically replace a secondary index. This can be useful if you want your index to become [covering](../concepts/query_execution/secondary_indexes.md#covering). This operation is totally transparent for your running applications: when you replace the index, the compiled queries are invalidated.
 
 To replace an existing index atomically, use the {{ ydb-short-name }} CLI command [{{ ydb-cli }} table index rename](../reference/ydb-cli/commands/secondary_index.md#rename) with the  `--replace` parameter.
 

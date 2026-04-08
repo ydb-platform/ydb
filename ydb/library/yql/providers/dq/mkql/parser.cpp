@@ -348,10 +348,7 @@ TRuntimeNode BuildParseCall(
             formatForCh = "csv_with_names";
         }
 
-        TString typeConfig = csvVirtualHeader ? formatForCh : TString(format);
-        if (!settingsAsJson.empty()) {
-            typeConfig += settingsAsJson;
-        }
+        TString typeConfig = formatForCh;
 
         const auto userType = ctx.ProgramBuilder.NewTupleType({
             ctx.ProgramBuilder.NewTupleType({inputType}),

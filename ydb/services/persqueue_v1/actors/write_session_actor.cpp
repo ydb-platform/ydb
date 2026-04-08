@@ -17,6 +17,7 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/library/actors/core/log.h>
 #include <google/protobuf/util/time_util.h>
+#include <util/string/cast.h>
 #include <util/string/hex.h>
 #include <util/string/vector.h>
 #include <util/string/escape.h>
@@ -37,6 +38,8 @@ using ECodec = std::conditional_t<UseMigrationProtocol, Ydb::PersQueue::V1::Code
 static constexpr ui64 MAX_METADATA_SIZE_PER_MESSAGE = 4096;
 
 static constexpr auto PARTITION_KEY_META_KEY = "__partition_key";
+// Topic API (StreamWriteMessage::InitRequest::write_session_meta) only; forwarded to NPQ::TPartitionWriterOpts::TrackProducerId.
+static constexpr auto TRACK_PRODUCER_ID_IN_TX_SESSION_META_KEY = "track_producer_id_in_tx";
 
 template <bool UseMigrationProtocol>
 ECodec<UseMigrationProtocol> CodecByName(const TString& codec) {
@@ -743,6 +746,18 @@ void TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const 
     opts.WithSourceId(SourceId);
     opts.WithInitialSeqNo(InitialSeqNo);
     opts.WithExpectedGeneration(ExpectedGeneration);
+
+    if constexpr (!UseMigrationProtocol) {
+        for (const auto& item : InitRequest.write_session_meta()) {
+            if (item.first == TRACK_PRODUCER_ID_IN_TX_SESSION_META_KEY) {
+                bool trackProducerId = opts.TrackProducerId;
+                if (TryFromString<bool>(item.second, trackProducerId)) {
+                    opts.WithTrackProducerId(trackProducerId);
+                }
+                break;
+            }
+        }
+    }
 
     if constexpr (UseMigrationProtocol) {
         opts.WithTopicPath(InitRequest.topic());

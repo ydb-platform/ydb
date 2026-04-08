@@ -20,7 +20,7 @@ Storage and compute disaggregation is an architectural principle of {{ ydb-short
 
 {{ydb-short-name}} is designed to minimize manual maintenance operations.
 
-* Automatic data compaction: Data is stored in [LSM-like](../../../concepts/mvcc.md#organizaciya-hraneniya-dannyh-mvcc) structures; data merging and optimization processes run continuously in the background. You do not need to run VACUUM or similar commands.
+* Automatic data compaction: Data is stored in [LSM-like](../../../concepts/query_execution/mvcc.md#how-ydb-short-name-stores-mvcc-data) structures; data merging and optimization processes run continuously in the background. You do not need to run VACUUM or similar commands.
 * Automatic data deletion: To manage the data lifecycle, use the [TTL-based deletion](../../../concepts/ttl.md) mechanism.
 
 ## Built-in fault tolerance {#reliability}

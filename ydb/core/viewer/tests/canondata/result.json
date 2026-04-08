@@ -695,6 +695,14 @@
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"
         },
+        "restart_pdisk_empty_pdisk_id_root": {
+            "status_code": 400,
+            "text": "Unable to parse the 'pdisk_id' parameter"
+        },
+        "restart_pdisk_three_part_pdisk_id_root": {
+            "status_code": 400,
+            "text": "Unable to parse the 'pdisk_id' parameter"
+        },
         "restart_pdisk_database": {
             "status_code": 403,
             "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: SID is not allowed\n</p></body></html>"

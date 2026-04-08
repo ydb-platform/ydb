@@ -189,6 +189,10 @@ protected:
     void WriteMessagesInTx(std::size_t big, size_t small);
 
     const TDriver& GetDriver() const;
+    /// Full topic path for SDK (same as integration setup), for use outside TFixture members with Setup access.
+    std::string GetTopicUtPath(const std::string& name) const {
+        return Setup->GetTopicPath(name);
+    }
     NTable::TTableClient& GetTableClient();
 
     void CheckTabletKeys(const std::string& topicName);

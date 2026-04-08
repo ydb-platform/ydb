@@ -434,21 +434,13 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
         AFL_ENSURE(Blobs[blobIdx].Offset == blobs[blobIdx].Offset)("l", Blobs[blobIdx].Offset)("r", blobs[blobIdx].Offset);
         AFL_ENSURE(Blobs[blobIdx].Count == blobs[blobIdx].Count)("l", Blobs[blobIdx].Count)("r", blobs[blobIdx].Count);
 
-<<<<<<< HEAD
-        ui64 offset = blobs[pos].Offset;
-        ui32 count = blobs[pos].Count;
-        ui16 partNo = blobs[pos].PartNo;
-        ui16 internalPartsCount = blobs[pos].InternalPartsCount;
-        const TString& blobValue = blobs[pos].Value;
-
-        if (blobValue.empty()) { // this is ok. Means that someone requested too much data or retention race
-=======
         ui64 offset = blobs[blobIdx].Offset;
         const ui32 count = blobs[blobIdx].Count;
         const ui16 partNo = blobs[blobIdx].PartNo;
+        const ui16 internalPartsCount = blobs[blobIdx].InternalPartsCount;
+        const TString& blobValue = blobs[blobIdx].Value;
 
         if (blobs[blobIdx].Empty()) { // this is ok. Means that someone requested too much data or retention race
->>>>>>> c1119a39295 (Fix AddBlobsFromBody key index for FindPos with multiple blobs (#37556))
             PQ_LOG_D("Not full answer here!");
             const ui64 answerSize = answer->Response->ByteSize();
             if (userInfo && Destination != 0) {
@@ -465,41 +457,22 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
             readResult->SetEndOffset(endOffset);
             return TReadAnswer{answerSize, std::move(answer)};
         }
-        AFL_ENSURE(blobValue.size() <= blobs[pos].Size)("value for offset", offset)("count", count)
-            ("size must be",  blobs[pos].Size)("got", (ui32)blobValue.size());
+        AFL_ENSURE(blobValue.size() <= blobs[blobIdx].Size)("value for offset", offset)("count", count)
+            ("size must be",  blobs[blobIdx].Size)("got", (ui32)blobValue.size());
 
-<<<<<<< HEAD
-=======
-        AFL_ENSURE(blobs[blobIdx].RawValue.size() <= blobs[blobIdx].Size)("value for offset", offset)("count", count)
-            ("size must be",  blobs[blobIdx].Size)("got", blobs[blobIdx].RawValue.size());
-
-        const auto blobBatches = blobs[blobIdx].GetBatches();
->>>>>>> c1119a39295 (Fix AddBlobsFromBody key index for FindPos with multiple blobs (#37556))
         if (offset > Offset || (offset == Offset && partNo > PartNo)) { // got gap
             Offset = offset;
             PartNo = partNo;
         }
         AFL_ENSURE(offset <= Offset);
         AFL_ENSURE(offset < Offset || partNo <= PartNo);
-<<<<<<< HEAD
-        auto key = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId(0), offset, partNo, count, internalPartsCount);
-        ui64 firstHeaderOffset = GetFirstHeaderOffset(key, blobValue);
+        const auto key = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId(0), offset, partNo, count, internalPartsCount);
+        const ui64 firstHeaderOffset = GetFirstHeaderOffset(key, blobValue);
         for (TBlobIterator it(key, blobValue); it.IsValid() && !needStop; it.Next()) {
             TBatch batch = it.GetBatch();
-            auto& header = batch.Header;
-            batch.Unpack();
-            ui64 trueOffset = blobs[pos].Key.GetOffset() + (header.GetOffset() - firstHeaderOffset);
-=======
-        const ui64 firstHeaderOffset = blobBatches->front().GetOffset();
-
-        for (const auto& batch : *blobBatches) {
-            if (needStop) {
-                break;
-            }
-
             const auto& header = batch.Header;
+            batch.Unpack();
             const ui64 trueOffset = blobs[blobIdx].Key.GetOffset() + (header.GetOffset() - firstHeaderOffset);
->>>>>>> c1119a39295 (Fix AddBlobsFromBody key index for FindPos with multiple blobs (#37556))
 
             ui32 batchStartIdx = 0;
             if (trueOffset > Offset || (trueOffset == Offset && header.GetPartNo() >= PartNo)) {
@@ -535,11 +508,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                 if (res.IsLastPart()) {
                     PartNo = 0;
                     ++Offset;
-<<<<<<< HEAD
-		    if (LastOffset && Offset >= LastOffset) {
-=======
                     if (ReachedLastOffset()) {
->>>>>>> c1119a39295 (Fix AddBlobsFromBody key index for FindPos with multiple blobs (#37556))
                         needStop = true;
                         break;
                     }
@@ -679,11 +648,7 @@ TReadAnswer TReadInfo::FormAnswer(
             if (updateUsage(writeBlob)) {
                 break;
             }
-<<<<<<< HEAD
-	    if (LastOffset && Offset >= LastOffset) {
-=======
             if (ReachedLastOffset()) {
->>>>>>> c1119a39295 (Fix AddBlobsFromBody key index for FindPos with multiple blobs (#37556))
                 break;
             }
         }

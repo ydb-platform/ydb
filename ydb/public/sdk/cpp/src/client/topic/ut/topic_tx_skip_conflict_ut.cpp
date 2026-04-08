@@ -1,7 +1,12 @@
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/txusage_fixture.h>
+
 #include <ydb/core/persqueue/public/constants.h>
+
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <optional>
 #include <string>
+#include <variant>
 
 namespace NYdb::inline Dev::NTopic::NTests::NTxUsage {
 
@@ -266,6 +271,37 @@ Y_UNIT_TEST_F(SeqNoConflict_Distributed_TwoWriteSessions_SkipConflictOn_MetaTrue
 
 Y_UNIT_TEST_F(SeqNoConflict_Distributed_TwoWriteSessions_SkipConflictOn_MetaFalse, TFixture_SkipConflictOn_MetaFalse) {
     RunSeqNoConflictTwoWriteSessionsSameProducerDistributed(EStatus::SUCCESS);
+}
+
+Y_UNIT_TEST_F(InvalidWriteSessionAttributeTrackProducerIdInTx_RejectsInit, TFixtureTable) {
+    CreateTopic("topic_A", TEST_CONSUMER, 1);
+
+    NTopic::TTopicClient client(GetDriver());
+    NTopic::TWriteSessionSettings options;
+    options.Path(GetTopicUtPath("topic_A"));
+    options.ProducerId(TEST_MESSAGE_GROUP_ID);
+    options.MessageGroupId(TEST_MESSAGE_GROUP_ID);
+    options.Codec(ECodec::RAW);
+    options.AppendSessionMeta(std::string{NKikimr::NPQ::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX}, "not-a-bool");
+
+    auto ws = client.CreateWriteSession(options);
+
+    std::optional<NTopic::TSessionClosedEvent> closed;
+    for (size_t n = 0; n < 1000 && !closed.has_value(); ++n) {
+        auto ev = ws->GetEvent(true);
+        UNIT_ASSERT_C(ev.has_value(), "expected write session event");
+        if (auto* c = std::get_if<NTopic::TSessionClosedEvent>(&*ev)) {
+            closed.emplace(*c);
+            break;
+        }
+    }
+    UNIT_ASSERT_C(closed.has_value(), "session must close after invalid WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX");
+    UNIT_ASSERT_VALUES_EQUAL(closed->GetStatus(), EStatus::BAD_REQUEST);
+    const TString issues = closed->GetIssues().ToOneLineString();
+    UNIT_ASSERT_STRING_CONTAINS(issues, NKikimr::NPQ::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX);
+    UNIT_ASSERT_STRING_CONTAINS(issues, "not-a-bool");
+
+    ws->Close(TDuration::Seconds(5));
 }
 
 } // Y_UNIT_TEST_SUITE(TopicTxSkipConflictAndProducerMeta)

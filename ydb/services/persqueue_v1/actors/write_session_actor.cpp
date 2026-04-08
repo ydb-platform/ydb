@@ -719,7 +719,9 @@ void TWriteSessionActor<UseMigrationProtocol>::ProceedPartition(const ui32 parti
         return;
     }
 
-    CreatePartitionWriterCache(ctx);
+    if (!CreatePartitionWriterCache(ctx)) {
+        return;
+    }
 
     State = ES_WAIT_WRITER_INIT;
 
@@ -737,7 +739,7 @@ void TWriteSessionActor<UseMigrationProtocol>::ProceedPartition(const ui32 parti
 }
 
 template <bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const TActorContext& ctx)
+bool TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const TActorContext& ctx)
 {
     NPQ::TPartitionWriterOpts opts;
 
@@ -750,9 +752,16 @@ void TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const 
         for (const auto& item : InitRequest.write_session_meta()) {
             if (item.first == WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX) {
                 bool trackProducerId = opts.TrackProducerId;
-                if (TryFromString<bool>(item.second, trackProducerId)) {
-                    opts.WithTrackProducerId(trackProducerId);
+                if (!TryFromString<bool>(item.second, trackProducerId)) {
+                    CloseSession(
+                        Sprintf("invalid value for write_session_meta key '%s': expected boolean, got '%s'",
+                                TString{WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX}.c_str(),
+                                item.second.c_str()),
+                        PersQueue::ErrorCode::BAD_REQUEST,
+                        ctx);
+                    return false;
                 }
+                opts.WithTrackProducerId(trackProducerId);
                 break;
             }
         }
@@ -783,6 +792,7 @@ void TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const 
                                                      opts);
 
     PartitionWriterCache = ctx.RegisterWithSameMailbox(actor.release());
+    return true;
 }
 
 template <bool UseMigrationProtocol>

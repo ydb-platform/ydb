@@ -206,18 +206,14 @@ TResult TQueryCollector::Collect(const TJsonPathItem& item, EMode mode) {
             return FilterObject(item, mode);
         case EJsonPathItemType::FilterPredicate:
             return FilterPredicate(item, mode);
-        case EJsonPathItemType::BinaryLess:
-            return BinaryLess(item, mode);
-        case EJsonPathItemType::BinaryLessEqual:
-            return BinaryLessEqual(item, mode);
-        case EJsonPathItemType::BinaryGreater:
-            return BinaryGreater(item, mode);
-        case EJsonPathItemType::BinaryGreaterEqual:
-            return BinaryGreaterEqual(item, mode);
         case EJsonPathItemType::BinaryEqual:
             return BinaryEqual(item, mode);
+        case EJsonPathItemType::BinaryLess:
+        case EJsonPathItemType::BinaryLessEqual:
+        case EJsonPathItemType::BinaryGreater:
+        case EJsonPathItemType::BinaryGreaterEqual:
         case EJsonPathItemType::BinaryNotEqual:
-            return BinaryNotEqual(item, mode);
+            return BinaryComparisonOp(item, mode);
         case EJsonPathItemType::AbsMethod:
         case EJsonPathItemType::FloorMethod:
         case EJsonPathItemType::CeilingMethod:
@@ -350,7 +346,9 @@ TResult TQueryCollector::BinaryArithmeticOp(const TJsonPathItem& item, EMode mod
     auto& leftTokens = leftResult.GetTokens();
     auto& rightTokens = rightResult.GetTokens();
     leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
-    leftResult.SetTokensMode(TResult::ETokensMode::And);
+    if (leftTokens.size() > 1) {
+        leftResult.SetTokensMode(TResult::ETokensMode::And);
+    }
     leftResult.Finish();
     return leftResult;
 }
@@ -377,7 +375,9 @@ TResult TQueryCollector::BinaryAnd(const TJsonPathItem& item, EMode mode) {
     auto& leftTokens = leftResult.GetTokens();
     auto& rightTokens = rightResult.GetTokens();
     leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
-    leftResult.SetTokensMode(TResult::ETokensMode::And);
+    if (leftTokens.size() > 1) {
+        leftResult.SetTokensMode(TResult::ETokensMode::And);
+    }
     return leftResult;
 }
 
@@ -403,7 +403,9 @@ TResult TQueryCollector::BinaryOr(const TJsonPathItem& item, EMode mode) {
     auto& leftTokens = leftResult.GetTokens();
     auto& rightTokens = rightResult.GetTokens();
     leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
-    leftResult.SetTokensMode(TResult::ETokensMode::Or);
+    if (leftTokens.size() > 1) {
+        leftResult.SetTokensMode(TResult::ETokensMode::Or);
+    }
     return leftResult;
 }
 
@@ -439,39 +441,37 @@ TResult TQueryCollector::BinaryEqual(const TJsonPathItem& item, EMode mode) {
     return TResult(TIssue("Comparison requires exactly one path and one literal operand"));
 }
 
-TResult TQueryCollector::BinaryLess(const TJsonPathItem& item, EMode mode) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    Y_UNUSED(mode);
-    return TResult(TIssue("Not implemented"));
-}
+TResult TQueryCollector::BinaryComparisonOp(const TJsonPathItem& item, EMode mode) {
+    if (!ArePredicatesAllowed(mode)) {
+        return TResult(TIssue("Predicates are not allowed in this context"));
+    }
 
-TResult TQueryCollector::BinaryLessEqual(const TJsonPathItem& item, EMode mode) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    Y_UNUSED(mode);
-    return TResult(TIssue("Not implemented"));
-}
+    const auto& leftItem = Reader.ReadLeftOperand(item);
+    const auto& rightItem = Reader.ReadRightOperand(item);
 
-TResult TQueryCollector::BinaryGreater(const TJsonPathItem& item, EMode mode) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    Y_UNUSED(mode);
-    return TResult(TIssue("Not implemented"));
-}
+    auto leftResult = CollectArithmeticOperand(leftItem, EMode::Predicate);
+    if (leftResult.IsError()) {
+        return leftResult;
+    }
 
-TResult TQueryCollector::BinaryGreaterEqual(const TJsonPathItem& item, EMode mode) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    Y_UNUSED(mode);
-    return TResult(TIssue("Not implemented"));
-}
+    auto rightResult = CollectArithmeticOperand(rightItem, EMode::Predicate);
+    if (rightResult.IsError()) {
+        return rightResult;
+    }
 
-TResult TQueryCollector::BinaryNotEqual(const TJsonPathItem& item, EMode mode) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    Y_UNUSED(mode);
-    return TResult(TIssue("Not implemented"));
+    if (leftResult.GetTokensMode() == TResult::ETokensMode::Or ||
+        rightResult.GetTokensMode() == TResult::ETokensMode::Or) {
+        return TResult(TIssue("Cannot mix AND and OR operators in jsonpath expression"));
+    }
+
+    auto& leftTokens = leftResult.GetTokens();
+    auto& rightTokens = rightResult.GetTokens();
+    leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
+    if (leftTokens.size() > 1) {
+        leftResult.SetTokensMode(TResult::ETokensMode::And);
+    }
+    leftResult.Finish();
+    return leftResult;
 }
 
 TResult TQueryCollector::FilterObject(const TJsonPathItem& item, EMode mode) {

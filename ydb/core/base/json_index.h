@@ -96,12 +96,8 @@ private:
     TResult UnaryNot(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
     TResult BinaryAnd(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
     TResult BinaryOr(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-    TResult BinaryLess(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-    TResult BinaryLessEqual(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-    TResult BinaryGreater(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-    TResult BinaryGreaterEqual(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
     TResult BinaryEqual(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-    TResult BinaryNotEqual(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
+    TResult BinaryComparisonOp(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
 
     TResult Methods(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
     TResult Predicates(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);

@@ -430,13 +430,11 @@ TExpression MakeNothing(TPositionHandle pos, const TTypeAnnotationNode* type, TE
 TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax) {
     Y_ENSURE(vec.size());
 
-    // Fetch context and plan properties from one of the conjuncts (last non-null wins).
-    // Seed from vec[0] so ctx/props are always assigned; satisfies static analysis (Coverity 119936).
-    TExprContext* ctx = vec[0].Ctx;
-    TPlanProps* props = vec[0].PlanProps;
+    // Fetch context and plan properties from one of the conjuncts
+    TExprContext* ctx = nullptr;
+    TPlanProps* props = nullptr;
 
-    for (size_t i = 1; i < vec.size(); ++i) {
-        const TExpression& expr = vec[i];
+    for (auto& expr : vec) {
         if (expr.Ctx) {
             ctx = expr.Ctx;
         }

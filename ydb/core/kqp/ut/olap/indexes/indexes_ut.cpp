@@ -1818,6 +1818,12 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
                 FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.01}`);
         )");
 
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);
+        )");
+
+        csController->WaitActualization(TDuration::Seconds(20));
+
         const ui64 skipBefore = csController->GetIndexesSkippingOnSelect().Val();
         const ui64 approveBefore = csController->GetIndexesApprovedOnSelect().Val();
 
@@ -1877,6 +1883,18 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
                 FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "false_positive_probability" : 0.01, "case_sensitive" : false}`);
         )");
 
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);
+        )");
+
+        csController->WaitActualization(TDuration::Seconds(20));
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 2100000, 500000000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 2200000, 500100000, 10000);
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+        const ui64 skipBefore = csController->GetIndexesSkippingOnSelect().Val();
+
         auto it = kikimr.GetTableClient().StreamExecuteScanQuery(R"(
             --!syntax_v1
             SELECT COUNT(*)
@@ -1886,6 +1904,8 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         CompareYson(StreamResultToYson(it), R"([[0u;]])");
+        const ui64 skipAfter = csController->GetIndexesSkippingOnSelect().Val();
+        UNIT_ASSERT_C(skipAfter > skipBefore, "Expected at least one skipped portion after indexes activation");
 
         auto tableDesc = client.Ls("/Root/olapStore/olapTable");
         auto indexes = tableDesc->Record.GetPathDescription().GetColumnTableDescription().GetSchema().GetIndexes();
@@ -2040,6 +2060,10 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
         csController->WaitCompactions(TDuration::Seconds(5));
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/indexTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);
+        )");
+        csController->WaitActualization(TDuration::Seconds(10));
 
         auto checkCount = [&](const TString& query, TStringBuf expectedYson) {
             auto it = kikimr.GetTableClient().StreamExecuteScanQuery(query).GetValueSync();

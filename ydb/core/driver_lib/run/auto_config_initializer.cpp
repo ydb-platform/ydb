@@ -454,6 +454,10 @@ namespace {
         return row.RealPools[realPoolId];
     }
 
+    bool IsPreparedRow(const TCpuTableRow& row) {
+        return row.RealPoolCount > 0;
+    }
+
     TString GetRealPoolName(ERealPoolKind poolKind) {
         switch (poolKind) {
             case ERealPoolKind::Common:
@@ -566,6 +570,29 @@ namespace {
         ValidateRealPools(row, cpuCount);
     }
 
+    void ValidateCustomCpuTable(const ICpuTable& cpuTable, i16 cpuCount) {
+        if (cpuCount <= MaxPreparedCpuCount) {
+            return;
+        }
+
+        const auto* defaultCpuTable = dynamic_cast<const TDefaultCpuTable*>(&cpuTable);
+        if (!defaultCpuTable) {
+            return;
+        }
+
+        Y_VERIFY_S(defaultCpuTable->MinScaledRowCpuCount > 0,
+            "minScaledRowCpuCount# " << defaultCpuTable->MinScaledRowCpuCount);
+        Y_VERIFY_S(defaultCpuTable->MinScaledRowCpuCount <= MaxPreparedCpuCount,
+            "minScaledRowCpuCount# " << defaultCpuTable->MinScaledRowCpuCount
+            << " maxPreparedCpuCount# " << MaxPreparedCpuCount);
+
+        for (i16 rowCpuCount = defaultCpuTable->MinScaledRowCpuCount; rowCpuCount <= MaxPreparedCpuCount; ++rowCpuCount) {
+            Y_VERIFY_S(IsPreparedRow(defaultCpuTable->GetPreparedRow(rowCpuCount)),
+                "custom cpu table is sparse, row for cpuCount# " << rowCpuCount
+                << " must be defined to scale beyond " << MaxPreparedCpuCount);
+        }
+    }
+
     void AddExecutorFromRealPool(
         NKikimrConfig::TActorSystemConfig* config,
         const TRealPoolConfig& realPoolConfig,
@@ -666,6 +693,8 @@ namespace NKikimr::NAutoConfigInitializer {
             }
 
             const TCpuTableRow& chunk = Rows[chunkCpuCount];
+            Y_VERIFY_S(IsPreparedRow(chunk),
+                "cpu table row for cpuCount# " << chunkCpuCount << " is not defined");
             if (!initialized) {
                 result = chunk;
                 initialized = true;
@@ -701,8 +730,9 @@ namespace NKikimr::NAutoConfigInitializer {
             config.HasBatchExecutor() ||
             config.HasIoExecutor() ||
             config.ServiceExecutorSize();
+        const bool hasMaterializedExecutors = config.ExecutorSize() > 0;
 
-        if (useAutoConfig && !hasExplicitPoolIds) {
+        if (useAutoConfig && (!hasExplicitPoolIds || !hasMaterializedExecutors)) {
             i16 cpuCount = (config.HasCpuCount() ? config.GetCpuCount() : 0);
             return GetASPools(cpuCount);
         } else {
@@ -782,6 +812,9 @@ namespace NKikimr::NAutoConfigInitializer {
             : useTinyConfiguration && cpuCount <= 3
                 ? GetTinyCpuTable()
                 : GetDefaultCpuTable(config->GetNodeType());
+        if (options.CpuTable) {
+            ValidateCustomCpuTable(cpuTable, cpuCount);
+        }
         ValidateCpuTable(cpuTable, cpuCount);
 
         const TCpuTableRow row = cpuTable[cpuCount];

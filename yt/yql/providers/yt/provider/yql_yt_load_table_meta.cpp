@@ -221,7 +221,7 @@ public:
             .Repeat(TExprStep::ExpandApplyForLambdas)
             .Repeat(TExprStep::ExpandSeq);
         THashMap<std::pair<TString, TString>, TYtTableDescription*> tableDescrs;
-        for (size_t i = 0 ; i < LoadCtx->Result.Data.size(); ++i) {
+        for (size_t i = 0; i < LoadCtx->Result.Data.size(); ++i) {
             tableDescrs.emplace(LoadCtx->Tables[i]);
 
             TString cluster = LoadCtx->Tables[i].first.first;

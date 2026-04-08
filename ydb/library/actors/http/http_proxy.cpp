@@ -1,9 +1,98 @@
 #include <ydb/library/actors/core/events.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <cctype>
+#include <regex>
 #include "http_proxy.h"
 
 namespace NHttp {
+
+namespace {
+
+// https://fuchsia.googlesource.com/third_party/grpc/+/HEAD/doc/naming.md
+enum class EURIScheme : ui8 {
+    NONE,
+    IPV6, // ipv6:
+    IPV4, // ipv4:
+};
+
+inline EURIScheme GetScheme(const TString& uri) {
+    if (uri.StartsWith("ipv6:")) {
+        return EURIScheme::IPV6;
+    } else if (uri.StartsWith("ipv4:")) {
+        return EURIScheme::IPV4;
+    } else {
+        return EURIScheme::NONE;
+    }
+}
+
+// formats: ipv6:address or ipv6:[address]:port
+// Calling site should keep correctness of hostname and port on return value
+bool CrackIPv6Address(const TString& address, TString& hostname, TIpPort& port) {
+    static const std::regex ipv6(R"(ipv6:(.+))"); // ipv6:address
+    static const std::regex ipv6WithPort(R"(ipv6:\[(.+)\]:(\d+))"); // ipv6:[address]:port
+
+    if (std::smatch match; std::regex_match(address.c_str(), match, ipv6WithPort) && match.ready() && match.size() == 3) {
+        hostname = match.str(1);
+        port = FromStringWithDefault<TIpPort>(match.str(2), 0);
+        return (port != 0) && IsIPv6(hostname);
+    }
+
+    if (std::smatch match; std::regex_match(address.c_str(), match, ipv6) && match.ready() && match.size() == 2) {
+        hostname = match.str(1);
+        return IsIPv6(hostname);
+    }
+
+    return false;
+}
+
+// formats: ipv4:address or ipv4:address:port
+// Calling site should keep correctness of hostname and port on return value
+bool CrackIPv4Address(const TString& address, TString& hostname, TIpPort& port) {
+    static const std::regex ipv4(R"(ipv4:(.+))"); // ipv4:address
+    static const std::regex ipv4WithPort(R"(ipv4:(.+):(\d+))"); // ipv4:address:port
+
+    if (std::smatch match; std::regex_match(address.c_str(), match, ipv4WithPort) && match.ready() && match.size() == 3) {
+        hostname = match.str(1);
+        port = FromStringWithDefault<TIpPort>(match.str(2), 0);
+        return (port != 0) && IsIPv4(hostname);
+    }
+
+    if (std::smatch match; std::regex_match(address.c_str(), match, ipv4) && match.ready() && match.size() == 2) {
+        hostname = match.str(1);
+        return IsIPv4(hostname);
+    }
+
+    return false;
+}
+
+// Fallback to old impl
+void CrackAddressLegacy(const TString& address, TString& hostname, TIpPort& port) {
+    size_t firstColonPos = address.find(':');
+    if (firstColonPos != TString::npos) {
+        size_t lastColonPos = address.rfind(':');
+        if (lastColonPos == firstColonPos) {
+            // only one colon, simple case
+            port = FromStringWithDefault<TIpPort>(address.substr(firstColonPos + 1), 0);
+            hostname = address.substr(0, firstColonPos);
+        } else {
+            size_t closing_bracket_pos = address.rfind(']');
+            if (closing_bracket_pos == TString::npos || closing_bracket_pos > lastColonPos) {
+                // whole address is ipv6 host
+                hostname = address;
+            } else {
+                port = FromStringWithDefault<TIpPort>(address.substr(lastColonPos + 1), 0);
+                hostname = address.substr(0, lastColonPos);
+            }
+            if (hostname.StartsWith('[') && hostname.EndsWith(']')) {
+                hostname = hostname.substr(1, hostname.size() - 2);
+            }
+        }
+    } else {
+        hostname = address;
+    }
+}
+
+} // namespace
 
 class THttpProxy : public NActors::TActorBootstrapped<THttpProxy>, public THttpConfig {
 public:
@@ -369,30 +458,18 @@ bool CrackURL(TStringBuf url, TStringBuf& scheme, TStringBuf& host, TStringBuf& 
     return true;
 }
 
+// Does not guarantee consistency of hostname and port if parsing failed.
 void CrackAddress(const TString& address, TString& hostname, TIpPort& port) {
-    size_t first_colon_pos = address.find(':');
-    if (first_colon_pos != TString::npos) {
-        size_t last_colon_pos = address.rfind(':');
-        if (last_colon_pos == first_colon_pos) {
-            // only one colon, simple case
-            port = FromStringWithDefault<TIpPort>(address.substr(first_colon_pos + 1), 0);
-            hostname = address.substr(0, first_colon_pos);
-        } else {
-            // ipv6?
-            size_t closing_bracket_pos = address.rfind(']');
-            if (closing_bracket_pos == TString::npos || closing_bracket_pos > last_colon_pos) {
-                // whole address is ipv6 host
-                hostname = address;
-            } else {
-                port = FromStringWithDefault<TIpPort>(address.substr(last_colon_pos + 1), 0);
-                hostname = address.substr(0, last_colon_pos);
-            }
-            if (hostname.StartsWith('[') && hostname.EndsWith(']')) {
-                hostname = hostname.substr(1, hostname.size() - 2);
-            }
+    switch (GetScheme(address)) {
+        case EURIScheme::IPV6: {
+            CrackIPv6Address(address, hostname, port);
+            return;
         }
-    } else {
-        hostname = address;
+        case EURIScheme::IPV4: {
+            CrackIPv4Address(address, hostname, port);
+            return;
+        }
+        default: return CrackAddressLegacy(address, hostname, port);
     }
 }
 
@@ -542,4 +619,3 @@ bool IsValidHeaderData(TStringBuf s) {
 }
 
 }
-

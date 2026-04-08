@@ -152,8 +152,8 @@ private:
     bool WakeupScheduled = false;
 };
 
-class TDbPoolProxyActor : public TActor<TDbPoolActor> {
-    using TBase = TActor<TDbPoolActor>;
+class TDbPoolProxyActor : public TActor<TDbPoolProxyActor> {
+    using TBase = TActor<TDbPoolProxyActor>;
 
     struct TCounters {
         const NMonitoring::TDynamicCounterPtr CountersSubGroup;
@@ -295,31 +295,28 @@ private:
 
 } // anonymous namespace
 
-class TDbPool final : public TThrRefBase {
-    friend class TDbPoolMap;
-
-    TMutex Mutex;
-    TVector<NActors::TActorId> Actors;
-    ui32 Index = 0;
+class TDbPool {
+    const TActorId ProxyActorId;
 
 public:
-    NActors::TActorId GetNextActor() {
-        TGuard<TMutex> lock(Mutex);
-        Y_VALIDATE(!Actors.empty(), "Unexpected empty actors");
-        if (Index >= Actors.size()) {
-            Index = 0;
-        }
+    TDbPool(ui32 sessionsCount, NYdb::NTable::TTableClient tableClient, NMonitoring::TDynamicCounterPtr counters)
+        : ProxyActorId(StartWorkers(sessionsCount, std::move(tableClient), std::move(counters)))
+    {}
 
-        return Actors[Index++];
+    TActorId GetProxyActorId() const {
+        return ProxyActorId;
     }
 
 private:
-    TDbPool(ui32 sessionsCount, NYdb::NTable::TTableClient tableClient, NMonitoring::TDynamicCounterPtr counters) {
+    static TActorId StartWorkers(ui32 sessionsCount, NYdb::NTable::TTableClient tableClient, NMonitoring::TDynamicCounterPtr counters) {
         const auto parentId = TActivationContext::AsActorContext().SelfID;
-        Actors.reserve(sessionsCount);
+        std::unordered_set<TActorId> actors;
+        actors.reserve(sessionsCount);
         for (ui32 i = 0; i < sessionsCount; ++i) {
-            Actors.emplace_back(TActivationContext::Register(new TDbPoolActor(tableClient, counters), parentId, TMailboxType::HTSwap, parentId.PoolID()));
+            Y_VALIDATE(actors.emplace(TActivationContext::Register(new TDbPoolActor(tableClient, counters), parentId, TMailboxType::HTSwap, parentId.PoolID())).second, "Unexpected actor id");
         }
+
+        return TActivationContext::Register(new TDbPoolProxyActor(std::move(actors), std::move(counters)), parentId, TMailboxType::HTSwap, parentId.PoolID());
     }
 };
 
@@ -347,10 +344,10 @@ public:
     )
 
     void Bootstrap() {
-        const auto& workerId = DbPool->GetNextActor();
-        LOG_T("Bootstrap, send request to: " << workerId);
+        const auto& proxyId = DbPool->GetProxyActorId();
+        LOG_T("Bootstrap, send request to: " << proxyId);
         Become(&TDbRequest::StateFunc);
-        Send(workerId, new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery);
+        Send(proxyId, new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery);
     }
 
 private:
@@ -362,9 +359,9 @@ private:
     }
 
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-        const auto& workerId = DbPool->GetNextActor();
-        LOG_E("Undelivered from: " << ev->Sender << ", reason: " << ev->Get()->Reason << ", resend request to: " << workerId);
-        Send(workerId, new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery);
+        const auto& proxyId = DbPool->GetProxyActorId();
+        LOG_E("Undelivered from: " << ev->Sender << ", reason: " << ev->Get()->Reason << ", resend request to: " << proxyId);
+        Send(proxyId, new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery);
     }
 
     TString LogPrefix() const {
@@ -375,8 +372,6 @@ private:
 } // anonymous namespace
 
 class TDbPoolMap final : public TThrRefBase {
-    friend class TDbPoolHolder;
-
     const NDbPool::TConfig Config;
     const NYdb::TDriver Driver;
     const NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
@@ -387,6 +382,13 @@ class TDbPoolMap final : public TThrRefBase {
 
 public:
     using TPtr = TIntrusivePtr<TDbPoolMap>;
+
+    TDbPoolMap(const NDbPool::TConfig& config, NYdb::TDriver driver, NKikimr::TYdbCredentialsProviderFactory credentialsProviderFactory, NMonitoring::TDynamicCounterPtr counters)
+        : Config(PrepareConfig(config))
+        , Driver(driver)
+        , CredentialsProviderFactory(credentialsProviderFactory)
+        , Counters(counters)
+    {}
 
     TDbPoolPtr GetOrCreate(ui32 poolId) {
         TGuard<TMutex> lock(Mutex);
@@ -421,19 +423,12 @@ public:
             );
         }
 
-        auto dbPool = MakeIntrusive<TDbPool>(it->second, *TableClient, Counters);
+        auto dbPool = std::make_shared<TDbPool>(it->second, *TableClient, Counters);
         Pools.emplace(poolId, dbPool);
         return dbPool;
     }
 
 private:
-    TDbPoolMap(const NDbPool::TConfig& config, NYdb::TDriver driver, NKikimr::TYdbCredentialsProviderFactory credentialsProviderFactory, NMonitoring::TDynamicCounterPtr counters)
-        : Config(PrepareConfig(config))
-        , Driver(driver)
-        , CredentialsProviderFactory(credentialsProviderFactory)
-        , Counters(counters)
-    {}
-
     static NDbPool::TConfig PrepareConfig(const NDbPool::TConfig& config) {
         NDbPool::TConfig result = config;
         if (!result.GetToken() && result.GetOAuthFile()) {
@@ -461,6 +456,7 @@ TDbPoolPtr TDbPoolHolder::GetOrCreate(ui32 dbPoolId) {
 }
 
 NYdb::TAsyncStatus ExecDbRequest(TDbPoolPtr dbPool, std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)> handler) {
+    Y_VALIDATE(dbPool, "Missing db pool");
     const auto parentId = TActivationContext::AsActorContext().SelfID;
     NThreading::TPromise<NYdb::TStatus> promise = NThreading::NewPromise<NYdb::TStatus>();
     TActivationContext::Register(new TDbRequest(std::move(dbPool), promise, std::move(handler)), parentId, TMailboxType::HTSwap, parentId.PoolID());

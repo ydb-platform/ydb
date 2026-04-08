@@ -10,7 +10,7 @@ namespace NDbPool {
 class TConfig;
 class TDbPoolMap;
 class TDbPool;
-using TDbPoolPtr = TIntrusivePtr<TDbPool>;
+using TDbPoolPtr = std::shared_ptr<TDbPool>;
 
 class TDbPoolHolder final : public TThrRefBase {
 public:

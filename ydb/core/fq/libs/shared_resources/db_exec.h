@@ -6,6 +6,7 @@
 #include <ydb/core/fq/libs/events/events.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/library/db_pool/db_pool.h>
 #include <ydb/core/util/exceptions.h>
 
@@ -279,4 +280,4 @@ public:
     TState State;
 };
 
-} /* NFq */
+} // namespace NFq

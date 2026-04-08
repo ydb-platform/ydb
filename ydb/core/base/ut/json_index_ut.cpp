@@ -9,15 +9,12 @@ using namespace NYql::NJsonPath;
 
 namespace {
 
-using ECallableType = TQueryCollector::ECallableType;
-
 TVector<TString> ParseAndCollect(const TString& jsonPath, ECallableType callableType = ECallableType::JsonExists) {
     NYql::TIssues issues;
     const TJsonPathPtr path = NYql::NJsonPath::ParseJsonPath(jsonPath, issues, 1);
     UNIT_ASSERT_C(issues.Empty(), "Parse errors found for path: " + jsonPath + ": " + issues.ToOneLineString());
 
-    TQueryCollector collector(path, callableType);
-    auto result = collector.Collect();
+    auto result = CollectJsonPath(path, callableType);
     UNIT_ASSERT_C(!result.IsError(), "Collect errors found for path: " + jsonPath + ": " + result.GetError().GetMessage());
     return result.GetTokens();
 }
@@ -36,8 +33,7 @@ void ValidateError(
     } else {
         UNIT_ASSERT_C(issues.Empty(), "Parse errors found for path: " + jsonPath + ": " + issues.ToOneLineString());
 
-        TQueryCollector collector(path, callableType);
-        auto result = collector.Collect();
+        auto result = CollectJsonPath(path, callableType);
         UNIT_ASSERT_C(result.IsError(), "Expected error for path: " + jsonPath + ": " + errorMessage);
 
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetError().GetMessage(), errorMessage, "for path = " << jsonPath);

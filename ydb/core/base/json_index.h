@@ -9,7 +9,9 @@ namespace NKikimr {
 
 namespace NJsonIndex {
 
-class TResult {
+// Result of the JSON index collection process
+// Contains tokens for the JSON index or an error if the collection process failed
+class TCollectResult {
 public:
     using TTokens = TVector<TString>;
     using TError = NYql::TIssue;
@@ -21,13 +23,13 @@ public:
     };
 
 public:
-    TResult();
+    TCollectResult();
 
-    TResult(TTokens&& tokens);
+    TCollectResult(TTokens&& tokens);
 
-    TResult(TString&& token);
+    TCollectResult(TString&& token);
 
-    TResult(TError&& issue);
+    TCollectResult(TError&& issue);
 
     const TTokens& GetTokens() const;
 
@@ -53,73 +55,29 @@ private:
     bool Finished = false;
 };
 
-class TQueryCollector {
-    enum class EMode {
-        Context = 0,
-        Filter = 1,
-        Predicate = 2,
-        Literal = 3
-    };
-
-public:
-    enum class ECallableType {
-        JsonExists = 0,
-        JsonValue = 1,
-        JsonQuery = 2
-    };
-
-public:
-    TQueryCollector(const NYql::NJsonPath::TJsonPathPtr path, ECallableType callableType);
-
-    TResult Collect();
-
-private:
-    TResult Collect(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-
-    TResult CollectEqualOperands(const NYql::NJsonPath::TJsonPathItem& leftItem,
-        const NYql::NJsonPath::TJsonPathItem& rightItem);
-
-    TResult CollectArithmeticOperand(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-
-    TResult ContextObject(EMode mode);
-
-    TResult MemberAccess(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-    TResult WildcardMemberAccess(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-
-    TResult ArrayAccess(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-    TResult WildcardArrayAccess(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-    TResult LastArrayIndex(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-
-    TResult UnaryArithmeticOp(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-    TResult BinaryArithmeticOp(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-
-    TResult UnaryNot(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-    TResult BinaryAnd(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-    TResult BinaryOr(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-    TResult BinaryEqual(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-    TResult BinaryComparisonOp(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-
-    TResult Methods(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-    TResult Predicates(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-
-    TResult FilterObject(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-    TResult FilterPredicate(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-
-    TResult Literal(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-    TResult Variable(const NYql::NJsonPath::TJsonPathItem& item, EMode mode);
-
-    bool ArePredicatesAllowed(EMode mode) const;
-
-private:
-    NYql::NJsonPath::TJsonPathReader Reader;
-    ECallableType CallableType;
-    TVector<TString> FilterObjectPrefixes;
+// Type of the callable function that is used for the JSON index collection
+// It is given from the predicate of the SELECT statement
+enum class ECallableType {
+    JsonExists = 0,
+    JsonValue = 1,
+    JsonQuery = 2,
 };
 
-TVector<TString> BuildSearchTerms(const TString& jsonPathStr);
-
+// Tokenizes the given JSON string into a list of tokens
+// The tokenization result is filled into the JSON index table
 TVector<TString> TokenizeJson(const TStringBuf jsonStr, TString& error);
+
+// Tokenizes the given binary JSON into a list of tokens
+// The tokenization result is filled into the JSON index table
 TVector<TString> TokenizeBinaryJson(const TStringBuf text);
+
+// Builds tokens for the given jsonpath expression
+// The tokens are used for searching in the JSON index
+TCollectResult CollectJsonPath(const NYql::NJsonPath::TJsonPathPtr path, ECallableType callableType);
+
+// Builds search terms for the given jsonpath expression
+// It parses the jsonpath expression and collects tokens for the JSON index
+TVector<TString> BuildSearchTerms(const TString& jsonPathStr);
 
 }  // namespace NJsonIndex
 

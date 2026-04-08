@@ -102,9 +102,7 @@ TFastPathService::TFastPathService(
           .VChunkSize = storageConfig->GetVChunkSize()}))
     , WriteMode(GetWriteModeFromProto(storageConfig->GetWriteMode()))
     , PBufferReplyTimeout(storageConfig->GetPBufferReplyTimeout())
-{
-    Y_UNUSED(ActorSystem);
-}
+{}
 
 NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
     TCallContextPtr callContext,

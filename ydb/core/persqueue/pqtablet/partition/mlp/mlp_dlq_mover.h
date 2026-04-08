@@ -43,9 +43,6 @@ private:
     void Handle(TEvPartitionWriter::TEvWriteResponse::TPtr&);
     STFUNC(StateWrite);
 
-    void WriteToTopic(NKikimrClient::TCmdReadResult::TResult& result);
-    void WriteToSQS(NKikimrClient::TCmdReadResult::TResult& result);
-
     void ReplySuccess();
     void ReplyError(Ydb::StatusIds::StatusCode status, TString&& error);
 
@@ -55,10 +52,8 @@ private:
     TDLQMoverSettings Settings;
     TString TopicName;
 
-    const bool IsSQSCompatibility;
-
     TString SQSUserName;
-    TString SQSAccountName;
+    TString SQSFolderId;
     TString SQSQueueName;
 
     TString ProducerId;

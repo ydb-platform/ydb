@@ -3,10 +3,7 @@
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/protos/sqs.pb.h>
-#include <ydb/core/ymq/actor/actor.h>
 #include <ydb/core/ymq/actor/serviceid.h>
-
-#include <util/generic/guid.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -19,32 +16,29 @@ static constexpr ui64 CacheSubscribeCookie = 1;
 TDLQMoverActor::TDLQMoverActor(TDLQMoverSettings&& settings)
     : TBaseActor(NKikimrServices::EServiceKikimr::PQ_MLP_DLQ_MOVER)
     , Settings(std::move(settings))
-    , IsSQSCompatibility(Settings.DestinationTopic.StartsWith("sqs://"))
     , Queue(Settings.Messages)
 {
 }
 
 void TDLQMoverActor::Bootstrap() {
     Become(&TDLQMoverActor::StateDescribe);
-    if (IsSQSCompatibility) {
+    if (Settings.DestinationTopic.StartsWith("sqs://")) {
         auto tokensStr = Settings.DestinationTopic.substr("sqs://"sv.size());
         auto tokens = StringSplitter(tokensStr).Split('/').ToList<TString>();
         if (tokens.size() != 3) {
-            return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected destination topic");
+            return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected SQS destination topic format: " << Settings.DestinationTopic);
         }
 
         SQSUserName = tokens[0];
-        SQSAccountName = tokens[1];
+        SQSFolderId = tokens[1];
         SQSQueueName = tokens[2];
-
-        LOG_D(">>>>> SQSUserName: " << SQSUserName << " SQSAccountName: " << SQSAccountName << " SQSQueueName: " << SQSQueueName);
 
         this->Send(NSQS::MakeSqsServiceID(this->SelfId().NodeId()),
             MakeHolder<NSQS::TSqsEvents::TEvGetConfiguration>(
                 TStringBuilder() << "DLQMover/" << Settings.TabletId << "/" << Settings.PartitionId << "/" << SelfId(),
                 SQSUserName,
                 SQSQueueName,
-                SQSAccountName,
+                SQSFolderId,
                 false,
                 0)
         );
@@ -106,8 +100,7 @@ void TDLQMoverActor::Handle(NSQS::TSqsEvents::TEvConfiguration::TPtr& ev) {
     auto queueVersion = result.QueueVersion;
 
     TopicName = Join("/", AppData()->SqsConfig.GetRoot(), SQSUserName, queueName, TStringBuilder() << "v" << queueVersion, "streamImpl");
-    LOG_I(">>>>> topicName: " << TopicName);
-
+    LOG_D("SQS topic name: " << TopicName);
     RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, { TopicName }));
 }
 
@@ -182,16 +175,6 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     auto* result = response.MutablePartitionResponse()->MutableCmdReadResult()->MutableResult(0);
 
     LOG_D("Move message with offset " << result->GetOffset() << " seqNo " << Queue.front().SeqNo);
-    // if (IsSQSCompatibility) {
-    //     WriteToSQS(*result);
-    // } else {
-        WriteToTopic(*result);
-    // }
-
-    WaitWrite();
-}
-
-void TDLQMoverActor::WriteToTopic(NKikimrClient::TCmdReadResult::TResult& result) {
     auto writeRequest = std::make_unique<TEvPartitionWriter::TEvWriteRequest>(++WriteCookie);
     auto* request = writeRequest->Record.MutablePartitionRequest();
     request->SetTopic(Settings.DestinationTopic);
@@ -199,70 +182,17 @@ void TDLQMoverActor::WriteToTopic(NKikimrClient::TCmdReadResult::TResult& result
     auto* write = request->AddCmdWrite();
     write->SetSourceId(ProducerId);
     write->SetSeqNo(Queue.front().SeqNo);
-    write->SetData(std::move(*result.MutableData()));
-    write->SetCreateTimeMS(result.GetCreateTimestampMS());
-    write->SetUncompressedSize(result.GetUncompressedSize());
-    if (result.HasPartitionKey()) {
-        write->SetPartitionKey(std::move(*result.MutablePartitionKey()));
-        write->SetExplicitHash(std::move(*result.MutableExplicitHash()));
+    write->SetData(std::move(*result->MutableData()));
+    write->SetCreateTimeMS(result->GetCreateTimestampMS());
+    write->SetUncompressedSize(result->GetUncompressedSize());
+    if (result->HasPartitionKey()) {
+        write->SetPartitionKey(std::move(*result->MutablePartitionKey()));
+        write->SetExplicitHash(std::move(*result->MutableExplicitHash()));
     }
 
     Send(PartitionWriterActorId, std::move(writeRequest));
-}
 
-void TDLQMoverActor::WriteToSQS(NKikimrClient::TCmdReadResult::TResult& result) {
-    NKikimrClient::TSqsRequest request;
-    request.SetRequestId(CreateGuidAsString());
-    request.SetUserName(SQSUserName);
-
-    auto& sendMessage = *request.MutableSendMessage();
-    sendMessage.SetQueueName(SQSQueueName);
-    sendMessage.SetMessageBody(std::move(*result.MutableData()));
-
-    struct TCallback : public NSQS::IReplyCallback {
-        TCallback(const TActorContext& ctx, const TActorId& parent, const TString& queueName)
-            : Context(ctx)
-            , ParentActorId(parent)
-            , QueueName(queueName)
-        {
-        }
-
-        const NKikimrServices::EServiceKikimr Service = NKikimrServices::EServiceKikimr::PQ_MLP_DLQ_MOVER;
-
-        void DoSendReply(const NKikimrClient::TSqsResponse& resp) override {
-            if (resp.GetSendMessage().HasError()) {
-                auto& error = resp.GetSendMessage().GetError();
-                LOG_W("Write to SQS failed: " << error.GetMessage());
-                Context.Send(ParentActorId, new TEvPartitionWriter::TEvWriteResponse(
-                    "", // sessionId
-                    "", // txId
-                    TEvPartitionWriter::TEvWriteResponse::EErrorCode::InternalError,
-                    error.GetMessage(),
-                    NKikimrClient::TResponse{}
-                ));
-            } else {
-                Context.Send(ParentActorId, new TEvPartitionWriter::TEvWriteResponse(
-                    "", // sessionId
-                    "", // txId
-                    NKikimrClient::TResponse{}
-                ));
-            }
-        }
-
-        TStringBuilder LogBuilder() const {
-            return TStringBuilder() << ParentActorId << "[" << QueueName << "]";
-        }
-    
-        TString GetLogPrefix() {
-            return "";
-        }
-
-        const TActorContext Context;
-        const TActorId ParentActorId;
-        const TString QueueName;
-    };
-
-    RegisterWithSameMailbox(NSQS::CreateSendMessageInternalActor(request, MakeHolder<TCallback>(ActorContext(), SelfId(), SQSQueueName)));
+    WaitWrite();
 }
 
 void TDLQMoverActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {

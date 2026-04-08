@@ -133,6 +133,7 @@ namespace NKikimr::NAutoConfigInitializer {
 
     struct TDefaultCpuTable : ICpuTable {
         std::array<TCpuTableRow, MaxPreparedCpuCount + 1> Rows{};
+        // Smallest prepared row that may participate in chunked scaling above MaxPreparedCpuCount.
         i16 MinScalableRowCpuCount = 1;
 
         TDefaultCpuTable() = default;

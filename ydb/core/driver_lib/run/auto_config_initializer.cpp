@@ -52,7 +52,7 @@ namespace {
         return {{system, user, batch, io, ic}};
     }
 
-    constexpr TCpuTableRow MakeFivePoolRow(
+    constexpr TCpuTableRow MakeRowWithFiveExecutorPools(
         TPoolConfig system,
         TPoolConfig user,
         TPoolConfig batch,
@@ -96,7 +96,7 @@ namespace {
         };
     }
 
-    constexpr TCpuTableRow MakeFourPoolRow(
+    constexpr TCpuTableRow MakeRowWithFourExecutorPools(
         TPoolConfig common,
         TPoolConfig batch,
         TPoolConfig io,
@@ -134,7 +134,7 @@ namespace {
         };
     }
 
-    constexpr TCpuTableRow MakeTwoPoolRow(
+    constexpr TCpuTableRow MakeRowWithTwoExecutorPools(
         TPoolConfig common,
         TPoolConfig io)
     {
@@ -320,104 +320,104 @@ namespace {
 
     const TDefaultCpuTable ComputeCpuTable({{
         MakeEmptyRow(),                                                  // 0
-        MakeTwoPoolRow({1, 1}, {0, 0}),                                  // 1
-        MakeTwoPoolRow({2, 2}, {0, 0}),                                  // 2
-        MakeFourPoolRow({1, 3}, {1, 1}, {0, 0}, {1, 1}),                 // 3
-        MakeFivePoolRow({1, 3},  {1, 4},   {1, 1}, {0, 0}, {1, 2}),      // 4
-        MakeFivePoolRow({1, 3},  {2, 5},   {1, 1}, {0, 0}, {1, 2}),      // 5
-        MakeFivePoolRow({1, 3},  {3, 6},   {1, 1}, {0, 0}, {1, 3}),      // 6
-        MakeFivePoolRow({2, 4},  {3, 7},   {1, 2}, {0, 0}, {1, 3}),      // 7
-        MakeFivePoolRow({2, 4},  {4, 8},   {1, 2}, {0, 0}, {1, 4}),      // 8
-        MakeFivePoolRow({2, 5},  {4, 9},   {2, 3}, {0, 0}, {1, 4}),      // 9
-        MakeFivePoolRow({2, 5},  {5, 10},  {2, 3}, {0, 0}, {1, 5}),      // 10
-        MakeFivePoolRow({2, 6},  {5, 11},  {2, 3}, {0, 0}, {2, 5}),      // 11
-        MakeFivePoolRow({2, 6},  {6, 12},  {2, 3}, {0, 0}, {2, 6}),      // 12
-        MakeFivePoolRow({3, 7},  {6, 13},  {2, 3}, {0, 0}, {2, 6}),      // 13
-        MakeFivePoolRow({3, 7},  {6, 14},  {2, 3}, {0, 0}, {3, 7}),      // 14
-        MakeFivePoolRow({3, 8},  {7, 15},  {2, 4}, {0, 0}, {3, 7}),      // 15
-        MakeFivePoolRow({3, 8},  {8, 16},  {2, 4}, {0, 0}, {3, 8}),      // 16
-        MakeFivePoolRow({3, 9},  {9, 17},  {2, 4}, {0, 0}, {3, 8}),      // 17
-        MakeFivePoolRow({3, 9},  {9, 18},  {3, 5}, {0, 0}, {3, 9}),      // 18
-        MakeFivePoolRow({3, 10}, {9, 19},  {3, 5}, {0, 0}, {4, 9}),      // 19
-        MakeFivePoolRow({4, 10}, {9, 20},  {3, 5}, {0, 0}, {4, 10}),     // 20
-        MakeFivePoolRow({4, 11}, {10, 21}, {3, 5}, {0, 0}, {4, 10}),     // 21
-        MakeFivePoolRow({4, 11}, {11, 22}, {3, 5}, {0, 0}, {4, 11}),     // 22
-        MakeFivePoolRow({4, 12}, {12, 23}, {3, 6}, {0, 0}, {4, 11}),     // 23
-        MakeFivePoolRow({4, 12}, {12, 24}, {3, 6}, {0, 0}, {5, 12}),     // 24
-        MakeFivePoolRow({5, 13}, {12, 25}, {3, 6}, {0, 0}, {5, 12}),     // 25
-        MakeFivePoolRow({5, 13}, {12, 26}, {4, 7}, {0, 0}, {5, 13}),     // 26
-        MakeFivePoolRow({5, 14}, {13, 27}, {4, 7}, {0, 0}, {5, 13}),     // 27
-        MakeFivePoolRow({5, 14}, {14, 28}, {4, 7}, {0, 0}, {5, 14}),     // 28
-        MakeFivePoolRow({5, 15}, {14, 29}, {4, 8}, {0, 0}, {6, 14}),     // 29
-        MakeFivePoolRow({5, 15}, {15, 30}, {4, 8}, {0, 0}, {6, 15}),     // 30
+        MakeRowWithTwoExecutorPools({1, 1}, {0, 0}),                                  // 1
+        MakeRowWithTwoExecutorPools({2, 2}, {0, 0}),                                  // 2
+        MakeRowWithFourExecutorPools({1, 3}, {1, 1}, {0, 0}, {1, 1}),                 // 3
+        MakeRowWithFiveExecutorPools({1, 3},  {1, 4},   {1, 1}, {0, 0}, {1, 2}),      // 4
+        MakeRowWithFiveExecutorPools({1, 3},  {2, 5},   {1, 1}, {0, 0}, {1, 2}),      // 5
+        MakeRowWithFiveExecutorPools({1, 3},  {3, 6},   {1, 1}, {0, 0}, {1, 3}),      // 6
+        MakeRowWithFiveExecutorPools({2, 4},  {3, 7},   {1, 2}, {0, 0}, {1, 3}),      // 7
+        MakeRowWithFiveExecutorPools({2, 4},  {4, 8},   {1, 2}, {0, 0}, {1, 4}),      // 8
+        MakeRowWithFiveExecutorPools({2, 5},  {4, 9},   {2, 3}, {0, 0}, {1, 4}),      // 9
+        MakeRowWithFiveExecutorPools({2, 5},  {5, 10},  {2, 3}, {0, 0}, {1, 5}),      // 10
+        MakeRowWithFiveExecutorPools({2, 6},  {5, 11},  {2, 3}, {0, 0}, {2, 5}),      // 11
+        MakeRowWithFiveExecutorPools({2, 6},  {6, 12},  {2, 3}, {0, 0}, {2, 6}),      // 12
+        MakeRowWithFiveExecutorPools({3, 7},  {6, 13},  {2, 3}, {0, 0}, {2, 6}),      // 13
+        MakeRowWithFiveExecutorPools({3, 7},  {6, 14},  {2, 3}, {0, 0}, {3, 7}),      // 14
+        MakeRowWithFiveExecutorPools({3, 8},  {7, 15},  {2, 4}, {0, 0}, {3, 7}),      // 15
+        MakeRowWithFiveExecutorPools({3, 8},  {8, 16},  {2, 4}, {0, 0}, {3, 8}),      // 16
+        MakeRowWithFiveExecutorPools({3, 9},  {9, 17},  {2, 4}, {0, 0}, {3, 8}),      // 17
+        MakeRowWithFiveExecutorPools({3, 9},  {9, 18},  {3, 5}, {0, 0}, {3, 9}),      // 18
+        MakeRowWithFiveExecutorPools({3, 10}, {9, 19},  {3, 5}, {0, 0}, {4, 9}),      // 19
+        MakeRowWithFiveExecutorPools({4, 10}, {9, 20},  {3, 5}, {0, 0}, {4, 10}),     // 20
+        MakeRowWithFiveExecutorPools({4, 11}, {10, 21}, {3, 5}, {0, 0}, {4, 10}),     // 21
+        MakeRowWithFiveExecutorPools({4, 11}, {11, 22}, {3, 5}, {0, 0}, {4, 11}),     // 22
+        MakeRowWithFiveExecutorPools({4, 12}, {12, 23}, {3, 6}, {0, 0}, {4, 11}),     // 23
+        MakeRowWithFiveExecutorPools({4, 12}, {12, 24}, {3, 6}, {0, 0}, {5, 12}),     // 24
+        MakeRowWithFiveExecutorPools({5, 13}, {12, 25}, {3, 6}, {0, 0}, {5, 12}),     // 25
+        MakeRowWithFiveExecutorPools({5, 13}, {12, 26}, {4, 7}, {0, 0}, {5, 13}),     // 26
+        MakeRowWithFiveExecutorPools({5, 14}, {13, 27}, {4, 7}, {0, 0}, {5, 13}),     // 27
+        MakeRowWithFiveExecutorPools({5, 14}, {14, 28}, {4, 7}, {0, 0}, {5, 14}),     // 28
+        MakeRowWithFiveExecutorPools({5, 15}, {14, 29}, {4, 8}, {0, 0}, {6, 14}),     // 29
+        MakeRowWithFiveExecutorPools({5, 15}, {15, 30}, {4, 8}, {0, 0}, {6, 15}),     // 30
     }}, 4);
 
     const TDefaultCpuTable HybridCpuTable({{
         MakeEmptyRow(),                                                   // 0
-        MakeTwoPoolRow({1, 1}, {0, 0}),                                   // 1
-        MakeTwoPoolRow({2, 2}, {0, 0}),                                   // 2
-        MakeFourPoolRow({1, 3}, {1, 1}, {0, 0}, {1, 1}),                  // 3
-        MakeFivePoolRow({1, 3},   {1, 4},   {1, 1}, {0, 0}, {1, 2}),      // 4
-        MakeFivePoolRow({1, 3},   {2, 5},   {1, 1}, {0, 0}, {1, 2}),      // 5
-        MakeFivePoolRow({1, 3},   {2, 6},   {1, 1}, {0, 0}, {2, 3}),      // 6
-        MakeFivePoolRow({2, 3},   {2, 7},   {1, 2}, {0, 0}, {2, 3}),      // 7
-        MakeFivePoolRow({2, 3},   {3, 8},   {1, 2}, {0, 0}, {2, 4}),      // 8
-        MakeFivePoolRow({2, 4},   {3, 9},   {1, 2}, {0, 0}, {3, 4}),      // 9
-        MakeFivePoolRow({3, 4},   {3, 10},  {1, 2}, {0, 0}, {3, 5}),      // 10
-        MakeFivePoolRow({3, 5},   {4, 11},  {1, 2}, {0, 0}, {3, 5}),      // 11
-        MakeFivePoolRow({3, 5},   {4, 12},  {1, 3}, {0, 0}, {4, 6}),      // 12
-        MakeFivePoolRow({4, 6},   {4, 13},  {1, 3}, {0, 0}, {4, 6}),      // 13
-        MakeFivePoolRow({4, 6},   {5, 14},  {1, 3}, {0, 0}, {4, 7}),      // 14
-        MakeFivePoolRow({4, 7},   {5, 15},  {1, 3}, {0, 0}, {5, 7}),      // 15
-        MakeFivePoolRow({5, 7},   {5, 16},  {1, 3}, {0, 0}, {5, 8}),      // 16
-        MakeFivePoolRow({5, 8},   {6, 17},  {1, 4}, {0, 0}, {5, 8}),      // 17
-        MakeFivePoolRow({5, 8},   {6, 18},  {1, 4}, {0, 0}, {6, 9}),      // 18
-        MakeFivePoolRow({6, 9},   {6, 19},  {1, 4}, {0, 0}, {6, 9}),      // 19
-        MakeFivePoolRow({6, 9},   {7, 20},  {1, 4}, {0, 0}, {6, 10}),     // 20
-        MakeFivePoolRow({6, 10},  {7, 21},  {1, 4}, {0, 0}, {7, 10}),     // 21
-        MakeFivePoolRow({7, 10},  {7, 22},  {1, 5}, {0, 0}, {7, 11}),     // 22
-        MakeFivePoolRow({7, 11},  {8, 23},  {1, 5}, {0, 0}, {7, 11}),     // 23
-        MakeFivePoolRow({7, 11},  {8, 24},  {1, 5}, {0, 0}, {8, 12}),     // 24
-        MakeFivePoolRow({8, 12},  {8, 25},  {1, 5}, {0, 0}, {8, 12}),     // 25
-        MakeFivePoolRow({8, 12},  {9, 26},  {1, 5}, {0, 0}, {8, 13}),     // 26
-        MakeFivePoolRow({8, 13},  {9, 27},  {1, 6}, {0, 0}, {9, 13}),     // 27
-        MakeFivePoolRow({9, 13},  {9, 28},  {1, 6}, {0, 0}, {9, 14}),     // 28
-        MakeFivePoolRow({9, 14},  {10, 29}, {1, 6}, {0, 0}, {9, 14}),     // 29
-        MakeFivePoolRow({9, 14},  {10, 30}, {1, 6}, {0, 0}, {10, 15}),    // 30
+        MakeRowWithTwoExecutorPools({1, 1}, {0, 0}),                                   // 1
+        MakeRowWithTwoExecutorPools({2, 2}, {0, 0}),                                   // 2
+        MakeRowWithFourExecutorPools({1, 3}, {1, 1}, {0, 0}, {1, 1}),                  // 3
+        MakeRowWithFiveExecutorPools({1, 3},   {1, 4},   {1, 1}, {0, 0}, {1, 2}),      // 4
+        MakeRowWithFiveExecutorPools({1, 3},   {2, 5},   {1, 1}, {0, 0}, {1, 2}),      // 5
+        MakeRowWithFiveExecutorPools({1, 3},   {2, 6},   {1, 1}, {0, 0}, {2, 3}),      // 6
+        MakeRowWithFiveExecutorPools({2, 3},   {2, 7},   {1, 2}, {0, 0}, {2, 3}),      // 7
+        MakeRowWithFiveExecutorPools({2, 3},   {3, 8},   {1, 2}, {0, 0}, {2, 4}),      // 8
+        MakeRowWithFiveExecutorPools({2, 4},   {3, 9},   {1, 2}, {0, 0}, {3, 4}),      // 9
+        MakeRowWithFiveExecutorPools({3, 4},   {3, 10},  {1, 2}, {0, 0}, {3, 5}),      // 10
+        MakeRowWithFiveExecutorPools({3, 5},   {4, 11},  {1, 2}, {0, 0}, {3, 5}),      // 11
+        MakeRowWithFiveExecutorPools({3, 5},   {4, 12},  {1, 3}, {0, 0}, {4, 6}),      // 12
+        MakeRowWithFiveExecutorPools({4, 6},   {4, 13},  {1, 3}, {0, 0}, {4, 6}),      // 13
+        MakeRowWithFiveExecutorPools({4, 6},   {5, 14},  {1, 3}, {0, 0}, {4, 7}),      // 14
+        MakeRowWithFiveExecutorPools({4, 7},   {5, 15},  {1, 3}, {0, 0}, {5, 7}),      // 15
+        MakeRowWithFiveExecutorPools({5, 7},   {5, 16},  {1, 3}, {0, 0}, {5, 8}),      // 16
+        MakeRowWithFiveExecutorPools({5, 8},   {6, 17},  {1, 4}, {0, 0}, {5, 8}),      // 17
+        MakeRowWithFiveExecutorPools({5, 8},   {6, 18},  {1, 4}, {0, 0}, {6, 9}),      // 18
+        MakeRowWithFiveExecutorPools({6, 9},   {6, 19},  {1, 4}, {0, 0}, {6, 9}),      // 19
+        MakeRowWithFiveExecutorPools({6, 9},   {7, 20},  {1, 4}, {0, 0}, {6, 10}),     // 20
+        MakeRowWithFiveExecutorPools({6, 10},  {7, 21},  {1, 4}, {0, 0}, {7, 10}),     // 21
+        MakeRowWithFiveExecutorPools({7, 10},  {7, 22},  {1, 5}, {0, 0}, {7, 11}),     // 22
+        MakeRowWithFiveExecutorPools({7, 11},  {8, 23},  {1, 5}, {0, 0}, {7, 11}),     // 23
+        MakeRowWithFiveExecutorPools({7, 11},  {8, 24},  {1, 5}, {0, 0}, {8, 12}),     // 24
+        MakeRowWithFiveExecutorPools({8, 12},  {8, 25},  {1, 5}, {0, 0}, {8, 12}),     // 25
+        MakeRowWithFiveExecutorPools({8, 12},  {9, 26},  {1, 5}, {0, 0}, {8, 13}),     // 26
+        MakeRowWithFiveExecutorPools({8, 13},  {9, 27},  {1, 6}, {0, 0}, {9, 13}),     // 27
+        MakeRowWithFiveExecutorPools({9, 13},  {9, 28},  {1, 6}, {0, 0}, {9, 14}),     // 28
+        MakeRowWithFiveExecutorPools({9, 14},  {10, 29}, {1, 6}, {0, 0}, {9, 14}),     // 29
+        MakeRowWithFiveExecutorPools({9, 14},  {10, 30}, {1, 6}, {0, 0}, {10, 15}),    // 30
     }}, 4);
 
     const TDefaultCpuTable StorageCpuTable({{
         MakeEmptyRow(),                                                  // 0
-        MakeTwoPoolRow({1, 1}, {0, 0}),                                  // 1
-        MakeTwoPoolRow({2, 2}, {0, 0}),                                  // 2
-        MakeFourPoolRow({1, 3}, {1, 1}, {0, 0}, {1, 1}),                 // 3
-        MakeFivePoolRow({1, 4},   {1, 4},  {1, 1}, {0, 0}, {1, 2}),      // 4
-        MakeFivePoolRow({2, 5},   {1, 5},  {1, 1}, {0, 0}, {1, 2}),      // 5
-        MakeFivePoolRow({3, 6},   {1, 6},  {1, 1}, {0, 0}, {1, 3}),      // 6
-        MakeFivePoolRow({4, 7},   {1, 7},  {1, 2}, {0, 0}, {1, 3}),      // 7
-        MakeFivePoolRow({5, 8},   {1, 8},  {1, 2}, {0, 0}, {1, 4}),      // 8
-        MakeFivePoolRow({5, 9},   {1, 9},  {1, 2}, {0, 0}, {2, 4}),      // 9
-        MakeFivePoolRow({6, 10},  {1, 10}, {1, 2}, {0, 0}, {2, 5}),      // 10
-        MakeFivePoolRow({6, 11},  {1, 11}, {2, 3}, {0, 0}, {2, 5}),      // 11
-        MakeFivePoolRow({7, 12},  {1, 12}, {2, 3}, {0, 0}, {2, 6}),      // 12
-        MakeFivePoolRow({8, 13},  {1, 13}, {2, 3}, {0, 0}, {2, 6}),      // 13
-        MakeFivePoolRow({8, 14},  {1, 14}, {2, 3}, {0, 0}, {3, 7}),      // 14
-        MakeFivePoolRow({9, 15},  {1, 15}, {2, 4}, {0, 0}, {3, 7}),      // 15
-        MakeFivePoolRow({10, 16}, {1, 16}, {2, 4}, {0, 0}, {3, 8}),      // 16
-        MakeFivePoolRow({11, 17}, {1, 17}, {2, 4}, {0, 0}, {3, 8}),      // 17
-        MakeFivePoolRow({11, 18}, {1, 18}, {3, 5}, {0, 0}, {3, 9}),      // 18
-        MakeFivePoolRow({11, 19}, {1, 19}, {3, 5}, {0, 0}, {4, 9}),      // 19
-        MakeFivePoolRow({12, 20}, {1, 20}, {3, 5}, {0, 0}, {4, 10}),     // 20
-        MakeFivePoolRow({13, 21}, {1, 21}, {3, 5}, {0, 0}, {4, 10}),     // 21
-        MakeFivePoolRow({14, 22}, {1, 22}, {3, 6}, {0, 0}, {4, 11}),     // 22
-        MakeFivePoolRow({15, 23}, {1, 23}, {3, 6}, {0, 0}, {4, 11}),     // 23
-        MakeFivePoolRow({15, 24}, {1, 24}, {3, 6}, {0, 0}, {5, 12}),     // 24
-        MakeFivePoolRow({16, 25}, {1, 25}, {3, 6}, {0, 0}, {5, 12}),     // 25
-        MakeFivePoolRow({16, 26}, {1, 26}, {4, 7}, {0, 0}, {5, 13}),     // 26
-        MakeFivePoolRow({17, 27}, {1, 27}, {4, 7}, {0, 0}, {5, 13}),     // 27
-        MakeFivePoolRow({18, 28}, {1, 28}, {4, 7}, {0, 0}, {5, 14}),     // 28
-        MakeFivePoolRow({18, 29}, {1, 29}, {4, 7}, {0, 0}, {6, 14}),     // 29
-        MakeFivePoolRow({19, 30}, {1, 30}, {4, 8}, {0, 0}, {6, 15}),     // 30
+        MakeRowWithTwoExecutorPools({1, 1}, {0, 0}),                                  // 1
+        MakeRowWithTwoExecutorPools({2, 2}, {0, 0}),                                  // 2
+        MakeRowWithFourExecutorPools({1, 3}, {1, 1}, {0, 0}, {1, 1}),                 // 3
+        MakeRowWithFiveExecutorPools({1, 4},   {1, 4},  {1, 1}, {0, 0}, {1, 2}),      // 4
+        MakeRowWithFiveExecutorPools({2, 5},   {1, 5},  {1, 1}, {0, 0}, {1, 2}),      // 5
+        MakeRowWithFiveExecutorPools({3, 6},   {1, 6},  {1, 1}, {0, 0}, {1, 3}),      // 6
+        MakeRowWithFiveExecutorPools({4, 7},   {1, 7},  {1, 2}, {0, 0}, {1, 3}),      // 7
+        MakeRowWithFiveExecutorPools({5, 8},   {1, 8},  {1, 2}, {0, 0}, {1, 4}),      // 8
+        MakeRowWithFiveExecutorPools({5, 9},   {1, 9},  {1, 2}, {0, 0}, {2, 4}),      // 9
+        MakeRowWithFiveExecutorPools({6, 10},  {1, 10}, {1, 2}, {0, 0}, {2, 5}),      // 10
+        MakeRowWithFiveExecutorPools({6, 11},  {1, 11}, {2, 3}, {0, 0}, {2, 5}),      // 11
+        MakeRowWithFiveExecutorPools({7, 12},  {1, 12}, {2, 3}, {0, 0}, {2, 6}),      // 12
+        MakeRowWithFiveExecutorPools({8, 13},  {1, 13}, {2, 3}, {0, 0}, {2, 6}),      // 13
+        MakeRowWithFiveExecutorPools({8, 14},  {1, 14}, {2, 3}, {0, 0}, {3, 7}),      // 14
+        MakeRowWithFiveExecutorPools({9, 15},  {1, 15}, {2, 4}, {0, 0}, {3, 7}),      // 15
+        MakeRowWithFiveExecutorPools({10, 16}, {1, 16}, {2, 4}, {0, 0}, {3, 8}),      // 16
+        MakeRowWithFiveExecutorPools({11, 17}, {1, 17}, {2, 4}, {0, 0}, {3, 8}),      // 17
+        MakeRowWithFiveExecutorPools({11, 18}, {1, 18}, {3, 5}, {0, 0}, {3, 9}),      // 18
+        MakeRowWithFiveExecutorPools({11, 19}, {1, 19}, {3, 5}, {0, 0}, {4, 9}),      // 19
+        MakeRowWithFiveExecutorPools({12, 20}, {1, 20}, {3, 5}, {0, 0}, {4, 10}),     // 20
+        MakeRowWithFiveExecutorPools({13, 21}, {1, 21}, {3, 5}, {0, 0}, {4, 10}),     // 21
+        MakeRowWithFiveExecutorPools({14, 22}, {1, 22}, {3, 6}, {0, 0}, {4, 11}),     // 22
+        MakeRowWithFiveExecutorPools({15, 23}, {1, 23}, {3, 6}, {0, 0}, {4, 11}),     // 23
+        MakeRowWithFiveExecutorPools({15, 24}, {1, 24}, {3, 6}, {0, 0}, {5, 12}),     // 24
+        MakeRowWithFiveExecutorPools({16, 25}, {1, 25}, {3, 6}, {0, 0}, {5, 12}),     // 25
+        MakeRowWithFiveExecutorPools({16, 26}, {1, 26}, {4, 7}, {0, 0}, {5, 13}),     // 26
+        MakeRowWithFiveExecutorPools({17, 27}, {1, 27}, {4, 7}, {0, 0}, {5, 13}),     // 27
+        MakeRowWithFiveExecutorPools({18, 28}, {1, 28}, {4, 7}, {0, 0}, {5, 14}),     // 28
+        MakeRowWithFiveExecutorPools({18, 29}, {1, 29}, {4, 7}, {0, 0}, {6, 14}),     // 29
+        MakeRowWithFiveExecutorPools({19, 30}, {1, 30}, {4, 8}, {0, 0}, {6, 15}),     // 30
     }}, 4);
 
     const TDefaultCpuTable TinyCpuTable = [] {
@@ -492,7 +492,7 @@ namespace {
         return TinyCpuTable;
     }
 
-    void ValidateExecutorPoolLayout(const TExecutorPoolLayout& layout, ui8 executorPoolCount) {
+    void ValidatePoolIdLayout(const TExecutorPoolLayout& layout, ui8 executorPoolCount) {
         Y_VERIFY_S(executorPoolCount > 0 && executorPoolCount <= PoolKindsCount, "executorPoolCount# " << executorPoolCount);
         Y_VERIFY_S(layout.GetExecutorPoolCount() == executorPoolCount,
             "layout.GetExecutorPoolCount()# " << layout.GetExecutorPoolCount() << " executorPoolCount# " << executorPoolCount);
@@ -565,7 +565,7 @@ namespace {
     void ValidateCpuTable(const ICpuTable& cpuTable, i16 cpuCount) {
         const TCpuTableRow row = cpuTable[cpuCount];
         const TExecutorPoolLayout layout = GetExecutorPoolLayoutForRow(row);
-        ValidateExecutorPoolLayout(layout, row.ExecutorPoolCount);
+        ValidatePoolIdLayout(layout, row.ExecutorPoolCount);
         ValidateLogicalToExecutorPoolMapping(row);
         ValidateExecutorPools(row, cpuCount);
     }

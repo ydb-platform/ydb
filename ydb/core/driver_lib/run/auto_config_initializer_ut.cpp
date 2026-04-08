@@ -135,21 +135,35 @@ const NKikimrConfig::TActorSystemConfig::TExecutor* FindExecutorByName(
     return nullptr;
 }
 
-void SetPool(TCpuTableRow& row, EPoolKind poolKind, i16 threads, i16 maxThreads) {
-    row[static_cast<size_t>(poolKind)] = TPoolConfig{
+void SetRealPool(TCpuTableRow& row, ui8 poolId, ERealPoolKind poolKind, i16 threads, i16 maxThreads, ui8 priority) {
+    row.RealPools[poolId] = TRealPoolConfig{
+        .Kind = poolKind,
         .ThreadCount = threads,
         .MaxThreadCount = maxThreads,
+        .Priority = priority,
     };
+}
+
+void SetLogicalToRealPool(TCpuTableRow& row, EPoolKind logicalPoolKind, ui8 realPoolId) {
+    row.LogicalToRealPool[static_cast<size_t>(logicalPoolKind)] = realPoolId;
 }
 
 } // anonymous
 
 Y_UNIT_TEST(ApplyAutoConfigWithCustomCpuTable) {
-    TCpuTable cpuTable{};
-    SetPool(cpuTable[4], EPoolKind::System, 1, 2);
-    SetPool(cpuTable[4], EPoolKind::User, 1, 3);
-    SetPool(cpuTable[4], EPoolKind::Batch, 1, 2);
-    SetPool(cpuTable[4], EPoolKind::IC, 1, 2);
+    TDefaultCpuTable cpuTable{};
+    auto& row = cpuTable.GetPreparedRow(4);
+    row.RealPoolCount = 5;
+    SetRealPool(row, 0, ERealPoolKind::System, 1, 2, 30);
+    SetRealPool(row, 1, ERealPoolKind::User, 1, 3, 20);
+    SetRealPool(row, 2, ERealPoolKind::Batch, 1, 2, 10);
+    SetRealPool(row, 3, ERealPoolKind::IO, 0, 0, 0);
+    SetRealPool(row, 4, ERealPoolKind::IC, 1, 2, 40);
+    SetLogicalToRealPool(row, EPoolKind::System, 0);
+    SetLogicalToRealPool(row, EPoolKind::User, 1);
+    SetLogicalToRealPool(row, EPoolKind::Batch, 2);
+    SetLogicalToRealPool(row, EPoolKind::IO, 3);
+    SetLogicalToRealPool(row, EPoolKind::IC, 4);
 
     NKikimrConfig::TActorSystemConfig config;
     config.SetUseAutoConfig(true);
@@ -181,9 +195,18 @@ Y_UNIT_TEST(ApplyAutoConfigWithCustomCpuTable) {
 }
 
 Y_UNIT_TEST(ApplyAutoConfigDisablesTinyConfigurationWhenRequested) {
-    TCpuTable cpuTable{};
-    SetPool(cpuTable[3], EPoolKind::System, 2, 2);
-    SetPool(cpuTable[3], EPoolKind::IC, 1, 1);
+    TDefaultCpuTable cpuTable{};
+    auto& row = cpuTable.GetPreparedRow(3);
+    row.RealPoolCount = 4;
+    SetRealPool(row, 0, ERealPoolKind::Common, 2, 3, 30);
+    SetRealPool(row, 1, ERealPoolKind::Batch, 0, 0, 10);
+    SetRealPool(row, 2, ERealPoolKind::IO, 0, 0, 0);
+    SetRealPool(row, 3, ERealPoolKind::IC, 1, 1, 40);
+    SetLogicalToRealPool(row, EPoolKind::System, 0);
+    SetLogicalToRealPool(row, EPoolKind::User, 0);
+    SetLogicalToRealPool(row, EPoolKind::Batch, 1);
+    SetLogicalToRealPool(row, EPoolKind::IO, 2);
+    SetLogicalToRealPool(row, EPoolKind::IC, 3);
 
     NKikimrConfig::TActorSystemConfig config;
     config.SetUseAutoConfig(true);
@@ -198,21 +221,146 @@ Y_UNIT_TEST(ApplyAutoConfigDisablesTinyConfigurationWhenRequested) {
     UNIT_ASSERT_VALUES_EQUAL(config.ExecutorSize(), 4);
 
     const auto* common = FindExecutorByName(config, "Common");
+    const auto* batch = FindExecutorByName(config, "Batch");
+    const auto* ic = FindExecutorByName(config, "IC");
     UNIT_ASSERT(common);
+    UNIT_ASSERT(batch);
+    UNIT_ASSERT(ic);
     UNIT_ASSERT_VALUES_EQUAL(common->GetThreads(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(common->GetMaxThreads(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(batch->GetThreads(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(batch->GetMaxThreads(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(ic->GetThreads(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(ic->GetMaxThreads(), 1);
+}
+
+Y_UNIT_TEST(ApplyAutoConfigUsesCustomCpuTableInTinyConfiguration) {
+    TDefaultCpuTable cpuTable{};
+    auto& row = cpuTable.GetPreparedRow(3);
+    row.RealPoolCount = 4;
+    SetRealPool(row, 0, ERealPoolKind::Common, 2, 3, 30);
+    SetRealPool(row, 1, ERealPoolKind::Batch, 0, 0, 10);
+    SetRealPool(row, 2, ERealPoolKind::IO, 0, 0, 0);
+    SetRealPool(row, 3, ERealPoolKind::IC, 1, 1, 40);
+    SetLogicalToRealPool(row, EPoolKind::System, 0);
+    SetLogicalToRealPool(row, EPoolKind::User, 0);
+    SetLogicalToRealPool(row, EPoolKind::Batch, 1);
+    SetLogicalToRealPool(row, EPoolKind::IO, 2);
+    SetLogicalToRealPool(row, EPoolKind::IC, 3);
+
+    NKikimrConfig::TActorSystemConfig config;
+    config.SetUseAutoConfig(true);
+    config.SetCpuCount(3);
+    config.SetUseSharedThreads(true);
+
+    ApplyAutoConfig(&config, TAutoConfigOptions{
+        .CpuTable = &cpuTable,
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL(config.ExecutorSize(), 4);
+    UNIT_ASSERT_VALUES_EQUAL(config.GetSysExecutor(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(config.GetUserExecutor(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(config.GetBatchExecutor(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(config.GetIoExecutor(), 2);
+
+    const auto* common = FindExecutorByName(config, "Common");
+    const auto* batch = FindExecutorByName(config, "Batch");
+    const auto* ic = FindExecutorByName(config, "IC");
+    UNIT_ASSERT(common);
+    UNIT_ASSERT(batch);
+    UNIT_ASSERT(ic);
+    UNIT_ASSERT_VALUES_EQUAL(common->GetThreads(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(common->GetMaxThreads(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(batch->GetThreads(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(ic->GetThreads(), 1);
+}
+
+Y_UNIT_TEST(ApplyAutoConfigUsesBuiltInTinyConfigurationFromCpuTable) {
+    NKikimrConfig::TActorSystemConfig config;
+    config.SetUseAutoConfig(true);
+    config.SetCpuCount(2);
+    config.SetUseSharedThreads(true);
+
+    ApplyAutoConfig(&config, TAutoConfigOptions{});
+
+    UNIT_ASSERT_VALUES_EQUAL(config.ExecutorSize(), 5);
+    UNIT_ASSERT_VALUES_EQUAL(config.GetUserExecutor(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(config.GetSysExecutor(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(config.GetBatchExecutor(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(config.GetIoExecutor(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(config.GetServiceExecutor(0).GetExecutorId(), 4);
+
+    const auto* system = FindExecutorByName(config, "System");
+    const auto* user = FindExecutorByName(config, "User");
+    const auto* batch = FindExecutorByName(config, "Batch");
+    const auto* ic = FindExecutorByName(config, "IC");
+    UNIT_ASSERT(system);
+    UNIT_ASSERT(user);
+    UNIT_ASSERT(batch);
+    UNIT_ASSERT(ic);
+
+    UNIT_ASSERT_VALUES_EQUAL(system->GetThreads(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(system->GetMaxThreads(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(system->GetHasSharedThread(), false);
+    UNIT_ASSERT_VALUES_EQUAL(system->GetForcedForeignSlots(), 1);
+
+    UNIT_ASSERT_VALUES_EQUAL(user->GetThreads(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(user->GetMaxThreads(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(user->GetHasSharedThread(), true);
+    UNIT_ASSERT_VALUES_EQUAL(user->GetForcedForeignSlots(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(user->AdjacentPoolsSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(user->GetAdjacentPools(0), 2);
+
+    UNIT_ASSERT_VALUES_EQUAL(batch->GetThreads(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(batch->GetForcedForeignSlots(), 0);
+
+    UNIT_ASSERT_VALUES_EQUAL(ic->GetThreads(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(ic->GetHasSharedThread(), true);
+    UNIT_ASSERT_VALUES_EQUAL(ic->GetForcedForeignSlots(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(ic->AdjacentPoolsSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(ic->GetAdjacentPools(0), 0);
+}
+
+Y_UNIT_TEST(ApplyAutoConfigUsesConsistentLogicalPoolIds) {
+    NKikimrConfig::TActorSystemConfig config;
+    config.SetUseAutoConfig(true);
+    config.SetCpuCount(4);
+
+    ApplyAutoConfig(&config, TAutoConfigOptions{});
+
+    UNIT_ASSERT_VALUES_EQUAL(config.GetSysExecutor(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(config.GetUserExecutor(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(config.GetBatchExecutor(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(config.GetIoExecutor(), 3);
 }
 
 Y_UNIT_TEST(ApplyAutoConfigCustomCpuTableUsesChunkedScaling) {
-    TCpuTable cpuTable{};
-    SetPool(cpuTable[5], EPoolKind::System, 1, 2);
-    SetPool(cpuTable[5], EPoolKind::User, 2, 3);
-    SetPool(cpuTable[5], EPoolKind::Batch, 1, 1);
-    SetPool(cpuTable[5], EPoolKind::IC, 1, 2);
+    TDefaultCpuTable cpuTable{};
+    auto& row5 = cpuTable.GetPreparedRow(5);
+    row5.RealPoolCount = 5;
+    SetRealPool(row5, 0, ERealPoolKind::System, 1, 2, 30);
+    SetRealPool(row5, 1, ERealPoolKind::User, 2, 3, 20);
+    SetRealPool(row5, 2, ERealPoolKind::Batch, 1, 1, 10);
+    SetRealPool(row5, 3, ERealPoolKind::IO, 0, 0, 0);
+    SetRealPool(row5, 4, ERealPoolKind::IC, 1, 2, 40);
+    SetLogicalToRealPool(row5, EPoolKind::System, 0);
+    SetLogicalToRealPool(row5, EPoolKind::User, 1);
+    SetLogicalToRealPool(row5, EPoolKind::Batch, 2);
+    SetLogicalToRealPool(row5, EPoolKind::IO, 3);
+    SetLogicalToRealPool(row5, EPoolKind::IC, 4);
 
-    SetPool(cpuTable[30], EPoolKind::System, 10, 12);
-    SetPool(cpuTable[30], EPoolKind::User, 12, 14);
-    SetPool(cpuTable[30], EPoolKind::Batch, 4, 5);
-    SetPool(cpuTable[30], EPoolKind::IC, 4, 6);
+    auto& row30 = cpuTable.GetPreparedRow(30);
+    row30.RealPoolCount = 5;
+    SetRealPool(row30, 0, ERealPoolKind::System, 10, 12, 30);
+    SetRealPool(row30, 1, ERealPoolKind::User, 12, 14, 20);
+    SetRealPool(row30, 2, ERealPoolKind::Batch, 4, 5, 10);
+    SetRealPool(row30, 3, ERealPoolKind::IO, 0, 0, 0);
+    SetRealPool(row30, 4, ERealPoolKind::IC, 4, 6, 40);
+    SetLogicalToRealPool(row30, EPoolKind::System, 0);
+    SetLogicalToRealPool(row30, EPoolKind::User, 1);
+    SetLogicalToRealPool(row30, EPoolKind::Batch, 2);
+    SetLogicalToRealPool(row30, EPoolKind::IO, 3);
+    SetLogicalToRealPool(row30, EPoolKind::IC, 4);
 
     NKikimrConfig::TActorSystemConfig config;
     config.SetUseAutoConfig(true);

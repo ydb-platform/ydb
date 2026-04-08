@@ -129,7 +129,7 @@ jobs:
       - name: Update test monitor
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
-      - name: Sync issues with current muted_ya.txt
+      - name: Sync issues with current muted_ya file
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}

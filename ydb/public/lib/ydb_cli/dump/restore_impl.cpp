@@ -2200,8 +2200,11 @@ TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const 
             .DefaultProcessingTimeout(consumer.GetDefaultProcessingTimeout())
             .ReceiveMessageDelay(consumer.GetReceiveMessageDelay())
             .ReceiveMessageWaitTime(consumer.GetReceiveMessageWaitTime())
-            .ReadFrom(consumer.GetReadFrom())
-            .SupportedCodecs(consumer.GetSupportedCodecs());
+            .ReadFrom(consumer.GetReadFrom());
+
+        for (const auto& codec : consumer.GetSupportedCodecs()) {
+            addConsumer.AppendSupportedCodecs(codec);
+        }
 
         auto result = [&]() {
             if (!dlp.GetEnabled()) {

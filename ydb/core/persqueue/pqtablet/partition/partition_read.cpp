@@ -440,7 +440,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
         const ui16 internalPartsCount = blobs[blobIdx].InternalPartsCount;
         const TString& blobValue = blobs[blobIdx].Value;
 
-        if (blobs[blobIdx].Empty()) { // this is ok. Means that someone requested too much data or retention race
+        if (blobValue.empty()) { // this is ok. Means that someone requested too much data or retention race
             PQ_LOG_D("Not full answer here!");
             const ui64 answerSize = answer->Response->ByteSize();
             if (userInfo && Destination != 0) {

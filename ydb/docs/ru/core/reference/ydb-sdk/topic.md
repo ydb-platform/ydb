@@ -1,4 +1,4 @@
-# Работа с топиками
+﻿# Работа с топиками
 
 В этой статье приведены примеры использования {{ ydb-short-name }} SDK для работы с [топиками](../../concepts/datamodel/topic.md).
 
@@ -1090,8 +1090,8 @@
 
   ```javascript
   await using writer = createTopicWriter(driver, {
-  	topic: topicName,
-  	producer: producerName,
+    topic: topicName,
+    producer: producerName,
     // Callback that is called when writer receives an acknowledgment for a message.
     onAck: (seqNo, status) => {
       console.log("ACK", seqNo, status);
@@ -1207,8 +1207,6 @@
 
   Для включения дедупликации нужно в настройках сессии записи указать опцию `ProducerId` или явно включить дедупликацию, вызвав метод `DeduplicationEnabled()`, например, как в секции ["Подключение к топику"](#start-writer).
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -1217,7 +1215,6 @@
 
   В **ydb-go-sdk** при создании писателя, если не передавать `topicoptions.WithWriterProducerID`, SDK всё равно подставляет идентификатор производителя (генерирует его автоматически). Режим записи без дедупликации, эквивалентный отсутствию `ProducerId` в примере для C++ выше, в текущей версии SDK недоступен.
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 - Java
 
   Функциональность на данный момент не поддерживается.
@@ -2767,6 +2764,8 @@
     ```
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+
+  {% endlist %}
 
 - JavaScript
 

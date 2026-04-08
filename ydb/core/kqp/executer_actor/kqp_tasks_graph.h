@@ -423,7 +423,7 @@ private:
     TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, TQueryExecutionStats* stats);
     void BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQueryExecutionStats* stats);
     void BuildSysViewTasksFromSource(TStageInfo& stageInfo);
-    void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot, ui32 scheduledTaskCount);
+    void BuildReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot);
     void BuildSysViewScanTasks(TStageInfo& stageInfo);
     void BuildComputeTasks(TStageInfo& stageInfo);
     void BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, TQueryExecutionStats* stats);

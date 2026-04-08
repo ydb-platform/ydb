@@ -12,7 +12,7 @@ as sent by writing sent_at = NOW().
 There are no timing assumptions, no cursors, no historical-data floods.
 The queue is the single source of truth for "what still needs to be sent".
 
-Reads profiles from .github/config/telegram_notification_config.json
+Reads profiles from .github/config/mute_issue_and_digest.json
 and runs only those whose ``schedule_utc_hours`` contains the current UTC hour
 and whose ``schedule_weekdays`` contains the current ISO weekday (1=Mon … 7=Sun).
 Omitted ``schedule_weekdays`` defaults to Mon–Fri ``[1,2,3,4,5]``.
@@ -296,8 +296,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--config",
-        default=".github/config/telegram_notification_config.json",
-        help="Path to notification config JSON",
+        default=".github/config/mute_issue_and_digest.json",
+        help="Path to digest profiles config JSON",
     )
     parser.add_argument("--bot-token", help="Telegram bot token")
     parser.add_argument(

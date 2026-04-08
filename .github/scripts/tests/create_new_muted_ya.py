@@ -40,7 +40,7 @@ UNMUTE_DAYS = 7
 DELETE_DAYS = 7
 
 _DIGEST_NOTIFICATION_CONFIG = os.path.normpath(
-    os.path.join(dir, '..', '..', 'config', 'telegram_notification_config.json')
+    os.path.join(dir, '..', '..', 'config', 'mute_issue_and_digest.json')
 )
 
 
@@ -863,7 +863,7 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', b
 
 
 def load_configured_digest_profile_ids():
-    """Profile IDs listed in telegram_notification_config.json (branch:build_type).
+    """Profile IDs listed in mute_issue_and_digest.json (branch:build_type).
 
     Only these may be written to digest_queue so unsent rows always match a send_digest profile.
     """
@@ -914,7 +914,7 @@ def enqueue_to_digest_queue(ydb_wrapper, queue_items):
             filtered.append(item)
         else:
             logging.info(
-                'Skip digest enqueue for issue #%s (profile %r not in telegram_notification_config.json)',
+                'Skip digest enqueue for issue #%s (profile %r not in mute_issue_and_digest.json)',
                 item.get('github_issue_number'),
                 pid,
             )

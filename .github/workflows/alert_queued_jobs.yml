@@ -1,6 +1,6 @@
 name: Alert Queued Jobs
 
-# Digest schedule: telegram_notification_config.json (schedule_utc_hours + schedule_weekdays).
+# Digest schedule: mute_issue_and_digest.json (schedule_utc_hours + schedule_weekdays).
 # send_digest.py checks UTC hour and ISO weekday (1=Mon … 7=Sun) — defaults to Mon–Fri if weekdays omitted.
 
 on:
@@ -88,5 +88,5 @@ jobs:
             ARGS="$ARGS --dry-run"
           fi
           python3 .github/scripts/telegram/send_digest.py \
-            --config .github/config/telegram_notification_config.json \
+            --config .github/config/mute_issue_and_digest.json \
             $ARGS

@@ -9,6 +9,7 @@ ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_Unspec
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.ScalarFederativeWriting
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/mind/hive/ut TScaleRecommenderTest.BasicTest
+ydb/core/mind/hive/ut TStorageBalanceTest.TestScenario3
 ydb/core/mind/hive/ut unittest.[*/*] chunk
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact_WithRestart

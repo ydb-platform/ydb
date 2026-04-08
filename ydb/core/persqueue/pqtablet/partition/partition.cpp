@@ -3971,9 +3971,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         auto *userInfoFull = UsersInfoStorage->GetIfExists(userInfo.User);
         if (userInfo.Offset > userInfoFull->GetReadOffset()) {
             auto timestamps = GetTime(*userInfoFull, userInfo.Offset);
-            Cerr << timestamps.first << Endl;
             userInfoFull->UpdateReadOffset(userInfo.Offset - 1, timestamps.first, timestamps.second, ctx.Now());
-            // userInfoFull.ReadOffset = userInfo.Offset;
         }
     }
 }

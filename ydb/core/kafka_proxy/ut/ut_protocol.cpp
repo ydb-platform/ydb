@@ -19,6 +19,7 @@
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
+
 using namespace NKafka;
 using namespace NYdb;
 using namespace NYdb::NTable;
@@ -5222,8 +5223,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TKafkaTestClient kafkaClient(testServer.Port);
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
         // use random values to avoid parallel execution problems
-        TString topicName = TStringBuilder()
-                                << "topic-" << RandomNumber<ui64>();
+        TString topicName = "topic";
+        TString fullTopicName = "/Root/topic";
         TString consumerName = "my-consumer";
         ui64 minActivePartitions = 1;
 
@@ -5237,12 +5238,15 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         NYdb::NTopic::TWriteMessage msg1("Data-12345");
         NYdb::NTopic::TWriteMessage msg2("Data-67890");
         NYdb::NTopic::TWriteMessage msg3("Data-38t54");
+        NYdb::NTopic::TWriteMessage msg4("Data-3rgeij");
         msg1.MessageMeta({{"__key", "key1"}});
         msg2.MessageMeta({{"__key", "key2"}});
         msg3.MessageMeta({{"__key", "key3"}});
+        msg4.MessageMeta({{"__key", "key4"}});
         writer->Write(std::move(msg1));
         writer->Write(std::move(msg2));
         writer->Write(std::move(msg3));
+        writer->Write(std::move(msg4));
         writer->Close();
 
         // KikimrServer->AppData и там каунтеры. Посмотреть сколько нод
@@ -5253,10 +5257,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             const auto& partition = consumerDescription.GetPartitions()[0];
             UNIT_ASSERT(partition.GetActive());
             UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
-            // auto& partitionStats = partition.GetPartitionStats();
             i32 lastReadOffset = partition.GetPartitionConsumerStats()->GetLastReadOffset();
             i32 committedOffset = partition.GetPartitionConsumerStats()->GetCommittedOffset();
-            // Cerr << "Here" << stats.size();
             UNIT_ASSERT_VALUES_EQUAL(lastReadOffset, 1);
             UNIT_ASSERT_VALUES_EQUAL(committedOffset, 0);
         }
@@ -5265,7 +5267,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsets;
         TString commitedMetaData = "additional-info";
         for (ui64 i = 0; i < minActivePartitions; ++i) {
-            partitionsAndOffsets.emplace_back(i, 3, commitedMetaData);
+            partitionsAndOffsets.emplace_back(i, 2, commitedMetaData);
         }
 
         offsets[topicName] = partitionsAndOffsets;
@@ -5279,18 +5281,91 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             const auto& partition = consumerDescription.GetPartitions()[0];
             UNIT_ASSERT(partition.GetActive());
             UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
-            // auto& partitionStats = partition.GetPartitionStats();
             i32 lastReadOffset = partition.GetPartitionConsumerStats()->GetLastReadOffset();
             i32 committedOffset = partition.GetPartitionConsumerStats()->GetCommittedOffset();
-            // Cerr << "Here" << stats.size();
+            // Cerr << "Here" <<stats.size();
             UNIT_ASSERT_VALUES_EQUAL(lastReadOffset, committedOffset);
         }
-        auto counters = testServer.KikimrServer->GetRuntime()->GetAppData().Counters;
-        // UNIT_ASSERT(counters)
-        auto dbGroup = GetServiceCounters(counters, "pqproxy");
-        // TStringStream countersStr;
-        // dbGroup->OutputHtml(countersStr);
-        // Cerr << countersStr << Endl;
+        // Sleep(TDuration::Seconds(10));
+        // auto sender = testServer.KikimrServer->GetRuntime()->AllocateEdgeActor();
+        // testServer.KikimrServer->GetRuntime()->Send(MakeKafkaMetricsServiceID(), sender, new TEvKafka::TEvGetCountersRequest());
+
+        // TAutoPtr<IEventHandle> handle;
+        // auto ev = testServer.KikimrServer->GetRuntime()->GrabEdgeEvents<TEvKafka::TEvGetCountersResponse>(handle, TDuration::Seconds(1));
+
+
+        NSchemeCache::TDescribeResult::TPtr result = new NSchemeCache::TDescribeResult{};
+        result->SetPath("/Root");
+
+        TVector<TString> attrs = {"folder_id", "cloud_id", "database_id"};
+        auto ua = result->MutablePathDescription()->AddUserAttributes();
+        ua->SetKey("folder_id");
+        ua->SetValue("somefolder");
+
+        ua->SetKey("cloud_id");
+        ua->SetValue("somecloud");
+
+        ua->SetKey("database_id");
+        ua->SetValue("root");
+
+
+        //  ->GetSubgroup("database", "/Root")
+        //             ->GetSubgroup("cloud_id", "somecloud")
+        //             ->GetSubgroup("folder_id", "somefolder")
+        //             ->GetSubgroup("database_id", "root")
+        //             ->GetSubgroup("topic", topic)
+        NSchemeCache::TDescribeResult::TCPtr cres = result;
+
+        // // Отправка события обновления схемы
+        auto event = MakeHolder<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, "/Root", TPathId{}, cres);
+
+        NKikimr::NFlatTests::TFlatMsgBusClient kikimrClient(*(testServer.KikimrServer->ServerSettings));
+        auto record = kikimrClient.Ls(fullTopicName)->Record;
+        auto pathDescr = record.GetPathDescription();
+        auto g = pathDescr.GetPersQueueGroup();
+        auto tabletId = g.GetPartitions(0).GetTabletId();
+
+        auto* runtime = testServer.KikimrServer->GetRuntime();
+        TActorId pipeClient = runtime->ConnectToPipe(tabletId, runtime->AllocateEdgeActor(), 0, GetPipeConfigWithRetries());
+        runtime->SendToPipe(tabletId, runtime->AllocateEdgeActor(), event.Release(), 0, GetPipeConfigWithRetries(), pipeClient);
+
+        // {
+        //     // TDispatchOptions options;
+        //     // options.FinalEvents.emplace_back(TEvTxProxySchemeCache::EvWatchNotifyUpdated);
+        //     // runtime->DispatchEvents(options);
+        //     TDispatchOptions options;
+        //     options.FinalEvents.emplace_back(TEvTxProxySchemeCache::EvWatchNotifyUpdated);
+        //     auto processedCountersEvent = runtime->DispatchEvents(options);
+        //     UNIT_ASSERT_VALUES_EQUAL(processedCountersEvent, true);
+        // }
+        // {
+        //     auto* runtime = testServer.KikimrServer->GetRuntime();
+        //     TDispatchOptions options;
+        //     options.FinalEvents.emplace_back(TEvPersQueue::EvPeriodicTopicStats);
+        //     runtime->DispatchEvents(options);
+        // }
+
+        // // Ждем обработки
+        // {
+        //     TDispatchOptions options;
+        //     options.FinalEvents.emplace_back(TEvPersQueue::EvPeriodicTopicStats);
+        //     runtime->DispatchEvents(options);
+        // }
+
+        // 3. Небольшая задержка для гарантии обновления метрик
+        Sleep(TDuration::Seconds(10));
+
+        Cerr << TInstant::Now() << "Getting counters" << Endl;
+        auto counters = testServer.KikimrServer->GetRuntime()->GetAppData(0).Counters;
+        auto dbGroup = GetServiceCounters(counters, "topics", false);
+        TStringStream countersStr;
+        dbGroup->OutputPlainText(countersStr);
+        TString countersString = countersStr.Str();
+
+        Cerr << countersString << Endl;
+        std::ofstream out("counters_output.txt");
+        out << countersString;
+        out.close();
     }
 
     Y_UNIT_TEST(ProduceMetrics) {

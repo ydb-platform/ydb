@@ -731,8 +731,8 @@ private:
     }
 
     void CheckFinishedByOffsets() {
-        if (Clusters.empty()
-            || SourceParams.GetStreamingMode() 
+        if (SourceParams.GetStreamingMode()
+            || Clusters.empty()
             || FinishedByOffsets) {
             return;
         }

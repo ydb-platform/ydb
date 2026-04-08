@@ -239,6 +239,63 @@ assert len(EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN) == len(
 ), "Handlers list must be the same"
 
 
+def _data_shard_devui_mon_paths_with_enforce(datashard_tablet_id):
+    q = f'TabletID={datashard_tablet_id}'
+    mon_ok = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    }
+    return {
+        f'/tablets/app/secure?{q}': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 403,
+            'monitoring@builtin': 403,
+            'root@builtin': 200,
+        },
+        f'/tablets/app?{q}': mon_ok,
+        f'/tablets?{q}': mon_ok,
+    }
+
+
+def _data_shard_admin_actions_with_enforce(datashard_tablet_id):
+    forbidden_on_app = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 403,
+        'root@builtin': 403,
+    }
+    allowed_on_secure = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 403,
+        'root@builtin': 200,
+    }
+    paths = []
+    for suffix in (
+        'action=cleanup-borrowed-parts',
+        'action=reset-schema-version',
+        'action=key-access-sample',
+        'page=volatile-txs',
+        'page=change-sender',
+    ):
+        paths.append(f'TabletID={datashard_tablet_id}&{suffix}')
+    result = {}
+    for p in paths:
+        result[f'/tablets/app?{p}'] = forbidden_on_app
+        result[f'/tablets/app/secure?{p}'] = allowed_on_secure
+    return result
+
+
 def _test_endpoint(endpoint_url, endpoint_path, token, expected_status):
     headers = {}
     if token is not None:
@@ -277,6 +334,26 @@ def test_with_enforce_user_token(ydb_cluster_with_enforce_user_token):
 
 def test_without_enforce_user_token(ydb_cluster_without_enforce_user_token):
     _test_endpoints(ydb_cluster_without_enforce_user_token, EXPECTED_RESULTS_WITHOUT_ENFORCE_USER_TOKEN)
+
+
+def test_data_shard_devui_mon_paths_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token_and_datashard_tablet,
+):
+    tid = ydb_cluster_with_enforce_user_token_and_datashard_tablet.datashard_tablet_id
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token_and_datashard_tablet,
+        _data_shard_devui_mon_paths_with_enforce(tid),
+    )
+
+
+def test_data_shard_admin_actions_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token_and_datashard_tablet,
+):
+    tid = ydb_cluster_with_enforce_user_token_and_datashard_tablet.datashard_tablet_id
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token_and_datashard_tablet,
+        _data_shard_admin_actions_with_enforce(tid),
+    )
 
 
 def test_with_require_counters_authentication(ydb_cluster_with_require_counters_auth):

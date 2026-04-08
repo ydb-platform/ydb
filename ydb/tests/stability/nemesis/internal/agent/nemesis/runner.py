@@ -1,7 +1,28 @@
+import inspect
 import io
 import logging
 import threading
 import time
+import traceback
+
+from ydb.tests.stability.nemesis.internal.nemesis.monitored_actor import NEMESIS_EXECUTION_LOGGER
+
+
+def _invoke_fault(method, payload):
+    """Call inject/extract; tools-library actors use no-arg methods, app actors use optional payload."""
+    sig = inspect.signature(method)
+    if len(sig.parameters) <= 1:
+        method()
+    else:
+        method({} if payload is None else payload)
+
+
+def _invoke_inject(runner, payload):
+    _invoke_fault(runner.inject_fault, payload)
+
+
+def _invoke_extract(runner, payload):
+    _invoke_fault(runner.extract_fault, payload)
 
 
 class NemesisManager:
@@ -9,7 +30,13 @@ class NemesisManager:
         self.processes = []
         self.processes_lock = threading.Lock()
 
-    def start_process(self, type_name: str, runner, action='inject'):
+    def start_process(
+        self,
+        type_name: str,
+        runner,
+        action='inject',
+        payload=None,
+    ):
         with self.processes_lock:
             proc_id = len(self.processes)
             proc_data = {
@@ -23,12 +50,15 @@ class NemesisManager:
             self.processes.append(proc_data)
 
         # Start process in a daemon thread
-        thread = threading.Thread(target=self._run, args=(proc_id, runner, action))
+        thread = threading.Thread(
+            target=self._run,
+            args=(proc_id, runner, action, type_name, payload),
+        )
         thread.daemon = True
         thread.start()
         return proc_data
 
-    def _run(self, proc_id, runner, action):
+    def _run(self, proc_id, runner, action, type_name, payload):
         try:
             # It's a nemesis runner
             log_capture_string = io.StringIO()
@@ -45,26 +75,29 @@ class NemesisManager:
             def execute_with_logging():
                 thread_id = threading.get_ident()
                 handler = ThreadLocalHandler(log_capture_string, thread_id)
-                handler.setLevel(logging.DEBUG)  # Capture all levels
+                handler.setLevel(logging.DEBUG)
 
-                # Configure root logger to ensure it processes all logs
-                root_logger = logging.getLogger()
-                original_level = root_logger.level
-                root_logger.setLevel(logging.DEBUG)
-
-                # Add handler to root logger
-                root_logger.addHandler(handler)
+                exec_logger = logging.getLogger(NEMESIS_EXECUTION_LOGGER)
+                original_level = exec_logger.level
+                exec_logger.setLevel(logging.DEBUG)
+                exec_logger.addHandler(handler)
 
                 try:
                     if action == 'inject':
-                        runner.inject_fault()
+                        _invoke_inject(runner, payload)
                     elif action == 'extract':
-                        runner.extract_fault()
+                        _invoke_extract(runner, payload)
                     else:
                         raise Exception('Unknown action type')
+                except Exception:
+                    if action == 'inject':
+                        runner.on_failed_inject_fault()
+                    elif action == 'extract':
+                        runner.on_failed_extract_fault()
+                    raise
                 finally:
-                    root_logger.removeHandler(handler)
-                    root_logger.setLevel(original_level)
+                    exec_logger.removeHandler(handler)
+                    exec_logger.setLevel(original_level)
 
             # Background task to flush logs using threading.Timer
             stop_flushing = threading.Event()
@@ -96,7 +129,6 @@ class NemesisManager:
                 stop_flushing.set()
                 flush_thread.join(timeout=2)
             except Exception as e:
-                import traceback
                 final_logs = log_capture_string.getvalue()
                 stop_flushing.set()
                 flush_thread.join(timeout=2)
@@ -107,7 +139,6 @@ class NemesisManager:
                         self.processes[proc_id]['ret_code'] = 1
             log_capture_string.close()
         except Exception as e:
-            import traceback
             with self.processes_lock:
                 if proc_id < len(self.processes):
                     self.processes[proc_id]['logs'] += f"\nError setting up process: {str(e)}\n{traceback.format_exc()}"

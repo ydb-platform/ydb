@@ -2592,14 +2592,11 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], "MessageBody-0");
         }
 
-        // Wait for the message to be moved to the DLQ.
-        Sleep(TDuration::Seconds(5));
-
         {
             // Reading from DLQ queue should return the message.
             auto json = ReceiveMessage({
                 {"QueueUrl", GetByPath<TString>(json1, "QueueUrl")},
-                {"WaitTimeSeconds", 1}
+                {"WaitTimeSeconds", 10}
             });
             UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], "MessageBody-0");
         }

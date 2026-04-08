@@ -5,6 +5,7 @@
 #include <util/generic/map.h>
 
 #include <array>
+#include <optional>
 #include <vector>
 
 namespace NKikimrConfig {
@@ -29,17 +30,35 @@ namespace NKikimr::NAutoConfigInitializer {
         i16 MaxThreadCount = 0;
     };
 
+    enum class ERealPoolKind : ui8 {
+        Common = 0,
+        System = 1,
+        User = 2,
+        Batch = 3,
+        IO = 4,
+        IC = 5,
+    };
+
     static constexpr size_t PoolKindsCount = 5;
+    static_assert(static_cast<size_t>(EPoolKind::IC) + 1 == PoolKindsCount);
     static constexpr i16 MaxPreparedCpuCount = 30;
 
-    using TCpuTableRow = std::array<TPoolConfig, PoolKindsCount>;
-    using TCpuTable = std::array<TCpuTableRow, MaxPreparedCpuCount + 1>;
+    struct TAdjacentPoolConfig {
+        std::array<ui8, PoolKindsCount> Pools{};
+        ui8 Count = 0;
+    };
 
-    struct TAutoConfigOptions {
-        bool IsDynamicNode = false;
-        bool UseTinySchedulerConfig = false;
-        bool EnableTinyConfiguration = true;
-        const TCpuTable* CpuTable = nullptr;
+    struct TRealPoolConfig {
+        ERealPoolKind Kind = ERealPoolKind::Common;
+        i16 ThreadCount = 0;
+        i16 MaxThreadCount = 0;
+        ui8 Priority = 0;
+        std::optional<bool> HasSharedThread;
+        std::optional<ui64> SpinThreshold;
+        std::optional<ui32> TimePerMailboxMicroSecs;
+        std::optional<i32> MaxAvgPingDeviation;
+        std::optional<ui32> ForcedForeignSlots;
+        std::optional<TAdjacentPoolConfig> AdjacentPools;
     };
 
     struct TASPools {
@@ -99,6 +118,44 @@ namespace NKikimr::NAutoConfigInitializer {
                 return {30, 20, 10, 0, 40};
             }
         }
+    };
+
+    struct TCpuTableRow {
+        std::array<TRealPoolConfig, PoolKindsCount> RealPools{};
+        std::array<ui8, PoolKindsCount> LogicalToRealPool{};
+        ui8 RealPoolCount = 0;
+    };
+
+    struct ICpuTable {
+        virtual ~ICpuTable() = default;
+        virtual TCpuTableRow operator[](i16 cpuCount) const = 0;
+    };
+
+    struct TDefaultCpuTable : ICpuTable {
+        std::array<TCpuTableRow, MaxPreparedCpuCount + 1> Rows{};
+
+        TDefaultCpuTable() = default;
+
+        TDefaultCpuTable(std::array<TCpuTableRow, MaxPreparedCpuCount + 1> rows)
+            : Rows(rows)
+        {}
+
+        TCpuTableRow operator[](i16 cpuCount) const override;
+
+        TCpuTableRow& GetPreparedRow(size_t idx) {
+            return Rows[idx];
+        }
+
+        const TCpuTableRow& GetPreparedRow(size_t idx) const {
+            return Rows[idx];
+        }
+    };
+
+    struct TAutoConfigOptions {
+        bool IsDynamicNode = false;
+        bool UseTinySchedulerConfig = false;
+        bool EnableTinyConfiguration = true;
+        const ICpuTable* CpuTable = nullptr;
     };
 
     TASPools GetASPools(i16 cpuCount = 0);

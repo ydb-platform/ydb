@@ -9,11 +9,16 @@
 namespace {
 
     using NKikimr::NAutoConfigInitializer::EPoolKind;
+    using NKikimr::NAutoConfigInitializer::ERealPoolKind;
+    using NKikimr::NAutoConfigInitializer::ICpuTable;
     using NKikimr::NAutoConfigInitializer::MaxPreparedCpuCount;
     using NKikimr::NAutoConfigInitializer::PoolKindsCount;
     using NKikimr::NAutoConfigInitializer::TAutoConfigOptions;
-    using NKikimr::NAutoConfigInitializer::TCpuTable;
+    using NKikimr::NAutoConfigInitializer::TASPools;
+    using NKikimr::NAutoConfigInitializer::TCpuTableRow;
+    using NKikimr::NAutoConfigInitializer::TDefaultCpuTable;
     using NKikimr::NAutoConfigInitializer::TPoolConfig;
+    using NKikimr::NAutoConfigInitializer::TRealPoolConfig;
 
     i16 GetCpuCount() {
         TAffinity affinity;
@@ -37,107 +42,362 @@ namespace {
     constexpr ::arc_ui64 SchedulerDefaultResolution = 64;
     constexpr ::arc_ui64 SchedulerTinyResolution = 1024;
 
-    const TCpuTable ComputeCpuTable {{
-        {{{0, 0},  {0, 0},   {0, 0}, {0, 0}, {0, 0}}},     // 0
-        {{{1, 1},  {0, 1},   {0, 1}, {0, 0}, {0, 0}}},     // 1
-        {{{1, 2},  {0, 2},   {1, 1}, {0, 0}, {0, 1}}},     // 2
-        {{{1, 3},  {0, 3},   {1, 1}, {0, 0}, {1, 1}}},     // 3
-        {{{1, 3},  {1, 4},   {1, 1}, {0, 0}, {1, 2}}},     // 4
-        {{{1, 3},  {2, 5},   {1, 1}, {0, 0}, {1, 2}}},     // 5
-        {{{1, 3},  {3, 6},   {1, 1}, {0, 0}, {1, 3}}},     // 6
-        {{{2, 4},  {3, 7},   {1, 2}, {0, 0}, {1, 3}}},     // 7
-        {{{2, 4},  {4, 8},   {1, 2}, {0, 0}, {1, 4}}},     // 8
-        {{{2, 5},  {4, 9},   {2, 3}, {0, 0}, {1, 4}}},     // 9
-        {{{2, 5},  {5, 10},  {2, 3}, {0, 0}, {1, 5}}},     // 10
-        {{{2, 6},  {5, 11},  {2, 3}, {0, 0}, {2, 5}}},     // 11
-        {{{2, 6},  {6, 12},  {2, 3}, {0, 0}, {2, 6}}},     // 12
-        {{{3, 7},  {6, 13},  {2, 3}, {0, 0}, {2, 6}}},     // 13
-        {{{3, 7},  {6, 14},  {2, 3}, {0, 0}, {3, 7}}},     // 14
-        {{{3, 8},  {7, 15},  {2, 4}, {0, 0}, {3, 7}}},     // 15
-        {{{3, 8},  {8, 16},  {2, 4}, {0, 0}, {3, 8}}},     // 16
-        {{{3, 9},  {9, 17},  {2, 4}, {0, 0}, {3, 8}}},     // 17
-        {{{3, 9},  {9, 18},  {3, 5}, {0, 0}, {3, 9}}},     // 18
-        {{{3, 10}, {9, 19},  {3, 5}, {0, 0}, {4, 9}}},     // 19
-        {{{4, 10}, {9, 20},  {3, 5}, {0, 0}, {4, 10}}},    // 20
-        {{{4, 11}, {10, 21}, {3, 5}, {0, 0}, {4, 10}}},    // 21
-        {{{4, 11}, {11, 22}, {3, 5}, {0, 0}, {4, 11}}},    // 22
-        {{{4, 12}, {12, 23}, {3, 6}, {0, 0}, {4, 11}}},    // 23
-        {{{4, 12}, {12, 24}, {3, 6}, {0, 0}, {5, 12}}},    // 24
-        {{{5, 13}, {12, 25}, {3, 6}, {0, 0}, {5, 12}}},    // 25
-        {{{5, 13}, {12, 26}, {4, 7}, {0, 0}, {5, 13}}},    // 26
-        {{{5, 14}, {13, 27}, {4, 7}, {0, 0}, {5, 13}}},    // 27
-        {{{5, 14}, {14, 28}, {4, 7}, {0, 0}, {5, 14}}},    // 28
-        {{{5, 15}, {14, 29}, {4, 8}, {0, 0}, {6, 14}}},    // 29
-        {{{5, 15}, {15, 30}, {4, 8}, {0, 0}, {6, 15}}},    // 30
+    constexpr TASPools GetDefaultASPoolsForCpuCount(i16 cpuCount) {
+        if (cpuCount >= 4) {
+            return TASPools{};
+        } else if (cpuCount == 3) {
+            return TASPools{.SystemPoolId = 0, .UserPoolId = 0, .BatchPoolId = 1, .IOPoolId = 2, .ICPoolId = 3};
+        } else {
+            return TASPools{.SystemPoolId = 0, .UserPoolId = 0, .BatchPoolId = 0, .IOPoolId = 1, .ICPoolId = 0};
+        }
+    }
+
+    constexpr std::array<ui8, PoolKindsCount> MakeLogicalToRealPool(
+        ui8 system,
+        ui8 user,
+        ui8 batch,
+        ui8 io,
+        ui8 ic)
+    {
+        return {{
+            system,
+            user,
+            batch,
+            io,
+            ic,
+        }};
+    }
+
+    constexpr TRealPoolConfig MakeRealPoolConfig(
+        ERealPoolKind kind,
+        i16 threadCount,
+        i16 maxThreadCount,
+        ui8 priority)
+    {
+        return TRealPoolConfig{
+            .Kind = kind,
+            .ThreadCount = threadCount,
+            .MaxThreadCount = maxThreadCount,
+            .Priority = priority,
+        };
+    }
+
+    constexpr TRealPoolConfig WithSharedThread(TRealPoolConfig cfg, bool hasSharedThread) {
+        cfg.HasSharedThread = hasSharedThread;
+        return cfg;
+    }
+
+    constexpr TRealPoolConfig WithSpinThreshold(TRealPoolConfig cfg, ui64 spinThreshold) {
+        cfg.SpinThreshold = spinThreshold;
+        return cfg;
+    }
+
+    constexpr TRealPoolConfig WithForcedForeignSlots(TRealPoolConfig cfg, ui32 forcedForeignSlots) {
+        cfg.ForcedForeignSlots = forcedForeignSlots;
+        return cfg;
+    }
+
+    constexpr TRealPoolConfig WithAdjacentPools(
+        TRealPoolConfig cfg,
+        std::array<ui8, PoolKindsCount> adjacentPools,
+        ui8 adjacentPoolCount)
+    {
+        cfg.AdjacentPools = NKikimr::NAutoConfigInitializer::TAdjacentPoolConfig{
+            .Pools = adjacentPools,
+            .Count = adjacentPoolCount,
+        };
+        return cfg;
+    }
+
+    constexpr TCpuTableRow MakeCpuTableRow(
+        std::array<TRealPoolConfig, PoolKindsCount> realPools,
+        std::array<ui8, PoolKindsCount> logicalToRealPool,
+        ui8 realPoolCount)
+    {
+        return TCpuTableRow{
+            .RealPools = realPools,
+            .LogicalToRealPool = logicalToRealPool,
+            .RealPoolCount = realPoolCount,
+        };
+    }
+
+    constexpr TCpuTableRow MakeFivePoolRow(
+        TPoolConfig system,
+        TPoolConfig user,
+        TPoolConfig batch,
+        TPoolConfig io,
+        TPoolConfig ic)
+    {
+        return MakeCpuTableRow(
+            {{
+                MakeRealPoolConfig(ERealPoolKind::System, system.ThreadCount, system.MaxThreadCount, 30),
+                MakeRealPoolConfig(ERealPoolKind::User, user.ThreadCount, user.MaxThreadCount, 20),
+                MakeRealPoolConfig(ERealPoolKind::Batch, batch.ThreadCount, batch.MaxThreadCount, 10),
+                MakeRealPoolConfig(ERealPoolKind::IO, io.ThreadCount, io.MaxThreadCount, 0),
+                MakeRealPoolConfig(ERealPoolKind::IC, ic.ThreadCount, ic.MaxThreadCount, 40),
+            }},
+            MakeLogicalToRealPool(0, 1, 2, 3, 4),
+            5);
+    }
+
+    constexpr TCpuTableRow MakeFourPoolRow(
+        TPoolConfig common,
+        TPoolConfig batch,
+        TPoolConfig io,
+        TPoolConfig ic)
+    {
+        return MakeCpuTableRow(
+            {{
+                MakeRealPoolConfig(ERealPoolKind::Common, common.ThreadCount, common.MaxThreadCount, 30),
+                MakeRealPoolConfig(ERealPoolKind::Batch, batch.ThreadCount, batch.MaxThreadCount, 10),
+                MakeRealPoolConfig(ERealPoolKind::IO, io.ThreadCount, io.MaxThreadCount, 0),
+                MakeRealPoolConfig(ERealPoolKind::IC, ic.ThreadCount, ic.MaxThreadCount, 40),
+                {},
+            }},
+            MakeLogicalToRealPool(0, 0, 1, 2, 3),
+            4);
+    }
+
+    constexpr TCpuTableRow MakeTwoPoolRow(
+        TPoolConfig common,
+        TPoolConfig io)
+    {
+        return MakeCpuTableRow(
+            {{
+                MakeRealPoolConfig(ERealPoolKind::Common, common.ThreadCount, common.MaxThreadCount, 40),
+                MakeRealPoolConfig(ERealPoolKind::IO, io.ThreadCount, io.MaxThreadCount, 0),
+                {},
+                {},
+                {},
+            }},
+            MakeLogicalToRealPool(0, 0, 0, 1, 0),
+            2);
+    }
+
+    constexpr TCpuTableRow MakeEmptyRow() {
+        return MakeCpuTableRow({}, {}, 0);
+    }
+
+    constexpr TCpuTableRow MakeTinyRow1() {
+        return MakeCpuTableRow(
+            {{
+                WithForcedForeignSlots(
+                    WithSpinThreshold(
+                        WithSharedThread(
+                            MakeRealPoolConfig(ERealPoolKind::System, 0, 0, 30), false),
+                        0),
+                    0),
+                WithForcedForeignSlots(
+                    WithSpinThreshold(
+                        WithSharedThread(
+                            MakeRealPoolConfig(ERealPoolKind::User, 0, 0, 20), false),
+                        0),
+                    0),
+                WithForcedForeignSlots(
+                    WithSpinThreshold(
+                        WithSharedThread(
+                            MakeRealPoolConfig(ERealPoolKind::Batch, 0, 0, 10), false),
+                        0),
+                    0),
+                MakeRealPoolConfig(ERealPoolKind::IO, 1, 1, 0),
+                WithAdjacentPools(
+                    WithForcedForeignSlots(
+                        WithSpinThreshold(
+                            WithSharedThread(
+                                MakeRealPoolConfig(ERealPoolKind::IC, 1, 1, 40), true),
+                            0),
+                        0),
+                    {{0, 1, 2, 0, 0}},
+                    3),
+            }},
+            MakeLogicalToRealPool(1, 0, 2, 3, 4),
+            5);
+    }
+
+    constexpr TCpuTableRow MakeTinyRow2() {
+        return MakeCpuTableRow(
+            {{
+                WithForcedForeignSlots(
+                    WithSpinThreshold(
+                        WithSharedThread(
+                            MakeRealPoolConfig(ERealPoolKind::System, 0, 0, 30), false),
+                        0),
+                    1),
+                WithAdjacentPools(
+                    WithForcedForeignSlots(
+                        WithSpinThreshold(
+                            WithSharedThread(
+                                MakeRealPoolConfig(ERealPoolKind::User, 1, 1, 20), true),
+                            0),
+                        1),
+                    {{2, 0, 0, 0, 0}},
+                    1),
+                WithForcedForeignSlots(
+                    WithSpinThreshold(
+                        WithSharedThread(
+                            MakeRealPoolConfig(ERealPoolKind::Batch, 0, 0, 10), false),
+                        0),
+                    0),
+                MakeRealPoolConfig(ERealPoolKind::IO, 1, 1, 0),
+                WithAdjacentPools(
+                    WithForcedForeignSlots(
+                        WithSpinThreshold(
+                            WithSharedThread(
+                                MakeRealPoolConfig(ERealPoolKind::IC, 1, 1, 40), true),
+                            0),
+                        1),
+                    {{0, 0, 0, 0, 0}},
+                    1),
+            }},
+            MakeLogicalToRealPool(1, 0, 2, 3, 4),
+            5);
+    }
+
+    constexpr TCpuTableRow MakeTinyRow3() {
+        return MakeCpuTableRow(
+            {{
+                WithForcedForeignSlots(
+                    WithSpinThreshold(
+                        WithSharedThread(
+                            MakeRealPoolConfig(ERealPoolKind::System, 1, 1, 30), true),
+                        0),
+                    1),
+                WithAdjacentPools(
+                    WithForcedForeignSlots(
+                        WithSpinThreshold(
+                            WithSharedThread(
+                                MakeRealPoolConfig(ERealPoolKind::User, 1, 1, 20), true),
+                            0),
+                        2),
+                    {{2, 0, 0, 0, 0}},
+                    1),
+                WithForcedForeignSlots(
+                    WithSpinThreshold(
+                        WithSharedThread(
+                            MakeRealPoolConfig(ERealPoolKind::Batch, 0, 0, 10), false),
+                        0),
+                    0),
+                MakeRealPoolConfig(ERealPoolKind::IO, 1, 1, 0),
+                WithForcedForeignSlots(
+                    WithSpinThreshold(
+                        WithSharedThread(
+                            MakeRealPoolConfig(ERealPoolKind::IC, 1, 1, 40), true),
+                        0),
+                    1),
+            }},
+            MakeLogicalToRealPool(1, 0, 2, 3, 4),
+            5);
+    }
+
+    const TDefaultCpuTable ComputeCpuTable = {{
+        MakeEmptyRow(),                                                  // 0
+        MakeTwoPoolRow({1, 1}, {0, 0}),                                  // 1
+        MakeTwoPoolRow({2, 2}, {0, 0}),                                  // 2
+        MakeFourPoolRow({1, 3}, {1, 1}, {0, 0}, {1, 1}),                 // 3
+        MakeFivePoolRow({1, 3},  {1, 4},   {1, 1}, {0, 0}, {1, 2}),      // 4
+        MakeFivePoolRow({1, 3},  {2, 5},   {1, 1}, {0, 0}, {1, 2}),      // 5
+        MakeFivePoolRow({1, 3},  {3, 6},   {1, 1}, {0, 0}, {1, 3}),      // 6
+        MakeFivePoolRow({2, 4},  {3, 7},   {1, 2}, {0, 0}, {1, 3}),      // 7
+        MakeFivePoolRow({2, 4},  {4, 8},   {1, 2}, {0, 0}, {1, 4}),      // 8
+        MakeFivePoolRow({2, 5},  {4, 9},   {2, 3}, {0, 0}, {1, 4}),      // 9
+        MakeFivePoolRow({2, 5},  {5, 10},  {2, 3}, {0, 0}, {1, 5}),      // 10
+        MakeFivePoolRow({2, 6},  {5, 11},  {2, 3}, {0, 0}, {2, 5}),      // 11
+        MakeFivePoolRow({2, 6},  {6, 12},  {2, 3}, {0, 0}, {2, 6}),      // 12
+        MakeFivePoolRow({3, 7},  {6, 13},  {2, 3}, {0, 0}, {2, 6}),      // 13
+        MakeFivePoolRow({3, 7},  {6, 14},  {2, 3}, {0, 0}, {3, 7}),      // 14
+        MakeFivePoolRow({3, 8},  {7, 15},  {2, 4}, {0, 0}, {3, 7}),      // 15
+        MakeFivePoolRow({3, 8},  {8, 16},  {2, 4}, {0, 0}, {3, 8}),      // 16
+        MakeFivePoolRow({3, 9},  {9, 17},  {2, 4}, {0, 0}, {3, 8}),      // 17
+        MakeFivePoolRow({3, 9},  {9, 18},  {3, 5}, {0, 0}, {3, 9}),      // 18
+        MakeFivePoolRow({3, 10}, {9, 19},  {3, 5}, {0, 0}, {4, 9}),      // 19
+        MakeFivePoolRow({4, 10}, {9, 20},  {3, 5}, {0, 0}, {4, 10}),     // 20
+        MakeFivePoolRow({4, 11}, {10, 21}, {3, 5}, {0, 0}, {4, 10}),     // 21
+        MakeFivePoolRow({4, 11}, {11, 22}, {3, 5}, {0, 0}, {4, 11}),     // 22
+        MakeFivePoolRow({4, 12}, {12, 23}, {3, 6}, {0, 0}, {4, 11}),     // 23
+        MakeFivePoolRow({4, 12}, {12, 24}, {3, 6}, {0, 0}, {5, 12}),     // 24
+        MakeFivePoolRow({5, 13}, {12, 25}, {3, 6}, {0, 0}, {5, 12}),     // 25
+        MakeFivePoolRow({5, 13}, {12, 26}, {4, 7}, {0, 0}, {5, 13}),     // 26
+        MakeFivePoolRow({5, 14}, {13, 27}, {4, 7}, {0, 0}, {5, 13}),     // 27
+        MakeFivePoolRow({5, 14}, {14, 28}, {4, 7}, {0, 0}, {5, 14}),     // 28
+        MakeFivePoolRow({5, 15}, {14, 29}, {4, 8}, {0, 0}, {6, 14}),     // 29
+        MakeFivePoolRow({5, 15}, {15, 30}, {4, 8}, {0, 0}, {6, 15}),     // 30
     }};
 
-    const TCpuTable HybridCpuTable {{
-        {{{0, 0},   {0, 0},   {0, 0}, {0, 0}, {0, 0}}},     // 0
-        {{{1, 1},   {0, 1},   {0, 1}, {0, 0}, {0, 0}}},     // 1
-        {{{1, 2},   {0, 2},   {1, 1}, {0, 0}, {0, 1}}},     // 2
-        {{{1, 3},   {0, 3},   {1, 1}, {0, 0}, {1, 1}}},     // 3
-        {{{1, 3},   {1, 4},   {1, 1}, {0, 0}, {1, 2}}},     // 4
-        {{{1, 3},   {2, 5},   {1, 1}, {0, 0}, {1, 2}}},     // 5
-        {{{1, 3},   {2, 6},   {1, 1}, {0, 0}, {2, 3}}},     // 6
-        {{{2, 3},   {2, 7},   {1, 2}, {0, 0}, {2, 3}}},     // 7
-        {{{2, 3},   {3, 8},   {1, 2}, {0, 0}, {2, 4}}},     // 8
-        {{{2, 4},   {3, 9},   {1, 2}, {0, 0}, {3, 4}}},     // 9
-        {{{3, 4},   {3, 10},  {1, 2}, {0, 0}, {3, 5}}},     // 10
-        {{{3, 5},   {4, 11},  {1, 2}, {0, 0}, {3, 5}}},     // 11
-        {{{3, 5},   {4, 12},  {1, 3}, {0, 0}, {4, 6}}},     // 12
-        {{{4, 6},   {4, 13},  {1, 3}, {0, 0}, {4, 6}}},     // 13
-        {{{4, 6},   {5, 14},  {1, 3}, {0, 0}, {4, 7}}},     // 14
-        {{{4, 7},   {5, 15},  {1, 3}, {0, 0}, {5, 7}}},     // 15
-        {{{5, 7},   {5, 16},  {1, 3}, {0, 0}, {5, 8}}},     // 16
-        {{{5, 8},   {6, 17},  {1, 4}, {0, 0}, {5, 8}}},     // 17
-        {{{5, 8},   {6, 18},  {1, 4}, {0, 0}, {6, 9}}},     // 18
-        {{{6, 9},   {6, 19},  {1, 4}, {0, 0}, {6, 9}}},     // 19
-        {{{6, 9},   {7, 20},  {1, 4}, {0, 0}, {6, 10}}},    // 20
-        {{{6, 10},  {7, 21},  {1, 4}, {0, 0}, {7, 10}}},    // 21
-        {{{7, 10},  {7, 22},  {1, 5}, {0, 0}, {7, 11}}},    // 22
-        {{{7, 11},  {8, 23},  {1, 5}, {0, 0}, {7, 11}}},    // 23
-        {{{7, 11},  {8, 24},  {1, 5}, {0, 0}, {8, 12}}},    // 24
-        {{{8, 12},  {8, 25},  {1, 5}, {0, 0}, {8, 12}}},    // 25
-        {{{8, 12},  {9, 26},  {1, 5}, {0, 0}, {8, 13}}},    // 26
-        {{{8, 13},  {9, 27},  {1, 6}, {0, 0}, {9, 13}}},    // 27
-        {{{9, 13},  {9, 28},  {1, 6}, {0, 0}, {9, 14}}},    // 28
-        {{{9, 14},  {10, 29}, {1, 6}, {0, 0}, {9, 14}}},    // 29
-        {{{9, 14},  {10, 30}, {1, 6}, {0, 0}, {10, 15}}},   // 30
+    const TDefaultCpuTable HybridCpuTable = {{
+        MakeEmptyRow(),                                                   // 0
+        MakeTwoPoolRow({1, 1}, {0, 0}),                                   // 1
+        MakeTwoPoolRow({2, 2}, {0, 0}),                                   // 2
+        MakeFourPoolRow({1, 3}, {1, 1}, {0, 0}, {1, 1}),                  // 3
+        MakeFivePoolRow({1, 3},   {1, 4},   {1, 1}, {0, 0}, {1, 2}),      // 4
+        MakeFivePoolRow({1, 3},   {2, 5},   {1, 1}, {0, 0}, {1, 2}),      // 5
+        MakeFivePoolRow({1, 3},   {2, 6},   {1, 1}, {0, 0}, {2, 3}),      // 6
+        MakeFivePoolRow({2, 3},   {2, 7},   {1, 2}, {0, 0}, {2, 3}),      // 7
+        MakeFivePoolRow({2, 3},   {3, 8},   {1, 2}, {0, 0}, {2, 4}),      // 8
+        MakeFivePoolRow({2, 4},   {3, 9},   {1, 2}, {0, 0}, {3, 4}),      // 9
+        MakeFivePoolRow({3, 4},   {3, 10},  {1, 2}, {0, 0}, {3, 5}),      // 10
+        MakeFivePoolRow({3, 5},   {4, 11},  {1, 2}, {0, 0}, {3, 5}),      // 11
+        MakeFivePoolRow({3, 5},   {4, 12},  {1, 3}, {0, 0}, {4, 6}),      // 12
+        MakeFivePoolRow({4, 6},   {4, 13},  {1, 3}, {0, 0}, {4, 6}),      // 13
+        MakeFivePoolRow({4, 6},   {5, 14},  {1, 3}, {0, 0}, {4, 7}),      // 14
+        MakeFivePoolRow({4, 7},   {5, 15},  {1, 3}, {0, 0}, {5, 7}),      // 15
+        MakeFivePoolRow({5, 7},   {5, 16},  {1, 3}, {0, 0}, {5, 8}),      // 16
+        MakeFivePoolRow({5, 8},   {6, 17},  {1, 4}, {0, 0}, {5, 8}),      // 17
+        MakeFivePoolRow({5, 8},   {6, 18},  {1, 4}, {0, 0}, {6, 9}),      // 18
+        MakeFivePoolRow({6, 9},   {6, 19},  {1, 4}, {0, 0}, {6, 9}),      // 19
+        MakeFivePoolRow({6, 9},   {7, 20},  {1, 4}, {0, 0}, {6, 10}),     // 20
+        MakeFivePoolRow({6, 10},  {7, 21},  {1, 4}, {0, 0}, {7, 10}),     // 21
+        MakeFivePoolRow({7, 10},  {7, 22},  {1, 5}, {0, 0}, {7, 11}),     // 22
+        MakeFivePoolRow({7, 11},  {8, 23},  {1, 5}, {0, 0}, {7, 11}),     // 23
+        MakeFivePoolRow({7, 11},  {8, 24},  {1, 5}, {0, 0}, {8, 12}),     // 24
+        MakeFivePoolRow({8, 12},  {8, 25},  {1, 5}, {0, 0}, {8, 12}),     // 25
+        MakeFivePoolRow({8, 12},  {9, 26},  {1, 5}, {0, 0}, {8, 13}),     // 26
+        MakeFivePoolRow({8, 13},  {9, 27},  {1, 6}, {0, 0}, {9, 13}),     // 27
+        MakeFivePoolRow({9, 13},  {9, 28},  {1, 6}, {0, 0}, {9, 14}),     // 28
+        MakeFivePoolRow({9, 14},  {10, 29}, {1, 6}, {0, 0}, {9, 14}),     // 29
+        MakeFivePoolRow({9, 14},  {10, 30}, {1, 6}, {0, 0}, {10, 15}),    // 30
     }};
 
-    const TCpuTable StorageCpuTable {{
-        {{{0, 0},   {0, 0},  {0, 0}, {0, 0}, {0, 0}}},     // 0
-        {{{1, 1},   {0, 1},  {0, 1}, {0, 0}, {0, 0}}},     // 1
-        {{{1, 2},   {0, 2},  {1, 1}, {0, 0}, {0, 1}}},     // 2
-        {{{1, 3},   {0, 3},  {1, 1}, {0, 0}, {1, 1}}},     // 3
-        {{{1, 4},   {1, 4},  {1, 1}, {0, 0}, {1, 2}}},     // 4
-        {{{2, 5},   {1, 5},  {1, 1}, {0, 0}, {1, 2}}},     // 5
-        {{{3, 6},   {1, 6},  {1, 1}, {0, 0}, {1, 3}}},     // 6
-        {{{4, 7},   {1, 7},  {1, 2}, {0, 0}, {1, 3}}},     // 7
-        {{{5, 8},   {1, 8},  {1, 2}, {0, 0}, {1, 4}}},     // 8
-        {{{5, 9},   {1, 9},  {1, 2}, {0, 0}, {2, 4}}},     // 9
-        {{{6, 10},  {1, 10}, {1, 2}, {0, 0}, {2, 5}}},     // 10
-        {{{6, 11},  {1, 11}, {2, 3}, {0, 0}, {2, 5}}},     // 11
-        {{{7, 12},  {1, 12}, {2, 3}, {0, 0}, {2, 6}}},     // 12
-        {{{8, 13},  {1, 13}, {2, 3}, {0, 0}, {2, 6}}},     // 13
-        {{{8, 14},  {1, 14}, {2, 3}, {0, 0}, {3, 7}}},     // 14
-        {{{9, 15},  {1, 15}, {2, 4}, {0, 0}, {3, 7}}},     // 15
-        {{{10, 16}, {1, 16}, {2, 4}, {0, 0}, {3, 8}}},     // 16
-        {{{11, 17}, {1, 17}, {2, 4}, {0, 0}, {3, 8}}},     // 17
-        {{{11, 18}, {1, 18}, {3, 5}, {0, 0}, {3, 9}}},     // 18
-        {{{11, 19}, {1, 19}, {3, 5}, {0, 0}, {4, 9}}},     // 19
-        {{{12, 20}, {1, 20}, {3, 5}, {0, 0}, {4, 10}}},    // 20
-        {{{13, 21}, {1, 21}, {3, 5}, {0, 0}, {4, 10}}},    // 21
-        {{{14, 22}, {1, 22}, {3, 6}, {0, 0}, {4, 11}}},    // 22
-        {{{15, 23}, {1, 23}, {3, 6}, {0, 0}, {4, 11}}},    // 23
-        {{{15, 24}, {1, 24}, {3, 6}, {0, 0}, {5, 12}}},    // 24
-        {{{16, 25}, {1, 25}, {3, 6}, {0, 0}, {5, 12}}},    // 25
-        {{{16, 26}, {1, 26}, {4, 7}, {0, 0}, {5, 13}}},    // 26
-        {{{17, 27}, {1, 27}, {4, 7}, {0, 0}, {5, 13}}},    // 27
-        {{{18, 28}, {1, 28}, {4, 7}, {0, 0}, {5, 14}}},    // 28
-        {{{18, 29}, {1, 29}, {4, 7}, {0, 0}, {6, 14}}},    // 29
-        {{{19, 30}, {1, 30}, {4, 8}, {0, 0}, {6, 15}}},    // 30
+    const TDefaultCpuTable StorageCpuTable = {{
+        MakeEmptyRow(),                                                  // 0
+        MakeTwoPoolRow({1, 1}, {0, 0}),                                  // 1
+        MakeTwoPoolRow({2, 2}, {0, 0}),                                  // 2
+        MakeFourPoolRow({1, 3}, {1, 1}, {0, 0}, {1, 1}),                 // 3
+        MakeFivePoolRow({1, 4},   {1, 4},  {1, 1}, {0, 0}, {1, 2}),      // 4
+        MakeFivePoolRow({2, 5},   {1, 5},  {1, 1}, {0, 0}, {1, 2}),      // 5
+        MakeFivePoolRow({3, 6},   {1, 6},  {1, 1}, {0, 0}, {1, 3}),      // 6
+        MakeFivePoolRow({4, 7},   {1, 7},  {1, 2}, {0, 0}, {1, 3}),      // 7
+        MakeFivePoolRow({5, 8},   {1, 8},  {1, 2}, {0, 0}, {1, 4}),      // 8
+        MakeFivePoolRow({5, 9},   {1, 9},  {1, 2}, {0, 0}, {2, 4}),      // 9
+        MakeFivePoolRow({6, 10},  {1, 10}, {1, 2}, {0, 0}, {2, 5}),      // 10
+        MakeFivePoolRow({6, 11},  {1, 11}, {2, 3}, {0, 0}, {2, 5}),      // 11
+        MakeFivePoolRow({7, 12},  {1, 12}, {2, 3}, {0, 0}, {2, 6}),      // 12
+        MakeFivePoolRow({8, 13},  {1, 13}, {2, 3}, {0, 0}, {2, 6}),      // 13
+        MakeFivePoolRow({8, 14},  {1, 14}, {2, 3}, {0, 0}, {3, 7}),      // 14
+        MakeFivePoolRow({9, 15},  {1, 15}, {2, 4}, {0, 0}, {3, 7}),      // 15
+        MakeFivePoolRow({10, 16}, {1, 16}, {2, 4}, {0, 0}, {3, 8}),      // 16
+        MakeFivePoolRow({11, 17}, {1, 17}, {2, 4}, {0, 0}, {3, 8}),      // 17
+        MakeFivePoolRow({11, 18}, {1, 18}, {3, 5}, {0, 0}, {3, 9}),      // 18
+        MakeFivePoolRow({11, 19}, {1, 19}, {3, 5}, {0, 0}, {4, 9}),      // 19
+        MakeFivePoolRow({12, 20}, {1, 20}, {3, 5}, {0, 0}, {4, 10}),     // 20
+        MakeFivePoolRow({13, 21}, {1, 21}, {3, 5}, {0, 0}, {4, 10}),     // 21
+        MakeFivePoolRow({14, 22}, {1, 22}, {3, 6}, {0, 0}, {4, 11}),     // 22
+        MakeFivePoolRow({15, 23}, {1, 23}, {3, 6}, {0, 0}, {4, 11}),     // 23
+        MakeFivePoolRow({15, 24}, {1, 24}, {3, 6}, {0, 0}, {5, 12}),     // 24
+        MakeFivePoolRow({16, 25}, {1, 25}, {3, 6}, {0, 0}, {5, 12}),     // 25
+        MakeFivePoolRow({16, 26}, {1, 26}, {4, 7}, {0, 0}, {5, 13}),     // 26
+        MakeFivePoolRow({17, 27}, {1, 27}, {4, 7}, {0, 0}, {5, 13}),     // 27
+        MakeFivePoolRow({18, 28}, {1, 28}, {4, 7}, {0, 0}, {5, 14}),     // 28
+        MakeFivePoolRow({18, 29}, {1, 29}, {4, 7}, {0, 0}, {6, 14}),     // 29
+        MakeFivePoolRow({19, 30}, {1, 30}, {4, 8}, {0, 0}, {6, 15}),     // 30
     }};
+
+    const TDefaultCpuTable TinyCpuTable = [] {
+        TDefaultCpuTable table{};
+        table.GetPreparedRow(1) = MakeTinyRow1();
+        table.GetPreparedRow(2) = MakeTinyRow2();
+        table.GetPreparedRow(3) = MakeTinyRow3();
+        return table;
+    }();
 
     i16 GetIOThreadCount(i16 cpuCount) {
         return (cpuCount - 1) / (MaxPreparedCpuCount * 2) + 1;
@@ -147,27 +407,43 @@ namespace {
         return static_cast<size_t>(pool);
     }
 
-    template <typename TCpuTableType>
-    TPoolConfig GetPoolCfg(EPoolKind pool, i16 cpuCount, const TCpuTableType& cpuTable) {
-        i16 k = cpuCount / MaxPreparedCpuCount;
-        i16 mod = cpuCount % MaxPreparedCpuCount;
-        size_t poolIdx = GetPoolIdx(pool);
-        if (!k) {
-            return cpuTable[cpuCount][poolIdx];
-        }
-
-        TPoolConfig result = cpuTable[MaxPreparedCpuCount][poolIdx];
-        result.ThreadCount *= k;
-        result.MaxThreadCount *= k;
-        if (mod) {
-            TPoolConfig additional = cpuTable[mod][poolIdx];
-            result.ThreadCount += additional.ThreadCount;
-            result.MaxThreadCount += additional.MaxThreadCount;
-        }
-        return result;
+    ui8 GetPoolId(const TCpuTableRow& row, EPoolKind poolKind) {
+        return row.LogicalToRealPool[GetPoolIdx(poolKind)];
     }
 
-    const TCpuTable& GetDefaultCpuTable(NKikimrConfig::TActorSystemConfig::ENodeType nodeType) {
+    TASPools GetASPoolsForRow(const TCpuTableRow& row) {
+        return TASPools{
+            .SystemPoolId = GetPoolId(row, EPoolKind::System),
+            .UserPoolId = GetPoolId(row, EPoolKind::User),
+            .BatchPoolId = GetPoolId(row, EPoolKind::Batch),
+            .IOPoolId = GetPoolId(row, EPoolKind::IO),
+            .ICPoolId = GetPoolId(row, EPoolKind::IC),
+        };
+    }
+
+    TRealPoolConfig GetRealPoolCfg(ui8 realPoolId, const TCpuTableRow& row) {
+        return row.RealPools[realPoolId];
+    }
+
+    TString GetRealPoolName(ERealPoolKind poolKind) {
+        switch (poolKind) {
+            case ERealPoolKind::Common:
+                return TASPools::CommonPoolName;
+            case ERealPoolKind::System:
+                return TASPools::SystemPoolName;
+            case ERealPoolKind::User:
+                return TASPools::UserPoolName;
+            case ERealPoolKind::Batch:
+                return TASPools::BatchPoolName;
+            case ERealPoolKind::IO:
+                return TASPools::IOPoolName;
+            case ERealPoolKind::IC:
+                return TASPools::ICPoolName;
+        }
+        Y_ABORT("Unexpected real pool kind: %d", static_cast<int>(poolKind));
+    }
+
+    const TDefaultCpuTable& GetDefaultCpuTable(NKikimrConfig::TActorSystemConfig::ENodeType nodeType) {
         switch (nodeType) {
             case NKikimrConfig::TActorSystemConfig::STORAGE:
                 return StorageCpuTable;
@@ -179,24 +455,113 @@ namespace {
         Y_ABORT("Unexpected actor system node type: %d", static_cast<int>(nodeType));
     }
 
-    template <typename TCpuTableType>
-    void ValidateCpuTable(const TCpuTableType& cpuTable, i16 cpuCount) {
+    const TDefaultCpuTable& GetTinyCpuTable() {
+        return TinyCpuTable;
+    }
+
+    void ValidateASPools(const TASPools& pools, ui8 realPoolCount) {
+        Y_VERIFY_S(realPoolCount > 0 && realPoolCount <= PoolKindsCount, "realPoolCount# " << realPoolCount);
+        Y_VERIFY_S(pools.GetRealPoolCount() == realPoolCount,
+            "pools.GetRealPoolCount()# " << pools.GetRealPoolCount() << " realPoolCount# " << realPoolCount);
+        std::array<bool, PoolKindsCount> usedPoolIds{};
+        for (ui8 poolId : pools.GetIndeces()) {
+            Y_VERIFY_S(poolId < realPoolCount, "poolId# " << poolId << " realPoolCount# " << realPoolCount);
+            usedPoolIds[poolId] = true;
+        }
+        for (ui8 poolId = 0; poolId < realPoolCount; ++poolId) {
+            Y_VERIFY_S(usedPoolIds[poolId], "poolId# " << poolId << " is not used");
+        }
+    }
+
+    void ValidateLogicalToRealPoolMapping(const TCpuTableRow& row) {
+        for (EPoolKind logicalPoolKind : {EPoolKind::System, EPoolKind::User, EPoolKind::Batch, EPoolKind::IO, EPoolKind::IC}) {
+            const ui8 realPoolId = GetPoolId(row, logicalPoolKind);
+            Y_VERIFY_S(realPoolId < row.RealPoolCount,
+                "pool# " << static_cast<int>(logicalPoolKind)
+                << " realPoolId# " << realPoolId
+                << " realPoolCount# " << row.RealPoolCount);
+
+            const ERealPoolKind realPoolKind = row.RealPools[realPoolId].Kind;
+            switch (realPoolKind) {
+                case ERealPoolKind::Common:
+                case ERealPoolKind::System:
+                case ERealPoolKind::User:
+                case ERealPoolKind::Batch:
+                case ERealPoolKind::IC:
+                    Y_VERIFY_S(logicalPoolKind != EPoolKind::IO,
+                        "basic pool can't be used for IO executor, realPoolId# " << realPoolId);
+                    break;
+                case ERealPoolKind::IO:
+                    Y_VERIFY_S(logicalPoolKind == EPoolKind::IO,
+                        "io pool can only map io executor, realPoolId# " << realPoolId);
+                    break;
+            }
+        }
+    }
+
+    void ValidateRealPools(const TCpuTableRow& row, i16 cpuCount) {
         i16 cpuSum = 0;
-        for (auto poolKind : {EPoolKind::System, EPoolKind::User, EPoolKind::Batch, EPoolKind::IC}) {
-            const TPoolConfig cfg = GetPoolCfg(poolKind, cpuCount, cpuTable);
-            Y_VERIFY_S(cfg.ThreadCount >= 0, "pool# " << static_cast<int>(poolKind) << " threadCount# " << cfg.ThreadCount);
+        for (ui8 realPoolId = 0; realPoolId < row.RealPoolCount; ++realPoolId) {
+            const TRealPoolConfig cfg = GetRealPoolCfg(realPoolId, row);
+            Y_VERIFY_S(cfg.ThreadCount >= 0,
+                "realPoolId# " << realPoolId << " threadCount# " << cfg.ThreadCount);
             Y_VERIFY_S(cfg.MaxThreadCount >= cfg.ThreadCount,
-                "pool# " << static_cast<int>(poolKind)
+                "realPoolId# " << realPoolId
                 << " threadCount# " << cfg.ThreadCount
                 << " maxThreadCount# " << cfg.MaxThreadCount);
-            cpuSum += cfg.ThreadCount;
+            if (cfg.AdjacentPools) {
+                Y_VERIFY_S(cfg.AdjacentPools->Count <= row.RealPoolCount,
+                    "realPoolId# " << realPoolId
+                    << " adjacentPoolCount# " << cfg.AdjacentPools->Count
+                    << " realPoolCount# " << row.RealPoolCount);
+                for (ui8 adjacentPoolIdx = 0; adjacentPoolIdx < cfg.AdjacentPools->Count; ++adjacentPoolIdx) {
+                    Y_VERIFY_S(cfg.AdjacentPools->Pools[adjacentPoolIdx] < row.RealPoolCount,
+                        "realPoolId# " << realPoolId
+                        << " adjacentPool# " << cfg.AdjacentPools->Pools[adjacentPoolIdx]
+                        << " realPoolCount# " << row.RealPoolCount);
+                }
+            }
+
+            if (cfg.Kind != ERealPoolKind::IO) {
+                cpuSum += cfg.ThreadCount;
+            }
         }
         Y_VERIFY_S(cpuSum == cpuCount, "cpuSum# " << cpuSum << " cpuCount# " << cpuCount);
+    }
+
+    void ValidateCpuTable(const ICpuTable& cpuTable, i16 cpuCount) {
+        const TCpuTableRow row = cpuTable[cpuCount];
+        const TASPools pools = GetASPoolsForRow(row);
+        ValidateASPools(pools, row.RealPoolCount);
+        ValidateLogicalToRealPoolMapping(row);
+        ValidateRealPools(row, cpuCount);
     }
 
 } // anonymous
 
 namespace NKikimr::NAutoConfigInitializer {
+
+    TCpuTableRow TDefaultCpuTable::operator[](i16 cpuCount) const {
+        Y_ABORT_UNLESS(cpuCount >= 0);
+        if (cpuCount <= MaxPreparedCpuCount) {
+            return Rows[cpuCount];
+        }
+
+        const i16 fullChunks = cpuCount / MaxPreparedCpuCount;
+        const i16 tail = cpuCount % MaxPreparedCpuCount;
+
+        TCpuTableRow result = Rows[MaxPreparedCpuCount];
+        for (ui8 realPoolId = 0; realPoolId < result.RealPoolCount; ++realPoolId) {
+            result.RealPools[realPoolId].ThreadCount *= fullChunks;
+            result.RealPools[realPoolId].MaxThreadCount *= fullChunks;
+            if (tail) {
+                result.RealPools[realPoolId].ThreadCount += Rows[tail].RealPools[realPoolId].ThreadCount;
+                result.RealPools[realPoolId].MaxThreadCount += Rows[tail].RealPools[realPoolId].MaxThreadCount;
+            }
+        }
+
+        return result;
+    }
 
     TASPools GetASPools(i16 cpuCount) {
         Y_ABORT_UNLESS(cpuCount >= 0);
@@ -204,17 +569,18 @@ namespace NKikimr::NAutoConfigInitializer {
             cpuCount = GetCpuCount();
         }
         Y_ABORT_UNLESS(cpuCount > 0, "Can't read cpu count of this system");
-        if (cpuCount >= 4) {
-            return TASPools();
-        } else if (cpuCount == 3) {
-            return TASPools {.SystemPoolId = 0, .UserPoolId = 0, .BatchPoolId = 1, .IOPoolId = 2, .ICPoolId = 3};
-        } else {
-            return TASPools {.SystemPoolId = 0, .UserPoolId = 0, .BatchPoolId = 0, .IOPoolId = 1, .ICPoolId = 0};
-        }
+        return GetDefaultASPoolsForCpuCount(cpuCount);
     }
 
     TASPools GetASPools(const NKikimrConfig::TActorSystemConfig &config, bool useAutoConfig) {
-        if (useAutoConfig) {
+        const bool hasExplicitPoolIds =
+            config.HasSysExecutor() ||
+            config.HasUserExecutor() ||
+            config.HasBatchExecutor() ||
+            config.HasIoExecutor() ||
+            config.ServiceExecutorSize();
+
+        if (useAutoConfig && !hasExplicitPoolIds) {
             i16 cpuCount = (config.HasCpuCount() ? config.GetCpuCount() : 0);
             return GetASPools(cpuCount);
         } else {
@@ -241,8 +607,7 @@ namespace NKikimr::NAutoConfigInitializer {
     TMap<TString, ui32> GetServicePools(const NKikimrConfig::TActorSystemConfig &config, bool useAutoConfig) {
         TMap<TString, ui32> servicePools;
         if (useAutoConfig) {
-            i16 cpuCount = (config.HasCpuCount() ? config.GetCpuCount() : 0);
-            TASPools pools = GetASPools(cpuCount);
+            TASPools pools = GetASPools(config, useAutoConfig);
             servicePools =  {{"Interconnect", pools.ICPoolId}};
         }
         for (ui32 i = 0; i < config.ServiceExecutorSize(); ++i) {
@@ -281,69 +646,6 @@ namespace NKikimr::NAutoConfigInitializer {
         auto *serviceExecutor = config->AddServiceExecutor();
         serviceExecutor->SetServiceName("Interconnect");
 
-        if (options.EnableTinyConfiguration && useSharedThreads && cpuCount >= 1 && cpuCount <= 3) {
-            config->SetUserExecutor(0);
-            config->SetSysExecutor(1);
-            config->SetBatchExecutor(2);
-            config->SetIoExecutor(3);
-            serviceExecutor->SetExecutorId(4);
-
-            auto *systemExecutor = config->AddExecutor();
-            auto *userExecutor = config->AddExecutor();
-            auto *batchExecutor = config->AddExecutor();
-            auto *ioExecutor = config->AddExecutor();
-            auto *icExecutor = config->AddExecutor();
-
-            ioExecutor->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::IO);
-            ioExecutor->SetThreads(config->HasForceIOPoolThreads() ? config->GetForceIOPoolThreads() : 1);
-            ioExecutor->SetName("IO");
-
-            auto assignPool = [&](auto *executor, TString name, i16 priority, bool hasSharedThread) {
-                executor->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);
-                executor->SetThreads(hasSharedThread);
-                executor->SetMaxThreads(hasSharedThread);
-                executor->SetName(name);
-                executor->SetPriority(priority);
-                executor->SetSpinThreshold(0);
-                executor->SetHasSharedThread(hasSharedThread);
-            };
-
-            assignPool(systemExecutor, "System", 30, cpuCount >= 3);
-            assignPool(userExecutor, "User", 20, cpuCount >= 2);
-            assignPool(batchExecutor, "Batch", 10, false);
-            assignPool(icExecutor, "IC", 40, true);
-
-            batchExecutor->SetForcedForeignSlots(0);
-            userExecutor->SetForcedForeignSlots(cpuCount - 1);
-            icExecutor->SetForcedForeignSlots(Min(1, cpuCount - 1));
-            systemExecutor->SetForcedForeignSlots(Min(1, cpuCount - 1));
-
-            if (cpuCount >= 2) {
-                userExecutor->AddAdjacentPools(2);
-            }
-            if (cpuCount <= 2) {
-                icExecutor->AddAdjacentPools(0);
-            }
-            if (cpuCount == 1) {
-                icExecutor->AddAdjacentPools(1);
-                icExecutor->AddAdjacentPools(2);
-            }
-
-            return;
-        }
-
-        TASPools pools = GetASPools(cpuCount);
-        ui8 poolCount = pools.GetRealPoolCount();
-        std::vector<TString> names = pools.GetRealPoolNames();
-        std::vector<ui8> executorIds = pools.GetIndeces();
-        std::vector<ui8> priorities = pools.GetPriorities();
-
-        config->SetUserExecutor(pools.SystemPoolId);
-        config->SetSysExecutor(pools.UserPoolId);
-        config->SetBatchExecutor(pools.BatchPoolId);
-        config->SetIoExecutor(pools.IOPoolId);
-        serviceExecutor->SetExecutorId(pools.ICPoolId);
-
         if (!config->HasActorSystemProfile()) {
             if (cpuCount <= 4) {
                 config->SetActorSystemProfile(NKikimrConfig::TActorSystemConfig::LOW_CPU_CONSUMPTION);
@@ -352,71 +654,89 @@ namespace NKikimr::NAutoConfigInitializer {
             }
         }
 
+        if (!config->HasNodeType()) {
+            config->SetNodeType(options.IsDynamicNode ? NKikimrConfig::TActorSystemConfig::COMPUTE : NKikimrConfig::TActorSystemConfig::STORAGE);
+        }
+
+        const bool useTinyConfiguration = options.EnableTinyConfiguration && useSharedThreads && cpuCount >= 1 && cpuCount <= 3;
+        const ICpuTable& cpuTable = options.CpuTable
+            ? *options.CpuTable
+            : useTinyConfiguration
+                ? GetTinyCpuTable()
+                : GetDefaultCpuTable(config->GetNodeType());
+        ValidateCpuTable(cpuTable, cpuCount);
+
+        const TCpuTableRow row = cpuTable[cpuCount];
+        const TASPools pools = GetASPoolsForRow(row);
+        const ui8 poolCount = row.RealPoolCount;
+
+        config->SetSysExecutor(pools.SystemPoolId);
+        config->SetUserExecutor(pools.UserPoolId);
+        config->SetBatchExecutor(pools.BatchPoolId);
+        config->SetIoExecutor(pools.IOPoolId);
+        serviceExecutor->SetExecutorId(pools.ICPoolId);
+
         TVector<NKikimrConfig::TActorSystemConfig::TExecutor *> executors;
         for (ui32 poolIdx = 0; poolIdx < poolCount; ++poolIdx) {
             executors.push_back(config->AddExecutor());
         }
 
-        if (!config->HasNodeType()) {
-            config->SetNodeType(options.IsDynamicNode ? NKikimrConfig::TActorSystemConfig::COMPUTE : NKikimrConfig::TActorSystemConfig::STORAGE);
-        }
-
-        if (options.CpuTable) {
-            ValidateCpuTable(*options.CpuTable, cpuCount);
-        } else {
-            ValidateCpuTable(GetDefaultCpuTable(config->GetNodeType()), cpuCount);
-        }
-
-        const auto getPoolCfg = [&](EPoolKind poolKind) {
-            return options.CpuTable
-                ? GetPoolCfg(poolKind, cpuCount, *options.CpuTable)
-                : GetPoolCfg(poolKind, cpuCount, GetDefaultCpuTable(config->GetNodeType()));
-        };
-
         for (ui32 poolIdx = 0; poolIdx < poolCount; ++poolIdx) {
             auto *executor = executors[poolIdx];
-            if (names[poolIdx] == TASPools::IOPoolName) {
+            TRealPoolConfig realPoolConfig = GetRealPoolCfg(poolIdx, row);
+            const TString poolName = GetRealPoolName(realPoolConfig.Kind);
+
+            if (realPoolConfig.Kind == ERealPoolKind::IO) {
                 executor->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::IO);
-                ui32 ioThreadCount = GetIOThreadCount(cpuCount);
+                ui32 ioThreadCount = realPoolConfig.ThreadCount > 0 ? realPoolConfig.ThreadCount : GetIOThreadCount(cpuCount);
                 if (config->HasForceIOPoolThreads()) {
                     ioThreadCount = config->GetForceIOPoolThreads();
                 }
                 executor->SetThreads(ioThreadCount);
-                executor->SetName(names[poolIdx]);
+                executor->SetName(poolName);
                 continue;
             }
-            EPoolKind poolKind = EPoolKind::System;
-            if (names[poolIdx] == TASPools::UserPoolName) {
-                poolKind = EPoolKind::User;
-            } else if (names[poolIdx] == TASPools::BatchPoolName) {
-                poolKind = EPoolKind::Batch;
-            } else if (names[poolIdx] == TASPools::ICPoolName) {
-                poolKind = EPoolKind::IC;
-            }
-            TPoolConfig cfg = getPoolCfg(poolKind);
-            i16 threadsCount = cfg.ThreadCount;
-            if (poolCount == 2) {
-                threadsCount = cpuCount;
-            }
-            if (useSharedThreads) {
+
+            const bool hasSharedThread = realPoolConfig.HasSharedThread.value_or(useSharedThreads);
+            if (hasSharedThread) {
                 executor->SetHasSharedThread(true);
             }
             executor->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);
-            executor->SetThreads(threadsCount);
-            executor->SetMaxThreads(Max(cfg.MaxThreadCount, threadsCount));
-            executor->SetPriority(priorities[poolIdx]);
-            executor->SetName(names[poolIdx]);
+            executor->SetThreads(realPoolConfig.ThreadCount);
+            executor->SetMaxThreads(Max(realPoolConfig.MaxThreadCount, realPoolConfig.ThreadCount));
+            executor->SetPriority(realPoolConfig.Priority);
+            executor->SetName(poolName);
             executor->SetAllThreadsAreShared(useUnitedPool);
 
-            if (names[poolIdx] == TASPools::CommonPoolName) {
+            if (realPoolConfig.SpinThreshold) {
+                executor->SetSpinThreshold(*realPoolConfig.SpinThreshold);
+            } else if (realPoolConfig.Kind == ERealPoolKind::Common) {
                 executor->SetSpinThreshold(0);
-                executor->SetTimePerMailboxMicroSecs(100);
-            } else if (names[poolIdx] == TASPools::ICPoolName) {
+            } else if (realPoolConfig.Kind == ERealPoolKind::IC) {
                 executor->SetSpinThreshold(10);
-                executor->SetTimePerMailboxMicroSecs(100);
-                executor->SetMaxAvgPingDeviation(500);
             } else {
                 executor->SetSpinThreshold(1);
+            }
+
+            if (realPoolConfig.TimePerMailboxMicroSecs) {
+                executor->SetTimePerMailboxMicroSecs(*realPoolConfig.TimePerMailboxMicroSecs);
+            } else if (realPoolConfig.Kind == ERealPoolKind::Common || realPoolConfig.Kind == ERealPoolKind::IC) {
+                executor->SetTimePerMailboxMicroSecs(100);
+            }
+
+            if (realPoolConfig.MaxAvgPingDeviation) {
+                executor->SetMaxAvgPingDeviation(*realPoolConfig.MaxAvgPingDeviation);
+            } else if (realPoolConfig.Kind == ERealPoolKind::IC) {
+                executor->SetMaxAvgPingDeviation(500);
+            }
+
+            if (realPoolConfig.ForcedForeignSlots) {
+                executor->SetForcedForeignSlots(*realPoolConfig.ForcedForeignSlots);
+            }
+            if (realPoolConfig.AdjacentPools) {
+                for (ui8 adjacentPoolIdx = 0; adjacentPoolIdx < realPoolConfig.AdjacentPools->Count; ++adjacentPoolIdx) {
+                    executor->AddAdjacentPools(realPoolConfig.AdjacentPools->Pools[adjacentPoolIdx]);
+                }
             }
 
             if (config->HasMinLocalQueueSize()) {

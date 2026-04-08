@@ -461,4 +461,37 @@ Y_UNIT_TEST(GetASPoolsIgnoresRawExplicitPoolIdsBeforeAutoConfigMaterialization) 
     UNIT_ASSERT_VALUES_EQUAL(it->second, 4);
 }
 
+Y_UNIT_TEST(ApplyAutoConfigReusesExistingInterconnectServiceExecutor) {
+    NKikimrConfig::TActorSystemConfig config;
+    config.SetCpuCount(4);
+
+    auto* pqExecutor = config.AddServiceExecutor();
+    pqExecutor->SetServiceName("PQ");
+    pqExecutor->SetExecutorId(7);
+
+    auto* icExecutor = config.AddServiceExecutor();
+    icExecutor->SetServiceName("Interconnect");
+    icExecutor->SetExecutorId(42);
+
+    ApplyAutoConfig(&config, false, false);
+
+    UNIT_ASSERT_VALUES_EQUAL(config.ServiceExecutorSize(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(config.GetServiceExecutor(0).GetServiceName(), "PQ");
+    UNIT_ASSERT_VALUES_EQUAL(config.GetServiceExecutor(0).GetExecutorId(), 7);
+    UNIT_ASSERT_VALUES_EQUAL(config.GetServiceExecutor(1).GetServiceName(), "Interconnect");
+    UNIT_ASSERT_VALUES_EQUAL(config.GetServiceExecutor(1).GetExecutorId(), 4);
+}
+
+Y_UNIT_TEST(ApplyAutoConfigDoesNotDuplicateInterconnectServiceExecutorOnRepeatedCalls) {
+    NKikimrConfig::TActorSystemConfig config;
+    config.SetCpuCount(4);
+
+    ApplyAutoConfig(&config, false, false);
+    ApplyAutoConfig(&config, false, false);
+
+    UNIT_ASSERT_VALUES_EQUAL(config.ServiceExecutorSize(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(config.GetServiceExecutor(0).GetServiceName(), "Interconnect");
+    UNIT_ASSERT_VALUES_EQUAL(config.GetServiceExecutor(0).GetExecutorId(), 4);
+}
+
 } // Y_UNIT_TEST_SUITE(AutoConfig)

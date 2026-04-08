@@ -826,8 +826,18 @@ namespace NKikimr::NAutoConfigInitializer {
         config->SetBatchExecutor(pools.BatchPoolId);
         config->SetIoExecutor(pools.IOPoolId);
 
-        auto *serviceExecutor = config->AddServiceExecutor();
-        serviceExecutor->SetServiceName("Interconnect");
+        auto *serviceExecutor = [&]() -> decltype(config->AddServiceExecutor()) {
+            for (ui32 i = 0; i < config->ServiceExecutorSize(); ++i) {
+                auto* existing = config->MutableServiceExecutor(i);
+                if (existing->GetServiceName() == "Interconnect") {
+                    return existing;
+                }
+            }
+
+            auto* added = config->AddServiceExecutor();
+            added->SetServiceName("Interconnect");
+            return added;
+        }();
         serviceExecutor->SetExecutorId(pools.ICPoolId);
 
         for (ui32 poolIdx = 0; poolIdx < poolCount; ++poolIdx) {

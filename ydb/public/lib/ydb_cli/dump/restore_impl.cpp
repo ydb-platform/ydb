@@ -2201,23 +2201,48 @@ TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const 
             .ReceiveMessageDelay(consumer.GetReceiveMessageDelay())
             .ReceiveMessageWaitTime(consumer.GetReceiveMessageWaitTime());
 
-        auto deadLetterPolicy = addConsumer
-            .BeginDeadLetterPolicy()
-                .Enabled(dlp.GetEnabled())
-                .BeginCondition()
-                    .MaxProcessingAttempts(dlp.GetCondition().GetMaxProcessingAttempts())
-                .EndCondition();
+        auto result = [&]() {
+            if (!dlp.GetEnabled()) {
+                return TopicClient.AlterTopic(
+                    topicPath,
+                    addConsumer.EndAddConsumer()
+                ).ExtractValueSync();
+            }
 
-        if (dlp.GetAction() == EDeadLetterAction::Move) {
-            deadLetterPolicy.MoveAction(dlp.GetDeadLetterQueue());
-        } else {
-            deadLetterPolicy.DeleteAction();
-        }
+            auto deadLetterPolicy = addConsumer
+                .BeginDeadLetterPolicy()
+                    .Enabled(dlp.GetEnabled());
 
-        auto result = TopicClient.AlterTopic(
-            topicPath,
-            deadLetterPolicy.EndDeadLetterPolicy().EndAddConsumer()
-        ).ExtractValueSync();
+            switch (dlp.GetAction()) {
+                case EDeadLetterAction::Move:
+                    deadLetterPolicy
+                        .BeginCondition()
+                            .MaxProcessingAttempts(dlp.GetCondition().GetMaxProcessingAttempts())
+                        .EndCondition()
+                        .MoveAction(dlp.GetDeadLetterQueue());
+                    return TopicClient.AlterTopic(
+                        topicPath,
+                        deadLetterPolicy.EndDeadLetterPolicy().EndAddConsumer()
+                    ).ExtractValueSync();
+
+                case EDeadLetterAction::Delete:
+                    deadLetterPolicy
+                        .BeginCondition()
+                            .MaxProcessingAttempts(dlp.GetCondition().GetMaxProcessingAttempts())
+                        .EndCondition()
+                        .DeleteAction();
+                    return TopicClient.AlterTopic(
+                        topicPath,
+                        deadLetterPolicy.EndDeadLetterPolicy().EndAddConsumer()
+                    ).ExtractValueSync();
+
+                case EDeadLetterAction::Unspecified:
+                    return TopicClient.AlterTopic(
+                        topicPath,
+                        addConsumer.EndAddConsumer()
+                    ).ExtractValueSync();
+            }
+        }();
         if (result.IsSuccess()) {
             LOG_D("Created consumer " << TString{consumer.GetConsumerName()}.Quote() << " for " << topicPath.Quote());
         } else {

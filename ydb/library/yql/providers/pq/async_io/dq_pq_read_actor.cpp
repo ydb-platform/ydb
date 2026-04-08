@@ -873,7 +873,7 @@ private:
             auto key = MakePartitionKey(TString(cluster), partitionSession);
             auto& partitionInfo = Partitions[key];
             partitionInfo.Offset = ranges.back().second;
-            if (partitionInfo.IsFinishedInTableMode()) {
+            if (!SourceParams.GetStreamingMode() && partitionInfo.IsFinishedInTableMode()) {
                 FinishedPartitions.insert(key);
             }
         }
@@ -994,7 +994,7 @@ private:
             auto& partitionInfo = Self.Partitions[partitionKey];
             if (!partitionInfo.EndOffset) {
                 partitionInfo.EndOffset = event.GetEndOffset();
-                if (partitionInfo.IsFinishedInTableMode()) {
+                if (!Self.SourceParams.GetStreamingMode() && partitionInfo.IsFinishedInTableMode()) {
                     Self.FinishedPartitions.insert(partitionKey);
                 }
             }

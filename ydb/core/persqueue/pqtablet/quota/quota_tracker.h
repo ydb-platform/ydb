@@ -18,12 +18,13 @@ namespace NKikimr::NPQ {
         ui64 GetTotalSpeed() const;
 
     private:
-        ui64 TransfromBytesPerSecondToQuota(const ui64 bytesPerSecond) const;
+        ui64 TransfromToQuota(const ui64 bytes) const;
 
         i64 AvailableQuota;
         ui64 SpeedPerSecond;
         TInstant LastUpdateTime;
         ui64 MaxBurst;
+        ui64 RefillRemainder = 0;
 
         TDuration QuotedTime;
     };

@@ -4,137 +4,151 @@
 
 {% list tabs %}
 
-- Go (native)
+- Go
 
-    ```go
-    package main
+  {% list tabs %}
 
-    import (
-        "context"
-        "time"
+  - Native SDK
 
-        "github.com/opentracing/opentracing-go"
-        jaegerConfig "github.com/uber/jaeger-client-go/config"
+      ```go
+      package main
 
-        "github.com/ydb-platform/ydb-go-sdk/v3"
-        "github.com/ydb-platform/ydb-go-sdk/v3/trace"
+      import (
+          "context"
+          "time"
 
-        tracing "github.com/ydb-platform/ydb-go-sdk-opentracing"
-    )
+          "github.com/opentracing/opentracing-go"
+          jaegerConfig "github.com/uber/jaeger-client-go/config"
 
-    const (
-        tracerURL   = "localhost:5775"
-        serviceName = "ydb-go-sdk"
-    )
+          "github.com/ydb-platform/ydb-go-sdk/v3"
+          "github.com/ydb-platform/ydb-go-sdk/v3/trace"
 
-    func main() {
-        tracer, closer, err := jaegerConfig.Configuration{
-            ServiceName: serviceName,
-            Sampler: &jaegerConfig.SamplerConfig{
-                Type:  "const",
-                Param: 1,
-            },
-            Reporter: &jaegerConfig.ReporterConfig{
-                LogSpans:            true,
-                BufferFlushInterval: 1 * time.Second,
-                LocalAgentHostPort:  tracerURL,
-            },
-        }.NewTracer()
-        if err != nil {
-            panic(err)
-        }
+          tracing "github.com/ydb-platform/ydb-go-sdk-opentracing"
+      )
 
-        defer closer.Close()
+      const (
+          tracerURL   = "localhost:5775"
+          serviceName = "ydb-go-sdk"
+      )
 
-        // set global tracer of this application
-        opentracing.SetGlobalTracer(tracer)
+      func main() {
+          tracer, closer, err := jaegerConfig.Configuration{
+              ServiceName: serviceName,
+              Sampler: &jaegerConfig.SamplerConfig{
+                  Type:  "const",
+                  Param: 1,
+              },
+              Reporter: &jaegerConfig.ReporterConfig{
+                  LogSpans:            true,
+                  BufferFlushInterval: 1 * time.Second,
+                  LocalAgentHostPort:  tracerURL,
+              },
+          }.NewTracer()
+          if err != nil {
+              panic(err)
+          }
 
-        span, ctx := opentracing.StartSpanFromContext(context.Background(), "client")
-        defer span.Finish()
+          defer closer.Close()
 
-        db, err := ydb.Open(ctx,
-            os.Getenv("YDB_CONNECTION_STRING"),
-            tracing.WithTraces(tracing.WithDetails(trace.DetailsAll)),
-        )
-        if err != nil {
-            panic(err)
-        }
-        defer db.Close(ctx)
-        ...
-    }
-    ```
+          // set global tracer of this application
+          opentracing.SetGlobalTracer(tracer)
 
-- Go (database/sql)
+          span, ctx := opentracing.StartSpanFromContext(context.Background(), "client")
+          defer span.Finish()
 
-    ```go
-    package main
+          db, err := ydb.Open(ctx,
+              os.Getenv("YDB_CONNECTION_STRING"),
+              tracing.WithTraces(tracing.WithDetails(trace.DetailsAll)),
+          )
+          if err != nil {
+              panic(err)
+          }
+          defer db.Close(ctx)
+          ...
+      }
+      ```
 
-    import (
-        "context"
-        "database/sql"
-        "time"
+  - database/sql
 
-        "github.com/opentracing/opentracing-go"
-        jaegerConfig "github.com/uber/jaeger-client-go/config"
+      ```go
+      package main
 
-        "github.com/ydb-platform/ydb-go-sdk/v3"
-        "github.com/ydb-platform/ydb-go-sdk/v3/trace"
+      import (
+          "context"
+          "database/sql"
+          "time"
 
-        tracing "github.com/ydb-platform/ydb-go-sdk-opentracing"
-    )
+          "github.com/opentracing/opentracing-go"
+          jaegerConfig "github.com/uber/jaeger-client-go/config"
 
-    const (
-        tracerURL   = "localhost:5775"
-        serviceName = "ydb-go-sdk"
-    )
+          "github.com/ydb-platform/ydb-go-sdk/v3"
+          "github.com/ydb-platform/ydb-go-sdk/v3/trace"
 
-    func main() {
-        tracer, closer, err := jaegerConfig.Configuration{
-            ServiceName: serviceName,
-                Sampler: &jaegerConfig.SamplerConfig{
-                Type:  "const",
-                Param: 1,
-            },
-            Reporter: &jaegerConfig.ReporterConfig{
-                LogSpans:            true,
-                BufferFlushInterval: 1 * time.Second,
-                LocalAgentHostPort:  tracerURL,
-            },
-        }.NewTracer()
-        if err != nil {
-            panic(err)
-        }
+          tracing "github.com/ydb-platform/ydb-go-sdk-opentracing"
+      )
 
-        defer closer.Close()
+      const (
+          tracerURL   = "localhost:5775"
+          serviceName = "ydb-go-sdk"
+      )
 
-        // set global tracer of this application
-        opentracing.SetGlobalTracer(tracer)
+      func main() {
+          tracer, closer, err := jaegerConfig.Configuration{
+              ServiceName: serviceName,
+                  Sampler: &jaegerConfig.SamplerConfig{
+                  Type:  "const",
+                  Param: 1,
+              },
+              Reporter: &jaegerConfig.ReporterConfig{
+                  LogSpans:            true,
+                  BufferFlushInterval: 1 * time.Second,
+                  LocalAgentHostPort:  tracerURL,
+              },
+          }.NewTracer()
+          if err != nil {
+              panic(err)
+          }
 
-        span, ctx := opentracing.StartSpanFromContext(context.Background(), "client")
-        defer span.Finish()
+          defer closer.Close()
 
-        nativeDriver, err := ydb.Open(ctx,
-            os.Getenv("YDB_CONNECTION_STRING"),
-            tracing.WithTraces(tracing.WithDetails(trace.DetailsAll)),
-        )
-        if err != nil {
-            panic(err)
-        }
-        defer nativeDriver.Close(ctx)
+          // set global tracer of this application
+          opentracing.SetGlobalTracer(tracer)
 
-        connector, err := ydb.Connector(nativeDriver)
-        if err != nil {
-            panic(err)
-        }
+          span, ctx := opentracing.StartSpanFromContext(context.Background(), "client")
+          defer span.Finish()
 
-        db := sql.OpnDB(connector)
-        defer db.Close()
-        ...
-    }
-    ```
+          nativeDriver, err := ydb.Open(ctx,
+              os.Getenv("YDB_CONNECTION_STRING"),
+              tracing.WithTraces(tracing.WithDetails(trace.DetailsAll)),
+          )
+          if err != nil {
+              panic(err)
+          }
+          defer nativeDriver.Close(ctx)
+
+          connector, err := ydb.Connector(nativeDriver)
+          if err != nil {
+              panic(err)
+          }
+
+          db := sql.OpenDB(connector)
+          defer db.Close()
+          ...
+      }
+      ```
+
+  {% endlist %}
+
+- Java
+
+  Функциональность на данный момент не поддерживается.
 
 - Python
 
   Функциональность на данный момент не поддерживается.
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}

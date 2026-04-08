@@ -858,7 +858,7 @@ Y_UNIT_TEST(TablePartitionByHash) {
 }
 
 Y_UNIT_TEST(TableColumn) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnableOlapCompression = true});
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .EnableOlapCompression = true, .EnableCsDictionaryEncoding = true});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -876,6 +876,9 @@ Y_UNIT_TEST(TableColumn) {
                 Value1 Utf8 COMPRESSION (algorithm = lz4),
                 Value2 Int16 COMPRESSION (algorithm = zstd),
                 Value3 String COMPRESSION (algorithm = zstd, level = 10),
+                EncodingValue1 Utf8 ENCODING (),
+                EncodingValue2 Int16 ENCODING (OFF),
+                EncodingValue3 String ENCODING (DICT),
                 PRIMARY KEY (Key1, Key2, Key3),
             )
             PARTITION BY HASH(`Key1`, `Key2`)
@@ -896,6 +899,9 @@ Y_UNIT_TEST(TableColumn) {
                 `Value1` Utf8 COMPRESSION (algorithm = lz4),
                 `Value2` Int16 COMPRESSION (algorithm = zstd, level = 1),
                 `Value3` String COMPRESSION (algorithm = zstd, level = 10),
+                `EncodingValue1` Utf8,
+                `EncodingValue2` Int16 ENCODING (OFF),
+                `EncodingValue3` String ENCODING (DICT),
                 PRIMARY KEY (`Key1`, `Key2`, `Key3`)
             )
             PARTITION BY HASH (`Key1`, `Key2`)
@@ -1928,7 +1934,7 @@ Y_UNIT_TEST(TablePartitionPolicyIndexTable) {
 }
 
 Y_UNIT_TEST(TableColumnAlterColumn) {
-    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true});
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true, .EnableCsDictionaryEncoding = true});
 
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
@@ -1943,20 +1949,27 @@ Y_UNIT_TEST(TableColumnAlterColumn) {
                 Col1 Uint64 NOT NULL,
                 Col2 JsonDocument,
                 Col3 Uint32,
+                Col4 Uint32 ENCODING(DICT) COMPRESSION(algorithm=zstd, level=4),
+                Col5 Uint32,
                 PRIMARY KEY (Col1)
             )
             PARTITION BY HASH(Col1)
             WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`);
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `ENCODING.DICTIONARY.ENABLED`=`true`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `DEFAULT_VALUE`=`5`);
             ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col2 SET COMPRESSION (algorithm=zstd, level=4);
+            ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col3 SET ENCODING (DICT);
+            ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col4 SET ENCODING ();
+            ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col4 SET COMPRESSION ();
+            ALTER TABLE `/Root/test_show_create` ALTER COLUMN Col5 SET ENCODING (OFF);
         )", "test_show_create",
         R"(
             CREATE TABLE `test_show_create` (
                 `Col1` Uint64 NOT NULL,
                 `Col2` JsonDocument COMPRESSION (algorithm = zstd, level = 4),
-                `Col3` Uint32,
+                `Col3` Uint32 ENCODING (DICT),
+                `Col4` Uint32,
+                `Col5` Uint32 ENCODING (OFF),
                 PRIMARY KEY (`Col1`)
             )
             PARTITION BY HASH (`Col1`)
@@ -1965,7 +1978,7 @@ Y_UNIT_TEST(TableColumnAlterColumn) {
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
             );
 
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`, `ENCODING.DICTIONARY.ENABLED` = `true`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`);
 
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DEFAULT_VALUE` = `5`);
         )"
@@ -2038,8 +2051,9 @@ Y_UNIT_TEST(TableColumnUpsertIndex) {
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=count_min_sketch_index, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['Col2']}`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=bloom_ngramm_filter_index, TYPE=BLOOM_NGRAMM_FILTER,
-                FEATURES=`{"column_name" : "Col3", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096,
-                        "records_count" : 1024, "case_sensitive" : false, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : '"b.c.d"'}}`);
+                FEATURES=`{"column_name" : "Col3", "ngramm_size" : 3,
+                        "false_positive_probability" : 0.01, "case_sensitive" : false,
+                        "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : '"b.c.d"'}}`);
             ALTER OBJECT `Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=bloom_filter_index, TYPE=BLOOM_FILTER,
                     FEATURES=`{"column_name" : "Col2", "false_positive_probability" : 0.01, "bits_storage_type": "BITSET"}`);
             ALTER OBJECT `Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=max_index, TYPE=MAX, FEATURES=`{"column_name": "Col2"}`);
@@ -2061,7 +2075,7 @@ Y_UNIT_TEST(TableColumnUpsertIndex) {
 
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = count_min_sketch_index, TYPE = COUNT_MIN_SKETCH, FEATURES = `{"column_names":["Col2"]}`);
 
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_ngramm_filter_index, TYPE = BLOOM_NGRAMM_FILTER, FEATURES = `{"bits_storage_type":"SIMPLE_STRING","records_count":1024,"case_sensitive":false,"ngramm_size":3,"filter_size_bytes":4096,"data_extractor":{"class_name":"SUB_COLUMN","sub_column_name":"\\\"b.c.d\\\""},"hashes_count":2,"column_name":"Col3"}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_ngramm_filter_index, TYPE = BLOOM_NGRAMM_FILTER, FEATURES = `{"false_positive_probability":0.01,"case_sensitive":false,"ngramm_size":3,"data_extractor":{"class_name":"SUB_COLUMN","sub_column_name":"\\\"b.c.d\\\""},"bits_storage_type":"SIMPLE_STRING","column_name":"Col3"}`);
 
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_filter_index, TYPE = BLOOM_FILTER, FEATURES = `{"false_positive_probability":0.01,"data_extractor":{"class_name":"DEFAULT"},"bits_storage_type":"BITSET","column_name":"Col2"}`);
         )"
@@ -2091,8 +2105,9 @@ Y_UNIT_TEST(TableColumnAlterObject) {
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=count_min_sketch_index, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['Col2']}`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=bloom_ngramm_filter_index, TYPE=BLOOM_NGRAMM_FILTER,
-                FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096,
-                        "records_count" : 1024, "case_sensitive" : true, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : "a"}}`);
+                FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3,
+                        "false_positive_probability" : 0.01, "case_sensitive" : true,
+                        "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : "a"}}`);
             ALTER OBJECT `Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=bloom_filter_index, TYPE=BLOOM_FILTER,
                 FEATURES=`{"column_name" : "Col2", "false_positive_probability" : 0.01}`);
             ALTER OBJECT `Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=max_index, TYPE=MAX, FEATURES=`{"column_name": "Col2"}`);
@@ -2103,7 +2118,6 @@ Y_UNIT_TEST(TableColumnAlterObject) {
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `METADATA_MEMORY_MANAGER.CLASS_NAME`=`local_db`,
                     `METADATA_MEMORY_MANAGER.FEATURES`=`{"memory_cache_size" : 0}`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`);
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `ENCODING.DICTIONARY.ENABLED`=`true`);
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DEFAULT_VALUE`=`100`);
         )", "test_show_create",
         R"(
@@ -2121,13 +2135,13 @@ Y_UNIT_TEST(TableColumnAlterObject) {
 
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DEFAULT_VALUE` = `100`);
 
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`, `ENCODING.DICTIONARY.ENABLED` = `true`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`);
 
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = max_index, TYPE = MAX, FEATURES = `{"column_name":"Col2"}`);
 
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = count_min_sketch_index, TYPE = COUNT_MIN_SKETCH, FEATURES = `{"column_names":["Col2"]}`);
 
-            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_ngramm_filter_index, TYPE = BLOOM_NGRAMM_FILTER, FEATURES = `{"bits_storage_type":"SIMPLE_STRING","records_count":1024,"case_sensitive":true,"ngramm_size":3,"filter_size_bytes":4096,"data_extractor":{"class_name":"SUB_COLUMN","sub_column_name":"a"},"hashes_count":2,"column_name":"Col2"}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_ngramm_filter_index, TYPE = BLOOM_NGRAMM_FILTER, FEATURES = `{"false_positive_probability":0.01,"case_sensitive":true,"ngramm_size":3,"data_extractor":{"class_name":"SUB_COLUMN","sub_column_name":"a"},"bits_storage_type":"SIMPLE_STRING","column_name":"Col2"}`);
 
             ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_filter_index, TYPE = BLOOM_FILTER, FEATURES = `{"false_positive_probability":0.01,"data_extractor":{"class_name":"DEFAULT"},"bits_storage_type":"SIMPLE_STRING","column_name":"Col2"}`);
 
@@ -2348,6 +2362,86 @@ Y_UNIT_TEST(TableSystemTableWithEmptyKeyColumnIds) {
             Cerr << "SHOW CREATE TABLE on " << systemTable << " succeeded" << Endl;
         }
     }
+}
+
+Y_UNIT_TEST(TableDataShardLocalBloomFilterIndex) {
+    TTestEnv env(1, 4, {
+        .StoragePools = 3,
+        .ShowCreateTable = true,
+        .EnableLocalBloomFilterIndex = true,
+    });
+
+    TShowCreateChecker checker(env);
+
+    // Single-column prefix bloom filter.
+    // Index names are not stored for DataShard bloom filters (only prefix lengths are kept),
+    // so SHOW CREATE TABLE generates names from the prefix columns: "bloom_<col1>[_col2...]".
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Key2 Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key1, Key2),
+                INDEX idx_bloom LOCAL USING bloom_filter ON (Key1)
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Key2` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_bloom_1` LOCAL USING bloom_filter ON (`Key1`),
+                PRIMARY KEY (`Key1`, `Key2`)
+            );
+        )"
+    );
+
+    // Full-PK prefix bloom filter.
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Key2 Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key1, Key2),
+                INDEX idx_bloom LOCAL USING bloom_filter ON (Key1, Key2)
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Key2` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_bloom_2` LOCAL USING bloom_filter ON (`Key1`, `Key2`),
+                PRIMARY KEY (`Key1`, `Key2`)
+            );
+        )"
+    );
+
+    // Two bloom filter indexes at different prefix lengths.
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Key2 Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key1, Key2),
+                INDEX idx_bloom1 LOCAL USING bloom_filter ON (Key1),
+                INDEX idx_bloom2 LOCAL USING bloom_filter ON (Key1, Key2)
+            );
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Key1` Uint64 NOT NULL,
+                `Key2` Uint64 NOT NULL,
+                `Value` String,
+                INDEX `idx_bloom_1` LOCAL USING bloom_filter ON (`Key1`),
+                INDEX `idx_bloom_2` LOCAL USING bloom_filter ON (`Key1`, `Key2`),
+                PRIMARY KEY (`Key1`, `Key2`)
+            );
+        )"
+    );
 }
 
 }

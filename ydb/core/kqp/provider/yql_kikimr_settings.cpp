@@ -5,7 +5,7 @@
 #include <util/generic/size_literals.h>
 #include <util/string/split.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 
 namespace NYql {
 
@@ -87,7 +87,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptEnableOlapPushdownProjections);
     REGISTER_SETTING(*this, OptEnableOlapProvideComputeSharding);
     REGISTER_SETTING(*this, OptOverrideStatistics);
-    REGISTER_SETTING(*this, OptimizerHints).Parser([](const TString& v) { return NYql::TOptimizerHints::Parse(v); });
+    REGISTER_SETTING(*this, OptimizerHints).Parser([](const TString& v) { return NKikimr::NKqp::TOptimizerHints::Parse(v); });
     REGISTER_SETTING(*this, OptShuffleElimination);
     REGISTER_SETTING(*this, OptShuffleEliminationWithMap);
     REGISTER_SETTING(*this, OptShuffleEliminationForAggregation);
@@ -130,7 +130,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     );
     REGISTER_SETTING(*this, UseBlockReader);
 
-    REGISTER_SETTING(*this, MaxDPHypDPTableSize);
+    REGISTER_SETTING(*this, CBOTimeout);
     REGISTER_SETTING(*this, ShuffleEliminationJoinNumCutoff);
 
     REGISTER_SETTING(*this, MaxTasksPerStage);

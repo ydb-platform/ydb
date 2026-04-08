@@ -80,6 +80,11 @@
     "kind": "Normal"
   },
   {
+    "name": "AsOptionalType",
+    "kind": "Normal",
+    "minLangVer": "2026.01"
+  },
+  {
     "name": "AsSet",
     "kind": "Normal"
   },
@@ -221,7 +226,8 @@
   },
   {
     "name": "Concat",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "Corr",
@@ -353,7 +359,8 @@
   },
   {
     "name": "DictInsert",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "DictItems",
@@ -385,7 +392,8 @@
   },
   {
     "name": "DictRemove",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "DictType",
@@ -401,15 +409,23 @@
   },
   {
     "name": "DictUpdate",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "DictUpsert",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
+  },
+  {
+    "name": "DynamicLinearType",
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "DynamicLinearTypeHandle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "DynamicVariant",
@@ -549,11 +565,13 @@
   },
   {
     "name": "FromDynamicLinear",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "FromMutDict",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "FromPg",
@@ -665,7 +683,8 @@
   },
   {
     "name": "LinearDestroy",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.05"
   },
   {
     "name": "LinearHistogram",
@@ -677,15 +696,18 @@
   },
   {
     "name": "LinearItemType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "LinearType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "LinearTypeHandle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "ListAggregate",
@@ -977,55 +999,68 @@
   },
   {
     "name": "MutDictContains",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "MutDictCreate",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "MutDictHasItems",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "MutDictInsert",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "MutDictItems",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "MutDictKeys",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "MutDictLength",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "MutDictLookup",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "MutDictPayloads",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "MutDictPop",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "MutDictRemove",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "MutDictUpdate",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "MutDictUpsert",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "NTile",
@@ -1045,7 +1080,8 @@
   },
   {
     "name": "NullIf",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "NullType",
@@ -1156,6 +1192,11 @@
     "kind": "Agg"
   },
   {
+    "name": "PositionOf",
+    "kind": "Normal",
+    "minLangVer": "2026.01"
+  },
+  {
     "name": "QuoteCode",
     "kind": "Normal"
   },
@@ -1173,7 +1214,8 @@
   },
   {
     "name": "RandomSample",
-    "kind": "Agg"
+    "kind": "Agg",
+    "minLangVer": "2025.04"
   },
   {
     "name": "RandomUuid",
@@ -1181,7 +1223,8 @@
   },
   {
     "name": "RandomValue",
-    "kind": "Agg"
+    "kind": "Agg",
+    "minLangVer": "2025.04"
   },
   {
     "name": "Rank",
@@ -1505,7 +1548,8 @@
   },
   {
     "name": "ToDynamicLinear",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "ToHashedDict",
@@ -1521,7 +1565,8 @@
   },
   {
     "name": "ToMutDict",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "ToPg",
@@ -1676,12 +1721,19 @@
     "kind": "Normal"
   },
   {
+    "name": "WithIssue",
+    "kind": "Normal",
+    "minLangVer": "2026.01"
+  },
+  {
     "name": "WithSideEffects",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "WithSideEffectsMode",
-    "kind": "Normal"
+    "kind": "Normal",
+    "minLangVer": "2025.04"
   },
   {
     "name": "WorldCode",

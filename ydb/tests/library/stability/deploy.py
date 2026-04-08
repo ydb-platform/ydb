@@ -1,12 +1,16 @@
 from collections import defaultdict
+import json
 import random
+import subprocess
+import urllib.error
+import urllib.request
 import allure
 import logging
 import os
 import time as time_module
 from typing import Optional
 import yatest.common
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from ydb.tests.library.stability.utils.collect_errors import create_cluster_issue
 from ydb.tests.library.stability.utils.remote_execution import patch_max_suffix, copy_file, execute_command, deploy_binaries_to_hosts
@@ -15,17 +19,29 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.library.stability.utils.results_models import StressUtilDeployResult
 
 
+# Default orchestrator port from nemesis Settings.app_port
+_NEMESIS_ORCHESTRATOR_PORT = 31434
+# Health polling parameters
+_HEALTH_POLL_INTERVAL_S = 10
+_HEALTH_POLL_TIMEOUT_S = 300
+
+
 class StressUtilDeployer:
     binaries_deploy_path: str
     nemesis_started: bool
+    nemesis_installed: bool
     hosts: list[str]
 
-    def __init__(self, binaries_deploy_path: str, cluster_path: str, yaml_config: str):
+    def __init__(self, binaries_deploy_path: str, cluster_path: str, yaml_config: str,
+                 static_location: Optional[str] = None):
         self.binaries_deploy_path = binaries_deploy_path
         self.nemesis_started = False
+        self.nemesis_installed = False
+        self._orchestrator_endpoint: Optional[str] = None
         self.hosts = []
         self.cluster_path = cluster_path
         self.yaml_config = yaml_config
+        self.static_location = static_location
         self.nodes = YdbCluster.get_cluster_nodes()
         patch_max_suffix(1000000)
 
@@ -323,6 +339,341 @@ class StressUtilDeployer:
                 )
                 return deployed_nodes
 
+    # ------------------------------------------------------------------
+    # Nemesis orchestrator HTTP helpers
+    # ------------------------------------------------------------------
+
+    def _get_orchestrator_endpoint(self) -> str:
+        """Return cached ``http://<orchestrator_host>:<port>`` base URL.
+
+        The orchestrator always runs on the first host (sorted) from the
+        cluster, matching the convention used by ``install_on_hosts``.
+        """
+        if self._orchestrator_endpoint is not None:
+            return self._orchestrator_endpoint
+
+        if not self.hosts:
+            raise RuntimeError(
+                "Cannot determine orchestrator host: self.hosts is empty"
+            )
+
+        orchestrator_host = sorted(self.hosts)[0]
+        self._orchestrator_endpoint = (
+            f"http://{orchestrator_host}:{_NEMESIS_ORCHESTRATOR_PORT}"
+        )
+        logging.info(f"Nemesis orchestrator endpoint: {self._orchestrator_endpoint}")
+        return self._orchestrator_endpoint
+
+    def _poll_health(self, nemesis_log: list[str]) -> bool:
+        """Poll ``GET /health`` until the orchestrator responds with ``{"status": "ok"}``.
+
+        Returns:
+            ``True`` if the orchestrator became healthy within the timeout,
+            ``False`` otherwise.
+        """
+        endpoint = self._get_orchestrator_endpoint()
+        url = f"{endpoint}/health"
+        deadline = time_module.time() + _HEALTH_POLL_TIMEOUT_S
+        attempt = 0
+
+        nemesis_log.append(
+            f"Polling orchestrator health at {url} "
+            f"(interval={_HEALTH_POLL_INTERVAL_S}s, timeout={_HEALTH_POLL_TIMEOUT_S}s)"
+        )
+        logging.info(f"Polling nemesis orchestrator health: {url}")
+
+        while time_module.time() < deadline:
+            attempt += 1
+            try:
+                req = urllib.request.Request(url, method="GET")
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    body = json.loads(resp.read().decode())
+                    if body.get("status") == "ok":
+                        nemesis_log.append(
+                            f"Orchestrator healthy after {attempt} attempt(s)"
+                        )
+                        logging.info(
+                            f"Nemesis orchestrator healthy after {attempt} attempt(s)"
+                        )
+                        return True
+                    nemesis_log.append(
+                        f"Health attempt {attempt}: unexpected response {body}"
+                    )
+            except Exception as exc:
+                nemesis_log.append(f"Health attempt {attempt}: {exc}")
+                logging.debug(f"Health poll attempt {attempt} failed: {exc}")
+
+            time_module.sleep(_HEALTH_POLL_INTERVAL_S)
+
+        nemesis_log.append(
+            f"Orchestrator did not become healthy within {_HEALTH_POLL_TIMEOUT_S}s "
+            f"({attempt} attempts)"
+        )
+        logging.error(
+            f"Nemesis orchestrator health timeout after {attempt} attempts"
+        )
+        return False
+
+    def _set_schedules_enabled(
+        self, enabled: bool, nemesis_log: list[str]
+    ) -> bool:
+        """Call ``POST /api/schedule/all`` to enable or disable all nemesis schedules.
+
+        Returns:
+            ``True`` on success, ``False`` on failure.
+        """
+        endpoint = self._get_orchestrator_endpoint()
+        url = f"{endpoint}/api/schedule/all"
+        payload = json.dumps({"enabled": enabled}).encode()
+
+        action = "Enabling" if enabled else "Disabling"
+        nemesis_log.append(f"{action} all nemesis schedules via {url}")
+        logging.info(f"{action} nemesis schedules: POST {url}")
+
+        try:
+            req = urllib.request.Request(
+                url,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                body = json.loads(resp.read().decode())
+                if body.get("status") == "ok":
+                    nemesis_log.append(
+                        f"Schedules {'enabled' if enabled else 'disabled'} successfully: {body}"
+                    )
+                    logging.info(f"Nemesis schedules response: {body}")
+                    return True
+                nemesis_log.append(f"Unexpected schedule response: {body}")
+                logging.warning(f"Unexpected /api/schedule/all response: {body}")
+                return False
+        except Exception as exc:
+            nemesis_log.append(f"Failed to {action.lower()} schedules: {exc}")
+            logging.error(f"Error calling /api/schedule/all: {exc}")
+            return False
+
+    # ------------------------------------------------------------------
+    # Nemesis install (subprocess)
+    # ------------------------------------------------------------------
+
+    def _install_nemesis_services(self, nemesis_log: list[str]) -> bool:
+        """Deploy nemesis binary and start ``nemesis-agent`` on all cluster hosts.
+
+        Runs ``./nemesis install --yaml-config-location <path>`` as a subprocess.
+        Skips if services are already installed (``self.nemesis_installed``).
+
+        Returns:
+            ``True`` if services are installed (or were already), ``False`` on failure.
+        """
+        if self.nemesis_installed:
+            nemesis_log.append("Nemesis services already installed, skipping install")
+            return True
+
+        nemesis_binary_path = os.getenv("NEMESIS_BINARY")
+        if nemesis_binary_path:
+            nemesis_binary = yatest.common.binary_path(nemesis_binary_path)
+        else:
+            nemesis_binary = yatest.common.binary_path(
+                "ydb/tests/stability/nemesis/nemesis"
+            )
+
+        yaml_config_location = self.cluster_path or self.yaml_config
+        if not yaml_config_location:
+            nemesis_log.append(
+                "No cluster config path available for nemesis "
+                "(neither cluster_path nor yaml_config set)"
+            )
+            logging.error(nemesis_log[-1])
+            return False
+
+        cmd = (
+            f"{nemesis_binary} install "
+            f"--yaml-config-location {yaml_config_location}"
+        )
+        if self.static_location:
+            cmd += f" --static-location {self.static_location}"
+        nemesis_log.append(f"Nemesis binary: {nemesis_binary}")
+        nemesis_log.append(f"Cluster config: {yaml_config_location}")
+        nemesis_log.append(f"Running: {cmd}")
+        logging.info(f"Installing nemesis via: {cmd}")
+
+        start_time = time_module.time()
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            cwd=os.path.dirname(nemesis_binary),
+        )
+        elapsed = time_module.time() - start_time
+
+        nemesis_log.append(f"Exit code: {result.returncode}")
+        nemesis_log.append(f"Execution time: {elapsed:.2f}s")
+        if result.stdout:
+            nemesis_log.append(f"stdout:\n{result.stdout}")
+        if result.stderr:
+            nemesis_log.append(f"stderr:\n{result.stderr}")
+
+        if result.returncode != 0:
+            nemesis_log.append(
+                f"Nemesis install failed with exit code {result.returncode}"
+            )
+            return False
+
+        nemesis_log.append("Nemesis install completed successfully")
+        self.nemesis_installed = True
+        return True
+
+    # ------------------------------------------------------------------
+    # Enable / disable nemesis chaos
+    # ------------------------------------------------------------------
+
+    def _enable_nemesis(
+        self, stress_util_names: list[str], nemesis_log: list[str]
+    ) -> None:
+        """Install services (if needed), wait for health, enable chaos schedules.
+
+        Updates ``self.nemesis_started`` based on the outcome.
+        """
+        # Step 1: install services
+        if not self._install_nemesis_services(nemesis_log):
+            self.nemesis_started = False
+            cluster_issue = create_cluster_issue(
+                "nemesis_startup_failed",
+                nemesis_log[-1],
+                0,
+            )
+            test_event_report(
+                nemesis_enabled=True,
+                workload_names=stress_util_names,
+                event_kind="ClusterCheck",
+                verification_phase="nemesis_management",
+                check_type="nemesis_install_failure",
+                cluster_issue=cluster_issue,
+            )
+            return
+
+        # Step 2: poll /health until orchestrator is ready
+        if not self._poll_health(nemesis_log):
+            self.nemesis_started = False
+            error_msg = "Nemesis orchestrator did not become healthy in time"
+            nemesis_log.append(error_msg)
+            cluster_issue = create_cluster_issue(
+                "nemesis_health_timeout",
+                error_msg,
+                0,
+            )
+            test_event_report(
+                nemesis_enabled=True,
+                workload_names=stress_util_names,
+                event_kind="ClusterCheck",
+                verification_phase="nemesis_management",
+                check_type="nemesis_health_timeout",
+                cluster_issue=cluster_issue,
+            )
+            return
+
+        # Step 3: enable all chaos schedules
+        if self._set_schedules_enabled(True, nemesis_log):
+            self.nemesis_started = True
+            nemesis_log.append("Nemesis chaos enabled successfully")
+        else:
+            self.nemesis_started = False
+            nemesis_log.append("Failed to enable nemesis chaos schedules")
+
+    def _disable_nemesis(self, nemesis_log: list[str]) -> None:
+        """Disable chaos schedules.  Services keep running for fast re-enable.
+
+        Updates ``self.nemesis_started`` to ``False``.
+        """
+        if self.nemesis_installed:
+            if self._set_schedules_enabled(False, nemesis_log):
+                nemesis_log.append("Nemesis chaos disabled successfully")
+            else:
+                nemesis_log.append("Failed to disable nemesis chaos schedules")
+        else:
+            nemesis_log.append(
+                "Nemesis services not installed, nothing to disable"
+            )
+        self.nemesis_started = False
+
+    def _stop_nemesis_services(self, nemesis_log: list[str]) -> bool:
+        """Stop ``nemesis-agent`` systemd services on all cluster hosts.
+
+        Runs ``./nemesis stop --yaml-config-location <path>`` as a subprocess.
+        Resets ``self.nemesis_installed`` to ``False`` on success.
+
+        Returns:
+            ``True`` if services were stopped successfully, ``False`` on failure.
+        """
+        if not self.nemesis_installed:
+            nemesis_log.append("Nemesis services not installed, nothing to stop")
+            return True
+
+        nemesis_binary_path = os.getenv("NEMESIS_BINARY")
+        if nemesis_binary_path:
+            nemesis_binary = yatest.common.binary_path(nemesis_binary_path)
+        else:
+            nemesis_binary = yatest.common.binary_path(
+                "ydb/tests/stability/nemesis/nemesis"
+            )
+
+        yaml_config_location = self.cluster_path or self.yaml_config
+        if not yaml_config_location:
+            nemesis_log.append(
+                "No cluster config path available for nemesis stop "
+                "(neither cluster_path nor yaml_config set)"
+            )
+            logging.error(nemesis_log[-1])
+            return False
+
+        cmd = (
+            f"{nemesis_binary} stop "
+            f"--yaml-config-location {yaml_config_location}"
+        )
+        nemesis_log.append(f"Stopping nemesis services: {cmd}")
+        logging.info(f"Stopping nemesis services via: {cmd}")
+
+        try:
+            start_time = time_module.time()
+            result = subprocess.run(
+                cmd,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=120,
+                cwd=os.path.dirname(nemesis_binary),
+            )
+            elapsed = time_module.time() - start_time
+
+            nemesis_log.append(f"Exit code: {result.returncode}")
+            nemesis_log.append(f"Execution time: {elapsed:.2f}s")
+            if result.stdout:
+                nemesis_log.append(f"stdout:\n{result.stdout}")
+            if result.stderr:
+                nemesis_log.append(f"stderr:\n{result.stderr}")
+
+            if result.returncode != 0:
+                nemesis_log.append(
+                    f"Nemesis stop failed with exit code {result.returncode}"
+                )
+                return False
+
+            nemesis_log.append("Nemesis services stopped successfully")
+            self.nemesis_installed = False
+            return True
+
+        except Exception as exc:
+            nemesis_log.append(f"Error stopping nemesis services: {exc}")
+            logging.error(f"Error stopping nemesis services: {exc}")
+            return False
+
+    # ------------------------------------------------------------------
+    # Public entry point
+    # ------------------------------------------------------------------
+
     def _manage_nemesis(
         self,
         enable_nemesis: bool,
@@ -330,426 +681,71 @@ class StressUtilDeployer:
         operation_context: str = None,
         existing_log: list = None,
     ):
-        """
-        Manages nemesis service on all unique cluster hosts (parallel execution)
+        """Manage nemesis chaos schedules via the orchestrator HTTP API.
+
+        * **enable** — install → health-poll → ``POST /api/schedule/all``
+        * **disable** — ``POST /api/schedule/all {"enabled": false}``
 
         Args:
-            enable_nemesis: True to start, False to stop
+            enable_nemesis: True to enable chaos, False to disable
+            stress_util_names: List of stress utility names (for event reporting)
             operation_context: Operation context for logging
             existing_log: Existing log to append info to
 
         Returns:
-            List of strings with operation log containing:
-            - Operation status per host
-            - Timing information
-            - Error details if any
-
-        Note:
-            This method handles both binary deployment and service management
-            when starting nemesis
+            List of strings with operation log
         """
-        # Create summary log for Allure
         nemesis_log = existing_log if existing_log is not None else []
+        action_name = "Enabling" if enable_nemesis else "Disabling"
 
         try:
-            # Get all unique cluster hosts
-            nodes = self.nodes
-            unique_hosts = list(sorted(set(filter(lambda h: h != 'localhost', [node.host for node in nodes]))))[:1]
-
-            if enable_nemesis:
-                action = "restart"
-                action_name = "Starting"
-                logging.info(
-                    f"Starting nemesis on {
-                        len(unique_hosts)} hosts in parallel"
-                )
-
-                # Deploy nemesis binary to all nodes
-                nemesis_log.append(
-                    f"Deploying nemesis binary to {len(unique_hosts)} hosts"
-                )
-
-                # Get path to nemesis binary
-                nemesis_binary_path = os.getenv("NEMESIS_BINARY")
-                if nemesis_binary_path:
-                    nemesis_binary = yatest.common.binary_path(
-                        nemesis_binary_path)
-                else:
-                    # Используем путь по умолчанию
-                    nemesis_binary = yatest.common.binary_path(
-                        "ydb/tests/tools/nemesis/driver/nemesis"
-                    )
-
-                nemesis_log.append(f"Nemesis binary path: {nemesis_binary}")
-
-                # Create summary log for Allure for file operations
-                file_ops_log = []
-                file_ops_log.append(
-                    f"Preparing nemesis configuration and binary on {
-                        len(unique_hosts)} hosts in parallel"
-                )
-
-                # Add operation timing info
-                current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                file_ops_log.append(f"Time: {current_time}")
-
-                # Deploy nemesis binary using
-                # deploy_binaries_to_hosts
-                nemesis_binaries = [nemesis_binary]
-                nemesis_deploy_path = "/Berkanavt/nemesis/bin/"
-
-                file_ops_log.append(
-                    f"Deploying nemesis binary to {len(unique_hosts)} hosts"
-                )
-                deploy_results = deploy_binaries_to_hosts(
-                    nemesis_binaries, list(unique_hosts), nemesis_deploy_path
-                )
-
-                # Analyze deployment results
-                successful_deploys = 0
-                failed_deploys = 0
-                deploy_errors = []
-
-                for host in unique_hosts:
-                    binary_result = deploy_results.get(
-                        host, {}).get("nemesis", {})
-                    success = binary_result.get("success", False)
-
-                    if success:
-                        successful_deploys += 1
-                        file_ops_log.append(
-                            f"  {host}: Binary deployed successfully to {
-                                binary_result['path']}"
-                        )
-                    else:
-                        failed_deploys += 1
-                        error = binary_result.get("error", "Unknown error")
-                        deploy_errors.append(f"{host}: {error}")
-                        file_ops_log.append(
-                            f"  {host}: Deployment failed - {error}")
-
-                file_ops_log.append("\n--- Binary Deployment Summary ---")
-                file_ops_log.append(
-                    f"Successful deployments: {successful_deploys}/{
-                        len(unique_hosts)}"
-                )
-                file_ops_log.append(
-                    f"Failed deployments: {failed_deploys}/{len(unique_hosts)}"
-                )
-
-                if deploy_errors:
-                    file_ops_log.append("\nDeployment errors:")
-                    for error in deploy_errors:
-                        file_ops_log.append(f"- {error}")
-
-                # Function to perform file operations on single host
-                def prepare_nemesis_config(host):
-                    host_log = []
-                    host_log.append(f"\n--- {host} ---")
-                    logging.info(
-                        f"Starting nemesis config preparation for {host}")
-
-                    try:
-                        # 1. Set execute permissions for nemesis
-                        chmod_cmd = "sudo chmod +x /Berkanavt/nemesis/bin/nemesis"
-                        chmod_result = execute_command(
-                            host=host, cmd=chmod_cmd, raise_on_error=False, timeout=90
-                        )
-
-                        chmod_stderr = (
-                            chmod_result.stderr if chmod_result.stderr else ""
-                        )
-                        if chmod_stderr and "error" in chmod_stderr.lower():
-                            error_msg = f"Error setting executable permissions on {host}: {chmod_stderr}"
-                            host_log.append(error_msg)
-                            return {
-                                "host": host,
-                                "success": False,
-                                "error": error_msg,
-                                "log": host_log,
-                            }
-                        else:
-                            host_log.append(
-                                "Set executable permissions for nemesis")
-
-                        # 2. Delete cluster.yaml
-                        delete_cmd = "sudo rm -f /Berkanavt/kikimr/cfg/cluster.yaml"
-                        delete_result = execute_command(
-                            host=host, cmd=delete_cmd, raise_on_error=False
-                        )
-
-                        delete_stderr = (
-                            delete_result.stderr if delete_result.stderr else ""
-                        )
-                        if delete_stderr and "error" in delete_stderr.lower():
-                            error_msg = f"Error deleting cluster.yaml on {host}: {delete_stderr}"
-                            host_log.append(error_msg)
-                            return {
-                                "host": host,
-                                "success": False,
-                                "error": error_msg,
-                                "log": host_log,
-                            }
-                        else:
-                            host_log.append("Deleted cluster.yaml")
-
-                        # 3. Copy config.yaml to cluster.yaml
-                        copy_result = self._copy_cluster_config(host, host_log)
-                        if not copy_result["success"]:
-                            return copy_result
-
-                        logging.info(f"Completed nemesis config preparation for {host}")
-                        return {"host": host, "success": True, "log": host_log}
-
-                    except Exception as e:
-                        error_msg = f"Exception on {host}: {e}"
-                        host_log.append(error_msg)
-                        logging.error(
-                            f"Exception during nemesis config preparation for {host}: {e}"
-                        )
-                        return {
-                            "host": host,
-                            "success": False,
-                            "error": error_msg,
-                            "log": host_log,
-                        }
-
-                # Execute file operations in parallel
-                file_ops_start_time = time_module.time()
-                success_count = 0
-                error_count = 0
-                errors = []
-
-                with ThreadPoolExecutor(
-                    max_workers=min(len(unique_hosts), 20)
-                ) as executor:
-                    future_to_host = {
-                        executor.submit(prepare_nemesis_config, host): host
-                        for host in unique_hosts
-                    }
-
-                    for future in as_completed(future_to_host):
-                        try:
-                            result = future.result()
-                            host_log = result["log"]
-                            file_ops_log.extend(host_log)
-
-                            if result["success"]:
-                                success_count += 1
-                            else:
-                                error_count += 1
-                                errors.append(result["error"])
-
-                        except Exception as e:
-                            host = future_to_host[future]
-                            error_msg = f"Exception processing {host}: {e}"
-                            file_ops_log.append(f"\n--- {host} ---")
-                            file_ops_log.append(error_msg)
-                            errors.append(error_msg)
-                            error_count += 1
-
-                file_ops_time = time_module.time() - file_ops_start_time
-
-                # Add final file operations statistics
-                file_ops_log.append("\n--- File Operations Summary ---")
-                file_ops_log.append(
-                    f"Successful hosts: {success_count}/{len(unique_hosts)}"
-                )
-                file_ops_log.append(
-                    f"Failed hosts: {error_count}/{len(unique_hosts)}")
-                file_ops_log.append(f"Execution time: {file_ops_time:.2f}s")
-
-                if errors:
-                    file_ops_log.append("\nErrors:")
-                    for error in errors:
-                        file_ops_log.append(f"- {error}")
-
-                # Add file operations summary log to Allure
-                allure.attach(
-                    "\n".join(file_ops_log),
-                    "Nemesis Config and Binary Preparation (Parallel)",
-                    attachment_type=allure.attachment_type.TEXT,
-                )
-            else:
-                action = "stop"
-                action_name = "Stopping"
-                logging.info(
-                    f"Stopping nemesis on {
-                        len(unique_hosts)} hosts in parallel"
-                )
-
-            # Add operation info to log
             if operation_context:
-                nemesis_log.append(
-                    f"{operation_context}: {action_name} nemesis service on {
-                        len(unique_hosts)} hosts in parallel"
-                )
+                nemesis_log.append(f"{operation_context}: {action_name} nemesis")
             else:
-                nemesis_log.append(
-                    f"{action_name} nemesis service on {
-                        len(unique_hosts)} hosts in parallel"
-                )
+                nemesis_log.append(f"{action_name} nemesis")
 
-            # Add start/stop timing info
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            nemesis_log.append(f"Time: {current_time}")
-
-            # Function to execute service command on single host
-            def execute_service_command(host):
-                host_log = []
-                host_log.append(f"\n--- {host} ---")
-
-                try:
-                    cmd = f"sudo service nemesis {action}"
-                    result = execute_command(
-                        host=host, cmd=cmd, raise_on_error=False, timeout=90)
-
-                    stdout = result.stdout if result.stdout else ""
-                    stderr = result.stderr if result.stderr else ""
-
-                    if stderr and "error" in stderr.lower():
-                        error_msg = f"Error on {host}: {stderr}"
-                        host_log.append(error_msg)
-
-                        # Only create separate step and log for errors
-                        with allure.step(
-                            f"Error {action.lower()}ing nemesis on {host}"
-                        ):
-                            allure.attach(
-                                f"Command: {cmd}\nstdout: {stdout}\nstderr: {stderr}",
-                                f"Nemesis {action} error",
-                                attachment_type=allure.attachment_type.TEXT,
-                            )
-                            logging.warning(
-                                f"Error during nemesis {action} on {host}: {stderr}"
-                            )
-
-                        return {
-                            "host": host,
-                            "success": False,
-                            "error": error_msg,
-                            "log": host_log,
-                        }
-                    else:
-                        host_log.append("Success")
-                        return {"host": host, "success": True, "log": host_log}
-
-                except Exception as e:
-                    error_msg = f"Exception on {host}: {e}"
-                    host_log.append(error_msg)
-                    return {
-                        "host": host,
-                        "success": False,
-                        "error": error_msg,
-                        "log": host_log,
-                    }
-
-            # Execute service commands in parallel
-            service_start_time = time_module.time()
-            success_count = 0
-            error_count = 0
-            errors = []
-
-            with ThreadPoolExecutor(max_workers=min(len(unique_hosts), 10)) as executor:
-                future_to_host = {
-                    executor.submit(execute_service_command, host): host
-                    for host in unique_hosts
-                }
-
-                for future in as_completed(future_to_host):
-                    try:
-                        result = future.result()
-                        host_log = result["log"]
-                        nemesis_log.extend(host_log)
-
-                        if result["success"]:
-                            success_count += 1
-                        else:
-                            error_count += 1
-                            errors.append(result["error"])
-
-                    except Exception as e:
-                        host = future_to_host[future]
-                        error_msg = f"Exception processing {host}: {e}"
-                        nemesis_log.append(f"\n--- {host} ---")
-                        nemesis_log.append(error_msg)
-                        errors.append(error_msg)
-                        error_count += 1
-
-            service_time = time_module.time() - service_start_time
-
-            # Add final statistics
-            nemesis_log.append("\n--- Summary ---")
             nemesis_log.append(
-                f"Successful hosts: {success_count}/{len(unique_hosts)}")
-            nemesis_log.append(
-                f"Failed hosts: {error_count}/{len(unique_hosts)}")
-            nemesis_log.append(f"Service operations time: {service_time:.2f}s")
-
-            if errors:
-                nemesis_log.append("\nErrors:")
-                for error in errors:
-                    nemesis_log.append(f"- {error}")
-
-            # Set nemesis startup flag
-            if enable_nemesis:
-                if error_count == 0:
-                    # Complete success
-                    self.nemesis_started = True
-                    nemesis_log.append("Nemesis service started successfully on all hosts")
-                elif error_count < len(unique_hosts):
-                    # Partial success - create ClusterCheck record with warning
-                    self.nemesis_started = True  # Consider nemesis as partially working
-                    nemesis_log.append(f"Nemesis service started partially: {success_count}/{len(unique_hosts)} hosts")
-
-                    cluster_issue = create_cluster_issue(
-                        "nemesis_partial_startup",
-                        f"Nemesis started on {success_count}/{len(unique_hosts)} hosts. Failed hosts: {error_count}. Errors: {'; '.join(errors[:3])}{'...' if len(errors) > 3 else ''}",
-                        success_count
-                    )
-
-                    test_event_report(
-                        nemesis_enabled=enable_nemesis,
-                        workload_names=stress_util_names,
-                        event_kind='ClusterCheck',
-                        verification_phase="nemesis_management",
-                        check_type="nemesis_partial_failure",
-                        cluster_issue=cluster_issue
-                    )
-                else:
-                    # Complete failure - already handled in except block above via raise Exception
-                    self.nemesis_started = False
-                    nemesis_log.append("Nemesis service failed to start on all hosts")
-            else:
-                self.nemesis_started = False
-                nemesis_log.append("Nemesis service stopped successfully")
-
-            # Add summary log to Allure
-            allure.attach(
-                "\n".join(nemesis_log),
-                f"Nemesis {action_name} Summary (Parallel)",
-                attachment_type=allure.attachment_type.TEXT,
+                f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
             )
 
+            if enable_nemesis:
+                self._enable_nemesis(stress_util_names, nemesis_log)
+            else:
+                self._disable_nemesis(nemesis_log)
+
+            allure.attach(
+                "\n".join(nemesis_log),
+                f"Nemesis {action_name} Summary",
+                attachment_type=allure.attachment_type.TEXT,
+            )
+            return nemesis_log
+
+        except subprocess.TimeoutExpired:
+            error_msg = "Nemesis install command timed out after 300s"
+            nemesis_log.append(error_msg)
+            logging.error(error_msg)
+            self.nemesis_started = False
+            allure.attach(
+                "\n".join(nemesis_log),
+                f"Nemesis {action_name} Timeout",
+                attachment_type=allure.attachment_type.TEXT,
+            )
             return nemesis_log
 
         except Exception as e:
-            # Create problem information and report it
             cluster_issue = create_cluster_issue(
                 f"nemesis_{action_name.lower()}_exception",
                 f"Exception during nemesis {action_name.lower()}: {e}",
-                0
+                0,
             )
-
             test_event_report(
                 nemesis_enabled=enable_nemesis,
                 workload_names=stress_util_names,
-                event_kind='ClusterCheck',
+                event_kind="ClusterCheck",
                 verification_phase="nemesis_management",
                 check_type=f"nemesis_{action_name.lower()}_exception",
-                cluster_issue=cluster_issue
+                cluster_issue=cluster_issue,
             )
-
             error_msg = f"Error managing nemesis: {e}"
             logging.error(error_msg)
             allure.attach(
@@ -849,7 +845,7 @@ class StressUtilDeployer:
 
         # Copy cluster.yaml (if cluster_path is specified)
         cluster_result = self._copy_single_config(
-            host, self.cluster_path, "/Berkanavt/nemesis/cfg/config.yaml",
+            host, self.cluster_path, "/Berkanavt/nemesis/cluster.yaml",
             "cluster config", None, host_log
         )
         if not cluster_result["success"]:

@@ -830,7 +830,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         return true;
     }
-    
+
     bool LoadSharedShards(NIceDb::TNiceDb& db) const {
         auto rowSet = db.Table<Schema::SharedShards>().Range().Select();
         if (!rowSet.IsReady()) {
@@ -1393,6 +1393,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             ui64 secondsSinceEpoch = 0;
             RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_ServerlessStorageLastBillTime, secondsSinceEpoch));
             Self->ServerlessStorageLastBillTime = TInstant::Seconds(secondsSinceEpoch);
+        }
+
+        {
+            ui64 isOldArgonHashFormatMigrationCompletedVal = 0;
+            RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_IsOldArgonHashFormatMigrationCompleted,
+                isOldArgonHashFormatMigrationCompletedVal));
+            Self->IsOldArgonHashFormatMigrationCompleted = isOldArgonHashFormatMigrationCompletedVal;
         }
 
 #undef RETURN_IF_NO_PRECHARGED
@@ -2297,12 +2304,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             if (!LoadSharedShards(db)) {
                 return false;
             }
-            
+
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "TTxInit for Shared Shards"
                         << ", read records: " << Self->SharedShards.size()
                         << ", at schemeshard: " << Self->TabletID());
-            
+
             for (const auto& [shardIdx, paths]: Self->SharedShards) {
                 Y_ABORT_UNLESS(Self->ShardInfos.contains(shardIdx));
                 for (const auto& path: paths) {
@@ -2310,7 +2317,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             "TTxInit for Shared Shards"
                             << ", read: " << shardIdx
                             << ", PathId: " << path
-                            << ", at schemeshard: " << Self->TabletID()); 
+                            << ", at schemeshard: " << Self->TabletID());
                 }
             }
         }
@@ -5711,7 +5718,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 auto compactionId = shardsRowset.GetValue<Schema::WaitingForcedCompactionShards::ForcedCompactionId>();
 
-                Self->AddForcedCompactionShard(shardIdx, Self->ForcedCompactions.at(compactionId));
+                if (auto* info = Self->ForcedCompactions.FindPtr(compactionId)) {
+                    Self->AddForcedCompactionShard(shardIdx, *info);
+                } else {
+                    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "unknown forced compaction id " << compactionId
+                            << " for shardIdx: " << shardIdx
+                            << ", at schemeshard: " << Self->TabletID());
+                }
 
                 if (!shardsRowset.Next()) {
                     return false;

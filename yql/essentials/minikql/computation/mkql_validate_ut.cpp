@@ -602,7 +602,7 @@ static std::array<const NUdf::TPersonStruct*, 3> DICT_DIGIT2PERSON_BROKEN_CONTEN
 const ui32 DICT_DIGIT2PERSON_BROKEN_PERSON_INDEX = 1;
 const ui32 DICT_DIGIT2PERSON_BROKEN_STRUCT_INDEX = 2;
 
-const std::vector<std::pair<ui32, NUdf::IBoxedValuePtr>> MakeDictDigiT2PersonBroken() {
+std::vector<std::pair<ui32, NUdf::IBoxedValuePtr>> MakeDictDigiT2PersonBroken() {
     std::vector<std::pair<ui32, NUdf::IBoxedValuePtr>> DICT_DIGIT2PERSON_BROKEN = {
         {333, new TBrokenStructBoxedValue<NUdf::TPersonStruct>(STRUCT_PERSON_HITHCOCK, RAW_INDEX_NO_HOLE)},
         {5, new TBrokenStructBoxedValue<NUdf::TPersonStruct>(STRUCT_PERSON_JONNIE, DICT_DIGIT2PERSON_BROKEN_STRUCT_INDEX)},

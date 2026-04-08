@@ -4,8 +4,12 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/volume_counters.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/core/config.h>
+
+#include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -13,29 +17,42 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 class TFastPathService
     : public IStorage
+    , public IPartitionDirectService
     , public std::enable_shared_from_this<TFastPathService>
 {
 private:
     NActors::TActorSystem* const ActorSystem = nullptr;
-    const std::shared_ptr<TRegion> Region;   // 4 GiB
+    const TString DiskId;
+    const ISchedulerPtr Scheduler;
+    const ITimerPtr Timer;
+    const TVector<std::shared_ptr<TRegion>> Regions;   // 4 GiB each
 
+    std::atomic<ui64> SequenceGenerator;
     std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
     // Throttle trace ID creation to avoid overwhelming the tracing system
     TDuration TraceSamplePeriod;
 
     TVolumeCounters Counters;
+    TVolumeConfigPtr VolumeConfig;
+    const EWriteMode WriteMode;
+    TDuration PBufferReplyTimeout;
 
 public:
     TFastPathService(
         NActors::TActorSystem* actorSystem,
         ui64 tabletId,
-        ui32 generation,
-        std::shared_ptr<TRegion> region,
-        const NProto::TStorageServiceConfig& storageConfig,
+        const TString& diskId,
+        ui64 blockCount,
+        ui32 blockSize,
+        TVector<IDirectBlockGroupPtr> directBlockGroups,
+        std::shared_ptr<NYdb::NBS::NStorage::TStorageConfig> storageConfig,
+        ISchedulerPtr scheduler,
+        ITimerPtr timer,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters = nullptr);
 
     ~TFastPathService() override = default;
 
+    // IStorage implementation
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request) override;
@@ -50,8 +67,17 @@ public:
 
     void ReportIOError() override;
 
+    // IPartitionDirectService implementation
+    TVolumeConfigPtr GetVolumeConfig() const override;
+    NWilson::TSpan CreteRootSpan(TStringBuf name) override;
+
+    void ScheduleAfterDelay(
+        NYdb::NBS::TExecutorPtr executor,
+        TDuration delay,
+        NYdb::NBS::TCallback callback) override;
+
 private:
-    NWilson::TTraceId SpanTrace();
+    ui64 GenerateSequenceNumber();
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

@@ -12,4 +12,66 @@ extend google.protobuf.FieldOptions {
 
 extend google.protobuf.MessageOptions {
   bool include = 100800;
+
+  // Contains main information about the event type.
+  EventDescriptor event_descriptor = 102404;
+}
+
+message EventDescriptor {
+  // The ID of the service that the event will be linked to. It usually matches the name of the package embedded
+  // directly in yandex.cloud.events (for example, iam), but there are exceptions (for example, mdb.postgresql)).
+  string service = 1;
+
+  // The category of the event (see https://docs.yandex-team.ru/audit-trails/pages/concept#event_categories).
+  EventCategory category = 2;
+
+  // Event visibility (or publication status).
+  EventVisibility visibility = 3;
+
+  // Used to override default audit event package for events in a corresponding file.
+  // Introduced only for legacy events with custom package mappings.
+  string audit_event_package = 4;
+
+  // If set to true, Audit Trails will use the event timestamp (the event_metadata.created_at field) as a source of a
+  // sequence number for event ordering. The full implications of this are described at
+  // https://docs.yandex-team.ru/audit-trails/pages/sending_events/events_ordering
+  bool use_event_timestamp_as_ordering_sequence_number = 5;
+}
+
+enum EventCategory {
+  EVENT_CATEGORY_UNSPECIFIED = 0;
+
+  // Also known as control plane.
+  MANAGEMENT = 1;
+
+  // Also known as data plane.
+  DATA = 2;
+}
+
+enum EventVisibility {
+  EVENT_VISIBILITY_UNSPECIFIED = 0;
+
+  // Event is not visible to anyone.
+  //
+  // Suitable for the early stages of integration with Audit Trails. If this level is used, then it is necessary to
+  // specify the ticket for event publication in the comment.
+  NONE = 1;
+
+  // Event is visible only to trails pertaining to Yandex Cloud organizations.
+  //
+  // Suitable either for non-public events (for example, when the relevant functionality is unavailable to external
+  // users), or for testing integration with Audit Trails.
+  //
+  // If this level is used for events that should eventually be published, then it is necessary specify the ticket for
+  // event publication in the comment.
+  PRIVATE = 2;
+
+  // Event is visible to all users but: (1) is subject to change and (2) is not billed.
+  //
+  // Suitable for new high-frequency events so that customers can assess their potential value before the events become
+  // paid.
+  PUBLIC_PREVIEW = 3;
+
+  // Event is visible to all users.
+  PUBLIC = 4;
 }

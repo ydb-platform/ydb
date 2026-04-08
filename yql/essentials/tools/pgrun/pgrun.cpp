@@ -644,7 +644,7 @@ private:
                 return VarParser();
 
             default:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -749,7 +749,7 @@ void WriteErrorToStream(const TProgramPtr program)
 using CellFormatter = std::function<const TString(const TString&)>;
 using TColumnType = TString;
 
-inline const TString FormatBool(const TString& value)
+inline TString FormatBool(const TString& value)
 {
     static const TString T = "t";
     static const TString F = "f";
@@ -760,14 +760,14 @@ inline const TString FormatBool(const TString& value)
                                  : ythrow yexception() << "Unexpected bool literal: " << value;
 }
 
-inline const TString FormatNumeric(const TString& value)
+inline TString FormatNumeric(const TString& value)
 {
     static const TString Zero = "0.0";
 
     return (value == "0") ? Zero : value;
 }
 
-const TString FormatFloat(const TString& value, std::function<TString(const TString&)> formatter) {
+TString FormatFloat(const TString& value, std::function<TString(const TString&)> formatter) {
     static const TString Nan = "NaN";
     static const TString Inf = "Infinity";
     static const TString Minf = "-Infinity";
@@ -784,19 +784,19 @@ const TString FormatFloat(const TString& value, std::function<TString(const TStr
     }
 }
 
-inline const TString FormatFloat4(const TString& value)
+inline TString FormatFloat4(const TString& value)
 {
     return FormatFloat(value,
                        [](const TString& val) { return TString(fmt::format("{:.8g}", std::stof(val))); });
 }
 
-inline const TString FormatFloat8(const TString& value)
+inline TString FormatFloat8(const TString& value)
 {
     return FormatFloat(value,
                        [](const TString& val) { return TString(fmt::format("{:.15g}", std::stod(val))); });
 }
 
-inline const TString FormatTransparent(const TString& value)
+inline TString FormatTransparent(const TString& value)
 {
     return value;
 }

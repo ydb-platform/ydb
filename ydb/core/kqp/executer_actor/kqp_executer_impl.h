@@ -152,10 +152,9 @@ public:
         , AggregationSettings(executerConfig.TableServiceConfig.GetAggregationConfig())
         , StatementResultIndex(statementResultIndex)
         , BlockTrackingMode(executerConfig.GetBlockTrackingMode())
-        , VerboseMemoryLimitException(executerConfig.MutableConfig->VerboseMemoryLimitException.load())
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
-        , TasksGraph(Database, Request.Transactions, Request.TxAlloc, partitionPrunerConfig, AggregationSettings, Counters, BufferActorId, UserToken)
+        , TasksGraph(Database, Request.Transactions, Request.TxAlloc, AggregationSettings, Counters, BufferActorId, UserToken)
         , ChannelService(channelService)
         , PartitionPruner(MakeHolder<TPartitionPruner>(Request.TxAlloc->HolderFactory, Request.TxAlloc->TypeEnv, std::move(partitionPrunerConfig)))
     {
@@ -267,6 +266,14 @@ protected:
 
                 if (isFullScan && !source.HasItemsLimit()) {
                     Counters->Counters->FullScansExecuted->Inc();
+                }
+
+                const auto& partitions = stageInfo.Meta.PrunedPartitions.at(0);
+                bool singlePartitionedStage = stage.GetIsSinglePartition();
+                bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
+                if (!partitions.empty() && (isSequentialInFlight || singlePartitionedStage)) {
+                    auto [startShard, shardInfo] = PartitionPruner->MakeVirtualTablePartition(source, stageInfo);
+                    stageInfo.Meta.VirtualPartition.emplace(startShard, std::move(shardInfo));
                 }
             }
             // Scan tasks from shards
@@ -656,7 +663,7 @@ protected:
         YQL_ENSURE(Stats);
 
         if (state.HasStats()) {
-            Stats->UpdateTaskStats(taskId, state.GetStats(), nullptr, (NYql::NDqProto::EComputeState) state.GetState(),
+            Stats->UpdateTaskStats(computeActor.NodeId(), taskId, state.GetStats(), nullptr, (NYql::NDqProto::EComputeState) state.GetState(),
                 TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs()));
 
             if (CollectBasicStats(Request.StatsMode)) {
@@ -767,6 +774,12 @@ protected:
         }
 
         static_cast<TDerived*>(this)->CheckExecutionComplete();
+    }
+
+    void HandleNodeState(NYql::NDq::TEvDqCompute::TEvNodeState::TPtr& ev) {
+        if (CollectProfileStats(Request.StatsMode)) {
+            Stats->UpdateNodeStats(ev->Sender.NodeId(), ev->Get()->Record);
+        }
     }
 
     void HandleHttpInfo(NMon::TEvHttpInfo::TPtr& ev) {
@@ -1274,7 +1287,6 @@ protected:
             .BlockTrackingMode = BlockTrackingMode,
             .ArrayBufferMinFillPercentage = ArrayBufferMinFillPercentage,
             .BufferPageAllocSize = BufferPageAllocSize,
-            .VerboseMemoryLimitException = VerboseMemoryLimitException,
             .Query = Query,
             .CheckpointCoordinator = CheckpointCoordinatorId,
             .EnableWatermarks = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks(),
@@ -1701,10 +1713,6 @@ protected:
         return TasksGraph.GetMeta().IsRestored;
     }
 
-    NYql::NDqProto::TDqTask* SerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings) {
-        return TasksGraph.ArenaSerializeTaskToProto(task, serializeAsyncIoSettings);
-    }
-
     inline bool IsSchedulable() const {
         const auto& databaseId = GetUserRequestContext()->DatabaseId;
         const auto& poolId = GetUserRequestContext()->PoolId.empty() ? NResourcePool::DEFAULT_POOL_ID : GetUserRequestContext()->PoolId;
@@ -1792,7 +1800,6 @@ protected:
     bool AlreadyReplied = false;
 
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
-    const bool VerboseMemoryLimitException;
     TMaybe<ui8> ArrayBufferMinFillPercentage;
     TMaybe<size_t> BufferPageAllocSize;
 

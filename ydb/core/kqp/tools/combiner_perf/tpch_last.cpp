@@ -99,7 +99,7 @@ void RunTestLastTpch()
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(WideLastCombiner<Spilling>(
         pb,
-        pb.WideFilter(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false)),
+        pb.WideFilter(pb.ExpandMap(pb.ToFlow(TRuntimeNode(list, false), {}),
             [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U), pb.Nth(item, 3U), pb.Nth(item, 4U), pb.Nth(item, 5U), pb.Nth(item, 6U)}; }),
             [&](TRuntimeNode::TList items) { return pb.AggrLessOrEqual(items.front(), pb.NewDataLiteral<ui64>(TpchDateBorder)); }
         ),

@@ -456,7 +456,7 @@ bool IProxyNode::IsNull() const {
 }
 
 bool IProxyNode::IsLiteral() const {
-    return Inner_->IsNull();
+    return Inner_->IsLiteral();
 }
 
 TString IProxyNode::GetLiteralType() const {
@@ -3226,7 +3226,7 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
     return true;
 }
 
-const TNodePtr TUdfNode::GetExternalTypes() const {
+TNodePtr TUdfNode::GetExternalTypes() const {
     return ExternalTypesTuple_;
 }
 
@@ -3564,8 +3564,8 @@ void MakeTableFromExpression(TPosition pos, TContext& ctx, TNodePtr node, TDefer
 }
 
 TDeferredAtom MakeAtomFromExpression(TPosition pos, TContext& ctx, TNodePtr node, const TString& prefix) {
-    if (auto literal = node->GetLiteral("String")) {
-        return TDeferredAtom(node->GetPos(), prefix + *literal);
+    if (node->IsLiteral()) {
+        return TDeferredAtom(node->GetPos(), prefix + node->GetLiteralValue());
     }
 
     if (!prefix.empty()) {
@@ -3711,7 +3711,7 @@ TNodePtr BuildNamedExpr(TNodePtr parent) {
 
 bool TSecretParameters::ValidateParameters(TContext& ctx, const TPosition stmBeginPos, const TSecretParameters::EOperationMode mode) {
     if (!Value) {
-        ctx.Error(stmBeginPos) << "parameter VALUE must be set";
+        ctx.Error(stmBeginPos) << "Parameter VALUE must be set";
         return false;
     }
     if (mode == EOperationMode::Alter) {

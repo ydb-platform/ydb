@@ -869,6 +869,8 @@ void TDataShardUserDb::AddWriteConflict(ui64 txId) {
         if (info->State != EVolatileTxState::Aborting) {
             Self.SysLocksTable().AddVolatileDependency(info->TxId);
         }
+    } else if (auto* entry = Self.GetMultiTxIdManager().FindMultiTxId(txId)) {
+        Self.GetMultiTxIdManager().AddWriteConflict(entry);
     } else {
         Self.SysLocksTable().AddWriteConflict(txId);
         if (LockMode == ELockMode::OptimisticSnapshotIsolation) {
@@ -929,6 +931,8 @@ bool TDataShardUserDb::BreakWriteConflict(ui64 txId) {
             EnsureVolatileTxId();
             VolatileDependencies.insert(info->TxId);
         }
+    } else if (auto* entry = Self.GetMultiTxIdManager().FindMultiTxId(txId)) {
+        Self.GetMultiTxIdManager().BreakMultiTxId(entry);
     } else {
         // Break uncommitted locks from other transactions
         Self.SysLocksTable().BreakLock(txId);

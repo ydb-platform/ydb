@@ -5,6 +5,7 @@
 #include "scheduler_basic.h"
 #include "actor_bootstrapped.h"
 #include "actor_benchmark_helper.h"
+#include "subsystems/stats.h"
 
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/util/threadparkpad.h>
@@ -83,7 +84,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
             NanoSleep(1'000'000);
             TVector<TExecutorThreadStats> executorThreadStats;
             TExecutorPoolStats poolStats;
-            actorSystem.GetPoolStats(0, poolStats, executorThreadStats);
+            GetActorSystemStats(actorSystem).GetPoolStats(0, poolStats, executorThreadStats);
 
             ui64 newCpuUs = 0;
             ui64 newElapsedUs = 0;
@@ -154,7 +155,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         TVector<TExecutorThreadStats> stats;
         TVector<TExecutorThreadStats> sharedStats;
         TExecutorPoolStats poolStats;
-        actorSystem.GetPoolStats(0, poolStats, stats, sharedStats);
+        GetActorSystemStats(actorSystem).GetPoolStats(0, poolStats, stats, sharedStats);
         // Sum all per-thread counters into the 0th element
         for (auto &stat : stats) {
             aggregated.Aggregate(stat);
@@ -209,7 +210,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         TVector<TExecutorThreadStats> stats;
         TVector<TExecutorThreadStats> sharedStats;
         TExecutorPoolStats poolStats;
-        actorSystem.GetPoolStats(0, poolStats, stats, sharedStats);
+        GetActorSystemStats(actorSystem).GetPoolStats(0, poolStats, stats, sharedStats);
         // Sum all per-thread counters into the 0th element
         for (auto &stat : stats) {
             aggregated.Aggregate(stat);
@@ -330,7 +331,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         TVector<TExecutorThreadStats> stats;
         TVector<TExecutorThreadStats> sharedStats;
         TExecutorPoolStats poolStats;
-        actorSystem.GetPoolStats(0, poolStats, stats, sharedStats);
+        GetActorSystemStats(actorSystem).GetPoolStats(0, poolStats, stats, sharedStats);
         // Sum all per-thread counters into the 0th element
         for (auto &stat : stats) {
             aggregated.Aggregate(stat);
@@ -410,7 +411,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         TVector<TExecutorThreadStats> stats;
         TVector<TExecutorThreadStats> sharedStats;
         TExecutorPoolStats poolStats;
-        actorSystem.GetPoolStats(0, poolStats, stats, sharedStats);
+        GetActorSystemStats(actorSystem).GetPoolStats(0, poolStats, stats, sharedStats);
         // Sum all per-thread counters into the 0th element
         for (auto &stat : stats) {
             aggregated.Aggregate(stat);

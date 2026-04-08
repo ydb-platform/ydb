@@ -136,7 +136,7 @@ message TTestResults
     uint64 Iops = 12;
 
     // Avg throughput
-    uint64 ThroughputMbs = 13;
+    double ThroughputMbs = 13;
 
     // Number of requests failed
     uint64 RequestsFailed = 14;

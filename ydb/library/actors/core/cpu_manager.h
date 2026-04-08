@@ -2,7 +2,6 @@
 
 #include "config.h"
 #include "executor_pool.h"
-#include "mon_stats.h"
 #include <ydb/library/actors/core/harmonizer/harmonizer.h>
 #include <memory>
 
@@ -51,11 +50,12 @@ namespace NActors {
         void GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const;
         void GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const;
 
-        THarmonizerStats GetHarmonizerStats() const {
+        void GetHarmonizerStats(THarmonizerStats &stats) const {
             if (Harmonizer) {
-                return Harmonizer->GetStats();
+                return Harmonizer->GetStats(stats);
+            } else {
+                stats = {};
             }
-            return {};
         }
 
     private:

@@ -1019,11 +1019,16 @@ def build_pdisk_static_slots_map(base_config):
 def build_pdisk_usage_map(base_config, count_donors=False, storage_pool=None):
     pdisk_usage_map = {}
 
+    group_size_map = {group.GroupId: group.GroupSizeInUnits for group in base_config.Group}
+
+    pdisk_slot_size_in_units_map = {}
     for pdisk in base_config.PDisk:
         if storage_pool is not None and not pdisk_matches_storage_pool(pdisk, storage_pool):
             continue
         pdisk_id = get_pdisk_id(pdisk)
         pdisk_usage_map[pdisk_id] = pdisk.NumStaticSlots
+        _, slot_size_in_units = get_pdisk_inferred_settings(pdisk)
+        pdisk_slot_size_in_units_map[pdisk_id] = slot_size_in_units
 
     for vslot in base_config.VSlot:
         if not (vslot.GroupId & 0x80000000):  # don't count vslots from static groups twice
@@ -1031,10 +1036,13 @@ def build_pdisk_usage_map(base_config, count_donors=False, storage_pool=None):
         pdisk_id = get_pdisk_id(vslot.VSlotId)
         if pdisk_id not in pdisk_usage_map:
             continue
-        pdisk_usage_map[pdisk_id] += 1
+        group_size_in_units = group_size_map.get(vslot.GroupId, 0)
+        weight = get_vslot_owner_weight(group_size_in_units, pdisk_slot_size_in_units_map.get(pdisk_id, 0))
+        pdisk_usage_map[pdisk_id] += weight
         for donor in vslot.Donors if count_donors else []:
             donor_pdisk_id = get_pdisk_id(donor.VSlotId)
-            pdisk_usage_map[donor_pdisk_id] += 1
+            donor_weight = get_vslot_owner_weight(group_size_in_units, pdisk_slot_size_in_units_map.get(donor_pdisk_id, 0))
+            pdisk_usage_map[donor_pdisk_id] += donor_weight
 
     return pdisk_usage_map
 

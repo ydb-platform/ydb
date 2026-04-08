@@ -272,11 +272,89 @@ ORDER BY IntervalEnd DESC, SumReadBytes DESC
 LIMIT 100
 ```
 
+## Подробная информация о запросах сессий {#query-sessions}
+
+Следующее системное представление содержит подробную информацию о текущих сессиях и запросах, выполняющихся в них.
+* `.sys/query_sessions` — содержит информацию о сессиях и выполняемых в них запросах.
+
+| Колонка | Описание |
+| :--- | :--- |
+| `SessionId` | Уникальный идентификатор сессии.<br/>Тип: `Utf8`.<br/>Ключ: `0`. |
+| `NodeId` | Идентификатор узла, на котором запущена сессия.<br/>Тип: `Uint32`. |
+| `State` | Текущее состояние сессии.<br/>Тип: `Utf8`. |
+| `Query` | Текст последнего или текущего выполняемого запроса.<br/>Тип: `Utf8`. |
+| `QueryCount` | Количество запросов, выполненных в рамках данной сессии.<br/>Тип: `Uint32`. |
+| `ClientAddress` | Сетевой адрес клиента, инициировавшего сессию.<br/>Тип: `Utf8`. |
+| `ClientPID` | Идентификатор процесса (PID) клиентского приложения.<br/>Тип: `Utf8`. |
+| `ClientUserAgent` | Информация о клиентском ПО (User-Agent).<br/>Тип: `Utf8`. |
+| `ClientSdkBuildInfo` | Информация о сборке SDK клиента.<br/>Тип: `Utf8`. |
+| `ApplicationName` | Имя приложения, указанное клиентом при подключении.<br/>Тип: `Utf8`. |
+| `SessionStartAt` | Время начала (создания) сессии.<br/>Тип: `Timestamp`. |
+| `QueryStartAt` | Время начала выполнения текущего запроса.<br/>Тип: `Timestamp`. |
+| `StateChangeAt` | Время последнего изменения состояния сессии.<br/>Тип: `Timestamp`. |
+| `UserSID` | Security ID пользователя, владеющего сессией.<br/>Тип: `Utf8`. |
+| `WmPoolId` | Идентификатор пула Workload Manager, в котором выполняется запрос сессии.<br/>Тип: `Utf8`. |
+| `WmState` | Состояние запроса в Workload Manager.<br/>Тип: `Utf8`. |
+| `WmEnterTime` | Время, когда запрос перешел в статус PENDING или DELAYED.<br/>Тип: `Timestamp`. |
+| `WmExitTime` | Время, когда запрос передан на выполнение.<br/>Тип: `Timestamp`. |
+
+Возможные значения поля `WmState`:
+- `NONE` - Не обрабатывается.
+- `PENDING` - Обрабатывается (в процессе классификации/маршрутизации).
+- `DELAYED` - В очереди.
+- `EXITED` - Передан на исполнение.
+
+Возможные значения поля `State`:
+- `IDLE` - Сессия ожидает запроса.
+- `EXECUTING` - Выполняется запрос.
+
+### Примеры запросов {#query-sessions-examples}
+
+Просмотр всех активных сессий:
+
+```yql
+SELECT * FROM `.sys/query_sessions`
+```
+
+Топ-20 самых длительных выполняющихся запросов:
+
+```yql
+SELECT
+    Query,
+    SessionId,
+    NodeId,
+    QueryStartAt
+FROM `.sys/query_sessions`
+WHERE State = 'EXECUTING'
+ORDER BY QueryStartAt ASC
+LIMIT 20
+```
+
+Поиск сессий приложения с фильтрацией по пулу Workload Manager:
+
+```yql
+SELECT
+    SessionId,
+    Query,
+    State,
+    WmState,
+    ClientAddress
+FROM `.sys/query_sessions`
+WHERE ApplicationName = 'my_analytics_app'
+  AND WmPoolId = 'heavy_queries'
+```
+
 ## Кэш компиляции запросов {#compile-cache-queries}
 
 Следующее системное представление содержит информацию о запросах, хранящихся в кэше компиляции на всех нодах кластера:
 
 * `compile_cache_queries` — содержит информацию о запросах в кэше компиляции всех нод кластера.
+
+{% note warning %}
+
+Системное представление `compile_cache_queries` недоступно в режиме serverless.
+
+{% endnote %}
 
 У каждой ноды кластера есть собственный кэш скомпилированных запросов. Этот кэш используется всеми сессиями, запущенными на данной ноде: если во время выполнения запроса его текст уже есть в кэше, дополнительная компиляция не требуется.
 
@@ -295,7 +373,10 @@ LIMIT 100
 | `LastAccessedAt` | Время последнего обращения к результату компиляции запроса в кэше.<br/>Тип: `Timestamp`. |
 | `CompilationDurationMs` | Длительность компиляции запроса в миллисекундах.<br/>Тип: `Uint64`. |
 | `Warnings` | Предупреждения, возникшие при компиляции запроса.<br/>Тип: `Utf8`. |
+| `Metadata` | Типы параметров запроса в формате JSON. Содержит ключ `parameters` с именами параметров и их типами (base64-encoded protobuf). Пустым, если у запроса нет параметров.<br/>Тип: `Utf8`. |
 | `IsTruncated` | Флаг, указывающий, был ли текст запроса обрезан из-за превышения лимита в 10 КБ.<br/>Тип: `Bool`. |
+| `QueryType` | Тип запроса, значение одно из:<br/>`QUERY_TYPE_SQL_DML` — Table Service<br/>`QUERY_TYPE_SQL_GENERIC_QUERY` — Query Service<br/>`QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY` — Query Service в конкурентном режиме<br/>Для старых записей может быть пустым.<br/>Тип: `Utf8`. |
+| `Syntax` | Синтаксис запроса, значение одно из:<br/>`SYNTAX_YQL_V1` — YQL<br/>`SYNTAX_PG` — PostgreSQL-совместимый синтаксис<br/>`SYNTAX_UNSPECIFIED` — для старых записей без информации о синтаксисе<br/>Тип: `Utf8`. |
 
 ### Примеры запросов {#compile-cache-queries-examples}
 

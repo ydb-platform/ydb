@@ -46,6 +46,7 @@ struct TEvKafka {
         EvFetchRequest,
         EvFetchActorStateRequest,
         EvFetchActorStateResponse,
+        EvMtlsAuthRequest,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -152,7 +153,7 @@ struct TEvKafka {
         const TMessagePtr<TSaslAuthenticateRequestData> Request;
     };
 
-    struct TEvMtlsAuthRequest : public TEventLocal<TEvMtlsAuthRequest, EvRequest> {
+    struct TEvMtlsAuthRequest : public TEventLocal<TEvMtlsAuthRequest, EvMtlsAuthRequest> {
         TEvMtlsAuthRequest(const TString& clientCertificate)
             : ClientCertificate(clientCertificate)
         {
@@ -437,7 +438,7 @@ struct TEvSaveTxnProducerResponse : public NActors::TEventLocal<TEvSaveTxnProduc
 
     TEvSaveTxnProducerResponse(EStatus status, const TString& message) :
         Status(status),
-        Message(std::move(message))
+        Message(message)
     {}
 
     EStatus Status;

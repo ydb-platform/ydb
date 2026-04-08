@@ -267,6 +267,7 @@ public:
                 hFunc(TEvents::TEvUndelivered, HandleFinalize);
 
                 IgnoreFunc(TEvDqCompute::TEvState);
+                IgnoreFunc(TEvDqCompute::TEvNodeState);
                 IgnoreFunc(TEvDqCompute::TEvChannelData);
                 IgnoreFunc(TEvDqCompute::TEvResumeExecution);
                 IgnoreFunc(TEvKqpExecuter::TEvStreamDataAck);
@@ -404,6 +405,7 @@ private:
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
                 hFunc(TEvDqCompute::TEvState, HandleComputeState);
+                hFunc(TEvDqCompute::TEvNodeState, HandleNodeState);
                 hFunc(TEvDqCompute::TEvChannelData, HandleChannelData);
                 hFunc(TEvDqCompute::TEvResumeExecution, HandleResultData); // from Fast Channels
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
@@ -958,6 +960,7 @@ private:
     STATEFN(WaitShutdownState) {
         switch(ev->GetTypeRewrite()) {
             hFunc(TEvDqCompute::TEvState, HandleShutdown);
+            hFunc(TEvDqCompute::TEvNodeState, HandleShutdown);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleShutdown);
             hFunc(TEvents::TEvPoison, HandleShutdown);
             hFunc(TEvDq::TEvAbortExecution, HandleShutdown);
@@ -971,6 +974,12 @@ private:
     void HandleShutdown(TEvDqCompute::TEvState::TPtr& ev) {
         HandleComputeStats(ev);
 
+        if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
+            PassAway();
+        }
+    }
+
+    void HandleShutdown(TEvDqCompute::TEvNodeState::TPtr&) {
         if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
             PassAway();
         }
@@ -1131,18 +1140,6 @@ private:
             issue.AddSubIssue(new TIssue(message));
             issue.GetSubIssues()[0]->SetCode(NKikimrIssues::TIssuesIds::TX_STATE_UNKNOWN, TSeverityIds::S_ERROR);
             ReplyErrorAndDie(Ydb::StatusIds::UNDETERMINED, issue);
-        }
-    }
-
-    // Extract broken lock info from the first TxLock in a DataShard response.
-    void FillBrokenLockInfo(const NKikimrDataEvents::TLock& brokenLock) {
-        ResponseEv->BrokenLockPathId = NYql::TKikimrPathId(
-            brokenLock.GetSchemeShard(),
-            brokenLock.GetPathId());
-        auto victimSpanId = TxManager->LookupVictimQuerySpanId(brokenLock.GetDataShard(), brokenLock);
-        if (victimSpanId) {
-            TxManager->SetVictimQuerySpanId(*victimSpanId);
-            ResponseEv->BrokenLockQuerySpanId = *victimSpanId;
         }
     }
 

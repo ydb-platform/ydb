@@ -10,6 +10,7 @@
 namespace NYql::NTypeAnnImpl {
 
 bool AdjustPgUnknownType(TVector<const TItemExprType*>& outputItems, TExprContext& ctx);
+
 IGraphTransformer::TStatus InferPgCommonType(
     TPositionHandle pos,
     const TExprNode* setItems,
@@ -18,6 +19,9 @@ IGraphTransformer::TStatus InferPgCommonType(
     const TStructExprType*& resultStructType,
     TExtContext& ctx,
     bool& isUniversal);
+
+TVector<TExprNode::TPtr> InferPgGroupRefTypes(const TExprNode& groupExprs, TExprContext& ctx);
+
 TExprNodePtr WrapWithPgCast(TExprNodePtr&& node, ui32 targetTypeId, TExprContext& ctx);
 const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext& ctx, bool& isUniversal);
 const TTypeAnnotationNode* FromPgImpl(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext& ctx, bool& isUniversal);

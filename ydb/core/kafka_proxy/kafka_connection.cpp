@@ -90,7 +90,7 @@ public:
     MtlsAuthStages MtlsAuthStage;
     std::shared_ptr<TInet64SecureStreamSocket::TServerMtlsCreds> ServerCreds;
 
-    enum SslHandshakeErrors {ERROR_NONE = 1, ERROR_WANT_READ = -1, ERROR_WANT_WRITE = -2};
+    enum SslHandshakeErrors {ERROR_NONE = 0, ERROR_WANT_READ = 1, ERROR_WANT_WRITE = 2};
 
     TContext::TPtr Context;
 
@@ -959,8 +959,8 @@ protected:
                 RetryingWriteToSocket = false;
                 auto& request = PendingRequestsQueue.front();
                 auto& header = request->Header;
-                OnRequestProcessed(request);
                 KAFKA_LOG_D("Sent reply (after retry): ApiKey=" << header.RequestApiKey << ", Version=" << header.RequestApiVersion << ", Correlation=" << header.CorrelationId);
+                OnRequestProcessed(request);
                 ProcessReplyQueue(ctx);
 
                 if (!CloseConnection && Step == INFLIGHT_CHECK) {

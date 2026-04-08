@@ -911,7 +911,7 @@ public:
             }
 
             if (!txs.empty() && txs.front().Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME && isValidParams) {
-                auto tasksGraph = TKqpTasksGraph(Settings.Database, txs, txAlloc, {}, Settings.TableService.GetAggregationConfig(), RequestCounters, {}, nullptr);
+                auto tasksGraph = TKqpTasksGraph(Settings.Database, txs, txAlloc, Settings.TableService.GetAggregationConfig(), RequestCounters, {}, nullptr);
                 tasksGraph.GetMeta().AllowOlapDataQuery = Settings.TableService.GetAllowOlapDataQuery();
                 tasksGraph.GetMeta().UserRequestContext = QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId);
                 tasksGraph.GetMeta().SecureParams = std::move(secureParams);
@@ -1898,7 +1898,7 @@ public:
         }
 
         auto executerActor = CreateKqpSchemeExecuter(
-            tx, QueryState->GetType(), SelfId(), requestType, Settings.Database, userToken, clientAddress,
+            tx, QueryState->GetType(), QueryState->QueryData, SelfId(), requestType, Settings.Database, userToken, clientAddress,
             temporary, /* createTmpDir */ temporary && !TempTablesState.NeedCleaning,
             QueryState->IsCreateTableAs(), TempTablesState.TempDirName, QueryState->UserRequestContext,
             expectsResult, expectsResult ? QueryState->QueryData->GetAllocState() : nullptr,
@@ -1938,6 +1938,8 @@ public:
         STLOG_D("Sending to Executer",
             (span_id_size, request.TraceId.GetSpanIdSize()),
             (trace_id, TraceId()));
+
+        txCtx->TxManager->SetSkipTopicsConflictCheck(AppData()->FeatureFlags.GetEnableSkipConflictCheckForTopicsInTransaction());
 
         if (!txCtx->BufferActorId
             && (txCtx->HasTableWrite || request.TopicOperations.GetSize() != 0)) {
@@ -1986,7 +1988,7 @@ public:
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);
 
             txCtx->TxManager->SetAllowVolatile(AppData()->FeatureFlags.GetEnableDataShardVolatileTransactions());
-        } else if (txCtx->BufferActorId) {
+        } else if (txCtx->BufferActorId && !isRollback) {
             txCtx->TxManager->SetTopicOperations(std::move(request.TopicOperations));
             txCtx->TxManager->AddTopicsToShards();
         }
@@ -1995,7 +1997,7 @@ public:
         if (QueryState && QueryState->PreparedQuery && Settings.TableService.GetEnableKqpScanQueryUseLlvm()) {
             llvmSettings = QueryState->PreparedQuery->GetLlvmSettings();
         }
-        
+
         AFL_ENSURE(txCtx->TxManager);
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
@@ -2308,20 +2310,6 @@ public:
             victimQueryText = QueryState->TxCtx->QueryTextCollector.GetQueryTextBySpanId(*brokenLockQuerySpanId);
         }
 
-        // In Snapshot Isolation the conflict is detected during the write, but the actual
-        // victim is the read that established the snapshot.  When the resolved VictimQueryText
-        // is the same as the current (commit) query, prefer the first collected query text
-        // which is the lock-establishing read.
-        if (!victimQueryText.empty() && QueryState->TxCtx) {
-            TString currentQueryText = QueryState->ExtractQueryText();
-            if (victimQueryText == currentQueryText) {
-                TString firstText = QueryState->TxCtx->QueryTextCollector.GetFirstQueryText();
-                if (!firstText.empty() && firstText != currentQueryText) {
-                    victimQueryText = firstText;
-                }
-            }
-        }
-
         // Fallback for query text: the lock-derived VictimQuerySpanId may differ from the
         // session-level QuerySpanId (e.g. with OLTP sink where the shard-side SpanId diverges
         // from the session's). Preserve the lock-derived SpanId for DataShard linkage but
@@ -2410,7 +2398,7 @@ public:
 
         AFL_ENSURE(QueryState->TxCtx->TxManager);
         QueryState->ParticipantNodes = QueryState->TxCtx->TxManager->GetParticipantNodes();
-    
+
         if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
             const auto executionType = ev->ExecutionType;
 

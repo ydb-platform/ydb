@@ -1289,7 +1289,7 @@ void ToProto(
 
     ToProto(protoStatistics->mutable_column_hyperloglog_digests(), statistics.LargeStatistics.ColumnHyperLogLogDigests);
 
-    YT_OPTIONAL_SET_PROTO(protoStatistics, read_size_estimation, statistics.ReadDataSizeEstimate);
+    YT_OPTIONAL_SET_PROTO(protoStatistics, read_size_estimate, statistics.ReadDataSizeEstimate);
 }
 
 void FromProto(
@@ -1309,7 +1309,7 @@ void FromProto(
 
     FromProto(&statistics->LargeStatistics.ColumnHyperLogLogDigests, protoStatistics.column_hyperloglog_digests());
 
-    statistics->ReadDataSizeEstimate = YT_OPTIONAL_FROM_PROTO(protoStatistics, read_size_estimation);
+    statistics->ReadDataSizeEstimate = YT_OPTIONAL_FROM_PROTO(protoStatistics, read_size_estimate);
 }
 
 void ToProto(
@@ -2459,7 +2459,8 @@ bool IsChaosRetriableError(const TError& error)
             code == NTabletClient::EErrorCode::TabletReplicationEraMismatch ||
             code == NChaosClient::EErrorCode::ShortcutNotFound ||
             code == NChaosClient::EErrorCode::ShortcutHasDifferentEra ||
-            code == NChaosClient::EErrorCode::ShortcutRevoked;
+            code == NChaosClient::EErrorCode::ShortcutRevoked ||
+            code == NChaosClient::EErrorCode::ChaosCellIsNotEnabled;
     }));
 }
 

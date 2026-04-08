@@ -8,6 +8,7 @@
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
+#include <ydb/core/ymq/attributes/attributes.h>
 #include <ydb/core/ymq/attributes/attributes_md5.h>
 #include <ydb/core/ymq/base/helpers.h>
 #include <ydb/core/ymq/base/limits.h>
@@ -210,16 +211,29 @@ private:
             message.Index = i;
             message.MessageBody = std::move(currentRequest->GetMessageBody());
             message.Delay = GetDelay(*currentRequest);
-            message.MessageDeduplicationId = std::move(deduplicationId);
+            if (!deduplicationId.empty()) {
+                message.MessageDeduplicationId = std::move(deduplicationId);
+            }
             message.MessageGroupId = std::move(currentRequest->GetMessageGroupId());
 
-            {
-                TMessageAttributeList attrs;
-                for (const auto& a : currentRequest->GetMessageAttributes()) {
-                    attrs.AddAttributes()->CopyFrom(a);
+           {
+                Ydb::Ymq::V1::SendMessageBatchRequestEntry entry;
+                for (const auto& attr : currentRequest->GetMessageAttributes()) {
+                    Ydb::Ymq::V1::MessageAttribute dstAttribute;
+                    dstAttribute.set_data_type(std::move(attr.GetDataType()));
+                    if (const auto& value = attr.GetStringValue()) {
+                        dstAttribute.set_string_value(std::move(value));
+                    } else if (const auto& value = attr.GetBinaryValue()) {
+                        dstAttribute.set_binary_value(std::move(value));
+                    }
+                    entry.mutable_message_attributes()->emplace(std::move(attr.GetName()), dstAttribute);
                 }
-                message.SerializedMessageAttributes = ProtobufToString(attrs);
+
+                auto [attributes, md5] = NSQS::SerializeUserAttributes(entry);
+                message.Attributes = std::move(attributes);
             }
+
+            message.Attributes.emplace("sender_id", UserSID_);
         }
 
         if (writerSettings.Messages.size() > 0) {

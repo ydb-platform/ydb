@@ -191,7 +191,7 @@ public:
         const std::shared_ptr<IIndexHeader>& header, const ui32 recordsCount)
         : Header(header)
         , IndexAddresses(addresses)
-        , OriginalData(std::move(originalData))
+        , OriginalData(originalData)
         , RecordsCount(recordsCount)
         , FetchingState(BuildFetchingState(storageId, OriginalData, Header, addresses)) {
     }

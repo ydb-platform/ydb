@@ -53,6 +53,12 @@ constexpr std::array<ELocation, 10> AllLocations{
     ELocation::HOPBuffer0,
     ELocation::HOPBuffer1};
 
+constexpr std::array<ELocation, 3> PrimaryDDiskLocations{
+    ELocation::DDisk0,
+    ELocation::DDisk1,
+    ELocation::DDisk2,
+};
+
 constexpr std::array<ELocation, 5> DDiskLocations{
     ELocation::DDisk0,
     ELocation::DDisk1,
@@ -71,14 +77,45 @@ constexpr std::array<ELocation, 5> PBufferLocations{
 bool IsDDisk(ELocation location);
 bool IsPBuffer(ELocation location);
 
+ELocation TranslateDDiskToPBuffer(ELocation location);
+ELocation TranslatePBufferToDDisk(ELocation location);
+
+size_t GetLocationIndex(ELocation location);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TLocationMask
 {
 public:
+    class TIterator
+    {
+        ELocation Location = ELocation::Unknown;
+        const TLocationMask* const Mask = nullptr;
+
+    public:
+        TIterator() = default;
+        explicit TIterator(const TLocationMask& mask);
+
+        bool operator==(const TIterator& other) const;
+        bool operator!=(const TIterator& other) const;
+
+        TIterator& operator++();
+        ELocation operator*() const;
+        ELocation operator->() const;
+    };
+
     TLocationMask() = default;
 
     static TLocationMask MakeEmpty();
+
+    static TLocationMask MakeOne(ELocation location);
+
+    static TLocationMask Make(
+        bool primary0,
+        bool primary1,
+        bool primary2,
+        bool handOff0,
+        bool handOff1);
 
     static TLocationMask MakePBuffer(
         bool pBuffer0,
@@ -94,9 +131,17 @@ public:
         bool handOff0,
         bool handOff1);
 
-    static TLocationMask MakePrimaryDDisk();
-
+    static TLocationMask MakePrimary();
+    static TLocationMask MakePrimaryDDisks();
     static TLocationMask MakePrimaryPBuffers();
+    static TLocationMask MakeAllDDisks();
+    static TLocationMask MakeAllPBuffers();
+
+    [[nodiscard]] TLocationMask Exclude(const TLocationMask& other) const;
+    [[nodiscard]] TLocationMask Include(const TLocationMask& other) const;
+    [[nodiscard]] TLocationMask LogicalAnd(const TLocationMask& other) const;
+    [[nodiscard]] TLocationMask PBuffers() const;
+    [[nodiscard]] TLocationMask DDisks() const;
 
     [[nodiscard]] bool Get(ELocation location) const;
 
@@ -113,12 +158,47 @@ public:
 
     bool operator==(const TLocationMask& other) const;
 
+    [[nodiscard]] ELocation FirstLocation() const;
+    [[nodiscard]] TIterator begin() const;
+    [[nodiscard]] TIterator end() const;
+
     [[nodiscard]] TString Print() const;
 
 private:
     explicit TLocationMask(ui16 mask);
 
     ui16 Mask = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TRoute
+{
+    ELocation Source;
+    ELocation Destination;
+
+    bool operator==(const TRoute& other) const;
+    bool operator<(const TRoute& other) const;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <typename T>
+class THolderForLocation
+{
+public:
+    [[nodiscard]] const T& operator[](ELocation location) const
+    {
+        return Data[GetLocationIndex(location)];
+    }
+
+    [[nodiscard]] T& operator[](ELocation location)
+    {
+        return Data[GetLocationIndex(location)];
+    }
+
+private:
+    std::array<T, 10> Data;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

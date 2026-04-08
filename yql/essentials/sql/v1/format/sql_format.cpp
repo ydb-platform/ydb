@@ -1,5 +1,6 @@
 #include "sql_format.h"
 
+#include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/sql/v1/proto_parser/parse_tree.h>
 
 #include <yql/essentials/parser/lexer_common/lexer.h>
@@ -857,7 +858,7 @@ private:
                 break;
             }
             case TRule_value_constructor::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -2574,6 +2575,32 @@ private:
         NewLine();
     }
 
+    void VisitGroupingSetsSpecification(const TRule_grouping_sets_specification& msg) {
+        Visit(msg.GetToken1());
+        Visit(msg.GetToken2());
+        Visit(msg.GetToken3());
+        NewLine();
+        PushCurrentIndent();
+
+        const auto& list = msg.GetRule_grouping_element_list4();
+
+        Visit(list.GetRule_grouping_element1());
+        for (const auto& block : list.GetBlock2()) {
+            Visit(block.GetToken1());
+            NewLine();
+            Visit(block.GetRule_grouping_element2());
+        }
+
+        if (msg.HasBlock5()) {
+            Visit(msg.GetBlock5());
+        }
+
+        PopCurrentIndent();
+        NewLine();
+
+        Visit(msg.GetToken6());
+    }
+
     void VisitGroupByClause(const TRule_group_by_clause& msg) {
         Visit(msg.GetToken1());
         if (msg.HasBlock2()) {
@@ -2872,7 +2899,7 @@ private:
                 VisitKeyword(msg.GetAlt_ttl_tier_action2().GetToken1());
                 break;
             case TRule_ttl_tier_action::ALT_NOT_SET:
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
         }
     }
 
@@ -3172,6 +3199,7 @@ TStaticData::TStaticData()
           {TRule_without_column_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWithoutColumnList)},
           {TRule_table_ref::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTableRef)},
           {TRule_grouping_element_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGroupingElementList)},
+          {TRule_grouping_sets_specification::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGroupingSetsSpecification)},
           {TRule_group_by_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGroupByClause)},
           {TRule_window_definition_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWindowDefinitionList)},
           {TRule_window_specification::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWindowSpecification)},

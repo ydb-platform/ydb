@@ -1181,6 +1181,7 @@ public:
 
     friend class TPartitionStreamImpl<UseMigrationProtocol>;
     friend class TDirectReadSessionControlCallbacks;
+    friend class TDataDecompressionInfo<UseMigrationProtocol>;
 
     TSingleClusterReadSessionImpl(
         const TAReadSessionSettings<UseMigrationProtocol>& settings,

@@ -5,6 +5,7 @@
 #include "meta_cp_databases.h"
 #include "meta_cp_databases_verbose.h"
 #include "meta_cloud.h"
+#include "meta_capabilities.h"
 #include "meta_support_links.h"
 #include "meta_cache.h"
 
@@ -156,12 +157,17 @@ TString TMVP::GetMetaDatabaseAuthToken(const TRequest& request) {
 }
 
 NYdb::NTable::TClientSettings TMVP::GetMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location) {
-    NYdb::NTable::TClientSettings clientSettings;
-    clientSettings.AuthToken(GetMetaDatabaseAuthToken(request));
-    clientSettings.Database(location.RootDomain);
+    NYdb::NTable::TClientSettings clientSettings = GetStrictMetaDatabaseClientSettings(request, location);
     if (TString database = location.GetDatabaseName(request)) {
         clientSettings.Database(database);
     }
+    return clientSettings;
+}
+
+NYdb::NTable::TClientSettings TMVP::GetStrictMetaDatabaseClientSettings(const TRequest& request, const TYdbLocation& location) {
+    NYdb::NTable::TClientSettings clientSettings;
+    clientSettings.AuthToken(GetMetaDatabaseAuthToken(request));
+    clientSettings.Database(location.RootDomain);
     return clientSettings;
 }
 
@@ -211,6 +217,12 @@ void TMVP::InitMeta() {
     ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
                          "/meta/cloud",
                          ActorSystem.Register(new NMVP::THandlerActorMetaCloud(HttpProxyId, MetaLocation))
+                         )
+                     );
+
+    ActorSystem.Send(httpIncomingProxyId, new NHttp::TEvHttpProxy::TEvRegisterHandler(
+                         "/capabilities",
+                         ActorSystem.Register(new NMVP::THandlerActorMetaCapabilities())
                          )
                      );
 

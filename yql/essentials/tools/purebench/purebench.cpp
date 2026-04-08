@@ -379,6 +379,7 @@ int Main(int argc, const char** argv)
     TString LLVMSettings;
     TString blockEngineSettings;
     TString exprFile;
+    TLangVersion langVer = NYql::GetMaxReleasedLangVersion();
     opts.AddHelpOption();
     opts.AddLongOption("ndebug", "should be at first argument, do not show debug info in error output").NoArgument();
     opts.AddLongOption('b', "blocks-engine", "Block engine settings").StoreResult(&blockEngineSettings).DefaultValue("disable");
@@ -393,6 +394,13 @@ int Main(int argc, const char** argv)
     opts.AddLongOption("llvm-settings", "LLVM settings").StoreResult(&LLVMSettings).DefaultValue("");
     opts.AddLongOption("print-expr", "print rebuild AST before execution").NoArgument();
     opts.AddLongOption("expr-file", "print AST to that file instead of stdout").StoreResult(&exprFile);
+    opts.AddLongOption("langver", "Set current language version").RequiredArgument("VER").Handler1T<TString>([&langVer](const TString& str) {
+        if (str == "unknown") {
+            langVer = UnknownLangVersion;
+        } else if (!ParseLangVersion(str, langVer)) {
+            throw yexception() << "Failed to parse language version: " << str;
+        }
+    });
     opts.SetFreeArgsMax(0);
     TOptsParseResult res(&opts, argc, argv);
 
@@ -400,6 +408,7 @@ int Main(int argc, const char** argv)
     factoryOptions.SetUDFsDir(udfsDir);
     factoryOptions.SetLLVMSettings(LLVMSettings);
     factoryOptions.SetBlockEngineSettings(blockEngineSettings);
+    factoryOptions.SetLanguageVersion(langVer);
 
     IOutputStream* exprOut = nullptr;
     THolder<TFixedBufferFileOutput> exprFileHolder;

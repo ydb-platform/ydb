@@ -2,6 +2,7 @@
 #include "constants.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
@@ -380,37 +381,6 @@ TPartitionGraph::TPtr MakeSharedPartitionGraph(const NKikimrPQ::TPQTabletConfig&
 
 TPartitionGraph::TPtr MakeSharedPartitionGraph(const NKikimrSchemeOp::TPersQueueGroupDescription& config) {
     return std::make_shared<TPartitionGraph>(MakePartitionGraph(config));
-}
-
-void TLastCounter::Use(const TString& value, const TInstant& now) {
-    const auto full = MaxValueCount == Values.size();
-    if (!Values.empty() && Values[0].Value == value) {
-        auto& v0 = Values[0];
-        if (v0.LastUseTime < now) {
-            v0.LastUseTime = now;
-            if (full && Values[1].LastUseTime != now) {
-                Values.push_back(std::move(v0));
-                Values.pop_front();
-            }
-        }
-    } else if (full && Values[1].Value == value) {
-        Values[1].LastUseTime = now;
-    } else if (!full || Values[0].LastUseTime < now) {
-        if (full) {
-            Values.pop_front();
-        }
-        Values.push_back(Data{now, value});
-    }
-}
-
-size_t TLastCounter::Count(const TInstant& expirationTime) {
-    return std::count_if(Values.begin(), Values.end(), [&](const auto& i) {
-        return i.LastUseTime >= expirationTime;
-    });
-}
-
-const TString& TLastCounter::LastValue() const {
-    return Values.back().Value;
 }
 
 bool PreciseReadFromTimestampBehaviourEnabled(const NKikimr::TAppData& appData) {

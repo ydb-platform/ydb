@@ -25,7 +25,7 @@ struct TTransaction : private TMoveOnly {
     NYql::NNodes::TKqpPhysicalTx Node;
     TQueryData::TPtr Params;
 
-    inline TTransaction(const NYql::NNodes::TKqpPhysicalTx& node, TQueryData::TPtr params)
+    TTransaction(const NYql::NNodes::TKqpPhysicalTx& node, TQueryData::TPtr params)
         : Node(node)
         , Params(std::move(params)) {}
 };
@@ -75,7 +75,7 @@ struct TStageInfoMeta {
 
     TTableId TableId;
     TString TablePath;
-    ETableKind TableKind;
+    ETableKind TableKind{};
     TIntrusiveConstPtr<TTableConstInfo> TableConstInfo;
     TIntrusiveConstPtr<NKikimr::NSchemeCache::TSchemeCacheNavigate::TColumnTableInfo> ColumnTableInfoPtr;
     std::optional<NKikimrKqp::TKqpTableSinkSettings> ResolvedSinkSettings; // CTAS only
@@ -88,8 +88,11 @@ struct TStageInfoMeta {
     THolder<TKeyDesc> ShardKey;
     NSchemeCache::ETableKind ShardKind = NSchemeCache::ETableKind::KindUnknown;
 
-    // If stage has only source then it's a single-element vector, otherwise the vector corresponds to TableOps
+    // If stage has only source then it's a single-element vector, otherwise the vector corresponds to TableOps.
     std::vector<TShardIdToInfoMap> PrunedPartitions;
+
+    // Used for single-partitioned stage and sequential inflight optimization.
+    std::optional<TShardInfoWithId> VirtualPartition;
 
     struct TIndexMeta {
         TTableId TableId;
@@ -129,7 +132,7 @@ struct TStageInfoMeta {
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
     const NKqpProto::TKqpPhyStage& GetStage(const size_t idx) const {
-        auto& txBody = Tx.Body;
+        const auto& txBody = Tx.Body;
         YQL_ENSURE(idx < txBody->StagesSize());
         return txBody->GetStages(idx);
     }
@@ -306,15 +309,12 @@ struct TTaskOutputMeta {
 };
 
 struct TTaskMeta {
-private:
-    YDB_OPT(bool, EnableShardsSequentialScan);
-public:
     // For data executer (unresolved shards case):
     // - ShardId is set in case we don't know NodeId, later we gather all ShardId tasks (without writes) into RemoteTasks,
     //   set inside ScanTasksFromSource only.
     // - NodeId is set if it's local node id, otherwise set ShardId
 
-    enum TTaskType : ui32 {
+    enum ETaskType : ui32 {
         Unknown = 0,
         Compute = 1,
         Scan = 2,
@@ -324,7 +324,7 @@ public:
     ui64 NodeId = 0;  // only in case of scans over persistent snapshots
     bool ScanTask = false;
     TActorId ExecuterId;
-    TTaskType Type = Unknown;
+    ETaskType Type = Unknown;
 
     TActorId ResultChannelActorId;
     bool Completed = false;
@@ -369,6 +369,8 @@ public:
     TMaybe<TVector<TShardReadInfo>> Reads; // if not set -> no reads
 
     TString ToString(const TVector<NScheme::TTypeInfo>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
+
+    YDB_OPT(bool, EnableShardsSequentialScan);
 };
 
 using TStageInfo = NYql::NDq::TStageInfo<TStageInfoMeta>;
@@ -383,7 +385,6 @@ public:
         const TString& database,
         const TVector<IKqpGateway::TPhysicalTxData>& transactions,
         const NKikimr::NKqp::TTxAllocatorState::TPtr& txAlloc,
-        const TPartitionPrunerConfig& partitionPrunerConfig,
         const NKikimrConfig::TTableServiceConfig::TAggregationConfig& aggregationSettings,
         const TKqpRequestCounters::TPtr& counters,
         TActorId bufferActorId,
@@ -392,32 +393,25 @@ public:
 
     void ResolveShards(TGraphMeta::TShardToNodeMap&& shardsToNodes);
 
-    size_t BuildAllTasks(std::optional<TLlvmSettings> llvmSettings, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot,
-        TQueryExecutionStats* stats
-    );
-
-    // TODO: public used by TKqpLiteralExecuter
-    void BuildKqpTaskGraphResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx);
+    size_t BuildAllTasks(std::optional<TLlvmSettings> llvmSettings, const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats);
+    void BuildLiteralTasks();
 
     NYql::NDqProto::TDqTask* ArenaSerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings);
     void PersistTasksGraphInfo(NKikimrKqp::TQueryPhysicalGraph& result) const;
     void RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, const NKikimrKqp::TQueryPhysicalGraph& graphInfo);
 
-    // TODO: public used by TKqpPlanner
+    // TODO: public used by TKqpPlanner - why?
     void FillChannelDesc(NYql::NDqProto::TChannel& channelDesc, const NYql::NDq::TChannel& channel,
-        const NKikimrConfig::TTableServiceConfig::EChannelTransportVersion chanTransportVersion, bool enableSpilling) const;
+        NKikimrConfig::TTableServiceConfig::EChannelTransportVersion channelTransportVersion, bool enableSpilling) const;
 
     TVector<TString> GetStageIntrospection(const NYql::NDq::TStageId& stageId) const;
     TString DumpToString() const;
 
-public:
-    THolder<TPartitionPruner> PartitionPruner; // TODO: temporary public - used by Data Executer
-
 private:
-    void FillKqpTasksGraphStages();
+    void FillStages();
 
     void BuildSysViewScanTasks(TStageInfo& stageInfo);
-    bool BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount); // returns true if affected shards count is unknown
+    bool BuildComputeTasks(TStageInfo& stageInfo, ui32 nodesCount); // returns true if affected shards count is unknown
     void BuildDatashardTasks(TStageInfo& stageInfo, THashSet<ui64>* shardsWithEffects); // returns shards with effects
     void BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, TQueryExecutionStats* stats);
     void BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQueryExecutionStats* stats);
@@ -447,6 +441,7 @@ private:
         const NKqpProto::TKqpPhyCnVectorResolve& vectorResolve, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc);
     void BuildDqSourceStreamLookupChannels(const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo,
         ui32 outputIndex, const NKqpProto::TKqpPhyCnDqSourceStreamLookup& dqSourceStreamLookup, const NYql::NDq::TChannelLogFunc& logFunc);
+    void BuildResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx);
 
     void FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output, ui32 outputIdx,
         bool enableSpilling, const TStageInfo& stageInfo) const;
@@ -455,18 +450,18 @@ private:
 
     void SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDqTask* result, bool serializeAsyncIoSettings) const;
 
-    std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetMaxTasksAggregation(TStageInfo& stageInfo, const ui32 previousTasksCount, const ui32 nodesCount);
-    std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetScanTasksPerNode(TStageInfo& stageInfo, const bool isOlapScan, const ui64 nodeId, bool enableShuffleElimination = false) const;
+    std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetMaxTasksAggregation(TStageInfo& stageInfo, ui32 previousTasksCount, ui32 nodesCount);
+    std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetScanTasksPerNode(TStageInfo& stageInfo, bool isOlapScan, ui64 nodeId, bool enableShuffleElimination = false) const;
 
     void FillSecureParamsFromStage(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) const;
 
     void BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTasksGraph::TTaskType& task) const;
     void BuildInternalSinks(const NKqpProto::TKqpSink& sink, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const;
     void BuildInternalOutputTransform(const NKqpProto::TKqpOutputTransform& transform, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const;
-    void BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, TKqpTasksGraph::TTaskType& task) const;
+    void BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, TKqpTasksGraph::TTaskType& task) const;
     void FillKqpTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings& settings, const std::vector<std::pair<ui64, i64>>& internalSinksOrder, const TKqpTasksGraph::TTaskType& task) const;
 
-    std::vector<std::pair<ui64, i64>> BuildInternalSinksPriorityOrder();
+    std::vector<std::pair<ui64, i64>> BuildInternalSinksPriorityOrder() const;
     TString ReplaceStructuredTokenReferences(const TString& token) const;
 
 private:
@@ -476,41 +471,6 @@ private:
     TKqpRequestCounters::TPtr Counters;
     TActorId BufferActorId; // TODO: not sure if it belongs here
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-};
-
-void FillTableMeta(const TStageInfo& stageInfo, NKikimrTxDataShard::TKqpTransaction_TTableMeta* meta);
-
-template<typename Proto>
-TVector<TTaskMeta::TColumn> BuildKqpColumns(const Proto& op, TIntrusiveConstPtr<TTableConstInfo> tableInfo) {
-    TVector<TTaskMeta::TColumn> columns;
-    columns.reserve(op.GetColumns().size());
-
-    THashSet<TString> keyColumns;
-    for (auto column : tableInfo->KeyColumns) {
-        keyColumns.insert(std::move(column));
-    }
-
-    for (const auto& column : op.GetColumns()) {
-        TTaskMeta::TColumn c;
-
-        const auto& tableColumn = tableInfo->Columns.at(column.GetName());
-        c.Id = column.GetId();
-        c.Type = tableColumn.Type;
-        c.TypeMod = tableColumn.TypeMod;
-        c.Name = column.GetName();
-        c.NotNull = tableColumn.NotNull;
-        c.IsPrimary = keyColumns.contains(c.Name);
-
-        columns.emplace_back(std::move(c));
-    }
-
-    return columns;
-}
-
-struct TKqpTaskOutputType {
-    enum : ui32 {
-        ShardRangePartition = TTaskOutputType::COMMON_TASK_OUTPUT_TYPE_END
-    };
 };
 
 } // namespace NKikimr::NKqp

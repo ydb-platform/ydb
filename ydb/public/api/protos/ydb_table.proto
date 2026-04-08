@@ -59,6 +59,11 @@ message GlobalIndexSettings {
     // Partitioning settings for the table that implements the index.
     PartitioningSettings partitioning_settings = 3;
     ReadReplicasSettings read_replicas_settings = 4;
+
+    /**
+     * The metrics configuration for the given index.
+     */
+    optional MetricsSettings metrics_settings = 5;
 }
 
 message VectorIndexSettings {
@@ -326,6 +331,7 @@ message LocalBloomNgramFilterIndex {
     uint32 filter_size_bytes = 3;
     uint32 records_count = 4;
     optional bool case_sensitive = 5;
+    optional double false_positive_probability = 6;
 }
 
 message GlobalJsonIndex {
@@ -680,6 +686,19 @@ message ColumnCompression {
     optional int32 compression_level = 2;
 }
 
+message ColumnEncoding {
+    message Off {
+    }
+
+    message Dictionary {
+    }
+
+    oneof encoding_settings {
+        Off off = 1;
+        Dictionary dictionary = 2;
+    }
+}
+
 message ColumnMeta {
     // Name of column
     string name = 1;
@@ -696,6 +715,7 @@ message ColumnMeta {
         google.protobuf.NullValue empty_default = 7;
     }
     optional ColumnCompression compression = 8;
+    repeated ColumnEncoding encoding = 9;
 }
 
 message EvictionToExternalStorageSettings {
@@ -880,6 +900,48 @@ message ReadReplicasSettings {
     reserved 3; // cluster_replicas_settings (part of oneof settings)
 }
 
+/**
+ * The parameters for the detailed metrics for the given table.
+ */
+message MetricsSettings {
+    /**
+     * The level at which metrics are aggregated and reported.
+     */
+    enum MetricsLevel {
+        /**
+         * The metrics level is not specified.
+         */
+        METRICS_LEVEL_UNSPECIFIED = 0;
+
+        /**
+         * All metrics are disabled.
+         */
+        METRICS_LEVEL_DISABLED = 1;
+
+        /**
+         * Metrics are aggregated and reported for the entire database.
+         */
+        METRICS_LEVEL_DATABASE = 2;
+
+        /**
+         * Metrics are aggregated and reported for individual tables.
+         */
+        METRICS_LEVEL_TABLE = 3;
+
+        /**
+         * Metrics are aggregated and reported for individual partitions.
+         */
+        METRICS_LEVEL_PARTITION = 4;
+    }
+
+    /**
+     * The level at which metrics are aggregated and reported.
+     *
+     * @note If this value is not set, METRICS_LEVEL_DATABASE is assumed.
+     */
+    MetricsLevel metrics_level = 1;
+}
+
 enum StoreType {
     STORE_TYPE_UNSPECIFIED = 0;
     STORE_TYPE_ROW = 1;
@@ -929,6 +991,11 @@ message CreateTableRequest {
     bool temporary = 19;
     // Is table column or row oriented
     StoreType store_type = 20;
+
+    /**
+     * The metrics configuration for the given table.
+     */
+    optional MetricsSettings metrics_settings = 21;
 }
 
 message CreateTableResponse {
@@ -1033,6 +1100,14 @@ message AlterTableRequest {
     reserved 22, 23;
     // Start compaction for table
     CompactItem compact = 24;
+
+    /**
+     * Set, update or remove the metrics configuration for the given table.
+     */
+    oneof metrics_settings_action {
+        MetricsSettings set_metrics_settings = 25;
+        google.protobuf.Empty drop_metrics_settings = 26;
+    }
 }
 
 message AlterTableResponse {
@@ -1159,6 +1234,11 @@ message DescribeTableResult {
     bool temporary = 17;
     // Is table column or row oriented
     StoreType store_type = 18;
+
+    /**
+     * The metrics configuration for the given table.
+     */
+    optional MetricsSettings metrics_settings = 19;
 }
 
 message Query {

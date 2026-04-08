@@ -26,8 +26,17 @@ constexpr ui32 MaxSubRequestSize = 4_MB;
 // Default stripe size (in bytes)
 constexpr ui64 DefaultStripeSize = 512_KB;
 
+// Size of Region.
+constexpr ui64 RegionSize = 4_GB;
+
 // Size of VChunk.
 constexpr ui64 VChunkSize = 128_MB;
+
+// VChunks per Region count.
+constexpr ui32 VChunksPerRegionCount = RegionSize / VChunkSize;
+
+//
+constexpr ui64 CopyRangeSize = 1_MB;
 
 ////////////////////////////////////////////////////////////////////////////////
 

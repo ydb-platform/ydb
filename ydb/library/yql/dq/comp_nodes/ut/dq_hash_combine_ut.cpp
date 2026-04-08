@@ -337,7 +337,7 @@ THolder<IComputationGraph> BuildBlockGraph(TDqSetup<UseLLVM, Spilling>& setup, b
                 isAggregator,
                 Spilling,
                 memLimit,
-                pb.ToFlow(TRuntimeNode(streamCallable, false)),
+                pb.ToFlow(TRuntimeNode(streamCallable, false), {}),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.front() }; },
                 [&](TRuntimeNode::TList, TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.back() } ; },
                 [&](TRuntimeNode::TList, TRuntimeNode::TList items, TRuntimeNode::TList state) -> TRuntimeNode::TList {
@@ -388,7 +388,7 @@ THolder<IComputationGraph> BuildWideGraph(
 
     TRuntimeNode input = TRuntimeNode(streamCallable, false);
     if (useFlow) {
-        input = pb.ToFlow(input);
+        input = pb.ToFlow(input, {});
     }
 
     TRuntimeNode opNode = GetOperatorNode(
@@ -438,7 +438,7 @@ THolder<IComputationGraph> BuildZeroWidthWideGraph(TDqSetup<LLVM, Spilling>& set
                 isAggregator,
                 Spilling,
                 memLimit,
-                pb.ToFlow(TRuntimeNode(streamCallable, false)),
+                pb.ToFlow(TRuntimeNode(streamCallable, false), {}),
                 [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return { items.front() }; },
                 [&](TRuntimeNode::TList, [[maybe_unused]] TRuntimeNode::TList items) -> TRuntimeNode::TList { return { } ; },
                 [&](TRuntimeNode::TList, [[maybe_unused]] TRuntimeNode::TList items, [[maybe_unused]] TRuntimeNode::TList state) -> TRuntimeNode::TList {

@@ -924,7 +924,7 @@ TPrechargeResult TTable::Precharge(TRawVals minKey_, TRawVals maxKey_, TTagsRef 
             if (pos != run.end()) {
                 const auto* part = pos->Part.Get();
                 if ((flg & EHint::NoByKey) ||
-                    part->MightHaveKey(prefix.Get(part->Scheme->Groups[0].KeyTypes.size())))
+                    part->MightHaveKeyPrefix(prefix))
                 {
                     TRowId row1 = pos->Slice.BeginRowId();
                     TRowId row2 = pos->Slice.EndRowId() - 1;
@@ -1438,7 +1438,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
                 if (pos != run.end()) {
                     const auto* part = pos->Part.Get();
                     if ((flg & EHint::NoByKey) ||
-                        part->MightHaveKey(prefix.Get(part->Scheme->Groups[0].KeyTypes.size())))
+                        part->MightHaveKeyPrefix(prefix))
                     {
                         ++stats.Sieved;
                         TPartIter& it = tempIterators.emplace_back(part, tags, Scheme->Keys, env);
@@ -1582,7 +1582,7 @@ TSelectRowVersionResult TTable::SelectRowVersion(
             if (pos != run.end()) {
                 const auto* part = pos->Part.Get();
                 if ((readFlags & EHint::NoByKey) ||
-                    part->MightHaveKey(prefix.Get(part->Scheme->Groups[0].KeyTypes.size())))
+                    part->MightHaveKeyPrefix(prefix))
                 {
                     TPartIter it(part, { }, Scheme->Keys, env);
                     it.SetBounds(pos->Slice);
@@ -1675,7 +1675,9 @@ void TPartStats::Add(const TPartView& partView)
     } else {
         FlatIndexBytes += partView->IndexesRawSize;
     }
-    ByKeyBytes += partView->ByKey ? partView->ByKey->Raw.size() : 0;
+    for (const auto& [_, bloom] : partView->ByKeyPrefixes) {
+        ByKeyBytes += bloom ? bloom->Raw.size() : 0;
+    }
     PlainBytes += partView->Stat.Bytes;
     CodedBytes += partView->Stat.Coded;
     RowsErase += partView->Stat.Drops;
@@ -1698,7 +1700,9 @@ bool TPartStats::Remove(const TPartView& partView)
     } else {
         NUtil::SubSafe(FlatIndexBytes, partView->IndexesRawSize);
     }
-    NUtil::SubSafe(ByKeyBytes, partView->ByKey ? partView->ByKey->Raw.size() : 0);
+    for (const auto& [_, bloom] : partView->ByKeyPrefixes) {
+        NUtil::SubSafe(ByKeyBytes, bloom ? bloom->Raw.size() : 0);
+    }
     NUtil::SubSafe(PlainBytes, partView->Stat.Bytes);
     NUtil::SubSafe(CodedBytes, partView->Stat.Coded);
     NUtil::SubSafe(RowsErase, partView->Stat.Drops);

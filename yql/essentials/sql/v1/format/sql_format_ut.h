@@ -1031,6 +1031,52 @@ Y_UNIT_TEST(Select) {
          "SELECT\n\t1\nFROM\n\tuser\nGROUP COMPACT BY\n\tkey,\n\tvalue AS v\n;\n"},
         {"select 1 from user group by key with combine",
          "SELECT\n\t1\nFROM\n\tuser\nGROUP BY\n\tkey\n\tWITH combine\n;\n"},
+        {R"sql(select 1 from user group by grouping sets ((a, b), (b), ()))sql",
+         TrimIndent(R"sql(
+            SELECT
+                1
+            FROM
+                user
+            GROUP BY
+                GROUPING SETS (
+                    (a, b),
+                    (b),
+                    ()
+                )
+            ;
+
+         )sql")},
+        {R"sql(select 1 from user group by grouping sets ((a, b), (b), (),))sql",
+         TrimIndent(R"sql(
+            SELECT
+                1
+            FROM
+                user
+            GROUP BY
+                GROUPING SETS (
+                    (a, b),
+                    (b),
+                    (),
+                )
+            ;
+
+         )sql")},
+        {R"sql(select 1 from user group by grouping sets ((a, b), (b), (),), c)sql",
+         TrimIndent(R"sql(
+            SELECT
+                1
+            FROM
+                user
+            GROUP BY
+                GROUPING SETS (
+                    (a, b),
+                    (b),
+                    (),
+                ),
+                c
+            ;
+
+        )sql")},
         {"select 1 from user order by key asc",
          "SELECT\n\t1\nFROM\n\tuser\nORDER BY\n\tkey ASC\n;\n"},
         {"select 1 from user order by key, value desc",

@@ -8,6 +8,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
 #include <ydb/library/conclusion/generic/result.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/core/external_sources/iceberg_fields.h>
 
 namespace NKikimr::NKqp {
@@ -55,7 +56,12 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
     return GetOrEmpty(settings, secretKeyPrefix + "_path");
 }
 
-[[nodiscard]] TYqlConclusionStatus FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescription& externalDataSourceDesc, const TString& name, const NYql::TCreateObjectSettings& settings) {
+[[nodiscard]] TYqlConclusionStatus FillCreateExternalDataSourceDesc(
+    NKikimrSchemeOp::TExternalDataSourceDescription& externalDataSourceDesc,
+    const TString& name,
+    const NYql::TCreateObjectSettings& settings,
+    NActors::TActorSystem* actorSystem)
+{
     externalDataSourceDesc.SetName(name);
     externalDataSourceDesc.SetSourceType(GetOrEmpty(settings, "source_type"));
     externalDataSourceDesc.SetLocation(GetOrEmpty(settings, "location"));
@@ -113,6 +119,13 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
 
     for (const auto& property : properties) {
         if (const auto value = featuresExtractor.Extract(property)) {
+            if (property == "shared_reading") {
+                if (!actorSystem || !AppData(actorSystem)->FeatureFlags.GetEnableSharedReadingInStreamingQueries()) {
+                    return TYqlConclusionStatus::Fail(
+                        NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+                        "SHARED_READING in External data source is not supported");
+                }
+            }
             externalDataSourceDesc.MutableProperties()->MutableProperties()->insert({property, *value});
         }
     }
@@ -238,7 +251,8 @@ TYqlConclusionStatus TExternalDataSourceManager::PrepareCreateExternalDataSource
     schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExternalDataSource);
     schemeTx.SetFailedOnAlreadyExists(!settings.GetExistingOk());
 
-    return FillCreateExternalDataSourceDesc(*schemeTx.MutableCreateExternalDataSource(), name, settings);
+    return FillCreateExternalDataSourceDesc(
+        *schemeTx.MutableCreateExternalDataSource(), name, settings, context.GetExternalData().GetActorSystem());
 }
 
 TYqlConclusionStatus TExternalDataSourceManager::PrepareDropExternalDataSource(NKqpProto::TKqpSchemeOperation& schemeOperation, const NYql::TDropObjectSettings& settings, TInternalModificationContext& context) const {

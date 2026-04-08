@@ -2,6 +2,8 @@
 
 #include <yt/yql/providers/yt/fmr/utils/comparator/yql_yt_binary_yson_compare_impl.h>
 
+#include <unordered_set>
+
 namespace NYql::NFmr {
 
 void TSortedPartitioner::TChunkContainer::Push(TChunkUnit chunk) {
@@ -272,7 +274,6 @@ TSortedPartitioner::TReadSliceResult TSortedPartitioner::ReadSlice(TFmrTablesChu
         }
 
         slice.ChunksByTable[chunk.TableId].push_back(chunk);
-        slice.Weight += chunk.DataWeight;
 
         const TFmrTableKeysBoundary& interFirst = *intersection.FirstKeysBound;
         const TFmrTableKeysBoundary& effLast = *effectiveRange.LastKeysBound;
@@ -281,11 +282,12 @@ TSortedPartitioner::TReadSliceResult TSortedPartitioner::ReadSlice(TFmrTablesChu
             chunkPool.UpdateFilterBoundary(chunk.TableId, TSortedPartitionerFilterBoundary{.FilterBoundary = sepKey, .IsInclusive = false});
             chunkPool.PutBack(chunk);
         } else if (interFirst <= sepKey && sepKey == effLast) {
+            slice.Weight += chunk.DataWeight;
             chunkPool.UpdateFilterBoundary(chunk.TableId, TSortedPartitionerFilterBoundary{.FilterBoundary = sepKey, .IsInclusive = true});
         } else {
             return TReadSliceResult{.Error = TFmrError{
                 .Component = EFmrComponent::Coordinator,
-                .Reason = EFmrErrorReason::RestartQuery,
+                .Reason = EFmrErrorReason::FallbackOperation,
                 .ErrorMessage = "Undefined behaviour in ReadSlice: intersection doesn't reach separator key"
             }};
         }
@@ -467,7 +469,17 @@ TPartitionResult TSortedPartitioner::PartitionFmrTables(const std::vector<TFmrTa
     if (auto error = chunkPool.GetError()) {
         return TPartitionResult{.Error = *error};
     }
-    const ui64 maxWeight = Settings_.FmrPartitionSettings.MaxDataWeightPerPart;
+    ui64 maxWeight = Settings_.FmrPartitionSettings.MaxDataWeightPerPart;
+    if (Settings_.FmrPartitionSettings.AdjustDataWeightPerPartition) {
+        ui64 totalWeight = CollectFmrTotalWeight(inputTables);
+        ui64 estimatedParts = (totalWeight + maxWeight - 1) / maxWeight;
+        if (estimatedParts > maxParts && maxParts > 0) {
+            maxWeight = totalWeight / maxParts;
+            YQL_CLOG(INFO, FastMapReduce) << "AdjustDataWeightPerPartition (sorted): adjusted MaxDataWeightPerPart from "
+                << Settings_.FmrPartitionSettings.MaxDataWeightPerPart << " to " << maxWeight
+                << " (totalWeight=" << totalWeight << ", maxParts=" << maxParts << ")";
+        }
+    }
 
     std::vector<TSlice> currentSlices;
     ui64 currentWeight = 0;
@@ -481,12 +493,15 @@ TPartitionResult TSortedPartitioner::PartitionFmrTables(const std::vector<TFmrTa
             break;
         }
         auto& slice = *sliceResult.Slice;
-        if (!currentSlices.empty() && currentWeight + slice.Weight > maxWeight) {
+
+        ui64 newWeight = slice.Weight;
+
+        if (!currentSlices.empty() && currentWeight + newWeight > maxWeight) {
             tasks.emplace_back(CreateTaskInputFromSlices(currentSlices, inputTables));
             currentSlices.clear();
             currentWeight = 0;
         }
-        currentWeight += slice.Weight;
+        currentWeight += newWeight;
         currentSlices.push_back(std::move(slice));
     }
     if (!currentSlices.empty()) {

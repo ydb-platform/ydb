@@ -741,6 +741,16 @@ private:
         ev->Record.SetOverlapOutForeign(buildInfo.KMeans.OverlapClusters > 1 && buildInfo.KMeans.Levels > 1);
 
         auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
+        {
+            auto& shardStatus = buildInfo.Shards.at(shardIdx);
+            if (shardStatus.LastKeyAck) {
+                TSerializedCellVec lastKey{shardStatus.LastKeyAck};
+                TSerializedTableRange range{lastKey.GetCells(), false, {}, false};
+                range.Serialize(*ev->Record.MutableKeyRange());
+            } else {
+                shardStatus.Range.Serialize(*ev->Record.MutableKeyRange());
+            }
+        }
         LOG_N("TTxBuildProgress: TEvReshuffleKMeansRequest: " << ToShortDebugString(ev->Record));
 
         ToTabletSend.emplace(shardId, std::move(ev));
@@ -827,6 +837,30 @@ private:
 
         auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
         FillScanRequestSeed(ev->Record);
+        {
+            auto& shardStatus = buildInfo.Shards.at(shardIdx);
+            const ui64 parentTo = ev->Record.GetParentTo();
+            if (parentTo != 0) {
+                auto to = TCell::Make(parentTo);
+                if (shardStatus.LastKeyAck) {
+                    TSerializedCellVec lastKey{shardStatus.LastKeyAck};
+                    TSerializedTableRange range{lastKey.GetCells(), false, {&to, 1}, true};
+                    range.Serialize(*ev->Record.MutableKeyRange());
+                } else {
+                    auto fromCell = TCell::Make(ev->Record.GetParentFrom() - 1);
+                    TSerializedTableRange range{{&fromCell, 1}, false, {&to, 1}, true};
+                    range.Serialize(*ev->Record.MutableKeyRange());
+                }
+            } else {
+                if (shardStatus.LastKeyAck) {
+                    TSerializedCellVec lastKey{shardStatus.LastKeyAck};
+                    TSerializedTableRange range{lastKey.GetCells(), false, {}, false};
+                    range.Serialize(*ev->Record.MutableKeyRange());
+                } else {
+                    shardStatus.Range.Serialize(*ev->Record.MutableKeyRange());
+                }
+            }
+        }
         LOG_N("TTxBuildProgress: TEvLocalKMeansRequest: " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
@@ -877,6 +911,16 @@ private:
 
         auto shardId = FillScanRequestCommon<false>(ev->Record, shardIdx, buildInfo);
         FillScanRequestSeed(ev->Record);
+        {
+            auto& shardStatus = buildInfo.Shards.at(shardIdx);
+            if (shardStatus.LastKeyAck) {
+                TSerializedCellVec lastKey{shardStatus.LastKeyAck};
+                TSerializedTableRange range{lastKey.GetCells(), false, {}, false};
+                range.Serialize(*ev->Record.MutableKeyRange());
+            } else {
+                shardStatus.Range.Serialize(*ev->Record.MutableKeyRange());
+            }
+        }
         LOG_N("TTxBuildProgress: TEvPrefixKMeansRequest: " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
@@ -2777,8 +2821,8 @@ public:
                     keyTypes.emplace_back(tableInfo.Columns.at(keyPos).PType);
                 }
 
-                TSerializedCellVec next{shardStatus.LastKeyAck};
-                TSerializedCellVec prev{lastKeyAck};
+                TSerializedCellVec next{lastKeyAck};
+                TSerializedCellVec prev{shardStatus.LastKeyAck};
 
                 int cmp = CompareBorders<true, true>(next.GetCells(), prev.GetCells(), true, true, keyTypes);
                 if (cmp < 0) {
@@ -2788,6 +2832,8 @@ public:
                 } else {
                     shardStatus.LastKeyAck = lastKeyAck;
                 }
+            } else {
+                shardStatus.LastKeyAck = lastKeyAck;
             }
         }
     }
@@ -2918,10 +2964,18 @@ struct TSchemeShard::TIndexBuilder::TTxReplyLocalKMeans: public TTxShardReply<TE
     {
     }
 
-    void HandleDone(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) {
-        if (Response->Get()->Record.GetIsEmpty() &&
-            buildInfo.KMeans.Parent == 0)
-        {
+    void HandleProgress(TIndexBuildShardStatus& shardStatus, TIndexBuildInfo& buildInfo) override {
+        UpdateLastKeyAck(shardStatus, buildInfo, Response->Get()->Record.GetLastKeyAck());
+    }
+
+    void HandleDone(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) override {
+        const auto& record = Response->Get()->Record;
+        TTabletId shardId = TTabletId(record.GetTabletId());
+        TShardIdx shardIdx = Self->GetShardIdx(shardId);
+        TIndexBuildShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
+        UpdateLastKeyAck(shardStatus, buildInfo, record.GetLastKeyAck());
+
+        if (record.GetIsEmpty() && buildInfo.KMeans.Parent == 0) {
             // We only handle the root level through MultiLocal if the table has exactly 1 shard.
             // If that shard is empty then it means the whole index is empty.
             buildInfo.KMeans.IsEmpty = true;
@@ -2935,12 +2989,38 @@ struct TSchemeShard::TIndexBuilder::TTxReplyReshuffleKMeans: public TTxShardRepl
         : TTxShardReply(self, TIndexBuildId(response->Get()->Record.GetId()), response)
     {
     }
+
+    void HandleProgress(TIndexBuildShardStatus& shardStatus, TIndexBuildInfo& buildInfo) override {
+        UpdateLastKeyAck(shardStatus, buildInfo, Response->Get()->Record.GetLastKeyAck());
+    }
+
+    void HandleDone(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) override {
+        const auto& record = Response->Get()->Record;
+        TTabletId shardId = TTabletId(record.GetTabletId());
+        TShardIdx shardIdx = Self->GetShardIdx(shardId);
+        TIndexBuildShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
+        UpdateLastKeyAck(shardStatus, buildInfo, record.GetLastKeyAck());
+        Y_UNUSED(db);
+    }
 };
 
 struct TSchemeShard::TIndexBuilder::TTxReplyPrefixKMeans: public TTxShardReply<TEvDataShard::TEvPrefixKMeansResponse> {
     explicit TTxReplyPrefixKMeans(TSelf* self, TEvDataShard::TEvPrefixKMeansResponse::TPtr& response)
         : TTxShardReply(self, TIndexBuildId(response->Get()->Record.GetId()), response)
     {
+    }
+
+    void HandleProgress(TIndexBuildShardStatus& shardStatus, TIndexBuildInfo& buildInfo) override {
+        UpdateLastKeyAck(shardStatus, buildInfo, Response->Get()->Record.GetLastKeyAck());
+    }
+
+    void HandleDone(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) override {
+        const auto& record = Response->Get()->Record;
+        TTabletId shardId = TTabletId(record.GetTabletId());
+        TShardIdx shardIdx = Self->GetShardIdx(shardId);
+        TIndexBuildShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
+        UpdateLastKeyAck(shardStatus, buildInfo, record.GetLastKeyAck());
+        Y_UNUSED(db);
     }
 };
 
@@ -3049,10 +3129,7 @@ struct TSchemeShard::TIndexBuilder::TTxReplyFulltextIndex: public TTxShardReply<
         TTabletId shardId = TTabletId(record.GetTabletId());
         TShardIdx shardIdx = Self->GetShardIdx(shardId);
         TIndexBuildShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
-
-        if (record.HasLastKeyAck()) {
-            shardStatus.LastKeyAck = max(shardStatus.LastKeyAck, record.GetLastKeyAck());
-        }
+        UpdateLastKeyAck(shardStatus, buildInfo, record.GetLastKeyAck());
 
         shardStatus.DocCount = record.GetDocCount();
         shardStatus.TotalDocLength = record.GetTotalDocLength();

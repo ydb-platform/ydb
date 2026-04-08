@@ -3,6 +3,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/pqdata_transaction.pb.h>
 
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
@@ -47,7 +48,7 @@ public:
                       bool onlyCheckCommitedToFinish = false,
                       const TString& readSessionId = {});
     void AddKafkaApiOffsetCommit(const TString& consumer, ui64 offset);
-    
+
     bool IsKafkaApiOperation() const;
 
     void Merge(const TConsumerOperations& rhs);
@@ -92,10 +93,10 @@ public:
     void AddOperation(const TString& topic, ui32 partition,
                       TMaybe<ui32> supportivePartition);
     void AddKafkaApiWriteOperation(const TString& topic, ui32 partition, const NKafka::TProducerInstanceId& producerInstanceId);
-    
+
     void AddKafkaApiReadOperation(const TString& topic, ui32 partition, const TString& consumerName, ui64 offset);
 
-    void BuildTopicTxs(TTopicOperationTransactions &txs);
+    void BuildTopicTxs(TTopicOperationTransactions &txs, bool skipConflictCheck);
 
     void Merge(const TTopicPartitionOperations& rhs);
 
@@ -155,9 +156,9 @@ public:
                       const TString& readSessionId);
     void AddOperation(const TString& topic, ui32 partition,
                       TMaybe<ui32> supportivePartition);
-                      
+
     void AddKafkaApiWriteOperation(const TString& topic, ui32 partition, const NKafka::TProducerInstanceId& producerInstanceId);
-    
+
     void AddKafkaApiReadOperation(const TString& topic, ui32 partition, const TString& consumerName, ui64 offset);
 
     void FillSchemeCacheNavigate(NSchemeCache::TSchemeCacheNavigate& navigate,
@@ -183,7 +184,15 @@ public:
     void SetTabletId(const TString& topic, ui32 partition,
                      ui64 tabletId);
 
+    void SetSkipConflictCheck(bool skipConflictCheck);
+    void SetTrackProducerId(bool trackProducerId);
+
 private:
+    void MergeSkipConflictCheck(bool rhs);
+    void MergeTrackProducerId(bool rhs);
+
+    bool CalcSkipConflictCheck() const;
+
     THashMap<TTopicPartition, TTopicPartitionOperations, TTopicPartition::THash> Operations_;
     bool HasReadOperations_ = false;
     bool HasWriteOperations_ = false;
@@ -194,6 +203,8 @@ private:
     TMaybe<NKafka::TProducerInstanceId> KafkaProducerInstanceId_;
 
     THashMap<TString, NSchemeCache::TSchemeCacheNavigate::TEntry> CachedNavigateResult_;
+    bool SkipConflictCheck_ = true;
+    bool TrackProducerId_ = false;
 };
 
 }

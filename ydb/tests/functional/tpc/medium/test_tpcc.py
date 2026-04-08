@@ -6,6 +6,7 @@ class TestTpccW10T4(tpcc.TpccSuiteBase, FunctionalTestBase):
     time_s: float = 60
     warehouses: int = 10
     threads: int = 4
+    compact: bool = True
 
     @classmethod
     def setup_class(cls) -> None:

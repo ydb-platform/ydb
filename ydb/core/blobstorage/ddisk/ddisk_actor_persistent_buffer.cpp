@@ -13,6 +13,7 @@
 namespace NKikimr::NDDisk {
 
     void TDDiskActor::InitPersistentBuffer() {
+        Y_ABORT_UNLESS(IsPersistentBufferActor);
         Y_ABORT_UNLESS(DiskFormat);
         SectorSize = DiskFormat->SectorSize;
         Y_ABORT_UNLESS(SectorSize >= sizeof(TPersistentBufferHeader));
@@ -20,7 +21,6 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(ChunkSize % SectorSize == 0);
         SectorInChunk = ChunkSize / SectorSize;
         PersistentBufferSpaceAllocator = TPersistentBufferSpaceAllocator(SectorInChunk);
-        UpdateFreeSpaceInfo();
     }
 
     void TDDiskActor::UpdateFreeSpaceInfo() {
@@ -60,9 +60,11 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::StartRestorePersistentBuffer() {
+        Y_ABORT_UNLESS(IsPersistentBufferActor);
         if (PersistentBufferReady) {
             return;
         }
+
         if (PersistentBufferSpaceAllocator.OwnedChunks.size() < PersistentBufferFormat.InitChunks) {
             IssuePersistentBufferChunkAllocation();
             return;
@@ -71,6 +73,7 @@ namespace NKikimr::NDDisk {
         if (PersistentBufferSpaceAllocator.OwnedChunks.size() == PersistentBufferAllocatedChunks.size()) {
             STLOG(PRI_DEBUG, BS_DDISK, BSDD12, "TDDiskActor::StartRestorePersistentBuffer ready");
             PersistentBufferReady = true;
+            UpdateFreeSpaceInfo();
             return;
         }
         for (ui32 pos = 0; pos < PersistentBufferSpaceAllocator.OwnedChunks.size() && PersistentBufferRestoreChunksInflight < PersistentBufferFormat.MaxChunkRestoreInflight; pos++) {
@@ -93,7 +96,6 @@ namespace NKikimr::NDDisk {
             op->PrepareRead(ChunkSize, offset, chunkIdx, 0);
             DirectUringOp(op);
         }
-
     }
 
     std::vector<std::tuple<ui32, ui32, TRope>> TDDiskActor::SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex,
@@ -197,6 +199,7 @@ namespace NKikimr::NDDisk {
                 PersistentBufferSectorsChecksum[chunkIdx][sectorIdx] = XXH3_64bits((char*)&sector, SectorSize);
             }
         }
+
         StartRestorePersistentBuffer();
         if (PersistentBufferRestoreChunksInflight == 0) {
             for (auto& [_, pb] : PersistentBuffers) {

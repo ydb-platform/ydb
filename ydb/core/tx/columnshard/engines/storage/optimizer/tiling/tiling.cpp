@@ -199,7 +199,7 @@ struct TSettings {
             } else {
                 // Unknown settings are silently ignored for forward-compatibility
                 // (e.g. settings that exist in other tiling variants but not this one).
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
                     "event", "tiling_unknown_setting_ignored")("setting", name);
             }
         }
@@ -227,13 +227,16 @@ public:
         const std::shared_ptr<arrow::Schema>& primaryKeysSchema,
         const TSettings& settings)
         : IOptimizerPlanner(pathId, std::nullopt)
-        , LastLevel(settings.MakeLastLevelSettings())
-        , MiddleLevels(settings.MakeMiddleLevelSettings())
-        , Accumulator(settings.MakeAccumulatorSettings())
+        , Counters(std::make_shared<TCounters>())
+        // Level 0 → accumulator counter (accumulator family, index 0)
+        , Accumulator(settings.MakeAccumulatorSettings(), Counters->GetAccumulatorCounters(0))
+        // Level 1 → last-level counter (level family, index 1)
+        , LastLevel(settings.MakeLastLevelSettings(), Counters->GetLevelCounters(1))
+        // Middle levels 2..N → level counters at matching indices
+        , MiddleLevels(settings.MakeMiddleLevelSettings(), *Counters)
         , StoragesManager(storagesManager)
         , PrimaryKeysSchema(primaryKeysSchema)
         , Settings(settings)
-        , Counters(std::make_shared<TCounters>())
         , PortionsInfo(std::make_shared<TSimplePortionsGroupInfo>()) {
         AFL_VERIFY(StoragesManager);
         Y_UNUSED(PrimaryKeysSchema);
@@ -248,9 +251,13 @@ public:
     }
 
 private:
+    // Counters must be declared first — LastLevel, MiddleLevels, and Accumulator
+    // hold const references into it and are initialised after it.
+    std::shared_ptr<TCounters> Counters;
+
+    Accumulator Accumulator;
     LastLevel LastLevel;
     MiddleLevels MiddleLevels;
-    Accumulator Accumulator;
     THashMap<ui64, ui8> InternalLevel;
 
     std::shared_ptr<IStoragesManager> StoragesManager;
@@ -260,7 +267,6 @@ private:
     // ui64 TotalBlobBytes = 0;
     // ui64 TotalRecordsCount = 0;
 
-    std::shared_ptr<TCounters> Counters;
     std::shared_ptr<TSimplePortionsGroupInfo> PortionsInfo;
 
     void Actualize() {
@@ -273,7 +279,7 @@ private:
         const auto produced = p->GetProduced();
         if (produced == NPortion::EVICTED || produced == NPortion::INACTIVE ||
             produced == NPortion::UNSPECIFIED || produced == NPortion::COMPACTED) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
                 "event", "tiling_remove_portion_skipped")(
                 "reason", "not_tracked_type")(
                 "portion_id", p->GetPortionId())(
@@ -283,7 +289,7 @@ private:
 
         PortionsInfo->RemovePortion(p);
 
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
             "event", "tiling_remove_portion")(
             "portion_id", p->GetPortionId())(
             "produced", (ui32)p->GetProduced())(
@@ -295,7 +301,7 @@ private:
         auto lit = InternalLevel.find(p->GetPortionId());
         if (lit == InternalLevel.end()) {
             // Portion was never tracked (e.g. added before planner switch). Log and skip.
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
                 "event", "tiling_remove_unknown_portion")(
                 "portion_id", p->GetPortionId())(
                 "produced", (ui32)produced);
@@ -316,7 +322,7 @@ private:
             case NPortion::EVICTED:
             case NPortion::INACTIVE:
                 // Tiered-out or deleted portions: skip silently (same as old tiling planner).
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
                     "event", "tiling_add_portion_skipped")(
                     "reason", "evicted_or_inactive")(
                     "portion_id", p->GetPortionId())(
@@ -325,7 +331,7 @@ private:
             case NPortion::UNSPECIFIED:
             case NPortion::COMPACTED:
                 // Legacy / unexpected values: log and skip rather than crash.
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
                     "event", "tiling_add_portion_unexpected_type")(
                     "portion_id", p->GetPortionId())(
                     "produced", (ui32)p->GetProduced());
@@ -341,7 +347,7 @@ private:
         if (p->GetColumnBlobBytes() < Settings.AccumulatorPortionSizeLimit) {
             Accumulator.Add(p);
             InternalLevel[p->GetPortionId()] = 0;
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
             "event", "tiling_add_portion_acc")(
             "portion_id", p->GetPortionId())(
             "produced", (ui32)p->GetProduced())(
@@ -352,11 +358,21 @@ private:
         } else {
             const ui64 measure = LastLevel.Measure(p);
             // log10(0) is undefined; treat measure==0 as level 1 (LastLevel, no overlaps).
-            const ui8 level = (measure > 0) ? static_cast<ui8>(log(measure) / log(3) + 1) : 1;
+            // Use integer log_K(measure) to avoid floating-point rounding errors
+            // (e.g. log(9)/log(3) may be 1.9999... instead of 2.0).
+            // We compute floor(log_K(measure)) by repeated division.
+            ui8 level = 1;
+            if (measure > 0) {
+                ui64 threshold = 1;
+                while (threshold * Settings.K <= measure) {
+                    threshold *= Settings.K;
+                    ++level;
+                }
+            }
             if (level <= 1) {
                 LastLevel.Add(p);
                 InternalLevel[p->GetPortionId()] = 1;
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
                 "event", "tiling_add_portion_last")(
                 "portion_id", p->GetPortionId())(
                 "produced", (ui32)p->GetProduced())(
@@ -369,7 +385,7 @@ private:
             } else {
                 MiddleLevels.Add(p, level);
                 InternalLevel[p->GetPortionId()] = level;
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
                 "event", "tiling_add_portion_middle")(
                 "portion_id", p->GetPortionId())(
                 "produced", (ui32)p->GetProduced())(
@@ -400,7 +416,7 @@ private:
         auto lastLevelPriority = LastLevel.DoGetUsefulMetric();
         auto middleLevelsPriority = MiddleLevels.DoGetUsefulMetric();
 
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
             "event", "tiling_get_optimization_tasks")(
             "accumulator_priority_level", accumulatorPriority.GetLevel())(
             "last_level_priority_level", lastLevelPriority.GetLevel())(
@@ -417,7 +433,7 @@ private:
 
         if (lastLevelPriority < accumulatorPriority && middleLevelsPriority < accumulatorPriority) {
             auto tasks = makeConstTasks(Accumulator.GetOptimizationTasks(dataLocksManager));
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
                 "event", "tiling_accumulator_tasks")(
                 "tasks_size", tasks.size());
             if (tasks.size() > 1) {
@@ -428,7 +444,7 @@ private:
                 // The actual routing in AddPortion still uses GetColumnBlobBytes() vs AccumulatorPortionSizeLimit.
                 result->SetTargetCompactionLevel(0);
                 result->SetPortionExpectedSize(Settings.PortionExpectedSize);
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
                     "event", "tiling_accumulator_task_created")(
                     "tasks_size", tasks.size())(
                     "target_level", 3)(
@@ -437,14 +453,14 @@ private:
             }
             // If accumulator is overloaded but we got < 2 tasks, all portions must be locked
             // (compaction already in progress). Log this so we can diagnose stuck compaction.
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
                 "event", "tiling_accumulator_no_task_produced")(
                 "tasks_size", tasks.size())(
                 "accumulator_priority_level", accumulatorPriority.GetLevel());
         }
         else if (lastLevelPriority < middleLevelsPriority) {
             auto tasks = makeConstTasks(MiddleLevels.GetOptimizationTasks(dataLocksManager));
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
                 "event", "tiling_middle_levels_tasks")(
                 "tasks_size", tasks.size());
             if (tasks.size() > 1) {
@@ -456,7 +472,7 @@ private:
         }
         else {
             auto tasks = makeConstTasks(LastLevel.GetOptimizationTasks(dataLocksManager));
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
                 "event", "tiling_last_level_tasks")(
                 "tasks_size", tasks.size())(
                     "portion_expected_size", Settings.PortionExpectedSize
@@ -533,7 +549,7 @@ private:
     }
 
     TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const override {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("message", "creating tiling compaction optimizer (intersection-tree)");
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("message", "creating tiling compaction optimizer (intersection-tree)");
         return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), Settings);
     }
 };

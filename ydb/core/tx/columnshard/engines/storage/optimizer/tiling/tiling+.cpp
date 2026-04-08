@@ -615,7 +615,7 @@ private:
 class TOptimizerPlannerConstructor : public IOptimizerPlannerConstructor {
 public:
     static TString GetClassNameStatic() {
-        return "tiling";
+        return "tiling+";
     }
 
     TString GetClassName() const override {

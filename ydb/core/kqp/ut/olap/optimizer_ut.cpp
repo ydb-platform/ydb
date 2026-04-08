@@ -471,7 +471,7 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             auto alterQuery = TString(
                 R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, )"
                 R"(`COMPACTION_PLANNER.CLASS_NAME`=`tiling`, )"
-                R"(`COMPACTION_PLANNER.FEATURES`=`{"accumulator_portion_size_limit":40000, "accumulator_trigger_bytes":200000, "portion_expected_size":100000}`))"
+                R"(`COMPACTION_PLANNER.FEATURES`=`{"accumulator_portion_size_limit":40000, "accumulator_trigger_bytes":200000, "portion_expected_size":100000, "k":3}`))"
             );
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();

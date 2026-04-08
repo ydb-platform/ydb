@@ -1,6 +1,7 @@
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
 #include <ydb/library/intersection_tree/intersection_tree.h>
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
@@ -16,8 +17,10 @@ struct LastLevel {
     };
 
     LastLevelSettings Settings;
-    LastLevel(LastLevelSettings settings)
-        : Settings(settings) {}
+    const TLevelCounters& Counters;
+    LastLevel(LastLevelSettings settings, const TLevelCounters& counters)
+        : Settings(settings)
+        , Counters(counters) {}
 
     struct TPortionByIndexKeyEndComparator {
         using is_transparent = void;  // Enable heterogeneous lookup
@@ -41,7 +44,7 @@ struct LastLevel {
 
     TOptimizationPriority DoGetUsefulMetric() const {
         auto priority = TOptimizationPriority::Normalize(1, Settings.CandidatePortionsOverload, Candidates.size());
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
             "event", "last_level_get_useful_metric")(
             "overloaded", priority.IsCritical())(
             "candidates_count", Candidates.size())(
@@ -53,10 +56,11 @@ struct LastLevel {
     }
 
     void Add(TPortionInfo::TPtr p) {
+        Counters.Portions->AddPortion(p);
         const ui64 measure = Measure(p);
         if (measure == 0) {
             Portions.insert(p);
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
                 "event", "last_level_add_to_portions")(
                 "portion_id", p->GetPortionId())(
                 "portions_count", Portions.size())(
@@ -64,7 +68,7 @@ struct LastLevel {
         }
         else {
             Candidates.insert(p);
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
                 "event", "last_level_add_to_candidates")(
                 "portion_id", p->GetPortionId())(
                 "measure", measure)(
@@ -72,12 +76,14 @@ struct LastLevel {
                 "candidates_count", Candidates.size())(
                 "overloaded", Candidates.size() >= Settings.CandidatePortionsOverload);
         }
+        Counters.Portions->SetHeight(Candidates.size());
     }
 
     void Remove(TPortionInfo::TPtr p) {
+        Counters.Portions->RemovePortion(p);
         if (Portions.contains(p)) {
             Portions.erase(p);
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
                 "event", "last_level_remove_from_portions")(
                 "portion_id", p->GetPortionId())(
                 "portions_count", Portions.size())(
@@ -85,7 +91,7 @@ struct LastLevel {
         }
         else if (Candidates.contains(p)) {
             Candidates.erase(p);
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
                 "event", "last_level_remove_from_candidates")(
                 "portion_id", p->GetPortionId())(
                 "portions_count", Portions.size())(
@@ -95,18 +101,19 @@ struct LastLevel {
         else {
             AFL_VERIFY(false);
         }
+        Counters.Portions->SetHeight(Candidates.size());
     }
 
     std::pair<PrtionsEndSorted::iterator, PrtionsEndSorted::iterator> Borders(TPortionInfo::TPtr p) const {
         auto begin = Portions.lower_bound(p->IndexKeyStart());
         auto end = Portions.upper_bound(p->IndexKeyEnd());
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_Borders")("portion_id", p->GetPortionId())
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_Borders")("portion_id", p->GetPortionId())
         ("begin", begin == Portions.end() ? -1 : (i64)begin->get()->GetPortionId())
         ("end", end == Portions.end() ? -1 : (i64)end->get()->GetPortionId());
         if (end != Portions.end() && (*end)->IndexKeyStart() <= p->IndexKeyEnd()) {
             ++end;
         }
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_Borders")("portion_id", p->GetPortionId())
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_Borders")("portion_id", p->GetPortionId())
         ("begin", begin == Portions.end() ? -1 : (i64)begin->get()->GetPortionId())
         ("end", end == Portions.end() ? -1 : (i64)end->get()->GetPortionId());
         return std::make_pair(begin, end);
@@ -115,13 +122,13 @@ struct LastLevel {
     ui64 Measure(TPortionInfo::TPtr p) const {
         auto [start, end] = Borders(p);
         auto dist = std::distance(start, end);
-                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "Measure");
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_measure")("portion_id", p->GetPortionId())("size", dist);
+                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Measure");
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_measure")("portion_id", p->GetPortionId())("size", dist);
         return dist;
     }
 
     std::vector<TPortionInfo::TPtr> GetOptimizationTasks(const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_GetOptimizationTasks");
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_GetOptimizationTasks");
         for (auto candidate : Candidates) {
             std::vector<TPortionInfo::TPtr> result;
             result.push_back(candidate);
@@ -142,12 +149,12 @@ struct LastLevel {
             }
             if (success) {
                 if (result.size() == 1) {
-                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_one_result");
-                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_one_result")("portion_id", candidate->GetPortionId());
-                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_one_result")("begin", begin == Portions.end());
-                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_one_result")("end", end == Portions.end());
-                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_one_result")("eq", begin == end);
-                    AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_one_result")("portion_id", candidate->GetPortionId())
+                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_one_result");
+                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_one_result")("portion_id", candidate->GetPortionId());
+                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_one_result")("begin", begin == Portions.end());
+                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_one_result")("end", end == Portions.end());
+                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_one_result")("eq", begin == end);
+                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_one_result")("portion_id", candidate->GetPortionId())
                     ("begin", begin == Portions.end() ? -1 : (i64)begin->get()->GetPortionId())
                     ("end", end == Portions.end() ? -1 : (i64)end->get()->GetPortionId());
                     // continue;
@@ -155,10 +162,10 @@ struct LastLevel {
                 return result;
             }
             else {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_skip");
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_skip");
             }
         }
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_no_result");
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "last_level_no_result");
         AFL_VERIFY(!DoGetUsefulMetric().IsCritical());
         return {};
     }
@@ -178,8 +185,10 @@ struct Accumulator {
     };
 
     AccumulatorSettings Settings;
-    Accumulator(AccumulatorSettings settings)
-        : Settings(settings) {}
+    const TLevelCounters& Counters;
+    Accumulator(AccumulatorSettings settings, const TLevelCounters& counters)
+        : Settings(settings)
+        , Counters(counters) {}
 
     TSet<TPortionInfo::TPtr> Portions;
     ui64 TotalBlobBytes = 0;
@@ -188,7 +197,7 @@ struct Accumulator {
         auto portionPriority = TOptimizationPriority::Normalize(Settings.Trigger.Portions, Settings.Overload.Portions, Portions.size());
         auto bytestPriority = TOptimizationPriority::Normalize(Settings.Trigger.Bytes, Settings.Overload.Bytes, TotalBlobBytes);
         auto priority = std::max(portionPriority, bytestPriority);
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
             "event", "accumulator_get_useful_metric")(
             "overloaded", priority.IsCritical())(
             "portions_count", Portions.size())(
@@ -203,9 +212,11 @@ struct Accumulator {
     }
 
     void Add(TPortionInfo::TPtr p) {
+        Counters.Portions->AddPortion(p);
         Portions.insert(p);
         TotalBlobBytes += p->GetTotalBlobBytes();
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+        Counters.Portions->SetHeight(Portions.size());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
             "event", "accumulator_add_portion")(
             "portion_id", p->GetPortionId())(
             "portion_blob_bytes", p->GetTotalBlobBytes())(
@@ -215,9 +226,11 @@ struct Accumulator {
     }
 
     void Remove(TPortionInfo::TPtr p) {
+        Counters.Portions->RemovePortion(p);
         Portions.erase(p);
         TotalBlobBytes -= p->GetTotalBlobBytes();
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+        Counters.Portions->SetHeight(Portions.size());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
             "event", "accumulator_remove_portion")(
             "portion_id", p->GetPortionId())(
             "portion_blob_bytes", p->GetTotalBlobBytes())(
@@ -228,7 +241,7 @@ struct Accumulator {
 
     std::vector<TPortionInfo::TPtr> GetOptimizationTasks(const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
         if (TotalBlobBytes < Settings.Trigger.Bytes && Portions.size() < Settings.Trigger.Portions) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
                 "event", "accumulator_get_tasks_skipped_below_trigger")(
                 "total_blob_bytes", TotalBlobBytes)(
                 "trigger_bytes", Settings.Trigger.Bytes)(
@@ -242,7 +255,7 @@ struct Accumulator {
         for (auto it : Portions) {
             if (locksManager->IsLocked(*it, NDataLocks::ELockCategory::Compaction)) {
                 ++lockedCount;
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
                     "event", "accumulator_portion_locked")(
                     "portion_id", it->GetPortionId())(
                     "locked_so_far", lockedCount)(
@@ -255,7 +268,7 @@ struct Accumulator {
                 break;
             }
         }
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
             "event", "accumulator_get_tasks_result")(
             "result_size", result.size())(
             "locked_count", lockedCount)(
@@ -285,9 +298,11 @@ struct MiddleLevels {
         };
 
         MiddleLevelSettings Settings;
+        const TLevelCounters& Counters;
 
-        MiddleLevel(MiddleLevelSettings settings)
-            : Settings(settings) {};
+        MiddleLevel(MiddleLevelSettings settings, const TLevelCounters& counters)
+            : Settings(settings)
+            , Counters(counters) {};
 
         // TIntersectionTree uses THashMap<TValue, TValueNode> internally, so TValue must be
         // hashable via THash<>. std::shared_ptr<TPortionInfo> is not hashable with the Arcadia
@@ -298,7 +313,7 @@ struct MiddleLevels {
         TOptimizationPriority DoGetUsefulMetric() const {
             const ui64 maxCount = Intersections.GetMaxCount();
             auto priority = TOptimizationPriority::Normalize(Settings.TriggerHight, Settings.OverloadHight, maxCount);
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
                 "event", "middle_level_get_useful_metric")(
                 "overloaded", priority.IsCritical())(
                 "intersection_max_count", maxCount)(
@@ -311,11 +326,13 @@ struct MiddleLevels {
         }
 
         void Add(const TPortionInfo::TPtr& p) {
+            Counters.Portions->AddPortion(p);
             const ui64 id = p->GetPortionId();
             PortionById.emplace(id, p);
             Intersections.Add(id, p->IndexKeyStart(), p->IndexKeyEnd());
             const ui64 maxCount = Intersections.GetMaxCount();
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+            Counters.Portions->SetHeight(maxCount);
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
                 "event", "middle_level_add_portion")(
                 "portion_id", id)(
                 "portions_count", PortionById.size())(
@@ -324,11 +341,13 @@ struct MiddleLevels {
         }
 
         void Remove(const TPortionInfo::TPtr& p) {
+            Counters.Portions->RemovePortion(p);
             const ui64 id = p->GetPortionId();
             Intersections.Remove(id);
             PortionById.erase(id);
             const ui64 maxCount = Intersections.GetMaxCount();
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+            Counters.Portions->SetHeight(maxCount);
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
                 "event", "middle_level_remove_portion")(
                 "portion_id", id)(
                 "portions_count", PortionById.size())(
@@ -358,10 +377,12 @@ struct MiddleLevels {
     std::vector<MiddleLevel> Levels;
     THashMap<ui64, ui8> InternalLevel;
 
-    MiddleLevels(MiddleLevel::MiddleLevelSettings settings) {
+    // Each middle level i (i >= 2) maps directly to level counter index i.
+    // Indices 0 and 1 are reserved for accumulator and last-level respectively.
+    MiddleLevels(MiddleLevel::MiddleLevelSettings settings, const TCounters& counters) {
         Levels.reserve(10);
         for (int i = 0; i < 10; ++i) {
-            Levels.emplace_back(settings);
+            Levels.emplace_back(settings, counters.GetLevelCounters(i));
         }
     }
 
@@ -390,7 +411,7 @@ struct MiddleLevels {
     TOptimizationPriority DoGetUsefulMetric() const {
         ui8 maxLevel = GetMaxLevel();
         auto maxPriority = Levels.at(maxLevel).DoGetUsefulMetric();
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)(
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)(
             "event", "middle_levels_get_useful_metric")(
             "any_overloaded", maxPriority.IsCritical())(
             "max_priority_level_idx", (ui32)maxLevel)(

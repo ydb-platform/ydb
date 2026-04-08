@@ -3,7 +3,7 @@
     {
       "branch": "main",
       "build_type": "relwithdebinfo",
-      "schedule_utc_hours": [10,16],
+      "schedule_utc_hours": [13],
       "schedule_weekdays": [1, 2, 3, 4, 5],
       "include_plots": true
     }

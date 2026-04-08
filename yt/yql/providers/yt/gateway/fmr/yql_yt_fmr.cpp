@@ -292,7 +292,7 @@ public:
         TString sessionId = options.SessionId();
         TString cluster = execCtx->Cluster_;
         auto config = options.Config();
-        TString tmpFolder = GetTablesTmpFolder(*config, cluster);
+        TString tmpFolder = GetTablesTmpFolder(*config, cluster, Sessions_[sessionId]->UseSecureTmp_, Sessions_[sessionId]->OperationOptions_);
         std::unordered_map<TString, TVector<TOutputInfo>> outputTablesByCluster;
         THashSet<TString> seen;
 
@@ -550,7 +550,7 @@ public:
 
         bool isAnonymous = NYql::HasSetting(publish.Publish().Settings().Ref(), EYtSettingType::Anonymous);
 
-        TString tmpFolder = GetTablesTmpFolder(*config, cluster);
+        TString tmpFolder = GetTablesTmpFolder(*config, cluster, Sessions_[sessionId]->UseSecureTmp_, Sessions_[sessionId]->OperationOptions_);
         auto outputTableRichPath = GetWriteTable(sessionId, cluster, outputPath, tmpFolder);
         TFmrTableId fmrOutputTableId(outputTableRichPath);
 
@@ -700,7 +700,7 @@ public:
             for (const auto& path : options.Pathes()) {
                 TFmrTableId tableId(path.Cluster, path.Path);
 
-                auto tmpFolder = GetTablesTmpFolder(*options.Config(), path.Cluster);
+                auto tmpFolder = GetTablesTmpFolder(*options.Config(), path.Cluster, Sessions_[sessionId]->UseSecureTmp_, Sessions_[sessionId]->OperationOptions_);
                 auto transformedTableId = GetTransformedPath(sessionId, path.Path, tmpFolder);
                 auto status = GetTablePresenceStatus(transformedTableId, sessionId);
 
@@ -787,7 +787,7 @@ public:
             TFmrTableId fmrTableId(table.Cluster(), table.Table());
             if (table.Anonymous()) {
                 TString cluster = table.Cluster(), path = table.Table();
-                auto anonTableRichPath = GetWriteTable(sessionId, cluster, path, GetTablesTmpFolder(*options.Config(), cluster)).Cluster(cluster);
+                auto anonTableRichPath = GetWriteTable(sessionId, cluster, path, GetTablesTmpFolder(*options.Config(), cluster, Sessions_[options.SessionId()]->UseSecureTmp_, Sessions_[options.SessionId()]->OperationOptions_)).Cluster(cluster);
                 fmrTableId = TFmrTableId(anonTableRichPath);
             }
             YQL_CLOG(DEBUG, FastMapReduce) << " Getting table info for table with id " << fmrTableId;
@@ -946,7 +946,7 @@ public:
                 for (auto& tableInfo: inputTableInfos) {
                     TOutputInfo outputTableInfo;
                     auto config = options.Config();
-                    TString tmpFolder = GetTablesTmpFolder(*config, tableInfo->Cluster);
+                    TString tmpFolder = GetTablesTmpFolder(*config, tableInfo->Cluster, Sessions_[options.SessionId()]->UseSecureTmp_, Sessions_[options.SessionId()]->OperationOptions_);
                     TString tablePath = GetTransformedPath(options.SessionId(), tableInfo->Name, tmpFolder);
                     TFmrTableId fmrTableId = GetAliasOrFmrId(TFmrTableId(tableInfo->Cluster, tablePath), options.SessionId());
                     auto status = GetTablePresenceStatus(fmrTableId, options.SessionId());
@@ -972,7 +972,7 @@ public:
         TString sessionId = options.SessionId();
         TString cluster = options.Cluster();
         auto config = options.Config();
-        TString tmpFolder = GetTablesTmpFolder(*config, cluster);
+        TString tmpFolder = GetTablesTmpFolder(*config, cluster, Sessions_[sessionId]->UseSecureTmp_, Sessions_[sessionId]->OperationOptions_);
 
         struct TCalcTableInfo {
             TString Cluster;
@@ -1086,7 +1086,7 @@ public:
         Coordinator_->OpenSession(openRequest).GetValueSync();
 
         with_lock(Mutex_) {
-            Sessions_[sessionId] = MakeIntrusive<TFmrSession>(sessionId, options.UserName(), options.RandomProvider(), options.TimeProvider(), options.OperationOptions(), options.ProgressWriter());
+            Sessions_[sessionId] = MakeIntrusive<TFmrSession>(sessionId, options.UserName(), options.RandomProvider(), options.TimeProvider(), options.OperationOptions(), options.ProgressWriter(), options.UseSecureTmp());
         }
         YQL_CLOG(INFO, FastMapReduce) << "Registered session " << sessionId << " with coordinator";
 

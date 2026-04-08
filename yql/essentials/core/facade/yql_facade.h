@@ -333,6 +333,12 @@ public:
     }
 
     void SetParametersYson(const TString& parameters);
+
+    void SetProjectSlug(const TString& slug) {
+        Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+        OperationOptions_.ProjectSlug = slug;
+    }
+
     // should be used after Compile phase
     bool ExtractQueryParametersMetadata();
 

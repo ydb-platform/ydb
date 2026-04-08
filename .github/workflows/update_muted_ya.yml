@@ -129,16 +129,6 @@ jobs:
       - name: Update test monitor
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
-      - name: Sync issues with current muted_ya file
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
-        run: |
-          .github/scripts/tests/create_new_muted_ya.py create_issues \
-            --file_path=base_muted_ya.txt \
-            --branch=${{ env.BASE_BRANCH }} \
-            --build-type=${{ env.BUILD_TYPE }}
-
       - name: Generate new muted_ya.txt
         run: |
           .github/scripts/tests/create_new_muted_ya.py update_muted_ya \

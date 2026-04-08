@@ -82,7 +82,6 @@ const TString nullSuffix = TString("\0\2", 2);
 
 const TString compError = "Comparison requires exactly one path and one literal operand";
 const TString varError = "Variables are not supported at the moment";
-const TString notError = "Unary NOT operation is not supported";
 const TString predError = "Predicates are not allowed in this context";
 const TString mixError = "Cannot mix AND and OR operators in jsonpath expression";
 const TString filterError = "'@' is only allowed inside filters";
@@ -186,72 +185,101 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
 
     // IsUnknown predicates return error because their argument must be a predicate (-> nested predicates are not allowed)
     Y_UNIT_TEST(CollectPath_IsUnknownPredicate) {
-        ValidateError("($ starts with \"abc\") is unknown", "Predicates are not allowed in this context", ECallableType::JsonValue);
-        ValidateError("($ like_regex \"abc\") is unknown", "Predicates are not allowed in this context", ECallableType::JsonValue);
-        ValidateError("(exists($.key)) is unknown", "Predicates are not allowed in this context", ECallableType::JsonValue);
+        ValidateError("($ starts with \"abc\") is unknown", predError, ECallableType::JsonValue);
+        ValidateError("($ like_regex \"abc\") is unknown", predError, ECallableType::JsonValue);
+        ValidateError("(exists($.key)) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("($.key == 10) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("($.key != 10) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("($.key < 10) is unknown", predError, ECallableType::JsonValue);
 
-        // For JSON_EXISTS, the result is always true even if the path does not exist
-        ValidateError("($ starts with \"abc\") is unknown", "Predicates are not allowed in this context", ECallableType::JsonExists);
+        // For JSON_EXISTS, predicate mode is denied even earlier (at context level)
+        ValidateError("($ starts with \"abc\") is unknown", predError, ECallableType::JsonExists);
+        ValidateError("($.key == 10) is unknown", predError, ECallableType::JsonExists);
+
+        // IsUnknown wrapping && - inner AND evaluates its operands (==, starts with, etc.) in EMode::Predicate, blocked
+        ValidateError("(($.a == 10) && ($.b == 20)) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("(($.a starts with \"x\") && ($.b == 1)) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("(exists($.a) && ($.b like_regex \"y.*\")) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("(($.a == 10) && ($.b == 20) && ($.c == 30)) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("(exists($.a) && exists($.b)) is unknown", predError, ECallableType::JsonValue);
+
+        // IsUnknown wrapping || - same: inner OR evaluates its predicate operands in EMode::Predicate, blocked
+        ValidateError("(($.a == 10) || ($.b == 20)) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("(($.a starts with \"x\") || ($.b == 1)) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("(exists($.a) || ($.b like_regex \"y.*\")) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("(($.a == 10) || ($.b == 20) || ($.c == 30)) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("(exists($.a) || exists($.b)) is unknown", predError, ECallableType::JsonValue);
+
+        // IsUnknown wrapping ! - UnaryNot error is returned before the nested predicate check applies
+        ValidateError("(!($.a == 10)) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("(!($.a starts with \"x\")) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("(!(exists($.a))) is unknown", predError, ECallableType::JsonValue);
+
+        // IsUnknown wrapping && / || that contain !
+        ValidateError("(!($.a == 10) && ($.b == 20)) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("(($.a == 10) && !($.b == 20)) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("(!($.a == 10) || ($.b == 20)) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("(($.a == 10) || !($.b == 20)) is unknown", predError, ECallableType::JsonValue);
     }
 
     // Unary NOT always returns an error regardless of callable type or operand
     Y_UNIT_TEST(CollectPath_UnaryNot) {
         // Basic cases with JsonExists
-        ValidateError("!($.a == 10)", notError, ECallableType::JsonExists);
-        ValidateError("!($.key == \"hello\")", notError, ECallableType::JsonExists);
-        ValidateError("!($.a == true)", notError, ECallableType::JsonExists);
-        ValidateError("!($.a == null)", notError, ECallableType::JsonExists);
+        ValidateError("!($.a == 10)", predError, ECallableType::JsonExists);
+        ValidateError("!($.key == \"hello\")", predError, ECallableType::JsonExists);
+        ValidateError("!($.a == true)", predError, ECallableType::JsonExists);
+        ValidateError("!($.a == null)", predError, ECallableType::JsonExists);
 
         // Basic cases with JsonValue
-        ValidateError("!($.a == 10)", notError, ECallableType::JsonValue);
-        ValidateError("!($.key == \"hello\")", notError, ECallableType::JsonValue);
+        ValidateError("!($.a == 10)", predError, ECallableType::JsonValue);
+        ValidateError("!($.key == \"hello\")", predError, ECallableType::JsonValue);
 
         // Deeper paths
-        ValidateError("!($.a.b.c == 42)", notError, ECallableType::JsonExists);
-        ValidateError("!($.a.b == \"x\")", notError, ECallableType::JsonValue);
+        ValidateError("!($.a.b.c == 42)", predError, ECallableType::JsonExists);
+        ValidateError("!($.a.b == \"x\")", predError, ECallableType::JsonValue);
 
         // NOT applied to exists predicate
-        ValidateError("!(exists($.key))", notError, ECallableType::JsonValue);
+        ValidateError("!(exists($.key))", predError, ECallableType::JsonValue);
 
         // NOT applied to starts with predicate
-        ValidateError("!($.key starts with \"abc\")", notError, ECallableType::JsonValue);
+        ValidateError("!($.key starts with \"abc\")", predError, ECallableType::JsonValue);
 
         // NOT applied to like_regex predicate
-        ValidateError("!($.key like_regex \"abc\")", notError, ECallableType::JsonValue);
+        ValidateError("!($.key like_regex \"abc\")", predError, ECallableType::JsonValue);
 
         // Double NOT
-        ValidateError("!(!($.a == 10))", notError, ECallableType::JsonExists);
-        ValidateError("!(!($.a == 10))", notError, ECallableType::JsonValue);
+        ValidateError("!(!($.a == 10))", predError, ECallableType::JsonExists);
+        ValidateError("!(!($.a == 10))", predError, ECallableType::JsonValue);
 
         // NOT as left operand of AND - error propagates immediately from left
-        ValidateError("!($.a == 10) && ($.b == 20)", notError, ECallableType::JsonValue);
-        ValidateError("!($.key starts with \"abc\") && ($.b == 1)", notError, ECallableType::JsonValue);
-        ValidateError("!(exists($.key)) && ($.b == 2)", notError, ECallableType::JsonValue);
-        ValidateError("!($.a like_regex \".*\") && ($.b == 3)", notError, ECallableType::JsonValue);
+        ValidateError("!($.a == 10) && ($.b == 20)", predError, ECallableType::JsonValue);
+        ValidateError("!($.key starts with \"abc\") && ($.b == 1)", predError, ECallableType::JsonValue);
+        ValidateError("!(exists($.key)) && ($.b == 2)", predError, ECallableType::JsonValue);
+        ValidateError("!($.a like_regex \".*\") && ($.b == 3)", predError, ECallableType::JsonValue);
 
         // NOT as right operand of AND - left side succeeds, then error from right
-        ValidateError("($.a == 10) && !($.b == 20)", notError, ECallableType::JsonValue);
-        ValidateError("($.a starts with \"x\") && !($.b == 1)", notError, ECallableType::JsonValue);
-        ValidateError("exists($.a) && !($.b like_regex \"y.*\")", notError, ECallableType::JsonValue);
+        ValidateError("($.a == 10) && !($.b == 20)", predError, ECallableType::JsonValue);
+        ValidateError("($.a starts with \"x\") && !($.b == 1)", predError, ECallableType::JsonValue);
+        ValidateError("exists($.a) && !($.b like_regex \"y.*\")", predError, ECallableType::JsonValue);
 
         // NOT as left operand of OR - error propagates immediately from left
-        ValidateError("!($.a == 10) || ($.b == 20)", notError, ECallableType::JsonValue);
-        ValidateError("!($.key starts with \"abc\") || ($.b == 1)", notError, ECallableType::JsonValue);
-        ValidateError("!(exists($.key)) || ($.b == 2)", notError, ECallableType::JsonValue);
+        ValidateError("!($.a == 10) || ($.b == 20)", predError, ECallableType::JsonValue);
+        ValidateError("!($.key starts with \"abc\") || ($.b == 1)", predError, ECallableType::JsonValue);
+        ValidateError("!(exists($.key)) || ($.b == 2)", predError, ECallableType::JsonValue);
 
         // NOT as right operand of OR - left side succeeds, then error from right
-        ValidateError("($.a == 10) || !($.b == 20)", notError, ECallableType::JsonValue);
-        ValidateError("($.a starts with \"x\") || !($.b == 1)", notError, ECallableType::JsonValue);
-        ValidateError("exists($.a) || !($.b like_regex \"y.*\")", notError, ECallableType::JsonValue);
+        ValidateError("($.a == 10) || !($.b == 20)", predError, ECallableType::JsonValue);
+        ValidateError("($.a starts with \"x\") || !($.b == 1)", predError, ECallableType::JsonValue);
+        ValidateError("exists($.a) || !($.b like_regex \"y.*\")", predError, ECallableType::JsonValue);
 
         // NOT inside is unknown - is unknown receives error from its argument
-        ValidateError("(!($.a == 10)) is unknown", notError, ECallableType::JsonValue);
-        ValidateError("(!($.key starts with \"abc\")) is unknown", notError, ECallableType::JsonValue);
-        ValidateError("(!(exists($.key))) is unknown", notError, ECallableType::JsonValue);
+        ValidateError("(!($.a == 10)) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("(!($.key starts with \"abc\")) is unknown", predError, ECallableType::JsonValue);
+        ValidateError("(!(exists($.key))) is unknown", predError, ECallableType::JsonValue);
 
         // NOT in chained AND/OR
-        ValidateError("($.a == 1) && !($.b == 2) && ($.c == 3)", notError, ECallableType::JsonValue);
-        ValidateError("($.a == 1) || !($.b == 2) || ($.c == 3)", notError, ECallableType::JsonValue);
+        ValidateError("($.a == 1) && !($.b == 2) && ($.c == 3)", predError, ECallableType::JsonValue);
+        ValidateError("($.a == 1) || !($.b == 2) || ($.c == 3)", predError, ECallableType::JsonValue);
     }
 
     // Unary +/- stop further path extraction (same as methods): operand path only
@@ -1057,6 +1085,59 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         // Both sides are literals
         ValidateError("$.a ? (1 == 2)", compError, ECallableType::JsonExists);
         ValidateError("$.a ? (\"x\" == \"y\")", compError, ECallableType::JsonExists);
+
+        // IsUnknown inside filter: EMode::Filter allows predicates, but IsUnknown evaluates its
+        // inner argument in EMode::Predicate, where predicate types (==, starts with, etc.) are blocked
+        ValidateError("$.a ? ((@.b == 10) is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b starts with \"x\") is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b like_regex \".*\") is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((exists(@.b)) is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b != 10) is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b < 5) is unknown)", predError, ECallableType::JsonExists);
+        // deeper paths
+        ValidateError("$.a ? ((@.b.c == 10) is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a.b ? ((@.c.d starts with \"x\") is unknown)", predError, ECallableType::JsonExists);
+
+        // IsUnknown wrapping && inside filter: && evaluates its operands (==, etc.) in EMode::Predicate, blocked
+        ValidateError("$.a ? ((@.b == 10 && @.c == 20) is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b starts with \"x\" && @.c == 1) is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((exists(@.b) && @.c like_regex \"y.*\") is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((exists(@.b) && exists(@.c)) is unknown)", predError, ECallableType::JsonExists);
+
+        // IsUnknown wrapping || inside filter: same, || evaluates operands in EMode::Predicate
+        ValidateError("$.a ? ((@.b == 10 || @.c == 20) is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b starts with \"x\" || @.c == 1) is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((exists(@.b) || @.c like_regex \"y.*\") is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((exists(@.b) || exists(@.c)) is unknown)", predError, ECallableType::JsonExists);
+
+        // Unary NOT inside filter - UnaryNot always returns predError regardless of mode
+        ValidateError("$.a ? (!(@.b == 10))", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? (!(@.b starts with \"x\"))", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? (!(exists(@.b)))", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? (!(@.b like_regex \".*\"))", predError, ECallableType::JsonExists);
+        // deeper paths
+        ValidateError("$.a ? (!(@.b.c == 10))", predError, ECallableType::JsonExists);
+        ValidateError("$.key ? (!(@.sub != \"x\"))", predError, ECallableType::JsonExists);
+
+        // Unary NOT on left / right of && and || inside filter
+        ValidateError("$.a ? (!(@.b == 10) && @.c == 20)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? (@.b == 10 && !(@.c == 20))", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? (!(@.b starts with \"x\") && @.c == 1)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? (exists(@.b) && !(@.c like_regex \"y.*\"))", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? (!(@.b == 10) || @.c == 20)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? (@.b == 10 || !(@.c == 20))", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? (!(@.b starts with \"x\") || exists(@.c))", predError, ECallableType::JsonExists);
+
+        // Unary NOT inside is unknown inside filter
+        ValidateError("$.a ? ((!(@.b == 10)) is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((!(@.b starts with \"x\")) is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((!(exists(@.b))) is unknown)", predError, ECallableType::JsonExists);
+
+        // Unary NOT inside && / || which are wrapped by is unknown inside filter
+        ValidateError("$.a ? ((!(@.b == 10) && @.c == 20) is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b == 10 && !(@.c == 20)) is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((!(@.b == 10) || @.c == 20) is unknown)", predError, ECallableType::JsonExists);
+        ValidateError("$.a ? ((@.b == 10 || !(@.c == 20)) is unknown)", predError, ECallableType::JsonExists);
     }
 
     // Variables are not supported now

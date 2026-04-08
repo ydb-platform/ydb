@@ -148,6 +148,9 @@ TResult TQueryCollector::Collect(const TJsonPathItem& item, EMode mode) {
 
     if (mode == EMode::Predicate) {
         switch (item.Type) {
+            case EJsonPathItemType::UnaryNot:
+            case EJsonPathItemType::BinaryAnd:
+            case EJsonPathItemType::BinaryOr:
             case EJsonPathItemType::BinaryLess:
             case EJsonPathItemType::BinaryLessEqual:
             case EJsonPathItemType::BinaryGreater:
@@ -405,10 +408,13 @@ TResult TQueryCollector::BinaryOr(const TJsonPathItem& item, EMode mode) {
 }
 
 TResult TQueryCollector::UnaryNot(const TJsonPathItem& item, EMode mode) {
-    Y_UNUSED(item);
-    Y_UNUSED(mode);
-    // Unary not breaks the path, so we can't collect anymore: !($.a == 10) -> "1a|10"
-    return TResult(TIssue("Unary NOT operation is not supported"));
+    if (!ArePredicatesAllowed(mode)) {
+        return TResult(TIssue("Predicates are not allowed in this context"));
+    }
+
+    auto result = Collect(Reader.ReadInput(item), EMode::Predicate);
+    result.Finish();
+    return result;
 }
 
 TResult TQueryCollector::BinaryEqual(const TJsonPathItem& item, EMode mode) {
@@ -520,10 +526,6 @@ TResult TQueryCollector::Predicates(const TJsonPathItem& item, EMode mode) {
     }
 
     auto result = Collect(Reader.ReadInput(item), EMode::Predicate);
-    if (result.IsError()) {
-        return result;
-    }
-
     result.Finish();
     return result;
 }

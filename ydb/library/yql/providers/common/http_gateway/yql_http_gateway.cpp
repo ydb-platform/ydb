@@ -350,7 +350,7 @@ public:
               offset,
               sizeLimit,
               data.size(),
-              std::move(config),
+              config,
               std::move(dnsCache),
               std::move(data))
         , Input(Data)
@@ -387,7 +387,7 @@ public:
             sizeLimit,
             std::move(callback),
             std::move(retryState),
-            std::move(config),
+            config,
             std::move(dnsCache));
     }
 
@@ -485,7 +485,7 @@ public:
         size_t threshold,
         const TCurlInitConfig& config = TCurlInitConfig(),
         TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
-        : TEasyCurl(counter, downloadedBytes, uploadededBytes, url, std::move(headers), EMethod::GET, offset, sizeLimit, 0ULL, std::move(config), std::move(dnsCache))
+        : TEasyCurl(counter, downloadedBytes, uploadededBytes, url, std::move(headers), EMethod::GET, offset, sizeLimit, 0ULL, config, std::move(dnsCache))
         , OnStart(std::move(onStart))
         , OnNewData(std::move(onNewData))
         , OnFinish(std::move(onFinish))
@@ -512,7 +512,7 @@ public:
         const TCurlInitConfig& config = TCurlInitConfig(),
         TDNSGateway<>::TDNSConstCurlListPtr dnsCache = nullptr)
     {
-        return std::make_shared<TEasyCurlStream>(counter, downloadedBytes, uploadededBytes, std::move(url), std::move(headers), offset, sizeLimit, std::move(onStart), std::move(onNewData), std::move(onFinish), inflightCounter, handle, threshold, std::move(config), std::move(dnsCache));
+        return std::make_shared<TEasyCurlStream>(counter, downloadedBytes, uploadededBytes, std::move(url), std::move(headers), offset, sizeLimit, std::move(onStart), std::move(onNewData), std::move(onFinish), inflightCounter, handle, threshold, config, std::move(dnsCache));
     }
 
     enum class EAction : i8 {

@@ -320,6 +320,20 @@ Y_UNIT_TEST(ApplyAutoConfigUsesBuiltInTinyConfigurationFromCpuTable) {
     UNIT_ASSERT_VALUES_EQUAL(ic->GetAdjacentPools(0), 0);
 }
 
+Y_UNIT_TEST(ApplyAutoConfigUsesTinyProfileWhenForced) {
+    NKikimrConfig::TActorSystemConfig config;
+    config.SetUseAutoConfig(true);
+    config.SetCpuCount(8);
+
+    ApplyAutoConfig(&config, TAutoConfigOptions{
+        .ForceTinyConfiguration = true,
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        static_cast<int>(config.GetActorSystemProfile()),
+        static_cast<int>(NKikimrConfig::TActorSystemConfig::LOW_CPU_CONSUMPTION));
+}
+
 Y_UNIT_TEST(ApplyAutoConfigUsesConsistentLogicalPoolIds) {
     NKikimrConfig::TActorSystemConfig config;
     config.SetUseAutoConfig(true);

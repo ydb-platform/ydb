@@ -52,32 +52,6 @@ namespace {
         return {{system, user, batch, io, ic}};
     }
 
-    constexpr TRealPoolConfig MakeRealPoolConfig(
-        ERealPoolKind kind,
-        i16 threadCount,
-        i16 maxThreadCount,
-        ui8 priority)
-    {
-        return TRealPoolConfig{
-            .Kind = kind,
-            .ThreadCount = threadCount,
-            .MaxThreadCount = maxThreadCount,
-            .Priority = priority,
-        };
-    }
-
-    constexpr TCpuTableRow MakeCpuTableRow(
-        std::array<TRealPoolConfig, PoolKindsCount> realPools,
-        std::array<ui8, PoolKindsCount> logicalToRealPool,
-        ui8 realPoolCount)
-    {
-        return TCpuTableRow{
-            .RealPools = realPools,
-            .LogicalToRealPool = logicalToRealPool,
-            .RealPoolCount = realPoolCount,
-        };
-    }
-
     constexpr TCpuTableRow MakeFivePoolRow(
         TPoolConfig system,
         TPoolConfig user,
@@ -85,16 +59,41 @@ namespace {
         TPoolConfig io,
         TPoolConfig ic)
     {
-        return MakeCpuTableRow(
-            {{
-                MakeRealPoolConfig(ERealPoolKind::System, system.ThreadCount, system.MaxThreadCount, 30),
-                MakeRealPoolConfig(ERealPoolKind::User, user.ThreadCount, user.MaxThreadCount, 20),
-                MakeRealPoolConfig(ERealPoolKind::Batch, batch.ThreadCount, batch.MaxThreadCount, 10),
-                MakeRealPoolConfig(ERealPoolKind::IO, io.ThreadCount, io.MaxThreadCount, 0),
-                MakeRealPoolConfig(ERealPoolKind::IC, ic.ThreadCount, ic.MaxThreadCount, 40),
+        return TCpuTableRow{
+            .RealPools = {{
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::System,
+                    .ThreadCount = system.ThreadCount,
+                    .MaxThreadCount = system.MaxThreadCount,
+                    .Priority = 30,
+                },
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::User,
+                    .ThreadCount = user.ThreadCount,
+                    .MaxThreadCount = user.MaxThreadCount,
+                    .Priority = 20,
+                },
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::Batch,
+                    .ThreadCount = batch.ThreadCount,
+                    .MaxThreadCount = batch.MaxThreadCount,
+                    .Priority = 10,
+                },
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::IO,
+                    .ThreadCount = io.ThreadCount,
+                    .MaxThreadCount = io.MaxThreadCount,
+                },
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::IC,
+                    .ThreadCount = ic.ThreadCount,
+                    .MaxThreadCount = ic.MaxThreadCount,
+                    .Priority = 40,
+                },
             }},
-            MakeLogicalToRealPool(0, 1, 2, 3, 4),
-            5);
+            .LogicalToRealPool = MakeLogicalToRealPool(0, 1, 2, 3, 4),
+            .RealPoolCount = 5,
+        };
     }
 
     constexpr TCpuTableRow MakeFourPoolRow(
@@ -103,41 +102,71 @@ namespace {
         TPoolConfig io,
         TPoolConfig ic)
     {
-        return MakeCpuTableRow(
-            {{
-                MakeRealPoolConfig(ERealPoolKind::Common, common.ThreadCount, common.MaxThreadCount, 30),
-                MakeRealPoolConfig(ERealPoolKind::Batch, batch.ThreadCount, batch.MaxThreadCount, 10),
-                MakeRealPoolConfig(ERealPoolKind::IO, io.ThreadCount, io.MaxThreadCount, 0),
-                MakeRealPoolConfig(ERealPoolKind::IC, ic.ThreadCount, ic.MaxThreadCount, 40),
+        return TCpuTableRow{
+            .RealPools = {{
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::Common,
+                    .ThreadCount = common.ThreadCount,
+                    .MaxThreadCount = common.MaxThreadCount,
+                    .Priority = 30,
+                },
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::Batch,
+                    .ThreadCount = batch.ThreadCount,
+                    .MaxThreadCount = batch.MaxThreadCount,
+                    .Priority = 10,
+                },
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::IO,
+                    .ThreadCount = io.ThreadCount,
+                    .MaxThreadCount = io.MaxThreadCount,
+                },
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::IC,
+                    .ThreadCount = ic.ThreadCount,
+                    .MaxThreadCount = ic.MaxThreadCount,
+                    .Priority = 40,
+                },
                 {},
             }},
-            MakeLogicalToRealPool(0, 0, 1, 2, 3),
-            4);
+            .LogicalToRealPool = MakeLogicalToRealPool(0, 0, 1, 2, 3),
+            .RealPoolCount = 4,
+        };
     }
 
     constexpr TCpuTableRow MakeTwoPoolRow(
         TPoolConfig common,
         TPoolConfig io)
     {
-        return MakeCpuTableRow(
-            {{
-                MakeRealPoolConfig(ERealPoolKind::Common, common.ThreadCount, common.MaxThreadCount, 40),
-                MakeRealPoolConfig(ERealPoolKind::IO, io.ThreadCount, io.MaxThreadCount, 0),
+        return TCpuTableRow{
+            .RealPools = {{
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::Common,
+                    .ThreadCount = common.ThreadCount,
+                    .MaxThreadCount = common.MaxThreadCount,
+                    .Priority = 40,
+                },
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::IO,
+                    .ThreadCount = io.ThreadCount,
+                    .MaxThreadCount = io.MaxThreadCount,
+                },
                 {},
                 {},
                 {},
             }},
-            MakeLogicalToRealPool(0, 0, 0, 1, 0),
-            2);
+            .LogicalToRealPool = MakeLogicalToRealPool(0, 0, 0, 1, 0),
+            .RealPoolCount = 2,
+        };
     }
 
     constexpr TCpuTableRow MakeEmptyRow() {
-        return MakeCpuTableRow({}, {}, 0);
+        return TCpuTableRow{};
     }
 
     constexpr TCpuTableRow MakeTinyRow1() {
-        return MakeCpuTableRow(
-            {{
+        return TCpuTableRow{
+            .RealPools = {{
                 TRealPoolConfig{
                     .Kind = ERealPoolKind::System,
                     .Priority = 30,
@@ -178,13 +207,14 @@ namespace {
                     },
                 },
             }},
-            MakeLogicalToRealPool(1, 0, 2, 3, 4),
-            5);
+            .LogicalToRealPool = MakeLogicalToRealPool(1, 0, 2, 3, 4),
+            .RealPoolCount = 5,
+        };
     }
 
     constexpr TCpuTableRow MakeTinyRow2() {
-        return MakeCpuTableRow(
-            {{
+        return TCpuTableRow{
+            .RealPools = {{
                 TRealPoolConfig{
                     .Kind = ERealPoolKind::System,
                     .Priority = 30,
@@ -231,13 +261,14 @@ namespace {
                     },
                 },
             }},
-            MakeLogicalToRealPool(1, 0, 2, 3, 4),
-            5);
+            .LogicalToRealPool = MakeLogicalToRealPool(1, 0, 2, 3, 4),
+            .RealPoolCount = 5,
+        };
     }
 
     constexpr TCpuTableRow MakeTinyRow3() {
-        return MakeCpuTableRow(
-            {{
+        return TCpuTableRow{
+            .RealPools = {{
                 TRealPoolConfig{
                     .Kind = ERealPoolKind::System,
                     .ThreadCount = 1,
@@ -282,8 +313,9 @@ namespace {
                     .ForcedForeignSlots = ui32{1},
                 },
             }},
-            MakeLogicalToRealPool(1, 0, 2, 3, 4),
-            5);
+            .LogicalToRealPool = MakeLogicalToRealPool(1, 0, 2, 3, 4),
+            .RealPoolCount = 5,
+        };
     }
 
     const TDefaultCpuTable ComputeCpuTable = {{
@@ -534,6 +566,77 @@ namespace {
         ValidateRealPools(row, cpuCount);
     }
 
+    void AddExecutorFromRealPool(
+        NKikimrConfig::TActorSystemConfig* config,
+        const TRealPoolConfig& realPoolConfig,
+        i16 cpuCount,
+        bool useSharedThreads,
+        bool useUnitedPool)
+    {
+        auto* executor = config->AddExecutor();
+        const TString poolName = GetRealPoolName(realPoolConfig.Kind);
+
+        if (realPoolConfig.Kind == ERealPoolKind::IO) {
+            executor->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::IO);
+            ui32 ioThreadCount = realPoolConfig.ThreadCount > 0 ? realPoolConfig.ThreadCount : GetIOThreadCount(cpuCount);
+            if (config->HasForceIOPoolThreads()) {
+                ioThreadCount = config->GetForceIOPoolThreads();
+            }
+            executor->SetThreads(ioThreadCount);
+            executor->SetName(poolName);
+            return;
+        }
+
+        const bool hasSharedThread = realPoolConfig.HasSharedThread.value_or(useSharedThreads);
+        if (hasSharedThread) {
+            executor->SetHasSharedThread(true);
+        }
+        executor->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);
+        executor->SetThreads(realPoolConfig.ThreadCount);
+        executor->SetMaxThreads(Max(realPoolConfig.MaxThreadCount, realPoolConfig.ThreadCount));
+        executor->SetPriority(realPoolConfig.Priority);
+        executor->SetName(poolName);
+        executor->SetAllThreadsAreShared(useUnitedPool);
+
+        if (realPoolConfig.SpinThreshold) {
+            executor->SetSpinThreshold(*realPoolConfig.SpinThreshold);
+        } else if (realPoolConfig.Kind == ERealPoolKind::Common) {
+            executor->SetSpinThreshold(0);
+        } else if (realPoolConfig.Kind == ERealPoolKind::IC) {
+            executor->SetSpinThreshold(10);
+        } else {
+            executor->SetSpinThreshold(1);
+        }
+
+        if (realPoolConfig.TimePerMailboxMicroSecs) {
+            executor->SetTimePerMailboxMicroSecs(*realPoolConfig.TimePerMailboxMicroSecs);
+        } else if (realPoolConfig.Kind == ERealPoolKind::Common || realPoolConfig.Kind == ERealPoolKind::IC) {
+            executor->SetTimePerMailboxMicroSecs(100);
+        }
+
+        if (realPoolConfig.MaxAvgPingDeviation) {
+            executor->SetMaxAvgPingDeviation(*realPoolConfig.MaxAvgPingDeviation);
+        } else if (realPoolConfig.Kind == ERealPoolKind::IC) {
+            executor->SetMaxAvgPingDeviation(500);
+        }
+
+        if (realPoolConfig.ForcedForeignSlots) {
+            executor->SetForcedForeignSlots(*realPoolConfig.ForcedForeignSlots);
+        }
+        if (realPoolConfig.AdjacentPools) {
+            for (ui8 adjacentPoolIdx = 0; adjacentPoolIdx < realPoolConfig.AdjacentPools->Count; ++adjacentPoolIdx) {
+                executor->AddAdjacentPools(realPoolConfig.AdjacentPools->Pools[adjacentPoolIdx]);
+            }
+        }
+
+        if (config->HasMinLocalQueueSize()) {
+            executor->SetMinLocalQueueSize(config->GetMinLocalQueueSize());
+        }
+        if (config->HasMaxLocalQueueSize()) {
+            executor->SetMaxLocalQueueSize(config->GetMaxLocalQueueSize());
+        }
+    }
+
 } // anonymous
 
 namespace NKikimr::NAutoConfigInitializer {
@@ -629,22 +732,18 @@ namespace NKikimr::NAutoConfigInitializer {
 
         bool useSharedThreads = config->GetUseSharedThreads();
         bool useUnitedPool = config->GetUseUnitedPool();
+        const bool useTiny = options.ForceTinyConfiguration || (cpuCount >= 1 && cpuCount <= SchedulerTinyCoresThreshold);
 
         if (!config->HasScheduler()) {
             auto *scheduler = config->MutableScheduler();
-
-            bool useTiny = options.ForceTinyConfiguration || (cpuCount >= 1 && cpuCount <= SchedulerTinyCoresThreshold);
             scheduler->SetResolution(useTiny ? SchedulerTinyResolution : SchedulerDefaultResolution);
 
             scheduler->SetSpinThreshold(0);
             scheduler->SetProgressThreshold(10'000);
         }
 
-        auto *serviceExecutor = config->AddServiceExecutor();
-        serviceExecutor->SetServiceName("Interconnect");
-
         if (!config->HasActorSystemProfile()) {
-            if (cpuCount <= 4) {
+            if (useTiny) {
                 config->SetActorSystemProfile(NKikimrConfig::TActorSystemConfig::LOW_CPU_CONSUMPTION);
             } else {
                 config->SetActorSystemProfile(NKikimrConfig::TActorSystemConfig::LOW_LATENCY);
@@ -655,7 +754,7 @@ namespace NKikimr::NAutoConfigInitializer {
             config->SetNodeType(options.IsDynamicNode ? NKikimrConfig::TActorSystemConfig::COMPUTE : NKikimrConfig::TActorSystemConfig::STORAGE);
         }
 
-        const bool useTinyConfiguration = options.ForceTinyConfiguration || (useSharedThreads && cpuCount >= 1 && cpuCount <= 3);
+        const bool useTinyConfiguration = useTiny && useSharedThreads;
         const ICpuTable& cpuTable = options.CpuTable
             ? *options.CpuTable
             : useTinyConfiguration && cpuCount <= 3
@@ -671,77 +770,13 @@ namespace NKikimr::NAutoConfigInitializer {
         config->SetUserExecutor(pools.UserPoolId);
         config->SetBatchExecutor(pools.BatchPoolId);
         config->SetIoExecutor(pools.IOPoolId);
+
+        auto *serviceExecutor = config->AddServiceExecutor();
+        serviceExecutor->SetServiceName("Interconnect");
         serviceExecutor->SetExecutorId(pools.ICPoolId);
 
-        TVector<NKikimrConfig::TActorSystemConfig::TExecutor *> executors;
         for (ui32 poolIdx = 0; poolIdx < poolCount; ++poolIdx) {
-            executors.push_back(config->AddExecutor());
-        }
-
-        for (ui32 poolIdx = 0; poolIdx < poolCount; ++poolIdx) {
-            auto *executor = executors[poolIdx];
-            TRealPoolConfig realPoolConfig = GetRealPoolCfg(poolIdx, row);
-            const TString poolName = GetRealPoolName(realPoolConfig.Kind);
-
-            if (realPoolConfig.Kind == ERealPoolKind::IO) {
-                executor->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::IO);
-                ui32 ioThreadCount = realPoolConfig.ThreadCount > 0 ? realPoolConfig.ThreadCount : GetIOThreadCount(cpuCount);
-                if (config->HasForceIOPoolThreads()) {
-                    ioThreadCount = config->GetForceIOPoolThreads();
-                }
-                executor->SetThreads(ioThreadCount);
-                executor->SetName(poolName);
-                continue;
-            }
-
-            const bool hasSharedThread = realPoolConfig.HasSharedThread.value_or(useSharedThreads);
-            if (hasSharedThread) {
-                executor->SetHasSharedThread(true);
-            }
-            executor->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);
-            executor->SetThreads(realPoolConfig.ThreadCount);
-            executor->SetMaxThreads(Max(realPoolConfig.MaxThreadCount, realPoolConfig.ThreadCount));
-            executor->SetPriority(realPoolConfig.Priority);
-            executor->SetName(poolName);
-            executor->SetAllThreadsAreShared(useUnitedPool);
-
-            if (realPoolConfig.SpinThreshold) {
-                executor->SetSpinThreshold(*realPoolConfig.SpinThreshold);
-            } else if (realPoolConfig.Kind == ERealPoolKind::Common) {
-                executor->SetSpinThreshold(0);
-            } else if (realPoolConfig.Kind == ERealPoolKind::IC) {
-                executor->SetSpinThreshold(10);
-            } else {
-                executor->SetSpinThreshold(1);
-            }
-
-            if (realPoolConfig.TimePerMailboxMicroSecs) {
-                executor->SetTimePerMailboxMicroSecs(*realPoolConfig.TimePerMailboxMicroSecs);
-            } else if (realPoolConfig.Kind == ERealPoolKind::Common || realPoolConfig.Kind == ERealPoolKind::IC) {
-                executor->SetTimePerMailboxMicroSecs(100);
-            }
-
-            if (realPoolConfig.MaxAvgPingDeviation) {
-                executor->SetMaxAvgPingDeviation(*realPoolConfig.MaxAvgPingDeviation);
-            } else if (realPoolConfig.Kind == ERealPoolKind::IC) {
-                executor->SetMaxAvgPingDeviation(500);
-            }
-
-            if (realPoolConfig.ForcedForeignSlots) {
-                executor->SetForcedForeignSlots(*realPoolConfig.ForcedForeignSlots);
-            }
-            if (realPoolConfig.AdjacentPools) {
-                for (ui8 adjacentPoolIdx = 0; adjacentPoolIdx < realPoolConfig.AdjacentPools->Count; ++adjacentPoolIdx) {
-                    executor->AddAdjacentPools(realPoolConfig.AdjacentPools->Pools[adjacentPoolIdx]);
-                }
-            }
-
-            if (config->HasMinLocalQueueSize()) {
-                executor->SetMinLocalQueueSize(config->GetMinLocalQueueSize());
-            }
-            if (config->HasMaxLocalQueueSize()) {
-                executor->SetMaxLocalQueueSize(config->GetMaxLocalQueueSize());
-            }
+            AddExecutorFromRealPool(config, GetRealPoolCfg(poolIdx, row), cpuCount, useSharedThreads, useUnitedPool);
         }
     }
 

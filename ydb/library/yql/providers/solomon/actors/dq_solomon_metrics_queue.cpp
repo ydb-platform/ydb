@@ -13,6 +13,7 @@
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <util/generic/size_literals.h>
 #include <util/string/join.h>
 
 #define LOG_E(name, stream) \
@@ -79,6 +80,7 @@ public:
         TDqSolomonReadParams&& readParams,
         bool enableSolomonClientPostApi,
         ui64 batchCountLimit,
+        ui64 prefetchSize,
         TDuration truePointsFindRange,
         ui64 maxListingPageSize,
         ui64 maxApiInflight,
@@ -87,6 +89,7 @@ public:
         , ReadParams(std::move(readParams))
         , EnableSolomonClientPostApi(enableSolomonClientPostApi)
         , BatchCountLimit(batchCountLimit)
+        , PrefetchSize(prefetchSize)
         , TrueRangeFrom(TInstant::Seconds(ReadParams.Source.GetFrom()) - truePointsFindRange)
         , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo()) + truePointsFindRange)
         , MaxListingPageSize(maxListingPageSize)
@@ -318,7 +321,7 @@ private:
 
     bool TryFetch() {
         if (CurrentInflight >= MaxApiInflight) {
-            LOG_D("TDqSolomonMetricsQueueActor", "TryFetch can't start fetching, have " << CurrentInflight << " inflight requests, current max: " << MaxApiInflight);
+            LOG_D("TDqSolomonMetricsQueueActor", "TryFetch can't start fetching, have " << CurrentInflight << " inflight requests, current limit: " << MaxApiInflight);
             return false;
         }
 
@@ -329,6 +332,11 @@ private:
                 Become(&TDqSolomonMetricsQueueActor::NoMoreMetricsState);
                 AnswerPendingRequests();
             }
+            return false;
+        }
+
+        if (Metrics.size() >= PrefetchSize) {
+            LOG_D("TDqSolomonMetricsQueueActor", "TryFetch can't start fetching, have " << Metrics.size() << " metrics stored, current limit: " << PrefetchSize);
             return false;
         }
 
@@ -442,6 +450,7 @@ private:
             result.push_back(Metrics.back());
             Metrics.pop_back();
             ProcessedMetrics++;
+            TryFetch();
         }
 
         LOG_D("TDqSolomonMetricsQueueActor", "SendMetrics Sending " << result.size() << " metrics to consumer with id " << consumer);
@@ -501,11 +510,12 @@ private:
     const TDqSolomonReadParams ReadParams;
     const bool EnableSolomonClientPostApi;
     const ui64 BatchCountLimit;
+    const ui64 PrefetchSize;
     const TInstant TrueRangeFrom;
     const TInstant TrueRangeTo;
     const ui64 MaxListingPageSize;
     const ui64 MaxApiInflight;
-    const ui64 MaxHttpGetRequestSize = 4096;
+    const ui64 MaxHttpGetRequestSize = 4_KB;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
     const NSo::ISolomonAccessorClient::TPtr SolomonClient;
 
@@ -532,6 +542,11 @@ NActors::IActor* CreateSolomonMetricsQueueActor(
     if (auto it = settings.find("metricsQueueBatchCountLimit"); it != settings.end()) {
         batchCountLimit = FromString<ui64>(it->second);
     }
+    
+    ui64 prefetchSize = 1000;
+    if (auto it = settings.find("metricsQueuePrefetchSize"); it != settings.end()) {
+        prefetchSize = FromString<ui64>(it->second);
+    }
 
     ui64 truePointsFindRange = 301;
     if (auto it = settings.find("truePointsFindRange"); it != settings.end()) {
@@ -543,12 +558,12 @@ NActors::IActor* CreateSolomonMetricsQueueActor(
         maxListingPageSize = FromString<ui64>(it->second);
     }
 
-    ui64 maxInflight = 40;
+    ui64 maxApiInflight = 40;
     if (auto it = settings.find("maxApiInflight"); it != settings.end()) {
-        maxInflight = FromString<ui64>(it->second);
+        maxApiInflight = FromString<ui64>(it->second);
     }
 
-    return new TDqSolomonMetricsQueueActor(consumersCount, std::move(readParams), enableSolomonClientPostApi, batchCountLimit, TDuration::Seconds(truePointsFindRange), maxListingPageSize, maxInflight, credentialsProvider);
+    return new TDqSolomonMetricsQueueActor(consumersCount, std::move(readParams), enableSolomonClientPostApi, batchCountLimit, prefetchSize, TDuration::Seconds(truePointsFindRange), maxListingPageSize, maxApiInflight, credentialsProvider);
 }
 
 } // namespace NYql::NDq

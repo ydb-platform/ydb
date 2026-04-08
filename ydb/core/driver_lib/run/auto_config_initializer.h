@@ -17,7 +17,7 @@ namespace NKikimrConfig {
 
 namespace NKikimr::NAutoConfigInitializer {
 
-    enum class EPoolKind : ui8 {
+    enum class ELogicalPoolKind : ui8 {
         System = 0,
         User = 1,
         Batch = 2,
@@ -30,7 +30,7 @@ namespace NKikimr::NAutoConfigInitializer {
         i16 MaxThreadCount = 0;
     };
 
-    enum class ERealPoolKind : ui8 {
+    enum class EExecutorPoolKind : ui8 {
         Common = 0,
         System = 1,
         User = 2,
@@ -40,7 +40,7 @@ namespace NKikimr::NAutoConfigInitializer {
     };
 
     static constexpr size_t PoolKindsCount = 5;
-    static_assert(static_cast<size_t>(EPoolKind::IC) + 1 == PoolKindsCount);
+    static_assert(static_cast<size_t>(ELogicalPoolKind::IC) + 1 == PoolKindsCount);
     static constexpr i16 MaxPreparedCpuCount = 30;
 
     struct TAdjacentPoolConfig {
@@ -48,8 +48,8 @@ namespace NKikimr::NAutoConfigInitializer {
         ui8 Count = 0;
     };
 
-    struct TRealPoolConfig {
-        ERealPoolKind Kind = ERealPoolKind::Common;
+    struct TExecutorPoolConfig {
+        EExecutorPoolKind Kind = EExecutorPoolKind::Common;
         i16 ThreadCount = 0;
         i16 MaxThreadCount = 0;
         ui8 Priority = 0;
@@ -61,7 +61,7 @@ namespace NKikimr::NAutoConfigInitializer {
         std::optional<TAdjacentPoolConfig> AdjacentPools;
     };
 
-    struct TASPools {
+    struct TExecutorPoolLayout {
         static constexpr auto CommonPoolName = "Common";
         static constexpr auto SystemPoolName = "System";
         static constexpr auto UserPoolName = "User";
@@ -75,11 +75,11 @@ namespace NKikimr::NAutoConfigInitializer {
         ui8 IOPoolId = 3;
         ui8 ICPoolId = 4;
 
-        ui8 GetRealPoolCount() const {
+        ui8 GetExecutorPoolCount() const {
             return 1 + Max(SystemPoolId, UserPoolId, BatchPoolId, IOPoolId, ICPoolId);
         }
 
-        std::vector<ui8> GetIndeces() const {
+        std::vector<ui8> GetIndices() const {
             return {
                 SystemPoolId,
                 UserPoolId,
@@ -89,8 +89,8 @@ namespace NKikimr::NAutoConfigInitializer {
             };
         }
 
-        std::vector<TString> GetRealPoolNames() const {
-            switch (GetRealPoolCount()) {
+        std::vector<TString> GetExecutorPoolNames() const {
+            switch (GetExecutorPoolCount()) {
             case 1:
                 return {CommonPoolName};
             case 2:
@@ -105,7 +105,7 @@ namespace NKikimr::NAutoConfigInitializer {
         }
 
         std::vector<ui8> GetPriorities() const {
-            switch (GetRealPoolCount()) {
+            switch (GetExecutorPoolCount()) {
             case 1:
                 return {40};
             case 2:
@@ -121,9 +121,9 @@ namespace NKikimr::NAutoConfigInitializer {
     };
 
     struct TCpuTableRow {
-        std::array<TRealPoolConfig, PoolKindsCount> RealPools{};
-        std::array<ui8, PoolKindsCount> LogicalToRealPool{};
-        ui8 RealPoolCount = 0;
+        std::array<TExecutorPoolConfig, PoolKindsCount> ExecutorPools{};
+        std::array<ui8, PoolKindsCount> LogicalPoolToExecutorPool{};
+        ui8 ExecutorPoolCount = 0;
     };
 
     struct ICpuTable {
@@ -133,15 +133,15 @@ namespace NKikimr::NAutoConfigInitializer {
 
     struct TDefaultCpuTable : ICpuTable {
         std::array<TCpuTableRow, MaxPreparedCpuCount + 1> Rows{};
-        i16 MinScaledRowCpuCount = 1;
+        i16 MinScalableRowCpuCount = 1;
 
         TDefaultCpuTable() = default;
 
         TDefaultCpuTable(
             std::array<TCpuTableRow, MaxPreparedCpuCount + 1> rows,
-            i16 minScaledRowCpuCount = 1)
+            i16 minScalableRowCpuCount = 1)
             : Rows(rows)
-            , MinScaledRowCpuCount(minScaledRowCpuCount)
+            , MinScalableRowCpuCount(minScalableRowCpuCount)
         {}
 
         TCpuTableRow operator[](i16 cpuCount) const override;
@@ -161,9 +161,9 @@ namespace NKikimr::NAutoConfigInitializer {
         const ICpuTable* CpuTable = nullptr;
     };
 
-    TASPools GetASPools(i16 cpuCount = 0);
+    TExecutorPoolLayout GetExecutorPoolLayout(i16 cpuCount = 0);
 
-    TASPools GetASPools(const NKikimrConfig::TActorSystemConfig &config, bool useAutoConfig);
+    TExecutorPoolLayout GetExecutorPoolLayout(const NKikimrConfig::TActorSystemConfig &config, bool useAutoConfig);
 
     TMap<TString, ui32> GetServicePools(const NKikimrConfig::TActorSystemConfig &config, bool useAutoConfig);
 

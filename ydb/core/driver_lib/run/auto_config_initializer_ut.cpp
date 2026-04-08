@@ -334,6 +334,41 @@ Y_UNIT_TEST(ApplyAutoConfigUsesTinyProfileWhenForced) {
         static_cast<int>(NKikimrConfig::TActorSystemConfig::LOW_CPU_CONSUMPTION));
 }
 
+Y_UNIT_TEST(ApplyAutoConfigUsesBuiltInDefaultScalingAbove30Cpus) {
+    struct TCase {
+        i16 CpuCount;
+        i16 SystemThreads;
+        i16 UserThreads;
+        i16 BatchThreads;
+        i16 ICThreads;
+    };
+
+    for (const TCase testCase : {
+        TCase{33, 19, 2, 5, 7},
+        TCase{61, 37, 3, 9, 12},
+    }) {
+        NKikimrConfig::TActorSystemConfig config;
+        config.SetUseAutoConfig(true);
+        config.SetCpuCount(testCase.CpuCount);
+
+        ApplyAutoConfig(&config, TAutoConfigOptions{});
+
+        const auto* system = FindExecutorByName(config, "System");
+        const auto* user = FindExecutorByName(config, "User");
+        const auto* batch = FindExecutorByName(config, "Batch");
+        const auto* ic = FindExecutorByName(config, "IC");
+        UNIT_ASSERT(system);
+        UNIT_ASSERT(user);
+        UNIT_ASSERT(batch);
+        UNIT_ASSERT(ic);
+
+        UNIT_ASSERT_VALUES_EQUAL(system->GetThreads(), testCase.SystemThreads);
+        UNIT_ASSERT_VALUES_EQUAL(user->GetThreads(), testCase.UserThreads);
+        UNIT_ASSERT_VALUES_EQUAL(batch->GetThreads(), testCase.BatchThreads);
+        UNIT_ASSERT_VALUES_EQUAL(ic->GetThreads(), testCase.ICThreads);
+    }
+}
+
 Y_UNIT_TEST(ApplyAutoConfigUsesConsistentLogicalPoolIds) {
     NKikimrConfig::TActorSystemConfig config;
     config.SetUseAutoConfig(true);

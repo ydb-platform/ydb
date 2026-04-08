@@ -259,6 +259,23 @@ private:
 
     std::optional<ui32> GetRetentionDeadlineDelta() const;
 
+    void UpdateMessageGroupForNewMessage(ui64 offset, TMessage& message);
+    void UpdateMessageGroupForRemovedMessage(ui64 offset, const TMessage& message);
+    void UpdateMessageGroupOnMessageStatusChange(ui64 offset, const TMessage& message, EMessageStatus newStatus);
+    void UpdateMessageGroupToNextMessage(ui64 offset, const TMessage& message);
+    void UpdadeMessageGroupsParentLocks(const absl::flat_hash_set<ui32>& currLocked, const absl::flat_hash_set<ui32>& prevLocked, bool modeChanged);
+    void BuildAndLinkMessageGroups();
+
+    template <class Fn>
+    void IterateAllMessagesInOrder(Fn&& fn) {
+        for (auto& [offset, m] : SlowMessages) {
+            fn(offset, m);
+        }
+        for (size_t i = 0; i < Messages.size(); ++i) {
+            fn(FirstOffset + i, Messages[i]);
+        }
+    }
+
 private:
     const TIntrusivePtr<ITimeProvider> TimeProvider;
 

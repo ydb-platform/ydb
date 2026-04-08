@@ -2,17 +2,12 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
-
-#include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
-
-#include <ydb/library/actors/wilson/wilson_span.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TWriteRequestExecutor::TWriteRequestExecutor(
+TBaseWriteRequestExecutor::TBaseWriteRequestExecutor(
     NActors::TActorSystem* actorSystem,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
@@ -33,13 +28,13 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , HedgingDelay(hedgingDelay)
 {}
 
-TWriteRequestExecutor::~TWriteRequestExecutor()
+TBaseWriteRequestExecutor::~TBaseWriteRequestExecutor()
 {
     if (!Promise.IsReady()) {
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TWriteRequestExecutor. Reply not sent %s %s",
+            "TBaseWriteRequestExecutor. Reply not sent %s %s",
             Request->Headers.VolumeConfig->DiskId.Quote().c_str(),
             Request->Headers.Range.Print().c_str());
 
@@ -47,141 +42,27 @@ TWriteRequestExecutor::~TWriteRequestExecutor()
     }
 }
 
-void TWriteRequestExecutor::Run(
-    EWriteMode writeMode,
-    TDuration pbufferReplyTimeout)
-{
-    switch (writeMode) {
-        case EWriteMode::PBufferReplication:
-            SendWriteRequestToManyPBuffers(pbufferReplyTimeout);
-            // We don't need to schedule requests to handoff persistent buffers
-            // after delay since we will send them in case of error. See
-            // OnWriteToManyPBuffersResponse.
-            return;
-        case EWriteMode::DirectPBuffersFilling:
-            SendWriteRequest(ELocation::PBuffer0);
-            SendWriteRequest(ELocation::PBuffer1);
-            SendWriteRequest(ELocation::PBuffer2);
-
-            if (HedgingDelay) {
-                DirectBlockGroup->Schedule(
-                    HedgingDelay,
-                    [weakSelf = weak_from_this()]()
-                    {
-                        if (auto self = weakSelf.lock()) {
-                            self->SendWriteRequestsToHandoffPBuffers();
-                        }
-                    });
-            }
-            return;
-    }
-}
-
-NThreading::TFuture<TWriteRequestExecutor::TResponse>
-TWriteRequestExecutor::GetFuture() const
+NThreading::TFuture<TBaseWriteRequestExecutor::TResponse>
+TBaseWriteRequestExecutor::GetFuture() const
 {
     return Promise.GetFuture();
 }
 
-void TWriteRequestExecutor::SendWriteRequestToManyPBuffers(
-    TDuration pbufferReplyTimeout)
+void TBaseWriteRequestExecutor::Reply(NProto::TError error)
 {
-    std::vector<ELocation> locations = {
-        ELocation::PBuffer0,
-        ELocation::PBuffer1,
-        ELocation::PBuffer2};
-
-    std::vector<ui8> hostsIndexes;
-    hostsIndexes.reserve(3);
-    for (auto location: locations) {
-        hostsIndexes.push_back(VChunkConfig.GetHostIndex(location));
-        RequestedWrites.Set(location);
-    }
-
-    auto future = DirectBlockGroup->WriteBlocksToManyPBuffers(
-        VChunkConfig.VChunkIndex,
-        std::move(hostsIndexes),
-        Lsn,
-        VChunkRange,
-        pbufferReplyTimeout,
-        Request->Sglist,
-        NWilson::TTraceId(TraceId));
-
-    future.Subscribe(
-        [self = shared_from_this()](
-            const NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>& f)
-        { self->OnWriteToManyPBuffersResponse(f.GetValue()); });
+    Promise.TrySetValue(TResponse{
+        .Error = std::move(error),
+        .Lsn = Lsn,
+        .RequestedWrites = RequestedWrites,
+        .CompletedWrites = CompletedWrites});
 }
 
-void TWriteRequestExecutor::OnWriteToManyPBuffersResponse(
-    const TDBGWriteBlocksToManyPBuffersResponse& response)
-{
-    if (HasError(response.OverallError)) {
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "OnWriteToManyPBuffersResponse fatal error: %s",
-            FormatError(response.OverallError).c_str());
-        // The error will be set and replied below.
-    } else {
-        for (const auto& pbufferResponse: response.Responses) {
-            auto location =
-                VChunkConfig.GetPBufferLocation(pbufferResponse.HostIndex);
-            if (!HasError(pbufferResponse.Error)) {
-                CompletedWrites.Set(location);
-            } else {
-                LOG_WARN(
-                    *ActorSystem,
-                    NKikimrServices::NBS_PARTITION,
-                    "OnWriteToManyPBuffersResponse error on location %d: %s",
-                    location,
-                    FormatError(pbufferResponse.Error).c_str());
-            }
-        }
-    }
-
-    if (CompletedWrites.Count() >= QuorumDirectBlockGroupHostCount) {
-        Reply(MakeError(S_OK));
-        return;
-    }
-
-    std::vector<ELocation> handoffLocations(
-        {ELocation::HOPBuffer0, ELocation::HOPBuffer1});
-    if (CompletedWrites.Count() + handoffLocations.size() <
-        QuorumDirectBlockGroupHostCount)
-    {
-        auto resultError =
-            MakeError(E_FAIL, "Hand-offs retries are not available");
-        LOG_ERROR(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "OnWriteToManyPBuffersResponse: %s",
-            FormatError(resultError).c_str());
-
-        Reply(resultError);
-        return;
-    }
-
-    // Sending request to handoff in case of 1-2 errors
-    for (size_t i = 0;
-         i < QuorumDirectBlockGroupHostCount - CompletedWrites.Count();
-         ++i)
-    {
-        LOG_DEBUG(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "trying to send fallback writeRequest to %d handoff",
-            i);
-        SendWriteRequest(handoffLocations[i]);
-    }
-}
-
-void TWriteRequestExecutor::SendWriteRequest(ELocation location)
+void TBaseWriteRequestExecutor::SendWriteRequest(ELocation location)
 {
     auto span = std::make_shared<NWilson::TSpan>(NWilson::TSpan(
         NKikimr::TWilsonNbs::NbsBasic,
         TraceId.Clone(),
-        "TWriteRequestExecutor",
+        "TBaseWriteRequestExecutor",
         NWilson::EFlags::AUTO_END,
         ActorSystem));
     span->Attribute("Location", ToString(location));
@@ -203,32 +84,7 @@ void TWriteRequestExecutor::SendWriteRequest(ELocation location)
         });
 }
 
-void TWriteRequestExecutor::SendWriteRequestsToHandoffPBuffers()
-{
-    if (CompletedWrites.Count() <= QuorumDirectBlockGroupHostCount - 1) {
-        LOG_DEBUG(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "TWriteRequestExecutor. Send write request to HOPBuffer0 since we "
-            "have %lu completed writes",
-            CompletedWrites.Count());
-
-        SendWriteRequest(ELocation::HOPBuffer0);
-    }
-
-    if (CompletedWrites.Count() <= QuorumDirectBlockGroupHostCount - 2) {
-        LOG_DEBUG(
-            *ActorSystem,
-            NKikimrServices::NBS_PARTITION,
-            "TWriteRequestExecutor. Send write request to HOPBuffer1 since we "
-            "have %lu completed writes",
-            CompletedWrites.Count());
-
-        SendWriteRequest(ELocation::HOPBuffer1);
-    }
-}
-
-void TWriteRequestExecutor::OnWriteResponse(
+void TBaseWriteRequestExecutor::OnWriteResponse(
     ELocation location,
     const TDBGWriteBlocksResponse& response,
     std::shared_ptr<NWilson::TSpan> span)
@@ -245,7 +101,7 @@ void TWriteRequestExecutor::OnWriteResponse(
         LOG_WARN(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TWriteRequestExecutor. Try first hand-off. %s",
+            "TBaseWriteRequestExecutor. Try first hand-off. %s",
             FormatError(response.Error).c_str());
 
         SendWriteRequest(ELocation::HOPBuffer0);
@@ -253,7 +109,7 @@ void TWriteRequestExecutor::OnWriteResponse(
         LOG_WARN(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TWriteRequestExecutor. Try second hand-off. %s",
+            "TBaseWriteRequestExecutor. Try second hand-off. %s",
             FormatError(response.Error).c_str());
 
         SendWriteRequest(ELocation::HOPBuffer1);
@@ -261,22 +117,13 @@ void TWriteRequestExecutor::OnWriteResponse(
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TWriteRequestExecutor. All hand-offs attempts are over. %s",
+            "TBaseWriteRequestExecutor. All hand-offs attempts are over. %s",
             FormatError(response.Error).c_str());
 
         Reply(response.Error);
 
         auto ender = TEndSpanWithError(std::move(span), response.Error);
     }
-}
-
-void TWriteRequestExecutor::Reply(NProto::TError error)
-{
-    Promise.TrySetValue(TResponse{
-        .Error = std::move(error),
-        .Lsn = Lsn,
-        .RequestedWrites = RequestedWrites,
-        .CompletedWrites = CompletedWrites});
 }
 
 ////////////////////////////////////////////////////////////////////////////////

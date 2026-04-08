@@ -1,6 +1,7 @@
 #include "write_request.h"
 
 #include "base_test_fixture.h"
+#include "write_with_direct_replication_request.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -60,20 +61,19 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             TRequestHeaders{.RequestId = 1, .Range = range});
         originalRequest->Sglist = MakeSgList();
 
-        auto writeRequest = std::make_shared<TWriteRequestExecutor>(
-            Runtime->GetActorSystem(0),
-            VChunkConfig,
-            DirectBlockGroup,
-            range,
-            std::move(callContext),
-            std::move(originalRequest),
-            userLsn,
-            NWilson::TTraceId(),
-            hedgeDelay);
+        auto writeRequest =
+            std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
+                Runtime->GetActorSystem(0),
+                VChunkConfig,
+                DirectBlockGroup,
+                range,
+                std::move(callContext),
+                std::move(originalRequest),
+                userLsn,
+                NWilson::TTraceId(),
+                hedgeDelay);
         auto future = writeRequest->GetFuture();
-        writeRequest->Run(
-            EWriteMode::DirectPBuffersFilling,
-            TDuration::MilliSeconds(1000));
+        writeRequest->Run();
         UNIT_ASSERT_VALUES_EQUAL(false, future.HasValue());
 
         UNIT_ASSERT_VALUES_EQUAL(3, writePBufferPromises.size());

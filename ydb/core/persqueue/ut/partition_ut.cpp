@@ -3873,8 +3873,6 @@ Y_UNIT_TEST(BlobKeyFilfer)
     UNIT_ASSERT_EQUAL(filteredKeys, expectedKeys);
 }
 
-<<<<<<< HEAD
-=======
 Y_UNIT_TEST_F(GetPartitionWriteInfoWithoutSrcIdInfo, TPartitionFixture) {
     Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
 
@@ -4544,7 +4542,6 @@ Y_UNIT_TEST_F(AddBlobsFromBodyLastOffsetAndUpdateUsageSkips, TPartitionFixture) 
     Ctx->Runtime->DispatchEvents(options);
 }
 
->>>>>>> c1119a39295 (Fix AddBlobsFromBody key index for FindPos with multiple blobs (#37556))
 } // End of suite
 
 } // namespace

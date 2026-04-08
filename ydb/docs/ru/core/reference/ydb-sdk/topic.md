@@ -2988,12 +2988,12 @@
 
   ```cpp
   auto settings = NYdb::NTopic::TReadSessionSettings()
-      .SetAutoscalingSupport(true); // full support is enabled
+      .AutoPartitioningSupport(true); // full support is enabled
 
   // or
 
   auto settings = NYdb::NTopic::TReadSessionSettings()
-      .SetAutoscalingSupport(false); // compatibility mode is enabled
+      .AutoPartitioningSupport(false); // compatibility mode is enabled
 
   auto readSession = topicClient.CreateReadSession(settings);
   ```
@@ -3006,7 +3006,7 @@
 
   ```cpp
   auto settings = NYdb::NTopic::TReadSessionSettings()
-      .SetAutoscalingSupport(true);
+      .AutoPartitioningSupport(true);
 
   auto readSession = topicClient.CreateReadSession(settings);
 

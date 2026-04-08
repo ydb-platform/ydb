@@ -131,6 +131,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, UseBlockReader);
 
     REGISTER_SETTING(*this, CBOTimeout);
+    REGISTER_SETTING(*this, CBOHardTimeout);
     REGISTER_SETTING(*this, ShuffleEliminationJoinNumCutoff);
 
     REGISTER_SETTING(*this, MaxTasksPerStage);

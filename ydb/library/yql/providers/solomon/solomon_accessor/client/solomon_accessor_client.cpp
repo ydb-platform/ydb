@@ -12,6 +12,7 @@
 #include <ydb/library/yql/providers/solomon/solomon_accessor/grpc/data_service.pb.h>
 #include <ydb/library/yql/providers/solomon/solomon_accessor/grpc/data_service.grpc.pb.h>
 
+#include <util/generic/size_literals.h>
 #include <util/string/join.h>
 
 namespace NYql::NSo {
@@ -722,7 +723,7 @@ private:
 private:
     const bool EnableSolomonClientPostApi;
     const ui64 MaxListingPageSize;
-    const ui64 ListSizeLimit = 100 * 1024 * 1024 * 8;
+    const ui64 ListSizeLimit = 100_MB * 8;
     const NYql::NSo::NProto::TDqSolomonSource Settings;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
 

@@ -624,7 +624,7 @@ namespace NKikimr::NDDisk {
                 NWilson::EFlags::NONE, TActivationContext::ActorSystem())
             .Attribute("tablet_id", static_cast<long>(creds.TabletId)));
 
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD18, "TDDiskActor::ErasePersistentBuffer tabletId: " << creds.TabletId);
+        STLOG(PRI_DEBUG, BS_DDISK, BSDD31, "TDDiskActor::ErasePersistentBuffer tabletId: " << creds.TabletId);
 
         const ui64 batchEraseCookie = NextCookie++;
 
@@ -747,22 +747,18 @@ namespace NKikimr::NDDisk {
             return;
         }
         auto reply = std::make_unique<TEvPersistentBufferInfo>();
-        auto& rr = reply->Record;
-        rr.SetStatus(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
-        rr.SetStartedAt(StartedAt.TimeT());
-        rr.SetAllocatedChunks(PersistentBufferChunks.size());
-        rr.SetChunkSize(DiskFormat->ChunkSize);
-        rr.SetFreeSectors(PersistentBufferSpaceAllocator.GetFreeSpace());
+        reply->StartedAt = StartedAt;
+        reply->AllocatedChunks = PersistentBufferChunks.size();
+        reply->ChunkSize = DiskFormat->ChunkSize;
+        reply->MaxChunks = PersistentBufferFormat.MaxChunks;
+        reply->SectorSize = SectorSize;
+        reply->FreeSectors = PersistentBufferSpaceAllocator.GetFreeSpace();
         for (auto [k, v] : PersistentBuffers) {
-            auto *ti = rr.AddTabletInfos();
-            ti->SetTabletId(std::get<0>(k));
-            ti->SetGeneration(std::get<1>(k));
-            ti->SetFirstLsn(v.Records.begin()->first);
-            ti->SetLastLsn(v.Records.rbegin()->first);
-            ti->SetFirstLsnTimestamp(v.Records.begin()->second.Timestamp.TimeT());
-            ti->SetLastLsnTimestamp(v.Records.rbegin()->second.Timestamp.TimeT());
+            reply->TabletInfos.emplace_back(std::get<0>(k), std::get<1>(k),
+                v.Records.begin()->first, v.Records.rbegin()->first,
+                v.Records.begin()->second.Timestamp, v.Records.rbegin()->second.Timestamp);
         }
-        SendReply(*ev, std::move(reply));
+        Send(ev->Sender, std::move(reply), 0, ev->Cookie);
     }
 
     void TDDiskActor::Handle(TEvListPersistentBuffer::TPtr ev) {

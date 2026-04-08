@@ -475,15 +475,27 @@ struct TPersistentBufferFormat {
         }
     };
 
-    DECLARE_DDISK_EVENT(PersistentBufferInfo) {
 
-        TEvPersistentBufferInfo() = default;
+    struct TEvPersistentBufferInfo : public TEventLocal<TEvPersistentBufferInfo, TEv::EvPersistentBufferInfo> {
+        struct TTabletInfo {
+            ui64 TabletId;
+            ui32 Generation;
+            ui64 FirstLsn;
+            ui64 LastLsn;
+            TInstant FirstLsnTimestamp;
+            TInstant LastLsnTimestamp;
+        };
+
+        TInstant StartedAt;
+        ui32 AllocatedChunks;
+        ui32 MaxChunks;
+        ui32 SectorSize;
+        ui32 ChunkSize;
+        ui32 FreeSectors;
+        std::vector<TTabletInfo> TabletInfos;
     };
 
-    DECLARE_DDISK_EVENT(GetPersistentBufferInfo) {
-        using TResult = TEvPersistentBufferInfo;
-
-        TEvGetPersistentBufferInfo() = default;
+    struct TEvGetPersistentBufferInfo : public TEventLocal<TEvGetPersistentBufferInfo, TEv::EvGetPersistentBufferInfo> {
     };
 
     DECLARE_DDISK_EVENT(ListPersistentBuffer) {

@@ -18,7 +18,7 @@ Unlike MPP systems with a dedicated master node, {{ydb-short-name}}'s architectu
 
 ## Cost-Based Query Optimizer {#cbo}
 
-Before executing a query, {{ydb-short-name}} uses a [Cost-Based Optimizer (CBO)](../../../concepts/optimizer.md). It analyzes the query text, metadata, and statistics on data distribution in tables to build a physical execution plan with the lowest estimated cost.
+Before executing a query, {{ydb-short-name}} uses a [Cost-Based Optimizer (CBO)](../../../concepts/query_execution/optimizer.md). It analyzes the query text, metadata, and statistics on data distribution in tables to build a physical execution plan with the lowest estimated cost.
 
 The optimizer can:
 
@@ -30,7 +30,7 @@ The optimizer can:
 
 Analytical queries can require large amounts of RAM, especially for `JOIN` and `GROUP BY` operations. {{ydb-short-name}} is designed to work with data that may not fit into RAM.
 
-* Spilling: if the intermediate results of a query exceed the memory limit, {{ydb-short-name}} [automatically spills](../../../concepts/spilling.md) them to the node's local disk. This prevents the query from failing with an "Out of Memory" error and allows queries to be executed on large volumes of data.
+* Spilling: if the intermediate results of a query exceed the memory limit, {{ydb-short-name}} [automatically spills](../../../concepts/query_execution/spilling.md) them to the node's local disk. This prevents the query from failing with an "Out of Memory" error and allows queries to be executed on large volumes of data.
 * Distributed JOIN algorithms: for joining tables that exceed the memory of a single node, distributed algorithms are used that process data in chunks across different nodes.
 
 ## Workload Isolation and Resource Management {#resource_management}

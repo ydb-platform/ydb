@@ -667,7 +667,7 @@ namespace Tests {
         if (useAutoConfig) {
             NAutoConfigInitializer::ApplyAutoConfig(&actorSystemConfig, {
                 .IsDynamicNode = false,
-                .UseTinySchedulerConfig = false,
+                .ForceTinyConfiguration = false,
             });
         }
 

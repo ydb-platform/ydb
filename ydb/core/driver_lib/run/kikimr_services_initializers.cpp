@@ -584,7 +584,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
         bool isDynamicNode = appData->DynamicNameserviceConfig->MinDynamicNodeId <= NodeId;
         NAutoConfigInitializer::ApplyAutoConfig(Config.MutableActorSystemConfig(), {
             .IsDynamicNode = isDynamicNode,
-            .UseTinySchedulerConfig = TinyMode,
+            .ForceTinyConfiguration = TinyMode,
         });
     }
 

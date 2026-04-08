@@ -8,17 +8,7 @@
 
 namespace {
 
-    using NKikimr::NAutoConfigInitializer::EPoolKind;
-    using NKikimr::NAutoConfigInitializer::ERealPoolKind;
-    using NKikimr::NAutoConfigInitializer::ICpuTable;
-    using NKikimr::NAutoConfigInitializer::MaxPreparedCpuCount;
-    using NKikimr::NAutoConfigInitializer::PoolKindsCount;
-    using NKikimr::NAutoConfigInitializer::TAutoConfigOptions;
-    using NKikimr::NAutoConfigInitializer::TASPools;
-    using NKikimr::NAutoConfigInitializer::TCpuTableRow;
-    using NKikimr::NAutoConfigInitializer::TDefaultCpuTable;
-    using NKikimr::NAutoConfigInitializer::TPoolConfig;
-    using NKikimr::NAutoConfigInitializer::TRealPoolConfig;
+    using namespace NKikimr::NAutoConfigInitializer;
 
     i16 GetCpuCount() {
         TAffinity affinity;
@@ -59,13 +49,7 @@ namespace {
         ui8 io,
         ui8 ic)
     {
-        return {{
-            system,
-            user,
-            batch,
-            io,
-            ic,
-        }};
+        return {{system, user, batch, io, ic}};
     }
 
     constexpr TRealPoolConfig MakeRealPoolConfig(
@@ -80,33 +64,6 @@ namespace {
             .MaxThreadCount = maxThreadCount,
             .Priority = priority,
         };
-    }
-
-    constexpr TRealPoolConfig WithSharedThread(TRealPoolConfig cfg, bool hasSharedThread) {
-        cfg.HasSharedThread = hasSharedThread;
-        return cfg;
-    }
-
-    constexpr TRealPoolConfig WithSpinThreshold(TRealPoolConfig cfg, ui64 spinThreshold) {
-        cfg.SpinThreshold = spinThreshold;
-        return cfg;
-    }
-
-    constexpr TRealPoolConfig WithForcedForeignSlots(TRealPoolConfig cfg, ui32 forcedForeignSlots) {
-        cfg.ForcedForeignSlots = forcedForeignSlots;
-        return cfg;
-    }
-
-    constexpr TRealPoolConfig WithAdjacentPools(
-        TRealPoolConfig cfg,
-        std::array<ui8, PoolKindsCount> adjacentPools,
-        ui8 adjacentPoolCount)
-    {
-        cfg.AdjacentPools = NKikimr::NAutoConfigInitializer::TAdjacentPoolConfig{
-            .Pools = adjacentPools,
-            .Count = adjacentPoolCount,
-        };
-        return cfg;
     }
 
     constexpr TCpuTableRow MakeCpuTableRow(
@@ -181,34 +138,45 @@ namespace {
     constexpr TCpuTableRow MakeTinyRow1() {
         return MakeCpuTableRow(
             {{
-                WithForcedForeignSlots(
-                    WithSpinThreshold(
-                        WithSharedThread(
-                            MakeRealPoolConfig(ERealPoolKind::System, 0, 0, 30), false),
-                        0),
-                    0),
-                WithForcedForeignSlots(
-                    WithSpinThreshold(
-                        WithSharedThread(
-                            MakeRealPoolConfig(ERealPoolKind::User, 0, 0, 20), false),
-                        0),
-                    0),
-                WithForcedForeignSlots(
-                    WithSpinThreshold(
-                        WithSharedThread(
-                            MakeRealPoolConfig(ERealPoolKind::Batch, 0, 0, 10), false),
-                        0),
-                    0),
-                MakeRealPoolConfig(ERealPoolKind::IO, 1, 1, 0),
-                WithAdjacentPools(
-                    WithForcedForeignSlots(
-                        WithSpinThreshold(
-                            WithSharedThread(
-                                MakeRealPoolConfig(ERealPoolKind::IC, 1, 1, 40), true),
-                            0),
-                        0),
-                    {{0, 1, 2, 0, 0}},
-                    3),
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::System,
+                    .Priority = 30,
+                    .HasSharedThread = false,
+                    .SpinThreshold = ui64{0},
+                    .ForcedForeignSlots = ui32{0},
+                },
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::User,
+                    .Priority = 20,
+                    .HasSharedThread = false,
+                    .SpinThreshold = ui64{0},
+                    .ForcedForeignSlots = ui32{0},
+                },
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::Batch,
+                    .Priority = 10,
+                    .HasSharedThread = false,
+                    .SpinThreshold = ui64{0},
+                    .ForcedForeignSlots = ui32{0},
+                },
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::IO,
+                    .ThreadCount = 1,
+                    .MaxThreadCount = 1,
+                },
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::IC,
+                    .ThreadCount = 1,
+                    .MaxThreadCount = 1,
+                    .Priority = 40,
+                    .HasSharedThread = true,
+                    .SpinThreshold = ui64{0},
+                    .ForcedForeignSlots = ui32{0},
+                    .AdjacentPools = TAdjacentPoolConfig{
+                        .Pools = {{0, 1, 2, 0, 0}},
+                        .Count = 3,
+                    },
+                },
             }},
             MakeLogicalToRealPool(1, 0, 2, 3, 4),
             5);
@@ -217,37 +185,51 @@ namespace {
     constexpr TCpuTableRow MakeTinyRow2() {
         return MakeCpuTableRow(
             {{
-                WithForcedForeignSlots(
-                    WithSpinThreshold(
-                        WithSharedThread(
-                            MakeRealPoolConfig(ERealPoolKind::System, 0, 0, 30), false),
-                        0),
-                    1),
-                WithAdjacentPools(
-                    WithForcedForeignSlots(
-                        WithSpinThreshold(
-                            WithSharedThread(
-                                MakeRealPoolConfig(ERealPoolKind::User, 1, 1, 20), true),
-                            0),
-                        1),
-                    {{2, 0, 0, 0, 0}},
-                    1),
-                WithForcedForeignSlots(
-                    WithSpinThreshold(
-                        WithSharedThread(
-                            MakeRealPoolConfig(ERealPoolKind::Batch, 0, 0, 10), false),
-                        0),
-                    0),
-                MakeRealPoolConfig(ERealPoolKind::IO, 1, 1, 0),
-                WithAdjacentPools(
-                    WithForcedForeignSlots(
-                        WithSpinThreshold(
-                            WithSharedThread(
-                                MakeRealPoolConfig(ERealPoolKind::IC, 1, 1, 40), true),
-                            0),
-                        1),
-                    {{0, 0, 0, 0, 0}},
-                    1),
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::System,
+                    .Priority = 30,
+                    .HasSharedThread = false,
+                    .SpinThreshold = ui64{0},
+                    .ForcedForeignSlots = ui32{1},
+                },
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::User,
+                    .ThreadCount = 1,
+                    .MaxThreadCount = 1,
+                    .Priority = 20,
+                    .HasSharedThread = true,
+                    .SpinThreshold = ui64{0},
+                    .ForcedForeignSlots = ui32{1},
+                    .AdjacentPools = TAdjacentPoolConfig{
+                        .Pools = {{2, 0, 0, 0, 0}},
+                        .Count = 1,
+                    },
+                },
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::Batch,
+                    .Priority = 10,
+                    .HasSharedThread = false,
+                    .SpinThreshold = ui64{0},
+                    .ForcedForeignSlots = ui32{0},
+                },
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::IO,
+                    .ThreadCount = 1,
+                    .MaxThreadCount = 1,
+                },
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::IC,
+                    .ThreadCount = 1,
+                    .MaxThreadCount = 1,
+                    .Priority = 40,
+                    .HasSharedThread = true,
+                    .SpinThreshold = ui64{0},
+                    .ForcedForeignSlots = ui32{1},
+                    .AdjacentPools = TAdjacentPoolConfig{
+                        .Pools = {{0, 0, 0, 0, 0}},
+                        .Count = 1,
+                    },
+                },
             }},
             MakeLogicalToRealPool(1, 0, 2, 3, 4),
             5);
@@ -256,34 +238,49 @@ namespace {
     constexpr TCpuTableRow MakeTinyRow3() {
         return MakeCpuTableRow(
             {{
-                WithForcedForeignSlots(
-                    WithSpinThreshold(
-                        WithSharedThread(
-                            MakeRealPoolConfig(ERealPoolKind::System, 1, 1, 30), true),
-                        0),
-                    1),
-                WithAdjacentPools(
-                    WithForcedForeignSlots(
-                        WithSpinThreshold(
-                            WithSharedThread(
-                                MakeRealPoolConfig(ERealPoolKind::User, 1, 1, 20), true),
-                            0),
-                        2),
-                    {{2, 0, 0, 0, 0}},
-                    1),
-                WithForcedForeignSlots(
-                    WithSpinThreshold(
-                        WithSharedThread(
-                            MakeRealPoolConfig(ERealPoolKind::Batch, 0, 0, 10), false),
-                        0),
-                    0),
-                MakeRealPoolConfig(ERealPoolKind::IO, 1, 1, 0),
-                WithForcedForeignSlots(
-                    WithSpinThreshold(
-                        WithSharedThread(
-                            MakeRealPoolConfig(ERealPoolKind::IC, 1, 1, 40), true),
-                        0),
-                    1),
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::System,
+                    .ThreadCount = 1,
+                    .MaxThreadCount = 1,
+                    .Priority = 30,
+                    .HasSharedThread = true,
+                    .SpinThreshold = ui64{0},
+                    .ForcedForeignSlots = ui32{1},
+                },
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::User,
+                    .ThreadCount = 1,
+                    .MaxThreadCount = 1,
+                    .Priority = 20,
+                    .HasSharedThread = true,
+                    .SpinThreshold = ui64{0},
+                    .ForcedForeignSlots = ui32{2},
+                    .AdjacentPools = TAdjacentPoolConfig{
+                        .Pools = {{2, 0, 0, 0, 0}},
+                        .Count = 1,
+                    },
+                },
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::Batch,
+                    .Priority = 10,
+                    .HasSharedThread = false,
+                    .SpinThreshold = ui64{0},
+                    .ForcedForeignSlots = ui32{0},
+                },
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::IO,
+                    .ThreadCount = 1,
+                    .MaxThreadCount = 1,
+                },
+                TRealPoolConfig{
+                    .Kind = ERealPoolKind::IC,
+                    .ThreadCount = 1,
+                    .MaxThreadCount = 1,
+                    .Priority = 40,
+                    .HasSharedThread = true,
+                    .SpinThreshold = ui64{0},
+                    .ForcedForeignSlots = ui32{1},
+                },
             }},
             MakeLogicalToRealPool(1, 0, 2, 3, 4),
             5);
@@ -636,7 +633,7 @@ namespace NKikimr::NAutoConfigInitializer {
         if (!config->HasScheduler()) {
             auto *scheduler = config->MutableScheduler();
 
-            bool useTiny = options.UseTinySchedulerConfig || (cpuCount >= 1 && cpuCount <= SchedulerTinyCoresThreshold);
+            bool useTiny = options.ForceTinyConfiguration || (cpuCount >= 1 && cpuCount <= SchedulerTinyCoresThreshold);
             scheduler->SetResolution(useTiny ? SchedulerTinyResolution : SchedulerDefaultResolution);
 
             scheduler->SetSpinThreshold(0);
@@ -658,10 +655,10 @@ namespace NKikimr::NAutoConfigInitializer {
             config->SetNodeType(options.IsDynamicNode ? NKikimrConfig::TActorSystemConfig::COMPUTE : NKikimrConfig::TActorSystemConfig::STORAGE);
         }
 
-        const bool useTinyConfiguration = options.EnableTinyConfiguration && useSharedThreads && cpuCount >= 1 && cpuCount <= 3;
+        const bool useTinyConfiguration = options.ForceTinyConfiguration || (useSharedThreads && cpuCount >= 1 && cpuCount <= 3);
         const ICpuTable& cpuTable = options.CpuTable
             ? *options.CpuTable
-            : useTinyConfiguration
+            : useTinyConfiguration && cpuCount <= 3
                 ? GetTinyCpuTable()
                 : GetDefaultCpuTable(config->GetNodeType());
         ValidateCpuTable(cpuTable, cpuCount);

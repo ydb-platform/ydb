@@ -681,8 +681,10 @@ private:
         QuoterResources_ = std::move(ev->Get()->QuoterResources);
         TopicCreated_ = ev->Get()->TopicCreated;
 
-        FeatureFlags_.EnableSQSMigrationCompatibility_ |= UserSettings_.MigrationCompatibility;
-        FeatureFlags_.EnableSQSMigrationFinished_ |= UserSettings_.MigrationFinished;
+        FeatureFlags_.EnableSQSMigrationCompatibility_ =
+            FeatureFlags_.EnableSQSMigrationCompatibility_ || UserSettings_.MigrationCompatibility;
+        FeatureFlags_.EnableSQSMigrationFinished_ =
+            FeatureFlags_.EnableSQSMigrationFinished_ || UserSettings_.MigrationFinished;
 
         RLOG_SQS_TRACE("Got configuration. Root url: " << RootUrl_
                         << ", Shards: " << Shards_

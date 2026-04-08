@@ -6,11 +6,8 @@
 
 #|
 || Version | Release date | Download | Changelog ||
-<<<<<<< HEAD
-=======
 || v.2.30.0 | 07.04.2026 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.30.0/linux/amd64/ydb) | [See list](../changelog-cli.md#2-30-0) ||
 || v.2.29.0 | 11.02.2026 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.29.0/linux/amd64/ydb) | [See list](../changelog-cli.md#2-29-0) ||
->>>>>>> a673d6c367d (Add release notes for YDB CLI 2.30.0 (#37357))
 || v.2.28.0 | 19.12.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.28.0/linux/amd64/ydb) | [See list](../changelog-cli.md#2-28-0) ||
 || v.2.27.0 | 30.10.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.27.0/linux/amd64/ydb) | [See list](../changelog-cli.md#2-27-0) ||
 || v.2.26.0 | 25.09.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.26.0/linux/amd64/ydb) | [See list](../changelog-cli.md#2-26-0) ||
@@ -38,11 +35,8 @@
 
 #|
 || Version | Release date | Download | Changelog ||
-<<<<<<< HEAD
-=======
 || v.2.30.0 | 07.04.2026 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.30.0/linux/arm64/ydb) | [See list](../changelog-cli.md#2-30-0) ||
 || v.2.29.0 | 11.02.2026 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.29.0/linux/arm64/ydb) | [See list](../changelog-cli.md#2-29-0) ||
->>>>>>> a673d6c367d (Add release notes for YDB CLI 2.30.0 (#37357))
 || v.2.28.0 | 19.12.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.28.0/linux/arm64/ydb) | [See list](../changelog-cli.md#2-28-0) ||
 || v.2.27.0 | 30.10.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.27.0/linux/arm64/ydb) | [See list](../changelog-cli.md#2-27-0) ||
 || v.2.26.0 | 25.09.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.26.0/linux/arm64/ydb) | [See list](../changelog-cli.md#2-26-0) ||
@@ -68,11 +62,8 @@ Use the amd64 binary file if your Mac is based on an Intel processor.
 
 #|
 || Version | Release date | Download | Changelog ||
-<<<<<<< HEAD
-=======
 || v.2.30.0 | 07.04.2026 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.30.0/darwin/amd64/ydb) | [See list](../changelog-cli.md#2-30-0) ||
 || v.2.29.0 | 11.02.2026 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.29.0/darwin/amd64/ydb) | [See list](../changelog-cli.md#2-29-0) ||
->>>>>>> a673d6c367d (Add release notes for YDB CLI 2.30.0 (#37357))
 || v.2.28.0 | 19.12.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.28.0/darwin/amd64/ydb) | [See list](../changelog-cli.md#2-28-0) ||
 || v.2.27.0 | 30.10.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.27.0/darwin/amd64/ydb) | [See list](../changelog-cli.md#2-27-0) ||
 || v.2.26.0 | 25.09.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.26.0/darwin/amd64/ydb) | [See list](../changelog-cli.md#2-26-0) ||
@@ -102,11 +93,8 @@ Use the arm64 binary file if your Mac is based on an Apple Silicon processor (M1
 
 #|
 || Version | Release date | Download | Changelog ||
-<<<<<<< HEAD
-=======
 || v.2.30.0 | 07.04.2026 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.30.0/darwin/arm64/ydb) | [See list](../changelog-cli.md#2-30-0) ||
 || v.2.29.0 | 11.02.2026 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.29.0/darwin/arm64/ydb) | [See list](../changelog-cli.md#2-29-0) ||
->>>>>>> a673d6c367d (Add release notes for YDB CLI 2.30.0 (#37357))
 || v.2.28.0 | 19.12.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.28.0/darwin/arm64/ydb) | [See list](../changelog-cli.md#2-28-0) ||
 || v.2.27.0 | 30.10.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.27.0/darwin/arm64/ydb) | [See list](../changelog-cli.md#2-27-0) ||
 || v.2.26.0 | 25.09.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.26.0/darwin/arm64/ydb) | [See list](../changelog-cli.md#2-26-0) ||
@@ -134,11 +122,8 @@ Use the arm64 binary file if your Mac is based on an Apple Silicon processor (M1
 
 #|
 || Version | Release date | Download | Changelog ||
-<<<<<<< HEAD
-=======
 || v.2.30.0 | 07.04.2026 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.30.0/windows/amd64/ydb.exe) | [See list](../changelog-cli.md#2-30-0) ||
 || v.2.29.0 | 11.02.2026 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.29.0/windows/amd64/ydb.exe) | [See list](../changelog-cli.md#2-29-0) ||
->>>>>>> a673d6c367d (Add release notes for YDB CLI 2.30.0 (#37357))
 || v.2.28.0 | 19.12.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.28.0/windows/amd64/ydb.exe) | [See list](../changelog-cli.md#2-28-0) ||
 || v.2.27.0 | 30.10.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.27.0/windows/amd64/ydb.exe) | [See list](../changelog-cli.md#2-27-0) ||
 || v.2.26.0 | 25.09.2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.26.0/windows/amd64/ydb.exe) | [See list](../changelog-cli.md#2-26-0) ||

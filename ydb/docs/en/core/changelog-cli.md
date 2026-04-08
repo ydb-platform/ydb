@@ -1,7 +1,5 @@
 # {{ ydb-short-name }} CLI changelog
 
-<<<<<<< HEAD
-=======
 ## Version 2.30.0 {#2-30-0}
 
 Released on April 7, 2026. To update to version **2.30.0**, select the [Downloads](downloads/ydb-cli.md) section.
@@ -47,7 +45,6 @@ Released on February 11, 2026. To update to version **2.29.0**, select the [Down
 * Fixed an out-of-memory issue in the `{{ ydb-cli }} workload query run` [command](./reference/ydb-cli/commands/workload/index.md) for queries with large result sets.
 * Fixed static credentials parsing to avoid using a [profile](./reference/ydb-cli/profile/index.md) password when the username comes from another source.
 
->>>>>>> a673d6c367d (Add release notes for YDB CLI 2.30.0 (#37357))
 ## Version 2.28.0 {#2-28-0}
 
 Released on December 19, 2025. To update to version **2.28.0**, select the [Downloads](downloads/ydb-cli.md) section.

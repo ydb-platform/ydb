@@ -318,7 +318,7 @@ namespace {
         };
     }
 
-    const TDefaultCpuTable ComputeCpuTable = {{
+    const TDefaultCpuTable ComputeCpuTable({{
         MakeEmptyRow(),                                                  // 0
         MakeTwoPoolRow({1, 1}, {0, 0}),                                  // 1
         MakeTwoPoolRow({2, 2}, {0, 0}),                                  // 2
@@ -350,9 +350,9 @@ namespace {
         MakeFivePoolRow({5, 14}, {14, 28}, {4, 7}, {0, 0}, {5, 14}),     // 28
         MakeFivePoolRow({5, 15}, {14, 29}, {4, 8}, {0, 0}, {6, 14}),     // 29
         MakeFivePoolRow({5, 15}, {15, 30}, {4, 8}, {0, 0}, {6, 15}),     // 30
-    }};
+    }}, 4);
 
-    const TDefaultCpuTable HybridCpuTable = {{
+    const TDefaultCpuTable HybridCpuTable({{
         MakeEmptyRow(),                                                   // 0
         MakeTwoPoolRow({1, 1}, {0, 0}),                                   // 1
         MakeTwoPoolRow({2, 2}, {0, 0}),                                   // 2
@@ -384,9 +384,9 @@ namespace {
         MakeFivePoolRow({9, 13},  {9, 28},  {1, 6}, {0, 0}, {9, 14}),     // 28
         MakeFivePoolRow({9, 14},  {10, 29}, {1, 6}, {0, 0}, {9, 14}),     // 29
         MakeFivePoolRow({9, 14},  {10, 30}, {1, 6}, {0, 0}, {10, 15}),    // 30
-    }};
+    }}, 4);
 
-    const TDefaultCpuTable StorageCpuTable = {{
+    const TDefaultCpuTable StorageCpuTable({{
         MakeEmptyRow(),                                                  // 0
         MakeTwoPoolRow({1, 1}, {0, 0}),                                  // 1
         MakeTwoPoolRow({2, 2}, {0, 0}),                                  // 2
@@ -418,7 +418,7 @@ namespace {
         MakeFivePoolRow({18, 28}, {1, 28}, {4, 7}, {0, 0}, {5, 14}),     // 28
         MakeFivePoolRow({18, 29}, {1, 29}, {4, 7}, {0, 0}, {6, 14}),     // 29
         MakeFivePoolRow({19, 30}, {1, 30}, {4, 8}, {0, 0}, {6, 15}),     // 30
-    }};
+    }}, 4);
 
     const TDefaultCpuTable TinyCpuTable = [] {
         TDefaultCpuTable table{};
@@ -647,17 +647,39 @@ namespace NKikimr::NAutoConfigInitializer {
             return Rows[cpuCount];
         }
 
-        const i16 fullChunks = cpuCount / MaxPreparedCpuCount;
-        const i16 tail = cpuCount % MaxPreparedCpuCount;
+        Y_ABORT_UNLESS(MinScaledRowCpuCount > 0);
+        Y_ABORT_UNLESS(MinScaledRowCpuCount <= MaxPreparedCpuCount);
 
-        TCpuTableRow result = Rows[MaxPreparedCpuCount];
-        for (ui8 realPoolId = 0; realPoolId < result.RealPoolCount; ++realPoolId) {
-            result.RealPools[realPoolId].ThreadCount *= fullChunks;
-            result.RealPools[realPoolId].MaxThreadCount *= fullChunks;
-            if (tail) {
-                result.RealPools[realPoolId].ThreadCount += Rows[tail].RealPools[realPoolId].ThreadCount;
-                result.RealPools[realPoolId].MaxThreadCount += Rows[tail].RealPools[realPoolId].MaxThreadCount;
+        TCpuTableRow result{};
+        bool initialized = false;
+        i16 remaining = cpuCount;
+
+        while (remaining > 0) {
+            i16 chunkCpuCount = remaining;
+            if (chunkCpuCount > MaxPreparedCpuCount) {
+                const i16 tail = remaining - MaxPreparedCpuCount;
+                if (tail == 0 || tail >= MinScaledRowCpuCount) {
+                    chunkCpuCount = MaxPreparedCpuCount;
+                } else {
+                    chunkCpuCount = MaxPreparedCpuCount - (MinScaledRowCpuCount - tail);
+                }
             }
+
+            const TCpuTableRow& chunk = Rows[chunkCpuCount];
+            if (!initialized) {
+                result = chunk;
+                initialized = true;
+            } else {
+                Y_ABORT_UNLESS(result.RealPoolCount == chunk.RealPoolCount);
+                Y_ABORT_UNLESS(result.LogicalToRealPool == chunk.LogicalToRealPool);
+                for (ui8 realPoolId = 0; realPoolId < result.RealPoolCount; ++realPoolId) {
+                    Y_ABORT_UNLESS(result.RealPools[realPoolId].Kind == chunk.RealPools[realPoolId].Kind);
+                    result.RealPools[realPoolId].ThreadCount += chunk.RealPools[realPoolId].ThreadCount;
+                    result.RealPools[realPoolId].MaxThreadCount += chunk.RealPools[realPoolId].MaxThreadCount;
+                }
+            }
+
+            remaining -= chunkCpuCount;
         }
 
         return result;

@@ -133,11 +133,15 @@ namespace NKikimr::NAutoConfigInitializer {
 
     struct TDefaultCpuTable : ICpuTable {
         std::array<TCpuTableRow, MaxPreparedCpuCount + 1> Rows{};
+        i16 MinScaledRowCpuCount = 1;
 
         TDefaultCpuTable() = default;
 
-        TDefaultCpuTable(std::array<TCpuTableRow, MaxPreparedCpuCount + 1> rows)
+        TDefaultCpuTable(
+            std::array<TCpuTableRow, MaxPreparedCpuCount + 1> rows,
+            i16 minScaledRowCpuCount = 1)
             : Rows(rows)
+            , MinScaledRowCpuCount(minScaledRowCpuCount)
         {}
 
         TCpuTableRow operator[](i16 cpuCount) const override;

@@ -764,6 +764,10 @@ private:
         const auto& tablePath = sourceSettings.Table().Path();
         const auto& index = sourceSettings.Index();
         const auto& columns = sourceSettings.Columns();
+        const auto& settings = TKqpReadTableFullTextIndexSettings::Parse(sourceSettings.Settings());
+
+        auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, TString(tablePath));
+        auto [implTable, indexDesc] = tableData.Metadata->GetIndex(index);
 
         TOperator op;
 
@@ -796,32 +800,26 @@ private:
         for(const auto& query: sourceSettings.Query().Cast<TExprList>()) {
             if (query.Maybe<TCoDataCtor>()) {
                 auto literal = TString(query.Cast<TCoDataCtor>().Literal());
-                auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, TString(tablePath));
-                auto [implTable, indexDesc] = tableData.Metadata->GetIndex(index);
                 YQL_ENSURE(indexDesc);
                 YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
-                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance
-                    || indexDesc->Type == TIndexDescription::EType::GlobalJson);
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance);
 
-                if (indexDesc->Type == TIndexDescription::EType::GlobalJson) {
-                    for (auto term: NJsonIndex::BuildSearchTerms(literal)) {
-                        // Tokens are binary (contain null bytes and type bytes) and
-                        // cannot be embedded directly in a JSON string, so hex-encode for display.
-                        searchTerms.emplace_back(HexEncode(term));
-                    }
-                } else {
-                    auto& desc = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDesc->SpecializedIndexDescription);
-                    for(const auto& column: readColumns) {
-                        for(const auto& analyzer: desc.settings().columns()) {
-                            if (analyzer.column() == column) {
-                                for(const auto& term: NFulltext::BuildSearchTerms(literal, analyzer.analyzers())) {
-                                    searchTerms.push_back(term);
-                                }
+                auto& desc = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDesc->SpecializedIndexDescription);
+                for(const auto& column: readColumns) {
+                    for(const auto& analyzer: desc.settings().columns()) {
+                        if (analyzer.column() == column) {
+                            for(const auto& term: NFulltext::BuildSearchTerms(literal, analyzer.analyzers())) {
+                                searchTerms.push_back(term);
                             }
                         }
                     }
                 }
             }
+        }
+
+        for (const auto& token : TExprBase(settings.Tokens).Cast<TExprList>()) {
+            YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalJson);
+            searchTerms.push_back(HexEncode(token.Cast<TCoString>().Literal()));
         }
 
         if (!searchTerms.empty())
@@ -831,8 +829,6 @@ private:
         for(const auto& column: sourceSettings.QueryColumns()) {
             queryColumns.push_back(TString(column.Value()));
         }
-
-        const auto& settings = TKqpReadTableFullTextIndexSettings::Parse(sourceSettings.Settings());
 
         if (settings.ItemsLimit) {
             op.Properties["ItemsLimit"] = GetExprStr(TExprBase(settings.ItemsLimit), true);
@@ -848,6 +844,16 @@ private:
 
         if (settings.K1Factor) {
             op.Properties["K1Factor"] = GetExprStr(TExprBase(settings.K1Factor), true);
+        }
+
+        std::vector<TString> tokens;
+        if (settings.Tokens) {
+            YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalJson);
+            for (const auto& token : TExprBase(settings.Tokens).Cast<TExprList>()) {
+                tokens.push_back(HexEncode(token.Cast<TCoString>().Literal()));
+            }
+
+            op.Properties["Tokens"] = JoinSeq(", ", tokens);
         }
 
         NTableIndex::NFulltext::EDefaultOperator defaultOperator = NTableIndex::NFulltext::EDefaultOperator::Invalid;

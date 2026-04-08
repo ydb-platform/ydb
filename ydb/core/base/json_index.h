@@ -75,9 +75,6 @@ TVector<TString> TokenizeBinaryJson(const TStringBuf text);
 // The tokens are used for searching in the JSON index
 TCollectResult CollectJsonPath(const NYql::NJsonPath::TJsonPathPtr path, ECallableType callableType);
 
-// Builds search terms for the given jsonpath expression
-// It parses the jsonpath expression and collects tokens for the JSON index
-TVector<TString> BuildSearchTerms(const TString& jsonPathStr);
 
 }  // namespace NJsonIndex
 

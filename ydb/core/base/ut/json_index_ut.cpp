@@ -501,6 +501,17 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonValue("+$.key == 1", {"\3key"});
         ValidateJsonValue("-$.a.b == null", {"\1a\1b"});
 
+        // Literal numeric value folded from unary + / - (same suffix as a plain number literal)
+        ValidateJsonValue("$.a == -10", {"\1a" + numSuffix(-10)});
+        ValidateJsonValue("$.k == +(-(+(-3)))", {"\1k" + numSuffix(3)});
+        ValidateJsonValue("$.key == +42", {"\3key" + numSuffix(42)});
+        ValidateJsonValue("$.key == -(-42)", {"\3key" + numSuffix(42)});
+        ValidateJsonValue("$.key == +(-15)", {"\3key" + numSuffix(-15)});
+        ValidateJsonValue("$.a.b == -(-(-2))", {"\1a\1b" + numSuffix(-2)});
+        ValidateJsonValue("$ == +(-(-7))", {numSuffix(7)});
+        ValidateJsonValue("-10 == $.a", {"\1a" + numSuffix(-10)});
+        ValidateJsonValue("+(-(+(-3))) == $.k", {"\1k" + numSuffix(3)});
+
         // Arithmetic produces multiple tokens
         ValidateJsonValue("($.a + $.b) == \"x\"", {"\1a", "\1b"});
         ValidateJsonValue("\"x\" == ($.a + $.b)", {"\1a", "\1b"});

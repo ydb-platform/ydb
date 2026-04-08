@@ -50,6 +50,30 @@ void AppendKey(TString& prefix, TStringBuf key) {
     prefix += key;
 }
 
+// Appends NUL, binary JSON entry type byte, and scalar payload (matches index token layout).
+void AppendLiteral(TString& out, NBinaryJson::EEntryType type, TStringBuf stringPayload = {},
+    const double* numberPayload = nullptr)
+{
+    out.push_back(0);
+    out.push_back(static_cast<char>(type));
+    switch (type) {
+        case NBinaryJson::EEntryType::String:
+            out += stringPayload;
+            break;
+        case NBinaryJson::EEntryType::Number:
+            Y_ENSURE(numberPayload, "Number payload required");
+            out += TStringBuf(reinterpret_cast<const char*>(numberPayload), sizeof(double));
+            break;
+        case NBinaryJson::EEntryType::BoolFalse:
+        case NBinaryJson::EEntryType::BoolTrue:
+        case NBinaryJson::EEntryType::Null:
+            Y_ENSURE(!numberPayload, "No number payload for bool/null literal");
+            break;
+        case NBinaryJson::EEntryType::Container:
+            Y_ENSURE(false, "Container is not a scalar literal");
+    }
+}
+
 bool IsLiteralType(EJsonPathItemType type) {
     switch (type) {
         case EJsonPathItemType::StringLiteral:
@@ -132,6 +156,7 @@ private:
     TCollectResult Literal(const TJsonPathItem& item, EMode mode);
     TCollectResult Variable(const TJsonPathItem& item, EMode mode);
 
+    std::optional<double> EvaluteNumericLiteral(const TJsonPathItem& item);
     bool ArePredicatesAllowed(EMode mode) const;
 
 private:
@@ -141,7 +166,8 @@ private:
 };
 
 TCollectResult TQueryCollector::Collect(const TJsonPathItem& item, EMode mode) {
-    if (mode == EMode::Literal && !IsLiteralType(item.Type)) {
+    const bool isUnaryOp = item.Type == EJsonPathItemType::UnaryMinus || item.Type == EJsonPathItemType::UnaryPlus;
+    if (mode == EMode::Literal && !IsLiteralType(item.Type) && !isUnaryOp) {
         return TCollectResult(TIssue("Expected a literal expression"));
     }
 
@@ -215,23 +241,18 @@ TCollectResult TQueryCollector::Literal(const TJsonPathItem& item, EMode mode) {
     }
 
     TString value;
-    value.push_back(0);
-    value.push_back((char)GetEntryType(item));
-
     switch (item.Type) {
-        case EJsonPathItemType::StringLiteral: {
-            value += item.GetString();
+        case EJsonPathItemType::StringLiteral:
+            AppendLiteral(value, GetEntryType(item), item.GetString(), nullptr);
             break;
-        }
-
         case EJsonPathItemType::NumberLiteral: {
             double number = item.GetNumber();
-            value += TStringBuf((char*)&number, sizeof(double));
+            AppendLiteral(value, GetEntryType(item), {}, &number);
             break;
         }
-
         case EJsonPathItemType::BooleanLiteral:
         case EJsonPathItemType::NullLiteral:
+            AppendLiteral(value, GetEntryType(item), {}, nullptr);
             break;
         default:
             return TCollectResult(TIssue("Expected a literal expression"));
@@ -282,6 +303,18 @@ TCollectResult TQueryCollector::ArrayAccess(const TJsonPathItem& item, EMode mod
 }
 
 TCollectResult TQueryCollector::UnaryArithmeticOp(const TJsonPathItem& item, EMode mode) {
+    if (mode == EMode::Literal) {
+        auto val = EvaluteNumericLiteral(item);
+        if (!val) {
+            return TCollectResult(TIssue("Expected a numeric literal expression"));
+        }
+
+        TString value;
+        double number = *val;
+        AppendLiteral(value, NBinaryJson::EEntryType::Number, {}, &number);
+        return TCollectResult(std::move(value));
+    }
+
     auto result = Collect(Reader.ReadInput(item), mode);
     result.Finish();
     return result;
@@ -380,8 +413,8 @@ TCollectResult TQueryCollector::BinaryEqual(const TJsonPathItem& item, EMode mod
     const auto& leftItem = Reader.ReadLeftOperand(item);
     const auto& rightItem = Reader.ReadRightOperand(item);
 
-    const bool leftIsLiteral = IsLiteralType(leftItem.Type);
-    const bool rightIsLiteral = IsLiteralType(rightItem.Type);
+    const bool leftIsLiteral = IsLiteralType(leftItem.Type) || EvaluteNumericLiteral(leftItem).has_value();
+    const bool rightIsLiteral = IsLiteralType(rightItem.Type) || EvaluteNumericLiteral(rightItem).has_value();
 
     if (!leftIsLiteral && rightIsLiteral) {
         return CollectEqualOperands(leftItem, rightItem);
@@ -517,6 +550,21 @@ TCollectResult TQueryCollector::Variable(const TJsonPathItem& item, EMode mode) 
     return TCollectResult(TIssue("Variables are not supported at the moment"));
 }
 
+std::optional<double> TQueryCollector::EvaluteNumericLiteral(const TJsonPathItem& item) {
+    switch (item.Type) {
+        case EJsonPathItemType::NumberLiteral:
+            return item.GetNumber();
+        case EJsonPathItemType::UnaryMinus: {
+            auto val = EvaluteNumericLiteral(Reader.ReadInput(item));
+            return val ? std::optional<double>(-*val) : std::nullopt;
+        }
+        case EJsonPathItemType::UnaryPlus:
+            return EvaluteNumericLiteral(Reader.ReadInput(item));
+        default:
+            return std::nullopt;
+    }
+}
+
 bool TQueryCollector::ArePredicatesAllowed(EMode mode) const {
     switch (mode) {
         case EMode::Context:
@@ -540,22 +588,19 @@ void TokenizeBinaryJson(NBinaryJson::TEntryCursor element, const TString& prefix
         return;
     }
     TString token = prefix;
-    token.push_back(0);
-    // Value always comes last in the token and we may want range queries on value,
-    // so we just store element type and data.
-    token.push_back((char)element.GetType());
     switch (element.GetType()) {
     case NBinaryJson::EEntryType::String:
-        token += element.GetString();
+        AppendLiteral(token, element.GetType(), element.GetString(), nullptr);
         break;
     case NBinaryJson::EEntryType::Number: {
         double number = element.GetNumber();
-        token += TStringBuf((char*)&number, sizeof(double));
+        AppendLiteral(token, element.GetType(), {}, &number);
         break;
     }
     case NBinaryJson::EEntryType::BoolFalse:
     case NBinaryJson::EEntryType::BoolTrue:
     case NBinaryJson::EEntryType::Null:
+        AppendLiteral(token, element.GetType(), {}, nullptr);
         break;
     case NBinaryJson::EEntryType::Container:
         Y_ENSURE(false, "Unreachable");
@@ -678,21 +723,6 @@ TVector<TString> TokenizeJson(const TStringBuf jsonStr, TString& error) {
 
 TCollectResult CollectJsonPath(const TJsonPathPtr path, ECallableType callableType) {
     return TQueryCollector(path, callableType).Collect();
-}
-
-TVector<TString> BuildSearchTerms(const TString& jsonPathStr) {
-    TIssues issues;
-    const TJsonPathPtr path = ParseJsonPath(jsonPathStr, issues, 1);
-    if (!issues.Empty()) {
-        return {};
-    }
-
-    auto result = CollectJsonPath(path, ECallableType::JsonExists);
-    if (result.IsError()) {
-        return {};
-    }
-
-    return result.GetTokens();
 }
 
 }  // namespace NJsonIndex

@@ -1875,6 +1875,39 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
     return res;
 }
 
+// Parses jsonPathStr, collects search tokens via CollectJsonPath and builds
+// TKqpReadTableFullTextIndexSettings. Returns nullopt on any error and fills ctx with an issue.
+std::optional<TKqpReadTableFullTextIndexSettings> BuildFullTextSettingsFromJsonPath(const TString& jsonPathStr, const TExprBase& node, TExprContext& ctx) {
+    NYql::TIssues parseIssues;
+    const auto jsonPath = NYql::NJsonPath::ParseJsonPath(jsonPathStr, parseIssues, 1);
+    if (!parseIssues.Empty()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Failed to parse jsonpath expression: " << jsonPathStr));
+        return std::nullopt;
+    }
+
+    auto collectResult = NJsonIndex::CollectJsonPath(jsonPath, NJsonIndex::ECallableType::JsonExists);
+    if (collectResult.IsError() || collectResult.GetTokens().empty()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Failed to extract search terms from jsonpath expression: " << jsonPathStr));
+        return std::nullopt;
+    }
+
+    TVector<TExprNode::TPtr> tokenNodes;
+    tokenNodes.reserve(collectResult.GetTokens().size());
+    for (const auto& token : collectResult.GetTokens()) {
+        tokenNodes.push_back(Build<TCoString>(ctx, node.Pos()).Literal().Build(token).Done().Ptr());
+    }
+
+    TStringBuf defaultOperator = collectResult.GetTokensMode() == NJsonIndex::TCollectResult::ETokensMode::Or ? "or" : "and";
+
+    auto settings = TKqpReadTableFullTextIndexSettings{};
+    settings.SetDefaultOperator(Build<TCoString>(ctx, node.Pos()).Literal().Build(defaultOperator).Done().Ptr());
+    settings.SetMinimumShouldMatch(Build<TCoString>(ctx, node.Pos()).Literal().Build("").Done().Ptr());
+    settings.SetTokens(ctx.NewList(node.Pos(), std::move(tokenNodes)));
+    return settings;
+}
+
 TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TCoFlatMap>()) {
         return node;
@@ -1928,28 +1961,10 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBas
     }
 
     // Compile jsonpath to search tokens at query compile time to surface parse errors
-    auto searchTokens = NJsonIndex::BuildSearchTerms(jsonPathStr);
-    if (searchTokens.empty()) {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
-            TStringBuilder() << "Failed to extract search terms from jsonpath expression: " << jsonPathStr));
+    auto settings = BuildFullTextSettingsFromJsonPath(jsonPathStr, node, ctx);
+    if (!settings) {
         return {};
     }
-
-    TVector<TExprNode::TPtr> tokenNodes;
-    tokenNodes.reserve(searchTokens.size());
-    for (const auto& token : searchTokens) {
-        tokenNodes.push_back(Build<TCoString>(ctx, node.Pos()).Literal().Build(token).Done().Ptr());
-    }
-
-    auto settings = TKqpReadTableFullTextIndexSettings{};
-    settings.SetDefaultOperator(Build<TCoString>(ctx, node.Pos()).Literal().Build("and").Done().Ptr());
-    settings.SetMinimumShouldMatch(Build<TCoString>(ctx, node.Pos()).Literal().Build("").Done().Ptr());
-    settings.SetTokens(ctx.NewList(node.Pos(), std::move(tokenNodes)));
-
-    auto queryExpr = Build<TCoString>(ctx, node.Pos())
-        .Literal()
-        .Build(jsonPathStr)
-        .Done();
 
     auto searchColumns = Build<TCoAtomList>(ctx, node.Pos())
         .Add(Build<TCoAtom>(ctx, node.Pos()).Value(jsonColumnName).Done())
@@ -1959,9 +1974,9 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBas
         .Table(read.Table())
         .Index(read.Index())
         .Columns(read.Columns())
-        .Query<TExprList>().Add(queryExpr).Build()
+        .Query<TExprList>().Build()
         .QueryColumns(searchColumns.Ptr())
-        .Settings(settings.BuildNode(ctx, node.Pos()))
+        .Settings(settings->BuildNode(ctx, node.Pos()))
         .Done();
 
     return Build<TCoFlatMap>(ctx, read.Pos())

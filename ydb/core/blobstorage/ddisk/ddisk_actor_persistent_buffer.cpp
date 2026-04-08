@@ -212,6 +212,9 @@ namespace NKikimr::NDDisk {
                     }
                     return false;
                 });
+                for (auto [_, r] : pb.Records) {
+                    pb.Size += r.Size;
+                }
             }
             std::erase_if(PersistentBuffers, [](const auto& pb) { return pb.second.Records.empty(); });
             for (auto& [_, pb] : PersistentBuffers) {
@@ -329,6 +332,7 @@ namespace NKikimr::NDDisk {
                             .VChunkIndex = inflight.VChunkIdx,
                             .Timestamp = TInstant::Now()
                         };
+                        buffer.Size += pr.Size;
                         pr.DataParts.emplace(0, std::move(inflight.Data));
                         PersistentBufferInMemoryCacheSize += pr.Size;
                     } else {
@@ -663,6 +667,7 @@ namespace NKikimr::NDDisk {
             partOp->SetIsErase(true);
             partOp->PrepareWrite(TRope(zeroingData), diskOffset, pr.Sectors[0].ChunkIdx, chunkOffset);
 
+            buffer.Size -= pr.Size;
             buffer.Records.erase(jt);
             if (buffer.Records.empty()) {
                 PersistentBuffers.erase(it);
@@ -761,7 +766,8 @@ namespace NKikimr::NDDisk {
             for (auto& [k, v] : PersistentBuffers) {
                 reply->TabletInfos.emplace_back(std::get<0>(k), std::get<1>(k),
                     v.Records.begin()->first, v.Records.rbegin()->first,
-                    v.Records.begin()->second.Timestamp, v.Records.rbegin()->second.Timestamp);
+                    v.Records.begin()->second.Timestamp, v.Records.rbegin()->second.Timestamp,
+                    v.Records.size(), v.Size);
             }
         }
         if (ev->Get()->DescribeFreeSpace) {

@@ -19,7 +19,15 @@ namespace NKikimr::NDDisk {
         std::vector<std::vector<std::tuple<ui32, ui32>>> res;
         res.resize(FreeSpaceMap.size());
         ui32 resIdx = 0;
-        for (auto& [_, ch] : FreeSpaceMap) {
+        std::vector<ui32> chunkIdx;
+        chunkIdx.reserve(FreeSpaceMap.size());
+        for (auto& [k, _] : FreeSpaceMap) {
+            chunkIdx.push_back(k);
+        }
+        std::sort(chunkIdx.begin(), chunkIdx.end());
+
+        for (ui32 i : chunkIdx) {
+            auto& ch = FreeSpaceMap.at(i);
             res[resIdx].resize(ch.FreeSectors.size());
             ui32 fsIdx = 0;
             for (auto& fs : ch.FreeSectors) {

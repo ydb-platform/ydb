@@ -36,6 +36,7 @@ namespace NKikimr {
                 int SubRequestId;
                 bool DescribeFreeSpace;
                 bool ShowTablets;
+                ui32 RefreshRate;
                 std::vector<NDDisk::TEvPersistentBufferInfo::TPtr> Responses;
                 std::unordered_map<ui64, TActorId> Requests;
             };
@@ -124,8 +125,22 @@ namespace NKikimr {
                     }
                     return str;
                 };
+                auto beautySize = [](ui32 s) {
+                    TStringBuilder str;
+                    if (s > 1e6) {
+                        str << (ui32)(s / 1e6) << "Mb";
+                    } else if (s > 1e3) {
+                        str << (ui32)(s / 1e3) << "Kb";
+                    } else {
+                        str << s << "b";
+                    }
+                    return str;
+                };
                 TStringStream str;
                 HTML(str) {
+                    if (inflight.RefreshRate > 0) {
+                        str << "<script>setTimeout(function(){window.location.reload(1);}, " << (inflight.RefreshRate * 1000) << ");</script>";
+                    }
                     for (auto& [_, id] : inflight.Requests) {
                         str << "<h2 style=\"color:red;\">" << "No response from PB actorId: " << id << " </h2>";
                     }
@@ -142,7 +157,7 @@ namespace NKikimr {
                         str << "<br> Free sectors: " << b->FreeSectors;
                         str << " of allocated " << (b->AllocatedChunks * sectorsInChunk);
                         str << " max " << (b->MaxChunks * sectorsInChunk);
-                        str << "<br> InMemory cache: " << (ui32)(b->InMemoryCacheSize / 1e6) << "Mb of " << (ui32)(b->InMemoryCacheLimit / 1e6) << "Mb";
+                        str << "<br> InMemory cache: " << beautySize(b->InMemoryCacheSize) << " of " << beautySize(b->InMemoryCacheLimit);
 
                         if (inflight.DescribeFreeSpace && !b->FreeSpace.empty() && b->SectorSize > 0 && b->ChunkSize > 0) {
                             const ui32 sectorsPerChunk = b->ChunkSize / b->SectorSize;
@@ -155,6 +170,8 @@ namespace NKikimr {
                                     TABLER() {
                                         TABLEH() {str << "TabletId";}
                                         TABLEH() {str << "Generation";}
+                                        TABLEH() {str << "Lsns count";}
+                                        TABLEH() {str << "Total space";}
                                         TABLEH() {str << "First lsn";}
                                         TABLEH() {str << "Uptime";}
                                         TABLEH() {str << "Last lsn";}
@@ -166,6 +183,8 @@ namespace NKikimr {
                                         TABLER() {
                                             TABLED() {str << ti.TabletId;}
                                             TABLED() {str << ti.Generation;}
+                                            TABLED() {str << ti.LsnsCount;}
+                                            TABLED() {str << beautySize(ti.Size);}
                                             TABLED() {str << ti.FirstLsn;}
                                             TABLED() {str << beautyDuration(TInstant::Now() - ti.FirstLsnTimestamp);}
                                             TABLED() {str << ti.LastLsn;}
@@ -260,6 +279,15 @@ namespace NKikimr {
                         showTablets = value != 0;
                     }
                 }
+                ui32 refreshRate = 0;
+                if (params.Has("refreshRate")) {
+                    int value;
+                    if (!TryFromString(params.Get("refreshRate"), value) || !(value >= 0)) {
+                        return generateError("Failed to parse refreshRate parameter -- must be an integer in seconds");
+                    } else {
+                        refreshRate = value;
+                    }
+                }
                 const ui64 cookie = ++NextCookie;
                 Inflight[cookie] = TInflight{
                     .Sender = ev->Sender,
@@ -267,6 +295,7 @@ namespace NKikimr {
                     .SubRequestId = ev->Get()->SubRequestId,
                     .DescribeFreeSpace = describeFreeSpace,
                     .ShowTablets = showTablets,
+                    .RefreshRate = refreshRate,
                 };
                 auto nwId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
                 Send(nwId, new TEvNodeWardenListLocalDDisks(), 0, cookie);

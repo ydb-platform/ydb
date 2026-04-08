@@ -484,6 +484,8 @@ struct TPersistentBufferFormat {
             ui64 LastLsn;
             TInstant FirstLsnTimestamp;
             TInstant LastLsnTimestamp;
+            ui32 LsnsCount;
+            ui32 Size;
         };
 
         TInstant StartedAt;

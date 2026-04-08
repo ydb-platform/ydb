@@ -3873,65 +3873,6 @@ Y_UNIT_TEST(BlobKeyFilfer)
     UNIT_ASSERT_EQUAL(filteredKeys, expectedKeys);
 }
 
-Y_UNIT_TEST_F(GetPartitionWriteInfoWithoutSrcIdInfo, TPartitionFixture) {
-    Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
-
-    CreatePartition({
-                    .Partition=TPartitionId{2, TWriteId{0, 10}, 100'001},
-                    //
-                    // partition configuration
-                    //
-                    .Config={.Version=1, .Consumers={}}
-                    },
-                    //
-                    // tablet configuration
-                    //
-                    {.Version=2, .Consumers={}}
-    );
-
-    ui64 cookie = 1;
-
-    SendChangeOwner(cookie, "owner1", Ctx->Edge, true);
-    auto ownerEvent = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(1));
-    UNIT_ASSERT(ownerEvent != nullptr);
-    auto ownerCookie = ownerEvent->Response->GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
-
-    TAutoPtr<IEventHandle> handle;
-    auto truth = [&](const TEvPQ::TEvProxyResponse& e) { return cookie == e.Cookie; };
-
-    TString data = "data for write";
-
-    for (auto i = 0; i < 3; i++) {
-        SendWrite(++cookie, i, ownerCookie, i + 100, data, true, (i+1)*2);
-        SendDiskStatusResponse();
-        {
-            auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvError>(TDuration::Seconds(1));
-            UNIT_ASSERT(event == nullptr);
-        }
-        auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
-        UNIT_ASSERT(event != nullptr);
-    }
-    SendWrite(++cookie, 3, ownerCookie, 110, data, true, 7);
-    SendDiskStatusResponse();
-    {
-        auto event = Ctx->Runtime->GrabEdgeEventIf<TEvPQ::TEvProxyResponse>(handle, truth, TDuration::Seconds(1));
-        UNIT_ASSERT(event != nullptr);
-    }
-    SendGetWriteInfo(true);
-    {
-        {
-            auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoError>(TDuration::Seconds(1));
-            UNIT_ASSERT(event == nullptr);
-        }
-        auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvGetWriteInfoResponse>(TDuration::Seconds(1));
-        UNIT_ASSERT(event != nullptr);
-        UNIT_ASSERT_VALUES_EQUAL(event->BodyKeys.size(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(event->SrcIdInfo.size(), 0);
-
-        UNIT_ASSERT(event->BodyKeys.begin()->Key.ToString().StartsWith("D0000100001_"));
-    }
-}
-
 namespace {
 
 TClientBlob MakeSinglePartBodyReadBlob(ui64 seqNo, char fill) {
@@ -4026,8 +3967,7 @@ TReadInfo MakeReadInfoForAddBlobsFromBodyTest(
         TDuration::Zero(),
         false,
         edge,
-        false,
-        edge
+        false
     };
 }
 

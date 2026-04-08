@@ -703,7 +703,7 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', b
 
         monitor = monitor_by_name.get((full_name, build_type))
         if monitor and is_chunk_test(monitor):
-            logging.info(f"Skipping chunk test (sole chunk): {full_name}")
+            logging.info(f"Skipping chunk test: {full_name}")
             continue
         if monitor:
             entry = {

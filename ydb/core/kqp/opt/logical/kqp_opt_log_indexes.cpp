@@ -1,3 +1,4 @@
+#include <ydb/core/base/json_index.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -1926,9 +1927,24 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBas
         return {};
     }
 
+    // Compile jsonpath to search tokens at query compile time to surface parse errors
+    auto searchTokens = NJsonIndex::BuildSearchTerms(jsonPathStr);
+    if (searchTokens.empty()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Failed to extract search terms from jsonpath expression: " << jsonPathStr));
+        return {};
+    }
+
+    TVector<TExprNode::TPtr> tokenNodes;
+    tokenNodes.reserve(searchTokens.size());
+    for (const auto& token : searchTokens) {
+        tokenNodes.push_back(Build<TCoString>(ctx, node.Pos()).Literal().Build(token).Done().Ptr());
+    }
+
     auto settings = TKqpReadTableFullTextIndexSettings{};
     settings.SetDefaultOperator(Build<TCoString>(ctx, node.Pos()).Literal().Build("and").Done().Ptr());
     settings.SetMinimumShouldMatch(Build<TCoString>(ctx, node.Pos()).Literal().Build("").Done().Ptr());
+    settings.SetTokens(ctx.NewList(node.Pos(), std::move(tokenNodes)));
 
     auto queryExpr = Build<TCoString>(ctx, node.Pos())
         .Literal()

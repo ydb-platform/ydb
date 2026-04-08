@@ -57,17 +57,15 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/testing/unittest
     library/cpp/testing/common
+    library/cpp/testing/hook
+    library/cpp/testing/unittest
     library/cpp/threading/future
     ydb/core/kqp/ut/common
-    ydb/core/kqp/ut/federated_query/common
-    ydb/core/kqp/ut/olap/helpers
-    ydb/core/tx/columnshard/hooks/testing
-    ydb/core/tx/columnshard/test_helper
+    ydb/core/util
+    ydb/library/yql/providers/common/http_gateway
     yql/essentials/sql/pg_dummy
-    ydb/public/sdk/cpp/src/client/types/operation
-    ydb/library/actors/core
+    yql/essentials/utils
 )
 
 DEPENDS(

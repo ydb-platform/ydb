@@ -219,6 +219,9 @@ struct TTupleLayout {
         
     TPackResult Flatten(TArrayRef<TPackResult> chunks) const;
 
+    /// Appends packed rows from \p chunk to \p accum (same layout). Avoids per-row TupleDeepCopy.
+    void AppendPackResult(TPackResult& accum, TPackResult&& chunk) const;
+
     ui32 GetTupleVarSize(const ui8* inTuple) const;
 
     bool KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow, const ui8 *rhsRow, const ui8 *rhsOverflow) const;

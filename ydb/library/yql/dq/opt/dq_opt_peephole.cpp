@@ -1079,6 +1079,24 @@ TExprBase DqPeepholeRewriteBlockHashJoin(const TExprBase& node, TExprContext& ct
     return TExprBase(result);
 }
 
+NNodes::TExprBase DqPeepholeRewriteBlockMember(const NNodes::TExprBase& node, TExprContext& ctx) {
+    if (!node.Ref().IsCallable("BlockMember")) {
+        return node;
+    }
+    // Fold BlockMember(BlockAsStruct(..., ("col", val), ...), "col") -> val
+    const auto& input = node.Ref().Head();
+    if (!input.IsCallable("BlockAsStruct")) {
+        return node;
+    }
+    const auto memberName = node.Ref().Tail().Content();
+    for (const auto& field : input.Children()) {
+        if (field->Head().Content() == memberName) {
+            return TExprBase(field->TailPtr());
+        }
+    }
+    return node;
+}
+
 NNodes::TExprBase DqPeepholeRewriteWideCombiner(const NNodes::TExprBase& node, TExprContext& ctx, const bool rewritingFinalAggregator, const bool useBlocks)
 {
     if (!node.Maybe<TCoWideCombiner>()) {

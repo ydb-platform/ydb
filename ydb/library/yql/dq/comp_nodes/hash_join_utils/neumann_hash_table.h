@@ -414,6 +414,23 @@ class TNeumannHashTable {
         return iter;
     }
 
+    void PrefetchForRow(const ui8 *const row) const {
+        if constexpr (Prefetch) {
+            if (Directories_.empty()) {
+                return;
+            }
+            const THash &thash = ReadUnaligned<THash>(row);
+            const Hash dirSlot = getDirectorySlot(thash);
+            if (Directories_.size() > 1024 * 1024 / sizeof(TDirectory)) {
+                NYql::PrefetchForRead(&Directories_[dirSlot]);
+            } else {
+                const TDirectory dir = Directories_[dirSlot];
+                const ui8 *ptr = Buffer_.data() + BufferSlotSize_ * dir.BufferSlot;
+                NYql::PrefetchForRead(ptr);
+            }
+        }
+    }
+
     template <size_t Size>
     std::array<TIterator, Size> FindBatch(const std::array<const ui8 *, Size> &rows,
                                           const ui8 *const overflow) const {

@@ -258,7 +258,7 @@ public:
         }
 
         SRC_LOG_I("Start read actor, metadatafields: {" << JoinSeq(',', SourceParams.GetMetadataFields())
-            << "}, streaming mode: " << SourceParams.GetStreamingMode()
+            << "}, stop at current end offsets: " << SourceParams.GetStopAtCurrentEndOffsets()
             << ", disposition: " << SourceParams.GetDisposition().DebugString() << ", consumer: " << SourceParams.GetConsumerName());
 
         MetadataFields.reserve(SourceParams.MetadataFieldsSize());
@@ -351,7 +351,7 @@ public:
     NYdb::NTopic::IReadSession& GetReadSession(TClusterState& clusterState) {
         if (!clusterState.ReadSession) {
             const auto maxPartitionReadSkew = NProtoInterop::CastFromProto(SourceParams.GetMaxPartitionReadSkew());
-            if (maxPartitionReadSkew && SourceParams.GetStreamingMode()) {
+            if (maxPartitionReadSkew && !SourceParams.GetStopAtCurrentEndOffsets()) {
                 YQL_ENSURE(InfoAggregator, "Missing DQ info aggregator for distributed read session");
 
                 ui64 amountPartitions = 0;
@@ -731,7 +731,7 @@ private:
     }
 
     void CheckFinishedByOffsets() {
-        if (SourceParams.GetStreamingMode()
+        if (!SourceParams.GetStopAtCurrentEndOffsets()
             || Clusters.empty()
             || FinishedByOffsets) {
             return;
@@ -873,7 +873,7 @@ private:
             auto key = MakePartitionKey(TString(cluster), partitionSession);
             auto& partitionInfo = Partitions[key];
             partitionInfo.Offset = ranges.back().second;
-            if (!SourceParams.GetStreamingMode() && partitionInfo.IsFinishedInTableMode()) {
+            if (SourceParams.GetStopAtCurrentEndOffsets() && partitionInfo.IsFinishedInTableMode()) {
                 FinishedPartitions.insert(key);
             }
         }
@@ -924,7 +924,7 @@ private:
                 LWPROBE(PqReadDataReceived, TString(TStringBuilder() << Self.TxId), Self.SourceParams.GetTopicPath(), TString{data});
                 SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Data received: " << message.DebugString(true));
                 
-                if (!Self.SourceParams.GetStreamingMode() && partitionInfo.EndOffset && *partitionInfo.EndOffset <= message.GetOffset()) {
+                if (Self.SourceParams.GetStopAtCurrentEndOffsets() && partitionInfo.EndOffset && *partitionInfo.EndOffset <= message.GetOffset()) {
                     SRC_LOG_T("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " Skip data (message offset: " << message.GetOffset() << ", end offset: " << *partitionInfo.EndOffset << ")");
                     continue;
                 }
@@ -994,7 +994,7 @@ private:
             auto& partitionInfo = Self.Partitions[partitionKey];
             if (!partitionInfo.EndOffset) {
                 partitionInfo.EndOffset = event.GetEndOffset();
-                if (!Self.SourceParams.GetStreamingMode() && partitionInfo.IsFinishedInTableMode()) {
+                if (Self.SourceParams.GetStopAtCurrentEndOffsets() && partitionInfo.IsFinishedInTableMode()) {
                     Self.FinishedPartitions.insert(partitionKey);
                 }
             }

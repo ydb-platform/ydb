@@ -29,9 +29,6 @@ TInstant TrimToMillis(TInstant instant) {
 
 // StartingMessageTimestamp is serialized as milliseconds, so drop microseconds part to be consistent with storage
 TInstant InitStartingMessageTimestamp(const NPq::NProto::TDqPqTopicSource& source) {
-    if (!source.GetStreamingMode()) {
-        return TInstant::Zero();
-    }
     const auto& disposition = source.GetDisposition();
     return TrimToMillis([&]() -> TInstant {
         switch (disposition.GetDispositionCase()) {

@@ -319,7 +319,7 @@ public:
                     }
                 }
 
-                srcDesc.SetStreamingMode(streamingTopicRead);
+                srcDesc.SetStopAtCurrentEndOffsets(!streamingTopicRead);
 
                 for (auto prop : topic.Props()) {
                     const TStringBuf name = Name(prop);
@@ -369,7 +369,11 @@ public:
                 }
                 srcDesc.SetSkipJsonErrors(skipErrors);
 
-                *srcDesc.MutableDisposition() = State_->Disposition;
+                if (!streamingTopicRead) {
+                    srcDesc.MutableDisposition()->mutable_oldest();
+                } else {
+                    *srcDesc.MutableDisposition() = State_->Disposition;
+                }
 
                 for (const auto& [label, value] : State_->TaskSensorLabels) {
                     auto taskSensorLabel = srcDesc.AddTaskSensorLabel();

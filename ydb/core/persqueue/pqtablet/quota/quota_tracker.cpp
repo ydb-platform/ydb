@@ -17,7 +17,7 @@ namespace NKikimr::NPQ {
     } // namespace
 
     TQuotaTracker::TQuotaTracker(const ui64 maxBurst, const ui64 speedPerSecond, const TInstant timestamp)
-        : AvailableQuota(TransfromToQuota(maxBurst))
+        : AvailableQuota(ClampToI64(TransfromToQuota(maxBurst)))
         , SpeedPerSecond(speedPerSecond)
         , LastUpdateTime(timestamp)
         , MaxBurst(TransfromToQuota(maxBurst))

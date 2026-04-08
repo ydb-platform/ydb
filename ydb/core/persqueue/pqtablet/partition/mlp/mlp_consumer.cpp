@@ -705,7 +705,6 @@ void TConsumerActor::ProcessEventQueue() {
     TStorage::TPosition position;
     std::deque<TEvPQ::TEvMLPReadRequest::TPtr> readRequestsQueue;
     for (auto& ev : ReadRequestsQueue) {
-        LOG_D("Process read request: ProcessingTimeout=" << ev->Get()->GetProcessingTimeout() << " deadline=" << ev->Get()->GetProcessingTimeout().ToDeadLine());
         size_t count = ev->Get()->GetMaxNumberOfMessages();
         auto visibilityDeadline = ev->Get()->GetProcessingTimeout().ToDeadLine();
 
@@ -751,7 +750,7 @@ void TConsumerActor::Persist() {
 
     Become(&TConsumerActor::StateWrite);
 
-    LOG_D("Dump befor persist: " << Storage->DebugString());
+    LOG_T("Dump befor persist: " << Storage->DebugString());
 
     auto tryInlineChannel = [](auto& write) {
         if (write->GetValue().size() < 2048) {

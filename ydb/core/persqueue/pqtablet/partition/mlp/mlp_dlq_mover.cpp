@@ -1,8 +1,6 @@
 #include "mlp_dlq_mover.h"
 
 #include <ydb/core/persqueue/public/constants.h>
-#include <ydb/core/protos/msgbus.pb.h>
-#include <ydb/core/protos/sqs.pb.h>
 #include <ydb/core/ymq/actor/serviceid.h>
 
 namespace NKikimr::NPQ::NMLP {

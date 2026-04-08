@@ -334,6 +334,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Id, State, IsPrimary, IsPromoted, Drain>;
     };
 
+    // Note: this does not store groups with active status
     struct Group : Table<23> {
         struct Id : Column<1, NScheme::NTypeIds::Uint32> {};
         struct StoragePool : Column<2, NScheme::NTypeIds::Utf8> {};

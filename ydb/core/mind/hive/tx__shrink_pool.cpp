@@ -69,10 +69,7 @@ public:
             BLOG_D("THive::TTxShrinkPool::Execute marking group " << groupId << "as active");
             auto& groupInfo = storagePool->GetStorageGroup(groupId);
             groupInfo.Status = EGroupState::Active;
-            db.Table<Schema::Group>().Key(groupId).Update(
-                NIceDb::TUpdate<Schema::Group::StoragePool>(StoragePool),
-                NIceDb::TUpdate<Schema::Group::Status>(EGroupState::Active)
-            );
+            db.Table<Schema::Group>().Key(groupId).Delete();
             storagePool->InactiveGroups.pop_back();
         }
         // groupsToRemove > InactiveGroups - we need to remove some more groups

@@ -1037,6 +1037,14 @@ def mute_worker(args):
             file_path = args.file_path
             logging.info(f"Creating issues from file: {file_path}")
 
+            profile_id = make_profile_id(args.branch, build_type)
+            allowed_profiles = load_configured_digest_profile_ids()
+            if profile_id not in allowed_profiles:
+                logging.info(
+                    f"Profile {profile_id!r} not in mute_issue_and_digest_config.json — skipping issue creation"
+                )
+                return 0
+
             queue_items = create_mute_issues(
                 all_data,
                 file_path,

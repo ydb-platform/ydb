@@ -26,7 +26,7 @@ void THttpProxyTestMock::SetUp(NUnitTest::TTestContext&) {
 void THttpProxyTestMock::InitAll(const TInitParameters initParameters) {
     AccessServicePort = PortManager.GetPort(8443);
     AccessServiceEndpoint = "127.0.0.1:" + ToString(AccessServicePort);
-    InitKikimr(initParameters.YandexCloudMode, initParameters.EnableMetering, initParameters.EnforceUserTokenRequirement);
+    InitKikimr(initParameters);
     InitAccessServiceService();
     InitHttpServer(initParameters.YandexCloudMode, initParameters.EnableSqsTopic);
 }
@@ -300,6 +300,26 @@ NJson::TJsonMap THttpProxyTestMock::SendJsonRequest(TString method, NJson::TJson
     return json;
 }
 
+
+NJson::TJsonMap THttpProxyTestMock::SendJsonRequestWithRetries(TString method, NJson::TJsonMap request, ui32 expectedHttpCode, ui32 retries) {
+    for (ui32 i = 0; i < retries; ++i) {
+        auto res = SendHttpRequest("/Root", TStringBuilder() << "AmazonSQS." << method, request, FormAuthorizationStr("ru-central1"));
+        if (expectedHttpCode != 0 && res.HttpCode != expectedHttpCode) {
+            Sleep(TDuration::Seconds(1));
+            continue;
+        }
+        NJson::TJsonMap json;
+        if (NJson::ReadJsonTree(res.Body, &json)) {
+            return json;
+        }
+        Sleep(TDuration::Seconds(1));
+    }
+
+    UNIT_FAIL("SendJsonRequestWithRetries: failed to send request after " << retries << " retries");
+    return {};
+}
+
+
 void THttpProxyTestMock::WaitQueueAttributes(TString queueUrl, size_t retries, NJson::TJsonMap attributes) {
     WaitQueueAttributes(queueUrl, retries, [&attributes](NJson::TJsonMap json) {
         for (const auto& [k, v] : attributes.GetMapSafe()) {
@@ -359,7 +379,7 @@ TMaybe<NYdb::TResultSet> THttpProxyTestMock::RunYqlDataQuery(TString query) {
     return resultSet;
 }
 
-void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, bool enforceUserTokenRequirement) {
+void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
     AuthFactory = std::make_shared<NKikimr::NHttpProxy::TIamAuthFactory>();
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
@@ -370,18 +390,21 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
     appConfig.MutablePQConfig()->MutableBillingMeteringConfig()->SetEnabled(true);
 
     appConfig.MutableFeatureFlags()->SetEnableTopicMessageLevelParallelism(true);
-    if (enforceUserTokenRequirement) {
+    if (initParameters.EnableTopicPartitionSplitBasedOnKllSketch) {
+        appConfig.MutableFeatureFlags()->SetEnableTopicPartitionSplitBasedOnKllSketch(true);
+    }
+    if (initParameters.EnforceUserTokenRequirement) {
         auto* securityConfig = appConfig.MutableDomainsConfig()->MutableSecurityConfig();
         securityConfig->SetEnforceUserTokenRequirement(true);
     }
 
     appConfig.MutableSqsConfig()->SetEnableSqs(true);
-    appConfig.MutableSqsConfig()->SetYandexCloudMode(yandexCloudMode);
+    appConfig.MutableSqsConfig()->SetYandexCloudMode(initParameters.YandexCloudMode);
     appConfig.MutableSqsConfig()->SetEnableDeadLetterQueues(true);
 
     appConfig.MutableFeatureFlags()->SetEnableTopicMessageLevelParallelism(true);
 
-    if (enableMetering) {
+    if (initParameters.EnableMetering) {
         auto& sqsConfig = *appConfig.MutableSqsConfig();
 
         sqsConfig.SetMeteringFlushingIntervalMs(100);
@@ -431,8 +454,11 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
     ActorRuntime->SetLogPriority(NActorsServices::EServiceCommon::HTTP, NLog::PRI_DEBUG);
     ActorRuntime->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
     ActorRuntime->SetLogPriority(NKikimrServices::SQS, NLog::PRI_TRACE);
+    ActorRuntime->SetLogPriority(NKikimrServices::PQ_MLP_CONSUMER, NLog::PRI_DEBUG);
+    ActorRuntime->SetLogPriority(NKikimrServices::PQ_MLP_WRITER, NLog::PRI_DEBUG);
+    ActorRuntime->SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, NLog::PRI_DEBUG);
 
-    if (enableMetering) {
+    if (initParameters.EnableMetering) {
         ActorRuntime->RegisterService(
             NSQS::MakeSqsMeteringServiceID(),
             ActorRuntime->Register(NSQS::CreateSqsMeteringService())

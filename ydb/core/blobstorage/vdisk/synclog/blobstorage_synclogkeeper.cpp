@@ -255,7 +255,7 @@ namespace NKikimr {
             }
 
             void Handle(const TEvPhantomFlagStorageGetSnapshot::TPtr& ev) {
-                Send(ev->Sender, new TEvPhantomFlagStorageGetSnapshotResult(KeepState.GetPhantomFlagStorageSnapshot()));
+                KeepState.RequestPhantomFlagStorageSnapshot(ev);
             }
 
             void Handle(const TEvLocalSyncData::TPtr& ev) {
@@ -266,6 +266,10 @@ namespace NKikimr {
 
             void Handle(const TEvSyncLogUpdateNeighbourSyncedLsn::TPtr& ev) {
                 KeepState.UpdateNeighbourSyncedLsn(ev->Get()->OrderNumber, ev->Get()->SyncedLsn);
+            }
+
+            void Handle(TEvPhantomFlagStorageCommitData::TPtr ev) {
+                KeepState.UpdatePhantomFlagStorageData(std::move(ev->Get()->Data));
             }
 
             void UpdateCounters() {
@@ -287,6 +291,7 @@ namespace NKikimr {
                 HFunc(TEvListChunks, Handle)
                 hFunc(TEvPhantomFlagStorageFinishBuilder, Handle)
                 hFunc(TEvPhantomFlagStorageGetSnapshot, Handle)
+                hFunc(TEvPhantomFlagStorageCommitData, Handle)
                 hFunc(TEvLocalSyncData, Handle)
                 hFunc(TEvSyncLogUpdateNeighbourSyncedLsn, Handle)
                 cFunc(TEvents::TEvWakeup::EventType, UpdateCounters)

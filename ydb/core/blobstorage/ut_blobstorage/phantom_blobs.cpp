@@ -38,6 +38,8 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
                         NodeStates[nodeId - 1].PhantomFlagStorageEnabled);
                 Env->SetIcbControl(nodeId, "VDiskControls.PhantomFlagStorageLimitPerVDiskBytes",
                         NodeStates[nodeId - 1].MemoryLimit);
+                Env->SetIcbControl(nodeId, "VDiskControls.EnablePersistentPhantomFlagStorage",
+                        NodeStates[nodeId - 1].PhantomFlagStorageEnabled);
             }
         }
 
@@ -393,6 +395,7 @@ Y_UNIT_TEST_SUITE(PhantomBlobs) {
             .PDiskChunkSize = 32_MB,
             .EnablePhantomFlagStorage = false,
             .TinySyncLog = true,
+            .EnablePersistentPhantomFlagStorage = false,
         }, 100, 10000, nodeStates, expectPhantoms);
         if (nodeStates2) {
             ctx.RunTestWithUpdate(*nodeStates2);

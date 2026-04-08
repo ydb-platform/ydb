@@ -223,6 +223,7 @@ class TSyncLogTestWriteActor : public TActorBootstrapped<TSyncLogTestWriteActor>
                 TestCtx->LoggerId,
                 LogCutterId,
                 TActorId{},
+                TActorId{},
                 VDiskConfig->SyncLogMaxDiskAmount,
                 VDiskConfig->SyncLogMaxEntryPointSize,
                 VDiskConfig->SyncLogMaxMemAmount,

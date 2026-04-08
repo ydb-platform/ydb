@@ -7,6 +7,7 @@
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_vdisk_guids.h>
+#include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flag_storage_data.h>
 
 #include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
 #include <ydb/core/base/blobstorage.h>
@@ -105,6 +106,7 @@ namespace NKikimr {
             const ui32 AppendBlockSize;
             const TEntryPointDbgInfo LastEntryPointDbgInfo;
             const TSyncLogHeader Header;
+            const std::optional<TPhantomFlagStorageData> PhantomFlagStorageData;
 
         private:
             TSyncLogSnapshot(TDiskRecLogSnapshotPtr diskSnapPtr,
@@ -112,7 +114,8 @@ namespace NKikimr {
                              ui64 logStartLsn,
                              ui32 appendBlockSize,
                              const TEntryPointDbgInfo &lastEntryPointDbgInfo,
-                             const TSyncLogHeader &header);
+                             const TSyncLogHeader &header,
+                             const std::optional<TPhantomFlagStorageData>& phantomFlagStorageData);
 
             friend class TSyncLog;
         };
@@ -239,6 +242,12 @@ namespace NKikimr {
             // returns chunks owned by DiskRecLog
             void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
 
+            ////////////////////////////////////////////////////////////////////////
+            // PhantomFlagStorage
+            ////////////////////////////////////////////////////////////////////////
+            void UpdatePhantomFlagStorageData(std::optional<TPhantomFlagStorageData>&& data);
+            TPhantomFlagStorageData GetPhantomFlagStorageData() const;
+
         private:
             // part of the log on disk
             TDiskRecLog DiskRecLog;
@@ -249,6 +258,7 @@ namespace NKikimr {
             ui64 LogStartLsn;
             // info about last serialized data written to the log as an entry point
             TEntryPointDbgInfo LastEntryPointDbgInfo;
+            std::optional<TPhantomFlagStorageData> PhantomFlagStorageData;
 
             TSyncLog(const TSyncLogHeader &header,
                      TDiskRecLog &&diskRecLog,

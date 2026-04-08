@@ -45,6 +45,7 @@ namespace NKikimr {
             , NeedsInitialCommit(repaired->NeedsInitialCommit)
             , PhantomFlagStorageState(SlCtx)
             , EnablePhantomFlagStorage(SlCtx->EnablePhantomFlagStorage)
+            , EnablePersistentPhantomFlagStorage(SlCtx->EnablePersistentPhantomFlagStorage)
             , PhantomFlagStorageLimit(SlCtx->PhantomFlagStorageLimit)
             , SelfOrderNumber(SlCtx->VCtx->Top->GetOrderNumber(SlCtx->VCtx->ShortSelfVDisk))
         {
@@ -463,8 +464,8 @@ namespace NKikimr {
             PhantomFlagStorageState.FinishBuilding(std::move(flags), std::move(thresholds), PhantomFlagStorageLimit);
         }
 
-        TPhantomFlagStorageSnapshot TSyncLogKeeperState::GetPhantomFlagStorageSnapshot() const {
-            return PhantomFlagStorageState.GetSnapshot();
+        void TSyncLogKeeperState::RequestPhantomFlagStorageSnapshot(TEvPhantomFlagStorageGetSnapshot::TPtr request) const {
+            PhantomFlagStorageState.RequestSnapshot(request);
         }
 
         void TSyncLogKeeperState::ProcessLocalSyncData(ui32 orderNumber, const TString& data) {
@@ -479,6 +480,10 @@ namespace NKikimr {
             }
 
             if (EnablePhantomFlagStorage) {
+                if (EnablePersistentPhantomFlagStorage) {
+                    PhantomFlagStorageState.InitializePersistent(SyncLogPtr->GetPhantomFlagStorageData(),
+                            SelfId, SlCtx->ChunkKeeperId);
+                }
                 PhantomFlagStorageState.UpdateSyncedMask(SyncedMask);
                 if (!chunks.empty() && !PhantomFlagStorageState.IsActive() && SelfId != TActorId{}) {
                     PhantomFlagStorageState.StartBuilding();
@@ -496,6 +501,10 @@ namespace NKikimr {
         void TSyncLogKeeperState::UpdateMetrics() {
             PhantomFlagStorageState.UpdateMetrics();
             SlCtx->PhantomFlagStorageGroup.SyncedMask() = SyncedMask.to_ullong();
+        }
+
+        void TSyncLogKeeperState::UpdatePhantomFlagStorageData(std::optional<TPhantomFlagStorageData>&& data) {
+            SyncLogPtr->UpdatePhantomFlagStorageData(std::move(data));
         }
 
     } // NSyncLog

@@ -1,8 +1,10 @@
 #pragma once
 
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogformat.h>
+#include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_private_events.h>
 
 #include "phantom_flags.h"
+#include "phantom_flag_storage_data.h"
 #include "phantom_flag_storage_snapshot.h"
 #include "phantom_flag_thresholds.h"
 
@@ -19,6 +21,8 @@ class TPhantomFlagStorageState {
 public:
     TPhantomFlagStorageState(TIntrusivePtr<TSyncLogCtx> slCtx);
 
+    void InitializePersistent(TPhantomFlagStorageData&& data, TActorId syncLogKeeperId,
+            TActorId chunkKeeperId);
     void StartBuilding();
 
     // Adds DoNotKeep flags from synclog if needed
@@ -33,7 +37,7 @@ public:
     // TODO: rebuild thresholds structure after restart. Either write it to VDisk log or rebuild from hull snapshot
 
     // Read everything from storage
-    TPhantomFlagStorageSnapshot GetSnapshot() const;
+    void RequestSnapshot(TEvPhantomFlagStorageGetSnapshot::TPtr request) const;
     bool IsActive() const;
 
     // Process sync data from neighbours, we do it to update Thresholds
@@ -46,6 +50,10 @@ public:
 
     void UpdateMetrics();
 
+    std::optional<TPhantomFlagStorageData> GetPersistentData() const;
+    void UpdatePersistentData(std::optional<TPhantomFlagStorageData>&& data);
+    void FlushWriteBufferIfNeeded();
+
 private:
     // Adds DoNotKeep flags to storage and Keeps to Thresholds for specified neighbour
     void ProcessBlobRecordFromNeighbour(ui32 orderNumber, const TLogoBlobRec* blobRec);
@@ -55,15 +63,31 @@ private:
     void AdjustSize(ui64 sizeLimit);
     bool AddFlag(const TLogoBlobRec& blobRec);
 
+    void AddItemToWriteBuffer(const TPhantomFlagStorageItem& item);
+    void FlushWriteBuffer();
+
 private:
     TIntrusivePtr<TSyncLogCtx> SlCtx;
     const TBlobStorageGroupType GType;
     TPhantomFlagThresholds Thresholds;
     TPhantomFlags StoredFlags;
-    ui64 MaxFlagsStoredCount;
+    ui64 MaxFlagsStoredCount = 0;
     TSyncedMask SyncedMask;
     bool Active = false;
     bool Building = false;
+
+    // persistent phantom flag storage
+    bool IsPersistent = false;
+    TActorId ProcessorId;
+    std::vector<TPhantomFlagStorageItem> WriteBuffer;
+    ui32 WriteBufferSize = 0;
+    std::optional<TPhantomFlagStorageData> PersistentData;
+    TMonotonic WriteBufferFlushTimestamp = TMonotonic::Zero();
+
+private:
+    // TODO: configurable value
+    constexpr static ui32 WriteBufferSizeLimit = 32_KB;
+    constexpr static TDuration WriteBufferFlushPeriod = TDuration::Seconds(30);
 };
 
 } // namespace NSyncLog

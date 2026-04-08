@@ -110,6 +110,7 @@ namespace NKikimr {
             TActorId{},
             TActorId{},
             TActorId{},
+            TActorId{},
             syncLogMaxDiskAmount,
             syncLogMaxEntryPointSize,
             syncLogMaxMemAmount,

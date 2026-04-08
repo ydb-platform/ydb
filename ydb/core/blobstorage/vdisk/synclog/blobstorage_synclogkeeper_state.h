@@ -92,7 +92,8 @@ namespace NKikimr {
 
             // Add flags from cut sync log snapshot
             void FinishPhantomFlagStorageBuilder(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds);
-            TPhantomFlagStorageSnapshot GetPhantomFlagStorageSnapshot() const;
+            void RequestPhantomFlagStorageSnapshot(TEvPhantomFlagStorageGetSnapshot::TPtr request) const;
+            void UpdatePhantomFlagStorageData(std::optional<TPhantomFlagStorageData>&& data);
             void ProcessLocalSyncData(ui32 orderNumber, const TString& data);
 
             void UpdateMetrics();
@@ -138,6 +139,7 @@ namespace NKikimr {
             // phantom flag storage
             TPhantomFlagStorageState PhantomFlagStorageState;
             TMemorizableControlWrapper EnablePhantomFlagStorage;
+            bool EnablePersistentPhantomFlagStorage;
             TMemorizableControlWrapper PhantomFlagStorageLimit;
 
             ui32 SelfOrderNumber;

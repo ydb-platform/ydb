@@ -43,6 +43,7 @@ void TExecutionContext::Start(const std::shared_ptr<IDataSource>& source,
     auto visitor = std::make_shared<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>(std::move(context));
     SetProgramIterator(program->BuildIterator(visitor), visitor);
     SetCursorStep(step);
+    SetPrevCategoryName(step.GetPrevName());
 }
 
 const TFetchingStepSignals& TExecutionContext::GetCurrentStepSignalsVerified() const {
@@ -286,9 +287,10 @@ void IDataSource::BuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr
     AFL_VERIFY(StageResult);
     AFL_VERIFY(!StageData);
 
-    LWTRACK(SourceFinished, DataSourceOrbit, GetPathIdForProbe(), GetTabletIdForProbe(),
-            GetTxIdForProbe(), GetSourceIdx(), 0,
-            TString("SourceFinished"), GetTotalDuration(), GetTotalBytesRead(), GetTotalExecutionDuration());
+    const TDuration durationMs = GetAndResetWaitDuration();
+    LWTRACK(SourceFinished, DataSourceOrbit, GetRawPathId(), GetTabletId(),
+            GetTxId(), GetSourceIdx(), 0,
+            ExecutionContext.GetPrevCategoryName() + " - " + "SourceFinished", durationMs, GetTotalDuration(), GetTotalBytesRead(), GetTotalExecutionDuration());
 }
 
 bool IDataSource::AddTxConflict() {

@@ -39,8 +39,26 @@ private:
     std::optional<TMonotonic> CurrentNodeStart;
 
     std::optional<TFetchingScriptCursor> CursorStep;
+    TString PrevCategoryName;
+    TString PrevExecutionResult;
 
 public:
+    const TString& GetPrevCategoryName() const {
+        return PrevCategoryName;
+    }
+
+    void SetPrevCategoryName(const TString& name) {
+        PrevCategoryName = name;
+    }
+
+    const TString& GetPrevExecutionResult() const {
+        return PrevExecutionResult;
+    }
+
+    void SetPrevExecutionResult(const TString& result) {
+        PrevExecutionResult = result;
+    }
+
     void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals);
 
     void OnFinishProgramStepExecution();
@@ -344,15 +362,15 @@ public:
 
     virtual NColumnShard::TInternalPathId GetPathId() const = 0;
 
-    ui64 GetPathIdForProbe() const {
+    ui64 GetRawPathId() const {
         return GetPathId().GetRawValue();
     }
 
-    ui64 GetTabletIdForProbe() const {
+    ui64 GetTabletId() const {
         return GetContext()->GetCommonContext()->GetReadMetadata()->GetTabletId();
     }
 
-    ui64 GetTxIdForProbe() const {
+    ui64 GetTxId() const {
         return GetContext()->GetCommonContext()->GetReadMetadata()->GetTxId();
     }
 };

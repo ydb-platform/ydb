@@ -17,9 +17,9 @@ TConclusion<bool> TColumnBlobsFetchingStep::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
     
-    LWTRACK(ColumnBlobsFetchingStart, source->GetDataSourceOrbit(), source->GetPathIdForProbe(), source->GetTabletIdForProbe(),
-            source->GetTxIdForProbe(), source->GetSourceIdx(), step.GetStepIndex(),
-            TString("ColumnBlobsFetching"), durationMs, Columns.GetColumnsCount(), source->GetRecordsCount());
+    LWTRACK(ColumnBlobsFetchingStart, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(),
+            step.GetTracingName(), durationMs, Columns.GetColumnsCount(), source->GetRecordsCount());
     
     const TMonotonic start = TMonotonic::Now();
     auto result = !source->StartFetchingColumns(source, step, Columns);
@@ -30,9 +30,9 @@ TConclusion<bool> TColumnBlobsFetchingStep::DoExecuteInplace(
     source->AddBytesRead(bytesRead);
     
     const TDuration finishDurationMs = source->GetAndResetWaitDuration();
-    LWTRACK(ColumnBlobsFetchingFinish, source->GetDataSourceOrbit(), source->GetPathIdForProbe(), source->GetTabletIdForProbe(),
-            source->GetTxIdForProbe(), source->GetSourceIdx(), step.GetStepIndex(),
-            TString("ColumnBlobsFetching"), finishDurationMs, executionDurationMs, Columns.GetColumnsCount(), bytesRead, source->GetRecordsCount());
+    LWTRACK(ColumnBlobsFetchingFinish, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(),
+            step.GetTracingName(), finishDurationMs, executionDurationMs, Columns.GetColumnsCount(), bytesRead, source->GetRecordsCount());
     
     return result;
 }
@@ -44,9 +44,9 @@ ui64 TColumnBlobsFetchingStep::GetProcessingDataSize(const std::shared_ptr<IData
 TConclusion<bool> TAssemblerStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
     
-    LWTRACK(AssemblerStepStart, source->GetDataSourceOrbit(), source->GetPathIdForProbe(), source->GetTabletIdForProbe(),
-            source->GetTxIdForProbe(), source->GetSourceIdx(), step.GetStepIndex(),
-            TString("AssemblerStep"), durationMs, Columns->GetColumnsCount(), source->GetRecordsCount());
+    LWTRACK(AssemblerStepStart, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(),
+            step.GetTracingName(), durationMs, Columns->GetColumnsCount(), source->GetRecordsCount());
     
     const TMonotonic start = TMonotonic::Now();
     source->AssembleColumns(Columns);
@@ -56,9 +56,9 @@ TConclusion<bool> TAssemblerStep::DoExecuteInplace(const std::shared_ptr<IDataSo
     ui64 bytesAssembled = source->GetColumnRawBytes(Columns->GetColumnIds());
     
     const TDuration finishDurationMs = source->GetAndResetWaitDuration();
-    LWTRACK(AssemblerStepFinish, source->GetDataSourceOrbit(), source->GetPathIdForProbe(), source->GetTabletIdForProbe(),
-            source->GetTxIdForProbe(), source->GetSourceIdx(), step.GetStepIndex(),
-            TString("AssemblerStep"), finishDurationMs, executionDurationMs, Columns->GetColumnsCount(), bytesAssembled, source->GetRecordsCount());
+    LWTRACK(AssemblerStepFinish, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(),
+            step.GetTracingName(), finishDurationMs, executionDurationMs, Columns->GetColumnsCount(), bytesAssembled, source->GetRecordsCount());
     
     return true;
 }
@@ -138,17 +138,17 @@ TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(const std::shared_ptr<ID
     }
 
     const TDuration durationMs = source->GetAndResetWaitDuration();
-    LWTRACK(MemoryAllocationStart, source->GetDataSourceOrbit(), source->GetPathIdForProbe(), source->GetTabletIdForProbe(),
-            source->GetTxIdForProbe(), source->GetSourceIdx(), step.GetStepIndex(), TString("MemoryAllocation"), durationMs, size);
+    LWTRACK(MemoryAllocationStart, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(), step.GetTracingName(), durationMs, size);
     
     const TMonotonic start = TMonotonic::Now();
     auto allocation = std::make_shared<TFetchingStepAllocation>(source, size, step, StageIndex);
     const TDuration executionDurationMs = TMonotonic::Now() - start;
     
     const TDuration finishDurationMs = source->GetAndResetWaitDuration();
-    LWTRACK(MemoryAllocationFinish, source->GetDataSourceOrbit(), source->GetPathIdForProbe(), source->GetTabletIdForProbe(),
-            source->GetTxIdForProbe(), source->GetSourceIdx(), step.GetStepIndex(),
-            TString("MemoryAllocation"), finishDurationMs, executionDurationMs, size, true);
+    LWTRACK(MemoryAllocationFinish, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(),
+            step.GetTracingName(), finishDurationMs, executionDurationMs, size, true);
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("smalloc"));
     NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(source->GetContext()->GetProcessMemoryControlId(),
         source->GetContext()->GetCommonContext()->GetScanId(), source->GetMemoryGroupId(), { allocation }, (ui32)StageIndex);

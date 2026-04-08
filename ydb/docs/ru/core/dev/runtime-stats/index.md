@@ -8,7 +8,7 @@
     - [ydb cli](how-to-get.md#cli)
 - [Расположение информации на плане](layout.md)
     - [Отдельные регионы (колонки)](layout.md#regions)
-    - [Структура плана](layout.md#structure)
+    - [Структура запроса](layout.md#structure)
     - [Операторная статистика](layout.md#operators)
     - [Прогресс выполнения задач](layout.md#progress)
     - [Детальная информация по стадиям](layout.md#stages)

@@ -492,6 +492,11 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
     {
     }
 
+    ui64 GetBuildRows() const { return BuildRows_; }
+    ui64 GetProbeRows() const { return ProbeRows_; }
+    ui64 GetHashTableProbes() const { return HashTableProbes_; }
+    ui64 GetHashTableMisses() const { return HashTableMisses_; }
+
     struct Finish {};
 
     TPackResult Flatten(TMKQLVector<TPackResult> tuples) {
@@ -548,6 +553,8 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     }
                 }
             }
+            ++HashTableProbes_;
+            if (!found) ++HashTableMisses_;
         };
         if (std::get_if<Init>(&State_)) {
             State_ = FetchingBuild{*this};
@@ -560,6 +567,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     return EFetchResult::Yield;
                 } else if (status == NYql::NUdf::EFetchStatus::Ok) {
                     state.Pack = std::move(GetPayload(var));
+                    BuildRows_ += state.Pack->NTuples;
                 } else {
                     MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unhandled status");
                     MKQL_ENSURE(state.Build.Finished(), "sanity check");
@@ -635,6 +643,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     return EFetchResult::Yield;
                 } else if (status == NYql::NUdf::EFetchStatus::Ok) {
                     state.FetchedPack = std::move(GetPayload(var));
+                    ProbeRows_ += state.FetchedPack->NTuples;
                 } else {
                     MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unexpected enum");
                     if constexpr (Kind == EJoinKind::Left) {
@@ -828,6 +837,11 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
     TBlockHashJoinSettings Settings_;
     std::variant<Init, FetchingBuild, BuildingInMemoryTable, Probing, DumpRestOfPages, JoinPairsOfPartitions, Finish>
         State_ = Init{};
+
+    ui64 BuildRows_ = 0;
+    ui64 ProbeRows_ = 0;
+    ui64 HashTableProbes_ = 0;
+    ui64 HashTableMisses_ = 0;
 };
 } // namespace NJoinPackedTuples
 

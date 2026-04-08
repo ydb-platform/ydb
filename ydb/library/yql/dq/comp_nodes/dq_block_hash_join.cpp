@@ -1,6 +1,7 @@
 #include "dq_block_hash_join.h"
 
 #include <yql/essentials/minikql/comp_nodes/mkql_blocks.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_counters.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/minikql/computation/mkql_block_impl.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
@@ -8,12 +9,23 @@
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_stats_registry.h>
 
 #include <arrow/scalar.h>
 
 #include "dq_join_common.h"
 
 namespace NKikimr::NMiniKQL {
+
+static const TStatKey BlockHashJoin_SimdVariant("BlockHashJoin_SimdVariant", false);
+static const TStatKey BlockHashJoin_TupleSize("BlockHashJoin_TupleSize", false);
+static const TStatKey BlockHashJoin_BuildRows("BlockHashJoin_BuildRows", false);
+static const TStatKey BlockHashJoin_ProbeRows("BlockHashJoin_ProbeRows", true);
+static const TStatKey BlockHashJoin_OutputRows("BlockHashJoin_OutputRows", true);
+static const TStatKey BlockHashJoin_PackTimeUs("BlockHashJoin_PackTimeUs", true);
+static const TStatKey BlockHashJoin_UnpackTimeUs("BlockHashJoin_UnpackTimeUs", true);
+static const TStatKey BlockHashJoin_HashTableProbes("BlockHashJoin_HashTableProbes", true);
+static const TStatKey BlockHashJoin_HashTableCollisions("BlockHashJoin_HashTableCollisions", true);
 
 namespace {
 
@@ -46,6 +58,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         , Buff_(ctx.MutableValues.get() + meta->TempStateIndes.SelectSide(side), meta->InputTypes.SelectSide(side).size())
         , ArrowBlockToInternalConverter_(converters.SelectSide(side).get())
         , ColumnPermutation_(meta->ColumnPermutation.SelectSide(side))
+        , Stats_(ctx.Stats)
     {}
 
     bool Finished() const {
@@ -78,7 +91,10 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
             columns = std::move(permuted);
         }
         IBlockLayoutConverter::TPackResult result;
+        auto packStart = GetCycleCount();
         ArrowBlockToInternalConverter_->Pack(columns, result);
+        auto packUs = static_cast<i64>(1e6 * (GetCycleCount() - packStart) / NHPTimer::GetClockRate());
+        MKQL_ADD_STAT(Stats_, BlockHashJoin_PackTimeUs, packUs);
         return One{std::move(result)};
     }
 
@@ -98,6 +114,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
     std::span<NYql::NUdf::TUnboxedValue> Buff_;
     IBlockLayoutConverter* ArrowBlockToInternalConverter_;
     TVector<int> ColumnPermutation_;
+    IStatsRegistry* Stats_;
 };
 
 template<EJoinKind Kind>
@@ -264,16 +281,39 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                     meta->Settings)
             , Ctx_(&ctx)
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()}, userBuildTypes, ctx.ArrowMemoryPool)
-        {}
+        {
+            auto simdVariant = Converters_.Build->GetTupleLayout()->GetSimdVariant();
+            i64 simdId = (simdVariant == "AVX2") ? 2 : (simdVariant == "SSE4.2") ? 1 : 0;
+            MKQL_SET_STAT(ctx.Stats, BlockHashJoin_SimdVariant, simdId);
+            MKQL_SET_STAT(ctx.Stats, BlockHashJoin_TupleSize, Converters_.Build->GetTupleLayout()->TotalRowSize);
+
+            if (ctx.CountersProvider) {
+                TString id = TString(Operator_Join) + "0";
+                CounterOutputRows_ = ctx.CountersProvider->GetCounter(id, Counter_OutputRows, false);
+            }
+        }
 
         NUdf::EFetchStatus FlushTo(NUdf::TUnboxedValue* output) {
             MKQL_ENSURE(Output_.SizeTuples() != 0, "make sure we are flushing something, not empty set of tuples");
             i64 rows = Output_.SizeTuples();
+            auto unpackStart = GetCycleCount();
             TVector<arrow::Datum> arrowOutput = Output_.FlushAndApplyRenames();
+            i64 unpackUs = static_cast<i64>(1e6 * (GetCycleCount() - unpackStart) / NHPTimer::GetClockRate());
             for (int colIndex = 0; colIndex < Output_.Columns(); ++colIndex) {
                 output[colIndex] = Ctx_->HolderFactory.CreateArrowBlock(std::move(arrowOutput[colIndex]));
             }
             output[Output_.Columns()] = Ctx_->HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(rows)));
+
+            MKQL_ADD_STAT(Ctx_->Stats, BlockHashJoin_OutputRows, rows);
+            MKQL_ADD_STAT(Ctx_->Stats, BlockHashJoin_UnpackTimeUs, unpackUs);
+            MKQL_SET_STAT(Ctx_->Stats, BlockHashJoin_BuildRows, Join_.GetBuildRows());
+            MKQL_ADD_STAT(Ctx_->Stats, BlockHashJoin_ProbeRows, Join_.GetProbeRows() - LastReportedProbeRows_);
+            LastReportedProbeRows_ = Join_.GetProbeRows();
+            MKQL_ADD_STAT(Ctx_->Stats, BlockHashJoin_HashTableProbes, Join_.GetHashTableProbes() - LastReportedProbes_);
+            LastReportedProbes_ = Join_.GetHashTableProbes();
+            MKQL_ADD_STAT(Ctx_->Stats, BlockHashJoin_HashTableCollisions, Join_.GetHashTableMisses() - LastReportedMisses_);
+            LastReportedMisses_ = Join_.GetHashTableMisses();
+            CounterOutputRows_.Add(rows);
 
             MKQL_ENSURE(Output_.SizeTuples() == 0, "something left after flush??");
             return NYql::NUdf::EFetchStatus::Ok;
@@ -315,6 +355,10 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         JoinType Join_;
         TComputationContext* Ctx_;
         TRenamesPackedTupleOutput<Kind> Output_;
+        NYql::NUdf::TCounter CounterOutputRows_;
+        ui64 LastReportedProbeRows_ = 0;
+        ui64 LastReportedProbes_ = 0;
+        ui64 LastReportedMisses_ = 0;
         static constexpr i64 MaxOutputRows_ = 10000;
         bool Finished_ = false;
     };

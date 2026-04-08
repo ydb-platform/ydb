@@ -1805,6 +1805,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         }
 
         if (!isTierSecretAclPass) {
+            // Check doc-api restrictions on operations
             if (IsDocApiRestricted(SchemeRequest->Ev->Get()->Record)) {
                 if (!CheckDocApi(navigate->ResultSet, ctx)) {
                     return Die(ctx);

@@ -428,6 +428,8 @@ private:
     void BuildComputeTasks(TStageInfo& stageInfo);
     void BuildScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination, TQueryExecutionStats* stats);
 
+    void RestoreReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot);
+
     void FillScanTaskLockTxId(NKikimrTxDataShard::TKqpReadRangesSourceSettings& settings);
 
     void BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination);

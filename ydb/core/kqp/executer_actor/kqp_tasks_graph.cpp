@@ -1818,15 +1818,13 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
 
     for (ui64 txIdx = 0; txIdx < Transactions.size(); ++txIdx) {
         const auto& tx = Transactions.at(txIdx);
-        const auto scheduledTaskCount = ScheduleByCost(tx, resourcesSnapshot);
 
         for (ui64 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
             const auto& stage = tx.Body->GetStages(stageIdx);
             auto& stageInfo = GetStageInfo({txIdx, stageIdx});
 
             if (const auto& sources = stage.GetSources(); !sources.empty() && sources[0].GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
-                const auto it = scheduledTaskCount.find(stageIdx);
-                BuildReadTasksFromSource(stageInfo, resourcesSnapshot, it != scheduledTaskCount.end() ? it->second.TaskCount : 0);
+                RestoreReadTasksFromSource(stageInfo, resourcesSnapshot);
             }
 
             GetMeta().AllowWithSpilling |= stage.GetAllowWithSpilling();
@@ -2239,6 +2237,34 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
         if (++currentTaskIndex >= tasksIds.size()) {
             currentTaskIndex = 0;
         }
+    }
+}
+
+void TKqpTasksGraph::RestoreReadTasksFromSource(TStageInfo& stageInfo, const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot) {
+    const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+
+    YQL_ENSURE(stage.GetSources(0).HasExternalSource());
+    YQL_ENSURE(stage.SourcesSize() == 1, "multiple sources in one task are not supported");
+
+    const auto& stageSource = stage.GetSources(0);
+    const auto& externalSource = stageSource.GetExternalSource();
+
+    auto sourceName = externalSource.GetSourceName();
+    TString structuredToken;
+    if (sourceName) {
+        structuredToken = ReplaceStructuredTokenReferences(externalSource.GetAuthInfo());
+    }
+
+    ui64 nodeOffset = 0;
+    for (size_t i = 0; i < resourceSnapshot.size(); ++i) {
+        if (resourceSnapshot[i].GetNodeId() == GetMeta().ExecuterId.NodeId()) {
+            nodeOffset = i;
+            break;
+        }
+    }
+
+    for (const auto taskId : stageInfo.Tasks) {
+        FillReadTaskFromSource(GetTask(taskId), sourceName, structuredToken, resourceSnapshot, nodeOffset++);
     }
 }
 

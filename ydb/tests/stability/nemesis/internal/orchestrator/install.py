@@ -225,7 +225,7 @@ def get_hosts_from_yaml(yaml_path):
                 host.get("name") or host.get("host")
                 for host in yaml_config.get("config", {}).get("hosts", [])
             ]
-        return hosts
+        return sorted(hosts)
 
 
 def install_on_hosts(hosts, settings: Settings):

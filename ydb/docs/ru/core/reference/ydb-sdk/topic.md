@@ -24,8 +24,6 @@
 
   [Примеры на GitHub](https://github.com/ydb-platform/ydb-python-sdk/tree/main/examples/topic)
 
-<<<<<<< HEAD
-=======
 - C#
 
   [Примеры на GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/Topic)
@@ -33,7 +31,6 @@
 - JavaScript
 
   [Примеры на GitHub](https://github.com/ydb-platform/ydb-js-sdk/tree/main/examples/topic)
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 
 {% endlist %}
 
@@ -332,8 +329,6 @@
                   .build());
   ```
 
-<<<<<<< HEAD
-=======
 - C#
 
   Пример создания топика со списком поддерживаемых кодеков и минимальным количеством партиций:
@@ -367,7 +362,6 @@
   );
   ```
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ### Изменение топика {#alter-topic}
@@ -600,8 +594,6 @@
   topicClient.dropTopic(topicPath);
   ```
 
-<<<<<<< HEAD
-=======
 - C#
 
   ```c#
@@ -619,7 +611,6 @@
   );
   ```
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ## Запись сообщений {#write}
@@ -1055,8 +1046,6 @@
         });
   ```
 
-<<<<<<< HEAD
-=======
 - С#
 
   Асинхронная запись сообщения в топик. В случае переполнения внутреннего буфера будет ожидать, когда буфер освободится для повторной отправки.
@@ -1082,8 +1071,8 @@
 
   ```javascript
   await using writer = createTopicWriter(driver, {
-  	topic: topicName,
-  	producer: producerName,
+    topic: topicName,
+    producer: producerName,
     // Callback that is called when writer receives an acknowledgment for a message.
     onAck: (seqNo, status) => {
       console.log("ACK", seqNo, status);
@@ -1096,7 +1085,6 @@
   await writer.flush();
   ```
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ### Выбор кодека для сжатия сообщений {#codec}
@@ -1200,8 +1188,6 @@
 
   Для включения дедупликации нужно в настройках сессии записи указать опцию `ProducerId` или явно включить дедупликацию, вызвав метод `DeduplicationEnabled()`, например, как в секции ["Подключение к топику"](#start-writer).
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -1214,7 +1200,6 @@
 
   Функциональность на данный момент не поддерживается.
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ### Запись метаданных на уровне сообщения {#messagemeta}
@@ -1338,8 +1323,6 @@
       print(f"{meta_key}: {meta_value}")
   ```
 
-<<<<<<< HEAD
-=======
 - C#
 
   ```c#
@@ -1359,7 +1342,6 @@
   });
   ```
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ### Запись в транзакции {#write-tx}
@@ -1499,6 +1481,8 @@
     analyzeCommitStatus(commitStatus);
     ```
 
+    {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+
   - Асинхронный API
 
     [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteAsync.java)
@@ -1570,9 +1554,9 @@
     }
     ```
 
-  {% endlist %}
+    {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
-  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+  {% endlist %}
 
 - JavaScript
 
@@ -1811,8 +1795,6 @@
           .build();
   ```
 
-<<<<<<< HEAD
-=======
 - C#
 
   ```c#
@@ -1874,7 +1856,6 @@
   });
   ```
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ### Чтение сообщений {#reading-messages}
@@ -1957,26 +1938,21 @@
       process(message)
   ```
 
-- Java
+- Java (синхронный API)
 
-  {% list tabs %}
+  Чтобы читать сообщения без подтверждения обработки, по одному, используйте следующий код:
 
-  - Синхронный API
+  ```java
+  while(true) {
+    Message message = reader.receive();
+    process(message);
+  }
+  ```
 
-    Чтобы читать сообщения без подтверждения обработки, по одному, используйте следующий код:
-
-    ```java
-    while(true) {
-      Message message = reader.receive();
-      process(message);
-    }
-    ```
-
-<<<<<<< HEAD
-- Java (async)
+- Java (асинхронный API)
 
   В асинхронном клиенте нет возможности читать сообщения по одному.
-=======
+
 - JavaScript
 
   ```javascript
@@ -1985,9 +1961,6 @@
     }
   }
   ```
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
-
-  {% endlist %}
 
 {% endlist %}
 
@@ -2156,8 +2129,6 @@
          });
   ```
 
-<<<<<<< HEAD
-=======
 - C#
 
   ```c#
@@ -2194,7 +2165,6 @@
   }
   ```
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 #### Чтение сообщений пакетом с подтверждением
@@ -2458,8 +2428,6 @@
   }
   ```
 
-<<<<<<< HEAD
-=======
 - Python
 
   Для чтения без Consumer'а следует создать читателя с помощью метода `reader` с указанием следующих аргументов:
@@ -2490,7 +2458,6 @@
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ### Чтение в транзакции {#read-tx}
@@ -2628,6 +2595,8 @@
     Тогда полученное сообщение будет закоммичено вместе с транзакцией. Коммитить его отдельно не нужно.
     Метод `receive` свяжет на сервере оффсеты сообщения с транзакцией вызовом `sendUpdateOffsetsInTransaction` и вернёт управление, когда получит ответ на него.
 
+    {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+
   - Асинхронный API
 
     [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadAsync.java)
@@ -2671,11 +2640,9 @@
     }
     ```
 
-<<<<<<< HEAD
-{% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
-=======
-  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
+    {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+
+  {% endlist %}
 
 - JavaScript
 
@@ -3092,8 +3059,6 @@
 
   С практической точки зрения для конечного пользователя режимы не отличаются. Режим полной поддержки отличается от режима совместимости тем, кто гарантирует порядок чтения — клиент или сервер. Режим совместимости достигается серверной обработкой и, как правило, работает медленнее.
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -3102,7 +3067,6 @@
 
   Функциональность на данный момент не поддерживается.
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ### Подтверждение обработки вне читателя {#commit-outside-the-reader}
@@ -3141,8 +3105,6 @@
   )
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -3151,5 +3113,4 @@
 
   Функциональность на данный момент не поддерживается.
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}

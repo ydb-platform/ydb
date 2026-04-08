@@ -164,8 +164,6 @@
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -197,5 +195,4 @@
 
   {% endlist %}
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}

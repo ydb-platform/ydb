@@ -101,8 +101,6 @@
     NYdb::NQuery::TQueryClient client(driver);
     ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -133,7 +131,6 @@
     }
     ```
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 - Java
 
     Для запросов используйте `QueryClient` и `SessionRetryContext` (см. [инициализацию драйвера](./init.md)). Ниже — минимальное подключение и создание клиента для YQL Query Service:
@@ -281,8 +278,6 @@
   }
   ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -319,7 +314,6 @@
   }
   ```
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 
@@ -553,8 +547,6 @@
 
     {% endnote %}
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -736,7 +728,6 @@
     // record Item(String id, String document, float[] embedding) {}
     ```
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 - Python (альтернативный)
 
     Метод принимает массив словарей `items`, где каждый словарь содержит поля `id` - идентификатор, `document` - текст, `embedding` - векторное представление текста.
@@ -1098,8 +1089,6 @@
     }
     ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -1158,7 +1147,6 @@
     // SessionRetryContext tableRetry = SessionRetryContext.create(TableClient.newClient(transport).build()).build();
     ```
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ## Поиск по вектору {#search-by-vector}
@@ -1402,8 +1390,6 @@
     }
     ```
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -1557,7 +1543,6 @@
     // record ResultItem(String id, String document, float score) {}
     ```
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 - Python (alternative)
 
     {% cut "asyncio" %}
@@ -2022,8 +2007,6 @@
 
     Полный код программы доступен по [ссылке](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/vector_index_builtin).
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -2110,5 +2093,4 @@
 
     Вывод совпадает с примером на Python.
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}

@@ -75,8 +75,6 @@
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -127,5 +125,4 @@
   }
   ```
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}

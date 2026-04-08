@@ -220,8 +220,6 @@
 
   В Python SDK сессия автоматически восстанавливает связь с кластером {{ ydb-short-name }} при сбоях. Рекомендуется использовать контекстный менеджер (`with` или `async with`) для гарантированного закрытия сессии при выходе из блока. При работе с семафорами через контекстный менеджер (`with session.semaphore(name)` или `async with session.semaphore(name)`) семафор автоматически освобождается при выходе из блока, а сессия — при закрытии контекста.
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   В JS SDK для отслеживания таких ситуаций используется сигнал `session.signal`, который прерывается вместе с сессией. SDK самостоятельно обрабатывает ошибки транспортного уровня и восстанавливает соединение с сервисом, пытаясь восстановить сессию, если это возможно. Таким образом, клиенту достаточно следить за сигналом сессии, чтобы не совершать действий когда сессия была закрыта или просрочена.
@@ -232,7 +230,6 @@
 
   Завершите сессию (`close()`), когда ваш сценарий отработал: так вы явно освободите соединение с узлом. Пока сессия не закрыта, SDK при сбоях сети сам повторяет подключение согласно `CoordinationSessionSettings`. Семафор держите только на время решения пользовательской задачи и отпускайте через `SemaphoreLease.release()`, когда ресурс больше не нужен.
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ## Работа с семафорами {#semaphore}
@@ -306,8 +303,6 @@
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -328,7 +323,6 @@
       .expectSuccess("create semaphore failed");
   ```
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ### Захват семафора {#acquire-semaphore}
@@ -419,8 +413,6 @@
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -452,7 +444,6 @@
 
   В документации API указано: в один момент времени сессия может удерживать **только один** семафор; повторные вызовы для того же имени **заменяют** предыдущую операцию (например, чтобы уменьшить `count` или сменить таймаут).
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 Взятое значение захваченного семафора можно снизить (но не увеличить), вновь вызвав для него метод `AcquireSemaphore` с меньшим значением.
@@ -511,8 +502,6 @@
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -531,7 +520,6 @@
       .expectSuccess("update semaphore failed");
   ```
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 Этот вызов не требует захвата семафора и не приводит к нему. Если требуется, чтобы данные обновлял только один конкретный клиент, то это необходимо явным образом обеспечить, например, захватив семафор, обновив данные и отпустив семафор обратно.
@@ -616,8 +604,6 @@
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   ```javascript
@@ -646,7 +632,6 @@
 
   Для подписки на изменения используйте `watchSemaphore` с тем же режимом описания и [WatchSemaphoreMode](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/WatchSemaphoreMode.java) (данные, владельцы или оба). Объект [SemaphoreWatcher](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/SemaphoreWatcher.java) содержит снимок `SemaphoreDescription` и `getChangedFuture()` — `CompletableFuture<Result<SemaphoreChangedEvent>>` (см. [SemaphoreChangedEvent](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/SemaphoreChangedEvent.java), поля `isDataChanged`, `isOwnersChanged`). Future завершится при следующем событии; после уведомления для продолжения наблюдения вызовите `watchSemaphore` снова (см. [тесты](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/test/java/tech/ydb/coordination/CoordinationServiceTest.java)).
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ### Освобождение семафора {#release-semaphore}
@@ -705,8 +690,6 @@
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   Чтобы отпустить захваченный в сессии семафор, необходимо вызвать метод `Release` у объекта `Lease`. Если взятие семафора было с использованием конструкции using, то при выходе из скоупа, семафор будет освобожден автоматически.
@@ -723,7 +706,6 @@
   lease.release().join().expectSuccess("release failed");
   ```
 
->>>>>>> 3d1fe7d6db4 (Update javascript code snippets (#36498))
 {% endlist %}
 
 ## Важные особенности

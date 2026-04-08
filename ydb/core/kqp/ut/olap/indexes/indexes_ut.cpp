@@ -240,7 +240,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
     }
 
-    Y_UNIT_TEST_DUO(MinMaxNulls, UseQueryService) {
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(MinMaxNulls, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);

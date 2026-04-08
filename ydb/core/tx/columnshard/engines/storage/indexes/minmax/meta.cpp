@@ -25,7 +25,7 @@ bool TIndexMeta::DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op
         case NArrow::NSSA::TIndexCheckOperation::EOperation::GreaterOrEqual:
             return true;
         default:
-            Y_VERIFY(false, "unhandled enum case");
+            Y_ABORT();
     }
 }
 
@@ -89,7 +89,7 @@ bool TIndexMeta::Skip(NArrow::NAccessor::TMinMax chunkValue, const std::shared_p
             case NArrow::NSSA::TIndexCheckOperation::EOperation::GreaterOrEqual:
                 return requestValue > chunkValue.Max();
             default:
-                AFL_VERIFY(false)("error", "unreachable");
+                Y_ABORT();
         }
     }
 }

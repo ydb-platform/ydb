@@ -42,7 +42,7 @@ TMinMax TMinMax::Compute(std::shared_ptr<arrow::Array> arr) {
 
 TMinMax TMinMax::Compute(std::shared_ptr<arrow::ChunkedArray> arr) {
     auto res = TMinMax::MakeNull(arr->type());
-    for (auto& chunk : arr->chunks()) {
+    for (const auto& chunk : arr->chunks()) {
         res.UniteWith(Compute(chunk));
     }
     return res;
@@ -54,6 +54,7 @@ constexpr char NullTMinMaxFlag = '0';
 TMinMax TMinMax::FromBinaryString(std::string_view data, const std::shared_ptr<arrow::DataType>& fieldType) {
     AFL_VERIFY(!data.empty())("details", "empty binary minmax payload");
     if (data[0] == NullTMinMaxFlag) {
+        AFL_VERIFY(data.size() == 1);
         return MakeNull(fieldType);
     }
     std::vector<std::shared_ptr<arrow::Scalar>> fields;
@@ -126,6 +127,7 @@ void TMinMax::UniteWith(TMinMax other) {
         }
     }
 }
+
 namespace NArrowCompare {
 
 bool cmp(NKikimr::NKernels::EOperation op, const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {

@@ -1,6 +1,14 @@
 # Deploying {{ ydb-short-name }} Cluster Manually
 
 <!-- markdownlint-disable blanks-around-fences -->
+<<<<<<< HEAD
+=======
+{% note warning %}
+
+This guide is only for deploying clusters with [V1 configuration](../../configuration-management/configuration-v1/index.md). Deploying clusters with [V2 configuration](../../configuration-management/configuration-v2/index.md) is currently under development.
+
+{% endnote %}
+>>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225))
 
 This document describes how to deploy a multi-tenant {{ ydb-short-name }} cluster on multiple bare-metal or virtual servers.
 
@@ -8,7 +16,11 @@ This document describes how to deploy a multi-tenant {{ ydb-short-name }} cluste
 
 ### Prerequisites {#requirements}
 
+<<<<<<< HEAD
 Review the [system requirements](../../concepts/system-requirements.md) and the [cluster topology](../../../concepts/topology.md).
+=======
+Review the [system requirements](../../../devops/concepts/system-requirements.md) and the [cluster topology](../../../concepts/topology.md).
+>>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225))
 
 Make sure you have SSH access to all servers. This is required to install artifacts and run the {{ ydb-short-name }} executable.
 
@@ -36,7 +48,11 @@ Run each static node (data node) on a separate server. Both static and dynamic n
 
 {% endnote %}
 
+<<<<<<< HEAD
 For more information about hardware requirements, see [{#T}](../../concepts/system-requirements.md).
+=======
+For more information about hardware requirements, see [{#T}](../../../devops/concepts/system-requirements.md).
+>>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225))
 
 ### Preparing TLS Keys and Certificates {#tls-certificates}
 
@@ -79,7 +95,11 @@ sudo usermod -aG disk ydb
 
 ## Configure File Descriptor Limits {#file-descriptors}
 
+<<<<<<< HEAD
 For proper operation of {{ ydb-short-name }}, especially when using [spilling](../../../concepts/spilling.md) in multi-node clusters, it is recommended to increase the limit of simultaneously open file descriptors.
+=======
+For proper operation of {{ ydb-short-name }}, especially when using [spilling](../../../concepts/query_execution/spilling.md) in multi-node clusters, it is recommended to increase the limit of simultaneously open file descriptors.
+>>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225))
 
 To change the file descriptor limit, add the following lines to the `/etc/security/limits.conf` file:
 
@@ -165,7 +185,11 @@ The names of block devices depend on the operating system settings provided by t
   sudo partx --u ${DISK}
   ```
 
+<<<<<<< HEAD
   As a result, a disk labeled `/dev/disk/by-partlabel/ydb_disk_ssd_01` will appear on the system.
+=======
+  Execute the command `ls -l /dev/disk/by-partlabel/` to ensure that a disk with the label `/dev/disk/by-partlabel/ydb_disk_ssd_01` has appeared in the system.
+>>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225))
 
   If you plan to use more than one disk on each server, replace `ydb_disk_ssd_01` with a unique label for each one. Disk labels should be unique within each server. They are used in configuration files, see the following guides.
 
@@ -420,7 +444,11 @@ The database creation procedure depends on whether you enabled user authenticati
 
   ```bash
   export LD_LIBRARY_PATH=/opt/ydb/lib
+<<<<<<< HEAD
   /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://`hostname -s`:2135 \
+=======
+  /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://`hostname -f`:2135 \
+>>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225))
       admin database /Root/testdb create ssd:1
   echo $?
   ```
@@ -431,7 +459,11 @@ The database creation procedure depends on whether you enabled user authenticati
 
   ```bash
   export LD_LIBRARY_PATH=/opt/ydb/lib
+<<<<<<< HEAD
   /opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -s`:2135 \
+=======
+  /opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://$(hostname -f):2135 \
+>>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225))
       admin database /Root/testdb create ssd:1
   echo $?
   ```
@@ -542,13 +574,18 @@ To perform initial account setup in the created {{ ydb-short-name }} cluster, ru
 1. Create additional accounts:
 
   ```bash
+<<<<<<< HEAD
   ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+=======
+  ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root --password-file <path_to_root_pass_file> \
+>>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225))
       yql -s 'CREATE USER user1 PASSWORD "passw0rd"'
   ```
 
 1. Set the account rights by including them in the integrated groups:
 
   ```bash
+<<<<<<< HEAD
   ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
       yql -s 'ALTER GROUP `ADMINS` ADD USER user1'
   ```
@@ -556,6 +593,14 @@ To perform initial account setup in the created {{ ydb-short-name }} cluster, ru
 In the command examples above, `<node.ydb.tech>` is the FQDN of the server running any dynamic node that serves the `/Root/testdb` database.
 
 When running the account creation and group assignment commands, the {{ ydb-short-name }} CLI client will request the `root` user's password. You can avoid multiple password entries by creating a connection profile as described in the [{{ ydb-short-name }} CLI documentation](../../../reference/ydb-cli/profile/index.md).
+=======
+  ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root --password-file <path_to_root_pass_file> \
+      yql -s 'ALTER GROUP `ADMINS` ADD USER user1'
+  ```
+
+In the command examples listed above, `<node.ydb.tech>` is the FQDN of the server where any dynamic node servicing the `/Root/testdb` database is running. When connecting via SSH to a {{ ydb-short-name }} node, it's convenient to use the `grpcs://$(hostname -f):2136` command to use the current server's FQDN.
+
+>>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225))
 
 ## Start Using the Created Database {#try-first-db}
 

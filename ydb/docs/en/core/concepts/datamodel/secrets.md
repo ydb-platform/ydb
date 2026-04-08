@@ -6,7 +6,7 @@ This functionality is in "Preview" mode.
 
 {% endnote %}
 
-To work with external data sources in {{ ydb-full-name }}, [federated queries](../federated_query/index.md) are used. Federated queries utilize various access credentials for authentication in external systems. These credentials are stored in separate objects called secrets. Secrets are only available for writing and updating; their values cannot be retrieved.
+To work with external data sources in {{ ydb-full-name }}, [federated queries](../query_execution/federated_query/index.md) are used. Federated queries utilize various access credentials for authentication in external systems. These credentials are stored in separate objects called secrets. Secrets are only available for writing and updating; their values cannot be retrieved.
 
 {% note warning %}
 

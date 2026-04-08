@@ -16,34 +16,33 @@ items:
     mode: link
 - name: Cluster topology
   href: topology.md
+<<<<<<< HEAD
+=======
+- name: Bridge mode
+  href: bridge.md
+- name: Query execution
+  href: query_execution/index.md
+  include:
+    path: query_execution/toc_p.yaml
+    mode: link
+>>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225))
 - name: Transactions
   href: transactions.md
-- name: Secondary indexes
-  href: secondary_indexes.md
-- name: Vector search
-  href: vector_search.md
-- name: Spilling
-  href: spilling.md
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed
 - name: Time to live and eviction
   href: ttl.md
+<<<<<<< HEAD
 - name: Scan queries
   href: query_execution/scan_query.md
+=======
+>>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225))
 - name: Database limits
   href: limits-ydb.md
-- name: Multi-Version Concurrency Control (MVCC)
-  href: mvcc.md
 - name: Asynchronous replication
   href: async-replication.md
   when: feature_async_replication
 - name: Data transfer
   href: transfer.md
   when: feature_transfer
-- name: Query optimizer
-  href: optimizer.md
-- name: Federated query
-  include:
-    path: federated_query/toc_p.yaml
-    mode: link

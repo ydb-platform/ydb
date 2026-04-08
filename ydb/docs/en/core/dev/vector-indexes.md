@@ -1,8 +1,12 @@
 # Vector Indexes
 
+<<<<<<< HEAD
 {% include [limitations](../_includes/vector_index_limitations.md) %}
 
 [Vector indexes](../concepts/glossary.md#vector-index) are specialized data structures that enable efficient [vector search](../concepts/vector_search.md) in multidimensional spaces. Unlike [secondary indexes](../concepts/glossary.md#secondary-index), which optimize searching by equality or range, vector indexes allow similarity searching based on [similarity or distance functions](../yql/reference/udf/list/knn.md#functions).
+=======
+[Vector indexes](../concepts/glossary.md#vector-index) are specialized data structures that enable efficient [vector search](../concepts/query_execution/vector_search.md) in multidimensional spaces. Unlike [secondary indexes](../concepts/glossary.md#secondary-index), which optimize searching by equality or range, vector indexes allow similarity searching based on [similarity or distance functions](../yql/reference/udf/list/knn.md#functions).
+>>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225))
 
 Data in a {{ ydb-short-name }} table is stored and sorted by the primary key, ensuring efficient searching by exact match and range scanning. Vector indexes provide similar efficiency for nearest neighbor searches in vector spaces.
 

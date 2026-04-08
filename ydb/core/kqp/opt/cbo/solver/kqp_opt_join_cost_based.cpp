@@ -9,6 +9,8 @@
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <yql/essentials/utils/log/log.h>
 
+#include <chrono>
+
 namespace NKikimr::NKqp {
 
 using namespace NYql::NNodes;
@@ -325,7 +327,8 @@ public:
         TExprContext& exprCtx,
         bool enableShuffleElimination,
         TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM,
-        TTableAliasMap* tableAliases
+        TTableAliasMap* tableAliases,
+        std::chrono::milliseconds hardTimeout
     )
         : IOptimizerNew(ctx)
         , OptimizerSettings_(optimizerSettings)
@@ -333,6 +336,7 @@ public:
         , EnableShuffleElimination(enableShuffleElimination && orderingsFSM != nullptr)
         , OrderingsFSM(orderingsFSM)
         , TableAliases(tableAliases)
+        , HardTimeout_(hardTimeout)
     {}
 
     std::shared_ptr<TJoinOptimizerNode> JoinSearch(
@@ -372,9 +376,9 @@ private:
         }
 
         if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverClassic<TNodeSet>>) {
-            return TDPHypSolverClassic<TNodeSet>(hypergraph, this->Pctx);
+            return TDPHypSolverClassic<TNodeSet>(hypergraph, this->Pctx, HardTimeout_);
         } else if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverShuffleElimination<TNodeSet>>) {
-            return TDPHypSolverShuffleElimination<TNodeSet>(hypergraph, this->Pctx, *OrderingsFSM);
+            return TDPHypSolverShuffleElimination<TNodeSet>(hypergraph, this->Pctx, *OrderingsFSM, HardTimeout_);
         } else {
             static_assert(false, "No such DPHyp implementation");
         }
@@ -541,6 +545,8 @@ private:
 
     TSimpleSharedPtr<TOrderingsStateMachine> OrderingsFSM;
     TTableAliasMap* TableAliases;
+
+    std::chrono::milliseconds HardTimeout_;
 };
 
 IOptimizerNew* MakeNativeOptimizerNew(
@@ -549,9 +555,10 @@ IOptimizerNew* MakeNativeOptimizerNew(
     TExprContext& ectx,
     bool enableShuffleElimination,
     TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM,
-    TTableAliasMap* tableAliases
+    TTableAliasMap* tableAliases,
+    std::chrono::milliseconds hardTimeout
 ) {
-    return new TOptimizerNativeNew(pctx, settings, ectx, enableShuffleElimination, orderingsFSM, tableAliases);
+    return new TOptimizerNativeNew(pctx, settings, ectx, enableShuffleElimination, orderingsFSM, tableAliases, hardTimeout);
 }
 
 void CollectInterestingOrderingsFromJoinTree(

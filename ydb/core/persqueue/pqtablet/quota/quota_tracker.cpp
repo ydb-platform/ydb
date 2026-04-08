@@ -46,7 +46,7 @@ namespace NKikimr::NPQ {
     }
 
     void TQuotaTracker::Update(const TInstant timestamp) {
-        if (timestamp <= LastUpdateTime) {
+        if (timestamp.MilliSeconds() <= LastUpdateTime.MilliSeconds()) {
             return;
         }
 

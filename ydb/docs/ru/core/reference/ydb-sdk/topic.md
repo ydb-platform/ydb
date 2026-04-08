@@ -2517,6 +2517,13 @@
     }
     ```
 
+<<<<<<< HEAD
+=======
+  {% endlist %}
+
+  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+
+>>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225))
   {% endlist %}
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}

@@ -2,8 +2,6 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_database.h>
 
-#include <util/generic/fwd.h>
-
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 using namespace NActors;
@@ -12,52 +10,34 @@ using namespace NKikimr::NTabletFlatExecutor;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool TPartitionActor::PrepareInitSchema(
+bool TPartitionActor::PrepareStorePartitionIds(
     const TActorContext& ctx,
     TTransactionContext& tx,
-    TTxPartition::TInitSchema& args)
+    TTxPartition::TStorePartitionIds& args)
 {
     Y_UNUSED(ctx);
     Y_UNUSED(tx);
     Y_UNUSED(args);
 
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "PartitionDirect schema initializing");
-
     return true;
 }
 
-void TPartitionActor::ExecuteInitSchema(
+void TPartitionActor::ExecuteStorePartitionIds(
     const TActorContext& ctx,
     TTransactionContext& tx,
-    TTxPartition::TInitSchema& args)
+    TTxPartition::TStorePartitionIds& args)
 {
     Y_UNUSED(ctx);
-    Y_UNUSED(args);
 
     TPartitionDatabase db(tx.DB);
-    db.InitSchema();
-
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "PartitionDirect schema execution completed");
+    db.StoreDirectBlockGroupsConnections(args.DirectBlockGroupsConnections);
 }
 
-void TPartitionActor::CompleteInitSchema(
+void TPartitionActor::CompleteStorePartitionIds(
     const TActorContext& ctx,
-    TTxPartition::TInitSchema& args)
+    TTxPartition::TStorePartitionIds& args)
 {
-    Y_UNUSED(args);
-
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "PartitionDirect schema initialized");
-
-    ExecuteTx(ctx, CreateTx<TLoadState>());
+    Start(ctx, args.DirectBlockGroupsConnections);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

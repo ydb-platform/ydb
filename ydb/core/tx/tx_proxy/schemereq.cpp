@@ -766,13 +766,13 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     static TVector<TString> ExtractTierExternalDataSourcePaths(const NKikimrSchemeOp::TModifyScheme& pbModifyScheme) {
         TVector<TString> result;
         switch (pbModifyScheme.GetOperationType()) {
-            case NKikimrSchemeOp::ESchemeOpAlterTable: {
-                const auto& alterTable = pbModifyScheme.GetAlterTable();
-                if (!alterTable.HasTTLSettings() || !alterTable.GetTTLSettings().HasEnabled()) {
+            case NKikimrSchemeOp::ESchemeOpCreateColumnTable: {
+                const auto& createColumnTable = pbModifyScheme.GetCreateColumnTable();
+                if (!createColumnTable.HasTtlSettings() || !createColumnTable.GetTtlSettings().HasEnabled()) {
                     break;
                 }
 
-                for (auto&& tier : alterTable.GetTTLSettings().GetEnabled().GetTiers()) {
+                for (auto&& tier : createColumnTable.GetTtlSettings().GetEnabled().GetTiers()) {
                     if (tier.HasEvictToExternalStorage()) {
                         result.emplace_back(tier.GetEvictToExternalStorage().GetStorage());
                     }
@@ -931,7 +931,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             ResolveForACL.push_back(toResolve);
             break;
         }
-        case NKikimrSchemeOp::ESchemeOpAlterTable:
         case NKikimrSchemeOp::ESchemeOpAlterColumnTable: {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
@@ -940,6 +939,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             AddTierExternalDataSourceResolveTasks(pbModifyScheme, workingDir);
             break;
         }
+        case NKikimrSchemeOp::ESchemeOpAlterTable:
         case NKikimrSchemeOp::ESchemeOpDropIndex:
         case NKikimrSchemeOp::ESchemeOpCreateCdcStream:
         case NKikimrSchemeOp::ESchemeOpAlterCdcStream:
@@ -1085,7 +1085,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         }
         case NKikimrSchemeOp::ESchemeOpCreateIndexedTable:
         case NKikimrSchemeOp::ESchemeOpCreateColumnStore:
-        case NKikimrSchemeOp::ESchemeOpCreateColumnTable:
         case NKikimrSchemeOp::ESchemeOpCreateBlockStoreVolume:
         case NKikimrSchemeOp::ESchemeOpCreateFileStore:
         case NKikimrSchemeOp::ESchemeOpCreateRtmrVolume:
@@ -1105,6 +1104,15 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             toResolve.Path = workingDir;
             toResolve.RequireAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpCreateColumnTable:
+        {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = workingDir;
+            toResolve.RequireAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
+            ResolveForACL.push_back(toResolve);
+            AddTierExternalDataSourceResolveTasks(pbModifyScheme, workingDir);
             break;
         }
         case NKikimrSchemeOp::ESchemeOpCreateTransfer:

@@ -760,6 +760,96 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
         }
     }
 
+    Y_UNIT_TEST(TieringCreateTableWithTtlRequiresSecretAccess) {
+        const TString tierPath = "/Root/tier1";
+        const TString accessKeySecretName = "/Root/create-ttl-access-key-secret";
+        const TString secretKeySecretName = "/Root/create-ttl-secret-key-secret";
+        const TString tablePath = "/Root/ttl_create_acl_check";
+        const TString user = "root1@builtin";
+
+        auto kikimr = MakeS3TieringKikimrRunner(false, true);
+        auto adminClient = kikimr->GetTableClient();
+        auto adminSession = adminClient.CreateSession().GetValueSync().GetSession();
+
+        {
+            const TString query = fmt::format(R"(
+                CREATE SECRET `{access_key_secret}` WITH (value = "minio");
+                CREATE SECRET `{secret_key_secret}` WITH (value = "minio123");
+            )",
+                "access_key_secret"_a = accessKeySecretName,
+                "secret_key_secret"_a = secretKeySecretName
+            );
+
+            auto result = adminSession.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString minioLocation = "http://localhost:" + GetExternalPort("minio", "9000") + "/datalake/";
+        CreateTierExternalDataSource(
+            adminSession,
+            tierPath,
+            minioLocation,
+            accessKeySecretName,
+            secretKeySecretName,
+            false /*replace*/);
+
+        {
+            const TString query = fmt::format(R"(
+                GRANT CREATE TABLE, DESCRIBE SCHEMA ON `/Root` TO `{user}`;
+                GRANT DESCRIBE SCHEMA ON `{tier_path}` TO `{user}`;
+            )",
+                "user"_a = user,
+                "tier_path"_a = tierPath
+            );
+
+            auto result = adminSession.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto userClient = kikimr->GetTableClient(NYdb::NTable::TClientSettings().AuthToken(user));
+        auto userSession = userClient.CreateSession().GetValueSync().GetSession();
+
+        const TString createTableQuery = fmt::format(R"(
+            CREATE TABLE `{table_path}` (
+                `timestamp` Timestamp NOT NULL,
+                `uid` Uint64 NOT NULL,
+                `value` String,
+                PRIMARY KEY (`timestamp`, `uid`)
+            ) WITH (
+                STORE = COLUMN,
+                TTL = Interval("PT1H") TO EXTERNAL DATA SOURCE `{tier_path}` ON `timestamp`
+            );
+        )",
+            "table_path"_a = tablePath,
+            "tier_path"_a = tierPath
+        );
+
+        {
+            auto result = userSession.ExecuteSchemeQuery(createTableQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::UNAUTHORIZED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Access denied", result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = fmt::format(R"(
+                GRANT SELECT ROW ON `{access_key_secret}` TO `{user}`;
+                GRANT SELECT ROW ON `{secret_key_secret}` TO `{user}`;
+            )",
+                "access_key_secret"_a = accessKeySecretName,
+                "secret_key_secret"_a = secretKeySecretName,
+                "user"_a = user
+            );
+
+            auto result = adminSession.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = userSession.ExecuteSchemeQuery(createTableQuery).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(TieringInvalidSecrets) {
         const TString tablePath = "/Root/olapStore/olapTable";
         const TString tierPath = "/Root/tier1";

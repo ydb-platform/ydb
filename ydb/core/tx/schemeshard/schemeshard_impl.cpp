@@ -3215,6 +3215,11 @@ void TSchemeShard::PersistPersQueue(NIceDb::TNiceDb &db, TPathId pathId, TShardI
                 NIceDb::TUpdate<Schema::PersQueues::Parent>(parent),
                 NIceDb::TUpdate<Schema::PersQueues::AdjacentParent>(adjacentParent));
 
+    if (partitionInfo.CreationTimestamp) {
+        db.Table<Schema::PersQueues>().Key(pathId.LocalPathId, partitionInfo.PqId).Update(
+            NIceDb::TUpdate<Schema::PersQueues::CreationTimestampSeconds>(partitionInfo.CreationTimestamp.Seconds()));
+    }
+
     if (partitionInfo.KeyRange) {
         if (partitionInfo.KeyRange->FromBound) {
             db.Table<Schema::PersQueues>().Key(pathId.LocalPathId, partitionInfo.PqId).Update(

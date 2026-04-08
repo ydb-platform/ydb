@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     autopartitioning_manager.cpp
     consumer_offset_tracker.cpp
+    deduplication_write_queue.cpp
     message_id_deduplicator.cpp
     offload_actor.cpp
     ownerinfo.cpp
@@ -37,6 +38,8 @@ PEERDIR(
     ydb/core/persqueue/pqtablet/partition/mlp
     ydb/core/persqueue/pqtablet/quota
 )
+
+GENERATE_ENUM_SERIALIZATION(deduplication_write_queue.h)
 
 END()
 

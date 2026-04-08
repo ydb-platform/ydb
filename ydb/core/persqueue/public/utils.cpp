@@ -284,7 +284,7 @@ std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const TCollection& pa
     }
 
     for (const auto& p : partitions) {
-        result.emplace(GetPartitionId(p), TPartitionGraph::Node(GetPartitionId(p), p.GetTabletId(), p.GetKeyRange().GetFromBound(), p.GetKeyRange().GetToBound(), TInstant::Seconds(p.GetCreationTimestamp())));
+        result.emplace(GetPartitionId(p), TPartitionGraph::Node(GetPartitionId(p), p.GetTabletId(), p.GetKeyRange().GetFromBound(), p.GetKeyRange().GetToBound(), TInstant::Seconds(p.GetCreationTimestampSeconds())));
     }
 
     std::deque<TPartitionGraph::Node*> queue;

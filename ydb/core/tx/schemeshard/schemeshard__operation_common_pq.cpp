@@ -42,7 +42,7 @@ void FillPartition(NKikimrPQ::TPQTabletConfig::TPartition& partition, const TTop
     }
     partition.SetTabletId(tabletId);
     if (pq->CreationTimestamp) {
-        partition.SetCreationTimestamp(pq->CreationTimestamp.Seconds());
+        partition.SetCreationTimestampSeconds(pq->CreationTimestamp.Seconds());
     }
 }
 
@@ -584,7 +584,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                         info->MutableChildPartitionIds()->AddAlreadyReserved(children);
                     }
                     if (pq->CreationTimestamp) {
-                        info->SetCreationTimestamp(pq->CreationTimestamp.Seconds());
+                        info->SetCreationTimestampSeconds(pq->CreationTimestamp.Seconds());
                     }
                 }
             }

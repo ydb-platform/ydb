@@ -692,7 +692,7 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                     partition.AddChildPartitionIds(child);
                 }
                 if (desc.Info->CreationTimestamp) {
-                    partition.SetCreationTimestamp(desc.Info->CreationTimestamp.Seconds());
+                    partition.SetCreationTimestampSeconds(desc.Info->CreationTimestamp.Seconds());
                 }
             }
 
@@ -733,7 +733,7 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                         pq->KeyRange->SerializeToProto(*partition->MutableKeyRange());
                     }
                     if (pq->CreationTimestamp) {
-                        partition->SetCreationTimestamp(pq->CreationTimestamp.Seconds());
+                        partition->SetCreationTimestampSeconds(pq->CreationTimestamp.Seconds());
                     }
                 }
             }

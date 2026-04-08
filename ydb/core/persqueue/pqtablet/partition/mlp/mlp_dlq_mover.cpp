@@ -91,7 +91,7 @@ void TDLQMoverActor::Handle(NSQS::TSqsEvents::TEvConfiguration::TPtr& ev) {
     }
 
     if (!result.TopicCreated) {
-        return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "SQS DLQ '" << Settings.DestinationTopic << "' queue does not initialized");
+        return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "SQS DLQ '" << Settings.DestinationTopic << "' queue is not initialized");
     }
 
     auto queueName = result.QueueName;

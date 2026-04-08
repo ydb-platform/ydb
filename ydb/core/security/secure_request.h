@@ -44,7 +44,7 @@ private:
                 return static_cast<TDerived*>(this)->OnAccessDenied(result->Error, ctx);
             }
         } else {
-            UserAdmin = IsTokenAllowed(result->Token.Get(), GetAdministrationAllowedSIDs());
+            UserAdmin = IsAdministrator(AppData(), result->Token.Get());
             if (RequireAdminAccess && !UserAdmin) {
                 return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{.Message = "Administrative access denied", .Retryable = false}, ctx);
             }

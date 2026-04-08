@@ -60,7 +60,7 @@ TStringBuf Unquoted(TStringBuf content) {
 }
 
 bool IsBinding(TStringBuf content) {
-    return 1 <= content.size() && content.front() == '$';
+    return !content.empty() && content.front() == '$';
 }
 
 TStringBuf Unbinded(TStringBuf content) {

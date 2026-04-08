@@ -405,6 +405,7 @@ int main(int argc, char** argv) {
                 Allow(getpriority),
                 Allow(getrandom),
                 Allow(getrlimit),
+                Allow(prlimit64),
                 Allow(getrusage),
                 Allow(getsid),
                 Allow(gettid),

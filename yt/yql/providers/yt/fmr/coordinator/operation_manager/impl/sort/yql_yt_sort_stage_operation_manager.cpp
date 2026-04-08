@@ -61,6 +61,11 @@ public:
         return TGetNewPartIdsForTaskResult{};
     }
 
+    std::vector<TString> GetExpectedOutputTableIds(const TOperationParams& params) const override {
+        const auto& sortParams = std::get<TSortOperationParams>(params);
+        return {sortParams.Output.FmrTableId.Id};
+    }
+
     std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& context) override {
         std::vector<TPartIdInfo> groupsToClear;
         if (auto* localSortTaskParams = std::get_if<TLocalSortTaskParams>(&context.Task->TaskParams)) {
@@ -132,6 +137,8 @@ private:
         ui64 maxAllowedTables = GetMaxAllowedTablesForMerge(context.FmrOperationSpec);
 
         if (context.PartitionResult.TaskInputs.size() > maxAllowedTables) {
+            YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT: too many tables for sort operation to merge ("
+                << context.PartitionResult.TaskInputs.size() << " > " << maxAllowedTables << ")";
             TFmrError error = {
                 .Component = EFmrComponent::Coordinator,
                 .Reason = EFmrErrorReason::FallbackOperation,

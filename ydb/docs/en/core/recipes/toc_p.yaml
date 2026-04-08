@@ -22,5 +22,5 @@ items:
   include:
     mode: link
     path: transfer/toc_p.yaml
-- name: Import and export for column tables
+- name: Import and export data to column tables
   href: import-export-column-tables.md

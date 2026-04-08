@@ -689,6 +689,11 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', b
 
     for test_from_file in tests_from_file:
         full_name = test_from_file['full_name']
+
+        if '[*/*]' in test_from_file.get('testcase', ''):
+            logging.info(f"Skipping chunk wildcard pattern: {full_name}")
+            continue
+
         issue_key = (full_name, build_type)
         if issue_key in muted_tests_in_issues:
             logging.info(
@@ -697,6 +702,9 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', b
             continue
 
         monitor = monitor_by_name.get((full_name, build_type))
+        if monitor and is_chunk_test(monitor):
+            logging.info(f"Skipping chunk test: {full_name}")
+            continue
         if monitor:
             entry = {
                 'mute_string': f"{monitor.get('suite_folder')} {monitor.get('test_name')}",
@@ -1028,6 +1036,14 @@ def mute_worker(args):
         elif args.mode == 'create_issues':
             file_path = args.file_path
             logging.info(f"Creating issues from file: {file_path}")
+
+            profile_id = make_profile_id(args.branch, build_type)
+            allowed_profiles = load_configured_digest_profile_ids()
+            if profile_id not in allowed_profiles:
+                logging.info(
+                    f"Profile {profile_id!r} not in mute_issue_and_digest_config.json — skipping issue creation"
+                )
+                return 0
 
             queue_items = create_mute_issues(
                 all_data,

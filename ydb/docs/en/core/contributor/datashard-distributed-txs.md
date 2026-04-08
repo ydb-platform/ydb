@@ -12,7 +12,7 @@ Participants are allowed to execute transactions in any order for efficiency. Ho
 
 Additionally, {{ ydb-short-name }} has support for "volatile" distributed transactions. These transactions allow participants, including coordinators, to store transaction data in volatile memory, which is lost when the shards are restarted until the transaction is completed and the effects are persisted. This also allows participants to abort the transaction until the very last moment, which will be guaranteed to abort for all other participants. Using volatile memory removes persistent storage from the critical path before the transaction execution, reducing latency.
 
-When executing the user's YQL transactions, {{ ydb-short-name }} currently uses distributed transactions only for the final commit of non-read-only transactions. Queries before the commit of a YQL transaction are executed as single-shard operations, using optimistic locks and global [multi-version concurrency control (MVCC)](../concepts/mvcc.md) snapshots to ensure data consistency.
+When executing the user's YQL transactions, {{ ydb-short-name }} currently uses distributed transactions only for the final commit of non-read-only transactions. Queries before the commit of a YQL transaction are executed as single-shard operations, using optimistic locks and global [multi-version concurrency control (MVCC)](../concepts/query_execution/mvcc.md) snapshots to ensure data consistency.
 
 ## Basic distributed transactions protocol
 

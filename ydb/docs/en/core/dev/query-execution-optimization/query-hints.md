@@ -52,7 +52,11 @@ SELECT * FROM
 
 {% note info %}
 
+<<<<<<< HEAD:ydb/docs/en/core/dev/query-execution-optimization/query-hints.md
 All hints (`Rows`, `Bytes`, `JoinOrder`) work only with **enabled** [cost based optimizer](../../concepts/optimizer.md), except `JoinType` - it can be specified even if CBO is disabled.
+=======
+All hints (`Rows`, `Bytes`, `JoinOrder`) work only with **enabled** [cost based optimizer](../concepts/query_execution/optimizer.md), except `JoinType` - it can be specified even if CBO is disabled.
+>>>>>>> fb12d3cafd2 (DOCSUP-124714: Переводы Февраля - 3. Организация процесса перевода (1 архив) (1 шт.) (#35225)):ydb/docs/en/core/dev/query-hints.md
 
 {% endnote %}
 

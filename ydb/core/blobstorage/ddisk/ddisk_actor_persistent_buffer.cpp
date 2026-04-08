@@ -37,6 +37,7 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::Handle(TEvPrivate::TEvHandlePersistentBufferEventForChunk::TPtr ev) {
         auto chunkIdx = ev->Get()->ChunkIndex;
         Y_ABORT_UNLESS(chunkIdx);
+        IssuePersistentBufferChunkAllocationInflight = false;
         PersistentBufferSpaceAllocator.AddNewChunk(chunkIdx);
         PersistentBufferAllocatedChunks.insert(chunkIdx);
         if (!PersistentBufferReady) {
@@ -364,7 +365,6 @@ namespace NKikimr::NDDisk {
         const auto sectors = PersistentBufferSpaceAllocator.Occupy(sectorsCnt);
         if (sectors.size() == 0) {
             if (PersistentBufferSpaceAllocator.OwnedChunks.size() < PersistentBufferFormat.MaxChunks) {
-                STLOG(PRI_DEBUG, BS_DDISK, BSDD14, "TDDiskActor::ProcessPersistentBufferWrite empty space, request new chunk");
                 PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferWrite");
                 IssuePersistentBufferChunkAllocation();
             } else {

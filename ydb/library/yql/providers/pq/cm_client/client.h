@@ -342,7 +342,7 @@ struct TPermission {
     using TSelf = TPermission;
 
     FLUENT_SETTING_VECTOR(EPermission, PermissionNames);
-    FLUENT_SETTING_OPTIONAL(TString, Subject);
+    FLUENT_SETTING(TString, Subject);
 
     // Subject type and name used only in describe
     FLUENT_SETTING_OPTIONAL(TString, SubjectType);

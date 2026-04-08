@@ -6,6 +6,7 @@
 #include <ydb/core/tx/data_events/shard_writer.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/actors/wilson/wilson_profile_span.h>

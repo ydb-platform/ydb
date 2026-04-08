@@ -9,7 +9,6 @@
 #include <ydb/library/signals/owner.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
-#include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -191,10 +190,7 @@ private:
     const TString UserSID;
 
     void SendWriteRequest();
-    static TDuration OverloadTimeout() {
-        ui32 overloadedDelayMs = std::min(AppData() ? AppData()->ColumnShardConfig.GetProxyOverloadedDelayMs() : OverloadedDelayMs, ui32(TDuration::Hours(1).MilliSeconds()));
-        return TDuration::MilliSeconds(overloadedDelayMs + RandomNumber<ui32>(overloadedDelayMs));
-    }
+    static TDuration OverloadTimeout() noexcept;
     void SendToTablet(THolder<IEventBase> event) {
         Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), ShardId, true), IEventHandle::FlagTrackDelivery, 0,
             ActorSpan.GetTraceId());

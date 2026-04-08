@@ -6,6 +6,7 @@
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
+#include <ydb/core/protos/config.pb.h>
 
 extern "C" {
 #include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>

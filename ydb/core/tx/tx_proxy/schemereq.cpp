@@ -1776,6 +1776,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx) {
         NSchemeCache::TSchemeCacheNavigate *navigate = ev->Get()->Request.Get();
+        const bool isTierSecretAclPass = WaitingTierSecretAcl;
 
         TxProxyMon->CacheRequestLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds());
 
@@ -1792,13 +1793,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return Die(ctx);
         }
 
-        const auto& activeResolveTasks = WaitingTierSecretACL ? TierSecretResolveForACL : ResolveForACL;
+        const auto& activeResolveTasks = isTierSecretAclPass ? TierSecretResolveForACL : ResolveForACL;
         Y_ABORT_UNLESS(!navigate->ResultSet.empty());
         Y_ABORT_UNLESS(navigate->ResultSet.size() == activeResolveTasks.size());
-
-        if (!WaitingTierSecretACL) {
-            SchemeshardIdToRequest = GetShardToRequest(*navigate->ResultSet.begin(), *ResolveForACL.begin());
-        }
 
         // Check user access level, permissions on scheme objects and other restrictions/permissions
         if (UserToken) {
@@ -1807,7 +1804,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             }
         }
 
-        if (!WaitingTierSecretACL) {
+        if (!isTierSecretAclPass) {
             if (IsDocApiRestricted(SchemeRequest->Ev->Get()->Record)) {
                 if (!CheckDocApi(navigate->ResultSet, ctx)) {
                     return Die(ctx);
@@ -1829,6 +1826,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         } else {
             WaitingTierSecretACL = false;
             TierSecretResolveForACL.clear();
+        }
+
+        if (!isTierSecretAclPass) {
+            SchemeshardIdToRequest = GetShardToRequest(*navigate->ResultSet.begin(), *ResolveForACL.begin());
         }
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,

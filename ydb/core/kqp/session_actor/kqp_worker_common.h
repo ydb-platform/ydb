@@ -11,7 +11,6 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/security/util.h>
 #include <library/cpp/json/json_reader.h>
 
 #include <util/datetime/base.h>

@@ -49,6 +49,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/security/util.h>
 
 #include <util/string/printf.h>
 

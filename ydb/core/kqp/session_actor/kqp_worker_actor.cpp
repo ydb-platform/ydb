@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/host/kqp_host.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/security/util.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>

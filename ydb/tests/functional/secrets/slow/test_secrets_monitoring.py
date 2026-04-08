@@ -37,7 +37,7 @@ def _secret_value_not_leaked_to_sysviews(config, secret_value):
 def _secret_value_not_leaked_to_query_sessions(config, secret_value):
     sys_table = f"`{DATABASE}/.sys/query_sessions`"
     query = f"""
-    SELECT Query FROM {sys_table} WHERE String::Contains(QueryText, "ALTER SECRET")
+    SELECT Query FROM {sys_table} WHERE String::Contains(Query, "ALTER SECRET")
     """
     result_sets = run_with_assert(config, query)
     if not result_sets or not result_sets[0].rows:

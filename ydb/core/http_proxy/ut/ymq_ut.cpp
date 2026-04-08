@@ -210,7 +210,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(consumer.GetKeepMessagesOrder(), true);
         UNIT_ASSERT_VALUES_EQUAL(consumer.GetDefaultProcessingTimeout(), TDuration::Seconds(3600));
         UNIT_ASSERT_VALUES_EQUAL(consumer.GetDeadLetterPolicy().GetEnabled(), true);
-        UNIT_ASSERT_VALUES_EQUAL(consumer.GetDeadLetterPolicy().GetDeadLetterQueue(), "sqs://cloud4/queue-1.fifo");
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetDeadLetterPolicy().GetDeadLetterQueue(), "sqs://cloud4/folder4/queue-1.fifo");
         UNIT_ASSERT_VALUES_EQUAL(consumer.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 3);
 
         driver.Stop(true);

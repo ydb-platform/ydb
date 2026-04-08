@@ -380,7 +380,7 @@ private:
                             }
 
                             auto addRequest = [&](auto&& shardKey) {
-                                auto& entry = request->ResultSet.emplace_back(shardKey);
+                                auto& entry = request->ResultSet.emplace_back(std::move(shardKey));
                                 entry.UserData = EncodeStageInfo(stageInfo);
                                 switch (operation) {
                                     case TKeyDesc::ERowOperation::Read:
@@ -397,13 +397,13 @@ private:
                                 }
                             };
 
-                            addRequest(stageInfo.Meta.ShardKey);
+                            addRequest(std::move(stageInfo.Meta.ShardKey));
                             switch (operation) {
                                 case TKeyDesc::ERowOperation::Update:
                                 case TKeyDesc::ERowOperation::Erase:
                                     for (auto& indexMeta : stageInfo.Meta.IndexMetas) {
                                         indexMeta.ShardKey = ExtractKey(indexMeta.TableId, indexMeta.TableConstInfo->KeyColumnTypes, operation);
-                                        addRequest(indexMeta.ShardKey);
+                                        addRequest(std::move(indexMeta.ShardKey));
                                     }
                                     break;
                                 default:

@@ -1,5 +1,8 @@
 #include "wb_merge.h"
 
+#include "viewer_bsgroupinfo.h"
+#include "viewer_nodeinfo.h"
+
 #include <util/system/rwlock.h>
 
 namespace NKikimr::NViewer {
@@ -225,5 +228,15 @@ void TWhiteboardMergerBase::ProtoMerge(google::protobuf::Message& protoTo, const
         }
     }
 }
+
+// Registrator globals are defined in this TU so they initialize after FieldMerger above (Coverity 120576).
+const TWhiteboardMergerBase::TRegistrator TWhiteboardInfo<NKikimrWhiteboard::TEvBSGroupStateResponse>::Registrator({
+    {NKikimrWhiteboard::TBSGroupStateInfo::descriptor()->FindFieldByName("Latency"), &TWhiteboardMergerBase::ProtoMaximizeEnumField}
+});
+
+const TWhiteboardMergerBase::TRegistrator TWhiteboardInfo<NKikimrWhiteboard::TEvNodeStateResponse>::Registrator({
+    {NKikimrWhiteboard::TNodeStateInfo::descriptor()->FindFieldByName("ConnectStatus"), &TWhiteboardMergerBase::ProtoMaximizeEnumField},
+    {NKikimrWhiteboard::TNodeStateInfo::descriptor()->FindFieldByName("Connected"), &TWhiteboardMergerBase::ProtoMaximizeBoolField}
+});
 
 } // namespace NKikimr::NViewer

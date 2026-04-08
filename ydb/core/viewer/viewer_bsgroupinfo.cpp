@@ -1,9 +1,3 @@
 #include "viewer_bsgroupinfo.h"
 
-namespace NKikimr::NViewer {
-
-const TWhiteboardMergerBase::TRegistrator TWhiteboardInfo<NKikimrWhiteboard::TEvBSGroupStateResponse>::Registrator({
-    {NKikimrWhiteboard::TBSGroupStateInfo::descriptor()->FindFieldByName("Latency"), &TWhiteboardMergerBase::ProtoMaximizeEnumField}
-});
-
-} // namespace NKikimr::NViewer
+// TWhiteboardInfo<TEvBSGroupStateResponse>::Registrator is defined in wb_merge.cpp (initialization order vs FieldMerger).

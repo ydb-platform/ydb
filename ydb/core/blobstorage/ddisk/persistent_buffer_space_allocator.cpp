@@ -15,6 +15,21 @@ namespace NKikimr::NDDisk {
 
     }
 
+    std::vector<std::vector<std::tuple<ui32, ui32>>> TPersistentBufferSpaceAllocator::DescribeFreeSpace() {
+        std::vector<std::vector<std::tuple<ui32, ui32>>> res;
+        res.resize(FreeSpaceMap.size());
+        ui32 resIdx = 0;
+        for (auto& [_, ch] : FreeSpaceMap) {
+            res[resIdx].resize(ch.FreeSectors.size());
+            ui32 fsIdx = 0;
+            for (auto& fs : ch.FreeSectors) {
+                res[resIdx][fsIdx++] = {fs.First, fs.Last};
+            }
+            resIdx++;
+        }
+        return res;
+    }
+
     TString TPersistentBufferSpaceAllocator::TChunkSpaceOccupation::ToString() const {
         TStringBuilder sb;
         sb << "ChunkIdx: " << ChunkIdx << ", FreeSpace: " << FreeSpace << ", FreeSectors: [";

@@ -88,6 +88,7 @@ namespace NKikimr::NDDisk {
         ui32 GetFreeSpace() const {
             return FreeSpace;
         }
+        std::vector<std::vector<std::tuple<ui32, ui32>>> DescribeFreeSpace();
         TString ToString() const;
 
     };

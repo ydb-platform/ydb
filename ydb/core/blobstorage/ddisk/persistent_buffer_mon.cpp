@@ -66,7 +66,21 @@ namespace NKikimr {
                 auto it = Inflight.find(cookie);
                 Y_ABORT_UNLESS(it != Inflight.end());
                 auto& inflight = it->second;
-
+                auto beautyDuration = [](TDuration v) {
+                    TStringBuilder str;
+                    if (v.Days() > 1) {
+                        str << v.Days() << 'd';
+                    } else if (v.Hours() > 1) {
+                        str << v.Hours() << 'h';
+                    } else if (v.Minutes() > 1) {
+                        str << v.Minutes() << 'm';
+                    } else if (v.Seconds() > 1) {
+                        str << v.Seconds() << 's';
+                    } else {
+                        str << "Just now";
+                    }
+                    return str;
+                };
                 TStringStream str;
                 HTML(str) {
                     for (auto& [_, id] : inflight.Requests) {
@@ -76,19 +90,25 @@ namespace NKikimr {
                         auto b = v->Get();
                         TDuration uptime = TInstant::Now() - b->StartedAt;
                         str << "<h2>" << "PB actorId: " << v->Sender << "</font></h2>";
-                        str << "Uptime:" << uptime.ToString();
-                        str << " Free sectors: " << b->FreeSectors;
-                        str << " of allocated" << (b->AllocatedChunks * b->ChunkSize / b->SectorSize);
-                        str << " max" << (b->MaxChunks * b->ChunkSize / b->SectorSize);
+                        str << "Uptime: " << beautyDuration(uptime);
+                        str << "<br> MaxChunks: " << b->MaxChunks;
+                        str << "<br> Allocated chunks: " << b->AllocatedChunks;
+                        str << "<br> ChunkSize: " << (b->ChunkSize / 1e6) << "Mb";
+                        str << "<br> SectorSize: " << b->SectorSize << "b";
+
+                        str << "<br> Free sectors: " << b->FreeSectors;
+                        str << " of allocated " << ((ui64)b->AllocatedChunks * b->ChunkSize / b->SectorSize);
+                        str << " max " << ((ui64)b->MaxChunks * b->ChunkSize / b->SectorSize);
+                        
                         TABLE_CLASS ("table") {
                             TABLEHEAD() {
                                 TABLER() {
                                     TABLEH() {str << "TabletId";}
                                     TABLEH() {str << "Generation";}
                                     TABLEH() {str << "First lsn";}
-                                    TABLEH() {str << "Timestamp";}
+                                    TABLEH() {str << "Uptime";}
                                     TABLEH() {str << "Last lsn";}
-                                    TABLEH() {str << "Timestamp";}
+                                    TABLEH() {str << "Uptime";}
                                 }
                             }
                             TABLEBODY() {
@@ -97,9 +117,9 @@ namespace NKikimr {
                                         TABLED() {str << ti.TabletId;}
                                         TABLED() {str << ti.Generation;}
                                         TABLED() {str << ti.FirstLsn;}
-                                        TABLED() {str << ti.FirstLsnTimestamp;}
+                                        TABLED() {str << beautyDuration(TInstant::Now() - ti.FirstLsnTimestamp);}
                                         TABLED() {str << ti.LastLsn;}
-                                        TABLED() {str << ti.LastLsnTimestamp;}
+                                        TABLED() {str << beautyDuration(TInstant::Now() - ti.LastLsnTimestamp);}
                                     }
                                 }
                             }
@@ -145,7 +165,7 @@ namespace NKikimr {
                     auto reqCookie = ++NextCookie;
                     inflight.Requests.insert({reqCookie, r.PersistentBufferId});
                     PBuffersInflight[reqCookie] = cookie;
-                    Send(r.PersistentBufferId, new NDDisk::TEvGetPersistentBufferInfo(), reqCookie);
+                    Send(r.PersistentBufferId, new NDDisk::TEvGetPersistentBufferInfo(), 0, reqCookie);
                     STLOG(PRI_DEBUG, BS_DDISK, BSDD36, "TPersistentBufferMonActor::Handle(TEvNodeWardenListLocalDDisksResult) Send",
                         (r.PersistentBufferId, r.PersistentBufferId), (reqCookie, reqCookie));
                 }

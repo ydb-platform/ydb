@@ -746,9 +746,11 @@ namespace NKikimr::NDDisk {
             PendingPersistentBufferEvents.emplace(ev, "WaitingGetPersistentBufferInfo");
             return;
         }
+    STLOG(PRI_DEBUG, BS_DDISK, BSDD40, "TDDiskActor::Handle(TEvGetPersistentBufferInfo)",
+        (Sender, ev->Sender), (cookie, ev->Cookie));
         auto reply = std::make_unique<TEvPersistentBufferInfo>();
         reply->StartedAt = StartedAt;
-        reply->AllocatedChunks = PersistentBufferChunks.size();
+        reply->AllocatedChunks = PersistentBufferAllocatedChunks.size();
         reply->ChunkSize = DiskFormat->ChunkSize;
         reply->MaxChunks = PersistentBufferFormat.MaxChunks;
         reply->SectorSize = SectorSize;
@@ -757,6 +759,9 @@ namespace NKikimr::NDDisk {
             reply->TabletInfos.emplace_back(std::get<0>(k), std::get<1>(k),
                 v.Records.begin()->first, v.Records.rbegin()->first,
                 v.Records.begin()->second.Timestamp, v.Records.rbegin()->second.Timestamp);
+        }
+        if (ev->Get()->DescribeFreeSpace) {
+            reply->FreeSpace = PersistentBufferSpaceAllocator.DescribeFreeSpace();
         }
         Send(ev->Sender, std::move(reply), 0, ev->Cookie);
     }

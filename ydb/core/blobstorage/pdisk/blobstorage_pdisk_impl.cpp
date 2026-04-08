@@ -1683,8 +1683,8 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pDiskMetrics.SetAvailableSize(availableSize);
         pDiskMetrics.SetMaxReadThroughput(DriveModel.Speed(TDriveModel::OP_TYPE_READ));
         pDiskMetrics.SetMaxWriteThroughput(DriveModel.Speed(TDriveModel::OP_TYPE_WRITE));
-        pDiskMetrics.SetNonRealTimeMs(AtomicGet(NonRealTimeMs));
-        pDiskMetrics.SetSlowDeviceMs(Max((ui64)AtomicGet(SlowDeviceMs), (ui64)*Mon.DeviceNonperformanceMs));
+        //pDiskMetrics.SetNonRealTimeMs(AtomicGet(NonRealTimeMs));
+        //pDiskMetrics.SetSlowDeviceMs(Max((ui64)AtomicGet(SlowDeviceMs), (ui64)*Mon.DeviceNonperformanceMs));
         pDiskMetrics.SetMaxIOPS(DriveModel.IOPS());
 
         i64 minSlotSize = Max<i64>();

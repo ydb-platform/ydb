@@ -1921,7 +1921,8 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
 
         CreateIndexedTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
 
-        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple/ValueIndex", 1, Ydb::StatusIds::BAD_REQUEST);
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple/ValueIndex", false, 1, Ydb::StatusIds::BAD_REQUEST);
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple/ValueIndex", true, 1, Ydb::StatusIds::BAD_REQUEST);
     }
 
     Y_UNIT_TEST(SchemeshardShouldCompactAfterRestart) {
@@ -2076,6 +2077,30 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple");
         ui64 compactionId1 = txId;
         TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", false, 1, Ydb::StatusIds::PRECONDITION_FAILED);
+        ui64 compactionId2 = txId;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TestGetCompaction(runtime, compactionId1, "/MyRoot").GetForcedCompaction().GetState(),
+            Ydb::Table::CompactState::STATE_IN_PROGRESS
+        );
+        TestGetCompaction(runtime, compactionId2, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldNotCompactTableAndIndexImpleTableSimultaneously) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        Setup(runtime, env);
+
+        ui64 txId = 1000;
+
+        CreateIndexedTableWithData(runtime, env, "/MyRoot", "Simple", 2, ++txId);
+
+        // block result, so first compaction will stuck in progress
+        TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple", true);
+        ui64 compactionId1 = txId;
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/Simple/ValueIndex/indexImplTable", false, 1, Ydb::StatusIds::PRECONDITION_FAILED);
         ui64 compactionId2 = txId;
 
         UNIT_ASSERT_VALUES_EQUAL(

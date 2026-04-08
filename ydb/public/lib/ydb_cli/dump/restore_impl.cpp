@@ -2199,7 +2199,9 @@ TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const 
             .KeepMessagesOrder(consumer.GetKeepMessagesOrder())
             .DefaultProcessingTimeout(consumer.GetDefaultProcessingTimeout())
             .ReceiveMessageDelay(consumer.GetReceiveMessageDelay())
-            .ReceiveMessageWaitTime(consumer.GetReceiveMessageWaitTime());
+            .ReceiveMessageWaitTime(consumer.GetReceiveMessageWaitTime())
+            .ReadFrom(consumer.GetReadFrom())
+            .SupportedCodecs(consumer.GetSupportedCodecs());
 
         auto result = [&]() {
             if (!dlp.GetEnabled()) {

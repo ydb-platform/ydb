@@ -9,6 +9,7 @@
 #include <yt/yql/providers/yt/lib/yt_file_download/yql_yt_file_download.h>
 
 #include <yt/yql/providers/yt/gateway/lib/map_builder.h>
+#include <yt/yql/providers/yt/gateway/lib/reduce_builder.h>
 #include <yt/yql/providers/yt/gateway/lib/yt_attrs.h>
 #include <yt/yql/providers/yt/gateway/lib/yt_helpers.h>
 #include <yt/yql/providers/yt/lib/config_clusters/config_clusters.h>
@@ -3959,7 +3960,9 @@ private:
         });
     }
 
-    static TFuture<void> ExecReduce(const TVector<std::pair<TString, bool>>& reduceBy,
+    static TFuture<void> ExecReduce(
+        TIntrusivePtr<TYqlUserJob> job,
+        const TVector<std::pair<TString, bool>>& reduceBy,
         const TVector<std::pair<TString, bool>>& sortBy,
         bool joinReduce,
         const TMaybe<ui64>& maxDataSizePerJob,
@@ -3967,14 +3970,13 @@ private:
         const TMaybe<ui64>& limit,
         const TVector<TString>& sortLimitBy,
         TString reduceLambda,
-        const TString& inputType,
         const TExpressionResorceUsage& extraUsage,
         const TExecContext<TRunOptions>::TPtr& execCtx
     ) {
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
-        return ret.Apply([reduceBy, sortBy, joinReduce, maxDataSizePerJob, useFirstAsPrimary, limit,
-                          sortLimitBy, reduceLambda, inputType, extraUsage, execCtx, testRun]
+        return ret.Apply([job, reduceBy, sortBy, joinReduce, maxDataSizePerJob, useFirstAsPrimary, limit,
+                          sortLimitBy, reduceLambda, extraUsage, execCtx, testRun]
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
@@ -3996,9 +3998,6 @@ private:
             }
 
             TRawReduceOperationSpec reduceOpSpec;
-            auto job = MakeIntrusive<TYqlUserJob>();
-
-            job->SetInputType(inputType);
 
             for (size_t i: xrange(execCtx->OutTables_.size())) {
                 if (limit && sortLimitBy.empty()) {
@@ -4035,18 +4034,6 @@ private:
                 currentRowOffset += table.Records;
             }
 
-            const bool useSkiff = execCtx->Options_.Config()->UseSkiff.Get(execCtx->Cluster_).GetOrElse(DEFAULT_USE_SKIFF);
-
-            const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
-            job->SetInputSpec(execCtx->GetInputSpec(!useSkiff, nativeTypeCompat, false));
-            job->SetOutSpec(execCtx->GetOutSpec(!useSkiff, nativeTypeCompat));
-            YQL_ENSURE(!groups.empty());
-            if (groups.back() != 0) {
-                job->SetInputGroups(groups);
-            }
-            job->SetTableNames(tables);
-            job->SetRowOffsets(rowOffsets);
-
             if (joinReduce) {
                 reduceOpSpec.JoinBy(ToYTSortColumns(reduceBy));
                 reduceOpSpec.EnableKeyGuarantee(false);
@@ -4065,10 +4052,9 @@ private:
             if (!sortBy.empty()) {
                 std::for_each(sortBy.begin(), sortBy.end(), [&auxColumns](const auto& it) { auxColumns.insert(it.first); });
             }
-            job->SetAuxColumns(auxColumns);
 
-            job->SetUseSkiff(useSkiff, TMkqlIOSpecs::ESystemField::RowIndex | TMkqlIOSpecs::ESystemField::KeySwitch);
-            job->SetYamrInput(execCtx->YamrInput);
+            TReduceJobBuilder reduceJobBuilder;
+            reduceJobBuilder.SetReduceJobParams(job.Get(), execCtx, groups, tables, rowOffsets, auxColumns);
 
             auto tmpFiles = MakeIntrusive<TTempFiles>(execCtx->FileStorage_->GetTemp());
             {
@@ -4085,10 +4071,6 @@ private:
                     execCtx->Options_.OptLLVM("OFF");
                 }
                 job->SetLambdaCode(reduceLambda);
-                job->SetOptLLVM(execCtx->Options_.OptLLVM());
-                job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
-                job->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
-                job->SetLangVer(execCtx->Options_.LangVer());
                 transform.ApplyJobProps(*job);
                 transform.ApplyUserJobSpec(userJobSpec, testRun);
                 FillUserJobSpec(userJobSpec, execCtx, extraUsage, transform.GetUsedMemory(), execCtx->EstimateLLVMMem(nodeCount), testRun);
@@ -4143,14 +4125,10 @@ private:
         auto maxDataSizePerJob = NYql::GetMaxJobSizeForFirstAsPrimary(reduce.Settings().Ref());
         bool useFirstAsPrimary = NYql::HasSetting(reduce.Settings().Ref(), EYtSettingType::FirstAsPrimary);
 
-        TString reduceLambda;
-        {
-            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                execCtx->FunctionRegistry_->SupportsSizedAllocators());
-            alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-            TNativeYtLambdaBuilder builder(alloc, Services_, *execCtx->Session_, execCtx->Options_.LangVer());
-            reduceLambda = builder.BuildLambdaWithIO(*MkqlCompiler_, reduce.Reducer(), ctx);
-        }
+        auto reduceJob = MakeIntrusive<TYqlUserJob>();
+        TReduceJobBuilder reduceJobBuilder;
+        reduceJobBuilder.SetInputType(reduceJob.Get(), reduce);
+        TString reduceLambda = reduceJobBuilder.SetReduceLambdaCode(reduceJob.Get(), reduce, execCtx, ctx);
 
         TVector<TString> sortLimitBy = NYql::GetSettingAsColumnList(reduce.Settings().Ref(), EYtSettingType::SortLimitBy);
         TMaybe<ui64> limit = GetLimit(reduce.Settings().Ref());
@@ -4158,17 +4136,12 @@ private:
             limit.Clear();
         }
         auto extraUsage = execCtx->ScanExtraResourceUsage(reduce.Reducer().Body().Ref(), true);
-        const auto inputTypeSet = NYql::GetSetting(reduce.Settings().Ref(), EYtSettingType::ReduceInputType);
-        TString inputType = NCommon::WriteTypeToYson(inputTypeSet
-            ? inputTypeSet->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()
-            : GetSequenceItemType(reduce.Reducer().Args().Arg(0), true)
-        );
 
-        return execCtx->Session_->Async([reduceBy, sortBy, joinReduce, maxDataSizePerJob, useFirstAsPrimary, limit, sortLimitBy, reduceLambda, inputType, extraUsage, execCtx]() {
+        return execCtx->Session_->Async([reduceJob, reduceBy, sortBy, joinReduce, maxDataSizePerJob, useFirstAsPrimary, limit, sortLimitBy, reduceLambda, extraUsage, execCtx]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
-            return ExecReduce(reduceBy, sortBy, joinReduce, maxDataSizePerJob, useFirstAsPrimary, limit,
-                              sortLimitBy, reduceLambda, inputType, extraUsage, execCtx);
+            return ExecReduce(reduceJob, reduceBy, sortBy, joinReduce, maxDataSizePerJob, useFirstAsPrimary, limit,
+                              sortLimitBy, reduceLambda, extraUsage, execCtx);
         });
     }
 

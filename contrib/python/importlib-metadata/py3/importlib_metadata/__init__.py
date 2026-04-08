@@ -39,7 +39,7 @@ from ._functools import method_cache, noop, pass_none, passthrough
 from ._itertools import always_iterable, bucket, unique_everseen
 from ._meta import PackageMetadata, SimplePath
 from ._typing import md_none
-from .compat import py39, py311
+from .compat import py311
 
 __all__ = [
     'Distribution',
@@ -346,7 +346,7 @@ class EntryPoints(tuple):
         Select entry points from self that match the
         given parameters (typically group and/or name).
         """
-        return EntryPoints(ep for ep in self if py39.ep_matches(ep, **params))
+        return EntryPoints(ep for ep in self if ep.matches(**params))
 
     @property
     def names(self) -> set[str]:
@@ -1147,7 +1147,7 @@ def version(distribution_name: str) -> str:
 
 _unique = functools.partial(
     unique_everseen,
-    key=py39.normalized_name,
+    key=operator.attrgetter('_normalized_name'),
 )
 """
 Wrapper for ``distributions`` to return unique distributions by name.

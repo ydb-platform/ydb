@@ -3226,7 +3226,7 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
     return true;
 }
 
-const TNodePtr TUdfNode::GetExternalTypes() const {
+TNodePtr TUdfNode::GetExternalTypes() const {
     return ExternalTypesTuple_;
 }
 

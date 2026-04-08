@@ -158,6 +158,11 @@ struct TSqsEvents {
         // has operator<<
     };
 
+    struct TUserSettings {
+        size_t MigrationCompatibility: 1 = 0;
+        size_t MigrationFinished: 1 = 0;
+    };
+
     struct TEvGetConfiguration : public NActors::TEventLocal<TEvGetConfiguration, EvGetConfiguration> {
         TString  RequestId;
         TString  UserName;
@@ -165,6 +170,8 @@ struct TSqsEvents {
         TString  FolderId;
         bool EnableThrottling = true;
         ui64 Flags = 0;
+
+        TUserSettings Settings;
 
         enum EFlags {
             NeedQueueLeader = 1,
@@ -216,6 +223,9 @@ struct TSqsEvents {
         // Existence
         bool UserExists = false;
         bool QueueExists = false;
+
+        // User settings
+        TUserSettings Settings;
 
         // Event processing was throttled
         bool Throttled = false;

@@ -153,8 +153,7 @@ namespace NKikimr::NAutoConfigInitializer {
 
     struct TAutoConfigOptions {
         bool IsDynamicNode = false;
-        bool UseTinySchedulerConfig = false;
-        bool EnableTinyConfiguration = true;
+        bool ForceTinyConfiguration = false;
         const ICpuTable* CpuTable = nullptr;
     };
 

@@ -194,7 +194,7 @@ Y_UNIT_TEST(ApplyAutoConfigWithCustomCpuTable) {
     UNIT_ASSERT_VALUES_EQUAL(ic->GetMaxThreads(), 2);
 }
 
-Y_UNIT_TEST(ApplyAutoConfigDisablesTinyConfigurationWhenRequested) {
+Y_UNIT_TEST(ApplyAutoConfigUsesCustomCpuTableWithoutForcedTinyConfiguration) {
     TDefaultCpuTable cpuTable{};
     auto& row = cpuTable.GetPreparedRow(3);
     row.RealPoolCount = 4;
@@ -214,7 +214,6 @@ Y_UNIT_TEST(ApplyAutoConfigDisablesTinyConfigurationWhenRequested) {
     config.SetUseSharedThreads(true);
 
     ApplyAutoConfig(&config, TAutoConfigOptions{
-        .EnableTinyConfiguration = false,
         .CpuTable = &cpuTable,
     });
 

@@ -755,10 +755,14 @@ namespace NKikimr::NDDisk {
         reply->MaxChunks = PersistentBufferFormat.MaxChunks;
         reply->SectorSize = SectorSize;
         reply->FreeSectors = PersistentBufferSpaceAllocator.GetFreeSpace();
-        for (auto [k, v] : PersistentBuffers) {
-            reply->TabletInfos.emplace_back(std::get<0>(k), std::get<1>(k),
-                v.Records.begin()->first, v.Records.rbegin()->first,
-                v.Records.begin()->second.Timestamp, v.Records.rbegin()->second.Timestamp);
+        reply->InMemoryCacheSize = PersistentBufferInMemoryCacheSize;
+        reply->InMemoryCacheLimit = PersistentBufferFormat.MaxInMemoryCache;
+        if (ev->Get()->DescribeTablets) {
+            for (auto [k, v] : PersistentBuffers) {
+                reply->TabletInfos.emplace_back(std::get<0>(k), std::get<1>(k),
+                    v.Records.begin()->first, v.Records.rbegin()->first,
+                    v.Records.begin()->second.Timestamp, v.Records.rbegin()->second.Timestamp);
+            }
         }
         if (ev->Get()->DescribeFreeSpace) {
             reply->FreeSpace = PersistentBufferSpaceAllocator.DescribeFreeSpace();

@@ -34,6 +34,8 @@ namespace NKikimr {
                 TActorId Sender;
                 ui64 Cookie;
                 int SubRequestId;
+                bool DescribeFreeSpace;
+                bool ShowTablets;
                 std::vector<NDDisk::TEvPersistentBufferInfo::TPtr> Responses;
                 std::unordered_map<ui64, TActorId> Requests;
             };
@@ -62,6 +64,47 @@ namespace NKikimr {
                 Reply(ev->Get()->Tag);
             }
 
+            static TString GenerateFreeSpaceSvg(const std::vector<std::vector<std::tuple<ui32, ui32>>>& freeSpace,
+                    ui32 sectorsPerChunk) {
+                if (freeSpace.empty() || sectorsPerChunk == 0) {
+                    return {};
+                }
+
+                const ui32 chunkCount = freeSpace.size();
+                const int svgWidth = 800;
+                const int rowHeight = 5;
+                const int rowGap = 1;
+                const int barWidth = svgWidth - 10;
+                const int svgHeight = chunkCount * (rowHeight + rowGap) + 10;
+
+                TStringStream svg;
+                svg << "<svg xmlns=\"http://www.w3.org/2000/svg\""
+                    << " width=\"" << svgWidth << "\""
+                    << " height=\"" << svgHeight << "\">\n";
+
+                for (ui32 chunkIdx = 0; chunkIdx < chunkCount; ++chunkIdx) {
+                    const int y = chunkIdx * (rowHeight + rowGap) + 5;
+
+                    svg << "<rect x=\"" << 0 << "\" y=\"" << y
+                        << "\" width=\"" << barWidth << "\" height=\"" << rowHeight
+                        << "\" fill=\"#d9534f\"/>\n";
+
+                    const auto& ranges = freeSpace[chunkIdx];
+                    for (const auto& [left, right] : ranges) {
+                        const double xFrac = static_cast<double>(left) / sectorsPerChunk;
+                        const double wFrac = static_cast<double>(right - left + 1) / sectorsPerChunk;
+                        const int rx = static_cast<int>(xFrac * barWidth);
+                        const int rw = std::max(1, static_cast<int>(wFrac * barWidth));
+                        svg << "<rect x=\"" << rx << "\" y=\"" << y
+                            << "\" width=\"" << rw << "\" height=\"" << rowHeight
+                            << "\" fill=\"#5cb85c\"/>\n";
+                    }
+                }
+
+                svg << "</svg>\n";
+                return svg.Str();
+            }
+
             void Reply(ui64 cookie) {
                 auto it = Inflight.find(cookie);
                 Y_ABORT_UNLESS(it != Inflight.end());
@@ -86,40 +129,48 @@ namespace NKikimr {
                     for (auto& [_, id] : inflight.Requests) {
                         str << "<h2 style=\"color:red;\">" << "No response from PB actorId: " << id << " </font></h2>";
                     }
+                    std::sort(inflight.Responses.begin(), inflight.Responses.end(), [](auto &o1, auto &o2) -> bool {
+                        return o1->Sender < o2->Sender;
+                    });
                     for (auto& v : inflight.Responses) {
                         auto b = v->Get();
+                        ui32 sectorsInChunk = b->ChunkSize / b->SectorSize;
                         TDuration uptime = TInstant::Now() - b->StartedAt;
                         str << "<h2>" << "PB actorId: " << v->Sender << "</font></h2>";
                         str << "Uptime: " << beautyDuration(uptime);
-                        str << "<br> MaxChunks: " << b->MaxChunks;
-                        str << "<br> Allocated chunks: " << b->AllocatedChunks;
-                        str << "<br> ChunkSize: " << (b->ChunkSize / 1e6) << "Mb";
-                        str << "<br> SectorSize: " << b->SectorSize << "b";
-
+                        str << "<br> Allocated chunks: " << b->AllocatedChunks << " of " << b->MaxChunks << " by " << (ui32)(b->ChunkSize / 1e6) << "Mb";
                         str << "<br> Free sectors: " << b->FreeSectors;
-                        str << " of allocated " << ((ui64)b->AllocatedChunks * b->ChunkSize / b->SectorSize);
-                        str << " max " << ((ui64)b->MaxChunks * b->ChunkSize / b->SectorSize);
-                        
-                        TABLE_CLASS ("table") {
-                            TABLEHEAD() {
-                                TABLER() {
-                                    TABLEH() {str << "TabletId";}
-                                    TABLEH() {str << "Generation";}
-                                    TABLEH() {str << "First lsn";}
-                                    TABLEH() {str << "Uptime";}
-                                    TABLEH() {str << "Last lsn";}
-                                    TABLEH() {str << "Uptime";}
-                                }
-                            }
-                            TABLEBODY() {
-                                for (auto& ti : b->TabletInfos) {
+                        str << " of allocated " << (b->AllocatedChunks * sectorsInChunk);
+                        str << " max " << (b->MaxChunks * sectorsInChunk);
+                        str << "<br> InMemory cache: " << (ui32)(b->InMemoryCacheSize / 1e6) << "Mb of " << (ui32)(b->InMemoryCacheLimit / 1e6) << "Mb";
+
+                        if (inflight.DescribeFreeSpace && !b->FreeSpace.empty() && b->SectorSize > 0 && b->ChunkSize > 0) {
+                            const ui32 sectorsPerChunk = b->ChunkSize / b->SectorSize;
+                            str << "<br><br><b>Free space map (green = free, red = used):</b><br>";
+                            str << GenerateFreeSpaceSvg(b->FreeSpace, sectorsPerChunk);
+                        }
+                        if (inflight.ShowTablets) {
+                            TABLE_CLASS ("table") {
+                                TABLEHEAD() {
                                     TABLER() {
-                                        TABLED() {str << ti.TabletId;}
-                                        TABLED() {str << ti.Generation;}
-                                        TABLED() {str << ti.FirstLsn;}
-                                        TABLED() {str << beautyDuration(TInstant::Now() - ti.FirstLsnTimestamp);}
-                                        TABLED() {str << ti.LastLsn;}
-                                        TABLED() {str << beautyDuration(TInstant::Now() - ti.LastLsnTimestamp);}
+                                        TABLEH() {str << "TabletId";}
+                                        TABLEH() {str << "Generation";}
+                                        TABLEH() {str << "First lsn";}
+                                        TABLEH() {str << "Uptime";}
+                                        TABLEH() {str << "Last lsn";}
+                                        TABLEH() {str << "Uptime";}
+                                    }
+                                }
+                                TABLEBODY() {
+                                    for (auto& ti : b->TabletInfos) {
+                                        TABLER() {
+                                            TABLED() {str << ti.TabletId;}
+                                            TABLED() {str << ti.Generation;}
+                                            TABLED() {str << ti.FirstLsn;}
+                                            TABLED() {str << beautyDuration(TInstant::Now() - ti.FirstLsnTimestamp);}
+                                            TABLED() {str << ti.LastLsn;}
+                                            TABLED() {str << beautyDuration(TInstant::Now() - ti.LastLsnTimestamp);}
+                                        }
                                     }
                                 }
                             }
@@ -165,7 +216,10 @@ namespace NKikimr {
                     auto reqCookie = ++NextCookie;
                     inflight.Requests.insert({reqCookie, r.PersistentBufferId});
                     PBuffersInflight[reqCookie] = cookie;
-                    Send(r.PersistentBufferId, new NDDisk::TEvGetPersistentBufferInfo(), 0, reqCookie);
+                    auto infoReq = std::make_unique<NDDisk::TEvGetPersistentBufferInfo>();
+                    infoReq->DescribeFreeSpace = inflight.DescribeFreeSpace;
+                    infoReq->DescribeTablets = inflight.ShowTablets;
+                    Send(r.PersistentBufferId, infoReq.release(), 0, reqCookie);
                     STLOG(PRI_DEBUG, BS_DDISK, BSDD36, "TPersistentBufferMonActor::Handle(TEvNodeWardenListLocalDDisksResult) Send",
                         (r.PersistentBufferId, r.PersistentBufferId), (reqCookie, reqCookie));
                 }
@@ -173,11 +227,46 @@ namespace NKikimr {
             }
 
             void Handle(NMon::TEvHttpInfo::TPtr& ev) {
+                const TCgiParameters& params = ev->Get()->Request.GetParams();
+
+                auto generateError = [&](const TString& msg) {
+                    TStringStream out;
+
+                    out << "HTTP/1.1 400 Bad Request\r\n"
+                        << "Content-Type: text/plain\r\n"
+                        << "Connection: close\r\n"
+                        << "\r\n"
+                        << msg << "\r\n";
+
+                    Send(ev->Sender, new NMon::TEvHttpInfoRes(out.Str(), ev->Get()->SubRequestId, NMon::TEvHttpInfoRes::Custom), 0,
+                        ev->Cookie);
+                };
+                bool describeFreeSpace = true;
+                if (params.Has("describeFreeSpace")) {
+                    int value;
+                    if (!TryFromString(params.Get("describeFreeSpace"), value) || !(value >= 0 && value <= 1)) {
+                        return generateError("Failed to parse describeFreeSpace parameter -- must be an integer in range [0, 1]");
+                    } else {
+                        describeFreeSpace = value != 0;
+                    }
+                }
+
+                bool showTablets = true;
+                if (params.Has("showTablets")) {
+                    int value;
+                    if (!TryFromString(params.Get("showTablets"), value) || !(value >= 0 && value <= 1)) {
+                        return generateError("Failed to parse showTablets parameter -- must be an integer in range [0, 1]");
+                    } else {
+                        showTablets = value != 0;
+                    }
+                }
                 const ui64 cookie = ++NextCookie;
                 Inflight[cookie] = TInflight{
                     .Sender = ev->Sender,
                     .Cookie = ev->Cookie,
                     .SubRequestId = ev->Get()->SubRequestId,
+                    .DescribeFreeSpace = describeFreeSpace,
+                    .ShowTablets = showTablets,
                 };
                 auto nwId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
                 Send(nwId, new TEvNodeWardenListLocalDDisks(), 0, cookie);

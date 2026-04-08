@@ -492,12 +492,15 @@ struct TPersistentBufferFormat {
         ui32 SectorSize;
         ui32 ChunkSize;
         ui32 FreeSectors;
+        ui32 InMemoryCacheSize;
+        ui32 InMemoryCacheLimit;
         std::vector<TTabletInfo> TabletInfos;
         std::vector<std::vector<std::tuple<ui32, ui32>>> FreeSpace;
     };
 
     struct TEvGetPersistentBufferInfo : public TEventLocal<TEvGetPersistentBufferInfo, TEv::EvGetPersistentBufferInfo> {
         bool DescribeFreeSpace = false;
+        bool DescribeTablets = false;
     };
 
     DECLARE_DDISK_EVENT(ListPersistentBuffer) {

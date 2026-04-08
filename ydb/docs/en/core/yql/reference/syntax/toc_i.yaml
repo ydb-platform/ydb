@@ -48,8 +48,14 @@ items:
 - { name: SELECT,                       include: { mode: link, path: select/toc_p.yaml }  }
 - { name: SELECT STREAM,                href: select_stream.md,              when: feature_mapreduce and process_command == "PROCESS STREAM" }
 - { name: SUBQUERY,                     href: subquery.md,                   when: feature_subquery }
+<<<<<<< HEAD
+=======
+- { name: SHOW CREATE,                  href: show_create.md }
+- { name: TRUNCATE TABLE,               href: truncate-table.md }
+>>>>>>> ecfe717e65e (DOCSUP-126759: [YDBDOCS-1922] Переводы Февраля - 12. Организация процесса перевода (1 архив) (0 шт.) (#37350))
 - { name: UPDATE,                       href: update.md,                     when: feature_map_tables }
 - { name: UPSERT,                       href: upsert_into.md,                when: feature_upsert }
+- { name: UPSERT OBJECT TYPE SECRET,    href: upsert-object-type-secret.md,  when: feature_federated_queries }
 - { name: USE,                          href: use.md,                        when: feature_mapreduce }
 - { name: VALUES,                       href: values.md }
 - { name: WINDOW,                       href: window.md,                     when: feature_window_functions }

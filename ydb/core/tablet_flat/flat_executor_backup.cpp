@@ -796,7 +796,7 @@ public:
         , Step(step)
     {}
 
-    TString LogPrefix() const {
+    TStringBuilder LogPrefix() const {
         return TStringBuilder() << "[" << TabletId << ":" << Generation << ":" << Step << "] ";
     }
 
@@ -1007,9 +1007,9 @@ public:
     }
 
     void FlushAndDie() {
-        LOG_N("Final flush and shutdown");
         Dying = true;
         Flush();
+        LOG_N("Everything is flushed, shutting down");
         PassAway();
     }
 
@@ -1045,9 +1045,9 @@ private:
     TScheme Schema;
     TIntrusiveConstPtr<TBackupExclusion> Exclusion;
 
-    ui64 TabletId;
-    ui32 Generation;
-    ui32 Step;
+    const ui64 TabletId;
+    const ui32 Generation;
+    const ui32 Step;
 
     TBuffer Buffer;
     ui64 ExpectedFlushCookie = 0;

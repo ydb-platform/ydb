@@ -811,7 +811,7 @@
             },
             {
                 "ColumnId": 12,
-                "ColumnName": "CreationTimestamp",
+                "ColumnName": "CreationTimestampSeconds",
                 "ColumnType": "Uint64"
             }
         ],

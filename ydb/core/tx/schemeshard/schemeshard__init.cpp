@@ -2682,8 +2682,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     pqInfo->ParentPartitionIds.insert(rowset.GetValue<Schema::PersQueues::AdjacentParent>());
                 }
 
-                if (rowset.HaveValue<Schema::PersQueues::CreationTimestamp>()) {
-                    pqInfo->CreationTimestamp = TInstant::Seconds(rowset.GetValue<Schema::PersQueues::CreationTimestamp>());
+                if (rowset.HaveValue<Schema::PersQueues::CreationTimestampSeconds>()) {
+                    pqInfo->CreationTimestamp = TInstant::Seconds(rowset.GetValue<Schema::PersQueues::CreationTimestampSeconds>());
                 }
 
                 auto it = Self->Topics.find(pathId);

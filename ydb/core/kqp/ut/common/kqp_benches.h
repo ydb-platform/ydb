@@ -1,5 +1,6 @@
 #pragma once
 
+#include <library/cpp/json/writer/json_value.h>
 #include <util/generic/array_size.h>
 #include <util/generic/utility.h>
 #include <util/generic/ylimits.h>
@@ -40,6 +41,8 @@ struct TComputedStatistics {
 
     static std::string GetCSVHeader();
     void ToCSV(IOutputStream& os) const;
+
+    NJson::TJsonValue ToJson() const;
 };
 
 double CalculatePercentile(const std::vector<double>& data, double percentile);
@@ -234,7 +237,7 @@ private:
 
 class TimeFormatter {
 public:
-    static std::string Format(ui64 valueNs, ui64 uncertaintyNs);
+    static std::string Format(ui64 valueNs, ui64 uncertaintyNs, const char* uncertaintySymbol = "±");
     static std::string Format(ui64 valueNs);
 };
 
@@ -259,11 +262,10 @@ std::optional<TStatistics> RepeatedTest(TRepeatedTestConfig config, ui64 singleR
             return std::nullopt;
         }
 
+        stats.AddValue(ellapsedTime);
         if (ellapsedTime > singleRunTimeout) {
             break;
         }
-
-        stats.AddValue(ellapsedTime);
     } while ((stats.GetN() < config.MaxRepeats) &&
              (stats.GetN() < config.MinRepeats ||
               (stats.GetTotal() + stats.GetMedian() < config.Timeout &&

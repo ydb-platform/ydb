@@ -14,6 +14,13 @@ public:
     using TTokens = TVector<TString>;
     using TError = NYql::TIssue;
 
+    enum class ETokensMode {
+        NotSet = 0,
+        And = 1,
+        Or = 2,
+    };
+
+public:
     TResult();
 
     TResult(TTokens&& tokens);
@@ -36,8 +43,13 @@ public:
 
     void Finish();
 
+    ETokensMode GetTokensMode() const;
+
+    void SetTokensMode(ETokensMode mode);
+
 private:
     std::variant<TTokens, TError> Result;
+    ETokensMode TokensMode = ETokensMode::NotSet;
     bool Finished = false;
 };
 
@@ -105,6 +117,7 @@ private:
 private:
     NYql::NJsonPath::TJsonPathReader Reader;
     ECallableType CallableType;
+    TVector<TString> FilterObjectPrefixes;
 };
 
 TVector<TString> BuildSearchTerms(const TString& jsonPathStr);

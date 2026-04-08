@@ -115,6 +115,14 @@ void TResult::Finish() {
     Finished = true;
 }
 
+TResult::ETokensMode TResult::GetTokensMode() const {
+    return TokensMode;
+}
+
+void TResult::SetTokensMode(ETokensMode mode) {
+    TokensMode = mode;
+}
+
 TQueryCollector::TQueryCollector(const TJsonPathPtr path, ECallableType callableType)
     : Reader(path)
     , CallableType(callableType)
@@ -331,32 +339,76 @@ TResult TQueryCollector::BinaryArithmeticOp(const TJsonPathItem& item, EMode mod
         return rightResult;
     }
 
+    if (leftResult.GetTokensMode() == TResult::ETokensMode::Or ||
+        rightResult.GetTokensMode() == TResult::ETokensMode::Or) {
+        return TResult(TIssue("Cannot mix AND and OR operators in jsonpath expression"));
+    }
+
     auto& leftTokens = leftResult.GetTokens();
     auto& rightTokens = rightResult.GetTokens();
     leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
+    leftResult.SetTokensMode(TResult::ETokensMode::And);
     leftResult.Finish();
     return leftResult;
 }
 
 TResult TQueryCollector::BinaryAnd(const TJsonPathItem& item, EMode mode) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    Y_UNUSED(mode);
-    return TResult(TIssue("Not implemented"));
+    const auto& leftItem = Reader.ReadLeftOperand(item);
+    const auto& rightItem = Reader.ReadRightOperand(item);
+
+    auto leftResult = Collect(leftItem, mode);
+    if (leftResult.IsError()) {
+        return leftResult;
+    }
+
+    auto rightResult = Collect(rightItem, mode);
+    if (rightResult.IsError()) {
+        return rightResult;
+    }
+
+    if (leftResult.GetTokensMode() == TResult::ETokensMode::Or ||
+        rightResult.GetTokensMode() == TResult::ETokensMode::Or) {
+        return TResult(TIssue("Cannot mix AND and OR operators in jsonpath expression"));
+    }
+
+    auto& leftTokens = leftResult.GetTokens();
+    auto& rightTokens = rightResult.GetTokens();
+    leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
+    leftResult.SetTokensMode(TResult::ETokensMode::And);
+    return leftResult;
 }
 
 TResult TQueryCollector::BinaryOr(const TJsonPathItem& item, EMode mode) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    Y_UNUSED(mode);
-    return TResult(TIssue("Not implemented"));
+    const auto& leftItem = Reader.ReadLeftOperand(item);
+    const auto& rightItem = Reader.ReadRightOperand(item);
+
+    auto leftResult = Collect(leftItem, mode);
+    if (leftResult.IsError()) {
+        return leftResult;
+    }
+
+    auto rightResult = Collect(rightItem, mode);
+    if (rightResult.IsError()) {
+        return rightResult;
+    }
+
+    if (leftResult.GetTokensMode() == TResult::ETokensMode::And ||
+        rightResult.GetTokensMode() == TResult::ETokensMode::And) {
+        return TResult(TIssue("Cannot mix AND and OR operators in jsonpath expression"));
+    }
+
+    auto& leftTokens = leftResult.GetTokens();
+    auto& rightTokens = rightResult.GetTokens();
+    leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
+    leftResult.SetTokensMode(TResult::ETokensMode::Or);
+    return leftResult;
 }
 
 TResult TQueryCollector::UnaryNot(const TJsonPathItem& item, EMode mode) {
     Y_UNUSED(item);
     Y_UNUSED(mode);
     // Unary not breaks the path, so we can't collect anymore: !($.a == 10) -> "1a|10"
-    return TResult(TIssue("Unary not is not supported"));
+    return TResult(TIssue("Unary NOT operation is not supported"));
 }
 
 TResult TQueryCollector::BinaryEqual(const TJsonPathItem& item, EMode mode) {
@@ -417,17 +469,40 @@ TResult TQueryCollector::BinaryNotEqual(const TJsonPathItem& item, EMode mode) {
 }
 
 TResult TQueryCollector::FilterObject(const TJsonPathItem& item, EMode mode) {
-    // TODO: Implement
     Y_UNUSED(item);
     Y_UNUSED(mode);
-    return TResult(TIssue("Not implemented"));
+    if (FilterObjectPrefixes.empty()) {
+        return TResult(TIssue("'@' is only allowed inside filters"));
+    }
+    return TResult(TString(FilterObjectPrefixes.back()));
 }
 
 TResult TQueryCollector::FilterPredicate(const TJsonPathItem& item, EMode mode) {
-    // TODO: Implement
-    Y_UNUSED(item);
-    Y_UNUSED(mode);
-    return TResult(TIssue("Not implemented"));
+    auto inputResult = Collect(Reader.ReadInput(item), mode);
+    if (inputResult.IsError()) {
+        return inputResult;
+    }
+
+    const auto& tokens = inputResult.GetTokens();
+
+    // If input path is already finished (e.g. $.a.*) or has multiple tokens,
+    // we can't apply the filter to narrow down
+    if (inputResult.IsFinished() || tokens.size() != 1) {
+        inputResult.Finish();
+        return inputResult;
+    }
+
+    FilterObjectPrefixes.push_back(tokens.front());
+    const auto& predicateItem = Reader.ReadFilterPredicate(item);
+    auto predicateResult = Collect(predicateItem, EMode::Filter);
+    FilterObjectPrefixes.pop_back();
+
+    if (predicateResult.IsError()) {
+        return predicateResult;
+    }
+
+    predicateResult.Finish();
+    return predicateResult;
 }
 
 TResult TQueryCollector::Methods(const TJsonPathItem& item, EMode mode) {

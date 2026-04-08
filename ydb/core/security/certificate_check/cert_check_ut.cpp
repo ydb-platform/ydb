@@ -1,5 +1,6 @@
 #include "cert_check.h"
-#include "test_utils/test_cert_auth_utils.h"
+
+#include <ydb/core/security/certificate_check/test_utils/test_cert_auth_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

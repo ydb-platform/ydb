@@ -676,7 +676,7 @@ namespace Tests {
             NActorSystemConfigHelpers::AddExecutorPool(cpuManager, actorSystemConfig.GetExecutor(poolId), actorSystemConfig, poolId, nullptr);
         }
 
-        const NAutoConfigInitializer::TASPools pools = NAutoConfigInitializer::GetASPools(actorSystemConfig, useAutoConfig);
+        const NAutoConfigInitializer::TExecutorPoolLayout pools = NAutoConfigInitializer::GetExecutorPoolLayout(actorSystemConfig, useAutoConfig);
 
         Runtime->SetupActorSystemConfig(TTestActorRuntime::TActorSystemSetupConfig{
             .CpuManagerConfig = cpuManager,

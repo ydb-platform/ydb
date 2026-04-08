@@ -19,69 +19,69 @@ using namespace NAutoConfigInitializer;
     } while (false) \
 // ASSERT_POOLS
 
-Y_UNIT_TEST(GetASPoolsith1CPU) {
-    TASPools pools = GetASPools(1);
+Y_UNIT_TEST(GetExecutorPoolLayoutWith1CPU) {
+    TExecutorPoolLayout pools = GetExecutorPoolLayout(1);
     ASSERT_POOLS(pools, 0, 0, 0, 1, 0);
 
     NKikimrConfig::TActorSystemConfig config;
     config.SetUseAutoConfig(true);
     config.SetCpuCount(1);
-    pools = GetASPools(config, true);
+    pools = GetExecutorPoolLayout(config, true);
     ASSERT_POOLS(pools, 0, 0, 0, 1, 0);
 
-    UNIT_ASSERT_VALUES_EQUAL(pools.GetIndeces(),  (std::vector<ui8>{0, 0, 0, 1, 0}));
+    UNIT_ASSERT_VALUES_EQUAL(pools.GetIndices(),  (std::vector<ui8>{0, 0, 0, 1, 0}));
     UNIT_ASSERT_VALUES_EQUAL(pools.GetPriorities(), (std::vector<ui8>{40, 0}));
-    UNIT_ASSERT_VALUES_EQUAL(pools.GetRealPoolNames(), (std::vector<TString>{"Common", "IO"}));
-    UNIT_ASSERT_VALUES_EQUAL(pools.GetRealPoolCount(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(pools.GetExecutorPoolNames(), (std::vector<TString>{"Common", "IO"}));
+    UNIT_ASSERT_VALUES_EQUAL(pools.GetExecutorPoolCount(), 2);
 }
 
-Y_UNIT_TEST(GetASPoolsWith2CPUs) {
-    TASPools pools = GetASPools(2);
+Y_UNIT_TEST(GetExecutorPoolLayoutWith2CPUs) {
+    TExecutorPoolLayout pools = GetExecutorPoolLayout(2);
     ASSERT_POOLS(pools, 0, 0, 0, 1, 0);
 
     NKikimrConfig::TActorSystemConfig config;
     config.SetUseAutoConfig(true);
     config.SetCpuCount(2);
-    pools = GetASPools(config, true);
+    pools = GetExecutorPoolLayout(config, true);
     ASSERT_POOLS(pools, 0, 0, 0, 1, 0);
 
-    UNIT_ASSERT_VALUES_EQUAL(pools.GetIndeces(),  (std::vector<ui8>{0, 0, 0, 1, 0}));
+    UNIT_ASSERT_VALUES_EQUAL(pools.GetIndices(),  (std::vector<ui8>{0, 0, 0, 1, 0}));
     UNIT_ASSERT_VALUES_EQUAL(pools.GetPriorities(), (std::vector<ui8>{40, 0}));
-    UNIT_ASSERT_VALUES_EQUAL(pools.GetRealPoolNames(), (std::vector<TString>{"Common", "IO"}));
-    UNIT_ASSERT_VALUES_EQUAL(pools.GetRealPoolCount(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(pools.GetExecutorPoolNames(), (std::vector<TString>{"Common", "IO"}));
+    UNIT_ASSERT_VALUES_EQUAL(pools.GetExecutorPoolCount(), 2);
 }
 
-Y_UNIT_TEST(GetASPoolsWith3CPUs) {
-    TASPools pools = GetASPools(3);
+Y_UNIT_TEST(GetExecutorPoolLayoutWith3CPUs) {
+    TExecutorPoolLayout pools = GetExecutorPoolLayout(3);
     ASSERT_POOLS(pools, 0, 0, 1, 2, 3);
 
     NKikimrConfig::TActorSystemConfig config;
     config.SetUseAutoConfig(true);
     config.SetCpuCount(3);
-    pools = GetASPools(config, true);
+    pools = GetExecutorPoolLayout(config, true);
     ASSERT_POOLS(pools, 0, 0, 1, 2, 3);
 
-    UNIT_ASSERT_VALUES_EQUAL(pools.GetIndeces(),  (std::vector<ui8>{0, 0, 1, 2, 3}));
+    UNIT_ASSERT_VALUES_EQUAL(pools.GetIndices(),  (std::vector<ui8>{0, 0, 1, 2, 3}));
     UNIT_ASSERT_VALUES_EQUAL(pools.GetPriorities(), (std::vector<ui8>{30, 10, 0, 40}));
-    UNIT_ASSERT_VALUES_EQUAL(pools.GetRealPoolNames(), (std::vector<TString>{"Common", "Batch", "IO", "IC"}));
-    UNIT_ASSERT_VALUES_EQUAL(pools.GetRealPoolCount(), 4);
+    UNIT_ASSERT_VALUES_EQUAL(pools.GetExecutorPoolNames(), (std::vector<TString>{"Common", "Batch", "IO", "IC"}));
+    UNIT_ASSERT_VALUES_EQUAL(pools.GetExecutorPoolCount(), 4);
 }
 
-Y_UNIT_TEST(GetASPoolsWith4AndMoreCPUs) {
+Y_UNIT_TEST(GetExecutorPoolLayoutWith4AndMoreCPUs) {
     for (ui32 threadCount = 4; threadCount < 128; ++threadCount) {
-        TASPools pools = GetASPools(threadCount);
+        TExecutorPoolLayout pools = GetExecutorPoolLayout(threadCount);
         ASSERT_POOLS(pools, 0, 1, 2, 3, 4);
 
         NKikimrConfig::TActorSystemConfig config;
         config.SetUseAutoConfig(true);
         config.SetCpuCount(threadCount);
-        pools = GetASPools(config, true);
+        pools = GetExecutorPoolLayout(config, true);
         ASSERT_POOLS(pools, 0, 1, 2, 3, 4);
 
-        UNIT_ASSERT_VALUES_EQUAL(pools.GetIndeces(),  (std::vector<ui8>{0, 1, 2, 3, 4}));
+        UNIT_ASSERT_VALUES_EQUAL(pools.GetIndices(),  (std::vector<ui8>{0, 1, 2, 3, 4}));
         UNIT_ASSERT_VALUES_EQUAL(pools.GetPriorities(), (std::vector<ui8>{30, 20, 10, 0, 40}));
-        UNIT_ASSERT_VALUES_EQUAL(pools.GetRealPoolNames(), (std::vector<TString>{"System", "User", "Batch", "IO", "IC"}));
-    UNIT_ASSERT_VALUES_EQUAL(pools.GetRealPoolCount(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(pools.GetExecutorPoolNames(), (std::vector<TString>{"System", "User", "Batch", "IO", "IC"}));
+        UNIT_ASSERT_VALUES_EQUAL(pools.GetExecutorPoolCount(), 5);
     }
 }
 
@@ -135,8 +135,8 @@ const NKikimrConfig::TActorSystemConfig::TExecutor* FindExecutorByName(
     return nullptr;
 }
 
-void SetRealPool(TCpuTableRow& row, ui8 poolId, ERealPoolKind poolKind, i16 threads, i16 maxThreads, ui8 priority) {
-    row.RealPools[poolId] = TRealPoolConfig{
+void SetExecutorPool(TCpuTableRow& row, ui8 poolId, EExecutorPoolKind poolKind, i16 threads, i16 maxThreads, ui8 priority) {
+    row.ExecutorPools[poolId] = TExecutorPoolConfig{
         .Kind = poolKind,
         .ThreadCount = threads,
         .MaxThreadCount = maxThreads,
@@ -144,33 +144,33 @@ void SetRealPool(TCpuTableRow& row, ui8 poolId, ERealPoolKind poolKind, i16 thre
     };
 }
 
-void SetLogicalToRealPool(TCpuTableRow& row, EPoolKind logicalPoolKind, ui8 realPoolId) {
-    row.LogicalToRealPool[static_cast<size_t>(logicalPoolKind)] = realPoolId;
+void SetLogicalToExecutorPool(TCpuTableRow& row, ELogicalPoolKind logicalPoolKind, ui8 executorPoolId) {
+    row.LogicalPoolToExecutorPool[static_cast<size_t>(logicalPoolKind)] = executorPoolId;
 }
 
 void SetDefaultFivePoolMapping(TCpuTableRow& row) {
-    SetLogicalToRealPool(row, EPoolKind::System, 0);
-    SetLogicalToRealPool(row, EPoolKind::User, 1);
-    SetLogicalToRealPool(row, EPoolKind::Batch, 2);
-    SetLogicalToRealPool(row, EPoolKind::IO, 3);
-    SetLogicalToRealPool(row, EPoolKind::IC, 4);
+    SetLogicalToExecutorPool(row, ELogicalPoolKind::System, 0);
+    SetLogicalToExecutorPool(row, ELogicalPoolKind::User, 1);
+    SetLogicalToExecutorPool(row, ELogicalPoolKind::Batch, 2);
+    SetLogicalToExecutorPool(row, ELogicalPoolKind::IO, 3);
+    SetLogicalToExecutorPool(row, ELogicalPoolKind::IC, 4);
 }
 
-void FillDenseScalingCpuTable(TDefaultCpuTable& cpuTable) {
+void BuildDenseScalableCpuTable(TDefaultCpuTable& cpuTable) {
     for (i16 cpuCount = 1; cpuCount <= MaxPreparedCpuCount; ++cpuCount) {
         auto& row = cpuTable.GetPreparedRow(cpuCount);
-        row.RealPoolCount = 5;
+        row.ExecutorPoolCount = 5;
 
         const i16 systemThreads = 1;
         const i16 userThreads = cpuCount >= 2 ? 1 : 0;
         const i16 batchThreads = cpuCount >= 3 ? 1 : 0;
         const i16 icThreads = cpuCount - systemThreads - userThreads - batchThreads;
 
-        SetRealPool(row, 0, ERealPoolKind::System, systemThreads, systemThreads ? systemThreads + 1 : 0, 30);
-        SetRealPool(row, 1, ERealPoolKind::User, userThreads, userThreads ? userThreads + 1 : 0, 20);
-        SetRealPool(row, 2, ERealPoolKind::Batch, batchThreads, batchThreads ? batchThreads + 1 : 0, 10);
-        SetRealPool(row, 3, ERealPoolKind::IO, 0, 0, 0);
-        SetRealPool(row, 4, ERealPoolKind::IC, icThreads, icThreads ? icThreads + 1 : 0, 40);
+        SetExecutorPool(row, 0, EExecutorPoolKind::System, systemThreads, systemThreads ? systemThreads + 1 : 0, 30);
+        SetExecutorPool(row, 1, EExecutorPoolKind::User, userThreads, userThreads ? userThreads + 1 : 0, 20);
+        SetExecutorPool(row, 2, EExecutorPoolKind::Batch, batchThreads, batchThreads ? batchThreads + 1 : 0, 10);
+        SetExecutorPool(row, 3, EExecutorPoolKind::IO, 0, 0, 0);
+        SetExecutorPool(row, 4, EExecutorPoolKind::IC, icThreads, icThreads ? icThreads + 1 : 0, 40);
         SetDefaultFivePoolMapping(row);
     }
 }
@@ -180,12 +180,12 @@ void FillDenseScalingCpuTable(TDefaultCpuTable& cpuTable) {
 Y_UNIT_TEST(ApplyAutoConfigWithCustomCpuTable) {
     TDefaultCpuTable cpuTable{};
     auto& row = cpuTable.GetPreparedRow(4);
-    row.RealPoolCount = 5;
-    SetRealPool(row, 0, ERealPoolKind::System, 1, 2, 30);
-    SetRealPool(row, 1, ERealPoolKind::User, 1, 3, 20);
-    SetRealPool(row, 2, ERealPoolKind::Batch, 1, 2, 10);
-    SetRealPool(row, 3, ERealPoolKind::IO, 0, 0, 0);
-    SetRealPool(row, 4, ERealPoolKind::IC, 1, 2, 40);
+    row.ExecutorPoolCount = 5;
+    SetExecutorPool(row, 0, EExecutorPoolKind::System, 1, 2, 30);
+    SetExecutorPool(row, 1, EExecutorPoolKind::User, 1, 3, 20);
+    SetExecutorPool(row, 2, EExecutorPoolKind::Batch, 1, 2, 10);
+    SetExecutorPool(row, 3, EExecutorPoolKind::IO, 0, 0, 0);
+    SetExecutorPool(row, 4, EExecutorPoolKind::IC, 1, 2, 40);
     SetDefaultFivePoolMapping(row);
 
     NKikimrConfig::TActorSystemConfig config;
@@ -220,16 +220,16 @@ Y_UNIT_TEST(ApplyAutoConfigWithCustomCpuTable) {
 Y_UNIT_TEST(ApplyAutoConfigUsesCustomCpuTableWithoutForcedTinyConfiguration) {
     TDefaultCpuTable cpuTable{};
     auto& row = cpuTable.GetPreparedRow(3);
-    row.RealPoolCount = 4;
-    SetRealPool(row, 0, ERealPoolKind::Common, 2, 3, 30);
-    SetRealPool(row, 1, ERealPoolKind::Batch, 0, 0, 10);
-    SetRealPool(row, 2, ERealPoolKind::IO, 0, 0, 0);
-    SetRealPool(row, 3, ERealPoolKind::IC, 1, 1, 40);
-    SetLogicalToRealPool(row, EPoolKind::System, 0);
-    SetLogicalToRealPool(row, EPoolKind::User, 0);
-    SetLogicalToRealPool(row, EPoolKind::Batch, 1);
-    SetLogicalToRealPool(row, EPoolKind::IO, 2);
-    SetLogicalToRealPool(row, EPoolKind::IC, 3);
+    row.ExecutorPoolCount = 4;
+    SetExecutorPool(row, 0, EExecutorPoolKind::Common, 2, 3, 30);
+    SetExecutorPool(row, 1, EExecutorPoolKind::Batch, 0, 0, 10);
+    SetExecutorPool(row, 2, EExecutorPoolKind::IO, 0, 0, 0);
+    SetExecutorPool(row, 3, EExecutorPoolKind::IC, 1, 1, 40);
+    SetLogicalToExecutorPool(row, ELogicalPoolKind::System, 0);
+    SetLogicalToExecutorPool(row, ELogicalPoolKind::User, 0);
+    SetLogicalToExecutorPool(row, ELogicalPoolKind::Batch, 1);
+    SetLogicalToExecutorPool(row, ELogicalPoolKind::IO, 2);
+    SetLogicalToExecutorPool(row, ELogicalPoolKind::IC, 3);
 
     NKikimrConfig::TActorSystemConfig config;
     config.SetUseAutoConfig(true);
@@ -259,16 +259,16 @@ Y_UNIT_TEST(ApplyAutoConfigUsesCustomCpuTableWithoutForcedTinyConfiguration) {
 Y_UNIT_TEST(ApplyAutoConfigUsesCustomCpuTableInTinyConfiguration) {
     TDefaultCpuTable cpuTable{};
     auto& row = cpuTable.GetPreparedRow(3);
-    row.RealPoolCount = 4;
-    SetRealPool(row, 0, ERealPoolKind::Common, 2, 3, 30);
-    SetRealPool(row, 1, ERealPoolKind::Batch, 0, 0, 10);
-    SetRealPool(row, 2, ERealPoolKind::IO, 0, 0, 0);
-    SetRealPool(row, 3, ERealPoolKind::IC, 1, 1, 40);
-    SetLogicalToRealPool(row, EPoolKind::System, 0);
-    SetLogicalToRealPool(row, EPoolKind::User, 0);
-    SetLogicalToRealPool(row, EPoolKind::Batch, 1);
-    SetLogicalToRealPool(row, EPoolKind::IO, 2);
-    SetLogicalToRealPool(row, EPoolKind::IC, 3);
+    row.ExecutorPoolCount = 4;
+    SetExecutorPool(row, 0, EExecutorPoolKind::Common, 2, 3, 30);
+    SetExecutorPool(row, 1, EExecutorPoolKind::Batch, 0, 0, 10);
+    SetExecutorPool(row, 2, EExecutorPoolKind::IO, 0, 0, 0);
+    SetExecutorPool(row, 3, EExecutorPoolKind::IC, 1, 1, 40);
+    SetLogicalToExecutorPool(row, ELogicalPoolKind::System, 0);
+    SetLogicalToExecutorPool(row, ELogicalPoolKind::User, 0);
+    SetLogicalToExecutorPool(row, ELogicalPoolKind::Batch, 1);
+    SetLogicalToExecutorPool(row, ELogicalPoolKind::IO, 2);
+    SetLogicalToExecutorPool(row, ELogicalPoolKind::IC, 3);
 
     NKikimrConfig::TActorSystemConfig config;
     config.SetUseAutoConfig(true);
@@ -407,7 +407,7 @@ Y_UNIT_TEST(ApplyAutoConfigUsesConsistentLogicalPoolIds) {
 
 Y_UNIT_TEST(ApplyAutoConfigCustomCpuTableUsesChunkedScaling) {
     TDefaultCpuTable cpuTable{};
-    FillDenseScalingCpuTable(cpuTable);
+    BuildDenseScalableCpuTable(cpuTable);
 
     NKikimrConfig::TActorSystemConfig config;
     config.SetUseAutoConfig(true);
@@ -436,7 +436,7 @@ Y_UNIT_TEST(ApplyAutoConfigCustomCpuTableUsesChunkedScaling) {
     UNIT_ASSERT_VALUES_EQUAL(ic->GetMaxThreads(), 31);
 }
 
-Y_UNIT_TEST(GetASPoolsIgnoresRawExplicitPoolIdsBeforeAutoConfigMaterialization) {
+Y_UNIT_TEST(GetExecutorPoolLayoutIgnoresExplicitPoolIdsUntilExecutorsMaterialized) {
     NKikimrConfig::TActorSystemConfig config;
     config.SetUseAutoConfig(true);
     config.SetCpuCount(4);
@@ -448,7 +448,7 @@ Y_UNIT_TEST(GetASPoolsIgnoresRawExplicitPoolIdsBeforeAutoConfigMaterialization) 
     serviceExecutor->SetServiceName("Interconnect");
     serviceExecutor->SetExecutorId(3);
 
-    const TASPools pools = GetASPools(config, true);
+    const TExecutorPoolLayout pools = GetExecutorPoolLayout(config, true);
     const TMap<TString, ui32> servicePools = GetServicePools(config, true);
     const auto it = servicePools.find("Interconnect");
 

@@ -4,7 +4,6 @@
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
-#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_match_recognize.h>
 #include <yql/essentials/core/type_ann/type_ann_dict.h>
 

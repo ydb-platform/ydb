@@ -1005,7 +1005,7 @@ public:
     bool DoInit(TContext& ctx, ISource* src) final;
     TNodePtr DoClone() const final;
     TAstNode* Translate(TContext& ctx) const override;
-    const TNodePtr GetExternalTypes() const;
+    TNodePtr GetExternalTypes() const;
     const TString& GetFunction() const;
     const TString& GetModule() const;
     TNodePtr GetRunConfig() const;

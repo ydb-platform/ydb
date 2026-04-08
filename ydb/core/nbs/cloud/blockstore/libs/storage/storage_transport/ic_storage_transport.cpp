@@ -63,7 +63,7 @@ TICStorageTransport::WriteToManyPBuffers(
     const ui64 lsn,
     const NDDisk::TWriteInstruction instruction,
     TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
-    ui32 replyTimeoutMicroseconds,
+    TDuration replyTimeout,
     const TGuardedSgList& data,
     NWilson::TSpan& span)
 {
@@ -77,7 +77,7 @@ TICStorageTransport::WriteToManyPBuffers(
             lsn,
             instruction,
             std::move(persistentBufferIds),
-            replyTimeoutMicroseconds,
+            replyTimeout,
             data,
             span.GetTraceId());
 

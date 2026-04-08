@@ -8,7 +8,6 @@ SRCS(
     direct_block_group_mock.cpp
     direct_block_group.cpp
     erase_request.cpp
-    executor_pool.cpp
     fast_path_service.cpp
     flush_request.cpp
     load_actor_adapter.cpp
@@ -51,5 +50,6 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    partition_ut
     ut
 )

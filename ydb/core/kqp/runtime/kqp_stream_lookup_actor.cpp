@@ -585,9 +585,10 @@ private:
         }
 
         auto guard = BindAllocator();
-        StreamLookupWorker->AddResult(TKqpStreamLookupWorker::TShardReadResult{
-            shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release())
-        });
+        StreamLookupWorker->AddResult(TStreamLookupShardReadResult(
+            shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()),
+            &guard.GetMutex()->Ref()
+        ));
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 

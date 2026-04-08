@@ -6,6 +6,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/timer.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -77,12 +78,16 @@ TDirectBlockGroup::TDDiskConnection::GetFuture() const
 
 TDirectBlockGroup::TDirectBlockGroup(
     NActors::TActorSystem* actorSystem,
+    ISchedulerPtr scheduler,
+    ITimerPtr timer,
     TExecutorPtr executor,
     ui64 tabletId,
     ui32 generation,
     const TVector<NBsController::TDDiskId>& ddisksIds,
     const TVector<NBsController::TDDiskId>& pbufferIds)
     : ActorSystem(actorSystem)
+    , Scheduler(std::move(scheduler))
+    , Timer(std::move(timer))
     , Executor(std::move(executor))
     , TabletId(tabletId)
     , StorageTransport(
@@ -125,6 +130,14 @@ TDirectBlockGroup::TDirectBlockGroup(
 TExecutorPtr TDirectBlockGroup::GetExecutor()
 {
     return Executor;
+}
+
+void TDirectBlockGroup::Schedule(TDuration delay, TCallback callback)
+{
+    Scheduler->Schedule(
+        Executor.get(),
+        Timer->Now() + delay,
+        std::move(callback));
 }
 
 void TDirectBlockGroup::EstablishConnections()
@@ -409,7 +422,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
     std::vector<ui8> hostIndexes,
     ui64 lsn,
     TBlockRange64 range,
-    ui32 replyTimeoutMicroseconds,
+    TDuration replyTimeout,
     const TGuardedSgList& guardedSglist,
     NWilson::TTraceId traceId)
 {
@@ -454,7 +467,7 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
         lsn,
         NKikimr::NDDisk::TWriteInstruction(0),
         std::move(disksIds),
-        replyTimeoutMicroseconds,
+        replyTimeout,
         guardedSglist,
         childSpan);
 

@@ -1687,6 +1687,7 @@ public:
     void Write(IDataBatchPtr data) {
         AFL_ENSURE(!Closed);
         AFL_ENSURE(!IsError());
+        AFL_ENSURE(BufferedBatches.empty());
 
         if (!data->IsEmpty()) {
             Memory += data->GetMemory();
@@ -5522,14 +5523,14 @@ private:
         return {};
     }
 
-    void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64 size, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
+    void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
         YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
         AFL_ENSURE(!InFlight);
         Closed |= finished;
         Batcher->AddData(data);
-        DataSize += size;
+        DataSize = Batcher->GetMemory();
 
-        CA_LOG_D("Add data: " << size << " / " << DataSize);
+        CA_LOG_D("Add data: " << DataSize << " / " << DataSize);
         if (Closed || GetFreeSpace() <= 0) {
             WriteToBuffer();
         }

@@ -121,7 +121,7 @@ class TFileDescriber {
 public:
     TFileDescriber(const TFsPath& dir, const TFsPath& name)
         : Dir(dir)
-        , Path(dir / name)
+        , Path(TFsPath("/") / dir / name)
     {}
 
     const TString& GetDir() const {

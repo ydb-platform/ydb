@@ -127,7 +127,7 @@ namespace NKikimr {
                 TStringStream str;
                 HTML(str) {
                     for (auto& [_, id] : inflight.Requests) {
-                        str << "<h2 style=\"color:red;\">" << "No response from PB actorId: " << id << " </font></h2>";
+                        str << "<h2 style=\"color:red;\">" << "No response from PB actorId: " << id << " </h2>";
                     }
                     std::sort(inflight.Responses.begin(), inflight.Responses.end(), [](auto &o1, auto &o2) -> bool {
                         return o1->Sender < o2->Sender;
@@ -136,7 +136,7 @@ namespace NKikimr {
                         auto b = v->Get();
                         ui32 sectorsInChunk = b->ChunkSize / b->SectorSize;
                         TDuration uptime = TInstant::Now() - b->StartedAt;
-                        str << "<h2>" << "PB actorId: " << v->Sender << "</font></h2>";
+                        str << "<h2>" << "PB actorId: " << v->Sender << "</h2>";
                         str << "Uptime: " << beautyDuration(uptime);
                         str << "<br> Allocated chunks: " << b->AllocatedChunks << " of " << b->MaxChunks << " by " << (ui32)(b->ChunkSize / 1e6) << "Mb";
                         str << "<br> Free sectors: " << b->FreeSectors;

@@ -525,11 +525,11 @@ void TSqsService::RequestSqsQueuesList() {
     }
 }
 
-Y_WARN_UNUSED_RESULT bool TSqsService::RequestQueueListForUser(const TUserInfoPtr& user, const TString& reqId, bool throttling) {
+Y_WARN_UNUSED_RESULT bool TSqsService::RequestQueueListForUser(const TUserInfoPtr& user, const TString& reqId, bool throttlingEnabled) {
     if (RequestingQueuesList_) {
         return true;
     }
-    if (throttling) {
+    if (throttlingEnabled) {
         const i64 budget = Min(user->EarlyRequestQueuesListBudget_, EarlyRequestQueuesListMinBudget_ + EARLY_REQUEST_QUEUES_LIST_MAX_BUDGET);
         if (budget <= EarlyRequestQueuesListMinBudget_) {
             RLOG_SQS_REQ_WARN(reqId, "No budget to request queues list for user [" << user->UserName_ << "]. Min budget: " << EarlyRequestQueuesListMinBudget_ << ". User's budget: " << user->EarlyRequestQueuesListBudget_);
@@ -592,11 +592,6 @@ void TSqsService::HandleGetConfiguration(TSqsEvents::TEvGetConfiguration::TPtr& 
     if (!user) {
         return;
     }
-
-    RLOG_SQS_REQ_DEBUG(ev->Get()->RequestId, ">>>>> Queues 0:" << JoinSeq(", ", user->Queues_ | std::views::keys));
-    RLOG_SQS_REQ_DEBUG(ev->Get()->RequestId, ">>>>> Queues 1:" << JoinSeq(", ", user->QueueByNameAndFolder_ 
-        | std::views::transform([](const auto& pair) { return TStringBuilder() << pair.first.first << "/" << pair.first.second; })));
-    RLOG_SQS_REQ_DEBUG(ev->Get()->RequestId, ">>>>> Requested queue:" << ev->Get()->QueueName << "/" << ev->Get()->FolderId);
 
     const TString& reqId = ev->Get()->RequestId;
     const TString& userName = ev->Get()->UserName;

@@ -33,8 +33,8 @@ public:
         return true;
     }
 
-    TSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, bool isBatch, THolder<IReplyCallback> cb, bool isInternal)
-        : TActionActor(sourceSqsRequest, isBatch ? EAction::SendMessageBatch : EAction::SendMessage, std::move(cb), isInternal)
+    TSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, bool isBatch, THolder<IReplyCallback> cb)
+        : TActionActor(sourceSqsRequest, isBatch ? EAction::SendMessageBatch : EAction::SendMessage, std::move(cb))
         , IsBatch_(isBatch)
     {
     }
@@ -402,15 +402,11 @@ private:
 };
 
 IActor* CreateSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TSendMessageActor(sourceSqsRequest, false, std::move(cb), false);
-}
-
-IActor* CreateSendMessageInternalActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TSendMessageActor(sourceSqsRequest, false, std::move(cb), true);
+    return new TSendMessageActor(sourceSqsRequest, false, std::move(cb));
 }
 
 IActor* CreateSendMessageBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
-    return new TSendMessageActor(sourceSqsRequest, true, std::move(cb), false);
+    return new TSendMessageActor(sourceSqsRequest, true, std::move(cb));
 }
 
 } // namespace NKikimr::NSQS

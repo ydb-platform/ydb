@@ -71,7 +71,7 @@ private:
 
     void ScheduleRequestSqsQueuesList();
     void RequestSqsQueuesList();
-    bool RequestQueueListForUser(const TUserInfoPtr& user, const TString& reqId, bool throttling = true) Y_WARN_UNUSED_RESULT;
+    bool RequestQueueListForUser(const TUserInfoPtr& user, const TString& reqId, bool throttlingEnabled = true) Y_WARN_UNUSED_RESULT;
 
     void RemoveQueue(const TString& userName, const TString& queue);
     TUsersMap::iterator MutableUserIter(const TString& userName, bool moveUserRequestsToUserRecord = true, bool* requestsWereMoved = nullptr);

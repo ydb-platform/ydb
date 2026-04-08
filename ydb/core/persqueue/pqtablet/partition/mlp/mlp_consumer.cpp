@@ -961,7 +961,9 @@ void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr& ev) {
     switch (ev->Get()->Tag) {
         case EWakeUpTag::Regular: {
             FetchMessagesIfNeeded();
-            ScheduleProcessing();
+            if (!ProcessingScheduled) {
+                ProcessEventQueue();
+            }
             NotifyPQRB(true);
             UpdateMetrics();
             Schedule(WakeupInterval, new TEvents::TEvWakeup(EWakeUpTag::Regular));
@@ -986,7 +988,7 @@ void TConsumerActor::MoveToDLQIfPossible() {
 
     auto destinationTopic = [&]() -> TString {
         auto databasePrefix = TStringBuilder() << Database << "/";
-        if (Config.GetDeadLetterQueue().StartsWith(databasePrefix)) {
+        if (Config.GetDeadLetterQueue().StartsWith("sqs://") || Config.GetDeadLetterQueue().StartsWith(databasePrefix)) {
             return Config.GetDeadLetterQueue();
         } else {
             return databasePrefix << Config.GetDeadLetterQueue();

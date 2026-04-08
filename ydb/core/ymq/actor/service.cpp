@@ -526,18 +526,21 @@ void TSqsService::RequestSqsQueuesList() {
     }
 }
 
-Y_WARN_UNUSED_RESULT bool TSqsService::RequestQueueListForUser(const TUserInfoPtr& user, const TString& reqId) {
+Y_WARN_UNUSED_RESULT bool TSqsService::RequestQueueListForUser(const TUserInfoPtr& user, const TString& reqId, bool throttlingEnabled) {
     if (RequestingQueuesList_) {
         return true;
     }
-    const i64 budget = Min(user->EarlyRequestQueuesListBudget_, EarlyRequestQueuesListMinBudget_ + EARLY_REQUEST_QUEUES_LIST_MAX_BUDGET);
-    if (budget <= EarlyRequestQueuesListMinBudget_) {
-        RLOG_SQS_REQ_WARN(reqId, "No budget to request queues list for user [" << user->UserName_ << "]. Min budget: " << EarlyRequestQueuesListMinBudget_ << ". User's budget: " << user->EarlyRequestQueuesListBudget_);
-        return false; // no budget
+    if (throttlingEnabled) {
+        const i64 budget = Min(user->EarlyRequestQueuesListBudget_, EarlyRequestQueuesListMinBudget_ + EARLY_REQUEST_QUEUES_LIST_MAX_BUDGET);
+        if (budget <= EarlyRequestQueuesListMinBudget_) {
+            RLOG_SQS_REQ_WARN(reqId, "No budget to request queues list for user [" << user->UserName_ << "]. Min budget: " << EarlyRequestQueuesListMinBudget_ << ". User's budget: " << user->EarlyRequestQueuesListBudget_);
+            return false; // no budget
+        }
+    
+        RLOG_SQS_REQ_DEBUG(reqId, "Using budget to request queues list for user [" << user->UserName_ << "]. Current budget: " << budget << ". Min budget: " << EarlyRequestQueuesListMinBudget_);
+        user->EarlyRequestQueuesListBudget_ = budget - 1;
     }
 
-    RLOG_SQS_REQ_DEBUG(reqId, "Using budget to request queues list for user [" << user->UserName_ << "]. Current budget: " << budget << ". Min budget: " << EarlyRequestQueuesListMinBudget_);
-    user->EarlyRequestQueuesListBudget_ = budget - 1;
     RequestSqsQueuesList();
     return true;
 }
@@ -614,7 +617,7 @@ void TSqsService::HandleGetConfiguration(TSqsEvents::TEvGetConfiguration::TPtr& 
         }
     }
 
-    if (RequestQueueListForUser(user, reqId)) {
+    if (RequestQueueListForUser(user, reqId, ev->Get()->EnableThrottling)) {
         LWPROBE(QueueRequestCacheMiss, userName, queueName, reqId, ev->Get()->ToStringHeader());
         RLOG_SQS_REQ_DEBUG(reqId, "Queue [" << userName << "/" << queueName << "] was not found in sqs service list. Requesting queues list");
         user->GetConfigurationRequests_.emplace(queueName, std::move(ev));
@@ -745,6 +748,8 @@ void TSqsService::AnswerLeaderlessConfiguration(TSqsEvents::TEvGetConfiguration:
     answer->Settings = userInfo->Settings_;
     answer->RootUrl = RootUrl_;
     answer->SqsCoreCounters = SqsCoreCounters_;
+    answer->QueueName = queueInfo->QueueName_;
+    answer->FolderId = queueInfo->FolderId_;
     answer->QueueCounters = queueInfo->Counters_;
     answer->TablesFormat = queueInfo->TablesFormat_;
     answer->QueueVersion = queueInfo->Version_;

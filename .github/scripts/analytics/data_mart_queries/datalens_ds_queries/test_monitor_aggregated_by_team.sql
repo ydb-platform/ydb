@@ -31,7 +31,7 @@ select tm.state_filtered as state_filtered,
         WHEN tm.days_in_mute_state >= 30 THEN 'MUTED: delete candidate'
         ELSE 'MUTED: in sla'
     END as resolution,
-    String::ReplaceAll(tm.owner, 'TEAM:@ydb-platform/', '') as owner_team,
+    COALESCE(tm.effective_owner_team, String::ReplaceAll(tm.owner, 'TEAM:@ydb-platform/', '')) AS owner_team,
     CAST(
         CASE 
             WHEN tm.is_muted = 1 OR (tm.state = 'Skipped' AND tm.days_in_state > 14) THEN TRUE

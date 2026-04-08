@@ -210,8 +210,55 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(consumer.GetConsumerType(), NYdb::NTopic::EConsumerType::Shared);
         UNIT_ASSERT_VALUES_EQUAL(consumer.GetKeepMessagesOrder(), true);
         UNIT_ASSERT_VALUES_EQUAL(consumer.GetDefaultProcessingTimeout(), TDuration::Seconds(3600));
-        UNIT_ASSERT_VALUES_EQUAL(consumer.GetDeadLetterPolicy().GetEnabled(), false);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetDeadLetterPolicy().GetEnabled(), true);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetDeadLetterPolicy().GetDeadLetterQueue(), "sqs://cloud4/folder4/queue-1.fifo");
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 3);
 
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithAllAttributes_TableImplementation, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
+        auto json1 = CreateQueue({{"QueueName", "queue-1.fifo"}, {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}});
+        auto attributes1 = GetQueueAttributes({
+            {"QueueUrl", GetByPath<TString>(json1, "QueueUrl")},
+            {"AttributeNames", NJson::TJsonArray{"QueueArn"}}
+        });
+        auto queueArn1 = GetByPath<TString>(attributes1, "Attributes.QueueArn");
+
+        auto queueName = "ExampleQueueName.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{
+                {"DelaySeconds", "60"},
+                {"MaximumMessageSize", "1024"},
+                {"MessageRetentionPeriod", "60"},
+                {"ReceiveMessageWaitTimeSeconds", "10"},
+                {"VisibilityTimeout", "3600"},
+
+                {"RedrivePolicy", TStringBuilder() << "{\"deadLetterTargetArn\":\"" << queueArn1 << "\", \"maxReceiveCount\": 3}"},
+
+                // 2024-10-07: RedriveAllowPolicy not supported yet.
+                // {"RedriveAllowPolicy", TStringBuilder() << "{\"redrivePermission\":\"byQueue\", \"sourceQueueArns\": [\"" << queueArn2 << "\", \"" << queueArn3 << "\"]}"},
+
+                // FIFO queue
+                {"FifoQueue", "true"},
+                {"ContentBasedDeduplication", "true"}
+
+                // High throughput for FIFO queues not supported yet.
+                // {"DeduplicationScope", "messageGroup"},
+                // {"FifoThroughputLimit", "perMessageGroupId"}
+            }}
+        });
+        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
+        UNIT_ASSERT(resultQueueUrl.EndsWith(queueName));
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000301v0/v4/streamImpl").GetValueSync();
+        UNIT_ASSERT_C(!describe.IsSuccess(), "Topic should not be created because feature flag is disabled");
         driver.Stop(true);
     }
 
@@ -2551,4 +2598,53 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         }
     }
 
+    Y_UNIT_TEST_F(TestMoveMessagesToDLQ, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto json1 = CreateQueue({{"QueueName", "queue-1.fifo"}, {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}});
+        auto attributes1 = GetQueueAttributes({
+            {"QueueUrl", GetByPath<TString>(json1, "QueueUrl")},
+            {"AttributeNames", NJson::TJsonArray{"QueueArn"}}
+        });
+        auto queueArn1 = GetByPath<TString>(attributes1, "Attributes.QueueArn");
+
+        auto queueName = "ExampleQueueName.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"ReceiveMessageWaitTimeSeconds", "3"},
+                {"VisibilityTimeout", "1"},
+
+                {"RedrivePolicy", TStringBuilder() << "{\"deadLetterTargetArn\":\"" << queueArn1 << "\", \"maxReceiveCount\": 1}"},
+            }}
+        });
+
+        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        SendMessage({
+            {"QueueUrl", resultQueueUrl},
+            {"MessageBody", "MessageBody-0"},
+            {"MessageGroupId", "MessageGroupId-0"},
+            {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+        });
+        {
+            auto json = ReceiveMessage({
+                {"QueueUrl", resultQueueUrl},
+                {"WaitTimeSeconds", 1},
+                {"VisibilityTimeout", 1}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], "MessageBody-0");
+        }
+
+        {
+            // Reading from DLQ queue should return the message.
+            auto json = ReceiveMessage({
+                {"QueueUrl", GetByPath<TString>(json1, "QueueUrl")},
+                {"WaitTimeSeconds", 10}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], "MessageBody-0");
+        }
+    }
 } // Y_UNIT_TEST_SUITE(TestYmqHttpProxy)

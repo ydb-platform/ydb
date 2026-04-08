@@ -231,6 +231,8 @@ struct TSqsEvents {
         bool Throttled = false;
 
         // Queue info
+        TString QueueName;
+        TString FolderId;
         ui32 TablesFormat = 0;
         ui64 QueueVersion = 0;
         ui64 Shards = 1;

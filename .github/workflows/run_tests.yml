@@ -347,7 +347,7 @@ jobs:
         env:
           BLACKLIST_PATHS: ${{ inputs.blacklist_paths }}
         run: |
-          BLACKLIST_FILE="${{ runner.temp }}/test_blacklist.txt"
+          BLACKLIST_FILE="${{ runner.temp }}/test_blacklist.yaml"
           > "$BLACKLIST_FILE"
           while IFS= read -r path; do
             [ -z "$path" ] && continue

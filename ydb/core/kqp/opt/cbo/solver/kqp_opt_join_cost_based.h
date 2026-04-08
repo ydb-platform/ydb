@@ -66,8 +66,7 @@ IOptimizerNew* MakeNativeOptimizerNew(
     NYql::TExprContext& ectx,
     bool enableShuffleElimination,
     TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM = nullptr,
-    TTableAliasMap* tableAliases = nullptr,
-    std::chrono::milliseconds hardTimeout = std::chrono::milliseconds(UINT32_MAX)
+    TTableAliasMap* tableAliases = nullptr
 );
 
 } // namespace NKikimr::NKqp

@@ -327,8 +327,7 @@ public:
         TExprContext& exprCtx,
         bool enableShuffleElimination,
         TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM,
-        TTableAliasMap* tableAliases,
-        std::chrono::milliseconds hardTimeout
+        TTableAliasMap* tableAliases
     )
         : IOptimizerNew(ctx)
         , OptimizerSettings_(optimizerSettings)
@@ -336,7 +335,6 @@ public:
         , EnableShuffleElimination(enableShuffleElimination && orderingsFSM != nullptr)
         , OrderingsFSM(orderingsFSM)
         , TableAliases(tableAliases)
-        , HardTimeout_(hardTimeout)
     {}
 
     std::shared_ptr<TJoinOptimizerNode> JoinSearch(
@@ -375,10 +373,11 @@ private:
             assigner.Assign(*OrderingsFSM);
         }
 
+        auto hardTimeout = std::chrono::milliseconds(OptimizerSettings_.CBOHardTimeout);
         if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverClassic<TNodeSet>>) {
-            return TDPHypSolverClassic<TNodeSet>(hypergraph, this->Pctx, HardTimeout_);
+            return TDPHypSolverClassic<TNodeSet>(hypergraph, this->Pctx, hardTimeout);
         } else if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverShuffleElimination<TNodeSet>>) {
-            return TDPHypSolverShuffleElimination<TNodeSet>(hypergraph, this->Pctx, *OrderingsFSM, HardTimeout_);
+            return TDPHypSolverShuffleElimination<TNodeSet>(hypergraph, this->Pctx, *OrderingsFSM, hardTimeout);
         } else {
             static_assert(false, "No such DPHyp implementation");
         }
@@ -435,7 +434,9 @@ private:
             YQL_CLOG(WARN, CoreDq) << "CBO hard timeout exceeded, falling back to default join order: " << e.what();
             ExprCtx.AddWarning(YqlIssue(
                 {}, TIssuesIds::CBO_ENUM_LIMIT_REACHED,
-                TStringBuilder() << "Cost based optimizer timed out and was disabled for this query."
+                TStringBuilder() << "Cost based optimizer timed out and was disabled for this query. "
+                                 << "Use PRAGMA ydb.CBOHardTimeout='"
+                                 << OptimizerSettings_.CBOHardTimeout << "' or higher to extend the time budget."
             ));
             ComputeStatistics(joinTree, this->Pctx);
             return joinTree;
@@ -556,8 +557,6 @@ private:
 
     TSimpleSharedPtr<TOrderingsStateMachine> OrderingsFSM;
     TTableAliasMap* TableAliases;
-
-    std::chrono::milliseconds HardTimeout_;
 };
 
 IOptimizerNew* MakeNativeOptimizerNew(
@@ -566,10 +565,9 @@ IOptimizerNew* MakeNativeOptimizerNew(
     TExprContext& ectx,
     bool enableShuffleElimination,
     TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM,
-    TTableAliasMap* tableAliases,
-    std::chrono::milliseconds hardTimeout
+    TTableAliasMap* tableAliases
 ) {
-    return new TOptimizerNativeNew(pctx, settings, ectx, enableShuffleElimination, orderingsFSM, tableAliases, hardTimeout);
+    return new TOptimizerNativeNew(pctx, settings, ectx, enableShuffleElimination, orderingsFSM, tableAliases);
 }
 
 void CollectInterestingOrderingsFromJoinTree(

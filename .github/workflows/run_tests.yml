@@ -24,16 +24,22 @@ on:
         type: string
         default: ''
       build_preset:
-        description: 'Build preset type'
-        required: true
-        type: string
-      branches:
-        description: 'Branches to test (JSON array or single branch)'
+        description: 'Single build preset (used when workflow_presets is not set)'
         required: false
         type: string
-        default: '["main"]'
-      branches_config_path:
-        description: 'Path to JSON file with branches to test'
+        default: ''
+      branches:
+        description: 'Branches to test (JSON array or single branch, empty = use config_path)'
+        required: false
+        type: string
+        default: ''
+      workflow_presets:
+        description: 'JSON array of presets this workflow supports (enables multi-preset mode)'
+        required: false
+        type: string
+        default: ''
+      config_path:
+        description: 'Path to JSON config with per-branch presets (used when branches is empty)'
         required: false
         type: string
         default: ''
@@ -86,130 +92,112 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
-      branch_array: ${{ steps.set-branches.outputs.branch_array }}
-      branch_name_map: ${{ steps.set-branches.outputs.branch_name_map }}
-      pr_number_map: ${{ steps.set-branches.outputs.pr_number_map }}
+      matrix: ${{ steps.generate-matrix.outputs.matrix }}
+      branch_name_map: ${{ steps.generate-matrix.outputs.branch_name_map }}
+      pr_number_map: ${{ steps.generate-matrix.outputs.pr_number_map }}
     steps:
-      - name: Checkout ${{ matrix.branch }}
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           sparse-checkout: |
             .github/config
             .github/scripts/tests
 
-      - name: Set branches
-        id: set-branches
+      - name: Generate matrix
+        id: generate-matrix
         env:
           CALLED_BRANCHES: '${{ inputs.branches }}'
-          BRANCHES_CONFIG_PATH: '${{ inputs.branches_config_path }}'
           PULL_REQUEST_NUMBER: '${{ inputs.pull_number }}'
           GITHUB_TOKEN: '${{ github.token }}'
+          CONFIG_PATH: '${{ inputs.config_path }}'
+          WORKFLOW_PRESETS: '${{ inputs.workflow_presets }}'
+          BUILD_PRESET: '${{ inputs.build_preset }}'
         run: |
-          # Check if branches parameter was passed from calling workflow
+          GITHUB_REF_NAME="${{ github.ref_name }}"
+
+          # Phase 1: Determine which branches to process
+          branches=()
+
           if [[ -n "$CALLED_BRANCHES" ]]; then
-            echo "Branches parameter provided from calling workflow: $CALLED_BRANCHES"
-            
-            # Check if input is already a JSON array
             if [[ $CALLED_BRANCHES == \[* ]]; then
-              # This is a JSON array - parse it
-              branches=($(echo "$CALLED_BRANCHES" | jq -r '.[]'))
+              while IFS= read -r b; do branches+=("$b"); done < <(echo "$CALLED_BRANCHES" | jq -r '.[]')
             else
-              # If it's a single branch, create array with one element
               branches=("$CALLED_BRANCHES")
             fi
+          elif [[ -n "$CONFIG_PATH" ]] && [[ -n "$WORKFLOW_PRESETS" ]]; then
+            while IFS= read -r b; do branches+=("$b"); done < <(jq -r '.branches | keys_unsorted[]' "$CONFIG_PATH")
+          elif [[ -n "$PULL_REQUEST_NUMBER" ]] && [[ $PULL_REQUEST_NUMBER =~ ^[0-9]+$ ]]; then
+            branches=("pull/$PULL_REQUEST_NUMBER")
+          else
+            branches=("$GITHUB_REF_NAME")
+          fi
 
-            processed_branches=()
-            branch_name_map="{}"
-            pr_number_map="{}"
-            for branch in "${branches[@]}"; do
-              # Check if branch starts with pull/ and contains numbers
-              if [[ $branch =~ ^pull/([0-9]+)$ ]]; then
-                PULL_REQUEST_NUMBER=${BASH_REMATCH[1]}
-                echo "Processing pull request: $PULL_REQUEST_NUMBER"
-                
-                # Get PR data from GitHub API
-                PR_DATA=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s -H "Authorization: token $GITHUB_TOKEN" \
-                  "https://api.github.com/repos/ydb-platform/ydb/pulls/$PULL_REQUEST_NUMBER")
-                MERGE_SHA=$(echo "$PR_DATA" | jq -r '.merge_commit_sha')
-                BASE_BRANCH=$(echo "$PR_DATA" | jq -r '.base.ref')
-                
-                if [ -n "$MERGE_SHA" ] && [ "$MERGE_SHA" != "null" ]; then
-                  echo "Replaced pull/$PULL_REQUEST_NUMBER with merge commit: $MERGE_SHA (base: $BASE_BRANCH)"
-                  processed_branches+=("\"$MERGE_SHA\"")
-                  # Add to mapping: checkout_branch (SHA) -> test_history_branch (base branch for PR, or same for regular branches)
-                  branch_name_map=$(echo "$branch_name_map" | jq -c --arg sha "$MERGE_SHA" --arg base "$BASE_BRANCH" '. + {($sha): $base}')
-                  # Add to mapping: checkout_branch (SHA) -> PR number
-                  pr_number_map=$(echo "$pr_number_map" | jq -c --arg sha "$MERGE_SHA" --arg pr "$PULL_REQUEST_NUMBER" '. + {($sha): $pr}')
-                  # Save merge commit SHA, base branch, and PR number for comment step (use first PR)
-                  if [ -z "$COMMIT_SHA" ]; then
-                    echo "COMMIT_SHA=$MERGE_SHA" >> $GITHUB_ENV
-                    echo "PR_BASE_BRANCH=$BASE_BRANCH" >> $GITHUB_ENV
-                    echo "PR_NUMBER=$PULL_REQUEST_NUMBER" >> $GITHUB_ENV
-                  fi
-                else
-                  echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER, discarding"
+          echo "Branches to process: ${branches[*]}"
+
+          # Phase 2: Process branches — resolve PRs, determine presets, build matrix
+          matrix="[]"
+          branch_name_map="{}"
+          pr_number_map="{}"
+
+          for branch in "${branches[@]}"; do
+            checkout_ref="$branch"
+            config_branch="$branch"
+
+            # Resolve PR branches (pull/NNN → merge commit SHA)
+            if [[ $branch =~ ^pull/([0-9]+)$ ]]; then
+              PR_NUM=${BASH_REMATCH[1]}
+              echo "Processing pull request: $PR_NUM"
+
+              PR_DATA=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s -H "Authorization: token $GITHUB_TOKEN" \
+              MERGE_SHA=$(echo "$PR_DATA" | jq -r '.merge_commit_sha')
+              BASE_BRANCH=$(echo "$PR_DATA" | jq -r '.base.ref')
+
+              if [ -n "$MERGE_SHA" ] && [ "$MERGE_SHA" != "null" ]; then
+                echo "Resolved pull/$PR_NUM → merge commit: $MERGE_SHA (base: $BASE_BRANCH)"
+                checkout_ref="$MERGE_SHA"
+                config_branch="$BASE_BRANCH"
+                branch_name_map=$(echo "$branch_name_map" | jq -c --arg sha "$MERGE_SHA" --arg base "$BASE_BRANCH" '. + {($sha): $base}')
+                pr_number_map=$(echo "$pr_number_map" | jq -c --arg sha "$MERGE_SHA" --arg pr "$PR_NUM" '. + {($sha): $pr}')
+                if [ -z "$COMMIT_SHA" ]; then
+                  echo "COMMIT_SHA=$MERGE_SHA" >> $GITHUB_ENV
+                  echo "PR_BASE_BRANCH=$BASE_BRANCH" >> $GITHUB_ENV
+                  echo "PR_NUMBER=$PR_NUM" >> $GITHUB_ENV
                 fi
               else
-                # Just add the branch as-is
-                processed_branches+=("\"$branch\"")
+                echo "Failed to get merge commit for PR $PR_NUM, skipping"
+                continue
               fi
-            done
+            fi
 
-            # Reassemble into JSON array
-            branch_array=$(IFS=, ; echo "[${processed_branches[*]}]")
-            echo "branch_array=$branch_array" >> $GITHUB_OUTPUT
-            # Output mapping of checkout_branch -> test_history_branch (for PR: SHA -> base_branch, for regular branches: empty {})
-            # Use compact JSON format (no newlines) for GitHub Actions output
-            branch_name_map_compact=$(echo "$branch_name_map" | jq -c .)
-            echo "branch_name_map=$branch_name_map_compact" >> $GITHUB_OUTPUT
-            echo "Created branch_name_map: $branch_name_map_compact"
-            # Output mapping of checkout_branch -> PR number (for PR: SHA -> PR number, for regular branches: empty {})
-            pr_number_map_compact=$(echo "$pr_number_map" | jq -c .)
-            echo "pr_number_map=$pr_number_map_compact" >> $GITHUB_OUTPUT
-            echo "Created pr_number_map: $pr_number_map_compact"
-          elif [[ -n "$BRANCHES_CONFIG_PATH" ]]; then
-            echo "branch_array=$(jq -c "." "$BRANCHES_CONFIG_PATH")" >> $GITHUB_OUTPUT
-            # No mapping for branches from config file - use branches as-is for test history
-            echo "branch_name_map={}" >> $GITHUB_OUTPUT
-            echo "pr_number_map={}" >> $GITHUB_OUTPUT
-          elif [[ -n "$PULL_REQUEST_NUMBER" ]] && [[ $PULL_REQUEST_NUMBER =~ ^[0-9]+$ ]]; then
-            PR_DATA=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s -H "Authorization: token $GITHUB_TOKEN" \
-                  "https://api.github.com/repos/ydb-platform/ydb/pulls/$PULL_REQUEST_NUMBER")
-            MERGE_SHA=$(echo "$PR_DATA" | jq -r '.merge_commit_sha')
-            BASE_BRANCH=$(echo "$PR_DATA" | jq -r '.base.ref')
-            if [ -n "$MERGE_SHA" ] && [ "$MERGE_SHA" != "null" ]; then
-              # Use merge commit SHA for checkout, but base branch for test history and results
-              echo "branch_array=[\"$MERGE_SHA\"]" >> $GITHUB_OUTPUT
-              # Save merge commit SHA, base branch, and PR number for comment step
-              echo "COMMIT_SHA=$MERGE_SHA" >> $GITHUB_ENV
-              echo "PR_BASE_BRANCH=$BASE_BRANCH" >> $GITHUB_ENV
-              echo "PR_NUMBER=$PULL_REQUEST_NUMBER" >> $GITHUB_ENV
-              # Output mapping of checkout_branch -> test_history_branch (SHA -> base_branch for PR)
-              # Use compact JSON format (no newlines) for GitHub Actions output
-              branch_name_map=$(jq -c -n --arg sha "$MERGE_SHA" --arg base "$BASE_BRANCH" '{($sha): $base}')
-              echo "branch_name_map=$branch_name_map" >> $GITHUB_OUTPUT
-              # Output mapping of checkout_branch -> PR number (SHA -> PR number for PR)
-              pr_number_map=$(jq -c -n --arg sha "$MERGE_SHA" --arg pr "$PULL_REQUEST_NUMBER" '{($sha): $pr}')
-              echo "pr_number_map=$pr_number_map" >> $GITHUB_OUTPUT
+            # Determine presets for this branch
+            if [[ -n "$WORKFLOW_PRESETS" ]] && [[ -n "$CONFIG_PATH" ]]; then
+              presets=$(jq -c \
+                --arg b "$config_branch" \
+                --argjson wp "$WORKFLOW_PRESETS" \
+                '.default_presets as $defaults |
+                 ((.branches[$b] // $defaults) | map(select(. as $p | $wp | index($p))))' \
+                "$CONFIG_PATH")
+            elif [[ -n "$WORKFLOW_PRESETS" ]]; then
+              presets="$WORKFLOW_PRESETS"
+            elif [[ -n "$BUILD_PRESET" ]]; then
+              presets="[\"$BUILD_PRESET\"]"
             else
-              echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER"
+              echo "Error: either workflow_presets or build_preset must be specified"
               exit 1
             fi
-          else
-            # If no branches specified, this is a direct workflow_dispatch run
-            echo "No branches specified, using current branch: ${{ github.ref_name }}"
-            echo "branch_array=[\"${{ github.ref_name }}\"]" >> $GITHUB_OUTPUT
-            # No mapping for direct workflow_dispatch - use branch as-is for test history
-            echo "branch_name_map={}" >> $GITHUB_OUTPUT
-            echo "pr_number_map={}" >> $GITHUB_OUTPUT
-          fi
-          
-          echo "Final branches to use: $(cat $GITHUB_OUTPUT | grep branch_array | cut -d= -f2)"
+
+            matrix=$(echo "$matrix" | jq -c --arg ref "$checkout_ref" --argjson presets "$presets" \
+              '. + [$presets[] | {branch: $ref, build_preset: .}]')
+          done
+
+          echo "Generated matrix with $(echo "$matrix" | jq length) entries"
+          echo "matrix=$matrix" >> $GITHUB_OUTPUT
+          echo "branch_name_map=$(echo "$branch_name_map" | jq -c .)" >> $GITHUB_OUTPUT
+          echo "pr_number_map=$(echo "$pr_number_map" | jq -c .)" >> $GITHUB_OUTPUT
 
       - name: Install dependencies
         if: always()
         run: |
-          # Check if COMMIT_SHA is set (means we have a PR to comment on)
           if [ -n "$COMMIT_SHA" ]; then
             pip install PyGithub
           else
@@ -220,13 +208,12 @@ jobs:
         if: always()
         shell: bash
         env:
-          BUILD_PRESET: ${{ inputs.build_preset }}
+          BUILD_PRESET: ${{ inputs.workflow_presets || inputs.build_preset }}
           GITHUB_TOKEN: ${{ github.token }}
           TEST_SIZE: ${{ inputs.test_size }}
           BUILD_TARGET: ${{ inputs.test_targets }}
           COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
         run: |
-          # Check if COMMIT_SHA is set (means we have a PR to comment on)
           if [ -z "$COMMIT_SHA" ]; then
             echo "No PR detected (COMMIT_SHA is not set), skipping comment"
             exit 0
@@ -255,27 +242,27 @@ jobs:
 
   run_tests:
     needs: prepare
-    name: ${{ matrix.branch }}:${{ inputs.build_preset }}
+    name: ${{ matrix.branch }}:${{ matrix.build_preset }}
     timeout-minutes: 1200
-    runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', inputs.build_preset) }}" ]
+    runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
     strategy:
       fail-fast: false
       matrix:
-        branch: ${{ fromJson(needs.prepare.outputs.branch_array) }}
+        include: ${{ fromJson(needs.prepare.outputs.matrix) }}
     steps:
       - name: Set variables based on build_preset
         id: set-vars
         run: |
-          if [[ "${{ inputs.build_preset }}" == "relwithdebinfo" ]]; then
+          if [[ "${{ matrix.build_preset }}" == "relwithdebinfo" ]]; then
             echo "threads_count=52" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
-          elif [[ "${{ inputs.build_preset }}" == "release-asan" ]]; then
+          elif [[ "${{ matrix.build_preset }}" == "release-asan" ]]; then
             echo "threads_count=20" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
-          elif [[ "${{ inputs.build_preset }}" == "release-msan" ]]; then
+          elif [[ "${{ matrix.build_preset }}" == "release-msan" ]]; then
             echo "threads_count=5" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
-          elif [[ "${{ inputs.build_preset }}" == "release-tsan" ]]; then
+          elif [[ "${{ matrix.build_preset }}" == "release-tsan" ]]; then
             echo "threads_count=18" >> $GITHUB_ENV
             echo "timeout=1200" >> $GITHUB_ENV
           else
@@ -340,7 +327,7 @@ jobs:
         timeout-minutes: ${{ fromJson(env.timeout) }}
         uses: ./.github/actions/build_and_test_ya
         with:
-          build_preset: ${{ inputs.build_preset }}
+          build_preset: ${{ matrix.build_preset }}
           increment: false
           build_target: ${{ inputs.test_targets }}
           run_build: true
@@ -358,4 +345,3 @@ jobs:
             secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.TELEGRAM_YDBOT_TOKEN ) }}
           vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
             vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
-

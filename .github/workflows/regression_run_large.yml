@@ -30,5 +30,4 @@ jobs:
       branches_config_path: '.github/config/stable_tests_branches.json'
       build_preset: ${{ matrix.build_preset }}
       blacklist_paths: |
-        ydb/tests/compatibility
-        ydb/tests/compatibility/*
+        ydb/tests/compatibility*

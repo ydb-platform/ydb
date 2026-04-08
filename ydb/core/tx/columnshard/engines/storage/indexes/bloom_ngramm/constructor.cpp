@@ -16,6 +16,11 @@ std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
         return nullptr;
     }
 
+    if (columnInfo->GetType() != NScheme::NTypeIds::Utf8) {
+        errors.AddError(Sprintf("inappropriate column type for bloom ngramm index: %s", columnInfo->GetTypeName().c_str()));
+        return nullptr;
+    }
+
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
         GetInheritPortionStorage().value_or(false), columnId, GetDataExtractor(), FalsePositiveProbability, NGrammSize,

@@ -1834,8 +1834,8 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         const ui64 skipAfter = csController->GetIndexesSkippingOnSelect().Val();
         const ui64 approveAfter = csController->GetIndexesApprovedOnSelect().Val();
 
-        UNIT_ASSERT_VALUES_EQUAL_C(approveAfter - approveBefore, 0, TStringBuilder() << "Bloom index must not be approved for predicate on non-indexed column. before=" << approveBefore << ", after=" << approveAfter);
-        UNIT_ASSERT_VALUES_EQUAL_C(skipAfter - skipBefore, 0, TStringBuilder() << "Bloom index must not be checked for predicate on non-indexed column. before=" << skipBefore << ", after=" << skipAfter);
+        UNIT_ASSERT_VALUES_EQUAL_C(approveAfter, approveBefore, TStringBuilder() << "Bloom index must not be approved for predicate on non-indexed column. before=" << approveBefore << ", after=" << approveAfter);
+        UNIT_ASSERT_VALUES_EQUAL_C(skipAfter, skipBefore, TStringBuilder() << "Bloom index must not be checked for predicate on non-indexed column. before=" << skipBefore << ", after=" << skipAfter);
     }
 
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestCompatibilityWithOtherIndices, EUseQueryService) {
@@ -1943,8 +1943,8 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
         const TDuration noIndexDuration = executeProbeQuery();
         const ui64 skipAfterNoIndex = csController->GetIndexesSkippingOnSelect().Val();
         const ui64 approveAfterNoIndex = csController->GetIndexesApprovedOnSelect().Val();
-        UNIT_ASSERT_VALUES_EQUAL_C(skipAfterNoIndex - skipBeforeNoIndex, 0, "No index configured yet, skipping counter must not change");
-        UNIT_ASSERT_VALUES_EQUAL_C(approveAfterNoIndex - approveBeforeNoIndex, 0, "No index configured yet, approve counter must not change");
+        UNIT_ASSERT_VALUES_EQUAL_C(skipAfterNoIndex, skipBeforeNoIndex, "No index configured yet, skipping counter must not change");
+        UNIT_ASSERT_VALUES_EQUAL_C(approveAfterNoIndex, approveBeforeNoIndex, "No index configured yet, approve counter must not change");
 
         ExecQuery(kikimr, UseQueryService, R"(
             ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id_bf_probe, TYPE=BLOOM_FILTER,
@@ -2079,12 +2079,6 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
-        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
-
         ExecQuery(kikimr, UseQueryService, R"(
             --!syntax_v1
             CREATE TABLE `/Root/indexUnsupportedTypesTable`
@@ -2097,39 +2091,15 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
             WITH (STORE = COLUMN, PARTITION_COUNT = 1)
         )");
 
-        ExecQuery(kikimr, UseQueryService, R"(
+        ExecQueryExpectErrorContains(kikimr, UseQueryService, R"(
             ALTER OBJECT `/Root/indexUnsupportedTypesTable` (TYPE TABLE) SET (
                 ACTION=UPSERT_INDEX,
                 NAME=idx_level_ngram,
                 TYPE=BLOOM_NGRAMM_FILTER,
                 FEATURES=`{"column_name" : "level", "ngramm_size" : 3, "false_positive_probability" : 0.01}`
             );
-        )");
+        )", "column type");
 
-        ExecQuery(kikimr, UseQueryService, R"(
-            --!syntax_v1
-            UPSERT INTO `/Root/indexUnsupportedTypesTable` (id, level) VALUES
-                (1, 10),
-                (2, 20),
-                (3, 30);
-        )");
-
-        csController->WaitCompactions(TDuration::Seconds(5));
-
-        const ui64 skipBefore = csController->GetIndexesSkippingOnSelect().Val();
-        const ui64 approveBefore = csController->GetIndexesApprovedOnSelect().Val();
-        auto it = kikimr.GetTableClient().StreamExecuteScanQuery(R"(
-            --!syntax_v1
-            SELECT COUNT(*)
-            FROM `/Root/indexUnsupportedTypesTable`
-            WHERE level = 20
-        )").GetValueSync();
-
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        CompareYson(StreamResultToYson(it), "[[1u;]]");
-
-        UNIT_ASSERT_VALUES_EQUAL(csController->GetIndexesApprovedOnSelect().Val() - approveBefore, 0);
-        UNIT_ASSERT_VALUES_EQUAL(csController->GetIndexesSkippingOnSelect().Val() - skipBefore, 0);
     }
 
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(IndexesModificationError, EUseQueryService) {

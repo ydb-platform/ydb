@@ -195,20 +195,58 @@ def _topic_codec_sort_key(codec):
     return int(codec)
 
 
+def _topic_compare_value(value):
+    if isinstance(value, dict):
+        return tuple(sorted((k, _topic_compare_value(v)) for k, v in value.items()))
+    if isinstance(value, (list, tuple, set)):
+        normalized = tuple(_topic_compare_value(v) for v in value)
+        try:
+            return tuple(sorted(normalized))
+        except TypeError:
+            return normalized
+    if isinstance(value, enum.Enum):
+        return int(value)
+    return value
+
+
+def _topic_extra_public_attrs(obj, excluded_names):
+    extra_attrs = []
+    for attr_name in dir(obj):
+        if attr_name.startswith("_") or attr_name in excluded_names:
+            continue
+        try:
+            attr_value = getattr(obj, attr_name)
+        except Exception:
+            continue
+        if callable(attr_value):
+            continue
+        extra_attrs.append((attr_name, _topic_compare_value(attr_value)))
+    return tuple(sorted(extra_attrs))
+
+
+def _topic_consumer_compare_key(consumer):
+    return (
+        consumer.name,
+        consumer.important,
+        consumer.read_from,
+        tuple(sorted(_topic_codec_sort_key(x) for x in consumer.supported_codecs)),
+        tuple(sorted(consumer.attributes.items())),
+        _topic_extra_public_attrs(
+            consumer,
+            {
+                "name",
+                "important",
+                "read_from",
+                "supported_codecs",
+                "attributes",
+            },
+        ),
+    )
+
+
 def topic_description_compare_key(desc):
     user_attrs = tuple(sorted((k, v) for k, v in desc.attributes.items() if not k.startswith("_")))
-    consumers = tuple(
-        sorted(
-            (
-                c.name,
-                c.important,
-                c.read_from,
-                tuple(sorted(_topic_codec_sort_key(x) for x in c.supported_codecs)),
-                tuple(sorted(c.attributes.items())),
-            )
-            for c in desc.consumers
-        )
-    )
+    consumers = tuple(sorted(_topic_consumer_compare_key(c) for c in desc.consumers))
     partitions = tuple(
         sorted(
             (

@@ -729,14 +729,17 @@
     ```java
     AsyncWriter writer = topicClient.createAsyncWriter(settings);
 
-  // Init in background
-  writer.init()
+    // Init in background
+    writer.init()
           .thenRun(() -> logger.info("Init finished successfully"))
           .exceptionally(ex -> {
               logger.error("Init failed with ex: ", ex);
               return null;
           });
-  ```
+
+    ```
+
+  {% endlist %}
 
 - JavaScript
 
@@ -746,8 +749,6 @@
     producer: producerName,
   });
   ```
-
-    {% endlist %}
 
 {% endlist %}
 
@@ -904,6 +905,8 @@
       // Send queue is full. Need to retry with backoff or skip
     }
     ```
+
+  {% endlist %}
 
 - JavaScript
 
@@ -1722,7 +1725,10 @@
               logger.error("Init failed with ex: ", ex);
               return null;
           });
-  ```
+
+    ```
+
+  {% endlist %}
 
 - JavaScript
 
@@ -1732,8 +1738,6 @@
     consumer: consumerName,
   });
   ```
-
-  {% endlist %}
 
 {% endlist %}
 
@@ -2043,6 +2047,8 @@
     }
     ```
 
+  {% endlist %}
+
 - JavaScript
 
   ```javascript
@@ -2259,6 +2265,8 @@
              });
     }
     ```
+
+  {% endlist %}
 
 - JavaScript
 
@@ -2744,6 +2752,8 @@
     }
     ```
 
+  {% endlist %}
+
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -2840,6 +2850,8 @@
       logger.info("Partition session {} is closed.", event.getPartitionSession().getPartitionId());
     }
     ```
+
+  {% endlist %}
 
 - JavaScript
 

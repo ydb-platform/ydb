@@ -164,22 +164,32 @@ namespace {
         return TCpuTableRow{};
     }
 
-    constexpr TCpuTableRow MakeTinyRow1() {
+    constexpr TCpuTableRow MakeTinyRow(i16 cpuCount) {
         return TCpuTableRow{
             .ExecutorPools = {{
                 TExecutorPoolConfig{
                     .Kind = EExecutorPoolKind::System,
+                    .ThreadCount = static_cast<i16>(cpuCount >= 3 ? 1 : 0),
+                    .MaxThreadCount = static_cast<i16>(cpuCount >= 3 ? 1 : 0),
                     .Priority = 30,
-                    .HasSharedThread = false,
+                    .HasSharedThread = cpuCount >= 3,
                     .SpinThreshold = ui64{0},
-                    .ForcedForeignSlots = ui32{0},
+                    .ForcedForeignSlots = static_cast<ui32>(cpuCount >= 2 ? 1 : 0),
                 },
                 TExecutorPoolConfig{
                     .Kind = EExecutorPoolKind::User,
+                    .ThreadCount = static_cast<i16>(cpuCount >= 2 ? 1 : 0),
+                    .MaxThreadCount = static_cast<i16>(cpuCount >= 2 ? 1 : 0),
                     .Priority = 20,
-                    .HasSharedThread = false,
+                    .HasSharedThread = cpuCount >= 2,
                     .SpinThreshold = ui64{0},
-                    .ForcedForeignSlots = ui32{0},
+                    .ForcedForeignSlots = static_cast<ui32>(cpuCount >= 3 ? 2 : cpuCount >= 2 ? 1 : 0),
+                    .AdjacentPools = cpuCount >= 2
+                        ? TAdjacentPoolConfig{
+                            .Pools = {{2, 0, 0, 0, 0}},
+                            .Count = 1,
+                        }
+                        : TAdjacentPoolConfig{},
                 },
                 TExecutorPoolConfig{
                     .Kind = EExecutorPoolKind::Batch,
@@ -200,117 +210,18 @@ namespace {
                     .Priority = 40,
                     .HasSharedThread = true,
                     .SpinThreshold = ui64{0},
-                    .ForcedForeignSlots = ui32{0},
-                    .AdjacentPools = TAdjacentPoolConfig{
-                        .Pools = {{0, 1, 2, 0, 0}},
-                        .Count = 3,
-                    },
-                },
-            }},
-            .LogicalPoolToExecutorPool = MakeLogicalToExecutorPool(1, 0, 2, 3, 4),
-            .ExecutorPoolCount = 5,
-        };
-    }
-
-    constexpr TCpuTableRow MakeTinyRow2() {
-        return TCpuTableRow{
-            .ExecutorPools = {{
-                TExecutorPoolConfig{
-                    .Kind = EExecutorPoolKind::System,
-                    .Priority = 30,
-                    .HasSharedThread = false,
-                    .SpinThreshold = ui64{0},
-                    .ForcedForeignSlots = ui32{1},
-                },
-                TExecutorPoolConfig{
-                    .Kind = EExecutorPoolKind::User,
-                    .ThreadCount = 1,
-                    .MaxThreadCount = 1,
-                    .Priority = 20,
-                    .HasSharedThread = true,
-                    .SpinThreshold = ui64{0},
-                    .ForcedForeignSlots = ui32{1},
-                    .AdjacentPools = TAdjacentPoolConfig{
-                        .Pools = {{2, 0, 0, 0, 0}},
-                        .Count = 1,
-                    },
-                },
-                TExecutorPoolConfig{
-                    .Kind = EExecutorPoolKind::Batch,
-                    .Priority = 10,
-                    .HasSharedThread = false,
-                    .SpinThreshold = ui64{0},
-                    .ForcedForeignSlots = ui32{0},
-                },
-                TExecutorPoolConfig{
-                    .Kind = EExecutorPoolKind::IO,
-                    .ThreadCount = 1,
-                    .MaxThreadCount = 1,
-                },
-                TExecutorPoolConfig{
-                    .Kind = EExecutorPoolKind::IC,
-                    .ThreadCount = 1,
-                    .MaxThreadCount = 1,
-                    .Priority = 40,
-                    .HasSharedThread = true,
-                    .SpinThreshold = ui64{0},
-                    .ForcedForeignSlots = ui32{1},
-                    .AdjacentPools = TAdjacentPoolConfig{
-                        .Pools = {{0, 0, 0, 0, 0}},
-                        .Count = 1,
-                    },
-                },
-            }},
-            .LogicalPoolToExecutorPool = MakeLogicalToExecutorPool(1, 0, 2, 3, 4),
-            .ExecutorPoolCount = 5,
-        };
-    }
-
-    constexpr TCpuTableRow MakeTinyRow3() {
-        return TCpuTableRow{
-            .ExecutorPools = {{
-                TExecutorPoolConfig{
-                    .Kind = EExecutorPoolKind::System,
-                    .ThreadCount = 1,
-                    .MaxThreadCount = 1,
-                    .Priority = 30,
-                    .HasSharedThread = true,
-                    .SpinThreshold = ui64{0},
-                    .ForcedForeignSlots = ui32{1},
-                },
-                TExecutorPoolConfig{
-                    .Kind = EExecutorPoolKind::User,
-                    .ThreadCount = 1,
-                    .MaxThreadCount = 1,
-                    .Priority = 20,
-                    .HasSharedThread = true,
-                    .SpinThreshold = ui64{0},
-                    .ForcedForeignSlots = ui32{2},
-                    .AdjacentPools = TAdjacentPoolConfig{
-                        .Pools = {{2, 0, 0, 0, 0}},
-                        .Count = 1,
-                    },
-                },
-                TExecutorPoolConfig{
-                    .Kind = EExecutorPoolKind::Batch,
-                    .Priority = 10,
-                    .HasSharedThread = false,
-                    .SpinThreshold = ui64{0},
-                    .ForcedForeignSlots = ui32{0},
-                },
-                TExecutorPoolConfig{
-                    .Kind = EExecutorPoolKind::IO,
-                    .ThreadCount = 1,
-                    .MaxThreadCount = 1,
-                },
-                TExecutorPoolConfig{
-                    .Kind = EExecutorPoolKind::IC,
-                    .ThreadCount = 1,
-                    .MaxThreadCount = 1,
-                    .Priority = 40,
-                    .HasSharedThread = true,
-                    .SpinThreshold = ui64{0},
-                    .ForcedForeignSlots = ui32{1},
+                    .ForcedForeignSlots = static_cast<ui32>(cpuCount >= 2 ? 1 : 0),
+                    .AdjacentPools = cpuCount == 1
+                        ? TAdjacentPoolConfig{
+                            .Pools = {{0, 1, 2, 0, 0}},
+                            .Count = 3,
+                        }
+                        : cpuCount == 2
+                            ? TAdjacentPoolConfig{
+                                .Pools = {{0, 0, 0, 0, 0}},
+                                .Count = 1,
+                            }
+                            : TAdjacentPoolConfig{},
                 },
             }},
             .LogicalPoolToExecutorPool = MakeLogicalToExecutorPool(1, 0, 2, 3, 4),
@@ -422,9 +333,9 @@ namespace {
 
     const TDefaultCpuTable TinyCpuTable = [] {
         TDefaultCpuTable table{};
-        table.GetPreparedRow(1) = MakeTinyRow1();
-        table.GetPreparedRow(2) = MakeTinyRow2();
-        table.GetPreparedRow(3) = MakeTinyRow3();
+        for (i16 cpuCount = 1; cpuCount <= 3; ++cpuCount) {
+            table.GetPreparedRow(cpuCount) = MakeTinyRow(cpuCount);
+        }
         return table;
     }();
 

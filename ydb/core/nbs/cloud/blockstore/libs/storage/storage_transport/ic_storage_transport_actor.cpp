@@ -75,8 +75,9 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
     auto* msg = ev->Get();
 
     const ui64 requestId = ++RequestIdGenerator;
-    auto [it, inserted] =
-        WriteToPBufferRequests.emplace(requestId, ev->Release().Release());
+    auto [it, inserted] = WriteToPBufferRequests.emplace(
+        requestId,
+        std::make_pair(ev->Release().Release(), TInstant::Now()));
     Y_ABORT_UNLESS(inserted);
 
     LOG_DEBUG(
@@ -146,7 +147,14 @@ void TICStorageTransportActor::HandleWritePersistentBufferResult(
         requestId);
 
     if (auto* r = WriteToPBufferRequests.FindPtr(requestId)) {
-        auto& request = **r;
+        const auto& p = *r;
+        auto& request = *p.first;
+        auto startTime = p.second;
+        LOG_DEBUG(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "WritePersistentBuffer execution time: %lu",
+            (TInstant::Now() - startTime).MicroSeconds());
         request.Promise.SetValue(std::move(ev->Get()->Record));
         WriteToPBufferRequests.erase(requestId);
     } else {
@@ -166,8 +174,9 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
     auto* msg = ev->Get();
 
     const ui64 requestId = ++RequestIdGenerator;
-    auto [it, inserted] =
-        WriteToManyPBuffersRequests.emplace(requestId, ev->Release().Release());
+    auto [it, inserted] = WriteToManyPBuffersRequests.emplace(
+        requestId,
+        std::make_pair(ev->Release().Release(), TInstant::Now()));
     Y_ABORT_UNLESS(inserted);
 
     LOG_DEBUG(
@@ -246,7 +255,15 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffersResult(
         requestId);
 
     if (auto* r = WriteToManyPBuffersRequests.FindPtr(requestId)) {
-        auto& request = **r;
+        const auto& p = *r;
+        auto& request = *p.first;
+        auto startTime = p.second;
+        LOG_DEBUG(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "WriteToManyPersistentBuffers execution time: %lu",
+            (TInstant::Now() - startTime).MicroSeconds());
+
         request.Promise.SetValue(std::move(ev->Get()->Record));
         WriteToManyPBuffersRequests.erase(requestId);
     } else {

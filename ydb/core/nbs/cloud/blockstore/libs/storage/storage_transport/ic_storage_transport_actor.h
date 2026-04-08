@@ -23,7 +23,11 @@ private:
     THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvReadFromDDisk>>
         ReadFromDDiskRequests;
 
-    THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvWriteToPBuffer>>
+    THashMap<
+        ui64,
+        std::pair<
+            std::unique_ptr<TEvTransportPrivate::TEvWriteToPBuffer>,
+            TInstant>>
         WriteToPBufferRequests;
 
     THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvSyncWithPBuffer>>
@@ -35,7 +39,11 @@ private:
     TMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvListPBufferEntries>>
         ListPBufferEntriesRequests;
 
-    THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvWriteToManyPBuffers>>
+    THashMap<
+        ui64,
+        std::pair<
+            std::unique_ptr<TEvTransportPrivate::TEvWriteToManyPBuffers>,
+            TInstant>>
         WriteToManyPBuffersRequests;
 
 public:

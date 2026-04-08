@@ -351,6 +351,19 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     Y_ABORT_UNLESS(hostIndexes.size() > 0);
 
+    auto startTime = TInstant::Now();
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "[PERF_DEBUG] WriteBlocksToManyPBuffers START: vChunk=%u, lsn=%lu, "
+        "range=[%lu,%lu], timeout=%u, hostCount=%lu",
+        vChunkIndex,
+        lsn,
+        range.Start,
+        range.End,
+        replyTimeoutMicroseconds,
+        hostIndexes.size());
+
     using TEvWriteToManyPersistentBuffersResultFuture = NThreading::TFuture<
         NTransport::IStorageTransport::TEvWriteToManyPersistentBuffersResult>;
 
@@ -362,6 +375,13 @@ TDirectBlockGroup::WriteBlocksToManyPBuffers(
         disksIds.push_back({});
         ddiskId.Serialize(&disksIds.back());
     }
+
+    auto serializeTime = (TInstant::Now() - startTime).MicroSeconds();
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "[PERF_DEBUG] WriteBlocksToManyPBuffers serialization took %lu us",
+        serializeTime);
 
     if (!Initialized) {
         return MakeFuture<TDBGWriteBlocksToManyPBuffersResponse>(
@@ -430,7 +450,18 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
     const NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult& response,
     TPromise<TDBGWriteBlocksToManyPBuffersResponse> promise)
 {
+    auto startTime = TInstant::Now();
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "[PERF_DEBUG] OnWriteBlocksToManyPBuffersResponse: processing %lu "
+        "responses",
+        response.GetResult().size());
+
     TDBGWriteBlocksToManyPBuffersResponse dbgResponse;
+    ui32 successCount = 0;
+    ui32 errorCount = 0;
+
     for (const auto& singlePBufferResponse: response.GetResult()) {
         auto hostIndex = PBufferIdToHostIndex.find(
             singlePBufferResponse.GetPersistentBufferId());
@@ -449,17 +480,35 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
             PBufferConnections[hostIndex->second].HostConnection.DDiskId ==
             singlePBufferResponse.GetPersistentBufferId());
 
+        bool isSuccess = singlePBufferResponse.GetResult().GetStatus() ==
+                         NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
+
+        if (isSuccess) {
+            ++successCount;
+        } else {
+            ++errorCount;
+        }
+
         NProto::TError error =
-            singlePBufferResponse.GetResult().GetStatus() ==
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::OK
-                ? MakeError(S_OK)
-                : MakeError(
-                      E_FAIL,
-                      singlePBufferResponse.GetResult().GetErrorReason());
+            isSuccess ? MakeError(S_OK)
+                      : MakeError(
+                            E_FAIL,
+                            singlePBufferResponse.GetResult().GetErrorReason());
 
         dbgResponse.Responses.push_back(
             {.HostId = hostIndex->second, .Error = std::move(error)});
     }
+
+    auto processingTime = (TInstant::Now() - startTime).MicroSeconds();
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "[PERF_DEBUG] OnWriteBlocksToManyPBuffersResponse: processed in %lu "
+        "us, success=%u, errors=%u",
+        processingTime,
+        successCount,
+        errorCount);
+
     promise.SetValue(std::move(dbgResponse));
 }
 

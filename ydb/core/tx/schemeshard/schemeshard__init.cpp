@@ -5705,12 +5705,19 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                             info->TablesToCompact.insert(TPathId::FromProto(tablePathId));
                         }
                     }
-                    Y_ENSURE(!info->TablesToCompact.empty());
                 } else {
                     info->TablesToCompact.insert(info->TablePathId); // Backward compatibility
                 }
 
-                Self->AddForcedCompaction(info);
+                // don't add compactions with empty tables to compact
+                if (!info->TablesToCompact.empty()) {
+                    Self->AddForcedCompaction(info);
+                } else {
+                    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "empty tables to compact "
+                        << " for compaction: " << info->Id
+                        << ", at schemeshard: " << Self->TabletID());
+                }
 
                 if (!compactionsRowset.Next()) {
                     return false;

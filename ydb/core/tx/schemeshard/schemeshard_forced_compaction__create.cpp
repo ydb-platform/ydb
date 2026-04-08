@@ -106,12 +106,6 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
                 auto indexPath = TPath::Init(childPathId, Self);
                 for (const auto& [_, implTablePathId]: indexPath.Base()->GetChildren()) {
                     auto indexImplPath = TPath::Init(implTablePathId, Self);
-                    if (Self->InProgressForcedCompactionsByTable.contains(implTablePathId)) {
-                        return Reply(
-                            std::move(response),
-                            Ydb::StatusIds::PRECONDITION_FAILED,
-                            TStringBuilder() << "Forced compaction already in progress for table " << indexImplPath.PathString());
-                    }
                     const auto checks = indexImplPath.Check();
                     checks
                         .IsAtLocalSchemeShard()
@@ -124,6 +118,14 @@ struct TSchemeShard::TForcedCompaction::TTxCreate: public TRwTxBase {
                     if (!checks) {
                         continue;
                     }
+
+                    if (Self->InProgressForcedCompactionsByTable.contains(implTablePathId)) {
+                        return Reply(
+                            std::move(response),
+                            Ydb::StatusIds::PRECONDITION_FAILED,
+                            TStringBuilder() << "Forced compaction already in progress for table " << indexImplPath.PathString());
+                    }
+
                     info->TablesToCompact.insert(implTablePathId);
                 }
             }

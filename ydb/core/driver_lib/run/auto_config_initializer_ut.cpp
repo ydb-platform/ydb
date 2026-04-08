@@ -473,7 +473,7 @@ Y_UNIT_TEST(ApplyAutoConfigReusesExistingInterconnectServiceExecutor) {
     icExecutor->SetServiceName("Interconnect");
     icExecutor->SetExecutorId(42);
 
-    ApplyAutoConfig(&config, false, false);
+    ApplyAutoConfig(&config, TAutoConfigOptions{});
 
     UNIT_ASSERT_VALUES_EQUAL(config.ServiceExecutorSize(), 2);
     UNIT_ASSERT_VALUES_EQUAL(config.GetServiceExecutor(0).GetServiceName(), "PQ");
@@ -486,8 +486,8 @@ Y_UNIT_TEST(ApplyAutoConfigDoesNotDuplicateInterconnectServiceExecutorOnRepeated
     NKikimrConfig::TActorSystemConfig config;
     config.SetCpuCount(4);
 
-    ApplyAutoConfig(&config, false, false);
-    ApplyAutoConfig(&config, false, false);
+    ApplyAutoConfig(&config, TAutoConfigOptions{});
+    ApplyAutoConfig(&config, TAutoConfigOptions{});
 
     UNIT_ASSERT_VALUES_EQUAL(config.ServiceExecutorSize(), 1);
     UNIT_ASSERT_VALUES_EQUAL(config.GetServiceExecutor(0).GetServiceName(), "Interconnect");

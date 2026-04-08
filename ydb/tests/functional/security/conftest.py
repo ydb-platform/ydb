@@ -6,6 +6,7 @@ import time
 import pytest
 
 import ydb.core.protos.msgbus_pb2 as msgbus
+from ydb.tests.library.common.types import TabletTypes
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -234,6 +235,27 @@ def ydb_cluster_with_enforce_user_token_and_datashard_tablet(certificates):
     assert datashard_tablet_id, 'DataShard tablet id not available after CREATE TABLE'
     cluster.datashard_tablet_id = datashard_tablet_id
 
+    yield cluster
+    cluster.stop()
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_enforce_user_token_and_bs_controller_tablet(certificates):
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=True,
+    )
+    cluster = KiKiMR(configurator)
+    cluster.start()
+    bs_controller_tablet_id = None
+    for _ in range(240):
+        resp = cluster.client.tablet_state(tablet_type=TabletTypes.FLAT_BS_CONTROLLER)
+        if resp.TabletStateInfo:
+            bs_controller_tablet_id = resp.TabletStateInfo[0].TabletId
+            break
+        time.sleep(1)
+    assert bs_controller_tablet_id, 'BS controller tablet id not available after cluster start'
+    cluster.bs_controller_tablet_id = bs_controller_tablet_id
     yield cluster
     cluster.stop()
 

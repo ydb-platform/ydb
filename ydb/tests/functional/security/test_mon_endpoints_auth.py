@@ -296,6 +296,31 @@ def _data_shard_admin_actions_with_enforce(datashard_tablet_id):
     return result
 
 
+def _bs_controller_devui_mon_paths_with_enforce(bs_controller_tablet_id):
+    q = f'TabletID={bs_controller_tablet_id}'
+    admin_only_app = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 403,
+        'root@builtin': 200,
+    }
+    mon_ok = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 200,
+        'root@builtin': 200,
+    }
+    return {
+        f'/tablets/app?{q}': admin_only_app,
+        f'/tablets/app?{q}&page=OperationLog': admin_only_app,
+        f'/tablets?{q}': mon_ok,
+    }
+
+
 def _test_endpoint(endpoint_url, endpoint_path, token, expected_status):
     headers = {}
     if token is not None:
@@ -353,6 +378,16 @@ def test_data_shard_admin_actions_with_enforce_user_token(
     _test_endpoints(
         ydb_cluster_with_enforce_user_token_and_datashard_tablet,
         _data_shard_admin_actions_with_enforce(tid),
+    )
+
+
+def test_bs_controller_devui_mon_paths_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token_and_bs_controller_tablet,
+):
+    tid = ydb_cluster_with_enforce_user_token_and_bs_controller_tablet.bs_controller_tablet_id
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token_and_bs_controller_tablet,
+        _bs_controller_devui_mon_paths_with_enforce(tid),
     )
 
 

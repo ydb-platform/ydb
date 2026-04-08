@@ -153,7 +153,7 @@ TRuntimeNode BuildParseCall(
     TType* finalItemType,
     NCommon::TMkqlBuildContext& ctx,
     bool useBlocks,
-    const std::vector<TString>* csvHeaderlessColumnOrder)
+    const std::vector<TString>& csvHeaderlessColumnOrder)
 {
     const auto* inputItemType = static_cast<TStreamType*>(inputType)->GetItemType();
     const auto* parseItemStructType = static_cast<TStructType*>(parseItemType);
@@ -324,14 +324,14 @@ TRuntimeNode BuildParseCall(
             writer.Write(v.first, v.second);
         }
 
-        const bool csvVirtualHeader = csvHeaderlessColumnOrder && !csvHeaderlessColumnOrder->empty();
+        const bool csvVirtualHeader = !csvHeaderlessColumnOrder.empty();
         if (csvVirtualHeader) {
             writer.Write("with_names_use_header", false);
             writer.Write("empty_as_default", true);
             // ClickHouse parser option name.
             writer.WriteKey("columns_list");
             writer.OpenArray();
-            for (const auto& col : *csvHeaderlessColumnOrder) {
+            for (const auto& col : csvHeaderlessColumnOrder) {
                 writer.Write(col);
             }
             writer.CloseArray();
@@ -475,7 +475,7 @@ TMaybe<TRuntimeNode> TryWrapWithParser(const TDqSourceWrapBase& wrapper, NCommon
         finalItemType,
         ctx,
         useBlocks,
-        csvHeaderlessColumns.empty() ? nullptr : &csvHeaderlessColumns);
+        csvHeaderlessColumns);
 }
 
 TMaybe<TRuntimeNode> TryWrapWithParserForArrowIPCStreaming(const TDqSourceWrapBase& wrapper, NCommon::TMkqlBuildContext& ctx) {

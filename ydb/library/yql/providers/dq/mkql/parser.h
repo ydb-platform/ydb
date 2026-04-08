@@ -29,7 +29,7 @@ NKikimr::NMiniKQL::TRuntimeNode BuildParseCall(
     NKikimr::NMiniKQL::TType* finalItemType,
     NCommon::TMkqlBuildContext& ctx,
     bool useBlocks = false,
-    const std::vector<TString>* csvHeaderlessColumnOrder = nullptr);
+    const std::vector<TString>& csvHeaderlessColumnOrder = {});
 
 TMaybe<NKikimr::NMiniKQL::TRuntimeNode> TryWrapWithParser(const NYql::NNodes::TDqSourceWrapBase& wrapper, NCommon::TMkqlBuildContext& ctx, bool useBlocks = false);
 TMaybe<NKikimr::NMiniKQL::TRuntimeNode> TryWrapWithParserForArrowIPCStreaming(const NYql::NNodes::TDqSourceWrapBase& wrapper, NCommon::TMkqlBuildContext& ctx);

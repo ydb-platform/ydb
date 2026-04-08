@@ -39,7 +39,6 @@ namespace NKikimr::NPQ {
             SpeedPerSecond = speedPerSecond;
             MaxBurst = newMaxBurst;
             AvailableQuota = newMaxBurst;
-            RefillRemainder = TDuration::Zero();
             return true;
         }
         return false;
@@ -57,12 +56,8 @@ namespace NKikimr::NPQ {
             QuotedTime += diff;
         }
 
-        const TDuration totalRefillTime = RefillRemainder + diff;
-        const ui64 wholeMilliseconds = totalRefillTime.MilliSeconds();
-        RefillRemainder = totalRefillTime - TDuration::MilliSeconds(wholeMilliseconds);
-
         ui64 refill = 0;
-        if (__builtin_mul_overflow(SpeedPerSecond, wholeMilliseconds, &refill)) {
+        if (__builtin_mul_overflow(SpeedPerSecond, diff.MilliSeconds(), &refill)) {
             AvailableQuota = ClampToI64(MaxBurst);
             return;
         }

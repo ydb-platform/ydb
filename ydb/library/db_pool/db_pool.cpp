@@ -11,6 +11,9 @@
 #include <util/stream/file.h>
 #include <util/string/strip.h>
 
+#include <unordered_map>
+#include <unordered_set>
+
 namespace NDbPool {
 
 namespace {
@@ -29,7 +32,7 @@ struct TFunctionRequest {
     TFunctionRequest(const TActorId sender, ui64 cookie, TFunction&& handler)
         : Sender(sender)
         , Cookie(cookie)
-        , Handler(handler)
+        , Handler(std::move(handler))
     {}
 };
 
@@ -37,6 +40,8 @@ class TDbPoolActor : public TActor<TDbPoolActor> {
     using TBase = TActor<TDbPoolActor>;
 
     struct TCounters {
+        const NMonitoring::TDynamicCounterPtr CountersSubGroup;
+
         const NMonitoring::THistogramPtr RequestsTime;
         const NMonitoring::TDynamicCounters::TCounterPtr SessionsCountLimit;
         const NMonitoring::TDynamicCounters::TCounterPtr ActiveTime;
@@ -45,10 +50,11 @@ class TDbPoolActor : public TActor<TDbPoolActor> {
         TMap<TString, NMonitoring::TDynamicCounters::TCounterPtr> Status;
 
         TCounters(NMonitoring::TDynamicCounterPtr counters)
-            : RequestsTime(counters->GetHistogram("RequestTimeMs", NMonitoring::ExponentialHistogram(6, 3, 100)))
-            , SessionsCountLimit(counters->GetCounter("SessionsCountLimit"))
-            , ActiveTime(counters->GetCounter("ActiveTimeUs", true))
-            , StatusSubgroup(counters->GetSubgroup("component", "status"))
+            : CountersSubGroup(counters->GetSubgroup("subcomponent", "DbPool"))
+            , RequestsTime(CountersSubGroup->GetHistogram("RequestTimeMs", NMonitoring::ExponentialHistogram(6, 3, 100)))
+            , SessionsCountLimit(CountersSubGroup->GetCounter("SessionsCountLimit"))
+            , ActiveTime(CountersSubGroup->GetCounter("ActiveTimeUs", true))
+            , StatusSubgroup(CountersSubGroup->GetSubgroup("component", "status"))
         {
             SessionsCountLimit->Inc();
         }
@@ -199,6 +205,7 @@ public:
     STRICT_STFUNC(WorkingState,
         hFunc(TEvents::TEvDbFunctionRequest, Handle);
         hFunc(TEvents::TEvDbFunctionResponse, Handle);
+        hFunc(NActors::TEvents::TEvUndelivered, Handle);
         hFunc(NActors::TEvents::TEvWakeup, Handle);
     )
 
@@ -241,6 +248,26 @@ private:
         }
 
         Send(ev->Forward(it->second.Sender));
+        InflightRequests.erase(it);
+        Y_VALIDATE(FreeWorkers.emplace(sender).second, "Unexpected worker state: " << sender);
+        Counters.TotalInFlight->Dec();
+        ProcessQueue();
+    }
+
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+        const auto sender = ev->Sender;
+        LOG_E("Undelivered from: " << ev->Sender << ", reason: " << ev->Get()->Reason << ", Queue size = " << Requests.size());
+
+        const auto it = InflightRequests.find(sender);
+        if (it == InflightRequests.end()) {
+            LOG_I("Undelivered from unknown sender " << sender);
+            return;
+        }
+
+        Counters.QueueSize->Inc();
+        Requests.emplace_back(it->second);
+        ReportStats();
+
         InflightRequests.erase(it);
         Y_VALIDATE(FreeWorkers.emplace(sender).second, "Unexpected worker state: " << sender);
         Counters.TotalInFlight->Dec();
@@ -309,6 +336,8 @@ public:
 
 private:
     static TActorId StartWorkers(ui32 sessionsCount, NYdb::NTable::TTableClient tableClient, NMonitoring::TDynamicCounterPtr counters) {
+        Y_VALIDATE(sessionsCount > 0, "Sessions count must be greater than 0");
+
         const auto parentId = TActivationContext::AsActorContext().SelfID;
         std::unordered_set<TActorId> actors;
         actors.reserve(sessionsCount);
@@ -340,7 +369,7 @@ public:
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvents::TEvDbFunctionResponse, Handle);
-        hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered);
+        hFunc(NActors::TEvents::TEvUndelivered, Handle);
     )
 
     void Bootstrap() {
@@ -358,7 +387,7 @@ private:
         PassAway();
     }
 
-    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+    void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         const auto& proxyId = DbPool->GetProxyActorId();
         LOG_E("Undelivered from: " << ev->Sender << ", reason: " << ev->Get()->Reason << ", resend request to: " << proxyId);
         Send(proxyId, new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery);

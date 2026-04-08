@@ -2,7 +2,6 @@
 #include "defs.h"
 #include "flat_executor.h"
 #include "flat_boot_cookie.h"
-//#include "flat_boot_txstatus.h"
 #include "flat_boot_util.h"
 #include "flat_load_blob_queue.h"
 #include "flat_part_loader.h"

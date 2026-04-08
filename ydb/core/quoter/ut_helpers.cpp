@@ -184,7 +184,6 @@ TKesusProxyTestSetup::TKesusProxyTestSetup() {
 TTestActorRuntime::TEgg MakeEgg() {
     auto* appData = new TAppData(0, 0, 0, 0, { }, nullptr, nullptr, nullptr, nullptr);
     auto icb = MakeIntrusive<TControlBoard>();
-    icb->CreateConfigControls(true);
     appData->Icb = icb;
     return { appData, nullptr, nullptr, {} };
 }

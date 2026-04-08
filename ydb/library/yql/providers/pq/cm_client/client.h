@@ -194,9 +194,9 @@ public:
         return Issues;
     }
 
-    template <typename... Args>
-    void AddIssue(Args&&... args) {
-        return Issues.AddIssue(std::forward(args)...);
+    template <typename... TArgs>
+    void AddIssue(TArgs&&... args) {
+        return Issues.AddIssue(std::forward<TArgs>(args)...);
     }
 
     void AddIssues(const NYql::TIssues& errors) {

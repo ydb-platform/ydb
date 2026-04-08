@@ -1,5 +1,7 @@
 #pragma once
 
+#include <utility>
+
 namespace NKikimr::NStructLog {
 
 template <class... Types> struct TOverloaded : Types... { using Types:: operator ()...; };

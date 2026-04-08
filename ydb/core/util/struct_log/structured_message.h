@@ -174,7 +174,9 @@ public:
         AttachedValues.erase(begin(AttachedValues) + index);
 
         auto pos = std::upper_bound( begin(AttachedValues), end(AttachedValues), value);
+        value.AddNumber = AddNumber++;
         AttachedValues.insert(pos, std::move(value));
+        RemoveDups();
     }
 
     void RenameValue(const TString& oldName, const TString& newName) {
@@ -245,13 +247,17 @@ protected:
         }
 
         std::sort(begin(AttachedValues), end(AttachedValues));
+        RemoveDups();
+        AttachedValuesSorted = true;
+    }
+
+    void RemoveDups() const {
         auto it = std::unique( begin(AttachedValues), end(AttachedValues),
             [](const auto& a, const auto& b)->bool
             {
                 return a.Name == b.Name;
             });
         AttachedValues.erase(it, end(AttachedValues));
-        AttachedValuesSorted = true;
     }
 };
 

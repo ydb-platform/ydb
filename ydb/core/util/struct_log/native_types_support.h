@@ -63,14 +63,13 @@ template<> struct TNativeTypeSupport<TString> : public std::true_type
     static void Serialize(const TString& value, TBinaryData& data) {
         // Write size
         TLength size = value.size();
-        auto from = reinterpret_cast<const std::uint8_t*>(&size);
-        auto to = from + sizeof(size);
-        std::copy(from, to, std::back_inserter(data) );
+        TNativePlainTypeSupport<TLength>::Serialize(size, data);
 
         // Write contents
-        from = reinterpret_cast<const std::uint8_t*>(value.c_str());
-        to = from + size;
-        std::copy(from, to, std::back_inserter(data) );
+        auto oldSize = data.size();
+        data.resize(oldSize + size);
+        auto to = data.data() + oldSize;
+        std::memcpy(to, value.c_str(), size);
     }
 
     static bool Deserialize(TString& value, const void* data, std::size_t length) {
@@ -84,7 +83,7 @@ template<> struct TNativeTypeSupport<TString> : public std::true_type
         }
 
         auto charPtr = reinterpret_cast<const char*>(data);
-        value = TString(charPtr + sizeof(length), stringLength);
+        value = TString(charPtr + sizeof(stringLength), stringLength);
         return true;
     }
 

@@ -95,7 +95,7 @@ public:
 
 #define UPDATE_MESSAGE(M, ...) { \
     TCreateMessageArg::TGuard guard; \
-    std::initializer_list<TCreateMessageArg>{__VA_ARGS__}; \
+    std::initializer_list<TCreateMessageArg> args{__VA_ARGS__}; \
     Y_UNUSED(args); \
     M.AppendMessage(guard.Pop()); }
 

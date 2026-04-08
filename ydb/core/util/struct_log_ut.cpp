@@ -1,5 +1,6 @@
 #include <ydb/core/util/struct_log/create_message.h>
 #include <ydb/core/util/struct_log/key_name.h>
+#include <ydb/core/util/struct_log/log_stack.h>
 #include <ydb/core/util/struct_log/native_types_mapping.h>
 #include <ydb/core/util/struct_log/native_types_support.h>
 #include <ydb/core/util/struct_log/structured_message.h>
@@ -235,5 +236,74 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_MESSAGE(CREATE_MESSAGE(std::optional<TStructuredMessage>{subMessage}), "subValue1:int32=1, subValue2:int32=2");
     }
 
+    Y_UNIT_TEST(UpdateMessage) {
+        {
+            auto message = CREATE_MESSAGE({"v1", 1}, {"v2", 2}, {"v3", 3});
+            TEST_MESSAGE(message, "v1:int32=1, v2:int32=2, v3:int32=3");
+
+            UPDATE_MESSAGE(message, TStructuredMessage{});
+            TEST_MESSAGE(message, "v1:int32=1, v2:int32=2, v3:int32=3");
+        }
+        {
+            auto message = CREATE_MESSAGE({"v1", 1}, {"v2", 2});
+            TEST_MESSAGE(message, "v1:int32=1, v2:int32=2");
+
+            UPDATE_MESSAGE(message, {"v3", 3});
+            TEST_MESSAGE(message, "v1:int32=1, v2:int32=2, v3:int32=3");
+        }
+        {
+            auto message = CREATE_MESSAGE({"v1", 1});
+            TEST_MESSAGE(message, "v1:int32=1");
+
+            UPDATE_MESSAGE(message, {"v2", 2}, {"v3", 3});
+            TEST_MESSAGE(message, "v1:int32=1, v2:int32=2, v3:int32=3");
+        }
+        {
+            auto message = CREATE_MESSAGE();
+            TEST_MESSAGE(message, "");
+
+            UPDATE_MESSAGE(message, {"v1", 1}, {"v2", 2}, {"v3", 3});
+            TEST_MESSAGE(message, "v1:int32=1, v2:int32=2, v3:int32=3");
+        }
+    }
+
+    Y_UNIT_TEST(LogStack) {
+        TLogStack::TLogGuard guard;
+
+        TEST_MESSAGE(TLogStack::GetTop(), "");
+
+        UPDATE_STACK_TOP({"v1", 1});
+        TEST_MESSAGE(TLogStack::GetTop(), "v1:int32=1");
+
+        TLogStack::Push();
+        TEST_MESSAGE(TLogStack::GetTop(), "v1:int32=1");
+        UPDATE_STACK_TOP({"v2", 2});
+        TEST_MESSAGE(TLogStack::GetTop(), "v1:int32=1, v2:int32=2");
+
+        TLogStack::Pop();
+        TEST_MESSAGE(TLogStack::GetTop(), "v1:int32=1");
+
+        TLogStack::Pop();
+        TEST_MESSAGE(TLogStack::GetTop(), "");
+    }
+
+    Y_UNIT_TEST(LogStackGuard) {
+        TEST_MESSAGE(TLogStack::GetTop(), "");
+        {
+            TLogStack::TLogGuard guard1;
+            UPDATE_STACK_TOP({"v1", 1});
+            TEST_MESSAGE(TLogStack::GetTop(), "v1:int32=1");
+
+            {
+                TLogStack::TLogGuard guard2;
+                TEST_MESSAGE(TLogStack::GetTop(), "v1:int32=1");
+                UPDATE_STACK_TOP({"v2", 2});
+                TEST_MESSAGE(TLogStack::GetTop(), "v1:int32=1, v2:int32=2");
+            }
+
+            TEST_MESSAGE(TLogStack::GetTop(), "v1:int32=1");
+        }
+        TEST_MESSAGE(TLogStack::GetTop(), "");
+    }
 }
 }

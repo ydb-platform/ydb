@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     create_message.cpp
+    log_stack.cpp
 )
 
 PEERDIR(

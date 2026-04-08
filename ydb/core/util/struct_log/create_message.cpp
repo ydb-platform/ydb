@@ -16,7 +16,7 @@ TStructuredMessage& TCreateMessageArg::GetBuildMessage() {
 }
 
 TStructuredMessage TCreateMessageArg::PopBuildMessage() {
-    auto result = GetBuildMessage();
+    auto result = std::move(GetBuildMessage());
     BuildMessageStack.pop_back();
     return result;
 }

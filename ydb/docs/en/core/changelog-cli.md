@@ -374,7 +374,7 @@ Released on April 25, 2024. To update to version **2.9.0**, select the [Download
 
 * Improved query logical plan tables: added colors, more information, fixed some bugs.
 * The verbose option `-v` is supported for the `{{ ydb-cli }} workload` commands to provide debug information.
-* Added an option to run the `{{ ydb-cli }} workload tpch` command with an S3 source to measure [federated queries](concepts/federated_query/index.md) performance.
+* Added an option to run the `{{ ydb-cli }} workload tpch` command with an S3 source to measure [federated queries](concepts/query_execution/federated_query/index.md) performance.
 * Added the `--rate` option for `{{ ydb-cli }} workload` commands to control the transactions (or requests) per second limit.
 * Added the `--use-virtual-addressing` option for S3 import/export, allowing the switch to [virtual hosting of buckets](https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html) for the S3 path layout.
 * Improved the `{{ ydb-cli }} scheme ls` command performance due to listing directories in parallel.
@@ -399,7 +399,7 @@ Released on January 12, 2024. To update to version **2.8.0**, select the [Downlo
 * Added support for outputting the results of [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb yql](reference/ydb-cli/yql.md) and [ydb scripting yql](reference/ydb-cli/scripting-yql.md) commands in the [Apache Parquet](https://parquet.apache.org/docs/) format.
 * In the [ydb workload](reference/ydb-cli/commands/workload/index.md) commands, the `--executer` option has been added, which allows to specify which type of queries to use.
 * Added a column with median benchmark execution time in the statistics table of the [ydb workload clickbench](reference/ydb-cli/workload-click-bench.md) command.
-* **_(Experimental)_** Added the `generic` request type to the [ydb table query execute](reference/ydb-cli/table-query-execute.md) command, allowing to perform [DDL](https://en.wikipedia.org/wiki/Data_Definition_Language) and [DML](https://en.wikipedia.org/wiki/Data_Manipulation_Language) operations, return with arbitrarily-sized results and support for [MVCC](concepts/mvcc.md). The command uses an experimental API, compatibility is not guaranteed.
+* **_(Experimental)_** Added the `generic` request type to the [ydb table query execute](reference/ydb-cli/table-query-execute.md) command, allowing to perform [DDL](https://en.wikipedia.org/wiki/Data_Definition_Language) and [DML](https://en.wikipedia.org/wiki/Data_Manipulation_Language) operations, return with arbitrarily-sized results and support for [MVCC](concepts/query_execution/mvcc.md). The command uses an experimental API, compatibility is not guaranteed.
 * **_(Experimental)_** In the `{{ ydb-cli }} table query explain` command, the `--collect-diagnostics` option has been added to collect query diagnostics and save it to a file. The command uses an experimental API, compatibility is not guaranteed.
 
 ### Bug fixes

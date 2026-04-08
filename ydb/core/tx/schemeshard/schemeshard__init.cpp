@@ -2683,7 +2683,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 if (rowset.HaveValue<Schema::PersQueues::CreationTimestamp>()) {
-                    pqInfo->CreationTimestamp = rowset.GetValue<Schema::PersQueues::CreationTimestamp>();
+                    pqInfo->CreationTimestamp = TInstant::Seconds(rowset.GetValue<Schema::PersQueues::CreationTimestamp>());
                 }
 
                 auto it = Self->Topics.find(pathId);

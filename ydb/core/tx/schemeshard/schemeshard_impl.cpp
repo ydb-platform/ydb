@@ -3212,7 +3212,7 @@ void TSchemeShard::PersistPersQueue(NIceDb::TNiceDb &db, TPathId pathId, TShardI
 
     if (partitionInfo.CreationTimestamp) {
         db.Table<Schema::PersQueues>().Key(pathId.LocalPathId, partitionInfo.PqId).Update(
-            NIceDb::TUpdate<Schema::PersQueues::CreationTimestamp>(partitionInfo.CreationTimestamp));
+            NIceDb::TUpdate<Schema::PersQueues::CreationTimestamp>(partitionInfo.CreationTimestamp.Seconds()));
     }
 
     if (partitionInfo.KeyRange) {

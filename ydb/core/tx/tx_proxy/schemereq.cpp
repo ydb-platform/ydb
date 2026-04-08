@@ -1776,7 +1776,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx) {
         NSchemeCache::TSchemeCacheNavigate *navigate = ev->Get()->Request.Get();
-        const bool isTierSecretAclPass = WaitingTierSecretAcl;
+        const bool isTierSecretAclPass = WaitingTierSecretACL;
 
         TxProxyMon->CacheRequestLatency->Collect((ctx.Now() - WallClockStarted).MilliSeconds());
 

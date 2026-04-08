@@ -27,7 +27,7 @@ Y_UNIT_TEST(TestSmallMessages) {
     }
     Cerr << "processed_blobs=" << processedBlobs << " quoted_time=" << quota.GetQuotedTime(ts) << Endl;
     UNIT_ASSERT_VALUES_EQUAL(processedBlobs, 41939);
-    UNIT_ASSERT_VALUES_EQUAL(quota.GetQuotedTime(ts), TDuration::MilliSeconds(9980));
+    UNIT_ASSERT_VALUES_EQUAL(quota.GetQuotedTime(ts), TDuration::Seconds(10));
 }
 
 Y_UNIT_TEST(TestBigMessages) {

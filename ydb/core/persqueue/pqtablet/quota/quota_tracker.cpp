@@ -52,7 +52,7 @@ namespace NKikimr::NPQ {
         TDuration diff = timestamp - LastUpdateTime;
         LastUpdateTime = timestamp;
 
-        if (AvailableQuota < 0) {
+        if (AvailableQuota < static_cast<i64>(MILLISECONDS_PER_SECOND)) {
             QuotedTime += diff;
         }
 

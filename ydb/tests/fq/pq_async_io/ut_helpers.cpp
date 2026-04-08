@@ -200,7 +200,7 @@ void PQCreateStream(const TString& streamName)
 void AddReadRule(NYdb::TDriver& driver, const TString& streamName) {
     NYdb::NTopic::TTopicClient client(driver);
 
-   auto alterTopicSettings =
+    auto alterTopicSettings =
         NYdb::NTopic::TAlterTopicSettings()
             .BeginAddConsumer(DefaultPqConsumer)
             .SetSupportedCodecs(
@@ -209,6 +209,21 @@ void AddReadRule(NYdb::TDriver& driver, const TString& streamName) {
                 })
             .EndAddConsumer();
     auto result = client.AlterTopic(streamName, alterTopicSettings).ExtractValueSync();
+
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+}
+
+void ChangePartitionCount(const TString& streamName, ui32 partitionCount) {
+    NYdb::TDriverConfig cfg;
+    cfg.SetEndpoint(GetDefaultPqEndpoint());
+    cfg.SetDatabase(GetDefaultPqDatabase());
+    cfg.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
+    NYdb::TDriver driver(cfg);
+    NYdb::NTopic::TTopicClient client(driver);
+
+    auto result = client.AlterTopic(streamName, NYdb::NTopic::TAlterTopicSettings()
+        .AlterPartitioningSettings(partitionCount, partitionCount)).ExtractValueSync();
 
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);

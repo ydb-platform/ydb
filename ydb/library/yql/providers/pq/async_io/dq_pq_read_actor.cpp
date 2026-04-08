@@ -169,7 +169,6 @@ struct TEvPrivate {
 class TDqPqReadActor : public TActor<TDqPqReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase, TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
     static constexpr bool STATIC_DISCOVERY = true;
     static constexpr TDuration CHECK_HANGING_PERIOD = TDuration::Minutes(1);
-    static constexpr TDuration CHECK_PARTITION_COUNT_PERIOD = TDuration::Seconds(60);
 
     struct TMetrics {
         TMetrics(
@@ -268,7 +267,8 @@ public:
         const IPqStaticGateway::TPtr& pqGateway,
         ui32 topicPartitionsCount,
         bool enableStreamingQueriesCounters,
-        TActorId infoAggregator)
+        TActorId infoAggregator,
+        TDuration checkPartitionCountPeriod)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
         , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
         , Metrics(txId, taskId, counters, SourceParams, enableStreamingQueriesCounters)
@@ -281,6 +281,7 @@ public:
         , PqGateway(pqGateway)
         , TopicPartitionsCount(topicPartitionsCount)
         , WithoutConsumer(SourceParams.GetConsumerName().empty())
+        , CheckPartitionCountPeriod(checkPartitionCountPeriod)
     {
         if (const auto& period = SourceParams.GetReconnectPeriod(); !TDuration::TryParse(period, ReconnectPeriod)) {
             SRC_LOG_N("Failed to parse reconnect period: " << period);
@@ -903,7 +904,7 @@ private:
                 continue;
             }
             clusterState.PartitionCountCheckScheduled = true;
-            Schedule(CHECK_PARTITION_COUNT_PERIOD, new TEvPrivate::TEvCheckPartitionCount(clusterState.Index));
+            Schedule(CheckPartitionCountPeriod, new TEvPrivate::TEvCheckPartitionCount(clusterState.Index));
         }
     }
 
@@ -952,11 +953,11 @@ private:
 
         if (clusterIndex < Clusters.size() && Clusters[clusterIndex].PartitionsCount != partitionsCount) {
             TStringBuilder message;
-            message << "Partition count for topic \"" << SourceParams.GetTopicPath() << "\"";
+            message << "Number of partitions in the topic \"" << SourceParams.GetTopicPath() << "\"";
             if (!Clusters[clusterIndex].Info.Name.empty()) {
-                message << " on cluster \"" << Clusters[clusterIndex].Info.Name << "\"";
+                message << " (on cluster \"" << Clusters[clusterIndex].Info.Name << "\")";
             }
-            message << " changed from " << Clusters[clusterIndex].PartitionsCount << " to " << partitionsCount 
+            message << " is changed from " << Clusters[clusterIndex].PartitionsCount << " to " << partitionsCount 
                 << ". You need to restart (alter with text or drop / create) query to read all partitions.";
             SRC_LOG_E(message);
             TIssue issue(message);
@@ -1123,6 +1124,7 @@ private:
     bool WakeupScheduled = false;
     TInstant LastActiveTime = TInstant::Now();
     bool CaNotified = false;
+    const TDuration CheckPartitionCountPeriod;
 };
 
 ui32 ExtractPartitionsFromParams(
@@ -1171,7 +1173,8 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
     ui32 topicPartitionsCount,
     bool enableStreamingQueriesCounters,
     i64 bufferSize,
-    TActorId infoAggregator
+    TActorId infoAggregator,
+    TDuration checkPartitionCountPeriod
 ) {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -1194,7 +1197,8 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
         pqGateway,
         topicPartitionsCount,
         enableStreamingQueriesCounters,
-        infoAggregator
+        infoAggregator,
+        checkPartitionCountPeriod
     );
 
     return {actor, actor};

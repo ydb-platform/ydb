@@ -209,8 +209,6 @@ class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public NYql::
     const ui64 PrintStateToLogSplitSize = 64000;
     const ui64 NotifyCAPeriodSec = 10;
 
-    static constexpr TDuration CHECK_PARTITION_COUNT_PERIOD = TDuration::Seconds(60);
-
     struct TReadyBatch {
     public:
         TReadyBatch(const TPartitionKey& partitionKey, TMaybe<TInstant> watermark, ui32 dataCapacity)
@@ -365,6 +363,7 @@ private:
     ui64 NextGeneration = 0;
     ui64 NextEventQueueId = 0;
     bool EnableStreamingQueriesCounters = false;
+    const TDuration CheckPartitionCountPeriod;
 
     TMap<NActors::TActorId, TSet<ui32>> LastUsedPartitionDistribution;
     TMap<NActors::TActorId, TSet<ui32>> LastReceivedPartitionDistribution;
@@ -389,6 +388,7 @@ public:
         i64 bufferSize,
         const IPqStaticGateway::TPtr& pqGateway,
         bool enableStreamingQueriesCounters,
+        TDuration checkPartitionCountPeriod,
         TDqPqRdReadActor* parent = nullptr,
         const TString& cluster = {});
 
@@ -586,6 +586,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         i64 bufferSize,
         const IPqStaticGateway::TPtr& pqGateway,
         bool enableStreamingQueriesCounters,
+        TDuration checkPartitionCountPeriod,
         TDqPqRdReadActor* parent,
         const TString& cluster)
         : TActor<TDqPqRdReadActor>(&TDqPqRdReadActor::StateFunc)
@@ -602,6 +603,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , MaxBufferSize(bufferSize)
         , EnableStreamingQueriesCounters(enableStreamingQueriesCounters)
+        , CheckPartitionCountPeriod(checkPartitionCountPeriod)
 {
     SRC_LOG_I("Start read actor, local row dispatcher " << LocalRowDispatcherActorId.ToString() << ", metadatafields: " << JoinSeq(',', SourceParams.GetMetadataFields())
         << ", partitions: " << JoinSeq(',', GetPartitionsToRead()) << ", skip json errors: " << SourceParams.GetSkipJsonErrors());
@@ -1614,6 +1616,7 @@ void TDqPqRdReadActor::StartCluster(ui32 clusterIndex) {
         MaxBufferSize,
         PqGateway,
         EnableStreamingQueriesCounters,
+        CheckPartitionCountPeriod,
         this,
         TString(Clusters[clusterIndex].Info.Name));
     Clusters[clusterIndex].Child = actor;
@@ -1660,7 +1663,7 @@ void TDqPqRdReadActor::SchedulePartitionCountCheck() {
             continue;
         }
         clusterState.PartitionCountCheckScheduled = true;
-        Schedule(CHECK_PARTITION_COUNT_PERIOD, new TEvPrivate::TEvCheckPartitionCount(clusterState.Index));
+        Schedule(CheckPartitionCountPeriod, new TEvPrivate::TEvCheckPartitionCount(clusterState.Index));
     }
 }
 
@@ -1709,11 +1712,11 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvCheckPartitionCountResult::TPtr& ev
 
     if (clusterIndex < Clusters.size() && Clusters[clusterIndex].PartitionsCount != partitionsCount) {
         TStringBuilder message;
-        message << "Partition count for topic \"" << SourceParams.GetTopicPath() << "\"";
+        message << "Number of partitions in the topic \"" << SourceParams.GetTopicPath() << "\"";
         if (!Clusters[clusterIndex].Info.Name.empty()) {
-            message << " on cluster \"" << Clusters[clusterIndex].Info.Name << "\"";
+            message << " (on cluster \"" << Clusters[clusterIndex].Info.Name << "\")";
         }
-        message << " changed from " << Clusters[clusterIndex].PartitionsCount << " to " << partitionsCount 
+        message << " is changed from " << Clusters[clusterIndex].PartitionsCount << " to " << partitionsCount 
             << ". You need to restart (alter with text or drop / create) query to read all partitions.";
         SRC_LOG_E(message);
         TIssue issue(message);
@@ -1741,7 +1744,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     const ::NMonitoring::TDynamicCounterPtr& counters,
     i64 bufferSize,
     const IPqStaticGateway::TPtr& pqGateway,
-    bool enableStreamingQueriesCounters)
+    bool enableStreamingQueriesCounters,
+    TDuration checkPartitionCountPeriod)
 {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -1764,7 +1768,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
         counters,
         bufferSize,
         pqGateway,
-        enableStreamingQueriesCounters);
+        enableStreamingQueriesCounters,
+        checkPartitionCountPeriod);
 
     return {actor, actor};
 }

@@ -1,8 +1,8 @@
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/core/config.h>
+#include "config.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NYdb::NBS::NStorage {
+namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -68,4 +68,4 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
     }
 }
 
-}   // namespace NYdb::NBS::NStorage
+}   // namespace NYdb::NBS::NBlockStore

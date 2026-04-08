@@ -1,8 +1,7 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/config/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/core/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/tablet.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/part_counters.h>
@@ -41,8 +40,7 @@ class TPartitionActor
     };
 
 private:
-    TExecutorPool ExecutorPool{32};
-    std::shared_ptr<NYdb::NBS::NStorage::TStorageConfig> StorageConfig;
+    TStorageConfigPtr StorageConfig;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
     NActors::TActorId BSControllerPipeClient;
 

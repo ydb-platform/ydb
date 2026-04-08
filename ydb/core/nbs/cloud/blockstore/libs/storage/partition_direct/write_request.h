@@ -3,7 +3,7 @@
 #include "direct_block_group.h"
 #include "vchunk_config.h"
 
-#include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
@@ -13,15 +13,6 @@
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
-
-enum class EWriteMode: ui32
-{
-    PBufferReplication,
-    DirectPBuffersFilling,
-};
-
-EWriteMode GetWriteModeFromProto(NProto::EWriteMode writeMode);
-NProto::EWriteMode GetProtoWriteMode(EWriteMode writeMode);
 
 class TWriteRequestExecutor
     : public std::enable_shared_from_this<TWriteRequestExecutor>

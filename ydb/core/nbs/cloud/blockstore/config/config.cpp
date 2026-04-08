@@ -3,13 +3,23 @@
 #include <util/generic/size_literals.h>
 #include <util/generic/vector.h>
 
-namespace NYdb::NBS::NStorage {
+namespace NYdb::NBS::NBlockStore {
+
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+const auto DefaultTraceSamplePeriod = TDuration::MicroSeconds(1000);
+const auto DefaultPBufferReplyTimeout = TDuration::MicroSeconds(50000);
+const auto DefaultHedgingDelay = TDuration::MilliSeconds(0);
+
+}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TStorageConfig::TStorageConfig(
-    NProto::TStorageServiceConfig storageServiceConfig)
-    : StorageServiceConfig(std::move(storageServiceConfig))
+    const NProto::TStorageServiceConfig& storageServiceConfig)
+    : StorageServiceConfig(storageServiceConfig)
 {}
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -22,8 +32,9 @@ TStorageConfig::TStorageConfig(
     xxx(PersistentBufferDDiskPoolName,      TString,  "ddp1"                  )\
     xxx(WriteMode,                                                             \
         NProto::EWriteMode,                                                    \
-        NProto::PBufferReplication)                                            \
+        NProto::DirectPBuffersFilling)                                         \
     xxx(VChunkSize,                         ui64,     128_MB                  )\
+    xxx(ThreadPoolSize,                     ui32,     2                       )\
 
 // BLOCKSTORE_STORAGE_CONFIG_RO
 // clang-format on
@@ -97,12 +108,37 @@ BLOCKSTORE_STORAGE_CONFIG_RO(BLOCKSTORE_CONFIG_GETTER)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+EWriteMode GetWriteModeFromProto(NProto::EWriteMode writeMode)
+{
+    switch (writeMode) {
+        case NProto::EWriteMode::PBufferReplication:
+            return EWriteMode::PBufferReplication;
+        case NProto::EWriteMode::DirectPBuffersFilling:
+            return EWriteMode::DirectPBuffersFilling;
+        default:
+            break;
+    }
+    Y_ABORT_UNLESS(false);
+}
+
+NProto::EWriteMode GetProtoWriteMode(EWriteMode writeMode)
+{
+    switch (writeMode) {
+        case EWriteMode::PBufferReplication:
+            return NProto::EWriteMode::PBufferReplication;
+        case EWriteMode::DirectPBuffersFilling:
+            return NProto::EWriteMode::DirectPBuffersFilling;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TDuration TStorageConfig::GetTraceSamplePeriod() const
 {
     return StorageServiceConfig.HasTraceSamplePeriod()
                ? TDuration::MilliSeconds(
                      StorageServiceConfig.GetTraceSamplePeriod())
-               : TDuration::MicroSeconds(1000);
+               : DefaultTraceSamplePeriod;
 }
 
 TDuration TStorageConfig::GetWriteHandoffDelay() const
@@ -110,7 +146,7 @@ TDuration TStorageConfig::GetWriteHandoffDelay() const
     return StorageServiceConfig.HasWriteHandoffDelay()
                ? TDuration::MicroSeconds(
                      StorageServiceConfig.GetWriteHandoffDelay())
-               : TDuration::MicroSeconds(700);
+               : DefaultHedgingDelay;
 }
 
 TDuration TStorageConfig::GetPBufferReplyTimeout() const
@@ -118,7 +154,7 @@ TDuration TStorageConfig::GetPBufferReplyTimeout() const
     return StorageServiceConfig.HasPBufferReplyTimeoutMicroseconds()
                ? TDuration::MicroSeconds(
                      StorageServiceConfig.GetPBufferReplyTimeoutMicroseconds())
-               : TDuration::MicroSeconds(50000);
+               : DefaultPBufferReplyTimeout;
 }
 
-}   // namespace NYdb::NBS::NStorage
+}   // namespace NYdb::NBS::NBlockStore

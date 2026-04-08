@@ -4,6 +4,7 @@
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/protos/sqs.pb.h>
 #include <ydb/core/ymq/actor/actor.h>
+#include <ydb/core/ymq/actor/serviceid.h>
 
 #include <util/generic/guid.h>
 
@@ -28,16 +29,28 @@ void TDLQMoverActor::Bootstrap() {
     if (IsSQSCompatibility) {
         auto tokensStr = Settings.DestinationTopic.substr("sqs://"sv.size());
         auto tokens = StringSplitter(tokensStr).Split('/').ToList<TString>();
-        if (tokens.size() != 2) {
+        if (tokens.size() != 3) {
             return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected destination topic");
         }
 
         SQSUserName = tokens[0];
-        SQSQueueName = tokens[1];
+        SQSAccountName = tokens[1];
+        SQSQueueName = tokens[2];
 
-        ProcessQueue();
+        LOG_D(">>>>> SQSUserName: " << SQSUserName << " SQSAccountName: " << SQSAccountName << " SQSQueueName: " << SQSQueueName);
+
+        this->Send(NSQS::MakeSqsServiceID(this->SelfId().NodeId()),
+            MakeHolder<NSQS::TSqsEvents::TEvGetConfiguration>(
+                TStringBuilder() << "DLQMover/" << Settings.TabletId << "/" << Settings.PartitionId << "/" << SelfId(),
+                SQSUserName,
+                SQSQueueName,
+                SQSAccountName,
+                false,
+                0)
+        );
     } else {
-        RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, { Settings.DestinationTopic }));
+        TopicName = Settings.DestinationTopic;
+        RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, { TopicName }));
     }
     LOG_D("QUEUE: " << Queue.size() << " " << JoinRange(", ", Queue.begin(), Queue.end()));
 }
@@ -65,7 +78,7 @@ void TDLQMoverActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
         return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected describe result");
     }
 
-    auto& topic = topics[Settings.DestinationTopic];
+    auto& topic = topics[TopicName];
 
     switch (topic.Status) {
         case NDescriber::EStatus::SUCCESS:
@@ -76,6 +89,26 @@ void TDLQMoverActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             LOG_D(NDescriber::Description(Settings.DestinationTopic, topic.Status));
             return ReplyError(NDescriber::Convert(topic.Status), NDescriber::Description(Settings.DestinationTopic, topic.Status));
     }
+}
+
+void TDLQMoverActor::Handle(NSQS::TSqsEvents::TEvConfiguration::TPtr& ev) {
+    LOG_D("Handle NSQS::TSqsEvents::TEvConfiguration");
+    const auto& result = *ev->Get();
+    if (!result.UserExists || !result.QueueExists) {
+        return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "SQS DLQ '" << Settings.DestinationTopic << "' queue does not exist");
+    }
+
+    if (!result.TopicCreated) {
+        return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "SQS DLQ '" << Settings.DestinationTopic << "' queue does not initialized");
+    }
+
+    auto queueName = result.QueueName;
+    auto queueVersion = result.QueueVersion;
+
+    TopicName = Join("/", AppData()->SqsConfig.GetRoot(), SQSUserName, queueName, TStringBuilder() << "v" << queueVersion, "streamImpl");
+    LOG_I(">>>>> topicName: " << TopicName);
+
+    RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, { TopicName }));
 }
 
 void TDLQMoverActor::CreateWriter() {
@@ -149,11 +182,11 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     auto* result = response.MutablePartitionResponse()->MutableCmdReadResult()->MutableResult(0);
 
     LOG_D("Move message with offset " << result->GetOffset() << " seqNo " << Queue.front().SeqNo);
-    if (IsSQSCompatibility) {
-        WriteToSQS(*result);
-    } else {
+    // if (IsSQSCompatibility) {
+    //     WriteToSQS(*result);
+    // } else {
         WriteToTopic(*result);
-    }
+    // }
 
     WaitWrite();
 }
@@ -284,6 +317,7 @@ void TDLQMoverActor::SendToPQTablet(std::unique_ptr<IEventBase> ev) {
 STFUNC(TDLQMoverActor::StateDescribe) {
     switch (ev->GetTypeRewrite()) {
         hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
+        hFunc(NSQS::TSqsEvents::TEvConfiguration, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
             LOG_E("Unexpected " << EventStr("StateDescribe", ev));

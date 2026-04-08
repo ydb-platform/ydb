@@ -537,7 +537,7 @@ void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir
     if (ValidatedAttributes_.RedrivePolicy.TargetQueueName) {
         consumer->SetDeadLetterPolicyEnabled(true);
         consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
-        consumer->SetDeadLetterQueue(TString::Join("sqs://", UserName_, '/', *ValidatedAttributes_.RedrivePolicy.TargetQueueName));
+        consumer->SetDeadLetterQueue(TStringBuilder() << "sqs://" << AccountName_ << "/" << FolderId_ << "/" << *ValidatedAttributes_.RedrivePolicy.TargetQueueName);
     }
 
     Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));

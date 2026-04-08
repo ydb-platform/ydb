@@ -17,6 +17,9 @@ void TKafkaOffsetCommitActor::Die(const TActorContext& ctx) {
     for (const auto& tabletToPipePair: TabletIdToPipe) {
         NTabletPipe::CloseClient(ctx, tabletToPipePair.second);
     }
+    if (Kqp) {
+        Kqp->CloseKqpSession(ctx);
+    }
     TBase::Die(ctx);
 }
 
@@ -137,6 +140,7 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
     int readId = 0;
     std::vector<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo> commits;
     ui64 topicInd = 0;
+    std::vector<std::pair<TString, ui64>> unknownTopicPartitionResponses;
     for (auto topicReq: Message->Topics) {
         auto topicIt = TopicAndTablets.find(NormalizePath(Context->DatabasePath, topicReq.Name.value()));
         ui64 partitionReqInd = 0;
@@ -144,14 +148,16 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
             readId++;
             if (topicIt == TopicAndTablets.end()) {
                 PendingResponses++;
-                AddPartitionResponse(UNKNOWN_TOPIC_OR_PARTITION, topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
+                partitionReqInd++;
+                unknownTopicPartitionResponses.push_back({topicReq.Name.value(), partitionRequest.PartitionIndex});
                 continue;
             }
 
             auto tabletIdIt = topicIt->second.Partitions.find(partitionRequest.PartitionIndex);
             if (tabletIdIt == topicIt->second.Partitions.end()) {
                 PendingResponses++;
-                AddPartitionResponse(UNKNOWN_TOPIC_OR_PARTITION, topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
+                partitionReqInd++;
+                unknownTopicPartitionResponses.push_back({topicReq.Name.value(), partitionRequest.PartitionIndex});
                 continue;
             }
             if (Message->GenerationId == -1) {
@@ -210,6 +216,9 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
         }
         topicInd++;
     }
+    for (auto [topicName, partitionInd] : unknownTopicPartitionResponses) {
+        AddPartitionResponse(UNKNOWN_TOPIC_OR_PARTITION, topicName, partitionInd, ctx);
+    }
     if (Message->GenerationId != -1) {
         NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::GenerationIdCheckerSettings checkerSettings {.GenerationId = static_cast<ui64>(Message->GenerationId),
                                                                                                         .TopicDatabasePath = Context->DatabasePath,
@@ -252,7 +261,6 @@ void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, c
                 AddPartitionResponse(Error, topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
             }
         }
-        Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
         return;
     }
 
@@ -266,7 +274,6 @@ void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, c
                 AddPartitionResponse(Error, topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
             }
         }
-        Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
     }
     return;
 }

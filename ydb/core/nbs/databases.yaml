@@ -1,0 +1,12 @@
+domains:
+   - domain_name: Root
+     dynamic_slots: 8
+     databases:
+       - name: "NBS"
+         storage_units:
+           - count: 1
+             kind: ssd
+         compute_units:
+           - count: 1
+             kind: slot
+             zone: any

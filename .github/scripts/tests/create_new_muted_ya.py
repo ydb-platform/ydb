@@ -690,7 +690,7 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', b
     for test_from_file in tests_from_file:
         full_name = test_from_file['full_name']
 
-        if 'chunk' in test_from_file.get('testcase', '').lower():
+        if '[*/*]' in test_from_file.get('testcase', ''):
             logging.info(f"Skipping chunk wildcard pattern: {full_name}")
             continue
 
@@ -702,6 +702,9 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', b
             continue
 
         monitor = monitor_by_name.get((full_name, build_type))
+        if monitor and is_chunk_test(monitor):
+            logging.info(f"Skipping chunk test (sole chunk): {full_name}")
+            continue
         if monitor:
             entry = {
                 'mute_string': f"{monitor.get('suite_folder')} {monitor.get('test_name')}",

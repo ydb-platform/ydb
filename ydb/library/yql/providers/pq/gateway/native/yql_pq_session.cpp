@@ -18,9 +18,9 @@ namespace {
 NPq::NConfigurationManager::TClientOptions GetCmClientOptions(const TPqClusterConfig& cfg, std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory) {
     NPq::NConfigurationManager::TClientOptions opts;
     opts
-        .Endpoint(cfg.GetConfigManagerEndpoint())
-        .CredentialsProviderFactory(credentialsProviderFactory)
-        .EnableSsl(cfg.GetUseSsl());
+        .SetEndpoint(cfg.GetConfigManagerEndpoint())
+        .SetCredentialsProviderFactory(credentialsProviderFactory)
+        .SetEnableSsl(cfg.GetUseSsl());
 
     return opts;
 }

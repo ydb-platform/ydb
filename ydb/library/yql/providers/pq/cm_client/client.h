@@ -18,6 +18,16 @@
 
 #include <variant>
 
+namespace {
+
+[[noreturn]] void AbortUnimplemented(const char* methodName) {
+    Y_ABORT(
+        "Method %s is not implemented in IClient descendant",
+        methodName);
+}
+
+} // anonymous namespace
+
 namespace NPq::NConfigurationManager {
 
 // Statuses as in ydb/public/api/protos/ydb_status_codes.proto
@@ -359,33 +369,63 @@ struct TGrantPermissionsOptions {
 struct IClient : public TThrRefBase {
     using TPtr = TIntrusivePtr<IClient>;
 
-    virtual TAsyncDescribePathResult DescribePath(const TString& path) const = 0;
+    virtual TAsyncDescribePathResult DescribePath(const TString& /*path*/) const {
+        AbortUnimplemented(__FUNCTION__);
+    }
 
-    virtual TAsyncCreateConsumerResult CreateConsumer(const TString& path, const TCreateConsumerOptions& options) const = 0;
+    virtual TAsyncCreateConsumerResult CreateConsumer(const TString& /*path*/, const TCreateConsumerOptions& /*options*/) const {
+        AbortUnimplemented(__FUNCTION__);
+    }
 
-    virtual TAsyncCreateDirectoryResult CreateDirectory(const TString& path, const TCreateDirectoryOptions& options) const = 0;
+    virtual TAsyncCreateDirectoryResult CreateDirectory(const TString& /*path*/, const TCreateDirectoryOptions& /*options*/) const {
+        AbortUnimplemented(__FUNCTION__);
+    }
 
-    virtual TAsyncCreateTopicResult CreateTopic(const TString& path, const TCreateTopicOptions& options) const = 0;
+    virtual TAsyncCreateTopicResult CreateTopic(const TString& /*path*/, const TCreateTopicOptions& /*options*/) const {
+        AbortUnimplemented(__FUNCTION__);
+    }
 
-    virtual TAsyncCreateReadRuleResult CreateReadRule(const TString& topicPath, const TString& consumerPath,
-        const TCreateReadRuleOptions& options) const = 0;
+    virtual TAsyncCreateReadRuleResult CreateReadRule(const TString& /*topicPath*/, const TString& /*consumerPath*/,
+        const TCreateReadRuleOptions& /*options*/) const
+    {
+        AbortUnimplemented(__FUNCTION__);
+    }
 
-    virtual TAsyncGrantPermissionsResult GrantPermissions(const TString& path,
-        const TGrantPermissionsOptions& options) const = 0;
+    virtual TAsyncGrantPermissionsResult GrantPermissions(const TString& /*path*/,
+        const TGrantPermissionsOptions& /*options*/) const
+    {
+        AbortUnimplemented(__FUNCTION__);
+    }
 
-    virtual TAsyncGetOperationResult GetOperation(const TString& operationId) const = 0;
+    virtual TAsyncGetOperationResult GetOperation(const TString& /*operationId*/) const {
+        AbortUnimplemented(__FUNCTION__);
+    }
 
     // TODO: If you need other methods, add them.
 };
 
+#define OPTION(type, name, default_exp)             \
+    private:                                        \
+        type name default_exp;                      \
+    public:                                         \
+        TTypeTraits<type>::TFuncParam Y_CAT(Get, name)() const { \
+            return name;                            \
+        }                                           \
+        TSelf& Y_CAT(Set, name)(TTypeTraits<type>::TFuncParam val) { \
+            name = val;                             \
+            return *this;                           \
+        }                                           \
+
 struct TClientOptions {
     using TSelf = TClientOptions;
 
-    FLUENT_SETTING(TString, Endpoint);
-    FLUENT_SETTING(std::shared_ptr<NYdb::ICredentialsProviderFactory>, CredentialsProviderFactory);
-    FLUENT_SETTING_DEFAULT(TDuration, RequestTimeout, TDuration::Seconds(10));
-    FLUENT_SETTING_DEFAULT(bool, EnableSsl, false);
+    OPTION(TString, Endpoint, );
+    OPTION(std::shared_ptr<NYdb::ICredentialsProviderFactory>, CredentialsProviderFactory, );
+    OPTION(TDuration, RequestTimeout, = TDuration::Seconds(10));
+    OPTION(bool, EnableSsl, = false);
 };
+
+#undef OPTION
 
 // Factory interface for creation clients to different pq clusters.
 struct IConnections : public TThrRefBase {

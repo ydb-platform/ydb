@@ -2,18 +2,30 @@
 
 ``codeowners`` returns ``TEAM:@ydb-platform/<Slug>`` with whatever casing is in
 ``.github/TESTOWNERS``. We normalize team slugs to lowercase **here** (on read) so YDB
-``owners`` / downstream marts match ``monitor_owner_to_team_key`` without touching the file.
+``owners`` / downstream marts match :func:`team_slug_from_monitor_owner` without touching the file.
+
+For queue / Telegram / issue routing use :func:`canonical_team_slug` in ``github_issue_utils``.
 """
 
 import os
-
-from codeowners import CodeOwners
 
 _MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.normpath(os.path.join(_MODULE_DIR, '..', '..', '..'))
 TESTOWNERS_FILE = os.path.join(_REPO_ROOT, '.github', 'TESTOWNERS')
 
 _GITHUB_TEAM_PREFIX = "TEAM:@ydb-platform/"
+
+
+def team_slug_from_monitor_owner(owner) -> str:
+    """Lowercase team slug from ``tests_monitor.owner`` / YQL ``owner`` (SQL-aligned).
+
+    Strips ``TEAM:@ydb-platform/`` then ``Unicode::ToLower`` on the remainder.
+    ``None`` → empty string (join keys / pandas use empty, not ``\"unknown\"``).
+    """
+    if owner is None:
+        return ""
+    s = str(owner).replace("TEAM:@ydb-platform/", "").strip()
+    return s.lower()
 
 
 def normalize_github_team_owners_string(owners_str: str) -> str:
@@ -28,7 +40,7 @@ def normalize_github_team_owners_string(owners_str: str) -> str:
             rest = s[len(_GITHUB_TEAM_PREFIX) :]
             normalized.append(_GITHUB_TEAM_PREFIX + rest.lower())
         else:
-            normalized.append(raw)
+            normalized.append(s)
     return ";;".join(normalized)
 
 
@@ -67,6 +79,8 @@ def get_testowners_for_tests(tests_data):
     Entry may be a dict with key ``suite_folder`` (upload pipeline) or any object with
     ``classname`` (e.g. generate-summary.TestResult — same path as suite_folder in JSON).
     """
+    from codeowners import CodeOwners
+
     with open(TESTOWNERS_FILE, 'r') as file:
         data = file.readlines()
         owners_obj = CodeOwners(''.join(sort_codeowners_lines(data)))

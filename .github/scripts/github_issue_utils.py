@@ -6,11 +6,17 @@ Used by both the muted test analytics and issue management scripts.
 """
 
 import datetime as dt
+import os
 import re
+import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
+_analytics_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "analytics")
+if _analytics_dir not in sys.path:
+    sys.path.insert(0, _analytics_dir)
+from testowners_utils import team_slug_from_monitor_owner  # noqa: E402
 
 DEFAULT_BUILD_TYPE = 'relwithdebinfo'
 DEFAULT_BRANCH = 'main'
@@ -58,12 +64,22 @@ def normalize_analytics_area(raw) -> str:
     return s
 
 
-def monitor_owner_to_team_key(owner) -> str:
-    """Lowercase slug like SQL ``Unicode::ToLower(ReplaceAll(owner, 'TEAM:@ydb-platform/', ''))``."""
-    if owner is None:
-        return ""
-    s = str(owner).replace("TEAM:@ydb-platform/", "").strip()
-    return s.lower()
+def canonical_team_slug(raw_owner_team) -> str:
+    """Lowercase team slug for routing (digest queue, Telegram ``teams``, GitHub project owner).
+
+    Uses :func:`team_slug_from_monitor_owner` for the core strip/lowercase. Maps ``None``,
+    empty, ``unknown`` (any case), and a bare ``TEAM:@ydb-platform/`` to the slug ``unknown``.
+    """
+    if raw_owner_team is None:
+        return "unknown"
+    raw = str(raw_owner_team).strip()
+    if not raw or raw.lower() == "unknown":
+        return "unknown"
+    return team_slug_from_monitor_owner(raw) or "unknown"
+
+
+# Historical name (SQL/mart comments); same as team_slug_from_monitor_owner.
+monitor_owner_to_team_key = team_slug_from_monitor_owner
 
 
 def resolve_team_by_longest_area_prefix(normalized_area: str, area_to_owner: Dict[str, str]) -> Optional[str]:
@@ -131,7 +147,7 @@ def compute_effective_analytics_row(
     area_to_owner: Dict[str, str],
     min_area_by_owner: Dict[str, str],
 ) -> Tuple[str, str]:
-    otk = monitor_owner_to_team_key(row.get("owner"))
+    otk = team_slug_from_monitor_owner(row.get("owner"))
     key = (str(row["full_name"]), str(row["branch"]), str(row["build_type"]))
     g = gim_by_key.get(key, {})
     dw = row["date_window"]

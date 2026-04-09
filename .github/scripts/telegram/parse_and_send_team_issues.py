@@ -21,7 +21,7 @@ from send_telegram_message import send_telegram_message
 # Add analytics directory to path for ydb_wrapper import
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from github_issue_utils import DEFAULT_BUILD_TYPE, DEFAULT_BRANCH
+from github_issue_utils import DEFAULT_BRANCH, DEFAULT_BUILD_TYPE, canonical_team_slug
 try:
     from ydb_wrapper import YDBWrapper
     YDB_AVAILABLE = True
@@ -170,7 +170,7 @@ def get_all_team_data(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, branch
             
         # Handle TEAM:@ydb-platform/<slug> and sentinel unknown (legacy rows may use "Unknown")
         if owner.startswith('TEAM:@ydb-platform/'):
-            team_name = owner.split('/')[-1]
+            team_name = canonical_team_slug(owner)
         elif str(owner).strip().lower() == 'unknown':
             team_name = 'unknown'
         else:
@@ -579,7 +579,9 @@ def get_team_config(team_name, team_channels):
     """
     if not team_channels:
         return None, None, None
-    
+
+    team_name = canonical_team_slug(team_name)
+
     # Get default channel first
     default_channel_name = team_channels.get('default_channel')
     default_chat_id, default_thread_id = None, None
@@ -860,6 +862,26 @@ def test_telegram_connection(bot_token, chat_id, message_thread_id=None):
         return False
 
 
+def _normalize_telegram_team_channels_config(data: dict) -> dict:
+    """Lowercase ``teams`` keys in mailing JSON so they match mart slugs (see ``canonical_team_slug``)."""
+    if not isinstance(data, dict):
+        return data
+    raw_teams = data.get("teams")
+    if not isinstance(raw_teams, dict):
+        return data
+    normalized: dict = {}
+    for k, v in raw_teams.items():
+        nk = canonical_team_slug(k)
+        if nk in normalized and normalized[nk] != v:
+            print(
+                f"⚠️ Mailing config: duplicate team after normalizing keys {k!r} → {nk!r}; keeping last entry"
+            )
+        normalized[nk] = v
+    out = dict(data)
+    out["teams"] = normalized
+    return out
+
+
 def load_team_channels(team_channels_json):
     """
     Load team channels configuration from JSON string or file.
@@ -876,16 +898,17 @@ def load_team_channels(team_channels_json):
     try:
         # Try to parse as JSON string first
         if team_channels_json.strip().startswith('{'):
-            return json.loads(team_channels_json)
+            data = json.loads(team_channels_json)
         else:
             # Try to read as file
             file_path = Path(team_channels_json)
             if file_path.exists():
                 with open(file_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    data = json.load(f)
             else:
                 print(f"⚠️ Team channels file not found: {file_path}")
                 return None
+        return _normalize_telegram_team_channels_config(data)
     except json.JSONDecodeError as e:
         print(f"❌ Error parsing team channels JSON: {e}")
         return None
@@ -957,8 +980,9 @@ def send_period_updates(period, bot_token, team_channels, ydb_config, delay=2, m
                     print(f"📨 Using default channel '{default_channel_name}' for team {team_name}: {team_chat_id}")
         
         # Determine channel name for logging
-        if team_channels and 'teams' in team_channels and team_name in team_channels['teams']:
-            team_config = team_channels['teams'][team_name]
+        team_key = canonical_team_slug(team_name)
+        if team_channels and 'teams' in team_channels and team_key in team_channels['teams']:
+            team_config = team_channels['teams'][team_key]
             team_channel_name = team_config.get('channel', team_channels.get('default_channel', 'default'))
         else:
             team_channel_name = team_channels.get('default_channel', 'default') if team_channels else 'default'
@@ -1286,8 +1310,9 @@ def main():
         responsible_info = ""
         channel_info = ""
         
-        if team_channels and 'teams' in team_channels and team_name in team_channels['teams']:
-            team_config = team_channels['teams'][team_name]
+        team_key = canonical_team_slug(team_name)
+        if team_channels and 'teams' in team_channels and team_key in team_channels['teams']:
+            team_config = team_channels['teams'][team_key]
             
             # Get responsible info
             if 'responsible' in team_config:

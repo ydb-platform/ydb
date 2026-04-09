@@ -34,7 +34,7 @@ Release date: September 21, 2025.
 * [Cost-Based Optimizer](./concepts/optimizer.md?version=v25.2) is enabled by default for queries involving at least one column-oriented table but can also be enabled manually for other queries. The Cost-Based Optimizer improves query performance by determining the optimal join order and join types based on table statistics; supported hints allow fine-tuning execution plans for complex analytical queries.
 * Added YDB Transfer – an asynchronous mechanism for transferring data from a topic to a table. You can create a transfer, update or delete it using YQL commands.
 * Added [spilling](./concepts/spilling.md?version=v25.2), a memory management mechanism, that temporarily offloads intermediate data arising from computations and exceeding available node RAM capacity to external storage. Spilling allows executing user queries that require processing large data volumes exceeding available node memory.
-* Increased the [maximum amount of time allowed for a single query to execute](./concepts/limits-ydb?version=v25.2) from 30 minutes to 2 hours.
+* Increased the [maximum amount of time allowed for a single query to execute](./concepts/limits-ydb.md?version=v25.2) from 30 minutes to 2 hours.
 * Added support for a user-defined Certificate Authority (CA) and [Yandex Cloud Identity and Access Management (IAM)](https://yandex.cloud/ru/docs/iam) authentication in [asynchronous replication](./yql/reference/syntax/create-async-replication.md?version=v25.2).
 * Enabled by default:
 
@@ -96,7 +96,6 @@ Release date: July 14, 2025.
 
 * [Implemented](https://github.com/ydb-platform/ydb/issues/19504) a [vector index](./dev/vector-indexes.md?version=v25.1) for approximate vector similarity search. This mode is enabled by setting the `enable_vector_index` flag in the [cluster configuration](./reference/configuration/?version=v25.1#feature_flags). Attention! After enabling the flag, rollback to previous versions of {{ ydb-short-name }} is not possible.
 * [Added](https://github.com/ydb-platform/ydb/issues/11454) support for [consistent asynchronous replication](./concepts/async-replication.md?version=v25.1).
-* Implemented [BATCH UPDATE](./yql/reference/syntax/batch-update?version=v25.1) and [BATCH DELETE](./yql/reference/syntax/batch-delete?version=v25.1) statements, allowing the application of changes to large row-oriented tables outside of transactional constraints. This mode is enabled by setting the `enable_batch_updates` flag in the cluster configuration.
 * Added [configuration mechanism V2](./devops/configuration-management/configuration-v2/config-overview?version=v25.1) that simplifies the deployment of new {{ ydb-short-name }} clusters and further work with them. [Comparison](./devops/configuration-management/compare-configs?version=v25.1) of configuration mechanisms V1 and V2.
 * Added support for the parameterized [Decimal type](./yql/reference/types/primitive.md?version=v25.1#numeric).
 * [Added](https://github.com/ydb-platform/ydb/pull/8065) the ability to omit the `DECLARE` operator for query parameter type declarations. Parameter types are now automatically inferred from the provided values.
@@ -396,7 +395,7 @@ Release date: August 20, 2024.
 
 ### Bug fixes
 
-* Added a check on the size of the local transaction prior to its commit to fix [errors](https://github.com/db-platform/ydb/issues/6677) in scheme shard operations when exporting/backing up large databases.
+* Added a check on the size of the local transaction prior to its commit to fix [errors](https://github.com/ydb-platform/ydb/issues/6677) in scheme shard operations when exporting/backing up large databases.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/7709) an issue with duplicate results in SELECT queries when reducing quotas in [DataShard](./concepts/glossary#data-shard).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/6461) [errors](https://github.com/ydb-platform/ydb/issues/6220) occurring during [coordinator](./concepts/glossary#coordinator) state changes.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/5992) issues during the initial CDC scan.

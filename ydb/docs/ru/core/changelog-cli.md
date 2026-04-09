@@ -1,5 +1,50 @@
 # Список изменений {{ ydb-short-name }} CLI
 
+## Версия 2.30.0 {#2-30-0}
+
+Дата выхода 7 апреля 2026. Для обновления до версии **2.30.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
+
+### Функциональность
+
+* Добавлена команда `{{ ydb-cli }} config completion` для генерации скриптов автодополнения команд для bash и zsh.
+* Добавлены команды `{{ ydb-cli }} export nfs` и `{{ ydb-cli }} import nfs`, позволяющие создавать и восстанавливать резервные копии непосредственно в/из общей NFS-директории, примонтированной на каждом хосте кластера.
+* Добавлена опция `--compact` в [команду](./reference/ydb-cli/workload-tpcc.md) `{{ ydb-cli }} workload tpcc import`.
+* Добавлена опция `--tx-mode` в [команды](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload * run`, позволяющая задать режим транзакции (например, `no-tx`, `serializable-rw`, `snapshot-rw`).
+* Добавлена поддержка новой операции [компакшна](./concepts/glossary.md#compaction) в [подкомандах](./reference/ydb-cli/operation-list.md) `{{ ydb-cli }} operation`.
+
+### Улучшения
+
+* При явном указании [профиля](./reference/ydb-cli/profile/index.md) с помощью опции `-p`/`--profile` активный профиль больше не используется: все параметры берутся только из указанного профиля, переменных окружения и командной строки. Это устраняет путаницу, когда выбранный профиль неожиданно дополнялся настройками из активного профиля.
+
+## Версия 2.29.0 {#2-29-0}
+
+Дата выхода 11 февраля 2026. Для обновления до версии **2.29.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
+
+### Функциональность
+
+* Улучшения [интерактивного режима](./reference/ydb-cli/interactive-cli.md) `{{ ydb-cli }}`:
+  * Добавлена команда `/help` для получения справки по командам интерактивного режима.
+  * Добавлена команда `/config`, предоставляющая интерактивный диалог для просмотра и изменения параметров {{ ydb-short-name }} CLI:
+    * Включение/выключение подсказок автодополнения.
+    * Включение/выключение цветного вывода.
+    * Интерактивный выбор цветовой темы из набора предустановленных вариантов с возможностью клонирования и настройки собственной темы.
+* Добавлен прогресс-бар загрузки в [команду](./reference/ydb-cli/commands/service.md) `{{ ydb-cli }} update`.
+* Добавлена опция `--include-index-data` в [команду](./reference/ydb-cli/export-import/export-s3.md) `{{ ydb-cli }} export s3`, позволяющая экспортировать данные индексов.
+* Добавлена опция `--index-population-mode` в [команду](./reference/ydb-cli/export-import/import-s3.md) `{{ ydb-cli }} import s3`, позволяющая выбрать режим наполнения индекса (например, `build` или `import`).
+* Добавлены поля `Created by`, `Create time` и `End time` для операций "build index" и "execute script" в [подкомандах](./reference/ydb-cli/operation-list.md) `{{ ydb-cli }} operation`.
+* Добавлена поддержка единого формата временных интервалов во всех командах {{ ydb-short-name }} CLI. Опции, принимающие временные интервалы, теперь поддерживают явное указание единиц времени (например, `5s`, `2m`, `1h`) с сохранением обратной совместимости с числовыми значениями без суффикса, которые интерпретируются в исходных единицах по умолчанию.
+* В описании семейств столбцов [команды](./reference/ydb-cli/commands/scheme-describe.md) `{{ ydb-cli }} scheme describe` устаревшее поле "Keep in memory" заменено на "Cache mode".
+
+### Улучшения
+
+* Улучшены [команды](./reference/ydb-cli/profile/index.md) `{{ ydb-cli }} init` и `{{ ydb-cli }} config profile` с добавлением интерактивных меню.
+* Улучшены прогресс-бары: единообразные единицы MiB/GiB, стабильное отображение скорости, двойной прогресс-бар для [команды](./reference/ydb-cli/export-import/import-file.md) `{{ ydb-cli }} import file`, показывающий как отправленные, так и подтверждённые байты.
+
+### Исправления ошибок
+
+* Исправлена ошибка Out Of Memory в [команде](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload query run` при выполнении запросов с большими наборами результатов.
+* Исправлен разбор параметров аутентификации по логину и паролю: пароль из [профиля](./reference/ydb-cli/profile/index.md) больше не используется, если имя пользователя получено из другого источника.
+
 ## Версия 2.28.0 {#2-28-0}
 
 Дата выхода 19 декабря 2025. Для обновления до версии **2.28.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
@@ -373,7 +418,7 @@
 * Добавлена поддержка вывода результата выполнения команд [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb yql](reference/ydb-cli/yql.md) и [ydb scripting yql](reference/ydb-cli/scripting-yql.md) в формате [Apache Parquet](https://parquet.apache.org/docs/).
 * В командах [ydb workload](reference/ydb-cli/commands/workload/index.md) добавлена опция `--executer`, задающая используемый тип запросов.
 * Добавлена колонка медианного времени выполнения бенчмарка в таблице статистики в команде [ydb workload clickbench](reference/ydb-cli/workload-click-bench.md).
-* **_(Experimental)_** Добавлен тип запросов `generic` в команде [ydb table query execute](reference/ydb-cli/table-query-execute.md), позволяющий выполнять [DDL](https://ru.wikipedia.org/wiki/Data_Definition_Language) и [DML](https://ru.wikipedia.org/wiki/Data_Manipulation_Language) операции, с результатами произвольного размера и c поддержкой [MVCC](concepts/mvcc.md). Команда использует экспериментальное API, совместимость не гарантируется.
+* **_(Experimental)_** Добавлен тип запросов `generic` в команде [ydb table query execute](reference/ydb-cli/table-query-execute.md), позволяющий выполнять [DDL](https://ru.wikipedia.org/wiki/Data_Definition_Language) и [DML](https://ru.wikipedia.org/wiki/Data_Manipulation_Language) операции, с результатами произвольного размера и c поддержкой [MVCC](concepts/query_execution/mvcc.md). Команда использует экспериментальное API, совместимость не гарантируется.
 * **_(Experimental)_** В команде `{{ ydb-cli }} table query explain` добавлена опция `--collect-diagnostics` для сбора диагностики запроса и сохранения её в файл. Команда использует экспериментальное API, совместимость не гарантируется.
 
 ### Исправления ошибок

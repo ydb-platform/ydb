@@ -40,6 +40,19 @@
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_date_type_column('created_at', 3600))
   ```
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+- Java
+
+  ```java
+  AlterTableSettings settings = new AlterTableSettings()
+          .setTableTtl(TableTtl.dateTimeColumn("created_at", 3600));
+
+  session.alterTable("mytable", settings).join().expectSuccess();
+  ```
+
 {% endlist %}
 
 Следующий пример демонстрирует использование колонки `modified_at` с числовым типом (`Uint32`) в качестве TTL-колонки. Значение колонки интерпретируется как секунды от Unix-эпохи:
@@ -78,6 +91,23 @@
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_value_since_unix_epoch('modified_at', UNIT_SECONDS, 3600))
   ```
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+- Java
+
+  ```java
+  AlterTableSettings settings = new AlterTableSettings()
+          .setTableTtl(TableTtl.valueSinceUnixEpoch(
+                  "modified_at",
+                  TableTtl.TtlUnit.SECONDS,
+                  3600
+          ));
+
+  session.alterTable("mytable", settings).join().expectSuccess();
+  ```
+
 {% endlist %}
 
 ## Включение вытеснения во внешнее S3-совместимое хранилище {#enable-tiering-on-existing-tables}
@@ -108,6 +138,22 @@
   ```
 
 {% endif %}
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+- Go
+
+  Функциональность на данный момент не поддерживается.
+
+- Python
+
+  Функциональность на данный момент не поддерживается.
+
+- Java
+
+  Функциональность на данный момент не поддерживается.
 
 {% endlist %}
 
@@ -160,6 +206,23 @@
   )
   ```
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+- Java
+
+  ```java
+  TableDescription description = TableDescription.newBuilder()
+          .addNullableColumn("id", PrimitiveType.Uint64)
+          .addNullableColumn("expire_at", PrimitiveType.Timestamp)
+          .setPrimaryKey("id")
+          .setTtlSettings(TableTtl.dateTimeColumn("expire_at", 0))
+          .build();
+
+  session.createTable("mytable", description).join().expectSuccess();
+  ```
+
 {% endlist %}
 
 ## Выключение TTL {#disable}
@@ -194,6 +257,19 @@
 
   ```python
   session.alter_table('mytable', drop_ttl_settings=True)
+  ```
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+- Java
+
+  ```java
+  AlterTableSettings settings = new AlterTableSettings()
+          .setTableTtl(TableTtl.notSet());
+
+  session.alterTable("mytable", settings).join().expectSuccess();
   ```
 
 {% endlist %}
@@ -232,5 +308,16 @@
   ttl = desc.ttl_settings
   ```
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+- Java
+
+  ```java
+  TableTtl ttl = session.describeTable("mytable").join().getValue().getTableDescription().getTableTtl();
+  ```
+
 {% endlist %}
 
+{% endlist %}

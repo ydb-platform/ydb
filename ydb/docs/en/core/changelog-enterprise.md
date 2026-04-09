@@ -12,7 +12,7 @@ Release date: February 12, 2026.
 * [Cost-Based Optimizer](./concepts/optimizer.md?version=v25.2) is enabled by default for queries involving at least one column-oriented table but can also be enabled manually for other queries. The Cost-Based Optimizer improves query performance by determining the optimal join order and join types based on table statistics; supported [hints](./dev/query-hints.md) allow fine-tuning execution plans for complex analytical queries.
 * Added YDB Transfer – an asynchronous mechanism for transferring data from a topic to a table. You can create a transfer, update or delete it using YQL commands.
 * Added [spilling](./concepts/spilling.md?version=v25.2), a memory management mechanism, that temporarily offloads intermediate data arising from computations and exceeding available node RAM capacity to external storage. Spilling allows executing user queries that require processing large data volumes exceeding available node memory.
-* Increased the [maximum amount of time allowed for a single query to execute](./concepts/limits-ydb?version=v25.2) from 30 minutes to 2 hours.
+* Increased the [maximum amount of time allowed for a single query to execute](./concepts/limits-ydb.md?version=v25.2) from 30 minutes to 2 hours.
 * Added support for a user-defined Certificate Authority (CA) and [Yandex Cloud Identity and Access Management (IAM)](https://yandex.cloud/ru/docs/iam) authentication in [asynchronous replication](./yql/reference/syntax/create-async-replication.md?version=v25.2).
 * Enabled by default:
   * [vector index](./dev/vector-indexes.md?version=v25.2) for approximate vector similarity search,
@@ -63,7 +63,6 @@ Release date: November 25, 2025.
 
 * [Implemented](https://github.com/ydb-platform/ydb/issues/19504) a [vector index](./dev/vector-indexes.md?version=v25.1) for approximate vector similarity search. This mode is enabled by setting the `enable_vector_index` flag in the [cluster configuration](./reference/configuration/?version=v25.1#feature_flags). Attention! After enabling the flag, rollback to previous versions of {{ ydb-short-name }} is not possible.
 * [Added](https://github.com/ydb-platform/ydb/issues/11454) support for [consistent asynchronous replication](./concepts/async-replication.md?version=v25.1).
-* Implemented [BATCH UPDATE](./yql/reference/syntax/batch-update?version=v25.1) and [BATCH DELETE](./yql/reference/syntax/batch-delete?version=v25.1) statements, allowing the application of changes to large row-oriented tables outside of transactional constraints. This mode is enabled by setting the `enable_batch_updates` flag in the cluster configuration.
 * Added [configuration mechanism V2](./devops/configuration-management/configuration-v2/config-overview?version=v25.1) that simplifies the deployment of new {{ ydb-short-name }} clusters and further work with them. [Comparison](./devops/configuration-management/compare-configs?version=v25.1) of configuration mechanisms V1 and V2.
 * Added support for the parameterized [Decimal type](./yql/reference/types/primitive.md?version=v25.1#numeric).
 * [Implemented](https://github.com/ydb-platform/ydb/issues/18017) client balancing of partitions when reading using the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) (like Kafka itself). Previously, balancing took place on the server. This mode is enabled by setting the `enable_kafka_native_balancing` flag in the cluster configuration.
@@ -72,7 +71,7 @@ Release date: November 25, 2025.
 * [Added support](https://github.com/ydb-platform/ydb/pull/7052) for [the DEBEZIUM_JSON format](./concepts/cdc.md?version=v25.1#debezium-json-record-structure) for CDC.
 * [Added](https://github.com/ydb-platform/ydb/pull/19507) the ability to create changefeed streams to index tables.
 * [Added](https://github.com/ydb-platform/ydb/issues/19310) the ability to [enable followers (read replicas)](./yql/reference/syntax/alter_table/indexes.md?version=v25.1) for covered secondary indexes. This mode is enabled by setting the `enable_access_to_index_impl_tables` flag in the cluster configuration.
-* Changefeeds are now supported in backup and restore operations. To use this feature, set the `enable_changefeeds_export` and `enable_changefeeds_import` flags in the `feature_flags` section of the [database](./maintenance/manual/dynamic-config) or [cluster](./maintenance/manual/static-config) configuration.
+* Changefeeds are now supported in backup and restore operations. To use this feature, set the `enable_changefeeds_export` and `enable_changefeeds_import` flags in the `feature_flags` section of the [database](./maintenance/manual/dynamic-config) or [cluster](./devops/configuration-management/configuration-v1/static-config.md) configuration.
 * [Added](https://github.com/ydb-platform/ydb/issues/17734) automatic cleanup of temporary tables and directories during export to S3. This mode is enabled by setting the `enable_export_auto_dropping` flag in the cluster configuration.
 * [Added](https://github.com/ydb-platform/ydb/pull/12909) automatic integrity checks of backups during import, which prevent restoration from corrupted backups and protect against data loss.
 * [Added](https://github.com/ydb-platform/ydb/pull/15570) the ability to create views that refer to [UDFs](./yql/reference/builtins/basic?version=v25.1#udf) in queries.
@@ -376,7 +375,7 @@ Release date: August 20, 2024.
 
 ### Bug fixes
 
-* Added a check on the size of the local transaction prior to its commit to fix [errors](https://github.com/db-platform/ydb/issues/6677) in scheme shard operations when exporting/backing up large databases.
+* Added a check on the size of the local transaction prior to its commit to fix [errors](https://github.com/ydb-platform/ydb/issues/6677) in scheme shard operations when exporting/backing up large databases.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/7709) an issue with duplicate results in SELECT queries when reducing quotas in [DataShard](./concepts/glossary#data-shard).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/6461) [errors](https://github.com/ydb-platform/ydb/issues/6220) occurring during [coordinator](./concepts/glossary#coordinator) state changes.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/5992) issues during the initial CDC scan.

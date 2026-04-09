@@ -739,9 +739,7 @@ public:
             TExprNode::TPtr usc = maybeUserSchema.Cast().Ptr();
             YQL_ENSURE(usc->IsList() && !TCoVoid::Match(usc.Get()));
             YQL_ENSURE(usc->ChildrenSize() > 0);
-            for (auto child : usc->Children()) {
-                YQL_ENSURE(child->IsAtom(), "PqReadTopic csv: UserSchemaColumns must contain only column name atoms");
-            }
+            YQL_ENSURE(EnsureTupleOfAtoms(*usc, ctx), "PqReadTopic csv: UserSchemaColumns must contain only column name atoms");
             props.push_back(Build<TCoNameValueTuple>(ctx, pos)
                 .Name().Build(UserSchemaColumnsSetting)
                 .Value(std::move(usc))
@@ -778,9 +776,7 @@ public:
             TExprNode::TPtr usc = maybeUserSchema.Cast().Ptr();
             YQL_ENSURE(usc->IsList() && !TCoVoid::Match(usc.Get()));
             YQL_ENSURE(usc->ChildrenSize() > 0);
-            for (auto child : usc->Children()) {
-                YQL_ENSURE(child->IsAtom(), "PqReadTopic csv: UserSchemaColumns must contain only column name atoms");
-            }
+            YQL_ENSURE(EnsureTupleOfAtoms(*usc, ctx), "PqReadTopic csv: UserSchemaColumns must contain only column name atoms");
             TExprNode::TListType merged = formatSettingsNode->ChildrenList();
             merged.push_back(ctx.NewList(pos, {
                 ctx.NewAtom(pos, UserSchemaColumnsSetting),

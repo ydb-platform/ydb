@@ -349,6 +349,9 @@ TRuntimeNode BuildParseCall(
         }
 
         TString typeConfig = formatForCh;
+        if (!settingsAsJson.empty()) {
+            typeConfig += settingsAsJson;
+        }
 
         const auto userType = ctx.ProgramBuilder.NewTupleType({
             ctx.ProgramBuilder.NewTupleType({inputType}),

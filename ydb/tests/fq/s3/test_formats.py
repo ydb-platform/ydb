@@ -472,13 +472,7 @@ Pear;15;33'''
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         describe_result = client.describe_query(query_id).result
-        stack = list(describe_result.query.issue[0].issues)
-        issue_messages = []
-        while stack:
-            iss = stack.pop()
-            issue_messages.append(iss.message)
-            stack.extend(iss.issues)
-        describe_string = " ".join(issue_messages)
+        describe_string = "{}".format(describe_result)
         assert (
             "csv format requires SCHEMA with explicitly listed column names to determine column order"
             in describe_string
@@ -608,7 +602,6 @@ Pear,15
         describe_result = client.describe_query(query_id).result
         describe_string = "{}".format(describe_result)
         logging.debug("Describe result: {}".format(describe_result))
-        assert "Weight" in describe_string, describe_string
         assert (
             "Column `Weight` is marked as not null, but was not found in the csv file" in describe_string
         ), describe_string

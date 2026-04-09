@@ -219,19 +219,8 @@ class TestPqRowDispatcher(TestYdsBase):
             '{"time": 109}',
             '{"time": 118}',
         ]
-        self.write_stream(data)
-
-        # This scenario is intended to verify that row dispatcher works with MATCH_RECOGNIZE + metadata fields.
-        # Row emission timing may vary; poll output topic until at least one row appears.
-        client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        deadline = time.time() + 20
-        out = []
-        while time.time() < deadline:
-            out = self.read_stream(1, topic_path=self.output_topic)
-            if out:
-                break
-            time.sleep(1)
-        assert len(out) == 1
+        self.write_stream(data)        
+        assert len(self.read_stream(1, topic_path=self.output_topic)) == 1
         stop_yds_query(client, query_id)
 
     @yq_v1

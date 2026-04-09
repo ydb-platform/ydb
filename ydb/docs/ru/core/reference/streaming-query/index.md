@@ -1,1 +1,8 @@
-{% include [streaming-queries](../../recipes/streaming_queries/index.md) %}
+# Практические руководства по потоковым запросам
+
+Этот раздел содержит практические руководства по работе с [потоковыми запросами](../../concepts/streaming-query.md).
+
+Содержание:
+
+* [{#T}](topics.md)
+* [{#T}](debug-read.md)

@@ -771,6 +771,8 @@ void TCmsTestEnv::SetupLogging()
     NActors::NLog::EPriority priority = ENABLE_DETAILED_CMS_LOG ? NLog::PRI_DEBUG : NLog::PRI_ERROR;
 
     SetLogPriority(NKikimrServices::CMS, priority);
+    SetLogPriority(NKikimrServices::PIPE_CLIENT, priority);
+    SetLogPriority(NKikimrServices::PIPE_SERVER, priority);
 }
 
 NCms::TPDiskID TCmsTestEnv::PDiskId(ui32 nodeIndex, ui32 pdiskIndex)

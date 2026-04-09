@@ -349,20 +349,6 @@ public:
         TActivationContext::ActorSystem()->RegisterLocalService(
             MakeKqpWorkloadServiceId(SelfId().NodeId()), KqpWorkloadService);
 
-        NScheduler::TOptions schedulerOptions {
-            .Counters = Counters,
-            .DelayParams = {
-                .MaxDelay = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetMaxTaskDelayUs()),
-                .MinDelay = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetMinTaskDelayUs()),
-                .AttemptBonus = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetAttemptTaskBonusUs()),
-                .MaxRandomDelay = TDuration::MicroSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetMaxTaskRandomDelayUs()),
-            },
-            .UpdateFairSharePeriod = TDuration::MilliSeconds(TableServiceConfig.GetComputeSchedulerSettings().GetUpdateFairShareMs()),
-        };
-        KqpComputeSchedulerService = TActivationContext::Register(CreateKqpComputeSchedulerService(schedulerOptions));
-        TActivationContext::ActorSystem()->RegisterLocalService(
-            MakeKqpSchedulerServiceId(SelfId().NodeId()), KqpComputeSchedulerService);
-
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {
             NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
@@ -763,7 +749,7 @@ public:
                 return;
             }
             LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery());
-            
+
             // Pass WmState from session to the event
             Y_ABORT_UNLESS(sessionInfo->WmState, "WmState must be initialized in session constructor");
             ev->Get()->SetWmSessionUpdater(sessionInfo->WmState);
@@ -1072,7 +1058,7 @@ public:
             for (const auto& resource : PeerProxyNodeResources) {
                 nodeIds.push_back(resource.GetNodeId());
             }
-            KQP_PROXY_LOG_I("Discovered " << PeerProxyNodeResources.size() 
+            KQP_PROXY_LOG_I("Discovered " << PeerProxyNodeResources.size()
                 << " proxy nodes, starting warmup");
             Send(MakeKqpWarmupActorId(SelfId().NodeId()), new TEvStartWarmup(PeerProxyNodeResources.size(), std::move(nodeIds)));
         }

@@ -32,12 +32,12 @@ constexpr double Epsilon = 1e-8;
 
 class TComputeSchedulerService : public NActors::TActorBootstrapped<TComputeSchedulerService> {
 public:
-    explicit TComputeSchedulerService(const NScheduler::TOptions& options)
-        : Scheduler(std::make_shared<NScheduler::TComputeScheduler>(options.Counters, options.DelayParams))
-        , UpdateFairSharePeriod(options.UpdateFairSharePeriod)
-    {}
+    explicit TComputeSchedulerService(const NScheduler::TOptions& options) : Options(options) {}
 
     void Bootstrap() {
+        auto counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &NActors::TActivationContext::AsActorContext());
+        Scheduler = std::make_shared<NScheduler::TComputeScheduler>(counters, Options.DelayParams);
+
         Send(
             NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({(ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem}),
@@ -53,7 +53,7 @@ public:
         Scheduler->SetTotalCpuLimit(CalculateTotalCpuLimit()); // TODO: take total cpu limit from outside
 
         Become(&TComputeSchedulerService::State);
-        Schedule(UpdateFairSharePeriod, new NActors::TEvents::TEvWakeup());
+        Schedule(Options.UpdateFairSharePeriod, new NActors::TEvents::TEvWakeup());
     }
 
     STATEFN(State) {
@@ -202,7 +202,7 @@ public:
 
     void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
         Scheduler->UpdateFairShare();
-        Schedule(UpdateFairSharePeriod, new NActors::TEvents::TEvWakeup());
+        Schedule(Options.UpdateFairSharePeriod, new NActors::TEvents::TEvWakeup());
     }
 
 private:
@@ -230,7 +230,7 @@ private:
 private:
     bool Enabled = true;
     TComputeSchedulerPtr Scheduler;
-    const TDuration UpdateFairSharePeriod;
+    const NScheduler::TOptions Options;
 
     struct TPoolParams {
         bool IsFirstRemoval = false;
@@ -246,7 +246,7 @@ namespace NKikimr::NKqp {
 
 namespace NScheduler {
 
-TComputeScheduler::TComputeScheduler(TIntrusivePtr<TKqpCounters> counters, const TDelayParams& delayParams, NHdrf::NSnapshot::ELeafFairShare fairShareMode)
+TComputeScheduler::TComputeScheduler(const TIntrusivePtr<TKqpCounters>& counters, const TDelayParams& delayParams, NHdrf::NSnapshot::ELeafFairShare fairShareMode)
     : Root(std::make_shared<TRoot>(counters))
     , DelayParams(delayParams)
     , FairShareMode(fairShareMode)

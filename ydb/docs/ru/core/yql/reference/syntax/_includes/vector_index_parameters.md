@@ -3,7 +3,7 @@
     * `vector_type` - тип значений вектора (`float`, `uint8` или `int8`);
     * `distance` - [функция расстояния](../../udf/list/knn.md#functions-distance) (`cosine`, `manhattan` или `euclidean`), взаимосключающий с `similarity`;
     * `similarity` - [функция схожести](../../udf/list/knn.md#functions-distance) (`inner_product` или `cosine`), взаимосключающий с `distance`;
-  * специфичные параметры для `vector_kmeans_tree`{% if backend_name == "YDB" and oss == true %} (см. [документацию](../../../../dev/vector-indexes.md#kmeans-tree-type)){% endif %}:
+  * специфичные параметры для `vector_kmeans_tree`{% if backend_name == "YDB" and oss == true %} ([подробнее о типе индекса](../../../../dev/vector-indexes.md#kmeans-tree-type)){% endif %}:
     * `clusters` - количество центроидов для алгоритма k-means (значение от 2 до 2048);
     * `levels` - количество уровней в дереве (значение от 1 до 16);
     * `overlap_clusters` - число ближайших кластеров, в которые будет добавлен каждый вектор (по умолчанию 1).

@@ -186,7 +186,7 @@ bool ConstIntAggregate(const TExprNode::TChildrenType& values, std::function<TIn
         return true;
     };
 
-    if (values.size() == 0) {
+    if (values.empty()) {
         return false;
     }
     if (!extractValue(0, result)) {
@@ -3045,7 +3045,7 @@ TExprNodeList DedupCalcOverWindowsOnSamePartitioning(const TExprNodeList& calcs,
 }
 
 TExprNode::TPtr BuildCalcOverWindowGroup(TCoCalcOverWindowGroup node, TExprNodeList&& calcs, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
-    if (calcs.size() == 0) {
+    if (calcs.empty()) {
         return node.Input().Ptr();
     }
 
@@ -7337,7 +7337,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
         if (failureKind == "opt_cycle" || failureKind == "opt_inf") {
             auto children = node->ChildrenList();
-            Y_ENSURE(children.size() >= 1 && children.size() <= 2);
+            Y_ENSURE(!children.empty() && children.size() <= 2);
             if (children.size() < 2) {
                 children.push_back(ctx.NewAtom(node->Pos(),"0"));
             } else {

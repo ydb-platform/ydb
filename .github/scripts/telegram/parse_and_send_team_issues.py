@@ -20,6 +20,8 @@ from send_telegram_message import send_telegram_message
 
 # Add analytics directory to path for ydb_wrapper import
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from github_issue_utils import DEFAULT_BUILD_TYPE, DEFAULT_BRANCH
 try:
     from ydb_wrapper import YDBWrapper
     YDB_AVAILABLE = True
@@ -50,16 +52,7 @@ DATALENS_DASHBOARD_URL = "https://datalens.yandex/4un3zdm0zcnyr?owner_team={team
 
 
 def _execute_ydb_query(query, description):
-    """
-    Execute a YDB query using YDBWrapper and return results.
-    
-    Args:
-        query (str): SQL query to execute
-        description (str): Description for logging
-        
-    Returns:
-        list: Query results or None if error
-    """
+    """Execute a YDB query using YDBWrapper and return results."""
     if not YDB_AVAILABLE:
         print("❌ YDBWrapper not available")
         return None
@@ -86,13 +79,27 @@ def _execute_ydb_query(query, description):
         return None
 
 
-def get_all_team_data(use_yesterday=False):
+def _sql_build_type_clause(build_type) -> str:
+    """Return YQL fragment ``AND build_type = '…'`` or empty string if ``all`` / unset."""
+    if build_type is None:
+        return ""
+    raw = str(build_type).strip()
+    if raw.lower() == "all":
+        return ""
+    if not raw:
+        raise ValueError(f"Invalid build_type: {build_type!r} (empty)")
+    escaped = raw.replace("'", "''")
+    return f"\n    AND build_type = '{escaped}'"
+
+
+def get_all_team_data(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, branch=DEFAULT_BRANCH):
     """
     Get all team data (stats + trends) from YDB in one optimized query.
-    
+
     Args:
-        use_yesterday (bool): If True, use yesterday's data for development convenience
-        
+        use_yesterday: If True, use yesterday's data for development convenience.
+        build_type: ``test_muted_monitor_mart.build_type`` filter; ``"all"`` = no filter.
+
     Returns:
         dict: Dictionary with team names as keys and their data, or None if error
     """
@@ -119,7 +126,9 @@ def get_all_team_data(use_yesterday=False):
     # Get table path from config
     with YDBWrapper() as ydb_wrapper:
         test_muted_monitor_mart_table = ydb_wrapper.get_table_path("test_muted_monitor_mart")
-    
+
+    bt_clause = _sql_build_type_clause(build_type)
+
     # Single optimized query for all data
     all_data_query = f"""
     SELECT 
@@ -131,8 +140,7 @@ def get_all_team_data(use_yesterday=False):
     WHERE date_window >= Date('{start_date.strftime('%Y-%m-%d')}')
     AND date_window <= Date('{target_date.strftime('%Y-%m-%d')}')
     AND is_muted = 1
-    AND branch = 'main'
-    AND build_type = 'relwithdebinfo'
+    AND branch = '{branch}'{bt_clause}
     AND is_test_chunk = 0
     AND resolution != 'Skipped'
     GROUP BY owner, date_window
@@ -144,7 +152,10 @@ def get_all_team_data(use_yesterday=False):
     print(f"   Start date: {start_date.strftime('%Y-%m-%d')}")
     print(f"   Target date: {target_date.strftime('%Y-%m-%d')}")
     
-    results = _execute_ydb_query(all_data_query, f"Getting all team data from {start_date.strftime('%Y-%m-%d')} to {target_date.strftime('%Y-%m-%d')}")
+    results = _execute_ydb_query(
+        all_data_query,
+        f"Getting all team data from {start_date.strftime('%Y-%m-%d')} to {target_date.strftime('%Y-%m-%d')}",
+    )
     if results is None:
         return None
     
@@ -210,7 +221,7 @@ def get_all_team_data(use_yesterday=False):
     return team_data
 
 
-def get_muted_tests_stats(use_yesterday=False):
+def get_muted_tests_stats(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, branch=DEFAULT_BRANCH):
     """
     Get statistics about muted tests from YDB by team.
     
@@ -222,7 +233,7 @@ def get_muted_tests_stats(use_yesterday=False):
     """
     
     # Use the optimized function to get all data
-    all_data = get_all_team_data(use_yesterday)
+    all_data = get_all_team_data(use_yesterday, build_type=build_type, branch=branch)
     if all_data is None:
         return None
     
@@ -235,7 +246,7 @@ def get_muted_tests_stats(use_yesterday=False):
     return team_stats
 
 
-def get_monthly_trend_data(team_name=None, use_yesterday=False):
+def get_monthly_trend_data(team_name=None, use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, branch=DEFAULT_BRANCH):
     """
     Get monthly trend data for a specific team.
     
@@ -246,12 +257,10 @@ def get_monthly_trend_data(team_name=None, use_yesterday=False):
     Returns:
         dict: Dictionary with dates as keys and counts as values, or None if error
     """
-    # Use the optimized function to get all data
-    all_data = get_all_team_data(use_yesterday)
+    all_data = get_all_team_data(use_yesterday, build_type=build_type, branch=branch)
     if all_data is None:
         return None
     
-    # Extract trend data for the specific team
     if team_name in all_data:
         trend_data = all_data[team_name]['trend']
         print(f"📊 Found trend data for {len(trend_data)} days for team '{team_name}'")
@@ -715,7 +724,8 @@ def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10,
                     print(f"📊 Getting trend data for team: {team_name}")
                     trend_data = get_monthly_trend_data(
                         team_name=team_name,
-                        use_yesterday=ydb_config.get('use_yesterday', False)
+                        use_yesterday=ydb_config.get('use_yesterday', False),
+                        build_type=ydb_config.get('build_type', DEFAULT_BUILD_TYPE),
                     )
                 else:
                     trend_data = None
@@ -914,9 +924,11 @@ def send_period_updates(period, bot_token, team_channels, ydb_config, delay=2, m
     
     # Get all team data for trends
     all_team_data = get_all_team_data(
-        use_yesterday=ydb_config.get('use_yesterday', False)
+        use_yesterday=ydb_config.get('use_yesterday', False),
+        build_type=ydb_config.get('build_type', DEFAULT_BUILD_TYPE),
+        branch=ydb_config.get('branch', DEFAULT_BRANCH),
     )
-    
+
     if not all_team_data:
         print("❌ Could not fetch team data for trend updates")
         return False
@@ -1152,7 +1164,19 @@ def main():
     parser.add_argument('--use-yesterday', action='store_true', help='Use yesterday\'s data for development convenience')
     parser.add_argument('--include-plots', action='store_true', help='Include trend plots in messages (requires matplotlib)')
     parser.add_argument('--debug-plots-dir', help='Directory to save debug plot files (enables debug mode)')
-    
+    parser.add_argument(
+        '--build-type',
+        default=DEFAULT_BUILD_TYPE,
+        dest='build_type',
+        help='test_muted_monitor_mart filter; use "all" to include every build_type (default: relwithdebinfo)',
+    )
+    parser.add_argument(
+        '--branch',
+        default=DEFAULT_BRANCH,
+        dest='branch',
+        help=f'Branch filter for YDB queries (default: {DEFAULT_BRANCH})',
+    )
+
     args = parser.parse_args()
     
     # Validate mode-specific requirements
@@ -1179,16 +1203,16 @@ def main():
     if args.period_update:
         # Prepare YDB config for period updates
         ydb_config = {
-            'use_yesterday': args.use_yesterday
+            'use_yesterday': args.use_yesterday,
+            'build_type': args.build_type,
+            'branch': args.branch,
         }
-        
-        # Check if we need Telegram connection (not for dry run)
+
         if not args.dry_run:
             if not bot_token:
                 print("❌ Bot token not provided. Use --bot-token or set TELEGRAM_BOT_TOKEN environment variable")
                 sys.exit(1)
-        
-        # Send period updates
+
         success = send_period_updates(
             period=args.period_update,
             bot_token=bot_token,
@@ -1214,7 +1238,8 @@ def main():
     if not args.no_stats:
         print("📊 Fetching muted tests statistics from YDB...")
         muted_stats = get_muted_tests_stats(
-            use_yesterday=args.use_yesterday
+            use_yesterday=args.use_yesterday,
+            build_type=args.build_type,
         )
         if muted_stats:
             print(f"✅ Statistics loaded for {len(muted_stats)} teams")
@@ -1303,13 +1328,16 @@ def main():
     
     if args.include_plots and not args.no_stats:
         ydb_config = {
-            'use_yesterday': args.use_yesterday
+            'use_yesterday': args.use_yesterday,
+            'build_type': args.build_type,
+            'branch': args.branch,
         }
-        
-        # Get all team data in one optimized query
+
         print("📊 Fetching all team data in one optimized query...")
         all_team_data = get_all_team_data(
-            use_yesterday=args.use_yesterday
+            use_yesterday=args.use_yesterday,
+            build_type=args.build_type,
+            branch=args.branch,
         )
         
         if all_team_data:

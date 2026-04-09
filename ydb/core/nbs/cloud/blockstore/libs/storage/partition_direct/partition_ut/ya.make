@@ -12,6 +12,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    part_database_ut.cpp
     partition_direct_ut.cpp
 )
 

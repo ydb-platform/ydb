@@ -151,4 +151,8 @@ Below are examples of the code enabling Jaeger tracing in different {{ ydb-short
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+- Python
+
+  This functionality is not currently supported.
+
 {% endlist %}

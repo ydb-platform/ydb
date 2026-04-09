@@ -100,7 +100,14 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             createImport.MutableImportFromS3Settings()->CopyFrom(request.settings());
         }
         if constexpr (IsFsImport) {
-            createImport.MutableImportFromFsSettings()->CopyFrom(request.settings());
+            auto* fsSettings = createImport.MutableImportFromFsSettings();
+            fsSettings->CopyFrom(request.settings());
+            // Normalize base_path: remove trailing slash to avoid double slashes in path concatenation
+            TString basePath = fsSettings->base_path();
+            while (basePath.size() > 1 && basePath.back() == '/') {
+                basePath.pop_back();
+            }
+            fsSettings->set_base_path(basePath);
         }
 
         return ev.Release();

@@ -139,6 +139,36 @@ Below are examples of connecting to {{ ydb-short-name }} (creating a driver) in 
 
   {% endlist %}
 
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import ydb
+
+    with ydb.Driver(connection_string="grpc://localhost:2136?database=/local") as driver:
+      driver.wait(timeout=5)
+      ...
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import ydb
+    import asyncio
+
+    async def ydb_init():
+      async with ydb.aio.Driver(endpoint="grpc://localhost:2136", database="/local") as driver:
+        await driver.wait()
+        ...
+
+    asyncio.run(ydb_init())
+    ```
+
+  {% endlist %}
+
 - C# (.NET)
 
   ```C#

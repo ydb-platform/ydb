@@ -97,4 +97,8 @@ Below are examples of the code for enabling metrics in Prometheus in different {
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+- Python
+
+  This functionality is not currently supported.
+
 {% endlist %}

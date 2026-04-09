@@ -96,11 +96,36 @@ Below are examples of authentication with a username and password in different {
 
 - Python
 
-  {% include [auth-static](../../_includes/python/auth-static.md) %}
+  {% list tabs %}
 
-- Python (asyncio)
+  - Native SDK
 
-  {% include [auth-static](../../_includes/python/async/auth-static.md) %}
+    {% include [auth-static](../../_includes/python/auth-static.md) %}
+
+  - Native SDK (Asyncio)
+
+    {% include [auth-static](../../_includes/python/async/auth-static.md) %}
+
+  - SQLAlchemy
+
+    ```python
+    import os
+    import sqlalchemy as sa
+
+    engine = sa.create_engine(
+        "yql+ydb://localhost:2136/local",
+        connect_args={
+            "credentials": {
+                "username": os.environ["YDB_USER"],
+                "password": os.environ["YDB_PASSWORD"]
+            }
+        }
+    )
+    with engine.connect() as connection:
+        result = connection.execute(sa.text("SELECT 1"))
+    ```
+
+  {% endlist %}
 
 - C# (.NET)
 

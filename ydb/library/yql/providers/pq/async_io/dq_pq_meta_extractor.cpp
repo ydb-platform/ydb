@@ -1,11 +1,31 @@
 #include "dq_pq_meta_extractor.h"
 
+#include <library/cpp/json/writer/json.h>
+
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 
+#include <util/stream/str.h>
+
 namespace NYql::NDq {
 
+TString SerializePqMessageMetaToJson(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
+    TStringStream ss;
+    NJsonWriter::TBuf json(NJsonWriter::HEM_DONT_ESCAPE_HTML, &ss);
+    json.BeginObject();
+    const auto& metaPtr = message.GetMessageMeta();
+    if (metaPtr) {
+        for (const auto& [k, v] : metaPtr->Fields) {
+            json.WriteKey(k);
+            json.WriteString(v);
+        }
+    }
+    json.EndObject();
+    return ss.Str();
+}
+
 namespace {
+
 
 const std::unordered_map<TString, TPqMetaExtractor::TPqMetaExtractorLambda> ExtractorsMap = {
     {
@@ -59,6 +79,14 @@ const std::unordered_map<TString, TPqMetaExtractor::TPqMetaExtractorLambda> Extr
                 NUdf::TUnboxedValuePod(static_cast<TDataType::TLayout>(message.GetSeqNo())),
                 NUdf::GetDataTypeInfo(TDataType::Slot).FixedSize
             );
+        }
+    },
+    {
+        "message_meta", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
+            TString jsonStr = SerializePqMessageMetaToJson(message);
+            return std::make_pair(
+                NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(jsonStr.data(), jsonStr.size())),
+                static_cast<i64>(jsonStr.size()));
         }
     },
 };

@@ -439,7 +439,7 @@ TMaybe<typename TLoader::TType> DoLoadTypeFromYson(TLoader& loader, const NYT::T
         TVector<TString> argNames;
         TVector<ui64> argFlags;
         for (auto& item : node[3].AsList()) {
-            if (!item.IsList() || item.AsList().size() < 1 || item.AsList().size() > 3) {
+            if (!item.IsList() || item.AsList().empty() || item.AsList().size() > 3) {
                 loader.Error("Invalid callable type scheme");
                 return Nothing();
             }

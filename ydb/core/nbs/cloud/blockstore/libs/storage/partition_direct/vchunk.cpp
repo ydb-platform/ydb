@@ -38,7 +38,8 @@ TVChunk::TVChunk(
     , Executor(directBlockGroup->GetExecutor())
     , DirectBlockGroup(std::move(directBlockGroup))
     , VChunkConfig(vChunkConfig)
-    , BlocksCount(vChunkSize / DefaultBlockSize)
+    , BlockSize(DefaultBlockSize)
+    , BlocksCount(vChunkSize / BlockSize)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
     , WriteHandoffDelay(writeHandoffDelay)
     , TraceSamplePeriod(traceSamplePeriod)
@@ -130,7 +131,7 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     EWriteMode writeMode,
-    ui32 pbufferReplyTimeoutMicroseconds,
+    TDuration pbufferReplyTimeout,
     ui64 lsn,
     const NWilson::TTraceId& traceId)
 {
@@ -175,7 +176,7 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
          callContext = std::move(callContext),
          request = std::move(request),
          writeMode,
-         pbufferReplyTimeoutMicroseconds,
+         pbufferReplyTimeout,
          lsn,
          span = std::move(span)]() mutable
         {
@@ -189,7 +190,7 @@ TFuture<TWriteBlocksLocalResponse> TVChunk::WriteBlocksLocal(
                     std::move(callContext),
                     std::move(request),
                     writeMode,
-                    pbufferReplyTimeoutMicroseconds,
+                    pbufferReplyTimeout,
                     lsn,
                     std::move(span));
             } else {
@@ -332,7 +333,7 @@ void TVChunk::DoWriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     EWriteMode writeMode,
-    ui32 pbufferReplyTimeoutMicroseconds,
+    TDuration pbufferReplyTimeout,
     ui64 lsn,
     std::shared_ptr<NWilson::TSpan> span)
 {
@@ -340,8 +341,6 @@ void TVChunk::DoWriteBlocksLocal(
 
     auto writeExecutor = std::make_shared<TWriteRequestExecutor>(
         ActorSystem,
-        Executor,
-        PartitionDirectService,
         VChunkConfig,
         DirectBlockGroup,
         vchunkRange,
@@ -372,7 +371,7 @@ void TVChunk::DoWriteBlocksLocal(
         });
 
     span->Event("Run");
-    writeExecutor->Run(writeMode, pbufferReplyTimeoutMicroseconds);
+    writeExecutor->Run(writeMode, pbufferReplyTimeout);
 }
 
 void TVChunk::OnWriteBlocksResponse(

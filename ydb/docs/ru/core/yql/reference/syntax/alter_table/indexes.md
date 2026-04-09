@@ -40,7 +40,7 @@ ALTER TABLE `series`
   GLOBAL ON (`title`);
 ```
 
-Векторный индекс:
+[Векторный индекс](../../../../dev/vector-indexes.md):
 
 ```yql
 ALTER TABLE `series`
@@ -51,7 +51,8 @@ ALTER TABLE `series`
     vector_type="float",
     vector_dimension=512,
     clusters=128,
-    levels=2
+    levels=2,
+    overlap_clusters=3
   );
 ```
 

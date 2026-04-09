@@ -82,6 +82,12 @@ void TReadRequestExecutor::Run()
         "TReadRequestExecutor. Reading from location %s",
         ToString(*location).c_str());
 
+    auto onReadResponse = [self = shared_from_this()]   //
+        (const NThreading::TFuture<TDBGReadBlocksResponse>& f)
+    {
+        self->OnReadResponse(f.GetValue());
+    };
+
     auto future = IsDDisk(*location) ? DirectBlockGroup->ReadBlocksFromDDisk(
                                            VChunkConfig.VChunkIndex,
                                            VChunkConfig.GetHostIndex(*location),
@@ -95,10 +101,7 @@ void TReadRequestExecutor::Run()
                                            hint.VChunkRange,
                                            Request->Sglist,
                                            NWilson::TTraceId(TraceId));
-
-    future.Subscribe([self = shared_from_this()]   //
-                     (const NThreading::TFuture<TDBGReadBlocksResponse>& f)
-                     { self->OnReadResponse(f.GetValue()); });
+    future.Subscribe(std::move(onReadResponse));
 }
 
 NThreading::TFuture<TReadRequestExecutor::TResponse>

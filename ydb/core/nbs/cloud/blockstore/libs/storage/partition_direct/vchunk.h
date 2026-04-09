@@ -45,7 +45,7 @@ public:
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         EWriteMode writeMode,
-        ui32 pbufferReplyTimeoutMicroseconds,
+        TDuration pbufferReplyTimeout,
         ui64 lsn,
         const NWilson::TTraceId& traceId);
 
@@ -67,7 +67,7 @@ private:
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         EWriteMode writeMode,
-        ui32 pbufferReplyTimeoutMicroseconds,
+        TDuration pbufferReplyTimeout,
         ui64 lsn,
         std::shared_ptr<NWilson::TSpan> span);
     void OnWriteBlocksResponse(
@@ -90,12 +90,13 @@ private:
     const ISchedulerPtr Scheduler;
     const ITimerPtr Timer;
     const TVChunkConfig VChunkConfig;
-    const size_t BlocksCount;
+    const ui32 BlockSize;
+    const ui64 BlocksCount;
     const ui32 SyncRequestsBatchSize;
     const TDuration WriteHandoffDelay;
     const TDuration TraceSamplePeriod;
 
-    TBlocksDirtyMap BlocksDirtyMap;
+    TBlocksDirtyMap BlocksDirtyMap{BlockSize, BlocksCount};
     bool DirtyMapRestored = false;
 };
 

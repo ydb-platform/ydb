@@ -1794,7 +1794,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(
                                 .List(0)
                                     .Atom(0, "")
                                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                                        if (toRemove.size()) {
+                                        if (!toRemove.empty()) {
                                             parent.Callable(1, "RemoveMembers")
                                                 .Arg(0, "row")
                                                 .Add(1, ctx.NewList(pos, std::move(toRemove)))

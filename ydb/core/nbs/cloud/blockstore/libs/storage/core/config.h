@@ -23,7 +23,7 @@ public:
     [[nodiscard]] TString GetDDiskPoolName() const;
     [[nodiscard]] TString GetPersistentBufferDDiskPoolName() const;
     [[nodiscard]] NProto::EWriteMode GetWriteMode() const;
-    [[nodiscard]] ui32 GetPBufferReplyTimeoutMicroseconds() const;
+    [[nodiscard]] TDuration GetPBufferReplyTimeout() const;
     [[nodiscard]] ui64 GetVChunkSize() const;
 
 private:

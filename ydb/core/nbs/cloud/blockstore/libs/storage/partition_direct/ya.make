@@ -1,15 +1,20 @@
 LIBRARY()
 
+GENERATE_ENUM_SERIALIZATION(ddisk_data_copier.h)
+
 SRCS(
+    ddisk_data_copier.cpp
     direct_block_group_in_mem.cpp
+    direct_block_group_mock.cpp
     direct_block_group.cpp
     erase_request.cpp
-    executor_pool.cpp
     fast_path_service.cpp
     flush_request.cpp
     load_actor_adapter.cpp
     part_initschema.cpp
-    part_readwritemeta.cpp
+    part_loadstate.cpp
+    part_storevolumeconfig.cpp
+    part_storepartitionids.cpp
     part_database.cpp
     partition_direct_actor.cpp
     partition_direct.cpp
@@ -47,5 +52,6 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    partition_ut
     ut
 )

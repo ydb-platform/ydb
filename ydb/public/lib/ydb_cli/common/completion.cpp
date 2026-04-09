@@ -1,4 +1,5 @@
 #include <util/string/subst.h>
+#include <util/system/env.h>
 
 #include "completion.h"
 
@@ -116,5 +117,18 @@ TString MakeCompletionInfo(TStringBuf command, TStringBuf flag) {
   SubstGlobal(info, "{R}", NColorizer::StdErr().Reset());
   return info;
 }
+TString DetectShellFromEnv() {
+    auto shellVar = TryGetEnv("SHELL");
+    if (!shellVar) {
+        return {};
+    }
+    TStringBuf shell = shellVar.GetRef();
+    shell = shell.RAfter('/');
+    if (shell == "bash" || shell == "zsh") {
+        return TString(shell);
+    }
+    return {};
+}
+
 } // namespace NConsoleClient
 } // namespace NYdb

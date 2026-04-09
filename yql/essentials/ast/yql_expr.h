@@ -2924,7 +2924,7 @@ struct TExprContext: private TNonCopyable {
 
     TStringBuf AppendString(const TStringBuf& buf) {
         ENSURE_NOT_FROZEN_CTX
-        if (buf.size() == 0) {
+        if (buf.empty()) {
             return ZeroString;
         }
 

@@ -26,6 +26,9 @@ private:
     THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvWriteToPBuffer>>
         WriteToPBufferRequests;
 
+    THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvWriteToDDisk>>
+        WriteToDDiskRequests;
+
     THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvSyncWithPBuffer>>
         FlushFromPBufferRequests;
 
@@ -74,6 +77,14 @@ private:
 
     void HandleWriteToManyPersistentBuffersResult(
         const TEvWriteToManyPersistentBuffersResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleWriteToDDisk(
+        const TEvTransportPrivate::TEvWriteToDDisk::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleWriteToDDiskResult(
+        const NKikimr::NDDisk::TEvWriteResult::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleErasePersistentBuffer(

@@ -132,7 +132,7 @@ private:
     void StartQueueCreation(const TString& queueName, const TString& accountName, const TString& customQueueName) {
         const auto& cfg = Cfg();
         SchemaActor_ = Register(
-            new TCreateQueueSchemaActorV2(TQueuePath(cfg.GetRoot(), accountName, queueName),
+            new TCreateQueueSchemaActorV2(accountName, TQueuePath(cfg.GetRoot(), accountName, queueName),
                                           Request(), SelfId(), RequestId_, customQueueName, FolderId_, IsCloud(),
                                           cfg.GetEnableQueueAttributesValidation(), UserCounters_, QuoterResources_,
                                           TagsJson_, UserSID_, MaskedToken_, AuthType_, Request().GetSourceAddress())

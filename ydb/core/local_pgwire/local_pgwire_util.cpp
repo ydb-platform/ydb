@@ -229,7 +229,7 @@ int16_t GetFormatForColumn(size_t index, const std::vector<int16_t>& format) {
 }
 
 void FillResultSet(const NYdb::TResultSet& resultSet, std::vector<NPG::TEvPGEvents::TDataRow>& dataRows, const std::vector<int16_t>& format) {
-    NYdb::TResultSetParser parser(std::move(resultSet));
+    NYdb::TResultSetParser parser(resultSet);
     while (parser.TryNextRow()) {
         dataRows.emplace_back();
         auto& row = dataRows.back();

@@ -72,6 +72,7 @@ class Settings(BaseSettings):
     mon_port: int = 8765
     nemesis_mon_port: int = 8666
     yaml_config_location: str = ''
+    database_config_location: str = ''
     # Remote install layout (rsync targets, systemd ExecStart); override via NEMESIS_INSTALL_ROOT.
     install_root: str = '/Berkanavt/nemesis'
     # Log directory on agents for safety wardens (grep kikimr.start, etc.); override via KIKIMR_LOGS_DIRECTORY.
@@ -89,12 +90,14 @@ class AgentSettings(BaseSettings):
     kikimr_logs_directory: str = '/Berkanavt/kikimr/logs/'
     # Same cluster.yaml as orchestrator when deployed via install (env YAML_CONFIG_LOCATION).
     yaml_config_location: str = ''
+    database_config_location: str = ''
 
     @classmethod
     def from_orchestrator_args(cls: Type['AgentSettings'], settings: Settings) -> 'AgentSettings':
         """Create AgentSettings from orchestrator Settings."""
         root = settings.install_root.rstrip("/")
         yaml_on_agent = f"{root}/cluster.yaml" if settings.yaml_config_location else ""
+        database_yaml_on_agent = f"{root}/cluster_database.yaml" if settings.database_config_location else None
         return cls(
             app_host=settings.app_host,
             app_port=settings.app_port,
@@ -103,11 +106,12 @@ class AgentSettings(BaseSettings):
             install_root=settings.install_root,
             kikimr_logs_directory=settings.kikimr_logs_directory,
             yaml_config_location=yaml_on_agent,
+            database_config_location=database_yaml_on_agent,
         )
 
 
 @lru_cache
-def get_orchestrator_settings(**kwargs):
+def get_orchestrator_settings(**kwargs) -> Settings:
     """Get orchestrator-mode settings with argv arguments having highest priority."""
     settings = Settings.from_args(**kwargs)
     print(settings, file=sys.stderr)

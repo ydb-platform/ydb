@@ -3,10 +3,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <vector>
 
-namespace Ydb::Scheme {
-    class Entry;
-}
-
 namespace NYdb::inline Dev {
 
 template<typename TFrom>

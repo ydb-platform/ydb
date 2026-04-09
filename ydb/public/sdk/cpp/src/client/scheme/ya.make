@@ -8,8 +8,8 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h)
 
 PEERDIR(
-    ydb/public/api/grpc
     ydb/public/sdk/cpp/src/client/impl/internal/make_request
+    ydb/public/sdk/cpp/src/client/impl/internal/scheme_helpers
     ydb/public/sdk/cpp/src/client/common_client/impl
     ydb/public/sdk/cpp/src/client/driver
 )

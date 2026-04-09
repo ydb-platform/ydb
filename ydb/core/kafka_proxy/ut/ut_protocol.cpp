@@ -5221,7 +5221,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TInsecureTestServer testServer("1", false, true);
         TKafkaTestClient kafkaClient(testServer.Port);
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
-        // use random values to avoid parallel execution problems
         TString topicName = "topic";
         TString fullTopicName = "/Root/topic";
         TString consumerName = "my-consumer";
@@ -5274,7 +5273,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         {
             auto describeConsumerSettings = NTopic::TDescribeConsumerSettings().IncludeStats(true);
-            // auto result = pqClient.DescribeTopic(topicName, describeTopicSettings).GetValueSync();
             auto result =  pqClient.DescribeConsumer(topicName, consumerName, describeConsumerSettings).GetValueSync();
             const auto& consumerDescription = result.GetConsumerDescription();
             const auto& partition = consumerDescription.GetPartitions()[0];
@@ -5284,19 +5282,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             i32 committedOffset = partition.GetPartitionConsumerStats()->GetCommittedOffset();
             UNIT_ASSERT_VALUES_EQUAL(lastReadOffset, committedOffset);
         }
-        NSchemeCache::TDescribeResult::TPtr result = new NSchemeCache::TDescribeResult{};
-        result->SetPath("/Root");
-        TVector<TString> attrs = {"folder_id", "cloud_id", "database_id"};
-        auto ua = result->MutablePathDescription()->AddUserAttributes();
-        ua->SetKey("folder_id");
-        ua->SetValue("somefolder");
-        ua->SetKey("cloud_id");
-        ua->SetValue("somecloud");
-        ua->SetKey("database_id");
-        ua->SetValue("root");
-
-        NSchemeCache::TDescribeResult::TCPtr cres = result;
-        auto event = MakeHolder<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(0, "/Root", TPathId{}, cres);
+        auto event =  MakeHolder<TEvPersQueue::TEvStatus>(consumerName, true);
         NKikimr::NFlatTests::TFlatMsgBusClient kikimrClient(*(testServer.KikimrServer->ServerSettings));
         auto record = kikimrClient.Ls(fullTopicName)->Record.GetPathDescription().GetPersQueueGroup();
         auto tabletId = record.GetPartitions(0).GetTabletId();
@@ -5311,6 +5297,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TStringStream countersStr;
         dbGroup->OutputPlainText(countersStr);
         TString countersString = countersStr.Str();
+
         auto group = dbGroup->GetSubgroup("host", "")
                                 ->GetSubgroup("database", "/Root")
                                 ->GetSubgroup("cloud_id", "somecloud")

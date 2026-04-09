@@ -121,6 +121,8 @@ inline void FillExtraFieldsForDataChunk(
             logType = item.second;
         } else if (item.first == "file") {
             file = item.second;
+        } else if (item.first == WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX) {
+            continue;
         } else {
             auto res = data.MutableExtraFields()->AddItems();
             res->SetKey(item.first);

@@ -163,9 +163,20 @@ TCollectResult MergeComparisonPathResults(TCollectResult left, TCollectResult ri
 
 class TQueryCollector {
     enum class EMode {
+        // Main path from the context item ($): accumulate index tokens along the query
+        // Predicate operators are disallowed when the callable is JSON_EXISTS (existence vs. boolean result)
         Context = 0,
+
+        // Body of a filter (? ...): the current node is @
+        // Predicates are allowed here, including for JSON_EXISTS
         Filter = 1,
+
+        // Subexpression under a predicate (exists(...) argument or path side of a comparison)
+        // Nested predicate syntax (AND/OR, further comparisons, etc.) is rejected
         Predicate = 2,
+
+        // Comparison RHS: scalar literals (string, number, bool, null)
+        // Also supports unary arithmetic operations (+, -) for numbers
         Literal = 3
     };
 

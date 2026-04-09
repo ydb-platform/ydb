@@ -18,7 +18,7 @@ namespace NKikimr::NPQ {
         ui64 GetTotalSpeed() const;
 
     private:
-        ui64 TransfromToQuota(const ui64 bytes) const;
+        ui64 TransformToQuota(const ui64 bytes) const;
 
         i64 AvailableQuota;
         ui64 SpeedPerSecond;

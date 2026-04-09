@@ -532,7 +532,8 @@ public:
             }
         }
 
-        Self->BuildIndexScanManager.PersistAdd(db, buildId, seqNoGeneration, seqNoRound, Ev->Sender, request);
+        Self->BuildIndexScanManager.PersistAdd(db, buildId, seqNoGeneration, seqNoRound,
+            "TEvBuildIndexProgressResponse");
 
         Self->HandleSafe(Ev, ctx);
 
@@ -567,7 +568,7 @@ public:
         const auto& scans = Self->BuildIndexScanManager.GetScans();
         if (const auto* info = scans.FindPtr(buildId)) {
             if (info->SeqNoGeneration == seqNoGeneration && info->SeqNoRound == seqNoRound) {
-                Sender = info->Sender;
+                ShouldForward = true;
                 NIceDb::TNiceDb db(txc.DB);
                 Self->BuildIndexScanManager.PersistRemove(db, buildId, seqNoGeneration, seqNoRound);
             }
@@ -577,23 +578,32 @@ public:
     }
 
     void Complete(const TActorContext& ctx) {
-        if (Sender) {
-            ctx.Send(Sender, Ev->Release().Release());
+        if (ShouldForward) {
+            if (!Self->StateReportPipe) {
+                NTabletPipe::TClientConfig clientConfig;
+                clientConfig.RetryPolicy = Self->SchemeShardPipeRetryPolicy;
+                Self->StateReportPipe = ctx.Register(
+                    NTabletPipe::CreateClient(ctx.SelfID, Self->CurrentSchemeShardId, clientConfig));
+            }
+            NTabletPipe::SendData(ctx, Self->StateReportPipe, Ev->Release().Release());
         }
     }
 
 private:
     TEvDataShard::TEvBuildIndexProgressResponse::TPtr Ev;
-    TActorId Sender;
+    bool ShouldForward = false;
 };
 
 void TDataShard::Handle(TEvDataShard::TEvBuildIndexProgressResponse::TPtr& ev, const TActorContext& ctx) {
     const auto status = ev->Get()->Record.GetStatus();
     if (status == NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS) {
-        const ui64 buildId = ev->Get()->Record.GetId();
-        if (const auto* info = BuildIndexScanManager.GetScans().FindPtr(buildId)) {
-            ctx.Send(info->Sender, ev->Release().Release());
+        if (!StateReportPipe) {
+            NTabletPipe::TClientConfig clientConfig;
+            clientConfig.RetryPolicy = SchemeShardPipeRetryPolicy;
+            StateReportPipe = ctx.Register(
+                NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
         }
+        NTabletPipe::SendData(ctx, StateReportPipe, ev->Release().Release());
         return;
     }
     Execute(new TTxHandleBuildIndexScanProgress(this, std::move(ev)));

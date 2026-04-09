@@ -16,16 +16,7 @@ namespace NKikimr::NDataShard {
             info.BuildId = rowset.GetValue<TDataShard::Schema::IndexBuildScans::BuildId>();
             info.SeqNoGeneration = rowset.GetValue<TDataShard::Schema::IndexBuildScans::SeqNoGeneration>();
             info.SeqNoRound = rowset.GetValue<TDataShard::Schema::IndexBuildScans::SeqNoRound>();
-
-            const TString senderStr = rowset.GetValue<TDataShard::Schema::IndexBuildScans::SenderActorId>();
-            if (senderStr.size() == sizeof(NActors::TActorId)) {
-                memcpy(&info.Sender, senderStr.data(), sizeof(NActors::TActorId));
-            }
-
-            const TString protoStr = rowset.GetValue<TDataShard::Schema::IndexBuildScans::RequestProto>();
-            if (!info.Request.ParseFromString(protoStr)) {
-                return false;
-            }
+            info.ResponseType = rowset.GetValue<TDataShard::Schema::IndexBuildScans::ResponseType>();
 
             Scans[info.BuildId] = std::move(info);
 
@@ -37,27 +28,19 @@ namespace NKikimr::NDataShard {
         return true;
     }
 
-    void TBuildIndexScanManager::PersistAdd(NIceDb::TNiceDb& db, ui64 buildId, ui64 seqNoGeneration, ui64 seqNoRound,
-                                            const NActors::TActorId& sender, const NKikimrTxDataShard::TEvBuildIndexCreateRequest& request)
+    void TBuildIndexScanManager::PersistAdd(NIceDb::TNiceDb& db, ui64 buildId,
+                                            ui64 seqNoGeneration, ui64 seqNoRound,
+                                            TStringBuf responseType)
     {
-        TString senderStr(sizeof(NActors::TActorId), '\0');
-        memcpy(&senderStr[0], &sender, sizeof(NActors::TActorId));
-
-        TString protoStr;
-        Y_ENSURE(request.SerializeToString(&protoStr));
-
         db.Table<TDataShard::Schema::IndexBuildScans>()
             .Key(buildId, seqNoGeneration, seqNoRound)
-            .Update(
-                NIceDb::TUpdate<TDataShard::Schema::IndexBuildScans::SenderActorId>(senderStr),
-                NIceDb::TUpdate<TDataShard::Schema::IndexBuildScans::RequestProto>(protoStr));
+            .Update(NIceDb::TUpdate<TDataShard::Schema::IndexBuildScans::ResponseType>(TString(responseType)));
 
         TScanInfo& info = Scans[buildId];
         info.BuildId = buildId;
         info.SeqNoGeneration = seqNoGeneration;
         info.SeqNoRound = seqNoRound;
-        info.Sender = sender;
-        info.Request = request;
+        info.ResponseType = responseType;
     }
 
     void TBuildIndexScanManager::PersistRemove(NIceDb::TNiceDb& db, ui64 buildId, ui64 seqNoGeneration, ui64 seqNoRound) {

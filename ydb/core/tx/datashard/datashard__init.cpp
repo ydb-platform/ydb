@@ -193,17 +193,36 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
 
     // Notify SchemeShard about any index build scans that were in progress before reboot.
     // SchemeShard will move these shards back to ToUpload and retry.
-    for (const auto& [buildId, scanInfo] : Self->BuildIndexScanManager.GetScans()) {
-        auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
-        TScanRecord::TSeqNo seqNo = {scanInfo.SeqNoGeneration, scanInfo.SeqNoRound};
-        FillScanResponseCommonFields(*response, buildId, Self->TabletID(), seqNo);
-        response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
-            "TTxInitRestored: notifying SchemeShard of aborted index build scan"
-            << ", buildId# " << buildId
-            << ", tabletId# " << Self->TabletID()
-            << ", sender# " << scanInfo.Sender);
-        ctx.Send(scanInfo.Sender, std::move(response));
+    // We send via a pipe to CurrentSchemeShardId because the original sender TActorId
+    // is a runtime value that is no longer valid after reboot.
+    if (!Self->BuildIndexScanManager.GetScans().empty()) {
+        using TFactory = std::function<THolder<IEventBase>(ui64 buildId, ui64 tabletId, TScanRecord::TSeqNo)>;
+        const THashMap<TString, TFactory> responseFactories = {
+            {"TEvBuildIndexProgressResponse", [](ui64 id, ui64 tabletId, TScanRecord::TSeqNo seqNo) {
+                auto response = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+                FillScanResponseCommonFields(*response, id, tabletId, seqNo);
+                response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
+                return THolder<IEventBase>(response.Release());
+            }},
+        };
+
+        NTabletPipe::TClientConfig pipeConfig;
+        pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+        TActorId pipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, Self->CurrentSchemeShardId, pipeConfig));
+        for (const auto& [buildId, scanInfo] : Self->BuildIndexScanManager.GetScans()) {
+            const auto* factory = responseFactories.FindPtr(scanInfo.ResponseType);
+            Y_ENSURE(factory, "Unknown ResponseType in IndexBuildScans: " << scanInfo.ResponseType);
+            TScanRecord::TSeqNo seqNo = {scanInfo.SeqNoGeneration, scanInfo.SeqNoRound};
+            auto response = (*factory)(buildId, Self->TabletID(), seqNo);
+            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
+                "TTxInitRestored: notifying SchemeShard of aborted index build scan"
+                << ", buildId# " << buildId
+                << ", tabletId# " << Self->TabletID()
+                << ", schemeShardId# " << Self->CurrentSchemeShardId
+                << ", responseType# " << scanInfo.ResponseType);
+            NTabletPipe::SendData(ctx, pipe, response.Release());
+        }
+        NTabletPipe::CloseClient(ctx, pipe);
     }
 
     // InReadSets table might have a lot of garbage due to old bug.

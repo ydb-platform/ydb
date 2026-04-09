@@ -95,7 +95,7 @@ public:
             using T = std::decay_t<decltype(arg)>;
             std::optional<TReadSessionEvent::TEvent> ev;
             if constexpr (std::is_same_v<T, NTopic::TReadSessionEvent::TDataReceivedEvent>) {
-                ev = TReadSessionEvent::TDataReceivedEvent(std::forward<decltype(arg)&&>(arg), std::move(fps));
+                ev = TReadSessionEvent::TDataReceivedEvent(std::forward<decltype(arg)>(arg), std::move(fps));
             } else if constexpr (std::is_same_v<T, NTopic::TSessionClosedEvent>) {
                 ev = std::forward<decltype(arg)>(arg);
             } else {

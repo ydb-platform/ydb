@@ -101,6 +101,36 @@
     NYdb::NQuery::TQueryClient client(driver);
     ```
 
+- JavaScript
+
+  ```javascript
+  import { Driver } from '@ydbjs/core'
+  import { query, unsafe, identifier } from '@ydbjs/query'
+
+  const driver = new Driver('grpc://localhost:2136/local')
+  await driver.ready()
+  const sql = query(driver)
+  ```
+
+- Java
+
+    Для запросов используйте `QueryClient` и `SessionRetryContext` (см. [инициализацию драйвера](./init.md)). Ниже — минимальное подключение и создание клиента для YQL Query Service:
+
+    ```java
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.tools.SessionRetryContext;
+    
+    String connectionString = System.getenv().getOrDefault("YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+    
+    try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+       QueryClient queryClient = QueryClient.newClient(transport).build()) {
+    
+      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+      // retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery(...)))
+    }
+    ```
+
 - Java
 
     Для запросов используйте `QueryClient` и `SessionRetryContext` (см. [инициализацию драйвера](./init.md)). Ниже — минимальное подключение и создание клиента для YQL Query Service:
@@ -222,6 +252,42 @@
         std::cout << "Vector table created: " << tableName << std::endl;
     }
     ```
+
+- Java
+
+  ```java
+  import tech.ydb.common.transaction.TxMode;
+  import tech.ydb.query.tools.QueryReader;
+  import tech.ydb.query.tools.SessionRetryContext;
+  import tech.ydb.table.query.Params;
+  
+  void createVectorTable(SessionRetryContext retryCtx, String tableName) {
+      String query = String.format("""
+              CREATE TABLE IF NOT EXISTS `%s` (
+                  id Utf8,
+                  document Utf8,
+                  embedding String,
+                  PRIMARY KEY (id)
+              );""", tableName);
+  
+      retryCtx.supplyResult(session -> QueryReader.readFrom(
+              session.createQuery(query, TxMode.NONE, Params.empty())
+      )).join().getValue();
+  
+      System.out.println("Vector table created: " + tableName);
+  }
+  ```
+
+- JavaScript
+
+  ```javascript
+  await sql`CREATE TABLE IF NOT EXISTS `table_name` (
+    id Utf8,
+    document Utf8,
+    embedding String,
+    PRIMARY KEY (id)
+  );`
+  ```
 
 - Java
 
@@ -480,6 +546,35 @@
     В функции `ConvertVectorToBytes` подразумевается, что на клиенте используется процессор с [little-endian порядком байт](https://ru.wikipedia.org/wiki/Порядок_байтов), например x86\_64. Если используется другой порядок байт, функцию `ConvertVectorToBytes` необходимо адаптировать.
 
     {% endnote %}
+
+- JavaScript
+
+  ```javascript
+  function convertVectorToBytes(vector) {
+    const bytes = new Uint8Array(vector.length * 4 + 1);
+    const view = new DataView(bytes.buffer);
+
+    for (let i = 0; i < vector.length; i++) {
+        view.setFloat32(i * 4, vector[i], true);
+    }
+
+    bytes[bytes.length - 1] = 0x01;
+    return bytes;
+  }
+
+  const items = [
+    {
+      id: "first_doc",
+      document: "My Document",
+      embedding: convertVectorToBytes(new Float32Array([1.5, 2.5, 3.5]))
+    }
+  ]
+
+  await sql`
+    UPSERT INTO `table_name` (id, document, embedding)
+    SELECT id, document, embedding,
+    FROM AS_TABLE($items);`
+  ```
 
 - Java
 
@@ -775,6 +870,23 @@
     }
     ```
 
+- JavaScript (альтернативный)
+
+  ```javascript
+  const items = [
+    {
+      id: "first_doc",
+      document: "My Document",
+      embedding: new Float32Array([1.5, 2.5, 3.5])
+    }
+  ]
+
+  await sql`
+    UPSERT INTO `table_name` (id, document, embedding)
+    SELECT id, document, Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
+    FROM AS_TABLE($items);`
+  ```
+
 {% endlist %}
 
 
@@ -976,6 +1088,10 @@
         std::cout << "Table index `" << indexName << "` for table `" << tableName << "` added" << std::endl;
     }
     ```
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 - Java
 
@@ -1273,6 +1389,21 @@
         return result;
     }
     ```
+
+- JavaScript
+
+  ```javascript
+  const limit;
+  const embedding = convertVectorToBytes(new Float32Array([1.5, 2.5, 3.5]))
+
+  await sql`SELECT
+        id,
+        document,
+        Knn::CosineSimilarity(embedding, ${embedding}) as score
+    FROM `table_name`
+    ORDER BY score DESC
+    LIMIT ${unsafe(limit)};
+  ```
 
 - Java
 
@@ -1578,6 +1709,21 @@
     }
     ```
 
+- JavaScript (alternative)
+
+  ```javascript
+  const limit;
+  const embedding = new Float32Array([1.5, 2.5, 3.5])
+
+  await sql`SELECT
+        id,
+        document,
+        Knn::CosineSimilarity(embedding, Knn::ToBinaryStringFloat(${embedding})) as score
+    FROM `table_name`
+    ORDER BY score DESC
+    LIMIT ${unsafe(limit)};
+  ```
+
 {% endlist %}
 
 ## Итоговый пример {#full-example}
@@ -1860,6 +2006,10 @@
     ```
 
     Полный код программы доступен по [ссылке](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/vector_index_builtin).
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 - Java
 

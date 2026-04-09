@@ -37,6 +37,15 @@
 - Python
 
   Функциональность на данный момент не поддерживается.
+- JavaScript
+
+  Функциональность на данный момент не поддерживается. Можно сделать клиент для мониторинга и вызывать методы проверки самостоятельно:
+
+  ```javascript
+  const monitoring = driver.createClient(MonitoringServiceDefinition);
+  await monitoring.selfCheck();
+  ```
+
 
 {% endlist %}
 
@@ -95,6 +104,10 @@
 - Python
 
   Функциональность на данный момент не поддерживается.
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 {% endlist %}
 

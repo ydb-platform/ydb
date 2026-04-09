@@ -223,9 +223,9 @@
   var response = await queryClient.Exec("SELECT 1");
   ```
 
-- Js/Ts
+- JavaScript
 
-  ```typescript
+  ```javascript
   import { sql } from '@ydbjs/query';
 
   // ...
@@ -537,7 +537,7 @@
   var response = await queryClient.Exec("SELECT 1");
   ```
 
-- Js/Ts
+- JavaScript
 
   ```typescript
   import { sql } from '@ydbjs/query';
@@ -817,7 +817,7 @@
   var response = await queryClient.ReadAllRows("SELECT 1", txMode: TransactionMode.OnlineRo);
   ```
 
-- Js/Ts
+- JavaScript
 
   ```typescript
   import { sql } from '@ydbjs/query';
@@ -1085,7 +1085,7 @@
   var response = await queryClient.ReadAllRows("SELECT 1", txMode: TransactionMode.StaleRo);
   ```
 
-- Js/Ts
+- JavaScript
 
   ```typescript
   import { sql } from '@ydbjs/query';
@@ -1341,7 +1341,7 @@
   var response = await queryClient.ReadAllRows("SELECT 1", TransactionMode.SnapshotRo);
   ```
 
-- Js/Ts
+- JavaScript
 
   ```typescript
   import { sql } from '@ydbjs/query';
@@ -1644,7 +1644,7 @@
   var response = await queryClient.ReadAllRows("SELECT 1", TransactionMode.SnapshotRw);
   ```
 
-- Js/Ts
+- JavaScript
 
   ```typescript
   import { sql } from '@ydbjs/query';

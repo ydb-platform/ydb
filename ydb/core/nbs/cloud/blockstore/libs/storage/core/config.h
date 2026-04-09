@@ -24,6 +24,7 @@ public:
     [[nodiscard]] TString GetPersistentBufferDDiskPoolName() const;
     [[nodiscard]] NProto::EWriteMode GetWriteMode() const;
     [[nodiscard]] ui32 GetPBufferReplyTimeoutMicroseconds() const;
+    [[nodiscard]] ui64 GetVChunkSize() const;
 
 private:
     NProto::TStorageServiceConfig StorageServiceConfig;

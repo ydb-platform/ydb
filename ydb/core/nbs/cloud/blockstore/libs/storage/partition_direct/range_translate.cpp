@@ -27,7 +27,8 @@ size_t GetVChunkIndex(
 {
     const size_t blocksPerStripe = DefaultStripeSize / volumeConfig.BlockSize;
     const size_t stripeIndex = regionRange.Start / blocksPerStripe;
-    return stripeIndex % VChunksPerRegionCount;
+    const ui32 vChunksPerRegionCount = RegionSize / volumeConfig.VChunkSize;
+    return stripeIndex % vChunksPerRegionCount;
 }
 
 TBlockRange64 TranslateToVChunk(
@@ -36,7 +37,8 @@ TBlockRange64 TranslateToVChunk(
 {
     const size_t blocksPerStripe = DefaultStripeSize / volumeConfig.BlockSize;
     const size_t stripeIndex = regionRange.Start / blocksPerStripe;
-    const size_t stripeIndexInVChunk = stripeIndex / VChunksPerRegionCount;
+    const ui32 vChunksPerRegionCount = RegionSize / volumeConfig.VChunkSize;
+    const size_t stripeIndexInVChunk = stripeIndex / vChunksPerRegionCount;
     const size_t blockIndexInStripe = regionRange.Start % blocksPerStripe;
 
     return TBlockRange64::WithLength(

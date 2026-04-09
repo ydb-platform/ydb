@@ -24,6 +24,7 @@ TStorageConfig::TStorageConfig(
         NProto::EWriteMode,                                                    \
         NProto::PBufferReplication)                                            \
     xxx(PBufferReplyTimeoutMicroseconds,     ui32,     50000                  )\
+    xxx(VChunkSize,                         ui64,     128_MB                  )\
 
 // BLOCKSTORE_STORAGE_CONFIG_RO
 // clang-format on

@@ -29,6 +29,9 @@ constexpr ui64 DefaultStripeSize = 512_KB;
 // Size of Region.
 constexpr ui64 RegionSize = 4_GB;
 
+// Default vchunk size.
+constexpr ui64 DefaultVChunkSize = 128_MB;
+
 //
 constexpr ui64 CopyRangeSize = 1_MB;
 

@@ -5290,14 +5290,12 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         auto* runtime = testServer.KikimrServer->GetRuntime();
         TActorId pipeClient = runtime->ConnectToPipe(tabletId, runtime->AllocateEdgeActor(), 0, GetPipeConfigWithRetries());
         runtime->SendToPipe(tabletId, runtime->AllocateEdgeActor(), event.Release(), 0, GetPipeConfigWithRetries(), pipeClient);
-        Sleep(TDuration::Seconds(50));
-        Cerr << TInstant::Now() << "Getting counters" << Endl;
+        Sleep(TDuration::Seconds(30));
         auto counters = testServer.KikimrServer->GetRuntime()->GetAppData(0).Counters;
         auto dbGroup = GetServiceCounters(counters, "topics", false);
         TStringStream countersStr;
         dbGroup->OutputPlainText(countersStr);
         TString countersString = countersStr.Str();
-
         auto group = dbGroup->GetSubgroup("host", "")
                                 ->GetSubgroup("database", "/Root")
                                 ->GetSubgroup("cloud_id", "somecloud")

@@ -2284,6 +2284,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                           expectedResult);
     }
 
+    Y_UNIT_TEST(TPCH8) {
+       RunTPCHBenchmark(/*columnstore*/ true, {8}, /*new rbo*/ true);
+    }
+
     /*
     void InsertIntoAliasesRenames(NYdb::NTable::TTableClient &db, std::string tableName, int numRows) {
         NYdb::TValueBuilder rows;

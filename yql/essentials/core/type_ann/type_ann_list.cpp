@@ -856,6 +856,11 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
+        if (lambda->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(lambda->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (!EnsureSpecificDataType(*lambda, EDataSlot::Bool, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }

@@ -106,6 +106,7 @@ public:
                                     .RealPath = realPath,
                                     .CreateStep = entry.CreateStep,
                                     .Info = entry.PQGroupInfo,
+                                    .Self = entry.Self,
                                     .SecurityObject = entry.SecurityObject
                                 };
                             }

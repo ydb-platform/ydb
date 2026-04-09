@@ -29,6 +29,7 @@ struct TTopicInfo {
 
     ui64 CreateStep = 0;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> Info;
+    TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TDirEntryInfo> Self;
     TIntrusivePtr<TSecurityObject> SecurityObject;
 };
 

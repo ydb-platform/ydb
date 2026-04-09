@@ -2,9 +2,10 @@ LIBRARY()
 
 SRCS(
     alter_topic.cpp
+    common.cpp
     scheme.cpp
-    scheme_int.cpp
     topic_alterer.cpp
+    validation.cpp
 )
 
 PEERDIR(

@@ -79,7 +79,7 @@ namespace NKikimr::NGRpcProxy::V1 {
     // Returns true if have duplicated read rules
     Ydb::StatusIds::StatusCode CheckConfig(const NKikimrPQ::TPQTabletConfig& config, const TClientServiceTypes& supportedReadRuleServiceTypes,
                                             TString& error, const NKikimrPQ::TPQConfig& pqConfig,
-                                            const Ydb::StatusIds::StatusCode dubsStatus = Ydb::StatusIds::BAD_REQUEST);
+                                            const EOperation operation = EOperation::Create);
 
     TMsgPqCodes AddReadRuleToConfig(
         NKikimrPQ::TPQTabletConfig *config,

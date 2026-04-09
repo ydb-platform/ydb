@@ -19,7 +19,7 @@ std::expected<TDuration, TString> ConvertPositiveDuration(const google::protobuf
     return NKikimr::GetDuration(duration);
 }
 
-std::expected<i32, TString> CheckRetentionPeriod(auto seconds) {
+std::expected<i32, TString> CheckRetentionPeriod(i64 seconds) {
     if (std::cmp_greater(seconds, Max<i32>())) {
         return std::unexpected{"retention_period must be less than " + ToString(ui64(Max<i32>()) + 1)};
     } else if (std::cmp_less_equal(seconds, 0)) {

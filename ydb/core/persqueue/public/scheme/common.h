@@ -5,6 +5,7 @@
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/services/lib/actors/consumers_advanced_monitoring_settings.h>
 
+#include <expected>
 
 namespace NKikimr::NPQ::NScheme {
 
@@ -64,7 +65,7 @@ TResult ValidateConsumersConfig(
 );
 
 std::expected<TDuration, TString> ConvertPositiveDuration(const google::protobuf::Duration& duration);
-std::expected<i32, TString> CheckRetentionPeriod(auto seconds);
+std::expected<i32, TString> CheckRetentionPeriod(i64 seconds);
 std::expected<std::optional<TDuration>, TResult> ConvertConsumerAvailabilityPeriod(
     const google::protobuf::Duration& duration,
     std::string_view consumerName

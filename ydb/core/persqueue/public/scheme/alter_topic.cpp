@@ -1,11 +1,9 @@
-#include "scheme.h"
 #include "scheme_int.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/core/util/proto_duration.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>

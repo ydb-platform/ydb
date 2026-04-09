@@ -4,8 +4,6 @@
 
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 
 namespace NKikimr::NPQ::NScheme {
 

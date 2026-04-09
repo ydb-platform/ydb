@@ -23,7 +23,6 @@ TStorageConfig::TStorageConfig(
     xxx(WriteMode,                                                             \
         NProto::EWriteMode,                                                    \
         NProto::PBufferReplication)                                            \
-    xxx(PBufferReplyTimeoutMicroseconds,     ui32,     50000                  )\
 
 // BLOCKSTORE_STORAGE_CONFIG_RO
 // clang-format on
@@ -111,6 +110,14 @@ TDuration TStorageConfig::GetWriteHandoffDelay() const
                ? TDuration::MicroSeconds(
                      StorageServiceConfig.GetWriteHandoffDelay())
                : TDuration::MicroSeconds(700);
+}
+
+TDuration TStorageConfig::GetPBufferReplyTimeout() const
+{
+    return StorageServiceConfig.HasPBufferReplyTimeoutMicroseconds()
+               ? TDuration::MicroSeconds(
+                     StorageServiceConfig.GetPBufferReplyTimeoutMicroseconds())
+               : TDuration::MicroSeconds(50000);
 }
 
 }   // namespace NYdb::NBS::NStorage

@@ -5,7 +5,6 @@
 #include <yql/essentials/public/purecalc/ut/protos/test_structs.pb.h>
 #include <yql/essentials/public/udf/udf_counter.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
-#include <library/cpp/testing/unittest/registar.h>
 
 class TMyModule: public NKikimr::NUdf::IUdfModule {
 public:

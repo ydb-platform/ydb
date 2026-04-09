@@ -3305,6 +3305,9 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 if ((*stat)->HasSourceCpuTimeUs()) {
                     FillAggrStat(stats, (*stat)->GetSourceCpuTimeUs(), "SourceCpuTimeUs");
                 }
+                if ((*stat)->HasMemoryUsageMB()) {
+                    FillAggrStat(stats, (*stat)->GetMemoryUsageMB(), "MemoryUsageMB");
+                }
                 if ((*stat)->HasMaxMemoryUsage()) {
                     FillAggrStat(stats, (*stat)->GetMaxMemoryUsage(), "MaxMemoryUsage");
                 }
@@ -3504,6 +3507,89 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
 
     ModifyPlan(root, collectPlanNodeId);
     ModifyPlan(root, addStatsToPlanNode);
+
+    if (stats.GetNodes().size()) {
+        if (root.GetMapSafe().contains("Plans") && root.GetMapSafe().at("Plans").IsArray()) {
+            for (auto& plan : root.GetMapSafe().at("Plans").GetArraySafe()) {
+                auto& nodesStats = plan.InsertValue("Nodes", NJson::JSON_ARRAY);
+                for (auto&& node : stats.GetNodes()) {
+                    auto& nodeInfo = nodesStats.AppendValue(NJson::JSON_MAP);
+                    nodeInfo["NodeId"] = node.GetNodeId();
+                    nodeInfo["Tasks"] = node.GetTotalTasksCount();
+                    nodeInfo["FinishedTasks"] = node.GetFinishedTasksCount();
+                    if (node.GetBaseTimeMs()) {
+                        nodeInfo["BaseTimeMs"] = node.GetBaseTimeMs();
+                    }
+                    FillAggrStat(nodeInfo, node.GetCpuTimeUs(), "CpuTimeUs");
+                    FillAggrStat(nodeInfo, node.GetMemoryUsageMB(), "MemoryUsageMB");
+                    FillAggrStat(nodeInfo, node.GetMaxMemoryUsage(), "MaxMemoryUsage");
+                    FillAggrStat(nodeInfo, node.GetInputBytes(), "InputBytes");
+                    FillAggrStat(nodeInfo, node.GetOutputBytes(), "OutputBytes");
+                    FillAggrStat(nodeInfo, node.GetResultBytes(), "ResultBytes");
+                    FillAggrStat(nodeInfo, node.GetIngressBytes(), "IngressBytes");
+                    FillAggrStat(nodeInfo, node.GetEgressBytes(), "EgressBytes");
+                    FillAggrStat(nodeInfo, node.GetSpillingComputeBytes(), "SpillingComputeBytes");
+                    FillAggrStat(nodeInfo, node.GetSpillingChannelBytes(), "SpillingChannelBytes");
+                    FillAggrStat(nodeInfo, node.GetSpillingComputeTimeUs(), "SpillingComputeTimeUs");
+                    FillAggrStat(nodeInfo, node.GetSpillingChannelTimeUs(), "SpillingChannelTimeUs");
+                    if (node.GetGlobalMemoryUsageMB().size()) {
+                        auto& history = nodeInfo.InsertValue("GlobalMemoryUsageMB", NJson::JSON_MAP);
+
+                        auto& time = history.InsertValue("TimeMs", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            time.AppendValue(u.GetTimeMs());
+                        }
+
+                        auto& physical = history.InsertValue("MemPhysicalUsage", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            physical.AppendValue(u.GetMemPhysicalUsage());
+                        }
+
+                        auto& sysAlloc = history.InsertValue("MemSysAllocated", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            sysAlloc.AppendValue(u.GetMemSysAllocated());
+                        }
+
+                        auto& sysFragm = history.InsertValue("MemSysFragmented", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            sysFragm.AppendValue(u.GetMemSysFragmented());
+                        }
+
+                        auto& arrow = history.InsertValue("MemArrowDefault", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            arrow.AppendValue(u.GetMemArrowDefault());
+                        }
+
+                        auto& mkqlAlloc = history.InsertValue("MemMkqlAllocated", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            mkqlAlloc.AppendValue(u.GetMemMkqlAllocated());
+                        }
+
+                        auto& mkqlFree = history.InsertValue("MemMkqlFreeList", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            mkqlFree.AppendValue(u.GetMemMkqlFreeList());
+                        }
+
+                        auto& outputBytes = history.InsertValue("OutputInflightBytes", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            outputBytes.AppendValue(u.GetOutputInflightBytes());
+                        }
+
+                        auto& localBytes = history.InsertValue("LocalInflightBytes", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            localBytes.AppendValue(u.GetLocalInflightBytes());
+                        }
+
+                        auto& inputBytes = history.InsertValue("InputInflightBytes", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            inputBytes.AppendValue(u.GetInputInflightBytes());
+                        }
+                    }
+                }
+                break;
+            }
+        }
+    }
 
     NJsonWriter::TBuf txWriter;
     txWriter.WriteJsonValue(&root, true, PREC_NDIGITS, 17);

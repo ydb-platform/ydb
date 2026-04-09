@@ -60,7 +60,7 @@ TLogRow ParseLegacyLogRow(TStringBuf str) {
         .Component = TComponentHelpers::FromString(match[6].str()),
         .FileName = match[7].str(),
         .LineNumber = FromString<ui32>(match[8].str()),
-        .Path = match[9].str() != ""
+        .Path = !match[9].str().empty()
                     ? match[9].str().substr(1, match[9].str().size() - 3)
                     : "",
         .Message = match[10].str(),

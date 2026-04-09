@@ -1061,13 +1061,9 @@ void ProcessAggregationsInResultItems(TExprNode::TPtr result, const TStructExprT
     }
 }
 
-TExprNode::TPtr BuildLimit(TExprNode::TPtr input, TExprNode::TPtr limit, TExprContext& ctx, bool pgSyntax, TPositionHandle pos) {
-    if (pgSyntax) {
-        return input;
-    }
-    Y_ENSURE(input->ChildrenSize() > 1);
-
-    auto count = limit->ChildPtr(1);
+TExprNode::TPtr ProcessCount(TExprNode::TPtr input, TExprContext& ctx, TPositionHandle pos) {
+    Y_ENSURE(input->ChildrenSize() >= 2);
+    auto count = input->ChildPtr(1);
     if (count->IsCallable("Just")) {
         count = count->ChildPtr(0);
     }
@@ -1093,13 +1089,27 @@ TExprNode::TPtr BuildLimit(TExprNode::TPtr input, TExprNode::TPtr limit, TExprCo
         .Done().Ptr();
         // clang-format on
     }
+    return count;
+}
 
+TExprNode::TPtr BuildLimit(TExprNode::TPtr input, TExprNode::TPtr limit, TExprNode::TPtr offset, TExprContext& ctx, bool pgSyntax, TPositionHandle pos) {
+    if (pgSyntax) {
+        return input;
+    }
+
+    auto limitCount = ProcessCount(limit, ctx, pos);
     // clang-format off
-    return Build<TKqpOpLimit>(ctx, pos)
+    auto limitBuilder =  Build<TKqpOpLimit>(ctx, pos)
         .Input(input)
-        .Count(count)
-    .Done().Ptr();
+        .Count(limitCount);
     // clang-format on
+
+    if (offset) {
+        auto offsetCount = ProcessCount(offset, ctx, pos);
+        limitBuilder.Offset(offsetCount);
+    }
+
+    return limitBuilder.Done().Ptr();
 }
 
 } // namespace
@@ -1748,7 +1758,8 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
 
     auto limit = GetSetting(node->Head(), "limit");
     if (limit) {
-        opResult = BuildLimit(opResult, limit, ctx, pgSyntax, node->Pos());
+        auto offset = GetSetting(node->Head(), "offset");
+        opResult = BuildLimit(opResult, limit, offset, ctx, pgSyntax, node->Pos());
     }
 
     // clang-format off

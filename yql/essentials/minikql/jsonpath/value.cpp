@@ -249,7 +249,7 @@ bool TValue::GetBool() const {
     }
 }
 
-const TStringBuf TValue::GetString() const {
+TStringBuf TValue::GetString() const {
     Y_DEBUG_ABORT_UNLESS(IsString());
 
     if (const auto* value = std::get_if<TEntryCursor>(&Value_)) {

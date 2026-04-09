@@ -1994,7 +1994,8 @@ public:
             auto evRead = reader->GetReadRequest(inflightItem.ReadId, inflightItem.Points);
             YQL_ENSURE(evRead);
             ReadsState.SendEvRead(shardId, evRead, TReadInfo{.ReadKind = readKind, .Cookie = cookie, .ShardId = shardId});
-            Enqueue(inflightItem.ReadId, std::move(inflightItem));
+            auto readId = inflightItem.ReadId;
+            Enqueue(readId, std::move(inflightItem));
         }
 
         return prefixSize;

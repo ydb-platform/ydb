@@ -860,7 +860,7 @@ def test_telegram_connection(bot_token, chat_id, message_thread_id=None):
         return False
 
 
-def _normalize_telegram_team_channels_config(data: dict) -> dict:
+def _normalize_telegram_team_channels_config(data):
     """Lowercase ``teams`` keys in mailing JSON so they match mart slugs (see ``canonical_team_slug``)."""
     if not isinstance(data, dict):
         return data

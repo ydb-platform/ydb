@@ -30,8 +30,9 @@ import ydb
 from datetime import datetime, timezone
 from pathlib import Path
 
-_scripts = os.path.join(os.path.dirname(__file__), "..")
-sys.path.insert(0, _scripts)
+_scripts = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _scripts not in sys.path:
+    sys.path.insert(0, _scripts)
 from github_issue_utils import canonical_team_slug, make_profile_id
 
 # ISO weekday: Monday=1 … Sunday=7 (datetime.isoweekday())

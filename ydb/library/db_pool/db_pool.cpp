@@ -215,11 +215,11 @@ public:
         const auto cancelled = NYdb::TStatus(NYdb::EStatus::CANCELLED, std::move(issues));
 
         for (const auto& pRequest : Requests) {
-            Send(pRequest.Sender, new TEvents::TEvDbFunctionResponse(cancelled));
+            Send(pRequest.Sender, new TEvents::TEvDbFunctionResponse(cancelled), 0, pRequest.Cookie);
         }
 
         for (const auto& [_, pRequest] : InflightRequests) {
-            Send(pRequest.Sender, new TEvents::TEvDbFunctionResponse(cancelled));
+            Send(pRequest.Sender, new TEvents::TEvDbFunctionResponse(cancelled), 0, pRequest.Cookie);
         }
 
         TBase::PassAway();

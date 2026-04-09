@@ -20,8 +20,8 @@ struct TEvents {
         using TFunction = std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)>;
         TFunction Handler;
 
-        explicit TEvDbFunctionRequest(const TFunction& handler)
-            : Handler(handler)
+        explicit TEvDbFunctionRequest(TFunction handler)
+            : Handler(std::move(handler))
         {}
     };
 

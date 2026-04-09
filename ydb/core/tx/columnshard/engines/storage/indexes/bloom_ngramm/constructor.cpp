@@ -7,6 +7,18 @@
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
+namespace {
+
+bool IsSupportedColumnType(const NSchemeShard::TOlapColumnSchema& columnInfo, const TReadDataExtractorContainer& dataExtractor) {
+    const auto extractorProto = dataExtractor.SerializeToProto();
+    const auto typeId = columnInfo.GetType().GetTypeId();
+    const bool isUtf8Column = typeId == NScheme::NTypeIds::Utf8;
+    const bool isJsonSubColumn = typeId == NScheme::NTypeIds::JsonDocument && extractorProto.HasSubColumn();
+    return isUtf8Column || isJsonSubColumn;
+}
+
+} // namespace
+
 std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
     const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
     auto* columnInfo = currentSchema.GetColumns().GetByName(GetColumnName());
@@ -14,6 +26,12 @@ std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
         errors.AddError("no column with name " + GetColumnName());
         return nullptr;
     }
+
+    if (!IsSupportedColumnType(*columnInfo, GetDataExtractor())) {
+        errors.AddError(Sprintf("inappropriate column type for bloom ngramm index: %s", columnInfo->GetTypeName().c_str()));
+        return nullptr;
+    }
+
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
         GetInheritPortionStorage().value_or(false), columnId, GetDataExtractor(), HashesCount, FilterSizeBytes, NGrammSize, RecordsCount,

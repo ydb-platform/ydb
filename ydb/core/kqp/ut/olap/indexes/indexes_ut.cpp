@@ -11,6 +11,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/datetime/base.h>
+#include <util/generic/serialized_enum.h>
 
 namespace NKikimr::NKqp {
 
@@ -27,7 +29,205 @@ static void ExecSchemeQuery(TKikimrRunner& kikimr, bool useQueryService, const T
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
-    Y_UNIT_TEST_DUO(CreateTableThenAddAndDropLocalBloomIndexesWithSqlSyntax, UseQueryService) {
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CreateMinMaxIndex, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
+
+        ExecQuery(kikimr, UseQueryService, R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_level, TYPE=MINMAX,
+            FEATURES=`{"column_name" : "level"}`);
+        )");
+    }
+
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(MinMaxIndexAppliedToDataAfterCompaction, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
+        auto tableClient = kikimr.GetTableClient();
+
+        Tests::NCommon::TLoggerInit(kikimr)
+            .SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS")
+            .SetPriority(NActors::NLog::PRI_DEBUG)
+            .Initialize();
+
+        {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1200000, 300200000, 10000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1300000, 300300000, 10000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1400000, 300400000, 10000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 2000000, 200000000, 70000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 3000000, 100000000, 110000);
+        }
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+        ExecQuery(kikimr, UseQueryService,
+            TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_level, TYPE=MINMAX,
+                    FEATURES=`{"column_name" : "level"}`);
+                )");
+        ExecQuery(kikimr, UseQueryService,
+            TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=MINMAX,
+                    FEATURES=`{"column_name" : "resource_id"}`);
+                )");
+        ExecQuery(kikimr, UseQueryService,
+            TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
+        csController->WaitActualization(TDuration::Seconds(10));
+        {
+            auto it = tableClient
+                          .StreamExecuteScanQuery(R"(
+                --!syntax_v1
+
+                SELECT
+                    COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+                WHERE level = -1
+            )")
+                          .GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            CompareYson(result, R"([[0u;]])");
+            UNIT_ASSERT_VALUES_EQUAL(csController->GetIndexesSkippedNoData().Val(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(csController->GetIndexesApprovedOnSelect().Val(), 0);
+            UNIT_ASSERT_C(
+                csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val(),
+                TStringBuilder()
+                    << "approved: "
+                    << csController->GetIndexesApprovedOnSelect().Val()
+                    << ", skipped: "
+                    << csController->GetIndexesSkippingOnSelect().Val());
+        }
+    }
+
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(MinMaxIndexUsedInQueries, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapStandaloneTable();
+        helper.SetForcedCompaction();
+        auto tableClient = kikimr.GetTableClient();
+        auto queryServiceCLient = kikimr.GetQueryClient();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+
+
+        auto assertDDLQueryOk = [&](TString query) {
+            if (UseQueryService) {
+                auto result = queryServiceCLient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto res = session.ExecuteSchemeQuery(query).GetValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            }
+        };
+
+
+        auto runDMLQuery = [&] (TString query) -> TString {
+            if (/*UseQueryService*/ true) {
+                auto result = queryServiceCLient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                if (result.GetResultSets().empty()) {
+                    return "[]";
+                }
+                return FormatResultSetYson(result.GetResultSet(0));
+            } else {
+                NYdb::NTable::TDataQueryResult result = tableClient.CreateSession().GetValueSync().GetSession().ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                if (result.GetResultSets().empty()) {
+                    return "[]";
+                }
+                return FormatResultSetYson(result.GetResultSet(0));
+            }
+        };
+
+        assertDDLQueryOk(R"(
+            CREATE TABLE `/Root/minmax_test_applied_applied` (
+                `key` Int32 NOT NULL,
+                `value` String NOT NULL,
+                PRIMARY KEY (`key`)
+            )
+            PARTITION BY HASH (`key`)
+            WITH (
+                STORE = COLUMN
+            );
+        )");
+
+        assertDDLQueryOk(R"(
+            ALTER OBJECT `/Root/minmax_test_applied_applied` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=value_mm, TYPE=MINMAX, FEATURES=`{"column_name" : "value"}`);
+
+        )");
+
+        runDMLQuery(R"(
+            $data1 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
+            UPSERT INTO `/Root/minmax_test_applied_applied` (`key`, `value`)
+            SELECT CAST(item AS Int32) AS `key`, "Value_" || CAST(item+1 AS String) AS `value` FROM AS_TABLE($data1);
+        )");
+
+        runDMLQuery(R"(
+            $data2 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
+            UPSERT INTO `/Root/minmax_test_applied_applied` (`key`, `value`)
+            SELECT CAST(item AS Int32) AS `key`, "Value_" || CAST(item AS String) AS `value` FROM AS_TABLE($data2);
+        )");
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+        auto skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
+
+
+        CompareYson(runDMLQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` < "Value_500000";
+        )"), "[[944450u]]");
+        Cerr << "not built indexes: " << csController->GetIndexesSkippedNoData().Val() << '\n';
+
+        UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
+        skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
+
+        CompareYson(runDMLQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` > "Value_500000";
+        )"), "[[555549u]]");
+
+        UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
+        skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
+
+        CompareYson(runDMLQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` <= "Value_500000";
+        )"), "[[944451u]]");
+
+        UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
+        skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
+
+        CompareYson(runDMLQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` >= "Value_500000";
+        )"), "[[555550u]]");
+
+        UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
+        
+    }
+
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CreateTableThenAddAndDropLocalBloomIndexesWithSqlSyntax, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
@@ -281,18 +481,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         }
         csController->WaitCompactions(TDuration::Seconds(5));
 
-        {
-            auto alterQuery = TStringBuilder() <<
-                              R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`))";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
-
-
-        }
-        {
-            auto alterQuery = TStringBuilder() <<
-                              R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
+        ExecQuery(kikimr, UseQueryService,
+            TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
                     FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.01}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -1106,63 +1296,563 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         TTestIndexesScenario().SetStorageId("__LOCAL_METADATA").Initialize().ExecuteDifferentConfigurationScenarios(__SCRIPT_CONTENT, "ILIKE");
     }
 
-    Y_UNIT_TEST(IndexesModificationError) {
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CheckThatIndexIsUsedInQueries, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1200000, 300200000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1300000, 300300000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1400000, 300400000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 2000000, 200000000, 70000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 3000000, 100000000, 110000);
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=BLOOM_FILTER,
+                FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.01}`);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);
+        )");
+
+        csController->WaitActualization(TDuration::Seconds(10));
+
+        const ui64 skipBefore = csController->GetIndexesSkippingOnSelect().Val();
+
+        auto it = kikimr.GetTableClient().StreamExecuteScanQuery(R"(
+            --!syntax_v1
+            SELECT COUNT(*)
+            FROM `/Root/olapStore/olapTable`
+            WHERE resource_id = 'nonexistent_value'
+        )").GetValueSync();
+
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        CompareYson(StreamResultToYson(it), R"([[0u;]])");
+
+        const ui64 skipAfter = csController->GetIndexesSkippingOnSelect().Val();
+        UNIT_ASSERT_C(skipAfter > skipBefore, "Expected bloom index to skip at least one portion");
+    }
+
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CheckThatIndexIsNotUsedInQueries, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1200000, 300200000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1300000, 300300000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1400000, 300400000, 10000);
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=BLOOM_FILTER,
+                FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.01}`);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);
+        )");
+
+        csController->WaitActualization(TDuration::Seconds(20));
+
+        const ui64 skipBefore = csController->GetIndexesSkippingOnSelect().Val();
+        const ui64 approveBefore = csController->GetIndexesApprovedOnSelect().Val();
+
+        auto it = kikimr.GetTableClient().StreamExecuteScanQuery(R"(
+            --!syntax_v1
+            SELECT COUNT(*)
+            FROM `/Root/olapStore/olapTable`
+            WHERE level = -1
+        )").GetValueSync();
+
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        CompareYson(StreamResultToYson(it), R"([[0u;]])");
+
+        const ui64 skipAfter = csController->GetIndexesSkippingOnSelect().Val();
+        const ui64 approveAfter = csController->GetIndexesApprovedOnSelect().Val();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(approveAfter, approveBefore, TStringBuilder() << "Bloom index must not be approved for predicate on non-indexed column. before=" << approveBefore << ", after=" << approveAfter);
+        UNIT_ASSERT_VALUES_EQUAL_C(skipAfter, skipBefore, TStringBuilder() << "Bloom index must not be checked for predicate on non-indexed column. before=" << skipBefore << ", after=" << skipAfter);
+    }
+
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestCompatibilityWithOtherIndices, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+        auto& client = kikimr.GetTestClient();
+
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1200000, 300200000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1300000, 300300000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1400000, 300400000, 10000);
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id_bf, TYPE=BLOOM_FILTER,
+                FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.01}`);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid_bf, TYPE=BLOOM_FILTER,
+                FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.01}`);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id_ngram, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "false_positive_probability" : 0.01, "case_sensitive" : false}`);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);
+        )");
+
+        csController->WaitActualization(TDuration::Seconds(20));
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 2100000, 500000000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 2200000, 500100000, 10000);
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+        const ui64 skipBefore = csController->GetIndexesSkippingOnSelect().Val();
+
+        auto it = kikimr.GetTableClient().StreamExecuteScanQuery(R"(
+            --!syntax_v1
+            SELECT COUNT(*)
+            FROM `/Root/olapStore/olapTable`
+            WHERE resource_id = 'nonexistent_value' AND uid = 'missing_uid'
+        )").GetValueSync();
+
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        CompareYson(StreamResultToYson(it), R"([[0u;]])");
+        const ui64 skipAfter = csController->GetIndexesSkippingOnSelect().Val();
+        UNIT_ASSERT_C(skipAfter > skipBefore, "Expected at least one skipped portion after indexes activation");
+
+        auto tableDesc = client.Ls("/Root/olapStore/olapTable");
+        auto indexes = tableDesc->Record.GetPathDescription().GetColumnTableDescription().GetSchema().GetIndexes();
+        std::unordered_set<TString> expectedIndexNames{"index_resource_id_bf", "index_uid_bf", "index_resource_id_ngram"};
+        UNIT_ASSERT_VALUES_EQUAL_C(indexes.size(), expectedIndexNames.size(), "Unexpected number of indexes on /Root/olapStore/olapTable");
+        for (auto&& index : indexes) {
+            UNIT_ASSERT_C(expectedIndexNames.erase(index.GetName()), TStringBuilder() << "Unexpected index in schema: " << index.GetName());
+        }
+
+        UNIT_ASSERT_C(expectedIndexNames.empty(), "Some expected indexes were not found in schema");
+    }
+
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable();
+        helper.SetForcedCompaction();
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000, 300000000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1100000, 300100000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1200000, 300200000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1300000, 300300000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 1400000, 300400000, 10000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 2000000, 200000000, 70000);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 3000000, 100000000, 110000);
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+        const auto executeProbeQuery = [&]() -> TDuration {
+            const TInstant start = TInstant::Now();
+            auto it = kikimr.GetTableClient().StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+                WHERE resource_id = 'nonexistent_value'
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(StreamResultToYson(it), "[[0u;]]");
+            return TInstant::Now() - start;
+        };
+
+        const ui64 skipBeforeNoIndex = csController->GetIndexesSkippingOnSelect().Val();
+        const ui64 approveBeforeNoIndex = csController->GetIndexesApprovedOnSelect().Val();
+        const TDuration noIndexDuration = executeProbeQuery();
+        const ui64 skipAfterNoIndex = csController->GetIndexesSkippingOnSelect().Val();
+        const ui64 approveAfterNoIndex = csController->GetIndexesApprovedOnSelect().Val();
+        UNIT_ASSERT_VALUES_EQUAL_C(skipAfterNoIndex, skipBeforeNoIndex, "No index configured yet, skipping counter must not change");
+        UNIT_ASSERT_VALUES_EQUAL_C(approveAfterNoIndex, approveBeforeNoIndex, "No index configured yet, approve counter must not change");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id_bf_probe, TYPE=BLOOM_FILTER,
+                FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.01}`);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);
+        )");
+
+        csController->WaitActualization(TDuration::Seconds(10));
+
+        const ui64 skipBeforeWithIndex = csController->GetIndexesSkippingOnSelect().Val();
+        const ui64 approveBeforeWithIndex = csController->GetIndexesApprovedOnSelect().Val();
+        const TDuration withIndexDuration = executeProbeQuery();
+        const ui64 skipAfterWithIndex = csController->GetIndexesSkippingOnSelect().Val();
+        const ui64 approveAfterWithIndex = csController->GetIndexesApprovedOnSelect().Val();
+
+        UNIT_ASSERT_C(skipAfterWithIndex > skipBeforeWithIndex, TStringBuilder() << "Expected bloom filter to skip portions in appropriate scenario. before=" << skipBeforeWithIndex << ", after=" << skipAfterWithIndex);
+        UNIT_ASSERT_C(skipAfterWithIndex + approveAfterWithIndex > skipBeforeWithIndex + approveBeforeWithIndex, "Expected bloom filter index to be checked after creation");
+        UNIT_ASSERT_C(
+            withIndexDuration < noIndexDuration,
+            TStringBuilder()
+                << "Expected probe query to become faster with bloom index. no-index=" << noIndexDuration
+                << ", with-index=" << withIndexDuration);
+    }
+
+    Y_UNIT_TEST(TestIndicesWorkOnSupportedDataTypes) {
+        const bool UseQueryService = true;
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+        TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+        auto& client = kikimr.GetTestClient();
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/indexTypesTable`
+            (
+                id Int32 NOT NULL,
+                uid Utf8,
+                resource_id Utf8,
+                message Utf8,
+                PRIMARY KEY (id)
+            )
+            PARTITION BY HASH(id)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1)
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/indexTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_uid_bf, TYPE=BLOOM_FILTER,
+                FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.01}`);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/indexTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_resource_bf, TYPE=BLOOM_FILTER,
+                FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.01}`);
+        )");
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/indexTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=idx_message_ngram, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "message", "ngramm_size" : 3, "false_positive_probability" : 0.01, "case_sensitive" : false}`);
+        )");
+
+        if (UseQueryService) {
+            auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto result = session.ExecuteQuery(R"(
+                --!syntax_v1
+                UPSERT INTO `/Root/indexTypesTable` (id, uid, resource_id, message) VALUES
+                    (1, "uid_1", "res_a", "alpha"),
+                    (2, "uid_2", "res_b", "beta"),
+                    (3, "uid_3", "res_c", "gamma"),
+                    (4, "uid_4", "res_b", "delta");
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        } else {
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+                UPSERT INTO `/Root/indexTypesTable` (id, uid, resource_id, message) VALUES
+                    (1, "uid_1", "res_a", "alpha"),
+                    (2, "uid_2", "res_b", "beta"),
+                    (3, "uid_3", "res_c", "gamma"),
+                    (4, "uid_4", "res_b", "delta");
+            )", NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        csController->WaitCompactions(TDuration::Seconds(5));
+        ExecQuery(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/indexTypesTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);
+        )");
+        csController->WaitActualization(TDuration::Seconds(10));
+
+        auto checkCount = [&](const TString& query, TStringBuf expectedYson) {
+            auto it = kikimr.GetTableClient().StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(TString(expectedYson), StreamResultToYson(it));
+        };
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/indexTypesTable` WHERE uid = "uid_2"
+        )", "[[1u;]]");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/indexTypesTable` WHERE resource_id = "res_b"
+        )", "[[2u;]]");
+
+        checkCount(R"(
+            --!syntax_v1
+            SELECT COUNT(*) FROM `/Root/indexTypesTable` WHERE message LIKE "%ta%"
+        )", "[[2u;]]");
+
+        auto tableDesc = client.Ls("/Root/indexTypesTable");
+        auto indexes = tableDesc->Record.GetPathDescription().GetColumnTableDescription().GetSchema().GetIndexes();
+        std::unordered_set<TString> expectedIndexNames{"idx_uid_bf", "idx_resource_bf", "idx_message_ngram"};
+        UNIT_ASSERT_VALUES_EQUAL(indexes.size(), expectedIndexNames.size());
+        for (auto&& index : indexes) {
+            UNIT_ASSERT(expectedIndexNames.erase(index.GetName()));
+        }
+
+        UNIT_ASSERT(expectedIndexNames.empty());
+    }
+
+    Y_UNIT_TEST(TestIndicesNotWorkingOnNotSupportedDataTypes) {
+        const bool UseQueryService = true;
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/indexUnsupportedTypesTable`
+            (
+                id Int32 NOT NULL,
+                level Int32,
+                PRIMARY KEY (id)
+            )
+            PARTITION BY HASH(id)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1)
+        )");
+
+        ExecQueryExpectErrorContains(kikimr, UseQueryService, R"(
+            ALTER OBJECT `/Root/indexUnsupportedTypesTable` (TYPE TABLE) SET (
+                ACTION=UPSERT_INDEX,
+                NAME=idx_level_ngram,
+                TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "level", "ngramm_size" : 3, "false_positive_probability" : 0.01}`
+            );
+        )", "column type");
+
+    }
+
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(IndexesModificationError, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
-        auto tableClient = kikimr.GetTableClient();
-
-        //        Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
 
-        {
-            auto alterQuery = TStringBuilder() <<
-                              R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
+        ExecQuery(kikimr, UseQueryService,
+            TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
                     FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.05}`);
+                )");
+
+        {
+            auto alterQuery = TStringBuilder() <<
+                              R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
+                    FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0}`);
                 )";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            if (UseQueryService) {
+                auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+                auto result = session.ExecuteQuery(alterQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            } else {
+                auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_UNEQUAL(alterResult.GetStatus(), NYdb::EStatus::SUCCESS);
+            }
         }
 
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.05}`);
+                    FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0}`);
                 )";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_UNEQUAL(alterResult.GetStatus(), NYdb::EStatus::SUCCESS);
+            if (UseQueryService) {
+                auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+                auto result = session.ExecuteQuery(alterQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+            } else {
+                auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_UNEQUAL(alterResult.GetStatus(), NYdb::EStatus::SUCCESS);
+            }
         }
 
-        {
-            auto alterQuery = TStringBuilder() <<
-                              R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.005}`);
-                )";
-            auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
-            UNIT_ASSERT_VALUES_UNEQUAL(alterResult.GetStatus(), NYdb::EStatus::SUCCESS);
-        }
-
-        {
-            auto alterQuery = TStringBuilder() <<
-                              R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
+        ExecQuery(kikimr, UseQueryService,
+            TStringBuilder() << R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
                     FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.01, "bits_storage_type": "BITSET"}`);
-                )";
+                )");
+        ExecQuery(kikimr, UseQueryService,
+            TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_INDEX, NAME=index_uid);");
+    }
+
+    Y_UNIT_TEST(BloomNgramFilterSizeBasedOnUniqueNgrams) {
+        class TIndexSizeCapturingController : public NOlap::TWaitCompactionController {
+        private:
+            using TBase = NOlap::TWaitCompactionController;
+            mutable TMutex SizeMutex;
+            std::vector<ui32> CompactionIndexBlobSizes;
+
+            bool DoOnWriteIndexComplete(
+                const NOlap::TColumnEngineChanges& change, const ::NKikimr::NColumnShard::TColumnShard& shard) override
+            {
+                if (change.TypeString() == NOlap::TCompactColumnEngineChanges::StaticTypeName()) {
+                    if (auto* compaction = dynamic_cast<const NOlap::TChangesWithAppend*>(&change)) {
+                        TGuard<TMutex> g(SizeMutex);
+                        for (auto&& portion : compaction->GetAppendedPortions()) {
+                            for (auto&& idx : portion.GetPortionResult().GetIndexesVerified()) {
+                                CompactionIndexBlobSizes.push_back(idx.GetRawBytes());
+                            }
+                        }
+                    }
+                }
+                return TBase::DoOnWriteIndexComplete(change, shard);
+            }
+
+        public:
+            std::vector<ui32> GetCompactionIndexBlobSizes() const {
+                TGuard<TMutex> g(SizeMutex);
+                return CompactionIndexBlobSizes;
+            }
+        };
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetReaderClassName("SIMPLE");
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<TIndexSizeCapturingController>();
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Disable);
+        TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
+
+        {
+            auto tableClient = kikimr.GetTableClient();
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            auto alterResult = session.ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_resource_id, TYPE=BLOOM_NGRAMM_FILTER,
+                    FEATURES=`{"column_name" : "resource_id", "ngramm_size" : 3, "false_positive_probability" : 0.01,
+                               "data_extractor" : {"class_name" : "DEFAULT"}, "bits_storage_type": "SIMPLE_STRING"}`);
+            )").GetValueSync();
+
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
 
         {
-            auto alterQuery = TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_INDEX, NAME=index_uid);";
+            auto tableClient = kikimr.GetTableClient();
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
-            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            auto alterResult = session.ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS,
+                    `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`,
+                    `COMPACTION_PLANNER.FEATURES`=`
+                    {"levels" : [{"class_name" : "Zero", "portions_live_duration" : "10s",
+                                  "expected_blobs_size" : 2048000, "portions_count_available" : 1},
+                                 {"class_name" : "Zero"}]}`);
+            )").GetValueSync();
+
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
+
+        constexpr ui32 UniqueResourceIds = 100;
+        for (ui32 batch = 0; batch < 10; ++batch) {
+            WriteTestData(kikimr, "/Root/olapTable", 1000000, 300000000 + batch * UniqueResourceIds, UniqueResourceIds);
+        }
+
+        csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
+        UNIT_ASSERT(csController->WaitCompactions(TDuration::Seconds(15)));
+
+        constexpr ui64 MaxFilterSizeBytes = NOlap::NIndexes::NBloomNGramm::TConstants::MaxFilterSizeBytes;
+
+        auto sizes = csController->GetCompactionIndexBlobSizes();
+        UNIT_ASSERT_C(!sizes.empty(), "Compaction should produce at least one index blob");
+
+        for (auto&& blobSize : sizes) {
+            UNIT_ASSERT_C(blobSize > 0, "Index blob size must be positive");
+            UNIT_ASSERT_C((blobSize & (blobSize - 1)) == 0, "Index blob size must be a power of 2, got: " << blobSize);
+            UNIT_ASSERT_C(blobSize < MaxFilterSizeBytes / 4, "With only " << UniqueResourceIds << " unique resource_ids the filter should be much smaller than max (" << MaxFilterSizeBytes << "), got: " << blobSize);
+        }
+
+        auto tableClient = kikimr.GetTableClient();
+        {
+            auto it = tableClient.StreamExecuteScanQuery(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+                SELECT COUNT(*) FROM `/Root/olapTable`
+                WHERE resource_id = '1000050'
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            CompareYson(result, "[[10u;]]");
+        }
+
+        {
+            auto it = tableClient.StreamExecuteScanQuery(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+                SELECT COUNT(*) FROM `/Root/olapTable`
+                WHERE resource_id = 'nonexistent_value'
+            )").GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), NYdb::EStatus::SUCCESS, it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            CompareYson(result, "[[0u;]]");
+        }
+
+        UNIT_ASSERT_C(csController->GetIndexesSkippingOnSelect().Val() > 0,
+            "Bloom ngram filter should skip at least some portions for a nonexistent value");
     }
 }
 

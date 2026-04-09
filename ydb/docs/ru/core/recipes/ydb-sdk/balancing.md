@@ -9,7 +9,7 @@
 
 Содержание:
 
-- [Равномерный случайный выбор](balancing-random-choice.md)
-- [Предпочитать ближайший дата-центр](balancing-prefer-local.md)
-- [Предпочитать конкретную зону доступности](balancing-prefer-location.md)
-- [Предпочитать пайл c конкретным состоянием](balancing-prefer-pile.md)
+- [Равномерный случайный выбор](../../reference/ydb-sdk/balancing-random-choice.md)
+- [Предпочитать ближайший дата-центр](../../reference/ydb-sdk/balancing-prefer-local.md)
+- [Предпочитать конкретную зону доступности](../../reference/ydb-sdk/balancing-prefer-location.md)
+- [Предпочитать пайл c конкретным состоянием](../../reference/ydb-sdk/balancing-prefer-pile.md)

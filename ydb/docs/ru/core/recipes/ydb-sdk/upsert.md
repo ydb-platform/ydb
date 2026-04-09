@@ -140,7 +140,7 @@
 
   - Native SDK
 
-    Используйте `SessionRetryContext` и `TableSession.executeDataQuery` с параметром `$seriesData` типа `List<Struct<...>>`. Значения для `AS_TABLE($seriesData)` собираются так же, как структуры строк в примере [пакетной вставки](./bulk-upsert.md).
+    Используйте `SessionRetryContext` и `TableSession.executeDataQuery` с параметром `$seriesData` типа `List<Struct<...>>`. Значения для `AS_TABLE($seriesData)` собираются так же, как структуры строк в примере [пакетной вставки](../../reference/ydb-sdk/bulk-upsert.md).
 
     ```java
     SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();

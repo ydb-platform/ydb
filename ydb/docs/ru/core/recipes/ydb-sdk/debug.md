@@ -6,8 +6,8 @@
 
 Содержание:
 
-- [Включить логирование](debug-logs.md)
-- [Подключить метрики в Prometheus](debug-prometheus.md)
-- [Подключить трассировку в Jaeger](debug-jaeger.md)
-- [Подключить трассировку в OpenTelemetry](debug-otel.md)
+- [Включить логирование](../../reference/ydb-sdk/debug-logs.md)
+- [Подключить метрики в Prometheus](../../reference/ydb-sdk/debug-prometheus.md)
+- [Подключить трассировку в Jaeger](../../reference/ydb-sdk/debug-jaeger.md)
+- [Подключить трассировку в OpenTelemetry](../../reference/ydb-sdk/debug-otel.md)
 

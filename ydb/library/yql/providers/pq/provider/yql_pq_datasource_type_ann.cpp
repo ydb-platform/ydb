@@ -1,6 +1,7 @@
 #include "yql_pq_provider_impl.h"
 #include "yql_pq_helpers.h"
 
+#include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 
@@ -21,6 +22,14 @@ namespace NYql {
 using namespace NNodes;
 
 namespace {
+
+const TTypeAnnotationNode* BuildPqMetaFieldExprType(const TMetaFieldDescriptor& descriptor, TExprContext& ctx) {
+    if (descriptor.DictStringString) {
+        const auto* stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
+        return ctx.MakeType<TDictExprType>(stringType, stringType);
+    }
+    return ctx.MakeType<TDataExprType>(descriptor.Type);
+}
 
 struct TWatermarkPushdownSettings: public NPushdown::TSettings {
     TWatermarkPushdownSettings()
@@ -451,7 +460,7 @@ public:
                     << "Pq Meta Field Descriptor was not found"));
                 return TStatus::Error;
             }
-            items.emplace_back(ctx.MakeType<TDataExprType>(descriptor->Type));
+            items.emplace_back(BuildPqMetaFieldExprType(*descriptor, ctx));
         }
 
         input->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TTupleExprType>(items)));
@@ -492,7 +501,7 @@ public:
                     << "Pq Meta Field Descriptor was not found"));
                 return TStatus::Error;
             }
-            items.emplace_back(ctx.MakeType<TItemExprType>(descriptor->SysColumn, ctx.MakeType<TDataExprType>(descriptor->Type)));
+            items.emplace_back(ctx.MakeType<TItemExprType>(descriptor->SysColumn, BuildPqMetaFieldExprType(*descriptor, ctx)));
         }
 
         input->SetTypeAnn(ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(items)));
@@ -541,14 +550,32 @@ public:
                 return TStatus::Error;
             }
 
-            bool isOptional = false;
-            const TDataExprType* dataType = nullptr;
-            if (!EnsureDataOrOptionalOfData(row->Pos(), structType->GetItems()[*pos]->GetItemType(), isOptional, dataType, ctx)) {
-                return TStatus::Error;
-            }
+            if (descriptor->DictStringString) {
+                const auto* itemType = structType->GetItems()[*pos]->GetItemType();
+                const TTypeAnnotationNode* dictType = itemType;
+                if (itemType->GetKind() == ETypeAnnotationKind::Optional) {
+                    dictType = itemType->Cast<TOptionalExprType>()->GetItemType();
+                }
+                if (!EnsureDictType(row->Pos(), *dictType, ctx)) {
+                    return TStatus::Error;
+                }
+                const auto* dict = dictType->Cast<TDictExprType>();
+                if (!EnsureSpecificDataType(row->Pos(), *dict->GetKeyType(), EDataSlot::String, ctx)) {
+                    return TStatus::Error;
+                }
+                if (!EnsureSpecificDataType(row->Pos(), *dict->GetPayloadType(), EDataSlot::String, ctx)) {
+                    return TStatus::Error;
+                }
+            } else {
+                bool isOptional = false;
+                const TDataExprType* dataType = nullptr;
+                if (!EnsureDataOrOptionalOfData(row->Pos(), structType->GetItems()[*pos]->GetItemType(), isOptional, dataType, ctx)) {
+                    return TStatus::Error;
+                }
 
-            if (!EnsureSpecificDataType(row->Pos(), *dataType, descriptor->Type, ctx)) {
-                return TStatus::Error;
+                if (!EnsureSpecificDataType(row->Pos(), *dataType, descriptor->Type, ctx)) {
+                    return TStatus::Error;
+                }
             }
 
             output = ctx.Builder(input->Pos())
@@ -561,7 +588,7 @@ public:
             return TStatus::Repeat;
         }
 
-        input->SetTypeAnn(ctx.MakeType<TDataExprType>(descriptor->Type));
+        input->SetTypeAnn(BuildPqMetaFieldExprType(*descriptor, ctx));
         return TStatus::Ok;
     }
 

@@ -1477,6 +1477,69 @@ bool NKikimr::ObtainPDiskKey(NPDisk::TMainKey *mainKey, const NKikimrProto::TKey
     return true;
 }
 
+static void CleanupRemovedNodeEntries(NKikimrBlobStorage::TStorageConfig& config) {
+    if (!config.GetSelfManagementConfig().GetEnabled() || !config.GetBlobStorageConfig().HasServiceSet()) {
+        return;
+    }
+
+    if (config.AllNodesSize() == 0) {
+        return;
+    }
+
+    THashSet<ui32> nodeIds;
+    for (const auto& node : config.GetAllNodes()) {
+        nodeIds.insert(node.GetNodeId());
+    }
+
+    auto& ss = *config.MutableBlobStorageConfig()->MutableServiceSet();
+
+    auto isOnRemovedNode = [&](const auto& location) {
+        return location.HasNodeID() && !nodeIds.contains(location.GetNodeID());
+    };
+
+    // remove DESTROY VDisks whose node is no longer in the config
+    for (int i = ss.VDisksSize() - 1; i >= 0; --i) {
+        const auto& vdisk = ss.GetVDisks(i);
+        if (vdisk.HasVDiskLocation() && isOnRemovedNode(vdisk.GetVDiskLocation()) &&
+                vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
+            ss.MutableVDisks()->DeleteSubrange(i, 1);
+        }
+    }
+
+    // remove PDisk entries whose node is gone and no remaining VDisk references them
+    for (int i = ss.PDisksSize() - 1; i >= 0; --i) {
+        const auto& pdisk = ss.GetPDisks(i);
+        if (!pdisk.HasNodeID() || nodeIds.contains(pdisk.GetNodeID())) {
+            continue;
+        }
+        const auto pdiskNodeId = pdisk.GetNodeID();
+        const auto pdiskId = pdisk.GetPDiskID();
+        const bool referenced = std::any_of(ss.GetVDisks().begin(), ss.GetVDisks().end(),
+            [&](const auto& vdisk) {
+                return vdisk.HasVDiskLocation() &&
+                       vdisk.GetVDiskLocation().HasNodeID() &&
+                       vdisk.GetVDiskLocation().GetNodeID() == pdiskNodeId &&
+                       vdisk.GetVDiskLocation().GetPDiskID() == pdiskId;
+            });
+        if (!referenced) {
+            ss.MutablePDisks()->DeleteSubrange(i, 1);
+        }
+    }
+
+    if (config.GetBlobStorageConfig().HasDefineBox()) {
+        auto* box = config.MutableBlobStorageConfig()->MutableDefineBox();
+        for (int i = box->HostSize() - 1; i >= 0; --i) {
+            const auto& host = box->GetHost(i);
+            if (!host.GetEnforcedNodeId()) {
+                continue;
+            }
+            if (!nodeIds.contains(host.GetEnforcedNodeId())) {
+                box->MutableHost()->DeleteSubrange(i, 1);
+            }
+        }
+    }
+}
+
 bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& appConfig,
         NKikimrBlobStorage::TStorageConfig *config, TString *errorReason) {
     // copy blob storage config
@@ -1725,6 +1788,8 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
             return false;
         }
     }
+
+    CleanupRemovedNodeEntries(*config);
 
     // and copy ClusterUUID from there too
     config->SetClusterUUID(nsFrom.GetClusterUUID());

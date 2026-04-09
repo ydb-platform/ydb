@@ -39,7 +39,7 @@ message TTableServiceConfig {
 
         optional uint64 MaxTotalChannelBuffersSize = 11 [default = 2147483648]; // 2 GB
         optional uint64 MinChannelBufferSize = 12 [default = 2048];             // 2 KB
-        optional uint32 MaxChannelCountPerNode = 31 [default = 5000];
+        optional uint32 MaxChannelCountPerNode = 31 [default = 7300];
 
         reserved 13;
         reserved 14;

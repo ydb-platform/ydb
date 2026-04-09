@@ -74,7 +74,8 @@ void TSchemeActualizer::DoExtractTasks(TTieringProcessContext& tasksContext, con
         for (auto&& portionId : portions) {
             auto portion = externalContext.GetPortionVerified(portionId);
             if (!address.WriteIs(NBlobOperations::TGlobal::DefaultStorageId) && !address.WriteIs(NTiering::NCommon::DeleteTierName)) {
-                if (!portion->HasRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized)) {
+                const bool sameTierRewrite = portion->GetTierNameDef(IStoragesManager::DefaultStorageId) == IStoragesManager::DefaultStorageId;
+                if (!sameTierRewrite && !portion->HasRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized)) {
                     TSchemeGlobalCounters::OnSkipNotOptimized();
                     continue;
                 }

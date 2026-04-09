@@ -442,7 +442,8 @@ public:
     void Terminate() override {
     }
 
-    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override {
+    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId, ui64 channelId) override {
+        Y_UNUSED(channelId);
         IsLocalChannel = outputActorId.NodeId() == inputActorId.NodeId();
         if (Packer.IsBlock()) {
             Packer.SetMinFillPercentage(IsLocalChannel ? Nothing() : ArrayBufferMinFillPercentage);

@@ -727,6 +727,63 @@ TInputDescriptor::~TInputDescriptor() {
     *InputBufferInflightBytes -= InflightBytes.load();
 }
 
+TBroadcastBuffer::~TBroadcastBuffer() {
+}
+
+EDqFillLevel TBroadcastBuffer::GetFillLevel() const {
+    EDqFillLevel result = EDqFillLevel::NoLimit;
+    for (auto& [_, buffer] : Buffers)
+        result = std::max(result, buffer->GetFillLevel());
+    return result;
+}
+
+void TBroadcastBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) {
+    for (auto& [_, buffer] : Buffers)
+        buffer->SetFillAggregator(aggregator);
+}
+
+void TBroadcastBuffer::Push(TDataChunk&& data) {
+    for (auto& [_, buffer] : Buffers)
+        buffer->Push(TDataChunk{data});
+}
+
+bool TBroadcastBuffer::IsFinished() {
+    for (auto& [_, buffer] : Buffers)
+        if (!buffer->IsFinished())
+            return false;
+    return true;
+}
+
+bool TBroadcastBuffer::IsEarlyFinished() {
+    for (auto& [_, buffer] : Buffers)
+        if (!buffer->IsEarlyFinished())
+            return false;
+    return true;
+}
+
+bool TBroadcastBuffer::IsEmpty() {
+    return false;
+}
+
+bool TBroadcastBuffer::Pop(TDataChunk&) {
+    Y_ENSURE(false, "TBroadcastBuffer::Pop not allowed");
+    return false;
+}
+
+void TBroadcastBuffer::EarlyFinish() {
+    Y_ENSURE(false, "TBroadcastBuffer::EarlyFinish not allowed");
+}
+
+void TBroadcastBuffer::ExportPushStats(TDqAsyncStats& stats) {
+    for (auto& [_, buffer] : Buffers)
+        buffer->ExportPushStats(stats);
+}
+
+void TBroadcastBuffer::ExportPopStats(TDqAsyncStats& stats) {
+    for (auto& [_, buffer] : Buffers)
+        buffer->ExportPopStats(stats);
+}
+
 bool TInputDescriptor::IsEmpty() {
     std::lock_guard lock(QueueMutex);
     auto result = Queue.empty();
@@ -789,6 +846,7 @@ bool TInputDescriptor::IsEarlyFinished() {
     return EarlyFinished.load();
 }
 
+// allows multiple channels to take data
 bool TInputDescriptor::PopDataChunk(TDataChunk& data) {
     std::lock_guard lock(QueueMutex);
     if (Queue.empty()) {
@@ -852,6 +910,60 @@ ui32 TInputDescriptor::GetQueueSize() {
     return  Queue.size();
 }
 
+/// Broadcast input
+
+bool TBroadcastInputDescriptor::IsEmpty() {
+    for(const auto& descriptor: InputDescriptors)
+        if(!descriptor->IsEmpty())
+            return false;
+    return true;
+}
+
+bool TBroadcastInputDescriptor::IsFinished() {
+    for(const auto& descriptor: InputDescriptors)
+        if(!descriptor->IsFinished())
+            return false;
+    return true;
+}
+
+bool TBroadcastInputDescriptor::IsEarlyFinished() {
+    for(const auto& descriptor: InputDescriptors)
+        if(!descriptor->IsEarlyFinished())
+            return false;
+    return true;
+}
+
+
+bool TBroadcastInputDescriptor::EarlyFinish() {
+    bool result = true;
+    for(const auto& descriptor: InputDescriptors)
+        result = result && descriptor->EarlyFinish();
+    return result;
+}
+
+
+void TBroadcastInputDescriptor::Terminate() {}
+
+ui32 TBroadcastInputDescriptor::GetQueueSize() {
+    // should it be allowed?
+    Y_ENSURE(false, "TBroadcastInputDescriptor::GetQueueSize not allowed");
+    return  0;
+}
+
+bool TBroadcastInputDescriptor::PushDataChunk(TDataChunk&& data) {
+    bool result = true;
+    for(const auto& descriptor: InputDescriptors)
+        result = result && descriptor->PushDataChunk(TDataChunk{data});
+    return result;
+}
+
+// pop from inner descriptors
+bool TBroadcastInputDescriptor::PopDataChunk(TDataChunk& data) {
+    Y_UNUSED(data);
+    Y_ENSURE(false, "TBroadcastInputDescriptor::Pop not allowed");
+}
+
+
 TInputBuffer::~TInputBuffer() {
     NodeState->TerminateInputDescriptor(Descriptor);
 }
@@ -887,11 +999,11 @@ void TInputBuffer::EarlyFinish() {
 }
 
 void TInputBuffer::ExportPushStats(TDqAsyncStats& stats) {
-    Descriptor->PushStats.Export(stats);
+    Descriptor->ExportPushStats(stats);
 }
 
 void TInputBuffer::ExportPopStats(TDqAsyncStats& stats) {
-    Descriptor->PopStats.Export(stats);
+    Descriptor->ExportPopStats(stats);
 }
 
 TLocalBufferRegistry::~TLocalBufferRegistry() {
@@ -1030,6 +1142,15 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
 
     NActors::ActorIdToProto(item->Descriptor->Info.OutputActorId, ev->Record.MutableSrcActorId());
     NActors::ActorIdToProto(item->Descriptor->Info.InputActorId, ev->Record.MutableDstActorId());
+
+    // setting multiple inputs if channel is broadcast channel
+    if (!item->Descriptor->Info.BroadcastInputActorIds.empty())
+        for (auto& inputId : item->Descriptor->Info.BroadcastInputActorIds){
+            auto* ids = ev->Record.MutableBroadcastDstActorIds();
+            auto *ex = ids->Add();
+            ActorIdToProto(inputId, ex);
+        }
+
     ev->Record.SetChannelId(item->Descriptor->Info.ChannelId);
 
     if (!item->Data.Buffer.Empty()) {
@@ -1134,6 +1255,10 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
         NActors::ActorIdFromProto(record.GetSrcActorId()),
         NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0, TCollectStatsLevel::None);
 
+
+    for (const auto& actorId : record.GetBroadcastDstActorIds())
+        info.BroadcastInputActorIds.push_back(NActors::ActorIdFromProto(actorId));
+
     auto descriptor = GetOrCreateInputDescriptor(info, nullptr, false, record.GetLeading());
     if (!descriptor) {
         // do not auto create if not leading and fail sender
@@ -1175,6 +1300,7 @@ void TNodeState::HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     if (record.HasCheckpoint()) {
         data.Checkpoint = record.GetCheckpoint();
     }
+    // broadcast descriptor can be here
     if (descriptor->PushDataChunk(std::move(data))) {
         UpdateProgress(descriptor);
     }
@@ -1597,9 +1723,13 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
         return;
     }
 
+
     TChannelFullInfo info(record.GetChannelId(),
         NActors::ActorIdFromProto(record.GetSrcActorId()),
         NActors::ActorIdFromProto(record.GetDstActorId()), 0, 0, TCollectStatsLevel::None);
+
+    for (const auto& actorId : record.GetBroadcastDstActorIds())
+        info.BroadcastInputActorIds.push_back(NActors::ActorIdFromProto(actorId));
 
     auto descriptor = GetOrCreateOutputDescriptor(info, nullptr, false, popBytes == 0);
     if (!descriptor) {
@@ -1616,7 +1746,27 @@ void TNodeState::HandleSendWaiters(TEvPrivate::TEvSendWaiters::TPtr&) {
    SendFromWaiters(0);
 }
 
-void TNodeState::UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor) {
+void TNodeState::UpdateProgress(std::shared_ptr<IInputDescriptor>& descriptor) {
+
+    ui64 curBytes;
+    auto childDescriptor = std::dynamic_pointer_cast<TInputDescriptor>(descriptor);
+    std::shared_ptr<TBroadcastInputDescriptor> parentDescriptor = nullptr;
+    // if it is one of inner descriptors of broadcast descriptors
+    if (childDescriptor && childDescriptor->parentDescriptor) {
+        parentDescriptor = childDescriptor->parentDescriptor;
+        ui64 lastSentBytes = parentDescriptor->GetLastSentPopBytes();
+        curBytes = parentDescriptor->GetPopBytes();
+        if (curBytes <= lastSentBytes)
+            return;
+        parentDescriptor->LastSentPopBytes = curBytes;
+    } else {
+        curBytes = descriptor->GetPopBytes();
+        if (!descriptor->Info.BroadcastInputActorIds.empty()){
+            auto broadcastDescriptor = std::static_pointer_cast<TBroadcastInputDescriptor>(descriptor);
+            broadcastDescriptor->LastSentPopBytes = curBytes;
+        }
+    }
+
     auto evUpdate = MakeHolder<TEvDqCompute::TEvChannelUpdateV2>();
 
     evUpdate->Record.SetGenMajor(PeerGenMajor.load());
@@ -1624,11 +1774,25 @@ void TNodeState::UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor) {
     // evUpdate->Record.SetSeqNo(ConfirmedSeqNo);
 
     NActors::ActorIdToProto(descriptor->Info.OutputActorId, evUpdate->Record.MutableSrcActorId());
-    NActors::ActorIdToProto(descriptor->Info.InputActorId, evUpdate->Record.MutableDstActorId());
-    evUpdate->Record.SetChannelId(descriptor->Info.ChannelId);
+    NActors::ActorIdToProto(parentDescriptor == nullptr ? descriptor->Info.InputActorId : NActors::TActorId{}, evUpdate->Record.MutableDstActorId());
+    evUpdate->Record.SetChannelId(parentDescriptor == nullptr ? descriptor->Info.ChannelId : parentDescriptor->Info.ChannelId);
 
-    evUpdate->Record.SetEarlyFinished(descriptor->EarlyFinished.load());
-    evUpdate->Record.SetPopBytes(descriptor->PopStats.Bytes.load());
+    if (parentDescriptor && !parentDescriptor->Info.BroadcastInputActorIds.empty()){
+        for (auto& inputId : parentDescriptor->Info.BroadcastInputActorIds){
+            auto* ids = evUpdate->Record.MutableBroadcastDstActorIds();
+            auto *ex = ids->Add();
+            ActorIdToProto(inputId, ex);
+        }
+    } else if(!descriptor->Info.BroadcastInputActorIds.empty()) {
+        for (auto& inputId : descriptor->Info.BroadcastInputActorIds){
+            auto* ids = evUpdate->Record.MutableBroadcastDstActorIds();
+            auto *ex = ids->Add();
+            ActorIdToProto(inputId, ex);
+        }
+    }
+
+    evUpdate->Record.SetEarlyFinished(descriptor->IsEarlyFinished());
+    evUpdate->Record.SetPopBytes(curBytes);
 
     ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
     if (!Subscribed.exchange(true)) {
@@ -1669,7 +1833,7 @@ std::shared_ptr<TOutputDescriptor> TNodeState::GetOrCreateOutputDescriptor(const
     return result;
 }
 
-std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, bool bound, bool leading) {
+std::shared_ptr<IInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, bool bound, bool leading) {
     std::lock_guard lock(Mutex);
     auto it = InputDescriptors.find(info);
     if (it != InputDescriptors.end()) {
@@ -1686,6 +1850,7 @@ std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
                 result->AbortChannelByMemoryLimit(result->QueueBytes);
             }
             ActorSystem->Send(result->Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+
         }
         return result;
     }
@@ -1694,7 +1859,25 @@ std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
         return {};
     }
 
-    auto result = std::make_shared<TInputDescriptor>(info, quotaManager, ActorSystem, InputBufferBytes, InputBufferChunks, InputBufferInflightBytes);
+    bool isBroadcast = !info.BroadcastInputActorIds.empty();
+
+    std::shared_ptr<IInputDescriptor> result;
+
+    if (isBroadcast){
+        result = std::make_shared<TBroadcastInputDescriptor>(info);
+        TChannelFullInfo newInfo = info;
+        auto broadcastDescriptor = std::static_pointer_cast<TBroadcastInputDescriptor>(result);
+        newInfo.BroadcastInputActorIds.clear();
+        for (const auto& inputId : info.BroadcastInputActorIds) {
+            newInfo.InputActorId = inputId;
+            auto& newDescriptor = broadcastDescriptor->InputDescriptors.emplace_back(GetOrCreateInputDescriptor(newInfo, quotaManager, bound, leading));
+            auto nonBroadcastDescriptor = std::static_pointer_cast<TInputDescriptor>(newDescriptor);
+            nonBroadcastDescriptor->parentDescriptor = broadcastDescriptor;
+        }
+    } else {
+        result = std::make_shared<TInputDescriptor>(info, quotaManager, ActorSystem, InputBufferBytes, InputBufferChunks, InputBufferInflightBytes);
+    }
+
     InputDescriptors.emplace(info, result);
     (*InputBufferCount)++;
     if (bound) {
@@ -1712,7 +1895,7 @@ void TNodeState::TerminateOutputDescriptor(const std::shared_ptr<TOutputDescript
     (*OutputBufferCount)--;
 }
 
-void TNodeState::TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor>& descriptor) {
+void TNodeState::TerminateInputDescriptor(const std::shared_ptr<IInputDescriptor>& descriptor) {
     std::lock_guard lock(Mutex);
     InputDescriptors.erase(descriptor->Info);
     (*InputBufferCount)--;
@@ -2104,6 +2287,14 @@ IDqOutputChannel::TPtr TDqChannelService::GetOutputChannel(const TDqChannelSetti
     return new TFastDqOutputChannel(Self, settings, buffer, false);
 }
 
+IDqOutputChannel::TPtr TDqChannelService::GetOutputBroadcastChannel(const TBroadcastChannelSettings& broadcastSettings) {
+    // TODO: remove creation of unbinded buffers
+    std::unordered_map<ui64, std::shared_ptr<IChannelBuffer>> buffers;
+    for (const auto& settings : broadcastSettings.settings)
+        buffers[settings.ChannelId] = GetUnbindedBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId, settings.Level));
+    return new TBroadcastOutputChannel(Self, broadcastSettings, buffers, false);
+}
+
 IDqInputChannel::TPtr TDqChannelService::GetInputChannel(const TDqChannelSettings& settings) {
     auto buffer = GetUnbindedBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId, settings.Level));
     return new TFastDqInputChannel(Self, settings, buffer);
@@ -2168,7 +2359,8 @@ bool TFastDqInputChannel::Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMay
     return hasData;
 }
 
-void TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) {
+void TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId, ui64 channelId) {
+    Y_UNUSED(channelId);
     IsLocalChannel = outputActorId.NodeId() == inputActorId.NodeId();
     auto service = Service.lock();
     Y_ENSURE(service, "Channel has been binded or service is not available");
@@ -2197,6 +2389,35 @@ void TFastDqInputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorI
     Buffer = buffer;
     Service.reset();
 }
+
+void TBroadcastOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId, ui64 channelId) {
+            /* TODO: add local optimization
+            IsLocalChannel = outputActorId.NodeId() == inputActorId.NodeId();
+            auto service = Service.lock();
+            Y_ENSURE(service, "Channel has been binded or service is not available");
+            */
+            Y_ENSURE(!Binded[channelId]);
+
+            Binded[channelId] = true;
+            ++BindedCount;
+            /* TODO: add local optimization 2
+            if (IsLocalChannel)
+            {
+                Serializer = ConvertToLocalSerializer(std::move(Serializer));
+            }
+            */
+
+            auto broadcastBuffer = std::static_pointer_cast<TBroadcastBuffer>(Serializer->Buffer);
+
+            auto nodeId = inputActorId.NodeId();
+            ChannelIdFromNodeId[nodeId].push_back(channelId);
+            broadcastBuffer->Buffers[channelId]->Info.OutputActorId = outputActorId;
+            broadcastBuffer->Buffers[channelId]->Info.InputActorId = inputActorId;
+
+            if (BindedCount == OutputSize) {
+                FinishBinding();
+            }
+        }
 
 void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
     std::lock_guard lock(ChannelService->Mutex);

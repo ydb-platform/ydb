@@ -237,7 +237,7 @@ private:
 private:
     bool Enabled = true;
     TComputeSchedulerPtr Scheduler;
-    NScheduler::TOptions Options;
+    const NScheduler::TOptions Options;
 
     struct TPoolParams {
         bool IsFirstRemoval = false;

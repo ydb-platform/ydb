@@ -14,7 +14,7 @@ def cluster_yaml_path() -> str:
 
 
 def database_yaml_path() -> str:
-    return (os.environ.get("DATABASE_CONFIG_LOCATION") or Settings().yaml_config_location or "").strip()
+    return (os.environ.get("DATABASE_CONFIG_LOCATION") or Settings().database_config_location or "").strip()
 
 
 @lru_cache(maxsize=1)

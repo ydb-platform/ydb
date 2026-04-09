@@ -615,6 +615,8 @@ class KikimrConfigGenerator(object):
                     "pipe_client_min_retry_time": 1,
                     "pipe_client_max_retry_time": 10,
                     "sync_requests_batch_size": 3,
+                    # vchunk_size must match pdisk chunk size
+                    # nbs is tested wth in-mem pdisks which have 32MB chunks
                     "vchunk_size": 33554432,
                 }
             }

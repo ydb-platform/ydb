@@ -5,9 +5,9 @@
 namespace Ydb {
     class VirtualTimestamp;
     namespace Scheme {
+        class Entry;
         class ModifyPermissionsRequest;
         class Permissions;
-        class Entry;
     }
 }
 

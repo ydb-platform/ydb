@@ -776,7 +776,7 @@ int TDescribeLogic::DescribeSecret(const TString& path, EDataFormat format) {
     }
 
     Ydb::Secret::DescribeSecretResult msg;
-    secretResult.SerializeSelf(msg.mutable_self());
+    secretResult.SerializeTo(msg.mutable_self());
     msg.set_version(static_cast<i64>(secretResult.GetVersion()));
 
     return PrintProtoJsonBase64(msg, Out);

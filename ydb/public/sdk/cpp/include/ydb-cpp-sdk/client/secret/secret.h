@@ -31,7 +31,7 @@ public:
 
     void Out(IOutputStream& out) const;
 
-    void SerializeSelf(::Ydb::Scheme::Entry* proto) const;
+    void SerializeTo(::Ydb::Scheme::Entry* proto) const;
 
 private:
     NScheme::TSchemeEntry Entry_;

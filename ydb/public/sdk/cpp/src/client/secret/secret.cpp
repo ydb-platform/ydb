@@ -75,8 +75,8 @@ void TDescribeSecretResult::Out(IOutputStream& out) const {
     }
 }
 
-void TDescribeSecretResult::SerializeSelf(::Ydb::Scheme::Entry* proto) const {
-    CheckStatusOk("TDescribeSecretResult::SerializeSelf");
+void TDescribeSecretResult::SerializeTo(::Ydb::Scheme::Entry* proto) const {
+    CheckStatusOk("TDescribeSecretResult::SerializeTo");
     NScheme::SchemeEntryToProto(Entry_, proto);
 }
 

@@ -555,12 +555,21 @@ def do_link_exe(args):
         extldflags.extend(cgo_peers)
     if len(extldflags) > 0:
         for p in args.ld_plugins:
-            res = subprocess.check_output([sys.executable, p, sys.argv[0]] + extldflags, cwd=args.build_root).decode().strip()
+            res = (
+                subprocess.check_output([sys.executable, p, sys.argv[0]] + extldflags, cwd=args.build_root)
+                .decode()
+                .strip()
+            )
             if res:
                 extldflags = json.loads(res)[1:]
         cmd.append('-extldflags={}'.format(' '.join(extldflags)))
     cmd.append(compile_args.output)
-    call(cmd, args.build_root)
+    with tempfile.NamedTemporaryFile(mode='w', delete_on_close=False) as response_file:
+        for arg in cmd[1:]:
+            print(arg, file=response_file)
+        response_file.close()
+        cmd = [cmd[0], '@' + response_file.name]
+        call(cmd, args.build_root)
 
 
 def gen_cover_info(args):

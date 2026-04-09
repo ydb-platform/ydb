@@ -19,6 +19,7 @@ namespace NYql::NDq {
 class TDqAsyncIoFactory;
 
 const i64 PQReadDefaultFreeSpace = 16_MB;
+const TDuration PqDefaultCheckPartitionCountPeriod = TDuration::Seconds(60);
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     NPq::NProto::TDqPqTopicSource&& settings,
@@ -39,7 +40,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     bool enableStreamingQueriesCounters,
     i64 bufferSize = PQReadDefaultFreeSpace,
     NActors::TActorId infoAggregator = {},
-    TDuration CheckPartitionCountPeriod = TDuration::Seconds(60)
+    TDuration CheckPartitionCountPeriod = PqDefaultCheckPartitionCountPeriod
 );
 
 void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, const IPqStaticGateway::TPtr& pqGateway, const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>(), const TString& reconnectPeriod = {}, bool enableStreamingQueriesCounters = true);

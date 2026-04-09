@@ -1655,12 +1655,17 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvNoSession::TPtr& ev) {
 }
 
 void TDqPqRdReadActor::SchedulePartitionCountCheck() {
+    if (!CheckPartitionCountPeriod) {
+        return;
+    }
     for (auto& clusterState : Clusters) {
         if (clusterState.PartitionCountCheckScheduled) {
             continue;
         }
         clusterState.PartitionCountCheckScheduled = true;
-        Schedule(CheckPartitionCountPeriod, new TEvPrivate::TEvCheckPartitionCount(clusterState.Index));
+        const auto checkTime = 2 * CheckPartitionCountPeriod * RandomNumber<double>();
+        SRC_LOG_T("Next partition count check in " << checkTime << " seconds");
+        Schedule(checkTime, new TEvPrivate::TEvCheckPartitionCount(clusterState.Index));
     }
 }
 
@@ -1705,7 +1710,6 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvCheckPartitionCountResult::TPtr& ev
         SchedulePartitionCountCheck();
         return;
     }
-
     if (clusterIndex < Clusters.size() && Clusters[clusterIndex].PartitionsCount != partitionsCount) {
         TStringBuilder message;
         message << "Number of partitions in the topic \"" << SourceParams.GetTopicPath() << "\"";

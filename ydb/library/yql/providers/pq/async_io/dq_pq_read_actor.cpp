@@ -791,7 +791,8 @@ private:
         settings
             .AppendTopics(topicReadSettings)
             .MaxMemoryUsageBytes(BufferSize)
-            .ReadFromTimestamp(StartingMessageTimestamp);
+            .ReadFromTimestamp(StartingMessageTimestamp)
+            .AutoPartitioningSupport(true);
 
         if (!WithoutConsumer) {
             settings.ConsumerName(SourceParams.GetConsumerName());
@@ -896,12 +897,17 @@ private:
     }
 
     void SchedulePartitionCountCheck() {
+        if (!CheckPartitionCountPeriod) {
+            return;
+        }
         for (auto& clusterState : Clusters) {
             if (clusterState.PartitionCountCheckScheduled) {
                 continue;
             }
             clusterState.PartitionCountCheckScheduled = true;
-            Schedule(CheckPartitionCountPeriod, new TEvPrivate::TEvCheckPartitionCount(clusterState.Index));
+            const auto checkTime = 2 * CheckPartitionCountPeriod * RandomNumber<double>();
+            SRC_LOG_T("Next partition count check in " << checkTime << " seconds");
+            Schedule(checkTime, new TEvPrivate::TEvCheckPartitionCount(clusterState.Index));
         }
     }
 
@@ -946,7 +952,6 @@ private:
             SchedulePartitionCountCheck();
             return;
         }
-
         if (clusterIndex < Clusters.size() && Clusters[clusterIndex].PartitionsCount != partitionsCount) {
             TStringBuilder message;
             message << "Number of partitions in the topic \"" << SourceParams.GetTopicPath() << "\"";
@@ -956,8 +961,7 @@ private:
             message << " is changed from " << Clusters[clusterIndex].PartitionsCount << " to " << partitionsCount 
                 << ". You need to restart (alter with text or drop / create) query to read all partitions.";
             SRC_LOG_E(message);
-            TIssue issue(message);
-            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, TIssues({issue}), NYql::NDqProto::StatusIds::SCHEME_ERROR));
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, TIssues({TIssue(message)}), NYql::NDqProto::StatusIds::SCHEME_ERROR));
             return;
         }
         SchedulePartitionCountCheck();
@@ -1054,6 +1058,11 @@ private:
         void operator()(NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& event) {
             const auto partitionKey = MakePartitionKey(Cluster, event.GetPartitionSession());
             SRC_LOG_D("SessionId: " << Self.GetSessionId(Index) << " Key: " << partitionKey << " EndPartitionSessionEvent received");
+
+            TStringBuilder message;
+            message << "Topic (" << Self.SourceParams.GetTopicPath() << ") with auto partitioning is not supported.";
+            SRC_LOG_E(message);
+            Self.Send(Self.ComputeActorId, new TEvAsyncInputError(Self.InputIndex, TIssues({TIssue(message)}), NYql::NDqProto::StatusIds::SCHEME_ERROR));
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent&) { }
@@ -1220,6 +1229,14 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             txId = taskParamsIt->second;
         }
 
+        TDuration checkPartitionCountPeriod;
+        taskParamsIt = args.TaskParams.find("partition_count_check_enabled");
+        if (taskParamsIt != args.TaskParams.end()) {
+            if (taskParamsIt->second == "true") {
+                checkPartitionCountPeriod = PqDefaultCheckPartitionCountPeriod;
+            }
+        }
+
         TActorId infoAggregator;
         if (const auto it = args.TaskParams.find("ControlPlane/PqSourcePartitionBalancerAggregatorId"); it != args.TaskParams.end()) {
             NActorsProto::TActorId actorIdProto;
@@ -1246,7 +1263,8 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 topicPartitionsCount,
                 enableStreamingQueriesCounters,
                 PQReadDefaultFreeSpace,
-                infoAggregator);
+                infoAggregator,
+                checkPartitionCountPeriod);
         }
 
         return CreateDqPqRdReadActor(
@@ -1266,7 +1284,8 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             counters ? counters : args.TaskCounters,
             PQReadDefaultFreeSpace,
             pqGateway,
-            enableStreamingQueriesCounters);
+            enableStreamingQueriesCounters,
+            checkPartitionCountPeriod);
     });
 }
 

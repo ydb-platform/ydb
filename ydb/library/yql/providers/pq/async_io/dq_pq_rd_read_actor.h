@@ -38,6 +38,6 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqRdReadActor(
     i64 bufferSize,
     const IPqStaticGateway::TPtr& pqGateway,
     bool enableStreamingQueriesCounters,
-    TDuration CheckPartitionCountPeriod = TDuration::Seconds(60));
+    TDuration CheckPartitionCountPeriod);
 
 } // namespace NYql::NDq

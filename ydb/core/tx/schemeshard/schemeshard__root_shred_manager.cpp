@@ -523,7 +523,7 @@ struct TSchemeShard::TTxCompleteShredBSC : public TSchemeShard::TRwTxBase {
     const TEvBlobStorage::TEvControllerShredResponse::TPtr Ev;
     bool NeedScheduleRequestToBSC = false;
 
-    TTxCompleteShredBSC(TSelf* self, const TEvBlobStorage::TEvControllerShredResponse::TPtr& ev)
+    TTxCompleteShredBSC(TSelf* self, TEvBlobStorage::TEvControllerShredResponse::TPtr& ev)
         : TRwTxBase(self)
         , Ev(std::move(ev))
     {}

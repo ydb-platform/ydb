@@ -152,11 +152,33 @@ Below are examples of authentication with a token in different {{ ydb-short-name
 
 - Python
 
-  {% include [auth-access-token](../../_includes/python/auth-access-token.md) %}
+  {% list tabs %}
 
-- Python (asyncio)
+  - Native SDK
 
-  {% include [auth-access-token](../../_includes/python/async/auth-access-token.md) %}
+    {% include [auth-access-token](../../_includes/python/auth-access-token.md) %}
+
+  - Native SDK (Asyncio)
+
+    {% include [auth-access-token](../../_includes/python/async/auth-access-token.md) %}
+
+  - SQLAlchemy
+
+    ```python
+    import os
+    import sqlalchemy as sa
+
+    engine = sa.create_engine(
+        "yql+ydb://localhost:2136/local",
+        connect_args={
+            "credentials": {"token": os.environ["YDB_TOKEN"]}
+        }
+    )
+    with engine.connect() as connection:
+        result = connection.execute(sa.text("SELECT 1"))
+    ```
+
+  {% endlist %}
 
 - C# (.NET)
 

@@ -492,35 +492,10 @@ private:
                 funcRegistry,
                 Config));
 
-            // HashFuncPropagate rebuilds stage nodes without type annotations. The old optimizer
-            // re-annotates them in physicalPeepholeTransformer; in the new RBO we need an explicit
-            // TypeAnnotation pass after the propagation. Wrap both steps in one pipeline.
-            auto newRBOHashFuncPropagateTransformer = TTransformationPipeline(typesCtx)
-                .AddServiceTransformers()
-                .Add(Log("NewRBOHashFuncPropagate"), "LogNewRBOHashFuncPropagate")
-                .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
-                .AddPostTypeAnnotation(/* forSubgraph */ true)
-                .Add(CreateKqpTxsHashFuncPropagateTransformer(
-                        CreateTypeAnnotationTransformer(
-                            CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config),
-                            *typesCtx
-                        ),
-                        *typesCtx,
-                        Config
-                    ),
-                    "HashFuncPropagate"
-                )
-                // Re-annotate the new stage nodes created by HashFuncPropagate so that
-                // kqp_query_compiler.cpp can call GetDqConnectionType on ColumnShardHashV1 shuffles.
-                .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
-                .AddPostTypeAnnotation(/* forSubgraph */ true)
-                .Build(false);
-
             NewRBOTransformer = CreateCompositeGraphTransformer(
                 {
                     TTransformStage{newRBOPhysicalOptimizeTransformer, "NewRBOPhysicalOptimize", TIssuesIds::DEFAULT_ERROR},
                     LogStage("NewRBOPhysicalOptimize"),
-                    TTransformStage{newRBOHashFuncPropagateTransformer, "NewRBOHashFuncPropagate", TIssuesIds::DEFAULT_ERROR},
                     // TTransformStage{ newRBOPhysicalBuildTxsTransformer, "NewRBOPhysicalBuildTxs", TIssuesIds::DEFAULT_ERROR },
                     // LogStage("NewRBOPhysicalBuildTxs"),
                     // TTransformStage{ newRBOPhysicalBuildQueryTransformer, "NewRBOPhysicalBuildQuery", TIssuesIds::DEFAULT_ERROR },

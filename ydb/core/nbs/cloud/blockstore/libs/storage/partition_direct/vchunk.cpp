@@ -43,7 +43,9 @@ TVChunk::TVChunk(
     , SyncRequestsBatchSize(syncRequestsBatchSize)
     , WriteHandoffDelay(writeHandoffDelay)
     , TraceSamplePeriod(traceSamplePeriod)
-{}
+{
+    Y_ABORT_UNLESS(vChunkSize % BlockSize == 0);
+}
 
 TVChunk::~TVChunk() = default;
 

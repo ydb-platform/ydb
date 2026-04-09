@@ -615,7 +615,7 @@ class KikimrConfigGenerator(object):
                     "pipe_client_min_retry_time": 1,
                     "pipe_client_max_retry_time": 10,
                     "sync_requests_batch_size": 3,
-                    "vchunk_size": 32000000,
+                    "vchunk_size": 33554432,
                 }
             }
 

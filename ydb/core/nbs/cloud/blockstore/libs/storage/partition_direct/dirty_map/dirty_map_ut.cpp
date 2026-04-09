@@ -19,6 +19,8 @@ TVector<ui64> GetLsns(const TVector<TPBufferSegment>& segments)
     return lsns;
 }
 
+constexpr ui32 VChunkSize = 128_MB;
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////

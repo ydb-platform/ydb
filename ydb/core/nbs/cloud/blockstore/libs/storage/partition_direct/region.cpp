@@ -31,6 +31,7 @@ TRegion::TRegion(
     TDuration traceSamplePeriod)
     : ActorSystem(actorSystem)
 {
+    Y_ABORT_UNLESS(vChunkSize > 0 && vChunkSize <= RegionSize);
     const ui32 vChunksPerRegionCount = RegionSize / vChunkSize;
     for (size_t i = 0; i < vChunksPerRegionCount; i++) {
         const size_t vChunkIndex =

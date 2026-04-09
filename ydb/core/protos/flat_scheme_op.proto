@@ -360,6 +360,9 @@ message TTableDescription {
     optional TDropCdcStream DropSrcCdcStream = 48;
     // Coordinated schema version for backup operations - persisted with AlterData
     optional uint64 CoordinatedSchemaVersion = 49;
+
+    // For unique indexes - number of leading PK columns which should have unique values (for correct locking)
+    optional uint32 UniqueIndexKeySize = 50;
 }
 
 message TCompressionOptions {

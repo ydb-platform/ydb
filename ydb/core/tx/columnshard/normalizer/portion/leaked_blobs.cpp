@@ -11,7 +11,11 @@
 
 #include <ydb/library/actors/core/actor.h>
 
+#include <util/string/cast.h>
+#include <util/string/split.h>
 #include <util/string/vector.h>
+
+#include <array>
 
 namespace NKikimr::NOlap {
 
@@ -20,13 +24,18 @@ private:
     THashSet<TLogoBlobID> Leaks;
     const ui64 TabletId;
     NColumnShard::TBlobGroupSelector DsGroupSelector;
+    const bool PrintLeakedBlobIds;
+    const NActors::NLog::EPriority LogLevel;
     ui64 LeakeadBlobsSize;
 
 public:
-    TLeakedBlobsNormalizerChanges(THashSet<TLogoBlobID>&& leaks, const ui64 tabletId, NColumnShard::TBlobGroupSelector dsGroupSelector)
+    TLeakedBlobsNormalizerChanges(THashSet<TLogoBlobID>&& leaks, const ui64 tabletId, NColumnShard::TBlobGroupSelector dsGroupSelector,
+        const bool printLeakedBlobIds, const NActors::NLog::EPriority logLevel)
         : Leaks(std::move(leaks))
         , TabletId(tabletId)
-        , DsGroupSelector(dsGroupSelector) {
+        , DsGroupSelector(dsGroupSelector)
+        , PrintLeakedBlobIds(printLeakedBlobIds)
+        , LogLevel(logLevel) {
         LeakeadBlobsSize = 0;
         for (const auto& blob : Leaks) {
             LeakeadBlobsSize += blob.BlobSize();
@@ -37,32 +46,44 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         for (auto&& i : Leaks) {
             TUnifiedBlobId blobId(DsGroupSelector.GetGroup(i), i);
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("normalizer", "leaked_blobs")("blob_id", blobId.ToStringLegacy());
             db.Table<NColumnShard::Schema::BlobsToDeleteWT>().Key(blobId.ToStringLegacy(), TabletId).Update();
         }
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("normalizer", "leaked_blobs")("removed_blobs", Leaks.size());
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("fuck", "after applying normalizer result")("blobs_to_delete", Leaks.size());
 
         return true;
     }
 
     void ApplyOnComplete(const TNormalizationController& /* normController */) const override {
+        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)(
+            "normalizer", "leaked_blobs")("event", "apply_on_complete")("changes", DebugStringImpl(PrintLeakedBlobIds));
     }
 
     ui64 GetSize() const override {
         return Leaks.size();
     }
 
-    TString DebugString() const override {
+    TString DebugStringImpl(bool printLeakedBlobIds) const {
         TStringBuilder sb;
         sb << "tablet=" << TabletId;
         sb << ";leaked_blob_count=" << Leaks.size();
         sb << ";leaked_blobs_size=" << LeakeadBlobsSize;
-        auto blobSampleEnd = Leaks.begin();
-        for (ui64 i = 0; i < 10 && blobSampleEnd != Leaks.end(); ++i, ++blobSampleEnd) {
+        if (printLeakedBlobIds) {
+            sb << ";leaked_blobs=[" << JoinStrings(Leaks.begin(), Leaks.end(), ",") << "]";
+        } else {
+            auto blobSampleEnd = Leaks.begin();
+            for (ui64 i = 0; i < 10 && blobSampleEnd != Leaks.end(); ++i, ++blobSampleEnd) {
+            }
+            sb << ";leaked_blobs=[" << JoinStrings(Leaks.begin(), blobSampleEnd, ",");
+            if (blobSampleEnd != Leaks.end()) {
+                sb << ",...";
+            }
+            sb << "]";
         }
-        sb << ";leaked_blobs=[" << JoinStrings(Leaks.begin(), blobSampleEnd, ",") << "]";
         return sb;
+    }
+
+    TString DebugString() const override {
+        // we do not want to print millions of blob ids twice, see ApplyOnComplete
+        return DebugStringImpl(false);
     }
 };
 
@@ -73,6 +94,8 @@ private:
     THashSet<TLogoBlobID> BSBlobIds;
     TActorId CSActorId;
     ui64 CSTabletId;
+    bool PrintLeakedBlobIds = false;
+    NActors::NLog::EPriority LogLevel = NActors::NLog::PRI_WARN;
     i32 WaitingCount = 0;
     THashSet<ui32> WaitingRequests;
     NColumnShard::TBlobGroupSelector DsGroupSelector;
@@ -81,26 +104,32 @@ private:
         if (WaitingCount) {
             return;
         }
-        AFL_VERIFY(CSBlobIds.size() <= BSBlobIds.size())("cs", CSBlobIds.size())("bs", BSBlobIds.size())(
-                                         "error", "have to use broken blobs repair");
+        AFL_VERIFY(CSBlobIds.size() <= BSBlobIds.size())("cs", CSBlobIds.size())("bs", BSBlobIds.size())("error", "have to use broken blobs repair");
         for (auto&& i : CSBlobIds) {
             AFL_VERIFY(BSBlobIds.erase(i))("error", "have to use broken blobs repair")("blob_id", i);
         }
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("fuck", "before sending normalizer result")("bs_blob_ids", BSBlobIds.size());
-        // BSBlobIds.clear();
+        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", "leaked_blobs")(
+            "event", "found leaked blobs")("leaked_blobs_count", BSBlobIds.size());
         TActorContext::AsActorContext().Send(
-            CSActorId, std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(
-                           std::make_shared<TLeakedBlobsNormalizerChanges>(std::move(BSBlobIds), CSTabletId, DsGroupSelector)));
+            CSActorId, 
+            std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(
+                std::make_shared<TLeakedBlobsNormalizerChanges>(
+                    std::move(BSBlobIds), CSTabletId, DsGroupSelector, PrintLeakedBlobIds, LogLevel
+                )
+            )
+        );
         PassAway();
     }
 
 public:
     TRemoveLeakedBlobsActor(TVector<TTabletChannelInfo>&& channels, THashSet<TLogoBlobID>&& csBlobIDs, TActorId csActorId, ui64 csTabletId,
-        const NColumnShard::TBlobGroupSelector& dsGroupSelector)
+        const NColumnShard::TBlobGroupSelector& dsGroupSelector, const bool printLeakedBlobIds, const NActors::NLog::EPriority logLevel)
         : Channels(std::move(channels))
         , CSBlobIds(std::move(csBlobIDs))
         , CSActorId(csActorId)
         , CSTabletId(csTabletId)
+        , PrintLeakedBlobIds(printLeakedBlobIds)
+        , LogLevel(logLevel)
         , DsGroupSelector(dsGroupSelector) {
     }
 
@@ -151,19 +180,24 @@ class TRemoveLeakedBlobsTask: public INormalizerTask {
     ui64 TabletId;
     TActorId ActorId;
     NColumnShard::TBlobGroupSelector DsGroupSelector;
+    bool PrintLeakedBlobIds = false;
+    NActors::NLog::EPriority LogLevel = NActors::NLog::PRI_WARN;
 
 public:
     TRemoveLeakedBlobsTask(TVector<TTabletChannelInfo>&& channels, THashSet<TLogoBlobID>&& csBlobIDs, ui64 tabletId, TActorId actorId,
-        const NColumnShard::TBlobGroupSelector& dsGroupSelector)
+        const NColumnShard::TBlobGroupSelector& dsGroupSelector, const bool printLeakedBlobIds, const NActors::NLog::EPriority logLevel)
         : Channels(std::move(channels))
         , CSBlobIDs(std::move(csBlobIDs))
         , TabletId(tabletId)
         , ActorId(actorId)
-        , DsGroupSelector(dsGroupSelector) {
+        , DsGroupSelector(dsGroupSelector)
+        , PrintLeakedBlobIds(printLeakedBlobIds)
+        , LogLevel(logLevel) {
     }
     void Start(const TNormalizationController& /*controller*/, const TNormalizationContext& /*nCtx*/) override {
         NActors::TActivationContext::Register(
-            new TRemoveLeakedBlobsActor(std::move(Channels), std::move(CSBlobIDs), ActorId, TabletId, DsGroupSelector));
+            new TRemoveLeakedBlobsActor(
+                std::move(Channels), std::move(CSBlobIDs), ActorId, TabletId, DsGroupSelector, PrintLeakedBlobIds, LogLevel));
     }
 };
 
@@ -176,6 +210,7 @@ TLeakedBlobsNormalizer::TLeakedBlobsNormalizer(const TNormalizationController::T
 TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
     const TNormalizationController& controller, NTabletFlatExecutor::TTransactionContext& txc) {
     using namespace NColumnShard;
+    ReadParamsFromDescription();
     AFL_VERIFY(AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert());
     NIceDb::TNiceDb db(txc.DB);
 
@@ -205,7 +240,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
     Stats.OnCompleted();
     Stats.PrintToLog();
     return std::vector<INormalizerTask::TPtr>{ std::make_shared<TRemoveLeakedBlobsTask>(
-        std::move(Channels), std::move(Result), TabletId, TabletActorId, DsGroupSelector) };
+        std::move(Channels), std::move(Result), TabletId, TabletActorId, DsGroupSelector, PrintLeakedBlobIds, LogLevel) };
 }
 
 
@@ -387,5 +422,76 @@ THowToProcessPortion TLeakedBlobsNormalizer::DefineHowToProcessPortion(
     }
     return THowToProcessPortion::Skip;
 }
+
+namespace {
+bool TryParseLogPriority(const TStringBuf value, NActors::NLog::EPriority& out) {
+    TString normalized(value);
+    normalized.to_upper();
+    static const std::array<NActors::NLog::EPriority, 9> priorities = {
+        NActors::NLog::PRI_TRACE,
+        NActors::NLog::PRI_DEBUG,
+        NActors::NLog::PRI_INFO,
+        NActors::NLog::PRI_NOTICE,
+        NActors::NLog::PRI_WARN,
+        NActors::NLog::PRI_ERROR,
+        NActors::NLog::PRI_CRIT,
+        NActors::NLog::PRI_ALERT,
+        NActors::NLog::PRI_EMERG
+    };
+    for (const auto priority : priorities) {
+        if (normalized == NActors::NLog::PriorityToString(NActors::NLog::EPrio(priority))) {
+            out = priority;
+            return true;
+        }
+    }
+    return false;
+}
+} // namespace
+
+void TLeakedBlobsNormalizer::ReadParamsFromDescription() {
+    if (ParamsInitialized) {
+        return;
+    }
+    ParamsInitialized = true;
+
+    const TString& description = GetUniqueDescription();
+
+    TVector<TStringBuf> tokens;
+    StringSplitter(description).Split(';').SkipEmpty().Collect(&tokens);
+    for (ui32 i = 1; i < tokens.size(); ++i) {
+        const TStringBuf token = tokens[i];
+        const size_t eqPos = token.find('=');
+        AFL_VERIFY(eqPos != TStringBuf::npos)("error", "invalid param format, expected key=value")("token", token)("description", description);
+
+        const TStringBuf key = token.SubStr(0, eqPos);
+        const TStringBuf value = token.SubStr(eqPos + 1);
+        if (key == "batch_size") {
+            const auto parsed = TryFromString<size_t>(TString(value));
+            AFL_VERIFY(parsed.Defined())("error", "cannot parse batch_size")("value", TString(value))("description", description);
+            AFL_VERIFY(*parsed > 0)("error", "batch_size has to be > 0")("value", *parsed)("description", description);
+            BatchSize = *parsed;
+        } else if (key == "print_leaked_blob_ids") {
+            if (value == "true") {
+                PrintLeakedBlobIds = true;
+            } else if (value == "false") {
+                PrintLeakedBlobIds = false;
+            } else {
+                AFL_VERIFY(false)("error", "cannot parse print_leaked_blob_ids")("value", TString(value))("description", description);
+            }
+        } else if (key == "log_level") {
+            NActors::NLog::EPriority parsedPriority = NActors::NLog::PRI_WARN;
+            AFL_VERIFY(TryParseLogPriority(value, parsedPriority))(
+                "error", "cannot parse log_level")("value", TString(value))("description", description);
+            LogLevel = parsedPriority;
+        } else {
+            AFL_VERIFY(false)("error", "unknown param key")("key", key)("description", description);
+        }
+    }
+
+    BatchCursor = TBatchCursor(BatchSize);
+    Stats.SetLogLevel(LogLevel);
+    ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", "leaked_blobs")("batch_size", BatchSize)("print_leaked_blob_ids", PrintLeakedBlobIds)("log_level", static_cast<ui32>(LogLevel));
+}
+
 }   // namespace NKikimr::NOlap
 

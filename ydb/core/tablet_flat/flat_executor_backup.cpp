@@ -238,7 +238,7 @@ public:
     }
 
     void Bootstrap() {
-        LOG_N("Starting snapshot to " << SnapshotPath);
+        LOG_N("Starting snapshot" << " Path# " << SnapshotPath);
 
         DeleteOldBackups();
 
@@ -261,7 +261,7 @@ public:
             SchemaSha256.Update(stringOut.Data(), stringOut.Size());
             WrittenBytes += stringOut.Size();
             Send(Owner, new TEvSnapshotStats(stringOut.Size()));
-            LOG_D("Schema written, " << stringOut.Size() << " bytes");
+            LOG_D("Schema written" << " Bytes# " << stringOut.Size());
         } catch (const std::exception& e) {
             return ReplyAndDie(false, TStringBuilder() << "Failed to create snapshot schema file " << schemaPath << ": " << e.what());
         }
@@ -314,7 +314,7 @@ public:
                     continue;
                 }
     
-                LOG_N("Deleting incomplete backup " << child);
+                LOG_N("Deleting incomplete backup" << " Path# " << child);
                 child.ForceDelete();
             }
 
@@ -323,11 +323,11 @@ public:
             });
 
             for (size_t i = MaxBackupsLimit(); i < backups.size(); ++i) {
-                LOG_N("Deleting old backup " << backups[i].second);
+                LOG_N("Deleting old backup" << " Path# " << backups[i].second);
                 backups[i].second.ForceDelete();
             }
         } catch (const std::exception& e) {
-            LOG_E("Failed to delete old backups in " << BackupPath << ": " << e.what());
+            LOG_E("Failed to delete old backups" << " Path# " << BackupPath << " Error# " << e.what());
         }
     }
 
@@ -335,7 +335,7 @@ public:
         if (success) {
             Send(Owner, new TEvSnapshotCompleted(WrittenBytes));
         } else {
-            LOG_E("Snapshot failed: " << error);
+            LOG_E("Snapshot failed" << " Error# " << error);
             Send(Owner, new TEvSnapshotCompleted(error));
         }
 
@@ -350,7 +350,7 @@ public:
 
     void Handle(TEvWriteSnapshot::TPtr& ev) {
         const auto* msg = ev->Get();
-        LOG_D("Writing " << msg->SnapshotData.Size() << " bytes for table " << msg->TableId);
+        LOG_D("Writing snapshot" << " TableId# " << msg->TableId << " Bytes# " << msg->SnapshotData.Size());
 
         auto it = Tables.find(msg->TableId);
         if (it == Tables.end()) {
@@ -390,7 +390,7 @@ public:
 
     void ScanDone(ui32 tableId) {
         DoneTables.insert(tableId);
-        LOG_D("Table scan done (" << DoneTables.size() << "/" << Tables.size() << ")");
+        LOG_D("Table scan done" << " Done# " << DoneTables.size() << " Total# " << Tables.size());
         if (DoneTables.size() == Tables.size()) {
             return Finalize();
         }
@@ -475,7 +475,7 @@ public:
 
         DeleteOldBackups();
 
-        LOG_N("Snapshot finalized, " << WrittenBytes << " bytes");
+        LOG_N("Snapshot finalized" << " Bytes# " << WrittenBytes);
         return ReplyAndDie();
     }
 
@@ -801,7 +801,7 @@ public:
     }
 
     void Bootstrap() {
-        LOG_N("Starting changelog to " << ChangelogPath);
+        LOG_N("Starting changelog" << " Path# " << ChangelogPath);
 
         try {
             ChangelogPath.Parent().MkDirs();
@@ -836,7 +836,7 @@ public:
 
         const auto* msg = ev->Get();
         const ui64 msgSize = msg->GetTotalSize();
-        LOG_D("Writing changelog step " << msg->Step << ", " << msgSize << " bytes");
+        LOG_D("Writing changelog" << " Step# " << msg->Step << " Bytes# " << msgSize);
 
         TString dataUpdate;
         TString schemeUpdate;
@@ -985,7 +985,7 @@ public:
             TDuration lag = TActivationContext::Monotonic() - *BufferCreatedAt;
             BufferCreatedAt = std::nullopt;
 
-            LOG_D("Flushed " << flushedBytes << " bytes, total " << WrittenBytes << ", lag " << lag);
+            LOG_D("Flushed" << " Bytes# " << flushedBytes << " TotalBytes# " << WrittenBytes << " Lag# " << lag);
             Send(Owner, new TEvChangelogStats(flushedBytes, flushLatency, lag));
 
             try {
@@ -999,7 +999,7 @@ public:
             }
 
             if (NeedNewBackup()) {
-                LOG_N("Requesting new backup, changelog " << WrittenBytes << " bytes >= snapshot " << *SnapshotWrittenBytes << " bytes");
+                LOG_N("Requesting new backup" << " ChangelogBytes# " << WrittenBytes << " SnapshotBytes# " << *SnapshotWrittenBytes);
                 Send(Owner, new TEvStartNewBackup());
             }
         }
@@ -1015,7 +1015,7 @@ public:
 
     void ReplyAndDie(const TString& error) {
         if (!Dying) {
-            LOG_E("Changelog failed: " << error);
+            LOG_E("Changelog failed" << " Error# " << error);
             Send(Owner, new TEvChangelogFailed(error));
             PassAway();
         }

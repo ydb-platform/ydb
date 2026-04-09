@@ -450,7 +450,7 @@ public:
 
     void Handle(TEvBackupInfo::TPtr& ev, const TActorContext& ctx) {
         TotalBytes = ev->Get()->TotalBytes;
-        LOG_D("Backup info: " << TotalBytes << " bytes, dryRun=" << DryRun);
+        LOG_D("Backup info" << " TotalBytes# " << TotalBytes << " DryRun# " << DryRun);
 
         if (DryRun) {
             auto* dryRunExec = new TDryRunExecutor(TabletID());
@@ -469,17 +469,17 @@ public:
     }
 
     void Handle(TEvSnapshotData::TPtr& ev) {
-        LOG_D("Uploading snapshot for table " << ev->Get()->TableName);
+        LOG_D("Uploading snapshot" << " Table# " << ev->Get()->TableName);
         Execute(CreateTxUploadSnapshot(ev));
     }
 
     void Handle(TEvChangelogData::TPtr& ev) {
-        LOG_D("Uploading changelog, " << ev->Get()->Lines.size() << " lines");
+        LOG_D("Uploading changelog" << " Lines# " << ev->Get()->Lines.size());
         Execute(CreateTxUploadChangelog(ev));
     }
 
     void StartRestore(const TString& backupPath, TActorId subscriber = {}, bool skipChecksumValidation = false, bool dryRun = false) {
-        LOG_N("Starting restore from " << backupPath << " skipChecksum=" << skipChecksumValidation << " dryRun=" << dryRun);
+        LOG_N("Starting restore" << " Path# " << backupPath << " SkipChecksum# " << skipChecksumValidation << " DryRun# " << dryRun);
         RestoreState = ERestoreState::InProgress;
         SkipChecksumValidation = skipChecksumValidation;
         DryRun = dryRun;
@@ -493,7 +493,7 @@ public:
     void CompleteRestore(bool success, const TString& error) {
         if (success) {
             if (error) {
-                LOG_N("Restore completed with warning: " << error);
+                LOG_N("Restore completed with warning" << " Error# " << error);
                 RestoreState = ERestoreState::DoneWithWarning;
                 Error = error;
             } else {
@@ -501,7 +501,7 @@ public:
                 RestoreState = ERestoreState::Done;
             }
         } else {
-            LOG_E("Restore failed: " << error);
+            LOG_E("Restore failed" << " Error# " << error);
             RestoreState = ERestoreState::Error;
             Error = error;
         }
@@ -789,7 +789,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Error) {
-            LOG_E("Schema upload failed: " << Error);
+            LOG_E("Schema upload failed" << " Error# " << Error);
             Self->CompleteRestore(false, Error);
             ctx.Send(Schema->Sender, new TEvDataAck(false, Error));
         } else {
@@ -850,7 +850,7 @@ public:
 
         if (i < Snapshot->Get()->Lines.size()) {
             // Start new tx to upload the rest data
-            LOG_D("Snapshot upload partial, continuing from line " << i);
+            LOG_D("Snapshot upload partial, continuing from" << " Line# " << i);
             Self->Execute(Self->CreateTxUploadSnapshot(std::move(Snapshot), i));
             Result.PartialDone(processedBytes);
         } else {
@@ -861,13 +861,13 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Result.IsDone()) {
-            LOG_D("Snapshot chunk uploaded, " << Result.GetProcessedBytes() << " bytes");
+            LOG_D("Snapshot chunk uploaded" << " Bytes# " << Result.GetProcessedBytes());
             Self->ProcessedBytes += Result.GetProcessedBytes();
             ctx.Send(Snapshot->Sender, new TEvDataAck(true));
         } else if (Result.IsPartialDone()) {
             Self->ProcessedBytes += Result.GetProcessedBytes();
         } else if (Result.IsError()) {
-            LOG_E("Snapshot upload failed: " << Result.GetErrorMessage());
+            LOG_E("Snapshot upload failed" << " Error# " << Result.GetErrorMessage());
             Self->CompleteRestore(false, Result.GetErrorMessage());
             ctx.Send(Snapshot->Sender, new TEvDataAck(false, Result.GetErrorMessage()));
         }
@@ -976,7 +976,7 @@ public:
 
         if (i < Changelog->Get()->Lines.size()) {
             // Start new tx to upload the rest data
-            LOG_D("Changelog upload partial, continuing from line " << i);
+            LOG_D("Changelog upload partial, continuing from" << " Line# " << i);
             Self->Execute(Self->CreateTxUploadChangelog(std::move(Changelog), i));
             Result.PartialDone(processedBytes);
         } else {
@@ -987,13 +987,13 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Result.IsDone()) {
-            LOG_D("Changelog chunk uploaded, " << Result.GetProcessedBytes() << " bytes");
+            LOG_D("Changelog chunk uploaded" << " Bytes# " << Result.GetProcessedBytes());
             Self->ProcessedBytes += Result.GetProcessedBytes();
             ctx.Send(Changelog->Sender, new TEvDataAck(true));
         } else if (Result.IsPartialDone()) {
             Self->ProcessedBytes += Result.GetProcessedBytes();
         } else if (Result.IsError()) {
-            LOG_E("Changelog upload failed: " << Result.GetErrorMessage());
+            LOG_E("Changelog upload failed" << " Error# " << Result.GetErrorMessage());
             Self->CompleteRestore(true, Result.GetErrorMessage()); // changelog errors are warnings
             ctx.Send(Changelog->Sender, new TEvDataAck(false, Result.GetErrorMessage()));
         }
@@ -1038,7 +1038,7 @@ public:
     }
 
     void Bootstrap() {
-        LOG_N("Validating backup at " << BackupPath);
+        LOG_N("Validating backup" << " Path# " << BackupPath);
 
         if (!BackupPath.Exists()) {
             return SendResultAndDie(false, TStringBuilder() << "Backup dir doesn't exist: " << BackupPath);
@@ -1059,7 +1059,7 @@ public:
             return SendResultAndDie(false, TStringBuilder() << "Cannot calculate total size: " << e.what());
         }
 
-        LOG_N("Backup validated, " << totalBytes << " bytes");
+        LOG_N("Backup validated" << " TotalBytes# " << totalBytes);
         Send(Owner, new TEvBackupInfo(totalBytes));
         Become(&TThis::StateWork);
     }
@@ -1106,7 +1106,7 @@ public:
                         CurrentTableName = CurrentTableName.substr(0, CurrentTableName.size() - 5);
                     }
 
-                    LOG_D("Processing " << CurrentFilePath);
+                    LOG_D("Processing snapshot file" << " Path# " << CurrentFilePath);
                     try {
                         CurrentFileInput = MakeHolder<TFileInput>(CurrentFilePath, 1_MB);
                     } catch (const TIoException& e) {
@@ -1307,7 +1307,7 @@ public:
                                              << ", got " << actualFileSha256);
                     return false;
                 }
-                LOG_D("Checksum validated for " << name);
+                LOG_D("Checksum validated" << " File# " << name);
             }
         }
 
@@ -1435,7 +1435,7 @@ public:
 
     void SendResultAndDie(bool success, const TString& error = "") {
         if (!success) {
-            LOG_E("Failed: " << error);
+            LOG_E("Failed" << " Error# " << error);
         }
         Send(Owner, new TEvBackupReaderResult(success, error));
         PassAway();

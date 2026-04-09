@@ -5195,7 +5195,7 @@ void TExecutor::StartNewBackup() {
         tabletId, Generation0, Step0, scheme, exclusion);
 
     if (snapshotWriter && changelogWriter) {
-        LOG_BACKUP_N("Starting new backup, type " << tabletType << " gen " << Generation0 << " step " << Step0);
+        LOG_BACKUP_N("Starting new backup" << " Type# " << tabletType << " Gen# " << Generation0 << " Step# " << Step0);
         auto snapshotWriterActor = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
         for (const auto& [tableId, table] : tables) {
             if (exclusion && exclusion->HasTable(tableId)) {
@@ -5227,7 +5227,7 @@ void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
     BackupSnapshotInProgress = false;
     Counters->Simple()[TExecutorCounters::BACKUP_SNAPSHOT_IN_PROGRESS].Set(0);
     if (ev->Get()->Success) {
-        LOG_BACKUP_N("Snapshot completed, " << ev->Get()->WrittenBytes << " bytes");
+        LOG_BACKUP_N("Snapshot completed" << " Bytes# " << ev->Get()->WrittenBytes);
         Owner->BackupSnapshotComplete(OwnerCtx());
 
         if (CommitManager->BackupLogic.IsRunning()) {
@@ -5265,7 +5265,7 @@ void TExecutor::FailBackup(const TString& error) {
 void TExecutor::ScheduleRetryBackup() const {
     if (!BackupSnapshotInProgress) {
         auto retryTimeout = TDuration::Seconds(AppData()->SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
-        LOG_BACKUP_N("Scheduling backup retry in " << retryTimeout);
+        LOG_BACKUP_N("Scheduling backup retry" << " Timeout# " << retryTimeout);
         Schedule(retryTimeout, new NBackup::TEvStartNewBackup);
     }
 }

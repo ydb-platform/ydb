@@ -118,7 +118,7 @@
 
   {% endlist %}
 
-- Node.js
+- JavaScript
 
   ```typescript
     import { Driver, getCredentialsFromEnv } from 'ydb-sdk';

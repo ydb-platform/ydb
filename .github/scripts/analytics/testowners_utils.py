@@ -17,18 +17,6 @@ TESTOWNERS_FILE = os.path.join(_REPO_ROOT, '.github', 'TESTOWNERS')
 _GITHUB_TEAM_PREFIX = "TEAM:@ydb-platform/"
 
 
-def team_slug_from_monitor_owner(owner) -> str:
-    """Lowercase team slug from ``tests_monitor.owner`` / YQL ``owner`` (SQL-aligned).
-
-    Strips ``TEAM:@ydb-platform/`` then ``Unicode::ToLower`` on the remainder.
-    ``None`` → empty string (join keys / pandas use empty, not ``\"unknown\"``).
-    """
-    if owner is None:
-        return ""
-    s = str(owner).replace(_GITHUB_TEAM_PREFIX, "").strip()
-    return s.lower()
-
-
 def normalize_github_team_owners_string(owners_str: str) -> str:
     """Lowercase path after ``TEAM:@ydb-platform/`` in each ``;;``-separated owner token."""
     if not owners_str or _GITHUB_TEAM_PREFIX not in owners_str:

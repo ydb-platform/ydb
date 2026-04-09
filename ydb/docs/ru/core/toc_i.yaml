@@ -38,7 +38,7 @@ items:
   include:
     mode: link
     path: reference/toc_p.yaml
-- name: Инструменты диагностики
+- name: Диагностика проблем
   href: troubleshooting/index.md
   include:
     mode: link

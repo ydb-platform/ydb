@@ -19,8 +19,6 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
     using namespace NCms::NSentinel;
     using TPDiskID = NCms::TPDiskID;
 
-    constexpr TDuration ZeroGracePeriod = TDuration::Zero();
-
     void AddState(TPDiskStatus& st, const EPDiskState state) {
         st.AddState(state, false);
     }
@@ -40,7 +38,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
         };
 
         for (const EPDiskStatus status : AllStatuses) {
-            TPDiskStatus st(status, DefaultStateLimit, GoodStateLimit, DefaultStateLimits, TInstant::Zero(), ZeroGracePeriod);
+            TPDiskStatus st(status, DefaultStateLimit, GoodStateLimit, DefaultStateLimits, ZeroBootTimestamp, ZeroGracePeriod);
 
             UNIT_ASSERT(!st.IsChanged());
             UNIT_ASSERT_VALUES_EQUAL(st.GetStatus(), status);
@@ -50,7 +48,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
     Y_UNIT_TEST(PDiskErrorState) {
         for (const EPDiskState state : ErrorStates) {
             const EPDiskStatus initialStatus = EPDiskStatus::ACTIVE;
-            TPDiskStatus st(initialStatus, DefaultStateLimit, GoodStateLimit, DefaultStateLimits, TInstant::Zero(), ZeroGracePeriod);
+            TPDiskStatus st(initialStatus, DefaultStateLimit, GoodStateLimit, DefaultStateLimits, ZeroBootTimestamp, ZeroGracePeriod);
 
             for (ui32 i = 1; i < DefaultStateLimits[state]; ++i) {
                 AddState(st, state);
@@ -69,7 +67,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
     Y_UNIT_TEST(PDiskInactiveAfterStateChange) {
         for (const EPDiskState state : ErrorStates) {
             const EPDiskStatus initialStatus = EPDiskStatus::ACTIVE;
-            TPDiskStatus st(initialStatus, DefaultStateLimit, GoodStateLimit, DefaultStateLimits, TInstant::Zero(), ZeroGracePeriod);
+            TPDiskStatus st(initialStatus, DefaultStateLimit, GoodStateLimit, DefaultStateLimits, ZeroBootTimestamp, ZeroGracePeriod);
 
             for (ui32 i = 1; i < DefaultStateLimits[state]; ++i) {
                 AddState(st, state);
@@ -105,7 +103,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
     Y_UNIT_TEST(PDiskFaultyState) {
         for (const EPDiskState state : FaultyStates) {
             const EPDiskStatus initialStatus = EPDiskStatus::ACTIVE;
-            TPDiskStatus st(initialStatus, DefaultStateLimit, GoodStateLimit, DefaultStateLimits, TInstant::Zero(), ZeroGracePeriod);
+            TPDiskStatus st(initialStatus, DefaultStateLimit, GoodStateLimit, DefaultStateLimits, ZeroBootTimestamp, ZeroGracePeriod);
 
             for (ui32 i = 1; i < DefaultStateLimit; ++i) {
                 AddState(st, state);
@@ -127,7 +125,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
         // If disk has only been in good state, then change to Normal state within GoodStateLimit
         const EPDiskStatus initialStatus = EPDiskStatus::ACTIVE;
         const ui32 defaultStateLimit = 60;
-        TPDiskStatus st(initialStatus, defaultStateLimit, GoodStateLimit, DefaultStateLimits, TInstant::Zero(), ZeroGracePeriod);
+        TPDiskStatus st(initialStatus, defaultStateLimit, GoodStateLimit, DefaultStateLimits, ZeroBootTimestamp, ZeroGracePeriod);
 
         AddState(st, NKikimrBlobStorage::TPDiskState::Initial);
         UNIT_ASSERT(!st.IsChanged());
@@ -159,7 +157,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
         // If node is restarting all the time, then disk should never become ACTIVE
         const EPDiskStatus initialStatus = EPDiskStatus::INACTIVE;
         const ui32 defaultStateLimit = 60;
-        TPDiskStatus st(initialStatus, defaultStateLimit, GoodStateLimit, DefaultStateLimits, TInstant::Zero(), ZeroGracePeriod);
+        TPDiskStatus st(initialStatus, defaultStateLimit, GoodStateLimit, DefaultStateLimits, ZeroBootTimestamp, ZeroGracePeriod);
 
         AddState(st, NKikimrBlobStorage::TPDiskState::Unknown);
         UNIT_ASSERT(!st.IsChanged());
@@ -189,7 +187,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
         // Node restarts and it is not planned, so disk should become ACTIVE only after defaultStateLimit
         const EPDiskStatus initialStatus = EPDiskStatus::INACTIVE;
         const ui32 defaultStateLimit = 60;
-        TPDiskStatus st(initialStatus, defaultStateLimit, GoodStateLimit, DefaultStateLimits, TInstant::Zero(), ZeroGracePeriod);
+        TPDiskStatus st(initialStatus, defaultStateLimit, GoodStateLimit, DefaultStateLimits, ZeroBootTimestamp, ZeroGracePeriod);
 
         auto nodeStartFn = [&st]() {
             AddState(st, NKikimrBlobStorage::TPDiskState::Unknown);
@@ -234,7 +232,7 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
         // Node restarts, but it is planned (node is locked by CMS), so disk should become ACTIVE after GoodStateLimit
         const EPDiskStatus initialStatus = EPDiskStatus::INACTIVE;
         const ui32 defaultStateLimit = 60;
-        TPDiskStatus st(initialStatus, defaultStateLimit, GoodStateLimit, DefaultStateLimits, TInstant::Zero(), ZeroGracePeriod);
+        TPDiskStatus st(initialStatus, defaultStateLimit, GoodStateLimit, DefaultStateLimits, ZeroBootTimestamp, ZeroGracePeriod);
 
         auto nodeStartFn = [&st]() {
             AddStateNodeLocked(st, NKikimrBlobStorage::TPDiskState::Unknown);

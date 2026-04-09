@@ -1898,8 +1898,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
-        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
-        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
 
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
@@ -1939,18 +1937,20 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         std::vector<std::string> queries = {
             R"(
-                PRAGMA YqlSelect = 'force';
                 SELECT id FROM `/Root/foo` order by id limit 1 + 2;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 SELECT id FROM `/Root/foo` order by id limit 5;
+            )",
+            R"(
+                SELECT id FROM `/Root/foo` order by id limit 5 offset 1;
             )",
         };
 
         std::vector<std::string> results = {
             R"([[0];[1];[2]])",
-            R"([[0];[1];[2];[3];[4]])"
+            R"([[0];[1];[2];[3];[4]])",
+            R"([[1];[2];[3];[4]])"
         };
 
         auto queryClient = kikimr.GetQueryClient();

@@ -106,10 +106,18 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             }
 
             auto limit = CastOperator<TOpLimit>(op);
+            if (limit->HasOffset()) {
+                // clang-format off
+                currentStageBody = Build<TCoSkip>(ctx, op->Pos)
+                    .Input(currentStageBody)
+                    .Count(limit->GetOffsetCond()->GetExpressionBody())
+                .Done().Ptr();
+                // clang-format on
+            }
 
             // clang-format off
             currentStageBody = Build<TCoTake>(ctx, op->Pos)
-                .Input(TExprBase(currentStageBody))
+                .Input(currentStageBody)
                 .Count(limit->LimitCond.GetExpressionBody())
             .Done().Ptr();
             // clang-format on

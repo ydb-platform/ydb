@@ -2,7 +2,7 @@
 
 Fulltext indexes are a specialized type of [secondary index](../concepts/glossary.md#secondary-index) that enable efficient text search within table columns. While traditional secondary indexes optimize searching by equality or range, fulltext indexes allow searching by words, phrases, and (with n-grams) by substrings.
 
-For the general idea of fulltext search, see [Fulltext search](../concepts/fulltext_search.md).
+For the general idea of fulltext search, see [Fulltext search](../concepts/query_execution/fulltext_search.md).
 
 ## Characteristics of Fulltext Indexes {#characteristics}
 

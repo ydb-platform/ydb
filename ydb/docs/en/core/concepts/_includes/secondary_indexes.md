@@ -31,7 +31,7 @@ Unlike traditional secondary indexes, which optimize equality or range searches,
 
 [Fulltext index](../../dev/fulltext-indexes.md) is a special type of secondary index.
 
-Unlike traditional secondary indexes, which optimize equality or range searches, fulltext indexes allow scalable text search by words and phrases (and, with n-grams, by substrings). See also: [Fulltext search](../fulltext_search.md).
+Unlike traditional secondary indexes, which optimize equality or range searches, fulltext indexes allow scalable text search by words and phrases (and, with n-grams, by substrings). See also: [Fulltext search](../query_execution/fulltext_search.md).
 
 ### Creating a Secondary Index Online {#index-add}
 

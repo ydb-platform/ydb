@@ -186,7 +186,7 @@ The capabilities of {{ ydb-short-name }} regarding **ANN search** (approximate n
 
 **Fulltext index** is an additional data structure used to speed up text search in a table column by words and phrases (and, with n-grams, by substrings).
 
-The fulltext search capabilities and index parameters are described in [{#T}](../dev/fulltext-indexes.md) and [{#T}](fulltext_search.md).
+The fulltext search capabilities and index parameters are described in [{#T}](../dev/fulltext-indexes.md) and [{#T}](query_execution/fulltext_search.md).
 
 
 #### Column family {#column-family}

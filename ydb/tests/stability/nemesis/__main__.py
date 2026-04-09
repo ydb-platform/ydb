@@ -30,7 +30,7 @@ def parse_args():
                         help='Type of nemesis: orchestrator or agent')
     parser.add_argument('--app-host', help='Host to bind the application to')
     parser.add_argument('--app-port', type=int, help='Port to bind the application to')
-    parser.add_argument('--yaml-config-location', help='Path to cluster.yaml config file or to cluter template')
+    parser.add_argument('--yaml-config-location', help='Path to cluster.yaml config file or to cluster template')
     parser.add_argument('--database-config-location', help='Path to database.yaml config file')
     parser.add_argument('--static-location', help='Path to static files directory')
     parser.add_argument('--mon-port', type=int, default=8765, help='Monitoring port for liveness checks')

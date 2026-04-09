@@ -55,6 +55,62 @@ TStepAction::TStepAction(
     }
 }
 
+void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs, const TString& currentExecutionResult) const {
+    auto iterator = source->GetExecutionContext().GetProgramIteratorVerified();
+    const auto& step = source->GetExecutionContext().GetCursorStep();
+    const auto& currentCategoryName = iterator->GetCurrentNode().GetSignalCategoryName();
+    const TString tracingName = source->GetExecutionContext().GetPrevCategoryName() + " - " + currentCategoryName;
+    const TString tracingExecutionResult = source->GetExecutionContext().GetPrevExecutionResult() + " - " + currentExecutionResult;
+    const TDuration finishDurationMs = source->GetAndResetWaitDuration();
+    const auto& processor = iterator->GetProcessorVerified();
+    const auto processorType = processor->GetProcessorType();
+    const TString details = processor->DebugJson().GetStringRobust();
+#define PROGRAM_PROBE_ARGS source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), \
+                    source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(), \
+                    tracingName, iterator->GetCurrentNodeId(), finishDurationMs, \
+                    executionDurationMs, source->GetRecordsCount(), tracingExecutionResult, details
+    switch (processorType) {
+        case NArrow::NSSA::EProcessorType::Const:
+            LWTRACK(ProgramConst, PROGRAM_PROBE_ARGS);
+            break;
+        case NArrow::NSSA::EProcessorType::Calculation:
+            LWTRACK(ProgramCalculation, PROGRAM_PROBE_ARGS);
+            break;
+        case NArrow::NSSA::EProcessorType::Projection:
+            LWTRACK(ProgramProjection, PROGRAM_PROBE_ARGS);
+            break;
+        case NArrow::NSSA::EProcessorType::Filter:
+            LWTRACK(ProgramFilter, PROGRAM_PROBE_ARGS);
+            break;
+        case NArrow::NSSA::EProcessorType::Aggregation:
+            LWTRACK(ProgramAggregation, PROGRAM_PROBE_ARGS);
+            break;
+        case NArrow::NSSA::EProcessorType::FetchOriginalData:
+            LWTRACK(ProgramFetchOriginalData, PROGRAM_PROBE_ARGS);
+            break;
+        case NArrow::NSSA::EProcessorType::AssembleOriginalData:
+            LWTRACK(ProgramAssembleOriginalData, PROGRAM_PROBE_ARGS);
+            break;
+        case NArrow::NSSA::EProcessorType::CheckIndexData:
+            LWTRACK(ProgramCheckIndexData, PROGRAM_PROBE_ARGS);
+            break;
+        case NArrow::NSSA::EProcessorType::CheckHeaderData:
+            LWTRACK(ProgramCheckHeaderData, PROGRAM_PROBE_ARGS);
+            break;
+        case NArrow::NSSA::EProcessorType::StreamLogic:
+            LWTRACK(ProgramStreamLogic, PROGRAM_PROBE_ARGS);
+            break;
+        case NArrow::NSSA::EProcessorType::ReserveMemory:
+            LWTRACK(ProgramReserveMemory, PROGRAM_PROBE_ARGS);
+            break;
+        case NArrow::NSSA::EProcessorType::Unknown:
+            break;
+    }
+#undef PROGRAM_PROBE_ARGS
+    source->MutableExecutionContext().SetPrevCategoryName(currentCategoryName);
+    source->MutableExecutionContext().SetPrevExecutionResult(currentExecutionResult);
+}
+
 TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     const bool started = !source->GetExecutionContext().HasProgramIterator();
     if (!source->GetExecutionContext().HasProgramIterator()) {
@@ -83,35 +139,15 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         source->MutableExecutionContext().OnStartProgramStepExecution(iterator->GetCurrentNodeId(), GetSignals(iterator->GetCurrentNodeId()));
         auto signals = GetSignals(iterator->GetCurrentNodeId());
 
-        const auto& currentCategoryName = iterator->GetCurrentNode().GetSignalCategoryName();
-        if (LWPROBE_ENABLED(ProgramChainStart) || source->GetDataSourceOrbit().HasShuttles()) {
-            const TString tracingName = source->GetExecutionContext().GetPrevCategoryName() + " - " + currentCategoryName;
-            const TDuration durationMs = source->GetAndResetWaitDuration();
-            LWTRACK(ProgramChainStart, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-                    source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(),
-                    tracingName, iterator->GetCurrentNodeId(), durationMs, source->GetRecordsCount());
-        }
-
         const TMonotonic start = TMonotonic::Now();
         auto conclusion = source->GetExecutionContext().GetExecutionVisitorVerified()->Execute();
         const TDuration executionDurationMs = TMonotonic::Now() - start;
         source->GetContext()->GetCommonContext()->GetCounters().AddExecutionDuration(executionDurationMs);
         signals->AddExecutionDuration(executionDurationMs);
         source->AddExecutionDuration(executionDurationMs);
-        
-        if (LWPROBE_ENABLED(ProgramChainFinish) || source->GetDataSourceOrbit().HasShuttles()) {
-            const TString tracingName = source->GetExecutionContext().GetPrevCategoryName() + " - " + currentCategoryName;
-            TString currentExecutionResult = conclusion.IsFail() ? "Fail" : ToString(*conclusion);
-            const TString tracingExecutionResult = source->GetExecutionContext().GetPrevExecutionResult() + " - " + currentExecutionResult;
-            const TDuration finishDurationMs = source->GetAndResetWaitDuration();
-            LWTRACK(ProgramChainFinish, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-                    source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(),
-                    tracingName, iterator->GetCurrentNodeId(), finishDurationMs,
-                    executionDurationMs, source->GetRecordsCount(), tracingExecutionResult);
-            source->MutableExecutionContext().SetPrevCategoryName(currentCategoryName);
-            source->MutableExecutionContext().SetPrevExecutionResult(currentExecutionResult);
-        }
-        
+
+        const TString currentExecutionResult = conclusion.IsFail() ? "Fail" : ToString(*conclusion);
+        ReportTracing(source, executionDurationMs, currentExecutionResult);
         if (conclusion.IsFail()) {
             source->MutableExecutionContext().OnFailedProgramStepExecution();
             return conclusion;

@@ -153,6 +153,12 @@ ui32 IDataSource::GetRecordsCount() const {
     }
 }
 
+void IDataSource::OnStartProcessing() {
+    AFL_VERIFY(!SourceCreatedTimestamp);
+    SourceCreatedTimestamp = TMonotonic::Now();
+    LWTRACK(StartSourceProcessing, DataSourceOrbit, GetRawPathId(), GetTabletId(), GetTxId(), GetSourceIdx());
+}
+
 void IDataSource::StartAsyncSection() {
     AFL_VERIFY(AtomicCas(&SyncSectionFlag, 0, 1));
 }
@@ -207,7 +213,6 @@ IDataSource::IDataSource(const EType type, const ui32 sourceIdx, const std::shar
     , ShardingVersionOptional(shardingVersion)
     , HasDeletions(hasDeletions)
 {
-    SourceCreatedTimestamp = TMonotonic::Now();
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Events.emplace(NEvLog::TLogsThread()));
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, AddEvent("c"));
 }

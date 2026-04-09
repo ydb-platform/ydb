@@ -57,6 +57,7 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
         if (!source) {
             return changed;
         }
+        source->OnStartProcessing();
         SyncPoints.front()->AddSource(std::move(source));
         changed = true;
     }

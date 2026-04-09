@@ -45,6 +45,7 @@ private:
     const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
     THashMap<ui32, std::shared_ptr<TFetchingStepSignals>> Signals;
     const std::shared_ptr<TFetchingStepSignals>& GetSignals(const ui32 nodeId) const;
+    void ReportTracing(const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs, const TString& currentExecutionResult) const;
 
 public:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;

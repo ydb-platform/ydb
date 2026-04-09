@@ -164,6 +164,8 @@ public:
         TotalBytesRead += bytes;
     }
 
+    void OnStartProcessing();
+
     TDuration GetTotalDuration() const {
         return SourceCreatedTimestamp ? (TMonotonic::Now() - SourceCreatedTimestamp) : TDuration::Zero();
     }

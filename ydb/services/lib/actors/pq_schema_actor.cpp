@@ -284,9 +284,9 @@ namespace NKikimr::NGRpcProxy::V1 {
     Ydb::StatusIds::StatusCode CheckConfig(const NKikimrPQ::TPQTabletConfig& config,
                               const TClientServiceTypes& supportedClientServiceTypes,
                               TString& error, const NKikimrPQ::TPQConfig& /*pqConfig*/,
-                              const Ydb::StatusIds::StatusCode dubsStatus)
+                              EOperation operation)
     {
-        auto result = NPQ::NScheme::ValidateConfig(config, supportedClientServiceTypes, dubsStatus);
+        auto result = NPQ::NScheme::ValidateConfig(config, supportedClientServiceTypes, operation);
         if (!result) {
             error = result.GetErrorMessage();
         }
@@ -655,7 +655,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             pqTabletConfig->ClearMetricsLevel();
         }
 
-        return CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::BAD_REQUEST);
+        return CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, EOperation::Create);
     }
 
     static bool FillMeteringMode(Ydb::Topic::MeteringMode mode, NKikimrPQ::TPQTabletConfig& config,
@@ -842,7 +842,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             pqTabletConfig->SetMetricsLevel(request.metrics_level());
         }
 
-        return TYdbPqCodes(CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::BAD_REQUEST),
+        return TYdbPqCodes(CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, EOperation::Create),
                            Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
     }
 
@@ -1100,6 +1100,6 @@ namespace NKikimr::NGRpcProxy::V1 {
             pqTabletConfig->ClearMetricsLevel();
         }
 
-        return CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, Ydb::StatusIds::ALREADY_EXISTS);
+        return CheckConfig(*pqTabletConfig, supportedClientServiceTypes, error, pqConfig, EOperation::Alter);
     }
 }

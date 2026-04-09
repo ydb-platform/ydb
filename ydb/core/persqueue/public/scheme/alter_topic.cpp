@@ -1,6 +1,5 @@
 #include "scheme.h"
 #include "scheme_int.h"
-#include "topic_alterer.h"
 
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/ydb_convert/topic_description.h>
@@ -257,7 +256,7 @@ TResult ApplyChangesInt(
         pqTabletConfig->ClearMetricsLevel();
     }
 
-    return ValidateConfig(*pqTabletConfig, supportedClientServiceTypes, Ydb::StatusIds::ALREADY_EXISTS);
+    return ValidateConfig(*pqTabletConfig, supportedClientServiceTypes, EOperation::Alter);
 }
 
 TResult ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter) {
@@ -363,7 +362,7 @@ struct TAlterTopicStrategy : public TTopicAltererStrategy {
 };
 
 NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlterTopicSettings&& settings) {
-    return new TTopicAlterer(NKikimrServices::EServiceKikimr::PQ_ALTER_TOPIC, TTopicAltererSettings{
+    return CreateTopicAlterer(NKikimrServices::EServiceKikimr::PQ_ALTER_TOPIC, TTopicAltererSettings{
         .ParentId = parentId,
         .Database = std::move(settings.Database),
         .PeerName = std::move(settings.PeerName),

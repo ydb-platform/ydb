@@ -11,28 +11,6 @@
 
 namespace NKikimr::NPQ::NScheme {
 
-class TTopicAltererStrategy {
-public:
-    virtual ~TTopicAltererStrategy() = default;
-
-    virtual const TString& GetTopicName() const = 0;
-    virtual TResult ApplyChanges(
-        NKikimrSchemeOp::TPersQueueGroupDescription& targetConfig,
-        const NKikimrSchemeOp::TPersQueueGroupDescription& sourceConfig,
-        const bool isCdcStream
-    ) = 0;
-};
-
-struct TTopicAltererSettings {
-    TActorId ParentId;
-    TString Database;
-    TString PeerName;
-    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    std::unique_ptr<TTopicAltererStrategy> Strategy;
-    ui64 Cookie = 0;
-    bool IsCdcStreamCompatible = true;
-};
-
 class TTopicAlterer : public TBaseActor<TTopicAlterer>
                     , public TConstantLogPrefix {
 public:
@@ -53,6 +31,7 @@ private:
     void DoAlter();
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev);
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev);
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&);
     STFUNC(AlterState);
 
 private:
@@ -65,6 +44,7 @@ private:
     const TTopicAltererSettings Settings;
 
     NDescriber::TTopicInfo TopicInfo;
+    ui64 Cookie = 0;
 };
 
 } // namespace NKikimr::NPQ::NScheme

@@ -134,10 +134,16 @@ void TTopicAlterer::Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRe
     PassAway();
 }
 
+void TTopicAlterer::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+    LOG_T("Handle TEvPipeCache::TEvDeliveryProblem");
+    return ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Scheme shard " << ev->Get()->TabletId << " is unavailable");
+}
+
 STFUNC(TTopicAlterer::AlterState) {
     switch(ev->GetTypeRewrite()) {
         hFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
         hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
+        hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
     }
 }
@@ -161,6 +167,11 @@ void TTopicAlterer::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TStri
 void TTopicAlterer::SendToTablet(ui64 tabletId, IEventBase *ev) {
     auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev, tabletId, true, ++Cookie);
     Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
+}
+
+
+IActor* CreateTopicAlterer(NKikimrServices::EServiceKikimr service, TTopicAltererSettings&& settings) {
+    return new TTopicAlterer(service, std::move(settings));
 }
 
 } // namespace NKikimr::NPQ::NScheme

@@ -468,7 +468,7 @@ struct TSchemeShard::TTxCompleteShredTenant : public TSchemeShard::TRwTxBase {
     const TEvSchemeShard::TEvTenantShredResponse::TPtr Ev;
     bool NeedSendRequestToBSC = false;
 
-    TTxCompleteShredTenant(TSelf* self, const TEvSchemeShard::TEvTenantShredResponse::TPtr& ev)
+    TTxCompleteShredTenant(TSelf* self, TEvSchemeShard::TEvTenantShredResponse::TPtr& ev)
         : TRwTxBase(self)
         , Ev(std::move(ev))
     {}

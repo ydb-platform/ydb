@@ -1,8 +1,5 @@
 ydb/core/blobstorage/ut_blobstorage Get.TestRdmaRegiseredMemory
-ydb/core/blobstorage/ut_blobstorage VDiskAssimilation.Test
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
-ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeGet.PartRestorationAcrossBridgeOnDiscover
-ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeGet.PartRestorationAcrossBridgeOnRange
 ydb/core/external_sources/s3/ut S3AwsCredentials.ExecuteScriptWithEqSymbol
 ydb/core/external_sources/s3/ut S3AwsCredentials.TestInsertEscaping
 ydb/core/external_sources/s3/ut S3AwsCredentials.TieringInvalidSecrets

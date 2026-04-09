@@ -15,4 +15,4 @@ After optimization:
 )))))
 )
 Benchmark completed: <ITERATIONS> iterations for <DURATION>s
-Bench score: <SCORE>
+Bench score: <SCORE>ms (mean wall clock: <WALL-CLOCK>ms, cv: <CV>%)

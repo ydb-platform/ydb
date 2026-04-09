@@ -13,7 +13,10 @@ def run_purebench_test(cmdline):
     stdout = re.sub(
         r'(Benchmark completed: )(\d+)( iterations for )(\d+([.]\d+)?)', r'\1<ITERATIONS>\3<DURATION>', stdout
     )
-    stdout = re.sub(r'(Bench score: )(\d+([.]\d+(e+\d+)?)?|nan)', r'\1<SCORE>', stdout)
+    fraction = r'(\d+([.]\d+(e+\d+)?)?|nan)'
+    stdout = re.sub(f'(Bench score: ){fraction}', r'\1<SCORE>', stdout)
+    stdout = re.sub(f'(mean wall clock: ){fraction}', r'\1<WALL-CLOCK>', stdout)
+    stdout = re.sub(f'(cv: ){fraction}', r'\1<CV>', stdout)
     # Dump the masked stdout.
     outfile = yatest.common.output_path('out')
     with open(outfile, "w") as dump:

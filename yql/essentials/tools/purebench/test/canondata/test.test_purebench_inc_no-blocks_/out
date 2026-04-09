@@ -7,4 +7,4 @@ After optimization:
 (return (Map (Self '0) (lambda '($1) (AsStruct '('column0 (+ (Member $1 'index) (Int32 '1)))))))
 )
 Benchmark completed: <ITERATIONS> iterations for <DURATION>s
-Bench score: <SCORE>
+Bench score: <SCORE>ms (mean wall clock: <WALL-CLOCK>ms, cv: <CV>%)

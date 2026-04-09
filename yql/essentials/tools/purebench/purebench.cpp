@@ -424,18 +424,30 @@ void ShowResults(
     Cerr << "\n";
 }
 
-double Score(TVector<TDuration>&& times) {
+void DropOutliers(TVector<TDuration>& times, size_t portion) {
     Sort(times);
-    times.erase(times.end() - times.size() / 3, times.end());
+    times.erase(times.end() - times.size() / portion, times.end());
+}
 
-    double sum = std::transform_reduce(times.cbegin(), times.cend(),
-                                       .0, std::plus{}, [](auto t) { return std::log(t.MicroSeconds()); });
+double Score(TVector<TDuration> times) {
+    double sum = std::transform_reduce(times.cbegin(), times.cend(), 0.0, std::plus{},
+                                       [](auto t) { return std::log(t.MicroSeconds()); });
+    return std::exp(sum / times.size()) / 1000;
+}
 
-    return std::exp(sum / times.size());
+double CV(const TVector<TDuration>& times) {
+    TVector<ui64> microseconds(times.size());
+    std::transform(times.cbegin(), times.cend(), microseconds.begin(),
+                   [](auto t) { return t.MicroSeconds(); });
+    double sum = std::accumulate(microseconds.cbegin(), microseconds.cend(), 0.0);
+    double mean = sum / microseconds.size();
+    double sqDiff = std::transform_reduce(microseconds.cbegin(), microseconds.cend(), 0.0, std::plus{},
+                                          [mean](auto t) { return std::pow(t - mean, 2); });
+    return std::sqrt(sqDiff / microseconds.size()) / mean * 100.0;
 }
 
 template <typename TInputSpec, typename TOutputSpec, typename TNopOutputSpec, typename TRunProgram>
-double RunBenchmarks(
+std::tuple<double, double, double> RunBenchmarks(
     const IProgramFactoryPtr testFactory,
     const IProgramFactoryPtr benchFactory,
     const TVector<NYT::TNode>& inputSchema,
@@ -486,7 +498,10 @@ double RunBenchmarks(
 
     Cerr << "Calibration completed: " << calibrations << " iterations for " << calibrationTimer.Get() << "\n";
 
-    return Score(std::move(calibrationTimes)) / Score(std::move(benchTimes)) * 100;
+    DropOutliers(benchTimes, 3);
+    DropOutliers(calibrationTimes, 3);
+
+    return {Score(benchTimes) - Score(calibrationTimes), Score(benchTimes), CV(benchTimes)};
 }
 
 int Main(int argc, const char** argv)
@@ -571,7 +586,7 @@ int Main(int argc, const char** argv)
     Cerr << "Input data size: " << inputGenStream.Size() << "\n";
     ETranslationMode isPgGen = res.Has("pg") ? ETranslationMode::PG : ETranslationMode::SQL;
     ETranslationMode isPgTest = res.Has("pt") ? ETranslationMode::PG : ETranslationMode::SQL;
-    double normalizedTime;
+    std::tuple<double, double, double> score;
 
     if (blockEngineSettings == "disable") {
         TStringStream outputGenStream;
@@ -589,7 +604,7 @@ int Main(int argc, const char** argv)
                 benchFactory, {outputGenSchema}, testSql, isPgTest, &inputResStream);
         }
 
-        normalizedTime = RunBenchmarks<TPickleInputSpec, TPickleOutputSpec, TNopOutputSpec<false>>(
+        score = RunBenchmarks<TPickleInputSpec, TPickleOutputSpec, TNopOutputSpec<false>>(
             testFactory, benchFactory, {outputGenSchema}, testSql, isPgTest,
             benchmarkRuns, calibrationRuns, benchmarkSeconds, calibrationSeconds,
             [&](const auto& program) {
@@ -634,7 +649,7 @@ int Main(int argc, const char** argv)
                 benchFactory, {outputGenSchema}, testSql, isPgTest, inputResStream);
         }
 
-        normalizedTime = RunBenchmarks<TArrowInputSpec, TArrowOutputSpec, TNopOutputSpec<true>>(
+        score = RunBenchmarks<TArrowInputSpec, TArrowOutputSpec, TNopOutputSpec<true>>(
             testFactory, benchFactory, {outputGenSchema}, testSql, isPgTest,
             benchmarkRuns, calibrationRuns, benchmarkSeconds, calibrationSeconds,
             [&](const auto& program) {
@@ -644,7 +659,13 @@ int Main(int argc, const char** argv)
             });
     }
 
-    Cout << "Bench score: " << Prec(normalizedTime, 4) << "\n";
+    Cout << "Bench score: "
+         << Prec(std::get<0>(score), 4)
+         << "ms (mean wall clock: "
+         << Prec(std::get<1>(score), 4)
+         << "ms, cv: "
+         << Prec(std::get<2>(score), 4)
+         << "%)\n";
 
     NLog::CleanupLogger();
     return 0;

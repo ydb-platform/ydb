@@ -107,6 +107,60 @@ bool IsPredicateType(EJsonPathItemType type) {
     }
 }
 
+TCollectResult MergeBooleanOperands(TCollectResult left, TCollectResult right,
+    TCollectResult::ETokensMode incompatibleMode, TCollectResult::ETokensMode combinedMode)
+{
+    if (left.IsError()) {
+        return left;
+    }
+    if (right.IsError()) {
+        return right;
+    }
+
+    auto& leftTokens = left.GetTokens();
+    auto& rightTokens = right.GetTokens();
+
+    if (!leftTokens.empty() && !rightTokens.empty()) {
+        if (left.GetTokensMode() == incompatibleMode || right.GetTokensMode() == incompatibleMode) {
+            return TCollectResult(TIssue("Cannot mix AND and OR operators in jsonpath expression"));
+        }
+    }
+
+    leftTokens.reserve(leftTokens.size() + rightTokens.size());
+    leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
+    if (leftTokens.size() > 1) {
+        left.SetTokensMode(combinedMode);
+    }
+    return left;
+}
+
+TCollectResult MergeComparisonPathResults(TCollectResult left, TCollectResult right) {
+    if (left.IsError()) {
+        return left;
+    }
+    if (right.IsError()) {
+        return right;
+    }
+
+    auto& leftTokens = left.GetTokens();
+    auto& rightTokens = right.GetTokens();
+
+    if (!leftTokens.empty() && !rightTokens.empty()) {
+        if (left.GetTokensMode() == TCollectResult::ETokensMode::Or ||
+            right.GetTokensMode() == TCollectResult::ETokensMode::Or) {
+            return TCollectResult(TIssue("Cannot mix AND and OR operators in jsonpath expression"));
+        }
+    }
+
+    leftTokens.reserve(leftTokens.size() + rightTokens.size());
+    leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
+    if (leftTokens.size() > 1) {
+        left.SetTokensMode(TCollectResult::ETokensMode::And);
+    }
+    left.Finish();
+    return left;
+}
+
 class TQueryCollector {
     enum class EMode {
         Context = 0,
@@ -324,91 +378,51 @@ TCollectResult TQueryCollector::BinaryArithmeticOp(const TJsonPathItem& item, EM
     const auto& leftItem = Reader.ReadLeftOperand(item);
     const auto& rightItem = Reader.ReadRightOperand(item);
 
-    auto lefTCollectResult = CollectArithmeticOperand(leftItem, mode);
-    if (lefTCollectResult.IsError()) {
-        return lefTCollectResult;
+    auto leftCollectResult = CollectArithmeticOperand(leftItem, mode);
+    if (leftCollectResult.IsError()) {
+        return leftCollectResult;
     }
 
-    auto righTCollectResult = CollectArithmeticOperand(rightItem, mode);
-    if (righTCollectResult.IsError()) {
-        return righTCollectResult;
+    auto rightCollectResult = CollectArithmeticOperand(rightItem, mode);
+    if (rightCollectResult.IsError()) {
+        return rightCollectResult;
     }
 
-    if (lefTCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or ||
-        righTCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or) {
-        return TCollectResult(TIssue("Cannot mix AND and OR operators in jsonpath expression"));
+    auto& leftTokens = leftCollectResult.GetTokens();
+    auto& rightTokens = rightCollectResult.GetTokens();
+
+    if (!leftTokens.empty() && !rightTokens.empty()) {
+        if (leftCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or ||
+            rightCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or) {
+            return TCollectResult(TIssue("Cannot mix AND and OR operators in jsonpath expression"));
+        }
     }
 
-    auto& leftTokens = lefTCollectResult.GetTokens();
-    auto& rightTokens = righTCollectResult.GetTokens();
+    leftTokens.reserve(leftTokens.size() + rightTokens.size());
     leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
     if (leftTokens.size() > 1) {
-        lefTCollectResult.SetTokensMode(TCollectResult::ETokensMode::And);
+        leftCollectResult.SetTokensMode(TCollectResult::ETokensMode::And);
     }
-    lefTCollectResult.Finish();
-    return lefTCollectResult;
+    leftCollectResult.Finish();
+    return leftCollectResult;
 }
 
 TCollectResult TQueryCollector::BinaryAnd(const TJsonPathItem& item, EMode mode) {
     const auto& leftItem = Reader.ReadLeftOperand(item);
     const auto& rightItem = Reader.ReadRightOperand(item);
-
-    auto lefTCollectResult = Collect(leftItem, mode);
-    if (lefTCollectResult.IsError()) {
-        return lefTCollectResult;
-    }
-
-    auto righTCollectResult = Collect(rightItem, mode);
-    if (righTCollectResult.IsError()) {
-        return righTCollectResult;
-    }
-
-    auto& leftTokens = lefTCollectResult.GetTokens();
-    auto& rightTokens = righTCollectResult.GetTokens();
-
-    if (!leftTokens.empty() && !rightTokens.empty()) {
-        if (lefTCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or ||
-            righTCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or) {
-            return TCollectResult(TIssue("Cannot mix AND and OR operators in jsonpath expression"));
-        }
-    }
-
-    leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
-    if (leftTokens.size() > 1) {
-        lefTCollectResult.SetTokensMode(TCollectResult::ETokensMode::And);
-    }
-    return lefTCollectResult;
+    auto leftCollectResult = Collect(leftItem, mode);
+    auto rightCollectResult = Collect(rightItem, mode);
+    return MergeBooleanOperands(std::move(leftCollectResult), std::move(rightCollectResult),
+        TCollectResult::ETokensMode::Or, TCollectResult::ETokensMode::And);
 }
 
 TCollectResult TQueryCollector::BinaryOr(const TJsonPathItem& item, EMode mode) {
     const auto& leftItem = Reader.ReadLeftOperand(item);
     const auto& rightItem = Reader.ReadRightOperand(item);
-
-    auto lefTCollectResult = Collect(leftItem, mode);
-    if (lefTCollectResult.IsError()) {
-        return lefTCollectResult;
-    }
-
-    auto righTCollectResult = Collect(rightItem, mode);
-    if (righTCollectResult.IsError()) {
-        return righTCollectResult;
-    }
-
-    auto& leftTokens = lefTCollectResult.GetTokens();
-    auto& rightTokens = righTCollectResult.GetTokens();
-
-    if (!leftTokens.empty() && !rightTokens.empty()) {
-        if (lefTCollectResult.GetTokensMode() == TCollectResult::ETokensMode::And ||
-            righTCollectResult.GetTokensMode() == TCollectResult::ETokensMode::And) {
-            return TCollectResult(TIssue("Cannot mix AND and OR operators in jsonpath expression"));
-        }
-    }
-
-    leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
-    if (leftTokens.size() > 1) {
-        lefTCollectResult.SetTokensMode(TCollectResult::ETokensMode::Or);
-    }
-    return lefTCollectResult;
+    auto leftCollectResult = Collect(leftItem, mode);
+    auto rightCollectResult = Collect(rightItem, mode);
+    return MergeBooleanOperands(std::move(leftCollectResult), std::move(rightCollectResult),
+        TCollectResult::ETokensMode::And, TCollectResult::ETokensMode::Or);
 }
 
 TCollectResult TQueryCollector::BinaryEqual(const TJsonPathItem& item, EMode mode) {
@@ -430,7 +444,13 @@ TCollectResult TQueryCollector::BinaryEqual(const TJsonPathItem& item, EMode mod
         return CollectEqualOperands(rightItem, leftItem);
     }
 
-    return TCollectResult(TIssue("Comparison requires exactly one path and one literal operand"));
+    if (!leftIsLiteral && !rightIsLiteral) {
+        auto leftCollectResult = CollectArithmeticOperand(leftItem, EMode::Predicate);
+        auto rightCollectResult = CollectArithmeticOperand(rightItem, EMode::Predicate);
+        return MergeComparisonPathResults(std::move(leftCollectResult), std::move(rightCollectResult));
+    }
+
+    return TCollectResult(TIssue("Comparison is not allowed between literals on both sides"));
 }
 
 TCollectResult TQueryCollector::BinaryComparisonOp(const TJsonPathItem& item, EMode mode) {
@@ -441,32 +461,9 @@ TCollectResult TQueryCollector::BinaryComparisonOp(const TJsonPathItem& item, EM
     const auto& leftItem = Reader.ReadLeftOperand(item);
     const auto& rightItem = Reader.ReadRightOperand(item);
 
-    auto lefTCollectResult = CollectArithmeticOperand(leftItem, EMode::Predicate);
-    if (lefTCollectResult.IsError()) {
-        return lefTCollectResult;
-    }
-
-    auto righTCollectResult = CollectArithmeticOperand(rightItem, EMode::Predicate);
-    if (righTCollectResult.IsError()) {
-        return righTCollectResult;
-    }
-
-    auto& leftTokens = lefTCollectResult.GetTokens();
-    auto& rightTokens = righTCollectResult.GetTokens();
-
-    if (!leftTokens.empty() && !rightTokens.empty()) {
-        if (lefTCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or ||
-            righTCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or) {
-            return TCollectResult(TIssue("Cannot mix AND and OR operators in jsonpath expression"));
-        }
-    }
-
-    leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
-    if (leftTokens.size() > 1) {
-        lefTCollectResult.SetTokensMode(TCollectResult::ETokensMode::And);
-    }
-    lefTCollectResult.Finish();
-    return lefTCollectResult;
+    auto leftCollectResult = CollectArithmeticOperand(leftItem, EMode::Predicate);
+    auto rightCollectResult = CollectArithmeticOperand(rightItem, EMode::Predicate);
+    return MergeComparisonPathResults(std::move(leftCollectResult), std::move(rightCollectResult));
 }
 
 TCollectResult TQueryCollector::FilterObject(const TJsonPathItem& item, EMode mode) {

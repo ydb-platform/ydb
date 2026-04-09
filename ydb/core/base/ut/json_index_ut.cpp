@@ -76,7 +76,7 @@ const TString boolTrueSuffix = TString("\0\1", 2);
 const TString boolFalseSuffix = TString("\0\0", 2);
 const TString nullSuffix = TString("\0\2", 2);
 
-const TString compError = "Comparison requires exactly one path and one literal operand";
+const TString compError = "Comparison is not allowed between literals on both sides";
 const TString varError = "Variables are not supported at the moment";
 const TString predError = "Predicates are not allowed in this context";
 const TString mixError = "Cannot mix AND and OR operators in jsonpath expression";
@@ -539,11 +539,11 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateError("$.key == 10", "Predicates are not allowed in this context", ECallableType::JsonExists);
         ValidateError("false == ($.key == 10)", "Predicates are not allowed in this context", ECallableType::JsonExists);
 
-        // Both operands are paths
-        ValidateError("$.a == $.b", compError, ECallableType::JsonValue);
-        ValidateError("$.key == $", compError, ECallableType::JsonValue);
-        ValidateError("$ == $", compError, ECallableType::JsonValue);
-        ValidateError("$.a.b == $.c.d", compError, ECallableType::JsonValue);
+        // Both operands are paths: merge index tokens with AND (same as comparison ops)
+        ValidateJsonValue("$.a == $.b", {"\1a", "\1b"});
+        ValidateJsonValue("$.key == $", {"\3key", ""});
+        ValidateJsonValue("$ == $", {"", ""});
+        ValidateJsonValue("$.a.b == $.c.d", {"\1a\1b", "\1c\1d"});
 
         // Literals only
         ValidateError("\"x\" == \"y\"", compError, ECallableType::JsonValue);
@@ -558,8 +558,8 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         // Variables
         ValidateError("$var == \"x\"", varError, ECallableType::JsonValue);
         ValidateError("\"x\" == $var", varError, ECallableType::JsonValue);
-        ValidateError("$var == $var", compError, ECallableType::JsonValue);
-        ValidateError("$ == $var", compError, ECallableType::JsonValue);
+        ValidateError("$var == $var", varError, ECallableType::JsonValue);
+        ValidateError("$ == $var", varError, ECallableType::JsonValue);
     }
 
     // Comparison operators <, <=, >, >=, != collect path tokens from both operands; literals are silently dropped.
@@ -1284,6 +1284,9 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonValue("$.a ? (@.b == 10 && @.c == 13)", {"\1a\1b" + numSuffix(10), "\1a\1c" + numSuffix(13)});
         ValidateJsonValue("$.a ? ((@.b == 10) || (@.c == 13))", {"\1a\1b" + numSuffix(10), "\1a\1c" + numSuffix(13)});
         ValidateJsonValue("$.a ? (@.b + @.c == 5)", {"\1a\1b", "\1a\1c"});
+        ValidateJsonValue("$.a ? (@.b == @.c)", {"\1a\1b", "\1a\1c"});
+        ValidateJsonValue("$.a ? (@.b == $.c)", {"\1a\1b", "\1c"});
+        ValidateJsonValue("$.a ? (@ == @.b)", {"\1a", "\1a\1b"});
 
         // Nested filter: exists(@.b ? (@.c == 1)) inside an outer filter
         ValidateJsonExists("$.a ? (exists(@.b ? (@.c == 1)))", {"\1a\1b\1c" + numSuffix(1)});
@@ -1296,10 +1299,10 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateError("exists(@.a)", filterError, ECallableType::JsonValue);
         ValidateError("@ starts with \"x\"", filterError, ECallableType::JsonValue);
 
-        // Both sides of == are paths
-        ValidateError("$.a ? (@.b == @.c)", compError, ECallableType::JsonExists);
-        ValidateError("$.a ? (@.b == $.c)", compError, ECallableType::JsonExists);
-        ValidateError("$.a ? (@ == @.b)", compError, ECallableType::JsonExists);
+        // Both sides of == are paths: AND-merge of filter-relative paths
+        ValidateJsonExists("$.a ? (@.b == @.c)", {"\1a\1b", "\1a\1c"});
+        ValidateJsonExists("$.a ? (@.b == $.c)", {"\1a\1b", "\1c"});
+        ValidateJsonExists("$.a ? (@ == @.b)", {"\1a", "\1a\1b"});
         // Both sides are literals
         ValidateError("$.a ? (1 == 2)", compError, ECallableType::JsonExists);
         ValidateError("$.a ? (\"x\" == \"y\")", compError, ECallableType::JsonExists);

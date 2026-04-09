@@ -240,7 +240,7 @@ void ValidateError(TQueryClient& db, const std::string& table, const std::string
 
     auto result = db.ExecuteQuery(query(table, indexTable, predicate), TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Failed to extract search terms from the jsonpath expression");
+    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Failed to extract search terms from jsonpath expression");
 }
 
 void TestSelectJsonExists(bool isJsonDocument, bool isStrict,
@@ -1305,6 +1305,9 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k4 == true)"));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k2 == false)"));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k5 == null)"));
+            // Both sides are paths (index terms merged with AND)
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == @.k1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k3 == @.k4)"));
             // @ itself as the filter path (not a sub-member), all literal types
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ == 1)"));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ == -1.5)"));

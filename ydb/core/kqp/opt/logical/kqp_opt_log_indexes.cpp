@@ -1875,27 +1875,26 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
     return res;
 }
 
-// Parses jsonPathStr, collects search tokens via CollectJsonPath and builds
-// TKqpReadTableFullTextIndexSettings. Returns nullopt on any error and fills ctx with an issue.
+// Parses jsonPathStr, collects search tokens via CollectJsonPath and builds TKqpReadTableFullTextIndexSettings
 std::optional<TKqpReadTableFullTextIndexSettings> BuildFullTextSettingsFromJsonPath(const TString& jsonPathStr, const TExprBase& node, TExprContext& ctx) {
     NYql::TIssues parseIssues;
     const auto jsonPath = NYql::NJsonPath::ParseJsonPath(jsonPathStr, parseIssues, 1);
     if (!parseIssues.Empty()) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
-            TStringBuilder() << "Failed to parse jsonpath expression: " << jsonPathStr));
+            TStringBuilder() << "Failed to parse jsonpath expression: " << parseIssues.ToOneLineString()));
         return std::nullopt;
     }
 
     auto collectResult = NJsonIndex::CollectJsonPath(jsonPath, NJsonIndex::ECallableType::JsonExists);
     if (collectResult.IsError()) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
-            TStringBuilder() << "Failed to extract search terms from the jsonpath expression: " << collectResult.GetError().GetMessage()));
+            TStringBuilder() << "Failed to extract search terms from jsonpath expression: " << collectResult.GetError().GetMessage()));
         return std::nullopt;
     }
 
     if (collectResult.GetTokens().empty()) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
-            TStringBuilder() << "Failed to extract search terms from the jsonpath expression, no tokens found"));
+            TStringBuilder() << "Failed to extract search terms from jsonpath expression, no tokens found"));
         return std::nullopt;
     }
 
@@ -1935,26 +1934,36 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBas
 
     auto body = flatMap.Lambda().Body();
     if (!body.Maybe<TCoOptionalIf>()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Expected OptionalIf in lambda body"));
         return {};
     }
 
     auto optionalIf = body.Maybe<TCoOptionalIf>().Cast();
     if (!optionalIf.Predicate().Maybe<TCoCoalesce>()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Expected Coalesce in predicate"));
         return {};
     }
 
     auto coalesce = optionalIf.Predicate().Maybe<TCoCoalesce>().Cast();
     if (!coalesce.Predicate().Maybe<TCoJsonExists>()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Expected JsonExists in predicate"));
         return {};
     }
 
     auto jsonExists = coalesce.Predicate().Maybe<TCoJsonExists>().Cast();
 
     if (!jsonExists.Json().Maybe<TCoMember>()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Expected Member in Json"));
         return {};
     }
 
     if (!jsonExists.JsonPath().Maybe<TCoUtf8>()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Expected Utf8 in JsonPath"));
         return {};
     }
 
@@ -1963,6 +1972,8 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBas
 
     const auto& variables = jsonExists.Variables().Ref();
     if (!variables.GetTypeAnn() || variables.GetTypeAnn()->GetKind() != ETypeAnnotationKind::EmptyDict) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Variables are not supported at the moment"));
         return {};
     }
 

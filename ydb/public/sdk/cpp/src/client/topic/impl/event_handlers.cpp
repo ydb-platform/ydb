@@ -72,7 +72,11 @@ public:
             PartitionStreamToUncommittedOffsets.erase(partitionStreamId);
             event.Confirm();
         } else {
+<<<<<<< HEAD
             UnconfirmedDestroys.emplace(partitionStreamId, std::move(event));
+=======
+            UnconfirmedDestroys.emplace(key, event);
+>>>>>>> 3b40d765b18 ([C++ SDK] Fixed coverity issues (#37798))
         }
     }
 

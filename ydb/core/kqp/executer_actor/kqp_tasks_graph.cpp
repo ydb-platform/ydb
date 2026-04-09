@@ -3510,7 +3510,7 @@ void TKqpTasksGraph::CountComputeTasks(const TStageInfo& stageInfo, const ui32 n
     if (isShuffle && !forceMapTasks) {
         if (stage.GetTaskCount()) {
             stageType = TMaxTasksGraph::FIXED;
-            partitionsCount = stage.GetTaskCount();
+            partitionsCount = stage.GetTaskCount(); // TODO: is it allowed to have zero forced tasks?
         } else {
             auto [newPartitionCount, _] = GetMaxTasksAggregation(stageInfo, inputTasks, nodesCount);
             partitionsCount = std::max(newPartitionCount, partitionsCount);
@@ -3518,7 +3518,13 @@ void TKqpTasksGraph::CountComputeTasks(const TStageInfo& stageInfo, const ui32 n
     }
 
     MaxTasksGraph.AddStage(stageId, stageType, inputs, copyInput);
-    MaxTasksGraph.AddTasks(stageId, partitionsCount);
+    if (partitionsCount) {
+        // It's possible to have zero partitions in case we COPY from input stage, which is empty because of non-intersecting param values:
+        // i.e. "WHERE a > $1 AND a < $2", where $1 = $2 = 10
+        MaxTasksGraph.AddTasks(stageId, partitionsCount);
+    } else {
+        YQL_ENSURE(stageType == TMaxTasksGraph::COPY);
+    }
 }
 
 void TKqpTasksGraph::CountScanTasksFromShards(const TStageInfo& stageInfo, bool enableShuffleElimination) {

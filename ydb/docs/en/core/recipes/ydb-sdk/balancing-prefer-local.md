@@ -168,6 +168,7 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
 
   {% endlist %}
 
+<<<<<<< HEAD
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -197,4 +198,6 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
 
   {% endlist %}
 
+=======
+>>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 {% endlist %}

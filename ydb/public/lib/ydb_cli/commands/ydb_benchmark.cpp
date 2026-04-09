@@ -109,8 +109,13 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
     config.Opts->AddLongOption("tx-mode", TStringBuilder() << "Transaction mode (" << GetEnumAllNames<BenchmarkUtils::ETxMode>() << ")")
         .RequiredArgument("VAL").StoreResult(&TxMode).DefaultValue(TxMode);
 
-    config.Opts->AddLongOption("stats", "Collect statistics mode [full, profile]")
-        .RequiredArgument("VAL").StoreResult(&CollectStatsMode);
+    config.Opts->AddLongOption("stats", TStringBuilder() << "Collect statistics mode (full, profile)")
+        .RequiredArgument("VAL").Handler([&](const TStringBuf option) {
+            StatsMode = ParseQueryStatsModeOrThrow(TString(option), StatsMode);
+            if (StatsMode < NQuery::EStatsMode::Full) {
+                throw TMisuseException() << "Stats collection mode can't be less than [full] in benchmark mode";
+            }
+        });
 }
 
 TString TWorkloadCommandBenchmark::PatchQuery(const TStringBuf& original) const {
@@ -653,6 +658,7 @@ BenchmarkUtils::TQueryBenchmarkSettings TWorkloadCommandBenchmark::GetBenchmarkS
     BenchmarkUtils::TQueryBenchmarkSettings result;
     result.WithProgress = withProgress;
     result.TxMode = TxMode;
+    result.StatsMode = StatsMode;
     result.RetrySettings = RetrySettings;
     if (GlobalDeadline != TInstant::Max()) {
         result.Deadline.Deadline = GlobalDeadline;
@@ -662,12 +668,6 @@ BenchmarkUtils::TQueryBenchmarkSettings TWorkloadCommandBenchmark::GetBenchmarkS
     if (requestDeadline < result.Deadline.Deadline) {
         result.Deadline.Deadline = requestDeadline;
         result.Deadline.Name = "Request";
-    }
-    if (CollectStatsMode) {
-        result.StatsMode = ParseQueryStatsModeOrThrow(CollectStatsMode, NQuery::EStatsMode::None);
-        if (result.StatsMode < NQuery::EStatsMode::Full) {
-            throw TMisuseException() << "Stats collection mode can't be less than [full] in benchmark mode";
-        }
     }
     return result;
 }

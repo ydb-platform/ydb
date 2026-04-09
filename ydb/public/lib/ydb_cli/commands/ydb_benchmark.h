@@ -31,7 +31,7 @@ private:
     class TIterationExecution;
     TString OutFilePath;
     ETxMode TxMode = ETxMode::SerializableRW;
-    TString CollectStatsMode;
+    NQuery::EStatsMode StatsMode = NQuery::EStatsMode::Full;
     ui32 IterationsCount;
     TString JsonReportFileName;
     TString CsvReportFileName;

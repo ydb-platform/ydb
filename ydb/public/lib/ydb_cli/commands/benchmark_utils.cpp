@@ -337,7 +337,7 @@ TMaybe<TQueryBenchmarkResult> SetTimeoutSettings(NQuery::TExecuteQuerySettings& 
 
 TQueryBenchmarkResult ExecuteImpl(const TString& query, TStringBuf expected, NQuery::TQueryClient& client, const TQueryBenchmarkSettings& benchmarkSettings, bool explainOnly) {
     NQuery::TExecuteQuerySettings settings;
-    settings.StatsMode(benchmarkSettings.StatsMode.value_or(NQuery::EStatsMode::Profile));
+    settings.StatsMode(benchmarkSettings.StatsMode);
     settings.ExecMode(explainOnly ? NQuery::EExecMode::Explain : NQuery::EExecMode::Execute);
     if (benchmarkSettings.WithProgress) {
         settings.StatsCollectPeriod(std::chrono::milliseconds(3000));

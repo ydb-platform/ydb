@@ -37,20 +37,9 @@ public:
     // Test-only constructor that doesn't require TPortionDataSource
     TEvRequestFilter(const NArrow::TSimpleRow& minPK, const NArrow::TSimpleRow& maxPK, const ui64 portionId,
         const ui64 recordsCount, const TSnapshot& maxVersion, const std::shared_ptr<IFilterSubscriber>& subscriber,
-        const std::shared_ptr<const TAtomicCounter>& abortionFlag)
-        : MinPK(minPK)
-        , MaxPK(maxPK)
-        , PortionId(portionId)
-        , RecordsCount(recordsCount)
-        , MaxVersion(maxVersion)
-        , Subscriber(subscriber)
-        , AbortionFlag(abortionFlag)
-    {
-    }
+        const std::shared_ptr<const TAtomicCounter>& abortionFlag);
 
-    TSnapshot GetMaxVersion() const {
-        return MaxVersion;
-    }
+    TSnapshot GetMaxVersion() const;
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

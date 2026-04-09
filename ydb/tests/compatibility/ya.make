@@ -41,7 +41,6 @@ TEST_SRCS(
 SIZE(LARGE)
 REQUIREMENTS(cpu:16)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-TAG(ya:manual)
 
 DEPENDS(
     ydb/tests/library/compatibility/binaries
@@ -63,5 +62,4 @@ RECURSE(
     olap
     streaming
     result_set_format
-    distconf
 )

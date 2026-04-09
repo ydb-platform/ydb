@@ -555,6 +555,10 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::GetExecutorPoolState(TExecutorPoolState &poolState) const {
+        poolState.CurrentLimit = GetThreadCount();
+        poolState.MaxLimit = GetMaxThreadCount();
+        poolState.MinLimit = GetMinThreadCount();
+
         if (Harmonizer) {
             TPoolHarmonizerStats stats = Harmonizer->GetPoolStats(PoolId);
             poolState.ElapsedCpu = stats.AvgElapsedCpu;
@@ -566,9 +570,6 @@ namespace NActors {
         } else {
             poolState.PossibleMaxLimit = poolState.MaxLimit;
         }
-        poolState.CurrentLimit = GetThreadCount();
-        poolState.MaxLimit = GetMaxThreadCount();
-        poolState.MinLimit = GetDefaultThreadCount();
     }
 
     void TBasicExecutorPool::Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) {

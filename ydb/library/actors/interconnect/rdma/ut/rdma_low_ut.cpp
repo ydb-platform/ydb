@@ -118,10 +118,18 @@ TEST_P(TCqMode, ReadInOneProcessWithQpInterruption) {
             case EReadResult::OK: // corruptor fired too late, just check data is ok
                 {
                     ASSERT_TRUE(strncmp(expected.data(), (char*)reg2->GetAddr(), MEM_REG_SZ) == 0);
-                    // Additional check cq is empty after all this stuff
+                    // Additional check CQ has no leaked WR after async completion callback returns.
+                    // In CQ processing we call wr->Reply(...) first and ReturnWr(wr) second. ReadOneMemRegion()
+                    // unblocks on the callback from Reply(), so immediately after it returns we may observe
+                    // a transient "allocated WR still not returned" state (Ready < Total), especially in EVENT mode.
+                    // Bounded waiting (<=100ms) keeps this check strict for real leaks while tolerating that ordering race.
                     ICq::TWrStats stats = rdma->CqPtr->GetWrStats();
+                    for (ui32 i = 0; i < 2000 && stats.Ready != stats.Total; ++i) {
+                        Sleep(TDuration::MicroSeconds(50));
+                        stats = rdma->CqPtr->GetWrStats();
+                    }
                     EXPECT_TRUE(stats.Total > 0);
-                    EXPECT_TRUE(stats.Ready == stats.Total);
+                    EXPECT_EQ(stats.Ready, stats.Total);
                 }
                 break;
             case EReadResult::WRPOST_ERR: // corruptor fired too early, increase timeout

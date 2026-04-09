@@ -26,6 +26,7 @@ TRegion::TRegion(
     ui32 regionIndex,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
     ui32 syncRequestsBatchSize,
+    TDuration writeHandoffDelay,
     TDuration traceSamplePeriod)
     : ActorSystem(actorSystem)
 {
@@ -40,6 +41,7 @@ TRegion::TRegion(
             TVChunkConfig::Make(vChunkIndex),
             directBlockGroups[dbgIndex],
             syncRequestsBatchSize,
+            writeHandoffDelay,
             traceSamplePeriod);
         vChunk->Start();
         VChunks.push_back(std::move(vChunk));
@@ -49,27 +51,33 @@ TRegion::TRegion(
 NThreading::TFuture<TReadBlocksLocalResponse> TRegion::ReadBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request,
-    NWilson::TTraceId traceId)
+    const NWilson::TTraceId& traceId)
 {
     const size_t vChunkIndex = VChunkIndexFromHeaders(request->Headers);
 
     return VChunks[vChunkIndex]->ReadBlocksLocal(
         std::move(callContext),
         std::move(request),
-        std::move(traceId));
+        traceId);
 }
 
 NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
-    NWilson::TTraceId traceId)
+    EWriteMode writeMode,
+    TDuration pbufferReplyTimeout,
+    ui64 lsn,
+    const NWilson::TTraceId& traceId)
 {
     const size_t vChunkIndex = VChunkIndexFromHeaders(request->Headers);
 
     return VChunks[vChunkIndex]->WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
-        std::move(traceId));
+        writeMode,
+        pbufferReplyTimeout,
+        lsn,
+        traceId);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

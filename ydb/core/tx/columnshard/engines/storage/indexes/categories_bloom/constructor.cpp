@@ -48,7 +48,8 @@ NKikimr::TConclusionStatus TBloomIndexConstructor::DoDeserializeFromProto(const 
             return conclusion;
         }
     }
-    FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
+    FalsePositiveProbability = bFilter.HasFalsePositiveProbability() ? bFilter.GetFalsePositiveProbability()
+                                                                       : NDefaults::FalsePositiveProbability;
     if (FalsePositiveProbability < 0.01 || FalsePositiveProbability >= 1) {
         const TString errorMessage = "FalsePositiveProbability have to be in interval[0.01, 1)";
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", errorMessage);

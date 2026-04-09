@@ -271,7 +271,7 @@ private:
                     StringPiece text(piece);
                     std::vector<TUnboxedValue> matches;
                     for (StringPiece w; text.begin() < text.end() && RE2::FindAndConsume(&text, *Regexp_, &w);) {
-                        if (w.size() == 0 && !text.empty()) {
+                        if (w.empty() && !text.empty()) {
                             text.remove_prefix(1);
                         }
                         matches.emplace_back(valueBuilder->SubString(args[0], std::distance(piece.begin(), w.begin()), w.size()));

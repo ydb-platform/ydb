@@ -9,6 +9,11 @@ on:
         description: 'Comma-separated list of branches to process (empty = use branches from config file)'
         required: false
         default: ''
+      build_type:
+        description: 'tests_monitor / mute scripts build_type (relwithdebinfo, release-asan, …)'
+        required: false
+        default: relwithdebinfo
+        type: string
 
 env:
   BRANCHES_CONFIG_PATH: .github/config/stable_tests_branches.json
@@ -16,8 +21,8 @@ env:
   PR_BRANCH_PREFIX: update-muted-ya
   TITLE: "Update muted_ya.txt"
   REVIEWERS: '["ci"]'
-  LABELS: "mute-unmute,not-for-changelog,ok-to-test"
-  BUILD_TYPE: relwithdebinfo
+  LABELS: "mute-unmute,not-for-changelog,ok-to-test,automerge"
+  BUILD_TYPE: ${{ github.event.inputs.build_type || 'relwithdebinfo' }}
 
 jobs:
   setup:
@@ -100,7 +105,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ydb[yc] PyGithub codeowners pandas
+          pip install ydb[yc] PyGithub codeowners pandas numpy
 
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
@@ -128,7 +133,8 @@ jobs:
         run: |
           .github/scripts/tests/create_new_muted_ya.py update_muted_ya \
             --branch=${{ env.BASE_BRANCH }} \
-            --muted_ya_file=base_muted_ya.txt
+            --muted_ya_file=base_muted_ya.txt \
+            --build-type=${{ env.BUILD_TYPE }}
 
       - name: Check if changes exist
         id: changes_check

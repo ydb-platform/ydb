@@ -183,7 +183,7 @@ IGraphTransformer::TStatus PopulateJoinStrategySizeInfo(
     {
         if (leftLeaf) {
             TYtSection section{leftLeaf->Section};
-            if (Y_UNLIKELY(!section.Settings().Empty() && section.Settings().Item(0).Name() == "Test")) {
+            if (!section.Settings().Empty() && section.Settings().Item(0).Name() == "Test") [[unlikely]] {
                 return IGraphTransformer::TStatus::Ok;
             }
 
@@ -199,7 +199,7 @@ IGraphTransformer::TStatus PopulateJoinStrategySizeInfo(
         }
         if (rightLeaf) {
             TYtSection section{rightLeaf->Section};
-            if (Y_UNLIKELY(!section.Settings().Empty() && section.Settings().Item(0).Name() == "Test")) {
+            if (!section.Settings().Empty() && section.Settings().Item(0).Name() == "Test") [[unlikely]] {
                 return IGraphTransformer::TStatus::Ok;
             }
             auto status = CollectPathsAndLabelsReady(rightTablesReady, rightTables, labels, rightItemType, rightItemTypeBeforePremap, *rightLeaf, ctx);

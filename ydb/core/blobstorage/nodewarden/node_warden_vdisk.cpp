@@ -88,7 +88,15 @@ namespace NKikimr::NStorage {
 
         // find underlying PDisk and determine its media type
         auto pdiskIt = LocalPDisks.find({vslotId.NodeId, vslotId.PDiskId});
-        Y_VERIFY_S(pdiskIt != LocalPDisks.end(), "PDiskId# " << vslotId.NodeId << ":" << vslotId.PDiskId << " not found");
+        if (pdiskIt == LocalPDisks.end()) {
+            // VDisk config may arrive before corresponding PDisk is started (e.g. during bootstrap/config updates).
+            // Defer starting the VDisk until PDisk appears.
+            STLOG(PRI_NOTICE, BS_NODE, NW23, "StartLocalVDiskActor: PDisk not found yet, deferring",
+                (VDiskId, vdisk.GetVDiskId()),
+                (VSlotId, vslotId),
+                (PDiskGuid, pdiskGuid));
+            return;
+        }
         auto& pdisk = pdiskIt->second;
         Y_VERIFY_S(pdisk.Record.GetPDiskGuid() == pdiskGuid, "PDiskId# " << vslotId.NodeId << ":" << vslotId.PDiskId << " PDiskGuid mismatch");
         const NPDisk::EDeviceType deviceType = TPDiskCategory(pdisk.Record.GetPDiskCategory()).Type();
@@ -187,6 +195,7 @@ namespace NKikimr::NStorage {
             donorDiskIds, scrubCookie, whiteboardInstanceGuid, readOnly);
 
         std::unique_ptr<IActor> actor;
+        auto *as = TActivationContext::ActorSystem();
 
         if (ddisk) {
             actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, {},
@@ -295,7 +304,6 @@ namespace NKikimr::NStorage {
             actor.reset(CreateVDisk(vdiskConfig, groupInfo, AppData()->Counters));
         }
 
-        auto *as = TActivationContext::ActorSystem();
         const TActorId actorId = as->Register(actor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
         as->RegisterLocalService(vdiskServiceId, actorId);
         VDiskIdByActor.try_emplace(actorId, vslotId);
@@ -384,6 +392,16 @@ namespace NKikimr::NStorage {
         }
 
         record.Config.CopyFrom(vdisk);
+
+        // Sticky runtime marker: if this node ever had a local dynamic VDisk for the group, keep subscribing
+        // for its updates in RegisterNode even when proxy is not currently running. We don't need it after restart
+        // so this flag is purely local.
+        if (!vdisk.GetDoDestroy() && vdisk.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY) {
+            const ui32 groupId = vdisk.GetVDiskID().GetGroupID();
+            if (TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Dynamic) {
+                Groups[groupId].MustSubscribe = true;
+            }
+        }
 
         if (vdisk.GetDoDestroy() || vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
             if (record.UnderlyingPDiskDestroyed) {

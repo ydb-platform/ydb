@@ -207,6 +207,8 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvInterpilePut, Handle);
         hFunc(TEvBlobStorage::TEvPutResult, Handle);
 
+        hFunc(TEvNodeWardenListLocalDDisks, Handle);
+
         default:
             EnqueuePendingMessage(ev);
             break;

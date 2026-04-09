@@ -58,6 +58,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/json_index.h>
 #include <ydb/core/base/table_index.h>
 
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
@@ -149,7 +150,7 @@ class TTableReader : public TAtomicRefCount<T> {
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TVector<NScheme::TTypeInfo> ResultColumnTypes;
     TVector<i32> ResultColumnIds;
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> PartitionInfo;
+    std::shared_ptr<const TPartitioning> PartitionInfo;
 
 public:
 
@@ -294,12 +295,14 @@ public:
 
         YQL_ENSURE(PartitionInfo);
 
+        const auto& partitions = PartitionInfo->GetTablePartitioning();
+
         // Binary search of the index to start with.
         size_t idxStart = 0;
-        size_t idxFinish = PartitionInfo->size();
+        size_t idxFinish = partitions.size();
         while ((idxFinish - idxStart) > 1) {
             size_t idxCur = (idxFinish + idxStart) / 2;
-            const auto& partCur = (*PartitionInfo)[idxCur].Range->EndKeyPrefix.GetCells();
+            const auto& partCur = partitions[idxCur].Range->EndKeyPrefix.GetCells();
             YQL_ENSURE(partCur.size() <= KeyColumnTypes.size());
             int cmp = CompareTypedCellVectors(partCur.data(), range.From.data(), KeyColumnTypes.data(),
                                             std::min(partCur.size(), range.From.size()));
@@ -313,12 +316,12 @@ public:
         std::vector<TCell> minusInf(KeyColumnTypes.size());
 
         std::vector<std::pair<ui64, TTableRange>> rangePartition;
-        for (size_t idx = idxStart; idx < PartitionInfo->size(); ++idx) {
+        for (size_t idx = idxStart; idx < partitions.size(); ++idx) {
             TTableRange partitionRange{
-                idx == 0 ? minusInf : (*PartitionInfo)[idx - 1].Range->EndKeyPrefix.GetCells(),
-                idx == 0 ? true : !(*PartitionInfo)[idx - 1].Range->IsInclusive,
-                (*PartitionInfo)[idx].Range->EndKeyPrefix.GetCells(),
-                (*PartitionInfo)[idx].Range->IsInclusive
+                idx == 0 ? minusInf : partitions[idx - 1].Range->EndKeyPrefix.GetCells(),
+                idx == 0 ? true : !partitions[idx - 1].Range->IsInclusive,
+                partitions[idx].Range->EndKeyPrefix.GetCells(),
+                partitions[idx].Range->IsInclusive
             };
 
             if (range.Point) {
@@ -329,7 +332,7 @@ public:
                     KeyColumnTypes);
 
                 if (intersection == 0) {
-                    rangePartition.emplace_back((*PartitionInfo)[idx].ShardId, range);
+                    rangePartition.emplace_back(partitions[idx].ShardId, range);
                 } else if (intersection < 0) {
                     break;
                 }
@@ -338,7 +341,7 @@ public:
 
                 if (intersection == 0) {
                     auto rangeIntersection = Intersect(KeyColumnTypes, range, partitionRange);
-                    rangePartition.emplace_back((*PartitionInfo)[idx].ShardId, rangeIntersection);
+                    rangePartition.emplace_back(partitions[idx].ShardId, rangeIntersection);
                 } else if (intersection < 0) {
                     break;
                 }
@@ -1993,7 +1996,8 @@ public:
             auto evRead = reader->GetReadRequest(inflightItem.ReadId, inflightItem.Points);
             YQL_ENSURE(evRead);
             ReadsState.SendEvRead(shardId, evRead, TReadInfo{.ReadKind = readKind, .Cookie = cookie, .ShardId = shardId});
-            Enqueue(inflightItem.ReadId, std::move(inflightItem));
+            auto readId = inflightItem.ReadId;
+            Enqueue(readId, std::move(inflightItem));
         }
 
         return prefixSize;
@@ -2207,9 +2211,17 @@ private:
         const auto& expr = Settings->GetQuerySettings().GetQuery();
         YQL_ENSURE(Settings->GetQuerySettings().GetColumns().size() == 1);
 
-        for(const auto& column : Settings->GetQuerySettings().GetColumns()) {
+        for (const auto& column : Settings->GetQuerySettings().GetColumns()) {
+            if (Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson) {
+                size_t wordIndex = 0;
+                for (const TString& query: NJsonIndex::BuildSearchTerms(expr)) {
+                    YQL_ENSURE(IndexTableReader);
+                    Words.emplace_back(MakeIntrusive<TWordReadState>(wordIndex++, query, IndexTableReader));
+                }
+                continue;
+            }
 
-            for(const auto& analyzer : Settings->GetIndexDescription().GetSettings().columns()) {
+            for (const auto& analyzer : Settings->GetIndexDescription().GetSettings().columns()) {
                 if (analyzer.analyzers().use_filter_ngram() || analyzer.analyzers().use_filter_edge_ngram()) {
                     IsNgram = true;
                 }

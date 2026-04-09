@@ -31,7 +31,7 @@ public:
     };
 
     struct GenerationIdCheckerSettings {
-        i64 GenerationId;
+        ui64 GenerationId;
         TString TopicDatabasePath;
         TString ConsumerMetadataTablePath;
     };
@@ -43,9 +43,9 @@ public:
     void SendCreateSessionRequest(const TActorContext& ctx);
     void BeginTransaction(const NActors::TActorContext& ctx);
     bool Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx);
+    void CloseKqpSession(const TActorContext& ctx);
 
 private:
-    void CloseKqpSession(const TActorContext& ctx);
     THolder<NKqp::TEvKqp::TEvCreateSessionRequest> MakeCreateSessionRequest();
     THolder<NKqp::TEvKqp::TEvCloseSessionRequest> MakeCloseSessionRequest();
     void RetrieveGeneration(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx);

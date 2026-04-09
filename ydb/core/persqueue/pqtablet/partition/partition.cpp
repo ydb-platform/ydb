@@ -14,6 +14,7 @@
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/tracing_support.h>
 #include <ydb/core/persqueue/pqtablet/partition/autopartitioning_manager.h>
+#include <ydb/core/persqueue/pqtablet/partition/deduplication_write_queue.h>
 #include <ydb/core/persqueue/pqtablet/partition/mirrorer/mirrorer_factory.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/counters_pq.pb.h>
@@ -689,6 +690,10 @@ void TPartition::DestroyActor(const TActorContext& ctx)
         Send(OffloadActor, new TEvents::TEvPoisonPill());
     }
 
+    if (DeduplicationQueueActor) {
+        Send(DeduplicationQueueActor, new TEvents::TEvPoisonPill());
+    }
+
     Die(ctx);
 }
 
@@ -777,6 +782,19 @@ void TPartition::InitComplete(const TActorContext& ctx) {
 
     if (MirroringEnabled(Config)) {
         CreateMirrorerActor();
+    }
+    if (PartitionConfig != nullptr && PartitionConfig->ParentPartitionIdsSize() > 0 && !IsSupportive()) {
+        TCreateDeduplicationWriteQueueActorResult writeQueue = CreateDeduplicationWriteQueueActor(
+            this->TabletId,
+            this->TabletActorId,
+            ctx.SelfID,
+            TopicName(),
+            Partition.OriginalPartitionId,
+            PartitionGraph
+        );
+        if (writeQueue.RecentPartitionsCount != 0 && writeQueue.Actor) {
+            DeduplicationQueueActor = ctx.Register(writeQueue.Actor.Release());
+        }
     }
 
     ProcessMLPPendingEvents();
@@ -904,6 +922,16 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
 
     result.SetWriteBytesQuota(TotalPartitionWriteSpeed);
 
+    auto setMLPConsumerState = [&](auto* clientInfo, const auto& consumerName) {
+        auto it = MLPConsumers.find(consumerName);
+        if (it != MLPConsumers.end()) {
+            clientInfo->SetUseForReading(it->second.UseForReading);
+            clientInfo->SetMLPLockedMessageCount(it->second.LockedMessageCount);
+            clientInfo->SetMLPDelayedMessageCount(it->second.DelayedMessageCount);
+            clientInfo->SetMLPMessageCount(it->second.MessageCount);
+        }
+    };
+
     TVector<ui64> resSpeed;
     resSpeed.resize(4);
     ui64 maxQuota = 0;
@@ -925,11 +953,14 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             if (requiredConsumers.contains(userInfo.User)) {
                 auto* clientInfo = result.AddConsumerResult();
                 clientInfo->SetConsumer(userInfo.User);
-                clientInfo->set_errorcode(NPersQueue::NErrorCode::EErrorCode::OK);
+                clientInfo->SetErrorCode(NPersQueue::NErrorCode::EErrorCode::OK);
                 clientInfo->SetCommitedOffset(userInfo.Offset);
                 if (userInfo.CommittedMetadata.has_value()) {
                     clientInfo->SetCommittedMetadata(*userInfo.CommittedMetadata);
                 }
+
+                setMLPConsumerState(clientInfo, userInfo.User);
+
                 requiredConsumers.extract(userInfo.User);
             }
             continue;
@@ -992,10 +1023,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             auto lastOffsetHasBeenCommited = LastOffsetHasBeenCommited(userInfo);
             clientInfo->SetReadingFinished(lastOffsetHasBeenCommited);
 
-            auto mit = MLPConsumers.find(userInfo.User);
-            if (mit != MLPConsumers.end()) {
-                clientInfo->SetUseForReading(mit->second.UseForReading);
-            }
+            setMLPConsumerState(clientInfo, userInfo.User);
         }
     }
 
@@ -4318,9 +4346,12 @@ ui32 TPartition::NextChannel(bool isHead, ui32 blobSize) {
 
 void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorContext& ctx) {
     const ui64 cookie = ev->Get()->Cookie;
-    LOG_D("Got quota." <<
-            " Topic: \"" << TopicName() << "\"." <<
-            " Partition: " << Partition << ": Cookie: " << cookie
+    LOG_D("Got quota."
+         << " Topic: \"" << TopicName() << "\"."
+         << " Partition: " << Partition
+         << ": Cookie: " << cookie
+         << " AccountWaitTime: " << ev->Get()->AccountQuotaWaitTime
+         << " PartitionWaitTime: " << ev->Get()->PartitionQuotaWaitTime
     );
 
     // Search for proper request
@@ -4678,6 +4709,42 @@ void TPartition::ResetDetailedMetrics() {
 
 bool IsImportant(const NKikimrPQ::TPQTabletConfig::TConsumer& consumer) {
     return consumer.GetImportant() || consumer.GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP;
+}
+
+void TPartition::Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest::TPtr& ev) {
+    auto& record = ev->Get()->Record;
+    const ui32 partitionId = record.GetPartitionId();
+    LOG_T("TEvCheckMessageDeduplicationRequest for partition " << partitionId
+        << ", deduplication IDs count: " << record.MessageDeduplicationIdSize()
+        << ". Topic: \"" << TopicName() << "\""
+        << ". Partition: " << Partition);
+   if (Partition.InternalPartitionId != partitionId) {
+        LOG_W("TEvCheckMessageDeduplicationRequest for wrong partition " << partitionId
+            << ". Topic: \"" << TopicName() << "\""
+            << ". Partition: " << Partition);
+        return;
+    }
+    auto response = MakeHolder<NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationResponse>();
+    response->Record.SetPartitionId(Partition.InternalPartitionId);
+    response->Record.SetGeneration(record.GetGeneration());
+    if (IsActive()) {
+        for (const auto& messageId : record.GetMessageDeduplicationId()) {
+            response->Record.MutableResult()->try_emplace(messageId);
+        }
+        response->Record.SetStatus(NKikimrPQ::EStatus::ERROR);
+        Send(ev->Sender, response.Release());
+        return;
+    }
+    for (const auto& messageId : record.GetMessageDeduplicationId()) {
+        std::optional offset = MessageIdDeduplicator.CheckMessageId(messageId);
+        auto& result = (*response->Record.MutableResult())[messageId];
+        result.SetIsDuplicate(offset.has_value());
+        if (offset.has_value()) {
+            result.SetOffset(*offset);
+        }
+    }
+    response->Record.SetStatus(NKikimrPQ::EStatus::OK);
+    Send(ev->Sender, response.Release());
 }
 
 } // namespace NKikimr::NPQ

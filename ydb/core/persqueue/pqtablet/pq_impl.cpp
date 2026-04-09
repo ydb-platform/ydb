@@ -1240,6 +1240,7 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
 
     if (!partitionId.IsSupportivePartition()) {
         ProcessCheckPartitionStatusRequests(partitionId);
+        ProcessCheckMessageDeduplicationRequests(partitionId);
     }
 
     if (allInitialized) {
@@ -1603,6 +1604,37 @@ void TPersQueue::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
             ctx.Send(it->second.Actor, ev->Release().Release());
         }
     }
+}
+
+void TPersQueue::Handle(TEvPersQueue::TEvPartitionUpdateReadMetrics::TPtr& ev, const TActorContext& ctx)
+{
+    if (!ConfigInited || TabletState == NKikimrPQ::EDropped) {
+        return;
+    }
+
+    const auto& record = ev->Get()->Record;
+    if (!record.HasUpdateReadMetrics() || !record.HasPartition()) {
+        return;
+    }
+
+    const auto& metrics = record.GetUpdateReadMetrics();
+    if (!metrics.HasClientId()) {
+        return;
+    }
+
+    auto it = Partitions.find(TPartitionId(record.GetPartition()));
+    if (it == Partitions.end() || !it->second.InitDone) {
+        return;
+    }
+
+    TDuration inFlightLimitReachedDuration = TDuration::Zero();
+    if (metrics.HasInFlightLimitReachedDurationMs()) {
+        inFlightLimitReachedDuration = TDuration::MilliSeconds(metrics.GetInFlightLimitReachedDurationMs());
+    }
+
+    ctx.Send(it->second.Actor,
+        new TEvPQ::TEvUpdateReadMetrics(metrics.GetClientId(), inFlightLimitReachedDuration),
+        0, 0, NWilson::TTraceId(ev->TraceId));
 }
 
 
@@ -2012,6 +2044,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                     .UncompressedSize = uncompressedSize,
                     .PartitionKey = cmd.GetPartitionKey(),
                     .ExplicitHashKey = cmd.GetExplicitHash(),
+                    .ChoosePartitionKey = cmd.GetChoosePartitionKey(),
                     .External = cmd.GetExternalOperation(),
                     .IgnoreQuotaDeadline = cmd.GetIgnoreQuotaDeadline(),
                     .HeartbeatVersion = heartbeatVersion,
@@ -2061,6 +2094,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                 .UncompressedSize = cmd.HasUncompressedSize() ? cmd.GetUncompressedSize() : 0u,
                 .PartitionKey = cmd.GetPartitionKey(),
                 .ExplicitHashKey = cmd.GetExplicitHash(),
+                .ChoosePartitionKey = cmd.GetChoosePartitionKey(),
                 .External = cmd.GetExternalOperation(),
                 .IgnoreQuotaDeadline = cmd.GetIgnoreQuotaDeadline(),
                 .HeartbeatVersion = heartbeatVersion,
@@ -2082,10 +2116,16 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
         initialSeqNo = req.GetInitialSeqNo();
     }
     THolder<TEvPQ::TEvWrite> event =
-        MakeHolder<TEvPQ::TEvWrite>(responseCookie, req.GetMessageNo(),
-                                    req.HasOwnerCookie() ? req.GetOwnerCookie() : "",
-                                    req.HasCmdWriteOffset() ? req.GetCmdWriteOffset() : TMaybe<ui64>(),
-                                    std::move(msgs), req.GetIsDirectWrite(), initialSeqNo);
+        MakeHolder<TEvPQ::TEvWrite>(
+            responseCookie,
+            req.GetMessageNo(),
+            req.HasOwnerCookie() ? req.GetOwnerCookie() : "",
+            req.HasCmdWriteOffset() ? req.GetCmdWriteOffset() : TMaybe<ui64>(),
+            std::move(msgs),
+            req.GetIsDirectWrite(),
+            initialSeqNo,
+            TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked
+        );
     ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
 }
 
@@ -2795,7 +2835,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
         return;
     }
 }
-
 
 void TPersQueue::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&)
 {
@@ -5196,6 +5235,20 @@ void TPersQueue::ProcessCheckPartitionStatusRequests(const TPartitionId& partiti
     }
 }
 
+void TPersQueue::ProcessCheckMessageDeduplicationRequests(const TPartitionId& partitionId)
+{
+    PQ_ENSURE(!partitionId.WriteId.Defined());
+    ui32 originalPartitionId = partitionId.OriginalPartitionId;
+    auto sit = CheckMessageDeduplicationRequests.find(originalPartitionId);
+    if (sit != CheckMessageDeduplicationRequests.end()) {
+        auto it = Partitions.find(partitionId);
+        for (auto& r : sit->second) {
+            Forward(r, it->second.Actor);
+        }
+        CheckMessageDeduplicationRequests.erase(sit);
+    }
+}
+
 void TPersQueue::Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev)
 {
     PQ_LOG_TX_D("Handle TEvLongTxService::TEvLockStatus " << ev->Get()->Record.ShortDebugString());
@@ -5449,6 +5502,29 @@ void TPersQueue::Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr& 
     ForwardToPartition(ev->Get()->GetPartitionId(), ev);
 }
 
+void TPersQueue::Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest::TPtr& ev) {
+    auto& record = ev->Get()->Record;
+    auto partitionId = record.GetPartitionId();
+    auto* p = Partitions.FindPtr(TPartitionId{partitionId});
+    if (p == nullptr) [[unlikely]] {
+        PQ_LOG_I("TEvCheckMessageDeduplicationRequest: unknown partition " << partitionId);
+        auto response = MakeHolder<NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationResponse>();
+        response->Record.SetPartitionId(partitionId);
+        response->Record.SetGeneration(record.GetGeneration());
+        response->Record.SetStatus(NKikimrPQ::EStatus::ERROR);
+        for (const auto& messageId : record.GetMessageDeduplicationId()) {
+            response->Record.MutableResult()->try_emplace(messageId);
+        }
+        Send(ev->Sender, response.Release());
+        return;
+    }
+    if (!p->InitDone) [[unlikely]] {
+        CheckMessageDeduplicationRequests[partitionId].push_back(std::move(ev));
+        return;
+    }
+    Forward(ev, p->Actor);
+}
+
 template<typename TEventHandle>
 bool TPersQueue::ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev) {
     auto it = Partitions.find(TPartitionId{partitionId});
@@ -5486,6 +5562,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
     {
         HFuncTraced(TEvInterconnect::TEvNodeInfo, Handle);
         HFuncTraced(TEvPersQueue::TEvRequest, Handle);
+        HFuncTraced(TEvPersQueue::TEvPartitionUpdateReadMetrics, Handle);
         HFuncTraced(TEvPersQueue::TEvUpdateConfig, Handle);
         HFuncTraced(TEvPersQueue::TEvOffsets, Handle);
         HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
@@ -5535,6 +5612,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
         hFuncTraced(TEvPQ::TEvMLPConsumerStatus, Handle);
         hFuncTraced(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId, Handle);
+        hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
             return false;
     }

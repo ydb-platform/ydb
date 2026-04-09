@@ -24,17 +24,6 @@ namespace NYdb::NConsoleClient {
 
 const TString AuthNode = "authentication";
 
-TCommandConfig::TCommandConfig()
-    : TClientCommandTree("config", {}, "Manage YDB CLI configuration")
-{
-    AddCommand(std::make_unique<TCommandProfile>());
-    AddCommand(std::make_unique<TCommandConnectionInfo>());
-}
-
-void TCommandConfig::Config(TConfig& config) {
-    TClientCommandTree::Config(config);
-}
-
 TCommandProfile::TCommandProfile()
     : TClientCommandTree("profile", {}, "Manage configuration profiles")
 {

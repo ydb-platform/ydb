@@ -213,6 +213,10 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
         InitializeTabletMigrations();
     }
 
+    if (!IsOldArgonHashFormatMigrationCompleted) {
+        Execute(CreateTxUserHashesMigration(), ctx);
+    }
+
     ResumeExports(opts.ExportIds, ctx);
     ResumeImports(opts.ImportsIds, ctx);
     ResumeCdcStreamScans(opts.CdcStreamScans, ctx);
@@ -3019,7 +3023,7 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::Tables::ReplicationConfig>(replicationConfig),
             NIceDb::TUpdate<Schema::Tables::IsTemporary>(tableInfo->IsTemporary),
             NIceDb::TUpdate<Schema::Tables::OwnerActorId>(tableInfo->OwnerActorId.ToString()),
-            NIceDb::TUpdate<Schema::Tables::OwnerActorId>(incrementalBackupConfig));
+            NIceDb::TUpdate<Schema::Tables::IncrementalBackupConfig>(incrementalBackupConfig));
     } else {
         db.Table<Schema::MigratedTables>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::MigratedTables::NextColId>(tableInfo->NextColumnId),
@@ -3033,7 +3037,7 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
             NIceDb::TUpdate<Schema::MigratedTables::ReplicationConfig>(replicationConfig),
             NIceDb::TUpdate<Schema::MigratedTables::IsTemporary>(tableInfo->IsTemporary),
             NIceDb::TUpdate<Schema::MigratedTables::OwnerActorId>(tableInfo->OwnerActorId.ToString()),
-            NIceDb::TUpdate<Schema::MigratedTables::OwnerActorId>(incrementalBackupConfig));
+            NIceDb::TUpdate<Schema::MigratedTables::IncrementalBackupConfig>(incrementalBackupConfig));
     }
 
     for (auto col : tableInfo->Columns) {
@@ -3205,6 +3209,11 @@ void TSchemeShard::PersistPersQueue(NIceDb::TNiceDb &db, TPathId pathId, TShardI
                 NIceDb::TUpdate<Schema::PersQueues::Status>(partitionInfo.Status),
                 NIceDb::TUpdate<Schema::PersQueues::Parent>(parent),
                 NIceDb::TUpdate<Schema::PersQueues::AdjacentParent>(adjacentParent));
+
+    if (partitionInfo.CreationTimestamp) {
+        db.Table<Schema::PersQueues>().Key(pathId.LocalPathId, partitionInfo.PqId).Update(
+            NIceDb::TUpdate<Schema::PersQueues::CreationTimestampSeconds>(partitionInfo.CreationTimestamp.Seconds()));
+    }
 
     if (partitionInfo.KeyRange) {
         if (partitionInfo.KeyRange->FromBound) {
@@ -8464,7 +8473,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvWakeupToRunShred::TPtr &ev, const T
     if (!IsDomainSchemeShard) {
         LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Cannot handle EvWakeupToRunShred in tenant schemeshard: " << TabletID());
         return;
-    } 
+    }
     RootShredManager->WakeupToRunShred(ev, ctx);
 }
 

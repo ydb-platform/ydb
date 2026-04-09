@@ -17,6 +17,9 @@ void TKafkaOffsetCommitActor::Die(const TActorContext& ctx) {
     for (const auto& tabletToPipePair: TabletIdToPipe) {
         NTabletPipe::CloseClient(ctx, tabletToPipePair.second);
     }
+    if (Kqp) {
+        Kqp->CloseKqpSession(ctx);
+    }
     TBase::Die(ctx);
 }
 
@@ -136,18 +139,25 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
     TopicAndTablets = std::move(ev->Get()->TopicAndTablets);
     int readId = 0;
     std::vector<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo> commits;
+    ui64 topicInd = 0;
+    std::vector<std::pair<TString, ui64>> unknownTopicPartitionResponses;
     for (auto topicReq: Message->Topics) {
         auto topicIt = TopicAndTablets.find(NormalizePath(Context->DatabasePath, topicReq.Name.value()));
+        ui64 partitionReqInd = 0;
         for (auto partitionRequest: topicReq.Partitions) {
             readId++;
             if (topicIt == TopicAndTablets.end()) {
-                AddPartitionResponse(UNKNOWN_TOPIC_OR_PARTITION, topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
+                PendingResponses++;
+                partitionReqInd++;
+                unknownTopicPartitionResponses.push_back({topicReq.Name.value(), partitionRequest.PartitionIndex});
                 continue;
             }
 
             auto tabletIdIt = topicIt->second.Partitions.find(partitionRequest.PartitionIndex);
             if (tabletIdIt == topicIt->second.Partitions.end()) {
-                AddPartitionResponse(UNKNOWN_TOPIC_OR_PARTITION, topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
+                PendingResponses++;
+                partitionReqInd++;
+                unknownTopicPartitionResponses.push_back({topicReq.Name.value(), partitionRequest.PartitionIndex});
                 continue;
             }
             if (Message->GenerationId == -1) {
@@ -196,11 +206,21 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
                                                                                        .TopicPath = topicIt->second.TopicNameConverter->GetPrimaryPath()};
                 PendingResponses++;
                 commits.push_back(commitReq);
+                KqpCommitTopicToPartitions[topicInd].emplace_back(partitionReqInd);
+                KAFKA_LOG_D("Add commit request in txn for group# " << Message->GroupId.value() <<
+                    ", topic# " << topicIt->second.TopicNameConverter->GetPrimaryPath() <<
+                    ", partition# " << partitionRequest.PartitionIndex <<
+                    ", offset# " << partitionRequest.CommittedOffset);
             }
+            partitionReqInd++;
         }
+        topicInd++;
+    }
+    for (auto [topicName, partitionInd] : unknownTopicPartitionResponses) {
+        AddPartitionResponse(UNKNOWN_TOPIC_OR_PARTITION, topicName, partitionInd, ctx);
     }
     if (Message->GenerationId != -1) {
-        NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::GenerationIdCheckerSettings checkerSettings {.GenerationId = Message->GenerationId,
+        NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::GenerationIdCheckerSettings checkerSettings {.GenerationId = static_cast<ui64>(Message->GenerationId),
                                                                                                         .TopicDatabasePath = Context->DatabasePath,
                                                                                                         .ConsumerMetadataTablePath = NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath)};
         Kqp = std::make_shared<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper>(Context->ResourceDatabasePath, Message->GroupId.value(), commits, readId, checkerSettings);
@@ -215,13 +235,15 @@ void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPt
         Error = ConvertErrorCode(record.GetYdbStatus());
         KAFKA_LOG_ERROR("Error on Kqp session creation: " << Error);
         ctx.Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
+        Die(ctx);
     }
     return;
 }
+
 void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
+    Error = ConvertErrorCode(record.GetYdbStatus());
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-        Error = ConvertErrorCode(record.GetYdbStatus());
         auto kqpQueryError = TStringBuilder() << "Kqp error. Status# " << record.GetYdbStatus() << ", ";
         NYql::TIssues issues;
         NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
@@ -229,28 +251,33 @@ void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, c
         KAFKA_LOG_ERROR(kqpQueryError);
 
         if (record.GetYdbStatus() == Ydb::StatusIds::PRECONDITION_FAILED && issues.Size() == 1 && (issues.begin())->IssueCode == Ydb::PersQueue::ErrorCode::ErrorCode::GENERATION_MISMATCH) {
-            Error = EKafkaErrors::FENCED_INSTANCE_ID;
-            for (auto topicReq: Message->Topics) {
-                for (auto partitionRequest: topicReq.Partitions) {
-                    AddPartitionResponse(Error, topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
-                }
-            }
-            Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
-            return;
+            Error = EKafkaErrors::ILLEGAL_GENERATION;
         }
+
+        for (const auto& [topicReqInd, partitionReqIndexes] : KqpCommitTopicToPartitions) {
+            auto topicReq =  Message->Topics[topicReqInd];
+            for (const ui64 partitionReqInd : partitionReqIndexes) {
+                auto partitionRequest = topicReq.Partitions[partitionReqInd];
+                AddPartitionResponse(Error, topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
+            }
+        }
+        return;
     }
 
     NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::ECurrentStep step = Kqp->Handle(ev, ctx);
+    KAFKA_LOG_D("Handled TEvQuery response on step=" << int(step));
     if (step == NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::ECurrentStep::DONE) {
-        for (auto topicReq: Message->Topics) {
-            for (auto partitionRequest: topicReq.Partitions) {
-                AddPartitionResponse(ConvertErrorCode(record.GetYdbStatus()), topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
+        for (const auto& [topicReqInd, partitionReqIndexes] : KqpCommitTopicToPartitions) {
+            auto topicReq =  Message->Topics[topicReqInd];
+            for (const ui64 partitionReqInd : partitionReqIndexes) {
+                auto partitionRequest = topicReq.Partitions[partitionReqInd];
+                AddPartitionResponse(Error, topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
             }
         }
-        Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
     }
     return;
 }
+
 void TKafkaOffsetCommitActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& partitionResult = ev->Get()->Record.GetPartitionResponse();
     auto requestInfo = CookieToRequestInfo.find(partitionResult.GetCookie());

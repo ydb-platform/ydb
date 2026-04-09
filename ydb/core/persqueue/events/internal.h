@@ -234,6 +234,8 @@ struct TEvPQ {
         EvMLPConsumerStatus,
         EvUpdateReadMetrics,
         EvMLPUpdateExternalLockedMessageGroupsId,
+        EvMLPGetRuntimeAttributesRequest,
+        EvMLPGetRuntimeAttributesResponse,
         EvEnd,
     };
 
@@ -247,6 +249,28 @@ struct TEvPQ {
     };
 
     struct TEvWrite : public TEventLocal<TEvWrite, EvWrite> {
+        enum class EWriteExternalDeduplicationStatus: i8 {
+            Unchecked,
+            Checked,
+            Error,
+        };
+
+        enum class EMessageExternalDeduplicationStatus: i8 {
+            Unchecked,
+            Duplicate,
+            Unique,
+            Error,
+        };
+
+        struct TMessageExternalDeduplicationInfo {
+            struct TPartitonAndOffset {
+                ui32 Partition;
+                ui64 Offset;
+            };
+            EMessageExternalDeduplicationStatus Status = EMessageExternalDeduplicationStatus::Unchecked;
+            std::optional<TPartitonAndOffset> OriginalPartitionAndOffset;
+        };
+
         struct TMsg {
             TString SourceId;
             ui64 SeqNo;
@@ -261,6 +285,7 @@ struct TEvPQ {
             ui32 UncompressedSize;
             TString PartitionKey;
             TString ExplicitHashKey;
+            TString ChoosePartitionKey;
             bool External;
             bool IgnoreQuotaDeadline;
             // If specified, Data will contain heartbeat's data
@@ -271,9 +296,10 @@ struct TEvPQ {
             TMaybe<i16> ProducerEpoch;
 
             std::optional<TString> MessageDeduplicationId;
+            TMessageExternalDeduplicationInfo ExternalDeduplicationInfo;
         };
 
-        TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo)
+        TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo, EWriteExternalDeduplicationStatus externalDeduplicationStatus)
         : Cookie(cookie)
         , MessageNo(messageNo)
         , OwnerCookie(ownerCookie)
@@ -281,6 +307,7 @@ struct TEvPQ {
         , Msgs(std::move(msgs))
         , IsDirectWrite(isDirectWrite)
         , InitialSeqNo(initialSeqNo)
+        , ExternalDeduplicationStatus(externalDeduplicationStatus)
         {
         }
 
@@ -291,7 +318,7 @@ struct TEvPQ {
         TVector<TMsg> Msgs;
         bool IsDirectWrite;
         std::optional<ui64> InitialSeqNo;
-
+        EWriteExternalDeduplicationStatus ExternalDeduplicationStatus;
     };
 
     struct TEvReadTimeout : public TEventLocal<TEvReadTimeout, EvReadTimeout> {
@@ -638,6 +665,7 @@ struct TEvPQ {
         TString OwnerCookie;
         ui64 MessageNo;
         bool LastRequest;
+        bool FromDeduplicatedQueue = false;
     };
 
     struct TEvChangePartitionConfig : public TEventLocal<TEvChangePartitionConfig, EvChangePartitionConfig> {
@@ -1745,10 +1773,9 @@ struct TEvPQ {
     struct TEvMLPConsumerStatus : TEventPB<TEvMLPConsumerStatus, NKikimrPQ::TEvMLPConsumerStatus, EvMLPConsumerStatus> {
         TEvMLPConsumerStatus() = default;
 
-        TEvMLPConsumerStatus(const TString& consumer, ui32 partitionId, ui64 messages, bool useForReading) {
+        TEvMLPConsumerStatus(const TString& consumer, ui32 partitionId, bool useForReading) {
             Record.SetConsumer(consumer);
             Record.SetPartitionId(partitionId);
-            Record.SetMessages(messages);
             Record.SetUseForReading(useForReading);
         }
     };
@@ -1762,6 +1789,45 @@ struct TEvPQ {
 
         ui32 GetPartitionId() const {
             return Record.GetPartitionId();
+        }
+    };
+
+    struct TEvMLPGetRuntimeAttributesRequest : TEventPB<TEvMLPGetRuntimeAttributesRequest, NKikimrPQ::TEvMLPGetRuntimeAttributesRequest, EvMLPGetRuntimeAttributesRequest> {
+        TEvMLPGetRuntimeAttributesRequest() = default;
+
+        TEvMLPGetRuntimeAttributesRequest(const TString& topic, const TString& consumer) {
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+        }
+
+        const TString& GetTopic() const {
+            return Record.GetTopic();
+        }
+
+        const TString& GetConsumer() const {
+            return Record.GetConsumer();
+        }
+    };
+
+    struct TEvMLPGetRuntimeAttributesResponse : TEventPB<TEvMLPGetRuntimeAttributesResponse, NKikimrPQ::TEvMLPGetRuntimeAttributesResponse, EvMLPGetRuntimeAttributesResponse> {
+        TEvMLPGetRuntimeAttributesResponse() = default;
+
+        TEvMLPGetRuntimeAttributesResponse(ui64 messageCount, ui64 delayedMessageCount, ui64 lockedMessageCount) {
+            Record.SetApproximateMessageCount(messageCount);
+            Record.SetApproximateDelayedMessageCount(delayedMessageCount);
+            Record.SetApproximateLockedMessageCount(lockedMessageCount);
+        }
+
+        ui64 GetApproximateMessageCount() const {
+            return Record.GetApproximateMessageCount();
+        }
+
+        ui64 GetApproximateDelayedMessageCount() const {
+            return Record.GetApproximateDelayedMessageCount();
+        }
+
+        ui64 GetApproximateLockedMessageCount() const {
+            return Record.GetApproximateLockedMessageCount();
         }
     };
 };

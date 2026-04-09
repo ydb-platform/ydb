@@ -6,11 +6,13 @@
 #include "vchunk_config.h"
 #include "write_request.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -26,6 +28,7 @@ public:
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
+        TDuration writeHandoffDelay,
         TDuration traceSamplePeriod);
 
     ~TVChunk();
@@ -35,12 +38,15 @@ public:
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
-        NWilson::TTraceId traceId);
+        const NWilson::TTraceId& traceId);
 
     NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
-        NWilson::TTraceId traceId);
+        EWriteMode writeMode,
+        TDuration pbufferReplyTimeout,
+        ui64 lsn,
+        const NWilson::TTraceId& traceId);
 
 private:
     void UpdateDirtyMap(const TDBGRestoreResponse& response);
@@ -48,22 +54,26 @@ private:
     void DoStart();
 
     void DoReadBlocksLocal(
-        NThreading::TPromise<TReadBlocksLocalResponse> promise,
+        TTracedPromise<TReadBlocksLocalResponse> promise,
         TBlockRange64 vchunkRange,
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
-        NWilson::TTraceId traceId);
+        std::shared_ptr<NWilson::TSpan> span);
 
     void DoWriteBlocksLocal(
-        NThreading::TPromise<TWriteBlocksLocalResponse> promise,
+        TTracedPromise<TWriteBlocksLocalResponse> promise,
         TBlockRange64 vchunkRange,
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
-        NWilson::TTraceId traceId);
+        EWriteMode writeMode,
+        TDuration pbufferReplyTimeout,
+        ui64 lsn,
+        std::shared_ptr<NWilson::TSpan> span);
     void OnWriteBlocksResponse(
-        NThreading::TPromise<TWriteBlocksLocalResponse> promise,
+        TTracedPromise<TWriteBlocksLocalResponse> promise,
         TBlockRange64 range,
-        const TWriteRequestExecutor::TResponse& response);
+        const TWriteRequestExecutor::TResponse& response,
+        std::shared_ptr<NWilson::TSpan> span);
 
     void DoFlush();
     void OnFlushResponse(const TFlushRequestExecutor::TResponse& response);
@@ -76,12 +86,16 @@ private:
     const TExecutorPtr Executor;
     const TThreadChecker ExecutorThreadChecker{Executor};
     const IDirectBlockGroupPtr DirectBlockGroup;
+    const ISchedulerPtr Scheduler;
+    const ITimerPtr Timer;
     const TVChunkConfig VChunkConfig;
-    const size_t BlocksCount;
+    const ui32 BlockSize;
+    const ui64 BlocksCount;
     const ui32 SyncRequestsBatchSize;
+    const TDuration WriteHandoffDelay;
     const TDuration TraceSamplePeriod;
 
-    TBlocksDirtyMap BlocksDirtyMap;
+    TBlocksDirtyMap BlocksDirtyMap{BlockSize, BlocksCount};
     bool DirtyMapRestored = false;
 };
 

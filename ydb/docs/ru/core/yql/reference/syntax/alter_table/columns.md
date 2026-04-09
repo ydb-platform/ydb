@@ -43,7 +43,7 @@ ALTER TABLE episodes ADD COLUMN rate Double (DEFAULT 5.0, NOT NULL); -- альт
 
 ## ALTER COLUMN
 
-Изменяет свойства существующей колонки в указанной таблице.
+Изменяет свойства существующей колонки в указанной таблице. Изменение свойства происходит без пересоздания колонки. Некоторые свойства применяются только к свежим записанным данным или в процессе компакшена (детали можно найти в описании конкретного свойства)
 
 ```yql
 ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])] [ENCODING([OFF|DICT])];
@@ -65,7 +65,7 @@ ALTER TABLE table_name ALTER COLUMN column_name {SET | DROP} [FAMILY <family_nam
 
 #### DROP
 
-Удалить параметр колонки
+Удалить параметр колонки. На текущий момент поддерживается только удаление `NOT NULL`.
 
 {% include [column_option_list.md](../_includes/column_option_list.md) %}
 
@@ -89,21 +89,8 @@ ALTER TABLE episodes ALTER COLUMN title SET NOT NULL;
 ALTER TABLE compressed_table ALTER COLUMN info SET COMPRESSION();
 ```
 
-После сброса будет использоваться сжатие по умолчанию.
+После выполнения запроса для колонки снова действует алгоритм сжатия по умолчанию (см. описание опции `COMPRESSION` выше).
 
-{% if oss == true and backend_name == "YDB" %}
-
-{% include [OLAP_only_allow_note](../../../../_includes/only_allow_for_olap_note.md) %}
-
-{% endif %}
-
-Сброс настроек кодирования колонки
-
-```yql
-ALTER TABLE encoded_table ALTER COLUMN info SET ENCODING();
-```
-
-После сброса будет использоваться кодирование по умолчанию.
 
 ## DROP COLUMN
 

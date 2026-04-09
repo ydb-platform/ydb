@@ -265,7 +265,7 @@ public:
 
     Y_FORCE_INLINE void OnString(TStringBuf value, const TProtobufWriterTypePtr& type)
     {
-        if (Y_UNLIKELY(!type->EnumerationDescription)) {
+        if (!type->EnumerationDescription) [[unlikely]] {
             THROW_ERROR_EXCEPTION("Enumeration description not found");
         }
         if (SuppressUnknownValueError_) {
@@ -318,7 +318,7 @@ Y_FORCE_INLINE void WriteProtobufEnum(
             : "<unknown>";
     };
 
-    if (Y_UNLIKELY(!visitor.InRange_)) {
+    if (!visitor.InRange_) [[unlikely]] {
         if (visitor.SuppressUnknownValueError_) {
             return;
         } else {
@@ -406,7 +406,7 @@ Y_FORCE_INLINE void WriteProtobufField(
 void ValidateYsonCursorType(const TYsonPullParserCursor* cursor, EYsonItemType expected)
 {
     auto actual = cursor->GetCurrent().GetType();
-    if (Y_UNLIKELY(actual != expected)) {
+    if (actual != expected) [[unlikely]] {
         THROW_ERROR_EXCEPTION("Protobuf writing error: bad YSON item, expected %Qlv, actual %Qlv",
             expected,
             actual);
@@ -476,7 +476,7 @@ private:
 
 void ValidateUnversionedValueType(const TUnversionedValue& value, EValueType type)
 {
-    if (Y_UNLIKELY(value.Type != type)) {
+    if (value.Type != type) [[unlikely]] {
         THROW_ERROR_EXCEPTION("Invalid protobuf storage type: expected %Qlv, got %Qlv",
             type,
             value.Type);
@@ -657,7 +657,7 @@ public:
             TYsonPullParser parser(&input, EYsonType::Node);
             auto maxVarIntSize = GetMaxVarIntSizeOfProtobufSizeOfComplexType();
             Traverse(writer, fieldDescription, &parser, maxVarIntSize);
-        } else if (Y_UNLIKELY(MatchesEnumerateType(fieldDescription))) {
+        } else if (MatchesEnumerateType(fieldDescription)) [[unlikely]] {
             WriteProtobufEnum(writer,
                 fieldDescription,
                 TUnversionedValueExtractor(value));
@@ -799,7 +799,7 @@ private:
             WriteVarUint32(writer, fieldDescription.WireTag);
             WriteWithSizePrefix(writer, maxVarIntSize, [&] {
                 while (!parser->IsEndList()) {
-                    if (Y_UNLIKELY(MatchesEnumerateType(fieldDescription))) {
+                    if (MatchesEnumerateType(fieldDescription)) [[unlikely]] {
                         WriteProtobufEnum(writer,
                             fieldDescription,
                             TYsonValueExtractor(parser));

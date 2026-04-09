@@ -261,4 +261,11 @@ message TFeatureFlags {
     optional bool EnableSetDropDefaultValue = 234 [ default = false];
     optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
     optional bool EnableSharedReadingInStreamingQueries = 248 [default = false];
+<<<<<<< HEAD
+=======
+    optional bool EnableCsDictionaryEncoding = 249 [default = true];
+    optional bool EnableTopicPartitionSplitBasedOnKllSketch = 250 [default = false];
+    reserved 251; // EnableOltpSinkForTopicOnlyTx
+    optional bool EnableExternalDataSourceAuthMethodIam = 252 [default = false];
+>>>>>>> e283d11ab04 (CREATE EXTERNAL DATA SOURCE: add AUTH_METHOD=IAM (ydb part) (#36106))
 }

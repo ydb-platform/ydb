@@ -42,6 +42,7 @@
 #include <util/generic/utility.h>
 #include <util/string/join.h>
 
+#include <memory>
 #include <queue>
 #include <variant>
 
@@ -293,12 +294,15 @@ public:
             << ", disposition: " << SourceParams.GetDisposition().DebugString() << ", consumer: " << SourceParams.GetConsumerName());
 
         MetadataFields.reserve(SourceParams.MetadataFieldsSize());
-        TTypeBuilder typeBuilder(typeEnv);
-        TType* stringDataType = typeBuilder.NewDataType(NUdf::EDataSlot::String);
-        TType* messageMetaDictType = typeBuilder.NewDictType(stringDataType, stringDataType, false);
-        TPqMetaExtractor fieldsExtractor(HolderFactory, messageMetaDictType);
-        for (const auto& fieldName : SourceParams.GetMetadataFields()) {
-            MetadataFields.emplace_back(fieldName, fieldsExtractor.FindExtractorLambda(fieldName));
+        if (SourceParams.MetadataFieldsSize() > 0) {
+            TTypeBuilder typeBuilder(typeEnv);
+            TType* stringDataType = typeBuilder.NewDataType(NUdf::EDataSlot::String);
+            TType* messageMetaDictType = typeBuilder.NewDictType(stringDataType, stringDataType, false);
+            // Must outlive MetadataFields lambdas (they capture TPqMetaExtractor::this).
+            MetaExtractor_ = std::make_unique<TPqMetaExtractor>(HolderFactory, messageMetaDictType);
+            for (const auto& fieldName : SourceParams.GetMetadataFields()) {
+                MetadataFields.emplace_back(fieldName, MetaExtractor_->FindExtractorLambda(fieldName));
+            }
         }
 
         InitWatermarkTracker(); // non-virtual!
@@ -1187,6 +1191,7 @@ private:
     std::vector<TClusterState> Clusters;
     std::queue<std::pair<ui64, NYdb::NTopic::TDeferredCommit>> DeferredCommits;
     NYdb::NTopic::TDeferredCommit CurrentDeferredCommit;
+    std::unique_ptr<TPqMetaExtractor> MetaExtractor_;
     std::vector<std::tuple<TString, TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
     std::queue<TReadyBatch> ReadyBuffer;
     IPqStaticGateway::TPtr PqGateway;

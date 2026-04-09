@@ -16,6 +16,7 @@ from github_issue_utils import (
     compute_effective_analytics_row,
     min_area_by_owner_team_from_rows,
 )
+from testowners_utils import normalize_github_team_owners_string
 
 
 def create_tables(ydb_wrapper, table_path):
@@ -287,7 +288,7 @@ def compute_owner(owner):
     elif ';;' in owner:
         parts = owner.split(';;', 1)
         if 'TEAM' in parts[0]:
-            return parts[0]
+            return normalize_github_team_owners_string(parts[0])
         else:
             return parts[1]
     else:

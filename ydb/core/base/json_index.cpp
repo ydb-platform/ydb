@@ -363,13 +363,16 @@ TCollectResult TQueryCollector::BinaryAnd(const TJsonPathItem& item, EMode mode)
         return righTCollectResult;
     }
 
-    if (lefTCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or ||
-        righTCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or) {
-        return TCollectResult(TIssue("Cannot mix AND and OR operators in jsonpath expression"));
-    }
-
     auto& leftTokens = lefTCollectResult.GetTokens();
     auto& rightTokens = righTCollectResult.GetTokens();
+
+    if (!leftTokens.empty() && !rightTokens.empty()) {
+        if (lefTCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or ||
+            righTCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or) {
+            return TCollectResult(TIssue("Cannot mix AND and OR operators in jsonpath expression"));
+        }
+    }
+
     leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
     if (leftTokens.size() > 1) {
         lefTCollectResult.SetTokensMode(TCollectResult::ETokensMode::And);
@@ -391,13 +394,16 @@ TCollectResult TQueryCollector::BinaryOr(const TJsonPathItem& item, EMode mode) 
         return righTCollectResult;
     }
 
-    if (lefTCollectResult.GetTokensMode() == TCollectResult::ETokensMode::And ||
-        righTCollectResult.GetTokensMode() == TCollectResult::ETokensMode::And) {
-        return TCollectResult(TIssue("Cannot mix AND and OR operators in jsonpath expression"));
-    }
-
     auto& leftTokens = lefTCollectResult.GetTokens();
     auto& rightTokens = righTCollectResult.GetTokens();
+
+    if (!leftTokens.empty() && !rightTokens.empty()) {
+        if (lefTCollectResult.GetTokensMode() == TCollectResult::ETokensMode::And ||
+            righTCollectResult.GetTokensMode() == TCollectResult::ETokensMode::And) {
+            return TCollectResult(TIssue("Cannot mix AND and OR operators in jsonpath expression"));
+        }
+    }
+
     leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
     if (leftTokens.size() > 1) {
         lefTCollectResult.SetTokensMode(TCollectResult::ETokensMode::Or);
@@ -445,13 +451,16 @@ TCollectResult TQueryCollector::BinaryComparisonOp(const TJsonPathItem& item, EM
         return righTCollectResult;
     }
 
-    if (lefTCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or ||
-        righTCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or) {
-        return TCollectResult(TIssue("Cannot mix AND and OR operators in jsonpath expression"));
-    }
-
     auto& leftTokens = lefTCollectResult.GetTokens();
     auto& rightTokens = righTCollectResult.GetTokens();
+
+    if (!leftTokens.empty() && !rightTokens.empty()) {
+        if (lefTCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or ||
+            righTCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or) {
+            return TCollectResult(TIssue("Cannot mix AND and OR operators in jsonpath expression"));
+        }
+    }
+
     leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
     if (leftTokens.size() > 1) {
         lefTCollectResult.SetTokensMode(TCollectResult::ETokensMode::And);

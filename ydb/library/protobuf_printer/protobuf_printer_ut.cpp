@@ -91,6 +91,34 @@ Y_UNIT_TEST_SUITE(SecurityPrinterTest) {
             UNIT_ASSERT_STRINGS_EQUAL(s, "name: \"name1\" login: \"***\" types { login: \"***\" } types { name: \"name3\" } ");
         }
     }
+
+    Y_UNIT_TEST(SecureDebugStringViaMessageRefSingleLine) {
+        NTestProto::TConnectionContent m;
+        m.set_name("name1");
+        m.mutable_setting()->mutable_connection2()->set_login("login1");
+        m.mutable_setting()->mutable_connection2()->set_password("pswd");
+        const google::protobuf::Message& ref = m;
+        const TString s = SecureDebugString(ref);
+        UNIT_ASSERT_STRINGS_EQUAL(s, "name: \"name1\" setting { connection2 { login: \"***\" password: \"***\" } } ");
+    }
+
+    Y_UNIT_TEST(SecureDebugStringMultilineViaMessageRef) {
+        NTestProto::TConnectionContent m;
+        m.set_name("name1");
+        m.mutable_setting()->mutable_connection2()->set_login("login1");
+        m.mutable_setting()->mutable_connection2()->set_password("pswd");
+        const google::protobuf::Message& ref = m;
+        const TString s = SecureDebugStringMultiline(ref);
+        const TString expected =
+            "name: \"name1\"\n"
+            "setting {\n"
+            "  connection2 {\n"
+            "    login: \"***\"\n"
+            "    password: \"***\"\n"
+            "  }\n"
+            "}\n";
+        UNIT_ASSERT_STRINGS_EQUAL(s, expected);
+    }
 }
 
 Y_UNIT_TEST_SUITE(FieldSizePrinterTest) {

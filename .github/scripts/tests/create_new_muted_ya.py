@@ -731,7 +731,7 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', b
                 'success_rate': 0,
                 'days_in_state': 0,
                 'date_window': 'N/A',
-                'owner': 'Unknown',
+                'owner': 'unknown',
                 'state': 'Muted',
                 'summary': 'added manually, no monitor data',
                 'fail_count': 0,

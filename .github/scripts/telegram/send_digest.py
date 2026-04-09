@@ -210,7 +210,7 @@ def _group_by_team(rows: list) -> dict:
     """Return {team_name: [{url, title}, ...]}."""
     teams: dict = {}
     for row in rows:
-        team = (row.get("owner_team") or "Unknown").strip() or "Unknown"
+        team = (row.get("owner_team") or "unknown").strip() or "unknown"
         teams.setdefault(team, []).append(
             {
                 "url":   row.get("github_issue_url") or "",

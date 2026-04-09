@@ -168,11 +168,11 @@ def get_all_team_data(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, branch
         if not owner:
             continue
             
-        # Handle both "TEAM:@ydb-platform/teamname" and "Unknown" formats
+        # Handle TEAM:@ydb-platform/<slug> and sentinel unknown (legacy rows may use "Unknown")
         if owner.startswith('TEAM:@ydb-platform/'):
             team_name = owner.split('/')[-1]
-        elif owner == 'Unknown':
-            team_name = 'Unknown'
+        elif str(owner).strip().lower() == 'unknown':
+            team_name = 'unknown'
         else:
             # Skip other formats
             continue
@@ -615,37 +615,29 @@ def get_team_config(team_name, team_channels):
         
         return team_responsible, team_chat_id, team_thread_id
     
-    # Try Unknown team as fallback
-    elif 'teams' in team_channels and 'Unknown' in team_channels['teams']:
-        unknown_config = team_channels['teams']['Unknown']
-        
-        # Get responsible users from Unknown team
-        team_responsible = None
-        if 'responsible' in unknown_config:
-            team_responsible = {team_name: unknown_config['responsible']}
-        
-        # Use default channel or Unknown team's channel
-        if default_chat_id:
-            print(f"📨 Using default channel '{default_channel_name}' for unknown team {team_name}: {default_chat_id}" + (f" (thread {default_thread_id})" if default_thread_id else ""))
-            return team_responsible, default_chat_id, default_thread_id
-        elif 'channel' in unknown_config:
-            # Try Unknown team's specific channel
-            channel_name = unknown_config['channel']
-            if 'channels' in team_channels and channel_name in team_channels['channels']:
-                team_chat_id, team_thread_id = parse_chat_and_thread_id(team_channels['channels'][channel_name])
-                print(f"📨 Using Unknown team channel '{channel_name}' for team {team_name}: {team_chat_id}" + (f" (thread {team_thread_id})" if team_thread_id else ""))
-                return team_responsible, team_chat_id, team_thread_id
-            else:
-                print(f"❌ Unknown team channel '{channel_name}' not found")
+    # Fallback config: prefer key "unknown", accept legacy "Unknown"
+    elif 'teams' in team_channels:
+        unknown_config = team_channels['teams'].get('unknown') or team_channels['teams'].get('Unknown')
+        if unknown_config is not None:
+            team_responsible = None
+            if 'responsible' in unknown_config:
+                team_responsible = {team_name: unknown_config['responsible']}
+            if default_chat_id:
+                print(f"📨 Using default channel '{default_channel_name}' for unknown team {team_name}: {default_chat_id}" + (f" (thread {default_thread_id})" if default_thread_id else ""))
+                return team_responsible, default_chat_id, default_thread_id
+            if 'channel' in unknown_config:
+                channel_name = unknown_config['channel']
+                if 'channels' in team_channels and channel_name in team_channels['channels']:
+                    team_chat_id, team_thread_id = parse_chat_and_thread_id(team_channels['channels'][channel_name])
+                    print(f"📨 Using unknown-team channel '{channel_name}' for team {team_name}: {team_chat_id}" + (f" (thread {team_thread_id})" if team_thread_id else ""))
+                    return team_responsible, team_chat_id, team_thread_id
+                print(f"❌ Unknown-team channel '{channel_name}' not found")
                 return None, None, None
-        else:
             print(f"❌ No channel configuration found for unknown team {team_name}")
             return None, None, None
-    
-    # No configuration found
-    else:
-        print(f"❌ No channel configuration found for team {team_name}")
-        return None, None, None
+
+    print(f"❌ No channel configuration found for team {team_name}")
+    return None, None, None
 
 
 def send_team_messages(teams, bot_token, delay=2, max_retries=5, retry_delay=10, team_channels=None, dry_run=False, muted_stats=None, include_plots=False, ydb_config=None, debug_plots_dir=None, all_team_data=None, show_diff=False):

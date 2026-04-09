@@ -281,10 +281,9 @@ def _annotate_effective_owner_change_columns(df, last_exist_df):
             immediate = curr
 
 
-
 def compute_owner(owner):
     if not owner or owner == '':
-        return 'Unknown'
+        return 'unknown'
     elif ';;' in owner:
         parts = owner.split(';;', 1)
         if 'TEAM' in parts[0]:

@@ -81,8 +81,6 @@
   }
   ```
 
-<<<<<<< HEAD
-=======
 - С++
 
   {{ ydb-short-name }} C++ SDK использует алгоритм `prefer_local_dc` (предпочитать ближайший дата-центр) по умолчанию.
@@ -189,5 +187,4 @@
 
   {% endlist %}
 
->>>>>>> 3aaf064311c (dev: update java snippets (#36547))
 {% endlist %}

@@ -4,8 +4,6 @@
 
 Ниже приведены примеры кода, которые используют встроенные в {{ ydb-short-name }} SDK средства создания объекта *режим выполнения транзакции*.
 
-<<<<<<< HEAD
-=======
 ## ImplicitTx {#implicittx}
 
 [ImplicitTx](../../concepts/transactions#implicit) режим позволяет выполнить один запрос без явного управления транзакцией. Запрос выполняется в своей собственной неявной транзакции, которая автоматически фиксируется в случае успеха.
@@ -253,7 +251,6 @@
 
 {% endlist %}
 
->>>>>>> 3aaf064311c (dev: update java snippets (#36547))
 ## Serializable {#serializable}
 
 {% list tabs group=lang %}
@@ -296,8 +293,6 @@
   }
   ```
 
-<<<<<<< HEAD
-=======
 - Java
 
   {% list tabs %}
@@ -511,7 +506,6 @@
   }).await?;
   ```
 
->>>>>>> 3aaf064311c (dev: update java snippets (#36547))
 - PHP
 
   ```php
@@ -587,8 +581,6 @@
   }
   ```
 
-<<<<<<< HEAD
-=======
 - Java
 
   {% list tabs %}
@@ -755,7 +747,6 @@
   }, true);
   ```
 
->>>>>>> 3aaf064311c (dev: update java snippets (#36547))
 {% endlist %}
 
 ## Stale Read-Only {#stale-read-only}
@@ -800,8 +791,6 @@
   }
   ```
 
-<<<<<<< HEAD
-=======
 - Java
 
   {% list tabs %}
@@ -960,7 +949,6 @@
   }, true);
   ```
 
->>>>>>> 3aaf064311c (dev: update java snippets (#36547))
 {% endlist %}
 
 ## Snapshot Read-Only {#snapshot-read-only}
@@ -1005,8 +993,6 @@
   }
   ```
 
-<<<<<<< HEAD
-=======
 - Java
 
   {% list tabs %}
@@ -1448,5 +1434,4 @@
 
   Режим Snapshot Read-Write не поддерживается в PHP SDK.
 
->>>>>>> 3aaf064311c (dev: update java snippets (#36547))
 {% endlist %}

@@ -94,21 +94,6 @@
     private static final int BATCH_SIZE = 1000;
     
     public static void main(String[] args) {
-<<<<<<< HEAD
-        String connectionString = args[0];
-
-        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-                .withAuthProvider(NopAuthProvider.INSTANCE) // анонимная аутентификация 
-                .build()) {
-
-            // Для bulk upsert необходимо использовать полный путь к таблице
-            String tablePath = transport.getDatabase() + "/" + TABLE_NAME;
-            try (TableClient tableClient = TableClient.newClient(transport).build()) {
-                SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
-                execute(retryCtx, tablePath);
-            }
-        }
-=======
       String connectionString = args[0];
     
       try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
@@ -122,7 +107,6 @@
               execute(retryCtx, tablePath);
           }
       }
->>>>>>> 3aaf064311c (dev: update java snippets (#36547))
     }
     
     public static void execute(SessionRetryContext retryCtx, String tablePath) {

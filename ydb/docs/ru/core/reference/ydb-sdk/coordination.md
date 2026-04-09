@@ -41,8 +41,6 @@
      - Чем меньше значение, тем выше вероятность ложных срабатываний, когда живой лидер может завершить работу для перестраховки, так как не будет уверен, что этот период не закончился у нового лидера.
      - Должен быть строго больше, чем `SelfCheckPeriod`.
 
-<<<<<<< HEAD
-=======
 - Java
 
   ```java
@@ -100,7 +98,6 @@
 
   {% endlist %}
 
->>>>>>> 3aaf064311c (dev: update java snippets (#36547))
 {% endlist %}
 
 ## Работа с сессиями {#session}
@@ -141,8 +138,6 @@
    - `OnStopped` - вызывается, когда сессия прекращает попытки восстановить связь с сервисом, что может быть полезно для установления нового соединения.
    - `Timeout` - максимальный таймаут, в течение которого сессия может быть восстановлена после потери связи с сервисом.
 
-<<<<<<< HEAD
-=======
 - Java
 
   Сессия (см. [CoordinationSession](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/CoordinationSession.java)) создаётся через `createSession`; для установления двунаправленного gRPC-потока с узлом нужно вызвать `connect()` (асинхронно, возвращает `CompletableFuture<Status>`). Параметры повторных попыток и таймаут подключения задаются в [CoordinationSessionSettings](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/CoordinationSessionSettings.java) (`withConnectTimeout`, `withRetryPolicy`, `withExecutor`).
@@ -189,7 +184,6 @@
 
   {% endlist %}
 
->>>>>>> 3aaf064311c (dev: update java snippets (#36547))
 {% endlist %}
 
 ### Контроль завершения сессии {#session-control}
@@ -206,8 +200,6 @@
 
   В C++ SDK установленная сессия в фоне поддерживает и автоматически восстанавливает связь с кластером {{ ydb-short-name }}.
 
-<<<<<<< HEAD
-=======
 - Python
 
   В Python SDK сессия автоматически восстанавливает связь с кластером {{ ydb-short-name }} при сбоях. Рекомендуется использовать контекстный менеджер (`with` или `async with`) для гарантированного закрытия сессии при выходе из блока. При работе с семафорами через контекстный менеджер (`with session.semaphore(name)` или `async with session.semaphore(name)`) семафор автоматически освобождается при выходе из блока, а сессия — при закрытии контекста.
@@ -216,7 +208,6 @@
 
   Завершите сессию (`close()`), когда ваш сценарий отработал: так вы явно освободите соединение с узлом. Пока сессия не закрыта, SDK при сбоях сети сам повторяет подключение согласно `CoordinationSessionSettings`. Семафор держите только на время решения пользовательской задачи и отпускайте через `SemaphoreLease.release()`, когда ресурс больше не нужен.
 
->>>>>>> 3aaf064311c (dev: update java snippets (#36547))
 {% endlist %}
 
 ## Работа с семафорами {#semaphore}
@@ -261,8 +252,6 @@
         .ExtractResult();
     ```
 
-<<<<<<< HEAD
-=======
 - Python
 
   В Python SDK семафор создаётся неявно при первом вызове `acquire()` в методе `session.semaphore(name, limit)`. Лимит указывается при создании объекта семафора.
@@ -303,7 +292,6 @@
       .expectSuccess("create semaphore failed");
   ```
 
->>>>>>> 3aaf064311c (dev: update java snippets (#36547))
 {% endlist %}
 
 ### Захват семафора {#acquire-semaphore}
@@ -353,8 +341,6 @@
     - `Shared()` - алиас для выставления `Count = 1`, захват семафора в shared режиме.
     - `Exclusive()` - алиас для выставления `Count = max`, захват семафора в exclusive режиме (для семафоров, созданных с лимитом `Max<ui64>()`).
 
-<<<<<<< HEAD
-=======
 - Python
 
   {% list tabs %}
@@ -419,7 +405,6 @@
 
   В документации API указано: в один момент времени сессия может удерживать **только один** семафор; повторные вызовы для того же имени **заменяют** предыдущую операцию (например, чтобы уменьшить `count` или сменить таймаут).
 
->>>>>>> 3aaf064311c (dev: update java snippets (#36547))
 {% endlist %}
 
 Взятое значение захваченного семафора можно снизить (но не увеличить), вновь вызвав для него метод `AcquireSemaphore` с меньшим значением.
@@ -451,8 +436,6 @@
         .ExtractResult();
     ```
 
-<<<<<<< HEAD
-=======
 - Python
 
   {% list tabs %}
@@ -489,7 +472,6 @@
       .expectSuccess("update semaphore failed");
   ```
 
->>>>>>> 3aaf064311c (dev: update java snippets (#36547))
 {% endlist %}
 
 Этот вызов не требует захвата семафора и не приводит к нему. Если требуется, чтобы данные обновлял только один конкретный клиент, то это необходимо явным образом обеспечить, например, захватив семафор, обновив данные и отпустив семафор обратно.
@@ -545,8 +527,6 @@
     - `Count` - запрошенное в `AcquireSemaphore` значение.
     - `Data` - данные, которые были указаны в `AcquireSemaphore`.
 
-<<<<<<< HEAD
-=======
 - Python
 
   {% list tabs %}
@@ -595,7 +575,6 @@
 
   Для подписки на изменения используйте `watchSemaphore` с тем же режимом описания и [WatchSemaphoreMode](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/WatchSemaphoreMode.java) (данные, владельцы или оба). Объект [SemaphoreWatcher](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/SemaphoreWatcher.java) содержит снимок `SemaphoreDescription` и `getChangedFuture()` — `CompletableFuture<Result<SemaphoreChangedEvent>>` (см. [SemaphoreChangedEvent](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/SemaphoreChangedEvent.java), поля `isDataChanged`, `isOwnersChanged`). Future завершится при следующем событии; после уведомления для продолжения наблюдения вызовите `watchSemaphore` снова (см. [тесты](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/test/java/tech/ydb/coordination/CoordinationServiceTest.java)).
 
->>>>>>> 3aaf064311c (dev: update java snippets (#36547))
 {% endlist %}
 
 ### Освобождение семафора {#release-semaphore}
@@ -621,8 +600,6 @@
         .ExtractResult();
     ```
 
-<<<<<<< HEAD
-=======
 - Python
 
   В Python SDK семафор освобождается методом `release()` у объекта семафора. При использовании контекстного менеджера (`with` или `async with`) освобождение происходит автоматически при выходе из блока.
@@ -665,7 +642,6 @@
   lease.release().join().expectSuccess("release failed");
   ```
 
->>>>>>> 3aaf064311c (dev: update java snippets (#36547))
 {% endlist %}
 
 ## Важные особенности

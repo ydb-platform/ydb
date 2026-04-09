@@ -128,8 +128,6 @@
   }
   ```
 
-<<<<<<< HEAD
-=======
 - Java
 
   {% list tabs %}
@@ -334,5 +332,4 @@
 
   {% endlist %}
 
->>>>>>> 3aaf064311c (dev: update java snippets (#36547))
 {% endlist %}

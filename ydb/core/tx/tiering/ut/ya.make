@@ -2,10 +2,7 @@ UNITTEST_FOR(ydb/core/tx/tiering)
 
 NO_CHECK_IMPORTS()
 
-DATA(
-    arcadia/ydb/core/tx/tiering/ut/docker-compose.yml
-    arcadia/ydb/core/tx/tiering/ut/test.json
-)
+DATA(arcadia/ydb/core/tx/tiering/ut/docker-compose.yml)
 
 ENV(COMPOSE_PROJECT_NAME=tiering_ut_minio)
 ENV(TZ="UTC+13")

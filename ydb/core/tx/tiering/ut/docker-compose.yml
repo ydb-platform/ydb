@@ -12,18 +12,14 @@ services:
       MINIO_SECRET_KEY: minio123
     command: server /data --console-address ":9001"
 
-  # This job creates the "datalake" bucket on Minio
+  # Creates the "datalake" bucket used as tiering external storage root
   mc-job:
     image: 'minio/mc@sha256:03e4ea06fe42f94c078613554c34eeb2c7045e79a4b0d875a3c977bf27a8befb'
-    volumes:
-      - ./test.json:/test.json
     entrypoint: |
       /bin/bash -c "
       sleep 5;
       /usr/bin/mc config --quiet host add myminio http://minio:9000 minio minio123;
       /usr/bin/mc mb --quiet myminio/datalake
-      /usr/bin/mc put /test.json myminio/datalake/a/test.json
-      /usr/bin/mc put /test.json myminio/datalake/b/year=2023/month=01/day=03/test.json
       "
     depends_on:
       - minio

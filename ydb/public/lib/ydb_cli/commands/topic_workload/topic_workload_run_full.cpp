@@ -99,6 +99,9 @@ void TCommandWorkloadTopicRunFull::Config(TConfig& config)
         .Optional()
         .DefaultValue(false)
         .StoreTrue(&Scenario.UseTransactions);
+    config.Opts->AddLongOption("no-track-producer-id", "Do not set track_producer_id_in_tx in write session metadata (only applies with --use-tx).")
+        .Optional()
+        .StoreTrue(&Scenario.NoTrackProducerIdInTx);
     config.Opts->AddLongOption("tx-commit-interval", "Interval of transaction commit in milliseconds."
                                                             " Both tx-commit-messages and tx-commit-interval can trigger transaction commit.")
         .DefaultValue(1000)

@@ -87,6 +87,9 @@ void TCommandWorkloadTopicRunWrite::Config(TConfig& config)
         .Optional()
         .DefaultValue(false)
         .StoreTrue(&Scenario.UseTransactions);
+    config.Opts->AddLongOption("no-track-producer-id", "Do not set track_producer_id_in_tx in write session metadata (only applies with --use-tx).")
+        .Optional()
+        .StoreTrue(&Scenario.NoTrackProducerIdInTx);
     config.Opts->AddLongOption("commit-period", "DEPRECATED: use tx-commit-intervall-ms instead. Waiting time between commit in seconds. Default - 1 second")
         .Optional()
         .Hidden()

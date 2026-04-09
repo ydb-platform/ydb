@@ -319,8 +319,11 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
     }
   ```
 
+<<<<<<< HEAD
   {% endlist %}
 
+=======
+>>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 - Python
 
   {% list tabs %}

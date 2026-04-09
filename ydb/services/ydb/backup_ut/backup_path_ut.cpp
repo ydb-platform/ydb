@@ -81,6 +81,18 @@ struct TBackupTraits<NExport::TExportToS3Settings> {
     TString ImportSrcPrefix() {
         return "Prefix/";
     }
+
+    static void SetEncryption(TExportSettings& settings, const std::string& algorithm, const TString& key) {
+        settings.SymmetricEncryption(algorithm.c_str(), key.c_str());
+    }
+
+    static void SetDecryptionKey(TImportSettings& settings, const TString& key) {
+        settings.SymmetricKey(key.c_str());
+    }
+
+    static TString EncryptedFileExtension() {
+        return ".enc";
+    }
 };
 
 template <>
@@ -146,6 +158,18 @@ struct TBackupTraits<NExport::TExportToFsSettings> {
 
     TString ImportSrcPrefix() {
         return "";
+    }
+
+    static void SetEncryption(TExportSettings& settings, const std::string& algorithm, const TString& key) {
+        settings.SymmetricEncryption(algorithm.c_str(), key.c_str());
+    }
+
+    static void SetDecryptionKey(TImportSettings& settings, const TString& key) {
+        settings.SymmetricKey(key.c_str());
+    }
+
+    static TString EncryptedFileExtension() {
+        return ".enc";
     }
 };
 
@@ -1002,6 +1026,59 @@ void ExportRecursiveWithoutDestinationPrefixImpl(TBackupTestFixture& f, bool isO
     }
 }
 
+template <typename TExportSettings, typename TBackupTestFixture>
+void ExportDirectoryWithEncryptionImpl(TBackupTestFixture& f, bool isOlap) {
+    TBackupTraits<TExportSettings> traits;
+    const TString prefix = traits.FilePrefix();
+    const TString encExt = traits.EncryptedFileExtension();
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
+
+    {
+        auto exportSettings = traits.MakeExportSettings(f, "/Root/RecursiveFolderProcessing/dir1");
+        traits.SetEncryption(exportSettings, NExport::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
+        auto res = traits.Export(f, exportSettings);
+        f.WaitOpSuccess(res);
+
+        traits.ValidateFileList(f, {
+            prefix + "metadata.json",
+            prefix + "SchemaMapping/metadata.json" + encExt,
+            prefix + "SchemaMapping/mapping.json" + encExt,
+            prefix + "001/metadata.json" + encExt,
+            prefix + "001/scheme.pb" + encExt,
+            prefix + "001/permissions.pb" + encExt,
+            prefix + "001/data_00.csv" + encExt,
+            prefix + "002/metadata.json" + encExt,
+            prefix + "002/scheme.pb" + encExt,
+            prefix + "002/permissions.pb" + encExt,
+            prefix + "002/data_00.csv" + encExt,
+
+            prefix + "metadata.json.sha256",
+            prefix + "SchemaMapping/metadata.json.sha256",
+            prefix + "SchemaMapping/mapping.json.sha256",
+            prefix + "001/metadata.json.sha256",
+            prefix + "001/scheme.pb.sha256",
+            prefix + "001/permissions.pb.sha256",
+            prefix + "001/data_00.csv.sha256",
+            prefix + "002/metadata.json.sha256",
+            prefix + "002/scheme.pb.sha256",
+            prefix + "002/permissions.pb.sha256",
+            prefix + "002/data_00.csv.sha256",
+        });
+    }
+
+    {
+        auto importSettings = traits.MakeImportSettings(f, "/Root/RestorePrefix");
+        traits.SetDecryptionKey(importSettings, "Cool random key!");
+        auto res = traits.Import(f, importSettings);
+        f.WaitOpSuccess(res);
+
+        f.ValidateHasYdbPaths({
+            TBackupTestFixture::TEntryPath::TablePath("/Root/RestorePrefix/Table1", isOlap),
+            TBackupTestFixture::TEntryPath::TablePath("/Root/RestorePrefix/dir2/Table2", isOlap),
+        });
+    }
+}
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
@@ -1150,53 +1227,7 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
     }
 
     Y_UNIT_TEST_TWIN(ExportDirectoryWithEncryption, IsOlap) {
-        // Export directory with encryption
-        {
-            NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/RecursiveFolderProcessing/dir1", "Prefix");
-            exportSettings
-                .SymmetricEncryption(NExport::TExportToS3Settings::TEncryptionAlgorithm::AES_128_GCM, "Cool random key!");
-            auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
-            WaitOpSuccess(res);
-
-            ValidateS3FileList({
-                "/test_bucket/Prefix/metadata.json",
-                "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
-                "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
-                "/test_bucket/Prefix/001/metadata.json.enc",
-                "/test_bucket/Prefix/001/scheme.pb.enc",
-                "/test_bucket/Prefix/001/permissions.pb.enc",
-                "/test_bucket/Prefix/001/data_00.csv.enc",
-                "/test_bucket/Prefix/002/metadata.json.enc",
-                "/test_bucket/Prefix/002/scheme.pb.enc",
-                "/test_bucket/Prefix/002/permissions.pb.enc",
-                "/test_bucket/Prefix/002/data_00.csv.enc",
-
-                "/test_bucket/Prefix/metadata.json.sha256",
-                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
-                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
-                "/test_bucket/Prefix/001/metadata.json.sha256",
-                "/test_bucket/Prefix/001/scheme.pb.sha256",
-                "/test_bucket/Prefix/001/permissions.pb.sha256",
-                "/test_bucket/Prefix/001/data_00.csv.sha256",
-                "/test_bucket/Prefix/002/metadata.json.sha256",
-                "/test_bucket/Prefix/002/scheme.pb.sha256",
-                "/test_bucket/Prefix/002/permissions.pb.sha256",
-                "/test_bucket/Prefix/002/data_00.csv.sha256",
-            });
-        }
-
-        {
-            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/RestorePrefix");
-            importSettings
-                .SymmetricKey("Cool random key!");
-            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
-            WaitOpSuccess(res);
-
-            ValidateHasYdbPaths({
-                TEntryPath::TablePath("/Root/RestorePrefix/Table1", IsOlap),
-                TEntryPath::TablePath("/Root/RestorePrefix/dir2/Table2", IsOlap),
-            });
-        }
+        ExportDirectoryWithEncryptionImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
     }
 
     Y_UNIT_TEST_TWIN(EncryptedExportWithExplicitDestinationPath, IsOlap) { // supported, but not recommended

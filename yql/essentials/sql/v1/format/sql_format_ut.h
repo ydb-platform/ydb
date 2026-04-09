@@ -1793,6 +1793,34 @@ Y_UNIT_TEST(CommentAfterLastSelect) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(CommentAfterLastStatement) {
+    TCases cases = {
+        {
+            TrimIndent(R"sql(
+                SELECT
+                    1
+                ;
+
+                -- x
+
+                -- y
+            )sql"),
+            TrimIndent(R"sql(
+                SELECT
+                    1
+                ;
+                -- x
+
+                -- y
+
+            )sql"),
+        },
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(WindowFunctionInsideExpr) {
     TCases cases = {
         {"SELECT CAST(ROW_NUMBER() OVER () AS String) AS x,\nFROM Input;",

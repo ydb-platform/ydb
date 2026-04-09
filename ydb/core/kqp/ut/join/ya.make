@@ -32,6 +32,7 @@ PEERDIR(
     ydb/core/kqp/ut/common
     yql/essentials/sql/pg_dummy
     yql/essentials/udfs/common/digest
+    yql/essentials/public/langver
 )
 
 DATA (

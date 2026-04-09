@@ -2,6 +2,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 
 #include <util/string/printf.h>
 
@@ -101,6 +102,7 @@ static void CreateSampleTable(NYdb::NQuery::TSession session, bool useColumnStor
 struct TExecuteParams {
     bool RemoveLimitOperator = false;
     bool EnableSeparationComputeActorsFromRead = true;
+    bool EnableNewRBO = false;
 };
 
 static TKikimrRunner GetKikimrWithJoinSettings(
@@ -127,6 +129,13 @@ static TKikimrRunner GetKikimrWithJoinSettings(
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(0);
     } else {
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+    }
+    if (params.EnableNewRBO) {
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
     }
     TKikimrSettings serverSettings(appConfig);
     serverSettings.FeatureFlags.SetEnableSeparationComputeActorsFromRead(params.EnableSeparationComputeActorsFromRead);
@@ -964,6 +973,95 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             UNIT_ASSERT(join.LhsShuffled);
             UNIT_ASSERT(join.RhsShuffled);
         }
+    }
+
+    Y_UNIT_TEST(NewRBOOneJoinWithSEEnabled) {
+        // Verify that the new RBO handles a query with OptShuffleElimination=true correctly.
+        //
+        // Note: SE in the new RBO is a CBO cost optimization only. Unlike the old optimizer
+        // (InnerJoin (BlockHash), where only one side is hash-bucketed and LHS never needs
+        // reshuffling), GraceJoin requires both sides to be co-located by the same hash
+        // function and partition count. Physical shuffle elimination for GraceJoin would
+        // require compatible partitioning at runtime — not guaranteed at compile time.
+        // So assign_stages.cpp always adds TShuffleConnection on both sides.
+        //
+        // Key design of this test:
+        //   - EnableFallbackToYqlOptimizer=false: if the new RBO fails to handle the SELECT,
+        //     the query returns an error instead of silently falling back to the old optimizer.
+        //     This guarantees that a passing test means the new RBO actually handled the query.
+        //   - DDL via table client ExecuteSchemeQuery: bypasses the new RBO compile actor entirely,
+        //     so table creation always succeeds regardless of new RBO limitations.
+        //
+        // The old optimizer with OLAP tables always converts GraceJoin → BlockHash via a peephole
+        // transformer (AllowOlapDataQuery=true path). So "InnerJoin (Grace)" in the plan is
+        // uniquely produced by the new RBO.
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetEnableOrderOptimizaionFSM(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+        appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(TDuration::Minutes(10).MilliSeconds());
+
+        NKikimrKqp::TKqpSetting statsSetting;
+        statsSetting.SetName("OptOverrideStatistics");
+        statsSetting.SetValue(GetStatic("stats/tpch1000s.json"));
+
+        TKikimrSettings serverSettings(appConfig);
+        serverSettings.WithSampleTables = false;
+        serverSettings.SetKqpSettings({statsSetting});
+        serverSettings.FeatureFlags.SetEnableSeparationComputeActorsFromRead(true);
+
+        TKikimrRunner kikimr(serverSettings);
+
+        // DDL via table client — does not go through the new RBO compile actor
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto res = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/customer` (
+                c_custkey Int32 NOT NULL,
+                c_name String,
+                PRIMARY KEY (c_custkey)
+            ) WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);
+        )").GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        res = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/orders` (
+                o_orderkey Int32 NOT NULL,
+                o_custkey Int32,
+                PRIMARY KEY (o_orderkey)
+            ) WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);
+        )").GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        // SELECT via query client — goes through new RBO with no fallback
+        auto queryClient = kikimr.GetQueryClient();
+        auto qResult = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(qResult);
+        auto qSession = qResult.GetSession();
+
+        auto explainRes = qSession.ExecuteQuery(
+            GetStatic("queries/new_rbo_one_join_se_enabled.sql"),
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+        explainRes.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_C(explainRes.IsSuccess(), explainRes.GetIssues().ToString());
+
+        TString plan = *explainRes.GetStats()->GetPlan();
+        PrintPlan(plan);
+
+        auto joinFinder = TFindJoinWithLabels(plan);
+        auto join = joinFinder.Find({"customer", "orders"});
+        // InnerJoin (Grace) confirms the new RBO was used — old optimizer always produces BlockHash for OLAP
+        UNIT_ASSERT_C(join.Join == "InnerJoin (Grace)", join.Join);
+        // Both sides are HashShuffled: SE is cost-only in the new RBO, no physical shuffle elimination for GraceJoin
+        UNIT_ASSERT(join.LhsShuffled);
+        UNIT_ASSERT(join.RhsShuffled);
     }
 
     Y_UNIT_TEST(TPCH12_100) {

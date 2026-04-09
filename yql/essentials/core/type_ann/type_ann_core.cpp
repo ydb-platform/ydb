@@ -1485,6 +1485,55 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus LibraryExportsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        bool needRepeat = false;
+        for (ui32 i = 0; i < input->ChildrenSize(); ++i) {
+            if (input->Child(i)->GetTypeAnn() && input->Child(i)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                continue;
+            }
+
+            TExprNode::TPtr lambdaIn;
+            if (input->Child(i)->IsCallable("WithOptionalArgs")) {
+                lambdaIn = input->Child(i)->HeadPtr();
+                if (!EnsureLambda(*lambdaIn, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else if (input->Child(i)->IsLambda()) {
+                lambdaIn = input->ChildPtr(i);
+            } else {
+                continue;
+            }
+
+            auto argsCount = lambdaIn->Head().ChildrenSize();
+            TVector<const TTypeAnnotationNode*> args(argsCount, ctx.Expr.MakeType<TUniversalExprType>());
+            auto lambdaOut = lambdaIn;
+            if (!UpdateLambdaAllArgumentsTypes(lambdaOut, args, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!lambdaOut->GetTypeAnn()) {
+                needRepeat = true;
+            }
+
+            if (lambdaOut != lambdaIn) {
+                needRepeat = true;
+                if (input->Child(i)->IsLambda()) {
+                    input->ChildRef(i) = lambdaOut;
+                } else {
+                    input->ChildRef(i) = ctx.Expr.ChangeChild(*input->Child(i), 0, std::move(lambdaOut));
+                }
+            }
+        }
+
+        if (needRepeat) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus TryMemberWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -15960,6 +16009,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["EnsureWarn"] = &EnsureWrapper;
         Functions["RaiseError"] = &RaiseErrorWrapper;
         Functions["EnsureTypeKind"] = &EnsureTypeKindWrapper;
+        Functions["LibraryExports"] = &LibraryExportsWrapper;
         Functions["TryMember"] = &TryMemberWrapper;
         Functions["ToIndexDict"] = &ToIndexDictWrapper;
         Functions["ToDict"] = &ToDictWrapper;

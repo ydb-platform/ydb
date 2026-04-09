@@ -1105,17 +1105,38 @@ private:
 
 }
 
-bool PartialAnnonateTypes(TAstNode* astRoot, TLangVersion langver, const IUdfMeta* udfMeta, TIssues& issues,
+bool PartialAnnonateTypes(TAstNode* astRoot, bool isLibrary, TLangVersion langver, const IUdfMeta* udfMeta, TIssues& issues,
     std::function<TIntrusivePtr<IDataProvider>(TTypeAnnotationContext&)> configProviderFactory,
     std::function<const TTypeAnnotationNode* (TStringBuf, TExprContext&)> typeParser) {
     YQL_ENSURE(astRoot, "AST root is null");
 
     TExprContext ctx;
     TExprNode::TPtr exprRoot;
-    if (!CompileExpr(*astRoot, exprRoot, ctx, /* resolver= */ nullptr, /* urlListerManager */ nullptr,
-                        /* hasAnnotations= */ false, /* typeAnnotationIndex= */ Max<ui32>(), /* syntaxVersion= */ 1)) {
+    TLibraryCohesion cohesion;
+    bool res;
+    if (isLibrary) {
+        res = CompileExpr(*astRoot, cohesion, ctx, /*syntaxVersion=*/ 1);
+    }  else {
+        res = CompileExpr(*astRoot, exprRoot, ctx, /* resolver= */ nullptr, /* urlListerManager */ nullptr,
+                        /* hasAnnotations= */ false, /* typeAnnotationIndex= */ Max<ui32>(), /* syntaxVersion= */ 1);
+    }
+
+    if (!res) {
         issues.AddIssues(ctx.IssueManager.GetCompletedIssues());
         return false;
+    }
+
+    if (isLibrary) {
+        TExprNode::TListType exports;
+        for (const auto& [name, node] : cohesion.Exports.Symbols()) {
+            exports.push_back(node);
+        }
+
+        if (exports.empty()) {
+            return true;
+        }
+
+        exprRoot = ctx.NewCallable(TPosition(), "LibraryExports", std::move(exports));
     }
 
     TTypeAnnotationContext typeCtx;

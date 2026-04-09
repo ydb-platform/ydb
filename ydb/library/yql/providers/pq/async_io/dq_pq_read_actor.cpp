@@ -142,7 +142,6 @@ struct TEvPrivate {
         TEvCheckPartitionCount(ui32 clusterIndex)
             : ClusterIndex(clusterIndex)
         {}
-
         const ui32 ClusterIndex = 0;
     };
 
@@ -151,13 +150,11 @@ struct TEvPrivate {
             : ClusterIndex(clusterIndex)
             , PartitionsCount(partitionsCount)
         {}
-
         TEvCheckPartitionCountResult(ui32 clusterIndex, const NYdb::TStatus& status)
             : ClusterIndex(clusterIndex)
             , PartitionsCount(0)
             , Status(status)
         {}
-
         const ui32 ClusterIndex = 0;
         const ui32 PartitionsCount = 0;
         TMaybe<NYdb::TStatus> Status;
@@ -911,7 +908,6 @@ private:
     void Handle(TEvPrivate::TEvCheckPartitionCount::TPtr& ev) {
         auto& clusterState = Clusters[ev->Get()->ClusterIndex];
         clusterState.PartitionCountCheckScheduled = false;
-
         SRC_LOG_T("Checking partition count for topic \"" << SourceParams.GetTopicPath() << "\", cluster \"" << clusterState.Info.Name << "\"");
 
         std::string clusterTopicPath = SourceParams.GetTopicPath();
@@ -964,7 +960,6 @@ private:
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, TIssues({issue}), NYql::NDqProto::StatusIds::SCHEME_ERROR));
             return;
         }
-
         SchedulePartitionCountCheck();
     }
 

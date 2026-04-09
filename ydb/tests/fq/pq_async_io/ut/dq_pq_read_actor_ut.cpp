@@ -495,9 +495,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         PQRead(expected);
 
         Sleep(TDuration::MilliSeconds(100));
-
         ChangePartitionCount(topicName, 7);
-      //  Sleep(TDuration::MilliSeconds(10000));
 
         TInstant deadline = Now() + TDuration::Seconds(5);
         auto future = CaSetup->AsyncInputPromises->FatalError.GetFuture();

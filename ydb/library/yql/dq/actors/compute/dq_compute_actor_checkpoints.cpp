@@ -537,7 +537,6 @@ void TDqComputeActorCheckpoints::TryToSavePendingCheckpoint() {
         LOG_PCP_D("Task checkpoint is done. Send to storage");
         PendingCheckpoint.Clear();
         SavingToDatabase = true;
-        ComputeActor->ResumeExecution(EResumeSource::CheckpointInject);
     }
 }
 

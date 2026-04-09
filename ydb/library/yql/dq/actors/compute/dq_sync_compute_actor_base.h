@@ -175,13 +175,13 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
                 return false;
             }
         }
-       // CA_LOG_D("ReadyToCheckpoint " );
+
         for (const auto& [_, channelInfo] : this->InputChannelsMap) {
             if (channelInfo.CheckpointingMode == NDqProto::CHECKPOINTING_MODE_DISABLED) {
                 continue;
             }
 
-            if (!channelInfo.IsPaused() && !channelInfo.Channel->IsPausedByCheckpoint()) {
+            if (!channelInfo.IsPaused()) {
                 return false;
             }
 

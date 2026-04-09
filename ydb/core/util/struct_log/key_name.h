@@ -13,11 +13,12 @@ public:
     TKeyName(TKeyName&&) = default;
 
     template<unsigned N>
-    constexpr TKeyName(const char(&name)[N]) : CompileTime(name) {}
+    constexpr TKeyName(const char(&name)[N]) : CompileTime(name), CompileTimeLength(N - 1 /* zero char */) {}
+    TKeyName(const char* name, std::size_t length) : CompileTime(name), CompileTimeLength(length) {}
     TKeyName(const TString& name) : RunTime(name) {}
     TKeyName(TString&& name) : RunTime(std::move(name)) {}
 
-    constexpr operator const char* () const {
+    const char* GetData() const {
         if (CompileTime != nullptr) {
             return CompileTime;
         } else {
@@ -25,17 +26,20 @@ public:
         }
     }
 
+    std::size_t GetLength() const {
+        if (CompileTime != nullptr) {
+            return CompileTimeLength;
+        } else {
+            return RunTime.size();
+        }
+    }
+
+    TString ToString() const {
+        return TString(GetData(), GetLength());
+    }
+
     bool operator==(const TKeyName& value) const {
-        if(CompileTime != nullptr && value.CompileTime != nullptr) {
-            return CompileTime == value.CompileTime || strcmp(CompileTime, value.CompileTime) == 0;
-        }
-        if(CompileTime != nullptr && value.CompileTime == nullptr) {
-            return strcmp(CompileTime, value.RunTime.c_str()) == 0;
-        }
-        if(CompileTime == nullptr && value.CompileTime != nullptr) {
-            return strcmp(RunTime.c_str(), value.CompileTime) == 0;
-        }
-        return RunTime == value.RunTime;
+        return Compare(*this, value) == TCompareResult::Equal;
     }
 
     bool operator!=(const TKeyName& value) const {
@@ -43,35 +47,11 @@ public:
     }
 
     bool operator<(const TKeyName& value) const {
-        if(CompileTime != nullptr && value.CompileTime != nullptr) {
-            if (CompileTime == value.CompileTime) {
-                return false;
-            }
-            return strcmp(CompileTime, value.CompileTime) < 0;
-        }
-        if(CompileTime != nullptr && value.CompileTime == nullptr) {
-            return strcmp(CompileTime, value.RunTime.c_str()) < 0;
-        }
-        if(CompileTime == nullptr && value.CompileTime != nullptr) {
-            return strcmp(RunTime.c_str(), value.CompileTime) < 0;
-        }
-        return RunTime < value.RunTime;
+        return Compare(*this, value) == TCompareResult::Less;
     }
 
     bool operator>(const TKeyName& value) const {
-        if(CompileTime != nullptr && value.CompileTime != nullptr) {
-            if (CompileTime == value.CompileTime) {
-                return false;
-            }
-            return strcmp(CompileTime, value.CompileTime) > 0;
-        }
-        if(CompileTime != nullptr && value.CompileTime == nullptr) {
-            return strcmp(CompileTime, value.RunTime.c_str()) > 0;
-        }
-        if(CompileTime == nullptr && value.CompileTime != nullptr) {
-            return strcmp(RunTime.c_str(), value.CompileTime) > 0;
-        }
-        return RunTime > value.RunTime;
+        return Compare(*this, value) == TCompareResult::Great;
     }
 
     bool operator>(const TString& value) const {
@@ -92,7 +72,36 @@ public:
     }
 protected:
     const char* CompileTime{nullptr};
+    std::size_t CompileTimeLength{0};
     TString RunTime;
+
+    enum class TCompareResult {
+        Less,
+        Equal,
+        Great
+    };
+
+    static TCompareResult Compare(const char* a, std::size_t lengthA, const char* b, std::size_t lengthB) {
+        auto minLength = std::min(lengthA, lengthB);
+        int result = strncmp(a, b, minLength);
+        if (result < 0) {
+            return TCompareResult::Less;
+        } else if (result > 0) {
+            return TCompareResult::Great;
+        }
+
+        if (minLength < lengthB) {
+            return TCompareResult::Less;
+        } else if (minLength < lengthA) {
+            return TCompareResult::Great;
+        }
+
+        return TCompareResult::Equal;
+    }
+
+    static TCompareResult Compare(const TKeyName& a, const TKeyName& b) {
+        return Compare(a.GetData(), a.GetLength(), b.GetData(), b.GetLength() );
+    }
 };
 
 }

@@ -46,6 +46,36 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TestType<TString>({"", "a", "ab", "abc"});
     }
 
+    Y_UNIT_TEST(TestKeyName) {
+        // compile vs compile
+        UNIT_ASSERT(TKeyName("aaa") < TKeyName("bbb"));
+        UNIT_ASSERT(TKeyName("aa") < TKeyName("aaa"));
+        UNIT_ASSERT(TKeyName("aaa") == TKeyName("aaa"));
+        UNIT_ASSERT(TKeyName("aaa") > TKeyName("aa"));
+        UNIT_ASSERT(TKeyName("bbb") > TKeyName("aaa"));
+
+        // compile vs string
+        UNIT_ASSERT(TKeyName("aaa") < TKeyName(std::string("bbb")));
+        UNIT_ASSERT(TKeyName("aa") < TKeyName(std::string("aaa")));
+        UNIT_ASSERT(TKeyName("aaa") == TKeyName(std::string("aaa")));
+        UNIT_ASSERT(TKeyName("aaa") > TKeyName(std::string("aa")));
+        UNIT_ASSERT(TKeyName("bbb") > TKeyName(std::string("aaa")));
+
+        // string vs compile
+        UNIT_ASSERT(TKeyName(std::string("aaa")) < TKeyName("bbb"));
+        UNIT_ASSERT(TKeyName(std::string("aa")) < TKeyName("aaa"));
+        UNIT_ASSERT(TKeyName(std::string("aaa")) == TKeyName("aaa"));
+        UNIT_ASSERT(TKeyName(std::string("aaa")) > TKeyName("aa"));
+        UNIT_ASSERT(TKeyName(std::string("bbb")) > TKeyName("aaa"));
+
+        // string vs string
+        UNIT_ASSERT(TKeyName(std::string("aaa")) < TKeyName(std::string("bbb")));
+        UNIT_ASSERT(TKeyName(std::string("aa")) < TKeyName(std::string("aaa")));
+        UNIT_ASSERT(TKeyName(std::string("aaa")) == TKeyName(std::string("aaa")));
+        UNIT_ASSERT(TKeyName(std::string("aaa")) > TKeyName(std::string("aa")));
+        UNIT_ASSERT(TKeyName(std::string("bbb")) > TKeyName(std::string("aaa")));
+    }
+
     template <typename T>
     void TestCreateMessageTypedValueRead(const std::vector<T>& values) {
         for(auto value: values) {
@@ -146,16 +176,16 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
         message.ForEach(
             MakeOverloaded(
-                [](const char* name, const ui8& value) { UNIT_ASSERT(TString(name)=="uint8" && value==1); },
-                [](const char* name, const i8& value) { UNIT_ASSERT(TString(name)=="int8" && value==2); },
-                [](const char* name, const ui16& value) { UNIT_ASSERT(TString(name)=="uint16" && value==3); },
-                [](const char* name, const i16& value) { UNIT_ASSERT(TString(name)=="int16" && value==4); },
-                [](const char* name, const ui32& value) { UNIT_ASSERT(TString(name)=="uint32" && value==5); },
-                [](const char* name, const i32& value) { UNIT_ASSERT(TString(name)=="int32" && value==6); },
-                [](const char* name, const ui64& value) { UNIT_ASSERT(TString(name)=="uint64" && value==7); },
-                [](const char* name, const i64& value) { UNIT_ASSERT(TString(name)=="int64" && value==8); },
-                [](const char* name, const bool& value) { UNIT_ASSERT(TString(name)=="bool" && value==true); },
-                [](const char* name, const TString& value) { UNIT_ASSERT(TString(name)=="string" && value=="abc"); }
+                [](const TKeyName& name, const ui8& value) { UNIT_ASSERT(name.ToString() == "uint8" && value == 1); },
+                [](const TKeyName& name, const i8& value) { UNIT_ASSERT(name.ToString() == "int8" && value == 2); },
+                [](const TKeyName& name, const ui16& value) { UNIT_ASSERT(name.ToString() == "uint16" && value == 3); },
+                [](const TKeyName& name, const i16& value) { UNIT_ASSERT(name.ToString() == "int16" && value == 4); },
+                [](const TKeyName& name, const ui32& value) { UNIT_ASSERT(name.ToString() == "uint32" && value == 5); },
+                [](const TKeyName& name, const i32& value) { UNIT_ASSERT(name.ToString() == "int32" && value == 6); },
+                [](const TKeyName& name, const ui64& value) { UNIT_ASSERT(name.ToString() == "uint64" && value == 7); },
+                [](const TKeyName& name, const i64& value) { UNIT_ASSERT(name.ToString() == "int64" && value == 8); },
+                [](const TKeyName& name, const bool& value) { UNIT_ASSERT(name.ToString() == "bool" && value == true); },
+                [](const TKeyName& name, const TString& value) { UNIT_ASSERT(name.ToString() == "string" && value == "abc"); }
             ));
     }
 
@@ -173,16 +203,16 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
         message.ForEach(
             MakeOverloaded(
-                [&](const char* name, const ui8& value) { append(TString(name)+":uint8", value); },
-                [&](const char* name, const i8& value) { append(TString(name)+":int8", value); },
-                [&](const char* name, const ui16& value) { append(TString(name)+":uint16", value); },
-                [&](const char* name, const i16& value) { append(TString(name)+":int16", value); },
-                [&](const char* name, const ui32& value) { append(TString(name)+":uint32", value); },
-                [&](const char* name, const i32& value) { append(TString(name)+":int32", value); },
-                [&](const char* name, const ui64& value) { append(TString(name)+":uint64", value); },
-                [&](const char* name, const i64& value) { append(TString(name)+":int64", value); },
-                [&](const char* name, const bool& value) { append(TString(name)+":bool", value); },
-                [&](const char* name, const TString& value) { append(TString(name)+":string", value); }
+                [&](const TKeyName& name, const ui8& value) { append(name.ToString() + ":uint8", value); },
+                [&](const TKeyName& name, const i8& value) { append(name.ToString() + ":int8", value); },
+                [&](const TKeyName& name, const ui16& value) { append(name.ToString() + ":uint16", value); },
+                [&](const TKeyName& name, const i16& value) { append(name.ToString() + ":int16", value); },
+                [&](const TKeyName& name, const ui32& value) { append(name.ToString() + ":uint32", value); },
+                [&](const TKeyName& name, const i32& value) { append(name.ToString() + ":int32", value); },
+                [&](const TKeyName& name, const ui64& value) { append(name.ToString() + ":uint64", value); },
+                [&](const TKeyName& name, const i64& value) { append(name.ToString() + ":int64", value); },
+                [&](const TKeyName& name, const bool& value) { append(name.ToString() + ":bool", value); },
+                [&](const TKeyName& name, const TString& value) { append(name.ToString() + ":string", value); }
             )
         );
         return result;

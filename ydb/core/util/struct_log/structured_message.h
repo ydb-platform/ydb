@@ -22,8 +22,8 @@ class TStructuredMessage {
 public:
 
     TStructuredMessage() {
-        AttachedValues.reserve(PreallocatedValueCount);
-        Data.reserve(PreallocatedDataSize);
+        AttachedValues.reserve(16);
+        Data.reserve(64);
     };
 
     TStructuredMessage(const TStructuredMessage&) = default;
@@ -32,8 +32,8 @@ public:
     TStructuredMessage& operator=(const TStructuredMessage&) = default;
     TStructuredMessage& operator=(TStructuredMessage&&) = default;
 
-    template <typename T, typename V = typename std::enable_if<TNativeTypeSupport<T>::value>::type>
-    TStructuredMessage& AppendValue(TKeyName&& name, const T& value) {
+    template <typename T, typename V = typename std::enable_if<TNativeTypeSupport<T>::value>::type >
+    inline TStructuredMessage& AppendValue(TKeyName&& name, const T& value) {
         auto typeCode = TTypesMapping::GetCode<T>();
 
         auto offset = Data.size();
@@ -47,7 +47,7 @@ public:
     }
 
     template<unsigned N>
-    TStructuredMessage& AppendFixedValue(TKeyName&& name, const char(&value)[N]) {
+    inline TStructuredMessage& AppendFixedValue(TKeyName&& name, const char(&value)[N]) {
         auto typeCode = TTypesMapping::GetCode<TString>();
 
         auto offset = Data.size();
@@ -60,7 +60,7 @@ public:
         return *this;
     }
 
-    TStructuredMessage& AppendMessage(const TStructuredMessage& message) {
+    inline TStructuredMessage& AppendMessage(const TStructuredMessage& message) {
         auto offset = Data.size();
         for(auto& subItem: message.AttachedValues) {
             AttachedValues.emplace_back(TKeyName(subItem.Name), subItem.TypeCode, subItem.Offset + offset, subItem.Length, ++AddNumber);
@@ -70,23 +70,23 @@ public:
         auto addSize = message.Data.size();
         Data.resize(oldSize + addSize);
         memcpy(Data.data() + oldSize, message.Data.data(), addSize);
-
         AttachedValuesSorted = false;
 
         return *this;
     }
 
-    TStructuredMessage& AppendSubMessage(TKeyName&& name, const TStructuredMessage& subMessage) {
+    inline TStructuredMessage& AppendSubMessage(TKeyName&& name, const TStructuredMessage& subMessage) {
         auto offset = Data.size();
-        auto prefix = TString(name) + ".";
+        auto prefix = name.ToString() + ".";
         for(auto subItem: subMessage.AttachedValues) {
-            AttachedValues.emplace_back(prefix + TString(subItem.Name), subItem.TypeCode, subItem.Offset + offset, subItem.Length, ++AddNumber);
+            AttachedValues.emplace_back(prefix + subItem.Name.ToString(), subItem.TypeCode, subItem.Offset + offset, subItem.Length, ++AddNumber);
         }
 
+        std::copy(begin(subMessage.Data), end(subMessage.Data), std::back_inserter(Data));
+
         auto oldSize = Data.size();
-        auto addSize = subMessage.Data.size();
-        Data.resize(oldSize + addSize);
-        memcpy(Data.data() + oldSize, subMessage.Data.data(), addSize);
+        Data.resize(oldSize + subMessage.Data.size());
+        std::memcpy(Data.data() + oldSize, subMessage.Data.data(), subMessage.Data.size());
 
         AttachedValuesSorted = false;
 
@@ -98,7 +98,7 @@ public:
         return AttachedValues.size();
     }
 
-    const char* GetValueName(std::size_t index) const {
+    const TKeyName& GetValueName(std::size_t index) const {
         CheckSorted();
         return AttachedValues[index].Name;
     }
@@ -107,18 +107,14 @@ public:
         CheckSorted();
 
         auto it = std::upper_bound(begin(AttachedValues), end(AttachedValues), name,
-            [](const auto& name, const auto& b) -> bool
+            [](const auto& name, const auto& b) -> bool 
             {
                 return b.Name > name;
             } );
-        if (it == begin(AttachedValues)) {
-            return {};
-        }
+        if (it == begin(AttachedValues)) return {};
 
         it--;
-        if (it->Name != TKeyName(name)) {
-            return {};
-        }
+        if (it->Name != name) return {};
 
         return it - begin(AttachedValues);
     }
@@ -260,5 +256,6 @@ protected:
         AttachedValues.erase(it, end(AttachedValues));
     }
 };
+
 
 }

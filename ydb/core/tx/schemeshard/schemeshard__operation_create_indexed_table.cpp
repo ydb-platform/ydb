@@ -323,7 +323,9 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     // This description provided by user to override partition policy
                     userIndexDesc = indexDescription.GetIndexImplTableDescriptions(0);
                 }
-                result.push_back(createIndexImplTable(CalcImplTableDesc(baseTableDescription, implTableColumns, userIndexDesc)));
+                const auto uniqueKeySize = indexType == NKikimrSchemeOp::EIndexTypeGlobalUnique
+                    ? indexDescription.GetKeyColumnNames().size() : 0;
+                result.push_back(createIndexImplTable(CalcImplTableDesc(baseTableDescription, implTableColumns, userIndexDesc, uniqueKeySize)));
                 break;
             }
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {

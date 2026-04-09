@@ -1078,8 +1078,8 @@
 
   ```javascript
   await using writer = createTopicWriter(driver, {
-  	topic: topicName,
-  	producer: producerName,
+    topic: topicName,
+    producer: producerName,
     // Callback that is called when writer receives an acknowledgment for a message.
     onAck: (seqNo, status) => {
       console.log("ACK", seqNo, status);
@@ -2765,7 +2765,11 @@
     }
     ```
 
+  {% endlist %}
+
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+
+  {% endlist %}
 
 - JavaScript
 

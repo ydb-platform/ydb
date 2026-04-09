@@ -111,6 +111,7 @@ EDqFillLevel TLocalBuffer::GetFillLevel() const {
 }
 
 TLocalBuffer::~TLocalBuffer() {
+    *Registry->LocalBufferInflightBytes -= InflightBytes;
     Registry->DeleteLocalBufferInfo(Info);
 }
 
@@ -154,11 +155,13 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
             fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
         } else {
             InflightBytes += data.Bytes;
+            *Registry->LocalBufferInflightBytes += data.Bytes;
             Queue.push(std::move(data));
             fillLevel = InflightBytes.load() >= MaxInflightBytes ? EDqFillLevel::SoftLimit : EDqFillLevel::NoLimit;
         }
     } else {
         InflightBytes += data.Bytes;
+        *Registry->LocalBufferInflightBytes += data.Bytes;
         Queue.push(std::move(data));
         fillLevel = InflightBytes.load() >= MaxInflightBytes ? EDqFillLevel::HardLimit : EDqFillLevel::NoLimit;
     }
@@ -223,6 +226,7 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
 
     Y_ENSURE(InflightBytes.load() >= data.Bytes);
     InflightBytes -= data.Bytes;
+    *Registry->LocalBufferInflightBytes -= data.Bytes;
 
     if (data.Finished) {
         if (!Finished.exchange(true)) {
@@ -234,6 +238,7 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
             auto bytes = SpilledChunkBytes.front();
             SpilledChunkBytes.pop();
             InflightBytes += bytes;
+            *Registry->LocalBufferInflightBytes += bytes;
             Y_ENSURE(TailBlobId < HeadBlobId);
 
             TLoadingInfo info(++TailBlobId, bytes);
@@ -389,6 +394,8 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
         PushStats.Resume();
     }
 
+    const ui64 chunkBytes = data.Bytes;
+
     std::lock_guard lock(FlowControlMutex);
 
     if (FinishPushed.load()) {
@@ -435,7 +442,7 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
     }
 
     (*OutputBufferChunks)++;
-    *OutputBufferBytes += data.Bytes;
+    *OutputBufferBytes += chunkBytes;
 
     if (!spilled) {
         nodeState->PushDataChunk(std::move(data), self);
@@ -661,6 +668,10 @@ void TOutputBuffer::ExportPopStats(TDqAsyncStats& stats) {
     Descriptor->PopStats.Export(stats);
 }
 
+TInputDescriptor::~TInputDescriptor() {
+    *InputBufferInflightBytes -= InflightBytes;
+}
+
 bool TInputDescriptor::IsEmpty() {
     std::lock_guard lock(QueueMutex);
     auto result = Queue.empty();
@@ -677,7 +688,9 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
     PushStats.Rows += data.Rows;
 
     (*InputBufferChunks)++;
+    InflightBytes += data.Bytes;
     *InputBufferBytes += data.Bytes;
+    *InputBufferInflightBytes += data.Bytes;
 
     std::lock_guard lock(QueueMutex);
 
@@ -732,6 +745,8 @@ bool TInputDescriptor::PopDataChunk(TDataChunk& data) {
         if (data.Finished) {
             Finished.store(true);
         }
+        InflightBytes -= data.Bytes;
+        *InputBufferInflightBytes -= data.Bytes;
         return true;
     }
 }
@@ -1592,7 +1607,7 @@ std::shared_ptr<TInputDescriptor> TNodeState::GetOrCreateInputDescriptor(const T
         return {};
     }
 
-    auto result = std::make_shared<TInputDescriptor>(info, ActorSystem, InputBufferBytes, InputBufferChunks);
+    auto result = std::make_shared<TInputDescriptor>(info, ActorSystem, InputBufferBytes, InputBufferChunks, InputBufferInflightBytes);
     InputDescriptors.emplace(info, result);
     (*InputBufferCount)++;
     if (bound) {

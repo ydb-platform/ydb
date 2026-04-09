@@ -32,6 +32,7 @@ namespace {
     bool FilterAllSupportedSchemeObjects(const NScheme::TSchemeEntry& entry) {
         return IsIn({
             NScheme::ESchemeEntryType::Table,
+            NScheme::ESchemeEntryType::ColumnTable,
             NScheme::ESchemeEntryType::View,
             NScheme::ESchemeEntryType::Topic,
         }, entry.Type);

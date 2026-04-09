@@ -94,6 +94,15 @@ public:
         return result;
     }
 
+    std::vector<TString> GetExpectedOutputTableIds(const TOperationParams& params) const override {
+        const auto& mapParams = std::get<TMapOperationParams>(params);
+        std::vector<TString> ids;
+        for (const auto& output : mapParams.Output) {
+            ids.emplace_back(output.FmrTableId.Id);
+        }
+        return ids;
+    }
+
     std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& context) override {
         std::vector<TPartIdInfo> groupsToClear;
         TMapTaskParams& mapTaskParams = std::get<TMapTaskParams>(context.Task->TaskParams);

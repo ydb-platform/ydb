@@ -1425,7 +1425,7 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
         TExecutor(const std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<NOlap::NGeneralCache::TColumnDataCachePolicy>>&
                       cacheCallback, const NOlap::TPortionAddress& portion, const TActorId& owner, const NOlap::ISnapshotSchema::TPtr& schema)
             : CacheCallback(cacheCallback)
-            , Portion(std::move(portion))
+            , Portion(portion)
             , Owner(owner)
             , Schema(schema)
         {

@@ -331,6 +331,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(Opts.TxId);
 
         auto* operations = ev->Record.MutableRequest()->MutableTopicOperations();
+        operations->SetTrackProducerId(Opts.TrackProducerId);
         auto* topics = operations->AddTopics();
         topics->set_path(Opts.TopicPath);
         auto* partitions = topics->add_partitions();

@@ -8,6 +8,8 @@
 #include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -582,9 +584,9 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
 
                 bloom->AddColumnIds(columnIdIt->second);
                 const auto& settings = std::get<TIndexDescription::TLocalBloomFilterDescription>(index.SpecializedIndexDescription);
-                if (settings.FalsePositiveProbability) {
-                    bloom->SetFalsePositiveProbability(*settings.FalsePositiveProbability);
-                }
+                const double fpp = settings.FalsePositiveProbability.value_or(
+                    NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability);
+                bloom->SetFalsePositiveProbability(fpp);
 
                 break;
             }
@@ -609,17 +611,21 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                 }
 
                 ngram->SetColumnId(columnIdIt->second);
-                ngram->SetNGrammSize(settings.NgramSize);
-                ngram->SetHashesCount(settings.HashesCount);
-                ngram->SetFilterSizeBytes(settings.FilterSizeBytes);
-                ngram->SetRecordsCount(settings.RecordsCount);
-                ngram->SetCaseSensitive(settings.CaseSensitive);
+                ngram->SetNGrammSize(settings.NgramSize.value_or(NKikimr::NOlap::NIndexes::NDefaults::NGrammSize));
+                ngram->SetCaseSensitive(settings.CaseSensitive.value_or(NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive));
+                const double fpp = settings.FalsePositiveProbability.value_or(NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability);
+                ngram->SetFilterSizeBytes(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
+                ngram->SetHashesCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
+                ngram->SetRecordsCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));
+                ngram->SetFalsePositiveProbability(fpp);
+
                 break;
             }
             default:
                 break;
         }
     }
+
     return true;
 }
 
@@ -1148,6 +1154,33 @@ public:
                 *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
             auto &phyTx = *phyQuery.AddTransactions();
             phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+            // DataShard LocalBloomFilter: not a real secondary index — maps to ByKeyFilterPrefixes
+            // in the partition config via ESchemeOpAlterTable. ColumnShard LocalBloomFilter is
+            // handled by AlterColumnTable and never reaches this path.
+            const bool isLocalBloom = std::all_of(req.add_indexes().begin(), req.add_indexes().end(),
+                [](const auto& idx) {
+                    return idx.type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex;
+                });
+
+            if (isLocalBloom) {
+                Ydb::StatusIds::StatusCode code;
+                TString error;
+                NKikimrSchemeOp::TModifyScheme modifyScheme;
+                if (!BuildAlterTableBloomFilterModifyScheme(&req, &modifyScheme, code, error)) {
+                    IKqpGateway::TGenericResult errResult;
+                    errResult.AddIssue(NYql::TIssue(error));
+                    errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                    tablePromise.SetValue(errResult);
+                    return tablePromise.GetFuture();
+                }
+                phyTx.MutableSchemeOperation()->MutableAlterTable()->CopyFrom(modifyScheme);
+                TGenericResult result;
+                result.SetSuccess();
+                tablePromise.SetValue(result);
+                return tablePromise.GetFuture();
+            }
+
             auto buildOp = phyTx.MutableSchemeOperation()->MutableBuildOperation();
             Ydb::StatusIds::StatusCode code;
             TString error;

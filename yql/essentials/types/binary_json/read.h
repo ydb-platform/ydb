@@ -37,7 +37,7 @@ public:
      *
      * @param offset Offset to the beginning of TSEntry
      */
-    const TStringBuf ReadString(ui32 offset) const;
+    TStringBuf ReadString(ui32 offset) const;
 
     /**
      * @brief Reads number from Number index

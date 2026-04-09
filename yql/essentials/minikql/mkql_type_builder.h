@@ -6,7 +6,6 @@
 #include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
 #include <yql/essentials/public/udf/arrow/block_type_helper.h>
-#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/parser/pg_wrapper/interface/compare.h>
 
 #include <util/generic/size_literals.h>

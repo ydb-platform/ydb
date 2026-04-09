@@ -188,16 +188,8 @@ public:
         : IChannelBuffer(info)
         , Registry(registry)
         , ActorSystem(actorSystem)
-        , InflightBytes(0)
-        , SpilledBytes(0)
         , MaxInflightBytes(maxInflightBytes)
         , MinInflightBytes(minInflightBytes)
-        , NeedToNotifyOutput(false)
-        , NeedToNotifyInput(false)
-        , EarlyFinished(false)
-        , OutputBound(false)
-        , InputBound(false)
-        , Finished(false)
     {
         PushStats.Level = info.Level;
         PopStats.Level = info.Level;
@@ -243,8 +235,8 @@ public:
     std::queue<TLoadingInfo> LoadingQueue;
     IDqChannelStorage::TPtr Storage;
 
-    std::atomic<ui64> InflightBytes;
-    std::atomic<ui64> SpilledBytes;
+    std::atomic<ui64> InflightBytes = 0;
+    std::atomic<ui64> SpilledBytes = 0;
     const ui64 MaxInflightBytes; // NoLimit => HardLimit
     const ui64 MinInflightBytes; // HardLimit => NoLimit
     bool FinishPushed = false;
@@ -252,12 +244,13 @@ public:
     TInstant LastInputNotificationTime;
     TInstant FinishTime;
 
-    std::atomic<bool> NeedToNotifyOutput;
-    std::atomic<bool> NeedToNotifyInput;
-    std::atomic<bool> EarlyFinished;
-    std::atomic<bool> OutputBound;
-    std::atomic<bool> InputBound;
-    std::atomic<bool> Finished;
+    std::atomic<bool> NeedToNotifyOutput = false;
+    std::atomic<bool> NeedToNotifyInput = false;
+
+    std::atomic<bool> EarlyFinished = false;
+    std::atomic<bool> OutputBound = false;
+    std::atomic<bool> InputBound = false;
+    std::atomic<bool> Finished = false;
 };
 
 class TOutputBuffer;
@@ -269,18 +262,6 @@ public:
         ::NMonitoring::TDynamicCounters::TCounterPtr outputBufferChunks, ui64 maxInflightBytes, ui64 minInflightBytes)
         : Info(info)
         , ActorSystem(actorSystem)
-        , GenMajor(0)
-        , WaitQueueBytes(0)
-        , WaitQueueSize(0)
-        , PushBytes(0)
-        , RemotePopBytes(0)
-        , SpilledBytes(0)
-        , NeedToNotifyOutput(false)
-        , EarlyFinished(false)
-        , Terminated(false)
-        , Aborted(false)
-        , Finished(false)
-        , FinishPushed(false)
         , OutputBufferBytes(outputBufferBytes)
         , OutputBufferChunks(outputBufferChunks)
         , MaxInflightBytes(maxInflightBytes)
@@ -306,7 +287,7 @@ public:
 
     TChannelFullInfo Info;
     NActors::TActorSystem* ActorSystem;
-    std::atomic<ui64> GenMajor;
+    std::atomic<ui64> GenMajor = 0;
     TDqThreadSafeStats PushStats;
     TDqThreadSafeStats PopStats;
 
@@ -318,8 +299,8 @@ public:
     bool IsBound = false;
 
     mutable std::mutex WaitQueueMutex;
-    std::atomic<ui64> WaitQueueBytes;
-    std::atomic<ui64> WaitQueueSize;
+    std::atomic<ui64> WaitQueueBytes = 0;
+    std::atomic<ui64> WaitQueueSize = 0;
     mutable std::queue<TDataChunk> WaitQueue;
     mutable TInstant WaitTimestamp;
 
@@ -327,17 +308,17 @@ public:
     std::shared_ptr<TDqFillAggregator> Aggregator;
     mutable EDqFillLevel FillLevel = EDqFillLevel::NoLimit;
 
-    std::atomic<ui64> PushBytes;
-    std::atomic<ui64> RemotePopBytes;
-    std::atomic<ui64> SpilledBytes;
+    std::atomic<ui64> PushBytes = 0;
+    std::atomic<ui64> RemotePopBytes = 0;
+    std::atomic<ui64> SpilledBytes = 0;
 
-    std::atomic<bool> NeedToNotifyOutput;
-    std::atomic<bool> EarlyFinished;
-    std::atomic<bool> Terminated;
-    std::atomic<bool> Aborted;
-    std::atomic<bool> Finished;
-    std::atomic<bool> FinishPushed;
-    std::atomic<bool> Leading;
+    std::atomic<bool> NeedToNotifyOutput = false;
+    std::atomic<bool> EarlyFinished = false;
+    std::atomic<bool> Terminated = false;
+    std::atomic<bool> Aborted = false;
+    std::atomic<bool> Finished = false;
+    std::atomic<bool> FinishPushed = false;
+    std::atomic<bool> Leading = false;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferChunks;
@@ -407,22 +388,20 @@ class TInputDescriptor {
 public:
 
     TInputDescriptor(const TChannelFullInfo& info, NActors::TActorSystem* actorSystem,
-      ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferBytes, ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferChunks)
+        ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferBytes,
+        ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferChunks,
+        ::NMonitoring::TDynamicCounters::TCounterPtr inputBufferInflightBytes)
         : Info(info)
         , ActorSystem(actorSystem)
-        , QueueSize(0)
-        , QueueBytes(0)
-        , NeedToNotifyInput(false)
-        , FinishPushed(false)
-        , Finished(false)
-        , EarlyFinished(false)
-        , Aborted(false)
         , InputBufferBytes(inputBufferBytes)
         , InputBufferChunks(inputBufferChunks)
+        , InputBufferInflightBytes(inputBufferInflightBytes)
     {
         PushStats.Level = info.Level;
         PopStats.Level = info.Level;
     }
+
+    ~TInputDescriptor();
 
     bool IsEmpty();
     bool PushDataChunk(TDataChunk&& data);
@@ -444,18 +423,20 @@ public:
     TDqThreadSafeStats PopStats;
 
     mutable std::mutex QueueMutex;
-    std::atomic<ui64> QueueSize;
-    std::atomic<ui64> QueueBytes;
+    std::atomic<ui64> QueueSize = 0;
+    std::atomic<ui64> QueueBytes = 0;
     mutable std::queue<TInputItem> Queue;
+    std::atomic<ui64> InflightBytes = 0;
 
-    std::atomic<bool> NeedToNotifyInput;
-    std::atomic<bool> FinishPushed;
-    std::atomic<bool> Finished;
-    std::atomic<bool> EarlyFinished;
-    std::atomic<bool> Aborted;
+    std::atomic<bool> NeedToNotifyInput = false;
+    std::atomic<bool> FinishPushed = false;
+    std::atomic<bool> Finished = false;
+    std::atomic<bool> EarlyFinished = false;
+    std::atomic<bool> Aborted = false;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferInflightBytes;
 };
 
 class TInputBuffer : public IChannelBuffer {
@@ -548,6 +529,7 @@ public:
         InputBufferCount = counters->GetCounter("InputBuffer/Count", false);
         InputBufferBytes = counters->GetCounter("InputBuffer/Bytes", true);
         InputBufferChunks = counters->GetCounter("InputBuffer/Chunks", true);
+        InputBufferInflightBytes = counters->GetCounter("InputBuffer/InflightBytes", false);
     }
 
     virtual ~TNodeState();
@@ -625,6 +607,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferInflightBytes;
     TDuration ReconciliationDelay = TDuration::Zero();
     bool ReReconciliation = false;
     ui64 ReconciliationCount = 0;
@@ -678,6 +661,7 @@ public:
         LocalBufferBytes = counters->GetCounter("LocalBuffer/Bytes", true);
         LocalBufferChunks = counters->GetCounter("LocalBuffer/Chunks", true);
         LocalBufferLatency = counters->GetCounter("LocalBuffer/Latency", true);
+        LocalBufferInflightBytes = counters->GetCounter("LocalBuffer/InflightBytes", false);
     }
     ~TLocalBufferRegistry();
     std::shared_ptr<TLocalBuffer> GetOrCreateLocalBuffer(const std::shared_ptr<TLocalBufferRegistry>& registry, const TChannelFullInfo& info);
@@ -692,6 +676,7 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferChunks;
     ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferLatency;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferInflightBytes;
 };
 
 class TDqChannelService : public IDqChannelService {

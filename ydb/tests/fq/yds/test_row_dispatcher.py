@@ -219,7 +219,7 @@ class TestPqRowDispatcher(TestYdsBase):
             '{"time": 109}',
             '{"time": 118}',
         ]
-        self.write_stream(data)        
+        self.write_stream(data)
         assert len(self.read_stream(1, topic_path=self.output_topic)) == 1
         stop_yds_query(client, query_id)
 

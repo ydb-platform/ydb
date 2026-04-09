@@ -1,3 +1,4 @@
+import json
 import logging
 import pytest
 import random
@@ -448,6 +449,132 @@ class TestStreamingInYdb(StreamingTestBase):
         result_sets2 = future2.result()
         assert result_sets1[0].rows[0]['time'] == b'lunch time'
         assert result_sets2[0].rows[0]['time'] == b'lunch time'
+
+    @pytest.mark.parametrize(
+        "kikimr",
+        [
+            {"enable_pq_user_message_meta_in_system_metadata": True},
+            {"enable_pq_user_message_meta_in_system_metadata": False},
+        ],
+        ids=["enable_pq_user_message_meta_in_system_metadata_true", "enable_pq_user_message_meta_in_system_metadata_false"],
+        indirect=["kikimr"],
+    )
+    @pytest.mark.parametrize(
+        "pragma_message_meta",
+        [None, False, True],
+        ids=["no_pragma", "pragma_false", "pragma_true"],
+    )
+    def test_read_message_meta_streaming(self, kikimr, entity_name, pragma_message_meta, request):
+        """Cluster StreamingQueries flag and PRAGMA pq.EnableUserMessageMetaInSystemMetadata together gate message_meta."""
+        cfg = request.node.callspec.params["kikimr"]
+        enable_message_meta_flag = cfg["enable_pq_user_message_meta_in_system_metadata"]
+
+        def pragma_message_meta_suffix():
+            if pragma_message_meta is None:
+                return "nopragma"
+            return str(pragma_message_meta).lower()
+
+        # Short topic prefix: long pytest node ids + read_stream temp paths hit OS filename limits.
+        def short_topic_prefix():
+            p = "n" if pragma_message_meta is None else ("f" if pragma_message_meta is False else "t")
+            return f"mm_{enable_message_meta_flag!s:.1}_{p}"
+
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            short_topic_prefix(),
+            True,
+            entity_name,
+            partitions_count=1,
+        )
+        query_name = f"test_read_message_meta_{pragma_message_meta_suffix()}_{enable_message_meta_flag!s:.1}"
+        path = f"/Root/{query_name}"
+
+        if pragma_message_meta is None:
+            pragma_pq_message_meta = ""
+        else:
+            pragma_pq_message_meta = 'PRAGMA pq.EnableUserMessageMetaInSystemMetadata="{}";\n'.format(
+                str(pragma_message_meta).lower()
+            )
+
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                ''' + pragma_pq_message_meta + R'''INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow())))
+                FROM (
+                    SELECT field1, field2, SystemMetadata("message_meta") AS meta
+                    FROM {inp}
+                    WITH (
+                        FORMAT="json_each_row",
+                        SCHEMA=(field1 String NOT NULL, field2 Int32 NOT NULL)
+                    )
+                );
+            END DO;'''
+
+        expect_success = enable_message_meta_flag and pragma_message_meta is True
+        if not expect_success:
+            with pytest.raises(ydb.issues.GenericError) as excinfo:
+                kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+            err = str(excinfo.value)
+            assert "Metadata key message_meta" in err and "found" in err
+            return
+
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        self.wait_completed_checkpoints(kikimr, path)
+
+        rows = [
+            ('{"field1": "value1", "field2": 105}', {"trace_id": "tid-a"}),
+            ('{"field1": "value2", "field2": 106}', {"trace_id": "tid-b"}),
+        ]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        expected = [
+            {"field1": "value1", "field2": 105, "meta": {"trace_id": "tid-a"}},
+            {"field1": "value2", "field2": 106, "meta": {"trace_id": "tid-b"}},
+        ]
+        got = self.read_stream(len(expected), topic_path=self.output_topic, endpoint=endpoint)
+        for line, exp in zip(got, expected):
+            parsed = json.loads(line)
+            meta = parsed["meta"]
+            if isinstance(meta, str):
+                meta = json.loads(meta)
+            parsed["meta"] = meta
+            assert parsed == exp
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+
+    @pytest.mark.parametrize(
+        "kikimr",
+        [{"enable_pq_user_message_meta_in_system_metadata": True}],
+        indirect=["kikimr"],
+    )
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_read_message_meta_streaming_requires_pragma(self, kikimr, entity_name, local_topics):
+        """Cluster allows message_meta only together with PRAGMA pq.EnableUserMessageMetaInSystemMetadata."""
+        inp, out, _ = self.get_io_names(
+            kikimr,
+            f"read_message_meta_no_pragma_{local_topics!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=1,
+        )
+        query_name = f"test_read_message_meta_no_pragma_{local_topics!s:.1}"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow())))
+                FROM (
+                    SELECT field1, field2, SystemMetadata("message_meta") AS meta
+                    FROM {inp}
+                    WITH (
+                        FORMAT="json_each_row",
+                        SCHEMA=(field1 String NOT NULL, field2 Int32 NOT NULL)
+                    )
+                );
+            END DO;'''
+        with pytest.raises(ydb.issues.GenericError) as excinfo:
+            kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        err = str(excinfo.value)
+        assert "Metadata key message_meta" in err and "found" in err
 
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])

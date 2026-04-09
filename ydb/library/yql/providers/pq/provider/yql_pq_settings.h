@@ -23,6 +23,8 @@ public:
     NCommon::TConfSetting<TDuration, Static> MaxPartitionReadSkew;
     NCommon::TConfSetting<ui64, Static> ReadSessionBufferBytes;
     NCommon::TConfSetting<bool, Static> EnableDeduplication;
+    /// When true, SystemMetadata("message_meta") is allowed (also requires cluster StreamingQueries.EnablePqUserMessageMetaInSystemMetadata).
+    NCommon::TConfSetting<bool, Static> EnableUserMessageMetaInSystemMetadata;
 };
 
 struct TPqClusterConfigurationSettings {

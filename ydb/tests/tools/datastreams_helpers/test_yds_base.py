@@ -32,6 +32,36 @@ class TestYdsBase(object):
         topic = topic_path if topic_path else self.input_topic
         write_stream(topic, data, partition_key=partition_key, database=database, endpoint=fqdn)
 
+    def write_stream_with_message_metadata(self, kikimr, data, topic_path=None, endpoint=None):
+        """Write payloads via Topic API with per-message metadata (key/value pairs).
+
+        data: list of (payload_str, metadata_dict) where metadata_dict maps str -> str or bytes.
+        When endpoint is set (same as for write_stream/read_stream), the writer uses that cluster;
+        otherwise kikimr's local driver is used.
+        """
+        import ydb
+
+        topic = topic_path if topic_path else self.input_topic
+
+        def write_with_driver(driver):
+            with driver.topic_client.writer(topic, producer_id="fq_test_message_meta_writer") as writer:
+                for item in data:
+                    payload, meta = item
+                    writer.write(ydb.TopicWriterMessage(str(payload), metadata_items=meta or {}))
+
+        if endpoint is not None:
+            database, fqdn = self.__unwrap_endpoint(endpoint)
+            driver_config = ydb.DriverConfig(f"grpc://{fqdn}", database, auth_token="root@builtin")
+            driver = ydb.Driver(driver_config)
+            driver.wait(timeout=5)
+            try:
+                write_with_driver(driver)
+            finally:
+                driver.stop()
+        else:
+            driver = getattr(kikimr, "driver", None) or kikimr.ydb_client.driver
+            write_with_driver(driver)
+
     def read_stream(self, messages_count, commit_after_processing=True, topic_path=None, endpoint=None, timeout=None):
         database, fqdn = self.__unwrap_endpoint(endpoint)
         topic = topic_path if topic_path else self.output_topic

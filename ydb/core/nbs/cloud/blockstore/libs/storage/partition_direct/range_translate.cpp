@@ -25,7 +25,8 @@ size_t GetVChunkIndex(
     const TVolumeConfig& volumeConfig,
     TBlockRange64 regionRange)
 {
-    Y_ABORT_UNLESS(volumeConfig.VChunkSize > 0 && volumeConfig.VChunkSize <= RegionSize);
+    Y_ABORT_UNLESS(
+        volumeConfig.VChunkSize > 0 && volumeConfig.VChunkSize <= RegionSize);
     Y_ABORT_UNLESS(RegionSize % volumeConfig.VChunkSize == 0);
     Y_ABORT_UNLESS(volumeConfig.BlockSize > 0);
 
@@ -39,10 +40,11 @@ TBlockRange64 TranslateToVChunk(
     const TVolumeConfig& volumeConfig,
     TBlockRange64 regionRange)
 {
-    Y_ABORT_UNLESS(volumeConfig.VChunkSize > 0 && volumeConfig.VChunkSize <= RegionSize);
+    Y_ABORT_UNLESS(
+        volumeConfig.VChunkSize > 0 && volumeConfig.VChunkSize <= RegionSize);
     Y_ABORT_UNLESS(RegionSize % volumeConfig.VChunkSize == 0);
     Y_ABORT_UNLESS(volumeConfig.BlockSize > 0);
-    
+
     const size_t blocksPerStripe = DefaultStripeSize / volumeConfig.BlockSize;
     const size_t stripeIndex = regionRange.Start / blocksPerStripe;
     const ui32 vChunksPerRegionCount = RegionSize / volumeConfig.VChunkSize;

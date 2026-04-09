@@ -115,6 +115,7 @@ Below are examples of setting the "prefer availability zone" balancing algorithm
 
   This functionality is not currently supported.
 
+<<<<<<< HEAD
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -146,4 +147,6 @@ Below are examples of setting the "prefer availability zone" balancing algorithm
 
   {% endlist %}
 
+=======
+>>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 {% endlist %}

@@ -134,11 +134,36 @@ Below are examples of authentication with a service account file in different {{
 
 - Python
 
-  {% include [auth-sa-data](../../_includes/python/auth-service-account.md) %}
+  {% list tabs %}
 
-- Python (asyncio)
+  - Native SDK
 
-  {% include [auth-sa-data](../../_includes/python/async/auth-service-account.md) %}
+    {% include [auth-sa-data](../../_includes/python/auth-service-account.md) %}
+
+  - Native SDK (Asyncio)
+
+    {% include [auth-sa-data](../../_includes/python/async/auth-service-account.md) %}
+
+  - SQLAlchemy
+
+    ```python
+    import os
+    import sqlalchemy as sa
+    import ydb.iam
+
+    engine = sa.create_engine(
+        "yql+ydb://localhost:2136/local",
+        connect_args={
+            "credentials": ydb.iam.ServiceAccountCredentials.from_file(
+                os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
+            )
+        }
+    )
+    with engine.connect() as connection:
+        result = connection.execute(sa.text("SELECT 1"))
+    ```
+
+  {% endlist %}
 
 - C# (.NET)
 

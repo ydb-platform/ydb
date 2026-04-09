@@ -25,7 +25,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
 from ydb_wrapper import YDBWrapper
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from github_issue_utils import DEFAULT_BUILD_TYPE, make_profile_id
+from github_issue_utils import DEFAULT_BUILD_TYPE, canonical_team_slug, make_profile_id
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -732,7 +732,7 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', b
                 'success_rate': 0,
                 'days_in_state': 0,
                 'date_window': 'N/A',
-                'owner': 'Unknown',
+                'owner': 'unknown',
                 'state': 'Muted',
                 'summary': 'added manually, no monitor data',
                 'fail_count': 0,
@@ -742,7 +742,7 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', b
             }
             logging.info(f"test {full_name} not in monitor, using fallback data")
 
-        key = f"{test_from_file['testsuite']}:{entry['owner']}"
+        key = f"{test_from_file['testsuite']}:{canonical_team_slug(entry['owner'])}"
         if not temp_tests_by_suite.get(key):
             temp_tests_by_suite[key] = []
         temp_tests_by_suite[key].append(entry)
@@ -762,7 +762,8 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', b
     queue_items = []
     for item in prepared_tests_by_suite:
         title, body = generate_github_issue_title_and_body(prepared_tests_by_suite[item])
-        owner_value = prepared_tests_by_suite[item][0]['owner'].split('/', 1)[1] if '/' in prepared_tests_by_suite[item][0]['owner'] else prepared_tests_by_suite[item][0]['owner']
+        raw_owner = prepared_tests_by_suite[item][0]['owner']
+        owner_value = canonical_team_slug(raw_owner)
         result = create_and_add_issue_to_project(title, body, state='Muted', owner=owner_value)
         if not result:
             break

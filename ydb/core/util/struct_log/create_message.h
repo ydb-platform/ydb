@@ -72,18 +72,21 @@ public:
         }
 
         ~TGuard() {
-            if (!Poped) {
+            if (!MessagePoped) {
                 PopBuildMessage();
             }
         }
 
         TStructuredMessage Pop() {
-            Poped = true;
+            if (MessagePoped) {
+                return TStructuredMessage();
+            }
+            MessagePoped = true;
             return PopBuildMessage();
         }
 
     protected:
-        bool Poped{false};
+        bool MessagePoped{false};
     };
 };
 

@@ -19,7 +19,9 @@ void TLogStack::Push() {
 }
 
 void TLogStack::Pop() {
-    LogStack.pop_back();
+    if (!LogStack.empty()) {
+        LogStack.pop_back();
+    }
 }
 
 }

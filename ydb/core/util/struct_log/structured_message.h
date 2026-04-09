@@ -82,8 +82,6 @@ public:
             AttachedValues.emplace_back(prefix + subItem.Name.ToString(), subItem.TypeCode, subItem.Offset + offset, subItem.Length, ++AddNumber);
         }
 
-        std::copy(begin(subMessage.Data), end(subMessage.Data), std::back_inserter(Data));
-
         auto oldSize = Data.size();
         Data.resize(oldSize + subMessage.Data.size());
         std::memcpy(Data.data() + oldSize, subMessage.Data.data(), subMessage.Data.size());
@@ -169,8 +167,8 @@ public:
         auto value = AttachedValues[index];
         AttachedValues.erase(begin(AttachedValues) + index);
 
-        auto pos = std::upper_bound( begin(AttachedValues), end(AttachedValues), value);
         value.AddNumber = AddNumber++;
+        auto pos = std::upper_bound( begin(AttachedValues), end(AttachedValues), value);
         AttachedValues.insert(pos, std::move(value));
         RemoveDups();
     }

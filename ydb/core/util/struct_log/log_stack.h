@@ -1,4 +1,5 @@
 #pragma once
+#include "create_message.h"
 #include "structured_message.h"
 
 namespace NKikimr::NStructLog {

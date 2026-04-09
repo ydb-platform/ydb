@@ -22,6 +22,8 @@ items:
   include:
     mode: link
     path: ydb-cli/toc_p.yaml
+- name: Импорт и экспорт данных в колоночные таблицы
+  href: import-export-column-tables.md
 - name: YDB Native SDK
   href: ydb-sdk/index.md
   include:
@@ -37,6 +39,11 @@ items:
   include:
     mode: link
     path: kafka-api/toc_p.yaml
+- name: Потоковые запросы
+  href: streaming-query/index.md
+  include:
+    mode: link
+    path: streaming-query/toc_p.yaml
 - name: Конфигурация
   href: configuration/index.md
   include:

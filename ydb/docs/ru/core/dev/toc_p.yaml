@@ -25,8 +25,17 @@ items:
   href: secondary-indexes.md
 - name: Векторные индексы
   href: vector-indexes.md
-- name: Векторный индекс вида vector_kmeans_tree
-  href: vector-indexes-kmeans-tree-type.md
+  items:
+  - name: Векторный индекс вида vector_kmeans_tree
+    href: vector-indexes-kmeans-tree-type.md
+  - name: Практические руководства
+    items:
+    - name: Векторный индекс - быстрый старт
+      href: vector-indexes/vector-index-quickstart.md
+    - name: Векторный индекс с загрузкой внешнего набора данных
+      href: vector-indexes/vector-index-with-prepared-dataset.md
+    - name: Векторный поиск через YDB SDK
+      href: vector-indexes/sdk.md
 - name: Оптимизация планов запросов
   href: query-plans-optimization.md
 - name: Подсказки оптимизатора

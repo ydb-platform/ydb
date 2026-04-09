@@ -38,12 +38,7 @@ items:
   include:
     mode: link
     path: reference/toc_p.yaml
-- name: Рецепты
-  href: recipes/index.md
-  include:
-    mode: link
-    path: recipes/toc_p.yaml
-- name: Диагностика проблем
+- name: Инструменты диагностики
   href: troubleshooting/index.md
   include:
     mode: link

@@ -38,5 +38,12 @@ items:
   href: bridge.md
 - name: Трансфер данных
   href: transfer.md
+  items:
+  - name: Практические руководства
+    items:
+    - name: Трансфер - быстрый старт
+      href: transfer/quickstart.md
+    - name: Трансфер - поставка access логов NGINX в таблицу
+      href: transfer/nginx.md
 - name: Потоковые запросы
   href: streaming-query.md

@@ -3,6 +3,14 @@ items:
     href: install.md
   - name: Соединение с БД и аутентификация
     href: connect.md
+  - name: Практические руководства
+    items:
+    - name: Конвертация типов таблиц
+      href: convert-table-type.md
+    - name: Нагрузочное тестирование
+      href: benchmarks.md
+    - name: Настройка TTL таблиц
+      href: ttl.md
   - name: Все команды по алфавиту
     href: commands.md
   - name: Сервисные команды

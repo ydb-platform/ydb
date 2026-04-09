@@ -20,7 +20,6 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64 & nodeCounter, ui32 explainFlag
     NJson::TJsonValue plans;
 
     finalStage["PlanNodeId"] = nodeCounter++;
-    finalStage["Node Type"] = "Stage";
 
     // We first build a map of stage_id -> operator list
     // Then iterate through stage ids and output a plan node for each stage
@@ -37,7 +36,11 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64 & nodeCounter, ui32 explainFlag
 
         auto & stageOps = stageOpMap.at(stageId);
 
-        if (currOp->Kind != EOperator::Map && currOp->Kind != EOperator::EmptySource) {
+        //if (currOp->Kind != EOperator::Map && currOp->Kind != EOperator::EmptySource) {
+        if (currOp->Kind != EOperator::EmptySource) {
+
+            YQL_CLOG(TRACE, CoreDq) << "Adding operator to explain json: " << currOp->GetExplainName() << ", stageId: " << stageId;
+
             stageOps.insert(stageOps.begin(), currOp);
         }
 
@@ -74,6 +77,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64 & nodeCounter, ui32 explainFlag
 
         // If this is the final stage, add the child plans and operators to it
         if(stageOutputs.empty()) {
+            finalStage["Node Type"] = stageName;
             finalStage["Operators"] = operatorList;
             finalStage["Plans"] = planList;
         }
@@ -96,6 +100,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64 & nodeCounter, ui32 explainFlag
                 stage["Operators"] = operatorList;
                 stage["Plans"] = planList;
                 stage["PlanNodeId"] = nodeCounter++;
+                stage["RBO-ID"] = stageId;
 
                 auto connPlans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
                 connPlans.AppendValue(stage);

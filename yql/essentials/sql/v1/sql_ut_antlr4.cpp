@@ -3,6 +3,7 @@
 #include "format/sql_format.h"
 #include "lexer/lexer.h"
 
+#include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
@@ -29,6 +30,19 @@ TParsedTokenList Tokenize(const TString& query) {
                   issues.ToString());
 
     return tokens;
+}
+
+// Verifies that the parse result is a valid program with the expected YQL_EMPTY_QUERY info issue
+// and no user SQL statements.
+void AssertEmptyProgram(const NYql::TAstParseResult& res) {
+    UNIT_ASSERT_C(res.Root, Err2Str(res));
+    // The only issue should be the informational YQL_EMPTY_QUERY notice.
+    UNIT_ASSERT_VALUES_EQUAL_C(res.Issues.Size(), 1, Err2Str(res));
+    UNIT_ASSERT_VALUES_EQUAL(res.Issues.begin()->GetCode(), NYql::TIssuesIds::YQL_EMPTY_QUERY);
+    UNIT_ASSERT_VALUES_EQUAL(res.Issues.begin()->GetSeverity(), NYql::TSeverityIds::S_INFO);
+    TWordCountHive elementStat = {{"Write!", 0}};
+    VerifyProgram(res, elementStat);
+    UNIT_ASSERT_VALUES_EQUAL(0, elementStat["Write!"]);
 }
 
 } // namespace
@@ -293,3 +307,31 @@ Y_UNIT_TEST(AlterColumnCompressionLevelNegative) {
 }
 
 } // Y_UNIT_TEST_SUITE(ColumnCompression)
+
+Y_UNIT_TEST_SUITE(CommentOnlyQuery) {
+
+Y_UNIT_TEST(SingleLineComment) {
+    AssertEmptyProgram(SqlToYql("-- This is a single-line comment"));
+}
+
+Y_UNIT_TEST(MultiLineComment) {
+    AssertEmptyProgram(SqlToYql("/* This is a\n   multi-line comment */"));
+}
+
+Y_UNIT_TEST(MultipleComments) {
+    AssertEmptyProgram(SqlToYql("-- First comment\n-- Second comment\n-- Third comment"));
+}
+
+Y_UNIT_TEST(MixedCommentTypes) {
+    AssertEmptyProgram(SqlToYql("-- Single-line\n/* Multi-line */\n-- Another single-line"));
+}
+
+Y_UNIT_TEST(WhitespaceAndComments) {
+    AssertEmptyProgram(SqlToYql("   -- comment\n  "));
+}
+
+Y_UNIT_TEST(OnlyWhitespace) {
+    AssertEmptyProgram(SqlToYql("   \n\t  "));
+}
+
+} // Y_UNIT_TEST_SUITE(CommentOnlyQuery)

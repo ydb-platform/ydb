@@ -161,6 +161,7 @@ message TIssuesIds {
         YQL_HINT_INVALID_PARAMETERS = 4539;
         YQL_UNTYPED_STRING_LITERALS = 4540;
         YQL_DISCARD_IN_INVALID_PLACE = 4541;
+        YQL_EMPTY_QUERY = 4542;
         YQL_SYNTAX_AMBIGUITY = 4602;
 
 // yql parser errors

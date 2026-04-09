@@ -219,33 +219,40 @@ TVector<NYql::TAstParseResult> SqlToAstStatements(const TLexers& lexers, const T
             std::vector<::NSQLv1Generated::TRule_sql_stmt_core> commonStates;
             std::vector<::NSQLv1Generated::TRule_sql_stmt_core> statementResult;
             const auto& statements = query.GetAlt_sql_query1().GetRule_sql_stmt_list1();
-            if (NeedUseForAllStatements(statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2().Alt_case())) {
-                commonStates.push_back(statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2());
+            if (!statements.HasBlock2()) {
+                // Query contains no statements (only comments/whitespace).
+                // Return an empty result with the informational YQL_EMPTY_QUERY issue.
+                issues.AddIssue(NYql::TIssue("Query contains no statements").SetCode(
+                    NYql::TIssuesIds::YQL_EMPTY_QUERY, NYql::TSeverityIds::S_INFO));
             } else {
-                TContext ctx(lexers, parsers, settings, hints, issues, queryText);
-                result.emplace_back();
-                if (stmtParseInfo) {
-                    stmtParseInfo->push_back({});
+                if (NeedUseForAllStatements(statements.GetBlock2().GetRule_sql_stmt1().GetRule_sql_stmt_core2().Alt_case())) {
+                    commonStates.push_back(statements.GetBlock2().GetRule_sql_stmt1().GetRule_sql_stmt_core2());
+                } else {
+                    TContext ctx(lexers, parsers, settings, hints, issues, queryText);
+                    result.emplace_back();
+                    if (stmtParseInfo) {
+                        stmtParseInfo->push_back({});
+                    }
+                    SqlASTsToYqlsImpl(result.back(), {statements.GetBlock2().GetRule_sql_stmt1().GetRule_sql_stmt_core2()}, ctx);
+                    result.back().Issues = std::move(issues);
+                    issues = {};
                 }
-                SqlASTsToYqlsImpl(result.back(), {statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2()}, ctx);
-                result.back().Issues = std::move(issues);
-                issues = {};
-            }
-            for (auto block : statements.GetBlock3()) {
-                if (NeedUseForAllStatements(block.GetRule_sql_stmt2().GetRule_sql_stmt_core2().Alt_case())) {
-                    commonStates.push_back(block.GetRule_sql_stmt2().GetRule_sql_stmt_core2());
-                    continue;
+                for (auto block : statements.GetBlock2().GetBlock2()) {
+                    if (NeedUseForAllStatements(block.GetRule_sql_stmt2().GetRule_sql_stmt_core2().Alt_case())) {
+                        commonStates.push_back(block.GetRule_sql_stmt2().GetRule_sql_stmt_core2());
+                        continue;
+                    }
+                    TContext ctx(lexers, parsers, settings, hints, issues, queryText);
+                    result.emplace_back();
+                    if (stmtParseInfo) {
+                        stmtParseInfo->push_back({});
+                    }
+                    statementResult = commonStates;
+                    statementResult.push_back(block.GetRule_sql_stmt2().GetRule_sql_stmt_core2());
+                    SqlASTsToYqlsImpl(result.back(), statementResult, ctx);
+                    result.back().Issues = std::move(issues);
+                    issues = {};
                 }
-                TContext ctx(lexers, parsers, settings, hints, issues, queryText);
-                result.emplace_back();
-                if (stmtParseInfo) {
-                    stmtParseInfo->push_back({});
-                }
-                statementResult = commonStates;
-                statementResult.push_back(block.GetRule_sql_stmt2().GetRule_sql_stmt_core2());
-                SqlASTsToYqlsImpl(result.back(), statementResult, ctx);
-                result.back().Issues = std::move(issues);
-                issues = {};
             }
         }
     } else {

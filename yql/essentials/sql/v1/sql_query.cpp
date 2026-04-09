@@ -4406,21 +4406,27 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
             return true;
         };
 
-        const auto& firstStmt = statements.GetRule_sql_stmt2();
-        if (!checkExplainToken(firstStmt)) {
-            return nullptr;
-        }
-
-        if (!Statement(blocks, firstStmt.GetRule_sql_stmt_core2(), statementNumber++)) {
-            return nullptr;
-        }
-        for (auto block : statements.GetBlock3()) {
-            const auto& stmt = block.GetRule_sql_stmt2();
-            if (!checkExplainToken(stmt)) {
+        if (!statements.HasBlock2()) {
+            // Query contains no statements (only comments/whitespace).
+            Ctx_.Issues.AddIssue(NYql::TIssue("Query contains no statements").SetCode(
+                NYql::TIssuesIds::YQL_EMPTY_QUERY, NYql::TSeverityIds::S_INFO));
+        } else {
+            const auto& firstStmt = statements.GetBlock2().GetRule_sql_stmt1();
+            if (!checkExplainToken(firstStmt)) {
                 return nullptr;
             }
-            if (!Statement(blocks, stmt.GetRule_sql_stmt_core2(), statementNumber++)) {
+
+            if (!Statement(blocks, firstStmt.GetRule_sql_stmt_core2(), statementNumber++)) {
                 return nullptr;
+            }
+            for (auto block : statements.GetBlock2().GetBlock2()) {
+                const auto& stmt = block.GetRule_sql_stmt2();
+                if (!checkExplainToken(stmt)) {
+                    return nullptr;
+                }
+                if (!Statement(blocks, stmt.GetRule_sql_stmt_core2(), statementNumber++)) {
+                    return nullptr;
+                }
             }
         }
     }

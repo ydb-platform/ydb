@@ -190,7 +190,7 @@ public:
         return Status;
     }
 
-    const NYql::TIssues GetIssues() const {
+    const NYql::TIssues& GetIssues() const {
         return Issues;
     }
 
@@ -199,8 +199,8 @@ public:
         return Issues.AddIssue(std::forward<TArgs>(args)...);
     }
 
-    void AddIssues(const NYql::TIssues& errors) {
-        Issues.AddIssues(errors);
+    void AddIssues(const NYql::TIssues& issues) {
+        Issues.AddIssues(issues);
     }
 
 private:

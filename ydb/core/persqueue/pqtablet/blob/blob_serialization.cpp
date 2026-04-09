@@ -547,7 +547,7 @@ void TBatch::Unpack() {
     }
     AFL_ENSURE(InternalPartsPos.size() == GetInternalPartsCount());
 
-    PackedData.Clear();
+    TBuffer().Swap(PackedData);
 }
 
 void TBatch::UnpackTo(TVector<TClientBlob> *blobs) const

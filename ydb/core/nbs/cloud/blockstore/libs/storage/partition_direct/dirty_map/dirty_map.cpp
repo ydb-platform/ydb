@@ -444,6 +444,19 @@ void TInflightInfo::UnlockPBuffer()
     if (State == EState::PBufferFlushed && PBuffersLockCount == 0) {
         ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Erase);
     }
+
+    /*
+    // TODO double check me
+    if (PBuffersLockCount == 0) {
+        if (State == EState::PBufferWritten) {
+            // Restore the LSN to the flush queue after the read lock is
+            // released.
+            ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Flush);
+        } else if (State == EState::PBufferFlushed) {
+            ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Erase);
+        }
+    }
+    */
 }
 
 ////////////////////////////////////////////////////////////////////////////////

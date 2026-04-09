@@ -35,14 +35,13 @@ items:
     href: session-pool-limit.md
   - name: Выполнение повторных запросов
     href: retry.md
+  - name: Обработка ошибок в API
+    href: error_handling.md
     items:
-    - name: Обработка ошибок в API
-      href: error_handling.md
-      items:
-      - name: Статусы завершения сервера YDB
-        href: ydb-status-codes.md
-      - name: Статусы завершения gRPC
-        href: grpc-status-codes.md
+    - name: Статусы завершения сервера YDB
+      href: ydb-status-codes.md
+    - name: Статусы завершения gRPC
+      href: grpc-status-codes.md
   - name: Параметризованные запросы
     href: parameterized_queries.md
   - name: Форматы данных

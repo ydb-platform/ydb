@@ -1887,9 +1887,15 @@ std::optional<TKqpReadTableFullTextIndexSettings> BuildFullTextSettingsFromJsonP
     }
 
     auto collectResult = NJsonIndex::CollectJsonPath(jsonPath, NJsonIndex::ECallableType::JsonExists);
-    if (collectResult.IsError() || collectResult.GetTokens().empty()) {
+    if (collectResult.IsError()) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
-            TStringBuilder() << "Failed to extract search terms from jsonpath expression: " << jsonPathStr));
+            TStringBuilder() << "Failed to extract search terms from the jsonpath expression: " << collectResult.GetError().GetMessage()));
+        return std::nullopt;
+    }
+
+    if (collectResult.GetTokens().empty()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Failed to extract search terms from the jsonpath expression, no tokens found"));
         return std::nullopt;
     }
 

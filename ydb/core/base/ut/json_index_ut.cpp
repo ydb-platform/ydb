@@ -1358,6 +1358,72 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateError("$.a ? ((@.b == 10 || !(@.c == 20)) is unknown)", predError, ECallableType::JsonExists);
     }
 
+    // Nested filter: (@ ? (predicate)).member == value
+    Y_UNIT_TEST(CollectPath_NestedFilter) {
+        // Basic: inner == predicate, outer comparison dropped
+        ValidateJsonExists("$ ? ((@ ? (@.a == 1)).b == 2)", {"\1a" + numSuffix(1)});
+        ValidateJsonExists("$ ? ((@ ? (@.a == \"x\")).b == \"y\")", {"\1a" + strSuffix("x")});
+        ValidateJsonExists("$ ? ((@ ? (@.a == true)).b == false)", {"\1a" + boolTrueSuffix});
+        ValidateJsonExists("$ ? ((@ ? (@.a == false)).b == true)", {"\1a" + boolFalseSuffix});
+        ValidateJsonExists("$ ? ((@ ? (@.a == null)).b == null)", {"\1a" + nullSuffix});
+        ValidateJsonExists("$ ? ((@ ? (@.a == -3.14)).b == 0)", {"\1a" + numSuffix(-3.14)});
+
+        // Reversed literal in inner predicate (literal == @.path)
+        ValidateJsonExists("$ ? ((@ ? (1 == @.a)).b == 2)", {"\1a" + numSuffix(1)});
+        ValidateJsonExists("$ ? ((@ ? (\"x\" == @.a)).b == \"y\")", {"\1a" + strSuffix("x")});
+        ValidateJsonExists("$ ? ((@ ? (null == @.a)).b == 0)", {"\1a" + nullSuffix});
+
+        // Outer path contributes to the index prefix
+        ValidateJsonExists("$.key ? ((@ ? (@.sub == \"x\")).other == \"y\")", {"\3key\3sub" + strSuffix("x")});
+        ValidateJsonExists("$.a.b ? ((@ ? (@.c == true)).d == false)", {"\1a\1b\1c" + boolTrueSuffix});
+        ValidateJsonExists("$.arr ? ((@ ? (@.id == 9)).name == \"x\")", {"\3arr\2id" + numSuffix(9)});
+        ValidateJsonExists("$.items ? ((@ ? (@.type == null)).value > 0)", {"\5items\4type" + nullSuffix});
+
+        // Comparison operators != == in inner predicate: literal not appended, only path
+        ValidateJsonExists("$ ? ((@ ? (@.n < 10)).label == \"x\")", {"\1n"});
+        ValidateJsonExists("$ ? ((@ ? (@.n > 0)).label == \"x\")", {"\1n"});
+        ValidateJsonExists("$ ? ((@ ? (@.n != 0)).label == \"x\")", {"\1n"});
+        ValidateJsonExists("$ ? ((@ ? (@.n >= 0)).label == \"x\")", {"\1n"});
+        ValidateJsonExists("$ ? ((@ ? (@.n <= 100)).label == \"x\")", {"\1n"});
+        ValidateJsonExists("$.arr ? ((@ ? (@.score >= 5)).rank == 1)", {"\3arr\5score"});
+
+        // Deeper inner path
+        ValidateJsonExists("$ ? ((@ ? (@.a.b == 1)).c == 2)", {"\1a\1b" + numSuffix(1)});
+        ValidateJsonExists("$.key ? ((@ ? (@.a.b.c == \"x\")).d == \"y\")", {"\3key\1a\1b\1c" + strSuffix("x")});
+        ValidateJsonExists("$ ? ((@ ? (@.x.y == null)).z == true)", {"\1x\1y" + nullSuffix});
+
+        // Array subscript in inner predicate path: subscript is dropped for the index
+        ValidateJsonExists("$ ? ((@ ? (@.a[0] == 1)).b == 2)", {"\1a" + numSuffix(1)});
+        ValidateJsonExists("$ ? ((@ ? (@.a[last] == true)).b == null)", {"\1a" + boolTrueSuffix});
+        ValidateJsonExists("$ ? ((@ ? (@.a[0].b == \"x\")).c == 1)", {"\1a\1b" + strSuffix("x")});
+
+        // Array subscript on @ before inner filter: subscript is dropped for the index
+        ValidateJsonExists("$ ? ((@[0] ? (@.id == 9)).name == \"x\")", {"\2id" + numSuffix(9)});
+        ValidateJsonExists("$ ? ((@[*] ? (@.tag == \"foo\")).value > 0)", {"\3tag" + strSuffix("foo")});
+        ValidateJsonExists("$.items ? ((@[*] ? (@.tag == \"foo\")).value > 0)", {"\5items\3tag" + strSuffix("foo")});
+        ValidateJsonExists("$.k ? ((@[1] ? (@.x == true)).y == false)", {"\1k\1x" + boolTrueSuffix});
+
+        // Wildcard in inner predicate: path finishes, literal not appended
+        ValidateJsonExists("$ ? ((@ ? (@.* == 1)).x == 2)", {""});
+        ValidateJsonExists("$.key ? ((@ ? (@.* == \"x\")).y == 1)", {"\3key"});
+        ValidateJsonExists("$ ? ((@ ? (@.a.* == null)).b == 1)", {"\1a"});
+
+        // Inner AND: both tokens propagate (filter result has multiple tokens)
+        ValidateJsonExists("$ ? ((@ ? (@.a == 1 && @.b == 2)).c == 3)", {"\1a" + numSuffix(1), "\1b" + numSuffix(2)});
+        ValidateJsonExists("$.key ? ((@ ? (@.x == \"v\" && @.y == true)).z == null)", {"\3key\1x" + strSuffix("v"), "\3key\1y" + boolTrueSuffix});
+        ValidateJsonExists("$ ? ((@ ? (@.a == null && @.b == false)).c == 1)", {"\1a" + nullSuffix, "\1b" + boolFalseSuffix});
+
+        // Inner OR: both tokens propagate
+        ValidateJsonExists("$ ? ((@ ? (@.a == 1 || @.a == 2)).b == \"x\")", {"\1a" + numSuffix(1), "\1a" + numSuffix(2)});
+        ValidateJsonExists("$ ? ((@ ? (@.tag == \"foo\" || @.tag == \"bar\")).value == 0)", {"\3tag" + strSuffix("foo"), "\3tag" + strSuffix("bar")});
+        ValidateJsonExists("$.arr ? ((@ ? (@.id == 1 || @.id == 2)).val == true)", {"\3arr\2id" + numSuffix(1), "\3arr\2id" + numSuffix(2)});
+
+        // Double nesting: only deepest (innermost) inner filter determines the tokens
+        ValidateJsonExists("$ ? ((@ ? ((@ ? (@.z == 1)).w == 2)).val == 3)", {"\1z" + numSuffix(1)});
+        ValidateJsonExists("$.a ? ((@ ? ((@ ? (@.b == \"x\")).c == \"y\")).d == \"z\")", {"\1a\1b" + strSuffix("x")});
+        ValidateJsonExists("$ ? ((@ ? ((@ ? (@.p == null)).q == true)).r == false)", {"\1p" + nullSuffix});
+    }
+
     // Variables are not supported now
     Y_UNIT_TEST(CollectPath_Variables) {
         const TString errorMessage = "Variables are not supported at the moment";

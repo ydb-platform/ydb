@@ -81,6 +81,9 @@ private:
         NThreading::NewPromise<TResponse>();
     TLocationMask RequestedWrites;
     TLocationMask CompletedWrites;
+
+    TInstant StartTime{};
+    EWriteMode DebugWriteMode{};
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -74,6 +74,17 @@ void TWriteRequestExecutor::Run(
     EWriteMode writeMode,
     TDuration pbufferReplyTimeout)
 {
+    DebugWriteMode = writeMode;
+    StartTime = TInstant::Now();
+
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "[PERF_DEBUG] TWriteRequestExecutor::Run writeMode=%d, timeout=%u",
+        static_cast<int>(writeMode),
+        pbufferReplyTimeoutMicroseconds);
+
+
     switch (writeMode) {
         case EWriteMode::PBufferReplication:
             SendWriteRequestToManyPBuffers(pbufferReplyTimeout);
@@ -109,6 +120,18 @@ TWriteRequestExecutor::GetFuture() const
 void TWriteRequestExecutor::SendWriteRequestToManyPBuffers(
     TDuration pbufferReplyTimeout)
 {
+    auto startTime = TInstant::Now();
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "[PERF_DEBUG] SendWriteRequestToManyPBuffers START: vChunkIndex=%u, "
+        "lsn=%lu, range=[%lu,%lu], timeout=%u",
+        VChunkConfig.VChunkIndex,
+        Lsn,
+        VChunkRange.Start,
+        VChunkRange.End,
+        pbufferReplyTimeoutMicroseconds);
+
     std::vector<ELocation> locations = {
         ELocation::PBuffer0,
         ELocation::PBuffer1,
@@ -130,10 +153,25 @@ void TWriteRequestExecutor::SendWriteRequestToManyPBuffers(
         Request->Sglist,
         NWilson::TTraceId(TraceId));
 
+    auto prepTime = (TInstant::Now() - startTime).MicroSeconds();
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "[PERF_DEBUG] SendWriteRequestToManyPBuffers preparation took %lu us",
+        prepTime);
+
     future.Subscribe(
-        [self = shared_from_this()](
+        [self = shared_from_this(), startTime](
             const NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>& f)
-        { self->OnWriteToManyPBuffersResponse(f.GetValue()); });
+        {
+            auto totalTime = (TInstant::Now() - startTime).MicroSeconds();
+            LOG_DEBUG(
+                *self->ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "[PERF_DEBUG] WriteBlocksToManyPBuffers completed in %lu us",
+                totalTime);
+            self->OnWriteToManyPBuffersResponse(f.GetValue());
+        });
 }
 
 void TWriteRequestExecutor::OnWriteToManyPBuffersResponse(
@@ -201,6 +239,17 @@ void TWriteRequestExecutor::OnWriteToManyPBuffersResponse(
 
 void TWriteRequestExecutor::SendWriteRequest(ELocation location)
 {
+    auto startTime = TInstant::Now();
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "[PERF_DEBUG] SendWriteRequest START DirectPBuffersFilling: "
+        "vChunkIndex=%u, "
+        "lsn=%lu, range=[%lu,%lu]",
+        VChunkConfig.VChunkIndex,
+        Lsn,
+        VChunkRange.Start,
+        VChunkRange.End);
     auto span = std::make_shared<NWilson::TSpan>(NWilson::TSpan(
         NKikimr::TWilsonNbs::NbsBasic,
         TraceId.Clone(),
@@ -220,8 +269,14 @@ void TWriteRequestExecutor::SendWriteRequest(ELocation location)
         span->GetTraceId());
 
     future.Subscribe(
-        [self = shared_from_this(), location, span = std::move(span)]       //
+        [self = shared_from_this(), location, span = std::move(span), startTime]                                                    //
         (const NThreading::TFuture<TDBGWriteBlocksResponse>& f) mutable {   //
+            auto totalTime = (TInstant::Now() - startTime).MicroSeconds();
+            LOG_DEBUG(
+                *self->ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "[PERF_DEBUG] SendWriteRequest completed in %lu us",
+                totalTime);
             self->OnWriteResponse(location, f.GetValue(), std::move(span));
         });
 }
@@ -295,6 +350,14 @@ void TWriteRequestExecutor::OnWriteResponse(
 
 void TWriteRequestExecutor::Reply(NProto::TError error)
 {
+    auto totalTime = (TInstant::Now() - StartTime).MicroSeconds();
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "[PERF_DEBUG] TWriteRequestExecutor (writemode %d) completed in %lu us",
+        DebugWriteMode,
+        totalTime);
+
     Promise.TrySetValue(TResponse{
         .Error = std::move(error),
         .Lsn = Lsn,

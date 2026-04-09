@@ -4,6 +4,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/datetime/base.h>
+
 #include <optional>
 #include <string>
 #include <variant>
@@ -287,12 +289,18 @@ Y_UNIT_TEST_F(InvalidWriteSessionAttributeTrackProducerIdInTx_RejectsInit, TFixt
     auto ws = client.CreateWriteSession(options);
 
     std::optional<NTopic::TSessionClosedEvent> closed;
-    for (size_t n = 0; n < 1000 && !closed.has_value(); ++n) {
-        auto ev = ws->GetEvent(true);
-        UNIT_ASSERT_C(ev.has_value(), "expected write session event");
-        if (auto* c = std::get_if<NTopic::TSessionClosedEvent>(&*ev)) {
-            closed.emplace(*c);
-            break;
+    const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+    while (!closed.has_value()) {
+        UNIT_ASSERT_C(
+            TInstant::Now() < deadline,
+            "timed out waiting for write session close after invalid WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX");
+
+        if (auto ev = ws->GetEvent(false)) {
+            if (auto* c = std::get_if<NTopic::TSessionClosedEvent>(&*ev)) {
+                closed.emplace(*c);
+            }
+        } else {
+            Sleep(TDuration::MilliSeconds(50));
         }
     }
     UNIT_ASSERT_C(closed.has_value(), "session must close after invalid WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX");

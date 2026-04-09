@@ -151,6 +151,8 @@ public:
         }
         if (settings.items().empty() && !commonSourcePathSpecified) {
             return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No source prefix specified. Don't know where to import from");
+        } else if (settings.items().empty() && !encryptedExportFeatureFlag) {
+            return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No items to import. Don't know where to import from");
         }
         for (const auto& item : settings.items()) {
             if (TTraits::GetSourcePath(item).empty() && !commonSourcePathSpecified) {

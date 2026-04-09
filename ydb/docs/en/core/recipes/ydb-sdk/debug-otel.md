@@ -123,10 +123,13 @@ Below are examples of the code enabling OpenTelemetry tracing in different {{ yd
        ...
    }
 
+<<<<<<< HEAD
     ````
 
   {% endlist %}
 
+=======
+>>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 - Python
 
   This functionality is not currently supported.

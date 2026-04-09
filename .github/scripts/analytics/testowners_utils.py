@@ -24,7 +24,7 @@ def team_slug_from_monitor_owner(owner) -> str:
     """
     if owner is None:
         return ""
-    s = str(owner).replace("TEAM:@ydb-platform/", "").strip()
+    s = str(owner).replace(_GITHUB_TEAM_PREFIX, "").strip()
     return s.lower()
 
 

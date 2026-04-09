@@ -1968,7 +1968,7 @@ bool TSimpleBlockingKeyedWriteSession::Write(const std::string& key, TWriteMessa
     }
 
     auto seqNo = message.SeqNo_;
-    Writer->Write(std::move(*continuationToken), std::move(key), std::move(message), tx);
+    Writer->Write(std::move(*continuationToken), key, std::move(message), tx);
     return WaitForAck(seqNo, blockTimeout);
 }
 

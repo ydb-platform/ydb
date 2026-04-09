@@ -1835,15 +1835,15 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
     }
 
     Y_UNIT_TEST_TWIN(ParallelBackupWholeDatabase, IsOlap) {
-        return ParallelBackupWholeDatabaseImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
+        ParallelBackupWholeDatabaseImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
     }
 
     Y_UNIT_TEST_TWIN(ChecksumsForSchemaMappingFiles, IsOlap) {
-        return ChecksumsForSchemaMappingFilesImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
+        ChecksumsForSchemaMappingFilesImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
     }
 
     // Test that covers races between processing and cancellation
     Y_UNIT_TEST_TWIN(CancelWhileProcessing, IsOlap) {
-        
+        CancelWhileProcessingImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
     }
 }

@@ -86,10 +86,40 @@ private:
     TGetNewPartIdsForTaskResult GetNewPartIdsForLocalSort(const TGetNewPartIdsForTaskContext& context) {
         TGetNewPartIdsForTaskResult result;
         TLocalSortTaskParams& localSortTaskParams = std::get<TLocalSortTaskParams>(context.Task->TaskParams);
-        TString tableId = localSortTaskParams.Output.TableId;
-        TString newPartId = localSortTaskParams.Output.PartId;
 
-        result.NewPartIdsForTables[tableId].emplace_back(newPartId);
+        if (localSortTaskParams.Output.PartId.empty()) {
+            return {.Error = TFmrError{
+                .Component = EFmrComponent::Coordinator,
+                .Reason = EFmrErrorReason::RestartQuery,
+                .ErrorMessage = "LocalSort task has empty output PartId",
+                .TaskId = context.TaskId,
+                .OperationId = context.OperationId
+            }};
+        }
+        TString tableId = localSortTaskParams.Output.TableId;
+        TString partId = localSortTaskParams.Output.PartId;
+
+        const auto& partIdsIter = context.PartIdsForTables.find(tableId);
+        if (partIdsIter == context.PartIdsForTables.end()) {
+            return {.Error = TFmrError{
+                .Component = EFmrComponent::Coordinator,
+                .Reason = EFmrErrorReason::RestartQuery,
+                .ErrorMessage = "LocalSort task output PartId is missing in coordinator part list",
+                .TaskId = context.TaskId,
+                .OperationId = context.OperationId
+            }};
+        }
+
+        const auto& partIds = partIdsIter->second;
+        if (std::find(partIds.begin(), partIds.end(), partId) == partIds.end()) {
+            return {.Error = TFmrError{
+                .Component = EFmrComponent::Coordinator,
+                .Reason = EFmrErrorReason::RestartQuery,
+                .ErrorMessage = "LocalSort task output PartId is missing in coordinator part list",
+                .TaskId = context.TaskId,
+                .OperationId = context.OperationId
+            }};
+        }
         return result;
     }
 
@@ -147,14 +177,16 @@ private:
             return TGenerateTasksResult{.Error = TMaybe<TFmrError>(std::move(error))};
         }
 
-        std::vector<TGeneratedTaskInfo> generatedTasks;
+        TGenerateTasksResult result;
         for (auto& task: context.PartitionResult.TaskInputs) {
             TLocalSortTaskParams localSortTaskParams;
             TFmrTableRef output = GenerateOutputTable(sortOperationParams.Output);
 
             localSortTaskParams.Input = task;
             localSortTaskParams.Output = TFmrTableOutputRef(output);
-            localSortTaskParams.Output.PartId = GenerateId();
+            TString newPartId = GenerateId();
+            localSortTaskParams.Output.PartId = newPartId;
+            result.PartIdsToUpdate[localSortTaskParams.Output.TableId].emplace_back(newPartId);
 
             GeneratedTasks_.push_back(TGeneratedTaskInfo{
                 .TaskType = ETaskType::LocalSort,
@@ -164,7 +196,8 @@ private:
 
         YQL_CLOG(INFO, FastMapReduce) << "Starting Sort.LocalSort operation stage";
 
-        return TGenerateTasksResult{.Tasks = GeneratedTasks_};
+        result.Tasks = GeneratedTasks_;
+        return result;
     }
 
     TGenerateTasksResult GenerateMergeSortTasksImpl(const TGenerateTasksContext& context)  {

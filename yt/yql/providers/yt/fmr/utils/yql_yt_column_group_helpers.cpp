@@ -36,8 +36,7 @@ TSplittedYsonByColumnGroups SplitYsonByColumnGroups(const TString& tableContent,
     for (const auto& [groupName, cols] : columnGroupsSpec.ColumnGroups) {
         totalColumns += cols.size();
     }
-    const bool needDefaultGroup = !(columnGroupsSpec.DefaultColumnGroupName.empty() && !columnGroupsSpec.ColumnGroups.empty());
-    const ui64 estimatedGroupsCount = columnGroupsSpec.ColumnGroups.size() + (needDefaultGroup ? 1 : 0);
+    const ui64 estimatedGroupsCount = columnGroupsSpec.ColumnGroups.size() + 1;
 
     THashMap<TString, ui64> columnGroups; // Column name -> column group index (for non-default groups)
     columnGroups.reserve(totalColumns);
@@ -57,12 +56,9 @@ TSplittedYsonByColumnGroups SplitYsonByColumnGroups(const TString& tableContent,
     }
 
     const TString& defaultColumnGroupName = columnGroupsSpec.DefaultColumnGroupName;
-    // don't use default column group (#) if all columns are filled with explicit group names.
-    if (needDefaultGroup) {
-        columnGroupIndexes[columnGroupIndex] = defaultColumnGroupName;
-        splittedYsonByColumnGroups[defaultColumnGroupName] = TString();
-        ++columnGroupIndex;
-    }
+    columnGroupIndexes[columnGroupIndex] = defaultColumnGroupName;
+    splittedYsonByColumnGroups[defaultColumnGroupName] = TString();
+    ++columnGroupIndex;
 
     const ui64 columnGroupsNum = columnGroupIndex;
 
@@ -99,8 +95,7 @@ TSplittedYsonByColumnGroups SplitYsonByColumnGroupsRaw(TStringBuf tableContent, 
         totalColumns += cols.size();
     }
 
-    const bool needDefaultGroup = !(columnGroupsSpec.DefaultColumnGroupName.empty() && !columnGroupsSpec.ColumnGroups.empty());
-    const ui64 estimatedGroupsCount = columnGroupsSpec.ColumnGroups.size() + (needDefaultGroup ? 1 : 0);
+    const ui64 estimatedGroupsCount = columnGroupsSpec.ColumnGroups.size() + 1;
 
     THashMap<TString, ui64> columnToGroupIndex;
     columnToGroupIndex.reserve(totalColumns);
@@ -118,10 +113,8 @@ TSplittedYsonByColumnGroups SplitYsonByColumnGroupsRaw(TStringBuf tableContent, 
 
     TString defaultColumnGroupName = columnGroupsSpec.DefaultColumnGroupName;
     ui64 defaultGroupIndex = groupCount;
-    if (!(defaultColumnGroupName.empty() && groupCount > 0)) {
-        groupIndexToName[groupCount] = defaultColumnGroupName;
-        ++groupCount;
-    }
+    groupIndexToName[groupCount] = defaultColumnGroupName;
+    ++groupCount;
 
     TParserFragmentListIndex parser(tableContent);
     parser.Parse();

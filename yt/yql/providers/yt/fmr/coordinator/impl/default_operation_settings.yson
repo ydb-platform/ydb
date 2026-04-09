@@ -22,7 +22,7 @@
             "max_row_weight" = 16777216;
             "chunk_size" = 4194304;
             "inflight_chunks" = 4;
-            "skip_sorted_check" = %true;
+            "skip_sorted_check" = %false;
         };
         "yt_table_writer" = {
             "max_row_weight" = 16777216;

@@ -97,7 +97,7 @@ void TTopicAlterer::DoAlter() {
         applyIf->SetPathVersion(TopicInfo.Self->Info.GetPathVersion());
     }
 
-    auto [status, error] = Settings.Strategy->ApplyChanges(*config, TopicInfo.Info->Description, true);
+    auto [status, error] = Settings.Strategy->ApplyChanges(*config, TopicInfo.Info->Description, Settings.IsCdcStreamCompatible);
     if (status != Ydb::StatusIds::SUCCESS) {
         return ReplyErrorAndDie(status, std::move(error));
     }

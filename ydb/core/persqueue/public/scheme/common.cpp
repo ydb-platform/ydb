@@ -212,7 +212,7 @@ TResult ProcessTopicAttributes(
 }
 
 TClientServiceTypes GetSupportedClientServiceTypes() {
-    auto pqConfig = AppData()->PQConfig;
+    const auto& pqConfig = AppData()->PQConfig;
 
     TClientServiceTypes serviceTypes;
     ui32 count = pqConfig.GetDefaultClientServiceType().GetMaxReadRulesCountPerTopic();
@@ -247,8 +247,8 @@ TResult ProcessAddConsumer(
     const bool checkServiceType,
     NGRpcProxy::V1::TConsumersAdvancedMonitoringSettings* consumersAdvancedMonitoringSettings
 ) {
-    auto enableTopicDiskSubDomainQuota = AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota();
-    auto pqConfig = AppData()->PQConfig;
+    const auto enableTopicDiskSubDomainQuota = AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota();
+    const auto& pqConfig = AppData()->PQConfig;
 
     auto consumerName = NPersQueue::ConvertNewConsumerName(consumerConfig.name(), pqConfig);
     if (consumerName.find("/") != TString::npos || consumerName.find("|") != TString::npos) {

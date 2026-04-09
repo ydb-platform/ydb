@@ -6,6 +6,8 @@
 #include <ydb/services/lib/actors/consumers_advanced_monitoring_settings.h>
 
 #include <expected>
+#include <map>
+#include <optional>
 
 namespace NKikimr::NPQ::NScheme {
 

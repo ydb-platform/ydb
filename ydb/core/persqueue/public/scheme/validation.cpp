@@ -54,7 +54,7 @@ TResult ValidateConfig(
     const TClientServiceTypes& supportedClientServiceTypes,
     const EOperation operation
 ) {
-    auto pqConfig = AppData()->PQConfig;
+    const auto& pqConfig = AppData()->PQConfig;
 
     if (config.GetPartitionConfig().HasStorageLimitBytes() && config.GetPartitionConfig().GetStorageLimitBytes() > 0) {
         auto hasMLP = AnyOf(config.GetConsumers(), [](const auto& consumer) {
@@ -123,7 +123,7 @@ TResult ValidateConsumersConfig(
     const TClientServiceTypes& supportedClientServiceTypes,
     const EOperation operation
 ) {
-    auto pqConfig = AppData()->PQConfig;
+    const auto& pqConfig = AppData()->PQConfig;
 
     size_t consumerCount = NPQ::ConsumerCount(config);
     if (consumerCount > MAX_READ_RULES_COUNT) {

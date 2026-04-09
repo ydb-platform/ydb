@@ -35,6 +35,49 @@
 
 {% list tabs group=lang %}
 
+- Go
+
+  Для работы с топиками используется экземпляр драйвера {{ ydb-short-name }}, созданный с помощью `ydb.Open`. Клиент топиков доступен через метод `db.Topic()`.
+
+  ```go
+  package main
+
+  import (
+    "context"
+    "os"
+
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions"
+  )
+
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    db, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer db.Close(ctx)
+
+    // db.Topic() — клиент для работы с топиками
+    writer, err := db.Topic().StartWriter("topic-path")
+    if err != nil {
+      panic(err)
+    }
+
+    reader, err := db.Topic().StartReader("consumer-name",
+      topicoptions.ReadTopic("topic-path"),
+    )
+    if err != nil {
+      panic(err)
+    }
+    _ = writer
+    _ = reader
+  }
+  ```
+
 - C++
 
   Для работы с топиками создаются экземпляры драйвера {{ ydb-short-name }} и клиента.
@@ -371,6 +414,7 @@
                                   .build())
                           .build())
                   .build());
+  ```
 
 {% endlist %}
 
@@ -595,7 +639,7 @@
   - Асинхронный API
 
     Инициализация настроек писателя:
-    
+
     ```java
     String producerAndGroupID = "group-id";
     WriterSettings settings = WriterSettings.newBuilder()
@@ -604,12 +648,12 @@
           .setMessageGroupId(producerAndGroupID)
           .build();
     ```
-    
+
     Создание и инициализация асинхронного писателя:
-    
+
     ```java
     AsyncWriter writer = topicClient.createAsyncWriter(settings);
-    
+
     // Init in background
     writer.init()
             .thenRun(() -> logger.info("Init finished successfully"))
@@ -618,7 +662,7 @@
                 return null;
             });
     ```
-    
+
     {% endlist %}
 
 - C#
@@ -748,10 +792,10 @@
     Но попадание сообщения в очередь отправки не гарантирует того, что сообщение в итоге будет записано.
     Например, могут возникать ошибки, приводящие к завершению работы писателя до того, как сообщения из очереди будут отправлены.
     Если нужно подтверждение успешной записи для каждого сообщения, используйте асинхронного писателя и проверяйте статус, возвращаемый методом `send`.
-    
+
     ```java
     writer.send(Message.of("11".getBytes()));
-    
+
     long timeoutSeconds = 5; // How long should we wait for a message to be put into sending buffer
     try {
       writer.send(
@@ -777,7 +821,7 @@
     Это способ сигнализировать пользователю о том, что поток записи следует притормозить.
     В таком случае стоит или пропускать сообщения, или выполнять повторные попытки записи через exponential backoff.
     Также можно увеличить размер клиентского буфера (`setMaxSendBufferMemorySize`), чтобы обрабатывать больший объем сообщений перед тем, как он заполнится.
-    
+
     ```java
     try {
       // Non-blocking. Throws QueueOverflowException if send queue is full
@@ -1028,6 +1072,10 @@
 
   Для включения дедупликации нужно в настройках сессии записи указать опцию `ProducerId` или явно включить дедупликацию, вызвав метод `DeduplicationEnabled()`, например, как в секции ["Подключение к топику"](#start-writer).
 
+- Go
+
+  В **ydb-go-sdk** при создании писателя, если не передавать `topicoptions.WithWriterProducerID`, SDK всё равно подставляет идентификатор производителя (генерирует его автоматически). Режим записи без дедупликации, эквивалентный отсутствию `ProducerId` в примере для C++ выше, в текущей версии SDK недоступен.
+
 - Java
 
   Функциональность на данный момент не поддерживается.
@@ -1061,6 +1109,32 @@
 
   if (auto* readyEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
       session->Write(std::move(event.ContinuationToken), std::move(message));
+  }
+  ```
+
+- Go
+
+  Метаданные задаются в поле `Metadata` структуры `topicwriter.Message`:
+
+  ```go
+  err := writer.Write(ctx, topicwriter.Message{
+    Data: strings.NewReader("message-data"),
+    Metadata: map[string][]byte{
+      "meta-key":    []byte("meta-value"),
+      "another-key": []byte("value"),
+    },
+  })
+  ```
+
+  При чтении метаданные доступны в поле `Metadata` у сообщения:
+
+  ```go
+  msg, err := reader.ReadMessage(ctx)
+  if err != nil {
+    return err
+  }
+  for k, v := range msg.Metadata {
+    fmt.Printf("%s: %s\n", k, string(v))
   }
   ```
 
@@ -1242,10 +1316,10 @@
   - Синхронный API
 
     [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteSync.java)
-    
+
     В настройках `SendSettings` метода `send` можно указать транзакцию.
     Тогда сообщение будет записано вместе с коммитом этой транзакцией.
-    
+
     ```java
     // creating a session in the table service
     Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
@@ -1257,7 +1331,7 @@
     // creating a transaction in the table service
     // this transaction is not yet active and has no id
     TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
-    
+
     // get message text within the transaction
     Result<DataQueryResult> dataQueryResult = transaction.executeDataQuery("SELECT \"Hello, world!\";")
           .join();
@@ -1266,7 +1340,7 @@
       return; // retry or shutdown
     }
     // now the transaction is active and has an id
-    
+
     ResultSetReader rsReader = dataQueryResult.getValue().getResultSet(0);
     byte[] message;
     if (rsReader.next()) {
@@ -1274,17 +1348,17 @@
     } else {
       return; // retry or shutdown
     }
-    
+
     writer.send(
           Message.of(message),
           SendSettings.newBuilder()
                   .setTransaction(transaction)
                   .build()
     );
-    
+
     // flush to wait until all messages reach server before commit
     writer.flush();
-    
+
     Status commitStatus = transaction.commit().join();
     analyzeCommitStatus(commitStatus);
     ```
@@ -1292,10 +1366,10 @@
   - Асинхронный API
 
     [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteAsync.java)
-    
+
     В настройках `SendSettings` метода `send` можно указать транзакцию.
     Тогда сообщение будет записано вместе с коммитом этой транзакцией.
-    
+
     ```java
     // creating a session in the table service
     Result<Session> sessionResult = tableClient.createSession(Duration.ofSeconds(10)).join();
@@ -1307,7 +1381,7 @@
     // creating a transaction in the table service
     // this transaction is not yet active and has no id
     TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
-    
+
     // get message text within the transaction
     Result<DataQueryResult> dataQueryResult = transaction.executeDataQuery("SELECT \"Hello, world!\";")
           .join();
@@ -1316,7 +1390,7 @@
       return; // retry or shutdown
     }
     // now the transaction is active and has an id
-    
+
     ResultSetReader rsReader = dataQueryResult.getValue().getResultSet(0);
     byte[] message;
     if (rsReader.next()) {
@@ -1324,7 +1398,7 @@
     } else {
       return; // retry or shutdown
     }
-    
+
     try {
       writer.send(Message.newBuilder()
                               .setData(message)
@@ -1351,7 +1425,7 @@
               })
               // Waiting for the message to reach the server before committing the transaction
               .join();
-    
+
       Status commitStatus = transaction.commit().join();
       analyzeCommitStatus(commitStatus);
     } catch (QueueOverflowException exception) {
@@ -1432,7 +1506,7 @@
   - Синхронный API
 
     Инициализация настроек читателя
-    
+
     ```java
     ReaderSettings settings = ReaderSettings.newBuilder()
           .setConsumerName(consumerName)  // имя consumer'а, зарегистрированного на топике
@@ -1443,22 +1517,22 @@
                   .build())
           .build();
     ```
-    
+
     Создание синхронного читателя
-    
+
     ```java
     SyncReader reader = topicClient.createSyncReader(settings);
     ```
-    
+
     После создания синхронного читателя необходимо инициализировать. Для этого следует воспользоваться одним их двух методов:
     - `init()`: неблокирующий, запускает процесс инициализации в фоне и не ждёт его завершения.
-    
+
     ```java
     reader.init();
     ```
-    
+
     - `initAndWait()`: блокирующий, запускает процесс инициализации и ждёт его завершения. Если в процессе инициализации возникла ошибка, будет брошено исключение.
-    
+
     ```java
     try {
         reader.initAndWait();
@@ -1483,21 +1557,21 @@
                   .build())
           .build();
     ```
-    
+
     Для асинхронного читателя, помимо общих настроек чтения `ReaderSettings`, понадобятся настройки обработчика событий `ReadEventHandlersSettings`, в которых необходимо передать экземпляр наследника `ReadEventHandler`.
     Он будет описывать, как должна происходить обработка различных событий, происходящих во время чтения.
-    
+
     ```java
     ReadEventHandlersSettings handlerSettings = ReadEventHandlersSettings.newBuilder()
           .setEventHandler(new Handler())
           .build();
     ```
-    
+
     Опционально, в `ReadEventHandlersSettings` можно указать executor'а, на котором будет происходить обработка сообщений; по умолчанию используется внутренний поток SDK.
 
     Для реализации обработчика событий можно унаследоваться от `AbstractReadEventHandler` и переопределить метод `onMessages`.
     Метод `onMessages` вызывается каждый раз, когда SDK получает очередной пакет сообщений от сервера. В рамках одного вызова приходит один или несколько сообщений, которые можно подтвердить (`commit`) как по отдельности, так и после обработки всего пакета. Пример реализации:
-    
+
     ```java
     private class Handler extends AbstractReadEventHandler {
       @Override
@@ -1505,9 +1579,9 @@
           for (Message message : event.getMessages()) {
               StringBuilder str = new StringBuilder();
               logger.info("Message received. SeqNo={}, offset={}", message.getSeqNo(), message.getOffset());
-    
+
               process(message);
-    
+
               message.commit().thenRun(() -> {
                   logger.info("Message committed");
               });
@@ -1515,9 +1589,9 @@
       }
     }
     ```
-    
+
     Создание и инициализация асинхронного читателя:
-    
+
     ```java
     AsyncReader reader = topicClient.createAsyncReader(readerSettings, handlerSettings);
     // Init in background
@@ -1705,7 +1779,7 @@
   - Синхронный API
 
     Чтобы читать сообщения без подтверждения обработки, по одному, используйте следующий код:
-    
+
     ```java
     while(true) {
       Message message = reader.receive();
@@ -1804,9 +1878,9 @@
     В синхронном клиенте нет возможности прочитать сразу пакет сообщений.
 
   - Асинхронный API
-    
+
     Чтобы прочитать пакет сообщений без подтверждения обработки, используйте следующий код:
-    
+
     ```java
     private class Handler extends AbstractReadEventHandler {
       @Override
@@ -2020,7 +2094,7 @@
   - Асинхронный API
 
     В обработчике `onMessages` можно закоммитить весь пакет сообщений, вызвав `commit` на событии.
-    
+
     ```java
     @Override
     public void onMessages(DataReceivedEvent event) {
@@ -2187,6 +2261,24 @@
 Обычно прогресс чтения топика сохраняется на сервере в каждом `Consumer`е. Но можно не хранить такой прогресс на сервере и при создании читателя явно указать, что чтение будет происходить без `Consumer`а.
 
 {% list tabs group=lang %}
+
+- Go
+
+  Нужно передать пустую строку в качестве имени consumer и опцию `topicoptions.WithReaderWithoutConsumer(false)` (режим **экспериментальный**, см. [VERSIONING](https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md) в репозитории SDK). В селекторе чтения укажите путь топика и список партиций. Коммиты сообщений в этом режиме недоступны (`CommitModeNone`); при переподключениях прогресс нужно восстанавливать на стороне клиента — см. [хранение позиции на клиенте](#client-commit).
+
+  ```go
+  reader, err := db.Topic().StartReader(
+    "",
+    topicoptions.ReadSelectors{{
+      Path:       "topic-path",
+      Partitions: []int64{0, 1, 2},
+    }},
+    topicoptions.WithReaderWithoutConsumer(false),
+  )
+  if err != nil {
+    return err
+  }
+  ```
 
 - Java
 
@@ -2370,26 +2462,26 @@
   - Синхронный API
 
     [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadSync.java)
-    
+
     В настройках `ReceiveSettings` метода `receive` можно указать транзакцию:
-    
+
     ```java
     Message message = reader.receive(ReceiveSettings.newBuilder()
           .setTransaction(transaction)
           .build());
     ```
-    
+
     Тогда полученное сообщение будет закоммичено вместе с транзакцией. Коммитить его отдельно не нужно.
     Метод `receive` свяжет на сервере оффсеты сообщения с транзакцией вызовом `sendUpdateOffsetsInTransaction` и вернёт управление, когда получит ответ на него.
 
   - Асинхронный API
 
     [Пример на GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionReadAsync.java)
-    
+
     После получения сообщения в обработчике `onMessages` можно связать одно или несколько сообщений с транзакцией.
     Для этого нужно вызвать отдельный метод `reader.updateOffsetsInTransaction` и дождаться его выполнения на сервере.
     Этот метод принимает параметром список оффсетов. Для удобства у `Message` и `DataReceivedEvent` есть метод `getPartitionOffsets()`, возвращающий такой список.
-    
+
     ```java
     @Override
     public void onMessages(DataReceivedEvent event) {
@@ -2404,12 +2496,12 @@
           // creating a transaction in the table service
           // this transaction is not yet active and has no id
           TableTransaction transaction = session.createNewTransaction(TxMode.SERIALIZABLE_RW);
-    
+
           // do something else in the transaction
           transaction.executeDataQuery("SELECT 1").join();
           // now the transaction is active and has an id
           // analyzeQueryResultIfNeeded();
-    
+
           Status updateStatus = reader.updateOffsetsInTransaction(transaction,
                           message.getPartitionOffsets(), new UpdateOffsetsInTransactionSettings.Builder().build())
                   // Do not commit a transaction without waiting for updateOffsetsInTransaction result to avoid a race condition
@@ -2418,7 +2510,7 @@
               logger.error("Couldn't update offsets in a transaction: {}", updateStatus);
               return; // retry or shutdown
           }
-    
+
           Status commitStatus = transaction.commit().join();
           analyzeCommitStatus(commitStatus);
       }
@@ -2510,7 +2602,7 @@
 
     Для возможности реагировать на такое событие следует переопределить метод `onStopPartitionSession(StopPartitionSessionEvent event)` в объекте-наследнике `ReadEventHandler` (см [Подключение к топику для чтения сообщений](#start-reader)).
     `event.confirm()` обязательно должен быть вызван, т.к. сервер ожидает этого ответа для продолжения остановки.
-    
+
     ```java
     @Override
     public void onStopPartitionSession(StopPartitionSessionEvent event) {
@@ -2519,7 +2611,7 @@
       // This event means that no more messages will be received by server
       // Received messages still can be read from ReaderBuffer
       // Messages still can be committed, until confirm() method is called
-    
+
       // Confirm that session can be closed
       event.confirm();
     }
@@ -2847,6 +2939,10 @@
 Чаще всего подтверждение обработки удобно выполнять в рамках читателя, получающего сообщения. Однако существуют сценарии, при которых подтверждение обработки должно производиться процессом, отличным от процесса чтения. В таком случае необходим способ подтверждения, находящийся вне читателя.
 
 {% list tabs group=lang %}
+
+- Go
+
+  Функциональность на данный момент не поддерживается.
 
 - Python
 

@@ -223,7 +223,7 @@ namespace NKikimr::NStorage {
             (SubscriptionExists, SubscribedSessions.contains(nodeId)));
 
         if (!IsSelfStatic) {
-            return OnStaticNodeConnected(nodeId, sessionId);
+            return OnStaticNodeConnected(nodeId, sessionId, cookie);
         }
 
         // check subscription map, do we really have this subscription in flight
@@ -269,7 +269,7 @@ namespace NKikimr::NStorage {
         STLOG(PRI_DEBUG, BS_NODE, NWDC07, "TEvNodeDisconnected", (NodeId, nodeId), (SessionId, sessionId), (Cookie, cookie));
 
         if (!IsSelfStatic) {
-            return OnStaticNodeDisconnected(nodeId, sessionId);
+            return OnStaticNodeDisconnected(nodeId, sessionId, cookie);
         }
 
         const auto it = SubscribedSessions.find(nodeId);
@@ -417,9 +417,6 @@ namespace NKikimr::NStorage {
             }
 
             UnsubscribeQueue.insert(binding.NodeId);
-
-            std::ranges::for_each(std::exchange(InvokeOnRootPending, {}), std::bind(&TThis::HandleInvokeOnRoot,
-                this, std::placeholders::_1));
         }
     }
 
@@ -494,14 +491,6 @@ namespace NKikimr::NStorage {
 
         if (pendingPush) {
             SendEvent(*Binding, std::move(pendingPush));
-        }
-
-        // if we have a root node id that is not ours, then we drop all inbound pile connections; also execute any
-        // pending commands
-        if (Binding && Binding->RootNodeId) {
-            Y_ABORT_UNLESS(Binding->RootNodeId != SelfId().NodeId());
-            std::ranges::for_each(std::exchange(InvokeOnRootPending, {}), std::bind(&TThis::HandleInvokeOnRoot, this,
-                std::placeholders::_1));
         }
     }
 
@@ -707,13 +696,14 @@ namespace NKikimr::NStorage {
             const bool configUpdated = UpdateBound(senderNodeId, nodeId, item.GetMeta(), getPushEv());
             info.BoundNodeIds.insert(nodeId);
 
-            if (Scepter && configUpdated && item.GetMeta().GetGeneration() < StorageConfig->GetGeneration()) {
+            if (Scepter && configUpdated && CommittedStorageConfig &&
+                    item.GetMeta().GetGeneration() < CommittedStorageConfig->GetGeneration()) {
                 // a new node has arrived with stale configuration: we have to update it
                 fanOutCommittedStorageConfig = true;
             }
         }
         if (fanOutCommittedStorageConfig) {
-            FanOutReversePush(StorageConfig.get());
+            FanOutReversePush(CommittedStorageConfig.get());
         }
 
         // process deleted items

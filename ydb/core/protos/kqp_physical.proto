@@ -406,7 +406,7 @@ message TKqpFullTextSource {
         repeated NKikimrKqp.TKqpColumnMetadataProto Columns = 1;
         repeated TKqpPhyValue QueryValue = 2;
         // Pre-compiled tokens extracted from jsonpath at query compile time (JSON index only)
-        repeated string Tokens = 3;
+        repeated bytes Tokens = 3;
     }
 
     message TIndexTable {

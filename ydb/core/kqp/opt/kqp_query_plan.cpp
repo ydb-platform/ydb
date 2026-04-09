@@ -817,11 +817,6 @@ private:
             }
         }
 
-        for (const auto& token : TExprBase(settings.Tokens).Cast<TExprList>()) {
-            YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalJson);
-            searchTerms.push_back(HexEncode(token.Cast<TCoString>().Literal()));
-        }
-
         if (!searchTerms.empty())
             op.Properties["SearchTerms"] = JoinSeq(", ", searchTerms);
 

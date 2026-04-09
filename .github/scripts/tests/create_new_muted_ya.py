@@ -690,7 +690,7 @@ def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', b
     for test_from_file in tests_from_file:
         full_name = test_from_file['full_name']
 
-        if '[*/*]' in test_from_file.get('testcase', ''):
+        if '*/*' in test_from_file.get('testcase', ''): #Do not create issue for chunks and wildcard rows in muted_ya
             logging.info(f"Skipping chunk wildcard pattern: {full_name}")
             continue
 

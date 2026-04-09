@@ -33,6 +33,7 @@ struct TConnection : TSimpleRefCount<TConnection> {
     template <typename T>
     TExprNode::TPtr BuildConnectionImpl(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage, TExprContext& ctx);
     ui32 GetOutputIndex() const { return OutputIndex; }
+    virtual TString GetExplainName() const = 0;
 
     TString Type;
     NYql::EStorageType FromSourceStageStorageType;
@@ -45,6 +46,7 @@ struct TBroadcastConnection: public TConnection {
     }
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
                                             TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Broadcast"; }
 };
 
 struct TMapConnection: public TConnection {
@@ -53,6 +55,8 @@ struct TMapConnection: public TConnection {
     }
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
                                             TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Map"; }
+
 };
 
 struct TUnionAllConnection: public TConnection {
@@ -61,6 +65,7 @@ struct TUnionAllConnection: public TConnection {
         , Parallel(parallel) {
     }
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage, TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "UnionAll"; }
 
 private:
     bool Parallel{false};
@@ -74,6 +79,7 @@ struct TShuffleConnection: public TConnection {
 
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
                                             TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "HashShuffle"; }
 
     TVector<TInfoUnit> Keys;
 };
@@ -86,6 +92,7 @@ struct TMergeConnection: public TConnection {
 
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
                                             TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Merge"; }
 
     TVector<TSortElement> Order;
 };
@@ -96,6 +103,8 @@ struct TSourceConnection: public TConnection {
     }
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
                                             TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "Source"; }
+
 };
 
 template <typename T>

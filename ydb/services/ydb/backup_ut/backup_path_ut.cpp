@@ -1440,7 +1440,7 @@ void ParallelBackupWholeDatabaseImpl(TBackupTestFixture& f, bool /*isOlap*/) {
         for (size_t i = 0; i < parallelBackups.size(); ++i) {
             auto& backupOp = parallelBackups[i];
             TExportSettings settings = traits.MakeExportSettingsCustomDest(f, "", TStringBuilder() << "ParallelBackupWholeDatabasePrefix_" << i);
-            backupOp = traits.ExportAsync(f, settings);;
+            backupOp = traits.ExportAsync(f, settings);
         }
 
         // Wait

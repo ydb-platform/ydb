@@ -22,6 +22,7 @@ TPqConfiguration::TPqConfiguration() {
     REGISTER_SETTING(*this, MaxPartitionReadSkew);
     REGISTER_SETTING(*this, ReadSessionBufferBytes);
     REGISTER_SETTING(*this, EnableDeduplication);
+    REGISTER_SETTING(*this, EnableUserMessageMetaInSystemMetadata);
 }
 
 TPqSettings::TConstPtr TPqConfiguration::Snapshot() const {

@@ -222,7 +222,9 @@ public:
         if (!State_->IsRtmrMode() && !NCommon::ValidateFormatForInput(      // Rtmr has 3 field (key/subkey/value).
             format->Content(),
             schema->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(),
-            [](TStringBuf fieldName) {return GetPqMetaFieldDescriptorBySysColumn(TString(fieldName)).has_value(); },
+            [this](TStringBuf fieldName) {
+                return GetPqMetaFieldDescriptorBySysColumn(TString(fieldName), State_->EffectiveUserMessageMetaInSystemMetadata()).has_value();
+            },
             ctx)) {
             return TStatus::Error;
         }
@@ -441,7 +443,9 @@ public:
                 return TStatus::Error;
             }
             const TString metadataSysColumnName(metadataSysColumn->Content());
-            const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(metadataSysColumnName);
+            const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(
+                metadataSysColumnName,
+                State_->EffectiveUserMessageMetaInSystemMetadata());
             if (!descriptor) {
                 ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
                     << "Pq Meta Field Descriptor was not found"));
@@ -480,7 +484,9 @@ public:
                 return TStatus::Error;
             }
             const TString metadataSysColumnName(metadataSysColumn->Content());
-            const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(metadataSysColumnName);
+            const auto descriptor = GetPqMetaFieldDescriptorBySysColumn(
+                metadataSysColumnName,
+                State_->EffectiveUserMessageMetaInSystemMetadata());
             if (!descriptor) {
                 ctx.AddError(TIssue(ctx.GetPosition(metadataField->Pos()), TStringBuilder()
                     << "Pq Meta Field Descriptor was not found"));
@@ -500,7 +506,10 @@ public:
         }
 
         const auto metadataKey = TString(key->TailPtr()->Content());
-        const auto descriptor = GetPqMetaFieldDescriptorByKey(metadataKey, State_->AddTransparentPrefixToTransparentSystemColumns);
+        const auto descriptor = GetPqMetaFieldDescriptorByKey(
+            metadataKey,
+            State_->AddTransparentPrefixToTransparentSystemColumns,
+            State_->EffectiveUserMessageMetaInSystemMetadata());
         if (!descriptor) {
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
                 << "Metadata key " << metadataKey << " wasn't found"));

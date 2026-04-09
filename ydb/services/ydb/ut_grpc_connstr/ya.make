@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/services/ydb)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(45)
+SPLIT_FACTOR(3)
 
 REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE)
@@ -12,25 +12,7 @@ ELSE()
 ENDIF()
 
 SRCS(
-    ydb_bulk_upsert_csv_ut.cpp
-    ydb_bulk_upsert_ut.cpp
-    ydb_bulk_upsert_olap_ut.cpp
-    ydb_coordination_ut.cpp
-    ydb_index_table_ut.cpp
-    ydb_import_ut.cpp
-    ydb_register_node_ut.cpp
-    ydb_scripting_ut.cpp
-    ydb_table_ut.cpp
-    ydb_stats_ut.cpp
-    ydb_logstore_ut.cpp
-    ydb_olapstore_ut.cpp
-    ydb_monitoring_ut.cpp
-    ydb_query_ut.cpp
-    ydb_read_rows_ut.cpp
-    ydb_ldap_login_ut.cpp
-    ydb_login_ut.cpp
-    ydb_object_storage_ut.cpp
-    ydb_whoami_ut.cpp
+    ydb_ut_grpc_connstr.cpp
 )
 
 PEERDIR(
@@ -66,6 +48,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/monitoring
     ydb/services/ydb
+    ydb/services/ydb/ut_common
 )
 
 YQL_LAST_ABI_VERSION()

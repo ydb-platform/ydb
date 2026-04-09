@@ -357,4 +357,161 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools to perfo
   ```
 
 
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    To insert data, use `QuerySessionPool` and `execute_with_retries` with a parameterized YQL query. The query uses the container type `List<Struct<...>>`, which lets you pass multiple rows in one call.
+
+    ```python
+    import os
+    import ydb
+
+    with ydb.Driver(
+        connection_string=os.environ["YDB_CONNECTION_STRING"],
+        credentials=ydb.credentials_from_env_variables(),
+    ) as driver:
+        driver.wait(timeout=5)
+        pool = ydb.QuerySessionPool(driver)
+
+        series_struct_type = ydb.StructType()
+        series_struct_type.add_member("series_id", ydb.PrimitiveType.Uint64)
+        series_struct_type.add_member("title", ydb.PrimitiveType.Utf8)
+        series_struct_type.add_member("series_info", ydb.PrimitiveType.Utf8)
+        series_struct_type.add_member("comment", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+
+        series_data = [
+            {
+                "series_id": 1,
+                "title": "IT Crowd",
+                "series_info": "The IT Crowd is a British sitcom...",
+                "comment": None,
+            },
+            {
+                "series_id": 2,
+                "title": "Silicon Valley",
+                "series_info": "Silicon Valley is an American comedy...",
+                "comment": "lorem ipsum",
+            },
+        ]
+
+        pool.execute_with_retries(
+            """
+            DECLARE $seriesData AS List<Struct<
+                series_id: Uint64,
+                title: Utf8,
+                series_info: Utf8,
+                comment: Optional<Utf8>
+            >>;
+
+            UPSERT INTO series
+            (
+                series_id,
+                title,
+                series_info,
+                comment
+            )
+            SELECT
+                series_id,
+                title,
+                series_info,
+                comment
+            FROM AS_TABLE($seriesData);
+            """,
+            {"$seriesData": (series_data, ydb.ListType(series_struct_type))},
+            retry_settings=ydb.RetrySettings(idempotent=True),
+        )
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import os
+    import ydb
+    import asyncio
+
+    async def ydb_init():
+        async with ydb.aio.Driver(
+            connection_string=os.environ["YDB_CONNECTION_STRING"],
+            credentials=ydb.credentials_from_env_variables(),
+        ) as driver:
+            await driver.wait()
+            pool = ydb.aio.QuerySessionPool(driver)
+
+            series_struct_type = ydb.StructType()
+            series_struct_type.add_member("series_id", ydb.PrimitiveType.Uint64)
+            series_struct_type.add_member("title", ydb.PrimitiveType.Utf8)
+            series_struct_type.add_member("series_info", ydb.PrimitiveType.Utf8)
+            series_struct_type.add_member("comment", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+
+            series_data = [
+                {"series_id": 1, "title": "IT Crowd", "series_info": "The IT Crowd is a British sitcom...", "comment": None},
+                {"series_id": 2, "title": "Silicon Valley", "series_info": "Silicon Valley is an American comedy...", "comment": "lorem ipsum"},
+            ]
+
+            await pool.execute_with_retries(
+                """
+                DECLARE $seriesData AS List<Struct<
+                    series_id: Uint64,
+                    title: Utf8,
+                    series_info: Utf8,
+                    comment: Optional<Utf8>
+                >>;
+
+                UPSERT INTO series (series_id, title, series_info, comment)
+                SELECT series_id, title, series_info, comment FROM AS_TABLE($seriesData);
+                """,
+                {"$seriesData": (series_data, ydb.ListType(series_struct_type))},
+                retry_settings=ydb.RetrySettings(idempotent=True),
+            )
+
+    asyncio.run(ydb_init())
+    ```
+
+  - SQLAlchemy
+
+    When using {{ ydb-short-name }} through SQLAlchemy, use the `ydb_sqlalchemy.upsert` helper to build an `UPSERT INTO` statement from a table and values. You can insert one row or several rows in one call:
+
+    ```python
+    import os
+    import sqlalchemy as sa
+    from sqlalchemy import Column, Integer, MetaData, String, Table
+    import ydb_sqlalchemy as ydb_sa
+
+    engine = sa.create_engine(os.environ["YDB_SQLALCHEMY_URL"])
+
+    series = Table(
+        "series",
+        MetaData(),
+        Column("series_id", Integer, primary_key=True),
+        Column("title", String),
+        Column("series_info", String),
+        Column("comment", String, nullable=True),
+    )
+
+    with engine.connect() as connection:
+        stmt = ydb_sa.upsert(series).values(
+            [
+                {
+                    "series_id": 1,
+                    "title": "IT Crowd",
+                    "series_info": "The IT Crowd is a British sitcom...",
+                    "comment": None,
+                },
+                {
+                    "series_id": 2,
+                    "title": "Silicon Valley",
+                    "series_info": "Silicon Valley is an American comedy...",
+                    "comment": "lorem ipsum",
+                },
+            ]
+        )
+        connection.execute(stmt)
+        connection.commit()
+    ```
+
+  {% endlist %}
+
 {% endlist %}

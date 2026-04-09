@@ -26,14 +26,18 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
   auto result = client.SelfCheck(settings).GetValueSync();
   ```
 
+<<<<<<< HEAD
 - Java
 
   This functionality is not currently supported.
 
+=======
+>>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 - Python
 
   This functionality is not currently supported.
 
+<<<<<<< HEAD
 - JavaScript
 
   This functionality is not currently supported in the JavaScript SDK. You can create a monitoring client and call health-check APIs yourself:
@@ -43,6 +47,8 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
   await monitoring.selfCheck();
   ```
 
+=======
+>>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 {% endlist %}
 
 ## Call parameters {#call-parameters}
@@ -89,18 +95,24 @@ The complete list of extra parameters is presented below:
   };
   ```
 
+<<<<<<< HEAD
 - Java
 
   This functionality is not currently supported.
 
+=======
+>>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 - Python
 
   This functionality is not currently supported.
 
+<<<<<<< HEAD
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+=======
+>>>>>>> 7923e7f1394 (DOCSUP-126261: [YDBDOCS-1875] Перевод + бэкпорты. Организация процесса перевода (1 архив) (0 шт.) (#36832))
 {% endlist %}
 
 | Parameter | Type | Description |

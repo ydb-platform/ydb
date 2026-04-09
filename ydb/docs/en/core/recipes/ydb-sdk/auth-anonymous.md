@@ -120,11 +120,27 @@ Below are examples of anonymous authentication in different {{ ydb-short-name }}
 
 - Python
 
-  {% include [auth-anonymous](../../_includes/python/auth-anonymous.md) %}
+  {% list tabs %}
 
-- Python (asyncio)
+  - Native SDK
 
-  {% include [auth-anonymous](../../_includes/python/async/auth-anonymous.md) %}
+    {% include [auth-anonymous](../../_includes/python/auth-anonymous.md) %}
+
+  - Native SDK (Asyncio)
+
+    {% include [auth-anonymous](../../_includes/python/async/auth-anonymous.md) %}
+
+  - SQLAlchemy
+
+    ```python
+    import sqlalchemy as sa
+
+    engine = sa.create_engine("yql+ydb://localhost:2136/local")
+    with engine.connect() as connection:
+        result = connection.execute(sa.text("SELECT 1"))
+    ```
+
+  {% endlist %}
 
 - C# (.NET)
 

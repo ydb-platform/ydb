@@ -71,7 +71,7 @@ public:
             }
             fps = FederatedPartitionSessions[psPtr.Get()];
 
-            if constexpr (std::is_same_v<TEvent, NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>) {
+            if constexpr (std::is_same_v<T, NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>) {
                 FederatedPartitionSessions.erase(psPtr.Get());
             }
         }

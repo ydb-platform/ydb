@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/fq/libs/shared_resources/interface
     ydb/core/protos
     ydb/library/db_pool
+    ydb/library/db_pool/protos
     ydb/library/logger
     ydb/library/security
     yql/essentials/utils

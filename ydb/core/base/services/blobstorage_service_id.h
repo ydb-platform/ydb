@@ -88,25 +88,6 @@ inline TActorId MakeBlobStoragePersistentBufferId(ui32 node, ui32 pdiskId, ui32 
     return TActorId(node, TStringBuf(x, 12));
 }
 
-inline TActorId MakeBlobStoragePersistentBufferId(TActorId dDiskId) {
-    union {
-        struct {
-            ui64 X1;
-            ui64 X2;
-        } X;
-
-        ui8 Buf[16];
-    } raw;
-    raw.X.X1 = dDiskId.RawX1();
-    raw.X.X2 = dDiskId.RawX2();
-    raw.Buf[0] = 'N';
-    raw.Buf[1] = 'P';
-    raw.Buf[2] = 'B';
-    raw.Buf[3] = '_';
-    return TActorId(raw.X.X1, raw.X.X2);
-}
-
-
 inline TActorId MakeMonPersistentBufferID(ui32 nodeId) {
     char x[12] = {'N', 'P', 'B', '_', 'm', 'o', 'n', '_'};
     x[8] = (char)(nodeId >> 24);

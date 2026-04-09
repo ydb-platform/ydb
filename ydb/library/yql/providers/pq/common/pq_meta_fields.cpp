@@ -46,6 +46,8 @@ const std::unordered_map<TString, TPqMetadataField> PqMetaFields = {
     {"offset", TPqMetadataField(NUdf::EDataSlot::Uint64)},
     {"message_group_id", TPqMetadataField(NUdf::EDataSlot::String)},
     {"seq_no", TPqMetadataField(NUdf::EDataSlot::Uint64)},
+    // User key-value metadata attached to the message (see NYdb::NTopic::TMessageMeta::Fields).
+    {"message_meta", TPqMetadataField(NUdf::EDataSlot::Json)},
 };
 
 } // anonymous namespace

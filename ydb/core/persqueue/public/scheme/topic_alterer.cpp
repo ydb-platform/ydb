@@ -66,6 +66,8 @@ STFUNC(TTopicAlterer::DescribeState) {
 void TTopicAlterer::DoAlter() {
     LOG_D("DoAlter");
 
+    Become(&TTopicAlterer::AlterState);
+
     auto workingDir = GetWorkingDir();
     if (workingDir.empty()) {
         return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, "Wrong topic name");

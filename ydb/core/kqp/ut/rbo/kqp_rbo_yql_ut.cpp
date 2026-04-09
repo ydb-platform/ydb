@@ -2283,6 +2283,68 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TestFallbackToYql(/*fallbackToYqlEnabled=*/false, GetQueriesToTestFallbackToYql(), GetCompileCountersToTestFallbackToYql(),
                           expectedResult);
     }
+    
+    Y_UNIT_TEST(NewRBOOneJoinWithSEEnabled) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto dbSession = db.CreateSession().GetValueSync().GetSession();
+
+        dbSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64	NOT NULL,
+	            b Int64,
+                primary key(a)
+            ) WITH (Store = Column);
+
+            CREATE TABLE `/Root/t2` (
+                a Int64	NOT NULL,
+	            b Int64,
+                primary key(a)
+            ) WITH (Store = Column);
+
+            CREATE TABLE `/Root/t3` (
+                a Int64	NOT NULL,
+	            b Int64,
+                primary key(a)
+            ) WITH (Store = Column);
+        )").GetValueSync();
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto qResult = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(qResult);
+        auto qSession = qResult.GetSession();
+
+        auto explainRes = qSession.ExecuteQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64	NOT NULL,
+	            b Int64,
+                primary key(a)
+            ) WITH (Store = Column);
+
+            CREATE TABLE `/Root/t2` (
+                a Int64	NOT NULL,
+	            b Int64,
+                primary key(a)
+            ) WITH (Store = Column);
+
+            CREATE TABLE `/Root/t3` (
+                a Int64	NOT NULL,
+	            b Int64,
+                primary key(a)
+            ) WITH (Store = Column);
+        )",
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+        explainRes.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_C(explainRes.IsSuccess(), explainRes.GetIssues().ToString());
+    }
 
     /*
     void InsertIntoAliasesRenames(NYdb::NTable::TTableClient &db, std::string tableName, int numRows) {

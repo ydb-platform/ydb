@@ -11,12 +11,6 @@ namespace {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-// Build TFDStorage and TTableAliasMap from the CBO tree structure for Shuffle Elimination.
-// This collects:
-//   - Interesting orderings (shuffle targets) from join conditions
-//   - Existing shufflings from base table partition columns
-//   - Existing sortings from base table key columns
-//   - Functional dependencies (equijoin conditions)
 TSimpleSharedPtr<TOrderingsStateMachine> BuildShuffleEliminationFSM(
     TIntrusivePtr<TOpCBOTree>& cboTree,
     TTableAliasMap& tableAliasMap)

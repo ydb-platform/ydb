@@ -251,4 +251,8 @@ bool TKikimrConfiguration::GetUseDqHashCombine() const {
     return UseDqHashCombine.Get().GetOrElse(EnableDqHashCombineByDefault);
 }
 
+ui32 TKikimrConfiguration::GetDisableOlapBlocksOnColumnsLimit() const {
+    return DisableOlapBlocksOnColumnsLimit;
+}
+
 }

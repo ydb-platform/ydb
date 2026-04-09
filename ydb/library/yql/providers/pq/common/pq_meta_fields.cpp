@@ -12,9 +12,10 @@ public:
     static constexpr char SYS_PREFIX[] = "_yql_sys_";
     static constexpr char TRANSPARENT_PREFIX[] = "tsp_";
 
-    explicit TPqMetadataField(NUdf::EDataSlot type, bool transparent = false)
+    explicit TPqMetadataField(NUdf::EDataSlot type, bool transparent = false, bool dictStringString = false)
         : Type(type)
         , Transparent(transparent)
+        , DictStringString(dictStringString)
     {}
 
     TString GetSysColumnName(const TString& key, bool addTransparentPrefix) const {
@@ -31,12 +32,14 @@ public:
             .Key = key,
             .SysColumn = GetSysColumnName(key, addTransparentPrefix),
             .Type = Type,
+            .DictStringString = DictStringString,
         };
     }
 
 public:
     const NUdf::EDataSlot Type;
     const bool Transparent;
+    const bool DictStringString;
 };
 
 const std::unordered_map<TString, TPqMetadataField> PqMetaFields = {
@@ -47,7 +50,7 @@ const std::unordered_map<TString, TPqMetadataField> PqMetaFields = {
     {"message_group_id", TPqMetadataField(NUdf::EDataSlot::String)},
     {"seq_no", TPqMetadataField(NUdf::EDataSlot::Uint64)},
     // User key-value metadata attached to the message (see NYdb::NTopic::TMessageMeta::Fields).
-    {"message_meta", TPqMetadataField(NUdf::EDataSlot::Json)},
+    {"message_meta", TPqMetadataField(NUdf::EDataSlot::String, /* transparent */ false, /* dictStringString */ true)},
 };
 
 } // anonymous namespace

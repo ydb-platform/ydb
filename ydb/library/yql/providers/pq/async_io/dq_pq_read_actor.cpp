@@ -30,6 +30,7 @@
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -255,6 +256,7 @@ public:
         const TTxId& txId,
         ui64 taskId,
         const THolderFactory& holderFactory,
+        const TTypeEnvironment& typeEnv,
         std::shared_ptr<TScopedAlloc> alloc,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
         TVector<NPq::NProto::TDqReadTaskParams>&& readParams,
@@ -291,7 +293,10 @@ public:
             << ", disposition: " << SourceParams.GetDisposition().DebugString() << ", consumer: " << SourceParams.GetConsumerName());
 
         MetadataFields.reserve(SourceParams.MetadataFieldsSize());
-        TPqMetaExtractor fieldsExtractor;
+        TTypeBuilder typeBuilder(typeEnv);
+        TType* stringDataType = typeBuilder.NewDataType(NUdf::EDataSlot::String);
+        TType* messageMetaDictType = typeBuilder.NewDictType(stringDataType, stringDataType, false);
+        TPqMetaExtractor fieldsExtractor(HolderFactory, messageMetaDictType);
         for (const auto& fieldName : SourceParams.GetMetadataFields()) {
             MetadataFields.emplace_back(fieldName, fieldsExtractor.FindExtractorLambda(fieldName));
         }
@@ -1238,6 +1243,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TActorId& computeActorId,
     const THolderFactory& holderFactory,
+    const TTypeEnvironment& typeEnv,
     std::shared_ptr<TScopedAlloc> alloc,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     IPqStaticGateway::TPtr pqGateway,
@@ -1261,6 +1267,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
         txId,
         taskId,
         holderFactory,
+        typeEnv,
         std::move(alloc),
         std::move(settings),
         std::move(readTaskParamsMsg),
@@ -1328,6 +1335,7 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 credentialsFactory,
                 args.ComputeActorId,
                 args.HolderFactory,
+                args.TypeEnv,
                 std::move(args.Alloc),
                 counters ? counters : args.TaskCounters,
                 pqGateway,

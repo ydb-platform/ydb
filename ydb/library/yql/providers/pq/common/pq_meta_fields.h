@@ -15,6 +15,8 @@ struct TMetaFieldDescriptor {
     const TString Key;
     const TString SysColumn;
     const NUdf::EDataSlot Type;
+    /// When true, YQL type is Dict<String, String> (Type is unused for annotation).
+    const bool DictStringString = false;
 };
 
 std::optional<TString> SkipPqSystemPrefix(const TString& sysColumn, bool* isTransparent = nullptr);

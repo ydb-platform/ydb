@@ -364,11 +364,11 @@ namespace NKikimr::NDDisk {
         const auto sectors = PersistentBufferSpaceAllocator.Occupy(sectorsCnt);
         if (sectors.size() == 0) {
             if (PersistentBufferSpaceAllocator.OwnedChunks.size() < PersistentBufferFormat.MaxChunks) {
-                STLOG(PRI_DEBUG, BS_DDISK, BSDD14, "TDDiskActor::ProcessPersistentBufferWrite empty space, request new chunk");
+                STLOG(PRI_NOTICE, BS_DDISK, BSDD14, "TDDiskActor::ProcessPersistentBufferWrite empty space, request new chunk");
                 PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferWrite");
                 IssuePersistentBufferChunkAllocation();
             } else {
-                STLOG(PRI_DEBUG, BS_DDISK, BSDD15, "TDDiskActor::ProcessPersistentBufferWrite not enough space", (FreeSpace, PersistentBufferSpaceAllocator.GetFreeSpace() * SectorSize), (NeedSpace, sectorsCnt * SectorSize));
+                STLOG(PRI_WARN, BS_DDISK, BSDD15, "TDDiskActor::ProcessPersistentBufferWrite not enough space", (FreeSpace, PersistentBufferSpaceAllocator.GetFreeSpace() * SectorSize), (NeedSpace, sectorsCnt * SectorSize));
                 SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
                     NKikimrBlobStorage::NDDisk::TReplyStatus::BLOCKED,
                     TStringBuilder() << "persistent buffer overfill "
@@ -833,6 +833,17 @@ namespace NKikimr::NDDisk {
         ui32 ownedChunks = PersistentBufferSpaceAllocator.OwnedChunks.size();
         freeSpace += (PersistentBufferFormat.MaxChunks - ownedChunks) * SectorInChunk;
         freeSpace /= (PersistentBufferFormat.MaxChunks * SectorInChunk);
+
+        if (!(freeSpace >= 0 && freeSpace <= 1)) {
+          STLOG(PRI_CRIT, BS_DDISK, BSDD18,
+                "TDDiskActor::GetPersistentBufferFreeSpace extended log before failed verify: ["
+                << "GetFreeSpace(): " << PersistentBufferSpaceAllocator.GetFreeSpace()
+                << ", OwnedChunks.size(): " << PersistentBufferSpaceAllocator.OwnedChunks.size()
+                << ", MaxChunks: " << PersistentBufferFormat.MaxChunks
+                << ", SectorInChunk: " << SectorInChunk
+                << ", resulted freeSpace: " << freeSpace << "]");
+        }
+
         Y_ABORT_UNLESS(freeSpace >= 0 && freeSpace <= 1);
         return freeSpace;
     }

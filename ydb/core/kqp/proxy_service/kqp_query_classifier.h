@@ -132,7 +132,7 @@ private:
         if (poolId == REJECT_POOL_ID) {
             store = TReject{
                 .Code = Ydb::StatusIds::ABORTED,
-                .Message = TStringBuilder() << "Query reject by classifier"
+                .Message = TStringBuilder() << "Query is rejected by classifier"
             };
             return true;
         }

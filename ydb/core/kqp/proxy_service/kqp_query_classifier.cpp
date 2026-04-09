@@ -87,6 +87,37 @@ bool MatchFullScanFor(const TString& tablePath, const NKqpProto::TKqpPhyQuery& p
                     }
                 }
             }
+
+            for (const auto& source : stage.GetSources()) {
+                if (!source.HasReadRangesSource()) {
+                    continue;
+                }
+
+                const auto& rs = source.GetReadRangesSource();
+
+                if (rs.GetTable().GetPath() != tablePath) {
+                    Cerr << "Path: " << rs.GetTable().GetPath() << Endl;
+                    continue;
+                }
+
+                if (rs.HasKeyRange()) {
+                    // Explicit key range: full scan if both bounds are empty
+                    const auto& range = rs.GetKeyRange();
+                    if (range.GetFrom().ValuesSize() == 0 && range.GetTo().ValuesSize() == 0) {
+                        return true;
+                    }
+                }
+                else if (rs.HasRanges()) {
+                    // Parameterized ranges: full scan if param name is empty
+                    if (rs.GetRanges().GetParamName().empty()) {
+                        return true;
+                    }
+                }
+                else {
+                    // Neither KeyRange nor Ranges set: no filter → full scan
+                    return true;
+                }
+            }
         }
     }
 

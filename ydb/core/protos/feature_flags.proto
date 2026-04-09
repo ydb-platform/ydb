@@ -287,4 +287,5 @@ message TFeatureFlags {
     optional bool EnableCsDictionaryEncoding = 249 [default = true];
     optional bool EnableTopicPartitionSplitBasedOnKllSketch = 250 [default = false];
     reserved 251; // EnableOltpSinkForTopicOnlyTx
+    optional bool EnableExternalDataSourceAuthMethodIam = 252 [default = false];
 }

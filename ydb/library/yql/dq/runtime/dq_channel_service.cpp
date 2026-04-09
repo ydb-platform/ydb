@@ -3,6 +3,7 @@
 
 #include "dq_arrow_helpers.h"
 #include "dq_channel_service_impl.h"
+#include "dq_broadcast_channel.cpp"
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/dq/actors/dq.h>
@@ -646,6 +647,63 @@ void TOutputBuffer::ExportPopStats(TDqAsyncStats& stats) {
 
 TInputDescriptor::~TInputDescriptor() {
     *InputBufferInflightBytes -= InflightBytes;
+}
+
+TBroadcastBuffer::~TBroadcastBuffer() {
+}
+
+EDqFillLevel TBroadcastBuffer::GetFillLevel() const {
+    EDqFillLevel result = EDqFillLevel::NoLimit;
+    for (auto& [_, buffer] : Buffers) 
+        result = std::max(result, buffer->GetFillLevel());    
+    return result;
+}
+
+void TBroadcastBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) {
+    for (auto& [_, buffer] : Buffers)
+        buffer->SetFillAggregator(aggregator);
+}
+
+void TBroadcastBuffer::Push(TDataChunk&& data) {
+    for (auto& [_, buffer] : Buffers)
+        buffer->Push(TDataChunk{data});
+}
+
+bool TBroadcastBuffer::IsFinished() {
+    for (auto& [_, buffer] : Buffers)
+        if (!buffer->IsFinished())
+            return false;
+    return true;
+}
+
+bool TBroadcastBuffer::IsEarlyFinished() {
+    for (auto& [_, buffer] : Buffers)
+        if (!buffer->IsEarlyFinished())
+            return false;
+    return true;
+}
+
+bool TBroadcastBuffer::IsEmpty() {
+    return false;
+}
+
+bool TBroadcastBuffer::Pop(TDataChunk&) {
+    Y_ENSURE(false, "TOutputBuffer::Pop not allowed");
+    return false;
+}
+
+void TBroadcastBuffer::EarlyFinish() {
+    Y_ENSURE(false, "TOutputBuffer::EarlyFinish not allowed");
+}
+
+void TBroadcastBuffer::ExportPushStats(TDqAsyncStats& stats) {
+    for (auto& [_, buffer] : Buffers)
+        buffer->ExportPushStats(stats);
+}
+
+void TBroadcastBuffer::ExportPopStats(TDqAsyncStats& stats) {
+    for (auto& [_, buffer] : Buffers)
+        buffer->ExportPopStats(stats);
 }
 
 bool TInputDescriptor::IsEmpty() {
@@ -1953,6 +2011,13 @@ std::shared_ptr<IChannelBuffer> TDqChannelService::GetLocalBuffer(const TChannel
 IDqOutputChannel::TPtr TDqChannelService::GetOutputChannel(const TDqChannelSettings& settings) {
     auto buffer = GetUnbindedBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId, settings.Level));
     return new TFastDqOutputChannel(Self, settings, buffer, false);
+}
+
+IDqOutputChannel::TPtr TDqChannelService::GetOutputBroadcastChannel(const TBroadcastChannelSettings& broadcastSettings) {
+    std::unordered_map<ui64, std::shared_ptr<IChannelBuffer>> buffers;
+    for (const auto& settings : broadcastSettings.settings)
+        buffers[settings.ChannelId] = GetUnbindedBuffer(TChannelFullInfo(settings.ChannelId, {}, {}, settings.SrcStageId, settings.DstStageId, settings.Level));
+    return new TBroadcastOutputChannel(Self, broadcastSettings, buffers, false);
 }
 
 IDqInputChannel::TPtr TDqChannelService::GetInputChannel(const TDqChannelSettings& settings) {

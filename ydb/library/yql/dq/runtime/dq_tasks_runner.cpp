@@ -759,13 +759,17 @@ public:
 
         TVector<IDqOutputConsumer::TPtr> outputConsumers(task.OutputsSize());
         for (ui32 i = 0; i < task.OutputsSize(); ++i) {
+            bool isBroadcast = task.GetDqChannelVersion() >= 3u;
+            // used only for broadcast
+            TVector<TDqChannelSettings> broadcastSettings;
+
             const auto& outputDesc = task.GetOutputs(i);
 
             if (outputDesc.GetTypeCase() == NDqProto::TTaskOutput::kEffects) {
                 TaskHasEffects = true;
             }
 
-            TVector<IDqOutput::TPtr> outputs{Reserve(std::max<ui64>(outputDesc.ChannelsSize(), 1))};
+            TVector<IDqOutput::TPtr> outputs{Reserve(isBroadcast ? 1 :std::max<ui64>(outputDesc.ChannelsSize(), 1))};
             TOutputTransformInfo* transform = nullptr;
             TType** taskOutputType = &entry->OutputItemTypes[i];
             if (outputDesc.HasTransform()) {
@@ -835,7 +839,10 @@ public:
                     };
 
                     IDqOutputChannel::TPtr outputChannel;
-                    if (task.GetDqChannelVersion() >= 2u) {
+                    if (isBroadcast) {
+                        broadcastSettings.push_back(settings);
+                        continue;
+                    } else if (task.GetDqChannelVersion() >= 2u) {
                         Y_ENSURE(Context.ChannelService);
                         outputChannel = Context.ChannelService->GetOutputChannel(settings);
                     } else {
@@ -850,6 +857,11 @@ public:
 
                     auto ret = AllocatedHolder->OutputChannels.emplace(channelId, outputChannel);
                     YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated output channelId: " << channelId);
+                    outputs.emplace_back(outputChannel);
+                }
+                if (isBroadcast){
+                    auto outputChannel = Context.ChannelService->GetOutputBroadcastChannel(broadcastSettings);
+                    // should I bind here?
                     outputs.emplace_back(outputChannel);
                 }
             }
@@ -892,6 +904,11 @@ public:
             }
             Stats->Sources = AllocatedHolder->Sources;
             for (auto& [channelId, outputChannel] : AllocatedHolder->OutputChannels) {
+                if (task.GetDqChannelVersion() >= 3u){
+                    // broadcast channel pushed multiple times
+                    for (ui32 i = 0; i < task.OutputsSize(); ++i) 
+                        Stats->OutputChannels[outputChannel->GetPopStats().DstStageId].emplace(channelId, outputChannel);
+                }
                 Stats->OutputChannels[outputChannel->GetPopStats().DstStageId].emplace(channelId, outputChannel);
             }
         }

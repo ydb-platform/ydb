@@ -108,6 +108,7 @@ class IDqChannelService {
 public:
     virtual ~IDqChannelService() {}
     virtual IDqOutputChannel::TPtr GetOutputChannel(const TDqChannelSettings& settings) = 0;
+    virtual IDqOutputChannel::TPtr GetOutputBroadcastChannel(const TBroadcastChannelSettings& settings) = 0;
     virtual IDqInputChannel::TPtr GetInputChannel(const TDqChannelSettings& settings) = 0;
     virtual std::shared_ptr<IChannelBuffer> GetOutputBuffer(const TChannelFullInfo& info, IDqChannelStorage::TPtr storage) = 0;
     virtual std::shared_ptr<IChannelBuffer> GetInputBuffer(const TChannelFullInfo& info) = 0;

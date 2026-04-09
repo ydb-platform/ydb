@@ -739,6 +739,13 @@ public:
         Y_UNUSED(inputActorId);
     }
 
+    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId, ui64 channelId) {
+        Y_UNUSED(outputActorId);
+        Y_UNUSED(inputActorId);
+        Y_UNUSED(channelId);
+        ythrow yexception() << "unimplemented";
+    }
+
     bool IsLocal() const override {
         return false;;
     }
@@ -1205,6 +1212,13 @@ public:
     void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) override { // noop
         Y_UNUSED(outputActorId);
         Y_UNUSED(inputActorId);
+    }
+
+    void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId, ui64 channelId) override {
+        Y_UNUSED(outputActorId);
+        Y_UNUSED(inputActorId);
+        Y_UNUSED(channelId);
+        ythrow yexception() << "unimplemented";
     }
 
     bool IsLocal() const override {

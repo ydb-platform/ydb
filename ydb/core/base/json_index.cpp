@@ -538,7 +538,7 @@ TCollectResult TQueryCollector::CollectEqualOperands(const TJsonPathItem& leftIt
 }
 
 TCollectResult TQueryCollector::CollectArithmeticOperand(const TJsonPathItem& item, EMode mode) {
-    if (IsLiteralType(item.Type)) {
+    if (IsLiteralType(item.Type) || EvaluteNumericLiteral(item).has_value()) {
         return TCollectResult(TCollectResult::TTokens{});
     }
     return Collect(item, mode);

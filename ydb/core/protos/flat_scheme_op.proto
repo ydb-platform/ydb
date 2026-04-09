@@ -2293,12 +2293,8 @@ message TAuth {
         TBasic Basic = 5;
         TMdbBasic MdbBasic = 6;
         TAws Aws = 7;
-<<<<<<< HEAD
         TToken Token = 8;
-=======
-        TToken Token = 8 [(Ydb.sensitive) = true];
         TIamImpersonate Iam = 9;
->>>>>>> e283d11ab04 (CREATE EXTERNAL DATA SOURCE: add AUTH_METHOD=IAM (ydb part) (#36106))
     }
 }
 

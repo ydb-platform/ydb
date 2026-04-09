@@ -9,6 +9,8 @@
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <yql/essentials/utils/log/log.h>
 
+#include <chrono>
+
 namespace NKikimr::NKqp {
 
 using namespace NYql::NNodes;
@@ -371,10 +373,11 @@ private:
             assigner.Assign(*OrderingsFSM);
         }
 
+        auto hardTimeout = std::chrono::milliseconds(OptimizerSettings_.CBOHardTimeout);
         if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverClassic<TNodeSet>>) {
-            return TDPHypSolverClassic<TNodeSet>(hypergraph, this->Pctx);
+            return TDPHypSolverClassic<TNodeSet>(hypergraph, this->Pctx, hardTimeout);
         } else if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverShuffleElimination<TNodeSet>>) {
-            return TDPHypSolverShuffleElimination<TNodeSet>(hypergraph, this->Pctx, *OrderingsFSM);
+            return TDPHypSolverShuffleElimination<TNodeSet>(hypergraph, this->Pctx, *OrderingsFSM, hardTimeout);
         } else {
             static_assert(false, "No such DPHyp implementation");
         }
@@ -424,7 +427,20 @@ private:
             return joinTree;
         }
 
-        auto bestJoinOrder = solver.Solve(hints);
+        std::shared_ptr<TJoinOptimizerNodeInternal> bestJoinOrder;
+        try {
+            bestJoinOrder = solver.Solve(hints);
+        } catch (const std::exception& e) {
+            YQL_CLOG(WARN, CoreDq) << "CBO hard timeout exceeded, falling back to default join order: " << e.what();
+            ExprCtx.AddWarning(YqlIssue(
+                {}, TIssuesIds::CBO_ENUM_LIMIT_REACHED,
+                TStringBuilder() << "Cost based optimizer timed out and was disabled for this query. "
+                                 << "Use PRAGMA ydb.CBOHardTimeout='"
+                                 << OptimizerSettings_.CBOHardTimeout << "' or higher to extend the time budget."
+            ));
+            ComputeStatistics(joinTree, this->Pctx);
+            return joinTree;
+        }
         if (postEnumerationShuffleElimination) {
             Y_ENSURE(OrderingsFSM != nullptr);
 

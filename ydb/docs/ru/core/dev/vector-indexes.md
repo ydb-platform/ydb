@@ -6,7 +6,7 @@
 
 ## Виды векторных индексов {#types}
 
-Векторный индекс может быть [глобальным](#global) либо [глобальным с фильтрацией](#filtered). Также любой из этих видов индекса может быть [покрывающим](#covering) и включать копию данных дополнительных колонок из основной таблицы.
+Векторный индекс может быть [глобальным](#global) либо [фильтрующим](#filtered). Также векторный индекс может быть [покрывающим](#covering) и включать копию данных дополнительных колонок из основной таблицы.
 
 ### Глобальный векторный индекс {#global}
 
@@ -39,7 +39,7 @@ LIMIT 10;
 Обратите внимание, что:
 
 - Как векторная колонка `embedding`, так и параметр `$query_vector` должны иметь строковый тип и содержать массив чисел в простом [бинарном формате](../yql/reference/udf/list/knn.md#functions-convert-format).
-- Передавать параметр из SDK эффективнее в виде строки, сериализуя числа на стороне приложения ([примеры](../recipes/ydb-sdk/vector-search.md#search-by-vector)). Альтернативно значение можно передавать из SDK как вектор чисел и конвертировать из списка функциями `Knn::ToBinaryString*`, но это медленнее.
+- Передавать параметр из SDK эффективнее в виде строки, сериализуя числа на стороне приложения ([примеры](./vector-indexes/sdk.md#search-by-vector)). Альтернативно значение можно передавать из SDK как вектор чисел и конвертировать из списка функциями `Knn::ToBinaryString*`, но это медленнее.
 - Конструкция `COVER (embedding, data)` необязательна и предназначена для создания [покрывающего индекса](#covering). Это помогает дополнительно ускорить поиск.
 - Поиск по векторному индексу всегда приближённый - его результаты отличаются от поиска полным перебором.
 - Увеличение параметра [`PRAGMA KMeansTreeSearchTopSize`](../yql/reference/syntax/select/vector_index.md#kmeanstreesearchtopsize) повышает качество (полноту) поиска, но снижает его скорость. Параметр задаёт число ближайших к запросу сканируемых кластеров индекса. Значение по умолчанию - 1 (минимальное качество, максимальная скорость).
@@ -198,7 +198,7 @@ SET AUTO_PARTITIONING_PARTITION_SIZE_MB 100;
    ALTER TABLE `my_table/my_index/indexImplPrefixTable` SET READ_REPLICAS_SETTINGS 'PER_AZ:3';
    ```
 
-3. Использовать режим запроса [Stale Read-Only](../recipes/ydb-sdk/tx-control.md#stale-read-only).
+3. Использовать режим запроса [Stale Read-Only](../reference/ydb-sdk/tx-control.md#stale-read-only).
 
 ## Обновление векторных индексов {#update}
 
@@ -237,5 +237,5 @@ SET AUTO_PARTITIONING_PARTITION_SIZE_MB 100;
 
 Для начала работы с векторным индексом можно воспользоваться следующими рецептами:
 
-* [YDB CLI & YQL](../recipes/vector-search)
-* [YDB SDK: Python, C++](../recipes/ydb-sdk/vector-search.md)
+* [YDB CLI & YQL](./vector-indexes/vector-index-quickstart.md)
+* [YDB SDK: Python, C++](./vector-indexes/sdk.md)

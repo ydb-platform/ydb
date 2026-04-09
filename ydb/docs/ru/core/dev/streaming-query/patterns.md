@@ -138,4 +138,4 @@ END DO
 ## См. также
 
 - [{#T}](../../yql/reference/syntax/create-streaming-query.md)
-- [{#T}](../../recipes/streaming_queries/topics.md)
+- [{#T}](../../reference/streaming-query/topics.md)

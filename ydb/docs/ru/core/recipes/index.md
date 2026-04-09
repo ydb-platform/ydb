@@ -1,10 +1,11 @@
-# Рецепты по работе с {{ ydb-short-name }}
+# Практические руководства по {{ ydb-short-name }}
 
-Этот раздел документации {{ ydb-short-name }} содержит готовые рецепты для различных аспектов взаимодействия с {{ ydb-short-name }}. Они сгруппированы по следующим категориям:
+Материалы бывшего раздела `Рецепты` перенесены в профильные части документации:
 
-* [{#T}](ydb-sdk/index.md)
-* [{#T}](ydb-cli/index.md)
-* [{#T}](../yql/reference/recipes/index.md)
-* [{#T}](transfer/index.md)
-* [{#T}](./import-export-column-tables.md)
-* [{#T}](./streaming_queries/index.md)
+* [YDB Native SDK](../reference/ydb-sdk/index.md)
+* [YDB CLI](../reference/ydb-cli/index.md)
+* [YQL](../yql/reference/index.md)
+* [Векторные индексы](../dev/vector-indexes.md)
+* [Трансфер данных](../concepts/transfer.md)
+* [Импорт и экспорт данных в колоночные таблицы](../reference/import-export-column-tables.md)
+* [Потоковые запросы](../reference/streaming-query/index.md)

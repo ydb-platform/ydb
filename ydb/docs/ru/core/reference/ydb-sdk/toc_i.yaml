@@ -3,8 +3,46 @@ items:
     href: index.md
   - name: Установка SDK
     href: install.md
+  - name: Инициализация драйвера
+    href: init.md
   - name: Аутентификация в SDK
     href: auth.md
+    items:
+    - name: С помощью токена
+      href: auth-access-token.md
+    - name: Анонимная
+      href: auth-anonymous.md
+    - name: Файл сервисного аккаунта
+      href: auth-service-account.md
+    - name: Сервис метаданных
+      href: auth-metadata.md
+    - name: С помощью переменных окружения
+      href: auth-env.md
+    - name: С помощью логина и пароля
+      href: auth-static.md
+  - name: Балансировка
+    href: balancing.md
+    items:
+    - name: Равномерный случайный выбор
+      href: balancing-random-choice.md
+    - name: Предпочитать ближайший дата-центр
+      href: balancing-prefer-local.md
+    - name: Предпочитать конкретную зону доступности
+      href: balancing-prefer-location.md
+    - name: Предпочитать пайл c конкретным состоянием
+      href: balancing-prefer-pile.md
+  - name: Установить размер пула сессий
+    href: session-pool-limit.md
+  - name: Выполнение повторных запросов
+    href: retry.md
+    items:
+    - name: Обработка ошибок в API
+      href: error_handling.md
+      items:
+      - name: Статусы завершения сервера YDB
+        href: ydb-status-codes.md
+      - name: Статусы завершения gRPC
+        href: grpc-status-codes.md
   - name: Параметризованные запросы
     href: parameterized_queries.md
   - name: Форматы данных
@@ -14,17 +52,27 @@ items:
       href: data-formats/format-protobuf.md
     - name: Apache Arrow
       href: data-formats/format-arrow.md
+  - name: Вставка данных
+    href: upsert.md
+  - name: Пакетная вставка данных
+    href: bulk-upsert.md
+  - name: Установка режима выполнения транзакции
+    href: tx-control.md
+  - name: Настройка TTL
+    href: ttl.md
   - name: Работа с топиками
     href: topic.md
   - name: Работа с узлами координации
     href: coordination.md
-  - name: Обработка ошибок в API
-    href: error_handling.md
     items:
-    - name: Статусы завершения сервера YDB
-      href: ydb-status-codes.md
-    - name: Статусы завершения gRPC
-      href: grpc-status-codes.md
+    - name: Распределённая блокировка
+      href: distributed-lock.md
+    - name: Выбор лидера
+      href: leader-election.md
+    - name: Обнаружение сервисов
+      href: service-discovery.md
+    - name: Публикация конфигурации
+      href: config-publication.md
   - name: gRPC API
     items:
     - name: Обзор
@@ -33,5 +81,16 @@ items:
       href: grpc-headers.md
     - name: Health Check API
       href: health-check-api.md
+  - name: Инструменты диагностики
+    href: debug.md
+    items:
+    - name: Включить логирование
+      href: debug-logs.md
+    - name: Подключить метрики в Prometheus
+      href: debug-prometheus.md
+    - name: Подключить трассировку в Jaeger
+      href: debug-jaeger.md
+    - name: Подключить трассировку в OpenTelemetry
+      href: debug-otel.md
   - name: Сравнение возможностей SDK
     href: feature-parity.md

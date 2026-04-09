@@ -1,8 +1,8 @@
-  * С помощью [токена](../../../../recipes/ydb-sdk/auth-access-token.md):
+  * С помощью [токена](../../../../reference/ydb-sdk/auth.md):
 
     * `TOKEN_SECRET_PATH` — [секрет](../../../../concepts/datamodel/secrets.md), содержащий токен.
 
-  * С помощью [логина и пароля](../../../../recipes/ydb-sdk/auth-static.md):
+  * С помощью [логина и пароля](../../../../reference/ydb-sdk/auth.md):
 
     * `USER` — имя пользователя.
     * `PASSWORD_SECRET_PATH` — [секрет](../../../../concepts/datamodel/secrets.md), содержащий пароль.

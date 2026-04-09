@@ -11,5 +11,5 @@
 
 ## См. также
 
-- [Рецепты работы с потоковыми запросами](../../recipes/streaming_queries/index.md)
+- [Практические руководства по потоковым запросам](../../reference/streaming-query/index.md)
 - [Описание потоковых запросов](../../concepts/streaming-query.md)

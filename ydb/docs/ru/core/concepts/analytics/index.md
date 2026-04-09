@@ -11,8 +11,8 @@
 Платформа спроектирована для приёма потоковых и пакетных данных в больших объёмах.
 
 - Потоковая обработка: встроенная система топиков с поддержкой Kafka API для интеграции с существующими системами. Для сбора логов доступны плагины к [Fluent Bit](../../integrations/ingestion/fluent-bit.md) и [Logstash](../../integrations/ingestion/logstash.md).
-- Пакетная загрузка: API [BulkUpsert](../../recipes/ydb-sdk/bulk-upsert.md) для быстрой загрузки массивов данных и коннектор к Apache Spark для интеграции с платформами обработки данных.
-- Подключение через стандартные интерфейсы: [JDBC-драйвер](../../reference/languages-and-apis/jdbc-driver/index.md) и нативные [SDK](../../recipes/ydb-sdk/index.md).
+- Пакетная загрузка: API [BulkUpsert](../../reference/ydb-sdk/bulk-upsert.md) для быстрой загрузки массивов данных и коннектор к Apache Spark для интеграции с платформами обработки данных.
+- Подключение через стандартные интерфейсы: [JDBC-драйвер](../../reference/languages-and-apis/jdbc-driver/index.md) и нативные [SDK](../../reference/ydb-sdk/index.md).
 
 [Подробнее о вводе данных](concepts/ingest.md)
 

@@ -54,5 +54,5 @@
 
 Для начала работы с векторным индексом можно воспользоваться следующими рецептами:
 
-* [YDB CLI & YQL](../../recipes/vector-search)
-* [YDB SDK: Python, C++](../../recipes/ydb-sdk/vector-search.md)
+* [YDB CLI & YQL](../../dev/vector-indexes/vector-index-quickstart.md)
+* [YDB SDK: Python, C++](../../dev/vector-indexes/sdk.md)

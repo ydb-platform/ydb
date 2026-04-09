@@ -335,6 +335,16 @@ common:
     to: /reference/embedded-ui/index.md
 
 # Redirects for recipes
+  - from: /recipes/index.md
+    to: /reference/index.md
+  - from: /recipes/ydb-sdk/index.md
+    to: /reference/ydb-sdk/index.md
+  - from: /recipes/ydb-cli/index.md
+    to: /reference/ydb-cli/index.md
+  - from: /recipes/transfer/index.md
+    to: /concepts/transfer.md
+  - from: /recipes/vector-search/index.md
+    to: /dev/vector-indexes.md
   - from: reference/ydb-sdk/recipes/auth-access-token.md
     to: recipes/ydb-sdk/auth-access-token.md
   - from: reference/ydb-sdk/recipes/auth-anonymous.md

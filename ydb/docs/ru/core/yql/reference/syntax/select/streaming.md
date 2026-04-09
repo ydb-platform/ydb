@@ -33,6 +33,6 @@ LIMIT 1
 
 ## См. также
 
-* [{#T}](../../../../recipes/streaming_queries/debug-read.md) — рецепт с дополнительными примерами
+* [{#T}](../../../../reference/streaming-query/debug-read.md) — практическое руководство с дополнительными примерами
 * [{#T}](../../../../concepts/streaming-query.md)
 * [{#T}](../create-streaming-query.md)

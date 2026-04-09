@@ -6,7 +6,7 @@ Data in a {{ ydb-short-name }} table is stored and sorted by the primary key, en
 
 ## Types of Vector Indexes {#types}
 
-A vector index can be [global](#global) or [global filtered](#filtered). Indexes of any of these types can also be [covering](#covering) and include a copy of additional column data from the main table.
+A vector index can be [global](#global) or [filtered](#filtered). A vector index can also be [covering](#covering) and include a copy of additional column data from the main table.
 
 ### Global Vector Index {#global}
 
@@ -140,7 +140,7 @@ The `vector_kmeans_tree` index implements hierarchical data clustering. The stru
     * `clusters`: number of clusters in k-means, defining search width (recommended 64-512).
     * `overlap_clusters`: number of leaf-level clusters each vector is added to (recommended 3).
 
-Internally, a vector index consists of index tables named `indexImpl*Table`. In selection queries using the vector index, these tables appear in [query statistics](query-plans-optimization.md). For more on the structure of the vector index, see the dedicated article [{#T}](vector-indexes-kmeans-tree-type.md).
+Internally, a vector index consists of index tables named `indexImpl*Table`. In selection queries using the vector index, these tables appear in [query statistics](query-plans-optimization.md).
 
 ### Overlapping Clusters {#overlap-clusters}
 
@@ -202,7 +202,7 @@ Another way to speed up search is to use table replicas. To do this:
 
 ## Updating Vector Indexes {#update}
 
-Updating vector indexes has the following limitations:
+Updating vector indexes has specific peculiarities:
 
 ### Clusters are not recalculated during update
 
@@ -227,11 +227,11 @@ To prevent degradation:
 
 ### Update inconsistency during index build
 
-Vector indexes do not support consistent updates during build. That is, a vector index is not updated when data in the main table is modified until the index build is finished.
+Vector index does not support consistent updates during build. That is, a vector index is not updated when the data in the main table is modified until the index build is finished.
 
-This means that if you want a vector index to remain 100% consistent, you have to pause table updates while it is being built.
+This means that if you want a vector index to be 100% consistent you have to pause table updates when you build it.
 
-Updates are not blocked automatically because vector index search is approximate by nature, and in many cases temporary inconsistency during the build is acceptable.
+Updates are not blocked automatically because vector index is anyway approximate by its nature and in a lot of cases the lack of consistency during build is not an issue.
 
 ## Recipes for Working with Vector Indexes {#vector-index-recipes}
 

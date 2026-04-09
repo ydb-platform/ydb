@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ydb/public/api/protos/ydb_scheme.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 namespace Ydb {
@@ -8,6 +7,7 @@ namespace Ydb {
     namespace Scheme {
         class ModifyPermissionsRequest;
         class Permissions;
+        class Entry;
     }
 }
 
@@ -97,11 +97,9 @@ struct TSchemeEntry {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TDescribePathResult;
-class TDescribeSecretResult;
 class TListDirectoryResult;
 
 using TAsyncDescribePathResult = NThreading::TFuture<TDescribePathResult>;
-using TAsyncDescribeSecretResult = NThreading::TFuture<TDescribeSecretResult>;
 using TAsyncListDirectoryResult = NThreading::TFuture<TListDirectoryResult>;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -192,21 +190,6 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSecretClient {
-    class TImpl;
-
-public:
-    TSecretClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
-
-    TAsyncDescribeSecretResult DescribeSecret(const std::string& path,
-        const TDescribePathSettings& settings = TDescribePathSettings());
-
-private:
-    std::shared_ptr<TImpl> Impl_;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TDescribePathResult : public TStatus {
 public:
     TDescribePathResult(TStatus&& status, const TSchemeEntry& entry);
@@ -217,23 +200,6 @@ public:
 private:
     TSchemeEntry Entry_;
 };
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TDescribeSecretResult : public TStatus {
-public:
-    TDescribeSecretResult(TStatus&& status, ::Ydb::Scheme::Entry&& self, uint64_t version);
-    TSchemeEntry GetEntry() const;
-    const ::Ydb::Scheme::Entry& GetSelfProto() const;
-    const std::string& GetName() const;
-    uint64_t GetVersion() const { return Version_; }
-
-private:
-    ::Ydb::Scheme::Entry Self_;
-    uint64_t Version_ = 0;
-};
-
-////////////////////////////////////////////////////////////////////////////////
 
 class TListDirectoryResult : public TDescribePathResult {
 public:

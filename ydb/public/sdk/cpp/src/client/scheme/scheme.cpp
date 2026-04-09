@@ -6,9 +6,7 @@
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
-#include <ydb/public/api/grpc/ydb_secret_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_scheme.pb.h>
-#include <ydb/public/api/protos/ydb_secret.pb.h>
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
 #include <util/string/join.h>
@@ -126,6 +124,72 @@ static ESchemeEntryType ConvertProtoEntryType(::Ydb::Scheme::Entry::Type entry) 
     }
 }
 
+static ::Ydb::Scheme::Entry::Type SchemeEntryTypeToProto(ESchemeEntryType type) {
+    switch (type) {
+    case ESchemeEntryType::Directory:
+        return ::Ydb::Scheme::Entry::DIRECTORY;
+    case ESchemeEntryType::Table:
+        return ::Ydb::Scheme::Entry::TABLE;
+    case ESchemeEntryType::ColumnTable:
+        return ::Ydb::Scheme::Entry::COLUMN_TABLE;
+    case ESchemeEntryType::PqGroup:
+        return ::Ydb::Scheme::Entry::PERS_QUEUE_GROUP;
+    case ESchemeEntryType::SubDomain:
+        return ::Ydb::Scheme::Entry::DATABASE;
+    case ESchemeEntryType::RtmrVolume:
+        return ::Ydb::Scheme::Entry::RTMR_VOLUME;
+    case ESchemeEntryType::BlockStoreVolume:
+        return ::Ydb::Scheme::Entry::BLOCK_STORE_VOLUME;
+    case ESchemeEntryType::CoordinationNode:
+        return ::Ydb::Scheme::Entry::COORDINATION_NODE;
+    case ESchemeEntryType::Sequence:
+        return ::Ydb::Scheme::Entry::SEQUENCE;
+    case ESchemeEntryType::Replication:
+        return ::Ydb::Scheme::Entry::REPLICATION;
+    case ESchemeEntryType::Topic:
+        return ::Ydb::Scheme::Entry::TOPIC;
+    case ESchemeEntryType::ColumnStore:
+        return ::Ydb::Scheme::Entry::COLUMN_STORE;
+    case ESchemeEntryType::ExternalTable:
+        return ::Ydb::Scheme::Entry::EXTERNAL_TABLE;
+    case ESchemeEntryType::ExternalDataSource:
+        return ::Ydb::Scheme::Entry::EXTERNAL_DATA_SOURCE;
+    case ESchemeEntryType::View:
+        return ::Ydb::Scheme::Entry::VIEW;
+    case ESchemeEntryType::ResourcePool:
+        return ::Ydb::Scheme::Entry::RESOURCE_POOL;
+    case ESchemeEntryType::BackupCollection:
+        return ::Ydb::Scheme::Entry::BACKUP_COLLECTION;
+    case ESchemeEntryType::SysView:
+        return ::Ydb::Scheme::Entry::SYS_VIEW;
+    case ESchemeEntryType::Transfer:
+        return ::Ydb::Scheme::Entry::TRANSFER;
+    case ESchemeEntryType::StreamingQuery:
+        return ::Ydb::Scheme::Entry::STREAMING_QUERY;
+    case ESchemeEntryType::Secret:
+        return ::Ydb::Scheme::Entry::SECRET;
+    case ESchemeEntryType::Unknown:
+    default:
+        return ::Ydb::Scheme::Entry::TYPE_UNSPECIFIED;
+    }
+}
+
+void SchemeEntryToProto(const TSchemeEntry& entry, ::Ydb::Scheme::Entry* proto) {
+    proto->set_name(TStringType{entry.Name});
+    proto->set_owner(TStringType{entry.Owner});
+    proto->set_type(SchemeEntryTypeToProto(entry.Type));
+    proto->set_size_bytes(entry.SizeBytes);
+    auto& timestamp = *proto->mutable_created_at();
+    timestamp.set_plan_step(entry.CreatedAt.PlanStep);
+    timestamp.set_tx_id(entry.CreatedAt.TxId);
+    for (const auto& permission : entry.Permissions) {
+        permission.SerializeTo(*proto->add_permissions());
+    }
+    for (const auto& permission : entry.EffectivePermissions) {
+        permission.SerializeTo(*proto->add_effective_permissions());
+    }
+}
+
 TSchemeEntry::TSchemeEntry(const ::Ydb::Scheme::Entry& proto)
     : Name(proto.name())
     , Owner(proto.owner())
@@ -215,6 +279,7 @@ public:
                 if (any) {
                     any->UnpackTo(&result);
                 }
+
                 promise.SetValue(TDescribePathResult(TStatus(std::move(status)), result.self()));
             };
 
@@ -311,42 +376,6 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSecretClient::TImpl : public TClientImplCommon<TSecretClient::TImpl> {
-public:
-    TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
-        : TClientImplCommon(std::move(connections), settings) {}
-
-    TAsyncDescribeSecretResult DescribeSecret(const std::string& path, const TDescribePathSettings& settings) {
-        auto request = MakeOperationRequest<::Ydb::Secret::DescribeSecretRequest>(settings);
-        request.set_path(TStringType{path});
-
-        auto promise = NThreading::NewPromise<TDescribeSecretResult>();
-        auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {
-            ::Ydb::Secret::DescribeSecretResult result;
-            if (any) {
-                any->UnpackTo(&result);
-            }
-            ::Ydb::Scheme::Entry self = result.self();
-            promise.SetValue(TDescribeSecretResult(
-                TStatus(std::move(status)),
-                std::move(self),
-                result.version()));
-        };
-
-        Connections_->RunDeferred<::Ydb::Secret::V1::SecretService, ::Ydb::Secret::DescribeSecretRequest, ::Ydb::Secret::DescribeSecretResponse>(
-            std::move(request),
-            extractor,
-            &::Ydb::Secret::V1::SecretService::Stub::AsyncDescribeSecret,
-            DbDriverState_,
-            INITIAL_DEFERRED_CALL_DELAY,
-            TRpcRequestSettings::Make(settings));
-
-        return promise.GetFuture();
-    }
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 TDescribePathResult::TDescribePathResult(TStatus&& status, const TSchemeEntry& entry)
     : TStatus(std::move(status))
     , Entry_(entry)
@@ -363,29 +392,6 @@ void TDescribePathResult::Out(IOutputStream& out) const {
     } else {
         return TStatus::Out(out);
     }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TDescribeSecretResult::TDescribeSecretResult(TStatus&& status, ::Ydb::Scheme::Entry&& self, uint64_t version)
-    : TStatus(std::move(status))
-    , Self_(std::move(self))
-    , Version_(version)
-{}
-
-TSchemeEntry TDescribeSecretResult::GetEntry() const {
-    CheckStatusOk("TDescribeSecretResult::GetEntry");
-    return TSchemeEntry(Self_);
-}
-
-const ::Ydb::Scheme::Entry& TDescribeSecretResult::GetSelfProto() const {
-    CheckStatusOk("TDescribeSecretResult::GetSelfProto");
-    return Self_;
-}
-
-const std::string& TDescribeSecretResult::GetName() const {
-    CheckStatusOk("TDescribeSecretResult::GetName");
-    return Self_.name();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -436,16 +442,6 @@ TAsyncStatus TSchemeClient::ModifyPermissions(const std::string& path,
     const TModifyPermissionsSettings& data)
 {
     return Impl_->ModifyPermissions(path, data);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TSecretClient::TSecretClient(const TDriver& driver, const TCommonClientSettings& settings)
-    : Impl_(new TImpl(CreateInternalInterface(driver), settings))
-{}
-
-TAsyncDescribeSecretResult TSecretClient::DescribeSecret(const std::string& path, const TDescribePathSettings& settings) {
-    return Impl_->DescribeSecret(path, settings);
 }
 
 } // namespace NScheme

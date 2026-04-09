@@ -39,6 +39,7 @@ RECURSE(
     resources
     result
     scheme
+    secret
     table
     table/impl
     table/query_stats

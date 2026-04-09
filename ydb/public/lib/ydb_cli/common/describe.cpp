@@ -759,7 +759,7 @@ int TDescribeLogic::PrintPathResponse(const TString& path, const NScheme::TDescr
 }
 
 int TDescribeLogic::DescribeSecret(const TString& path, EDataFormat format) {
-    NScheme::TSecretClient secretClient(Driver);
+    NSecret::TSecretClient secretClient(Driver);
 
     auto secretResult = secretClient.DescribeSecret(path).GetValueSync();
     if (!secretResult.IsSuccess()) {
@@ -776,13 +776,13 @@ int TDescribeLogic::DescribeSecret(const TString& path, EDataFormat format) {
     }
 
     Ydb::Secret::DescribeSecretResult msg;
-    msg.mutable_self()->CopyFrom(secretResult.GetSelfProto());
+    secretResult.SerializeSelf(msg.mutable_self());
     msg.set_version(static_cast<i64>(secretResult.GetVersion()));
 
     return PrintProtoJsonBase64(msg, Out);
 }
 
-int TDescribeLogic::PrintSecretResponsePretty(const NScheme::TDescribeSecretResult& result) const {
+int TDescribeLogic::PrintSecretResponsePretty(const NSecret::TDescribeSecretResult& result) const {
     Out << "Version: " << result.GetVersion() << Endl;
     return EXIT_SUCCESS;
 }

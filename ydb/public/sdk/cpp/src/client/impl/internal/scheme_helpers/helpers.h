@@ -3,6 +3,10 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <vector>
 
+namespace Ydb::Scheme {
+    class Entry;
+}
+
 namespace NYdb::inline Dev {
 
 template<typename TFrom>
@@ -14,5 +18,11 @@ inline void PermissionToSchemeEntry(const TFrom& from, std::vector<NScheme::TPer
         }
     }
 }
+
+namespace NScheme {
+
+void SchemeEntryToProto(const TSchemeEntry& entry, ::Ydb::Scheme::Entry* proto);
+
+} // namespace NScheme
 
 } // namespace NYdb

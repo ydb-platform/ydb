@@ -602,7 +602,7 @@
 
 ## Примеры
 
-* [Распределённая блокировка](../../recipes/ydb-sdk/distributed-lock.md)
-* [Выбор лидера](../../recipes/ydb-sdk/leader-election.md)
-* [Обнаружение сервисов](../../recipes/ydb-sdk/service-discovery.md)
-* [Публикация конфигурации](../../recipes/ydb-sdk/config-publication.md)
+* [Распределённая блокировка](distributed-lock.md)
+* [Выбор лидера](leader-election.md)
+* [Обнаружение сервисов](service-discovery.md)
+* [Публикация конфигурации](config-publication.md)

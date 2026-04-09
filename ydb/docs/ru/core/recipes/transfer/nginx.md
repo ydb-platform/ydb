@@ -156,7 +156,7 @@ FROM `transfer_recipe/access_log`;
 ## Смотрите также
 
 * [{#T}](../../concepts/transfer.md)
-* [{#T}](quickstart.md)
+* [{#T}](../../concepts/transfer/quickstart.md)
 * [Lambda-функция](../../yql/reference/syntax/expressions.md#lambda)
 * [{#T}](../../yql/reference/syntax/create_table/index.md)
 * [{#T}](../../yql/reference/syntax/create-topic.md)

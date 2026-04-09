@@ -90,5 +90,5 @@
 ## См. также
 
 - [{#T}](../dev/streaming-query/guarantees.md) — гарантии, аномалии при оконной агрегации и рекомендации;
-- [{#T}](../recipes/streaming_queries/topics.md) — пошаговое руководство;
+- [{#T}](../reference/streaming-query/topics.md) — пошаговое руководство;
 - [{#T}](../dev/streaming-query/streaming-query-formats.md) — форматы данных.

@@ -34,7 +34,7 @@
 ### Пакетная загрузка (Batch Ingestion)
 
   - [Коннектор Apache Spark](../../integrations/ingestion/spark.md): чтение и запись данных для ETL/ELT-задач.
-  - [BulkUpsert API](../../recipes/ydb-sdk/bulk-upsert.md): высокопроизводительная вставка больших объемов данных через SDK.
+  - [BulkUpsert API](../../reference/ydb-sdk/bulk-upsert.md): высокопроизводительная вставка больших объемов данных через SDK.
 
 ### Взаимодействие с внешними системами
 

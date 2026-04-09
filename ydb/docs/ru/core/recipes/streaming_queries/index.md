@@ -4,5 +4,5 @@
 
 Содержание:
 
-* [{#T}](topics.md)
-* [{#T}](debug-read.md)
+* [{#T}](../../reference/streaming-query/topics.md)
+* [{#T}](../../reference/streaming-query/debug-read.md)

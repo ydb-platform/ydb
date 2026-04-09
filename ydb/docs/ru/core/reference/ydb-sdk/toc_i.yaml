@@ -9,28 +9,28 @@ items:
     href: auth.md
     items:
     - name: С помощью токена
-      href: ../../recipes/ydb-sdk/auth-access-token.md
+      href: auth-access-token.md
     - name: Анонимная
-      href: ../../recipes/ydb-sdk/auth-anonymous.md
+      href: auth-anonymous.md
     - name: Файл сервисного аккаунта
-      href: ../../recipes/ydb-sdk/auth-service-account.md
+      href: auth-service-account.md
     - name: Сервис метаданных
-      href: ../../recipes/ydb-sdk/auth-metadata.md
+      href: auth-metadata.md
     - name: С помощью переменных окружения
-      href: ../../recipes/ydb-sdk/auth-env.md
+      href: auth-env.md
     - name: С помощью логина и пароля
-      href: ../../recipes/ydb-sdk/auth-static.md
+      href: auth-static.md
   - name: Балансировка
     href: balancing.md
     items:
     - name: Равномерный случайный выбор
-      href: ../../recipes/ydb-sdk/balancing-random-choice.md
+      href: balancing-random-choice.md
     - name: Предпочитать ближайший дата-центр
-      href: ../../recipes/ydb-sdk/balancing-prefer-local.md
+      href: balancing-prefer-local.md
     - name: Предпочитать конкретную зону доступности
-      href: ../../recipes/ydb-sdk/balancing-prefer-location.md
+      href: balancing-prefer-location.md
     - name: Предпочитать пайл c конкретным состоянием
-      href: ../../recipes/ydb-sdk/balancing-prefer-pile.md
+      href: balancing-prefer-pile.md
   - name: Установить размер пула сессий
     href: session-pool-limit.md
   - name: Выполнение повторных запросов
@@ -66,13 +66,13 @@ items:
     href: coordination.md
     items:
     - name: Распределённая блокировка
-      href: ../../recipes/ydb-sdk/distributed-lock.md
+      href: distributed-lock.md
     - name: Выбор лидера
-      href: ../../recipes/ydb-sdk/leader-election.md
+      href: leader-election.md
     - name: Обнаружение сервисов
-      href: ../../recipes/ydb-sdk/service-discovery.md
+      href: service-discovery.md
     - name: Публикация конфигурации
-      href: ../../recipes/ydb-sdk/config-publication.md
+      href: config-publication.md
   - name: gRPC API
     items:
     - name: Обзор
@@ -85,12 +85,12 @@ items:
     href: debug.md
     items:
     - name: Включить логирование
-      href: ../../recipes/ydb-sdk/debug-logs.md
+      href: debug-logs.md
     - name: Подключить метрики в Prometheus
-      href: ../../recipes/ydb-sdk/debug-prometheus.md
+      href: debug-prometheus.md
     - name: Подключить трассировку в Jaeger
-      href: ../../recipes/ydb-sdk/debug-jaeger.md
+      href: debug-jaeger.md
     - name: Подключить трассировку в OpenTelemetry
-      href: ../../recipes/ydb-sdk/debug-otel.md
+      href: debug-otel.md
   - name: Сравнение возможностей SDK
     href: feature-parity.md

@@ -61,7 +61,7 @@ ydb_operator = YDBExecuteQueryOperator(task_id="ydb_operator", sql="SELECT 'Hell
 
 #### bulk_upsert {#bulk_upsert}
 
-Выполняет [пакетную вставку данных](../../recipes/ydb-sdk/bulk-upsert.md) в таблицы {{ ydb-full-name }}.
+Выполняет [пакетную вставку данных](../../reference/ydb-sdk/bulk-upsert.md) в таблицы {{ ydb-full-name }}.
 
 Обязательные аргументы:
 
@@ -189,7 +189,7 @@ connection.close()
 
 Для выполнения запросов к {{ ydb-full-name }} в составе пакета содержится оператор {{ airflow-name }} [`YDBExecuteQueryOperator`](https://airflow.apache.org/docs/apache-airflow-providers-ydb/stable/_api/airflow/providers/ydb/operators/ydb/index.html) и хук [`YDBHook`](https://airflow.apache.org/docs/apache-airflow-providers-ydb/stable/_api/airflow/providers/ydb/hooks/ydb/index.html).
 
-В примере ниже создается задание `create_pet_table`, создающее таблицу в {{ ydb-full-name }}. После успешного создания таблицы вызывается задание `populate_pet_table`, заполняющее таблицу данными с помощью команд `UPSERT`, и задание `populate_pet_table_via_bulk_upsert`, заполняющее таблицу с помощью команд пакетной вставки данных [`bulk_upsert`](../../recipes/ydb-sdk/bulk-upsert.md). После выполнения вставки данных выполняется операция чтения с помощью задания `get_all_pets` и задание для параметризованного чтения данных `get_birth_date`.
+В примере ниже создается задание `create_pet_table`, создающее таблицу в {{ ydb-full-name }}. После успешного создания таблицы вызывается задание `populate_pet_table`, заполняющее таблицу данными с помощью команд `UPSERT`, и задание `populate_pet_table_via_bulk_upsert`, заполняющее таблицу с помощью команд пакетной вставки данных [`bulk_upsert`](../../reference/ydb-sdk/bulk-upsert.md). После выполнения вставки данных выполняется операция чтения с помощью задания `get_all_pets` и задание для параметризованного чтения данных `get_birth_date`.
 
 ![](_assets/airflow_dag.png)
 

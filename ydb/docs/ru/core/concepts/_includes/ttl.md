@@ -63,5 +63,5 @@ eviction_time = valueof(ttl_column) + evict_after_seconds
 Управление настройками TTL в настоящий момент возможно с использованием:
 
 * [YQL](../../yql/reference/recipes/ttl.md).
-* [Консольного клиента {{ ydb-short-name }}](../../recipes/ydb-cli/ttl.md).
-* {{ ydb-short-name }} {% if oss %}C++, {% endif %}Go и Python [SDK](../../recipes/ydb-sdk/ttl.md).
+* [Консольного клиента {{ ydb-short-name }}](../../reference/ydb-cli/ttl.md).
+* {{ ydb-short-name }} {% if oss %}C++, {% endif %}Go и Python [SDK](../../reference/ydb-sdk/ttl.md).

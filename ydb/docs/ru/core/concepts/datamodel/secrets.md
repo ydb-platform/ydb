@@ -17,7 +17,7 @@
 Примеры использования секретов и работа с ними есть в следующих разделах:
 
 * [{#T}](../../yql/reference/recipes/ttl.md)
-* [{#T}](../../recipes/import-export-column-tables.md)
+* [{#T}](../../reference/import-export-column-tables.md)
 
 ## Управление доступом {#secret_access}
 

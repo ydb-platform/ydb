@@ -32,7 +32,6 @@ from pathlib import Path
 
 _scripts = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, _scripts)
-sys.path.insert(0, os.path.join(_scripts, "analytics"))
 from github_issue_utils import canonical_team_slug, make_profile_id
 
 # ISO weekday: Monday=1 … Sunday=7 (datetime.isoweekday())

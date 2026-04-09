@@ -6,17 +6,25 @@ Used by both the muted test analytics and issue management scripts.
 """
 
 import datetime as dt
-import os
 import re
-import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
-_analytics_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "analytics")
-if _analytics_dir not in sys.path:
-    sys.path.insert(0, _analytics_dir)
-from testowners_utils import team_slug_from_monitor_owner  # noqa: E402
+_GITHUB_TEAM_PREFIX = "TEAM:@ydb-platform/"
+
+
+def team_slug_from_monitor_owner(owner) -> str:
+    """Lowercase team slug from ``tests_monitor.owner`` / YQL ``owner`` (SQL-aligned).
+
+    Strips ``TEAM:@ydb-platform/`` then lowercases the remainder.
+    ``None`` → empty string (join keys / pandas use empty, not ``"unknown"``).
+    """
+    if owner is None:
+        return ""
+    s = str(owner).replace(_GITHUB_TEAM_PREFIX, "").strip()
+    return s.lower()
+
 
 DEFAULT_BUILD_TYPE = 'relwithdebinfo'
 DEFAULT_BRANCH = 'main'
@@ -78,7 +86,7 @@ def canonical_team_slug(raw_owner_team) -> str:
     return team_slug_from_monitor_owner(raw) or "unknown"
 
 
-# Historical name (SQL/mart comments); same as team_slug_from_monitor_owner.
+# Backward-compatible alias used in older SQL comments and callers.
 monitor_owner_to_team_key = team_slug_from_monitor_owner
 
 

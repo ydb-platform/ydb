@@ -2,9 +2,10 @@
 
 ``codeowners`` returns ``TEAM:@ydb-platform/<Slug>`` with whatever casing is in
 ``.github/TESTOWNERS``. We normalize team slugs to lowercase **here** (on read) so YDB
-``owners`` / downstream marts match :func:`team_slug_from_monitor_owner` without touching the file.
+``owners`` / downstream marts always contain lowercase slugs without touching the file.
 
-For queue / Telegram / issue routing use :func:`canonical_team_slug` in ``github_issue_utils``.
+For routing (digest queue, Telegram, GitHub project owner) use :func:`canonical_team_slug`
+from ``github_issue_utils`` — it maps None / empty / unknown to the sentinel ``"unknown"``.
 """
 
 import os

@@ -168,13 +168,11 @@ def get_all_team_data(use_yesterday=False, build_type=DEFAULT_BUILD_TYPE, branch
         if not owner:
             continue
             
-        # Handle TEAM:@ydb-platform/<slug> and sentinel unknown (legacy rows may use "Unknown")
-        if owner.startswith('TEAM:@ydb-platform/'):
+        # Accept TEAM:@ydb-platform/<slug> and the sentinel unknown (any case);
+        # skip everything else (plain usernames, email addresses, etc.)
+        if owner.startswith('TEAM:@ydb-platform/') or str(owner).strip().lower() == 'unknown':
             team_name = canonical_team_slug(owner)
-        elif str(owner).strip().lower() == 'unknown':
-            team_name = 'unknown'
         else:
-            # Skip other formats
             continue
         
         if team_name not in team_data:
@@ -872,11 +870,13 @@ def _normalize_telegram_team_channels_config(data: dict) -> dict:
     normalized: dict = {}
     for k, v in raw_teams.items():
         nk = canonical_team_slug(k)
-        if nk in normalized and normalized[nk] != v:
-            print(
-                f"⚠️ Mailing config: duplicate team after normalizing keys {k!r} → {nk!r}; keeping last entry"
-            )
-        normalized[nk] = v
+        if nk in normalized:
+            if normalized[nk] != v:
+                print(
+                    f"⚠️ Mailing config: duplicate team after normalizing keys {k!r} → {nk!r}; keeping first entry"
+                )
+        else:
+            normalized[nk] = v
     out = dict(data)
     out["teams"] = normalized
     return out

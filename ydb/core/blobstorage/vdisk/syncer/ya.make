@@ -52,6 +52,8 @@ SRCS(
     syncer_job_actor.h
     syncer_job_task.cpp
     syncer_job_task.h
+    syncer_merger.cpp
+    syncer_merger.h
 )
 
 END()

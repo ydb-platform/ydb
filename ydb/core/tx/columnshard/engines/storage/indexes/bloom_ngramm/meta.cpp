@@ -142,7 +142,7 @@ private:
 public:
     TNGrammBuilder(const ui32 hashesCount, const bool caseSensitive)
         : HashesCount(hashesCount)
-        , CaseSensitive(caseSensitive) {
+        , StringNormalizer(caseSensitive) {
     }
 
     template <class TAction>

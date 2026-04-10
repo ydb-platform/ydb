@@ -3,7 +3,7 @@ LIBRARY()
 SRCS(
     alter_topic.cpp
     common.cpp
-    scheme.cpp
+    schema.cpp
     topic_alterer.cpp
     validation.cpp
 )

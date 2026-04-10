@@ -1,4 +1,4 @@
-#include "scheme_int.h"
+#include "schema_int.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/public/constants.h>

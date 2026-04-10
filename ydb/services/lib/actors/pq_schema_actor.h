@@ -3,7 +3,7 @@
 #include "consumers_advanced_monitoring_settings.h"
 
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
-#include <ydb/core/persqueue/public/scheme/common.h>
+#include <ydb/core/persqueue/public/schema/common.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>

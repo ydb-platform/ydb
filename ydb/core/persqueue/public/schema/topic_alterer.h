@@ -1,6 +1,6 @@
 #pragma once
 
-#include "scheme_int.h"
+#include "schema_int.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/persqueue/common/actor.h>

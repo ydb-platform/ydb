@@ -589,6 +589,7 @@ def test_discovery(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
     assert_that(serverless_db_endpoints, not_none())
     assert_that(serverless_db_endpoints, contains_inanyorder(*hostel_db_endpoints))
 
+
 def test_discovery_with_inner_path(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
     driver_config = ydb.DriverConfig(
         ydb_endpoint,

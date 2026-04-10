@@ -7,14 +7,24 @@
 #include <util/datetime/base.h>
 #include <util/generic/string.h>
 
-namespace NYdb::NBS::NStorage {
+namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+enum class EWriteMode: ui32
+{
+    PBufferReplication,
+    DirectPBuffersFilling,
+};
+
+EWriteMode GetWriteModeFromProto(NProto::EWriteMode writeMode);
+NProto::EWriteMode GetProtoWriteMode(EWriteMode writeMode);
 
 class TStorageConfig
 {
 public:
-    explicit TStorageConfig(NProto::TStorageServiceConfig storageServiceConfig);
+    explicit TStorageConfig(
+        const NProto::TStorageServiceConfig& storageServiceConfig);
 
     [[nodiscard]] TDuration GetTraceSamplePeriod() const;
     [[nodiscard]] ui32 GetSyncRequestsBatchSize() const;
@@ -25,9 +35,12 @@ public:
     [[nodiscard]] NProto::EWriteMode GetWriteMode() const;
     [[nodiscard]] TDuration GetPBufferReplyTimeout() const;
     [[nodiscard]] ui64 GetVChunkSize() const;
+    [[nodiscard]] ui32 GetThreadPoolSize() const;
 
 private:
     NProto::TStorageServiceConfig StorageServiceConfig;
 };
 
-}   // namespace NYdb::NBS::NStorage
+////////////////////////////////////////////////////////////////////////////////
+
+}   // namespace NYdb::NBS::NBlockStore

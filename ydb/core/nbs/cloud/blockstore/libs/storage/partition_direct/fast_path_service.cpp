@@ -2,6 +2,7 @@
 
 #include "range_translate.h"
 
+#include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
@@ -43,7 +44,7 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
     ui64 blockCount,
     ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
-    const std::shared_ptr<NYdb::NBS::NStorage::TStorageConfig>& storageConfig)
+    const TStorageConfig& storageConfig)
 {
     const ui64 regionsCount =
         AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
@@ -54,10 +55,10 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
             partitionDirectService,
             i,
             directBlockGroups,
-            storageConfig->GetSyncRequestsBatchSize(),
-            storageConfig->GetVChunkSize(),
-            storageConfig->GetWriteHandoffDelay(),
-            storageConfig->GetTraceSamplePeriod());
+            storageConfig.GetSyncRequestsBatchSize(),
+            storageConfig.GetVChunkSize(),
+            storageConfig.GetWriteHandoffDelay(),
+            storageConfig.GetTraceSamplePeriod());
     }
 
     return regions;
@@ -74,7 +75,7 @@ TFastPathService::TFastPathService(
     ui64 blockCount,
     ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
-    std::shared_ptr<NYdb::NBS::NStorage::TStorageConfig> storageConfig,
+    TStorageConfigPtr storageConfig,
     ISchedulerPtr scheduler,
     ITimerPtr timer,
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
@@ -87,7 +88,7 @@ TFastPathService::TFastPathService(
           blockCount,
           blockSize,
           std::move(directBlockGroups),
-          storageConfig))
+          *storageConfig))
     , TraceSamplePeriod(storageConfig->GetTraceSamplePeriod())
     , Counters(MakeCountersChain(
           std::move(counters),

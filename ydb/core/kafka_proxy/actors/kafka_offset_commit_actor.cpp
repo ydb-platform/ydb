@@ -194,14 +194,13 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
                                                                                        .OnlyCheckCommitedToFinish = false,
                                                                                        .ReadSessionId = {},
                                                                                        .TopicPath = topicIt->second.TopicNameConverter->GetPrimaryPath()};
-                PendingResponses++;
                 commits.push_back(commitReq);
             }
         }
     }
     if (!Kqp && Message->GenerationId != -1) {
-        NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::GenerationIdCheckerSettings checkerSettings {.GenerationId = Message->GenerationId, .ResourceDatabasePath = Context->ResourceDatabasePath};
-        Kqp = std::make_shared<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper>(Context->DatabasePath, Message->GroupId.value(), commits, readId, checkerSettings);
+        // не нужно ли тут всегда проверять !Kqp. Может ли переиспользоваться один актор? Вроде, нет?
+        Kqp = std::make_shared<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper>(Context->DatabasePath, Message->GroupId.value(), commits, readId);
         Kqp->SendCreateSessionRequest(ctx);
     }
 }
@@ -221,33 +220,25 @@ void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, c
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
         Error = ConvertErrorCode(record.GetYdbStatus());
         auto kqpQueryError = TStringBuilder() << "Kqp error. Status# " << record.GetYdbStatus() << ", ";
+
         NYql::TIssues issues;
         NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
         kqpQueryError << issues.ToString();
-        KAFKA_LOG_D(kqpQueryError);
 
         ctx.Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
         return;
     }
 
-    std::pair<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::ECurrentStep, bool> kqpHandleResult = Kqp->Handle(ev, ctx);
-    auto currentCommitStep = kqpHandleResult.first;
-    auto isSuccessful = kqpHandleResult.second;
-    if (!isSuccessful) {
-        Error = EKafkaErrors::ILLEGAL_GENERATION;
-        for (auto topicReq: Message->Topics) {
+    auto step = Kqp->Handle(ev, ctx);
+
+    if (step == NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::ECurrentStep::DONE) {
+         for (auto topicReq: Message->Topics) {
             for (auto partitionRequest: topicReq.Partitions) {
                 AddPartitionResponse(ConvertErrorCode(record.GetYdbStatus()), topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
             }
         }
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
-    } else if (currentCommitStep == NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::ECurrentStep::DONE) {
-        for (auto topicReq: Message->Topics) {
-            for (auto partitionRequest: topicReq.Partitions) {
-                AddPartitionResponse(ConvertErrorCode(record.GetYdbStatus()), topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
-            }
-        }
-        Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
+        // Die(ctx);
     }
     return;
 }

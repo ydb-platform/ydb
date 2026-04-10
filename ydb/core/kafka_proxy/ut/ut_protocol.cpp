@@ -1712,16 +1712,14 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
     } // Y_UNIT_TEST(BalanceScenarioCdc)
 
     Y_UNIT_TEST(OffsetCommitWithGenerationScenario) {
-        TInsecureTestServer testServer("2", false, true, false, false, true, true);
-        testServer.KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_TRACE);
-        testServer.KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NActors::NLog::PRI_TRACE);
+        TInsecureTestServer testServer("2", false, true, false, true, true, true);
+        testServer.KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NActors::NLog::PRI_TRACE);
+        testServer.KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_TRACE);
 
         TString topicName = "/Root/topic-0-test";
-        TString topicName1 = "/Root/topic-1-test";
         ui64 minActivePartitions = 3;
 
         TString consumerName = "consumer-0";
-        TString anotherConsumerName = "consumer-1";
 
         TString key = "record-key";
         TString value = "record-value";
@@ -1732,13 +1730,18 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
         CreateTopic(pqClient, topicName, minActivePartitions, {consumerName});
-        CreateTopic(pqClient, topicName1, minActivePartitions, {anotherConsumerName});
         {
             // authenticating as user with only read rights
             TKafkaTestClient client(testServer.Port);
+            // TString user = "ouruser@/Root";
+            // TString pass = "ourUserPassword";
+            // auto rA = client.SaslPlainAuthenticate(user, pass);
+            // UNIT_ASSERT_VALUES_EQUAL(rA->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
             std::vector<TString> topics = {topicName};
             i32 heartbeatTimeout = 15000;
             i32 rebalanceTimeout = 5000;
+            // i32 illegalGeneration = 10001;
             TString protocolType = "consumer";
             TString protocolName = "range";
 
@@ -1790,26 +1793,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
                 for (const auto& partition : topic.Partitions) {
                     UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-                }
-            }
-
-            auto msg1 = client.OffsetCommit(consumerName, offsets, generationId + 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg1->Topics.size(), 1);
-            for (const auto& topic : msg1->Topics) {
-                UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
-                for (const auto& partition : topic.Partitions) {
-                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-                }
-            }
-
-            // check that error on one topic triggers error responce on the whole commit request
-            offsets[topicName1] = partitionsAndOffsets;
-            auto msg2 = client.OffsetCommit(consumerName, offsets, generationId);
-            UNIT_ASSERT_VALUES_EQUAL(msg2->Topics.size(), 2);
-            for (const auto& topic : msg2->Topics) {
-                UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
-                for (const auto& partition : topic.Partitions) {
-                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::GROUP_ID_NOT_FOUND));
                 }
             }
         }

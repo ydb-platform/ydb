@@ -201,9 +201,9 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
     }
     if (Message->GenerationId != -1) {
         NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::GenerationIdCheckerSettings checkerSettings {.GenerationId = Message->GenerationId,
-                                                                                                        .TopicDatabasePath = Context->DatabasePath,
+                                                                                                        .ResourceDatabasePath = Context->ResourceDatabasePath,
                                                                                                         .ConsumerMetadataTablePath = NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath)};
-        Kqp = std::make_shared<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper>(Context->ResourceDatabasePath, Message->GroupId.value(), commits, readId, checkerSettings);
+        Kqp = std::make_shared<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper>(Context->DatabasePath, Message->GroupId.value(), commits, readId, checkerSettings);
         Kqp->SendCreateSessionRequest(ctx);
     }
 }
@@ -228,20 +228,22 @@ void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, c
         kqpQueryError << issues.ToString();
         KAFKA_LOG_ERROR(kqpQueryError);
 
-        if (record.GetYdbStatus() == Ydb::StatusIds::PRECONDITION_FAILED && issues.Size() == 1 && (issues.begin())->IssueCode == Ydb::PersQueue::ErrorCode::ErrorCode::GENERATION_MISMATCH) {
-            Error = EKafkaErrors::FENCED_INSTANCE_ID;
-            for (auto topicReq: Message->Topics) {
-                for (auto partitionRequest: topicReq.Partitions) {
-                    AddPartitionResponse(Error, topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
-                }
-            }
-            Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
-            return;
-        }
+        ctx.Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
+        return;
     }
 
-    NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::ECurrentStep step = Kqp->Handle(ev, ctx);
-    if (step == NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::ECurrentStep::DONE) {
+    std::pair<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::ECurrentStep, bool> kqpHandleResult = Kqp->Handle(ev, ctx);
+    auto currentCommitStep = kqpHandleResult.first;
+    auto isSuccessful = kqpHandleResult.second;
+    if (!isSuccessful) {
+        Error = EKafkaErrors::ILLEGAL_GENERATION;
+        for (auto topicReq: Message->Topics) {
+            for (auto partitionRequest: topicReq.Partitions) {
+                AddPartitionResponse(ConvertErrorCode(record.GetYdbStatus()), topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
+            }
+        }
+        Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
+    } else if (currentCommitStep == NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::ECurrentStep::DONE) {
         for (auto topicReq: Message->Topics) {
             for (auto partitionRequest: topicReq.Partitions) {
                 AddPartitionResponse(ConvertErrorCode(record.GetYdbStatus()), topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);

@@ -229,6 +229,7 @@ Checks: >
   -cppcoreguidelines-init-variables,
   -cppcoreguidelines-interfaces-global-init,
   -cppcoreguidelines-macro-usage,
+  -cppcoreguidelines-missing-std-forward,
   -cppcoreguidelines-narrowing-conversions,
   -cppcoreguidelines-no-malloc,
   -cppcoreguidelines-non-private-member-variables-in-classes,

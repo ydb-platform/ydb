@@ -85,7 +85,7 @@ public:
     virtual bool CanBlockRead(const NNodes::TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) = 0;
     virtual void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) = 0;
     virtual bool CanFallback() = 0;
-    virtual void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType, TMaybe<size_t> maxPartitions, TExprContext& ctx) = 0;
+    virtual void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType, size_t maxPartitions, TExprContext& ctx) = 0;
     virtual TMaybe<TSourceWatermarksSettings> ExtractSourceWatermarksSettings(const TExprNode& node, const ::google::protobuf::Any& settings, const TString& sourceType) = 0;
     virtual void FillLookupSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType) = 0;
     virtual void FillSinkSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sinkType) = 0;

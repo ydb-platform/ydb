@@ -147,10 +147,7 @@ public:
     virtual TString GetExplainName() const = 0;
     virtual TString ToString(TExprContext& ctx) = 0;
 
-    virtual NJson::TJsonValue ToJson(ui32 explainFlags) {
-        Y_UNUSED(explainFlags);
-        return NJson::TJsonValue (NJson::EJsonValueType::JSON_MAP);
-    }
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags);
 
     bool IsSingleConsumer() const {
         return Parents.size() <= 1;

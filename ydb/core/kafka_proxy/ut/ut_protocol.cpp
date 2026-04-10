@@ -4333,7 +4333,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         {
             TString user = "ouruser@/Root";
             TString pass = "ourUserPassword";
-            auto rA = clientA.SaslPlainAuthenticate(user, pass);
+            auto rA = clientA.SaslAuthenticate(user, pass);
             UNIT_ASSERT_VALUES_EQUAL(rA->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         }
 

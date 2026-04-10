@@ -1,6 +1,6 @@
 #pragma once
 
-#include "defs.h"
+#include <ydb/core/tx/schemeshard/defs.h>
 
 #include <ydb/core/protos/index_builder.pb.h>
 

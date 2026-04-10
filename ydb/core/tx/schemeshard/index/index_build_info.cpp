@@ -1,4 +1,4 @@
-#include "schemeshard_index_build_info.h"
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 
 namespace NKikimr {
 

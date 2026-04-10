@@ -1,5 +1,5 @@
-#include "schemeshard_info_types.h"
-#include "schemeshard_index_utils.h"
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/index/index_utils.h>
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/persqueue/public/utils.h>

@@ -84,6 +84,9 @@ class Daemon(object):
         if self.__command != new_command_tuple:
             self.__command = new_command_tuple
 
+    def set_aux_file(self, aux_file_name):
+        self.__aux_file_name = aux_file_name
+
     def __open_output_files(self):
         self.__stdout_file = open(self.__stdout_file_name, mode='ab')
         self.__stderr_file = open(self.__stderr_file_name, mode='ab')

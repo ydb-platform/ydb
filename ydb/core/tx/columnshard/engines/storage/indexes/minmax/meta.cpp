@@ -89,7 +89,7 @@ bool TIndexMeta::Skip(NArrow::NAccessor::TMinMax chunkValue, const std::shared_p
             case NArrow::NSSA::TIndexCheckOperation::EOperation::GreaterOrEqual:
                 return requestValue > chunkValue.Max();
             default:
-                Y_ABORT();
+                Y_ABORT("unexpected operation for min_max index");
         }
     }
 }

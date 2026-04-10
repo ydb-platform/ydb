@@ -45,8 +45,8 @@ protected:
         return 0;
     }
 
-    virtual TMinMax DoGetMinMaxScalars() const override { // not implemented
-        Y_ABORT();
+    virtual TMinMax DoGetMinMaxScalars() const override { 
+        Y_ABORT("Not implemented");
     }
 
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;

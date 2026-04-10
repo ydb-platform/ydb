@@ -191,10 +191,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         )");
 
-        assertDDLQueryOk(R"(
-            ALTER OBJECT `/Root/minmax_test_applied_applied` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
-        )");
-
         runDMLQuery(R"(
             $data1 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
             UPSERT INTO `/Root/minmax_test_applied_applied` (`key`, `value`)
@@ -294,10 +290,6 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         assertDDLQueryOk(R"(
             ALTER OBJECT `/Root/minmax_nulls` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=null_value_mm, TYPE=MINMAX, FEATURES=`{"column_name" : "null_value"}`);
-        )");
-
-        assertDDLQueryOk(R"(
-            ALTER OBJECT `/Root/minmax_nulls` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
         )");
 
         runDMLQuery(R"(

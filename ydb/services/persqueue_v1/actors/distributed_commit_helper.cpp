@@ -104,8 +104,15 @@ void TDistributedCommitHelper::CompareGenerations(NKqp::TEvKqp::TEvQueryResponse
         return queryResponse;
     };
 
-    Y_VERIFY(record.GetYdbStatus() == Ydb::StatusIds::SUCCESS);
+    if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+        auto errorMessage = TStringBuilder() << "Generation retrieval finished with status=" << record.GetYdbStatus() << ", issue=";
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
+        errorMessage << issues.ToString();
+        ctx.Send(ctx.SelfID, createErrorResponse(record.GetYdbStatus(), errorMessage).Release());
+        return;
 
+    }
     if (resp.GetYdbResults().empty()) {
         TString errorMessage = "Incorrect consumer group generation";
         ctx.Send(ctx.SelfID, createErrorResponse(Ydb::StatusIds_StatusCode_PRECONDITION_FAILED, errorMessage).Release());

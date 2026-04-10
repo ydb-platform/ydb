@@ -206,9 +206,6 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
             }},
         };
 
-        NTabletPipe::TClientConfig pipeConfig;
-        pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-        TActorId pipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, Self->CurrentSchemeShardId, pipeConfig));
         for (const auto& [buildId, scanInfo] : Self->BuildIndexScanManager.GetScans()) {
             const auto* factory = responseFactories.FindPtr(scanInfo.ResponseType);
             Y_ENSURE(factory, "Unknown ResponseType in IndexBuildScans: " << scanInfo.ResponseType);
@@ -220,9 +217,14 @@ void TDataShard::TTxInitRestored::Complete(const TActorContext& ctx) {
                 << ", tabletId# " << Self->TabletID()
                 << ", schemeShardId# " << Self->CurrentSchemeShardId
                 << ", responseType# " << scanInfo.ResponseType);
-            NTabletPipe::SendData(ctx, pipe, response.Release());
+            if (!Self->StateReportPipe) {
+                NTabletPipe::TClientConfig clientConfig;
+                clientConfig.RetryPolicy = Self->SchemeShardPipeRetryPolicy;
+                Self->StateReportPipe = ctx.Register(
+                    NTabletPipe::CreateClient(ctx.SelfID, Self->CurrentSchemeShardId, clientConfig));
+            }
+            NTabletPipe::SendData(ctx, Self->StateReportPipe, response.Release());
         }
-        NTabletPipe::CloseClient(ctx, pipe);
     }
 
     // InReadSets table might have a lot of garbage due to old bug.

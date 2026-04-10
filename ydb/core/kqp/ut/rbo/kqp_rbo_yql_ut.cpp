@@ -2296,22 +2296,16 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto dbSession = db.CreateSession().GetValueSync().GetSession();
 
         dbSession.ExecuteSchemeQuery(R"(
-            CREATE TABLE `/Root/t1` (
-                a Int64	NOT NULL,
-	            b Int64,
-                primary key(a)
+            CREATE TABLE `/Root/A` (
+                a_a Int64	NOT NULL,
+	            a_b Int64,
+                primary key(a_a)
             ) WITH (Store = Column);
 
-            CREATE TABLE `/Root/t2` (
-                a Int64	NOT NULL,
-	            b Int64,
-                primary key(a)
-            ) WITH (Store = Column);
-
-            CREATE TABLE `/Root/t3` (
-                a Int64	NOT NULL,
-	            b Int64,
-                primary key(a)
+            CREATE TABLE `/Root/B` (
+                b_a Int64	NOT NULL,
+	            b_b Int64,
+                primary key(b_a)
             ) WITH (Store = Column);
         )").GetValueSync();
 
@@ -2321,29 +2315,17 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto qSession = qResult.GetSession();
 
         auto explainRes = qSession.ExecuteQuery(R"(
-            CREATE TABLE `/Root/t1` (
-                a Int64	NOT NULL,
-	            b Int64,
-                primary key(a)
-            ) WITH (Store = Column);
-
-            CREATE TABLE `/Root/t2` (
-                a Int64	NOT NULL,
-	            b Int64,
-                primary key(a)
-            ) WITH (Store = Column);
-
-            CREATE TABLE `/Root/t3` (
-                a Int64	NOT NULL,
-	            b Int64,
-                primary key(a)
-            ) WITH (Store = Column);
+            SELECT a FROM `/Root/A` INNER JOIN `/Root/B` ON a_a = b_b;
         )",
             NYdb::NQuery::TTxControl::NoTx(),
             NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
         ).ExtractValueSync();
         explainRes.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_C(explainRes.IsSuccess(), explainRes.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(TPCH8) {
+       RunTPCHBenchmark(/*columnstore*/ true, {8}, /*new rbo*/ true);
     }
 
     /*

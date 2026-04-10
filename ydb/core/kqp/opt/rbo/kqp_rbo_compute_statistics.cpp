@@ -250,6 +250,27 @@ void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         }
     }
 
+    // Propagate ShuffledByColumns through Map, applying column renames
+    for (const auto& column : inputMetadata.ShuffledByColumns) {
+        const auto it = std::find_if(
+            renamesWithTransform.begin(), renamesWithTransform.end(),
+            [&column](const std::pair<TInfoUnit, TInfoUnit>& rename) {
+                return column == rename.second;
+            });
+
+        if (it != renamesWithTransform.end()) {
+            Props.Metadata->ShuffledByColumns.push_back(it->first);
+        } else {
+            Props.Metadata->ShuffledByColumns.push_back(column);
+        }
+
+        if (Project && it == renamesWithTransform.end()) {
+            // Column not in projection — shuffle guarantee broken
+            Props.Metadata->ShuffledByColumns = {};
+            break;
+        }
+    }
+
     // Build lineage data
     Props.Metadata->ColumnLineage = {};
     auto renames = GetRenames();
@@ -394,6 +415,13 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     } else {
         Props.Metadata->ColumnLineage = GetLeftInput()->Props.Metadata->ColumnLineage;
         Props.Metadata->ColumnLineage.Merge(GetRightInput()->Props.Metadata->ColumnLineage);
+    }
+
+    // After GraceJoin both sides are hashed by the join keys, so the output
+    // is partitioned by those keys. Propagate this so chained joins can SE.
+    for (const auto& [leftKey, rightKey] : JoinKeys) {
+        Props.Metadata->ShuffledByColumns.push_back(leftKey);
+        Props.Metadata->ShuffledByColumns.push_back(rightKey);
     }
 }
 

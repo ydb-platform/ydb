@@ -71,7 +71,8 @@ public:
         , OutputRowColumnOrder(std::move(outputRowColumnOrder))
         , WatermarksTracker(watermarksTracker)
         , InputFlowFetchStatus(NUdf::EFetchStatus::Yield)
-        , LruCache(std::make_unique<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl>(Settings.GetCacheLimit(), lookupKeyType))
+        , LruCache(std::make_unique<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl>(std::max(Settings.GetCacheLimit(), ui64(1)), lookupKeyType))
+        , DisableLruCache(Settings.GetCacheLimit() < 1)
         , MaxDelayedRows(Settings.GetMaxDelayedRows())
         , CacheTtl(std::chrono::seconds(Settings.GetCacheTtlSeconds()))
         , IsMultiMatches(Settings.GetIsMultiMatches())
@@ -268,6 +269,7 @@ protected:
     TDqComputeActorWatermarks* WatermarksTracker;
     NUdf::EFetchStatus InputFlowFetchStatus;
     std::unique_ptr<NKikimr::NMiniKQL::TUnboxedKeyValueLruCacheWithTtl> LruCache;
+    const bool DisableLruCache;
     size_t MaxDelayedRows;
     std::chrono::seconds CacheTtl;
     const bool IsMultiMatches;
@@ -371,10 +373,53 @@ private:
             if (lookupPayload == nullptr) {
                 continue;
             }
+<<<<<<< HEAD
             AddReadyQueue(lookupKey, inputOther, lookupPayload);
         }
         for (auto&& [k, v]: *lookupResult) {
             LruCache->Update(NUdf::TUnboxedValue(const_cast<NUdf::TUnboxedValue&&>(k)), std::move(v), now + CacheTtl);
+=======
+            PushReadyWatermark();
+            Send(ComputeActorId, new TEvNewAsyncInputDataArrived{InputIndex});
+        } else if (!IsMultiMatches) {
+#if 0 // TODO
+            // Try to (partially) resolve AwaitingQueue (for MultiMatches we MUST ignore incomplete results)
+#endif
+#if 0 // TODO
+            // Opportunistially populate LRU cache with partial fullscan results
+            // (again, in case of MultiMatches, we cannot use partial results)
+            if (!DisableLruCache) {
+                for (auto& [k, v]: *lookupResult) {
+                    Y_DEBUG_ABORT_UNLESS(v);
+                    LruCache->Update<true>(NUdf::TUnboxedValue(k), std::move(v), now + CacheTtl);
+                }
+            }
+#endif
+        }
+        if (fullscan) {
+            Y_DEBUG_ABORT_UNLESS(lookupResult == FullscanRequest);
+            lookupResult.reset();
+            Y_DEBUG_ABORT_UNLESS(FullscanRequested);
+            FullscanRequested = false;
+            if (resultIncomplete) {
+                FullscanExpireTime = now + std::max(CacheTtl, MinFullscanFailureTtl);
+            } else {
+                FullscanExpireTime = now + CacheTtl;
+                FullscanReady = true;
+#if 0 // TODO
+                LruCache->Clear(); // Erase now-useless LRU cache
+#endif
+            }
+        } else {
+            Y_ABORT_UNLESS(lookupResult == KeysForLookup);
+            lookupResult.reset();
+            if (!FullscanReady && !DisableLruCache) { // don't populate LRU cache when we have (complete) fullscan results
+                for (auto& [k, v]: *KeysForLookup) {
+                    LruCache->Update(NUdf::TUnboxedValue(k), std::move(v), now + CacheTtl);
+                }
+            }
+            KeysForLookup->erase(KeysForLookup->begin(), KeysForLookup->end()); // don't ->clear();, it's O(reserved) instead of O(size)
+>>>>>>> d5b068060dc (streamlookup join: prevent assert on zero-size lru cache (#37320))
         }
         KeysForLookup->clear();
         PushReadyWatermark();
@@ -588,8 +633,10 @@ private: //events
         } else {
             PushReadyWatermark();
         }
-        for (auto&& [k, v]: *lookupResult) {
-            LruCache->Update(NUdf::TUnboxedValue(const_cast<NUdf::TUnboxedValue&&>(k)), std::move(v), now + CacheTtl);
+        if (!DisableLruCache) {
+            for (auto&& [k, v]: *lookupResult) {
+                LruCache->Update(NUdf::TUnboxedValue(const_cast<NUdf::TUnboxedValue&&>(k)), std::move(v), now + CacheTtl);
+            }
         }
         KeysForLookup->clear();
         auto deltaLruSize = (i64)LruCache->Size() - LastLruSize;

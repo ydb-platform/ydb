@@ -109,12 +109,16 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
     config.Opts->AddLongOption("tx-mode", TStringBuilder() << "Transaction mode (" << GetEnumAllNames<BenchmarkUtils::ETxMode>() << ")")
         .RequiredArgument("VAL").StoreResult(&TxMode).DefaultValue(TxMode);
 
-    config.Opts->AddLongOption("stats", TStringBuilder() << "Collect statistics mode (full, profile)")
+    config.Opts->AddLongOption("stats", TStringBuilder() << "Collect statistics mode")
         .RequiredArgument("VAL").Handler([&](const TStringBuf option) {
             StatsMode = ParseQueryStatsModeOrThrow(TString(option), StatsMode);
             if (StatsMode < NQuery::EStatsMode::Full) {
                 throw TMisuseException() << "Stats collection mode can't be less than [full] in benchmark mode";
             }
+        })
+        .ChoicesWithCompletion({
+            {"full", "Full"},
+            {"profile", "Profile"},
         });
 }
 

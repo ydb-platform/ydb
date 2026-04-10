@@ -2439,12 +2439,6 @@ public:
         Self->Execute(Self->CreateTxProgress(buildInfo->Id), ctx);
     }
 
-    static TSerializedTableRange InfiniteRange(ui32 columns) {
-        TVector<TCell> vec(columns, TCell());
-        TArrayRef<TCell> cells(vec);
-        return TSerializedTableRange(TSerializedCellVec::Serialize(cells), "", true, false);
-    }
-
     static TSerializedTableRange ParentRange(NTableIndex::NKMeans::TClusterId parent) {
         if (parent == 0) {
             return {};  // empty
@@ -2503,18 +2497,16 @@ public:
         TTableInfo::TPtr table = Self->Tables.at(path->PathId);
 
         auto tableColumns = NTableIndex::ExtractInfo(table); // skip dropped columns
-        // In case of unique index validation the real range will arrive after index validation for each shard:
-        // it will describe the first and the last index keys for further validation.
-        TSerializedTableRange shardRange = buildInfo.IsValidatingUniqueIndex() ? TSerializedTableRange{} : InfiniteRange(tableColumns.Keys.size());
         static constexpr std::string_view LogPrefix = "";
+        TString prevBound = TSerializedCellVec::Serialize(TVector<TCell>(tableColumns.Keys.size()));
 
         buildInfo.Cluster2Shards.clear();
         for (const auto& x: table->GetPartitions()) {
             Y_ENSURE(Self->ShardInfos.contains(x.ShardIdx));
-            TSerializedCellVec bound{x.EndOfRange};
-            if (!buildInfo.IsValidatingUniqueIndex()) {
-                shardRange.To = bound;
-            }
+            // In case of unique index validation the real range will arrive after index validation for each shard:
+            // it will describe the first and the last index keys for further validation.
+            TSerializedTableRange shardRange = (buildInfo.IsValidatingUniqueIndex()
+                ? TSerializedTableRange() : TSerializedTableRange(prevBound, x.EndOfRange, true, false));
             if (buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex &&
                 buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::Filter) {
                 LOG_D("InitiateShard " << x.ShardIdx << " range " << buildInfo.KMeans.RangeToDebugStr(shardRange));
@@ -2524,9 +2516,7 @@ public:
             }
             auto [it, emplaced] = buildInfo.Shards.emplace(x.ShardIdx, TIndexBuildShardStatus{std::move(shardRange), ""});
             Y_ENSURE(emplaced);
-            if (!buildInfo.IsValidatingUniqueIndex()) {
-                shardRange.From = std::move(bound);
-            }
+            prevBound = x.EndOfRange;
 
             Self->PersistBuildIndexShardStatusInitiate(db, BuildId, x.ShardIdx, it->second);
         }

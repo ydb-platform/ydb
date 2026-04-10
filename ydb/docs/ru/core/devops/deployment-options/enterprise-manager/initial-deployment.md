@@ -45,7 +45,7 @@
 
 Версия | Ссылка
 --- | ---
-`<VERSION>` | `http://binaries.ydbem.website.yandexcloud.net/builds/<VERSION>/ydb-em-<VERSION>-stable-linux-amd64.tar.xz`
+`<VERSION>` | `https://binaries.ydbem.website.yandexcloud.net/builds/<VERSION>/ydb-em-<VERSION>-stable-linux-amd64.tar.xz`
 
 Распакуйте скачанный архив (замените `<VERSION>` на актуальную версию):
 

@@ -23,6 +23,7 @@ using namespace Aws::Utils::Stream;
 namespace {
 
 static const TString OkCode = "OK";
+static const TString UnknownCode = "CodeUnknown";
 
 NMonitoring::IHistogramCollectorPtr GetLatencyCollector() {
     return NMonitoring::ExplicitHistogram({
@@ -88,13 +89,13 @@ protected:
             hist->Collect((TInstant::Now() - Start).MilliSeconds());
         }
 
-        if (BytesWritten) {
+        if (outcome.IsSuccess() && BytesWritten) {
             if (auto* bw = Counters->GetBytesWritten()) {
                 *bw += *BytesWritten;
             }
         }
 
-        if (BytesRead) {
+        if (outcome.IsSuccess() && BytesRead) {
             if (auto* br = Counters->GetBytesRead()) {
                 *br += *BytesRead;
             }
@@ -340,11 +341,15 @@ NMonitoring::TCounterForPtr* TS3ExternalStorage::TS3RequestCounters::GetCodeCoun
     std::lock_guard<std::mutex> g(Parent->Mutex);
     if (code == OkCode) {
         if (!CodeOk) {
-            CodeOk = RequestGroup->GetNamedCounter("code", code, true);
+            CodeOk = RequestGroup->GetCounter(OkCode, true);
         }
         return CodeOk.Get();
     }
-    return RequestGroup->GetNamedCounter("code", code, true).Get();
+    if (code) {
+        return RequestGroup->GetCounter(code, true).Get();
+    } else {
+        return RequestGroup->GetCounter(UnknownCode, true).Get();
+    }
 }
 
 TS3ExternalStorage::~TS3ExternalStorage() {

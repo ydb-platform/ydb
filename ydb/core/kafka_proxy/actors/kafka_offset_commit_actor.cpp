@@ -134,12 +134,10 @@ void TKafkaOffsetCommitActor::ProcessPipeProblem(ui64 tabletId, const TActorCont
 void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx) {
     KAFKA_LOG_D("Auth success. Topics count: " << ev->Get()->TopicAndTablets.size());
     TopicAndTablets = std::move(ev->Get()->TopicAndTablets);
-    int readId = 0;
-    std::vector<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo> commits;
+
     for (auto topicReq: Message->Topics) {
         auto topicIt = TopicAndTablets.find(NormalizePath(Context->DatabasePath, topicReq.Name.value()));
         for (auto partitionRequest: topicReq.Partitions) {
-            readId++;
             if (topicIt == TopicAndTablets.end()) {
                 AddPartitionResponse(UNKNOWN_TOPIC_OR_PARTITION, topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
                 continue;
@@ -174,6 +172,7 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
             commit->SetClientId(Message->GroupId.value());
             commit->SetOffset(partitionRequest.CommittedOffset);
             commit->SetStrict(true);
+            commit->SetGenerationId(Message->GenerationId);
 
             if (partitionRequest.CommittedMetadata.has_value()) {
                 commit->SetCommittedMetadata(*partitionRequest.CommittedMetadata);
@@ -187,26 +186,10 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
 
             TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
             req->Record.Swap(&request);
-            NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo commitReq {.PartitionId = (ui64)partitionRequest.PartitionIndex, .Offset = (i64)partitionRequest.CommittedOffset, .KillReadSession = false, .OnlyCheckCommitedToFinish = false, .ReadSessionId = {}};
-            commits.push_back(commitReq);
+
             NTabletPipe::SendData(ctx, TabletIdToPipe[tabletId], req.Release());
         }
     }
-    if (!Kqp) {
-        // не нужно ли тут всегда
-        Kqp = std::make_shared<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper>(Context->DatabasePath, Message->GroupId.value(), commits, readId);
-        Kqp->SendCreateSessionRequest(ctx);
-    }
-}
-
-void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext&) {
-    KAFKA_LOG_D(ev->Cookie);
-    // auto kqpIt = Kqps.find(ev->Cookie);
-    // if (kqpIt == Kqps.end()) {
-    //     ctx.Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, NKafka::EKafkaErrors::ILLEGAL_GENERATION));
-    //     return;
-    // }
-    return;
 }
 
 void TKafkaOffsetCommitActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {

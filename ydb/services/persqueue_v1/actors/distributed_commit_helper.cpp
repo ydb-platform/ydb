@@ -105,10 +105,7 @@ void TDistributedCommitHelper::CompareGenerations(NKqp::TEvKqp::TEvQueryResponse
     };
 
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-        auto errorMessage = TStringBuilder() << "Generation retrieval finished with status=" << record.GetYdbStatus() << ", issue=";
-        NYql::TIssues issues;
-        NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
-        errorMessage << issues.ToString();
+        TString errorMessage = "Incorrect consumer group generation";
         ctx.Send(ctx.SelfID, createErrorResponse(record.GetYdbStatus(), errorMessage).Release());
         return;
 

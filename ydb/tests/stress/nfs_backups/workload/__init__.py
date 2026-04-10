@@ -138,10 +138,82 @@ class FsExportClient:
         )
 
 
+def _ensure_table_exists(client, table_name):
+    """Check if table exists; if not, import it from S3 using env vars."""
+    try:
+        result = client.query(
+            f"SELECT COUNT(*) AS cnt FROM `{table_name}` LIMIT 1;",
+            False,
+        )
+        logger.info("[setup] Table '%s' already exists", table_name)
+        return
+    except Exception:
+        logger.info("[setup] Table '%s' not found, will try to import from S3", table_name)
+
+    s3_endpoint = os.getenv("S3_ENDPOINT")
+    s3_bucket = os.getenv("S3_BUCKET")
+    s3_access_key = os.getenv("S3_ACCESS_KEY_ID")
+    s3_secret_key = os.getenv("S3_ACCESS_KEY_SECRET")
+    s3_source_prefix = os.getenv("S3_SOURCE_PREFIX", table_name)
+
+    if not all([s3_endpoint, s3_bucket, s3_access_key, s3_secret_key]):
+        missing = [
+            name for name, val in [
+                ("S3_ENDPOINT", s3_endpoint),
+                ("S3_BUCKET", s3_bucket),
+                ("S3_ACCESS_KEY_ID", s3_access_key),
+                ("S3_ACCESS_KEY_SECRET", s3_secret_key),
+            ] if not val
+        ]
+        raise RuntimeError(
+            f"Table '{table_name}' does not exist and cannot import from S3: "
+            f"missing env vars: {', '.join(missing)}"
+        )
+
+    from ydb.import_client import ImportClient, ImportFromS3Settings
+
+    db_path = client.database.rstrip("/")
+    dest_path = f"{db_path}/{table_name}"
+
+    settings = (
+        ImportFromS3Settings()
+        .with_endpoint(s3_endpoint)
+        .with_bucket(s3_bucket)
+        .with_access_key(s3_access_key)
+        .with_secret_key(s3_secret_key)
+        .with_number_of_retries(3)
+        .with_source_and_destination(s3_source_prefix, dest_path)
+    )
+
+    logger.info(
+        "[setup] Importing table from S3: endpoint=%s bucket=%s prefix=%s -> %s",
+        s3_endpoint, s3_bucket, s3_source_prefix, dest_path,
+    )
+
+    import_client = ImportClient(client.driver)
+    result = import_client.import_from_s3(settings)
+    op_id = result.id
+    logger.info("[setup] S3 import started: op=%s progress=%s", op_id, result.progress.name)
+
+    while True:
+        op = import_client.get_import_from_s3_operation(op_id)
+        progress = op.progress.name
+        if progress == "DONE":
+            logger.info("[setup] S3 import DONE: op=%s", op_id)
+            break
+        elif progress == "CANCELLED":
+            raise RuntimeError(f"S3 import cancelled: op={op_id}")
+        logger.debug("[setup] S3 import in progress: op=%s progress=%s", op_id, progress)
+        time.sleep(5)
+
+    try:
+        client.query(f"SELECT COUNT(*) AS cnt FROM `{table_name}` LIMIT 1;", False)
+        logger.info("[setup] Table '%s' imported successfully", table_name)
+    except Exception as e:
+        raise RuntimeError(f"Table '{table_name}' not accessible after S3 import: {e}")
+
+
 class WorkloadNfsExportImport(WorkloadBase):
-    # Expected table schema:
-    #   c0: Uint64 (PRIMARY KEY)
-    #   c1: String
     TABLE_NAME = "large_test_table"
 
     def __init__(self, client, stop, nfs_mount_path, fatal_error_event):
@@ -333,7 +405,13 @@ class WorkloadNfsExportImport(WorkloadBase):
 
     def _main_loop(self):
         logger.info("[main_loop] Starting export/import cycle, nfs_mount_path=%s", self.nfs_mount_path)
-        logger.info("[main_loop] Using existing table: %s", self.TABLE_NAME)
+
+        try:
+            _ensure_table_exists(self.client, self.TABLE_NAME)
+        except Exception as e:
+            self._signal_fatal_error(f"Cannot ensure table exists: {e}")
+            return
+
         iteration = 0
 
         while not self.is_stop_requested() and not self.fatal_error_event.is_set():

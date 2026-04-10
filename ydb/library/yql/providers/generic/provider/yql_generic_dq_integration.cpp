@@ -155,7 +155,7 @@ namespace NYql {
                 auto maybeGenSourceSettings = TMaybeNode<TGenSourceSettings>(srcSettings.Raw());
                 Y_ENSURE(maybeGenSourceSettings);
                 auto genSourceSettings = maybeGenSourceSettings.Cast();
-                auto maxPartitions = partitionSettings.MaxPartitions.GetOrElse(DefaultMaxPartitions);
+                auto maxPartitions = partitionSettings.MaxPartitions ? partitionSettings.MaxPartitions : 0;
 
                 const TGenericState::TTableAddress tableAddress{
                     genSourceSettings.Cluster().StringValue(),
@@ -210,7 +210,7 @@ namespace NYql {
             }
 
             void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings,
-                                    TString& sourceType, TMaybe<size_t>, TExprContext& ctx) override {
+                                    TString& sourceType, size_t, TExprContext& ctx) override {
                 const TDqSource dqSource(&node);
                 const auto maybeSettings = dqSource.Settings().Maybe<TGenSourceSettings>();
 

@@ -121,7 +121,7 @@ public:
         }
 
         constexpr ui64 maxTaskRatio = 20;
-        size_t maxPartitions = settings.MaxPartitions.GetOrElse(DefaultMaxPartitions);
+        size_t maxPartitions = settings.MaxPartitions ? settings.MaxPartitions : DefaultMaxPartitions;
         if (!maxPartitions || (mbLimitHint && maxPartitions > *mbLimitHint / maxTaskRatio)) {
             maxPartitions = std::max(*mbLimitHint / maxTaskRatio, ui64{1});
             YQL_CLOG(TRACE, ProviderS3) << "limited max partitions to " << maxPartitions;
@@ -517,7 +517,7 @@ public:
                             << "Unknown 'pathpatternvariant': " << pathPatternVariantValue->second;
                     }
                 }
-                auto consumersCount = hasDirectories ? maxPartitions.GetOrElse(DefaultMaxPartitions) : paths.size();
+                auto consumersCount = hasDirectories ? (maxPartitions ? maxPartitions : DefaultMaxPartitions) : paths.size();
 
                 auto fileQueuePrefetchSize = State_->Configuration->FileQueuePrefetchSize.Get()
                     .GetOrElse(consumersCount * srcDesc.GetParallelDownloadCount() * 3);

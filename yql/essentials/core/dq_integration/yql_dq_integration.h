@@ -50,7 +50,7 @@ public:
 
     struct TPartitionSettings {
         TMaybe<ui64> DataSizePerJob;
-        TMaybe<ui32> MaxPartitions;
+        size_t MaxPartitions = 0;
         TMaybe<bool> EnableComputeActor;
         bool CanFallback = false;
     };

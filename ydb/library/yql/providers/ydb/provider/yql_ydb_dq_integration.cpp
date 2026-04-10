@@ -39,7 +39,7 @@ public:
         meta.ReadAsync = settings.EnableComputeActor.GetOrElse(false); // TODO: Use special method for get settings.
         auto parts = meta.Partitions;
 
-        auto maxPartitions = settings.MaxPartitions.GetOrElse(DefaultMaxPartitions);
+        auto maxPartitions = settings.MaxPartitions ? settings.MaxPartitions : DefaultMaxPartitions;
         if (maxPartitions && parts.size() > maxPartitions) {
             if (const auto extraParts = parts.size() - maxPartitions; extraParts > maxPartitions) {
                 const auto dropsPerTask = (parts.size() - 1ULL) / maxPartitions;
@@ -117,7 +117,7 @@ public:
         return read;
     }
 
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, TMaybe<size_t>, TExprContext&) override {
+    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t, TExprContext&) override {
         const TDqSource source(&node);
         if (const auto maySettings = source.Settings().Maybe<TYdbSourceSettings>()) {
             const auto settings = maySettings.Cast();

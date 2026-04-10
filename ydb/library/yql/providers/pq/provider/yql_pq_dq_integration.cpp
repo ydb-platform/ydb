@@ -38,7 +38,7 @@ public:
         : State_(state.Get())
     {}
 
-    ui64 PartitionTopicRead(const TPqTopic& topic, TMaybe<ui32> maxPartitions, TVector<TString>& partitions, bool streamingTopicRead) {
+    ui64 PartitionTopicRead(const TPqTopic& topic, size_t maxPartitions, TVector<TString>& partitions, bool streamingTopicRead) {
         size_t topicPartitionsCount = 0;
         for (auto kv : topic.Props()) {
             auto key = kv.Name().Value();
@@ -54,7 +54,7 @@ public:
             maxPartitions = DefaultMaxPartitions;
         }
 
-        const size_t tasks = Min(*maxPartitions, static_cast<ui32>(topicPartitionsCount));
+        const size_t tasks = Min(*maxPartitions, topicPartitionsCount);
         partitions.reserve(tasks);
         for (size_t i = 0; i < tasks; ++i) {
             NPq::NProto::TDqReadTaskParams params;
@@ -228,7 +228,7 @@ public:
         return watermarksSettings;
     }
 
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, TMaybe<size_t>, TExprContext& ctx) override {
+    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType, size_t, TExprContext& ctx) override {
         if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) {
             auto settings = maybeDqSource.Cast().Settings();
             if (auto maybeTopicSource = TMaybeNode<TDqPqTopicSource>(settings.Raw())) {

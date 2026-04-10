@@ -249,7 +249,7 @@ public:
             }
         }
 
-        auto maxTasks = settings.MaxPartitions.GetOrElse(DefaultMaxPartitions);
+        auto maxTasks = settings.MaxPartitions ? settings.MaxPartitions : DefaultMaxPartitions;
         ui64 maxDataSizePerJob = 0;
         if (ytState->Configuration->_EnableYtPartitioning.Get(cluster).GetOrElse(false)) {
             TVector<TYtPathInfo::TPtr> paths;

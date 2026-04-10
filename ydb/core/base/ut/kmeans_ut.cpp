@@ -52,16 +52,16 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         UNIT_ASSERT_STRING_CONTAINS(error, "vector index settings contain 1 unsupported parameter(s)");
 
         settings.GetReflection()->MutableUnknownFields(&settings)->DeleteByNumber(10000);
-        UNIT_ASSERT(!ValidateSettings(settings, error));
-        UNIT_ASSERT_STRING_CONTAINS(error, "levels should be set");
+        // levels and clusters are optional (auto-detected when not set)
+        UNIT_ASSERT(ValidateSettings(settings, error));
 
         settings.set_levels(UINT32_MAX);
         UNIT_ASSERT(!ValidateSettings(settings, error));
         UNIT_ASSERT_STRING_CONTAINS(error, "Invalid levels");
 
         settings.set_levels(16);
-        UNIT_ASSERT(!ValidateSettings(settings, error));
-        UNIT_ASSERT_STRING_CONTAINS(error, "clusters should be set");
+        // clusters still optional when levels is set
+        UNIT_ASSERT(ValidateSettings(settings, error));
 
         settings.set_clusters(UINT32_MAX);
         UNIT_ASSERT(!ValidateSettings(settings, error));

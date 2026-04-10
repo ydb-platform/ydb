@@ -162,6 +162,18 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
     }
 }
 
+void TSchemeShard::PersistBuildIndexCreationConfig(NIceDb::TNiceDb& db, const TIndexBuildInfo& info) {
+    NKikimrSchemeOp::TIndexCreationConfig serializableRepresentation;
+    for (const auto& description : info.ImplTableDescriptions) {
+        *serializableRepresentation.AddIndexImplTableDescriptions() = description;
+    }
+    *serializableRepresentation.MutableVectorIndexKmeansTreeDescription() =
+        std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(info.SpecializedIndexDescription);
+    db.Table<Schema::IndexBuild>().Key(info.Id).Update(
+        NIceDb::TUpdate<Schema::IndexBuild::CreationConfig>(serializableRepresentation.SerializeAsString())
+    );
+}
+
 void TSchemeShard::PersistBuildIndexState(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
     db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
         NIceDb::TUpdate<Schema::IndexBuild::State>(ui32(indexInfo.State)),

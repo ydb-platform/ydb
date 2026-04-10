@@ -7,6 +7,7 @@
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -680,7 +681,7 @@ private:
 
         *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
             buildInfo.SpecializedIndexDescription).GetSettings().settings();
-        ev->Record.SetK(buildInfo.KMeans.K);
+        ev->Record.SetK(buildInfo.KMeans.K != 0 ? buildInfo.KMeans.K : NKikimr::NKMeans::MaxKMeansAutoSampleK);
         ev->Record.SetMaxProbability(buildInfo.Sample.MaxProbability);
         if (buildInfo.KMeans.Parent != 0) {
             auto from = TCell::Make(buildInfo.KMeans.Parent - 1);
@@ -1754,6 +1755,33 @@ private:
         Y_ENSURE(false);
     }
 
+    // Default threshold S for automatic clusters/levels selection.
+    // 1500 rows * ~4 KB per vector = ~6 MB scanned per query.
+    static constexpr ui64 AutoKMeansSearchThreshold = 1500;
+
+    void SetAutoKMeansTreeParams(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
+        const ui64 n = buildInfo.Processed.GetReadRows();
+        const bool withOverlap = buildInfo.KMeans.OverlapClusters > 1;
+        const ui32 t = withOverlap ? 4 : 10;
+        const double p = withOverlap ? (buildInfo.KMeans.OverlapClusters - 0.5) : 1.0;
+
+        auto [clusters, levels] = NKikimr::NKMeans::ComputeOptimalClustersAndLevels(n, t, p, AutoKMeansSearchThreshold);
+
+        LOG_N("FillVectorIndex AutoKMeansTreeParams"
+            << " N=" << n << " T=" << t << " P=" << p
+            << " -> clusters=" << clusters << " levels=" << levels
+            << " " << buildInfo.DebugString());
+
+        buildInfo.KMeans.K = clusters;
+        buildInfo.KMeans.Levels = buildInfo.KMeans.IsPrefixed + levels;
+
+        auto& desc = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(buildInfo.SpecializedIndexDescription);
+        desc.MutableSettings()->set_clusters(clusters);
+        desc.MutableSettings()->set_levels(levels);
+        NIceDb::TNiceDb db(txc.DB);
+        Self->PersistBuildIndexCreationConfig(db, buildInfo);
+    }
+
     bool FillVectorIndexSamples(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
             if (NoShardsAdded(buildInfo)) {
@@ -1770,6 +1798,9 @@ private:
                 return false;
             }
             ClearDoneShards(txc, buildInfo);
+            if (buildInfo.KMeans.K == 0 && buildInfo.KMeans.Level == 1 && buildInfo.KMeans.Parent == 0) {
+                SetAutoKMeansTreeParams(txc, buildInfo);
+            }
             if (buildInfo.Sample.Rows.empty()) {
                 // No samples
                 if (buildInfo.KMeans.Parent == 0) {
@@ -2869,7 +2900,8 @@ struct TSchemeShard::TIndexBuilder::TTxReplySampleK: public TTxShardReply<TEvDat
                 }
                 sample.emplace_back(probabilities[i], std::move(rows[i]));
             }
-            if (buildInfo.Sample.MakeWeakTop(buildInfo.KMeans.K)) {
+            const ui32 effectiveK = buildInfo.KMeans.K != 0 ? buildInfo.KMeans.K : NKikimr::NKMeans::MaxKMeansAutoSampleK;
+            if (buildInfo.Sample.MakeWeakTop(effectiveK)) {
                 from = 0;
             }
             for (; from < sample.size(); ++from) {
@@ -2878,7 +2910,7 @@ struct TSchemeShard::TIndexBuilder::TTxReplySampleK: public TTxShardReply<TEvDat
                     NIceDb::TUpdate<Schema::KMeansTreeSample::Data>(sample[from].Row)
                 );
             }
-            for (; from < 2*buildInfo.KMeans.K; ++from) {
+            for (; from < 2 * effectiveK; ++from) {
                 db.Table<Schema::KMeansTreeSample>().Key(buildInfo.Id, from).Delete();
             }
         }

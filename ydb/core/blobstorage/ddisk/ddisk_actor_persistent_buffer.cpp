@@ -351,7 +351,6 @@ namespace NKikimr::NDDisk {
                         buffer.Size += pr.Size;
                         pr.DataParts.emplace(0, std::move(inflight.Data));
                         PersistentBufferInMemoryCacheSize += pr.Size;
-
                     } else {
                         Y_ABORT_UNLESS(pr.OffsetInBytes == inflight.OffsetInBytes);
                         Y_ABORT_UNLESS(pr.Size == inflight.Data.size());
@@ -378,7 +377,6 @@ namespace NKikimr::NDDisk {
         const TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();
         ui32 sectorsCnt = selector.Size / SectorSize + 1;
-
         const auto sectors = PersistentBufferSpaceAllocator.Occupy(sectorsCnt);
         if (sectors.size() == 0) {
             if (PersistentBufferSpaceAllocator.OwnedChunks.size() < PersistentBufferFormat.MaxChunks) {
@@ -412,6 +410,7 @@ namespace NKikimr::NDDisk {
 
         auto parts = SlicePersistentBuffer(creds.TabletId, creds.Generation,
             selector.VChunkIndex, lsn, selector.OffsetInBytes, selector.Size, TRope(payload), sectors);
+
         auto opCookie = NextCookie++;
         auto& inflightRecord = PersistentBufferDiskOperationInflight[opCookie];
         inflightRecord = {

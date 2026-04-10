@@ -213,7 +213,6 @@ void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPt
     if (!Kqp->Handle(ev, ctx)) {
         const auto& record = ev->Get()->Record;
         Error = ConvertErrorCode(record.GetYdbStatus());
-        KAFKA_LOG_ERROR("Error on Kqp session creation: " << Error);
         ctx.Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
     }
     return;
@@ -226,7 +225,7 @@ void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, c
         NYql::TIssues issues;
         NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
         kqpQueryError << issues.ToString();
-        KAFKA_LOG_ERROR(kqpQueryError);
+        KAFKA_LOG_D(kqpQueryError);
 
         ctx.Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
         return;

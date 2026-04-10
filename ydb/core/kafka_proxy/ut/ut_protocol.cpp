@@ -1592,7 +1592,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 }
             }
 
-            // check that error on one topic triggers error response on the whole commit request
+            // check that error on one topic triggers error responce on the whole commit request
             offsets[topicName1] = partitionsAndOffsets;
             auto msg2 = client.OffsetCommit(consumerName, offsets, generationId);
             UNIT_ASSERT_VALUES_EQUAL(msg2->Topics.size(), 2);

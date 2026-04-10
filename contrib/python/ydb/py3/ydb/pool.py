@@ -232,6 +232,47 @@ class Discovery(threading.Thread):
                 if cached_endpoint.endpoint not in resolved_endpoints:
                     self._cache.make_outdated(cached_endpoint)
 
+            local_dc = resolve_details.self_location
+
+            # Detect local DC using TCP latency if enabled and preferred is meaningful
+            if self._driver_config.detect_local_dc and not self._driver_config.use_all_nodes:
+                # Use only endpoints that match the SSL requirements for detection
+                ssl_filtered_endpoints = [
+                    endpoint
+                    for endpoint in resolve_details.endpoints
+                    if (self._ssl_required and endpoint.ssl) or (not self._ssl_required and not endpoint.ssl)
+                ]
+
+                if ssl_filtered_endpoints:
+                    try:
+                        detected_location = _utilities.detect_local_dc(
+                            ssl_filtered_endpoints, max_per_location=3, timeout=self._ready_timeout
+                        )
+                        if detected_location:
+                            local_dc = detected_location
+                            self.logger.info(
+                                "Detected local DC via TCP latency: %s (server reported: %s)",
+                                local_dc,
+                                resolve_details.self_location,
+                            )
+                        else:
+                            self.logger.warning(
+                                "Failed to detect local DC via TCP latency, using server location: %s",
+                                resolve_details.self_location,
+                            )
+                    except Exception as e:
+                        self.logger.warning(
+                            "Failed to detect local DC via TCP latency, using server location: %s. Error: %s",
+                            resolve_details.self_location,
+                            e,
+                            exc_info=True,
+                        )
+                else:
+                    self.logger.warning(
+                        "No SSL-compatible endpoints for local DC detection, using server location: %s",
+                        resolve_details.self_location,
+                    )
+
             for resolved_endpoint in resolve_details.endpoints:
                 if self._ssl_required and not resolved_endpoint.ssl:
                     continue
@@ -239,7 +280,7 @@ class Discovery(threading.Thread):
                 if not self._ssl_required and resolved_endpoint.ssl:
                     continue
 
-                preferred = resolve_details.self_location == resolved_endpoint.location
+                preferred = local_dc == resolved_endpoint.location
 
                 for (
                     endpoint,

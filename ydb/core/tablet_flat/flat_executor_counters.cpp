@@ -125,6 +125,8 @@ TExecutorCounters::TExecutorCounters()
     Percentile()[TX_PERCENTILE_CONSUMED_CPU].Initialize(txConsumedCpu, false);
     Percentile()[TX_PERCENTILE_FOLLOWERSYNC_LATENCY].Initialize(txLatencyConfig, false);
     Percentile()[TX_PERCENTILE_COMMIT_REDO_BYTES].Initialize(txCommitSize, false);
+    Percentile()[TX_PERCENTILE_BACKUP_CHANGELOG_FLUSH_LATENCY].Initialize(txLatencyConfig, false);
+    Percentile()[TX_PERCENTILE_BACKUP_CHANGELOG_LAG].Initialize(txLatencyConfig, false);
 }
 
 }}

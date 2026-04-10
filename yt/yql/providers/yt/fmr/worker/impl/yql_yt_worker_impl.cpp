@@ -1,6 +1,7 @@
 #include <library/cpp/threading/future/wait/wait.h>
 #include <thread>
 #include <util/system/mutex.h>
+#include <util/system/rusage.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include "yql_yt_worker_impl.h"
@@ -23,11 +24,16 @@ struct TFmrWorkerState {
     std::unordered_map<TString, TTask::TPtr> TasksToRun; // taskId -> tasks with already downloaded files, waiting for job start
     std::unordered_map<TString, TTask::TPtr> TasksToDownload; // taskId -> tasks which are downloading files.
     std::unordered_map<TString, std::vector<TFileLinkPtr>> LocalFileCache; // taskId -> downloaded files
+    std::unordered_set<TString> ForceFailedTaskIds; // taskIds force-failed, pending callback cleanup
 
     void HandleTaskException(const TString& taskId, const TString& exceptionMessage) {
         // TODO (@cdzyura171) - Restart Fmr Operation in case download of files / resources failed in jobPreparer.
         with_lock(Mutex) {
             YQL_CLOG(ERROR, FastMapReduce) << "Task with id " << taskId << " failed with error message " << exceptionMessage;
+            if (ForceFailedTaskIds.contains(taskId)) {
+                ForceFailedTaskIds.erase(taskId);
+                return;
+            }
             YQL_ENSURE(TaskStatuses.contains(taskId));
             auto taskStatus = ETaskStatus::Failed;
             auto taskError = TFmrError{.Component = EFmrComponent::Worker, .ErrorMessage = exceptionMessage, .TaskId = taskId};
@@ -94,7 +100,8 @@ public:
         StopWorker_(false),
         RandomProvider_(settings.RandomProvider),
         WorkerId_(settings.WorkerId),
-        TimeToSleepBetweenRequests_(settings.TimeToSleepBetweenRequests)
+        TimeToSleepBetweenRequests_(settings.TimeToSleepBetweenRequests),
+        MemoryLimitBytes_(settings.MemoryLimitBytes)
 {
     YQL_ENSURE(Coordinator_ && RandomProvider_ && JobPreparer_);
     GenerateVolatileId();
@@ -110,6 +117,32 @@ public:
 
             while (!StopWorker_) {
                 try {
+                    if (MemoryLimitBytes_ > 0) {
+                        ui64 currentRss = TRusage::GetCurrentRSS();
+                        if (currentRss > MemoryLimitBytes_) {
+                            with_lock(WorkerState_->Mutex) {
+                                YQL_CLOG(ERROR, FastMapReduce) << "Worker OOM detected (RSS: " << currentRss
+                                    << " bytes, limit: " << MemoryLimitBytes_ << " bytes), failing all tasks";
+                                for (auto& [taskId, taskState] : WorkerState_->TaskStatuses) {
+                                    if (taskState->TaskStatus == ETaskStatus::InProgress) {
+                                        auto taskError = TFmrError{
+                                            .Component = EFmrComponent::Worker,
+                                            .Reason = EFmrErrorReason::WorkerOOM,
+                                            .ErrorMessage = TStringBuilder()
+                                                << "Worker out of memory (RSS: " << currentRss << " bytes, limit: " << MemoryLimitBytes_ << " bytes)",
+                                            .WorkerId = WorkerId_,
+                                            .TaskId = taskId
+                                        };
+                                        taskState = MakeTaskState(ETaskStatus::Failed, taskId, taskError, TStatistics());
+                                        WorkerState_->ForceFailedTaskIds.insert(taskId);
+                                    }
+                                }
+                                WorkerState_->TasksToRun.clear();
+                                WorkerState_->TasksToDownload.clear();
+                            }
+                        }
+                    }
+
                     std::vector<TTaskState::TPtr> taskStates;
                     std::vector<TString> taskIdsToErase;
                     with_lock(WorkerState_->Mutex) {
@@ -196,6 +229,11 @@ public:
                                 try {
                                     f.GetValue();
                                     with_lock(state->Mutex) {
+                                        if (state->ForceFailedTaskIds.contains(taskId)) {
+                                            YQL_CLOG(DEBUG, FastMapReduce) << "Skipping resource download callback for force-failed task " << taskId;
+                                            state->ForceFailedTaskIds.erase(taskId);
+                                            return;
+                                        }
                                         YQL_ENSURE(state->TasksToDownload.contains(taskId));
                                         auto task = state->TasksToDownload[taskId];
 
@@ -217,9 +255,13 @@ public:
                         auto runJobFuture = future.Subscribe([weakState = std::weak_ptr(WorkerState_), taskId](const auto& jobFuture) {
                             std::shared_ptr<TFmrWorkerState> state = weakState.lock();
                             if (state) {
-                                auto finalTaskState = jobFuture.GetValue();
                                 try {
+                                    auto finalTaskState = jobFuture.GetValue();
                                     with_lock(state->Mutex) {
+                                        if (state->ForceFailedTaskIds.contains(taskId)) {
+                                            state->ForceFailedTaskIds.erase(taskId);
+                                            return;
+                                        }
                                         YQL_ENSURE(state->TaskStatuses.contains(taskId));
                                         state->TaskStatuses[taskId] = finalTaskState;
                                     }
@@ -282,6 +324,7 @@ private:
     void ClearState() {
         TasksCancelStatus_.clear();
         WorkerState_->TaskStatuses.clear();
+        WorkerState_->ForceFailedTaskIds.clear();
     }
 
     void GenerateVolatileId() {
@@ -343,6 +386,7 @@ private:
     TString VolatileId_;
     std::thread MainThread_;
     const TDuration TimeToSleepBetweenRequests_;
+    const ui64 MemoryLimitBytes_;
 };
 
 } // namespace

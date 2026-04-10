@@ -101,6 +101,17 @@
     NYdb::NQuery::TQueryClient client(driver);
     ```
 
+- JavaScript
+
+  ```javascript
+  import { Driver } from '@ydbjs/core'
+  import { query, unsafe, identifier } from '@ydbjs/query'
+
+  const driver = new Driver('grpc://localhost:2136/local')
+  await driver.ready()
+  const sql = query(driver)
+  ```
+
 - Java
 
     Для запросов используйте `QueryClient` и `SessionRetryContext` (см. [инициализацию драйвера](./init.md)). Ниже — минимальное подключение и создание клиента для YQL Query Service:
@@ -222,6 +233,17 @@
         std::cout << "Vector table created: " << tableName << std::endl;
     }
     ```
+
+- JavaScript
+
+  ```javascript
+  await sql`CREATE TABLE IF NOT EXISTS `table_name` (
+    id Utf8,
+    document Utf8,
+    embedding String,
+    PRIMARY KEY (id)
+  );`
+  ```
 
 - Java
 
@@ -480,6 +502,35 @@
     В функции `ConvertVectorToBytes` подразумевается, что на клиенте используется процессор с [little-endian порядком байт](https://ru.wikipedia.org/wiki/Порядок_байтов), например x86\_64. Если используется другой порядок байт, функцию `ConvertVectorToBytes` необходимо адаптировать.
 
     {% endnote %}
+
+- JavaScript
+
+  ```javascript
+  function convertVectorToBytes(vector) {
+    const bytes = new Uint8Array(vector.length * 4 + 1);
+    const view = new DataView(bytes.buffer);
+
+    for (let i = 0; i < vector.length; i++) {
+        view.setFloat32(i * 4, vector[i], true);
+    }
+
+    bytes[bytes.length - 1] = 0x01;
+    return bytes;
+  }
+
+  const items = [
+    {
+      id: "first_doc",
+      document: "My Document",
+      embedding: convertVectorToBytes(new Float32Array([1.5, 2.5, 3.5]))
+    }
+  ]
+
+  await sql`
+    UPSERT INTO `table_name` (id, document, embedding)
+    SELECT id, document, embedding,
+    FROM AS_TABLE($items);`
+  ```
 
 - Java
 
@@ -775,6 +826,23 @@
     }
     ```
 
+- JavaScript (альтернативный)
+
+  ```javascript
+  const items = [
+    {
+      id: "first_doc",
+      document: "My Document",
+      embedding: new Float32Array([1.5, 2.5, 3.5])
+    }
+  ]
+
+  await sql`
+    UPSERT INTO `table_name` (id, document, embedding)
+    SELECT id, document, Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
+    FROM AS_TABLE($items);`
+  ```
+
 {% endlist %}
 
 
@@ -868,7 +936,8 @@
             vector_type="Float",
             vector_dimension={dimension},
             levels={levels},
-            clusters={clusters}
+            clusters={clusters},
+            overlap_clusters=3
         );
         """
 
@@ -911,7 +980,8 @@
             vector_type="Float",
             vector_dimension={dimension},
             levels={levels},
-            clusters={clusters}
+            clusters={clusters},
+            overlap_clusters=3
         );
         """
 
@@ -954,7 +1024,8 @@
                 vector_type="Float",
                 vector_dimension={3},
                 levels={4},
-                clusters={5}
+                clusters={5},
+                overlap_clusters=3
             );
         )", tableName, indexName, strategy, dim, levels, clusters);
 
@@ -976,6 +1047,10 @@
         std::cout << "Table index `" << indexName << "` for table `" << tableName << "` added" << std::endl;
     }
     ```
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 - Java
 
@@ -1180,12 +1255,14 @@
         strategy: str = "CosineSimilarity",
         limit: int = 1,
         index_name: str | None = None,
+        top_clusters: int = 10,
     ) -> list[dict]:
         view_index = f"VIEW {index_name}" if index_name else ""
 
         sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
 
         query = f"""
+        PRAGMA ydb.KMeansTreeSearchTopSize = "{top_clusters}";
         DECLARE $embedding as String;
 
         SELECT
@@ -1231,12 +1308,14 @@
         const std::vector<float>& embedding,
         const std::string& strategy,
         std::uint64_t limit,
-        const std::optional<std::string>& indexName)
+        std::uint64_t topClusters = 10,
+        const std::optional<std::string>& indexName = std::nullopt)
     {
         std::string viewIndex = indexName ? "VIEW " + *indexName : "";
         std::string sortOrder = strategy.ends_with("Similarity") ? "DESC" : "ASC";
 
         std::string query = std::format(R"(
+            PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
             DECLARE $embedding as String;
             SELECT
                 id,
@@ -1245,7 +1324,7 @@
             FROM {0} {1}
             ORDER BY score {3}
             LIMIT {4};
-        )", tableName, viewIndex, strategy, sortOrder, limit);
+        )", tableName, viewIndex, strategy, sortOrder, limit, topClusters);
 
         auto params = NYdb::TParamsBuilder()
             .AddParam("$embedding")
@@ -1273,6 +1352,21 @@
         return result;
     }
     ```
+
+- JavaScript
+
+  ```javascript
+  const limit;
+  const embedding = convertVectorToBytes(new Float32Array([1.5, 2.5, 3.5]))
+
+  await sql`SELECT
+        id,
+        document,
+        Knn::CosineSimilarity(embedding, ${embedding}) as score
+    FROM `table_name`
+    ORDER BY score DESC
+    LIMIT ${unsafe(limit)};
+  ```
 
 - Java
 
@@ -1478,12 +1572,14 @@
         strategy: str = "CosineSimilarity",
         limit: int = 1,
         index_name: str | None = None,
+        top_clusters: int = 10,
     ) -> list[dict]:
         view_index = f"VIEW {index_name}" if index_name else ""
 
         sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
 
         query = f"""
+        PRAGMA ydb.KMeansTreeSearchTopSize = "{top_clusters}";
         DECLARE $embedding as List<Float>;
 
         $target_embedding = Knn::ToBinaryStringFloat($embedding);
@@ -1529,12 +1625,14 @@
         const std::vector<float>& embedding,
         const std::string& strategy,
         std::uint64_t limit,
-        const std::optional<std::string>& indexName)
+        std::uint64_t topClusters = 10,
+        const std::optional<std::string>& indexName = std::nullopt)
     {
         std::string viewIndex = indexName ? "VIEW " + *indexName : "";
         std::string sortOrder = strategy.ends_with("Similarity") ? "DESC" : "ASC";
 
         std::string query = std::format(R"(
+            PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
             DECLARE $embedding as List<Float>;
 
             $TargetEmbedding = Knn::ToBinaryStringFloat($embedding);
@@ -1547,7 +1645,7 @@
             ORDER BY score
             {3}
             LIMIT {4};
-        )", tableName, viewIndex, strategy, sortOrder, limit);
+        )", tableName, viewIndex, strategy, sortOrder, limit, topClusters);
 
         NYdb::TParamsBuilder paramsBuilder;
         auto& valueBuilder = paramsBuilder.AddParam("$embedding");
@@ -1577,6 +1675,21 @@
         return result;
     }
     ```
+
+- JavaScript (alternative)
+
+  ```javascript
+  const limit;
+  const embedding = new Float32Array([1.5, 2.5, 3.5])
+
+  await sql`SELECT
+        id,
+        document,
+        Knn::CosineSimilarity(embedding, Knn::ToBinaryStringFloat(${embedding})) as score
+    FROM `table_name`
+    ORDER BY score DESC
+    LIMIT ${unsafe(limit)};
+  ```
 
 {% endlist %}
 
@@ -1751,6 +1864,7 @@
             embedding=[1, 0, 0],
             strategy="CosineSimilarity",
             limit=3,
+            top_clusters=10,
         )
         print_results(items)
 
@@ -1772,6 +1886,7 @@
             index_name=index_name,
             strategy="CosineSimilarity",
             limit=3,
+            top_clusters=10,
         )
         print_results(items)
 
@@ -1850,7 +1965,7 @@
             InsertItemsAsBytes(client, tableName, items);
             PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3));
             AddIndex(driver, client, database, tableName, indexName, "similarity=cosine", 3, 1, 3);
-            PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3, indexName));
+            PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3, 10, indexName));
         } catch (const std::exception& e) {
             std::cerr << "Execution failed: " << e.what() << std::endl;
         }
@@ -1860,6 +1975,10 @@
     ```
 
     Полный код программы доступен по [ссылке](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/vector_index_builtin).
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 - Java
 

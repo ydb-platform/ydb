@@ -316,7 +316,7 @@ void TYtState::Reset() {
     NextEpochId = 1;
     FlowDependsOnId = 0;
     if (FullCapture_) {
-        FullCapture_ = CreateYtFullCapture();
+        FullCapture_->Reset();
     }
 }
 

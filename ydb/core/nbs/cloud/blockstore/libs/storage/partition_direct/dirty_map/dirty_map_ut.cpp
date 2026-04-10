@@ -1,5 +1,7 @@
 #include "dirty_map.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -25,7 +27,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 {
     Y_UNIT_TEST(ShouldReadWithoutWrites)
     {
-        TBlocksDirtyMap dirtyMap;
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
 
         // We should be able to get read hints
         auto readHint =
@@ -44,9 +48,54 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             readHint.DebugPrint());
     }
 
+    Y_UNIT_TEST(ShouldNotReadFromFresh)
+    {
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        dirtyMap.MarkFresh(ELocation::DDisk0, 30 * DefaultBlockSize);
+        dirtyMap.MarkFresh(ELocation::DDisk2, 40 * DefaultBlockSize);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            "DDisk0{Fresh,30,30};"
+            "DDisk1{Operational,32768,32768};"
+            "DDisk2{Fresh,40,40};"
+            "HODDisk0{Operational,32768,32768};"
+            "HODDisk1{Operational,32768,32768};",
+            dirtyMap.DebugPrintDDiskState());
+
+        // Read below fresh watermark
+        auto readHint =
+            dirtyMap.MakeReadHint(TBlockRange64::WithLength(10, 10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "0{[D+++..P.....][10..19][0..9]};",
+            readHint.DebugPrint());
+
+        // Read crossed fresh watermark
+        readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(25, 10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "0{[D.++..P.....][25..34][0..9]};",
+            readHint.DebugPrint());
+
+        // Read above fresh watermark
+        readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(30, 10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "0{[D.++..P.....][30..39][0..9]};",
+            readHint.DebugPrint());
+
+        // Read above fresh watermark
+        readHint = dirtyMap.MakeReadHint(TBlockRange64::WithLength(40, 10));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "0{[D.+...P.....][40..49][0..9]};",
+            readHint.DebugPrint());
+    }
+
     Y_UNIT_TEST(ShouldReadAfterWriteFinished)
     {
-        TBlocksDirtyMap dirtyMap;
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
 
         dirtyMap.WriteFinished(
             123,
@@ -74,7 +123,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldReadAfterWriteFinishedFromLastLsn)
     {
-        TBlocksDirtyMap dirtyMap;
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
 
         dirtyMap.WriteFinished(
             123,
@@ -108,7 +159,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldWriteAndFlushAndErase)
     {
-        TBlocksDirtyMap dirtyMap;
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Without write, we should not get flush hints
         auto flushHint = dirtyMap.MakeFlushHint(1);
@@ -229,7 +282,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldWriteAndFlushAndEraseWhenAdditionalHandOffDesired)
     {
-        TBlocksDirtyMap dirtyMap;
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Enable additional Hand-off
         auto desired = TLocationMask::Make(true, true, true, true, false);
@@ -237,7 +292,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Written to 2 primary and 1 hand-off
         TLocationMask requested =
-            TLocationMask::Make(false, true, true, true, false);
+            TLocationMask::MakePBuffer(false, true, true, true, false);
         TLocationMask confirmed = requested;
 
         dirtyMap.WriteFinished(
@@ -275,7 +330,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldWriteAndFlushAndEraseWithOneDisabled)
     {
-        TBlocksDirtyMap dirtyMap;
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Enable Hand-off-0 instead of DDisk0
         auto desired = TLocationMask::Make(false, true, true, true, false);
@@ -320,7 +377,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldWriteAndFlushAndEraseWithTwoDisabled)
     {
-        TBlocksDirtyMap dirtyMap;
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Enable Hand-off-0 instead of DDisk0
         auto desired = TLocationMask::Make(false, false, true, true, true);
@@ -365,7 +424,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldNotFlushAndEraseFromDisabled)
     {
-        TBlocksDirtyMap dirtyMap;
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Enable Hand-off-0
         // Disable DDisk0
@@ -381,8 +442,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap.WriteFinished(
             123,
             TBlockRange64::WithLength(10, 10),
-            requested,
-            confirmed);
+            requested.LogicalAnd(TLocationMask::MakeAllPBuffers()),
+            confirmed.LogicalAnd(TLocationMask::MakeAllPBuffers()));
 
         auto flushHint = dirtyMap.MakeFlushHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -412,9 +473,95 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap.GetInflightCount());
     }
 
+    Y_UNIT_TEST(ShouldNotFlushOverWriteWatermark)
+    {
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+        // Enable 4 DDisks. Available DDisks is enough for a quorum.
+        auto desired = TLocationMask::Make(true, true, true, true, false);
+        dirtyMap.UpdateConfig(desired, {});
+
+        dirtyMap.SetFlushWatermark(ELocation::DDisk2, 100 * DefaultBlockSize);
+
+        TLocationMask requested =
+            TLocationMask::MakePBuffer(true, true, true, false, false);
+        TLocationMask confirmed = requested;
+
+        // Range below write watermark. Should be flushed to 4 ddisks.
+        dirtyMap.WriteFinished(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            requested,
+            confirmed);
+        // Range cross write watermark. Should be flushed to 4 ddisks.
+        dirtyMap.WriteFinished(
+            124,
+            TBlockRange64::WithLength(95, 10),
+            requested,
+            confirmed);
+        // Range over write watermark. Should be flushed to 3 ddisks.
+        dirtyMap.WriteFinished(
+            125,
+            TBlockRange64::WithLength(100, 10),
+            requested,
+            confirmed);
+
+        auto flushHint = dirtyMap.MakeFlushHint(3);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "PBuffer0->DDisk0:123[10..19],124[95..104],125[100..109];"
+            "PBuffer0->HODDisk0:123[10..19],124[95..104],125[100..109];"
+            "PBuffer1->DDisk1:123[10..19],124[95..104],125[100..109];"
+            "PBuffer2->DDisk2:123[10..19],124[95..104];",
+            flushHint.DebugPrint());
+    }
+
+    Y_UNIT_TEST(ShouldBlockFlushOverWriteWatermark)
+    {
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        // Only 3 DDisks available by default. For some requests, ddisk will not
+        // be sufficient for quorum.
+        dirtyMap.SetFlushWatermark(ELocation::DDisk2, 100 * DefaultBlockSize);
+
+        TLocationMask requested =
+            TLocationMask::MakePBuffer(true, true, true, false, false);
+        TLocationMask confirmed = requested;
+
+        // Range below write watermark. Should be flushed.
+        dirtyMap.WriteFinished(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            requested,
+            confirmed);
+        // Range cross write watermark. Should be flushed.
+        dirtyMap.WriteFinished(
+            124,
+            TBlockRange64::WithLength(95, 10),
+            requested,
+            confirmed);
+        // Range over write watermark. Should not be flushed.
+        dirtyMap.WriteFinished(
+            125,
+            TBlockRange64::WithLength(100, 10),
+            requested,
+            confirmed);
+
+        auto flushHint = dirtyMap.MakeFlushHint(3);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "PBuffer0->DDisk0:123[10..19],124[95..104];"
+            "PBuffer1->DDisk1:123[10..19],124[95..104];"
+            "PBuffer2->DDisk2:123[10..19],124[95..104];",
+            flushHint.DebugPrint());
+    }
+
     Y_UNIT_TEST(ShouldLockPBuffer)
     {
-        TBlocksDirtyMap dirtyMap;
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
 
         dirtyMap.WriteFinished(
             123,
@@ -445,7 +592,10 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldLockDDisk)
     {
-        TBlocksDirtyMap dirtyMap;
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+        TLocationMask mask = TLocationMask ::MakePrimaryDDisks();
 
         dirtyMap.WriteFinished(
             123,
@@ -455,7 +605,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Lock range on DDisk
         auto lockHandle =
-            dirtyMap.LockDDiskRange(TBlockRange64::WithLength(5, 10));
+            dirtyMap.LockDDiskRange(TBlockRange64::WithLength(5, 10), mask);
 
         // Flush hints should not be generated when DDisk is locked.
         auto flushHint = dirtyMap.MakeFlushHint(1);
@@ -471,7 +621,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldRestoreCompletePBuffer)
     {
-        TBlocksDirtyMap dirtyMap;
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
 
         dirtyMap.RestorePBuffer(
             123,
@@ -499,7 +651,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldRestoreOverCompletePBuffer)
     {
-        TBlocksDirtyMap dirtyMap;
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Block written to four PBuffers
         dirtyMap.RestorePBuffer(
@@ -538,7 +692,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldFlushFromHandOff)
     {
-        TBlocksDirtyMap dirtyMap;
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Block written to two primary PBuffers and one hand-off PBuffer
         dirtyMap.RestorePBuffer(
@@ -573,7 +729,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ShouldReadFromDDiskIfRangeIsNotCoveredByInflightRange)
     {
-        TBlocksDirtyMap dirtyMap;
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
 
         dirtyMap.WriteFinished(
             123,
@@ -631,7 +789,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
     Y_UNIT_TEST(ReadShouldWaitPBufferRestore)
     {
-        TBlocksDirtyMap dirtyMap;
+        TBlocksDirtyMap dirtyMap(
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
 
         dirtyMap.RestorePBuffer(
             123,

@@ -121,7 +121,7 @@ public:
     }
 
     nostd::shared_ptr<Baggage> baggage(new Baggage(cnt));
-    bool kv_valid;
+    bool kv_valid{false};
     nostd::string_view key, value;
 
     while (kv_str_tokenizer.next(kv_valid, key, value) && baggage->kv_properties_->Size() < cnt)

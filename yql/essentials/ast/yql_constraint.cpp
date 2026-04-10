@@ -737,7 +737,7 @@ TChoppedConstraintNode::TSetOfSetsType TChoppedConstraintNode::NodeToSets(TExprC
     } catch (...) {
         YQL_ENSURE(false, "Cannot deserialize " << Name() << " constraint: " << CurrentExceptionMessage());
     }
-    Y_UNREACHABLE();
+    YQL_ENSURE(false, "Unreachable");
 }
 
 TChoppedConstraintNode::TChoppedConstraintNode(TChoppedConstraintNode&& constr) = default;
@@ -2152,7 +2152,7 @@ TMultiConstraintNode::TMultiConstraintNode(TExprContext& ctx, TMapType&& items)
     : TConstraintNode(ctx, Name())
     , Items_(std::move(items))
 {
-    YQL_ENSURE(Items_.size());
+    YQL_ENSURE(!Items_.empty());
     for (auto& item : Items_) {
         Hash_ = MurmurHash<ui64>(&item.first, sizeof(item.first), Hash_);
         for (auto c : item.second.GetAllConstraints()) {

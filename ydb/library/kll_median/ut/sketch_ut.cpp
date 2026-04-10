@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(TKllMedianTest) {
     }
 
     Y_UNIT_TEST(LevelsGrow) {
-        TKllSketch<int> sketch(4, 42);  // small k to trigger compaction
+        TKllSketch<int> sketch(4, 42); // small k to trigger compaction
         for (int i = 0; i < 100; ++i) {
             sketch.Add(i);
         }

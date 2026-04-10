@@ -15,6 +15,7 @@ PEERDIR(
 )
 
 SRCS(
+    kqp_opt_cbo_latency_predictor.cpp
     kqp_opt_conflict_rules_collector.cpp
     kqp_opt_join.cpp
     kqp_opt_join_cbo_factory.cpp
@@ -22,7 +23,6 @@ SRCS(
     kqp_opt_join_tree_node.cpp
     kqp_opt_predicate_selectivity.cpp
     kqp_opt_stat.cpp
-    kqp_opt_stat_kqp.cpp
 )
 
 YQL_LAST_ABI_VERSION()

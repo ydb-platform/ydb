@@ -81,7 +81,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const std::optional<TLlvmSettings>& llvmSettings,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
-    std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
+    std::shared_ptr<NYql::NDq::IDqChannelService> channelService, bool shrinkTasksGraph)
 {
     if (request.Transactions.empty()) {
         // commit-only or rollback-only data transaction
@@ -91,7 +91,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
             userRequestContext, statementResultIndex,
             federatedQuerySetup, nullptr, std::move(partitionPrunerConfig),
             shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation,
-            channelService
+            channelService, shrinkTasksGraph
         );
     }
 
@@ -116,7 +116,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
                 userRequestContext, statementResultIndex,
                 federatedQuerySetup, nullptr, std::move(partitionPrunerConfig),
                 shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation,
-                channelService
+                channelService, shrinkTasksGraph
             );
 
         case NKqpProto::TKqpPhyTx::TYPE_SCAN:
@@ -124,7 +124,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
                 std::move(request), database, userToken, std::move(formatsSettings), counters,
                 executerConfig, std::move(asyncIoFactory), userRequestContext,
                 statementResultIndex, federatedQuerySetup, nullptr, llvmSettings, channelService,
-                txManager
+                txManager, shrinkTasksGraph
             );
 
         case NKqpProto::TKqpPhyTx::TYPE_GENERIC:
@@ -134,7 +134,7 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
                 userRequestContext, statementResultIndex,
                 federatedQuerySetup, GUCSettings, std::move(partitionPrunerConfig),
                 shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation,
-                channelService
+                channelService, shrinkTasksGraph
             );
 
         default:

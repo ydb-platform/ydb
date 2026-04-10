@@ -10,35 +10,10 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
-EWriteMode GetWriteModeFromProto(NProto::EWriteMode writeMode)
-{
-    switch (writeMode) {
-        case NProto::EWriteMode::PBufferReplication:
-            return EWriteMode::PBufferReplication;
-        case NProto::EWriteMode::DirectPBuffersFilling:
-            return EWriteMode::DirectPBuffersFilling;
-        default:
-            break;
-    }
-    Y_ABORT_UNLESS(false);
-}
-
-NProto::EWriteMode GetProtoWriteMode(EWriteMode writeMode)
-{
-    switch (writeMode) {
-        case EWriteMode::PBufferReplication:
-            return NProto::EWriteMode::PBufferReplication;
-        case EWriteMode::DirectPBuffersFilling:
-            return NProto::EWriteMode::DirectPBuffersFilling;
-    }
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 TWriteRequestExecutor::TWriteRequestExecutor(
     NActors::TActorSystem* actorSystem,
-    TExecutorPtr executor,
-    IPartitionDirectService* partitionDirectService,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     TBlockRange64 vChunkRange,
@@ -46,10 +21,8 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     ui64 lsn,
     NWilson::TTraceId traceId,
-    TDuration writeHandoffDelay)
+    TDuration hedgingDelay)
     : ActorSystem(actorSystem)
-    , Executor(std::move(executor))
-    , PartitionDirectService(partitionDirectService)
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , VChunkRange(vChunkRange)
@@ -57,7 +30,7 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , Request(std::move(request))
     , TraceId(std::move(traceId))
     , Lsn(lsn)
-    , WriteHandoffDelay(writeHandoffDelay)
+    , HedgingDelay(hedgingDelay)
 {}
 
 TWriteRequestExecutor::~TWriteRequestExecutor()
@@ -76,28 +49,32 @@ TWriteRequestExecutor::~TWriteRequestExecutor()
 
 void TWriteRequestExecutor::Run(
     EWriteMode writeMode,
-    ui32 pbufferReplyTimeoutMicroseconds)
+    TDuration pbufferReplyTimeout)
 {
     switch (writeMode) {
         case EWriteMode::PBufferReplication:
-            SendWriteRequestToManyPBuffers(pbufferReplyTimeoutMicroseconds);
+            SendWriteRequestToManyPBuffers(pbufferReplyTimeout);
+            // We don't need to schedule requests to handoff persistent buffers
+            // after delay since we will send them in case of error. See
+            // OnWriteToManyPBuffersResponse.
             return;
         case EWriteMode::DirectPBuffersFilling:
             SendWriteRequest(ELocation::PBuffer0);
             SendWriteRequest(ELocation::PBuffer1);
             SendWriteRequest(ELocation::PBuffer2);
+
+            if (HedgingDelay) {
+                DirectBlockGroup->Schedule(
+                    HedgingDelay,
+                    [weakSelf = weak_from_this()]()
+                    {
+                        if (auto self = weakSelf.lock()) {
+                            self->SendWriteRequestsToHandoffPBuffers();
+                        }
+                    });
+            }
             return;
     }
-
-    PartitionDirectService->ScheduleAfterDelay(
-        Executor,
-        WriteHandoffDelay,
-        [weakSelf = weak_from_this()]()
-        {
-            if (auto self = weakSelf.lock()) {
-                self->SendWriteRequestsToHandoffPBuffers();
-            }
-        });
 }
 
 NThreading::TFuture<TWriteRequestExecutor::TResponse>
@@ -107,7 +84,7 @@ TWriteRequestExecutor::GetFuture() const
 }
 
 void TWriteRequestExecutor::SendWriteRequestToManyPBuffers(
-    ui32 pbufferReplyTimeoutMicroseconds)
+    TDuration pbufferReplyTimeout)
 {
     std::vector<ELocation> locations = {
         ELocation::PBuffer0,
@@ -126,7 +103,7 @@ void TWriteRequestExecutor::SendWriteRequestToManyPBuffers(
         std::move(hostsIndexes),
         Lsn,
         VChunkRange,
-        pbufferReplyTimeoutMicroseconds,
+        pbufferReplyTimeout,
         Request->Sglist,
         NWilson::TTraceId(TraceId));
 

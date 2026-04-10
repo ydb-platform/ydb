@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    executor_pool.cpp
     executor.cpp
     queue.cpp
 )

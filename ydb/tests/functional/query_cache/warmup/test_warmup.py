@@ -444,8 +444,8 @@ class TestWarmupStress:
         nodes_count = len(self.cluster.nodes)
         node3 = self.cluster.nodes[3]
 
-        logger.info("SETUP: Populating cache on all nodes (Table API)")
-        queries = self.cache.populate_cache_on_nodes(all_node_ids, use_query_api=False)
+        logger.info("SETUP: Populating cache on all nodes (Query API)")
+        queries = self.cache.populate_cache_on_nodes(all_node_ids, use_query_api=True)
         logger.info("%d queries on nodes %s", len(queries), all_node_ids)
         time.sleep(2)
 
@@ -469,7 +469,7 @@ class TestWarmupStress:
             assert compiled > 0, f"[MultiRestart round {i + 1}] WarmupQueriesCompiled should be > 0, got {compiled}"
 
             from_cache, total = self.cache.verify_queries_served_from_cache(
-                queries, node3, use_query_api=False, nodes_count=nodes_count,
+                queries, node3, use_query_api=True, nodes_count=nodes_count,
             )
             logger.info("Round %d: cache hit %d/%d", i + 1, from_cache, total)
             assert from_cache == total, (
@@ -477,7 +477,7 @@ class TestWarmupStress:
             )
 
         logger.info("Re-populating cache on all nodes before rolling restart")
-        self.cache.populate_cache_on_nodes(all_node_ids, use_query_api=False)
+        self.cache.populate_cache_on_nodes(all_node_ids, use_query_api=True)
         time.sleep(2)
 
         # --- Scenario 2: Rolling restart ---
@@ -504,13 +504,13 @@ class TestWarmupStress:
 
         first_restarted = self.cluster.nodes[node_ids_to_restart[0]]
         from_cache, total = self.cache.verify_queries_served_from_cache(
-            queries, first_restarted, use_query_api=False, nodes_count=nodes_count,
+            queries, first_restarted, use_query_api=True, nodes_count=nodes_count,
         )
         logger.info("[Rolling] First restarted node: cache hit %d/%d", from_cache, total)
         assert from_cache == total, f"[Rolling] Expected all from cache, got {from_cache}/{total}"
 
         logger.info("Re-populating cache on all nodes before full cluster restart")
-        self.cache.populate_cache_on_nodes(all_node_ids, use_query_api=False)
+        self.cache.populate_cache_on_nodes(all_node_ids, use_query_api=True)
         time.sleep(2)
 
         # --- Scenario 3: Full cluster restart (all except node 1) ---

@@ -47,6 +47,8 @@ public:
             }
         }
 
+        auto userSchemaColumnsNode = Build<TCoVoid>(ctx, read->Pos()).Done().Ptr();
+
         return Build<TPqReadTopic>(ctx, read->Pos())
             .InitFrom(maybeReadTopic.Cast())
             .Topic<TPqTopic>()
@@ -57,6 +59,7 @@ public:
             .Columns<TCoAtomList>()
                 .Add(columns)
                 .Build()
+            .UserSchemaColumns(std::move(userSchemaColumnsNode))
             .Done().Ptr();
     }
 

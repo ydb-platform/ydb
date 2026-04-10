@@ -3,6 +3,8 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 

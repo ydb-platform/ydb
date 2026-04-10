@@ -3,6 +3,8 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 namespace NKikimr {
 namespace NKqp {
 

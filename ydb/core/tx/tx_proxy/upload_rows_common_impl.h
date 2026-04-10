@@ -31,6 +31,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
+#include <ydb/library/aclib/user_context.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>

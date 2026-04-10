@@ -104,13 +104,4 @@ TResult ApplyChangesInt(
     bool isCdcStream
 );
 
-// TODO поожить в общее место. убрать дубль из kafka_proxy в core/base/path.h
-inline TString NormalizePath(const TString& database, const TString& topic) {
-    if (topic.size() > database.size() && topic.at(database.size()) == '/' && topic.StartsWith(database)) {
-        return topic;
-    }
-    return NKikimr::CanonizePath(database + "/" + topic);
-}
-
-
 }

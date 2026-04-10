@@ -36,7 +36,7 @@ void TTopicAlterer::DoDescribe() {
     RegisterWithSameMailbox(NDescriber::CreateDescriberActor(
         SelfId(),
         Settings.Database,
-        { NormalizePath(Settings.Database, Settings.Strategy->GetTopicName()) },
+        { Settings.Strategy->GetTopicName() },
         {
             .UserToken = Settings.UserToken,
             .AccessRights = NACLib::EAccessRights::AlterSchema

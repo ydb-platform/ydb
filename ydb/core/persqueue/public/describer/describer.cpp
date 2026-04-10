@@ -33,7 +33,7 @@ public:
         schemeRequest->DatabaseName = DatabasePath;
 
         auto addEntry = [&](const TString& topic) {
-            auto split = NKikimr::SplitPath(topic);
+            auto split = NKikimr::SplitPath(NKikimr::NormalizePath(DatabasePath, topic));
 
             schemeRequest->ResultSet.emplace_back();
             auto& entry = schemeRequest->ResultSet.back();

@@ -17,6 +17,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut unittest.[*/*] chunk
 ydb/core/kafka_proxy/ut TMetadataActorTests.TopicMetadataGoodAndBad
 ydb/core/kqp/ut/scheme KqpScheme.StreamingQueriesOnServerless
 ydb/core/kqp/ut/service KqpQueryServiceScripts.CancelScriptExecution
+ydb/core/kqp/ut/tli KqpTli.Basic
 ydb/core/kqp/ut/tli KqpTli.BasicDataQuery
 ydb/core/kqp/ut/tli KqpTli.BreakerAndVictimInSameTransaction
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect

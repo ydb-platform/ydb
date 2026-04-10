@@ -28,33 +28,7 @@ IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NDqProto::TTaskOutput& outp
 {
     switch (outputDesc.GetTypeCase()) {
         case NDqProto::TTaskOutput::kRangePartition: {
-            TVector<NScheme::TTypeInfo> keyColumnTypeInfos;
-            keyColumnTypeInfos.reserve(outputDesc.GetRangePartition().GetKeyColumns().size());
-            TVector<ui32> keyColumnIndices;
-            TVector<TColumnInfo> keyColumns;
-            GetColumnsInfo(type, outputDesc.GetRangePartition().GetKeyColumns(), keyColumns);
-            YQL_ENSURE(!keyColumns.empty());
-            for (auto& info : keyColumns) {
-                NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromMiniKQLType(info.DataType);
-                keyColumnTypeInfos.emplace_back(typeInfo);
-                keyColumnIndices.emplace_back(info.Index);
-            }
-
-            TVector<TKqpRangePartition> partitions;
-            partitions.reserve(outputDesc.GetRangePartition().PartitionsSize());
-
-            for (auto& partitionDesc : outputDesc.GetRangePartition().GetPartitions()) {
-                TKqpRangePartition partition;
-                partition.ChannelId = partitionDesc.GetChannelId();
-                partition.Range.EndKeyPrefix = TSerializedCellVec(partitionDesc.GetEndKeyPrefix());
-                partition.Range.IsInclusive = partitionDesc.GetIsInclusive();
-                partition.Range.IsPoint = partitionDesc.GetIsPoint();
-
-                partitions.emplace_back(std::move(partition));
-            }
-
-            return CreateOutputRangePartitionConsumer(std::move(outputs), std::move(partitions),
-                std::move(keyColumnTypeInfos), std::move(keyColumnIndices), typeEnv);
+            YQL_ENSURE(false, "unsupported");
         }
 
         case NDqProto::TTaskOutput::kEffects: {

@@ -213,7 +213,7 @@ public:
             for (const auto& [name, handler] : JsonHandlers.JsonHandlersIndex) {
                 // temporary handling of new handlers
                 if (handler->IsHttpEvent()) {
-                    if (name == "/viewer/capabilities") {
+                    if (name == "/viewer/capabilities" || name == "/viewer/json/capabilities") {
                         // this handler is used to discover capabilities, including auth requirements, so it must be always available without authentication
                         mon->RegisterActorHandler({
                             .Path = name,

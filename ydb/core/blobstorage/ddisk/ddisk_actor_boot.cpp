@@ -115,6 +115,7 @@ namespace NKikimr::NDDisk {
         PersistentBufferActorId = as->Register(pbActor.release(), TMailboxType::Revolving, AppData()->SystemPoolId);
         auto pbServiceId = MakeBlobStoragePersistentBufferId(BaseInfo.PDiskActorID.NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
         as->RegisterLocalService(pbServiceId, PersistentBufferActorId);
+        STLOG(PRI_DEBUG, BS_DDISK, BSDD03, "TDDiskActor::CreatePersistentBuffer()", (DDiskId, DDiskId), (pbServiceId, pbServiceId), (PersistentBufferActorId, PersistentBufferActorId));
     }
 
     void TDDiskActor::StartHandlingQueries() {

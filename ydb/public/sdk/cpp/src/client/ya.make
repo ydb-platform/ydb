@@ -23,6 +23,7 @@ RECURSE(
     impl/internal/logger
     impl/internal/make_request
     impl/internal/plain_status
+    impl/internal/scheme_helpers
     impl/internal/thread_pool
     impl/internal/value_helpers
     impl/session
@@ -39,6 +40,7 @@ RECURSE(
     resources
     result
     scheme
+    secret
     table
     table/impl
     table/query_stats

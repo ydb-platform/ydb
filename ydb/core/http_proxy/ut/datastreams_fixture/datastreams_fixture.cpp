@@ -443,6 +443,7 @@ void THttpProxyTestMock::InitKikimr(const TInitParameters& initParameters) {
                 settings.AuthConfig.SetAccessServiceEndpoint(AccessServiceEndpoint);
                 settings.AuthConfig.SetUseAccessService(true);
                 settings.AuthConfig.SetUseAccessServiceTLS(false);
+                settings.AppConfig->MutableSqsConfig()->SetUserSettingsUpdateTimeMs(100);
             }, 0, 1);
 
     server->ServerSettings->SetUseRealThreads(false);

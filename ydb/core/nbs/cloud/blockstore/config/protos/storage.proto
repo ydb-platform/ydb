@@ -61,4 +61,7 @@ message TStorageServiceConfig
 
     // Delay (in microseconds) before writing to handoff persistent buffers.
     optional uint32 WriteHandoffDelay = 16;
+
+    // Size of VChunk (in bytes). Default is 128 MB.
+    optional uint64 VChunkSize = 17;
 }

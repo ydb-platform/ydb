@@ -53,6 +53,7 @@ public:
         , Database(settings.GetDatabase())
         , MaxTotalBytesQuota(MaxTotalBytesQuotaStreamLookup())
         , MaxRowsProcessing(MaxRowsProcessingStreamLookup())
+        , MaxInFlightReads(MaxInFlightReadsStreamLookup())
         , Counters(counters)
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "LookupActor")
     {
@@ -323,13 +324,7 @@ private:
         ReadRowsCount += replyResultStats.ReadRowsCount;
         ReadBytesCount += replyResultStats.ReadBytesCount;
 
-        auto overloaded = StreamLookupWorker->IsOverloaded(MaxRowsProcessing);
-        if (!overloaded.has_value()) {
-            FetchInputRows();
-        } else {
-            CA_LOG_N("Pausing stream lookup because it's overloaded by reason: "
-                << overloaded.value_or("empty"));
-        }
+        FetchInputRows();
 
         if (Partitioning) {
             ProcessInputRows();
@@ -638,11 +633,9 @@ private:
         if ((read.State == EReadState::Running && read.LastSeqNo <= ev->Get()->LastSeqNo) || read.State == EReadState::Blocked) {
             if (ev->Get()->InstantStart) {
                 auto guard = BindAllocator();
-                auto requests = StreamLookupWorker->RebuildRequest(read.Id, ReadId);
-                for (auto& request : requests) {
-                    StartTableRead(read.ShardId, std::move(request));
-                }
+                StreamLookupWorker->RebuildRequest(read.ShardId, read.Id, ReadId);
                 Reads.erase(read);
+                ScheduleNextReads();
             } else {
                 RetryTableRead(read);
             }
@@ -670,8 +663,17 @@ private:
 
         auto guard = BindAllocator();
 
-        auto requests = StreamLookupWorker->BuildRequests(Partitioning, ReadId);
-        for (auto& [shardId, request] : requests) {
+        StreamLookupWorker->BuildRequests(Partitioning, ReadId);
+        ScheduleNextReads();
+    }
+
+    void ScheduleNextReads() {
+        while(Reads.InFlightReads() < MaxInFlightReads) {
+            auto [shardId, request] = StreamLookupWorker->PopNextRequest();
+            if (!request) {
+                break;
+            }
+
             StartTableRead(shardId, std::move(request));
         }
     }
@@ -784,11 +786,9 @@ private:
         auto delay = Reads.CalcDelayForShard(failedRead, allowInstantRetry);
         if (delay == TDuration::Zero()) {
             auto guard = BindAllocator();
-            auto requests = StreamLookupWorker->RebuildRequest(failedRead.Id, ReadId);
-            for (auto& request : requests) {
-                StartTableRead(failedRead.ShardId, std::move(request));
-            }
+            StreamLookupWorker->RebuildRequest(failedRead.ShardId, failedRead.Id, ReadId);
             Reads.erase(failedRead);
+            ScheduleNextReads();
         } else {
             CA_LOG_D("Schedule retry atempt for readId: " << failedRead.Id << " after " << delay);
             TlsActivationContext->Schedule(
@@ -878,7 +878,7 @@ private:
     const ui64 QuerySpanId;
     TReads Reads;
     NUdf::EFetchStatus LastFetchStatus = NUdf::EFetchStatus::Yield;
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
+    std::shared_ptr<const TPartitioning> Partitioning;
     const TDuration SchemeCacheRequestTimeout;
     NActors::TActorId SchemeCacheRequestTimeoutTimer;
     TVector<NKikimrDataEvents::TLock> Locks;
@@ -900,6 +900,7 @@ private:
     size_t TotalBytesQuota = 0;
     ui64 MaxTotalBytesQuota = 0;
     size_t MaxRowsProcessing = 0;
+    ui64 MaxInFlightReads = 50;
     size_t MaxBytesDefaultQuota = 0;
     size_t MaxRowsDefaultQuota = 0;
 

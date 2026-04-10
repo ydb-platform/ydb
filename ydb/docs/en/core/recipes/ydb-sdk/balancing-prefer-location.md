@@ -105,4 +105,8 @@ Below are examples of the code for setting the "prefer the availability zone" ba
   }
   ```
 
+- Python
+
+  This functionality is not currently supported.
+
 {% endlist %}

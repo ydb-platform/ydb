@@ -21,6 +21,7 @@ public:
         ui32 regionIndex,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
         ui32 syncRequestsBatchSize,
+        ui64 vChunkSize,
         TDuration writeHandoffDelay,
         TDuration traceSamplePeriod);
 

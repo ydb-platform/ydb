@@ -285,7 +285,8 @@ const auto& GetColumns(const NKikimrSchemeOp::TTableDescription& tableDescr) {
 auto CalcImplTableDescImpl(
     const auto& baseTable,
     const TTableColumns& implTableColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    ui32 uniqueKeySize)
 {
     NKikimrSchemeOp::TTableDescription implTableDesc;
     implTableDesc.SetName(NTableIndex::ImplTable);
@@ -294,6 +295,10 @@ auto CalcImplTableDescImpl(
     FillIndexImplTableColumns(GetColumns(baseTable), implTableColumns.Keys, implTableColumns.Columns, implTableDesc);
     if (indexTableDesc.HasReplicationConfig()) {
         implTableDesc.MutableReplicationConfig()->CopyFrom(indexTableDesc.GetReplicationConfig());
+    }
+    if (uniqueKeySize > 0 && uniqueKeySize < implTableColumns.Keys.size()) {
+        // Unique key may contain all PK columns, then the prefix is not required
+        implTableDesc.SetUniqueIndexKeySize(uniqueKeySize);
     }
 
     return implTableDesc;
@@ -586,17 +591,19 @@ void FillIndexTableColumns(
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const TTableColumns& implTableColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    ui32 uniqueKeySize)
 {
-    return CalcImplTableDescImpl(baseTableInfo, implTableColumns, indexTableDesc);
+    return CalcImplTableDescImpl(baseTableInfo, implTableColumns, indexTableDesc, uniqueKeySize);
 }
 
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const TTableColumns& implTableColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    ui32 uniqueKeySize)
 {
-    return CalcImplTableDescImpl(baseTableDescr, implTableColumns, indexTableDesc);
+    return CalcImplTableDescImpl(baseTableDescr, implTableColumns, indexTableDesc, uniqueKeySize);
 }
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(

@@ -84,7 +84,7 @@ size_t MatchANSIMultilineComment(TStringBuf prefix) {
             continue;
         }
 
-        if (prefix.size() == 0) {
+        if (prefix.empty()) {
             return 0;
         }
 

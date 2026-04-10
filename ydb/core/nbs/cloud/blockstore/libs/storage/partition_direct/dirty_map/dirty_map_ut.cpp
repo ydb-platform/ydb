@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         // We should be able to get read hints
         auto readHint =
@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         dirtyMap.MarkFresh(ELocation::DDisk0, 30 * DefaultBlockSize);
         dirtyMap.MarkFresh(ELocation::DDisk2, 40 * DefaultBlockSize);
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         dirtyMap.WriteFinished(
             123,
@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         dirtyMap.WriteFinished(
             123,
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Without write, we should not get flush hints
         auto flushHint = dirtyMap.MakeFlushHint(1);
@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Enable additional Hand-off
         auto desired = TLocationMask::Make(true, true, true, true, false);
@@ -332,7 +332,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Enable Hand-off-0 instead of DDisk0
         auto desired = TLocationMask::Make(false, true, true, true, false);
@@ -379,7 +379,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Enable Hand-off-0 instead of DDisk0
         auto desired = TLocationMask::Make(false, false, true, true, true);
@@ -426,7 +426,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Enable Hand-off-0
         // Disable DDisk0
@@ -477,7 +477,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
         // Enable 4 DDisks. Available DDisks is enough for a quorum.
         auto desired = TLocationMask::Make(true, true, true, true, false);
         dirtyMap.UpdateConfig(desired, {});
@@ -520,7 +520,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Only 3 DDisks available by default. For some requests, ddisk will not
         // be sufficient for quorum.
@@ -561,7 +561,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         dirtyMap.WriteFinished(
             123,
@@ -594,7 +594,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
         TLocationMask mask = TLocationMask ::MakePrimaryDDisks();
 
         dirtyMap.WriteFinished(
@@ -623,7 +623,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         dirtyMap.RestorePBuffer(
             123,
@@ -653,7 +653,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Block written to four PBuffers
         dirtyMap.RestorePBuffer(
@@ -694,7 +694,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         // Block written to two primary PBuffers and one hand-off PBuffer
         dirtyMap.RestorePBuffer(
@@ -731,7 +731,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         dirtyMap.WriteFinished(
             123,
@@ -791,7 +791,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         TBlocksDirtyMap dirtyMap(
             DefaultBlockSize,
-            VChunkSize / DefaultBlockSize);
+            DefaultVChunkSize / DefaultBlockSize);
 
         dirtyMap.RestorePBuffer(
             123,

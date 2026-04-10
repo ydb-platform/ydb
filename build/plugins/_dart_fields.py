@@ -707,7 +707,7 @@ class LintExtraParams:
     # HACK: Due to the mass usage of PY_NAMESPACE / TOP_LEVEL in these projects
     # it makes it difficult to run ruff checks in build root - it complains
     # about unsorted imports a lot. Let them run in source root instead.
-    _RUFF_RUN_IN_SOURCE_ROOT_ALLOWED_PATHS = ('fintech/uservices', 'taxi', 'electro')
+    _RUFF_RUN_IN_SOURCE_ROOT_ALLOWED_PATHS = ('fintech/uservices', 'taxi', 'electro', 'maps/tariffs')
 
     @classmethod
     def from_macro_args(cls, unit, flat_args, spec_args):

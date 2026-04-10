@@ -15,6 +15,7 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
+#include <ydb/core/persqueue/public/schema/schema.h>
 #include <ydb/core/protos/external_sources.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -1042,15 +1043,16 @@ public:
         Y_UNUSED(existingOk);
     }
 
-    TFuture<NKikimr::NGRpcProxy::V1::TAlterTopicResponse> AlterTopicPrepared(NYql::TAlterTopicSettings&& settings) override {
-        auto schemaTxPromise = NewPromise<NKikimr::NGRpcProxy::V1::TAlterTopicResponse>();
+    TFuture<NKikimr::NPQ::NScheme::TAlterTopicResponse> AlterTopicPrepared(NYql::TAlterTopicSettings&& settings) override {
+        auto schemaTxPromise = NewPromise<NPQ::NScheme::TAlterTopicResponse>();
         auto schemaTxFuture = schemaTxPromise.GetFuture();
 
-        NKikimr::NGRpcProxy::V1::TAlterTopicRequest request{
-                std::move(settings.Request), settings.WorkDir, settings.Name, Database, GetTokenCompat(),
-                settings.MissingOk
-        };
-        IActor* requestHandler = NGRpcProxy::V1::NTopic::CreateAlterTopicInternalActor(std::move(request), std::move(schemaTxPromise));
+        IActor* requestHandler = NPQ::NScheme::CreateAlterTopicActor(std::move(schemaTxPromise), {
+            .Database = Database,
+            .Request = std::move(settings.Request),
+            .UserToken = UserToken,
+            .IfExists = settings.MissingOk
+        });
         RegisterActor(requestHandler);
         return schemaTxFuture;
     }

@@ -25,6 +25,7 @@ struct TTopicAltererSettings {
     TString PeerName;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     std::unique_ptr<TTopicAltererStrategy> Strategy;
+    bool IfExists = false;
     ui64 Cookie = 0;
     bool IsCdcStreamCompatible = true;
 };

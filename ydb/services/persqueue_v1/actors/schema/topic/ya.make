@@ -8,7 +8,6 @@ PEERDIR(
 SRCS(
     actors.cpp
     alter_topic.cpp
-    alter_topic_internal.cpp
 )
 
 END()

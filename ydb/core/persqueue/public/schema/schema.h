@@ -1,6 +1,8 @@
 #pragma once
 
+#include <library/cpp/threading/future/core/future.h>
 #include <ydb/core/persqueue/events/events.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
@@ -16,15 +18,22 @@ enum EEv : ui32 {
     EvEnd
 };
 
-struct TEvAlterTopicResponse : public NActors::TEventLocal<TEvAlterTopicResponse, EEv::EvAlterTopicResponse> {
-    TEvAlterTopicResponse(Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, TString&& errorMessage = {})
-        : Status(status)
-        , ErrorMessage(std::move(errorMessage))
-    {
-    }
-
+struct TAlterTopicResponse {
     Ydb::StatusIds::StatusCode Status;
     TString ErrorMessage;
+    NKikimrSchemeOp::TModifyScheme ModifyScheme;
+};
+
+struct TEvAlterTopicResponse : public NActors::TEventLocal<TEvAlterTopicResponse, EEv::EvAlterTopicResponse>
+                             , public TAlterTopicResponse {
+    TEvAlterTopicResponse(
+        Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
+        TString&& errorMessage = {},
+        NKikimrSchemeOp::TModifyScheme&& modifyScheme = {}
+    )
+        : TAlterTopicResponse(status, std::move(errorMessage), std::move(modifyScheme))
+    {
+    }
 };
 
 
@@ -33,10 +42,12 @@ struct TAlterTopicSettings {
     TString PeerName;
     Ydb::Topic::AlterTopicRequest Request;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    bool IfExists = false;
     ui64 Cookie = 0;
 };
 
 NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlterTopicSettings&& settings);
+NActors::IActor* CreateAlterTopicActor(NThreading::TPromise<TAlterTopicResponse>&& promise, TAlterTopicSettings&& settings);
 
 
 struct TCreateTopicSettings {

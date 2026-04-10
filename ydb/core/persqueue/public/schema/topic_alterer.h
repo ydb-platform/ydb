@@ -44,11 +44,14 @@ private:
     TString GetWorkingDir() const;
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage);
+    void ReplyOkAndDie();
 
 private:
     const TTopicAltererSettings Settings;
 
     NDescriber::TTopicInfo TopicInfo;
+    NKikimrSchemeOp::TModifyScheme ModifyScheme;
+
     ui64 SchemeShardTabletId = 0;
     ui64 TxId = 0;
     size_t WaitTxCompletionRetries = 0;

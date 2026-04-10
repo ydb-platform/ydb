@@ -372,6 +372,7 @@ NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlter
         .PeerName = std::move(settings.PeerName),
         .UserToken = std::move(settings.UserToken),
         .Strategy = std::make_unique<TAlterTopicStrategy>(std::move(settings.Request)),
+        .IfExists = settings.IfExists,
         .Cookie = settings.Cookie,
         .IsCdcStreamCompatible = true,
     });

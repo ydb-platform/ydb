@@ -57,6 +57,12 @@ void TTopicAlterer::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             }
             return DoAlter();
         }
+        case NDescriber::EStatus::NOT_FOUND: {
+            if (Settings.IfExists) {
+                return ReplyOkAndDie();
+            }
+            return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Strategy->GetTopicName(), NDescriber::EStatus::NOT_FOUND));
+        }
         default: {
             return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Strategy->GetTopicName(), TopicInfo.Status));
         }
@@ -109,6 +115,7 @@ void TTopicAlterer::DoAlter() {
         return ReplyErrorAndDie(status, std::move(error));
     }
 
+    ModifyScheme = modifyScheme;
     Send(MakeTxProxyID(), std::move(proposal));
 }
 
@@ -165,8 +172,7 @@ void TTopicAlterer::DoWaitTxCompletion() {
 }
 
 void TTopicAlterer::Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&) {
-    Send(Settings.ParentId, new TEvAlterTopicResponse(), 0, Settings.Cookie);
-    PassAway();
+    ReplyOkAndDie();
 }
 
 void TTopicAlterer::HandleOnWaitTxCompletion(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -198,7 +204,12 @@ TString TTopicAlterer::GetWorkingDir() const {
 
 void TTopicAlterer::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
     LOG_D("ReplyErrorAndDie: " << errorCode << " " << errorMessage);
-    Send(Settings.ParentId, new TEvAlterTopicResponse(errorCode, std::move(errorMessage)), 0, Settings.Cookie);
+    Send(Settings.ParentId, new TEvAlterTopicResponse(errorCode, std::move(errorMessage), std::move(ModifyScheme)), 0, Settings.Cookie);
+    PassAway();
+}
+
+void TTopicAlterer::ReplyOkAndDie() {
+    Send(Settings.ParentId, new TEvAlterTopicResponse(), 0, Settings.Cookie);
     PassAway();
 }
 

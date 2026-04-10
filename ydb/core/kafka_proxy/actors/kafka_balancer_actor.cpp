@@ -842,7 +842,7 @@ void TKafkaBalancerActor::HeartbeatStepCommitTx(NKqp::TEvKqp::TEvQueryResponse::
     }
 
     if (deadsCount > 0) {
-        SendHeartbeatResponseFail(ctx, CorrelationId, EKafkaErrors::REBALANCE_IN_PROGRESS, "Deads members found. Rejoin required.");
+        SendHeartbeatResponseFail(ctx, CorrelationId, EKafkaErrors::FENCED_INSTANCE_ID, "Deads members found. Rejoin required.");
         return;
     }
 
@@ -885,7 +885,7 @@ void TKafkaBalancerActor::HeartbeatStepUpdateHeartbeatDeadlines(NKqp::TEvKqp::TE
         return;
     }
     if (groupStatus->Generation != GenerationId) {
-        SendHeartbeatResponseFail(ctx, CorrelationId, EKafkaErrors::ILLEGAL_GENERATION, TStringBuilder() << "Old or unknown group generation: " << GenerationId << ". Group generationId=" << groupStatus->Generation);
+        SendHeartbeatResponseFail(ctx, CorrelationId, EKafkaErrors::FENCED_INSTANCE_ID, TStringBuilder() << "Old or unknown group generation: " << GenerationId << ". Group generationId=" << groupStatus->Generation);
         return;
     }
 

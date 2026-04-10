@@ -54,7 +54,7 @@ public:
             maxPartitions = DefaultMaxPartitions;
         }
 
-        const size_t tasks = Min(*maxPartitions, topicPartitionsCount);
+        const size_t tasks = Min(maxPartitions, topicPartitionsCount);
         partitions.reserve(tasks);
         for (size_t i = 0; i < tasks; ++i) {
             NPq::NProto::TDqReadTaskParams params;

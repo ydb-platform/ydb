@@ -50,7 +50,7 @@ protected:
         return {};
     }
     virtual TMinMax DoGetMinMaxScalars() const override {
-        AFL_VERIFY(false);
+        Y_ABORT("Not implemented");
     }
     virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const override {
         if (!ForLazyInitialization) {

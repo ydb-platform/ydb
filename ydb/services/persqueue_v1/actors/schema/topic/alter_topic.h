@@ -15,6 +15,11 @@ public:
     {
     }
 
+    TAlterTopicActor(NGRpcService::IRequestOpCtx* request)
+        : TGrpcProxyActor<TAlterTopicActor, NGRpcService::TEvAlterTopicRequest>(request)
+    {
+    }
+
     void DoAction() {
         Become(&TAlterTopicActor::StateWork);
 

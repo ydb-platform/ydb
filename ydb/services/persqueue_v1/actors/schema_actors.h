@@ -370,21 +370,21 @@ private:
 };
 
 
-class TAlterTopicActor : public TUpdateSchemeActor<TAlterTopicActor, TEvAlterTopicRequest>
-                       , public TCdcStreamCompatible
-{
-    using TBase = TUpdateSchemeActor<TAlterTopicActor, TEvAlterTopicRequest>;
+// class TAlterTopicActor : public TUpdateSchemeActor<TAlterTopicActor, TEvAlterTopicRequest>
+//                        , public TCdcStreamCompatible
+// {
+//     using TBase = TUpdateSchemeActor<TAlterTopicActor, TEvAlterTopicRequest>;
 
-public:
-    TAlterTopicActor(NKikimr::NGRpcService::TEvAlterTopicRequest *request);
-    TAlterTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request);
+// public:
+//     TAlterTopicActor(NKikimr::NGRpcService::TEvAlterTopicRequest *request);
+//     TAlterTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request);
 
-    void Bootstrap(const NActors::TActorContext& ctx);
-    void ModifyPersqueueConfig(TAppData* appData,
-                               NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-                               const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-                               const NKikimrSchemeOp::TDirEntry& selfInfo) override;
-};
+//     void Bootstrap(const NActors::TActorContext& ctx);
+//     void ModifyPersqueueConfig(TAppData* appData,
+//                                NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
+//                                const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
+//                                const NKikimrSchemeOp::TDirEntry& selfInfo) override;
+// };
 
 
 class TAlterTopicActorInternal : public TPQInternalSchemaActor<TAlterTopicActorInternal, NKikimr::NGRpcProxy::V1::TAlterTopicRequest,

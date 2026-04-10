@@ -25,6 +25,7 @@ PEERDIR(
     ydb/services/lib/actors
     ydb/services/lib/sharding
     ydb/services/metadata
+    ydb/services/persqueue_v1/actors/schema
 )
 
 SRCS(

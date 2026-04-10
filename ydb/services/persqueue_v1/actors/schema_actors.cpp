@@ -438,39 +438,39 @@ void TPQAlterTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransactio
 }
 
 
-TAlterTopicActor::TAlterTopicActor(NKikimr::NGRpcService::TEvAlterTopicRequest* request)
-    : TBase(request, request->GetProtoRequest()->path())
-{
-}
+// TAlterTopicActor::TAlterTopicActor(NKikimr::NGRpcService::TEvAlterTopicRequest* request)
+//     : TBase(request, request->GetProtoRequest()->path())
+// {
+// }
 
-TAlterTopicActor::TAlterTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request)
-    : TBase(request)
-{
-}
+// TAlterTopicActor::TAlterTopicActor(NKikimr::NGRpcService::IRequestOpCtx* request)
+//     : TBase(request)
+// {
+// }
 
-void TAlterTopicActor::Bootstrap(const NActors::TActorContext& ctx) {
-    TBase::Bootstrap(ctx);
-    SendDescribeProposeRequest(ctx);
-    Become(&TBase::StateWork);
-}
+// void TAlterTopicActor::Bootstrap(const NActors::TActorContext& ctx) {
+//     TBase::Bootstrap(ctx);
+//     SendDescribeProposeRequest(ctx);
+//     Become(&TBase::StateWork);
+// }
 
-void TAlterTopicActor::ModifyPersqueueConfig(
-    TAppData* appData,
-    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-    const NKikimrSchemeOp::TDirEntry& selfInfo
-) {
-    Y_UNUSED(pqGroupDescription);
-    Y_UNUSED(selfInfo);
-    TString error;
-    Y_UNUSED(selfInfo);
+// void TAlterTopicActor::ModifyPersqueueConfig(
+//     TAppData* appData,
+//     NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
+//     const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
+//     const NKikimrSchemeOp::TDirEntry& selfInfo
+// ) {
+//     Y_UNUSED(pqGroupDescription);
+//     Y_UNUSED(selfInfo);
+//     TString error;
+//     Y_UNUSED(selfInfo);
 
-    auto status = FillProposeRequestImpl(*GetProtoRequest(), groupConfig, appData, error, GetCdcStreamName().Defined());
-    if (!error.empty()) {
-        Request_->RaiseIssue(FillIssue(error, Ydb::PersQueue::ErrorCode::BAD_REQUEST));
-        return RespondWithCode(status);
-    }
-}
+//     auto status = FillProposeRequestImpl(*GetProtoRequest(), groupConfig, appData, error, GetCdcStreamName().Defined());
+//     if (!error.empty()) {
+//         Request_->RaiseIssue(FillIssue(error, Ydb::PersQueue::ErrorCode::BAD_REQUEST));
+//         return RespondWithCode(status);
+//     }
+// }
 
 
 TDescribeTopicActor::TDescribeTopicActor(NKikimr::NGRpcService::TEvDescribeTopicRequest* request)

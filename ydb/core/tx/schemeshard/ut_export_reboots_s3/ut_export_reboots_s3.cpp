@@ -35,8 +35,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         TString Destination;
     };
 
-    TString MakeS3RequestTemplate(const TVector<TExportItem>& items,
-                                  const TString& extraSettings = "")
+    TString MakeS3RequestTemplate(const TVector<TExportItem>& items, const TString& extraSettings = "") {
     {
         TStringBuilder sb;
         sb << "ExportToS3Settings { endpoint: \"localhost:%d\" scheme: HTTP ";
@@ -49,9 +48,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         return sb;
     }
 
-    TString MakeFsRequestTemplate(const TVector<TExportItem>& items,
-                                  const TString& extraSettings = "")
-    {
+    TString MakeFsRequestTemplate(const TVector<TExportItem>& items, const TString& extraSettings = "") {
         TStringBuilder sb;
         sb << "ExportToFsSettings { base_path: \"%s\" ";
         if (extraSettings) sb << extraSettings << " ";

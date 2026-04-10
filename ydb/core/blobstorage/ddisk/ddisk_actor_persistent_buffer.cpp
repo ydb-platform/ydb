@@ -18,7 +18,7 @@ namespace NKikimr::NDDisk {
             IssuePersistentBufferChunkAllocationInflight = true;
             auto ddiskActorId = MakeBlobStorageDDiskId(SelfId().NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
             Send(ddiskActorId, new TEvPrivate::TEvIssuePersistentBufferChunkAllocation());
-            STLOG(PRI_DEBUG, BS_DDISK, BSDD14, "TDDiskActor::ProcessPersistentBufferWrite empty space, request new chunk", (FreeSpace, PersistentBufferSpaceAllocator.GetFreeSpace()));
+            STLOG(PRI_DEBUG, BS_DDISK, BSDD14, "TDDiskActor::ProcessPersistentBufferWrite empty space, request new chunk", (FreeSpace, PersistentBufferSpaceAllocator.GetFreeSpace()), (PersistentBufferSpaceAllocator, PersistentBufferSpaceAllocator.ToString()));
         }
     }
 
@@ -314,6 +314,8 @@ namespace NKikimr::NDDisk {
         }
 
         auto eraseCnt = inflight.OperationCookies.erase(partCookie);
+        inflight.Span.Event("Part written");
+
         Y_ABORT_UNLESS(eraseCnt == 1);
         if (inflight.OperationCookies.empty()) {
             if (ev->Get()->IsErase) {
@@ -328,6 +330,8 @@ namespace NKikimr::NDDisk {
                 }
                 TActivationContext::Send(h.release());
             } else {
+                inflight.Span.Event("All parts written");
+
                 Counters.Interface.WritePersistentBuffer.Reply(!inflight.ErrorMessage, inflight.Size,
                     HPMilliSecondsFloat(HPNow() - inflight.StartTs));
                 if (!inflight.ErrorMessage) {
@@ -346,6 +350,8 @@ namespace NKikimr::NDDisk {
                         buffer.Size += pr.Size;
                         pr.DataParts.emplace(0, std::move(inflight.Data));
                         PersistentBufferInMemoryCacheSize += pr.Size;
+                        inflight.Span.Event("Inserted");
+
                     } else {
                         Y_ABORT_UNLESS(pr.OffsetInBytes == inflight.OffsetInBytes);
                         Y_ABORT_UNLESS(pr.Size == inflight.Data.size());
@@ -360,6 +366,7 @@ namespace NKikimr::NDDisk {
                     h->Rewrite(TEvInterconnect::EvForward, inflight.Session);
                 }
                 TActivationContext::Send(h.release());
+                inflight.Span.Event("Replied");
             }
             inflight.Span.End();
             PersistentBufferDiskOperationInflight.erase(itInflight);
@@ -373,16 +380,7 @@ namespace NKikimr::NDDisk {
         const ui64 lsn = record.GetLsn();
         ui32 sectorsCnt = selector.Size / SectorSize + 1;
 
-        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.WritePersistentBuffer",
-                NWilson::EFlags::NONE, TActivationContext::ActorSystem())
-            .Attribute("tablet_id", static_cast<long>(creds.TabletId))
-            .Attribute("vchunk_index", static_cast<long>(selector.VChunkIndex))
-            .Attribute("offset_in_bytes", selector.OffsetInBytes)
-            .Attribute("size", selector.Size)
-            .Attribute("lsn", static_cast<long>(lsn)));
-
         const auto sectors = PersistentBufferSpaceAllocator.Occupy(sectorsCnt);
-        span.Event("Occupy");
         if (sectors.size() == 0) {
             if (PersistentBufferSpaceAllocator.OwnedChunks.size() < PersistentBufferFormat.MaxChunks) {
                 PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferWrite");
@@ -397,6 +395,14 @@ namespace NKikimr::NDDisk {
             return;
         }
         Y_ABORT_UNLESS(sectors.size() == sectorsCnt && sectorsCnt <= MaxSectorsPerBufferRecord + 1 && sectorsCnt > 1);
+
+        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.WritePersistentBuffer",
+                NWilson::EFlags::NONE, TActivationContext::ActorSystem())
+            .Attribute("tablet_id", static_cast<long>(creds.TabletId))
+            .Attribute("vchunk_index", static_cast<long>(selector.VChunkIndex))
+            .Attribute("offset_in_bytes", selector.OffsetInBytes)
+            .Attribute("size", selector.Size)
+            .Attribute("lsn", static_cast<long>(lsn)));
         Counters.Interface.WritePersistentBuffer.Request(selector.Size);
 
         const TWriteInstruction instr(record.GetInstruction());
@@ -779,6 +785,9 @@ namespace NKikimr::NDDisk {
         reply->FreeSectors = PersistentBufferSpaceAllocator.GetFreeSpace();
         reply->InMemoryCacheSize = PersistentBufferInMemoryCacheSize;
         reply->InMemoryCacheLimit = PersistentBufferFormat.MaxInMemoryCache;
+        reply->DiskOperationsInflight = PersistentBufferDiskOperationInflight.size();
+        reply->PendingEvents = PendingPersistentBufferEvents.size();
+
         if (ev->Get()->DescribeTablets) {
             for (auto& [k, v] : PersistentBuffers) {
                 reply->TabletInfos.emplace_back(std::get<0>(k), std::get<1>(k),

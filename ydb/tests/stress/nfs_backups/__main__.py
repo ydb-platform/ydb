@@ -4,7 +4,7 @@ import logging
 import os
 import sys
 
-from ydb.tests.stress.nfs_backups.workload import WorkloadRunner
+from ydb.tests.stress.nfs_backups.workload import WorkloadRunner, WORKLOADS, DEFAULT_WORKLOAD
 from ydb.tests.stress.common.instrumented_client import InstrumentedYdbClient
 
 logging.basicConfig(
@@ -28,6 +28,14 @@ if __name__ == "__main__":
         help="Path to NFS mount directory for export/import operations. "
              "If not specified, uses NFS_MOUNT_PATH environment variable."
     )
+    parser.add_argument(
+        "--workload",
+        nargs="+",
+        default=[DEFAULT_WORKLOAD],
+        choices=list(WORKLOADS.keys()),
+        help=f"Workload(s) to run. Available: {', '.join(WORKLOADS.keys())}. "
+             f"Default: {DEFAULT_WORKLOAD}",
+    )
     args = parser.parse_args()
 
     if args.nfs_path:
@@ -41,7 +49,7 @@ if __name__ == "__main__":
     logger.info("Connected successfully")
 
     try:
-        with WorkloadRunner(client, args.duration) as runner:
+        with WorkloadRunner(client, args.duration, args.workload) as runner:
             runner.run()
     except Exception:
         logger.exception("Workload failed")

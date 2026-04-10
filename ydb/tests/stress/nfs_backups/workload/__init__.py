@@ -613,10 +613,19 @@ class WorkloadFullRoundtrip(WorkloadBase):
         return [self._main_loop]
 
 
+WORKLOADS = {
+    "full_roundtrip": WorkloadFullRoundtrip,
+    "single_table": WorkloadNfsExportImport,
+}
+
+DEFAULT_WORKLOAD = "full_roundtrip"
+
+
 class WorkloadRunner:
-    def __init__(self, client, duration):
+    def __init__(self, client, duration, workload_names=None):
         self.client = client
         self.duration = duration
+        self.workload_names = workload_names or [DEFAULT_WORKLOAD]
         ydb.interceptor.monkey_patch_event_handler()
 
     @staticmethod
@@ -643,10 +652,11 @@ class WorkloadRunner:
         fatal_error = threading.Event()
         nfs_mount_path = self._setup_nfs()
 
-        workloads = [
-            # WorkloadNfsExportImport(self.client, stop, nfs_mount_path, fatal_error),
-            WorkloadFullRoundtrip(self.client, stop, nfs_mount_path, fatal_error),
-        ]
+        workloads = []
+        for name in self.workload_names:
+            cls = WORKLOADS[name]
+            workloads.append(cls(self.client, stop, nfs_mount_path, fatal_error))
+            logger.info("[runner] Registered workload: %s (%s)", name, cls.__name__)
 
         for w in workloads:
             w.start()

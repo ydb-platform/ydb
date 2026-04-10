@@ -391,23 +391,12 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveLocalIndex(TOperationId nextId,
         result.push_back(CreateAlterColumnTable(NextPartId(nextId, result), alterTx));
     }
 
-    // Check destination doesn't already exist
+    // Check destination doesn't already exist (as any path type)
     TPath dstIndexPath = mainTablePath.Child(dstIndex);
-    {
-        TPath::TChecker checks = dstIndexPath.Check();
-        checks
-            .NotEmpty()
-            .IsResolved()
-            .NotDeleted()
-            .IsTableIndex()
-            .NotUnderOperation();
-
-        if (checks) {
-            TString errStr = TStringBuilder()
-                << "Index " << dstIndex
-                << " exists, but overwrite flag has not been set";
-            return {CreateReject(nextId, NKikimrScheme::StatusSchemeError, errStr)};
-        }
+    if (dstIndexPath.IsResolved() && !dstIndexPath.IsDeleted()) {
+        TString errStr = TStringBuilder()
+            << "Path '" << dstIndex << "' already exists under '" << mainTable << "'";
+        return {CreateReject(nextId, NKikimrScheme::StatusSchemeError, errStr)};
     }
 
     // The move sub-operation

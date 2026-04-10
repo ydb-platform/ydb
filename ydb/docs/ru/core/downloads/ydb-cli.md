@@ -2,6 +2,12 @@
 
 [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) (`ydb`) — утилита командной строки для работы с базами данных {{ ydb-short-name }}. Распространяется под [лицензией Apache 2.0](https://github.com/ydb-platform/ydb/blob/main/LICENSE).
 
+{% note tip %}
+
+Рекомендуемый способ установки {{ ydb-short-name }} CLI — с помощью [скрипта установки](../reference/ydb-cli/install.md). Скрипт автоматически скачает подходящий бинарный файл и добавит его в `PATH`.
+
+{% endnote %}
+
 ## Linux (amd64)
 
 #|

@@ -4,6 +4,7 @@
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -31,7 +32,6 @@ public:
     struct GenerationIdCheckerSettings {
         i64 GenerationId;
         TString ResourceDatabasePath;
-        TString ConsumerMetadataTablePath;
     };
 
     TDistributedCommitHelper(TString database, TString consumer, std::vector<TCommitInfo> commits, ui64 cookie = 0,

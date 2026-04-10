@@ -4089,7 +4089,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         Sleep(TDuration::Seconds(25));
         {
             auto errorCode = clientA.Heartbeat(joinRespA2->MemberId.value(), joinRespA2->GenerationId, groupId)->ErrorCode;
-             UNIT_ASSERT(errorCode == static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS) || errorCode == static_cast<TKafkaInt16>(EKafkaErrors::FENCED_INSTANCE_ID));
+            UNIT_ASSERT(errorCode == static_cast<TKafkaInt16>(EKafkaErrors::REBALANCE_IN_PROGRESS) || errorCode == static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION));
         }
 
 
@@ -4244,7 +4244,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             clientA.Heartbeat(joinRespA->MemberId.value(),
                              illegalGeneration,
                              groupId)->ErrorCode,
-            static_cast<TKafkaInt16>(EKafkaErrors::FENCED_INSTANCE_ID)
+            static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION)
         );
 
         UNIT_ASSERT_VALUES_EQUAL(clientA.Heartbeat(joinRespA->MemberId.value(),

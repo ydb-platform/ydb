@@ -210,13 +210,8 @@ namespace NYql::NDq {
         }
 
         void Handle(TEvListSplitsPart::TPtr ev) {
-<<<<<<< HEAD
             auto response = ev->Get()->Response;
-            Y_ABORT_UNLESS(response.splits_size() == 1);
-=======
-            auto response = std::move(ev->Get()->Response);
             Y_ENSURE(response.splits_size() == 1, response.splits_size() << " == " << 1);
->>>>>>> cff8c45192b (generic lookup: don't ABORT on external errors (arrow parsing/etc) (#37321))
             auto& split = response.splits(0);
             NConnector::NApi::TReadSplitsRequest readRequest;
 

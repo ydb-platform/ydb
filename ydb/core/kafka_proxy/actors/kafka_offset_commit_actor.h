@@ -5,7 +5,6 @@
 #include <ydb/core/grpc_services/service_scheme.h>
 #include <ydb/core/grpc_services/service_topic.h>
 #include "ydb/core/kafka_proxy/actors/actors.h"
-#include <ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/kafka_proxy/actors/kafka_topic_group_path_struct.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>

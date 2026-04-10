@@ -3,6 +3,8 @@
 #include "dq_channel_settings.h"
 #include "dq_transport.h"
 
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
+
 namespace NYql::NDq {
 
 struct TDqInputChannelStats : TDqInputStats {

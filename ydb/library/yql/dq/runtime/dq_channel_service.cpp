@@ -2029,6 +2029,9 @@ bool TFastDqInputChannel::Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMay
 
     TDataChunk chunk;
     bool popResult = Buffer->Pop(chunk);
+    PushStats.PopTime = TInstant::Now();
+    PushStats.PopResult = popResult;
+
     if (popResult && chunk.Checkpoint) {
         if (Callback) {
             Callback->TakeCheckpoint(*chunk.Checkpoint, GetChannelId());
@@ -2051,9 +2054,6 @@ bool TFastDqInputChannel::Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMay
         Deserializer->Deserialize(std::move(chunk.Buffer), batch);
         Y_ENSURE(batch.RowCount() > 0);
     }
-
-    PushStats.PopTime = TInstant::Now();
-    PushStats.PopResult = popResult;
 
     return hasData;
 }

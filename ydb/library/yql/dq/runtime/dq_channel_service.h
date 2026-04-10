@@ -6,6 +6,7 @@
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem.h>
 
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>

@@ -4389,20 +4389,20 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         auto syncRespA = clientA.ReadResponse<TSyncGroupResponseData>(hdrSyncA);
 
-        UNIT_ASSERT_VALUES_EQUAL(syncRespA->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION));
+        UNIT_ASSERT_EQUAL(syncRespA->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION));
         syncReqA.GenerationId  = joinRespA->GenerationId;
         clientA.WriteToSocket(hdrSyncA, syncReqA);
         auto syncRespA1 = clientA.ReadResponse<TSyncGroupResponseData>(hdrSyncA);
-        UNIT_ASSERT_VALUES_EQUAL(syncRespA1->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_EQUAL(syncRespA1->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
 
-        UNIT_ASSERT_VALUES_EQUAL(
+        UNIT_ASSERT_EQUAL(
             clientA.Heartbeat(joinRespA->MemberId.value(),
                              illegalGeneration,
                              groupId)->ErrorCode,
             static_cast<TKafkaInt16>(EKafkaErrors::FENCED_INSTANCE_ID)
         );
 
-        UNIT_ASSERT_VALUES_EQUAL(clientA.Heartbeat(joinRespA->MemberId.value(),
+        UNIT_ASSERT_EQUAL(clientA.Heartbeat(joinRespA->MemberId.value(),
                              joinRespA->GenerationId,
                              groupId)->ErrorCode,
             static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR)

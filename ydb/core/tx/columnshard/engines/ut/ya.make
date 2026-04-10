@@ -21,6 +21,7 @@ PEERDIR(
     ydb/core/tx/columnshard/test_helper
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/columnshard/hooks/testing
+    ydb/core/formats/arrow/accessor/abstract
 
     yql/essentials/udfs/common/json2
 )
@@ -39,7 +40,11 @@ SRCS(
     ut_program.cpp
     ut_snapshot_holders.cpp
     ut_script.cpp
+<<<<<<< HEAD
     ut_predicate_ranges_builder.cpp
+=======
+    ut_minmax_serialization.cpp
+>>>>>>> 688cd417bbb (fix nulls handling in minmax index (#37328))
     helper.cpp
 )
 

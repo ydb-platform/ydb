@@ -18,7 +18,7 @@ public:
     bool CanBlockRead(const NNodes::TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) override;
     TExprNode::TPtr WrapWrite(const TExprNode::TPtr& write, TExprContext& ctx) override;
     bool CanFallback() override;
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType, TMaybe<size_t> maxPartitions, TExprContext&) override;
+    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType, size_t, TExprContext&) override;
     TMaybe<TSourceWatermarksSettings> ExtractSourceWatermarksSettings(const TExprNode& node, const ::google::protobuf::Any& settings, const TString& sourceType) override;
     void FillLookupSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType) override;
     void FillSinkSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sinkType) override;

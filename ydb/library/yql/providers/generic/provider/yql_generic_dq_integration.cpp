@@ -155,7 +155,7 @@ namespace NYql {
                 auto maybeGenSourceSettings = TMaybeNode<TGenSourceSettings>(srcSettings.Raw());
                 Y_ENSURE(maybeGenSourceSettings);
                 auto genSourceSettings = maybeGenSourceSettings.Cast();
-                auto maxPartitions = partitionSettings.MaxPartitions ? partitionSettings.MaxPartitions : 0;
+                auto maxPartitions = partitionSettings.MaxPartitions ? partitionSettings.MaxPartitions : DefaultMaxPartitions;
 
                 const TGenericState::TTableAddress tableAddress{
                     genSourceSettings.Cluster().StringValue(),

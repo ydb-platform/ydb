@@ -1582,9 +1582,10 @@ private:
         // Partitioning
         TVector<TString> partitionParams;
         TString clusterName;
+        auto maxTasksPerStage = Config->MaxTasksPerStage.Get().GetOrElse(0);    // 0 - unlimited
 
         IDqIntegration::TPartitionSettings pSettings;
-        pSettings.MaxPartitions = Config->MaxTasksPerStage.GetOrElse(0);
+        pSettings.MaxPartitions = maxTasksPerStage;
         pSettings.CanFallback = false;
         pSettings.DataSizePerJob = Config->DataSizePerPartition.Get().GetOrElse(NYql::TDqSettings::TDefault::DataSizePerJob);
         dqIntegration->Partition(*source, partitionParams, &clusterName, ctx, pSettings);
@@ -1601,7 +1602,7 @@ private:
 
             google::protobuf::Any& settings = *externalSource.MutableSettings();
             TString& sourceType = *externalSource.MutableType();
-            dqIntegration->FillSourceSettings(*source, settings, sourceType, Config->MaxTasksPerStage.GetOrElse(0), ctx);
+            dqIntegration->FillSourceSettings(*source, settings, sourceType, maxTasksPerStage, ctx);
 
             if (settings.Is<NDqProto::TDqIntegrationCommonSettings>()) {
                 NDqProto::TDqIntegrationCommonSettings commonSettings;

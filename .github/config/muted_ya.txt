@@ -79,18 +79,6 @@ ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenari
 ydb/tests/functional/api test_discovery.py.TestDiscoveryFaultInjectionSlotStop.test_scenario
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncr.test_full_cycle_local_backup_restore_with_incrementals
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncrComplSchemaChange.test_full_cycle_local_backup_restore_with_incrementals_complex_schema_changes
-ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_failover
-ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_rejoin
-ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_takedown
-ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_update_and_get_cluster_state
-ydb/tests/functional/bridge test_bridge.py.TestBridgeValidation.test_invalid_updates[updates0-no_updates]
-ydb/tests/functional/bridge test_bridge.py.TestBridgeValidation.test_invalid_updates[updates1-multiple_primary_piles_in_request]
-ydb/tests/functional/bridge test_bridge.py.TestBridgeValidation.test_invalid_updates[updates2-no_primary_pile_in_result]
-ydb/tests/functional/bridge test_bridge.py.TestBridgeValidation.test_invalid_updates[updates3-duplicate_pile_update]
-ydb/tests/functional/bridge test_bridge.py.TestBridgeValidation.test_invalid_updates[updates4-invalid_pile_name]
-ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_basic
-ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_update_piles
-ydb/tests/functional/config test_pdisk_metadata_cli.py.TestPDiskMetadata.test_auto_prev_flag
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_capacity_metrics
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
@@ -107,8 +95,6 @@ ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLe
 ydb/tests/olap/column_compression/fast py3test.[*/*] chunk
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
-ydb/tests/stress/reconfig_state_storage_workload/tests test_scheme_board_workload.py.TestReconfigSchemeBoardWorkload.test_scheme_board
-ydb/tests/stress/scheme_board/pile_promotion/tests test_scheme_board_workload.py.TestSchemeBoard.test_scheme_board
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestRead

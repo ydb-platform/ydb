@@ -24,10 +24,9 @@ public:
         bool KillReadSession;
         bool OnlyCheckCommitedToFinish;
         TString ReadSessionId;
-        TString TopicPath;
     };
 
-    TDistributedCommitHelper(TString database, TString consumer, std::vector<TCommitInfo> commits, ui64 cookie = 0);
+    TDistributedCommitHelper(TString database, TString consumer, TString path, std::vector<TCommitInfo> commits, ui64 cookie = 0);
 
     ECurrentStep Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
     void SendCreateSessionRequest(const TActorContext& ctx);
@@ -44,6 +43,7 @@ private:
 private:
     TString DataBase;
     TString Consumer;
+    TString Path;
     std::vector<TCommitInfo> Commits;
     ECurrentStep Step;
     ui64 Cookie;

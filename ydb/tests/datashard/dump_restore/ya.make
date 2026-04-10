@@ -6,6 +6,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(18)
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 TEST_SRCS(
     test_dump_restore.py

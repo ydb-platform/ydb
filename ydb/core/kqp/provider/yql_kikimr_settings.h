@@ -228,6 +228,8 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSimpleProgramsSinglePartitionOptimization = true;
     bool EnableDqHashCombineByDefault = false;
     bool EnableWatermarks = false;
+    bool EnableDqSourceStreamLookupJoin = false;
+    ui32 DisableOlapBlocksOnColumnsLimit = 0;
 
     ui32 LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
@@ -241,6 +243,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetEnableParallelUnionAllConnectionsForExtend() const;
     bool GetEnableOlapPushdownAggregate() const;
     bool GetUseDqHashCombine() const;
+    ui32 GetDisableOlapBlocksOnColumnsLimit() const;
 };
 
 }

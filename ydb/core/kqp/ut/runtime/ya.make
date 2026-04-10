@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
 SRCS(
     kqp_hash_shuffle_ut.cpp

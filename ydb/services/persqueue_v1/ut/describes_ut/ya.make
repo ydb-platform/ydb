@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/services/persqueue_v1)
 
+REQUIREMENTS(cpu:2)
+
 ADDINCL(
     ydb/public/sdk/cpp
 )

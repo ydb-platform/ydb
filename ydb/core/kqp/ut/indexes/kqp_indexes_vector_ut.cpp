@@ -483,7 +483,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         {
             const TString createTableSql(R"(
                 --!syntax_v1
-                CREATE TABLE TestVector2 (id Uint64, embedding String, embedding_bit String, PRIMARY KEY (id))
+                CREATE TABLE TestVector2 (id Uint64, embedding String, PRIMARY KEY (id))
                 WITH (PARTITION_AT_KEYS = (9));
             )");
             auto result = session.ExecuteSchemeQuery(createTableSql).GetValueSync();
@@ -504,7 +504,8 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 (1, ""), (2, "1"), (3, "40"), (4, "abcd"),
                 (5, "00\x02"), (6, "01\x02"), (7, "10\x02"), (8, "11\x02"),
                 (9, ""), (10, "1"), (11, "40"), (12, "abcd"),
-                (13, "00\x02"), (14, "01\x02"), (15, "10"), (16, "11\x02");)"));
+                (13, "00\x02"), (14, "01\x02"), (15, "10"), (16, "11\x02"),
+                (17, null);)"));
             auto result = session.ExecuteDataQuery(Q_(query1), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
                 .ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());

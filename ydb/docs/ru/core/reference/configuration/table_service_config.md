@@ -4,7 +4,7 @@
 
 ## spilling_service_config
 
-[Спиллинг](../../concepts/spilling.md) — это механизм управления памятью в {{ ydb-short-name }}, который временно сохраняет данные на диск при нехватке оперативной памяти.
+[Спиллинг](../../concepts/query_execution/spilling.md) — это механизм управления памятью в {{ ydb-short-name }}, который временно сохраняет данные на диск при нехватке оперативной памяти.
 
 ### Основные параметры конфигурации
 
@@ -186,7 +186,7 @@ table_service_config:
 **Расположение:** `table_service_config.spilling_service_config.local_file_config.enable`
 **Тип:** `boolean`  
 **По умолчанию:** `true`  
-**Описание:** Включает или отключает сервис спиллинга. При отключении (`false`) [спиллинг](../../concepts/spilling.md) не функционирует, что может привести к ошибкам при обработке больших объемов данных.
+**Описание:** Включает или отключает сервис спиллинга. При отключении (`false`) [спиллинг](../../concepts/query_execution/spilling.md) не функционирует, что может привести к ошибкам при обработке больших объемов данных.
 
 ##### Возможные ошибки
 
@@ -247,7 +247,7 @@ table_service_config:
 
 ## См. также
 
-- [Концепция спиллинга](../../concepts/spilling.md)
+- [Концепция спиллинга](../../concepts/query_execution/spilling.md)
 - [Архитектура Spilling Service](../../contributor/spilling-service.md)
 - [Устранение неполадок спиллинга](../../troubleshooting/spilling/index.md)
 - [Конфигурация контроллера памяти](memory_controller_config.md)

@@ -116,6 +116,7 @@ struct TStageInfoMeta {
 
     TVector<bool> SkipNullKeys;
 
+    THashSet<TKeyDesc::ERowOperation> AccessCheckOperations;
     THashSet<TKeyDesc::ERowOperation> ShardOperations;
     THolder<TKeyDesc> ShardKey;
     NSchemeCache::ETableKind ShardKind = NSchemeCache::ETableKind::KindUnknown;

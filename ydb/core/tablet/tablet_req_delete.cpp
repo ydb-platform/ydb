@@ -33,7 +33,7 @@ class TTabletReqDelete : public TActorBootstrapped<TTabletReqDelete> {
                          TabletId,
                          0,
                          NKikimrWhiteboard::TTabletStateInfo::Deleted,
-                         std::numeric_limits<ui32>::max()),
+                         Generation != std::numeric_limits<ui32>::max() ? Generation + 1 : Generation),
                          true);
             // TODO(xenoxeno): broadcast message to more/all nodes ... maybe?
         }

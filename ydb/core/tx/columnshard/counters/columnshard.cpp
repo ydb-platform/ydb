@@ -22,6 +22,7 @@ TCSCounters::TCSCounters()
     SetupIndexationCount = TBase::GetDeriviative("SetupIndexation/Count");
     SetupTtlCount = TBase::GetDeriviative("SetupTtl/Count");
     SetupCleanupCount = TBase::GetDeriviative("SetupCleanup/Count");
+    SetupCleanupSkippedByInProgressCount = TBase::GetDeriviative("SetupCleanup/SkippedByInProgress/Count");
 
     SkipIndexationInputDueToGranuleOverloadBytes = TBase::GetDeriviative("SkipIndexationInput/GranuleOverload/Bytes");
     SkipIndexationInputDueToGranuleOverloadCount = TBase::GetDeriviative("SkipIndexationInput/GranuleOverload/Count");

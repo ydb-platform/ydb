@@ -24,17 +24,19 @@ struct TEvSubscribeOnPoolChanges : public NActors::TEventLocal<TEvSubscribeOnPoo
 };
 
 struct TEvPlaceRequestIntoPool : public NActors::TEventLocal<TEvPlaceRequestIntoPool, TKqpWorkloadServiceEvents::EvPlaceRequestIntoPool> {
-    TEvPlaceRequestIntoPool(const TString& databaseId, const TString& sessionId, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
+    TEvPlaceRequestIntoPool(const TString& databaseId, const TString& sessionId, const TString& poolId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& requestText = "")
         : DatabaseId(databaseId)
         , SessionId(sessionId)
         , PoolId(poolId)
         , UserToken(userToken)
+        , RequestText(requestText)
     {}
 
     const TString DatabaseId;
     const TString SessionId;
     TString PoolId;  // Can be changed to default pool id
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    const TString RequestText;
 };
 
 struct TEvContinueRequest : public NActors::TEventLocal<TEvContinueRequest, TKqpWorkloadServiceEvents::EvContinueRequest> {

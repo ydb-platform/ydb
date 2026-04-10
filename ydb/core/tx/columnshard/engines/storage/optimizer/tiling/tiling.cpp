@@ -507,12 +507,6 @@ private:
         return {};
     }
 
-    bool DoIsLocked(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const override {
-        // This method is never used
-        Y_UNUSED(dataLocksManager);
-        return false;
-    }
-
     bool IsAccumulatorPortion(const TPortionInfo::TPtr& p) {
         if (p->GetTotalBlobBytes() <= MaxAccumulatePortionSize) {
             return true; // portion is too small

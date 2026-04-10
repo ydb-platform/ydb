@@ -35,6 +35,14 @@ void IOperator::ReplaceChild(const TIntrusivePtr<IOperator> oldChild, const TInt
     Y_ENSURE(false, "Did not find a child to replace");
 }
 
+NJson::TJsonValue IOperator::ToJson(ui32 explainFlags)
+{
+    Y_UNUSED(explainFlags);
+    auto res = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
+    res["Name"] = GetExplainName();
+    return res;
+}
+
 /**
  * EmptySource operator methods
  */

@@ -1964,31 +1964,13 @@ void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TAc
     const auto& parents = GetParents(partitionGraph);
     if (!ClientHasAnyCommits && parents.size() != 0) {
         std::vector<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo> commits;
-        auto topicPath = Topic->GetPrimaryPath();
         for (auto& parent: parents) {
-            NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo commit {
-                .PartitionId = parent->Id,
-                .Offset = Max<i64>(),
-                .KillReadSession = false,
-                .OnlyCheckCommitedToFinish = true,
-                .ReadSessionId = Session,
-                .TopicPath = topicPath
-            };
+            NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = false, .OnlyCheckCommitedToFinish = true, .ReadSessionId = Session};
             commits.push_back(commit);
         }
-
-        NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo commit {
-            .PartitionId = Partition,
-            .Offset = (i64)offset,
-            .KillReadSession = false,
-            .OnlyCheckCommitedToFinish = false,
-            .ReadSessionId = Session,
-            .TopicPath = topicPath
-        };
+        NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo commit {.PartitionId = Partition, .Offset = (i64)offset, .KillReadSession = false, .OnlyCheckCommitedToFinish = false, .ReadSessionId = Session};
         commits.push_back(commit);
-
-        auto kqp = std::make_shared<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper>(
-            Database, InternalClientId, commits, readId);
+        auto kqp = std::make_shared<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper>(Database, InternalClientId, Topic->GetPrimaryPath(), commits, readId);
         Kqps.emplace(readId, kqp);
 
         kqp->SendCreateSessionRequest(ctx);

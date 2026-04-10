@@ -176,29 +176,13 @@ void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TAc
     const auto& parents = GetParents(partitionGraph);
     if (!ClientHasAnyCommits && parents.size() != 0) {
         std::vector<TDistributedCommitHelper::TCommitInfo> commits;
-        auto topicPath = Topic->GetPrimaryPath();
         for (auto& parent: parents) {
-            TDistributedCommitHelper::TCommitInfo commit {
-                .PartitionId = parent->Id,
-                .Offset = Max<i64>(),
-                .KillReadSession = false,
-                .OnlyCheckCommitedToFinish = true,
-                .ReadSessionId = Session,
-                .TopicPath = topicPath
-            };
+            TDistributedCommitHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = false, .OnlyCheckCommitedToFinish = true, .ReadSessionId = Session};
             commits.push_back(commit);
         }
-
-        TDistributedCommitHelper::TCommitInfo commit {
-            .PartitionId = Partition.Partition,
-            .Offset = (i64)offset,
-            .KillReadSession = false,
-            .OnlyCheckCommitedToFinish = false,
-            .ReadSessionId = Session,
-            .TopicPath = topicPath
-        };
+        TDistributedCommitHelper::TCommitInfo commit {.PartitionId = Partition.Partition, .Offset = (i64)offset, .KillReadSession = false, .OnlyCheckCommitedToFinish = false, .ReadSessionId = Session};
         commits.push_back(commit);
-        auto kqp = std::make_shared<TDistributedCommitHelper>(Database, ClientId, commits, readId);
+        auto kqp = std::make_shared<TDistributedCommitHelper>(Database, ClientId, Topic->GetPrimaryPath(), commits, readId);
         Kqps.emplace(readId, kqp);
 
         kqp->SendCreateSessionRequest(ctx);

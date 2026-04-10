@@ -250,13 +250,15 @@ void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         }
     }
 
+    // NOTE: propagate
     // Propagate ShuffledByColumns through Map, applying column renames
     for (const auto& column : inputMetadata.ShuffledByColumns) {
         const auto it = std::find_if(
             renamesWithTransform.begin(), renamesWithTransform.end(),
             [&column](const std::pair<TInfoUnit, TInfoUnit>& rename) {
                 return column == rename.second;
-            });
+            }
+        );
 
         if (it != renamesWithTransform.end()) {
             Props.Metadata->ShuffledByColumns.push_back(it->first);
@@ -417,11 +419,9 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         Props.Metadata->ColumnLineage.Merge(GetRightInput()->Props.Metadata->ColumnLineage);
     }
 
-    // After GraceJoin both sides are hashed by the join keys, so the output
-    // is partitioned by those keys. Propagate this so chained joins can SE.
+    // NOTE: propagate
     for (const auto& [leftKey, rightKey] : JoinKeys) {
         Props.Metadata->ShuffledByColumns.push_back(leftKey);
-        Props.Metadata->ShuffledByColumns.push_back(rightKey);
     }
 }
 

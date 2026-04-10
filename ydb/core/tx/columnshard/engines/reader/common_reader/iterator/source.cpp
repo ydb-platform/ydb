@@ -158,13 +158,13 @@ ui32 IDataSource::GetRecordsCount() const {
 void IDataSource::OnStartProcessing() {
     AFL_VERIFY(!SourceCreatedTimestamp);
     SourceCreatedTimestamp = TMonotonic::Now();
+    const ui64 portionBlobBytes = HasPortionAccessor() ? GetPortionAccessor().GetPortionInfo().GetTotalBlobBytes() : 0;
+    const ui64 portionRawBytes = HasPortionAccessor() ? GetPortionAccessor().GetPortionInfo().GetTotalRawBytes() : 0;
     LWTRACK(StartSourceProcessing, DataSourceOrbit, GetRawPathId(), GetTabletId(), GetTxId(), GetDeprecatedPortionId(),
-            GetPortionAccessor().GetPortionInfo().GetTotalBlobBytes(),
-            GetPortionAccessor().GetPortionInfo().GetTotalRawBytes());
+            portionBlobBytes, portionRawBytes);
     LWTRACK(ScanStartSource, *GetContext()->GetCommonContext()->GetScanOrbit(), GetRawPathId(), GetTabletId(),
             GetTxId(), GetContext()->GetCommonContext()->GetScanId(), GetDeprecatedPortionId(),
-            GetPortionAccessor().GetPortionInfo().GetTotalBlobBytes(),
-            GetPortionAccessor().GetPortionInfo().GetTotalRawBytes());
+            portionBlobBytes, portionRawBytes);
 }
 
 void IDataSource::StartAsyncSection() {

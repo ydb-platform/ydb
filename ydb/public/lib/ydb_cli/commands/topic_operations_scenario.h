@@ -73,6 +73,7 @@ public:
     TString TableName;
     ui32 TablePartitionCount = 1;
     bool UseTransactions = false;
+    bool NoTrackProducerIdInTx = false;
     size_t CommitPeriodSeconds = 1;
     size_t TxCommitIntervalMs = 0;
     size_t CommitMessages = 1'000'000;

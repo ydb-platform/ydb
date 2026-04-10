@@ -12,6 +12,8 @@ constexpr TStringBuf MESSAGE_ATTRIBUTE_DEDUPLICATION_ID = "message_deduplication
 constexpr TStringBuf MESSAGE_ATTRIBUTE_ATTRIBUTES = "__message_attributes";
 constexpr TStringBuf MESSAGE_ATTRIBUTE_DELAY_SECONDS = "__delay_seconds";
 
+constexpr TStringBuf WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX = "track_producer_id_in_tx";
+
 constexpr ui32 METRICS_LEVEL_DISABLED = 0;
 constexpr ui32 METRICS_LEVEL_DATABASE = 1;
 constexpr ui32 METRICS_LEVEL_OBJECT = 2;

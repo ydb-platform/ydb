@@ -172,8 +172,6 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
             commit->SetClientId(Message->GroupId.value());
             commit->SetOffset(partitionRequest.CommittedOffset);
             commit->SetStrict(true);
-            commit->SetGenerationId(Message->GenerationId);
-
             if (partitionRequest.CommittedMetadata.has_value()) {
                 commit->SetCommittedMetadata(*partitionRequest.CommittedMetadata);
             }

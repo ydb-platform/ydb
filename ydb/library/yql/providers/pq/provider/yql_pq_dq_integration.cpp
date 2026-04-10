@@ -737,7 +737,6 @@ public:
             const auto maybeUserSchema = pqReadTopic.UserSchemaColumns();
             YQL_ENSURE(maybeUserSchema, "PqReadTopic csv: UserSchemaColumns is required");
             TExprNode::TPtr usc = maybeUserSchema.Cast().Ptr();
-            YQL_ENSURE(usc->IsList() && !TCoVoid::Match(usc.Get()));
             YQL_ENSURE(usc->ChildrenSize() > 0);
             YQL_ENSURE(EnsureTupleOfAtoms(*usc, ctx), "PqReadTopic csv: UserSchemaColumns must contain only column name atoms");
             props.push_back(Build<TCoNameValueTuple>(ctx, pos)

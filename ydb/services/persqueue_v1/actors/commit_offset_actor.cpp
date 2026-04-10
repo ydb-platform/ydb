@@ -161,6 +161,7 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
                     .Offset = 0,
                     .KillReadSession = true,
                     .OnlyCheckCommitedToFinish = false,
+                    // .ReadSessionId = readSessionId,
                     .TopicPath = topicPath
                 };
                 commits.push_back(commit);

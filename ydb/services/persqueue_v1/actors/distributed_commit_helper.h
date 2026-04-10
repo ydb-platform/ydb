@@ -9,8 +9,6 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace NKikimr::NGRpcService;
 
-extern const TString CHECK_GROUP_GENERATION_ID;
-
 class TDistributedCommitHelper {
 public:
     enum ECurrentStep {
@@ -63,6 +61,18 @@ private:
     TString TxId;
     TString KqpSessionId;
     std::optional<GenerationIdCheckerSettings> CheckerSettings;
+
+    const TString CHECK_GROUP_GENERATION_ID = R"sql(
+        --!syntax_v1
+        DECLARE $ConsumerGroup AS Utf8;
+        DECLARE $Database AS Utf8;
+
+        SELECT state, generation, last_success_generation
+        FROM `%s`
+        VIEW PRIMARY KEY
+        WHERE database = $Database
+        AND consumer_group = $ConsumerGroup;
+    )sql";
 };
 
 }  // namespace NKikimr::NGRpcProxy::V1

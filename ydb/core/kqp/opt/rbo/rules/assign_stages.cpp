@@ -90,7 +90,12 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
             props.StageGraph.Connect(*rightStage, newStageId, MakeIntrusive<TBroadcastConnection>(rightInputStorageType));
         }
         // For inner join (we don't support other joins yet) we build a new stage
-        // with GraceJoinCore and connect inputs via Shuffle connections
+        // with GraceJoinCore and connect inputs via Shuffle connections.
+        // Shuffle elimination: if an input is already partitioned by the join key
+        // (ShuffledByColumns covers all join keys), use TMapConnection (TDqCnMap)
+        // instead of TShuffleConnection. The HashFuncPropagate transformer will then
+        // propagate ColumnShardHashV1 from the read stage through TDqCnMap so the
+        // remaining side's TDqCnHashShuffle uses the matching hash function.
         else {
             TVector<TInfoUnit> leftShuffleKeys;
             TVector<TInfoUnit> rightShuffleKeys;
@@ -99,8 +104,40 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
                 rightShuffleKeys.push_back(key.second);
             }
 
-            props.StageGraph.Connect(*leftStage, newStageId, MakeIntrusive<TShuffleConnection>(leftShuffleKeys, leftInputStorageType));
-            props.StageGraph.Connect(*rightStage, newStageId, MakeIntrusive<TShuffleConnection>(rightShuffleKeys, rightInputStorageType));
+            bool enableSE = ctx.KqpCtx.Config->OptShuffleElimination.Get()
+                .GetOrElse(ctx.KqpCtx.Config->GetDefaultEnableShuffleElimination());
+
+            auto isAlreadyShuffled = [&](const TVector<TInfoUnit>& keys,
+                                          const std::optional<TRBOMetadata>& meta) -> bool {
+                if (!enableSE || !meta.has_value() || meta->ShuffledByColumns.empty()) {
+                    return false;
+                }
+                return std::all_of(keys.begin(), keys.end(), [&meta](const TInfoUnit& key) {
+                    return std::find(meta->ShuffledByColumns.begin(),
+                                     meta->ShuffledByColumns.end(), key)
+                           != meta->ShuffledByColumns.end();
+                });
+            };
+
+            bool leftEliminated  = isAlreadyShuffled(leftShuffleKeys,  join->GetLeftInput()->Props.Metadata);
+            bool rightEliminated = isAlreadyShuffled(rightShuffleKeys, join->GetRightInput()->Props.Metadata);
+
+            // Don't eliminate both sides at once — local join needs separate handling
+            if (leftEliminated && rightEliminated) {
+                rightEliminated = false;
+            }
+
+            if (leftEliminated) {
+                props.StageGraph.Connect(*leftStage, newStageId, MakeIntrusive<TMapConnection>(leftInputStorageType));
+            } else {
+                props.StageGraph.Connect(*leftStage, newStageId, MakeIntrusive<TShuffleConnection>(leftShuffleKeys, leftInputStorageType));
+            }
+
+            if (rightEliminated) {
+                props.StageGraph.Connect(*rightStage, newStageId, MakeIntrusive<TMapConnection>(rightInputStorageType));
+            } else {
+                props.StageGraph.Connect(*rightStage, newStageId, MakeIntrusive<TShuffleConnection>(rightShuffleKeys, rightInputStorageType));
+            }
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages join";
     } else if (input->Kind == EOperator::Filter || input->Kind == EOperator::Map) {

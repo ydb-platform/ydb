@@ -975,26 +975,22 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-    Y_UNIT_TEST(NewRBOOneJoinWithSEEnabled) {
-        // Verify that the new RBO handles a query with OptShuffleElimination=true correctly.
+    Y_UNIT_TEST(ShuffleEliminationNewRBOOneJoin) {
+        // Verify physical shuffle elimination for GraceJoin in the new RBO.
         //
-        // Note: SE in the new RBO is a CBO cost optimization only. Unlike the old optimizer
-        // (InnerJoin (BlockHash), where only one side is hash-bucketed and LHS never needs
-        // reshuffling), GraceJoin requires both sides to be co-located by the same hash
-        // function and partition count. Physical shuffle elimination for GraceJoin would
-        // require compatible partitioning at runtime — not guaranteed at compile time.
-        // So assign_stages.cpp always adds TShuffleConnection on both sides.
+        // customer is partitioned by c_custkey (the join key) → its TShuffleConnection is
+        // replaced by TMapConnection (TDqCnMap), preserving the column shard partitioning.
+        // PropogateHashFuncToHashShuffles then sets ColumnShardHashV1 on the join stage
+        // (propagated via TDqCnMap from the read stage), so the remaining TDqCnHashShuffle
+        // for orders uses the matching hash function. GraceJoin worker i receives customer
+        // rows from shard i and orders rows where ColumnShardHashV1(o_custkey) % N == i.
         //
-        // Key design of this test:
-        //   - EnableFallbackToYqlOptimizer=false: if the new RBO fails to handle the SELECT,
-        //     the query returns an error instead of silently falling back to the old optimizer.
-        //     This guarantees that a passing test means the new RBO actually handled the query.
-        //   - DDL via table client ExecuteSchemeQuery: bypasses the new RBO compile actor entirely,
-        //     so table creation always succeeds regardless of new RBO limitations.
-        //
-        // The old optimizer with OLAP tables always converts GraceJoin → BlockHash via a peephole
-        // transformer (AllowOlapDataQuery=true path). So "InnerJoin (Grace)" in the plan is
-        // uniquely produced by the new RBO.
+        // Key design:
+        //   - EnableFallbackToYqlOptimizer=false: SELECT failure surfaces as an error, not
+        //     a silent fallback. A passing test guarantees the new RBO handled the query.
+        //   - DDL via table client ExecuteSchemeQuery bypasses the new RBO compile actor.
+        //   - InnerJoin (Grace) is uniquely produced by the new RBO (old optimizer always
+        //     converts GraceJoin → BlockHash for OLAP via peephole).
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
@@ -1045,7 +1041,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto qSession = qResult.GetSession();
 
         auto explainRes = qSession.ExecuteQuery(
-            GetStatic("queries/new_rbo_one_join_se_enabled.sql"),
+            GetStatic("queries/shuffle_elimination_one_join_rbo.sql"),
             NYdb::NQuery::TTxControl::NoTx(),
             NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
         ).ExtractValueSync();
@@ -1059,8 +1055,9 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto join = joinFinder.Find({"customer", "orders"});
         // InnerJoin (Grace) confirms the new RBO was used — old optimizer always produces BlockHash for OLAP
         UNIT_ASSERT_C(join.Join == "InnerJoin (Grace)", join.Join);
-        // Both sides are HashShuffled: SE is cost-only in the new RBO, no physical shuffle elimination for GraceJoin
-        UNIT_ASSERT(join.LhsShuffled);
+        // customer is partitioned by c_custkey (join key) → LHS shuffle eliminated
+        UNIT_ASSERT(!join.LhsShuffled);
+        // orders is NOT partitioned by o_custkey → RHS still needs HashShuffle
         UNIT_ASSERT(join.RhsShuffled);
     }
 

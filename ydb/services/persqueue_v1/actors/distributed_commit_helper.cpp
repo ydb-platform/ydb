@@ -119,7 +119,7 @@ void TDistributedCommitHelper::CompareGenerations(NKqp::TEvKqp::TEvQueryResponse
         return;
     }
 
-    ui64 Generation = parser.ColumnParser("generation").GetUint64();
+    int Generation = parser.ColumnParser("generation").GetUint64();
     if (Generation != CheckerSettings->GenerationId) {
         TString errorMessage = TStringBuilder() << "Consumer group generation is outdated. Group generation=" << Generation << ", but consumer has generation=" << CheckerSettings->GenerationId;
         ctx.Send(ctx.SelfID, createErrorResponse(Ydb::StatusIds_StatusCode_PRECONDITION_FAILED, errorMessage).Release());

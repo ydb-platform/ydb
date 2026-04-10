@@ -886,7 +886,7 @@ void TKafkaBalancerActor::HeartbeatStepUpdateHeartbeatDeadlines(NKqp::TEvKqp::TE
         return;
     }
     if (groupStatus->Generation != GenerationId) {
-        SendHeartbeatResponseFail(ctx, CorrelationId, EKafkaErrors::ILLEGAL_GENERATION, TStringBuilder() << "Old or unknown group generation: " << GenerationId << ". Group generationId=" << groupStatus->Generation);
+        SendHeartbeatResponseFail(ctx, CorrelationId, EKafkaErrors::ILLEGAL_GENERATION, "Old or unknown group generation");
         return;
     }
 

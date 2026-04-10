@@ -45,11 +45,16 @@ private:
     TKqpPhyTxSettings GetPhysicalTxSettings() const;
     TExprNode::TPtr GetFinalStage(const TExprNode::TPtr& stage) const;
     TVector<TKqpParamBinding> CollectParamBindings(const TVector<TExprNode::TPtr>& physicalStages);
+    TExprNode::TPtr BuildPrecompute(TExprNode::TPtr ranges);
 
     TOpRoot& Root;
     TStageGraph Graph;
     THashMap<ui32, TExprNode::TPtr> Stages;
     THashMap<ui32, TVector<TExprNode::TPtr>> StageArgs;
     THashMap<ui32, TPositionHandle> StagePos;
+    ui32 UniqueParamsId{0};
+    // Param and PhysicalTx
+    TVector<std::pair<TExprNode::TPtr, TExprNode::TPtr>> Precomputes;
     TRBOContext& RBOCtx;
+    static constexpr TStringBuf ParamBindingName = "%kqp_precompute_param_binding_";
 };

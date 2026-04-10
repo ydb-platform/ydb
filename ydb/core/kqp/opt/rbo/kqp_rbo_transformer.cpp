@@ -392,6 +392,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     // Physical stage.
     TVector<std::unique_ptr<IRule>> physicalStageRules;
+    physicalStageRules.emplace_back(std::make_unique<TPushRangesRule>());
     physicalStageRules.emplace_back(std::make_unique<TPeepholePredicate>());
     physicalStageRules.emplace_back(std::make_unique<TPushOlapFilterRule>());
     physicalStageRules.emplace_back(std::make_unique<TPushOlapProjectionRule>());

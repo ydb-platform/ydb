@@ -1,5 +1,5 @@
 ###
-# from heare https://github.com/ydb-platform/benchhelpers/blob/main/tpcc/ydb/table_full_compact.py
+# from here https://github.com/ydb-platform/benchhelpers/blob/main/tpcc/ydb/table_full_compact.py
 ###
 
 import allure
@@ -28,13 +28,14 @@ def get_headers() -> dict[str, str]:
     if oauth:
         result['Authorization'] = 'OAuth ' + oauth
     elif YdbCluster.ydb_iam_file:
-        token = open(YdbCluster.ydb_iam_file).read().strip()
+        with open(YdbCluster.ydb_iam_file) as token_file:
+            token = token_file.read().strip()
         result['Authorization'] = 'Bearer ' + token
     return result
 
 
 def load_json(url):
-    response = requests.get(url, headers=get_headers(), verify=False)
+    response = requests.get(url, headers=get_headers(), verify=False, timeout=30)
     response.raise_for_status()
     return response.json()
 
@@ -46,7 +47,7 @@ def describe_table(path):
 
 def tablet_internals(tablet_id):
     url = URL_EXECUTOR_INTERNALS.format(url_base=YdbCluster._get_service_url(), tablet_id=tablet_id)
-    response = requests.get(url, headers=get_headers(), verify=False)
+    response = requests.get(url, headers=get_headers(), verify=False, timeout=30)
     response.raise_for_status()
     return response.text
 
@@ -69,30 +70,32 @@ def extract_force_compaction_state(text):
 
 def start_force_compaction(tablet_id, local_table_id=1001):
     url = URL_FORCE_COMPACT.format(url_base=YdbCluster._get_service_url(), tablet_id=tablet_id, local_table_id=local_table_id)
-    response = requests.get(url, headers=get_headers(), verify=False)
+    response = requests.get(url, headers=get_headers(), verify=False, timeout=30)
     response.raise_for_status()
     text = response.text
     if 'Table will be compacted in the near future' not in text:
         logging.warning(text)
 
 
-def force_compact(tablet_id, local_table_id=1001):
+def force_compact(tablet_id, timeout: float, local_table_id=1001):
     state = extract_force_compaction_state(tablet_internals(tablet_id))
     if state is None:
         start_force_compaction(tablet_id, local_table_id)
         time.sleep(0.1)
-    while True:
+    start_time = time.time()
+    while time.time() - start_time < timeout:
         prev_state = state
         state = extract_force_compaction_state(tablet_internals(tablet_id))
         if state is None:
-            break
+            return
         if state != 'Compacting' and state != prev_state:
             logging.info(f'... {state}')
         time.sleep(1)
+    raise TimeoutError(f'Compacting tablet {tablet_id} timeout ({timeout}s).')
 
 
 @allure.step
-def force_datashard_compact_legacy(tables: list[str], threads: int = 100):
+def force_datashard_compact_legacy(tables: list[str], timeout: float, threads: int = 100):
     tablet_ids = []
     for table in tables:
         for p in describe_table(table)['PathDescription']['TablePartitions']:
@@ -107,7 +110,7 @@ def force_datashard_compact_legacy(tables: list[str], threads: int = 100):
         index, count, tablet_id = task
         tablet_url = URL_EXECUTOR_INTERNALS.format(url_base=YdbCluster._get_service_url(), tablet_id=tablet_id)
         logging.info(f'[{time.ctime()}] [{index}/{count}] Compacting {tablet_id} url: {tablet_url}')
-        force_compact(tablet_id)
+        force_compact(tablet_id, timeout=timeout)
         if extract_loaned_parts(tablet_internals(tablet_id)):
             logging.info(f'[{time.ctime()}] [{index}/{count}] !!! WARNING !!! Tablet {tablet_id} has loaned parts after compaction')
 

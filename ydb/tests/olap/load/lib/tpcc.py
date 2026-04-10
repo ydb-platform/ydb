@@ -22,8 +22,10 @@ class CompactionMode(StrEnum):
     @staticmethod
     def get() -> CompactionMode:
         param = get_external_param('tpcc-compaction-mode', CompactionMode.NONE.value)
-        assert param in CompactionMode, f'invalid tpcc-compaction-mode {param}'
-        return CompactionMode(param)
+        try:
+            return CompactionMode(param)
+        except ValueError:
+            raise ValueError(f'invalid tpcc-compaction-mode {param}')
 
 
 class TpccSuiteBase(LoadSuiteBase):
@@ -74,7 +76,7 @@ class TpccSuiteBase(LoadSuiteBase):
                     'customer/idx_customer_name/indexImplTable',
                     'oorder/idx_order/indexImplTable'
                 ]
-                force_datashard_compact_legacy([f'{cls.get_tpcc_path()}/{t}' for t in tables])
+                force_datashard_compact_legacy([f'{cls.get_tpcc_path()}/{t}' for t in tables], timeout=cls.warehouses)
 
     @classmethod
     def get_key_measurements(cls) -> tuple[list[LoadSuiteBase.KeyMeasurement], str]:

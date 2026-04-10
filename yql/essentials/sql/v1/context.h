@@ -529,14 +529,8 @@ public:
         AltNotImplemented(ruleName, node.Alt_case(), node, TNode::descriptor());
     }
 
-    template <typename TNode>
-    TString AltDescription(const TNode& node) const {
-        return AltDescription(node, node.Alt_case(), TNode::descriptor());
-    }
-
 protected:
     void AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr);
-    TString AltDescription(const google::protobuf::Message& node, ui32 altCase, const google::protobuf::Descriptor* descr) const;
 
 protected:
     TContext& Ctx_;

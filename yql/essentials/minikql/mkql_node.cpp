@@ -1022,7 +1022,7 @@ TNode* TListLiteral::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
     }
 
     TRuntimeNode* allocatedItems = nullptr;
-    if (newList.size()) {
+    if (!newList.empty()) {
         allocatedItems = static_cast<TRuntimeNode*>(env.AllocateBuffer(newList.size() * sizeof(*allocatedItems)));
         for (ui32 i = 0; i < newList.size(); ++i) {
             allocatedItems[i] = newList[i];

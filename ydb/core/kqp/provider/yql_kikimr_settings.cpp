@@ -105,6 +105,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, UseDqHashCombine);
     REGISTER_SETTING(*this, UseDqHashAggregate);
     REGISTER_SETTING(*this, DqHashOperatorsUseBlocks);
+    REGISTER_SETTING(*this, DqHashCombineExportTypeInfo);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
@@ -130,7 +131,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
     );
     REGISTER_SETTING(*this, UseBlockReader);
 
-    REGISTER_SETTING(*this, MaxDPHypDPTableSize);
+    REGISTER_SETTING(*this, CBOTimeout);
+    REGISTER_SETTING(*this, CBOHardTimeout);
     REGISTER_SETTING(*this, ShuffleEliminationJoinNumCutoff);
 
     REGISTER_SETTING(*this, MaxTasksPerStage);
@@ -154,6 +156,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
                 throw yexception() << "Unknown DefaultTxMode, available: [SerializableRW, SnapshotRW, SnapshotRO, StaleRO]";
             }
         });
+    REGISTER_SETTING(*this, UseKqpTasksGraphV2);
 
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
@@ -295,6 +298,10 @@ bool TKikimrConfiguration::GetUseDqHashAggregate() const {
     return UseDqHashAggregate.Get().GetOrElse(TTableServiceConfig::GetEnableDqHashAggregateByDefault());
 }
 
+bool TKikimrConfiguration::GetDqHashCombineExportTypeInfo() const {
+    return GetFlagValue(DqHashCombineExportTypeInfo.Get());
+}
+
 bool TKikimrConfiguration::GetDqHashOperatorsUseBlocks() const {
     return DqHashOperatorsUseBlocks.Get().GetOrElse(TTableServiceConfig::GetDqHashOperatorsUseBlocks());
 }
@@ -303,4 +310,8 @@ bool TKikimrConfiguration::GetUseBlockHashJoin() const {
     return UseBlockHashJoin.Get().GetOrElse(TTableServiceConfig::GetUseBlockHashJoin());
 }
 
+bool TKikimrConfiguration::GetUseKqpTasksGraphV2() const {
+    return UseKqpTasksGraphV2.Get().GetOrElse(TTableServiceConfig::GetUseKqpTasksGraphV2());
 }
+
+} // namespace NYql

@@ -95,7 +95,7 @@ public:
     virtual void CheckReadConflict(const TRowVersion& rowVersion) = 0;
     virtual void CheckReadDependency(ui64 txId) = 0;
 
-    virtual void CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> keyCells) = 0;
+    virtual void CheckWriteConflicts(const TTableId& tableId, TConstArrayRef<const TCell> keyCells) = 0;
 
     /**
      * Called to handle new uncommitted writes potentially conflicting with
@@ -209,7 +209,7 @@ public:
     void CheckReadConflict(const TRowVersion& rowVersion) override;
     void CheckReadDependency(ui64 txId) override;
 
-    void CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> keyCells) override;
+    void CheckWriteConflicts(const TTableId& tableId, TConstArrayRef<const TCell> keyCells) override;
     void AddWriteConflict(ui64 txId) override;
     bool BreakWriteConflict(ui64 txId) override;
 

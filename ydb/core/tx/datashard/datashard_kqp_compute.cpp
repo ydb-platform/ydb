@@ -18,9 +18,6 @@ typedef IComputationNode* (*TCallableDatashardBuilderFunc)(TCallable& callable,
 
 struct TKqpDatashardComputationMap {
     TKqpDatashardComputationMap() {
-        Map["KqpUpsertRows"] = &WrapKqpUpsertRows;
-        Map["KqpDeleteRows"] = &WrapKqpDeleteRows;
-        Map["KqpEffects"] = &WrapKqpEffects;
     }
 
     THashMap<TString, TCallableDatashardBuilderFunc> Map;

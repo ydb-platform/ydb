@@ -145,6 +145,7 @@
 #include <ydb/services/ydb/ydb_debug.h>
 #include <ydb/services/ydb/ydb_query.h>
 #include <ydb/services/ydb/ydb_scheme.h>
+#include <ydb/services/ydb/ydb_secret.h>
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
 #include <ydb/services/ydb/ydb_object_storage.h>
@@ -869,6 +870,8 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         TServiceCfg hasNbs = services.empty();
         names["nbs"] = &hasNbs;
 #endif
+        TServiceCfg hasSecretService = services.empty();
+        names["secret"] = &hasSecretService;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -1024,6 +1027,11 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
             // We have no way to disable or enable this service explicitly
             server.AddService(new NGRpcService::TGRpcYdbSchemeService(ActorSystem.Get(), Counters,
                 grpcRequestProxies[0], true /*hasSchemeService.IsRlAllowed()*/));
+        }
+
+        if (hasSecretService) {
+            server.AddService(new NGRpcService::TGRpcYdbSecretService(ActorSystem.Get(), Counters,
+                grpcRequestProxies[0], hasSecretService.IsRlAllowed()));
         }
 
         if (hasOperationService) {
@@ -1839,6 +1847,14 @@ void TKikimrRunner::InitializeActorSystem(
                 MakeMonGetBlobId());
 
         Monitoring->RegisterActorPage(
+                ActorsMonPage,
+                "persistent_buffer",
+                "Persistent Buffer",
+                false,
+                ActorSystem.Get(),
+                MakeMonPersistentBufferID(runConfig.NodeId));
+
+        Monitoring->RegisterActorPage(
                 nullptr,
                 "blob_range",
                 TString(),
@@ -2046,6 +2062,8 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnableNetClassifier) {
         sil->AddServiceInitializer(new TNetClassifierInitializer(runConfig));
     }
+
+    sil->AddServiceInitializer(new TMonPersistentBufferInitializer(runConfig));
 
     sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig, ProcessMemoryInfoProvider));
 

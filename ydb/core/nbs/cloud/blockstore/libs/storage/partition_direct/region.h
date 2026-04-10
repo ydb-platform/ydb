@@ -21,6 +21,7 @@ public:
         ui32 regionIndex,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
         ui32 syncRequestsBatchSize,
+        ui64 vChunkSize,
         TDuration writeHandoffDelay,
         TDuration traceSamplePeriod);
 
@@ -33,7 +34,7 @@ public:
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         EWriteMode writeMode,
-        ui32 pbufferReplyTimeoutMicroseconds,
+        TDuration pbufferReplyTimeout,
         ui64 lsn,
         const NWilson::TTraceId& traceId);
 

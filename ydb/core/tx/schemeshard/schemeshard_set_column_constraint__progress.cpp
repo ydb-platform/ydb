@@ -438,18 +438,6 @@ private:
 
         TTableInfo::TPtr table = Self->Tables.at(path->PathId);
 
-        if (!operationInfo.ValidationSnapshotTxId) {
-            Y_ENSURE(Self->TablesWithSnapshots.contains(operationInfo.TablePathId));
-            Y_ENSURE(Self->TablesWithSnapshots.at(operationInfo.TablePathId) == operationInfo.LockTxId);
-            
-            operationInfo.ValidationSnapshotTxId = operationInfo.LockTxId;
-            Y_ENSURE(operationInfo.ValidationSnapshotTxId);
-            operationInfo.ValidationSnapshotStep = Self->SnapshotsStepIds.at(operationInfo.ValidationSnapshotTxId);
-            Y_ENSURE(operationInfo.ValidationSnapshotStep);
-            
-            // todo: persist snapshot info
-        }
-
         for (const auto& partition : table->GetPartitions()) {
             Y_ENSURE(Self->ShardInfos.contains(partition.ShardIdx));
             
@@ -480,12 +468,6 @@ private:
 
         record.SetOwnerId(operationInfo.TablePathId.OwnerId);
         record.SetPathId(operationInfo.TablePathId.LocalPathId);
-
-        if (operationInfo.ValidationSnapshotTxId) {
-            Y_ENSURE(operationInfo.ValidationSnapshotStep);
-            record.SetSnapshotTxId(ui64(operationInfo.ValidationSnapshotTxId));
-            record.SetSnapshotStep(ui64(operationInfo.ValidationSnapshotStep));
-        }
 
         auto& shardStatus = operationInfo.ValidationShards.at(shardIdx);
         record.SetSeqNoGeneration(Self->Generation());
@@ -540,11 +522,11 @@ public:
     {}
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& /*ctx*/) override {
-        LOG_D("TTxProgressSetColumnConstraint::DoExecute, id# " << BuildId);
-
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
         Y_ENSURE(operationInfoPtr);
         auto& operationInfo = *operationInfoPtr->get();
+
+        LOG_D("TTxProgressSetColumnConstraint::DoExecute, id# " << BuildId << "; OperationState = " << operationInfo.OperationState.GetStringValue());
 
         switch (operationInfo.OperationState) {
             case TSetColumnConstraintOperationInfo::EOperationState::Invalid: {
@@ -621,7 +603,6 @@ public:
             }
             case TSetColumnConstraintOperationInfo::EOperationState::Done: {
                 SendNotificationsIfFinished(operationInfo);
-                // stay calm keep status/issues
                 break;
             }
         }

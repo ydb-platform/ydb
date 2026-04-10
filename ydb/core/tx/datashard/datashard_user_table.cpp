@@ -1,12 +1,32 @@
 #include "datashard_user_table.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
 
 #include <util/generic/algorithm.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+
+#if defined LOG_T || \
+    defined LOG_D || \
+    defined LOG_I || \
+    defined LOG_N || \
+    defined LOG_W || \
+    defined LOG_E || \
+    defined LOG_C
+    #error log macro redefinition
+#endif
+
+#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+#define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 
 namespace NKikimr {
 
@@ -533,6 +553,14 @@ void TUserTable::ApplyAlter(
         TTransactionContext& txc, const TUserTable& oldTable,
         const NKikimrSchemeOp::TTableDescription& delta, TString& strError)
 {
+    LOG_E("TUserTable::ApplyAlter begin"
+        << " path# " << Path
+        << " localTid# " << LocalTid
+        << " shadowTid# " << ShadowTid
+        << " oldColumns# " << oldTable.Columns.size()
+        << " newColumns# " << Columns.size()
+        << " delta# " << delta.ShortDebugString());
+
     const auto& configDelta = delta.GetPartitionConfig();
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);
@@ -589,14 +617,35 @@ void TUserTable::ApplyAlter(
         ui32 colId = col.first;
         const TUserColumn& column = col.second;
 
-        if (!oldTable.Columns.contains(colId)) {
-            for (ui32 tid : tids) {
-                auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-                alter.AddColumnWithTypeInfo(tid, column.Name, colId, columnType.TypeId, columnType.TypeInfo, column.NotNull, false);
-            }
+        LOG_E("TUserTable::ApplyAlter column begin"
+            << " path# " << Path
+            << " colId# " << colId
+            << " name# " << column.Name
+            << " family# " << column.Family
+            << " notNull# " << (column.NotNull ? "true" : "false")
+            << " oldExists# " << (oldTable.Columns.contains(colId) ? "true" : "false"));
+
+        // if (!oldTable.Columns.contains(colId)) {
+        for (ui32 tid : tids) {
+            auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
+            LOG_E("TUserTable::ApplyAlter AddColumnWithTypeInfo"
+                << " path# " << Path
+                << " tid# " << tid
+                << " colId# " << colId
+                << " name# " << column.Name
+                << " typeId# " << columnType.TypeId
+                << " notNull# " << (column.NotNull ? "true" : "false"));
+            alter.AddColumnWithTypeInfo(tid, column.Name, colId, columnType.TypeId, columnType.TypeInfo, column.NotNull, false);
         }
+        // }
 
         for (ui32 tid : tids) {
+            LOG_E("TUserTable::ApplyAlter AddColumnToFamily"
+                << " path# " << Path
+                << " tid# " << tid
+                << " colId# " << colId
+                << " family# " << column.Family
+                << " notNull# " << (column.NotNull ? "true" : "false"));
             alter.AddColumnToFamily(tid, colId, column.Family);
         }
     }

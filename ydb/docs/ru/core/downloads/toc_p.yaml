@@ -1,2 +1,6 @@
 items:
+- name: Список изменений
+  include:
+    mode: link
+    path: ../toc_changelog.yaml
 - include: { mode: link, path: toc_i.yaml }

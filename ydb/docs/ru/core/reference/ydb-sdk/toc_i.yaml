@@ -35,22 +35,24 @@ items:
     href: session-pool-limit.md
   - name: Выполнение повторных запросов
     href: retry.md
-  - name: Обработка ошибок в API
-    href: error_handling.md
     items:
-    - name: Статусы завершения сервера YDB
-      href: ydb-status-codes.md
-    - name: Статусы завершения gRPC
-      href: grpc-status-codes.md
+    - name: Обработка ошибок в API
+      href: error_handling.md
+      items:
+      - name: Статусы завершения сервера YDB
+        href: ydb-status-codes.md
+      - name: Статусы завершения gRPC
+        href: grpc-status-codes.md
   - name: Параметризованные запросы
     href: parameterized_queries.md
-  - name: Форматы данных
-    href: data-formats/index.md
     items:
-    - name: Protobuf (Value)
-      href: data-formats/format-protobuf.md
-    - name: Apache Arrow
-      href: data-formats/format-arrow.md
+    - name: Форматы данных
+      href: data-formats/index.md
+      items:
+      - name: Protobuf (Value)
+        href: data-formats/format-protobuf.md
+      - name: Apache Arrow
+        href: data-formats/format-arrow.md
   - name: Вставка данных
     href: upsert.md
   - name: Пакетная вставка данных

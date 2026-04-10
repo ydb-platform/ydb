@@ -38,16 +38,18 @@ items:
   include:
     mode: link
     path: reference/toc_p.yaml
-- name: Диагностика проблем
-  href: troubleshooting/index.md
-  include:
-    mode: link
-    path: troubleshooting/toc_p.yaml
-- name: Вопросы и ответы
-  href: faq/index.md
-  include:
-    mode: link
-    path: faq/toc_p.yaml
+- name: Проблемы и решения
+  items:
+    - name: Диагностика проблем
+      href: troubleshooting/index.md
+      include:
+        mode: link
+        path: troubleshooting/toc_p.yaml
+    - name: Вопросы и ответы
+      href: faq/index.md
+      include:
+        mode: link
+        path: faq/toc_p.yaml
 - name: Загрузки
   href: downloads/index.md
   include:
@@ -57,10 +59,6 @@ items:
   include:
     mode: link
     path: public-materials/toc_p.yaml
-- name: Список изменений
-  include:
-    mode: link
-    path: toc_changelog.yaml
 - name: Обучение
   labeled: true
   when: audience != "tech"

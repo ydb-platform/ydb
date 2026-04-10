@@ -159,12 +159,12 @@ Dasboard displays metrics for the topic and consumer selected in the correspondi
 | Total outgoing records (bytes) per second | Number of bytes per second read from the topic by the consumer using `Ydb::TopicService::StreamRead` |
 | Total incoming records (count) per second | Number of messages per second written using `Ydb::TopicService::StreamWrite` |
 | Total outgoing records (count) per second | Number of messages per second read from the topic by the consumer using `Ydb::TopicService::StreamRead` |
-| End-to-end latency |  Time from when a message is created to when it is read by the consumer. Percentage of messages whose end-to-end latency falls within thresholds: <100 ms, <200 ms, etc. |
-| Read latency max | The maximum (across all partitions) difference between the current time and the write time of the most recently written message |
-| Unread messages max | The maximum difference (across all partitions) of the last offset in the partition and the last commited offset |
+| End-to-end latency | Time from when a message is created to when it is read by the consumer. Percentage of messages whose end-to-end latency falls within thresholds: <100 ms, <200 ms, etc. |
+| Read latency max | The maximum (across all partitions) difference between the current time and the write time of the most recently written message, ms |
+| Unread messages max | The maximum difference (across all partitions) between the latest offset in the partition and the last read offset, in messages |
 | Read idle time max | Maximum idle time (how long the topic partition was not read by the consumer) for all partitions, ms |
-| Uncommitted messages max | The maximum (across all partitions) number of messages after last committed offset |
+| Uncommitted messages max | The maximum (across all partitions) difference between the latest partition offset and the last committed offset, in messages |
 | Committed read lag max | The maximum (across all partitions) difference between the current time and the write time of the last committed message, ms |
 | Partition sessions started | Number of topic read sessions started by the consumer per second |
 
-Download the [topic-consumer.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/topic-consumer.json) file with the **Topic** dashboard.
+Download the [topic-consumer.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/topic-consumer.json) file with the **Topic — Consumer** dashboard.

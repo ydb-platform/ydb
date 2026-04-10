@@ -150,98 +150,65 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
                 AddPartitionResponse(UNKNOWN_TOPIC_OR_PARTITION, topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
                 continue;
             }
-            if (Message->GenerationId == -1) {
-                ui64 tabletId = tabletIdIt->second.TabletId;
 
-                if (!TabletIdToPipe.contains(tabletId)) {
-                    NTabletPipe::TClientConfig clientConfig;
-                    clientConfig.RetryPolicy = RetryPolicyForPipes;
-                    TabletIdToPipe[tabletId] = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
-                }
+            ui64 tabletId = tabletIdIt->second.TabletId;
 
-                NKikimrClient::TPersQueueRequest request;
-                request.MutablePartitionRequest()->SetTopic(topicIt->second.TopicNameConverter->GetPrimaryPath());
-                request.MutablePartitionRequest()->SetPartition(partitionRequest.PartitionIndex);
-                request.MutablePartitionRequest()->SetCookie(NextCookie);
-
-                TRequestInfo info(topicReq.Name.value(), partitionRequest.PartitionIndex);
-
-                CookieToRequestInfo.emplace(std::make_pair(NextCookie, info));
-                TabletIdToCookies[tabletId].push_back(NextCookie);
-                NextCookie++;
-
-                auto commit = request.MutablePartitionRequest()->MutableCmdSetClientOffset();
-                commit->SetClientId(Message->GroupId.value());
-                commit->SetOffset(partitionRequest.CommittedOffset);
-                commit->SetStrict(true);
-
-                if (partitionRequest.CommittedMetadata.has_value()) {
-                    commit->SetCommittedMetadata(*partitionRequest.CommittedMetadata);
-                }
-
-                PendingResponses++;
-                KAFKA_LOG_D("Send commit request for group# " << Message->GroupId.value() <<
-                    ", topic# " << topicIt->second.TopicNameConverter->GetPrimaryPath() <<
-                    ", partition# " << partitionRequest.PartitionIndex <<
-                    ", offset# " << partitionRequest.CommittedOffset);
-
-                TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
-                req->Record.Swap(&request);
-                NTabletPipe::SendData(ctx, TabletIdToPipe[tabletId], req.Release());
-            } else {
-                NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo commitReq {.PartitionId = (ui64)partitionRequest.PartitionIndex,
-                                                                                       .Offset = (i64)partitionRequest.CommittedOffset, .KillReadSession = false,
-                                                                                       .OnlyCheckCommitedToFinish = false,
-                                                                                       .ReadSessionId = {},
-                                                                                       .TopicPath = topicIt->second.TopicNameConverter->GetPrimaryPath()};
-                commits.push_back(commitReq);
+            if (!TabletIdToPipe.contains(tabletId)) {
+                NTabletPipe::TClientConfig clientConfig;
+                clientConfig.RetryPolicy = RetryPolicyForPipes;
+                TabletIdToPipe[tabletId] = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
             }
+
+            NKikimrClient::TPersQueueRequest request;
+            request.MutablePartitionRequest()->SetTopic(topicIt->second.TopicNameConverter->GetPrimaryPath());
+            request.MutablePartitionRequest()->SetPartition(partitionRequest.PartitionIndex);
+            request.MutablePartitionRequest()->SetCookie(NextCookie);
+
+            TRequestInfo info(topicReq.Name.value(), partitionRequest.PartitionIndex);
+
+            CookieToRequestInfo.emplace(std::make_pair(NextCookie, info));
+            TabletIdToCookies[tabletId].push_back(NextCookie);
+            NextCookie++;
+
+            auto commit = request.MutablePartitionRequest()->MutableCmdSetClientOffset();
+            commit->SetClientId(Message->GroupId.value());
+            commit->SetOffset(partitionRequest.CommittedOffset);
+            commit->SetStrict(true);
+
+            if (partitionRequest.CommittedMetadata.has_value()) {
+                commit->SetCommittedMetadata(*partitionRequest.CommittedMetadata);
+            }
+
+            PendingResponses++;
+            KAFKA_LOG_D("Send commit request for group# " << Message->GroupId.value() <<
+                ", topic# " << topicIt->second.TopicNameConverter->GetPrimaryPath() <<
+                ", partition# " << partitionRequest.PartitionIndex <<
+                ", offset# " << partitionRequest.CommittedOffset);
+
+            TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
+            req->Record.Swap(&request);
+            NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo commitReq {.PartitionId = (ui64)partitionRequest.PartitionIndex, .Offset = (i64)partitionRequest.CommittedOffset, .KillReadSession = false, .OnlyCheckCommitedToFinish = false, .ReadSessionId = {}};
+            commits.push_back(commitReq);
+            NTabletPipe::SendData(ctx, TabletIdToPipe[tabletId], req.Release());
         }
     }
-    if (!Kqp && Message->GenerationId != -1) {
-        // не нужно ли тут всегда проверять !Kqp. Может ли переиспользоваться один актор? Вроде, нет?
+    if (!Kqp) {
+        // не нужно ли тут всегда
         Kqp = std::make_shared<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper>(Context->DatabasePath, Message->GroupId.value(), commits, readId);
         Kqp->SendCreateSessionRequest(ctx);
     }
 }
 
-void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
+void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext&) {
     KAFKA_LOG_D(ev->Cookie);
-    if (!Kqp->Handle(ev, ctx)) {
-        const auto& record = ev->Get()->Record;
-        Error = ConvertErrorCode(record.GetYdbStatus());
-        ctx.Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
-    }
-    // !!! добавить обработку ошибок и подумать про Die(ctx);
+    // auto kqpIt = Kqps.find(ev->Cookie);
+    // if (kqpIt == Kqps.end()) {
+    //     ctx.Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, NKafka::EKafkaErrors::ILLEGAL_GENERATION));
+    //     return;
+    // }
     return;
 }
-void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-    auto& record = ev->Get()->Record;
-    if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-        Error = ConvertErrorCode(record.GetYdbStatus());
-        auto kqpQueryError = TStringBuilder() << "Kqp error. Status# " << record.GetYdbStatus() << ", ";
 
-        NYql::TIssues issues;
-        NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
-        kqpQueryError << issues.ToString();
-
-        ctx.Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
-        return;
-    }
-
-    auto step = Kqp->Handle(ev, ctx);
-
-    if (step == NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::ECurrentStep::DONE) {
-         for (auto topicReq: Message->Topics) {
-            for (auto partitionRequest: topicReq.Partitions) {
-                AddPartitionResponse(ConvertErrorCode(record.GetYdbStatus()), topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
-            }
-        }
-        Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
-        // Die(ctx);
-    }
-    return;
-}
 void TKafkaOffsetCommitActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& partitionResult = ev->Get()->Record.GetPartitionResponse();
     auto requestInfo = CookieToRequestInfo.find(partitionResult.GetCookie());

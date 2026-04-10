@@ -12,6 +12,16 @@
 
 namespace NKikimr::NDDisk {
 
+    void TDDiskActor::IssuePersistentBufferChunkAllocation() {
+        Y_ABORT_UNLESS(IsPersistentBufferActor);
+        if (!IssuePersistentBufferChunkAllocationInflight) {
+            IssuePersistentBufferChunkAllocationInflight = true;
+            auto ddiskActorId = MakeBlobStorageDDiskId(SelfId().NodeId(), BaseInfo.PDiskId, BaseInfo.VDiskSlotId);
+            Send(ddiskActorId, new TEvPrivate::TEvIssuePersistentBufferChunkAllocation());
+            STLOG(PRI_DEBUG, BS_DDISK, BSDD14, "TDDiskActor::ProcessPersistentBufferWrite empty space, request new chunk", (FreeSpace, PersistentBufferSpaceAllocator.GetFreeSpace()));
+        }
+    }
+
     void TDDiskActor::InitPersistentBuffer() {
         Y_ABORT_UNLESS(IsPersistentBufferActor);
         Y_ABORT_UNLESS(DiskFormat);
@@ -362,7 +372,17 @@ namespace NKikimr::NDDisk {
         const TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();
         ui32 sectorsCnt = selector.Size / SectorSize + 1;
+
+        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.WritePersistentBuffer",
+                NWilson::EFlags::NONE, TActivationContext::ActorSystem())
+            .Attribute("tablet_id", static_cast<long>(creds.TabletId))
+            .Attribute("vchunk_index", static_cast<long>(selector.VChunkIndex))
+            .Attribute("offset_in_bytes", selector.OffsetInBytes)
+            .Attribute("size", selector.Size)
+            .Attribute("lsn", static_cast<long>(lsn)));
+
         const auto sectors = PersistentBufferSpaceAllocator.Occupy(sectorsCnt);
+        span.Event("Occupy");
         if (sectors.size() == 0) {
             if (PersistentBufferSpaceAllocator.OwnedChunks.size() < PersistentBufferFormat.MaxChunks) {
                 PendingPersistentBufferEvents.emplace(ev, "WaitingPersistentBufferWrite");
@@ -377,24 +397,19 @@ namespace NKikimr::NDDisk {
             return;
         }
         Y_ABORT_UNLESS(sectors.size() == sectorsCnt && sectorsCnt <= MaxSectorsPerBufferRecord + 1 && sectorsCnt > 1);
+        Counters.Interface.WritePersistentBuffer.Request(selector.Size);
 
         const TWriteInstruction instr(record.GetInstruction());
         TRope payload;
         if (instr.PayloadId) {
             payload = ev->Get()->GetPayload(*instr.PayloadId);
         }
-        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.WritePersistentBuffer",
-                NWilson::EFlags::NONE, TActivationContext::ActorSystem())
-            .Attribute("tablet_id", static_cast<long>(creds.TabletId))
-            .Attribute("vchunk_index", static_cast<long>(selector.VChunkIndex))
-            .Attribute("offset_in_bytes", selector.OffsetInBytes)
-            .Attribute("size", selector.Size)
-            .Attribute("lsn", static_cast<long>(lsn)));
-        Counters.Interface.WritePersistentBuffer.Request(selector.Size);
+
+        span.Event("Begin SlicePersistentBuffer");
 
         auto parts = SlicePersistentBuffer(creds.TabletId, creds.Generation,
             selector.VChunkIndex, lsn, selector.OffsetInBytes, selector.Size, TRope(payload), sectors);
-
+        span.Event("End SlicePersistentBuffer");
         auto opCookie = NextCookie++;
         auto& inflightRecord = PersistentBufferDiskOperationInflight[opCookie];
         inflightRecord = {
@@ -424,6 +439,8 @@ namespace NKikimr::NDDisk {
             partOp->SetCookie(opCookie);
             partOp->SetPartCookie(cookie);
             partOp->PrepareWrite(std::move(data), diskOffset, chunkIdx, offset);
+            span.Event("DirectUringOp");
+
             DirectUringOp(op);
         }
     }

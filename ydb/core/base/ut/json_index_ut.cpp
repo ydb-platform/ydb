@@ -79,7 +79,6 @@ const TString nullSuffix = TString("\0\2", 2);
 const TString compError = "Comparison is not allowed between literals on both sides";
 const TString varError = "Variables are not supported at the moment";
 const TString predError = "Predicates are not allowed in this context";
-const TString mixError = "Cannot mix AND and OR operators in jsonpath expression";
 const TString filterError = "'@' is only allowed inside filters";
 
 }  // namespace
@@ -677,13 +676,13 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonValue("($.a != 5) || ($.b == 1)", {"\1a", "\1b" + numSuffix(1)});
         ValidateJsonValue("($.a < -5) || ($.b > 1) || ($.c != 3)", {"\1a", "\1b", "\1c"});
 
-        // Two-path comparison produces 2 tokens, And mode, cannot be used in OR
-        ValidateError("($.a < $.b) || ($.c > 1)", mixError, ECallableType::JsonValue);
-        ValidateError("($.a != $.b) || ($.c == -1)", mixError, ECallableType::JsonValue);
+        // Two-path comparison (And mode) mixed with OR: OR wins
+        ValidateJsonValue("($.a < $.b) || ($.c > 1)", {"\1a", "\1b", "\1c"});
+        ValidateJsonValue("($.a != $.b) || ($.c == -1)", {"\1a", "\1b", "\1c" + numSuffix(-1)});
 
-        // AND chain of two single-path predicates, 2 tokens, And mode, cannot be combined with OR
-        ValidateError("($.a < -5) && ($.b == 1) || ($.c > 2)", mixError, ECallableType::JsonValue);
-        ValidateError("($.a < -5) && ($.b > -1) || ($.c != 3)", mixError, ECallableType::JsonValue);
+        // AND chain with OR: OR wins, all tokens become OR
+        ValidateJsonValue("($.a < -5) && ($.b == 1) || ($.c > 2)", {"\1a", "\1b" + numSuffix(1), "\1c"});
+        ValidateJsonValue("($.a < -5) && ($.b > -1) || ($.c != 3)", {"\1a", "\1b", "\1c"});
 
         // Variables
         ValidateError("$var < 5", varError, ECallableType::JsonValue);
@@ -744,9 +743,9 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonExists("$.a ? ((@.b < 5) || (@.c > 10))", {"\1a\1b", "\1a\1c"});
         ValidateJsonExists("$.a ? ((@.b != 1) || (@.c != 2))", {"\1a\1b", "\1a\1c"});
 
-        // Mixing AND and OR inside filter is still forbidden
-        ValidateError("$.a ? ((@.b < 5) && ((@.c > 1) || (@.d > 2)))", mixError, ECallableType::JsonExists);
-        ValidateError("$.a ? (((@.b < 5) || (@.c > 1)) && @.d > 2)", mixError, ECallableType::JsonExists);
+        // Mixing AND and OR inside filter: OR wins
+        ValidateJsonExists("$.a ? ((@.b < 5) && ((@.c > 1) || (@.d > 2)))", {"\1a\1b", "\1a\1c", "\1a\1d"});
+        ValidateJsonExists("$.a ? (((@.b < 5) || (@.c > 1)) && @.d > 2)", {"\1a\1b", "\1a\1c", "\1a\1d"});
 
         // Nested predicate in filter operand is blocked (EMode::Predicate on operand)
         ValidateError("$.a ? (($.b == 1) < 5)", predError, ECallableType::JsonExists);
@@ -854,11 +853,11 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateError("($.a starts with \"x\") && ($.b == 1)", predError, ECallableType::JsonExists);
         ValidateError("exists($.a) && exists($.b)", predError, ECallableType::JsonExists);
 
-        // Cannot mix AND and OR operators in jsonpath expression
-        ValidateError("(($.a == 1) && ($.b == 2)) || ($.c == 3)", mixError, ECallableType::JsonValue);
-        ValidateError("($.a == 1) || (($.b == 2) && ($.c == 3))", mixError, ECallableType::JsonValue);
-        ValidateError("($.a == 1) && (($.b == 2) || ($.c == 3))", mixError, ECallableType::JsonValue);
-        ValidateError("(($.a == 1) || ($.b == 2)) && ($.c == 3)", mixError, ECallableType::JsonValue);
+        // Mixing AND and OR: OR wins, all tokens become OR
+        ValidateJsonValue("(($.a == 1) && ($.b == 2)) || ($.c == 3)", {"\1a" + numSuffix(1), "\1b" + numSuffix(2), "\1c" + numSuffix(3)});
+        ValidateJsonValue("($.a == 1) || (($.b == 2) && ($.c == 3))", {"\1a" + numSuffix(1), "\1b" + numSuffix(2), "\1c" + numSuffix(3)});
+        ValidateJsonValue("($.a == 1) && (($.b == 2) || ($.c == 3))", {"\1a" + numSuffix(1), "\1b" + numSuffix(2), "\1c" + numSuffix(3)});
+        ValidateJsonValue("(($.a == 1) || ($.b == 2)) && ($.c == 3)", {"\1a" + numSuffix(1), "\1b" + numSuffix(2), "\1c" + numSuffix(3)});
 
         // Nested predicates: AND appears in predicate position (inside exists / is unknown / == literal)
         // BinaryAnd inherits EMode::Predicate and its operands (==, starts with, like_regex, exists) are blocked
@@ -935,17 +934,16 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateError("($.a starts with \"x\") || ($.b == 1)", predError, ECallableType::JsonExists);
         ValidateError("exists($.a) || exists($.b)", predError, ECallableType::JsonExists);
 
-        // Arithmetic with multiple paths implies mode=And - mixing with OR is forbidden
-        // ($.a + $.b) == "x" collects two path tokens, And mode, which conflicts with ||
-        ValidateError("($.a + $.b == \"x\") || ($.c == 1)", mixError, ECallableType::JsonValue);
-        ValidateError("($.c == 1) || ($.a + $.b == \"x\")", mixError, ECallableType::JsonValue);
-        ValidateError("($.a.size() + $.b.abs() == 5) || ($.c == null)", mixError, ECallableType::JsonValue);
+        // Arithmetic with multiple paths (And mode) mixed with OR: OR wins
+        ValidateJsonValue("($.a + $.b == \"x\") || ($.c == 1)", {"\1a", "\1b", "\1c" + numSuffix(1)});
+        ValidateJsonValue("($.c == 1) || ($.a + $.b == \"x\")", {"\1c" + numSuffix(1), "\1a", "\1b"});
+        ValidateJsonValue("($.a.size() + $.b.abs() == 5) || ($.c == null)", {"\1a", "\1b", "\1c" + nullSuffix});
 
-        // mixing OR and AND - all four placement variants
-        ValidateError("(($.a == 1) && ($.b == 2)) || ($.c == 3)", mixError, ECallableType::JsonValue);
-        ValidateError("($.a == 1) || (($.b == 2) && ($.c == 3))", mixError, ECallableType::JsonValue);
-        ValidateError("($.a == 1) && (($.b == 2) || ($.c == 3))", mixError, ECallableType::JsonValue);
-        ValidateError("(($.a == 1) || ($.b == 2)) && ($.c == 3)", mixError, ECallableType::JsonValue);
+        // Mixing AND and OR: OR wins
+        ValidateJsonValue("(($.a == 1) && ($.b == 2)) || ($.c == 3)", {"\1a" + numSuffix(1), "\1b" + numSuffix(2), "\1c" + numSuffix(3)});
+        ValidateJsonValue("($.a == 1) || (($.b == 2) && ($.c == 3))", {"\1a" + numSuffix(1), "\1b" + numSuffix(2), "\1c" + numSuffix(3)});
+        ValidateJsonValue("($.a == 1) && (($.b == 2) || ($.c == 3))", {"\1a" + numSuffix(1), "\1b" + numSuffix(2), "\1c" + numSuffix(3)});
+        ValidateJsonValue("(($.a == 1) || ($.b == 2)) && ($.c == 3)", {"\1a" + numSuffix(1), "\1b" + numSuffix(2), "\1c" + numSuffix(3)});
 
         // Nested predicates: OR appears in predicate position (inside exists / is unknown / == literal)
         ValidateError("exists(($.a == 1) || ($.b == 2))", predError, ECallableType::JsonValue);
@@ -979,44 +977,43 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonValue("($.a + $.b == \"x\") && ($.c + $.d == \"y\") && ($.e == 1)",
             {"\1a", "\1b", "\1c", "\1d", "\1e" + numSuffix(1)});
 
-        // (A && B) || (C && D): both sides carry mode=And, BinaryOr detects conflict on left
-        ValidateError("(($.a == 1) && ($.b == 2)) || (($.c == 3) && ($.d == 4))",
-            mixError, ECallableType::JsonValue);
-        // AND of two OR sub-expressions: both sides carry mode=Or, BinaryAnd detects conflict
-        ValidateError("(($.a == 1) || ($.b == 2)) && (($.c == 3) || ($.d == 4))",
-            mixError, ECallableType::JsonValue);
+        // (A && B) || (C && D): OR wins, all tokens become OR
+        ValidateJsonValue("(($.a == 1) && ($.b == 2)) || (($.c == 3) && ($.d == 4))",
+            {"\1a" + numSuffix(1), "\1b" + numSuffix(2), "\1c" + numSuffix(3), "\1d" + numSuffix(4)});
+        // (A || B) && (C || D): OR wins, all tokens become OR
+        ValidateJsonValue("(($.a == 1) || ($.b == 2)) && (($.c == 3) || ($.d == 4))",
+            {"\1a" + numSuffix(1), "\1b" + numSuffix(2), "\1c" + numSuffix(3), "\1d" + numSuffix(4)});
 
-        // A && (B || (C || D)): right side is deep OR chain, mode=Or propagates up, BinaryAnd errors
-        ValidateError("($.a == 1) && (($.b == 2) || (($.c == 3) || ($.d == 4)))",
-            mixError, ECallableType::JsonValue);
-        // A && (B && (C || D)): innermost BinaryAnd sees Or on right, error propagates up
-        ValidateError("($.a == 1) && (($.b == 2) && (($.c == 3) || ($.d == 4)))",
-            mixError, ECallableType::JsonValue);
+        // A && (B || (C || D)): OR wins
+        ValidateJsonValue("($.a == 1) && (($.b == 2) || (($.c == 3) || ($.d == 4)))",
+            {"\1a" + numSuffix(1), "\1b" + numSuffix(2), "\1c" + numSuffix(3), "\1d" + numSuffix(4)});
+        // A && (B && (C || D)): OR wins
+        ValidateJsonValue("($.a == 1) && (($.b == 2) && (($.c == 3) || ($.d == 4)))",
+            {"\1a" + numSuffix(1), "\1b" + numSuffix(2), "\1c" + numSuffix(3), "\1d" + numSuffix(4)});
 
-        // A || (B && (C && D)): right side is deep AND chain, mode=And propagates up, BinaryOr errors
-        ValidateError("($.a == 1) || (($.b == 2) && (($.c == 3) && ($.d == 4)))",
-            mixError, ECallableType::JsonValue);
-        // A || (B || (C && D)): innermost BinaryOr sees And on right, error propagates up
-        ValidateError("($.a == 1) || (($.b == 2) || (($.c == 3) && ($.d == 4)))",
-            mixError, ECallableType::JsonValue);
+        // A || (B && (C && D)): OR wins
+        ValidateJsonValue("($.a == 1) || (($.b == 2) && (($.c == 3) && ($.d == 4)))",
+            {"\1a" + numSuffix(1), "\1b" + numSuffix(2), "\1c" + numSuffix(3), "\1d" + numSuffix(4)});
+        // A || (B || (C && D)): OR wins
+        ValidateJsonValue("($.a == 1) || (($.b == 2) || (($.c == 3) && ($.d == 4)))",
+            {"\1a" + numSuffix(1), "\1b" + numSuffix(2), "\1c" + numSuffix(3), "\1d" + numSuffix(4)});
 
         // && binds tighter than ||
-        // A && B && C || D  =>  ((A && B) && C) || D: outer BinaryOr gets left=And, error
-        ValidateError("($.a == 1) && ($.b == 2) && ($.c == 3) || ($.d == 4)",
-            mixError, ECallableType::JsonValue);
-        // A || B || C && D  =>  (A || B) || (C && D): outer BinaryOr gets right=And, error
-        ValidateError("($.a == 1) || ($.b == 2) || ($.c == 3) && ($.d == 4)",
-            mixError, ECallableType::JsonValue);
-        // A || B && C || D  =>  A || (B && C) || D  =>  (A || (B && C)) || D:
-        // inner BinaryOr: right=(B && C) has mode=And, error
-        ValidateError("($.a == 1) || ($.b == 2) && ($.c == 3) || ($.d == 4)",
-            mixError, ECallableType::JsonValue);
+        // A && B && C || D  =>  ((A && B) && C) || D: OR wins
+        ValidateJsonValue("($.a == 1) && ($.b == 2) && ($.c == 3) || ($.d == 4)",
+            {"\1a" + numSuffix(1), "\1b" + numSuffix(2), "\1c" + numSuffix(3), "\1d" + numSuffix(4)});
+        // A || B || C && D  =>  (A || B) || (C && D): OR wins
+        ValidateJsonValue("($.a == 1) || ($.b == 2) || ($.c == 3) && ($.d == 4)",
+            {"\1a" + numSuffix(1), "\1b" + numSuffix(2), "\1c" + numSuffix(3), "\1d" + numSuffix(4)});
+        // A || B && C || D  =>  A || (B && C) || D  =>  (A || (B && C)) || D: OR wins
+        ValidateJsonValue("($.a == 1) || ($.b == 2) && ($.c == 3) || ($.d == 4)",
+            {"\1a" + numSuffix(1), "\1b" + numSuffix(2), "\1c" + numSuffix(3), "\1d" + numSuffix(4)});
 
-        // ($.a + $.b == "x") has mode=And, nested as part of OR, detected
-        ValidateError("(($.a + $.b == \"x\") || ($.c == 1)) && ($.d == 2)",
-            mixError, ECallableType::JsonValue);
-        ValidateError("($.d == 2) && (($.a + $.b == \"x\") || ($.c == 1))",
-            mixError, ECallableType::JsonValue);
+        // ($.a + $.b == "x") has mode=And, nested as part of OR: OR wins
+        ValidateJsonValue("(($.a + $.b == \"x\") || ($.c == 1)) && ($.d == 2)",
+            {"\1a", "\1b", "\1c" + numSuffix(1), "\1d" + numSuffix(2)});
+        ValidateJsonValue("($.d == 2) && (($.a + $.b == \"x\") || ($.c == 1))",
+            {"\1d" + numSuffix(2), "\1a", "\1b", "\1c" + numSuffix(1)});
 
         // ($.a[0].b == 1) && ((-$.c.d == 2) && ($.e.* starts with "x"))
         // -$.c.d == 2: unary makes path Finished, no literal appended, token "\1c\1d"
@@ -1063,49 +1060,40 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonValue("(-$.a.b == 1) || (+$.c.d == 2) || (-$.e.f.g == 3)",
             {"\1a\1b", "\1c\1d", "\1e\1f\1g"});
 
-        // ((-$.a.b == 1) && ($.c.size() == 2)) || (exists($.d) && ($.e starts with "x"))
-        // Left AND, mode=And, OR detects conflict on left
-        ValidateError("((-$.a.b == 1) && ($.c.size() == 2)) || (exists($.d) && ($.e starts with \"x\"))",
-            mixError, ECallableType::JsonValue);
+        // ((-$.a.b == 1) && ($.c.size() == 2)) || (exists($.d) && ($.e starts with "x")): OR wins
+        ValidateJsonValue("((-$.a.b == 1) && ($.c.size() == 2)) || (exists($.d) && ($.e starts with \"x\"))",
+            {"\1a\1b", "\1c", "\1d", "\1e"});
 
-        // ($.a like_regex "x.*") || ($.b.abs() == 1) && ($.c[0] starts with "y")
-        // Precedence: || has lower prec, ($.a like_regex "x.*") || (($.b.abs() == 1) && ($.c[0] starts with "y"))
-        // Right AND, mode=And, BinaryOr detects conflict on right
-        ValidateError("($.a like_regex \"x.*\") || ($.b.abs() == 1) && ($.c[0] starts with \"y\")",
-            mixError, ECallableType::JsonValue);
+        // ($.a like_regex "x.*") || (($.b.abs() == 1) && ($.c[0] starts with "y")): OR wins
+        ValidateJsonValue("($.a like_regex \"x.*\") || ($.b.abs() == 1) && ($.c[0] starts with \"y\")",
+            {"\1a", "\1b", "\1c"});
 
-        // ($.a + $.b == "x") && (-$.c.d == 1) || ($.e.f == 2)
-        // Precedence: AND chain first, (($.a + $.b=="x") && (-$.c.d == 1)) || ($.e.f == 2)
-        // Inner AND: arithmetic (two paths, And) + unary (NotSet), 3 tokens, And; BinaryOr: left=And, error
-        ValidateError("($.a + $.b == \"x\") && (-$.c.d == 1) || ($.e.f == 2)",
-            mixError, ECallableType::JsonValue);
+        // (($.a + $.b == "x") && (-$.c.d == 1)) || ($.e.f == 2): OR wins
+        ValidateJsonValue("($.a + $.b == \"x\") && (-$.c.d == 1) || ($.e.f == 2)",
+            {"\1a", "\1b", "\1c\1d", "\1e\1f" + numSuffix(2)});
 
-        // ($.a[0] starts with "x") || ($.b.c + $.d.e == 3) && exists($.f.g.*)
-        // Precedence: ($.b.c + $.d.e == 3) && exists(...), And chain, BinaryOr: right=And, error
-        ValidateError("($.a[0] starts with \"x\") || ($.b.c + $.d.e == 3) && exists($.f.g.*)",
-            mixError, ECallableType::JsonValue);
+        // ($.a[0] starts with "x") || (($.b.c + $.d.e == 3) && exists($.f.g.*)): OR wins
+        ValidateJsonValue("($.a[0] starts with \"x\") || ($.b.c + $.d.e == 3) && exists($.f.g.*)",
+            {"\1a", "\1b\1c", "\1d\1e", "\1f\1g"});
 
-        // ($.a.b[0].c == 1) && ($.d.* starts with "x") || (-$.e.f.g == 2)
-        // Precedence: AND chain || C, BinaryOr: left=And, error
-        ValidateError("($.a.b[0].c == 1) && ($.d.* starts with \"x\") || (-$.e.f.g == 2)",
-            mixError, ECallableType::JsonValue);
+        // (($.a.b[0].c == 1) && ($.d.* starts with "x")) || (-$.e.f.g == 2): OR wins
+        ValidateJsonValue("($.a.b[0].c == 1) && ($.d.* starts with \"x\") || (-$.e.f.g == 2)",
+            {"\1a\1b\1c" + numSuffix(1), "\1d", "\1e\1f\1g"});
 
-        // ($.a like_regex ".*") && ($.b.size() == 0) && ($.c[last] == true) || ($.d.floor() == 0)
-        // Long AND chain with precedence gives And to BinaryOr left, error
-        ValidateError("($.a like_regex \".*\") && ($.b.size() == 0) && ($.c[last] == true) || ($.d.floor() == 0)",
-            mixError, ECallableType::JsonValue);
+        // (($.a like_regex ".*") && ($.b.size() == 0) && ($.c[last] == true)) || ($.d.floor() == 0): OR wins
+        ValidateJsonValue("($.a like_regex \".*\") && ($.b.size() == 0) && ($.c[last] == true) || ($.d.floor() == 0)",
+            {"\1a", "\1b", "\1c" + boolTrueSuffix, "\1d"});
 
-        // ($.a == 1) || ((-$.b.c.d == 2) && ($.e.size() == 3))
-        // Right AND, mode=And, BinaryOr: right=And, error
-        ValidateError("($.a == 1) || ((-$.b.c.d == 2) && ($.e.size() == 3))",
-            mixError, ECallableType::JsonValue);
+        // ($.a == 1) || ((-$.b.c.d == 2) && ($.e.size() == 3)): OR wins
+        ValidateJsonValue("($.a == 1) || ((-$.b.c.d == 2) && ($.e.size() == 3))",
+            {"\1a" + numSuffix(1), "\1b\1c\1d", "\1e"});
 
-        // All five arithmetic ops with two paths inside an OR, each produces mode=And (>1 tokens), OR detects on first
-        ValidateError("($.a + $.b == \"x\") || ($.c == 1)", mixError, ECallableType::JsonValue);
-        ValidateError("($.a - $.b == \"x\") || ($.c == 1)", mixError, ECallableType::JsonValue);
-        ValidateError("($.a * $.b == \"x\") || ($.c == 1)", mixError, ECallableType::JsonValue);
-        ValidateError("($.a / $.b == \"x\") || ($.c == 1)", mixError, ECallableType::JsonValue);
-        ValidateError("($.a % $.b == \"x\") || ($.c == 1)", mixError, ECallableType::JsonValue);
+        // All five arithmetic ops with two paths inside OR: OR wins
+        ValidateJsonValue("($.a + $.b == \"x\") || ($.c == 1)", {"\1a", "\1b", "\1c" + numSuffix(1)});
+        ValidateJsonValue("($.a - $.b == \"x\") || ($.c == 1)", {"\1a", "\1b", "\1c" + numSuffix(1)});
+        ValidateJsonValue("($.a * $.b == \"x\") || ($.c == 1)", {"\1a", "\1b", "\1c" + numSuffix(1)});
+        ValidateJsonValue("($.a / $.b == \"x\") || ($.c == 1)", {"\1a", "\1b", "\1c" + numSuffix(1)});
+        ValidateJsonValue("($.a % $.b == \"x\") || ($.c == 1)", {"\1a", "\1b", "\1c" + numSuffix(1)});
     }
 
     // Filter predicates allow the collector to use predicate constraints for path narrowing
@@ -1251,16 +1239,16 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateJsonExists("$.a ? ((@.b == 1) || (@.c starts with \"x\") || (@.d like_regex \"y.*\") || exists(@.e))",
             {"\1a\1b" + numSuffix(1), "\1a\1c", "\1a\1d", "\1a\1e"});
 
-        // AND on left of OR
-        ValidateError("$.a ? ((@.b == 1 && @.c == 2) || @.d == 3)", mixError, ECallableType::JsonExists);
-        // OR on right of AND
-        ValidateError("$.a ? (@.b == 1 && ((@.c == 2) || (@.d == 3)))", mixError, ECallableType::JsonExists);
-        // Arithmetic with two paths (mode=And) on left of OR
-        ValidateError("$.a ? ((@.b + @.c == 5) || @.d == 3)", mixError, ECallableType::JsonExists);
-        // Arithmetic with two paths (mode=And) on right of OR
-        ValidateError("$.a ? (@.b == 1 || (@.c + @.d == 5))", mixError, ECallableType::JsonExists);
-        // Deep mix: (A || B) inside an AND chain
-        ValidateError("$.a ? (((@.b == 1) || (@.c == 2)) && @.d == 3)", mixError, ECallableType::JsonExists);
+        // AND on left of OR: OR wins
+        ValidateJsonExists("$.a ? ((@.b == 1 && @.c == 2) || @.d == 3)", {"\1a\1b" + numSuffix(1), "\1a\1c" + numSuffix(2), "\1a\1d" + numSuffix(3)});
+        // OR on right of AND: OR wins
+        ValidateJsonExists("$.a ? (@.b == 1 && ((@.c == 2) || (@.d == 3)))", {"\1a\1b" + numSuffix(1), "\1a\1c" + numSuffix(2), "\1a\1d" + numSuffix(3)});
+        // Arithmetic with two paths (mode=And) on left of OR: OR wins
+        ValidateJsonExists("$.a ? ((@.b + @.c == 5) || @.d == 3)", {"\1a\1b", "\1a\1c", "\1a\1d" + numSuffix(3)});
+        // Arithmetic with two paths (mode=And) on right of OR: OR wins
+        ValidateJsonExists("$.a ? (@.b == 1 || (@.c + @.d == 5))", {"\1a\1b" + numSuffix(1), "\1a\1c", "\1a\1d"});
+        // (A || B) inside AND chain: OR wins
+        ValidateJsonExists("$.a ? (((@.b == 1) || (@.c == 2)) && @.d == 3)", {"\1a\1b" + numSuffix(1), "\1a\1c" + numSuffix(2), "\1a\1d" + numSuffix(3)});
 
         // Finished input path (wildcard/method) - filter predicate can't narrow
         ValidateJsonExists("$.* ? (@.b == 1)", {""});

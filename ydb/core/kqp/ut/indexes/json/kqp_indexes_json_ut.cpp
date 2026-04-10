@@ -1457,9 +1457,9 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 && @.k3 == \"text\" && @.k4 == false)"));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 || @.k1 == 1 || @.k1 == \"1\")"));
 
-            // Mix AND and OR inside filter is not allowed
-            ValidateError(db, "TestTable", "json_idx", jsonExists("$ ? ((@.k1 == 0 && @.k4 == true) || @.k2 == \"22\")"));
-            ValidateError(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 1 || (@.k1 == \"1\" && @.k2 == \"22\"))"));
+            // Mixing AND and OR inside filter: OR wins, index search uses OR semantics
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@.k1 == 0 && @.k4 == true) || @.k2 == \"22\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 1 || (@.k1 == \"1\" && @.k2 == \"22\"))"));
 
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 == 10 || @.k1 == 20)"));
             ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2 ? (@.k1 == 2 && @.k2 == true)"));

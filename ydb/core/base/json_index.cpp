@@ -120,16 +120,17 @@ TCollectResult MergeBooleanOperands(TCollectResult left, TCollectResult right,
     auto& leftTokens = left.GetTokens();
     auto& rightTokens = right.GetTokens();
 
+    bool hasMix = false;
     if (!leftTokens.empty() && !rightTokens.empty()) {
         if (left.GetTokensMode() == incompatibleMode || right.GetTokensMode() == incompatibleMode) {
-            return TCollectResult(TIssue("Cannot mix AND and OR operators in jsonpath expression"));
+            hasMix = true;
         }
     }
 
     leftTokens.reserve(leftTokens.size() + rightTokens.size());
     leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
     if (leftTokens.size() > 1) {
-        left.SetTokensMode(combinedMode);
+        left.SetTokensMode(hasMix ? TCollectResult::ETokensMode::Or : combinedMode);
     }
     return left;
 }
@@ -145,17 +146,18 @@ TCollectResult MergeComparisonPathResults(TCollectResult left, TCollectResult ri
     auto& leftTokens = left.GetTokens();
     auto& rightTokens = right.GetTokens();
 
+    bool hasMix = false;
     if (!leftTokens.empty() && !rightTokens.empty()) {
         if (left.GetTokensMode() == TCollectResult::ETokensMode::Or ||
             right.GetTokensMode() == TCollectResult::ETokensMode::Or) {
-            return TCollectResult(TIssue("Cannot mix AND and OR operators in jsonpath expression"));
+            hasMix = true;
         }
     }
 
     leftTokens.reserve(leftTokens.size() + rightTokens.size());
     leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
     if (leftTokens.size() > 1) {
-        left.SetTokensMode(TCollectResult::ETokensMode::And);
+        left.SetTokensMode(hasMix ? TCollectResult::ETokensMode::Or : TCollectResult::ETokensMode::And);
     }
     left.Finish();
     return left;
@@ -402,17 +404,18 @@ TCollectResult TQueryCollector::BinaryArithmeticOp(const TJsonPathItem& item, EM
     auto& leftTokens = leftCollectResult.GetTokens();
     auto& rightTokens = rightCollectResult.GetTokens();
 
+    bool hasMix = false;
     if (!leftTokens.empty() && !rightTokens.empty()) {
         if (leftCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or ||
             rightCollectResult.GetTokensMode() == TCollectResult::ETokensMode::Or) {
-            return TCollectResult(TIssue("Cannot mix AND and OR operators in jsonpath expression"));
+            hasMix = true;
         }
     }
 
     leftTokens.reserve(leftTokens.size() + rightTokens.size());
     leftTokens.insert(leftTokens.end(), rightTokens.begin(), rightTokens.end());
     if (leftTokens.size() > 1) {
-        leftCollectResult.SetTokensMode(TCollectResult::ETokensMode::And);
+        leftCollectResult.SetTokensMode(hasMix ? TCollectResult::ETokensMode::Or : TCollectResult::ETokensMode::And);
     }
     leftCollectResult.Finish();
     return leftCollectResult;

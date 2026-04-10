@@ -14,6 +14,7 @@ ydb/core/external_sources/s3/ut unittest.[*/*] chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.PartitionSplit_AutosplitByLoad_KllSketchBasedSplit_MessageGroupId
 ydb/core/http_proxy/ut/sqs_topic_ut unittest.[*/*] chunk
+ydb/core/kafka_proxy/ut TMetadataActorTests.TopicMetadataGoodAndBad
 ydb/core/kqp/ut/scheme KqpScheme.StreamingQueriesOnServerless
 ydb/core/kqp/ut/service KqpQueryServiceScripts.CancelScriptExecution
 ydb/core/kqp/ut/tli KqpTli.BasicDataQuery
@@ -51,6 +52,7 @@ ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
+ydb/core/tx/tiering/ut OlapTieringS3Secrets.TieringSecretMigration
 ydb/core/tx/tiering/ut OlapTieringS3Secrets.TieringSecretMigrationViaDropCreate
 ydb/core/viewer/tests test.py.TestViewer.test_storage_stats
 ydb/core/viewer/ut Viewer.CommitOffsetTest

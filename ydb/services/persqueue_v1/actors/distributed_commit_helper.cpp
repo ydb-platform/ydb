@@ -1,6 +1,5 @@
 #include "distributed_commit_helper.h"
 #include "ydb/core/kqp/common/simple/services.h"
-#include "ydb/services/lib/actors/pq_schema_actor.h"
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -13,7 +12,8 @@ TDistributedCommitHelper::TDistributedCommitHelper(TString database, TString con
     , CheckerSettings(generationCheckerSettings)
 {}
 
-TDistributedCommitHelper::ECurrentStep TDistributedCommitHelper::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+std::pair<TDistributedCommitHelper::ECurrentStep, bool> TDistributedCommitHelper::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+    bool isSuccessful = true;
     switch (Step) {
         case BEGIN_TRANSACTION_SENDED:
             if (CheckerSettings.has_value()) {
@@ -25,7 +25,7 @@ TDistributedCommitHelper::ECurrentStep TDistributedCommitHelper::Handle(NKqp::TE
             }
             break;
         case CHECK_GENERATION:
-            CompareGenerations(ev, ctx);
+            isSuccessful = CompareGenerations(ev, ctx);
             break;
         case OFFSETS_SENDED:
             Step = COMMIT_SENDED;
@@ -38,7 +38,7 @@ TDistributedCommitHelper::ECurrentStep TDistributedCommitHelper::Handle(NKqp::TE
         case DONE:
             break;
     }
-    return Step;
+    return std::make_pair(Step, isSuccessful);
 }
 
 void TDistributedCommitHelper::SendCreateSessionRequest(const TActorContext& ctx) {
@@ -90,57 +90,35 @@ THolder<NKqp::TEvKqp::TEvCloseSessionRequest> TDistributedCommitHelper::MakeClos
     return ev;
 }
 
-void TDistributedCommitHelper::CompareGenerations(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx) {
+bool TDistributedCommitHelper::CompareGenerations(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     auto& resp = record.GetResponse();
-
-    auto createErrorResponse = [](Ydb::StatusIds_StatusCode status, TString errorMessage) {
-        auto queryResponse = MakeHolder<NKqp::TEvKqp::TEvQueryResponse>();
-        auto* response = queryResponse->Record.MutableResponse();
-        queryResponse->Record.SetYdbStatus(status);
-        NYql::TIssues issues;
-        issues.AddIssue(FillIssue(errorMessage, Ydb::PersQueue::ErrorCode::ErrorCode::GENERATION_MISMATCH));
-        NYql::IssuesToMessage(issues, response->MutableQueryIssues());
-        return queryResponse;
-    };
-
-    if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-        TString errorMessage = "Incorrect consumer group generation";
-        ctx.Send(ctx.SelfID, createErrorResponse(record.GetYdbStatus(), errorMessage).Release());
-        return;
-
-    }
     if (resp.GetYdbResults().empty()) {
-        TString errorMessage = "Incorrect consumer group generation";
-        ctx.Send(ctx.SelfID, createErrorResponse(Ydb::StatusIds_StatusCode_PRECONDITION_FAILED, errorMessage).Release());
-        return;
+        return false;
     }
 
     NYdb::TResultSetParser parser(resp.GetYdbResults(0));
     if (!parser.TryNextRow()) {
-        TString errorMessage = "Incorrect consumer group generation";
-        ctx.Send(ctx.SelfID, createErrorResponse(Ydb::StatusIds_StatusCode_PRECONDITION_FAILED, errorMessage).Release());
-        return;
+        return false;
     }
 
     int Generation = parser.ColumnParser("generation").GetUint64();
     if (Generation != CheckerSettings->GenerationId) {
-        TString errorMessage = TStringBuilder() << "Consumer group generation is outdated. Group generation=" << Generation << ", but consumer has generation=" << CheckerSettings->GenerationId;
-        ctx.Send(ctx.SelfID, createErrorResponse(Ydb::StatusIds_StatusCode_PRECONDITION_FAILED, errorMessage).Release());
-        return;
+        return false;
     }
     Step = OFFSETS_SENDED;
     SendCommits(ev, ctx);
+    return true;
 }
 
 void TDistributedCommitHelper::RetrieveGeneration(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     TxId = record.GetResponse().GetTxMeta().id();
-    Y_ABORT_UNLESS(!TxId.empty());
+    Y_ABORT_UNLESS(!TxId.empty()); // мб вернуть false
 
     NYdb::TParamsBuilder params;
     params.AddParam("$ConsumerGroup").Utf8(Consumer).Build();
-    params.AddParam("$Database").Utf8(CheckerSettings->TopicDatabasePath).Build();
+    params.AddParam("$Database").Utf8(DataBase).Build();
     NYdb::TParams sqlParams = params.Build();
 
     auto check = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();

@@ -2,6 +2,44 @@
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/json_reader.h>
 
+namespace {
+
+using namespace NKikimr::NKqp;
+
+void AddOptimizerEstimates(NJson::TJsonValue & json, const TIntrusivePtr<IOperator>& op) {
+    json["E-Rows"] = TStringBuilder() << op->Props.Statistics->RecordsCount;
+    json["E-Size"] = TStringBuilder() << op->Props.Statistics->DataSize;
+    json["E-Cost"] = TStringBuilder() << *op->Props.Cost;
+}
+
+NJson::TJsonValue MakeJson(const TIntrusivePtr<IOperator>& op, ui32 explainFlags) {
+    auto res = op->ToJson(explainFlags);
+
+    AddOptimizerEstimates(res, op);
+    return res;
+}
+
+
+NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, ui64 & nodeCounter, ui32 explainFlags) {
+    NJson::TJsonValue result;
+    result["PlanNodeId"] = nodeCounter++;
+    result["Node Type"] = op->GetExplainName();
+    NJson::TJsonValue operatorList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
+    operatorList.AppendValue(MakeJson(op, explainFlags));
+    result["Operators"] = operatorList;
+
+    if (op->Children.size()){
+        NJson::TJsonValue plans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
+        for (const auto & child : op->Children) {
+            plans.AppendValue(GetExplainJsonRec(child, nodeCounter, explainFlags));
+        }
+        result["Plans"] = plans;
+    }
+
+    return result;
+}
+
+}
 
 namespace NKikimr {
 namespace NKqp {
@@ -63,7 +101,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64 & nodeCounter, ui32 explainFlag
                 stageName = stageName + "-" + op->GetExplainName();
             }
 
-            operatorList.AppendValue(op->ToJson(explainFlags));
+            operatorList.AppendValue(MakeJson(op, explainFlags));
         }
 
         // Build a list of subplans - these are connection objects of input stages
@@ -78,8 +116,12 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64 & nodeCounter, ui32 explainFlag
         // If this is the final stage, add the child plans and operators to it
         if(stageOutputs.empty()) {
             finalStage["Node Type"] = stageName;
-            finalStage["Operators"] = operatorList;
-            finalStage["Plans"] = planList;
+            if (ops.size()) {
+                finalStage["Operators"] = operatorList;
+            }
+            if (stageInputs.size()) {
+                finalStage["Plans"] = planList;
+            }
         }
 
         // Otherwise, construct a new plan object for each outgoing connection of the stage
@@ -97,10 +139,13 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64 & nodeCounter, ui32 explainFlag
 
                 auto stage = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
                 stage["Node Type"] = stageName;
-                stage["Operators"] = operatorList;
-                stage["Plans"] = planList;
+                if (ops.size()) {
+                    stage["Operators"] = operatorList;
+                }
+                if (stageInputs.size()) {
+                    stage["Plans"] = planList;
+                }
                 stage["PlanNodeId"] = nodeCounter++;
-                stage["RBO-ID"] = stageId;
 
                 auto connPlans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
                 connPlans.AppendValue(stage);
@@ -117,6 +162,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64 & nodeCounter, ui32 explainFlag
     return result;
 }
 
+// For explain JSON we recurse over the operators of the plan
 NJson::TJsonValue TOpRoot::GetExplainJson(ui64 & nodeCounter, ui32 explainFlags) {
     Y_UNUSED(explainFlags);
 
@@ -124,6 +170,10 @@ NJson::TJsonValue TOpRoot::GetExplainJson(ui64 & nodeCounter, ui32 explainFlags)
     result["PlanNodeId"] = nodeCounter++;
     result["PlanNodeType"] = "ResultSet";
     result["Node Type"] = "ResultSet";
+
+    NJson::TJsonValue plans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
+    plans.AppendValue(GetExplainJsonRec(GetInput(), nodeCounter, explainFlags));
+    result["Plans"] = plans;
 
     return result;
 }

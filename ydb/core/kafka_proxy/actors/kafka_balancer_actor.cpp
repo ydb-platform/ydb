@@ -842,7 +842,7 @@ void TKafkaBalancerActor::HeartbeatStepCommitTx(NKqp::TEvKqp::TEvQueryResponse::
     }
 
     if (deadsCount > 0) {
-        SendHeartbeatResponseFail(ctx, CorrelationId, EKafkaErrors::FENCED_INSTANCE_ID, "Deads members found. Rejoin required.");
+        SendHeartbeatResponseFail(ctx, CorrelationId, EKafkaErrors::REBALANCE_IN_PROGRESS, "Deads members found. Rejoin required.");
         return;
     }
 
@@ -880,8 +880,15 @@ void TKafkaBalancerActor::HeartbeatStepUpdateHeartbeatDeadlines(NKqp::TEvKqp::TE
     }
 
     if (!groupStatus->Exists ||
-        groupStatus->Generation == GenerationId + 1 && groupStatus->State != GROUP_STATE_WORKING) {
+        groupStatus->Generation == GenerationId + 1 ||
+        groupStatus->State != GROUP_STATE_WORKING) {
+        KAFKA_LOG_D("REBALANCE_IN_PROGRESS, oldGen=" << GenerationId << ", newGen=" << groupStatus->Generation << ", groupState=" << groupStatus->State);
         SendHeartbeatResponseFail(ctx, CorrelationId, EKafkaErrors::REBALANCE_IN_PROGRESS, "Group state changed. Rejoin required");
+        return;
+    }
+    if (groupStatus->Generation != GenerationId) {
+        KAFKA_LOG_D("ILLEGAL_GENERATION, oldGen=" << GenerationId << ", newGen=" << groupStatus->Generation << ", groupState=" << groupStatus->State);
+        SendHeartbeatResponseFail(ctx, CorrelationId, EKafkaErrors::ILLEGAL_GENERATION, TStringBuilder() << "Old or unknown group generation: " << GenerationId << ". Group generationId=" << groupStatus->Generation);
         return;
     }
 

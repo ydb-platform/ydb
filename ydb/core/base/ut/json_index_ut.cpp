@@ -9,22 +9,25 @@ using namespace NYql::NJsonPath;
 
 namespace {
 
-TVector<TString> ParseAndCollect(const TString& jsonPath, ECallableType callableType = ECallableType::JsonExists) {
+TVector<TString> ParseAndCollect(const TString& jsonPath, ECallableType callableType = ECallableType::JsonExists,
+    std::optional<TCollectResult::ETokensMode> tokensMode = std::nullopt)
+{
     NYql::TIssues issues;
     const TJsonPathPtr path = NYql::NJsonPath::ParseJsonPath(jsonPath, issues, 1);
     UNIT_ASSERT_C(issues.Empty(), "Parse errors found for path: " + jsonPath + ": " + issues.ToOneLineString());
 
     auto result = CollectJsonPath(path, callableType);
     UNIT_ASSERT_C(!result.IsError(), "Collect errors found for path: " + jsonPath + ": " + result.GetError().GetMessage());
+
+    if (tokensMode.has_value()) {
+        UNIT_ASSERT_C(result.GetTokensMode() == *tokensMode, "for path = " << jsonPath);
+    }
+
     return result.GetTokens();
 }
 
 template <bool ParserError = false>
-void ValidateError(
-    const TString& jsonPath,
-    const TString& errorMessage,
-    ECallableType callableType = ECallableType::JsonExists)
-{
+void ValidateError(const TString& jsonPath, const TString& errorMessage, ECallableType callableType = ECallableType::JsonExists) {
     NYql::TIssues issues;
     const TJsonPathPtr path = NYql::NJsonPath::ParseJsonPath(jsonPath, issues, 1);
 
@@ -40,24 +43,28 @@ void ValidateError(
     }
 }
 
-void ValidateQueries(
-    const TString& jsonPath,
-    const TVector<TString>& expectedQueries,
-    ECallableType callableType = ECallableType::JsonExists)
+void ValidateQueries(const TString& jsonPath, const TVector<TString>& expectedQueries, ECallableType callableType = ECallableType::JsonExists,
+    std::optional<TCollectResult::ETokensMode> tokensMode = std::nullopt)
 {
-    UNIT_ASSERT_VALUES_EQUAL_C(ParseAndCollect(jsonPath, callableType), expectedQueries, "for path = " << jsonPath);
+    UNIT_ASSERT_VALUES_EQUAL_C(ParseAndCollect(jsonPath, callableType, tokensMode), expectedQueries, "for path = " << jsonPath);
 }
 
-void ValidateJsonExists(const TString& jsonPath, const TVector<TString>& expectedQueries) {
-    ValidateQueries(jsonPath, expectedQueries, ECallableType::JsonExists);
+void ValidateJsonExists(const TString& jsonPath, const TVector<TString>& expectedQueries,
+    std::optional<TCollectResult::ETokensMode> tokensMode = std::nullopt)
+{
+    ValidateQueries(jsonPath, expectedQueries, ECallableType::JsonExists, tokensMode);
 }
 
-void ValidateJsonValue(const TString& jsonPath, const TVector<TString>& expectedQueries) {
-    ValidateQueries(jsonPath, expectedQueries, ECallableType::JsonValue);
+void ValidateJsonValue(const TString& jsonPath, const TVector<TString>& expectedQueries,
+    std::optional<TCollectResult::ETokensMode> tokensMode = std::nullopt)
+{
+    ValidateQueries(jsonPath, expectedQueries, ECallableType::JsonValue, tokensMode);
 }
 
-// void ValidateJsonQuery(const TString& jsonPath, const TVector<TString>& expectedQueries) {
-//     ValidateQueries(jsonPath, expectedQueries, ECallableType::JsonQuery);
+// void ValidateJsonQuery(const TString& jsonPath, const TVector<TString>& expectedQueries,
+// std::optional<TCollectResult::ETokensMode> tokensMode = std::nullopt)
+// {
+//     ValidateQueries(jsonPath, expectedQueries, ECallableType::JsonQuery, tokensMode);
 // }
 
 TString strSuffix(const TStringBuf s) {
@@ -443,6 +450,73 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         ValidateQueries("$.a.size() + $.b.floor()", {"\1a", "\1b"});
     }
 
+    // Arithmetic operators (two-path operands produce And mode) combined with && and ||
+    Y_UNIT_TEST(CollectPath_ArithmeticWithBooleanOps) {
+        // Two-path arithmetic result (And mode) in AND chain: stays And
+        ValidateJsonValue("($.a + $.b == \"x\") && ($.c == 1)", {"\1a", "\1b", "\1c" + numSuffix(1)}, TCollectResult::ETokensMode::And);
+        ValidateJsonValue("($.a - $.b == \"x\") && ($.c == 1)", {"\1a", "\1b", "\1c" + numSuffix(1)}, TCollectResult::ETokensMode::And);
+        ValidateJsonValue("($.a * $.b == \"x\") && ($.c == 1)", {"\1a", "\1b", "\1c" + numSuffix(1)}, TCollectResult::ETokensMode::And);
+        ValidateJsonValue("($.a / $.b == \"x\") && ($.c == 1)", {"\1a", "\1b", "\1c" + numSuffix(1)}, TCollectResult::ETokensMode::And);
+        ValidateJsonValue("($.a % $.b == \"x\") && ($.c == 1)", {"\1a", "\1b", "\1c" + numSuffix(1)}, TCollectResult::ETokensMode::And);
+        ValidateJsonValue("($.c == 1) && ($.a + $.b == \"x\")", {"\1c" + numSuffix(1), "\1a", "\1b"}, TCollectResult::ETokensMode::And);
+
+        // Two arithmetic results combined via AND: stays And
+        ValidateJsonValue("($.a + $.b == \"x\") && ($.c + $.d == \"y\")", {"\1a", "\1b", "\1c", "\1d"}, TCollectResult::ETokensMode::And);
+        ValidateJsonValue("($.a - $.b == \"x\") && ($.c * $.d == \"y\") && ($.e == 1)", {"\1a", "\1b", "\1c", "\1d", "\1e" + numSuffix(1)},
+            TCollectResult::ETokensMode::And);
+
+        // Two-path arithmetic result (And mode) in OR: OR wins
+        ValidateJsonValue("($.a + $.b == \"x\") || ($.c == 1)", {"\1a", "\1b", "\1c" + numSuffix(1)}, TCollectResult::ETokensMode::Or);
+        ValidateJsonValue("($.a - $.b == \"x\") || ($.c == 1)", {"\1a", "\1b", "\1c" + numSuffix(1)}, TCollectResult::ETokensMode::Or);
+        ValidateJsonValue("($.a * $.b == \"x\") || ($.c == 1)", {"\1a", "\1b", "\1c" + numSuffix(1)}, TCollectResult::ETokensMode::Or);
+        ValidateJsonValue("($.a / $.b == \"x\") || ($.c == 1)", {"\1a", "\1b", "\1c" + numSuffix(1)}, TCollectResult::ETokensMode::Or);
+        ValidateJsonValue("($.a % $.b == \"x\") || ($.c == 1)", {"\1a", "\1b", "\1c" + numSuffix(1)}, TCollectResult::ETokensMode::Or);
+        ValidateJsonValue("($.c == 1) || ($.a + $.b == \"x\")", {"\1c" + numSuffix(1), "\1a", "\1b"}, TCollectResult::ETokensMode::Or);
+
+        // Two arithmetic results combined via OR: OR wins
+        ValidateJsonValue("($.a + $.b == \"x\") || ($.c + $.d == \"y\")", {"\1a", "\1b", "\1c", "\1d"}, TCollectResult::ETokensMode::Or);
+        ValidateJsonValue("($.a - $.b == \"x\") || ($.c * $.d == \"y\")", {"\1a", "\1b", "\1c", "\1d"}, TCollectResult::ETokensMode::Or);
+        ValidateJsonValue("($.a / $.b == \"x\") || ($.c % $.d == \"y\")", {"\1a", "\1b", "\1c", "\1d"}, TCollectResult::ETokensMode::Or);
+
+        // Three-way OR of arithmetic results: all become OR
+        ValidateJsonValue("($.a + $.b == \"x\") || ($.c + $.d == \"y\") || ($.e == 1)",
+            {"\1a", "\1b", "\1c", "\1d", "\1e" + numSuffix(1)}, TCollectResult::ETokensMode::Or);
+
+        // Arithmetic result with comparison (single-path, NotSet) via AND: compatible, stays And
+        ValidateJsonValue("($.a + $.b == \"x\") && ($.c < 5)", {"\1a", "\1b", "\1c"}, TCollectResult::ETokensMode::And);
+        ValidateJsonValue("($.c < 5) && ($.a + $.b == \"x\")", {"\1c", "\1a", "\1b"}, TCollectResult::ETokensMode::And);
+
+        // Arithmetic result with comparison via OR: OR wins
+        ValidateJsonValue("($.a + $.b == \"x\") || ($.c < 5)", {"\1a", "\1b", "\1c"}, TCollectResult::ETokensMode::Or);
+        ValidateJsonValue("($.c < 5) || ($.a + $.b == \"x\")", {"\1c", "\1a", "\1b"}, TCollectResult::ETokensMode::Or);
+
+        // Arithmetic result with starts with / like_regex / exists in AND: compatible
+        ValidateJsonValue("($.a + $.b == \"x\") && ($.c starts with \"abc\")", {"\1a", "\1b", "\1c"}, TCollectResult::ETokensMode::And);
+        ValidateJsonValue("($.a + $.b == \"x\") && ($.c like_regex \".*\")", {"\1a", "\1b", "\1c"}, TCollectResult::ETokensMode::And);
+        ValidateJsonValue("($.a + $.b == \"x\") && exists($.c)", {"\1a", "\1b", "\1c"}, TCollectResult::ETokensMode::And);
+
+        // Arithmetic result with starts with / like_regex / exists in OR: OR wins
+        ValidateJsonValue("($.a + $.b == \"x\") || ($.c starts with \"abc\")", {"\1a", "\1b", "\1c"}, TCollectResult::ETokensMode::Or);
+        ValidateJsonValue("($.a + $.b == \"x\") || ($.c like_regex \".*\")", {"\1a", "\1b", "\1c"}, TCollectResult::ETokensMode::Or);
+        ValidateJsonValue("($.a + $.b == \"x\") || exists($.c)", {"\1a", "\1b", "\1c"}, TCollectResult::ETokensMode::Or);
+
+        // Deeper paths in arithmetic operands
+        ValidateJsonValue("($.a.b.c + $.x.y.z == \"val\") && ($.key == 1)", {"\1a\1b\1c", "\1x\1y\1z", "\3key" + numSuffix(1)},
+            TCollectResult::ETokensMode::And);
+        ValidateJsonValue("($.a.b.c + $.x.y.z == \"val\") || ($.key == 1)", {"\1a\1b\1c", "\1x\1y\1z", "\3key" + numSuffix(1)},
+            TCollectResult::ETokensMode::Or);
+
+        // Filter: arithmetic with two paths combined via OR with plain path
+        ValidateJsonExists("$.key ? (@.a + @.b == 5 || @.c == 1)", {"\3key\1a", "\3key\1b", "\3key\1c" + numSuffix(1)},
+            TCollectResult::ETokensMode::Or);
+        // Filter: two arithmetic results in OR
+        ValidateJsonExists("$.key ? (@.a + @.b == 5 || @.c + @.d == 3)", {"\3key\1a", "\3key\1b", "\3key\1c", "\3key\1d"},
+            TCollectResult::ETokensMode::Or);
+        // Filter: AND chain with OR appended - OR wins
+        ValidateJsonExists("$.key ? (@.a + @.b == 5 && @.c == 1 || @.d == 2)",
+            {"\3key\1a", "\3key\1b", "\3key\1c" + numSuffix(1), "\3key\1d" + numSuffix(2)}, TCollectResult::ETokensMode::Or);
+    }
+
     Y_UNIT_TEST(CollectPath_EqualityOperator) {
         // Path == literal, all literal types
         ValidateJsonValue("$.key == \"hello\"", {"\3key" + strSuffix("hello")});
@@ -764,6 +838,62 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         // JsonValue also supports comparison in filter
         ValidateJsonValue("$.a ? (@.b < -10)", {"\1a\1b"});
         ValidateJsonValue("$.a ? (@.b != null && @.c >= 1)", {"\1a\1b", "\1a\1c"});
+    }
+
+    // Comparison operators (path vs path produce And mode) combined with && and ||
+    Y_UNIT_TEST(CollectPath_ComparisonWithBooleanOps) {
+        // Two-path comparison (And mode) in AND chain: compatible, stays And
+        ValidateJsonValue("($.a < $.b) && ($.c > $.d)", {"\1a", "\1b", "\1c", "\1d"}, TCollectResult::ETokensMode::And);
+        ValidateJsonValue("($.a <= $.b) && ($.c >= $.d)", {"\1a", "\1b", "\1c", "\1d"}, TCollectResult::ETokensMode::And);
+        ValidateJsonValue("($.a != $.b) && ($.c == $.d)", {"\1a", "\1b", "\1c", "\1d"}, TCollectResult::ETokensMode::And);
+        ValidateJsonValue("($.a == $.b) && ($.c < $.d) && ($.e > $.f)", {"\1a", "\1b", "\1c", "\1d", "\1e", "\1f"},
+            TCollectResult::ETokensMode::And);
+
+        // Two-path comparison (And mode) in OR: OR wins
+        ValidateJsonValue("($.a < $.b) || ($.c > $.d)", {"\1a", "\1b", "\1c", "\1d"}, TCollectResult::ETokensMode::Or);
+        ValidateJsonValue("($.a <= $.b) || ($.c >= $.d)", {"\1a", "\1b", "\1c", "\1d"}, TCollectResult::ETokensMode::Or);
+        ValidateJsonValue("($.a != $.b) || ($.c == $.d)", {"\1a", "\1b", "\1c", "\1d"}, TCollectResult::ETokensMode::Or);
+        ValidateJsonValue("($.a < $.b) || ($.c > $.d) || ($.e != $.f)", {"\1a", "\1b", "\1c", "\1d", "\1e", "\1f"},
+            TCollectResult::ETokensMode::Or);
+
+        // Single-path comparison (NotSet mode) in AND chain
+        ValidateJsonValue("($.a < 5) && ($.b > 3) && ($.c <= 10)", {"\1a", "\1b", "\1c"}, TCollectResult::ETokensMode::And);
+        ValidateJsonValue("($.a > 0) && ($.b >= 1) && ($.c != 0) && ($.d == 2)", {"\1a", "\1b", "\1c", "\1d" + numSuffix(2)},
+            TCollectResult::ETokensMode::And);
+
+        // Single-path comparison in OR chain
+        ValidateJsonValue("($.a < 5) || ($.b > 3) || ($.c <= 10)", {"\1a", "\1b", "\1c"}, TCollectResult::ETokensMode::Or);
+        ValidateJsonValue("($.a > 0) || ($.b >= 1) || ($.c != 0) || ($.d == 2)", {"\1a", "\1b", "\1c", "\1d" + numSuffix(2)}, 
+            TCollectResult::ETokensMode::Or);
+
+        // Mix of single-path and two-path comparisons in AND: compatible (neither has Or)
+        ValidateJsonValue("($.a < 5) && ($.b > $.c)", {"\1a", "\1b", "\1c"}, TCollectResult::ETokensMode::And);
+        ValidateJsonValue("($.a < $.b) && ($.c > 5)", {"\1a", "\1b", "\1c"}, TCollectResult::ETokensMode::And);
+        ValidateJsonValue("($.a < 5) && ($.b > $.c) && ($.d == 1)", {"\1a", "\1b", "\1c", "\1d" + numSuffix(1)}, 
+            TCollectResult::ETokensMode::And);
+
+        // Mix of single-path and two-path comparisons in OR: OR wins
+        ValidateJsonValue("($.a < 5) || ($.b > $.c)", {"\1a", "\1b", "\1c"}, TCollectResult::ETokensMode::Or);
+        ValidateJsonValue("($.a < $.b) || ($.c > 5)", {"\1a", "\1b", "\1c"}, TCollectResult::ETokensMode::Or);
+
+        // AND chain then OR: OR wins
+        ValidateJsonValue("($.a < $.b) && ($.c > 1) || ($.d != 0)", {"\1a", "\1b", "\1c", "\1d"}, TCollectResult::ETokensMode::Or);
+        ValidateJsonValue("($.a < 5) && ($.b > $.c) || ($.d == 1)", {"\1a", "\1b", "\1c", "\1d" + numSuffix(1)},
+            TCollectResult::ETokensMode::Or);
+
+        // Two-path equality combined via AND and OR
+        ValidateJsonValue("($.a == $.b) && ($.c == $.d)", {"\1a", "\1b", "\1c", "\1d"}, TCollectResult::ETokensMode::And);
+        ValidateJsonValue("($.a == $.b) || ($.c == $.d)", {"\1a", "\1b", "\1c", "\1d"}, TCollectResult::ETokensMode::Or);
+
+        // Filter: two-path comparison combined with AND/OR
+        ValidateJsonExists("$.key ? (@.a < @.b && @.c > 1)", {"\3key\1a", "\3key\1b", "\3key\1c"}, TCollectResult::ETokensMode::And);
+        ValidateJsonExists("$.key ? (@.a < @.b || @.c > 1)", {"\3key\1a", "\3key\1b", "\3key\1c"}, TCollectResult::ETokensMode::Or);
+        ValidateJsonExists("$.key ? (@.a < @.b && @.c > @.d)", {"\3key\1a", "\3key\1b", "\3key\1c", "\3key\1d"}, TCollectResult::ETokensMode::And);
+        ValidateJsonExists("$.key ? (@.a < @.b || @.c > @.d)", {"\3key\1a", "\3key\1b", "\3key\1c", "\3key\1d"}, TCollectResult::ETokensMode::Or);
+
+        // Filter: AND chain with OR - OR wins
+        ValidateJsonExists("$.key ? (@.a < @.b && @.c > @.d || @.e == 1)", {"\3key\1a", "\3key\1b", "\3key\1c", "\3key\1d", "\3key\1e" + numSuffix(1)},
+            TCollectResult::ETokensMode::Or);
     }
 
     Y_UNIT_TEST(CollectPath_BinaryAnd) {

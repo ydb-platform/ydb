@@ -1466,6 +1466,61 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         });
     }
 
+    // Filter with arithmetic operators combined with && and ||: OR dominance
+    Y_UNIT_TEST_QUAD(SelectJsonExists_FilterArithmeticWithBooleanOps, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 + @.k2 == 5 || @.k3 == \"text\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 - @.k2 > 0 || @.k4 == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 * @.k2 != 0 || @.k5 == null)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 / @.k2 < 1 || @.k3 == \"text\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 % @.k2 == 0 || @.k4 == false)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 + @.k2 == 5 && @.k3 == \"text\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 - @.k2 > 0 && @.k4 == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 * @.k2 != 0 && @.k5 == null)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 + @.k2 == 5 || @.k3 + @.k4 == 1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 - @.k2 > 0 || @.k3 - @.k4 < 0)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 + @.k2 == 5 && @.k3 + @.k4 == 1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 + @.k2 == 5 || @.k3 - @.k4 < 0 || @.k5 == null)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@.k1 + @.k2 == 5 && @.k3 == \"text\") || @.k4 == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 || (@.k1 + @.k2 == 5 && @.k3 == \"text\"))"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 + @.k2 == 5 || @.k1 == 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 - @.k2 > 0 && @.k1 == 10)"));
+        });
+    }
+
+    // Filter with path-vs-path comparison operators combined with && and ||: OR dominance
+    Y_UNIT_TEST_QUAD(SelectJsonExists_FilterComparisonWithBooleanOps, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < @.k2 || @.k3 == \"text\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 > @.k2 || @.k4 == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 <= @.k2 || @.k5 == null)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 >= @.k2 || @.k3 == \"text\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == @.k2 || @.k4 == false)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 != @.k2 || @.k3 == \"text\")"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < @.k2 && @.k3 == \"text\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 > @.k2 && @.k4 == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 != @.k2 && @.k5 == null)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < @.k2 || @.k3 > @.k4)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == @.k2 || @.k3 != @.k4)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < @.k2 && @.k3 > @.k4)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < @.k2 && @.k3 > @.k4 || @.k5 == null)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 || @.k2 < @.k3)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < @.k2 || @.k3 == \"text\" || @.k4 == true)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@.k1 < @.k2 && @.k3 > @.k4) || @.k5 == null)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 || (@.k2 < @.k3 && @.k4 == true))"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 < @.k2 || @.k1 == 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 > @.k2 && @.k1 == 10)"));
+        });
+    }
+
     // Filter with paths: deep nesting, array subscripts inside filter, empty key
     Y_UNIT_TEST_QUAD(SelectJsonExists_FilterPathsDeep, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {

@@ -264,18 +264,6 @@ namespace NKikimr::NStorage {
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate(pdiskID, path, pdiskGuid, pdiskCategory));
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddRole("Storage"));
         }
-
-        // VDisk configuration can arrive before the PDisk is started. Once PDisk is up, try to start all local VDisks
-        // that belong to this PDisk and are still not running.
-        const TVSlotId lower(LocalNodeId, pdiskID, 0);
-        for (auto it = LocalVDisks.lower_bound(lower);
-                it != LocalVDisks.end() && it->first.NodeId == LocalNodeId && it->first.PDiskId == pdiskID; ++it) {
-            auto& vdiskRecord = it->second;
-            if (!vdiskRecord.RuntimeData && !vdiskRecord.Config.GetDoDestroy() &&
-                    vdiskRecord.Config.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY) {
-                StartLocalVDiskActor(vdiskRecord);
-            }
-        }
     }
 
     void TNodeWarden::DestroyLocalPDisk(ui32 pdiskId) {

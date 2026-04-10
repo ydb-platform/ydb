@@ -36,7 +36,6 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     };
 
     TString MakeS3RequestTemplate(const TVector<TExportItem>& items, const TString& extraSettings = "") {
-    {
         TStringBuilder sb;
         sb << "ExportToS3Settings { endpoint: \"localhost:%d\" scheme: HTTP ";
         if (extraSettings) sb << extraSettings << " ";

@@ -368,4 +368,14 @@ Below are examples of code that enables logging in different {{ ydb-short-name }
   $ydb = new \YdbPlatform\Ydb\Ydb($config);
   ```
 
+- Python
+
+  The Python SDK uses the standard `logging` library. To enable a specific logging level:
+
+  ```python
+  import logging
+
+  logging.getLogger('ydb').setLevel(logging.DEBUG)
+  ```
+
 {% endlist %}

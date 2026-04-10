@@ -46,12 +46,14 @@ std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpSt
 
     YQL_ENSURE(partitionInfo);
 
+    const auto& partitions = partitionInfo->GetTablePartitioning();
+
     // Binary search of the index to start with.
     size_t idxStart = 0;
-    size_t idxFinish = partitionInfo->size();
+    size_t idxFinish = partitions.size();
     while ((idxFinish - idxStart) > 1) {
         size_t idxCur = (idxFinish + idxStart) / 2;
-        const auto& partCur = (*partitionInfo)[idxCur].Range->EndKeyPrefix.GetCells();
+        const auto& partCur = partitions[idxCur].Range->EndKeyPrefix.GetCells();
         YQL_ENSURE(partCur.size() <= keyColumnTypes.size());
         int cmp = CompareTypedCellVectors(partCur.data(), range.From.data(), keyColumnTypes.data(),
                                           std::min(partCur.size(), range.From.size()));
@@ -65,12 +67,12 @@ std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpSt
     std::vector<TCell> minusInf(keyColumnTypes.size());
 
     std::vector<std::pair<ui64, TOwnedTableRange>> rangePartition;
-    for (size_t idx = idxStart; idx < partitionInfo->size(); ++idx) {
+    for (size_t idx = idxStart; idx < partitions.size(); ++idx) {
         TTableRange partitionRange{
-            idx == 0 ? minusInf : (*partitionInfo)[idx - 1].Range->EndKeyPrefix.GetCells(),
-            idx == 0 ? true : !(*partitionInfo)[idx - 1].Range->IsInclusive,
-            (*partitionInfo)[idx].Range->EndKeyPrefix.GetCells(),
-            (*partitionInfo)[idx].Range->IsInclusive
+            idx == 0 ? minusInf : partitions[idx - 1].Range->EndKeyPrefix.GetCells(),
+            idx == 0 ? true : !partitions[idx - 1].Range->IsInclusive,
+            partitions[idx].Range->EndKeyPrefix.GetCells(),
+            partitions[idx].Range->IsInclusive
         };
 
         if (range.Point) {
@@ -81,7 +83,7 @@ std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpSt
                 keyColumnTypes);
 
             if (intersection == 0) {
-                rangePartition.emplace_back((*partitionInfo)[idx].ShardId, range);
+                rangePartition.emplace_back(partitions[idx].ShardId, range);
             } else if (intersection < 0) {
                 break;
             }
@@ -90,7 +92,7 @@ std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpSt
 
             if (intersection == 0) {
                 auto rangeIntersection = Intersect(keyColumnTypes, range, partitionRange);
-                rangePartition.emplace_back((*partitionInfo)[idx].ShardId, rangeIntersection);
+                rangePartition.emplace_back(partitions[idx].ShardId, rangeIntersection);
             } else if (intersection < 0) {
                 break;
             }

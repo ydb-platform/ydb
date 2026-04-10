@@ -117,15 +117,43 @@ TExprNode::TPtr TPhysicalQueryBuilder::GetFinalStage(const TExprNode::TPtr& stag
     return finalStage;
 }
 
+TVector<TKqpParamBinding> TPhysicalQueryBuilder::CollectParamBindings(const TVector<TExprNode::TPtr>& physicalStages) {
+    auto& ctx = RBOCtx.ExprCtx;
+    auto pos = Root.Pos;
+
+    TVector<TKqpParamBinding> paramBindings;
+    THashSet<TString> paramsCollected;
+    for (const auto& physicalStage : physicalStages) {
+        const auto params = FindNodes(physicalStage, [](const TExprNode::TPtr& node) { return !!TMaybeNode<TCoParameter>(node); });
+        for (const auto& param : params) {
+            const auto paramName = TExprBase(param).Cast<TCoParameter>().Name().StringValue();
+            if (!paramsCollected.contains(paramName)) {
+                // clang-format off
+                const auto paramBinding = Build<TKqpParamBinding>(ctx, pos)
+                    .Name<TCoAtom>()
+                        .Value(paramName)
+                    .Build()
+                .Done();
+                // clang-format on
+                paramBindings.push_back(paramBinding);
+                paramsCollected.insert(paramName);
+            }
+        }
+    }
+
+    return paramBindings;
+}
+
 TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPtr>&& physicalStages) {
     Y_ENSURE(physicalStages.size());
     auto& ctx = RBOCtx.ExprCtx;
 
+    const auto paramBindings = CollectParamBindings(physicalStages);
     TVector<TCoAtom> columnAtomList;
     for (const auto& column : Root.ColumnOrder) {
         columnAtomList.push_back(Build<TCoAtom>(ctx, Root.Pos).Value(column).Done());
     }
-    auto columnOrder = Build<TCoAtomList>(ctx, Root.Pos).Add(columnAtomList).Done().Ptr();
+    const auto columnOrder = Build<TCoAtomList>(ctx, Root.Pos).Add(columnAtomList).Done().Ptr();
 
     // clang-format off
     // wrap in DqResult
@@ -150,7 +178,9 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
         .Results()
             .Add({dqResult})
         .Build()
-        .ParamBindings().Build()
+        .ParamBindings()
+            .Add(paramBindings)
+        .Build()
         .Settings(phyTxSettings.BuildNode(ctx, Root.Pos))
     .Done().Ptr();
     // clang-format on

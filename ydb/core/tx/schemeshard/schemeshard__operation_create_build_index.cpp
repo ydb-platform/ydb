@@ -193,7 +193,9 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             if (indexDesc.IndexImplTableDescriptionsSize() == 1) {
                 indexTableDesc = indexDesc.GetIndexImplTableDescriptions(0);
             }
-            auto implTableDesc = CalcImplTableDesc(tableInfo, implTableColumns, indexTableDesc);
+            const auto uniqueKeySize = indexType == NKikimrSchemeOp::EIndexTypeGlobalUnique
+                ? indexDesc.GetKeyColumnNames().size() : 0;
+            auto implTableDesc = CalcImplTableDesc(tableInfo, implTableColumns, indexTableDesc, uniqueKeySize);
             // TODO if keep erase markers also speedup compaction or something else we can enable it for other impl tables too
             implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
             result.push_back(createImplTable(std::move(implTableDesc)));

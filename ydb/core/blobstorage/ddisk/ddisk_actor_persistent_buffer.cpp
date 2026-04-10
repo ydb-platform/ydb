@@ -185,6 +185,7 @@ namespace NKikimr::NDDisk {
                     .Size = header->Size,
                     .PartsCount = 0,
                     .VChunkIndex = header->VChunkIndex,
+                    .Timestamp = TInstant::Now()
                 };
                 ui32 sectorsCnt = header->Size / SectorSize;
                 pr.Sectors.reserve(sectorsCnt + 1);
@@ -211,6 +212,9 @@ namespace NKikimr::NDDisk {
                     }
                     return false;
                 });
+                for (auto [_, r] : pb.Records) {
+                    pb.Size += r.Size;
+                }
             }
             std::erase_if(PersistentBuffers, [](const auto& pb) { return pb.second.Records.empty(); });
             for (auto& [_, pb] : PersistentBuffers) {
@@ -326,7 +330,9 @@ namespace NKikimr::NDDisk {
                             .Sectors = std::move(inflight.Sectors),
                             .PartsCount = 1,
                             .VChunkIndex = inflight.VChunkIdx,
+                            .Timestamp = TInstant::Now()
                         };
+                        buffer.Size += pr.Size;
                         pr.DataParts.emplace(0, std::move(inflight.Data));
                         PersistentBufferInMemoryCacheSize += pr.Size;
                     } else {
@@ -622,7 +628,7 @@ namespace NKikimr::NDDisk {
                 NWilson::EFlags::NONE, TActivationContext::ActorSystem())
             .Attribute("tablet_id", static_cast<long>(creds.TabletId)));
 
-        STLOG(PRI_DEBUG, BS_DDISK, BSDD18, "TDDiskActor::ErasePersistentBuffer tabletId: " << creds.TabletId);
+        STLOG(PRI_DEBUG, BS_DDISK, BSDD31, "TDDiskActor::ErasePersistentBuffer tabletId: " << creds.TabletId);
 
         const ui64 batchEraseCookie = NextCookie++;
 
@@ -661,6 +667,7 @@ namespace NKikimr::NDDisk {
             partOp->SetIsErase(true);
             partOp->PrepareWrite(TRope(zeroingData), diskOffset, pr.Sectors[0].ChunkIdx, chunkOffset);
 
+            buffer.Size -= pr.Size;
             buffer.Records.erase(jt);
             if (buffer.Records.empty()) {
                 PersistentBuffers.erase(it);
@@ -737,6 +744,36 @@ namespace NKikimr::NDDisk {
         }
 
         ErasePersistentBuffer(*ev, creds, erases);
+    }
+
+    void TDDiskActor::Handle(TEvGetPersistentBufferInfo::TPtr ev) {
+        if (!PersistentBufferReady) {
+            PendingPersistentBufferEvents.emplace(ev, "WaitingGetPersistentBufferInfo");
+            return;
+        }
+    STLOG(PRI_DEBUG, BS_DDISK, BSDD40, "TDDiskActor::Handle(TEvGetPersistentBufferInfo)",
+        (Sender, ev->Sender), (cookie, ev->Cookie));
+        auto reply = std::make_unique<TEvPersistentBufferInfo>();
+        reply->StartedAt = StartedAt;
+        reply->AllocatedChunks = PersistentBufferAllocatedChunks.size();
+        reply->ChunkSize = DiskFormat->ChunkSize;
+        reply->MaxChunks = PersistentBufferFormat.MaxChunks;
+        reply->SectorSize = SectorSize;
+        reply->FreeSectors = PersistentBufferSpaceAllocator.GetFreeSpace();
+        reply->InMemoryCacheSize = PersistentBufferInMemoryCacheSize;
+        reply->InMemoryCacheLimit = PersistentBufferFormat.MaxInMemoryCache;
+        if (ev->Get()->DescribeTablets) {
+            for (auto& [k, v] : PersistentBuffers) {
+                reply->TabletInfos.emplace_back(std::get<0>(k), std::get<1>(k),
+                    v.Records.begin()->first, v.Records.rbegin()->first,
+                    v.Records.begin()->second.Timestamp, v.Records.rbegin()->second.Timestamp,
+                    v.Records.size(), v.Size);
+            }
+        }
+        if (ev->Get()->DescribeFreeSpace) {
+            reply->FreeSpace = PersistentBufferSpaceAllocator.DescribeFreeSpace();
+        }
+        Send(ev->Sender, std::move(reply), 0, ev->Cookie);
     }
 
     void TDDiskActor::Handle(TEvListPersistentBuffer::TPtr ev) {

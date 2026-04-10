@@ -1839,6 +1839,14 @@ void TKikimrRunner::InitializeActorSystem(
                 MakeMonGetBlobId());
 
         Monitoring->RegisterActorPage(
+                ActorsMonPage,
+                "persistent_buffer",
+                "Persistent Buffer",
+                false,
+                ActorSystem.Get(),
+                MakeMonPersistentBufferID(runConfig.NodeId));
+
+        Monitoring->RegisterActorPage(
                 nullptr,
                 "blob_range",
                 TString(),
@@ -2046,6 +2054,8 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnableNetClassifier) {
         sil->AddServiceInitializer(new TNetClassifierInitializer(runConfig));
     }
+
+    sil->AddServiceInitializer(new TMonPersistentBufferInitializer(runConfig));
 
     sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig, ProcessMemoryInfoProvider));
 

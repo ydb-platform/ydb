@@ -20,6 +20,7 @@
 #include <yt/yql/providers/yt/provider/yql_yt_table_desc.h>
 #include <yt/yql/providers/yt/provider/yql_yt_mkql_compiler.h>
 
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
@@ -289,26 +290,77 @@ public:
         const TPosition& nodePos)
     {
         TString sessionId = options.SessionId();
+        TString cluster = execCtx->Cluster_;
+        auto config = options.Config();
+        TString tmpFolder = GetTablesTmpFolder(*config, cluster);
         std::unordered_map<TString, TVector<TOutputInfo>> outputTablesByCluster;
+        THashSet<TString> seen;
 
-        for (auto& inputInfo : execCtx->InputTables_) {
-            TFmrTableId inputFmrTableId(inputInfo.Cluster, inputInfo.Name);
-            TFmrTableId fmrTableId = GetAliasOrFmrId(inputFmrTableId, sessionId);
-
-            TString columnGroupSpec = GetColumnGroupSpec(fmrTableId, sessionId);
-
+        auto addFmrTable = [&](const TString& tableCluster, const TString& tablePath, const NYT::TNode& spec, const TString& columnGroupSpec) {
+            TString key = tableCluster + "." + tablePath;
+            if (seen.contains(key)) {
+                return;
+            }
+            seen.insert(key);
+            TFmrTableId fmrTableId = GetAliasOrFmrId(TFmrTableId(tableCluster, tablePath), sessionId);
             auto status = GetTablePresenceStatus(fmrTableId, sessionId);
             if (status == ETablePresenceStatus::OnlyInFmr) {
                 TOutputInfo outputTableInfo;
-                outputTableInfo.Path = inputInfo.Name;
-                outputTableInfo.Spec = inputInfo.Spec;
+                outputTableInfo.Path = tablePath;
+                outputTableInfo.Spec = spec;
                 outputTableInfo.AttrSpec = NYT::TNode::CreateMap();
                 if (!columnGroupSpec.empty()) {
                     outputTableInfo.ColumnGroups = NYT::NodeFromYsonString(columnGroupSpec);
                 }
-                outputTablesByCluster[inputInfo.Cluster].emplace_back(outputTableInfo);
+                YQL_CLOG(INFO, FastMapReduce) << "UploadFmrInputs: will upload FMR-only table " << fmrTableId << " to YT";
+                outputTablesByCluster[tableCluster].emplace_back(outputTableInfo);
             }
+        };
+
+        for (auto& inputInfo : execCtx->InputTables_) {
+            TFmrTableId inputFmrTableId(inputInfo.Cluster, inputInfo.Name);
+            TFmrTableId fmrTableId = GetAliasOrFmrId(inputFmrTableId, sessionId);
+            TString columnGroupSpec = GetColumnGroupSpec(fmrTableId, sessionId);
+            addFmrTable(inputInfo.Cluster, inputInfo.Name, inputInfo.Spec, columnGroupSpec);
         }
+
+        VisitExpr(node, [&](const TExprNode::TPtr& exprNode) {
+            if (auto maybeContent = TMaybeNode<TYtTableContent>(exprNode)) {
+                auto content = maybeContent.Cast();
+                if (auto maybeRead = content.Input().Maybe<TYtReadTable>()) {
+                    for (auto section : maybeRead.Cast().Input()) {
+                        for (auto path : section.Paths()) {
+                            auto tableInfo = TYtTableBaseInfo::Parse(path.Table());
+                            if (tableInfo->Cluster.empty()) {
+                                tableInfo->Cluster = cluster;
+                            }
+                            TString tablePath = GetTransformedPath(sessionId, tableInfo->Name, tmpFolder);
+                            TFmrTableId fmrTableId = GetAliasOrFmrId(TFmrTableId(tableInfo->Cluster, tablePath), sessionId);
+                            NYT::TNode spec;
+                            if (tableInfo->RowSpec) {
+                                spec = FillAttrSpecNode(*tableInfo->RowSpec, TRunOptions(options), tableInfo->Cluster);
+                            }
+                            addFmrTable(tableInfo->Cluster, tablePath, spec, GetColumnGroupSpec(fmrTableId, sessionId));
+                        }
+                    }
+                } else if (auto maybeOutput = content.Input().Maybe<TYtOutput>()) {
+                    auto tableInfo = TYtTableBaseInfo::Parse(maybeOutput.Cast());
+                    if (tableInfo->Cluster.empty()) {
+                        tableInfo->Cluster = cluster;
+                    }
+                    TString tablePath = GetTransformedPath(sessionId, tableInfo->Name, tmpFolder);
+                    TFmrTableId fmrTableId = GetAliasOrFmrId(TFmrTableId(tableInfo->Cluster, tablePath), sessionId);
+                    NYT::TNode spec;
+                    if (tableInfo->RowSpec) {
+                        spec = FillAttrSpecNode(*tableInfo->RowSpec, TRunOptions(options), tableInfo->Cluster);
+                    }
+                    addFmrTable(tableInfo->Cluster, tablePath, spec, GetColumnGroupSpec(fmrTableId, sessionId));
+                }
+                return false;
+            }
+            return true;
+        });
+
         if (!outputTablesByCluster.empty()) {
             return UploadSeveralFmrTablesToYt<TRunResult, TRunOptions>(outputTablesByCluster, TRunOptions(options), nodePos)
                 .Apply([this, node, &ctx, options = std::move(options)] (const auto& f) mutable {
@@ -361,11 +413,23 @@ public:
             try {
                 auto fmrOperationResult = f.GetValue(); // rethrow error if any
                 if (HasFmrErrorReason(fmrOperationResult, EFmrErrorReason::FallbackOperation)) {
+                    for (const auto& error : fmrOperationResult.Errors) {
+                        if (error.Reason == EFmrErrorReason::FallbackOperation) {
+                            YQL_CLOG(INFO, FastMapReduce) << "Falling back to native gateway: " << error.ErrorMessage;
+                        }
+                    }
                     return UploadFmrInputsAndForwardToUnderlyingGateway(execCtx, node, ctx, std::move(options), pos);
                 }
 
                 TRunResult result;
                 ProcessFmrOperationResult(fmrOperationResult, result, pos);
+
+                YQL_CLOG(INFO, FastMapReduce) << "FMR Run callback: fmrOperationResult.Success()=" << fmrOperationResult.Success()
+                    << ", result.Success()=" << result.Success()
+                    << ", result.Repeat()=" << result.Repeat()
+                    << ", TablesStats.size()=" << fmrOperationResult.TablesStats.size()
+                    << ", OutTables_.size()=" << execCtx->OutTables_.size()
+                    << ", node=" << node->Content();
 
                 if (fmrOperationResult.Success()) {
                     auto outputTables = execCtx->OutTables_;
@@ -377,7 +441,6 @@ public:
                         SetTablePresenceStatus(fmrOutputTableId, execCtx->GetSessionId(), ETablePresenceStatus::OnlyInFmr);
 
                         auto tableStats = fmrOperationResult.TablesStats[i];
-                        // setting stats
                         TYtTableStatInfo stats;
                         stats.Id = "fmr_" + fmrOutputTableId.Id;
                         stats.RecordsCount = tableStats.Rows;
@@ -387,7 +450,6 @@ public:
                         result.OutTableStats.emplace_back(outputTable.Name, MakeIntrusive<TYtTableStatInfo>(stats));
                         SetFmrTableStats(fmrOutputTableId, stats, execCtx->GetSessionId());
 
-                        // setting meta
                         TYtTableMetaInfo meta;
                         meta.DoesExist = true;
 
@@ -396,6 +458,8 @@ public:
                         YQL_CLOG(INFO, FastMapReduce) << "Fmr output table info: RecordsCount = " << result.OutTableStats.back().second->RecordsCount << " DataSize = " << result.OutTableStats.back().second->DataSize << " ChunkCount = " << result.OutTableStats.back().second->ChunkCount;
                     }
                 }
+                YQL_CLOG(INFO, FastMapReduce) << "FMR Run returning TRunResult: Success()=" << result.Success()
+                    << ", OutTableStats.size()=" << result.OutTableStats.size();
                 return MakeFuture<TRunResult>(std::move(result));
             } catch (...) {
                 return MakeFuture(ResultFromCurrentException<TRunResult>(pos));
@@ -903,6 +967,112 @@ public:
         return Slave_->ResOrPull(node, ctx, std::move(options));
     }
 
+    TFuture<TCalcResult> Calc(const TExprNode::TListType& nodes, TExprContext& ctx, TCalcOptions&& options) final {
+        YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
+        TString sessionId = options.SessionId();
+        TString cluster = options.Cluster();
+        auto config = options.Config();
+        TString tmpFolder = GetTablesTmpFolder(*config, cluster);
+
+        struct TCalcTableInfo {
+            TString Cluster;
+            TString Path;
+            ETablePresenceStatus Status;
+            TYtTableBaseInfo::TPtr TableInfo;
+        };
+
+        std::vector<TCalcTableInfo> tableRefs;
+        THashSet<TString> seen;
+
+        auto processTableInfo = [&](TYtTableBaseInfo::TPtr tableInfo) {
+            if (tableInfo->Cluster.empty()) {
+                tableInfo->Cluster = cluster;
+            }
+            TString tablePath = GetTransformedPath(sessionId, tableInfo->Name, tmpFolder);
+            TString key = tableInfo->Cluster + "." + tablePath;
+            if (seen.contains(key)) {
+                return;
+            }
+            seen.insert(key);
+            TFmrTableId fmrTableId = GetAliasOrFmrId(TFmrTableId(tableInfo->Cluster, tablePath), sessionId);
+            auto status = GetTablePresenceStatus(fmrTableId, sessionId);
+            tableRefs.push_back(TCalcTableInfo{
+                .Cluster = tableInfo->Cluster,
+                .Path = tablePath,
+                .Status = status,
+                .TableInfo = tableInfo
+            });
+        };
+
+        for (auto& node : nodes) {
+            VisitExpr(node, [&](const TExprNode::TPtr& exprNode) {
+                if (auto maybeContent = TMaybeNode<TYtTableContent>(exprNode)) {
+                    auto content = maybeContent.Cast();
+                    if (auto maybeRead = content.Input().Maybe<TYtReadTable>()) {
+                        for (auto section : maybeRead.Cast().Input()) {
+                            for (auto path : section.Paths()) {
+                                processTableInfo(TYtTableBaseInfo::Parse(path.Table()));
+                            }
+                        }
+                    } else if (auto maybeOutput = content.Input().Maybe<TYtOutput>()) {
+                        processTableInfo(TYtTableBaseInfo::Parse(maybeOutput.Cast()));
+                    }
+                    return false;
+                }
+                if (auto maybeRead = TMaybeNode<TCoRight>(exprNode).Input().Maybe<TYtReadTable>()) {
+                    for (auto section : maybeRead.Cast().Input()) {
+                        for (auto path : section.Paths()) {
+                            processTableInfo(TYtTableBaseInfo::Parse(path.Table()));
+                        }
+                    }
+                    return false;
+                }
+                return true;
+            });
+        }
+
+        bool hasFmrTables = false;
+        for (auto& ref : tableRefs) {
+            if (ref.Status == ETablePresenceStatus::OnlyInFmr) {
+                hasFmrTables = true;
+            }
+        }
+
+        if (hasFmrTables) {
+            YQL_CLOG(INFO, FastMapReduce) << "Calc: uploading FMR tables to YT before delegating to native gateway";
+            std::unordered_map<TString, TVector<TOutputInfo>> outputFmrTablesByCluster;
+            for (auto& ref : tableRefs) {
+                if (ref.Status != ETablePresenceStatus::OnlyInFmr) {
+                    continue;
+                }
+                TOutputInfo outputTableInfo;
+                outputTableInfo.Path = ref.Path;
+                if (ref.TableInfo->RowSpec) {
+                    outputTableInfo.Spec = FillAttrSpecNode(*ref.TableInfo->RowSpec, TCalcOptions(options), ref.Cluster);
+                }
+                outputTableInfo.AttrSpec = NYT::TNode::CreateMap();
+                outputFmrTablesByCluster[ref.Cluster].emplace_back(outputTableInfo);
+            }
+
+            TPosition pos;
+            if (!nodes.empty()) {
+                pos = ctx.GetPosition(nodes.front()->Pos());
+            }
+            return UploadSeveralFmrTablesToYt<TCalcResult, TCalcOptions>(outputFmrTablesByCluster, TCalcOptions(options), pos)
+                .Apply([this, nodes, &ctx, options = std::move(options)] (const auto& f) mutable {
+                    auto uploadResult = f.GetValue();
+                    if (!uploadResult.Success()) {
+                        TCalcResult calcResult;
+                        calcResult.AddIssues(uploadResult.Issues());
+                        return MakeFuture(std::move(calcResult));
+                    }
+                    return Slave_->Calc(nodes, ctx, std::move(options));
+                });
+        }
+
+        return Slave_->Calc(nodes, ctx, std::move(options));
+    }
+
     void OpenSession(TOpenSessionOptions&& options) final {
         TString sessionId = options.SessionId();
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
@@ -929,6 +1099,19 @@ public:
         TString sessionId = options.SessionId();
         with_lock(Mutex_) {
             YQL_ENSURE(Sessions_.contains(sessionId));
+            auto& operationStatuses = Sessions_[sessionId]->OperationStates.OperationStatuses;
+            for (auto& [operationId, promise] : operationStatuses) {
+                if (!promise.IsReady()) {
+                    YQL_CLOG(WARN, FastMapReduce) << "Resolving pending promise for operation " << operationId << " during session close";
+                    TFmrOperationResult fmrOperationResult{};
+                    fmrOperationResult.Errors.emplace_back(TFmrError{
+                        .Component = EFmrComponent::Gateway,
+                        .Reason = EFmrErrorReason::Unknown,
+                        .ErrorMessage = TStringBuilder() << "Session " << sessionId << " closed while operation " << operationId << " was still in progress"
+                    });
+                    promise.SetValue(std::move(fmrOperationResult));
+                }
+            }
             Sessions_.erase(sessionId);
         }
 

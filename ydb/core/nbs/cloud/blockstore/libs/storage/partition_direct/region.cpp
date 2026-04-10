@@ -26,13 +26,16 @@ TRegion::TRegion(
     ui32 regionIndex,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
     ui32 syncRequestsBatchSize,
+    ui64 vChunkSize,
     TDuration writeHandoffDelay,
     TDuration traceSamplePeriod)
     : ActorSystem(actorSystem)
 {
-    for (size_t i = 0; i < VChunksPerRegionCount; i++) {
+    Y_ABORT_UNLESS(vChunkSize > 0 && vChunkSize <= RegionSize);
+    const ui32 vChunksPerRegionCount = RegionSize / vChunkSize;
+    for (size_t i = 0; i < vChunksPerRegionCount; i++) {
         const size_t vChunkIndex =
-            (regionIndex * VChunksPerRegionCount) + static_cast<ui32>(i);
+            (regionIndex * vChunksPerRegionCount) + static_cast<ui32>(i);
         const size_t dbgIndex = i % directBlockGroups.size();
 
         auto vChunk = std::make_shared<TVChunk>(
@@ -41,6 +44,7 @@ TRegion::TRegion(
             TVChunkConfig::Make(vChunkIndex),
             directBlockGroups[dbgIndex],
             syncRequestsBatchSize,
+            vChunkSize,
             writeHandoffDelay,
             traceSamplePeriod);
         vChunk->Start();

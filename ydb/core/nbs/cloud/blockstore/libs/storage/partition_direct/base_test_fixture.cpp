@@ -39,7 +39,8 @@ void TBaseFixture::Init()
         "disk-1",
         DefaultBlockSize,
         65536,
-        1024);
+        1024,
+        DefaultVChunkSize);
     DirtyMap.UpdateConfig(DDiskMask.Include(PBuffersMask), {});
 
     DirectBlockGroup = std::make_shared<TDirectBlockGroupMock>();

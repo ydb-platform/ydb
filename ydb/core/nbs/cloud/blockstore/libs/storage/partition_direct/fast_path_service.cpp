@@ -55,6 +55,7 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
             i,
             directBlockGroups,
             storageConfig->GetSyncRequestsBatchSize(),
+            storageConfig->GetVChunkSize(),
             storageConfig->GetWriteHandoffDelay(),
             storageConfig->GetTraceSamplePeriod());
     }
@@ -96,7 +97,8 @@ TFastPathService::TFastPathService(
           .DiskId = DiskId,
           .BlockSize = blockSize,
           .BlockCount = blockCount,
-          .BlocksPerStripe = storageConfig->GetStripeSize()}))
+          .BlocksPerStripe = storageConfig->GetStripeSize(),
+          .VChunkSize = storageConfig->GetVChunkSize()}))
     , WriteMode(GetWriteModeFromProto(storageConfig->GetWriteMode()))
     , PBufferReplyTimeout(storageConfig->GetPBufferReplyTimeout())
 {

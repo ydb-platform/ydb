@@ -90,7 +90,7 @@ class TAlterLocalIndex: public TSubOperation {
         case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            return MakeHolder<TDone>(OperationId, TPathElement::EPathState::EPathStateNoChanges);
         default:
             return nullptr;
         }

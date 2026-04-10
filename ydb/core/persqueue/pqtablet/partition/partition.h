@@ -168,7 +168,7 @@ public:
 
 private:
     static const ui32 MAX_ERRORS_COUNT_TO_STORE = 10;
-    static const ui32 SCALE_REQUEST_REPEAT_MIN_SECONDS = 60;
+    static const ui32 SCALE_REQUEST_REPEAT_MIN_SECONDS = 10;
 
     enum EDeletePartitionState {
         DELETION_NOT_INITED = 0,

@@ -199,16 +199,22 @@ struct TEvPrivate {
     private:
         TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>> Result;
         TCounterGuard ScanCounter;
+        ui64 SourceId = 0;
 
     public:
         TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>& MutableResult() {
             return Result;
         }
 
+        ui64 GetSourceId() const {
+            return SourceId;
+        }
+
         TEvTaskProcessedResult(
-            TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>&& result, TCounterGuard&& scanCounters)
+            TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>&& result, TCounterGuard&& scanCounters, ui64 sourceId = 0)
             : Result(std::move(result))
-            , ScanCounter(std::move(scanCounters)) {
+            , ScanCounter(std::move(scanCounters))
+            , SourceId(sourceId) {
         }
     };
 

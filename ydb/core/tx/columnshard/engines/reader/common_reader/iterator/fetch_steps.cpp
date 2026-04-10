@@ -15,7 +15,7 @@ LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
 void TColumnBlobsFetchingStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs, const ui64 bytesRead) const {
     LWTRACK(ColumnBlobsFetching, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
             step.GetTracingName(), source->GetAndResetWaitDuration(), executionDurationMs, Columns.GetColumnsCount(), bytesRead, source->GetRecordsCount());
 }
 
@@ -41,7 +41,7 @@ ui64 TColumnBlobsFetchingStep::GetProcessingDataSize(const std::shared_ptr<IData
 void TAssemblerStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs, const ui64 bytesAssembled) const {
     const TDuration finishDurationMs = source->GetAndResetWaitDuration();
     LWTRACK(AssemblerStep, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
             step.GetTracingName(), finishDurationMs, executionDurationMs, Columns->GetColumnsCount(), bytesAssembled, source->GetRecordsCount());
 }
 
@@ -118,7 +118,7 @@ void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(cons
 
 void TAllocateMemoryStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs, const ui64 size) const {
     LWTRACK(MemoryAllocation, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
             step.GetTracingName(), source->GetAndResetWaitDuration(), executionDurationMs, size, true);
 }
 

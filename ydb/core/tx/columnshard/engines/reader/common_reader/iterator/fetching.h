@@ -21,6 +21,7 @@ private:
     std::shared_ptr<IDataSource> Source;
     TFetchingScriptCursor Cursor;
     bool FinishedFlag = false;
+    ui64 CachedSourceId = 0;
 
 protected:
     virtual bool DoApply(IDataReader& owner) override;
@@ -29,6 +30,10 @@ protected:
 public:
     virtual TString GetTaskClassIdentifier() const override {
         return "STEP_ACTION";
+    }
+
+    virtual ui64 GetSourceId() const override {
+        return CachedSourceId;
     }
 
     template <class T>

@@ -23,6 +23,9 @@ public:
         AppliedFlag = true;
         return DoApply(indexedDataRead);
     }
+    virtual ui64 GetSourceId() const {
+        return 0;
+    }
     virtual ~IApplyAction() = default;
 };
 

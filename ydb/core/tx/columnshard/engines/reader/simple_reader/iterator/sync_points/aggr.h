@@ -177,7 +177,7 @@ private:
             "table", resultChunk->GetTable()->num_rows())("original_count", source->GetRecordsCount())("activity", AggregationActivity);
         reader.OnIntervalResult(
             std::make_unique<TPartialReadResult>(source->ExtractResourceGuards(), source->MutableAs<IDataSource>()->ExtractGroupGuard(),
-                resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), std::nullopt));
+                resultChunk->ExtractTable(), std::move(cursor), Context->GetCommonContext(), std::nullopt, source->GetDeprecatedPortionId()));
         source->MutableAs<IDataSource>()->ClearResult();
         return ESourceAction::Finish;
     }

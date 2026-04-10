@@ -47,7 +47,8 @@ TStepAction::TStepAction(
     std::shared_ptr<IDataSource>&& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId, const bool changeSyncSection)
     : TBase(ownerActorId, source->GetContext()->GetCommonContext()->GetCounters().GetAssembleTasksGuard())
     , Source(std::move(source))
-    , Cursor(std::move(cursor)) {
+    , Cursor(std::move(cursor))
+    , CachedSourceId(Source->GetDeprecatedPortionId()) {
     if (changeSyncSection) {
         Source->StartAsyncSection();
     } else {
@@ -66,7 +67,7 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
     const auto processorType = processor->GetProcessorType();
     const TString details = processor->DebugJson().GetStringRobust();
 #define PROGRAM_PROBE_ARGS source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), \
-                    source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(), \
+                    source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(), \
                     tracingName, iterator->GetCurrentNodeId(), finishDurationMs, \
                     executionDurationMs, source->GetRecordsCount(), tracingExecutionResult, details
     switch (processorType) {

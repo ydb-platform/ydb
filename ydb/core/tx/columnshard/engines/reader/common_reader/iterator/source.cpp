@@ -2,10 +2,12 @@
 #include "source.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
+LWTRACE_USING(YDB_CS_SCAN);
 
 void TExecutionContext::OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals) {
     if (!CurrentProgramNodeId) {
@@ -156,7 +158,9 @@ ui32 IDataSource::GetRecordsCount() const {
 void IDataSource::OnStartProcessing() {
     AFL_VERIFY(!SourceCreatedTimestamp);
     SourceCreatedTimestamp = TMonotonic::Now();
-    LWTRACK(StartSourceProcessing, DataSourceOrbit, GetRawPathId(), GetTabletId(), GetTxId(), GetSourceIdx());
+    LWTRACK(StartSourceProcessing, DataSourceOrbit, GetRawPathId(), GetTabletId(), GetTxId(), GetDeprecatedPortionId());
+    LWTRACK(ScanStartSource, *GetContext()->GetCommonContext()->GetScanOrbit(), GetRawPathId(), GetTabletId(),
+            GetTxId(), GetContext()->GetCommonContext()->GetScanId(), GetDeprecatedPortionId());
 }
 
 void IDataSource::StartAsyncSection() {
@@ -280,6 +284,11 @@ void IDataSource::OnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& 
     DoOnEmptyStageData(sourcePtr);
     AFL_VERIFY(StageResult);
     AFL_VERIFY(!StageData);
+
+    const TDuration durationMs = GetAndResetWaitDuration();
+    LWTRACK(SourceFinished, DataSourceOrbit, GetRawPathId(), GetTabletId(),
+            GetTxId(), GetDeprecatedPortionId(), 0,
+            ExecutionContext.GetPrevCategoryName() + " - " + "SourceFinished(Empty)", durationMs, GetTotalDuration(), GetTotalBytesRead(), GetTotalExecutionDuration());
 }
 
 void IDataSource::BuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr) {
@@ -294,7 +303,7 @@ void IDataSource::BuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr
 
     const TDuration durationMs = GetAndResetWaitDuration();
     LWTRACK(SourceFinished, DataSourceOrbit, GetRawPathId(), GetTabletId(),
-            GetTxId(), GetSourceIdx(), 0,
+            GetTxId(), GetDeprecatedPortionId(), 0,
             ExecutionContext.GetPrevCategoryName() + " - " + "SourceFinished", durationMs, GetTotalDuration(), GetTotalBytesRead(), GetTotalExecutionDuration());
 }
 

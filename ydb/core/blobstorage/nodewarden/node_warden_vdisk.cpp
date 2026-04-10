@@ -88,15 +88,7 @@ namespace NKikimr::NStorage {
 
         // find underlying PDisk and determine its media type
         auto pdiskIt = LocalPDisks.find({vslotId.NodeId, vslotId.PDiskId});
-        if (pdiskIt == LocalPDisks.end()) {
-            // VDisk config may arrive before corresponding PDisk is started (e.g. during bootstrap/config updates).
-            // Defer starting the VDisk until PDisk appears.
-            STLOG(PRI_NOTICE, BS_NODE, NW23, "StartLocalVDiskActor: PDisk not found yet, deferring",
-                (VDiskId, vdisk.GetVDiskId()),
-                (VSlotId, vslotId),
-                (PDiskGuid, pdiskGuid));
-            return;
-        }
+        Y_VERIFY_S(pdiskIt != LocalPDisks.end(), "PDiskId# " << vslotId.NodeId << ":" << vslotId.PDiskId << " not found");
         auto& pdisk = pdiskIt->second;
         Y_VERIFY_S(pdisk.Record.GetPDiskGuid() == pdiskGuid, "PDiskId# " << vslotId.NodeId << ":" << vslotId.PDiskId << " PDiskGuid mismatch");
         const NPDisk::EDeviceType deviceType = TPDiskCategory(pdisk.Record.GetPDiskCategory()).Type();

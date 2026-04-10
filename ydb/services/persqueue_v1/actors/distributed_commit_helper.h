@@ -32,14 +32,14 @@ public:
 
     struct GenerationIdCheckerSettings {
         i64 GenerationId;
-        TString TopicDatabasePath;
+        TString ResourceDatabasePath;
         TString ConsumerMetadataTablePath;
     };
 
     TDistributedCommitHelper(TString database, TString consumer, std::vector<TCommitInfo> commits, ui64 cookie = 0,
                              std::optional<GenerationIdCheckerSettings> generationCheckerSettings = std::nullopt);
 
-    TDistributedCommitHelper::ECurrentStep Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
+    std::pair<TDistributedCommitHelper::ECurrentStep, bool> Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
     void SendCreateSessionRequest(const TActorContext& ctx);
     void BeginTransaction(const NActors::TActorContext& ctx);
     bool Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx);
@@ -49,7 +49,7 @@ private:
     THolder<NKqp::TEvKqp::TEvCreateSessionRequest> MakeCreateSessionRequest();
     THolder<NKqp::TEvKqp::TEvCloseSessionRequest> MakeCloseSessionRequest();
     void RetrieveGeneration(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx);
-    void CompareGenerations(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx);
+    bool CompareGenerations(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx);
     void SendCommits(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx);
     void CommitTx(const NActors::TActorContext& ctx);
 

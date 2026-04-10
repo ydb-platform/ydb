@@ -269,7 +269,8 @@ void TPartitionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TAc
         return;
     }
 
-    auto step = kqpIt->second->Handle(ev, ctx);
+    std::pair<TDistributedCommitHelper::ECurrentStep, bool> handleResult = kqpIt->second->Handle(ev, ctx);
+    auto step = handleResult.first;
     if (step == TDistributedCommitHelper::ECurrentStep::DONE) {
         CommitDone(ev->Cookie, ctx);
     }

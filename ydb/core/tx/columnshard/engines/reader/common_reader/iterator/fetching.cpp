@@ -94,11 +94,15 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
                 for (auto&& col : processor->GetOutput()) {
                     fetchColumnIds.insert(col.GetColumnId());
                 }
-                const ui64 blobBytes = source->GetColumnBlobBytes(fetchColumnIds);
+                ui64 blobBytes = source->GetColumnBlobBytes(fetchColumnIds);
+                ui64 rawBytes = source->GetColumnRawBytes(fetchColumnIds);
+                if (source->HasPortionAccessor()) {
+                    const auto& accessor = source->GetPortionAccessor();
+                    blobBytes += accessor.GetIndexBlobBytes(fetchColumnIds, false);
+                    rawBytes += accessor.GetIndexRawBytes(fetchColumnIds, false);
+                }
                 source->AddBytesRead(blobBytes);
-                LWTRACK(ProgramFetchOriginalData, PROGRAM_PROBE_ARGS,
-                    blobBytes,
-                    source->GetColumnRawBytes(fetchColumnIds), details);
+                LWTRACK(ProgramFetchOriginalData, PROGRAM_PROBE_ARGS, blobBytes, rawBytes, details);
             }
             break;
         case NArrow::NSSA::EProcessorType::AssembleOriginalData:

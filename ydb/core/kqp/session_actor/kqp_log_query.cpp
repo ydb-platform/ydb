@@ -1,4 +1,5 @@
 #include "kqp_log_query.h"
+#include "kqp_worker_common.h"
 
 #include <ydb/core/kqp/common/events/query.h>
 #include <ydb/core/kqp/session_actor/kqp_query_state.h>
@@ -82,6 +83,10 @@ TLogQuery TLogQuery::Started(const TKqpQueryState& state) {
 
         auto query = state.ExtractQueryText();
 
+        if (!IsQueryAllowedToLog(query)) {
+            return;
+        }
+
         WriteJsonChunks(
             poolId,
             GetRequestId(state),
@@ -106,6 +111,10 @@ TLogQuery TLogQuery::Completed(const TKqpQueryState& state,
             : TString{};
 
         auto queryText = state.ExtractQueryText();
+
+        if (!IsQueryAllowedToLog(queryText)) {
+            return;
+        }
 
         NYql::TIssues issues;
         TStringBuf poolId;

@@ -5882,6 +5882,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Self->PersistDropStep(db, childPathId, TStepId(1), {});
                 Self->PersistRemoveTableIndex(db, childPathId);
 
+                tablePath->DecAliveChildrenPrivate();
+
                 auto domainInfo = Self->ResolveDomainInfo(childPathId);
                 domainInfo->DecPathsInside(Self);
 
@@ -5944,7 +5946,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 tablePath->DbRefCount++;
                 tablePath->AllChildrenCount++;
+                tablePath->IncAliveChildrenPrivate();
                 tablePath->AddChild(indexName, indexPathId, false);
+
+                auto domainInfo = Self->ResolveDomainInfo(indexPathId);
+                domainInfo->IncPathsInside(Self);
 
                 Self->Indexes[indexPathId] = indexInfo;
                 Self->IncrementPathDbRefCount(indexPathId);

@@ -167,9 +167,11 @@ private:
                     }
                     {
                         auto it = colNameToId.find(index.index_columns(0));
-                        if (it != colNameToId.end()) {
-                            bloom->AddColumnIds(it->second);
+                        if (it == colNameToId.end()) {
+                            issues.AddIssue(NYql::TIssue(TStringBuilder() << "Unknown column '" << index.index_columns(0) << "' in index '" << index.name() << "'"));
+                            return false;
                         }
+                        bloom->AddColumnIds(it->second);
                     }
                     break;
                 }
@@ -198,9 +200,11 @@ private:
                     }
                     {
                         auto it = colNameToId.find(index.index_columns(0));
-                        if (it != colNameToId.end()) {
-                            ngram->SetColumnId(it->second);
+                        if (it == colNameToId.end()) {
+                            issues.AddIssue(NYql::TIssue(TStringBuilder() << "Unknown column '" << index.index_columns(0) << "' in index '" << index.name() << "'"));
+                            return false;
                         }
+                        ngram->SetColumnId(it->second);
                     }
                     break;
                 }

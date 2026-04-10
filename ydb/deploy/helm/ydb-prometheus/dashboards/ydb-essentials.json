@@ -56,7 +56,6 @@
         "content": "#### Health",
         "mode": "markdown"
       },
-      "pluginVersion": "12.3.3",
       "transparent": true,
       "type": "text"
     },
@@ -144,7 +143,6 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -259,7 +257,6 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -373,7 +370,6 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -409,7 +405,6 @@
         "content": "#### Saturation",
         "mode": "markdown"
       },
-      "pluginVersion": "12.3.3",
       "transparent": true,
       "type": "text"
     },
@@ -497,7 +492,6 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -600,7 +594,6 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -721,7 +714,6 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -887,7 +879,6 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -1056,7 +1047,6 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -1311,7 +1301,6 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -1414,7 +1403,6 @@
         "content": "#### Traffic",
         "mode": "markdown"
       },
-      "pluginVersion": "12.3.3",
       "transparent": true,
       "type": "text"
     },
@@ -1883,7 +1871,6 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -2381,7 +2368,6 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -2485,7 +2471,6 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -2626,7 +2611,6 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -2662,7 +2646,6 @@
         "content": "#### Latency",
         "mode": "markdown"
       },
-      "pluginVersion": "12.3.3",
       "transparent": true,
       "type": "text"
     },
@@ -2683,7 +2666,6 @@
         "content": "#### Errors",
         "mode": "markdown"
       },
-      "pluginVersion": "12.3.3",
       "transparent": true,
       "type": "text"
     },
@@ -2833,7 +2815,6 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -3044,7 +3025,6 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -3193,7 +3173,6 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -3294,7 +3273,6 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.3.3",
       "targets": [
         {
           "datasource": {
@@ -3316,7 +3294,9 @@
   ],
   "preload": false,
   "schemaVersion": 42,
-  "tags": [],
+  "tags": [
+    "ydb"
+  ],
   "templating": {
     "list": [
       {
@@ -3362,6 +3342,7 @@
   },
   "timezone": "",
   "title": "YDB Essential Metrics",
+  "uid": "ydb-essentials",
   "weekStart": "",
   "id": null
 }

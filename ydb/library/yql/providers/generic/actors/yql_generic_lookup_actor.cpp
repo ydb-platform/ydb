@@ -446,13 +446,8 @@ namespace NYql::NDq {
             Y_ENSURE(static_cast<ui32>(value->num_columns()) == ColumnDestinations.size(), value->num_columns() << " == " << ColumnDestinations.size());
             std::vector<NKikimr::NMiniKQL::TUnboxedValueVector> columns(ColumnDestinations.size());
             for (size_t i = 0; i != columns.size(); ++i) {
-<<<<<<< HEAD
-                Y_ABORT_UNLESS(value->column_name(i) == (ColumnDestinations[i].first == EColumnDestination::Key ? KeyType : PayloadType)->GetMemberName(ColumnDestinations[i].second));
-                columns[i] = NArrow::ExtractUnboxedValues(value->column(i), ArrowTypes[i], HolderFactory);
-=======
                 Y_ENSURE(value->column_name(i) == (ColumnDestinations[i].first == EColumnDestination::Key ? KeyType : PayloadType)->GetMemberName(ColumnDestinations[i].second));
-                columns[i] = NArrow::ExtractUnboxedValues(value->column(i), SelectResultType->GetMemberType(i), HolderFactory);
->>>>>>> cff8c45192b (generic lookup: don't ABORT on external errors (arrow parsing/etc) (#37321))
+                columns[i] = NArrow::ExtractUnboxedValues(value->column(i), ArrowTypes[i], HolderFactory);
             }
 
             auto height = columns[0].size();

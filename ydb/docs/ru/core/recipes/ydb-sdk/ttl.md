@@ -40,6 +40,10 @@
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_date_type_column('created_at', 3600))
   ```
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 - Java
 
   ```java
@@ -87,6 +91,10 @@
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_value_since_unix_epoch('modified_at', UNIT_SECONDS, 3600))
   ```
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 - Java
 
   ```java
@@ -130,6 +138,10 @@
   ```
 
 {% endif %}
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
 - Go
 
@@ -194,6 +206,10 @@
   )
   ```
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 - Java
 
   ```java
@@ -243,6 +259,10 @@
   session.alter_table('mytable', drop_ttl_settings=True)
   ```
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 - Java
 
   ```java
@@ -288,6 +308,10 @@
   ttl = desc.ttl_settings
   ```
 
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
 - Java
 
   ```java
@@ -296,3 +320,4 @@
 
 {% endlist %}
 
+{% endlist %}

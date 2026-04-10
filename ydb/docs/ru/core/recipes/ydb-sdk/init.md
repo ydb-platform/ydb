@@ -182,6 +182,15 @@
   await using var driver = await Driver.CreateInitialized(config);
   ```
 
+- JavaScript
+
+  ```javascript
+  import { Driver } from '@ydbjs/core'
+
+  const driver = new Driver('grpc://localhost:2136/local')
+  await driver.ready()
+  ```
+
 - PHP
 
   ```php

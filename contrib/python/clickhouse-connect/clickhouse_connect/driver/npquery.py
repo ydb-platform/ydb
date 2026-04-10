@@ -5,7 +5,7 @@ from typing import Generator, Sequence, Tuple
 from clickhouse_connect.driver.common import empty_gen, StreamContext
 from clickhouse_connect.driver.exceptions import StreamClosedError
 from clickhouse_connect.driver.types import Closable
-from clickhouse_connect.driver.options import np, pd
+from clickhouse_connect.driver import options
 
 logger = logging.getLogger(__name__)
 
@@ -39,20 +39,20 @@ class NumpyResult(Closable):
 
         d_types = self.np_types
         first_type = d_types[0]
-        if first_type != np.object_ and all(np.dtype(np_type) == first_type for np_type in d_types):
+        if first_type != options.np.object_ and all(options.np.dtype(np_type) == first_type for np_type in d_types):
             self.np_types = first_type
 
             def numpy_blocks():
                 for block in block_gen:
-                    yield np.array(block, first_type).transpose()
+                    yield options.np.array(block, first_type).transpose()
         else:
-            if any(x == np.object_ for x in d_types):
-                self.np_types = [np.object_] * len(self.np_types)
-            self.np_types = np.dtype(list(zip(self.column_names, d_types)))
+            if any(x == options.np.object_ for x in d_types):
+                self.np_types = [options.np.object_] * len(self.np_types)
+            self.np_types = options.np.dtype(list(zip(self.column_names, d_types)))
 
             def numpy_blocks():
                 for block in block_gen:
-                    np_array = np.empty(len(block[0]), dtype=self.np_types)
+                    np_array = options.np.empty(len(block[0]), dtype=self.np_types)
                     for col_name, data in zip(self.column_names, block):
                         np_array[col_name] = data
                     yield np_array
@@ -66,7 +66,7 @@ class NumpyResult(Closable):
 
         def pd_blocks():
             for block in block_gen:
-                yield pd.DataFrame(dict(zip(self.column_names, block)))
+                yield options.pd.DataFrame(dict(zip(self.column_names, block)))
 
         self._block_gen = None
         return pd_blocks()
@@ -80,16 +80,16 @@ class NumpyResult(Closable):
         for block in self._np_stream():
             blocks.append(block)
             if len(blocks) == chunk_size:
-                pieces.append(np.concatenate(blocks, dtype=self.np_types))
+                pieces.append(options.np.concatenate(blocks, dtype=self.np_types))
                 chunk_size *= 2
                 blocks = []
         pieces.extend(blocks)
         if len(pieces) > 1:
-            self._numpy_result = np.concatenate(pieces, dtype=self.np_types)
+            self._numpy_result = options.np.concatenate(pieces, dtype=self.np_types)
         elif len(pieces) == 1:
             self._numpy_result = pieces[0]
         else:
-            self._numpy_result = np.empty((0,))
+            self._numpy_result = options.np.empty((0,))
         self.close()
         return self
 
@@ -101,10 +101,10 @@ class NumpyResult(Closable):
         chains = [chain(b) for b in zip(*bg)]
         new_df_series = []
         for c in chains:
-            series = [pd.Series(piece, copy=False) for piece in c if len(piece) > 0]
+            series = [options.pd.Series(piece, copy=False) for piece in c if len(piece) > 0]
             if len(series) > 0:
-                new_df_series.append(pd.concat(series, copy=False, ignore_index=True))
-        self._df_result = pd.DataFrame(dict(zip(self.column_names, new_df_series)))
+                new_df_series.append(options.pd.concat(series, copy=False, ignore_index=True))
+        self._df_result = options.pd.DataFrame(dict(zip(self.column_names, new_df_series)))
         self.close()
         return self
 

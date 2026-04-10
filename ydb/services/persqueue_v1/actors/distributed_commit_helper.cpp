@@ -3,9 +3,10 @@
 
 namespace NKikimr::NGRpcProxy::V1 {
 
-TDistributedCommitHelper::TDistributedCommitHelper(TString database, TString consumer, std::vector<TCommitInfo> commits, ui64 cookie)
+TDistributedCommitHelper::TDistributedCommitHelper(TString database, TString consumer, TString path, std::vector<TCommitInfo> commits, ui64 cookie)
     : DataBase(database)
     , Consumer(consumer)
+    , Path(path)
     , Commits(std::move(commits))
     , Step(BEGIN_TRANSACTION_SENDED)
     , Cookie(cookie)
@@ -93,25 +94,18 @@ void TDistributedCommitHelper::SendCommits(NKqp::TEvKqp::TEvQueryResponse::TPtr&
     offsets->Record.MutableRequest()->MutableTxControl()->set_tx_id(TxId);
     offsets->Record.MutableRequest()->MutableTopicOperations()->SetConsumer(Consumer);
 
-    THashMap<TString, TVector<TCommitInfo*>> commitsByTopic;
-    for (auto& commit : Commits) {
-        commitsByTopic[commit.TopicPath].push_back(&commit);
-    }
+    auto* topic = offsets->Record.MutableRequest()->MutableTopicOperations()->AddTopics();
+    topic->set_path(Path);
 
-    for (const auto& [topicPath, topicCommits] : commitsByTopic) {
-        auto* topic = offsets->Record.MutableRequest()->MutableTopicOperations()->AddTopics();
-        topic->set_path(topicPath);
-
-        for (auto* commit : topicCommits) {
-            auto* partition = topic->add_partitions();
-            partition->set_partition_id(commit->PartitionId);
-            partition->set_force_commit(true);
-            partition->set_kill_read_session(commit->KillReadSession);
-            partition->set_only_check_commited_to_finish(commit->OnlyCheckCommitedToFinish);
-            partition->set_read_session_id(commit->ReadSessionId);
-            auto* offset = partition->add_partition_offsets();
-            offset->set_end(commit->Offset);
-        }
+    for(auto &commit: Commits) {
+        auto* partition = topic->add_partitions();
+        partition->set_partition_id(commit.PartitionId);
+        partition->set_force_commit(true);
+        partition->set_kill_read_session(commit.KillReadSession);
+        partition->set_only_check_commited_to_finish(commit.OnlyCheckCommitedToFinish);
+        partition->set_read_session_id(commit.ReadSessionId);
+        auto* offset = partition->add_partition_offsets();
+        offset->set_end(commit.Offset);
     }
 
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), offsets.Release(), 0, Cookie);

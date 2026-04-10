@@ -16,7 +16,6 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include "ydb/public/lib/base/msgbus_status.h"
-#include <ydb/services/persqueue_v1/actors/distributed_commit_helper.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
 #include "ydb/services/persqueue_v1/actors/persqueue_utils.h"
 #include <ydb/services/persqueue_v1/actors/read_init_auth_actor.h>
@@ -60,12 +59,10 @@ private:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(NKikimr::NReplication::TEvYdbProxy::TEvAlterTopicResponse, Handle);
-            HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
         }
     }
 
     void Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx);
-    void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvCloseSession::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
@@ -97,7 +94,6 @@ private:
     std::unordered_map<ui32, TString> AlterTopicCookieToName;
     std::unordered_set<NKafka::TTopicGroupIdAndPath, NKafka::TTopicGroupIdAndPathHash> ConsumerTopicAlterRequestAttempts;
     TActorId AuthInitActor;
-    std::shared_ptr<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper> Kqp;
     EKafkaErrors Error = NONE_ERROR;
 
     static constexpr NTabletPipe::TClientRetryPolicy RetryPolicyForPipes = {

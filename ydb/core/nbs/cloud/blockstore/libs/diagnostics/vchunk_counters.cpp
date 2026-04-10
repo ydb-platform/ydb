@@ -1,7 +1,5 @@
 #include "vchunk_counters.h"
 
-#include <util/generic/yexception.h>
-
 namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -405,10 +405,10 @@ void TVChunk::OnWriteBlocksResponse(
             range,
             response.RequestedWrites,
             response.CompletedWrites);
-
-        bool ok = !HasError(response.Error);
-        Counters.RequestFinished(EVChunkOperation::Write, ok);
     }
+
+    bool ok = !HasError(response.Error);
+    Counters.RequestFinished(EVChunkOperation::Write, ok);
 
     promise.SetValue(TWriteBlocksLocalResponse{.Error = response.Error});
 

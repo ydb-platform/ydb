@@ -25,7 +25,7 @@ bool TIndexMeta::DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op
         case NArrow::NSSA::TIndexCheckOperation::EOperation::GreaterOrEqual:
             return true;
         default:
-            Y_ABORT();
+            Y_ABORT("unhandled enum case");
     }
 }
 

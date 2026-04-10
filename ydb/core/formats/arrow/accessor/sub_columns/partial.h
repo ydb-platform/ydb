@@ -67,7 +67,7 @@ protected:
     }
 
     virtual TMinMax DoGetMinMaxScalars() const override {
-        AFL_VERIFY(false);
+        Y_ABORT("Not implemented");
     }
 
     virtual TLocalDataAddress DoGetLocalData(

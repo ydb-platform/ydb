@@ -128,9 +128,8 @@ public:
     {
     }
 
-    bool OnUnhandledException(const std::exception& exc) override  {
+    void OnException(const std::exception&) override {
         RestartTablet();
-        return TBase::OnUnhandledException(exc);
     }
 
     void RestartTablet() {

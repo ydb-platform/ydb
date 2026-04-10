@@ -35,6 +35,11 @@ public:
     }
 
 protected:
+
+    TIntrusiveConstPtr<NACLib::TUserToken> GetUserToken() const {
+        return this->Request_->GetSerializedToken().empty() ? nullptr : new NACLib::TUserToken(this->Request_->GetSerializedToken());
+    }
+
     void ReplyWithError(Ydb::StatusIds::StatusCode status, size_t additionalStatus, const TString& messageText) {
         if (IsDead) {
             return;

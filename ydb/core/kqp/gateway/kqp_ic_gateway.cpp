@@ -29,6 +29,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/persqueue_v1/rpc_calls.h>
+#include <ydb/services/persqueue_v1/actors/schema/topic/actors.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
@@ -1049,7 +1050,7 @@ public:
                 std::move(settings.Request), settings.WorkDir, settings.Name, Database, GetTokenCompat(),
                 settings.MissingOk
         };
-        IActor* requestHandler = new NKikimr::NGRpcProxy::V1::TAlterTopicActorInternal(std::move(request), std::move(schemaTxPromise), settings.MissingOk);
+        IActor* requestHandler = NGRpcProxy::V1::NTopic::CreateAlterTopicInternalActor(std::move(request), std::move(schemaTxPromise));
         RegisterActor(requestHandler);
         return schemaTxFuture;
     }

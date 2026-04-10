@@ -6,7 +6,7 @@ namespace {
 
 using namespace NKikimr::NKqp;
 
-void AddOptimizerEstimates(NJson::TJsonValue & json, const TIntrusivePtr<IOperator>& op) {
+void AddOptimizerEstimates(NJson::TJsonValue& json, const TIntrusivePtr<IOperator>& op) {
     json["E-Rows"] = TStringBuilder() << op->Props.Statistics->RecordsCount;
     json["E-Size"] = TStringBuilder() << op->Props.Statistics->DataSize;
     json["E-Cost"] = TStringBuilder() << *op->Props.Cost;
@@ -20,7 +20,7 @@ NJson::TJsonValue MakeJson(const TIntrusivePtr<IOperator>& op, ui32 explainFlags
 }
 
 
-NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, ui64 & nodeCounter, ui32 explainFlags) {
+NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, ui64& nodeCounter, ui32 explainFlags) {
     NJson::TJsonValue result;
     result["PlanNodeId"] = nodeCounter++;
     result["Node Type"] = op->GetExplainName();
@@ -44,7 +44,7 @@ NJson::TJsonValue GetExplainJsonRec(const TIntrusivePtr<IOperator>& op, ui64 & n
 namespace NKikimr {
 namespace NKqp {
 
-NJson::TJsonValue TOpRoot::GetExecutionJson(ui64 & nodeCounter, ui32 explainFlags) {
+NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32 explainFlags) {
     Y_UNUSED(explainFlags);
 
     // First construct the ResultSet
@@ -163,7 +163,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64 & nodeCounter, ui32 explainFlag
 }
 
 // For explain JSON we recurse over the operators of the plan
-NJson::TJsonValue TOpRoot::GetExplainJson(ui64 & nodeCounter, ui32 explainFlags) {
+NJson::TJsonValue TOpRoot::GetExplainJson(ui64& nodeCounter, ui32 explainFlags) {
     Y_UNUSED(explainFlags);
 
     NJson::TJsonValue result;

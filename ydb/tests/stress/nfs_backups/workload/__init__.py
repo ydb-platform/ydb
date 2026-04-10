@@ -771,7 +771,7 @@ class WorkloadRunner:
 
         for w in workloads:
             logger.info("[runner] Waiting for %s to finish (timeout=30s)", w.name)
-            w.join(timeout=30)
+            w.join()
             if w.is_alive():
                 logger.warning("[runner] %s did not stop within 30s", w.name)
             else:

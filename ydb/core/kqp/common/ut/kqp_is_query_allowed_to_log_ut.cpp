@@ -54,6 +54,28 @@ Y_UNIT_TEST_SUITE(IsQueryAllowedToLogTest) {
         UNIT_ASSERT(!IsQueryAllowedToLog("CREATE USER foo; ALTER USER bar PASSWORD 'x'"));
     }
 
+    Y_UNIT_TEST(CreateSecretIsNotAllowed) {
+        UNIT_ASSERT(!IsQueryAllowedToLog("CREATE SECRET name WITH (value = 'test_value')"));
+    }
+
+    Y_UNIT_TEST(AlterSecretIsNotAllowed) {
+        UNIT_ASSERT(!IsQueryAllowedToLog("ALTER SECRET name WITH (value = 'test_value')"));
+    }
+
+    Y_UNIT_TEST(CreateObjectTypeSecretIsNotAllowed) {
+        UNIT_ASSERT(!IsQueryAllowedToLog("CREATE OBJECT name (TYPE SECRET) WITH value = \"secretvalue\""));
+    }
+
+    Y_UNIT_TEST(UpsertObjectTypeSecretIsNotAllowed) {
+        UNIT_ASSERT(!IsQueryAllowedToLog("UPSERT OBJECT name (TYPE SECRET) WITH value = \"secretvalue\""));
+    }
+
+    Y_UNIT_TEST(SecretCaseInsensitive) {
+        UNIT_ASSERT(!IsQueryAllowedToLog("create secret name WITH (value = 'val')"));
+        UNIT_ASSERT(!IsQueryAllowedToLog("CREATE SECRET name WITH (value = 'val')"));
+        UNIT_ASSERT(!IsQueryAllowedToLog("Create Secret name WITH (value = 'val')"));
+    }
+
 } // Y_UNIT_TEST_SUITE
 
 } // namespace NKikimr::NKqp

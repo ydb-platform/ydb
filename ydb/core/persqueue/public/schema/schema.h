@@ -33,7 +33,7 @@ struct TAlterTopicSettings {
     TString PeerName;
     Ydb::Topic::AlterTopicRequest Request;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    ui64 Cookie;
+    ui64 Cookie = 0;
 };
 
 NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlterTopicSettings&& settings);

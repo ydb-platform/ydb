@@ -139,7 +139,7 @@ ui32 TStagePredictor::CalcTasksOptimalCount(const ui32 availableThreadsCount, co
     } else {
         result = (availableThreadsCount - previousStageTasksCount.value_or(0) * 0.25) * (InputDataPrediction / *LevelDataPrediction);
     }
-    if (previousStageTasksCount) {
+    if (previousStageTasksCount && *previousStageTasksCount > 0) {
         result = std::min<ui32>(result, *previousStageTasksCount);
     }
     return std::max<ui32>(1, result);

@@ -31,7 +31,7 @@ public:
     };
 
     struct GenerationIdCheckerSettings {
-        ui64 GenerationId;
+        i64 GenerationId;
         TString TopicDatabasePath;
         TString ConsumerMetadataTablePath;
     };

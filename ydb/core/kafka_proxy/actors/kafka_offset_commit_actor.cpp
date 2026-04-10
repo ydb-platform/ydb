@@ -204,7 +204,7 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
         }
     }
     if (Message->GenerationId != -1) {
-        NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::GenerationIdCheckerSettings checkerSettings {.GenerationId = static_cast<ui64>(Message->GenerationId),
+        NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::GenerationIdCheckerSettings checkerSettings {.GenerationId = Message->GenerationId,
                                                                                                         .TopicDatabasePath = Context->DatabasePath,
                                                                                                         .ConsumerMetadataTablePath = NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath)};
         Kqp = std::make_shared<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper>(Context->ResourceDatabasePath, Message->GroupId.value(), commits, readId, checkerSettings);

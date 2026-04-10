@@ -38,7 +38,7 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     std::unique_ptr<NActors::TTestActorRuntime> Runtime;
     TPartitionDirectServiceMockPtr PartitionDirectService;
     TDirectBlockGroupMockPtr DirectBlockGroup;
-    TBlocksDirtyMap DirtyMap{BlockSize, VChunkSize / BlockSize};
+    TBlocksDirtyMap DirtyMap{BlockSize, DefaultVChunkSize / BlockSize};
 
     TBlockRange64 ExpectedRange;
     TString RangeData;

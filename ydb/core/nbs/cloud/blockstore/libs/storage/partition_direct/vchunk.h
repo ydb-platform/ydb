@@ -28,6 +28,7 @@ public:
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
+        ui64 vChunkSize,
         TDuration writeHandoffDelay,
         TDuration traceSamplePeriod);
 

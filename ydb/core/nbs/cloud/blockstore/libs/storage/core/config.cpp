@@ -23,6 +23,7 @@ TStorageConfig::TStorageConfig(
     xxx(WriteMode,                                                             \
         NProto::EWriteMode,                                                    \
         NProto::PBufferReplication)                                            \
+    xxx(VChunkSize,                         ui64,     128_MB                  )\
 
 // BLOCKSTORE_STORAGE_CONFIG_RO
 // clang-format on

@@ -878,7 +878,7 @@ private:
     const ui64 QuerySpanId;
     TReads Reads;
     NUdf::EFetchStatus LastFetchStatus = NUdf::EFetchStatus::Yield;
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
+    std::shared_ptr<const TPartitioning> Partitioning;
     const TDuration SchemeCacheRequestTimeout;
     NActors::TActorId SchemeCacheRequestTimeoutTimer;
     TVector<NKikimrDataEvents::TLock> Locks;

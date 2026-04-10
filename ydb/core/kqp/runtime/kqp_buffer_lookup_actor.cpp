@@ -699,7 +699,7 @@ public:
 
 private:
     TKqpBufferTableLookupSettings Settings;
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
+    std::shared_ptr<const TPartitioning> Partitioning;
     const TString LogPrefix;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
 

@@ -1774,10 +1774,14 @@ private:
 
         buildInfo.KMeans.K = clusters;
         buildInfo.KMeans.Levels = buildInfo.KMeans.IsPrefixed + levels;
+        if (buildInfo.KMeans.OverlapClusters > clusters) {
+            buildInfo.KMeans.OverlapClusters = clusters;
+        }
 
         auto& desc = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(buildInfo.SpecializedIndexDescription);
         desc.MutableSettings()->set_clusters(clusters);
         desc.MutableSettings()->set_levels(levels);
+        desc.MutableSettings()->set_overlap_clusters(buildInfo.KMeans.OverlapClusters);
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistBuildIndexCreationConfig(db, buildInfo);
     }

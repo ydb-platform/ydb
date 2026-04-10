@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
+#include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimr {
@@ -433,7 +434,11 @@ void TSchemeShard::PersistBuildIndexSampleToClusters(NIceDb::TNiceDb& db, TIndex
     for (const auto& [_, row] : info.Sample.Rows) {
         clusters.push_back(TString(TSerializedCellVec::ExtractCell(row, 0).AsBuf()));
     }
-    for (ui32 i = info.KMeans.K; i <= 2*info.KMeans.K; i++) {
+    // During auto-K sampling, up to 2*MaxKMeansAutoSampleK rows may have been written
+    // to the DB (since K was 0 at collection time). Delete the full possible range so
+    // stale rows don't get reloaded after a schemeshard restart.
+    const ui32 sampleCap = Max(info.KMeans.K, NKikimr::NKMeans::MaxKMeansAutoSampleK);
+    for (ui32 i = info.KMeans.K; i <= 2 * sampleCap; i++) {
         db.Table<Schema::KMeansTreeSample>().Key(info.Id, i).Delete();
     }
     for (ui32 i = 0; i < info.Sample.Rows.size(); i++) {

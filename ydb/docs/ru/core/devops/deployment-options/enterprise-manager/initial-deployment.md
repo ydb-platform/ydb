@@ -23,7 +23,7 @@
     * Бинарные файлы {{ ydb-short-name }} установлены в директорию `/opt/ydb`.
     * Кластер {{ ydb-short-name }} настроен с [динамической конфигурацией](../../configuration-management/configuration-v2/index.md).
 
-1. На машине, с которой выполняется установка, доступен [Ansible](https://www.ansible.com/) поддерживаемой версии (рекомендуется ansible-core 2.14–2.18, подробнее см. [{#T}](../ansible/initial-deployment/index.md)).
+1. На машине, с которой выполняется установка, установлен [Ansible](https://www.ansible.com/) поддерживаемой версии (рекомендуется ansible-core 2.14–2.18, подробнее см. [{#T}](../ansible/initial-deployment/index.md)).
 
 1. Настроен SSH-доступ ко всем серверам, на которые будут установлены компоненты YDB EM.
 

@@ -42,11 +42,11 @@ namespace NKikimr::NDDisk {
     TString TPersistentBufferSpaceAllocator::TChunkSpaceOccupation::ToString() const {
         TStringBuilder sb;
         sb << "ChunkIdx: " << ChunkIdx << ", FreeSpace: " << FreeSpace << ", FreeSectors: [";
-        for (auto& s : FreeSectors) {
+        for (auto s : FreeSectors) {
             sb << s.ToString() << " ";
         }
         sb << "], FreeSectorsPriorityQueue: [";
-        for (auto& s : FreeSectorsPriorityQueue) {
+        for (auto s : FreeSectorsPriorityQueue) {
             sb << s.ToString() << " ";
         }
         sb << "]";
@@ -56,7 +56,7 @@ namespace NKikimr::NDDisk {
     TString TPersistentBufferSpaceAllocator::ToString() const {
         TStringBuilder sb;
         sb << "FreeSpace: " << FreeSpace << ", ChunksPriority: [";
-        for (auto& s : ChunksPriorityQueue) {
+        for (auto s : ChunksPriorityQueue) {
             sb << s.ChunkIdx << ":" << s.FreeSpace << " ";
         }
         sb << "], Chunks: [\n";

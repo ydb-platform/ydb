@@ -16,7 +16,7 @@ TResult ApplyChangesInt(
     bool isCdcStream
 ) {
     #define CHECK_CDC  if (isCdcStream) {\
-            return {Ydb::StatusIds::BAD_REQUEST, "Full alter of cdc stream is forbidden"};\
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Full alter of cdc stream is forbidden #" << __LINE__};\
         }
 
     auto appData = AppData();

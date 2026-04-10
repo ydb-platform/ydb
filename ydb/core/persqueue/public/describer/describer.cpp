@@ -104,6 +104,7 @@ public:
                                 Result[originalPath] = TTopicInfo{
                                     .Status = EStatus::SUCCESS,
                                     .RealPath = realPath,
+                                    .CdcStream = CDCPaths.contains(realPath),
                                     .CreateStep = entry.CreateStep,
                                     .Info = entry.PQGroupInfo,
                                     .Self = entry.Self,

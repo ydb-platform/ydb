@@ -27,7 +27,7 @@ public:
             .Database = CanonizePath(this->Request_->GetDatabaseName().GetOrElse("")),
             .PeerName = Request_->GetPeerName(),
             .Request = *GetProtoRequest(),
-            .UserToken = new NACLib::TUserToken(Request_->GetSerializedToken())
+            .UserToken = Request_->GetSerializedToken().empty() ? nullptr : new NACLib::TUserToken(Request_->GetSerializedToken())
         }));
     }
 

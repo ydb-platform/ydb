@@ -52,10 +52,12 @@ void TTopicAlterer::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     TopicInfo = std::move(topics.begin()->second);
     switch(TopicInfo.Status) {
         case NDescriber::EStatus::SUCCESS: {
+            if (TopicInfo.CdcStream && !Settings.IsCdcStreamCompatible) {
+                return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Strategy->GetTopicName(), NDescriber::EStatus::NOT_FOUND));
+            }
             return DoAlter();
         }
         default: {
-            LOG_D("DoDescribe failed: " << NDescriber::Description(Settings.Strategy->GetTopicName(), TopicInfo.Status));
             return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Strategy->GetTopicName(), TopicInfo.Status));
         }
     }
@@ -102,7 +104,7 @@ void TTopicAlterer::DoAlter() {
         applyIf->SetPathVersion(TopicInfo.Self->Info.GetPathVersion());
     }
 
-    auto [status, error] = Settings.Strategy->ApplyChanges(*config, TopicInfo.Info->Description, Settings.IsCdcStreamCompatible);
+    auto [status, error] = Settings.Strategy->ApplyChanges(*config, TopicInfo.Info->Description, TopicInfo.CdcStream);
     if (status != Ydb::StatusIds::SUCCESS) {
         return ReplyErrorAndDie(status, std::move(error));
     }
@@ -195,7 +197,7 @@ TString TTopicAlterer::GetWorkingDir() const {
 }
 
 void TTopicAlterer::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-    LOG_D("ReplyErrorAndDie");
+    LOG_D("ReplyErrorAndDie: " << errorCode << " " << errorMessage);
     Send(Settings.ParentId, new TEvAlterTopicResponse(errorCode, std::move(errorMessage)), 0, Settings.Cookie);
     PassAway();
 }

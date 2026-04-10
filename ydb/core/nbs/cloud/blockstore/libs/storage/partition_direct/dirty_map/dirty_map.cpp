@@ -745,6 +745,32 @@ size_t TBlocksDirtyMap::GetInflightCount() const
     return Inflight.Size();
 }
 
+size_t TBlocksDirtyMap::GetFlushPendingCount() const
+{
+    return ReadyToFlush.size();
+}
+
+size_t TBlocksDirtyMap::GetErasePendingCount() const
+{
+    return ReadyToErase.size();
+}
+
+ui64 TBlocksDirtyMap::GetMinFlushPendingLsn() const
+{
+    if (ReadyToFlush.empty()) {
+        return 0;
+    }
+    return *std::min_element(ReadyToFlush.begin(), ReadyToFlush.end());
+}
+
+ui64 TBlocksDirtyMap::GetMinErasePendingLsn() const
+{
+    if (ReadyToErase.empty()) {
+        return 0;
+    }
+    return *std::min_element(ReadyToErase.begin(), ReadyToErase.end());
+}
+
 void TBlocksDirtyMap::LockPBuffer(ui64 lsn)
 {
     auto item = Inflight.GetValue(lsn);

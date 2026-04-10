@@ -306,6 +306,10 @@ public:
 
     // Returns the number of in-flight write requests.
     [[nodiscard]] size_t GetInflightCount() const;
+    [[nodiscard]] size_t GetFlushPendingCount() const;
+    [[nodiscard]] size_t GetErasePendingCount() const;
+    [[nodiscard]] ui64 GetMinFlushPendingLsn() const;
+    [[nodiscard]] ui64 GetMinErasePendingLsn() const;
 
     // ILockableRanges implementation
     void LockPBuffer(ui64 lsn) override;

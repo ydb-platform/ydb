@@ -880,12 +880,13 @@ void TKafkaBalancerActor::HeartbeatStepUpdateHeartbeatDeadlines(NKqp::TEvKqp::TE
     }
 
     if (!groupStatus->Exists ||
-        (groupStatus->Generation != GenerationId + 1) && (groupStatus->State != GROUP_STATE_WORKING)) {
+        groupStatus->Exists && groupStatus->Generation == GenerationId + 1 && groupStatus->State != GROUP_STATE_WORKING ||
+        groupStatus->State != GROUP_STATE_WORKING) {
         SendHeartbeatResponseFail(ctx, CorrelationId, EKafkaErrors::REBALANCE_IN_PROGRESS, "Group state changed. Rejoin required");
         return;
     }
     if (groupStatus->Generation != GenerationId) {
-        SendHeartbeatResponseFail(ctx, CorrelationId, EKafkaErrors::FENCED_INSTANCE_ID, TStringBuilder() << "Old or unknown group generation: " << GenerationId << ". Group generationId=" << groupStatus->Generation);
+        SendHeartbeatResponseFail(ctx, CorrelationId, EKafkaErrors::ILLEGAL_GENERATION, "Old or unknown group generation");
         return;
     }
 

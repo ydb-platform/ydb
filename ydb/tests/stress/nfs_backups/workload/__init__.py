@@ -359,6 +359,260 @@ class WorkloadNfsExportImport(WorkloadBase):
         return [self._main_loop]
 
 
+class WorkloadFullRoundtrip(WorkloadBase):
+    NUM_TABLES = 5
+    NUM_ROWS = 100
+    NUM_TOPICS = 3
+    NUM_VIEWS = 3
+
+    def __init__(self, client, stop, nfs_mount_path, fatal_error_event):
+        super().__init__(client, "", "nfs_full_roundtrip", stop)
+        self.lock = threading.Lock()
+        self.nfs_mount_path = nfs_mount_path
+        self.fatal_error_event = fatal_error_event
+        self.fs_client = FsExportClient(self.client.driver)
+        self.op_client = OperationClient(self.client.driver)
+
+        self._stats = {
+            "iterations": 0,
+            "export_started": 0,
+            "export_done": 0,
+            "export_error": 0,
+            "import_started": 0,
+            "import_done": 0,
+            "import_error": 0,
+        }
+
+    def get_stat(self):
+        with self.lock:
+            return ", ".join(f"{k}={v}" for k, v in self._stats.items())
+
+    def _inc_stat(self, key):
+        with self.lock:
+            self._stats[key] += 1
+
+    def _signal_fatal_error(self, message):
+        logger.error("[full_rt][FATAL] %s", message)
+        self.fatal_error_event.set()
+
+    def _op_forget(self, op_id):
+        try:
+            self.op_client.forget(op_id)
+        except Exception:
+            pass
+
+    def _poll_export(self, export_id):
+        try:
+            op = self.fs_client.get_export_operation(export_id)
+            logger.debug("[full_rt][export] Poll op=%s ready=%s progress=%s", export_id, op.ready, op.progress)
+            if op.ready:
+                return op.progress if op.progress != "UNSPECIFIED" else "DONE"
+        except ydb_issues.NotFound:
+            logger.debug("[full_rt][export] Poll op=%s: NOT_FOUND (treating as DONE)", export_id)
+            return "DONE"
+        except Exception as e:
+            logger.warning("[full_rt][export] Poll op=%s failed: %s", export_id, e)
+            return "ERROR"
+        return None
+
+    def _poll_import(self, import_id):
+        try:
+            op = self.fs_client.get_import_operation(import_id)
+            logger.debug("[full_rt][import] Poll op=%s ready=%s progress=%s", import_id, op.ready, op.progress)
+            if op.ready:
+                return op.progress if op.progress != "UNSPECIFIED" else "DONE"
+        except ydb_issues.NotFound:
+            logger.debug("[full_rt][import] Poll op=%s: NOT_FOUND (treating as DONE)", import_id)
+            return "DONE"
+        except Exception as e:
+            logger.warning("[full_rt][import] Poll op=%s failed: %s", import_id, e)
+            return "ERROR"
+        return None
+
+    def _wait_op(self, op_id, poll_fn, op_type):
+        while True:
+            if self.is_stop_requested() or self.fatal_error_event.is_set():
+                return None
+            status = poll_fn(op_id)
+            if status is not None:
+                self._op_forget(op_id)
+                return status
+            time.sleep(1)
+
+    def _create_schema(self, prefix, table_names, topic_names, view_names):
+        for name in table_names:
+            if self.is_stop_requested():
+                return False
+            self.client.query(
+                f"""
+                    CREATE TABLE `{name}` (
+                        id Uint32 NOT NULL,
+                        payload Utf8,
+                        INDEX idx_payload GLOBAL SYNC ON (payload),
+                        PRIMARY KEY (id)
+                    );
+                """,
+                True,
+            )
+        logger.info("[full_rt] Created %d tables under %s", len(table_names), prefix)
+
+        for name in topic_names:
+            if self.is_stop_requested():
+                return False
+            self.client.query(f"CREATE TOPIC `{name}`;", True)
+            self.client.query(f"ALTER TOPIC `{name}` ADD CONSUMER consumer_a;", True)
+        logger.info("[full_rt] Created %d topics under %s", len(topic_names), prefix)
+
+        for i, name in enumerate(view_names):
+            if self.is_stop_requested():
+                return False
+            src_table = table_names[i % len(table_names)]
+            self.client.query(
+                f"CREATE VIEW `{name}` WITH security_invoker = TRUE AS SELECT * FROM `{src_table}`;",
+                True,
+            )
+        logger.info("[full_rt] Created %d views under %s", len(view_names), prefix)
+
+        return True
+
+    def _insert_rows(self, table_names):
+        for table in table_names:
+            if self.is_stop_requested():
+                return False
+            for batch_start in range(0, self.NUM_ROWS, 10):
+                if self.is_stop_requested():
+                    return False
+                values = ", ".join(
+                    f"({row_id}, 'row_{row_id}_in_{table.rsplit('/', 1)[-1]}')"
+                    for row_id in range(batch_start, min(batch_start + 10, self.NUM_ROWS))
+                )
+                self.client.query(
+                    f"INSERT INTO `{table}` (id, payload) VALUES {values};",
+                    False,
+                )
+        logger.info("[full_rt] Inserted %d rows into %d tables", self.NUM_ROWS, len(table_names))
+        return True
+
+    def _drop_tables(self, names):
+        for name in names:
+            try:
+                self.client.query(f"DROP TABLE `{name}`;", True)
+            except Exception:
+                pass
+
+    def _drop_topics(self, names):
+        for name in names:
+            try:
+                self.client.query(f"DROP TOPIC `{name}`;", True)
+            except Exception:
+                pass
+
+    def _drop_views(self, names):
+        for name in names:
+            try:
+                self.client.query(f"DROP VIEW `{name}`;", True)
+            except Exception:
+                pass
+
+    def _main_loop(self):
+        logger.info("[full_rt] Started, nfs_mount_path=%s", self.nfs_mount_path)
+
+        while not self.is_stop_requested() and not self.fatal_error_event.is_set():
+            self._inc_stat("iterations")
+            run_id = f"{uuid.uuid1()}".replace("-", "_")
+            prefix = f"full_{run_id}"
+            base_path = os.path.join(self.nfs_mount_path, f"full_{run_id}")
+            db_path = self.client.database.rstrip("/")
+
+            table_names = [f"{prefix}/tbl{i}" for i in range(self.NUM_TABLES)]
+            topic_names = [f"{prefix}/topic{i}" for i in range(self.NUM_TOPICS)]
+            view_names = [f"{prefix}/view{i}" for i in range(self.NUM_VIEWS)]
+            all_names = table_names + topic_names + view_names
+
+            logger.info("[full_rt] === run_id=%s tables=%d topics=%d views=%d ===",
+                        run_id[:16], len(table_names), len(topic_names), len(view_names))
+
+            try:
+                if not self._create_schema(prefix, table_names, topic_names, view_names):
+                    break
+                if not self._insert_rows(table_names):
+                    break
+
+                # Export
+                logger.info("[full_rt] Starting export, base_path=%s", base_path)
+                result = self.fs_client.export_to_fs(
+                    base_path=base_path,
+                    items=[(prefix, prefix)],
+                    description=f"full_export_{run_id}",
+                )
+                self._inc_stat("export_started")
+                logger.info("[full_rt] Export started: op=%s", result.id)
+
+                status = self._wait_op(result.id, self._poll_export, "export")
+                if status is None:
+                    break
+                if status != "DONE":
+                    self._inc_stat("export_error")
+                    self._signal_fatal_error(f"Export failed status={status} op={result.id}")
+                    break
+                self._inc_stat("export_done")
+                logger.info("[full_rt] Export DONE")
+
+                # Import into a different prefix (tables, topics, views)
+                import_prefix = f"imp_{run_id}"
+                all_source_names = table_names + topic_names + view_names
+                import_items = [
+                    (f"{prefix}/{name.split('/')[-1]}", f"{db_path}/{import_prefix}/{name.split('/')[-1]}")
+                    for name in all_source_names
+                ]
+                logger.info("[full_rt] Starting import, %d items (tables=%d, topics=%d, views=%d)",
+                            len(import_items), len(table_names), len(topic_names), len(view_names))
+                imp_result = self.fs_client.import_from_fs(
+                    base_path=base_path,
+                    items=import_items,
+                    description=f"full_import_{run_id}",
+                )
+                self._inc_stat("import_started")
+                logger.info("[full_rt] Import started: op=%s", imp_result.id)
+
+                imp_status = self._wait_op(imp_result.id, self._poll_import, "import")
+                if imp_status is None:
+                    break
+                if imp_status != "DONE":
+                    self._inc_stat("import_error")
+                    self._signal_fatal_error(f"Import failed status={imp_status} op={imp_result.id}")
+                    break
+                self._inc_stat("import_done")
+                logger.info("[full_rt] Import DONE")
+
+                # Cleanup imported objects (views first, then topics, then tables)
+                imported_views = [f"{import_prefix}/{name.split('/')[-1]}" for name in view_names]
+                imported_topics = [f"{import_prefix}/{name.split('/')[-1]}" for name in topic_names]
+                imported_tables = [f"{import_prefix}/{name.split('/')[-1]}" for name in table_names]
+                self._drop_views(imported_views)
+                self._drop_topics(imported_topics)
+                self._drop_tables(imported_tables)
+
+            except Exception as e:
+                logger.error("[full_rt] Iteration failed: %s", e, exc_info=True)
+                self._signal_fatal_error(f"Exception: {e}")
+                break
+            finally:
+                self._drop_views(view_names)
+                self._drop_topics(topic_names)
+                self._drop_tables(table_names)
+                try:
+                    if os.path.exists(base_path):
+                        shutil.rmtree(base_path, ignore_errors=True)
+                except Exception:
+                    pass
+
+        logger.info("[full_rt] Stopped")
+
+    def get_workload_thread_funcs(self):
+        return [self._main_loop]
+
+
 class WorkloadRunner:
     def __init__(self, client, duration):
         self.client = client
@@ -390,7 +644,8 @@ class WorkloadRunner:
         nfs_mount_path = self._setup_nfs()
 
         workloads = [
-            WorkloadNfsExportImport(self.client, stop, nfs_mount_path, fatal_error)
+            # WorkloadNfsExportImport(self.client, stop, nfs_mount_path, fatal_error),
+            WorkloadFullRoundtrip(self.client, stop, nfs_mount_path, fatal_error),
         ]
 
         for w in workloads:

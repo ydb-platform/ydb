@@ -3,6 +3,7 @@ import logging
 import os
 import shutil
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -605,7 +606,6 @@ class WorkloadFullRoundtrip(WorkloadBase):
             table_names = [f"{prefix}/tbl{i}" for i in range(self.NUM_TABLES)]
             topic_names = [f"{prefix}/topic{i}" for i in range(self.NUM_TOPICS)]
             view_names = [f"{prefix}/view{i}" for i in range(self.NUM_VIEWS)]
-            all_names = table_names + topic_names + view_names
 
             logger.info("[full_rt] === run_id=%s tables=%d topics=%d views=%d ===",
                         run_id[:16], len(table_names), len(topic_names), len(view_names))
@@ -704,25 +704,37 @@ class WorkloadRunner:
         self.client = client
         self.duration = duration
         self.workload_names = workload_names or [DEFAULT_WORKLOAD]
+        self._temp_nfs_dir = None
         ydb.interceptor.monkey_patch_event_handler()
 
-    @staticmethod
-    def _setup_nfs():
+    def _setup_nfs(self):
         nfs_mount_path = os.getenv("NFS_MOUNT_PATH")
-        ld_preload = os.getenv("LD_PRELOAD")
         logger.info("[setup] NFS_MOUNT_PATH=%s", nfs_mount_path)
-        logger.info("[setup] LD_PRELOAD=%s", ld_preload)
+
         if not nfs_mount_path:
-            raise RuntimeError("NFS_MOUNT_PATH environment variable is not set")
-        os.makedirs(nfs_mount_path, exist_ok=True)
+            self._temp_nfs_dir = tempfile.mkdtemp(prefix="nfs_stress_")
+            nfs_mount_path = self._temp_nfs_dir
+            logger.info("[setup] NFS_MOUNT_PATH not set, created temp dir: %s", nfs_mount_path)
+        else:
+            os.makedirs(nfs_mount_path, exist_ok=True)
+
         logger.info("[setup] NFS mount directory ready: %s", nfs_mount_path)
         return nfs_mount_path
+
+    def _cleanup_temp_nfs(self):
+        if self._temp_nfs_dir and os.path.exists(self._temp_nfs_dir):
+            try:
+                shutil.rmtree(self._temp_nfs_dir, ignore_errors=True)
+                logger.info("[cleanup] Removed temp NFS dir: %s", self._temp_nfs_dir)
+            except Exception as e:
+                logger.warning("[cleanup] Failed to remove temp NFS dir %s: %s", self._temp_nfs_dir, e)
+            self._temp_nfs_dir = None
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        pass
+        self._cleanup_temp_nfs()
 
     def run(self):
         logger.info("[runner] Starting workload, duration=%ds", self.duration)

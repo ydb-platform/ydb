@@ -8,8 +8,6 @@ TEST_SRCS(
 
 REQUIREMENTS(ram:32 cpu:4)
 
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/nfs_recipe/recipe.inc)
-
 SIZE(MEDIUM)
 
 DEPENDS(

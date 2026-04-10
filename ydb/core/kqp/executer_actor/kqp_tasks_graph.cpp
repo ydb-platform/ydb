@@ -2269,6 +2269,10 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
         settings->MutableQuerySettings()->SetQuery(TString(queryBuilder));
     }
 
+    for (const auto& token : fullTextSource.GetQuerySettings().GetTokens()) {
+        settings->MutableQuerySettings()->AddTokens(token);
+    }
+
     if (fullTextSource.HasTakeLimit()) {
         auto value = ExtractPhyValue(
             stageInfo, fullTextSource.GetTakeLimit(),

@@ -45,7 +45,7 @@ constexpr TDuration COMPUTE_HARD_TIMEOUT = TDuration::Minutes(10);
 
 void TColumnShardScan::PassAway() {
     TDuration duration = StartInstant ? TDuration::MilliSeconds((TMonotonic::Now() - *StartInstant).MilliSeconds()) : TDuration::Zero();
-    LWTRACK(ScanFinished, *ScanOrbit, PathId, TabletId, TxId, ScanId, duration);
+    LWTRACK(ScanFinished, *ScanOrbit, PathId, TabletId, TxId, ScanId, duration, TotalRowsCount, TotalSourcesCount, TotalBlobBytes, TotalRawBytes);
     Send(ResourceSubscribeActorId, new TEvents::TEvPoisonPill);
     Send(ReadCoordinatorActorId, new TEvents::TEvPoisonPill);
     IActor::PassAway();
@@ -123,7 +123,14 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
         WaitTime += delta;
     }
     StartWaitTime = TInstant::Now();
-    LWTRACK(ScanFinishSource, *ScanOrbit, PathId, TabletId, TxId, ScanId, (ui64)ev->Get()->GetSourceId(), TString("TaskProcessed"));
+    ++TotalSourcesCount;
+    TotalBlobBytes += ev->Get()->GetBlobBytes();
+    TotalRawBytes += ev->Get()->GetRawBytes();
+    TotalRowsCount += ev->Get()->GetFilteredRows();
+    if (ev->Get()->GetSourceId() > 0) {
+        LWTRACK(ScanFinishSource, *ScanOrbit, PathId, TabletId, TxId, ScanId, (ui64)ev->Get()->GetSourceId(),
+                ev->Get()->GetBlobBytes(), ev->Get()->GetRawBytes(), ev->Get()->GetColumnsCount(), ev->Get()->GetFilteredRows(), ev->Get()->GetTotalRows());
+    }
     auto g = Stats->MakeGuard("task_result", IS_INFO_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN));
     auto& result = ev->Get()->MutableResult();
     if (result.IsFail()) {

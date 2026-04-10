@@ -11,8 +11,8 @@ namespace NKikimr::NOlap::NReader {
         NAMES("pathId", "tabletId", "txId", "scanId")) \
     PROBE(ScanFinished, \
         GROUPS("Scan"), \
-        TYPES(ui64, ui64, ui64, ui64, TDuration), \
-        NAMES("pathId", "tabletId", "txId", "scanId", "durationMs")) \
+        TYPES(ui64, ui64, ui64, ui64, TDuration, ui64, ui64, ui64, ui64), \
+        NAMES("pathId", "tabletId", "txId", "scanId", "totalDurationMs", "totalRowsCount", "totalSourcesCount", "totalBlobBytes", "totalRawBytes")) \
     PROBE(SendResult, \
         GROUPS("Scan"), \
         TYPES(ui64, ui64, ui64, ui64, ui64, ui64, ui64, TDuration, TDuration, TDuration, bool), \
@@ -23,12 +23,12 @@ namespace NKikimr::NOlap::NReader {
         NAMES("pathId", "tabletId", "txId", "scanId", "elapsedMs")) \
     PROBE(ScanStartSource, \
         GROUPS("Scan"), \
-        TYPES(ui64, ui64, ui64, ui64, ui64), \
-        NAMES("pathId", "tabletId", "txId", "scanId", "sourceId")) \
+        TYPES(ui64, ui64, ui64, ui64, ui64, ui64, ui64), \
+        NAMES("pathId", "tabletId", "txId", "scanId", "sourceId", "blobBytes", "rawBytes")) \
     PROBE(ScanFinishSource, \
         GROUPS("Scan"), \
-        TYPES(ui64, ui64, ui64, ui64, ui64, TString), \
-        NAMES("pathId", "tabletId", "txId", "scanId", "sourceId", "name")) \
+        TYPES(ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui32, ui32, ui32), \
+        NAMES("pathId", "tabletId", "txId", "scanId", "sourceId", "blobBytes", "rawBytes", "columnsCount", "filteredRows", "totalRows")) \
     PROBE(ColumnEngineForLogsSelect, \
         GROUPS("Scan"), \
         TYPES(ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui64), \

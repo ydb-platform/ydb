@@ -15,11 +15,11 @@ namespace NKikimr::NOlap::NReader::NSimple {
 
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
-void TPredicateFilter::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+void TPredicateFilter::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const ui32 filteredRows) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
     LWTRACK(PredicateFilter, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
             source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, source->GetRecordsCount());
+            step.GetTracingName(), durationMs, source->GetRecordsCount(), filteredRows);
 }
 
 TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
@@ -28,8 +28,9 @@ TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<NComm
             source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
                 source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()),
             true));
+    const ui32 filteredRows = filter.GetFilteredCount().value_or(source->GetRecordsCount());
     source->MutableStageData().AddFilter(filter);
-    ReportTracing(source, step);
+    ReportTracing(source, step, filteredRows);
     return true;
 }
 
@@ -386,9 +387,12 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(
     }
     source->MutableStageResult().SetResultChunk(std::move(resultBatch), StartIndex, RecordsCount);
     ReportTracing(source, step);
+    const ui32 resultColumnsCount = resultBatch ? resultBatch->num_columns() : 0;
+    const ui64 blobBytes = source->GetColumnBlobBytes(source->GetContext()->GetAllUsageColumns()->GetColumnIds());
     NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
         new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step),
-            source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard(), source->GetDeprecatedPortionId()));
+            source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard(), source->GetDeprecatedPortionId(),
+            blobBytes, sSource->GetUsedRawBytes(), resultColumnsCount, recordsCount, source->GetRecordsCount()));
     return false;
 }
 

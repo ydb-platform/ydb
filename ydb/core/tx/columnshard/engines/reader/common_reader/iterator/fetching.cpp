@@ -66,43 +66,55 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
     const auto& processor = iterator->GetProcessorVerified();
     const auto processorType = processor->GetProcessorType();
     const TString details = processor->DebugJson().GetStringRobust();
+    const auto& resources = source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().GetResources();
+    const ui32 filteredRows = resources.GetRecordsCountActualOptional().value_or(source->GetRecordsCount());
 #define PROGRAM_PROBE_ARGS source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), \
                     source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(), \
                     tracingName, iterator->GetCurrentNodeId(), finishDurationMs, \
-                    executionDurationMs, source->GetRecordsCount(), tracingExecutionResult, details
+                    executionDurationMs, source->GetRecordsCount(), tracingExecutionResult
     switch (processorType) {
         case NArrow::NSSA::EProcessorType::Const:
-            LWTRACK(ProgramConst, PROGRAM_PROBE_ARGS);
+            LWTRACK(ProgramConst, PROGRAM_PROBE_ARGS, details);
             break;
         case NArrow::NSSA::EProcessorType::Calculation:
-            LWTRACK(ProgramCalculation, PROGRAM_PROBE_ARGS);
+            LWTRACK(ProgramCalculation, PROGRAM_PROBE_ARGS, details);
             break;
         case NArrow::NSSA::EProcessorType::Projection:
-            LWTRACK(ProgramProjection, PROGRAM_PROBE_ARGS);
+            LWTRACK(ProgramProjection, PROGRAM_PROBE_ARGS, details);
             break;
         case NArrow::NSSA::EProcessorType::Filter:
-            LWTRACK(ProgramFilter, PROGRAM_PROBE_ARGS);
+            LWTRACK(ProgramFilter, PROGRAM_PROBE_ARGS, filteredRows, details);
             break;
         case NArrow::NSSA::EProcessorType::Aggregation:
-            LWTRACK(ProgramAggregation, PROGRAM_PROBE_ARGS);
+            LWTRACK(ProgramAggregation, PROGRAM_PROBE_ARGS, details);
             break;
         case NArrow::NSSA::EProcessorType::FetchOriginalData:
-            LWTRACK(ProgramFetchOriginalData, PROGRAM_PROBE_ARGS);
+            {
+                std::set<ui32> fetchColumnIds;
+                for (auto&& col : processor->GetOutput()) {
+                    fetchColumnIds.insert(col.GetColumnId());
+                }
+                const ui64 blobBytes = source->GetColumnBlobBytes(fetchColumnIds);
+                source->AddBytesRead(blobBytes);
+                LWTRACK(ProgramFetchOriginalData, PROGRAM_PROBE_ARGS,
+                    blobBytes,
+                    source->GetColumnRawBytes(fetchColumnIds), details);
+            }
             break;
         case NArrow::NSSA::EProcessorType::AssembleOriginalData:
-            LWTRACK(ProgramAssembleOriginalData, PROGRAM_PROBE_ARGS);
+            LWTRACK(ProgramAssembleOriginalData, PROGRAM_PROBE_ARGS, details);
             break;
         case NArrow::NSSA::EProcessorType::CheckIndexData:
-            LWTRACK(ProgramCheckIndexData, PROGRAM_PROBE_ARGS);
+            LWTRACK(ProgramCheckIndexData, PROGRAM_PROBE_ARGS, filteredRows, details);
             break;
         case NArrow::NSSA::EProcessorType::CheckHeaderData:
-            LWTRACK(ProgramCheckHeaderData, PROGRAM_PROBE_ARGS);
+            LWTRACK(ProgramCheckHeaderData, PROGRAM_PROBE_ARGS, details);
             break;
         case NArrow::NSSA::EProcessorType::StreamLogic:
-            LWTRACK(ProgramStreamLogic, PROGRAM_PROBE_ARGS);
+            LWTRACK(ProgramStreamLogic, PROGRAM_PROBE_ARGS, details);
             break;
         case NArrow::NSSA::EProcessorType::ReserveMemory:
-            LWTRACK(ProgramReserveMemory, PROGRAM_PROBE_ARGS);
+            LWTRACK(ProgramReserveMemory, PROGRAM_PROBE_ARGS, source->GetReservedMemory(), details);
             break;
         case NArrow::NSSA::EProcessorType::Unknown:
             break;

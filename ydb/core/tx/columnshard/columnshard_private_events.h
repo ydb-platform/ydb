@@ -200,6 +200,11 @@ struct TEvPrivate {
         TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>> Result;
         TCounterGuard ScanCounter;
         ui64 SourceId = 0;
+        ui64 BlobBytes = 0;
+        ui64 RawBytes = 0;
+        ui32 ColumnsCount = 0;
+        ui32 FilteredRows = 0;
+        ui32 TotalRows = 0;
 
     public:
         TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>& MutableResult() {
@@ -210,11 +215,37 @@ struct TEvPrivate {
             return SourceId;
         }
 
+        ui64 GetBlobBytes() const {
+            return BlobBytes;
+        }
+
+        ui64 GetRawBytes() const {
+            return RawBytes;
+        }
+
+        ui32 GetColumnsCount() const {
+            return ColumnsCount;
+        }
+
+        ui32 GetFilteredRows() const {
+            return FilteredRows;
+        }
+
+        ui32 GetTotalRows() const {
+            return TotalRows;
+        }
+
         TEvTaskProcessedResult(
-            TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>&& result, TCounterGuard&& scanCounters, ui64 sourceId = 0)
+            TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>&& result, TCounterGuard&& scanCounters, ui64 sourceId = 0,
+            ui64 blobBytes = 0, ui64 rawBytes = 0, ui32 columnsCount = 0, ui32 filteredRows = 0, ui32 totalRows = 0)
             : Result(std::move(result))
             , ScanCounter(std::move(scanCounters))
-            , SourceId(sourceId) {
+            , SourceId(sourceId)
+            , BlobBytes(blobBytes)
+            , RawBytes(rawBytes)
+            , ColumnsCount(columnsCount)
+            , FilteredRows(filteredRows)
+            , TotalRows(totalRows) {
         }
     };
 

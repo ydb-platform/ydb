@@ -137,7 +137,7 @@ class TColumnBlobsFetchingStep: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
     YDB_READONLY_DEF(TColumnsSetIds, Columns);
-    void ReportTracing(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs, const ui64 bytesRead) const;
+    void ReportTracing(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs, const ui64 blobBytes, const ui64 rawBytes) const;
 
 protected:
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;

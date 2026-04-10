@@ -214,7 +214,7 @@ public:
 class TPredicateFilter: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
-    void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const;
+    void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const ui32 filteredRows) const;
 
 public:
     virtual TConclusion<bool> DoExecuteInplace(

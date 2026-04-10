@@ -1,3 +1,4 @@
+* Added `--stats` option to `ydb workload * run` benchmarks to enable extended execution stats collection (e.g. `--stats profile`).
 
 ## 2.30.0 ##
 

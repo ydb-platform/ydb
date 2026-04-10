@@ -1,6 +1,6 @@
 # Векторные индексы
 
-[Векторные индексы](../concepts/glossary.md#vector-index) — это специализированные структуры данных, которые позволяют эффективно выполнять [векторный поиск](../concepts/query_execution/vector_search.md) в многомерных пространствах. В отличие от [вторичных индексов](../concepts/glossary.md#secondary-index), которые оптимизируют поиск по равенству или диапазону, векторные индексы позволяют выполнять приближенный поиск на основе [функций схожести или расстояния](../yql/reference/udf/list/knn.md#functions).
+[Векторные индексы](../concepts/glossary.md#vector-index) — это специализированный тип [вторичного индекса](../concepts/glossary.md#secondary-index), который позволяет эффективно выполнять [векторный поиск](../concepts/query_execution/vector_search.md) в многомерных пространствах. В отличие от традиционных вторичных индексов, оптимизированных для поиска по равенству или диапазону, векторные индексы позволяют выполнять приближенный поиск на основе [функций схожести или расстояния](../yql/reference/udf/list/knn.md#functions).
 
 Данные в таблице {{ ydb-short-name }} хранятся и сортируются по первичному ключу, что обеспечивает эффективный поиск по точному совпадению и сканирование диапазонов. Векторные индексы предоставляют аналогичную эффективность для поиска ближайших соседей в векторных пространствах.
 
@@ -35,7 +35,67 @@
     * `levels`: число уровней в дереве, задает глубину поиска (рекомендуется 1-3);
     * `clusters`: количество кластеров в k-means, определяющее ширину поиска (рекомендуется 64-512).
 
+<<<<<<< HEAD
 Внутри векторный индекс состоит из скрытых индексных таблиц вида `indexImpl*Table`. В [запросах на выборку](../yql/reference/syntax/select/vector_index.md) с использованием векторного индекса эти таблицы отображаются в [статистике запросов](./query-execution-optimization/query-plans-optimization.md). Подробнее об устройстве векторного индекса см. в отдельной статье [{#T}](vector-indexes-kmeans-tree-type.md).
+=======
+Внутри векторный индекс состоит из скрытых индексных таблиц вида `indexImpl*Table`. В [запросах на выборку](#select) с использованием векторного индекса эти таблицы отображаются в [статистике запросов](query-plans-optimization.md). Подробнее об устройстве векторного индекса см. в отдельной статье [{#T}](vector-indexes-kmeans-tree-type.md).
+
+## Виды векторных индексов {#types}
+
+Векторный индекс может быть **покрывающим**, что означает включение дополнительных колонок для возможности чтения из индекса без обращения к основной таблице.
+
+Или же он может быть с поддержкой **фильтрации**, что позволяет учитывать дополнительные колонки для быстрой фильтрации при выполнении чтения.
+
+Ниже приведены примеры создания векторного индекса различных типов.
+
+### Базовый векторный индекс {#basic}
+
+Глобальный векторный индекс по колонке `embedding`:
+
+```yql
+ALTER TABLE my_table
+  ADD INDEX my_index
+  GLOBAL USING vector_kmeans_tree
+  ON (embedding)
+  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
+```
+
+### Векторный индекс с покрывающими колонками {#covering}
+
+Покрывающий векторный индекс, включающий дополнительную колонку `data`, чтобы избежать чтения из основной таблицы при поиске:
+
+```yql
+ALTER TABLE my_table
+  ADD INDEX my_index
+  GLOBAL USING vector_kmeans_tree
+  ON (embedding) COVER (data)
+  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
+```
+
+### Векторный индекс с фильтрацией {#filtered}
+
+Векторный индекс с фильтрацией, позволяющий фильтровать по колонке `user` в момент выполнения векторного поиска:
+
+```yql
+ALTER TABLE my_table
+  ADD INDEX my_index
+  GLOBAL USING vector_kmeans_tree
+  ON (user, embedding)
+  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
+```
+
+### Векторный индекс с фильтрацией и покрывающими колонками {#filtered-covering}
+
+Векторный индекс с фильтрацией и покрывающими колонками:
+
+```yql
+ALTER TABLE my_table
+  ADD INDEX my_index
+  GLOBAL USING vector_kmeans_tree
+  ON (user, embedding) COVER (data)
+  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
+```
+>>>>>>> a76423f7b3c (Fulltext index docs (#34824))
 
 ## Виды векторных индексов {#types}
 

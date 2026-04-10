@@ -22,7 +22,7 @@ NYql::NDqProto::TCheckpoint CreateCheckpoint(ui64 id) {
     return checkpoint;
 }
 
-TFakeActor::TFakeActor(TAsyncInputPromises& sourcePromises, TAsyncOutputPromises& asyncOutputPromises)
+TFakeActor::TFakeActor(std::shared_ptr<TAsyncInputPromises> sourcePromises, std::shared_ptr<TAsyncOutputPromises> asyncOutputPromises)
     : TActor<TFakeActor>(&TFakeActor::StateFunc)
     , Alloc(__LOCATION__)
     , MemoryInfo("test")

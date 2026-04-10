@@ -348,18 +348,13 @@ TRuntimeNode BuildParseCall(
             formatForCh = "csv_with_names";
         }
 
-        TString typeConfig = formatForCh;
-        if (!settingsAsJson.empty()) {
-            typeConfig += settingsAsJson;
-        }
-
         const auto userType = ctx.ProgramBuilder.NewTupleType({
             ctx.ProgramBuilder.NewTupleType({inputType}),
             ctx.ProgramBuilder.NewStructType({}),
             userOutputType});
         input = TType::EKind::Resource == inputDataType->GetKind() ?
             ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseBlocks", {}, userType), {input}), {}):
-            ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseFormat", {}, userType, typeConfig), {input}), {});
+            ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseFormat", {}, userType, formatForCh + settingsAsJson), {input}), {});
     }
 
     return ctx.ProgramBuilder.ExpandMap(input,

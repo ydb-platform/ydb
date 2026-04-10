@@ -742,7 +742,6 @@ class TestPqRowDispatcher(TestYdsBase):
             streaming_disposition=StreamingDisposition.from_last_checkpoint(),
         )
         client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
-        kikimr.compute_plane.wait_zero_checkpoint(query_id)
 
         data = ['{"time": 203}', '{"time": 204}']
         self.write_stream(data)

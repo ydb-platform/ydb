@@ -984,7 +984,7 @@ class TBroadcastOutputChannel : public IDqOutputChannel
 
     public:
         TBroadcastOutputChannel(std::weak_ptr<TDqChannelService> service, const TBroadcastChannelSettings &broadcastSettings, std::unordered_map<ui64, std::shared_ptr<IChannelBuffer>> buffers, bool localChannel)
-            : Service(service), Storage(broadcastSettings.settings[0].ChannelStorage)
+            : Service(service), Storage(broadcastSettings.settings[0].ChannelStorage), OutputSize(broadcastSettings.settings.size())
         {
             auto& settings = broadcastSettings.settings[0];
             PushStats.Level = settings.Level;
@@ -1169,6 +1169,7 @@ class TBroadcastOutputChannel : public IDqOutputChannel
 
             broadcastBuffer->Buffers[channelId] = buffer;
             Binded[channelId] = true;
+            ++BindedCount;
 
             if (BindedCount == OutputSize)
                 Service.reset();

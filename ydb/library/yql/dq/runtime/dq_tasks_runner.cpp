@@ -861,7 +861,13 @@ public:
                 }
                 if (isBroadcast){
                     auto outputChannel = Context.ChannelService->GetOutputBroadcastChannel(broadcastSettings);
-                    // should I bind here?
+                    // no bind here for broadcast?
+                    for (const auto& settings: broadcastSettings) {
+                        // broadcast channel pushed multiple times
+                        auto ret = AllocatedHolder->OutputChannels.emplace(settings.ChannelId, outputChannel);
+                        YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated output channelId: " << settings.ChannelId);
+                    }
+
                     outputs.emplace_back(outputChannel);
                 }
             }
@@ -904,11 +910,6 @@ public:
             }
             Stats->Sources = AllocatedHolder->Sources;
             for (auto& [channelId, outputChannel] : AllocatedHolder->OutputChannels) {
-                if (task.GetDqChannelVersion() >= 3u){
-                    // broadcast channel pushed multiple times
-                    for (ui32 i = 0; i < task.OutputsSize(); ++i) 
-                        Stats->OutputChannels[outputChannel->GetPopStats().DstStageId].emplace(channelId, outputChannel);
-                }
                 Stats->OutputChannels[outputChannel->GetPopStats().DstStageId].emplace(channelId, outputChannel);
             }
         }

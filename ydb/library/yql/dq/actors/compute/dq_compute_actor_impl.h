@@ -1145,7 +1145,9 @@ protected:
 
                 outputChannel->HasPeer = true;
                 outputChannel->PeerId = peer;
-                if (Task.GetDqChannelVersion() >= 2u) {
+                if (Task.GetDqChannelVersion() >= 3u) {
+                    outputChannel->Channel->Bind(this->SelfId(), peer, outputChannel->ChannelId);
+                } else if (Task.GetDqChannelVersion() >= 2u) {
                     Y_ENSURE(outputChannel->Channel);
                     outputChannel->Channel->Bind(this->SelfId(), peer);
                 } else {

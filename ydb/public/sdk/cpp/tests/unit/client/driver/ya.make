@@ -15,6 +15,7 @@ PEERDIR(
 )
 
 SRCS(
+    build_info_ut.cpp
     driver_ut.cpp
 )
 

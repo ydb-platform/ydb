@@ -719,6 +719,8 @@ private:
 
     IDiscoveryMutatorApi::TMutatorCb DiscoveryMutatorCb;
 
+    const std::string BuildInfo_;
+
     const std::size_t NetworkThreadsNum_;
     bool UsePerChannelTcpConnection_;
     // Must be the last member (first called destructor)

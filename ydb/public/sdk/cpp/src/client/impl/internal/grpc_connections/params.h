@@ -38,6 +38,7 @@ public:
     virtual uint64_t GetMaxOutboundMessageSize() const = 0;
     virtual uint64_t GetMaxMessageSize() const = 0;
     virtual std::shared_ptr<IExecutor> GetExecutor() const = 0;
+    virtual std::string GetBuildInfoExtra() const = 0;
 };
 
 } // namespace NYdb

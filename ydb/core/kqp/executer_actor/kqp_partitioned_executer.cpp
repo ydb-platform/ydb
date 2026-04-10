@@ -634,10 +634,10 @@ private:
 
         auto batchSettings = NBatchOperations::TSettings(partInfo->LimitSize, Settings.MinBatchSize);
         const auto executerConfig = TExecuterConfig(MutableExecuterConfig, TableServiceConfig, TliConfig);
-        auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, NFormats::TFormatsSettings{}, RequestCounters,
+        auto* executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, NFormats::TFormatsSettings{}, RequestCounters,
             executerConfig, AsyncIoFactory, SelfId(), UserRequestContext, StatementResultIndex,
             FederatedQuerySetup, GUCSettings, prunerConfig, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings),
-            llvmSettings, {}, 0, ChannelService);
+            llvmSettings, {}, 0, ChannelService, PreparedQuery->GetUseKqpTasksGraphV2());
         auto exId = RegisterWithSameMailbox(executerActor);
 
         partInfo->ExecuterId = exId;

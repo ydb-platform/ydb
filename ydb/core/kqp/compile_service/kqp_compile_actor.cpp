@@ -542,6 +542,7 @@ private:
             bool allowCache, bool success) {
         auto preparedQueryHolder = std::make_shared<TPreparedQueryHolder>(
             preparingQuery.release(), AppData()->FunctionRegistry, !success);
+        preparedQueryHolder->SetUseKqpTasksGraphV2(Config->GetUseKqpTasksGraphV2());
         preparedQueryHolder->MutableLlvmSettings().Fill(Config, queryType);
         KqpCompileResult->PreparedQuery = preparedQueryHolder;
         KqpCompileResult->AllowCache = CanCacheQuery(KqpCompileResult->PreparedQuery->GetPhysicalQuery()) && allowCache;

@@ -7611,9 +7611,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         return items;
     }
 
-    TString MakeS3ImportRequestTpl(const TVector<TImportItem>& items,
-                                   const TString& extraSettings = "")
-    {
+    TString MakeS3ImportRequestTpl(const TVector<TImportItem>& items, const TString& extraSettings = "") {
         TStringBuilder sb;
         sb << "ImportFromS3Settings { endpoint: \"localhost:%d\" scheme: HTTP ";
         if (extraSettings) sb << extraSettings << " ";
@@ -7625,9 +7623,10 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         return sb;
     }
 
-    TString MakeFsImportRequest(const TString& basePath,
-                                const TVector<TImportItem>& items,
-                                const TString& extraSettings = "")
+    TString MakeFsImportRequest(
+        const TString& basePath,
+        const TVector<TImportItem>& items,
+        const TString& extraSettings = "")
     {
         TStringBuilder sb;
         sb << "ImportFromFsSettings { base_path: \"" << basePath << "\" ";
@@ -7686,10 +7685,11 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
     };
 
     template <bool IsFs>
-    void ShouldSucceed(TTestWithReboots& t,
-                       const THashMap<TString, TTypedScheme>& schemes,
-                       const TVector<TImportItem>& items = DefaultImportItems(),
-                       const TString& extraSettings = "")
+    void ShouldSucceed(
+        TTestWithReboots& t,
+        const THashMap<TString, TTypedScheme>& schemes,
+        const TVector<TImportItem>& items = DefaultImportItems(),
+        const TString& extraSettings = "")
     {
         THashMap<TString, TTestDataWithScheme> bucketContent(schemes.size());
         for (const auto& [prefix, typedScheme] : schemes) {
@@ -7974,8 +7974,9 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             bucketContent.emplace(prefix, GenerateTestData(typedScheme, {}, permissions));
         }
 
-        TImportEnv<IsFs> env(ConvertTestData(bucketContent),
-                             {{"partition_stats", "/MyRoot/.sys/partition_stats"}});
+        TImportEnv<IsFs> env(ConvertTestData(bucketContent), {
+            {"partition_stats", "/MyRoot/.sys/partition_stats"},
+        });
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
@@ -7999,10 +8000,11 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
     }
 
     template <bool IsFs>
-    void CancelShouldSucceed(TTestWithReboots& t,
-                             const THashMap<TString, TTypedScheme>& schemes,
-                             const TVector<TImportItem>& items = DefaultImportItems(),
-                             const TString& extraSettings = "")
+    void CancelShouldSucceed(
+        TTestWithReboots& t,
+        const THashMap<TString, TTypedScheme>& schemes,
+        const TVector<TImportItem>& items = DefaultImportItems(),
+        const TString& extraSettings = "")
     {
         THashMap<TString, TTestDataWithScheme> bucketContent(schemes.size());
         for (const auto& [prefix, typedScheme] : schemes) {
@@ -8341,8 +8343,9 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             bucketContent.emplace(prefix, GenerateTestData(typedScheme, {}, permissions));
         }
 
-        TImportEnv<IsFs> env(ConvertTestData(bucketContent),
-                             {{"partition_stats", "/MyRoot/.sys/partition_stats"}});
+        TImportEnv<IsFs> env(ConvertTestData(bucketContent), {
+            {"partition_stats", "/MyRoot/.sys/partition_stats"},
+        });
 
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {

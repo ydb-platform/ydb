@@ -12,8 +12,6 @@
 
 Поддерживаются **режимы чтения-записи**: *Serializable* (по умолчанию) и *Snapshot Read-Write*; **режимы только для чтения**: *Snapshot Read-Only* и *Stale Read-Only*. Режим *Online Read-Only* оставлен для совместимости со старым кодом (**legacy**); в новых сценариях вместо него следует использовать *Snapshot Read-Only*.
 
-**Режимы чтения-записи**
-
 ### Serializable {#serializable}
 
 **Суть.** Самый строгий [уровень изоляции](https://en.wikipedia.org/wiki/Isolation_(database_systems)#Serializable) для пользовательских транзакций.

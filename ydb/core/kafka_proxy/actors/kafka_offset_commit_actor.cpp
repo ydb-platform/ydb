@@ -215,6 +215,7 @@ void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPt
         Error = ConvertErrorCode(record.GetYdbStatus());
         ctx.Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
     }
+    // !!! добавить обработку ошибок и подумать про Die(ctx);
     return;
 }
 void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {

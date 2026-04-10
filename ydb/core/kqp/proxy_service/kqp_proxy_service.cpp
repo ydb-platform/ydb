@@ -1914,7 +1914,6 @@ private:
         Y_VALIDATE(pqGatewayFactory, "Missing PQ gateway factory in federated query setup");
 
         auto counters = Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher");
-        counters = counters->GetSubgroup("host", "");
 
         const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
         auto rowDispatcher = NFq::NewRowDispatcherService(

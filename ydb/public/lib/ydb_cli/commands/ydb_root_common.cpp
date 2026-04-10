@@ -286,6 +286,8 @@ void TClientCommandRootCommon::FillConfig(TConfig& config) {
         config.AiPredefinedProfiles.push_back({profile.Name, profile.ApiType, profile.ApiEndpoint, profile.ModelName});
     }
 
+    config.BuildInfoProvider = Settings.BuildInfoProvider;
+
     SetCredentialsGetter(config);
 }
 

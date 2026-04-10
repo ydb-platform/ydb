@@ -880,7 +880,7 @@ void TKafkaBalancerActor::HeartbeatStepUpdateHeartbeatDeadlines(NKqp::TEvKqp::TE
     }
 
     if (!groupStatus->Exists ||
-        groupStatus->Generation == GenerationId + 1 ||
+        groupStatus->Generation == GenerationId + 1 && groupStatus->State != GROUP_STATE_WORKING ||
         groupStatus->State != GROUP_STATE_WORKING) {
         KAFKA_LOG_D("REBALANCE_IN_PROGRESS, oldGen=" << GenerationId << ", newGen=" << groupStatus->Generation << ", groupState=" << groupStatus->State);
         SendHeartbeatResponseFail(ctx, CorrelationId, EKafkaErrors::REBALANCE_IN_PROGRESS, "Group state changed. Rejoin required");

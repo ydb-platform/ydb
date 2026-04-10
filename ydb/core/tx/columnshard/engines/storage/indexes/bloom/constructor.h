@@ -2,6 +2,8 @@
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/constructor.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
+
 namespace NKikimr::NOlap::NIndexes {
 
 class TBloomIndexConstructor: public TSkipBitmapIndexConstructor {
@@ -14,7 +16,7 @@ public:
     }
 
 private:
-    double FalsePositiveProbability = 0.1;
+    double FalsePositiveProbability = NDefaults::FalsePositiveProbability;
     static inline auto Registrator = TFactory::TRegistrator<TBloomIndexConstructor>(GetClassNameStatic());
 
 protected:
@@ -24,6 +26,9 @@ protected:
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) override;
 
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexRequested& proto) override;
+
+private:
+    TConclusionStatus ValidateValues() const;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const override;
 
 public:

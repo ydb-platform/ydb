@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
@@ -61,6 +62,13 @@ public:
         return TStringBuilder() << "[" << TBase::SelfId() << "]";
     }
 
+    void PassAway() override {
+        if (!Pipes.empty()) {
+            this->Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+        }
+        TBase::PassAway();
+    }
+
 protected:
     template <typename TEv>
     TString EventStr(const char * func, const TEv& ev) {
@@ -69,8 +77,35 @@ protected:
             << ", Cookie: " << ev->Cookie;
     }
 
+    void SendToTablet(ui64 tabletId, IEventBase *ev) {
+        auto& pipe = Pipes[tabletId];
+        auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev, tabletId, !pipe.Subscribed, pipe.GetCookie());
+        this->Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
+        pipe.Subscribed = true;
+    }
+
+    void OnUndelivered(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+        auto& pipe = Pipes[ev->Get()->TabletId];
+        if (ev->Cookie == pipe.Cookie) {
+            pipe.Subscribed = false;
+        }
+    }
+
 protected:
     const NKikimrServices::EServiceKikimr Service;
+
+    struct TPipeInfo {
+        ui64 Cookie = 0;
+        ui64 Subscribed = false;
+
+        ui64 GetCookie() {
+            if (Subscribed) {
+                return Cookie;
+            }
+            return ++Cookie;
+        }
+    };
+    absl::flat_hash_map<ui64, TPipeInfo> Pipes;
 };
 
 

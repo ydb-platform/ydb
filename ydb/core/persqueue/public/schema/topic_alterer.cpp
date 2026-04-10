@@ -126,18 +126,15 @@ void TTopicAlterer::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev
         return ReplyErrorAndDie(ydbStatus, TString{*errorMessage});
     }
 
-    ui64 schemeShardTabletId = msg->Record.GetSchemeShardTabletId();
-    auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(msg->Record.GetTxId());
-    SendToTablet(schemeShardTabletId, request.release());
+    SchemeShardTabletId = msg->Record.GetSchemeShardTabletId();
+    TxId = msg->Record.GetTxId();
+
+    DoWaitTxCompletion();
 }
 
-void TTopicAlterer::Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&) {
-    Send(Settings.ParentId, new TEvAlterTopicResponse(), 0, Settings.Cookie);
-    PassAway();
-}
-
-void TTopicAlterer::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+void TTopicAlterer::HandleOnAlter(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
     LOG_T("Handle TEvPipeCache::TEvDeliveryProblem");
+    OnUndelivered(ev);
     return ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Scheme shard " << ev->Get()->TabletId << " is unavailable");
 }
 
@@ -145,7 +142,37 @@ STFUNC(TTopicAlterer::AlterState) {
     switch(ev->GetTypeRewrite()) {
         hFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
         hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
-        hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+        hFunc(TEvPipeCache::TEvDeliveryProblem, HandleOnAlter);
+        sFunc(TEvents::TEvPoison, PassAway);
+    }
+}
+
+void TTopicAlterer::DoWaitTxCompletion() {
+    LOG_D("DoWaitTxCompletion");
+    Become(&TTopicAlterer::WaitTxCompletionState);
+
+    auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(TxId);
+    SendToTablet(SchemeShardTabletId, request.release());
+}
+
+void TTopicAlterer::Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&) {
+    Send(Settings.ParentId, new TEvAlterTopicResponse(), 0, Settings.Cookie);
+    PassAway();
+}
+
+void TTopicAlterer::HandleOnWaitTxCompletion(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+    LOG_T("Handle TEvPipeCache::TEvDeliveryProblem");
+    OnUndelivered(ev);
+    if (++WaitTxCompletionRetries > MaxWaitTxCompletionRetries) {
+        return ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "SchemeShard " << ev->Get()->TabletId << " is unavailable");
+    }
+    DoWaitTxCompletion();
+}
+
+STFUNC(TTopicAlterer::WaitTxCompletionState) {
+    switch(ev->GetTypeRewrite()) {
+        hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
+        hFunc(TEvPipeCache::TEvDeliveryProblem, HandleOnWaitTxCompletion);
         sFunc(TEvents::TEvPoison, PassAway);
     }
 }
@@ -162,15 +189,9 @@ TString TTopicAlterer::GetWorkingDir() const {
 
 void TTopicAlterer::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
     LOG_T("ReplyErrorAndDie");
-    Send(Settings.ParentId, new TEvErrorResponse(errorCode, std::move(errorMessage)), 0, Settings.Cookie);
+    Send(Settings.ParentId, new TEvAlterTopicResponse(errorCode, std::move(errorMessage)), 0, Settings.Cookie);
     PassAway();
 }
-
-void TTopicAlterer::SendToTablet(ui64 tabletId, IEventBase *ev) {
-    auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev, tabletId, true, ++Cookie);
-    Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);
-}
-
 
 IActor* CreateTopicAlterer(NKikimrServices::EServiceKikimr service, TTopicAltererSettings&& settings) {
     return new TTopicAlterer(service, std::move(settings));

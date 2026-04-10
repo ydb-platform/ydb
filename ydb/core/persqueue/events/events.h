@@ -11,7 +11,7 @@ enum class EServices {
     DESCRIBER_SERVICE = 2,
     MLP = 4,
     CLOUD_EVENTS = 6,
-    SCHEME = 7,
+    SCHEMA = 7,
     END
 };
 

@@ -11,17 +11,13 @@ class TUserToken;
 namespace NKikimr::NPQ::NScheme {
 
 enum EEv : ui32 {
-    EvReadResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::SCHEME),
+    EvReadResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::SCHEMA),
     EvAlterTopicResponse,
-    EvErrorResponse,
     EvEnd
 };
 
 struct TEvAlterTopicResponse : public NActors::TEventLocal<TEvAlterTopicResponse, EEv::EvAlterTopicResponse> {
-};
-    
-struct TEvErrorResponse : public NActors::TEventLocal<TEvErrorResponse, EEv::EvErrorResponse> {
-    TEvErrorResponse(Ydb::StatusIds::StatusCode status, TString&& errorMessage)
+    TEvAlterTopicResponse(Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS, TString&& errorMessage = {})
         : Status(status)
         , ErrorMessage(std::move(errorMessage))
     {

@@ -12,6 +12,7 @@ namespace NKikimr::NPQ::NScheme {
 
 class TTopicAlterer : public TBaseActor<TTopicAlterer>
                     , public TConstantLogPrefix {
+    static constexpr size_t MaxWaitTxCompletionRetries = 3;
 public:
     TTopicAlterer(NKikimrServices::EServiceKikimr service, TTopicAltererSettings&& settings);
     ~TTopicAlterer() = default;
@@ -29,21 +30,27 @@ private:
 private:
     void DoAlter();
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev);
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev);
-    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&);
+    void HandleOnAlter(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
     STFUNC(AlterState);
+
+private:
+    void DoWaitTxCompletion();
+    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev);
+    void HandleOnWaitTxCompletion(TEvPipeCache::TEvDeliveryProblem::TPtr& ev);
+    STFUNC(WaitTxCompletionState);
 
 private:
     TString GetWorkingDir() const;
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage);
-    void SendToTablet(ui64 tabletId, IEventBase *ev);
 
 private:
     const TTopicAltererSettings Settings;
 
     NDescriber::TTopicInfo TopicInfo;
-    ui64 Cookie = 0;
+    ui64 SchemeShardTabletId = 0;
+    ui64 TxId = 0;
+    size_t WaitTxCompletionRetries = 0;
 };
 
 } // namespace NKikimr::NPQ::NScheme

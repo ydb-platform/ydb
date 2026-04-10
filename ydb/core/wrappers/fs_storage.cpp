@@ -393,18 +393,20 @@ public:
     struct TListContext {
         const TString& Marker;
         int MaxKeys;
-        TVector<TString>& Result;
+        Aws::S3::Model::ListObjectsResult& Result;
         bool Truncated = false;
 
         bool Add(const TString& path) {
             if (!Marker.empty() && path <= Marker) {
                 return true;
             }
-            if (static_cast<int>(Result.size()) >= MaxKeys) {
+            if (static_cast<int>(Result.GetContents().size()) >= MaxKeys) {
                 Truncated = true;
                 return false;
             }
-            Result.push_back(path);
+            Aws::S3::Model::Object obj;
+            obj.SetKey(Aws::String(path.data(), path.size()));
+            Result.AddContents(std::move(obj));
             return true;
         }
     };
@@ -450,20 +452,13 @@ public:
                 return;
             }
 
-            TVector<TString> files;
-            files.reserve(maxKeys);
-            TListContext ctx{marker, maxKeys, files};
+            Aws::S3::Model::ListObjectsResult awsResult;
+            TListContext ctx{marker, maxKeys, awsResult};
 
             if (dirPath.Exists() && dirPath.IsDirectory()) {
                 ListFilesRecursive(dirPath, ctx);
             }
 
-            Aws::S3::Model::ListObjectsResult awsResult;
-            for (const auto& filePath : files) {
-                Aws::S3::Model::Object obj;
-                obj.SetKey(Aws::String(filePath.data(), filePath.size()));
-                awsResult.AddContents(std::move(obj));
-            }
             awsResult.SetIsTruncated(ctx.Truncated);
 
             Aws::Utils::Outcome<Aws::S3::Model::ListObjectsResult, Aws::S3::S3Error> outcome(std::move(awsResult));

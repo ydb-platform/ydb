@@ -91,6 +91,7 @@ void EnsureScriptSpecificTypes(
         case EScriptType::SystemPython3_11:
         case EScriptType::SystemPython3_12:
         case EScriptType::SystemPython3_13:
+        case EScriptType::SystemPython3_14:
             return TPythonTypeChecker().Walk(funcType, nodeStack);
         case EScriptType::Javascript:
             return TJavascriptTypeChecker().Walk(funcType, nodeStack);
@@ -240,7 +241,7 @@ bool ReduceOptionalElements(const TType* type, const TArrayRef<const ui32>& test
 }
 
 static std::vector<TType*> ValidateBlockItems(const TArrayRef<TType* const>& wideComponents, bool unwrap) {
-    MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
+    MKQL_ENSURE(!wideComponents.empty(), "Expected at least one column");
     std::vector<TType*> items;
     items.reserve(wideComponents.size());
     // XXX: Declare these variables outside the loop body to use for the last
@@ -304,6 +305,7 @@ bool IsSystemPython(EScriptType type) {
            type == EScriptType::SystemPython3_11 ||
            type == EScriptType::SystemPython3_12 ||
            type == EScriptType::SystemPython3_13 ||
+           type == EScriptType::SystemPython3_14 ||
            type == EScriptType::Python ||
            type == EScriptType::Python2;
 }
@@ -1471,7 +1473,7 @@ TRuntimeNode TProgramBuilder::ForwardList(TRuntimeNode stream) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::ToFlow(TRuntimeNode stream) {
+TRuntimeNode TProgramBuilder::ToFlow(TRuntimeNode stream, const TArrayRef<const TRuntimeNode>& dependentNodes) {
     const auto type = stream.GetStaticType();
     MKQL_ENSURE(type->IsStream() || type->IsList() || type->IsOptional(), "Expected stream, list or optional.");
     TType* itemType;
@@ -1485,6 +1487,11 @@ TRuntimeNode TProgramBuilder::ToFlow(TRuntimeNode stream) {
 
     TCallableBuilder callableBuilder(Env_, __func__, NewFlowType(itemType));
     callableBuilder.Add(stream);
+    if constexpr (RuntimeVersion >= 75U) {
+        for (auto node : dependentNodes) {
+            callableBuilder.Add(node);
+        }
+    }
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
@@ -1646,12 +1653,19 @@ TRuntimeNode TProgramBuilder::BlockCompress(TRuntimeNode stream, ui32 bitmapInde
 }
 
 TRuntimeNode TProgramBuilder::BlockExpandChunked(TRuntimeNode comp) {
-    if (comp.GetStaticType()->IsStream()) {
-        ValidateBlockStreamType(comp.GetStaticType());
+    const auto inputType = comp.GetStaticType();
+    if constexpr (RuntimeVersion < 74U) {
+        if (inputType->IsStream()) {
+            ValidateBlockStreamType(inputType);
+        } else {
+            ValidateBlockFlowType(inputType);
+        }
     } else {
-        ValidateBlockFlowType(comp.GetStaticType());
+        MKQL_ENSURE(inputType->IsStream(), "Expected stream as input type");
+        ValidateBlockStreamType(inputType);
     }
-    TCallableBuilder callableBuilder(Env_, __func__, comp.GetStaticType());
+
+    TCallableBuilder callableBuilder(Env_, __func__, inputType);
     callableBuilder.Add(comp);
     return TRuntimeNode(callableBuilder.Build(), false);
 }
@@ -2276,7 +2290,7 @@ TRuntimeNode TProgramBuilder::Prepend(TRuntimeNode item, TRuntimeNode list) {
 }
 
 TRuntimeNode TProgramBuilder::BuildExtend(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& lists) {
-    MKQL_ENSURE(lists.size() > 0, "Expected at least 1 list or flow");
+    MKQL_ENSURE(!lists.empty(), "Expected at least 1 list or flow");
     if (lists.size() == 1) {
         return lists.front();
     }
@@ -4229,7 +4243,7 @@ TRuntimeNode TProgramBuilder::WideMap(TRuntimeNode flowOrStream, const TWideLamb
         TCallableBuilder callableBuilder(Env_, __func__, NewStreamType(NewMultiType(tupleItems)));
         return fillCallableBuilder(callableBuilder, flowOrStream);
     } else {
-        Y_UNREACHABLE();
+        MKQL_ENSURE(false, "Unreachable");
     }
 }
 
@@ -4572,7 +4586,7 @@ TRuntimeNode TProgramBuilder::BuildMap(const std::string_view& callableName, TRu
 }
 
 TRuntimeNode TProgramBuilder::Invoke(const std::string_view& funcName, TType* resultType, const TArrayRef<const TRuntimeNode>& args) {
-    MKQL_ENSURE(args.size() >= 1U && args.size() <= 3U, "Expected from one to three arguments.");
+    MKQL_ENSURE(!args.empty() && args.size() <= 3U, "Expected from one to three arguments.");
     std::array<TArgType, 4U> argTypes;
     argTypes.front().first = UnpackOptionalData(resultType, argTypes.front().second)->GetSchemeType();
     auto i = 0U;
@@ -4783,7 +4797,7 @@ TRuntimeNode TProgramBuilder::Concat(TRuntimeNode data1, TRuntimeNode data2) {
 }
 
 TRuntimeNode TProgramBuilder::ConcatMany(const TArrayRef<const TRuntimeNode>& args) {
-    MKQL_ENSURE(args.size() >= 1, "Expected at least one argument");
+    MKQL_ENSURE(!args.empty(), "Expected at least one argument");
     if (args.size() == 1) {
         return args[0];
     }

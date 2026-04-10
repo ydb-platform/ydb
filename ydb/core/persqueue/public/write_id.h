@@ -3,11 +3,12 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/pqdata_transaction.pb.h>
 #include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 
 #include <util/system/types.h>
 #include <util/digest/multi.h>
-#include <util/stream/output.h>
+#include <util/stream/fwd.h>
 
 namespace NKikimr::NPQ {
 
@@ -55,13 +56,6 @@ struct TWriteId {
     // Identifies kafka api transaction
     NKafka::TProducerInstanceId KafkaProducerInstanceId;
 };
-
-inline
-IOutputStream& operator<<(IOutputStream& s, const TWriteId& v)
-{
-    v.ToStream(s);
-    return s;
-}
 
 TWriteId GetWriteId(const NKikimrPQ::TTransaction& m);
 void SetWriteId(NKikimrPQ::TTransaction& m, const TWriteId& writeId);

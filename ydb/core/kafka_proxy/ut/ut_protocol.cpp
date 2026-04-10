@@ -1503,11 +1503,10 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
     Y_UNIT_TEST(OffsetCommitWithGenerationScenario) {
         TInsecureTestServer testServer("2", false, true, false, false, true, true);
-        testServer.KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_TRACE);
-        testServer.KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NActors::NLog::PRI_TRACE);
 
         TString topicName = "/Root/topic-0-test";
         TString topicName1 = "/Root/topic-1-test";
+        TString topicName2 = "/Root/topic-2-test";
         ui64 minActivePartitions = 3;
 
         TString consumerName = "consumer-0";
@@ -1523,10 +1522,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
         CreateTopic(pqClient, topicName, minActivePartitions, {consumerName});
         CreateTopic(pqClient, topicName1, minActivePartitions, {anotherConsumerName});
+        CreateTopic(pqClient, topicName2, minActivePartitions, {consumerName});
         {
             // authenticating as user with only read rights
             TKafkaTestClient client(testServer.Port);
-            std::vector<TString> topics = {topicName};
+            std::vector<TString> topics = {topicName, topicName2};
             i32 heartbeatTimeout = 15000;
             i32 rebalanceTimeout = 5000;
             TString protocolType = "consumer";
@@ -1588,15 +1588,36 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             for (const auto& topic : msg1->Topics) {
                 UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
                 for (const auto& partition : topic.Partitions) {
-                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::FENCED_INSTANCE_ID));
+                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION));
                 }
             }
 
-            // check that error on one topic triggers error response on the whole commit request
-            offsets[topicName1] = partitionsAndOffsets;
-            auto msg2 = client.OffsetCommit(consumerName, offsets, generationId);
+            std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsetsIncorrect;
+            for (ui64 i = 0; i < minActivePartitions; ++i) {
+                partitionsAndOffsetsIncorrect.emplace_back(i + minActivePartitions + 1, 0, commitedMetaData);
+            }
+            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets1;
+            offsets1[topicName2] = partitionsAndOffsetsIncorrect;
+            offsets1[topicName] = partitionsAndOffsets;
+            auto msg2 = client.OffsetCommit(consumerName, offsets1, generationId);
             UNIT_ASSERT_VALUES_EQUAL(msg2->Topics.size(), 2);
             for (const auto& topic : msg2->Topics) {
+                UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
+                for (const auto& partition : topic.Partitions) {
+                    if (topic.Name == topicName2) {
+                        UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION));
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+                    }
+                }
+            }
+
+            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets2;
+            offsets2[topicName1] = partitionsAndOffsets;
+            offsets2[topicName] = partitionsAndOffsets;
+            auto msg3 = client.OffsetCommit(consumerName, offsets2, generationId);
+            UNIT_ASSERT_VALUES_EQUAL(msg3->Topics.size(), 2);
+            for (const auto& topic : msg3->Topics) {
                 UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
                 for (const auto& partition : topic.Partitions) {
                     UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::GROUP_ID_NOT_FOUND));
@@ -1611,6 +1632,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         TString topicName = "/Root/topic-0-test";
         TString topicName1 = "/Root/topic-1-test";
+        TString topicName2 = "/Root/topic-2-test";
         ui64 minActivePartitions = 3;
 
         TString consumerName = "consumer-0";
@@ -1626,10 +1648,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
         CreateTopic(pqClient, topicName, minActivePartitions, {consumerName});
         CreateTopic(pqClient, topicName1, minActivePartitions, {anotherConsumerName});
+        CreateTopic(pqClient, topicName2, minActivePartitions, {consumerName});
         {
             // authenticating as user with only read rights
             TKafkaTestClient client(testServer.Port);
-            std::vector<TString> topics = {topicName};
+            std::vector<TString> topics = {topicName, topicName2};
             i32 heartbeatTimeout = 15000;
             i32 rebalanceTimeout = 5000;
             TString protocolType = "consumer";
@@ -1691,15 +1714,36 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             for (const auto& topic : msg1->Topics) {
                 UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
                 for (const auto& partition : topic.Partitions) {
-                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::FENCED_INSTANCE_ID));
+                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION));
                 }
             }
 
-            // check that error on one topic triggers error response on the whole commit request
-            offsets[topicName1] = partitionsAndOffsets;
-            auto msg2 = client.OffsetCommit(consumerName, offsets, generationId);
+            std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsetsIncorrect;
+            for (ui64 i = 0; i < minActivePartitions; ++i) {
+                partitionsAndOffsetsIncorrect.emplace_back(i + minActivePartitions + 1, 0, commitedMetaData);
+            }
+            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets1;
+            offsets1[topicName2] = partitionsAndOffsetsIncorrect;
+            offsets1[topicName] = partitionsAndOffsets;
+            auto msg2 = client.OffsetCommit(consumerName, offsets1, generationId);
             UNIT_ASSERT_VALUES_EQUAL(msg2->Topics.size(), 2);
             for (const auto& topic : msg2->Topics) {
+                UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
+                for (const auto& partition : topic.Partitions) {
+                    if (topic.Name == topicName2) {
+                        UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION));
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+                    }
+                }
+            }
+
+            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets2;
+            offsets2[topicName1] = partitionsAndOffsets;
+            offsets2[topicName] = partitionsAndOffsets;
+            auto msg3 = client.OffsetCommit(consumerName, offsets2, generationId);
+            UNIT_ASSERT_VALUES_EQUAL(msg3->Topics.size(), 2);
+            for (const auto& topic : msg3->Topics) {
                 UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
                 for (const auto& partition : topic.Partitions) {
                     UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::GROUP_ID_NOT_FOUND));
@@ -4348,6 +4392,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
     Y_UNIT_TEST(HeartbeatWithTTLGenerationsScenario) {
         TInsecureTestServer testServer("1", false, true);
+        testServer.KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_ERROR);
 
         TString topicName = "/Root/topic-0";
         ui64 totalPartitions = 24;
@@ -4451,10 +4496,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             clientA.Heartbeat(joinRespA->MemberId.value(),
                              illegalGeneration,
                              groupId)->ErrorCode,
-            static_cast<TKafkaInt16>(EKafkaErrors::FENCED_INSTANCE_ID)
+            static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION)
         );
 
-        UNIT_ASSERT_VALUES_EQUAL(clientA.Heartbeat(joinRespA->MemberId.value(),
+        UNIT_ASSERT_VALUES_EQUAL(
+            clientA.Heartbeat(joinRespA->MemberId.value(),
                              joinRespA->GenerationId,
                              groupId)->ErrorCode,
             static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR)

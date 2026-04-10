@@ -2,6 +2,7 @@ package NKikimrLongTxService;
 
 option java_package = "ru.yandex.kikimr.proto";
 
+import "ydb/library/actors/protos/actors.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 
@@ -75,9 +76,28 @@ message TEvAcquireReadSnapshotResult {
     optional string DatabaseName = 5;
 }
 
+// Lock wait edges are uniquely identified by the (Owner, RequestId) tuple. Owner is the actor
+// reporting the wait (e.g. a DataShard), and RequestId is an id unique to the particular
+// Owner. These unique ids allow us to make the TEvUpdateLockWaitEdges message idempotent.
+message TLockWaitEdgeId {
+    optional NActorsProto.TActorId Owner = 1;
+    optional uint64 RequestId = 2;
+}
+
+message TLockWaitEdge {
+    optional TLockWaitEdgeId Id = 1;
+
+    optional uint64 BlockerLockId = 2;
+    optional uint32 BlockerLockNode = 3;
+}
+
+
 message TEvSubscribeLock {
     optional uint64 LockId = 1;
     optional uint32 LockNode = 2;
+
+    // When (re)subscribing, tell the remote lock its current wait edges that are local to us.
+    repeated TLockWaitEdge LocalWaitEdges = 3;
 }
 
 message TEvLockStatus {
@@ -99,9 +119,20 @@ message TEvLockStatus {
     // locks, and placeholder (MultiXact) locks which are used in place of
     // a set of other transactions or savepoints.
     optional uint64 LockTimestampUs = 4;
+
+    // Used to sync current lock wait edges at the time of the subscription.
+    repeated TLockWaitEdge WaitEdges = 5;
 }
 
 message TEvUnsubscribeLock {
     optional uint64 LockId = 1;
     optional uint32 LockNode = 2;
+}
+
+message TEvUpdateLockWaitEdges {
+    optional uint64 LockId = 1;
+    optional uint32 LockNode = 2;
+
+    repeated TLockWaitEdge Added = 3;
+    repeated TLockWaitEdgeId Removed = 4;
 }

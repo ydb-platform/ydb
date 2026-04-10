@@ -1,12 +1,10 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
-
-#include <ydb/core/base/blobstorage.h>
-#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
-#include <ydb/core/protos/blockstore_config.pb.h>
-
 #include <ydb/library/actors/core/actor.h>
+
+namespace NKikimr {
+class TTabletStorageInfo;
+}   // namespace NKikimr
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 

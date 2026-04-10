@@ -2,11 +2,11 @@
 #include "fulltext_workload_generator.h"
 #include "fulltext_data_generator.h"
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
 namespace NYdbWorkload {
 
     void TFulltextWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
-        Y_UNUSED(workloadType);
-
         switch (commandType) {
             case TWorkloadParams::ECommandType::Root:
                 opts.AddLongOption("path", "Path to workload table.")
@@ -25,7 +25,7 @@ namespace NYdbWorkload {
                     .StoreResult(&AutoPartitioningByLoad);
                 break;
             case TWorkloadParams::ECommandType::Import:
-                opts.AddLongOption("index-name", "Fulltext index name.")
+                opts.AddLongOption("index", "Fulltext index name.")
                     .DefaultValue(IndexName)
                     .StoreResult(&IndexName);
                 opts.AddLongOption("index-type", "Fulltext index type (fulltext_plain, fulltext_relevance).")
@@ -36,15 +36,47 @@ namespace NYdbWorkload {
                     .DefaultValue("tokenizer=standard");
                 break;
             case TWorkloadParams::ECommandType::Run:
+                RunWorkloadType = workloadType;
                 opts.AddLongOption("index-name", "Fulltext index name.")
                     .DefaultValue(IndexName)
                     .StoreResult(&IndexName);
-                opts.AddLongOption("query-table", "Name of the table that contains queries to use for select queries. The table must have a 'query' column.")
-                    .Required()
-                    .StoreResult(&QueryTable);
-                opts.AddLongOption("limit", "Limit rows in result set.")
-                    .DefaultValue(Limit)
-                    .StoreResult(&Limit);
+                switch (static_cast<EFulltextWorkloadType>(workloadType)) {
+                    case EFulltextWorkloadType::Select:
+                        opts.AddLongOption("query-table", "Name of the table with predefined queries. The table must have a 'query' column.")
+                            .DefaultValue("")
+                            .StoreResult(&QueryTable);
+                        opts.AddLongOption("top-size", "Number of rows to sample from the table to build the query word set")
+                            .DefaultValue(TopSize)
+                            .StoreResult(&TopSize);
+                        opts.AddLongOption("limit", "Limit rows in result set")
+                            .DefaultValue(Limit)
+                            .StoreResult(&Limit);
+                        opts.AddLongOption('m', "model", "Path to Markov chain model file (.tsv.gz) for generating queries")
+                            .RequiredArgument("PATH")
+                            .StoreResult(&ModelPath);
+                        opts.AddLongOption("min-query-len", "Minimum number of words in a generated query")
+                            .DefaultValue(SelectMinQueryLen)
+                            .StoreResult(&SelectMinQueryLen);
+                        opts.AddLongOption("max-query-len", "Maximum number of words in a generated query")
+                            .DefaultValue(SelectMaxQueryLen)
+                            .StoreResult(&SelectMaxQueryLen);
+                        break;
+                    case EFulltextWorkloadType::Upsert:
+                        opts.AddLongOption("bulk-size", "Number of rows in a upsert batch")
+                            .DefaultValue(UpsertBulkSize)
+                            .StoreResult(&UpsertBulkSize);
+                        opts.AddLongOption('m', "model", "Path to Markov chain model file (.tsv.gz)")
+                            .RequiredArgument("PATH")
+                            .Required()
+                            .StoreResult(&ModelPath);
+                        opts.AddLongOption("min-sentence-len", "Minimum number of words in a generated sentence")
+                            .DefaultValue(UpsertMinSentenceLen)
+                            .StoreResult(&UpsertMinSentenceLen);
+                        opts.AddLongOption("max-sentence-len", "Maximum number of words in a generated sentence")
+                            .DefaultValue(UpsertMaxSentenceLen)
+                            .StoreResult(&UpsertMaxSentenceLen);
+                        break;
+                }
                 break;
             default:
                 break;
@@ -57,7 +89,8 @@ namespace NYdbWorkload {
 
     TWorkloadDataInitializer::TList TFulltextWorkloadParams::CreateDataInitializers() const {
         return {
-            std::make_shared<TFulltextWorkloadDataInitializer>(*this),
+            std::make_shared<TFulltextFilesDataInitializer>(*this),
+            std::make_shared<TFulltextGeneratorDataInitializer>(*this),
         };
     }
 
@@ -72,7 +105,21 @@ namespace NYdbWorkload {
     }
 
     void TFulltextWorkloadParams::Init() {
-        // Initialization logic if needed
+        if (RunWorkloadType != static_cast<int>(EFulltextWorkloadType::Select)) {
+            return;
+        }
+
+        const TString tablePath = GetFullTableName(TableName.c_str());
+        auto session = TableClient->GetSession().ExtractValueSync().GetSession();
+        auto describeResult = session.DescribeTable(tablePath).GetValueSync();
+        Y_ABORT_UNLESS(describeResult.IsSuccess(), "DescribeTable failed: %s", describeResult.GetIssues().ToString().c_str());
+
+        for (const auto& index : describeResult.GetTableDescription().GetIndexDescriptions()) {
+            if (index.GetIndexName() == IndexName) {
+                IndexIsRelevance = (index.GetIndexType() == NYdb::NTable::EIndexType::GlobalFulltextRelevance);
+                break;
+            }
+        }
     }
 
 } // namespace NYdbWorkload

@@ -14,8 +14,8 @@ namespace sdk
 namespace metrics
 {
 
-std::chrono::milliseconds GetEnvDuration(nostd::string_view env_var_name,
-                                         std::chrono::milliseconds default_value)
+static std::chrono::milliseconds GetEnvDuration(nostd::string_view env_var_name,
+                                                std::chrono::milliseconds default_value)
 {
   std::chrono::system_clock::duration duration;
   if (common::GetDurationEnvironmentVariable(env_var_name.data(), duration))

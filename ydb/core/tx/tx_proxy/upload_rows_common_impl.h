@@ -3,7 +3,6 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 
 #include <ydb/core/tx/long_tx_service/public/events.h>
-#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/io_formats/arrow/scheme/scheme.h>
@@ -26,10 +25,6 @@
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
-
-#define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
-#undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/wilson_ids/wilson.h>

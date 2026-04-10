@@ -251,26 +251,6 @@ public:
         return Tx.GetKqpTransaction().GetTasks();
     }
 
-    inline ui64 GetFirstKqpTaskId() {
-        ui64 taskId = std::numeric_limits<ui64>::max();
-        const auto& tasks = GetKqpTasksRunner().GetTasks();
-        if (!tasks.empty()) {
-            taskId = tasks.begin()->second.GetId();
-        }
-        return taskId;
-    }
-
-    NKqp::TKqpTasksRunner& GetKqpTasksRunner() {
-        Y_ENSURE(IsKqpDataTx());
-        BuiltTaskRunner = true;
-        return EngineBay.GetKqpTasksRunner(*Tx.MutableKqpTransaction());
-    }
-
-    ::NYql::NDqProto::EDqStatsMode GetKqpStatsMode() const {
-        Y_ENSURE(IsKqpDataTx());
-        return Tx.GetKqpTransaction().GetRuntimeSettings().GetStatsMode();
-    }
-
     NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx() { Y_ENSURE(IsKqpDataTx()); return EngineBay.GetKqpComputeCtx(); }
 
     bool HasStreamResponse() const { return Tx.GetStreamResponse(); }

@@ -7,6 +7,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_backup.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 
+#include <library/cpp/getopt/small/completer.h>
 #include <util/string/builder.h>
 
 namespace NYdb {
@@ -90,12 +91,16 @@ int TCommandGetOperation::Run(TConfig& config) {
     case TOperationId::EXPORT:
         if (OperationId.GetSubKind() == "s3") {
             return GetOperation<NExport::TExportToS3Response>(client, OperationId, OutputFormat);
+        } else if (OperationId.GetSubKind() == "fs") {
+            return GetOperation<NExport::TExportToFsResponse>(client, OperationId, OutputFormat);
         } else { // fallback to "yt"
             return GetOperation<NExport::TExportToYtResponse>(client, OperationId, OutputFormat);
         }
     case TOperationId::IMPORT:
         if (OperationId.GetSubKind() == "s3") {
             return GetOperation<NImport::TImportFromS3Response>(client, OperationId, OutputFormat);
+        } else if (OperationId.GetSubKind() == "fs") {
+            return GetOperation<NImport::TImportFromFsResponse>(client, OperationId, OutputFormat);
         } else {
             throw TMisuseException() << "Invalid operation ID (unexpected sub-kind of operation)";
         }
@@ -141,7 +146,9 @@ int TCommandForgetOperation::Run(TConfig& config) {
 void TCommandListOperations::InitializeKindToHandler(TConfig& config) {
     KindToHandler = {
         {"export/s3", &ListOperations<NExport::TExportToS3Response>},
+        {"export/nfs", &ListOperations<NExport::TExportToFsResponse>},
         {"import/s3", &ListOperations<NImport::TImportFromS3Response>},
+        {"import/nfs", &ListOperations<NImport::TImportFromFsResponse>},
         {"buildindex", &ListOperations<NTable::TBuildIndexOperation>},
         {"scriptexec", &ListOperations<NQuery::TScriptExecutionOperation>},
         {"incbackup", &ListOperations<NBackup::TIncrementalBackupResponse>},
@@ -192,6 +199,15 @@ void TCommandListOperations::Config(TConfig& config) {
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<kind>", KindChoices());
+
+    TVector<NLastGetopt::NComp::TChoice> kindChoices;
+    for (const auto& [kind, handler] : KindToHandler) {
+        if (!handler.Hidden) {
+            kindChoices.emplace_back(kind);
+        }
+    }
+    config.Opts->GetOpts().GetFreeArgSpec(0)
+        .Completer(NLastGetopt::NComp::Choice(std::move(kindChoices)));
 }
 
 void TCommandListOperations::Parse(TConfig& config) {

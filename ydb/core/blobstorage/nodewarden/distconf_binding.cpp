@@ -144,6 +144,11 @@ namespace NKikimr::NStorage {
             return; // we are either doing something, or binding is already in progress
         }
 
+        Y_ABORT_UNLESS(QuorumValid);
+        if (MajorityOfNodesConnected) {
+            return;
+        }
+
         const TMonotonic now = TActivationContext::Monotonic();
 
         // try to bind to node from the same pile
@@ -696,13 +701,14 @@ namespace NKikimr::NStorage {
             const bool configUpdated = UpdateBound(senderNodeId, nodeId, item.GetMeta(), getPushEv());
             info.BoundNodeIds.insert(nodeId);
 
-            if (Scepter && configUpdated && item.GetMeta().GetGeneration() < StorageConfig->GetGeneration()) {
+            if (Scepter && configUpdated && CommittedStorageConfig &&
+                    item.GetMeta().GetGeneration() < CommittedStorageConfig->GetGeneration()) {
                 // a new node has arrived with stale configuration: we have to update it
                 fanOutCommittedStorageConfig = true;
             }
         }
         if (fanOutCommittedStorageConfig) {
-            FanOutReversePush(StorageConfig.get());
+            FanOutReversePush(CommittedStorageConfig.get());
         }
 
         // process deleted items

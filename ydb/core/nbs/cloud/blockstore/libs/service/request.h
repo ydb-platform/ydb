@@ -4,6 +4,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/guarded_sglist.h>
 
 namespace NYdb::NBS::NBlockStore {
@@ -13,6 +14,7 @@ namespace NYdb::NBS::NBlockStore {
 struct TRequestHeaders
 {
     TRequestHeaders Clone(TBlockRange64 range) const;
+    size_t GetRequestSize() const;
 
     const TVolumeConfigPtr VolumeConfig;
     const TString ClientId;
@@ -22,14 +24,10 @@ struct TRequestHeaders
     const TInstant Timestamp;
 };
 
-struct TReadBlocksLocalRequest
+struct TReadBlocksLocalRequest: public TDisableCopyMove
 {
     TRequestHeaders Headers;
     TGuardedSgList Sglist;
-
-    // Set during execution
-    TBlockRange64 RegionRange;
-    TBlockRange64 VChunkRange;
 
     explicit TReadBlocksLocalRequest(TRequestHeaders headers)
         : Headers(std::move(headers))
@@ -41,15 +39,10 @@ struct TReadBlocksLocalResponse
     NProto::TError Error;
 };
 
-struct TWriteBlocksLocalRequest
+struct TWriteBlocksLocalRequest: public TDisableCopyMove
 {
     TRequestHeaders Headers;
     TGuardedSgList Sglist;
-
-    // Set during execution
-    TBlockRange64 RegionRange;
-    TBlockRange64 VChunkRange;
-    ui64 Lsn = 0;
 
     explicit TWriteBlocksLocalRequest(TRequestHeaders headers)
         : Headers(std::move(headers))
@@ -61,7 +54,7 @@ struct TWriteBlocksLocalResponse
     NProto::TError Error;
 };
 
-struct TZeroBlocksLocalRequest
+struct TZeroBlocksLocalRequest: public TDisableCopyMove
 {
     TRequestHeaders Headers;
 
@@ -105,6 +98,8 @@ enum class EBlockStoreRequest
     ZeroBlocks = 3,
     MAX
 };
+
+TStringBuf ToStringBuf(EBlockStoreRequest requestType);
 
 ui64 CreateRequestId();
 

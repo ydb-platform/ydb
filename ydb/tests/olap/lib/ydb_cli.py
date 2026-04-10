@@ -448,8 +448,11 @@ class YdbCliHelper:
 
     @classmethod
     @allure.step
-    def import_data_tpcc(cls, remote_cli_path: str, path: str, warehouses: int):
+    def import_data_tpcc(cls, remote_cli_path: str, path: str, warehouses: int, compact: bool):
         cmd = cls.get_cli_command(remote_cli_path) + ['workload', 'tpcc', '-p', YdbCluster.get_tables_path(path), 'import', '--no-tui', '--warehouses', str(warehouses)]
+        if compact:
+            cmd.append('--compact')
+
         with remote_execution.LongRemoteExecution(YdbCluster.get_client_host(), *cmd) as exec:
             while exec.is_running():
                 sleep(10)
@@ -491,11 +494,8 @@ class YdbCliHelper:
             try:
                 res.stdout = exec.stdout
                 res.stderr = exec.stderr
-                if exec.return_code != 0:
-                    res.add_error(f'ydb cli failed with code {exec.return_code}.')
-                    ans = {}
-                else:
-                    ans = json.loads(res.stdout)
+                assert exec.return_code == 0, f'ydb cli failed with code {exec.return_code}.'
+                ans = json.loads(res.stdout)
                 summary = ans.get('summary', {})
                 res.add_stat('test', 'tpcc_json', ans)
                 res.add_stat('test', 'tpcc_tpmc', summary.get('tpmc', 0))
@@ -509,6 +509,7 @@ class YdbCliHelper:
                         res.add_stat('test', f'tpcc_{tr}_perc_{p.replace(".", "_")}', t)
             except BaseException as e:
                 res.add_error(str(e))
+                res.traceback = e.__traceback__
             results[user] = res
 
         return results

@@ -2,13 +2,12 @@ import os
 import textwrap
 from contextlib import contextmanager
 
-import requests
 import yatest.common
 
 from library.python.port_manager import PortManager
 
-from ydb.tests.library.common.wait_for import wait_for
-from ydb.tests.library.harness.daemon import Daemon
+from ydb.tests.functional.mvp.common.http_env import BaseHttpEnv
+from ydb.tests.functional.mvp.common.mvp_service import MvpHttpService
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -29,53 +28,28 @@ MISSING_CLUSTER_PARAMETER_ERROR = (
 
 
 def mvp_meta_bin():
-    return yatest.common.binary_path("ydb/mvp/meta/bin/mvp_meta")
+    return yatest.common.binary_path(os.getenv("MVP_META_BINARY"))
 
 
 class MetaService:
     def __init__(self, config_path, http_port):
-        self.http_port = http_port
-        self._daemon = Daemon(
-            command=[
-                mvp_meta_bin(),
-                "--config",
-                config_path,
-                "--http-port",
-                str(http_port),
-                "--stderr",
-            ],
-            cwd=yatest.common.output_path(),
-            timeout=30,
-            stdout_file=os.path.join(yatest.common.output_path(), "mvp_meta.stdout"),
-            stderr_file=os.path.join(yatest.common.output_path(), "mvp_meta.stderr"),
-            stderr_on_error_lines=100,
+        self._service = MvpHttpService(
+            binary_path=mvp_meta_bin(),
+            config_path=config_path,
+            http_port=http_port,
+            service_name="mvp_meta",
         )
 
     @property
     def endpoint(self):
-        return f"http://localhost:{self.http_port}"
-
-    def _is_ready(self):
-        try:
-            return requests.get(f"{self.endpoint}/ping", timeout=1).status_code == 200
-        except requests.RequestException:
-            return False
+        return self._service.endpoint
 
     def start(self):
-        self._daemon.start()
-        ready = wait_for(
-            self._is_ready,
-            timeout_seconds=30,
-            step_seconds=0.5,
-        )
-        if not ready:
-            if self._daemon.is_alive():
-                self._daemon.stop()
-        assert ready, "mvp_meta did not become ready on /ping"
+        self._service.start()
         return self
 
     def stop(self):
-        self._daemon.stop()
+        self._service.stop()
 
 
 def start_cluster_with_meta_table(
@@ -112,13 +86,10 @@ def start_cluster_with_meta_table(
     return cluster, driver
 
 
-class MetaSupportLinksEnv:
+class MetaSupportLinksEnv(BaseHttpEnv):
     def __init__(self, meta_service):
+        super().__init__(meta_service)
         self.meta_service = meta_service
-
-    @property
-    def endpoint(self):
-        return self.meta_service.endpoint
 
     def get_support_links(self, cluster_name=None, database=None):
         params = {}
@@ -126,8 +97,8 @@ class MetaSupportLinksEnv:
             params["cluster"] = cluster_name
         if database is not None:
             params["database"] = database
-        return requests.get(
-            f"{self.endpoint}/meta/support_links",
+        return self.get(
+            "/meta/support_links",
             params=params,
             timeout=10,
         )

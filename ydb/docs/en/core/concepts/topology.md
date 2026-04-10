@@ -43,6 +43,22 @@ The storage volume multiplier specified above only applies to the fault toleranc
 
 For information about how to set the {{ ydb-short-name }} cluster topology, see [{#T}](../reference/configuration/domains_config.md#domains-blob).
 
+### Bridge mode {#bridge}
+
+Bridge mode is a special cluster operating mode that differs significantly from the distributed storage modes listed above. In [bridge mode](glossary.md#bridge), cluster nodes are divided into several [pile](glossary.md#pile) (typically corresponding to data centers), each of which stores data using one of the distributed storage modes described above, with synchronous replication organized between pile.
+
+It is important to understand that pile are not independent {{ ydb-short-name }} clusters but parts of a single cluster with complex topology.
+
+Bridge mode provides explicit control over replication stop and resume. The {{ ydb-short-name }} cluster becomes unavailable when any pile fails until the replication stop command is executed for that pile. After it is executed, the cluster resumes operation. Thus, the cluster remains available until the last pile fails.
+
+Resuming replication in a pile after it has been disconnected may take significant time, since {{ ydb-short-name }} synchronizes storage in that pile with the others, replicating missing data. The cluster remains available during synchronization.
+
+Bridge mode is recommended for clusters deployed in two data centers, as well as for systems with high fault tolerance requirements — for example, when it is necessary to maintain availability when three out of four data centers fail.
+
+When using bridge mode, each pile must have enough nodes, domains, and fail realms for the chosen storage mode to work correctly. The resulting storage volume multiplier will equal the sum of storage volume multipliers of all pile.
+
+Cluster response time in bridge mode for most operations is limited by the response time of the slowest pile.
+
 ### Reduced Configurations {#reduced}
 
 If it is impossible to use the [recommended amount](#cluster-config) of hardware, you can divide servers within a single rack into two dummy fail domains. In this configuration, the failure of one rack results in the failure of two domains instead of just one. In such reduced configurations, {{ ydb-short-name }} will continue to operate if two domains fail. The minimum number of racks in a cluster is five for `block-4-2` mode and two per data center (e.g., six in total) for `mirror-3-dc` mode.

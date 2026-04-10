@@ -134,7 +134,8 @@ public:
         ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
         const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr,
         TMaybe<NBatchOperations::TSettings> batchOperationSettings = Nothing(),
-        std::shared_ptr<NYql::NDq::IDqChannelService> channelService = nullptr)
+        std::shared_ptr<NYql::NDq::IDqChannelService> channelService = nullptr,
+        bool shrinkTasksGraph = false)
         : NActors::TActor<TDerived>(&TDerived::ReadyState)
         , Request(std::move(request))
         , AsyncIoFactory(std::move(asyncIoFactory))
@@ -154,7 +155,7 @@ public:
         , BlockTrackingMode(executerConfig.GetBlockTrackingMode())
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
-        , TasksGraph(Database, Request.Transactions, Request.TxAlloc, partitionPrunerConfig, AggregationSettings, Counters, BufferActorId, UserToken)
+        , TasksGraph(Database, Request.Transactions, Request.TxAlloc, executerConfig.TableServiceConfig.GetResourceManager(), AggregationSettings, Counters, BufferActorId, UserToken, shrinkTasksGraph)
         , ChannelService(channelService)
         , PartitionPruner(MakeHolder<TPartitionPruner>(Request.TxAlloc->HolderFactory, Request.TxAlloc->TypeEnv, std::move(partitionPrunerConfig)))
     {
@@ -266,6 +267,14 @@ protected:
 
                 if (isFullScan && !source.HasItemsLimit()) {
                     Counters->Counters->FullScansExecuted->Inc();
+                }
+
+                const auto& partitions = stageInfo.Meta.PrunedPartitions.at(0);
+                bool singlePartitionedStage = stage.GetIsSinglePartition();
+                bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0 && partitions.size() > source.GetSequentialInFlightShards();
+                if (!partitions.empty() && (isSequentialInFlight || singlePartitionedStage)) {
+                    auto [startShard, shardInfo] = PartitionPruner->MakeVirtualTablePartition(source, stageInfo);
+                    stageInfo.Meta.VirtualPartition.emplace(startShard, std::move(shardInfo));
                 }
             }
             // Scan tasks from shards
@@ -655,7 +664,7 @@ protected:
         YQL_ENSURE(Stats);
 
         if (state.HasStats()) {
-            Stats->UpdateTaskStats(taskId, state.GetStats(), nullptr, (NYql::NDqProto::EComputeState) state.GetState(),
+            Stats->UpdateTaskStats(computeActor.NodeId(), taskId, state.GetStats(), nullptr, (NYql::NDqProto::EComputeState) state.GetState(),
                 TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs()));
 
             if (CollectBasicStats(Request.StatsMode)) {
@@ -766,6 +775,12 @@ protected:
         }
 
         static_cast<TDerived*>(this)->CheckExecutionComplete();
+    }
+
+    void HandleNodeState(NYql::NDq::TEvDqCompute::TEvNodeState::TPtr& ev) {
+        if (CollectProfileStats(Request.StatsMode)) {
+            Stats->UpdateNodeStats(ev->Sender.NodeId(), ev->Get()->Record);
+        }
     }
 
     void HandleHttpInfo(NMon::TEvHttpInfo::TPtr& ev) {
@@ -1699,10 +1714,6 @@ protected:
         return TasksGraph.GetMeta().IsRestored;
     }
 
-    NYql::NDqProto::TDqTask* SerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings) {
-        return TasksGraph.ArenaSerializeTaskToProto(task, serializeAsyncIoSettings);
-    }
-
     inline bool IsSchedulable() const {
         const auto& databaseId = GetUserRequestContext()->DatabaseId;
         const auto& poolId = GetUserRequestContext()->PoolId.empty() ? NResourcePool::DEFAULT_POOL_ID : GetUserRequestContext()->PoolId;
@@ -1825,7 +1836,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
-    std::shared_ptr<NYql::NDq::IDqChannelService> channelService);
+    std::shared_ptr<NYql::NDq::IDqChannelService> channelService, bool shrinkTasksGraph);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, NFormats::TFormatsSettings formatsSettings,
@@ -1834,7 +1845,7 @@ IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     const std::optional<TLlvmSettings>& llvmSettings, std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-    const IKqpTransactionManagerPtr& txManager);
+    const IKqpTransactionManagerPtr& txManager, bool shrinkTasksGraph);
 
 } // namespace NKqp
 } // namespace NKikimr

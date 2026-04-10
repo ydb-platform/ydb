@@ -4,7 +4,7 @@
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
-#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <yql/essentials/providers/common/config/yql_dispatch.h>
 #include <yql/essentials/providers/common/config/yql_setting.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
@@ -69,9 +69,10 @@ public:
     NCommon::TConfSetting<bool, Static> UseDqHashCombine;
     NCommon::TConfSetting<bool, Static> UseDqHashAggregate;
     NCommon::TConfSetting<bool, Static> DqHashOperatorsUseBlocks;
+    NCommon::TConfSetting<bool, Static> DqHashCombineExportTypeInfo;
 
     NCommon::TConfSetting<TString, Static> OptOverrideStatistics;
-    NCommon::TConfSetting<NYql::TOptimizerHints, Static> OptimizerHints;
+    NCommon::TConfSetting<NKikimr::NKqp::TOptimizerHints, Static> OptimizerHints;
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, Static> OptDisableTopSort;
@@ -98,7 +99,8 @@ public:
     NCommon::TConfSetting<NDq::EHashShuffleFuncType , Static> HashShuffleFuncType;
     NCommon::TConfSetting<NDq::EHashShuffleFuncType , Static> ColumnShardHashShuffleFuncType;
 
-    NCommon::TConfSetting<ui32, Static> MaxDPHypDPTableSize;
+    NCommon::TConfSetting<ui32, Static> CBOTimeout;
+    NCommon::TConfSetting<ui32, Static> CBOHardTimeout;
     NCommon::TConfSetting<ui32, Static> ShuffleEliminationJoinNumCutoff;
 
     NCommon::TConfSetting<ui32, Static> MaxTasksPerStage;
@@ -109,6 +111,7 @@ public:
     NCommon::TConfSetting<bool, Static> DisableCheckpoints;
 
     NCommon::TConfSetting<NKqpProto::EIsolationLevel, Static> DefaultTxMode;
+    NCommon::TConfSetting<bool, Static> UseKqpTasksGraphV2;
 
     /* Runtime */
     NCommon::TConfSetting<bool, Dynamic> ScanQuery;
@@ -211,7 +214,9 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetUseDqHashCombine() const;
     bool GetUseDqHashAggregate() const;
     bool GetDqHashOperatorsUseBlocks() const;
+    bool GetDqHashCombineExportTypeInfo() const;
     bool GetUseBlockHashJoin() const;
+    bool GetUseKqpTasksGraphV2() const;
 };
 
-}
+} // namespace NYql

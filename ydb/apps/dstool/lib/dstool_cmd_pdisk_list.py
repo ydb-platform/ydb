@@ -12,32 +12,6 @@ def add_options(p):
     table.TableOutput([], col_units=[]).add_options(p)
 
 
-def calculate_num_active_slots(base_config):
-    group_size_map = {group.GroupId: group.GroupSizeInUnits for group in base_config.Group}
-
-    slot_size_in_units_map = {}
-    for pdisk in base_config.PDisk:
-        pdisk_id = (pdisk.NodeId, pdisk.PDiskId)
-        _, slot_size_in_units = common.get_pdisk_inferred_settings(pdisk)
-        slot_size_in_units_map[pdisk_id] = slot_size_in_units
-
-    num_active_slots_map = {}
-    for vslot in base_config.VSlot:
-        pdisk_id = (vslot.VSlotId.NodeId, vslot.VSlotId.PDiskId)
-        slot_size_in_units = slot_size_in_units_map.get(pdisk_id, 0)
-        group_size_in_units = group_size_map.get(vslot.GroupId, 0)
-        weight = common.get_vslot_owner_weight(group_size_in_units, slot_size_in_units)
-        num_active_slots_map[pdisk_id] = num_active_slots_map.get(pdisk_id, 0) + weight
-        for donor in vslot.Donors:
-            donor_pdisk_id = (donor.VSlotId.NodeId, donor.VSlotId.PDiskId)
-            donor_slot_size_in_units = slot_size_in_units_map.get(donor_pdisk_id, 0)
-            donor_group_size_in_units = group_size_map.get(donor.VDiskId.GroupID, 0)
-            donor_weight = common.get_vslot_owner_weight(donor_group_size_in_units, donor_slot_size_in_units)
-            num_active_slots_map[donor_pdisk_id] = num_active_slots_map.get(donor_pdisk_id, 0) + donor_weight
-
-    return num_active_slots_map
-
-
 def do(args):
     base_config = common.fetch_base_config()
     node_to_fqdn = common.fetch_node_to_fqdn_map()
@@ -98,7 +72,7 @@ def do(args):
 
     num_active_slots_map = None
     if args.all_columns or args.check_leaked_slots or (args.columns and 'NumActiveSlots' in args.columns):
-        num_active_slots_map = calculate_num_active_slots(base_config)
+        num_active_slots_map = common.build_pdisk_usage_map(base_config, count_donors=True)
 
     pdisk_whiteboard_info = {}
     if args.check_leaked_slots:

@@ -132,7 +132,7 @@ public:
     THolder<TGatewaysConfig> GatewaysConfig;
     THolder<TFileStorageConfig> FsConfig;
     THolder<NProto::TPgExtensions> PgExtConfig;
-    TMaybe<TString> GatewaysPatch;
+    THolder<TGatewaysConfig> GatewaysPatch;
 
     // No command line options for these settings. Should be configured in the inherited class
     bool NoDebug = false;

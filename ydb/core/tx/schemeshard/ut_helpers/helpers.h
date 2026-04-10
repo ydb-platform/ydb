@@ -363,13 +363,19 @@ namespace NSchemeShardUT_Private {
     void TestModifyACL(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner, TEvSchemeShard::EStatus expectedResult = NKikimrScheme::StatusSuccess, const TApplyIf& applyIf = {});
 
     // upgrade subdomain
-    TEvTx* UpgradeSubDomainRequest(ui64 txId, const TString& parentPath, const TString& name);
+    TEvTx* UpgradeSubDomainRequest(ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name);
+    void AsyncUpgradeSubDomain(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name);
     void AsyncUpgradeSubDomain(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name);
+    void TestUpgradeSubDomain(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name, const TVector<TExpectedResult>& expectedResults);
+    void TestUpgradeSubDomain(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name);
     void TestUpgradeSubDomain(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, const TVector<TExpectedResult>& expectedResults);
     void TestUpgradeSubDomain(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name);
 
-    TEvTx* UpgradeSubDomainDecisionRequest(ui64 txId, const TString& parentPath, const TString& name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision taskType);
+    TEvTx* UpgradeSubDomainDecisionRequest(ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision taskType);
+    void AsyncUpgradeSubDomainDecision(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision taskType);
     void AsyncUpgradeSubDomainDecision(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision taskType);
+    void TestUpgradeSubDomainDecision(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name, const TVector<TExpectedResult>& expectedResults, NKikimrSchemeOp::TUpgradeSubDomain::EDecision taskType);
+    void TestUpgradeSubDomainDecision(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision taskType);
     void TestUpgradeSubDomainDecision(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, const TVector<TExpectedResult>& expectedResults, NKikimrSchemeOp::TUpgradeSubDomain::EDecision taskType);
     void TestUpgradeSubDomainDecision(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name, NKikimrSchemeOp::TUpgradeSubDomain::EDecision taskType);
 
@@ -720,7 +726,7 @@ namespace NSchemeShardUT_Private {
             TVector<NScheme::TTypeInfo> KeyColumnTypes;
             TVector<TBorder> Partitioning;
 
-            std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> ResolveKey(const TTableRange& range) const;
+            std::shared_ptr<const TPartitioning> ResolveKey(const TTableRange& range) const;
         };
 
         void FillTablePartitioningInfo();

@@ -180,10 +180,10 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const std::optional<TLlvmSettings>& llvmSettings,
     const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
-    std::shared_ptr<NYql::NDq::IDqChannelService> channelService);
+    std::shared_ptr<NYql::NDq::IDqChannelService> channelService, bool shrinkTasksGraph);
 
 IActor* CreateKqpSchemeExecuter(
-    TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target,
+    TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, TQueryData::TPtr queryData, const TActorId& target,
     const TMaybe<TString>& requestType, const TString& database,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
     bool temporary, bool createTmpDir, bool isCreateTableAs, TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx,

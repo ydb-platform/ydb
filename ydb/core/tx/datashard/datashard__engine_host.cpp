@@ -312,7 +312,7 @@ public:
             UserDb.GetLockNodeId(),
             UserDb.GetUsesMvccSnapshot(),
             UserDb.GetIsImmediateTx(),
-            UserDb.GetIsWriteTx(), 
+            UserDb.GetIsWriteTx(),
             Scheme
         );
         return GetKeyValidator().IsValidKey(key, options);
@@ -385,18 +385,18 @@ public:
         UserDb.UpsertRow(tableId, key, ops, userCtx);
     }
 
-    void ReplaceRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, 
+    void ReplaceRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
         NACLib::TUserContext::TPtr userCtx) override
     {
         UserDb.ReplaceRow(tableId, key, ops, userCtx);
     }
 
-    void InsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, NACLib::TUserContext::TPtr userCtx) override 
+    void InsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, NACLib::TUserContext::TPtr userCtx) override
     {
         UserDb.InsertRow(tableId, key, ops, userCtx);
     }
 
-    void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, NACLib::TUserContext::TPtr userCtx) override 
+    void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, NACLib::TUserContext::TPtr userCtx) override
     {
         UserDb.UpdateRow(tableId, key, ops, userCtx);
     }
@@ -407,7 +407,6 @@ public:
     }
 
     void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row, NACLib::TUserContext::TPtr userCtx) override {
-
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).EraseRow(row);
             return;
@@ -424,7 +423,7 @@ public:
     void EraseRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, NACLib::TUserContext::TPtr userCtx) override
     {
         UserDb.EraseRow(tableId, key, userCtx);
-    }    
+    }
 
     // Returns whether row belong this shard.
     bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override {
@@ -542,43 +541,12 @@ TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorC
             };
     }
 
-    KqpLogFunc = [actorSystem, tabletId, txId](const TStringBuf& message) {
-        LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER,
-            "Shard %" << tabletId << ", txid %" << txId << ": " << message);
-    };
-
     ComputeCtx = MakeHolder<TKqpDatashardComputeContext>(self, GetUserDb(), EngineHost->GetSettings().DisableByKeyFilter);
     ComputeCtx->Database = &txc.DB;
-
-    KqpAlloc = std::make_shared<TScopedAlloc>(__LOCATION__, TAlignedPagePoolCounters(), AppData(ctx)->FunctionRegistry->SupportsSizedAllocators());
-    KqpTypeEnv = MakeHolder<TTypeEnvironment>(*KqpAlloc);
-    KqpAlloc->Release();
-
-    auto kqpApplyCtx = MakeHolder<TKqpDatashardApplyContext>();
-    kqpApplyCtx->Host = EngineHost.Get();
-    kqpApplyCtx->ShardTableStats = &EngineHostCounters;
-    kqpApplyCtx->Env = KqpTypeEnv.Get();
-
-    KqpApplyCtx.Reset(kqpApplyCtx.Release());
-
-    KqpExecCtx.FuncRegistry = AppData(ctx)->FunctionRegistry;
-    KqpExecCtx.ComputeCtx = ComputeCtx.Get();
-    KqpExecCtx.ComputationFactory = GetKqpDatashardComputeFactory(ComputeCtx.Get(), userCtx);
-    KqpExecCtx.RandomProvider = TAppData::RandomProvider.Get();
-    KqpExecCtx.TimeProvider = TAppData::TimeProvider.Get();
-    KqpExecCtx.ApplyCtx = KqpApplyCtx.Get();
-    KqpExecCtx.TypeEnv = KqpTypeEnv.Get();
-    if (auto rm = NKqp::TryGetKqpResourceManager()) {
-        KqpExecCtx.PatternCache = rm->GetPatternCache();
-    }
 }
 
 TEngineBay::~TEngineBay() {
-    if (KqpTasksRunner) {
-        KqpTasksRunner.Reset();
-        auto guard = TGuard(*KqpAlloc);
-        KqpTypeEnv.Reset();
-    }
+
 }
 
 TEngineBay::TSizes TEngineBay::CalcSizes(bool needsTotalKeysSize) const {
@@ -725,26 +693,6 @@ void TEngineBay::SetLockTxId(ui64 lockTxId, ui32 lockNodeId) {
     if (ComputeCtx) {
         ComputeCtx->SetLockTxId(lockTxId, lockNodeId);
     }
-}
-
-NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(NKikimrTxDataShard::TKqpTransaction& tx) {
-    if (!KqpTasksRunner) {
-        NYql::NDq::TDqTaskRunnerSettings settings;
-
-        if (tx.HasRuntimeSettings() && tx.GetRuntimeSettings().HasStatsMode()) {
-            settings.StatsMode = tx.GetRuntimeSettings().GetStatsMode();
-        } else {
-            settings.StatsMode = NYql::NDqProto::DQ_STATS_MODE_NONE;
-        }
-
-        settings.OptLLVM = "OFF";
-        settings.TerminateOnError = false;
-        Y_ENSURE(KqpAlloc);
-        KqpAlloc->SetLimit(10_MB);
-        KqpTasksRunner = NKqp::CreateKqpTasksRunner(std::move(*tx.MutableTasks()), KqpAlloc, KqpExecCtx, settings, KqpLogFunc);
-    }
-
-    return *KqpTasksRunner;
 }
 
 TKqpDatashardComputeContext& TEngineBay::GetKqpComputeCtx() {

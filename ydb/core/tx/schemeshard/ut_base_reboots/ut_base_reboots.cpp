@@ -993,4 +993,64 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
             }
         });
     }
+
+    Y_UNIT_TEST(IncrementalBackupConfigPersistsAfterReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        // Create table and set up continuous backup
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateContinuousBackup(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            ContinuousBackupDescription {
+                StreamName: "0_continuousBackupImpl"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Take incremental backup - creates IncrBackupImpl table with IncrementalBackupConfig
+        TestAlterContinuousBackup(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            TakeIncrementalBackup {
+                DstPath: "IncrBackupImpl"
+                DstStreamPath: "1_continuousBackupImpl"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify IncrBackupImpl table has IncrementalBackupConfig before reboot
+        {
+            auto describe = DescribePrivatePath(runtime, "/MyRoot/IncrBackupImpl");
+            const auto& tableDesc = describe.GetPathDescription().GetTable();
+            UNIT_ASSERT(tableDesc.HasIncrementalBackupConfig());
+            UNIT_ASSERT_VALUES_EQUAL(
+                static_cast<int>(tableDesc.GetIncrementalBackupConfig().GetMode()),
+                static_cast<int>(NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP)
+            );
+        }
+
+        // Reboot SchemeShard
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // Verify IncrementalBackupConfig survives reboot
+        {
+            auto describe = DescribePrivatePath(runtime, "/MyRoot/IncrBackupImpl");
+            const auto& tableDesc = describe.GetPathDescription().GetTable();
+            UNIT_ASSERT_C(tableDesc.HasIncrementalBackupConfig(),
+                "IncrementalBackupConfig lost after SchemeShard reboot");
+            UNIT_ASSERT_VALUES_EQUAL(
+                static_cast<int>(tableDesc.GetIncrementalBackupConfig().GetMode()),
+                static_cast<int>(NKikimrSchemeOp::TTableIncrementalBackupConfig::RESTORE_MODE_INCREMENTAL_BACKUP)
+            );
+        }
+    }
 }

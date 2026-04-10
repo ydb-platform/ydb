@@ -28,6 +28,9 @@ namespace {
 
 template <typename TResponse>
 NThreading::TFuture<TResponse> MakeFailedResponse(TResponse response, const TFmrError& error, TStringBuf logPrefix) {
+    if (error.Reason == EFmrErrorReason::FallbackOperation) {
+        YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT: " << error.ErrorMessage;
+    }
     YQL_CLOG(ERROR, FastMapReduce) << logPrefix << error.ErrorMessage;
     response.ErrorMessages.emplace_back(error);
     return NThreading::MakeFuture(std::move(response));
@@ -111,8 +114,11 @@ public:
         }
 
         auto& operationInfo = Operations_[operationId];
-        const auto initialStatus = operationInfo.TaskIds.empty() ? EOperationStatus::Completed : EOperationStatus::Accepted;
-        operationInfo.OperationStatus = initialStatus;
+        operationInfo.OperationStatus = GetOperationStatus(operationId);
+
+        if (operationInfo.OperationStatus == EOperationStatus::Completed) {
+            HandleOperationCompleted(operationId);
+        }
 
         YQL_CLOG(DEBUG, FastMapReduce) << "Starting operation with id " << operationId;
         return NThreading::MakeFuture(TStartOperationResponse(EOperationStatus::Accepted, operationId));
@@ -190,9 +196,14 @@ public:
         std::vector<TTableStats> outputTablesStats;
         std::vector<TString> result;
         if (operationStatus == EOperationStatus::Completed) {
-            // Calculating output table stats only in case of successful completion of opereation
-            for (auto& tableId : operationInfo.OutputTableIds) {
-                outputTablesStats.emplace_back(CalculateTableStats(tableId));
+            // Calculating output table stats only in case of successful completion of operation
+            auto expectedOutputTableIds = operationInfo.StageManager->GetExpectedOutputTableIds(operationInfo.OperationParams);
+            for (auto& tableId : expectedOutputTableIds) {
+                if (operationInfo.OutputTableIds.contains(tableId)) {
+                    outputTablesStats.emplace_back(CalculateTableStats(tableId));
+                } else {
+                    outputTablesStats.emplace_back(TTableStats{});
+                }
             }
             result = operationInfo.StageManager->GetOperationResult();
         }
@@ -295,54 +306,45 @@ public:
             TString taskId;
             with_lock(Mutex_) {
                 taskId = requestTaskState->TaskId;
-                Workers_[request.WorkerId].TaskIds.emplace(taskId);
-                YQL_ENSURE(Tasks_.contains(taskId));
-                auto operationId = Tasks_[taskId].OperationId;
-                YQL_LOG_CTX_ROOT_SESSION_SCOPE(Operations_[operationId].SessionId);
-                auto taskStatus = requestTaskState->TaskStatus;
-                YQL_ENSURE(taskStatus != ETaskStatus::Accepted);
-                if (taskStatus != ETaskStatus::InProgress) {
-                    // TODO - refactor the whole function
-                    Workers_[request.WorkerId].TaskIds.erase(taskId);
-                    // Task finished in some status, removing info from worker
-                }
-                SetUnfinishedTaskStatus(taskId, taskStatus, requestTaskState->TaskErrorMessage);
-                isTaskToDelete = (TaskToDeleteIds_.contains(taskId) && Tasks_[taskId].TaskStatus != ETaskStatus::InProgress);
-                auto statistics = requestTaskState->Stats;
-                YQL_CLOG(TRACE, FastMapReduce) << " Task with id " << taskId << " has current status " << taskStatus << Endl;
-                bool isOperationCompleted = (GetOperationStatus(operationId) == EOperationStatus::Completed);
-                for (auto& [fmrTableId, tableStats]: statistics.OutputTables) {
-                    Operations_[operationId].OutputTableIds.emplace(fmrTableId.TableId);
-                    PartIdStats_[fmrTableId.PartId] = tableStats.PartIdChunkStats;
-                    if (isOperationCompleted) {
-                        YQL_CLOG(INFO, FastMapReduce) << "Operation with id " << operationId << " has finished successfully";
-                        CalculateTableStats(fmrTableId.TableId, true);
+                if (Tasks_.contains(taskId)) {
+                    Workers_[request.WorkerId].TaskIds.emplace(taskId);
+                    auto operationId = Tasks_[taskId].OperationId;
+                    YQL_LOG_CTX_ROOT_SESSION_SCOPE(Operations_[operationId].SessionId);
+                    auto taskStatus = requestTaskState->TaskStatus;
+                    YQL_ENSURE(taskStatus != ETaskStatus::Accepted);
+                    if (taskStatus != ETaskStatus::InProgress) {
+                        // TODO - refactor the whole function
+                        Workers_[request.WorkerId].TaskIds.erase(taskId);
+                        // Task finished in some status, removing info from worker
                     }
-                    // TODO - проверка на валидность возвращаемой воркером статистики?
-                }
-
-                if (taskStatus == ETaskStatus::Completed) {
-                    Operations_[operationId].StageManager->OnTaskCompleted(requestTaskState->Stats);
-                }
-
-                if (isOperationCompleted) {
-                    auto& opInfo = Operations_[operationId];
-                    if (opInfo.StageManager) {
-                        auto advanceResult = opInfo.StageManager->AdvanceToNextStage();
-                        if (advanceResult.Error) {
-                            opInfo.OperationStatus = EOperationStatus::Failed;
-                            opInfo.ErrorMessages.emplace_back(*advanceResult.Error);
-                        } else if (advanceResult.HasNextStage) {
-                            opInfo.TaskIds.clear();
-                            opInfo.OutputTableIds.clear();
-                            auto stageError = ExecuteCurrentStage(operationId);
-                            if (stageError) {
-                                opInfo.OperationStatus = EOperationStatus::Failed;
-                                opInfo.ErrorMessages.emplace_back(*stageError);
-                            } else {
-                                opInfo.OperationStatus = GetOperationStatus(operationId);
-                            }
+                    SetUnfinishedTaskStatus(taskId, taskStatus, requestTaskState->TaskErrorMessage);
+                    isTaskToDelete = (TaskToDeleteIds_.contains(taskId) && Tasks_[taskId].TaskStatus != ETaskStatus::InProgress);
+                    auto statistics = requestTaskState->Stats;
+                    YQL_CLOG(TRACE, FastMapReduce) << " Task with id " << taskId << " has current status " << taskStatus << Endl;
+                    bool isOperationCompleted = (GetOperationStatus(operationId) == EOperationStatus::Completed);
+                    for (auto& [fmrTableId, tableStats]: statistics.OutputTables) {
+                        Operations_[operationId].OutputTableIds.emplace(fmrTableId.TableId);
+                        PartIdStats_[fmrTableId.PartId] = tableStats.PartIdChunkStats;
+                        if (isOperationCompleted) {
+                            YQL_CLOG(INFO, FastMapReduce) << "Operation with id " << operationId << " has finished successfully";
+                            CalculateTableStats(fmrTableId.TableId, true);
                         }
+                        // TODO - проверка на валидность возвращаемой воркером статистики?
+                    }
+
+                    if (taskStatus == ETaskStatus::Completed) {
+                        Operations_[operationId].StageManager->OnTaskCompleted(requestTaskState->Stats);
+                    }
+
+                    if (isOperationCompleted) {
+                        HandleOperationCompleted(operationId);
+                    }
+                } else {
+                    YQL_CLOG(DEBUG, FastMapReduce) << "Skipping heartbeat update for already cleared task " << taskId;
+                    if (requestTaskState->TaskStatus == ETaskStatus::InProgress) {
+                        TaskToDeleteIds_.insert(taskId);
+                    } else {
+                        TaskToDeleteIds_.erase(taskId);
                     }
                 }
             }
@@ -541,6 +543,10 @@ private:
                             }
                             workerInfo.NeedsToRestart = true;
                             for (auto& taskId: workerInfo.TaskIds) {
+                                if (!Tasks_.contains(taskId)) {
+                                    // Task was already cleaned up (e.g., by session or operation cleanup)
+                                    continue;
+                                }
                                 // resetting task, TODO - add max retry
                                 SetUnfinishedTaskStatus(taskId, ETaskStatus::Accepted);
                                 YQL_ENSURE(Tasks_.contains(taskId));
@@ -642,6 +648,9 @@ private:
         }
         ClearPreviousPartIdsForTask(task);
         with_lock(Mutex_) {
+            if (!Tasks_.contains(taskId)) {
+                return;
+            }
             ClearTask(taskId);
         }
     }
@@ -659,6 +668,39 @@ private:
         if (taskErrorMessage) {
             auto& errorMessages = operationInfo.ErrorMessages;
             errorMessages.emplace_back(*taskErrorMessage);
+        }
+    }
+
+    void HandleOperationCompleted(const TString& operationId) {
+        auto& opInfo = Operations_[operationId];
+
+        auto expectedOutputTableIds = opInfo.StageManager->GetExpectedOutputTableIds(opInfo.OperationParams);
+        for (const auto& tableId : expectedOutputTableIds) {
+            if (!PartIdsForTables_.contains(tableId)) {
+                PartIdsForTables_[tableId] = {};
+            }
+        }
+
+        auto advanceResult = opInfo.StageManager->AdvanceToNextStage();
+        if (advanceResult.Error) {
+            if (advanceResult.Error->Reason == EFmrErrorReason::FallbackOperation) {
+                YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT: " << advanceResult.Error->ErrorMessage;
+            }
+            opInfo.OperationStatus = EOperationStatus::Failed;
+            opInfo.ErrorMessages.emplace_back(*advanceResult.Error);
+        } else if (advanceResult.HasNextStage) {
+            opInfo.TaskIds.clear();
+            opInfo.OutputTableIds.clear();
+            auto stageError = ExecuteCurrentStage(operationId);
+            if (stageError) {
+                if (stageError->Reason == EFmrErrorReason::FallbackOperation) {
+                    YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT: " << stageError->ErrorMessage;
+                }
+                opInfo.OperationStatus = EOperationStatus::Failed;
+                opInfo.ErrorMessages.emplace_back(*stageError);
+            } else {
+                opInfo.OperationStatus = GetOperationStatus(operationId);
+            }
         }
     }
 

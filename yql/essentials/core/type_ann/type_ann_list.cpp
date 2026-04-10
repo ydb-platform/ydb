@@ -6272,7 +6272,7 @@ namespace {
 
             const TTypeAnnotationNode* distinctColumnType = nullptr;
             if (child->ChildrenSize() == 3) {
-                if (suffix != "" && suffix != "Finalize") {
+                if (!suffix.empty() && suffix != "Finalize") {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder() << "DISTINCT aggregation is not supported for mode: " << suffix));
                     return IGraphTransformer::TStatus::Error;
                 }
@@ -6296,7 +6296,7 @@ namespace {
                 }
             }
 
-            if (suffix == "" || suffix.EndsWith("Finalize")) {
+            if (suffix.empty() || suffix.EndsWith("Finalize")) {
                 auto finishType = isAggApply ? child->Child(1)->GetTypeAnn() : child->Child(1)->Child(6)->GetTypeAnn();
                 bool isOptional = finishType->GetKind() == ETypeAnnotationKind::Optional;
                 if (child->Head().IsList()) {
@@ -8105,12 +8105,18 @@ namespace {
             return IGraphTransformer::TStatus::Repeat;
         }
 
+        if (lambdaTimeExtractor->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(input->Head().GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (!EnsureSpecificDataType(*lambdaTimeExtractor, EDataSlot::Timestamp, ctx.Expr, true)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         const TTypeAnnotationNode* intervalType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Interval);
 
+        isUniversal = false;
         auto checkWindowParam = [&] (TExprNode::TPtr& param) -> IGraphTransformer::TStatus {
             auto type = param->GetTypeAnn();
             if (!type) {
@@ -8128,6 +8134,7 @@ namespace {
             }
             if (type->GetKind() == ETypeAnnotationKind::Universal) {
                 input->SetTypeAnn(type);
+                isUniversal = true;
                 return IGraphTransformer::TStatus::Ok;
             }
             if (!IsSameAnnotation(*type, *intervalType)) {
@@ -8144,15 +8151,15 @@ namespace {
         };
 
         auto convertStatus = checkWindowParam(input->ChildRef(2));
-        if (convertStatus.Level != IGraphTransformer::TStatus::Ok) {
+        if (convertStatus.Level != IGraphTransformer::TStatus::Ok || isUniversal) {
             return convertStatus;
         }
         convertStatus = checkWindowParam(input->ChildRef(3));
-        if (convertStatus.Level != IGraphTransformer::TStatus::Ok) {
+        if (convertStatus.Level != IGraphTransformer::TStatus::Ok || isUniversal) {
             return convertStatus;
         }
         convertStatus = checkWindowParam(input->ChildRef(4));
-        if (convertStatus.Level != IGraphTransformer::TStatus::Ok) {
+        if (convertStatus.Level != IGraphTransformer::TStatus::Ok || isUniversal) {
             return convertStatus;
         }
 
@@ -8176,6 +8183,11 @@ namespace {
 
         if (TCoHoppingTraits::idx_SizeLimit < input->ChildrenSize()) {
             auto& farFutureSizeLimit = input->ChildRef(TCoHoppingTraits::idx_SizeLimit);
+            if (farFutureSizeLimit->GetTypeAnn() && farFutureSizeLimit->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(farFutureSizeLimit->GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             if (!farFutureSizeLimit->IsCallable("Void")) {
                 if (farFutureSizeLimit->IsCallable("String") && farFutureSizeLimit->Child(0)->Content() == "max") {
                     // special cast
@@ -8195,6 +8207,11 @@ namespace {
         }
         if (TCoHoppingTraits::idx_TimeLimit < input->ChildrenSize()) {
             auto& farFutureTimeLimit = input->ChildRef(TCoHoppingTraits::idx_TimeLimit);
+            if (farFutureTimeLimit->GetTypeAnn() && farFutureTimeLimit->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(farFutureTimeLimit->GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             if (!farFutureTimeLimit->IsCallable("Void")) {
                 if (farFutureTimeLimit->IsCallable("String") && farFutureTimeLimit->Child(0)->Content() == "max") {
                     // special cast
@@ -8212,6 +8229,11 @@ namespace {
         }
         if (TCoHoppingTraits::idx_EarlyPolicy < input->ChildrenSize()) {
             auto* earlyPolicy = input->Child(TCoHoppingTraits::idx_EarlyPolicy);
+            if (earlyPolicy->GetTypeAnn() && earlyPolicy->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(earlyPolicy->GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             if (!earlyPolicy->IsCallable("Void")) {
                 if (!EnsureSpecificDataType(*earlyPolicy, EDataSlot::String, ctx.Expr, /*allowOptional=*/true)) {
                     return IGraphTransformer::TStatus::Error;
@@ -8220,6 +8242,11 @@ namespace {
         }
         if (TCoHoppingTraits::idx_LatePolicy < input->ChildrenSize()) {
             auto* latePolicy = input->Child(TCoHoppingTraits::idx_LatePolicy);
+            if (latePolicy->GetTypeAnn() && latePolicy->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+                input->SetTypeAnn(latePolicy->GetTypeAnn());
+                return IGraphTransformer::TStatus::Ok;
+            }
+
             if (!latePolicy->IsCallable("Void")) {
                 if (!EnsureSpecificDataType(*latePolicy, EDataSlot::String, ctx.Expr, /*allowOptional=*/true)) {
                     return IGraphTransformer::TStatus::Error;

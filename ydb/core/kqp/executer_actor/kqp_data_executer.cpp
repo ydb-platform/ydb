@@ -68,11 +68,12 @@ public:
         TMaybe<NBatchOperations::TSettings> batchOperationSettings,
         const NKikimrConfig::TQueryServiceConfig& queryServiceConfig,
         ui64 generation,
-        std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
+        std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
+        bool shrinkTasksGraph)
         : TBase(std::move(request), std::move(asyncIoFactory), federatedQuerySetup, GUCSettings, std::move(partitionPrunerConfig),
             database, userToken, std::move(formatsSettings), counters,
             executerConfig, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
-            "DataExecuter", bufferActorId, txManager, std::move(batchOperationSettings), channelService)
+            "DataExecuter", bufferActorId, txManager, std::move(batchOperationSettings), channelService, shrinkTasksGraph)
         , ShardIdToTableInfo(shardIdToTableInfo)
         , ReadOnlyTx(IsReadOnlyTx())
         , WaitCAStatsTimeout(TDuration::MilliSeconds(executerConfig.TableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
@@ -263,6 +264,7 @@ public:
                 hFunc(TEvents::TEvUndelivered, HandleFinalize);
 
                 IgnoreFunc(TEvDqCompute::TEvState);
+                IgnoreFunc(TEvDqCompute::TEvNodeState);
                 IgnoreFunc(TEvDqCompute::TEvChannelData);
                 IgnoreFunc(TEvDqCompute::TEvResumeExecution);
                 IgnoreFunc(TEvKqpExecuter::TEvStreamDataAck);
@@ -400,6 +402,7 @@ private:
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
                 hFunc(TEvDqCompute::TEvState, HandleComputeState);
+                hFunc(TEvDqCompute::TEvNodeState, HandleNodeState);
                 hFunc(TEvDqCompute::TEvChannelData, HandleChannelData);
                 hFunc(TEvDqCompute::TEvResumeExecution, HandleResultData); // from Fast Channels
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
@@ -954,6 +957,7 @@ private:
     STATEFN(WaitShutdownState) {
         switch(ev->GetTypeRewrite()) {
             hFunc(TEvDqCompute::TEvState, HandleShutdown);
+            hFunc(TEvDqCompute::TEvNodeState, HandleShutdown);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleShutdown);
             hFunc(TEvents::TEvPoison, HandleShutdown);
             hFunc(TEvDq::TEvAbortExecution, HandleShutdown);
@@ -967,6 +971,12 @@ private:
     void HandleShutdown(TEvDqCompute::TEvState::TPtr& ev) {
         HandleComputeStats(ev);
 
+        if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
+            PassAway();
+        }
+    }
+
+    void HandleShutdown(TEvDqCompute::TEvNodeState::TPtr&) {
         if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
             PassAway();
         }
@@ -1242,12 +1252,12 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
-    std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
+    std::shared_ptr<NYql::NDq::IDqChannelService> channelService, bool shrinkTasksGraph)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, std::move(formatsSettings), counters, executerConfig,
         std::move(asyncIoFactory), creator, userRequestContext, statementResultIndex, federatedQuerySetup, GUCSettings,
         std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation,
-        channelService);
+        channelService, shrinkTasksGraph);
 }
 
 } // namespace NKqp

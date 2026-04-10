@@ -1412,7 +1412,7 @@ TTableBuilder& TTableBuilder::SetStorageSettings(const TStorageSettings& setting
 }
 
 TTableBuilder& TTableBuilder::AddColumnFamily(const TColumnFamilyDescription& desc) {
-    TableDescription_.AddColumnFamily(std::move(desc));
+    TableDescription_.AddColumnFamily(desc);
     return *this;
 }
 

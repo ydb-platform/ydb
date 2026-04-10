@@ -239,6 +239,7 @@ SRCS(
     schemeshard__unmark_restore_tables.cpp
     schemeshard__upgrade_access_database.cpp
     schemeshard__upgrade_schema.cpp
+    schemeshard__user_hashes_migration.cpp
     schemeshard_audit_log.cpp
     schemeshard_audit_log_fragment.cpp
     schemeshard_backup.cpp
@@ -350,6 +351,7 @@ PEERDIR(
     contrib/libs/protobuf
     library/cpp/deprecated/enum_codegen
     library/cpp/html/pcdata
+    library/cpp/iterator
     library/cpp/json
     library/cpp/protobuf/json
     library/cpp/regex/pcre

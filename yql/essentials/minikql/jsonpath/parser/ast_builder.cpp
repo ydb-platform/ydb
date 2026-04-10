@@ -2,6 +2,7 @@
 #include "ast_nodes.h"
 #include "parse_double.h"
 
+#include <yql/essentials/minikql/defs.h>
 #include <yql/essentials/core/issue/protos/issue_id.pb.h>
 #include <yql/essentials/minikql/jsonpath/rewrapper/proto/serialization.pb.h>
 #include <yql/essentials/ast/yql_ast_escaping.h>
@@ -322,7 +323,7 @@ TAstNodePtr TAstBuilder::BuildPredicateExpr(const TRule_predicate_expr& node) {
                 case TRule_predicate_expr_TAlt1_TBlock1_TBlock2::ALT_NOT_SET:
                     Y_ABORT("Alternative for inner block of 'predicate_expr' rule is not set");
             }
-            Y_UNREACHABLE();
+            MKQL_ENSURE(false, "Unreachable");
         }
         case TRule_predicate_expr::kAltPredicateExpr2: {
             const auto& predicate = node.GetAlt_predicate_expr2().GetBlock1();
@@ -332,7 +333,7 @@ TAstNodePtr TAstBuilder::BuildPredicateExpr(const TRule_predicate_expr& node) {
         case TRule_predicate_expr::ALT_NOT_SET:
             Y_ABORT("Alternative for 'predicate' rule is not set");
     }
-    Y_UNREACHABLE();
+    MKQL_ENSURE(false, "Unreachable");
 }
 
 TAstNodePtr TAstBuilder::BuildUnaryExpr(const TRule_unary_expr& node) {

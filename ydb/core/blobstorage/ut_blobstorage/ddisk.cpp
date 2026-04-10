@@ -83,7 +83,6 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
                 Creds.DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
             }
-
             PBCreds = Creds;
             {
                 Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, new NDDisk::TEvConnect(PBCreds)), Edge.NodeId());
@@ -100,7 +99,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
             ServiceId = MakeBlobStorageDDiskId(ddiskId.GetNodeId(), ddiskId.GetPDiskId(), ddiskId.GetDDiskSlotId());
 
             PersId = node.GetPersistentBufferDDiskId();
-            PBServiceId = MakeBlobStorageDDiskId(PersId.GetNodeId(), PersId.GetPDiskId(), PersId.GetDDiskSlotId());
+            PBServiceId = MakeBlobStoragePersistentBufferId(PersId.GetNodeId(), PersId.GetPDiskId(), PersId.GetDDiskSlotId());
 
             Edge = Env.Runtime->AllocateEdgeActor(Env.Settings.ControllerNodeId, __FILE__, __LINE__);
 
@@ -116,17 +115,17 @@ Y_UNIT_TEST_SUITE(DDisk) {
             const ui32 size = numBlocks * BlockSize;
             UNIT_ASSERT(offset < Surface.size() && offset + size <= Surface.size());
 
-            TString update = TString::Uninitialized(size);
+            auto buf = TRcBuf::UninitializedPageAligned(size);
             char letter = Letters[LetterIndex++ % Letters.size()];
-            memset(update.Detach(), letter, update.size());
+            memset(buf.GetDataMut(), letter, buf.size());
 
-            memcpy(Surface.Detach() + offset, update.data(), update.size());
+            memcpy(Surface.Detach() + offset, buf.data(), buf.size());
 
             Cerr << "write offset# " << offset << " size# " << size << " letter# " << letter << "\n";
 
             std::unique_ptr<NDDisk::TEvWrite> ev(new NDDisk::TEvWrite(Creds,
                 {VChunkIndex, offset, size}, {0}));
-            ev->AddPayload(TRope(std::move(update)));
+            ev->AddPayload(TRope(std::move(buf)));
             Env.Runtime->Send(new IEventHandle(ServiceId, Edge, ev.release()), Edge.NodeId());
             auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvWriteResult>(Edge, false);
 
@@ -179,7 +178,6 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 const auto& [offsetInBytes, size, buffer] = item;
                 ourLsns.emplace(lsn, offsetInBytes, size);
             }
-
             UNIT_ASSERT_EQUAL(returnedLsns, ourLsns);
         }
 

@@ -178,7 +178,7 @@ public:
                 << "Could not resolve a partitioning of the table, partitioning is null")}));
         }
 
-        if (result->Partitioning->empty()) {
+        if (result->Partitioning->Empty()) {
             return AbortWithError(Ydb::StatusIds::INTERNAL_ERROR, NYql::TIssues({NYql::TIssue(TStringBuilder()
                 << "Could not resolve a partitioning of the table, partitioning is empty, "
                 << "TableId = " << result->TableId)}));
@@ -187,7 +187,7 @@ public:
         TablePartitioning = result->Partitioning;
 
         PE_STLOG_T("Partitions were resolved",
-            (PartitionsCount, result->Partitioning->size()));
+            (PartitionsCount, result->Partitioning->Size()));
 
         CreateExecutersWithBuffers();
     }
@@ -539,11 +539,11 @@ private:
     void CreateExecutersWithBuffers() {
         Become(&TKqpPartitionedExecuter::ExecuteState);
 
-        YQL_ENSURE(TablePartitioning && !TablePartitioning->empty(), "No partitions to execute");
-        auto partCount = std::min(Settings.PartitionExecutionLimit, TablePartitioning->size());
+        YQL_ENSURE(TablePartitioning && !TablePartitioning->Empty(), "No partitions to execute");
+        auto partCount = std::min(Settings.PartitionExecutionLimit, TablePartitioning->Size());
 
         PE_STLOG_I("Starting execution, creating executers with buffers",
-            (PartitionsCount, TablePartitioning->size()),
+            (PartitionsCount, TablePartitioning->Size()),
             (InFlightPartitionsCount, partCount));
 
         while (NextPartitionIndex < partCount) {
@@ -552,14 +552,15 @@ private:
     }
 
     TBatchPartitionInfo::TPtr CreatePartition(TPartitionIndex idx) {
-        YQL_ENSURE(idx < TablePartitioning->size());
+        const auto& partitions = TablePartitioning->GetTablePartitioning();
+        YQL_ENSURE(idx < partitions.size());
 
         auto partition = std::make_shared<TBatchPartitionInfo>();
         StartedPartitions[idx] = partition;
 
-        partition->EndRange = TablePartitioning->at(idx).Range;
-        if (idx > 0 && !TablePartitioning->at(idx).Range.Empty()) {
-            partition->BeginRange = TablePartitioning->at(idx - 1).Range;
+        partition->EndRange = partitions.at(idx).Range;
+        if (idx > 0 && !partitions.at(idx).Range.Empty()) {
+            partition->BeginRange = partitions.at(idx - 1).Range;
             partition->BeginRange->IsInclusive = !partition->BeginRange->IsInclusive;
         }
 
@@ -634,10 +635,10 @@ private:
 
         auto batchSettings = NBatchOperations::TSettings(partInfo->LimitSize, Settings.MinBatchSize);
         const auto executerConfig = TExecuterConfig(MutableExecuterConfig, TableServiceConfig, TliConfig, UserCtx);
-        auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, NFormats::TFormatsSettings{}, RequestCounters,
+        auto* executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, NFormats::TFormatsSettings{}, RequestCounters,
             executerConfig, AsyncIoFactory, SelfId(), UserRequestContext, StatementResultIndex,
             FederatedQuerySetup, GUCSettings, prunerConfig, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings),
-            llvmSettings, {}, 0, ChannelService);
+            llvmSettings, {}, 0, ChannelService, PreparedQuery->GetUseKqpTasksGraphV2());
         auto exId = RegisterWithSameMailbox(executerActor);
 
         partInfo->ExecuterId = exId;
@@ -715,7 +716,7 @@ private:
 
         ForgetPartition(partInfo);
 
-        if (NextPartitionIndex < TablePartitioning->size()) {
+        if (NextPartitionIndex < TablePartitioning->Size()) {
             return CreateExecuterWithBuffer(NextPartitionIndex++, /* isRetry */ false);
         }
 
@@ -867,7 +868,7 @@ private:
 
         PE_STLOG_D("Not all partitions have been processed, cannot finish execution",
             (RemainingPartitionsCount, StartedPartitions.size()),
-            (TotalPartitions, TablePartitioning ? TablePartitioning->size() : 0));
+            (TotalPartitions, TablePartitioning ? TablePartitioning->Size() : 0));
     }
 
     void AbortWithError(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
@@ -928,7 +929,7 @@ private:
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     THashMap<ui32, size_t> KeyColumnIdToPos;
 
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> TablePartitioning;
+    std::shared_ptr<const TPartitioning> TablePartitioning;
     THashMap<TPartitionIndex, TBatchPartitionInfo::TPtr> StartedPartitions;
     TPartitionIndex NextPartitionIndex = 0;
 

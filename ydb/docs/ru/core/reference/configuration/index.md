@@ -25,11 +25,13 @@
 || [{#T}](kafka_proxy_config.md) | Нет | Конфигурация [Kafka Proxy](../../reference/kafka-api/index.md) ||
 || [{#T}](log_config.md) | Нет | Конфигурация и параметры логирования ||
 || [{#T}](memory_controller_config.md) | Нет | Распределение памяти и лимиты для компонентов базы данных ||
+|| [{#T}](monitoring_config.md) | Нет | Параметры [YDB Monitoring](../embedded-ui/ydb-monitoring.md) ||
 || [{#T}](node_broker_config.md) | Нет | Конфигурация стабильных имен узлов ||
 || [{#T}](query_service_config.md) | Нет | Конфигурация внешних источников для федеративных запросов ||
 || [{#T}](resource_broker_config.md) | Нет | Брокер ресурсов для контроля потребления CPU и памяти ||
 || [{#T}](security_config.md) | Нет | Настройки конфигурации безопасности ||
 || [{#T}](table_service_config.md) | Нет | Настройки конфигурации выполнения запросов||
+|| [{#T}](tli_config.md) | Нет | Параметры диагностики [инвалидации блокировок транзакций](../../concepts/glossary.md#tli) (TLI) ||
 || [{#T}](tls.md) | Нет | Конфигурация TLS для безопасных соединений ||
 |#
 

@@ -4,6 +4,7 @@
 
 #include <yql/essentials/utils/utf8.h>
 #include <yql/essentials/utils/fetch/fetch.h>
+#include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/std_allocator.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 
@@ -2789,6 +2790,21 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, u
     settings.AnnotationFlags = annotationFlags;
     settings.RefAtoms = refAtoms;
     return ConvertToAst(root, exprContext, settings);
+}
+
+TExprNode::~TExprNode() {
+    // YQLOVERYT-51: Investigating the reasons of non-deleted nodes
+    if (!Dead() || UseCount()) {
+        if (std::uncaught_exceptions() > 0) {
+            YQL_CLOG(ERROR, Core) << "Node #" << UniqueId_ << Endl << FormatCurrentException();
+        }
+    }
+
+    Y_ABORT_UNLESS(Dead(), "Node (id: %lu, type: %s, content: '%s') not dead on destruction.",
+                   UniqueId_, ToString(Type_).data(), TString(ContentUnchecked()).data());
+    Y_ABORT_UNLESS(!UseCount(), "Node (id: %lu, type: %s, content: '%s') has non-zero use count on destruction.",
+                   UniqueId_, ToString(Type_).data(), TString(ContentUnchecked()).data());
+    DestroyPtrs();
 }
 
 void TExprNode::DestroyNode(TExprNode::TPtr& node, TExprNode*& root) {

@@ -113,18 +113,22 @@ bool TMinMax::IsNull() const {
 }
 
 void TMinMax::UniteWith(TMinMax other) {
-    if (!other.IsNull()) {
-        if (IsNull()) {
-            *this = other;
-        } else {
-            using namespace NArrowCompare;
-            if (Max() < other.Max()) {
-                Max() = other.Max();
-            }
-            if (Min() > other.Min()) {
-                Min() = other.Min();
-            }
-        }
+    AFL_VERIFY(other.MinMax.type->Equals(MinMax.type));
+    
+    if (other.IsNull()) {
+        return;
+    }
+
+    if (IsNull()) {
+        *this = other;
+        return;
+    }
+    using namespace NArrowCompare;
+    if (Max() < other.Max()) {
+        Max() = other.Max();
+    }
+    if (Min() > other.Min()) {
+        Min() = other.Min();
     }
 }
 

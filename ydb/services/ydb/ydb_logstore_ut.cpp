@@ -421,8 +421,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
     }
 
     Y_UNIT_TEST(AlterLogTable) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);

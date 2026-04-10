@@ -129,7 +129,7 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
         const TString& readSessionId = commitRequest->read_session_id();
 
         std::vector<TDistributedCommitHelper::TCommitInfo> commits;
-        const auto& topicPath = topicInitInfo.TopicNameConverter->GetPrimaryPath();
+        auto topicPath = topicInitInfo.TopicNameConverter->GetPrimaryPath();
 
         for (auto& parent: partitionNode->AllParents) {
             TDistributedCommitHelper::TCommitInfo commit {

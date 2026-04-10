@@ -2,6 +2,7 @@
 
 #include "schema.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/services/lib/actors/consumers_advanced_monitoring_settings.h>
@@ -102,5 +103,14 @@ TResult ApplyChangesInt(
     NKikimrSchemeOp::TPersQueueGroupDescription& config,
     bool isCdcStream
 );
+
+// TODO поожить в общее место. убрать дубль из kafka_proxy в core/base/path.h
+inline TString NormalizePath(const TString& database, const TString& topic) {
+    if (topic.size() > database.size() && topic.at(database.size()) == '/' && topic.StartsWith(database)) {
+        return topic;
+    }
+    return NKikimr::CanonizePath(database + "/" + topic);
+}
+
 
 }

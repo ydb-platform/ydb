@@ -49,6 +49,8 @@ public:
         if (AppData()->FeatureFlags.GetEnableTabletRestartOnUnhandledExceptions()) {
             DoLogUnhandledException(Service, NPQ_LOG_PREFIX, exc);
 
+            OnException(exc);
+
             NPrivate::IncrementUnhandledExceptionCounter(this->ActorContext());
             this->PassAway();
 
@@ -56,6 +58,10 @@ public:
         }
 
         return false;
+    }
+
+    virtual void OnException(const std::exception& exc) {
+        Y_UNUSED(exc);
     }
 
     TStringBuilder LogBuilder() const {

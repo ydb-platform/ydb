@@ -1,5 +1,6 @@
 #include "topic_alterer.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
@@ -18,8 +19,11 @@ void TTopicAlterer::Bootstrap() {
 }
 
 void TTopicAlterer::PassAway() {
-    Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
     TBaseActor<TTopicAlterer>::PassAway();
+}
+
+void TTopicAlterer::OnException(const std::exception& exc) {
+    ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, exc.what());
 }
 
 TString TTopicAlterer::BuildLogPrefix() const {
@@ -27,12 +31,12 @@ TString TTopicAlterer::BuildLogPrefix() const {
 }
 
 void TTopicAlterer::DoDescribe() {
-    LOG_T("DoDescribe");
+    LOG_D("DoDescribe");
 
     RegisterWithSameMailbox(NDescriber::CreateDescriberActor(
         SelfId(),
         Settings.Database,
-        { Settings.Strategy->GetTopicName() },
+        { NormalizePath(Settings.Database, Settings.Strategy->GetTopicName()) },
         {
             .UserToken = Settings.UserToken,
             .AccessRights = NACLib::EAccessRights::AlterSchema
@@ -40,7 +44,7 @@ void TTopicAlterer::DoDescribe() {
 }
 
 void TTopicAlterer::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-    LOG_T("Handle NDescriber::TEvDescribeTopicsResponse");
+    LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
 
     auto& topics = ev->Get()->Topics;
     AFL_ENSURE(topics.size() == 1)("s", topics.size());
@@ -51,6 +55,7 @@ void TTopicAlterer::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             return DoAlter();
         }
         default: {
+            LOG_D("DoDescribe failed: " << NDescriber::Description(Settings.Strategy->GetTopicName(), TopicInfo.Status));
             return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, NDescriber::Description(Settings.Strategy->GetTopicName(), TopicInfo.Status));
         }
     }
@@ -106,6 +111,8 @@ void TTopicAlterer::DoAlter() {
 }
 
 void TTopicAlterer::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
+    LOG_D("Handle TEvTxUserProxy::TEvProposeTransactionStatus");
+
     auto msg = ev->Get();
     const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(ev->Get()->Record.GetStatus());
 
@@ -133,7 +140,7 @@ void TTopicAlterer::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev
 }
 
 void TTopicAlterer::HandleOnAlter(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-    LOG_T("Handle TEvPipeCache::TEvDeliveryProblem");
+    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
     OnUndelivered(ev);
     return ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Scheme shard " << ev->Get()->TabletId << " is unavailable");
 }
@@ -161,7 +168,7 @@ void TTopicAlterer::Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRe
 }
 
 void TTopicAlterer::HandleOnWaitTxCompletion(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-    LOG_T("Handle TEvPipeCache::TEvDeliveryProblem");
+    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
     OnUndelivered(ev);
     if (++WaitTxCompletionRetries > MaxWaitTxCompletionRetries) {
         return ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "SchemeShard " << ev->Get()->TabletId << " is unavailable");
@@ -188,7 +195,7 @@ TString TTopicAlterer::GetWorkingDir() const {
 }
 
 void TTopicAlterer::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-    LOG_T("ReplyErrorAndDie");
+    LOG_D("ReplyErrorAndDie");
     Send(Settings.ParentId, new TEvAlterTopicResponse(errorCode, std::move(errorMessage)), 0, Settings.Cookie);
     PassAway();
 }

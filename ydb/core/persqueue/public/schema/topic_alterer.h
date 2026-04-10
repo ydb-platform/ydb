@@ -21,6 +21,7 @@ public:
     void PassAway() override;
 
     TString BuildLogPrefix() const override;
+    void OnException(const std::exception& exc) override;
 
 private:
     void DoDescribe();

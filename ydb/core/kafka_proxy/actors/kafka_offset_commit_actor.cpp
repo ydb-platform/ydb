@@ -219,7 +219,6 @@ void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPt
         Error = ConvertErrorCode(record.GetYdbStatus());
         KAFKA_LOG_ERROR("Error on Kqp session creation: " << Error);
         ctx.Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
-        Die(ctx);
     }
     return;
 }
@@ -236,14 +235,14 @@ void TKafkaOffsetCommitActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, c
 
         if (record.GetYdbStatus() == Ydb::StatusIds::PRECONDITION_FAILED && issues.Size() == 1 && (issues.begin())->IssueCode == Ydb::PersQueue::ErrorCode::ErrorCode::GENERATION_MISMATCH) {
             Error = EKafkaErrors::ILLEGAL_GENERATION;
-        }
-        for (auto topicReq: Message->Topics) {
-            for (auto partitionRequest: topicReq.Partitions) {
-                AddPartitionResponse(Error, topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
+            for (auto topicReq: Message->Topics) {
+                for (auto partitionRequest: topicReq.Partitions) {
+                    AddPartitionResponse(Error, topicReq.Name.value(), partitionRequest.PartitionIndex, ctx);
+                }
             }
+            Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
+            return;
         }
-        Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
-        return;
     }
 
     NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::ECurrentStep step = Kqp->Handle(ev, ctx);

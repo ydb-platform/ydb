@@ -100,7 +100,6 @@ public:
 
     ui32 GetFirstIndexNotDefault() const;
 
-    std::shared_ptr<arrow::Scalar> GetMaxScalar() const;
     TMinMax GetMinMaxScalars() const;
 
     std::shared_ptr<arrow::Scalar> GetScalar(const ui32 index) const;
@@ -152,7 +151,6 @@ private:
     }
 
 protected:
-    virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
     virtual TMinMax DoGetMinMaxScalars() const override;
 
     virtual ui32 DoGetNullsCount() const override {

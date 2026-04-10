@@ -3,29 +3,19 @@
 
 namespace NKikimr::NGRpcProxy::V1 {
 
-TDistributedCommitHelper::TDistributedCommitHelper(TString database, TString consumer, std::vector<TCommitInfo> commits, ui64 cookie, std::optional<GenerationIdCheckerSettings> generationCheckerSettings)
+TDistributedCommitHelper::TDistributedCommitHelper(TString database, TString consumer, std::vector<TCommitInfo> commits, ui64 cookie)
     : DataBase(database)
     , Consumer(consumer)
     , Commits(std::move(commits))
     , Step(BEGIN_TRANSACTION_SENDED)
     , Cookie(cookie)
-    , CheckerSettings(generationCheckerSettings)
 {}
 
-std::pair<TDistributedCommitHelper::ECurrentStep, bool> TDistributedCommitHelper::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-    bool isSuccessful = true;
+TDistributedCommitHelper::ECurrentStep TDistributedCommitHelper::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     switch (Step) {
         case BEGIN_TRANSACTION_SENDED:
-            if (CheckerSettings.has_value()) {
-                Step = CHECK_GENERATION;
-                RetrieveGeneration(ev, ctx);
-            } else {
-                Step = OFFSETS_SENDED;
-                SendCommits(ev, ctx);
-            }
-            break;
-        case CHECK_GENERATION:
-            isSuccessful = CompareGenerations(ev, ctx);
+            Step = OFFSETS_SENDED;
+            SendCommits(ev, ctx);
             break;
         case OFFSETS_SENDED:
             Step = COMMIT_SENDED;
@@ -38,7 +28,7 @@ std::pair<TDistributedCommitHelper::ECurrentStep, bool> TDistributedCommitHelper
         case DONE:
             break;
     }
-    return std::make_pair(Step, isSuccessful);
+    return Step;
 }
 
 void TDistributedCommitHelper::SendCreateSessionRequest(const TActorContext& ctx) {
@@ -88,50 +78,6 @@ THolder<NKqp::TEvKqp::TEvCloseSessionRequest> TDistributedCommitHelper::MakeClos
     auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
     ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
     return ev;
-}
-
-bool TDistributedCommitHelper::CompareGenerations(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx) {
-    auto& record = ev->Get()->Record;
-    auto& resp = record.GetResponse();
-    if (resp.GetYdbResults().empty()) {
-        return false;
-    }
-
-    NYdb::TResultSetParser parser(resp.GetYdbResults(0));
-    if (!parser.TryNextRow()) {
-        return false;
-    }
-
-    int Generation = parser.ColumnParser("generation").GetUint64();
-    if (Generation != CheckerSettings->GenerationId) {
-        return false;
-    }
-    Step = OFFSETS_SENDED;
-    SendCommits(ev, ctx);
-    return true;
-}
-
-void TDistributedCommitHelper::RetrieveGeneration(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx) {
-    auto& record = ev->Get()->Record;
-    TxId = record.GetResponse().GetTxMeta().id();
-    Y_ABORT_UNLESS(!TxId.empty()); // мб вернуть false
-
-    NYdb::TParamsBuilder params;
-    params.AddParam("$ConsumerGroup").Utf8(Consumer).Build();
-    params.AddParam("$Database").Utf8(DataBase).Build();
-    NYdb::TParams sqlParams = params.Build();
-
-    auto check = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-    check->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-    check->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-    check->Record.MutableRequest()->SetSessionId(KqpSessionId);
-    check->Record.MutableRequest()->SetDatabase(DataBase);
-    check->Record.MutableRequest()->MutableTxControl()->set_tx_id(TxId);
-    check->Record.MutableRequest()->SetQuery(Sprintf(CHECK_GROUP_GENERATION_ID.c_str(),
-                        TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(CheckerSettings->ResourceDatabasePath).c_str()));
-    check->Record.MutableRequest()->MutableYdbParameters()->swap(*(NYdb::TProtoAccessor::GetProtoMapPtr(sqlParams)));
-    Step = CHECK_GENERATION;
-    ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), check.Release(), 0, Cookie);
 }
 
 void TDistributedCommitHelper::SendCommits(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx) {

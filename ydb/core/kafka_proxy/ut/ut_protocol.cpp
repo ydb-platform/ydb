@@ -1806,10 +1806,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             for (ui64 i = 0; i < minActivePartitions; ++i) {
                 partitionsAndOffsetsIncorrect.emplace_back(i + minActivePartitions + 1, 0, commitedMetaData);
             }
-            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets1;
-            offsets1[topicName2] = partitionsAndOffsetsIncorrect;
-            offsets1[topicName] = partitionsAndOffsets;
-            auto msg2 = client.OffsetCommit(consumerName, offsets1, generationId);
+            offsets[topicName2] = partitionsAndOffsetsIncorrect;
+            auto msg2 = client.OffsetCommit(consumerName, offsets, generationId);
             UNIT_ASSERT_VALUES_EQUAL(msg2->Topics.size(), 2);
             for (const auto& topic : msg2->Topics) {
                 UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
@@ -1822,10 +1820,10 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 }
             }
 
-            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets2;
-            offsets2[topicName1] = partitionsAndOffsets;
-            offsets2[topicName] = partitionsAndOffsets;
-            auto msg3 = client.OffsetCommit(consumerName, offsets2, generationId);
+            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets1;
+            offsets1[topicName1] = partitionsAndOffsets;
+            offsets1[topicName] = partitionsAndOffsets;
+            auto msg3 = client.OffsetCommit(consumerName, offsets1, generationId);
             UNIT_ASSERT_VALUES_EQUAL(msg3->Topics.size(), 2);
             for (const auto& topic : msg3->Topics) {
                 UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);

@@ -12,7 +12,7 @@ struct TYdbCliBuildInfo {
 };
 
 // Appends distribution and (optionally) command build info segments to the driver config.
-// commandTag: e.g. "ydb-import-file-csv", "ydb-interactive", or empty for no command segment.
+// commandTag: e.g. "import-file-csv", "interactive", or empty for no command segment.
 void AppendYdbCliBuildInfo(TDriverConfig& driverConfig, const TYdbCliBuildInfo& buildInfo, const TString& commandTag);
 
 }

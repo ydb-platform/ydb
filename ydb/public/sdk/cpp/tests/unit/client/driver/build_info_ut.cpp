@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(AppendBuildInfoValidation) {
 
     Y_UNIT_TEST(LengthLimit) {
         TDriverConfig config;
-        std::string longName(500, 'a');
+        std::string longName(510, 'a');
         UNIT_ASSERT_EXCEPTION_CONTAINS(
             config.AppendBuildInfo(longName + "/1.0.0"),
             yexception,

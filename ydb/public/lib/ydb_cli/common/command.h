@@ -188,7 +188,7 @@ public:
 
         // Filled by ValidateAndRun to point at the leaf command being executed
         const TClientCommand* ActiveLeafCommand = nullptr;
-        // If non-empty, overrides the computed cli-command-... build info tag
+        // If non-empty, overrides the computed ydb-cli-... build info tag
         TString BuildInfoCommandTag;
 
         std::function<TYdbCliBuildInfo()> BuildInfoProvider;

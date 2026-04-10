@@ -128,7 +128,7 @@ void TDistributedCommitHelper::RetrieveGeneration(NKqp::TEvKqp::TEvQueryResponse
     check->Record.MutableRequest()->SetDatabase(DataBase);
     check->Record.MutableRequest()->MutableTxControl()->set_tx_id(TxId);
     check->Record.MutableRequest()->SetQuery(Sprintf(CHECK_GROUP_GENERATION_ID.c_str(),
-                        CheckerSettings->ConsumerMetadataTablePath.c_str()));
+                        TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(CheckerSettings->ResourceDatabasePath).c_str()));
     check->Record.MutableRequest()->MutableYdbParameters()->swap(*(NYdb::TProtoAccessor::GetProtoMapPtr(sqlParams)));
     Step = CHECK_GENERATION;
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), check.Release(), 0, Cookie);

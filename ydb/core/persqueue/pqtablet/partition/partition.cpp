@@ -3552,7 +3552,7 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(TTransaction& t,
         consumers.push_back(user);
     }
     affectedSourceIdsAndConsumers.ReadConsumers = std::move(consumers);
-    affectedSourceIdsAndConsumers.WriteKeysSize += consumers.size();
+    affectedSourceIdsAndConsumers.WriteKeysSize += affectedSourceIdsAndConsumers.ReadConsumers.size();
     return EProcessResult::Continue;
 }
 

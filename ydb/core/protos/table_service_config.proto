@@ -444,4 +444,8 @@ message TTableServiceConfig {
     }
 
     optional ETxMode DefaultTxMode = 116 [default = SerializableRW];
+
+    optional bool EnableDqSourceStreamLookupJoin = 121 [default = false];
+
+    optional uint32 DisableOlapBlocksOnColumnsLimit = 125 [default = 1000];
 };

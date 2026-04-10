@@ -31,7 +31,14 @@ def sanitize_issues(s):
     # (yexception) ... ->
     s = re.sub(r"\(yexception\).*", "", s)
     # library/cpp/json/json_reader.cpp:420 -> library/cpp/json/json_reader.cpp:xxx
-    return re.sub(r"cpp:\d+", "cpp:xxx", s)
+    s = re.sub(r"cpp:\d+", "cpp:xxx", s)
+    # Remove DWARF warnings from sanitizer symbolization
+    s = re.sub(r"warning: address range table[^\n]*\n?", "", s)
+    # Remove LSan suppression summary
+    s = re.sub(r"-+\nSuppressions used:\n.*?-+\n?", "", s, flags=re.DOTALL)
+    # Collapse multiple consecutive blank lines into one
+    s = re.sub(r"\n{3,}", "\n\n", s)
+    return s
 
 
 def pytest_generate_tests(metafunc):

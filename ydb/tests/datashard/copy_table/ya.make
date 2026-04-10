@@ -5,8 +5,7 @@ ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 FORK_SUBTESTS()
 SPLIT_FACTOR(13)
 SIZE(MEDIUM)
-
-
+REQUIREMENTS(cpu:2)
 
 TEST_SRCS(
     test_copy_table.py

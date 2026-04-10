@@ -5,6 +5,9 @@ TEST_SRCS(
 )
 
 SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
 
 DEPENDS(
     ydb/tests/tools/kqprun

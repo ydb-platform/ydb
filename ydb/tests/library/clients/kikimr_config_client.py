@@ -36,6 +36,7 @@ class ConfigClient(object):
         NONE = 1
         DETACH_STORAGE_CONFIG_SECTION = 2
         ATTACH_STORAGE_CONFIG_SECTION = 3
+        ADD_BLOB_STORAGE_AND_DOMAINS_CONFIG = 4
 
     def __init__(self, server, port, cluster=None, retry_count=1, ca_path=None, cert_path=None, key_path=None):
         self.server = server
@@ -98,6 +99,8 @@ class ConfigClient(object):
             settings.set_detach_storage_config_section()
         elif transform == ConfigClient.FetchTransform.ATTACH_STORAGE_CONFIG_SECTION:
             settings.set_attach_storage_config_section()
+        elif transform == ConfigClient.FetchTransform.ADD_BLOB_STORAGE_AND_DOMAINS_CONFIG:
+            settings.add_blob_storage_and_domains_config.SetInParent()
 
         request.all.CopyFrom(settings)
 

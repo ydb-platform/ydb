@@ -65,6 +65,7 @@ namespace NKikimr::NBsController {
 
         void MakeCommitToConsole(TString& config, ui32 configVersion);
         void MakeGetBlock();
+        void MaybeDisableConfigV2();
 
         void CommitConfig();
         void IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::EStatus status,

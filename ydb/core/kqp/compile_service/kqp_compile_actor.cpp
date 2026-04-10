@@ -673,6 +673,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableDqHashCombineByDefault = serviceConfig.GetEnableDqHashCombineByDefault();
     kqpConfig.EnableWatermarks = serviceConfig.GetEnableWatermarks();
     kqpConfig.EnableBuildAggregationResultStages = serviceConfig.GetEnableBuildAggregationResultStages();
+    kqpConfig.DisableOlapBlocksOnColumnsLimit = serviceConfig.GetDisableOlapBlocksOnColumnsLimit();
 
     if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
         kqpConfig._KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));
@@ -693,6 +694,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
             kqpConfig.DefaultHashShuffleFuncType = NYql::NDq::EHashShuffleFuncType::HashV2;
             break;
     }
+    kqpConfig.EnableDqSourceStreamLookupJoin = serviceConfig.GetEnableDqSourceStreamLookupJoin();
 }
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,

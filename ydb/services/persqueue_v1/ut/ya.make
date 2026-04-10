@@ -4,6 +4,8 @@ ADDINCL(
     ydb/public/sdk/cpp
 )
 
+REQUIREMENTS(cpu:2)
+
 CFLAGS(
     -DYDB_SDK_USE_STD_STRING
 )

@@ -1,5 +1,21 @@
 # Список изменений {{ ydb-short-name }} CLI
 
+## Версия 2.30.0 {#2-30-0}
+
+Дата выхода 7 апреля 2026. Для обновления до версии **2.30.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
+
+### Функциональность
+
+* Добавлена команда `{{ ydb-cli }} config completion` для генерации скриптов автодополнения команд для bash и zsh.
+* Добавлены команды `{{ ydb-cli }} export nfs` и `{{ ydb-cli }} import nfs`, позволяющие создавать и восстанавливать резервные копии непосредственно в/из общей NFS-директории, примонтированной на каждом хосте кластера.
+* Добавлена опция `--compact` в [команду](./reference/ydb-cli/workload-tpcc.md) `{{ ydb-cli }} workload tpcc import`.
+* Добавлена опция `--tx-mode` в [команды](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload * run`, позволяющая задать режим транзакции (например, `no-tx`, `serializable-rw`, `snapshot-rw`).
+* Добавлена поддержка новой операции [компакшна](./concepts/glossary.md#compaction) в [подкомандах](./reference/ydb-cli/operation-list.md) `{{ ydb-cli }} operation`.
+
+### Улучшения
+
+* При явном указании [профиля](./reference/ydb-cli/profile/index.md) с помощью опции `-p`/`--profile` активный профиль больше не используется: все параметры берутся только из указанного профиля, переменных окружения и командной строки. Это устраняет путаницу, когда выбранный профиль неожиданно дополнялся настройками из активного профиля.
+
 ## Версия 2.29.0 {#2-29-0}
 
 Дата выхода 11 февраля 2026. Для обновления до версии **2.29.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
@@ -402,7 +418,7 @@
 * Добавлена поддержка вывода результата выполнения команд [ydb table query execute](reference/ydb-cli/table-query-execute.md), [ydb yql](reference/ydb-cli/yql.md) и [ydb scripting yql](reference/ydb-cli/scripting-yql.md) в формате [Apache Parquet](https://parquet.apache.org/docs/).
 * В командах [ydb workload](reference/ydb-cli/commands/workload/index.md) добавлена опция `--executer`, задающая используемый тип запросов.
 * Добавлена колонка медианного времени выполнения бенчмарка в таблице статистики в команде [ydb workload clickbench](reference/ydb-cli/workload-click-bench.md).
-* **_(Experimental)_** Добавлен тип запросов `generic` в команде [ydb table query execute](reference/ydb-cli/table-query-execute.md), позволяющий выполнять [DDL](https://ru.wikipedia.org/wiki/Data_Definition_Language) и [DML](https://ru.wikipedia.org/wiki/Data_Manipulation_Language) операции, с результатами произвольного размера и c поддержкой [MVCC](concepts/mvcc.md). Команда использует экспериментальное API, совместимость не гарантируется.
+* **_(Experimental)_** Добавлен тип запросов `generic` в команде [ydb table query execute](reference/ydb-cli/table-query-execute.md), позволяющий выполнять [DDL](https://ru.wikipedia.org/wiki/Data_Definition_Language) и [DML](https://ru.wikipedia.org/wiki/Data_Manipulation_Language) операции, с результатами произвольного размера и c поддержкой [MVCC](concepts/query_execution/mvcc.md). Команда использует экспериментальное API, совместимость не гарантируется.
 * **_(Experimental)_** В команде `{{ ydb-cli }} table query explain` добавлена опция `--collect-diagnostics` для сбора диагностики запроса и сохранения её в файл. Команда использует экспериментальное API, совместимость не гарантируется.
 
 ### Исправления ошибок

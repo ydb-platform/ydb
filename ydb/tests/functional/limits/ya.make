@@ -5,11 +5,14 @@ TEST_SRCS(
     test_schemeshard_limits.py
 )
 
+SIZE(MEDIUM)
+
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:16 cpu:2)
+    REQUIREMENTS(ram:16 cpu:4)
+ELSE()
+    REQUIREMENTS(cpu:4)
 ENDIF()
 
-SIZE(MEDIUM)
 
 DEPENDS(
 )

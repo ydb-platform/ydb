@@ -20,6 +20,7 @@ private:
     google::protobuf::Arena Arena;
     TJsonSettings JsonSettings;
     TInstant DeadlineAt;
+    mutable TString MetaValueCache;
 
 public:
     TGrpcRequestContextWrapper(const THttpRequestContext& requestContext, std::unique_ptr<NProtoBuf::Message> request, TReplySender replySender);

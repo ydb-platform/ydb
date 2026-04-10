@@ -442,6 +442,11 @@ message TKqpExternalSource {
 
     string SourceName = 5;
     string AuthInfo = 6;
+
+    message TWatermarksSettings {
+        optional uint64 IdleTimeoutUs = 1;
+    };
+    optional TWatermarksSettings WatermarksSettings = 8;
 }
 
 message TKqpSource {

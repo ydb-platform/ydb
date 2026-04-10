@@ -189,8 +189,7 @@ protected:
                     .Get()
                     .GetOrElse(TDqSettings::TDefault::WatermarksLateArrivalDelayMs));
                 bool defaultWatermarksMode = Config->WatermarksMode.Get() == "default";
-                bool syncActor = Config->ComputeActorType.Get() != "async";
-                return NHopping::RewriteAsHoppingWindow(node, ctx, input.Cast(), analyticsHopping, lateArrivalDelay, defaultWatermarksMode, syncActor);
+                return NHopping::RewriteAsHoppingWindow(node, ctx, input.Cast(), analyticsHopping, lateArrivalDelay, defaultWatermarksMode);
             } else {
                 NDq::TSpillingSettings spillingSettings(Config->GetEnabledSpillingNodes());
                 return DqRewriteAggregate(node, ctx, TypesCtx, true, Config->UseAggPhases.Get().GetOrElse(false), Config->UseFinalizeByKey.Get().GetOrElse(false), spillingSettings.IsAggregationSpillingEnabled());

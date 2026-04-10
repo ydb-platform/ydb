@@ -342,6 +342,86 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             CompareYson(result, R"([])");
         }
     }
+
+    Y_UNIT_TEST(CompactionTaskLimits) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings().SetMaxPortionSize(30000));
+
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            auto alterQuery =
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
+                {"levels" : [{"class_name" : "Zero", "expected_blobs_size" : 20000, "portions_size_limit" : 400000, "portions_count_available" : 2,
+                              "compaction_task_memory_limit" : 1000000000, "compaction_task_portions_count_limit" : 5},
+                             {"class_name" : "Zero", "expected_blobs_size" : 20000, "portions_count_available" : 1},
+                             {"class_name" : "OneLayer", "expected_portion_size" : 40000, "size_limit_guarantee" : 100000000, "bytes_limit_fraction" : 1}]}`);
+            )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        for (ui32 i = 0; i < 50; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, i * 1000, 10000);
+            if (i % 10 == 0) {
+                csController->WaitCompactions(TDuration::MilliSeconds(10));
+            }
+        }
+        csController->WaitCompactions(TDuration::Seconds(10));
+
+        {
+            auto it = tableClient
+                          .StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+            )")
+                          .GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson(result, R"([[59000u;]])");
+        }
+
+        {
+            auto describeResult = kikimr.GetTestClient().Ls("/Root/olapStore/olapTable");
+            UNIT_ASSERT(describeResult);
+            UNIT_ASSERT(describeResult->Record.HasPathDescription());
+            UNIT_ASSERT(describeResult->Record.GetPathDescription().HasColumnTableDescription());
+            
+            const auto& columnTableDesc = describeResult->Record.GetPathDescription().GetColumnTableDescription();
+            UNIT_ASSERT(columnTableDesc.HasSchema());
+            UNIT_ASSERT(columnTableDesc.GetSchema().HasOptions());
+            UNIT_ASSERT(columnTableDesc.GetSchema().GetOptions().HasCompactionPlannerConstructor());
+            UNIT_ASSERT(columnTableDesc.GetSchema().GetOptions().GetCompactionPlannerConstructor().HasLCBuckets());
+            
+            const auto& lcBuckets = columnTableDesc.GetSchema().GetOptions().GetCompactionPlannerConstructor().GetLCBuckets();
+            UNIT_ASSERT_VALUES_EQUAL(lcBuckets.LevelsSize(), 3);
+            
+            // Check level 0 (first Zero level)
+            UNIT_ASSERT(lcBuckets.GetLevels(0).HasZeroLevel());
+            UNIT_ASSERT(lcBuckets.GetLevels(0).GetZeroLevel().HasCompactionTaskMemoryLimit());
+            UNIT_ASSERT(lcBuckets.GetLevels(0).GetZeroLevel().HasCompactionTaskPortionsCountLimit());
+            UNIT_ASSERT_VALUES_EQUAL(lcBuckets.GetLevels(0).GetZeroLevel().GetCompactionTaskMemoryLimit(), 1000000000);
+            UNIT_ASSERT_VALUES_EQUAL(lcBuckets.GetLevels(0).GetZeroLevel().GetCompactionTaskPortionsCountLimit(), 5);
+            
+            // Check level 1 (second Zero level)
+            UNIT_ASSERT(lcBuckets.GetLevels(1).HasZeroLevel());
+            UNIT_ASSERT(!lcBuckets.GetLevels(1).GetZeroLevel().HasCompactionTaskMemoryLimit());
+            UNIT_ASSERT(!lcBuckets.GetLevels(1).GetZeroLevel().HasCompactionTaskPortionsCountLimit());
+            
+            // Check level 2 (OneLayer level)
+            UNIT_ASSERT(lcBuckets.GetLevels(2).HasOneLayer());
+        }
+    }
 }
 
 }   // namespace NKikimr::NKqp

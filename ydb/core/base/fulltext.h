@@ -25,4 +25,32 @@ bool ValidateColumnsMatches(const TVector<TString>& columns, const Ydb::Table::F
 bool ValidateSettings(const Ydb::Table::FulltextIndexSettings& settings, TString& error);
 bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& nameLower, const TString& value, TString& error);
 
+struct TTermFreq {
+    ui64 DocId;
+    ui32 Freq;
+};
+
+struct TDeltaWriter {
+    TVector<ui8> Buf;
+    ui64 MinId = 0;
+    ui64 MaxId = 0;
+    ui64 Count = 0;
+    ui64 TotalFreq = 0;
+public:
+    void Reset();
+    void Add(ui64 DocId);
+    void Add(ui64 DocId, ui32 Freq);
+    size_t AddCompressed(ui64 firstId, TConstArrayRef<ui8> other, bool withFreq, size_t maxSize);
+    ui64 GetMinId();
+    ui64 GetMaxId();
+    ui64 GetCount();
+    ui64 GetTotalFreq();
+    TConstArrayRef<ui8> GetBuf();
+};
+
+TVector<ui8> DeltaCompress(TConstArrayRef<ui64> ids);
+TVector<ui64> DeltaDecompress(TConstArrayRef<ui8> buf);
+TVector<ui8> DeltaCompressWithFreq(TConstArrayRef<TTermFreq> terms);
+TVector<TTermFreq> DeltaDecompressWithFreq(TConstArrayRef<ui8> buf);
+
 }

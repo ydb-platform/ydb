@@ -459,6 +459,213 @@ bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& nam
     return !error;
 }
 
+void AddVarint(TVector<ui8>& buf, ui64 num) {
+    while (true) {
+        if (num < 0x80) {
+            buf.push_back((ui8)num);
+            break;
+        } else {
+            buf.push_back(0x80 | (ui8)(num & 0x7F));
+            num >>= 7;
+        }
+    }
+}
+
+// regular varint but with an additional flag in the second most-significant bit
+void AddVarintWithFlag(TVector<ui8>& buf, ui64 num, bool flag) {
+    if (num < 0x40) {
+        buf.push_back(((ui8)num | (flag ? 0x40 : 0)));
+        return;
+    } else {
+        buf.push_back(0x80 | (flag ? 0x40 : 0) | (ui8)(num & 0x3F));
+        num >>= 6;
+        AddVarint(buf, num);
+    }
+}
+
+ui64 ReadVarint(TConstArrayRef<ui8> buf, size_t& pos) {
+    ui64 r = 0;
+    ui32 o = 0;
+    while (pos < buf.size()) {
+        ui8 c = buf[pos++];
+        r |= ((c & 0x7F) << o);
+        if (!(c & 0x80)) {
+            break;
+        }
+        o += 7;
+    }
+    return r;
+}
+
+ui64 ReadVarintWithFlag(TConstArrayRef<ui8> buf, size_t& pos, bool& flag) {
+    flag = false;
+    if (pos >= buf.size()) {
+        return 0;
+    }
+    ui8 c = buf[pos++];
+    flag = !!(c & 0x40);
+    ui64 r = c & 0x3F;
+    if (c & 0x80) {
+        r |= ReadVarint(buf, pos) << 6;
+    }
+    return r;
+}
+
+TVector<ui8> DeltaCompress(TConstArrayRef<ui64> ids) {
+    TVector<ui8> buf;
+    if (!ids.size()) {
+        return buf;
+    }
+    AddVarint(buf, ids[0]);
+    for (size_t i = 1; i < ids.size(); i++) {
+        Y_ENSURE(ids[i] > ids[i-1]);
+        AddVarint(buf, ids[i] - ids[i-1]);
+    }
+    return buf;
+}
+
+TVector<ui64> DeltaDecompress(TConstArrayRef<ui8> buf) {
+    TVector<ui64> ids;
+    if (!buf.size()) {
+        return ids;
+    }
+    size_t pos = 0;
+    ui64 docId = 0;
+    while (pos < buf.size()) {
+        ui64 deltaId = ReadVarint(buf, pos);
+        if (!deltaId && pos > 0) {
+            break;
+        }
+        docId += deltaId;
+        ids.push_back(docId);
+    }
+    return ids;
+}
+
+TVector<ui8> DeltaCompressWithFreq(TConstArrayRef<TTermFreq> terms) {
+    TVector<ui8> buf;
+    if (!terms.size()) {
+        return buf;
+    }
+    ui64 prevId = 0;
+    for (auto & term: terms) {
+        Y_ENSURE(term.DocId > prevId);
+        AddVarintWithFlag(buf, term.DocId - prevId, term.Freq > 1);
+        if (term.Freq > 1) {
+            AddVarint(buf, term.Freq);
+        }
+        prevId = term.DocId;
+    }
+    return buf;
+}
+
+TVector<TTermFreq> DeltaDecompressWithFreq(TConstArrayRef<ui8> buf) {
+    TVector<TTermFreq> terms;
+    if (buf.size() < sizeof(ui64)) {
+        return terms;
+    }
+    size_t pos = 0;
+    ui64 docId = 0;
+    bool hasFreq = false;
+    while (pos < buf.size()) {
+        ui64 deltaId = ReadVarintWithFlag(buf, pos, hasFreq);
+        if (!deltaId && pos > 0) {
+            break;
+        }
+        docId += deltaId;
+        ui64 freq = !hasFreq ? 1 : ReadVarint(buf, pos);
+        terms.emplace_back(docId, freq);
+    }
+    return terms;
+}
+
+void TDeltaWriter::Reset()
+{
+    Buf.clear();
+    MinId = 0;
+    MaxId = 0;
+    Count = 0;
+    TotalFreq = 0;
+}
+
+void TDeltaWriter::Add(ui64 DocId)
+{
+    Y_ENSURE(DocId > MaxId || !Count);
+    if (!Buf.size()) {
+        MinId = DocId;
+    }
+    AddVarint(Buf, DocId - MaxId);
+    MaxId = DocId;
+    Count++;
+    TotalFreq++;
+}
+
+void TDeltaWriter::Add(ui64 DocId, ui32 Freq)
+{
+    Y_ENSURE(DocId > MaxId || !Count);
+    if (!Buf.size()) {
+        MinId = DocId;
+    }
+    AddVarintWithFlag(Buf, DocId - MaxId, Freq > 1);
+    if (Freq > 1) {
+        AddVarint(Buf, Freq);
+    }
+    MaxId = DocId;
+    Count++;
+    TotalFreq += Freq;
+}
+
+size_t TDeltaWriter::AddCompressed(ui64 firstId, TConstArrayRef<ui8> other, bool withFreq, ui64 maxCount)
+{
+    if (!other.size() || maxCount > 0 && Count >= maxCount) {
+        return 0;
+    }
+    size_t pos = 0;
+    if (withFreq) {
+        bool hasFreq = false;
+        ui64 docId = firstId+ReadVarintWithFlag(other, pos, hasFreq);
+        ui64 freq = hasFreq ? ReadVarint(other, pos) : 1;
+        Add(docId, freq);
+        while (pos < other.size() && (!maxCount || Count < maxCount)) {
+            ui64 deltaId = ReadVarintWithFlag(other, pos, hasFreq);
+            ui64 freq = hasFreq ? ReadVarint(other, pos) : 1;
+            Add(MaxId+deltaId, freq);
+        }
+    } else {
+        ui64 docId = firstId+ReadVarint(other, pos);
+        Add(docId);
+        while (pos < other.size() && (!maxCount || Count < maxCount)) {
+            ui64 deltaId = ReadVarint(other, pos);
+            Add(MaxId+deltaId);
+        }
+    }
+    return pos;
+}
+
+ui64 TDeltaWriter::GetMinId()
+{
+    return MinId;
+}
+
+ui64 TDeltaWriter::GetMaxId()
+{
+    return MaxId;
+}
+
+ui64 TDeltaWriter::GetCount()
+{
+    return Count;
+}
+
+ui64 TDeltaWriter::GetTotalFreq()
+{
+    return TotalFreq;
+}
+
+TConstArrayRef<ui8> TDeltaWriter::GetBuf()
+{
+    return Buf;
+}
 
 }
 

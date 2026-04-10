@@ -33,6 +33,8 @@ using namespace NKikimr::NFulltext;
  * Source columns: <PK columns>, <text column>, <data columns>
  * Destination columns with a FulltextPlain index: __ydb_token, <PK columns>, __ydb_freq
  * Destination columns with a FulltextRelevance index: __ydb_token, <PK columns>, <data columns>
+ * Destination columns with a FulltextCompact/FulltextCompactRelevance/JsonCompact index:
+ *   __ydb_token, __ydb_max_id, __ydb_generation, __ydb_added (always true), __ydb_segment
  *
  * Request:
  * - The client sends TEvBuildFulltextIndexRequest with:
@@ -70,6 +72,15 @@ class TBuildFulltextIndexScan: public TActor<TBuildFulltextIndexScan>, public IA
     TBufferData* UploadBuf = nullptr;
     TBufferData* DocsBuf = nullptr;
 
+    THashMap<TString, THashMap<ui64, ui32>> TermBuf;
+    ui64 TermBufDocs = 0;
+    ui64 TermBufBytes = 0;
+
+    ui64 MaxBatchRows = 0;
+    ui64 MaxBatchBytes = 0;
+    ui64 Generation = 0;
+    ui64 MaxGeneration = 0;
+
     TVector<NScheme::TTypeInfo> KeyTypes;
     TSerializedTableRange RequestedRange;
     TSerializedTableRange TableRange;
@@ -92,6 +103,10 @@ public:
         , TabletId(tabletId)
         , BuildId{request.GetId()}
         , Uploader(request.GetDatabaseName(), request.GetScanSettings())
+        , MaxBatchRows(request.GetScanSettings().GetMaxBatchRows())
+        , MaxBatchBytes(request.GetScanSettings().GetMaxBatchBytes())
+        , Generation(request.GetMinGeneration())
+        , MaxGeneration(request.GetMaxGeneration())
         , KeyTypes(table.KeyColumnTypes)
         , TableRange(table.Range)
         , Request(std::move(request))
@@ -137,47 +152,93 @@ public:
             }
         };
 
-        {
-            auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
-            if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json) {
-                Ydb::Type type;
-                type.set_type_id(Ydb::Type::STRING);
-                uploadTypes->emplace_back(TokenColumn, type);
-            } else {
-                Ydb::Type type;
-                NScheme::ProtoFromTypeInfo(types.at(TextColumn), type);
-                uploadTypes->emplace_back(TokenColumn, type);
-            }
-            for (const auto& column : table.KeyColumnIds) {
-                addType(uploadTypes, table.Columns.at(column).Name);
-            }
-            if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
-                Ydb::Type type;
-                type.set_type_id(TokenCountType);
-                uploadTypes->emplace_back(FreqColumn, type);
-            } else {
-                for (auto dataColumn : Request.GetDataColumns()) {
-                    addType(uploadTypes, dataColumn);
-                }
-            }
-            UploadBuf = Uploader.AddDestination(Request.GetIndexName(), std::move(uploadTypes));
+        MakeTokenTypes(table, types, addType);
+
+        if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance ||
+            Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
+            MakeDocsTypes(table, addType);
+        }
+    }
+
+    void MakeTokenTypes(const TUserTable& table, const TColumnsTypes& types, std::function<void(std::shared_ptr<NTxProxy::TUploadTypes>& uploadTypes, const TString& column)> addType)
+    {
+        auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
+
+        if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json ||
+            Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact) {
+            Ydb::Type type;
+            type.set_type_id(Ydb::Type::STRING);
+            uploadTypes->emplace_back(TokenColumn, type);
+        } else {
+            Ydb::Type type;
+            NScheme::ProtoFromTypeInfo(types.at(TextColumn), type);
+            uploadTypes->emplace_back(TokenColumn, type);
         }
 
-        if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
-            auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
+        switch (Request.GetIndexType()) {
+        case NKikimrTxDataShard::EFulltextIndexType::FulltextCompact:
+        case NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance:
+        case NKikimrTxDataShard::EFulltextIndexType::JsonCompact:
+            {
+                Ydb::Type type;
+                type.set_type_id(Ydb::Type::UINT64);
+                uploadTypes->emplace_back("__ydb_max_id", type);
+            }
+            {
+                Ydb::Type type;
+                type.set_type_id(Ydb::Type::UINT64);
+                uploadTypes->emplace_back("__ydb_generation", type);
+            }
+            {
+                Ydb::Type type;
+                type.set_type_id(Ydb::Type::BOOL);
+                uploadTypes->emplace_back("__ydb_added", type);
+            }
+            {
+                Ydb::Type type;
+                type.set_type_id(Ydb::Type::STRING);
+                uploadTypes->emplace_back("__ydb_segment", type);
+            }
+            break;
+        case NKikimrTxDataShard::EFulltextIndexType::FulltextPlain:
+        case NKikimrTxDataShard::EFulltextIndexType::Json:
             for (const auto& column : table.KeyColumnIds) {
                 addType(uploadTypes, table.Columns.at(column).Name);
             }
             for (auto dataColumn : Request.GetDataColumns()) {
                 addType(uploadTypes, dataColumn);
             }
+            break;
+        case NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance:
+            for (const auto& column : table.KeyColumnIds) {
+                addType(uploadTypes, table.Columns.at(column).Name);
+            }
             {
                 Ydb::Type type;
                 type.set_type_id(TokenCountType);
-                uploadTypes->emplace_back(DocLengthColumn, type);
+                uploadTypes->emplace_back(FreqColumn, type);
             }
-            DocsBuf = Uploader.AddDestination(Request.GetDocsTableName(), std::move(uploadTypes));
+            break;
         }
+
+        UploadBuf = Uploader.AddDestination(Request.GetIndexName(), std::move(uploadTypes));
+    }
+
+    void MakeDocsTypes(const TUserTable& table, std::function<void(std::shared_ptr<NTxProxy::TUploadTypes>& uploadTypes, const TString& column)> addType)
+    {
+        auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
+        for (const auto& column : table.KeyColumnIds) {
+            addType(uploadTypes, table.Columns.at(column).Name);
+        }
+        for (auto dataColumn : Request.GetDataColumns()) {
+            addType(uploadTypes, dataColumn);
+        }
+        {
+            Ydb::Type type;
+            type.set_type_id(TokenCountType);
+            uploadTypes->emplace_back(DocLengthColumn, type);
+        }
+        DocsBuf = Uploader.AddDestination(Request.GetDocsTableName(), std::move(uploadTypes));
     }
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
@@ -226,11 +287,9 @@ public:
 
         LastProcessedKey = TSerializedCellVec(key);
 
-        TVector<TCell> uploadKey(::Reserve(key.size() + 1));
-        TVector<TCell> uploadValue(::Reserve(Request.GetDataColumns().size()));
-
         TVector<TString> tokens;
-        if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json) {
+        if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json ||
+            Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact) {
             if (IsBinaryJson) {
                 tokens = NJsonIndex::TokenizeBinaryJson(row.Get(0).AsBuf());
             } else {
@@ -243,26 +302,87 @@ public:
         } else {
             tokens = Analyze(row.Get(0).AsBuf(), TextAnalyzers);
         }
-        if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
-            ui32 totalTokens = 0;
-            THashMap<TString, ui32> tokenFreq;
-            for (const auto& token : tokens) {
-                tokenFreq[token]++;
-                totalTokens++;
+        if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompact ||
+            Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance) {
+            Y_ENSURE(key.size() == 1);
+            ui64 docId = key[0].AsValue<ui64>();
+            for (size_t i = 0; i < tokens.size(); i++) {
+                TermBuf[tokens[i]][docId]++;
+                TermBufBytes += tokens[i].size();
             }
-            for (const auto& [token, freq] : tokenFreq) {
-                uploadKey.clear();
-                uploadKey.push_back(TCell(token));
-                uploadKey.insert(uploadKey.end(), key.begin(), key.end());
-
-                uploadValue.clear();
-                uploadValue.push_back(TCell::Make(freq));
-
-                UploadBuf->AddRow(uploadKey, uploadValue);
+            TermBufDocs++;
+            if (!FlushTermBuf(false)) {
+                return EScan::Final;
             }
+            if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance) {
+                UploadDocRow(key, row, tokens.size());
+            }
+        } else if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance) {
+            UploadFulltextRelevance(key, tokens);
+            UploadDocRow(key, row, tokens.size());
+        } else {
+            UploadFulltextPlain(key, row, tokens);
+        }
+
+        return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
+    }
+
+    void UploadFulltextRelevance(TArrayRef<const TCell> key, const TVector<TString>& tokens)
+    {
+        THashMap<TString, ui32> tokenFreq;
+        for (const auto& token : tokens) {
+            tokenFreq[token]++;
+        }
+
+        TVector<TCell> uploadKey(::Reserve(key.size() + 1));
+        TVector<TCell> uploadValue(::Reserve(1));
+
+        for (const auto& [token, freq] : tokenFreq) {
+            uploadKey.clear();
+            uploadKey.push_back(TCell(token));
+            uploadKey.insert(uploadKey.end(), key.begin(), key.end());
 
             uploadValue.clear();
-            // Include data columns in indexImplDocsTable
+            uploadValue.push_back(TCell::Make(freq));
+
+            UploadBuf->AddRow(uploadKey, uploadValue);
+        }
+    }
+
+    void UploadDocRow(TArrayRef<const TCell> key, const TRow& row, ui32 totalTokens)
+    {
+        TVector<TCell> uploadValue(::Reserve(Request.GetDataColumns().size()));
+        uploadValue.clear();
+
+        // Include data columns in indexImplDocsTable
+        size_t index = 1; // skip text column
+        for (auto dataColumn : Request.GetDataColumns()) {
+            if (dataColumn != TextColumn) {
+                uploadValue.push_back(row.Get(index++));
+            } else {
+                uploadValue.push_back(row.Get(0));
+            }
+        }
+        // Document length column
+        uploadValue.push_back(TCell::Make(totalTokens));
+        DocsBuf->AddRow(key, uploadValue);
+
+        DocCount++;
+        TotalDocLength += totalTokens;
+    }
+
+    void UploadFulltextPlain(TArrayRef<const TCell> key, const TRow& row, const TVector<TString>& tokens)
+    {
+        TVector<TCell> uploadKey(::Reserve(key.size() + 1));
+        TVector<TCell> uploadValue(::Reserve(Request.GetDataColumns().size()));
+
+        for (const auto& token : tokens) {
+            uploadKey.clear();
+            uploadKey.push_back(TCell(token));
+            uploadKey.insert(uploadKey.end(), key.begin(), key.end());
+
+            uploadValue.clear();
+            // Include data columns in every posting row (poor, but anyway)
             size_t index = 1; // skip text column
             for (auto dataColumn : Request.GetDataColumns()) {
                 if (dataColumn != TextColumn) {
@@ -271,34 +391,56 @@ public:
                     uploadValue.push_back(row.Get(0));
                 }
             }
-            // Document length column
-            uploadValue.push_back(TCell::Make(totalTokens));
-            DocsBuf->AddRow(key, uploadValue);
 
-            DocCount++;
-            TotalDocLength += totalTokens;
-        } else {
-            for (const auto& token : tokens) {
-                uploadKey.clear();
-                uploadKey.push_back(TCell(token));
-                uploadKey.insert(uploadKey.end(), key.begin(), key.end());
-
-                uploadValue.clear();
-                // Include data columns in every posting row (poor, but anyway)
-                size_t index = 1; // skip text column
-                for (auto dataColumn : Request.GetDataColumns()) {
-                    if (dataColumn != TextColumn) {
-                        uploadValue.push_back(row.Get(index++));
-                    } else {
-                        uploadValue.push_back(row.Get(0));
-                    }
-                }
-
-                UploadBuf->AddRow(uploadKey, uploadValue);
-            }
+            UploadBuf->AddRow(uploadKey, uploadValue);
         }
+    }
 
-        return Uploader.ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
+    bool FlushTermBuf(bool force)
+    {
+        if (!TermBuf.size() || !force && TermBufDocs < MaxBatchRows && TermBufBytes < MaxBatchBytes) {
+            return true;
+        }
+        if (Generation > MaxGeneration) {
+            Finish(std::runtime_error("MaxGeneration exceeded"));
+            return false;
+        }
+        TVector<TCell> uploadKey(::Reserve(3));
+        TVector<TCell> uploadValue(::Reserve(2));
+        for (auto& [token, docs] : TermBuf) {
+            TVector<ui8> segment;
+            ui64 minId = 0;
+            if (Request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompact) {
+                TVector<ui64> ids;
+                for (auto& [docId, freq] : docs) {
+                    ids.push_back(docId);
+                }
+                std::sort(ids.begin(), ids.end());
+                minId = ids[0];
+                segment = DeltaCompress(ids);
+            } else {
+                TVector<TTermFreq> terms;
+                for (auto& [docId, freq] : docs) {
+                    terms.emplace_back(docId, freq);
+                }
+                std::sort(terms.begin(), terms.end(), [](const TTermFreq& a, const TTermFreq& b) -> bool {
+                    return a.DocId < b.DocId;
+                });
+                minId = terms[0].DocId;
+                segment = DeltaCompressWithFreq(terms);
+            }
+            uploadKey.clear();
+            uploadKey.push_back(TCell(token));
+            uploadKey.push_back(TCell::Make(minId));
+            uploadKey.push_back(TCell::Make(Generation));
+            uploadValue.clear();
+            uploadValue.push_back(TCell::Make(true));
+            uploadValue.push_back(TCell((const char*)segment.data(), segment.size()));
+            UploadBuf->AddRow(uploadKey, uploadValue);
+        }
+        TermBuf.clear();
+        Generation++;
+        return true;
     }
 
     EScan PageFault() final
@@ -309,6 +451,10 @@ public:
 
     EScan Exhausted() final
     {
+        if (!FlushTermBuf(true)) {
+            return EScan::Final;
+        }
+
         if (JsonErrors > 0) {
             LOG_W("Invalid JSON encountered in " << JsonErrors << " rows " << Debug());
         }
@@ -539,7 +685,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
             if (!tags.contains(column.column())) {
                 badRequest(TStringBuilder() << "Unknown key column: " << column.column());
             } else if (types.at(column.column()).GetTypeId() == NUdf::TDataType<NUdf::TJsonDocument>::Id) {
-                if (request.GetIndexType() != NKikimrTxDataShard::EFulltextIndexType::Json) {
+                if (request.GetIndexType() != NKikimrTxDataShard::EFulltextIndexType::Json &&
+                    request.GetIndexType() != NKikimrTxDataShard::EFulltextIndexType::JsonCompact) {
                     badRequest("Indexing binary JSON requires JSON index type");
                 }
             }
@@ -557,7 +704,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         // 3. Validating fulltext index settings
         if (!request.HasSettings()) {
             badRequest(TStringBuilder() << "Missing fulltext index settings");
-        } else if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json) {
+        } else if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::Json ||
+            request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact) {
             if (!request.GetSettings().columns_size()) {
                 badRequest(TStringBuilder() << "JSON columns should be set");
             }

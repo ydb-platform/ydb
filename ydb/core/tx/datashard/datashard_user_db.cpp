@@ -250,6 +250,8 @@ void TDataShardUserDb::UpdateRow(
     IncreaseUpdateCounters(key, ops);
 }
 
+// Вот сюда надо внедрить fulltext компакшен
+
 void TDataShardUserDb::IncrementRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,

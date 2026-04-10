@@ -1180,6 +1180,13 @@ private:
             ev->Record.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance);
         } else if (buildInfo.IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson) {
             ev->Record.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::Json);
+        } else {
+            ev->Record.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextCompact);
+            // We just need unique <generations> for the initial scan
+            const uint64_t perShard = UINT64_MAX / buildInfo.Shards.size();
+            const uint64_t shardIndex = buildInfo.Shards.at(shardIdx).Index;
+            ev->Record.SetMinGeneration(perShard*shardIndex);
+            ev->Record.SetMaxGeneration(perShard*shardIndex + perShard-1);
         }
 
         auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);

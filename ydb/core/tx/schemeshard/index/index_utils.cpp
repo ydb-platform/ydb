@@ -422,6 +422,83 @@ auto CalcVectorKmeansTreeBuildOverlapTableDescImpl(
     return implTableDesc;
 }
 
+auto CalcFulltextCompactImplTableDescImpl(
+    const auto& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc,
+    const NKikimrSchemeOp::EIndexType indexType)
+{
+    auto tableColumns = ExtractInfo(baseTable);
+    THashSet<TString> indexColumns;
+    for (const auto & keyColumn: tableColumns.Keys) {
+        indexColumns.insert(keyColumn);
+    }
+
+    TColumnTypes baseColumnTypes;
+    TString error;
+    Y_ENSURE(ExtractTypes(baseTable, baseColumnTypes, error), error);
+    NScheme::TTypeId tokenColumnType;
+    if (indexType == NKikimrSchemeOp::EIndexTypeGlobalJson) {
+        tokenColumnType = NScheme::NTypeIds::String;
+    } else {
+        Y_ENSURE(indexDesc.GetSettings().columns().size() == 1);
+        auto textColumnInfo = baseColumnTypes.at(indexDesc.GetSettings().columns().at(0).column());
+        tokenColumnType = textColumnInfo.GetTypeId();
+    }
+
+    NKikimrSchemeOp::TTableDescription implTableDesc;
+    implTableDesc.SetName(NTableIndex::ImplTable);
+    SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
+    {
+        auto tokenColumn = implTableDesc.AddColumns();
+        tokenColumn->SetName(NFulltext::TokenColumn);
+        tokenColumn->SetType(NScheme::TypeName(tokenColumnType));
+        tokenColumn->SetTypeId(tokenColumnType);
+        tokenColumn->SetNotNull(true);
+        implTableDesc.AddKeyColumnNames(NFulltext::TokenColumn);
+    }
+
+    {
+        auto col = implTableDesc.AddColumns();
+        // FIXME: Extract names to constants
+        col->SetName("__ydb_max_id");
+        col->SetType("Uint64");
+        col->SetTypeId(Ydb::Type::UINT64);
+        col->SetNotNull(true);
+        implTableDesc.AddKeyColumnNames("__ydb_max_id");
+    }
+
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName("__ydb_generation");
+        col->SetType("Uint64");
+        col->SetTypeId(Ydb::Type::UINT64);
+        col->SetNotNull(true);
+        implTableDesc.AddKeyColumnNames("__ydb_generation");
+    }
+
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName("__ydb_added");
+        col->SetType("Bool");
+        col->SetTypeId(Ydb::Type::BOOL);
+        col->SetNotNull(true);
+    }
+
+    {
+        auto col = implTableDesc.AddColumns();
+        col->SetName("__ydb_segment");
+        col->SetType("String");
+        col->SetTypeId(NScheme::NTypeIds::String);
+        col->SetNotNull(true);
+    }
+
+    implTableDesc.SetSystemColumnNamesAllowed(true);
+
+    return implTableDesc;
+}
+
 auto CalcFulltextImplTableDescImpl(
     const auto& baseTable,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
@@ -723,6 +800,26 @@ NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
     const NKikimrSchemeOp::EIndexType indexType)
 {
     return CalcFulltextImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc, indexType);
+}
+
+NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
+    const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc,
+    const NKikimrSchemeOp::EIndexType indexType)
+{
+    return CalcFulltextCompactImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexTableDesc, indexDesc, indexType);
+}
+
+NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
+    const NKikimrSchemeOp::TTableDescription& baseTableDescr,
+    const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc,
+    const NKikimrSchemeOp::EIndexType indexType)
+{
+    return CalcFulltextCompactImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexTableDesc, indexDesc, indexType);
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(

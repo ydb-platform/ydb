@@ -157,6 +157,8 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
         if (!col)
             return {NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder() << "Missing column with id " << columnTag};
 
+        LOG_E("TValidatedWriteTxOperation at " << tabletId << "; Column: Name = " << col->Name << ", NotNull: " << (col->NotNull ? "true" : "false"));
+
         if (col->NotNull) {
             for (ui32 rowIdx = 0; rowIdx < Matrix.GetRowCount(); ++rowIdx) {
                 const TCell& cell = Matrix.GetCell(rowIdx, colIdx);

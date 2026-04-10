@@ -721,7 +721,6 @@ enum ETxTypes {
     TXTYPE_LIST_BACKUP_COLLECTION_RESTORE = 108           [(TxTypeOpts) = {Name: "TxListBackupCollectionRestore"}];
     TXTYPE_FORGET_BACKUP_COLLECTION_RESTORE = 109         [(TxTypeOpts) = {Name: "TxForgetBackupCollectionRestore"}];
 
-<<<<<<< HEAD
     TXTYPE_CANCEL_FORCED_COMPACTION = 110   [(TxTypeOpts) = {Name: "TxCancelForcedCompaction"}];
     TXTYPE_CREATE_FORCED_COMPACTION = 111   [(TxTypeOpts) = {Name: "TxCreateForcedCompaction"}];
     TXTYPE_FORGET_FORCED_COMPACTION = 112   [(TxTypeOpts) = {Name: "TxForgetForcedCompaction"}];
@@ -732,14 +731,4 @@ enum ETxTypes {
     TXTYPE_USER_HASHES_MIGRATION = 116 [(TxTypeOpts) = {Name: "TTxUserHashesMigration"}];
 
     TXTYPE_CREATE_SET_COLUMN_CONSTRAINT = 117             [(TxTypeOpts) = {Name: "TxCreateSetColumnConstraint"}];
-=======
-    TXTYPE_CANCEL_FORCED_COMPACTION = 110                 [(TxTypeOpts) = {Name: "TxCancelForcedCompaction"}];
-    TXTYPE_CREATE_FORCED_COMPACTION = 111                 [(TxTypeOpts) = {Name: "TxCreateForcedCompaction"}];
-    TXTYPE_FORGET_FORCED_COMPACTION = 112                 [(TxTypeOpts) = {Name: "TxForgetForcedCompaction"}];
-    TXTYPE_GET_FORCED_COMPACTION = 113                    [(TxTypeOpts) = {Name: "TxGetForcedCompaction"}];
-    TXTYPE_LIST_FORCED_COMPACTION = 114                   [(TxTypeOpts) = {Name: "TxListForcedCompaction"}];
-    TXTYPE_PROGRESS_FORCED_COMPACTION = 115               [(TxTypeOpts) = {Name: "TxProgressForcedCompaction"}];
-
-    TXTYPE_CREATE_SET_COLUMN_CONSTRAINT = 116             [(TxTypeOpts) = {Name: "TxCreateSetColumnConstraint"}];
->>>>>>> 34d424f88f6 (create unit tests)
 }

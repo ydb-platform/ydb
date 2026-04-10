@@ -856,7 +856,39 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
         Done = 60
     };
 
-    EOperationState OperationState = EOperationState::Invalid;
+    struct TOperationState {
+        EOperationState Value = EOperationState::Invalid;
+
+        TOperationState() = default;
+        TOperationState(EOperationState value)
+            : Value(value)
+        {}
+
+        operator EOperationState() const {
+            return Value;
+        }
+
+        TString GetStringValue() const {
+            switch (Value) {
+                case EOperationState::Invalid:
+                    return "Invalid";
+                case EOperationState::LockTableOnSchemaOps:
+                    return "LockTableOnSchemaOps";
+                case EOperationState::LockNullWrites:
+                    return "LockNullWrites";
+                case EOperationState::Validate:
+                    return "Validate";
+                case EOperationState::UnlockNullWrites:
+                    return "UnlockNullWrites";
+                case EOperationState::UnlockTableOnSchemaOps:
+                    return "UnlockTableOnSchemaOps";
+                case EOperationState::Done:
+                    return "Done";
+            }
+        }
+    };
+
+    TOperationState OperationState = EOperationState::Invalid;
     std::vector<std::string> NotNullColumns;
 
     TTxId LockNullWritesTxId = TTxId();

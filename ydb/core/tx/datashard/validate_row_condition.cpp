@@ -38,12 +38,19 @@ public:
             columnNames.push_back(col);
         }
         ScanTags = BuildTags(tableInfo, std::move(columnNames));
+        LOG_I("Create TValidateRowConditionScan"
+            << " id# " << Request.GetId()
+            << " tabletId# " << TabletId
+            << " notNullColumns# " << Request.NotNullColumnsSize());
     }
 
     ~TValidateRowConditionScan() final = default;
 
     TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) noexcept final {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(static_cast<IActor*>(this));
+        LOG_I("Prepare TValidateRowConditionScan"
+            << " id# " << Request.GetId()
+            << " tabletId# " << TabletId);
         return {EScan::Feed, {}};
     }
 
@@ -57,6 +64,9 @@ public:
         const TConstArrayRef<TCell> rowCells = *row;
         for (const auto& cell : rowCells) {
             if (cell.IsNull()) {
+                LOG_N("TValidateRowConditionScan: NULL found, validation failed"
+                    << " id# " << Request.GetId()
+                    << " tabletId# " << TabletId);
                 IsValid = false;
                 Status = NKikimrIndexBuilder::EBuildStatus::DONE;
                 return EScan::Final;
@@ -65,7 +75,7 @@ public:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(NTable::IScan::EStatus) noexcept final {
+    TAutoPtr<IDestructable> Finish(NTable::IScan::EStatus status) noexcept final {
         auto response = MakeHolder<TEvDataShard::TEvValidateRowConditionResponse>();
         response->Record.SetId(Request.GetId());
         response->Record.SetTabletId(TabletId);
@@ -81,6 +91,24 @@ public:
             auto* issue = response->Record.AddIssues();
             issue->set_severity(NYql::TSeverityIds::S_ERROR);
             issue->set_message("Constraint violation: NULL value found.");
+        }
+
+        if (Status == NKikimrIndexBuilder::EBuildStatus::DONE && IsValid) {
+            LOG_N("TValidateRowConditionScan: Done (valid)"
+                << " id# " << Request.GetId()
+                << " tabletId# " << TabletId
+                << " scanStatus# " << (int)status);
+        } else if (!IsValid) {
+            LOG_N("TValidateRowConditionScan: Done (invalid, NULL found)"
+                << " id# " << Request.GetId()
+                << " tabletId# " << TabletId
+                << " scanStatus# " << (int)status);
+        } else {
+            LOG_E("TValidateRowConditionScan: Failed"
+                << " id# " << Request.GetId()
+                << " tabletId# " << TabletId
+                << " buildStatus# " << (int)Status
+                << " scanStatus# " << (int)status);
         }
 
         TActivationContext::Send(new IEventHandle(Sender, SelfId(), response.Release()));
@@ -141,7 +169,18 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
     auto rowVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly);
     TScanRecord::TSeqNo seqNo = {record.GetSeqNoGeneration(), record.GetSeqNoRound()};
 
+    LOG_N("HandleSafe TEvValidateRowConditionRequest"
+        << " id# " << id
+        << " tabletId# " << record.GetTabletId()
+        << " ownerId# " << record.GetOwnerId()
+        << " pathId# " << record.GetPathId()
+        << " notNullColumns# " << record.NotNullColumnsSize()
+        << " rowVersion# " << rowVersion);
+
     if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
+        LOG_D("HandleSafe TEvValidateRowConditionRequest: waiting for volatile txs"
+            << " id# " << id
+            << " rowVersion# " << rowVersion);
         VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
         return;
     }
@@ -160,22 +199,37 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
     };
 
     if (record.GetTabletId() != TabletID()) {
+        LOG_E("HandleSafe TEvValidateRowConditionRequest: wrong shard"
+            << " id# " << id
+            << " expected# " << TabletID()
+            << " got# " << record.GetTabletId());
         sendResponse(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST, TStringBuilder() << "Wrong shard " << record.GetTabletId() << " this is " << TabletID());
         return;
     }
 
     const auto tableId = TTableId(record.GetOwnerId(), record.GetPathId());
     if (!GetUserTables().contains(tableId.PathId.LocalPathId)) {
+        LOG_E("HandleSafe TEvValidateRowConditionRequest: unknown table"
+            << " id# " << id
+            << " localPathId# " << tableId.PathId.LocalPathId);
         sendResponse(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST, TStringBuilder() << "Unknown table id: " << tableId.PathId.LocalPathId);
         return;
     }
 
     if (!IsStateActive()) {
+        LOG_E("HandleSafe TEvValidateRowConditionRequest: shard not active"
+            << " id# " << id
+            << " tabletId# " << TabletID());
         sendResponse(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST, TStringBuilder() << "Shard " << TabletID() << " is not ready for requests");
         return;
     }
 
     const auto& userTable = *GetUserTables().at(tableId.PathId.LocalPathId);
+
+    LOG_D("HandleSafe TEvValidateRowConditionRequest: starting scan"
+        << " id# " << id
+        << " tabletId# " << TabletID()
+        << " localTid# " << userTable.LocalTid);
 
     auto scan = new TValidateRowConditionScan(record, ev->Sender, TabletID(), userTable);
     StartScan(this, scan, id, seqNo, rowVersion, userTable.LocalTid);

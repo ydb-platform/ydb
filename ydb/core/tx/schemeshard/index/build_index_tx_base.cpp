@@ -35,13 +35,13 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
 
     for (auto& rec: SetColumnConstraintStateChanges) {
         TIndexBuildId operationId;
-        TSetColumnConstraintOperationInfo::EOperationState state;
+        TSetColumnConstraintOperationInfo::TOperationState state;
         std::tie(operationId, state) = rec;
 
         const auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(operationId);
         Y_VERIFY_S(operationInfoPtr, "SetColumnConstraintOperations has no " << operationId);
         auto& operationInfo = *operationInfoPtr->get();
-        LOG_I("Change SetColumnConstraint state from " << (ui32)operationInfo.OperationState << " to " << (ui32)state);
+        LOG_I("Change SetColumnConstraint state from " << operationInfo.OperationState.GetStringValue() << " to " << state.GetStringValue());
         if (state == TSetColumnConstraintOperationInfo::EOperationState::Done) {
             operationInfo.EndTime = TAppData::TimeProvider->Now();
         }

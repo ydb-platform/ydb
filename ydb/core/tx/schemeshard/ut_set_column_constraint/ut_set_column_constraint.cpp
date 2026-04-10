@@ -31,14 +31,60 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
         return event->Record;
     }
 
-    Y_UNIT_TEST(BasicRequest) {
+    Y_UNIT_TEST(AlreadyNotNull) {
         TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
         TTestEnv env(runtime);
 
         ui64 txId = 100;
 
-        // Create table with nullable column "value"
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   NotNull: true }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            TVector<TCell> cells = {
+                TCell::Make((ui32)1), TCell(TStringBuf("test_value"))
+            };
+
+            WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, tablePath,
+                0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                {1, 2}, TSerializedCellMatrix(cells, 1, 2), true);
+        }
+
+        {
+            TVector<TCell> cells = {
+                TCell::Make((ui32)1), TCell()
+            };
+
+            WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, tablePath,
+                0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                {1, 2}, TSerializedCellMatrix(cells, 1, 2), false);
+        }
+    }
+
+    Y_UNIT_TEST(BasicRequest) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
               Name: "Table"
               Columns { Name: "key"   Type: "Uint32" }
               Columns { Name: "value" Type: "Utf8"   }
@@ -46,50 +92,48 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // Set NOT NULL constraint on "value" column
         ui64 setConstraintTxId = ++txId;
         auto response = TestSetColumnConstraint(
             runtime, setConstraintTxId,
             TTestTxConfig::SchemeShard,
-            "/MyRoot",
-            "/MyRoot/Table",
+            root,
+            tablePath,
             {"value"});
 
         Cerr << "SET COLUMN CONSTRAINT RESPONSE: " << response.ShortDebugString() << Endl;
 
-        // Should get SUCCESS response (operation accepted)
         UNIT_ASSERT_VALUES_EQUAL_C(
             response.GetStatus(),
             Ydb::StatusIds::SUCCESS,
             response.ShortDebugString());
 
-        // Wait for the operation to complete
-        env.TestWaitNotification(runtime, setConstraintTxId);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, tablePath), 0u);
 
-        // Test 1: Insert row with non-NULL value - should succeed
-        NKikimrMiniKQL::TResult result;
-        TString error;
-        bool success = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets, R"(
-            (
-                (let key '( '('key (Uint32 '1) ) ) )
-                (let row '( '('value (Utf8 '"test_value") ) ) )
-                (return (AsList (UpdateRow '__user__Table key row) ))
-            )
-        )", result, error);
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
 
-        UNIT_ASSERT_C(success, "Insert with non-NULL value should succeed: " << error);
+        Sleep(TDuration::Seconds(4));
 
-        // Test 2: Insert row with NULL value - should fail
-        success = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets, R"(
-            (
-                (let key '( '('key (Uint32 '2) ) ) )
-                (let row '( '('value (Nothing (OptionalType (DataType 'Utf8)))) ) )
-                (return (AsList (UpdateRow '__user__Table key row) ))
-            )
-        )", result, error);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, tablePath), 0u);
 
-        UNIT_ASSERT_C(!success, "Insert with NULL value should fail but succeeded");
-        UNIT_ASSERT_STRING_CONTAINS(error, "NOT NULL");
+        {
+            TVector<TCell> cells = {
+                TCell::Make((ui32)1), TCell(TStringBuf("test_value"))
+            };
+
+            WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, tablePath,
+                0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                {1, 2}, TSerializedCellMatrix(cells, 1, 2), true);
+        }
+
+        {
+            TVector<TCell> cells = {
+                TCell::Make((ui32)1), TCell()
+            };
+
+            WriteOp(runtime, TTestTxConfig::SchemeShard, ++txId, tablePath,
+                0, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                {1, 2}, TSerializedCellMatrix(cells, 1, 2), false);
+        }
     }
 
     Y_UNIT_TEST(InvalidTable) {

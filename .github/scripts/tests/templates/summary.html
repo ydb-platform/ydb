@@ -680,7 +680,9 @@
     function formatTestCommand(path, testName) {
         const namePieces = testName.split('.');
 
-        if (namePieces.length === 2) {
+        if (namePieces.length === 1) {
+            // No dots: use the test name as-is
+        } else if (namePieces.length === 2) {
             testName = namePieces[0] + '::' + namePieces[1];
         } else {
             testName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');

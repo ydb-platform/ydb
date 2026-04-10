@@ -1588,7 +1588,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             for (const auto& topic : msg1->Topics) {
                 UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
                 for (const auto& partition : topic.Partitions) {
-                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION));
+                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::FENCED_INSTANCE_ID));
                 }
             }
 
@@ -1691,7 +1691,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             for (const auto& topic : msg1->Topics) {
                 UNIT_ASSERT_VALUES_EQUAL(topic.Partitions.size(), minActivePartitions);
                 for (const auto& partition : topic.Partitions) {
-                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION));
+                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::FENCED_INSTANCE_ID));
                 }
             }
 
@@ -4348,7 +4348,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
     Y_UNIT_TEST(HeartbeatWithTTLGenerationsScenario) {
         TInsecureTestServer testServer("1", false, true);
-        testServer.KikimrServer->GetRuntime()->SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_ERROR);
 
         TString topicName = "/Root/topic-0";
         ui64 totalPartitions = 24;
@@ -4452,11 +4451,10 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             clientA.Heartbeat(joinRespA->MemberId.value(),
                              illegalGeneration,
                              groupId)->ErrorCode,
-            static_cast<TKafkaInt16>(EKafkaErrors::ILLEGAL_GENERATION)
+            static_cast<TKafkaInt16>(EKafkaErrors::FENCED_INSTANCE_ID)
         );
 
-        UNIT_ASSERT_VALUES_EQUAL(
-            clientA.Heartbeat(joinRespA->MemberId.value(),
+        UNIT_ASSERT_VALUES_EQUAL(clientA.Heartbeat(joinRespA->MemberId.value(),
                              joinRespA->GenerationId,
                              groupId)->ErrorCode,
             static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR)

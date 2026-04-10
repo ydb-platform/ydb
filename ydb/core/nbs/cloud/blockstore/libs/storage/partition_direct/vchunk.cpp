@@ -394,19 +394,21 @@ void TVChunk::OnWriteBlocksResponse(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    auto dirtyMapSpan = span->CreateChild(
-        NKikimr::TWilsonNbs::NbsBasic,
-        "TVChunk.UpdateDirtyMap",
-        NWilson::EFlags::AUTO_END);
+    {
+        auto dirtyMapSpan = span->CreateChild(
+            NKikimr::TWilsonNbs::NbsBasic,
+            "TVChunk.UpdateDirtyMap",
+            NWilson::EFlags::AUTO_END);
 
-    BlocksDirtyMap.WriteFinished(
-        response.Lsn,
-        range,
-        response.RequestedWrites,
-        response.CompletedWrites);
+        BlocksDirtyMap.WriteFinished(
+            response.Lsn,
+            range,
+            response.RequestedWrites,
+            response.CompletedWrites);
 
-    bool ok = !HasError(response.Error);
-    Counters.RequestFinished(EVChunkOperation::Write, ok);
+        bool ok = !HasError(response.Error);
+        Counters.RequestFinished(EVChunkOperation::Write, ok);
+    }
 
     promise.SetValue(TWriteBlocksLocalResponse{.Error = response.Error});
 

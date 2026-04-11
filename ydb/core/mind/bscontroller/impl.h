@@ -1787,7 +1787,7 @@ private:
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev);
     void Handle(TEvBlobStorage::TEvControllerDistconfRequest::TPtr ev);
 
-    bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) override;
+    bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
     void ProcessPostQuery(const NActorsProto::TRemoteHttpInfo& query, TActorId sender);
 
     void StartConsoleInteraction();

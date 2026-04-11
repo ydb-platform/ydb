@@ -542,12 +542,9 @@ public:
         Add(props, EndpointSetting, clusterConfiguration->Endpoint, pos, ctx);
         const bool useSharedReading = UseSharedReading(clusterConfiguration, format);
         Add(props, SharedReading, ToString(useSharedReading), pos, ctx);
+        Add(props, ReconnectPeriod, ToString(clusterConfiguration->ReconnectPeriod), pos, ctx);
         Add(props, Format, format, pos, ctx);
         Add(props, ReadGroup, clusterConfiguration->ReadGroup, pos, ctx);
-
-        if (const auto& reconnectPeriod = clusterConfiguration->ReconnectPeriod) {
-            Add(props, ReconnectPeriod, ToString(reconnectPeriod), pos, ctx);
-        }
 
         if (clusterConfiguration->UseSsl) {
             Add(props, UseSslSetting, "1", pos, ctx);

@@ -5145,28 +5145,28 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 );
 
                 $grouped1 = SELECT
-                    key1,
+                    key_1,
                     CAST(SOME(time) AS String) AS time,
                     CAST(COUNT(*) AS String) AS count
                 FROM $pq_source
                 GROUP BY
                     HOP (CAST(time AS Timestamp), "PT1H", "PT1H", "PT0H"),
-                    key1;
+                    (key1 || "-k1") AS key_1;
 
                 $grouped2 = SELECT
-                    key2,
+                    key_2,
                     CAST(SOME(time) AS String) AS time,
                     CAST(COUNT(*) AS String) AS count
                 FROM $pq_source
                 GROUP BY
                     HOP (CAST(time AS Timestamp), "PT1H", "PT1H", "PT0H"),
-                    key2;
+                    (key2 || "-k2") AS key_2;
 
                 INSERT INTO `{pq_source}`.`{output_topic1}`
-                SELECT Unwrap(key1 || "-" || time || "-" || count) FROM $grouped1;
+                SELECT Unwrap(key_1 || "-" || time || "-" || count) FROM $grouped1;
 
                 INSERT INTO `{pq_source}`.`{output_topic2}`
-                SELECT Unwrap(key2 || "-" || time || "-" || count) FROM $grouped2;
+                SELECT Unwrap(key_2 || "-" || time || "-" || count) FROM $grouped2;
             END DO;)",
             "query_name"_a = queryName,
             "pq_source"_a = pqSourceName,
@@ -5182,8 +5182,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             R"({"time": "2025-08-24T00:00:00.000000Z", "key1": "A", "key2": "X"})",
             R"({"time": "2025-08-25T00:00:00.000000Z", "key1": "B", "key2": "Y"})",
         });
-        ReadTopicMessage(outputTopicName1, "A-2025-08-24T00:00:00.000000Z-1");
-        ReadTopicMessage(outputTopicName2, "X-2025-08-24T00:00:00.000000Z-1");
+        ReadTopicMessage(outputTopicName1, "A-k1-2025-08-24T00:00:00.000000Z-1");
+        ReadTopicMessage(outputTopicName2, "X-k2-2025-08-24T00:00:00.000000Z-1");
+
+        const auto& result = ExecQuery("SELECT Ast FROM `.sys/streaming_queries`");
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+        CheckScriptResult(result[0], 1, 1, [&, check = AstChecker(1, 3)](TResultSetParser& resultSet) {
+            check(*resultSet.ColumnParser("Ast").GetOptionalUtf8());
+        });
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",
@@ -5200,8 +5206,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ));
         CheckScriptExecutionsCount(2, 1);
 
-        ReadTopicMessage(outputTopicName1, "B-2025-08-25T00:00:00.000000Z-1", disposition);
-        ReadTopicMessage(outputTopicName2, "Y-2025-08-25T00:00:00.000000Z-1", disposition);
+        ReadTopicMessage(outputTopicName1, "B-k1-2025-08-25T00:00:00.000000Z-1", disposition);
+        ReadTopicMessage(outputTopicName2, "Y-k2-2025-08-25T00:00:00.000000Z-1", disposition);
     }
 }
 

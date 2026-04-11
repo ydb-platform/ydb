@@ -659,23 +659,48 @@ def _parse_control_items(comment_body):
     return items
 
 
-def get_issue_comments_with_ids(issue_id):
+def _fetch_issue_comment_nodes(issue_id):
     query = """
-    {
-      node(id: "%s") {
+    query ($issueId: ID!, $after: String) {
+      node(id: $issueId) {
         ... on Issue {
-          comments(first: 100) {
+          comments(first: 100, after: $after) {
             nodes {
               id
               body
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
             }
           }
         }
       }
     }
-    """ % issue_id
-    result = run_query(query)
-    nodes = result.get('data', {}).get('node', {}).get('comments', {}).get('nodes', [])
+    """
+
+    all_nodes = []
+    after = None
+    has_next_page = True
+
+    while has_next_page:
+        variables = {
+            "issueId": issue_id,
+            "after": after,
+        }
+        result = run_query(query, variables)
+        comments = result.get('data', {}).get('node', {}).get('comments', {}) or {}
+        nodes = comments.get('nodes') or []
+        all_nodes.extend(nodes)
+        page_info = comments.get('pageInfo') or {}
+        has_next_page = bool(page_info.get('hasNextPage'))
+        after = page_info.get('endCursor')
+
+    return all_nodes
+
+
+def get_issue_comments_with_ids(issue_id):
+    nodes = _fetch_issue_comment_nodes(issue_id)
     return [{'id': node.get('id'), 'body': node.get('body', '')} for node in nodes if node.get('id')]
 
 
@@ -1335,25 +1360,8 @@ def get_issue_comments(issue_id):
     Returns:
         list: List of comment bodies
     """
-    query = """
-    {
-      node(id: "%s") {
-        ... on Issue {
-          comments(first: 100) {
-            nodes {
-              body
-            }
-          }
-        }
-      }
-    }
-    """ % issue_id
-    
-    result = run_query(query)
-    if not result.get('data', {}).get('node', {}).get('comments', {}).get('nodes'):
-        return []
-        
-    return [comment['body'] for comment in result['data']['node']['comments']['nodes']]
+    nodes = _fetch_issue_comment_nodes(issue_id)
+    return [comment.get('body', '') for comment in nodes if comment.get('body') is not None]
 
 def has_unmute_comment(comments, unmuted_tests):
     """Checks if there's already a comment about unmuting these tests.

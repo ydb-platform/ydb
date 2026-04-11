@@ -140,7 +140,13 @@ def _effective_unmute_window(status, default_window_days, fast_window_days):
 
 
 def collect_rows(default_window_days, fast_window_days, wait_hours):
-    issues = fetch_repository_issues(ORG_NAME, REPO_NAME, since=None)
+    issues = fetch_repository_issues(
+        ORG_NAME,
+        REPO_NAME,
+        since=None,
+        include_comment_bodies=True,
+        include_timeline_items=True,
+    )
     now = datetime.datetime.now(datetime.timezone.utc)
     rows = []
 

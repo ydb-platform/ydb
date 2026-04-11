@@ -156,6 +156,7 @@ def fetch_repository_issues(
     repo_name: str = REPO_NAME,
     since: Optional[datetime] = None,
     include_comment_bodies: bool = True,
+    include_timeline_items: bool = False,
 ) -> List[Dict[str, Any]]:
     """Fetch all issues from GitHub repository with comprehensive information"""
     if since:
@@ -175,6 +176,52 @@ def fetch_repository_issues(
         since_filter = f', filterBy: {{since: "{since_str}"}}'
     
     comments_body_field = "body" if include_comment_bodies else "bodyText"
+    timeline_items_block = ""
+    if include_timeline_items:
+        timeline_items_block = """
+              timelineItems(last: 50, itemTypes: [CLOSED_EVENT, CONNECTED_EVENT, CROSS_REFERENCED_EVENT]) {
+                nodes {
+                  __typename
+                  ... on ClosedEvent {
+                    actor {
+                      __typename
+                      ... on User {
+                        login
+                      }
+                      ... on Bot {
+                        login
+                      }
+                    }
+                  }
+                  ... on ConnectedEvent {
+                    subject {
+                      __typename
+                      ... on PullRequest {
+                        number
+                        state
+                        isDraft
+                        repository {
+                          nameWithOwner
+                        }
+                      }
+                    }
+                  }
+                  ... on CrossReferencedEvent {
+                    source {
+                      __typename
+                      ... on PullRequest {
+                        number
+                        state
+                        isDraft
+                        repository {
+                          nameWithOwner
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+"""
 
     repository_issues_query = """
     {
@@ -227,6 +274,7 @@ def fetch_repository_issues(
                   %s
                 }
               }
+%s
               repository {
                 id
                 name
@@ -257,6 +305,7 @@ def fetch_repository_issues(
             end_cursor,
             since_filter,
             comments_body_field,
+            timeline_items_block,
         )
         result = run_query(query)
         

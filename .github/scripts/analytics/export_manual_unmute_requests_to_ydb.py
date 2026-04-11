@@ -17,9 +17,10 @@ from export_issues_to_ydb import fetch_repository_issues
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "tests"))
 from mute_thresholds import get_thresholds
 from manual_unmute_contract import (
-    MANUAL_UNMUTE_TABLE_COLUMNS,
+    MANUAL_UNMUTE_TABLE_SCHEMA,
     build_manual_unmute_row_payload,
     normalize_manual_unmute_status,
+    render_manual_unmute_create_table_sql,
 )
 
 
@@ -222,42 +223,17 @@ def collect_rows(default_window_days, fast_window_days, wait_hours):
 
 
 def create_table(ydb_wrapper, table_path):
-    sql = f"""
-        CREATE TABLE IF NOT EXISTS `{table_path}` (
-            `issue_number` Uint64 NOT NULL,
-            `full_name` Utf8 NOT NULL,
-            `branch` Utf8 NOT NULL,
-            `build_type` Utf8 NOT NULL,
-            `issue_state` Utf8,
-            `issue_closed_by_login` Utf8,
-            `issue_closed_by_type` Utf8,
-            `linked_pr_count` Uint32,
-            `manual_unmute_status` Utf8,
-            `manual_request_active` Uint8,
-            `manual_requested_at` Timestamp,
-            `hours_until_ready` Uint32,
-            `manual_wait_hours` Uint32,
-            `effective_unmute_window_days` Uint32,
-            `default_unmute_window_days` Uint32,
-            `manual_fast_unmute_window_days` Uint32,
-            `resolution_reason` Utf8,
-            `exported_at` Timestamp NOT NULL,
-            PRIMARY KEY (`branch`, `build_type`, `full_name`, `issue_number`)
-        )
-        PARTITION BY HASH(`branch`)
-        WITH (
-            STORE = COLUMN
-        )
-    """
+    sql = render_manual_unmute_create_table_sql(table_path)
     ydb_wrapper.create_table(table_path, sql)
 
 
 def build_column_types():
     columns = ydb.BulkUpsertColumns()
 
-    for name, type_name in MANUAL_UNMUTE_TABLE_COLUMNS:
+    for name, type_name, nullable in MANUAL_UNMUTE_TABLE_SCHEMA:
         primitive = getattr(ydb.PrimitiveType, type_name)
-        columns = columns.add_column(name, ydb.OptionalType(primitive))
+        ydb_type = ydb.OptionalType(primitive) if nullable else primitive
+        columns = columns.add_column(name, ydb_type)
 
     return columns
 

@@ -5,26 +5,55 @@ READY_FOR_FAST_UNMUTE_STATUS = "ready_for_fast_unmute"
 IDLE_STATUS = "idle"
 
 # Canonical schema for test_results/analytics/manual_unmute_requests.
-MANUAL_UNMUTE_TABLE_COLUMNS = [
-    ("issue_number", "Uint64"),
-    ("full_name", "Utf8"),
-    ("branch", "Utf8"),
-    ("build_type", "Utf8"),
-    ("issue_state", "Utf8"),
-    ("issue_closed_by_login", "Utf8"),
-    ("issue_closed_by_type", "Utf8"),
-    ("linked_pr_count", "Uint32"),
-    ("manual_unmute_status", "Utf8"),
-    ("manual_request_active", "Uint8"),
-    ("manual_requested_at", "Timestamp"),
-    ("hours_until_ready", "Uint32"),
-    ("manual_wait_hours", "Uint32"),
-    ("effective_unmute_window_days", "Uint32"),
-    ("default_unmute_window_days", "Uint32"),
-    ("manual_fast_unmute_window_days", "Uint32"),
-    ("resolution_reason", "Utf8"),
-    ("exported_at", "Timestamp"),
+# Tuple format: (column_name, ydb_primitive_type, nullable)
+MANUAL_UNMUTE_TABLE_SCHEMA = [
+    ("issue_number", "Uint64", False),
+    ("full_name", "Utf8", False),
+    ("branch", "Utf8", False),
+    ("build_type", "Utf8", False),
+    ("issue_state", "Utf8", True),
+    ("issue_closed_by_login", "Utf8", True),
+    ("issue_closed_by_type", "Utf8", True),
+    ("linked_pr_count", "Uint32", True),
+    ("manual_unmute_status", "Utf8", True),
+    ("manual_request_active", "Uint8", True),
+    ("manual_requested_at", "Timestamp", True),
+    ("hours_until_ready", "Uint32", True),
+    ("manual_wait_hours", "Uint32", True),
+    ("effective_unmute_window_days", "Uint32", True),
+    ("default_unmute_window_days", "Uint32", True),
+    ("manual_fast_unmute_window_days", "Uint32", True),
+    ("resolution_reason", "Utf8", True),
+    ("exported_at", "Timestamp", False),
 ]
+
+# Backward-compatible short form used by existing call sites.
+MANUAL_UNMUTE_TABLE_COLUMNS = [(name, type_name) for name, type_name, _ in MANUAL_UNMUTE_TABLE_SCHEMA]
+
+MANUAL_UNMUTE_TABLE_PRIMARY_KEY = ("branch", "build_type", "full_name", "issue_number")
+MANUAL_UNMUTE_TABLE_PARTITION_BY_HASH = ("branch",)
+MANUAL_UNMUTE_TABLE_STORE = "COLUMN"
+
+
+def render_manual_unmute_create_table_sql(table_path):
+    column_lines = []
+    for name, type_name, nullable in MANUAL_UNMUTE_TABLE_SCHEMA:
+        suffix = "" if nullable else " NOT NULL"
+        column_lines.append(f"`{name}` {type_name}{suffix}")
+
+    primary_key = ", ".join(f"`{name}`" for name in MANUAL_UNMUTE_TABLE_PRIMARY_KEY)
+    partition_keys = ", ".join(f"`{name}`" for name in MANUAL_UNMUTE_TABLE_PARTITION_BY_HASH)
+
+    return (
+        f"CREATE TABLE IF NOT EXISTS `{table_path}` (\n"
+        f"    {',\n    '.join(column_lines)},\n"
+        f"    PRIMARY KEY ({primary_key})\n"
+        f")\n"
+        f"PARTITION BY HASH({partition_keys})\n"
+        f"WITH (\n"
+        f"    STORE = {MANUAL_UNMUTE_TABLE_STORE}\n"
+        f")"
+    )
 
 def normalize_manual_unmute_status(status, requested=False):
     if not status:

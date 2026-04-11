@@ -1,6 +1,6 @@
 # ALTER STREAMING QUERY
 
-`ALTER STREAMING QUERY` изменяет настройки{% if alter_streaming_query == true %} и текст {% endif %} [потоковых запросов](../../../concepts/streaming-query.md), а также управляет их состоянием: запуском и остановкой.
+`ALTER STREAMING QUERY` изменяет настройки{% if alter_streaming_query == true %} и текст {% endif %} [потоковых запросов](../../../concepts/streaming-query.md), а также управляет их состоянием: запуском, перезапуском и остановкой.
 
 ## Синтаксис
 
@@ -54,13 +54,15 @@ ALTER STREAMING QUERY [IF EXISTS] <query_name> SET (<key> = <value>)
 
 Доступные параметры:
 
-* `RUN = (TRUE|FALSE)` — запустить или остановить запрос.
+* `RUN = (TRUE|FALSE)` — запустить или перезапустить запрос либо остановить его.
 * `RESOURCE_POOL = <resource_pool_name>` — имя [пула ресурсов](../../../concepts/glossary.md#resource-pool), в котором будет выполняться запрос.
 {% if alter_streaming_query == true %}
 * `FORCE = (TRUE|FALSE)` — разрешить изменение текста запроса со сбросом состояния агрегаций. Обязателен при [изменении текста запроса](#text-changing-examples).
 {% endif %}
 
-При выполнении `SET (RUN = TRUE)` смещения чтения из топика и состояния агрегационных функций восстанавливаются из [чекпоинта](../../../dev/streaming-query/checkpoints.md). При отсутствии чекпоинта чтение начинается с самых свежих данных.
+При выполнении `SET (RUN = TRUE)` запрос будет запущен или перезапущен, если он уже работал. Смещения чтения из топика и состояния агрегационных функций восстанавливаются из [чекпоинта](../../../dev/streaming-query/checkpoints.md). При отсутствии чекпоинта чтение начинается с самых свежих данных.
+
+При выполнении `SET (RUN = FALSE)` запрос будет остановлен.
 
 Примеры изменения параметров запроса [см. ниже](#parameters-changing-examples).
 
@@ -143,11 +145,11 @@ ALTER STREAMING QUERY my_streaming_query SET (
 DO BEGIN
 
 INSERT INTO
-    ydb_source.output_topic
+    output_topic
 SELECT
     *
 FROM
-    ydb_source.input_topic;
+    input_topic;
 
 END DO
 ```

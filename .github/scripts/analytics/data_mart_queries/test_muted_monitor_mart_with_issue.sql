@@ -1,108 +1,90 @@
--- GitHub issue fields from github_issue_mapping; analytics area/owner + owner hand-off from tests_monitor.
--- COALESCE fallback: when effective_* columns are NULL (not yet populated), fall back to owner string + area_to_owner_mapping.
+PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
-$normalize = ($raw_area) -> {
-    $parts = String::SplitToList(Cast($raw_area AS String), '/');
-    RETURN Cast(
-        IF(ListLength($parts) >= 2, $parts[0] || '/' || $parts[1], Cast($raw_area AS String))
-    AS Utf8);
-};
+$default_unmute_days = 7u;
+$manual_fast_unmute_days = 1u;
+$manual_wait_hours = $manual_fast_unmute_days * 24u;
 
-$area_fallback = (
-    SELECT owner_team AS owner_team, MIN($normalize(area)) AS area
-    FROM `test_results/analytics/area_to_owner_mapping`
-    GROUP BY owner_team
-);
-
-$gim_latest = (
-    SELECT
-        full_name AS full_name,
-        branch AS branch,
-        build_type AS build_type,
-        github_issue_url AS github_issue_url,
-        github_issue_number AS github_issue_number,
-        github_issue_state AS github_issue_state,
-        github_issue_created_at AS github_issue_created_at,
-        area_override AS area_override,
-        area_override_since AS area_override_since
-    FROM (
-        SELECT
-            g.full_name AS full_name,
-            g.branch AS branch,
-            g.build_type AS build_type,
-            g.github_issue_url AS github_issue_url,
-            g.github_issue_number AS github_issue_number,
-            g.github_issue_state AS github_issue_state,
-            g.github_issue_created_at AS github_issue_created_at,
-            g.area_override AS area_override,
-            g.area_override_since AS area_override_since,
-            ROW_NUMBER() OVER (
-                PARTITION BY g.full_name, g.branch, g.build_type
-                ORDER BY g.github_issue_created_at DESC, g.github_issue_number DESC
-            ) AS rn
-        FROM `test_results/analytics/github_issue_mapping` AS g
-    ) AS g_rnk
-    WHERE g_rnk.rn = 1
-);
-
-SELECT
-    tm.state_filtered AS state_filtered,
-    tm.test_name AS test_name,
-    tm.suite_folder AS suite_folder,
-    tm.full_name AS full_name,
-    tm.date_window AS date_window,
-    tm.build_type AS build_type,
-    tm.branch AS branch,
-    tm.days_ago_window AS days_ago_window,
-    tm.pass_count AS pass_count,
-    tm.mute_count AS mute_count,
-    tm.fail_count AS fail_count,
-    tm.skip_count AS skip_count,
-    tm.owner AS owner,
-    tm.is_muted AS is_muted,
-    tm.is_test_chunk AS is_test_chunk,
-    tm.state AS state,
-    tm.previous_state AS previous_state,
-    tm.state_change_date AS state_change_date,
-    tm.days_in_state AS days_in_state,
-    tm.previous_mute_state AS previous_mute_state,
-    tm.mute_state_change_date AS mute_state_change_date,
-    tm.days_in_mute_state AS days_in_mute_state,
-    tm.previous_state_filtered AS previous_state_filtered,
-    tm.state_change_date_filtered AS state_change_date_filtered,
-    tm.days_in_state_filtered AS days_in_state_filtered,
-    CAST(CASE
+SELECT 
+    tm.state_filtered as state_filtered, 
+    tm.test_name as test_name, 
+    tm.suite_folder as suite_folder, 
+    tm.full_name as full_name, 
+    tm.date_window as date_window, 
+    tm.build_type as build_type, 
+    tm.branch as branch, 
+    tm.days_ago_window as days_ago_window, 
+    tm.pass_count as pass_count, 
+    tm.mute_count as mute_count, 
+    tm.fail_count as fail_count, 
+    tm.skip_count as skip_count, 
+    tm.owner as owner, 
+    tm.is_muted as is_muted, 
+    tm.is_test_chunk as is_test_chunk, 
+    tm.state as state, 
+    tm.previous_state as previous_state, 
+    tm.state_change_date as state_change_date, 
+    tm.days_in_state as days_in_state, 
+    tm.previous_mute_state as previous_mute_state, 
+    tm.mute_state_change_date as mute_state_change_date, 
+    tm.days_in_mute_state as days_in_mute_state, 
+    tm.previous_state_filtered as previous_state_filtered, 
+    tm.state_change_date_filtered as state_change_date_filtered, 
+    tm.days_in_state_filtered as days_in_state_filtered,
+    CASE 
         WHEN (tm.state = 'Skipped' AND tm.days_in_state > 14) THEN 'Skipped'
         WHEN tm.days_in_mute_state >= 30 THEN 'MUTED: delete candidate'
-        ELSE 'MUTED: in sla' 
-    END
-    as String) AS resolution,
-    CAST(Coalesce(
-        tm.effective_owner_team,
-        Unicode::ToLower(Cast(Coalesce(String::ReplaceAll(tm.owner, 'TEAM:@ydb-platform/', ''), '') AS Utf8))
-    ) AS String) AS owner_team,
-    Coalesce(tm.effective_area, $normalize(Coalesce(af.area, 'area/-'))) AS area,
-    tm.previous_effective_owner_team AS previous_effective_owner_team,
-    tm.effective_owner_team_changed_date AS effective_owner_team_changed_date,
+        ELSE 'MUTED: in sla'
+    END as resolution,
+    String::ReplaceAll(tm.owner, 'TEAM:@ydb-platform/', '') as owner_team,
     CAST(
-        CASE
+        CASE 
             WHEN tm.is_muted = 1 OR (tm.state = 'Skipped' AND tm.days_in_state > 14) THEN TRUE
             ELSE FALSE
         END AS Uint8
-    ) AS is_muted_or_skipped,
-    gim.github_issue_url AS github_issue_url,
-    gim.github_issue_number AS github_issue_number,
-    gim.github_issue_state AS github_issue_state,
-    gim.github_issue_created_at AS github_issue_created_at,
-    gim.area_override AS area_override,
-    gim.area_override_since AS area_override_since
+    ) as is_muted_or_skipped,
+    gim.github_issue_url as github_issue_url,
+    gim.github_issue_number as github_issue_number,
+    gim.github_issue_state as github_issue_state,
+    gim.github_issue_created_at as github_issue_created_at,
+    mru.manual_unmute_status as manual_unmute_status,
+    CAST(mru.manual_request_active AS Uint8) as is_manual_unmute_requested,
+    mru.manual_requested_at as manual_unmute_requested_at,
+    CAST(Coalesce(mru.effective_unmute_window_days, $default_unmute_days) AS Uint32) as effective_unmute_window_days,
+    CAST(Coalesce(mru.default_unmute_window_days, $default_unmute_days) AS Uint32) as default_unmute_window_days,
+    CAST(Coalesce(mru.manual_fast_unmute_window_days, $manual_fast_unmute_days) AS Uint32) as manual_fast_unmute_window_days,
+    CAST(Coalesce(mru.manual_wait_hours, $manual_wait_hours) AS Uint32) as manual_unmute_wait_hours,
+    CAST(Coalesce(mru.hours_until_ready, 0u) AS Uint32) as manual_unmute_hours_until_ready
 FROM `test_results/analytics/tests_monitor` AS tm
-LEFT JOIN $area_fallback AS af
-    ON Unicode::ToLower(Cast(Coalesce(String::ReplaceAll(tm.owner, 'TEAM:@ydb-platform/', ''), '') AS Utf8)) = af.owner_team
-LEFT JOIN $gim_latest AS gim
+LEFT JOIN `test_results/analytics/github_issue_mapping` AS gim
     ON tm.full_name = gim.full_name
     AND tm.branch = gim.branch
-    AND tm.build_type = gim.build_type
-WHERE tm.date_window >= CurrentUtcDate() - 1 * Interval("P1D")
+LEFT JOIN (
+    SELECT
+        full_name,
+        branch,
+        build_type,
+        manual_unmute_status,
+        manual_request_active,
+        manual_requested_at,
+        hours_until_ready,
+        effective_unmute_window_days,
+        default_unmute_window_days,
+        manual_fast_unmute_window_days,
+        manual_wait_hours
+    FROM (
+        SELECT
+            m.*,
+            ROW_NUMBER() OVER (
+                PARTITION BY m.full_name, m.branch, m.build_type
+                ORDER BY m.exported_at DESC, m.issue_number DESC
+            ) AS rn
+        FROM `test_results/analytics/manual_unmute_requests` AS m
+    )
+    WHERE rn = 1
+) AS mru
+    ON tm.full_name = mru.full_name
+    AND tm.branch = mru.branch
+    AND tm.build_type = mru.build_type
+WHERE tm.date_window >= CurrentUtcDate() - 2 * Interval("P1D")
     AND (tm.branch = 'main' OR tm.branch LIKE 'stable-%' OR tm.branch LIKE 'stream-nb-25%')
-    AND tm.is_test_chunk = 0;
+    AND tm.is_test_chunk = 0

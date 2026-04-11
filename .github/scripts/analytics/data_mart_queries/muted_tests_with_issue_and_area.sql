@@ -1,48 +1,7 @@
 $window_days = 365;
-
-$normalize = ($raw_area) -> {
-    $parts = String::SplitToList(Cast($raw_area AS String), '/');
-    RETURN Cast(
-        IF(ListLength($parts) >= 2, $parts[0] || '/' || $parts[1], Cast($raw_area AS String))
-    AS Utf8);
-};
-
-$area_fallback = (
-    SELECT owner_team AS owner_team, MIN($normalize(area)) AS area
-    FROM `test_results/analytics/area_to_owner_mapping`
-    GROUP BY owner_team
-);
-
-$gim_latest = (
-    SELECT
-        full_name AS full_name,
-        branch AS branch,
-        build_type AS build_type,
-        github_issue_url AS github_issue_url,
-        github_issue_number AS github_issue_number,
-        github_issue_state AS github_issue_state,
-        github_issue_created_at AS github_issue_created_at,
-        area_override AS area_override,
-        area_override_since AS area_override_since
-    FROM (
-        SELECT
-            g.full_name AS full_name,
-            g.branch AS branch,
-            g.build_type AS build_type,
-            g.github_issue_url AS github_issue_url,
-            g.github_issue_number AS github_issue_number,
-            g.github_issue_state AS github_issue_state,
-            g.github_issue_created_at AS github_issue_created_at,
-            g.area_override AS area_override,
-            g.area_override_since AS area_override_since,
-            ROW_NUMBER() OVER (
-                PARTITION BY g.full_name, g.branch, g.build_type
-                ORDER BY g.github_issue_created_at DESC, g.github_issue_number DESC
-            ) AS rn
-        FROM `test_results/analytics/github_issue_mapping` AS g
-    ) AS g_rnk
-    WHERE g_rnk.rn = 1
-);
+$default_unmute_days = 7u;
+$manual_fast_unmute_days = 1u;
+$manual_wait_hours = $manual_fast_unmute_days * 24u;
 
 SELECT
     tm.state_filtered AS state_filtered,
@@ -70,29 +29,79 @@ SELECT
     tm.previous_state_filtered AS previous_state_filtered,
     tm.state_change_date_filtered AS state_change_date_filtered,
     tm.days_in_state_filtered AS days_in_state_filtered,
-    Coalesce(
-        tm.effective_owner_team,
-        Unicode::ToLower(Cast(Coalesce(String::ReplaceAll(tm.owner, 'TEAM:@ydb-platform/', ''), '') AS Utf8))
-    ) AS owner_team,
-    Coalesce(tm.effective_area, $normalize(Coalesce(af.area, 'area/-'))) AS area,
-    tm.previous_effective_owner_team AS previous_effective_owner_team,
-    tm.effective_owner_team_changed_date AS effective_owner_team_changed_date,
+    tm.owner_team_key AS owner_team,
+    Coalesce(om.area, 'area/-') AS area,
+    Coalesce(mu.manual_unmute_status, 'none') AS manual_unmute_status,
+    mu.resolution_reason AS manual_unmute_reason,
+    mu.manual_requested_at AS manual_unmute_requested_at,
+    Coalesce(mu.manual_wait_hours, $manual_wait_hours) AS manual_unmute_wait_hours,
+    Coalesce(mu.hours_until_ready, 0u) AS manual_unmute_hours_until_ready,
+    Coalesce(mu.effective_unmute_window_days, $default_unmute_days) AS effective_unmute_window_days,
+    Coalesce(mu.default_unmute_window_days, $default_unmute_days) AS default_unmute_window_days,
+    Coalesce(mu.manual_fast_unmute_window_days, $manual_fast_unmute_days) AS manual_fast_unmute_window_days,
     gim.github_issue_url AS github_issue_url,
     gim.github_issue_number AS github_issue_number,
     gim.github_issue_state AS github_issue_state,
-    gim.github_issue_created_at AS github_issue_created_at,
-    gim.area_override AS area_override,
-    gim.area_override_since AS area_override_since
-FROM `test_results/analytics/tests_monitor` AS tm
-LEFT JOIN $area_fallback AS af
-    ON Unicode::ToLower(Cast(Coalesce(String::ReplaceAll(tm.owner, 'TEAM:@ydb-platform/', ''), '') AS Utf8)) = af.owner_team
-LEFT JOIN $gim_latest AS gim
-    ON tm.full_name = gim.full_name
+    gim.github_issue_created_at AS github_issue_created_at
+FROM (
+    SELECT
+        t.*,
+        Unicode::ToLower(Cast(Coalesce(String::ReplaceAll(t.owner, 'TEAM:@ydb-platform/', ''), '') AS Utf8)) AS owner_team_key
+    FROM `test_results/analytics/tests_monitor` AS t
+    WHERE
+      t.date_window >= CurrentUtcDate() - $window_days * Interval("P1D")
+      and t.branch = 'main'
+      and t.build_type = 'relwithdebinfo'
+        and t.is_test_chunk = 0
+        AND t.is_muted = 1
+        and t.state != 'Skipped'
+
+) AS tm
+LEFT JOIN (
+    SELECT owner_team AS owner_team, MIN(area) AS area
+    FROM `test_results/analytics/area_to_owner_mapping`
+    GROUP BY owner_team
+) AS om ON tm.owner_team_key = om.owner_team
+LEFT JOIN (
+    SELECT
+        full_name,
+        branch,
+        build_type,
+        manual_unmute_status,
+        resolution_reason,
+        manual_requested_at,
+        manual_wait_hours,
+        hours_until_ready,
+        effective_unmute_window_days,
+        default_unmute_window_days,
+        manual_fast_unmute_window_days
+    FROM (
+        SELECT
+            m.*,
+            ROW_NUMBER() OVER (
+                PARTITION BY m.full_name, m.branch, m.build_type
+                ORDER BY m.exported_at DESC, m.issue_number DESC
+            ) AS rn
+        FROM `test_results/analytics/manual_unmute_requests` AS m
+    )
+    WHERE rn = 1
+) AS mu ON tm.full_name = mu.full_name
+    AND tm.branch = mu.branch
+    AND tm.build_type = mu.build_type
+LEFT JOIN (
+    SELECT
+        full_name AS full_name,
+        branch AS branch,
+        github_issue_url AS github_issue_url,
+        github_issue_number AS github_issue_number,
+        github_issue_state AS github_issue_state,
+        github_issue_created_at AS github_issue_created_at
+    FROM (
+        SELECT
+            g.*,
+            ROW_NUMBER() OVER (PARTITION BY g.full_name, g.branch ORDER BY g.github_issue_created_at DESC, g.github_issue_number DESC) AS rn
+        FROM `test_results/analytics/github_issue_mapping` AS g
+    )
+    WHERE rn = 1
+) AS gim ON tm.full_name = gim.full_name
     AND tm.branch = gim.branch
-    AND tm.build_type = gim.build_type
-WHERE tm.date_window >= CurrentUtcDate() - $window_days * Interval("P1D")
-    AND tm.branch = 'main'
-    AND tm.build_type = 'relwithdebinfo'
-    AND tm.is_test_chunk = 0
-    AND tm.is_muted = 1
-    AND tm.state != 'Skipped';

@@ -846,15 +846,15 @@ namespace NKikimr::NGRpcProxy::V1 {
                            Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
     }
 
-    // Ydb::StatusIds::StatusCode FillProposeRequestImpl(
-    //         const Ydb::Topic::AlterTopicRequest& request,
-    //         NKikimrSchemeOp::TPersQueueGroupDescription& pqDescr, TAppData* /*appData*/,
-    //         TString& error, bool isCdcStream
-    // ) {
-    //     auto result = ApplyChangesInt(request, pqDescr, isCdcStream);
-    //     if (result.GetStatus() != Ydb::StatusIds::SUCCESS) {
-    //         error = result.GetErrorMessage();
-    //     }
-    //     return result.GetStatus();
-    // }
+    Ydb::StatusIds::StatusCode FillProposeRequestImpl(
+            const Ydb::Topic::AlterTopicRequest& request,
+            NKikimrSchemeOp::TPersQueueGroupDescription& pqDescr, TAppData* /*appData*/,
+            TString& error, bool isCdcStream
+    ) {
+        auto result = ApplyChangesInt(request, pqDescr, isCdcStream);
+        if (result.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            error = result.GetErrorMessage();
+        }
+        return result.GetStatus();
+    }
 }

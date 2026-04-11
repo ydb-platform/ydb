@@ -244,15 +244,6 @@ public:
         return Tx.GetKqpTransaction().GetSnapshot();
     }
 
-    inline const ::google::protobuf::RepeatedPtrField<::NYql::NDqProto::TDqTask>& GetTasks() const {
-        Y_ENSURE(IsKqpDataTx());
-        // ensure that GetTasks is not called after task runner is built
-        Y_ENSURE(!BuiltTaskRunner);
-        return Tx.GetKqpTransaction().GetTasks();
-    }
-
-    NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx() { Y_ENSURE(IsKqpDataTx()); return EngineBay.GetKqpComputeCtx(); }
-
     bool HasStreamResponse() const { return Tx.GetStreamResponse(); }
     TActorId GetSink() const { return ActorIdFromProto(Tx.GetSink()); }
     const NKikimrTxDataShard::TReadTableTransaction &GetReadTableTransaction() const { return Tx.GetReadTableTransaction(); }
@@ -287,7 +278,6 @@ private:
     TString ErrStr;
     ui64 TxSize;
     bool IsReleased;
-    bool BuiltTaskRunner;
     TMaybe<ui64> PerShardKeysSizeLimitBytes_;
     bool IsReadOnly;
     bool AllowCancelROwithReadsets;

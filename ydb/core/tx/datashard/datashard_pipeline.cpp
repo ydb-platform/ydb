@@ -577,7 +577,7 @@ TOperation::TPtr TPipeline::GetVolatileOp(ui64 txId)
 
 bool TPipeline::LoadTxDetails(TTransactionContext &txc,
                               const TActorContext &ctx,
-                              TActiveTransaction::TPtr tx, 
+                              TActiveTransaction::TPtr tx,
                               const TString& userSID)
 {
     auto it = DataTxCache.find(tx->GetTxId());
@@ -1618,14 +1618,6 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
                     << "Volatile distributed tx " << tx->GetTxId()
                     << " at tablet " << Self->TabletID()
                     << " must be a kqp data tx");
-                return tx;
-            }
-
-            if (dataTx->GetKqpComputeCtx().HasPersistentChannels()) {
-                badRequest(TStringBuilder()
-                    << "Volatile distributed tx " << tx->GetTxId()
-                    << " at tablet " << Self->TabletID()
-                    << " cannot have persistent channels");
                 return tx;
             }
 

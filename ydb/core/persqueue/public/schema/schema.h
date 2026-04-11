@@ -10,7 +10,7 @@ namespace NACLib {
 class TUserToken;
 }
     
-namespace NKikimr::NPQ::NScheme {
+namespace NKikimr::NPQ::NSchema {
 
 enum EEv : ui32 {
     EvReadResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::SCHEMA),
@@ -63,4 +63,4 @@ struct TDropTopicSettings {
 
 NActors::IActor* CreateDropTopicActor(const NActors::TActorId& parentId, TDropTopicSettings&& settings);
 
-} // namespace NKikimr::NPQ::NScheme
+} // namespace NKikimr::NPQ::NSchema

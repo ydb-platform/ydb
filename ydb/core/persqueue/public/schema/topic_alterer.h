@@ -8,7 +8,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
-namespace NKikimr::NPQ::NScheme {
+namespace NKikimr::NPQ::NSchema {
 
 class TTopicAlterer : public TBaseActor<TTopicAlterer>
                     , public TConstantLogPrefix {
@@ -57,4 +57,4 @@ private:
     size_t WaitTxCompletionRetries = 0;
 };
 
-} // namespace NKikimr::NPQ::NScheme
+} // namespace NKikimr::NPQ::NSchema

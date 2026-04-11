@@ -10,7 +10,7 @@
 
 #include <library/cpp/digest/md5/md5.h>
 
-namespace NKikimr::NPQ::NScheme {
+namespace NKikimr::NPQ::NSchema {
 
 std::expected<TDuration, TString> ConvertPositiveDuration(const google::protobuf::Duration& duration) {
     if (duration.seconds() < 0) {
@@ -388,4 +388,4 @@ TResult ProcessAddConsumer(
     return TResult();
 }
     
-} // namespace NKikimr::NPQ::NScheme
+} // namespace NKikimr::NPQ::NSchema

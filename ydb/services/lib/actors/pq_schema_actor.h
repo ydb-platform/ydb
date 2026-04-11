@@ -40,7 +40,7 @@ namespace Ydb::Topic {
 namespace NKikimr::NGRpcProxy::V1 {
 
     using namespace NKikimr::NPQ;
-    using namespace NKikimr::NPQ::NScheme;
+    using namespace NKikimr::NPQ::NSchema;
 
     Ydb::StatusIds::StatusCode FillProposeRequestImpl(
         const TString& name,

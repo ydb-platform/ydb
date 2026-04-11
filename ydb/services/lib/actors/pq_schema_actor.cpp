@@ -27,11 +27,11 @@ namespace NKikimr::NGRpcProxy::V1 {
     constexpr TStringBuf GRPC_ENDPOINT_PREFIX = "grpc://";
 
     TClientServiceTypes GetSupportedClientServiceTypes(const NKikimrPQ::TPQConfig& /*pqConfig*/) {
-        return NPQ::NScheme::GetSupportedClientServiceTypes();
+        return NPQ::NSchema::GetSupportedClientServiceTypes();
     }
 
     static std::expected<std::optional<TDuration>, TMsgPqCodes> ConvertConsumerAvailabilityPeriod(const google::protobuf::Duration& duration, std::string_view consumerName) {
-        auto val = NPQ::NScheme::ConvertConsumerAvailabilityPeriod(duration, consumerName);
+        auto val = NPQ::NSchema::ConvertConsumerAvailabilityPeriod(duration, consumerName);
         if (val.has_value()) {
             return std::expected<std::optional<TDuration>, TMsgPqCodes>(val.value());
         } else {
@@ -241,7 +241,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         const TAppData* /*appData*/,
         TConsumersAdvancedMonitoringSettings* consumersAdvancedMonitoringSettings
     ) {
-        auto result = NPQ::NScheme::ProcessAddConsumer(
+        auto result = NPQ::NSchema::ProcessAddConsumer(
             config,
             rr,
             supportedClientServiceTypes,
@@ -286,7 +286,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                               TString& error, const NKikimrPQ::TPQConfig& /*pqConfig*/,
                               EOperation operation)
     {
-        auto result = NPQ::NScheme::ValidateConfig(config, supportedClientServiceTypes, operation);
+        auto result = NPQ::NSchema::ValidateConfig(config, supportedClientServiceTypes, operation);
         if (!result) {
             error = result.GetErrorMessage();
         }
@@ -314,10 +314,10 @@ namespace NKikimr::NGRpcProxy::V1 {
         TString& error,
         const bool alter) {
 
-        auto [status, error_] = NPQ::NScheme::ProcessTopicAttributes(
+        auto [status, error_] = NPQ::NSchema::ProcessTopicAttributes(
             attributes,
             pqDescr,
-            alter ? NPQ::NScheme::EOperation::Alter : NPQ::NScheme::EOperation::Create,
+            alter ? NPQ::NSchema::EOperation::Alter : NPQ::NSchema::EOperation::Create,
             topicsAreFirstClassCitizen,
             consumersAdvancedMonitoringSettings);
 
@@ -328,7 +328,7 @@ namespace NKikimr::NGRpcProxy::V1 {
     }
 
     std::optional<TYdbPqCodes> ValidatePartitionStrategy(const ::NKikimrPQ::TPQTabletConfig& config, TString& error) {
-        auto [status, error_] = NPQ::NScheme::ValidatePartitionStrategy(config);
+        auto [status, error_] = NPQ::NSchema::ValidatePartitionStrategy(config);
 
         if (status != Ydb::StatusIds::SUCCESS) {
             error = error_;
@@ -663,7 +663,7 @@ namespace NKikimr::NGRpcProxy::V1 {
     {
         Y_UNUSED(meteringEnabled);
 
-        auto res = NPQ::NScheme::FillMeteringMode(config, mode, isAlter ? NPQ::NScheme::EOperation::Alter : NPQ::NScheme::EOperation::Create);
+        auto res = NPQ::NSchema::FillMeteringMode(config, mode, isAlter ? NPQ::NSchema::EOperation::Alter : NPQ::NSchema::EOperation::Create);
         if (!res) {
             error = res.GetErrorMessage();
             code = res.GetStatus();

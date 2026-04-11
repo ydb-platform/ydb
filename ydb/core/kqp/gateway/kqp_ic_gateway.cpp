@@ -1043,11 +1043,11 @@ public:
         Y_UNUSED(existingOk);
     }
 
-    TFuture<NKikimr::NPQ::NScheme::TAlterTopicResponse> AlterTopicPrepared(NYql::TAlterTopicSettings&& settings) override {
-        auto schemaTxPromise = NewPromise<NPQ::NScheme::TAlterTopicResponse>();
+    TFuture<NKikimr::NPQ::NSchema::TAlterTopicResponse> AlterTopicPrepared(NYql::TAlterTopicSettings&& settings) override {
+        auto schemaTxPromise = NewPromise<NPQ::NSchema::TAlterTopicResponse>();
         auto schemaTxFuture = schemaTxPromise.GetFuture();
 
-        IActor* requestHandler = NPQ::NScheme::CreateAlterTopicActor(std::move(schemaTxPromise), {
+        IActor* requestHandler = NPQ::NSchema::CreateAlterTopicActor(std::move(schemaTxPromise), {
             .Database = Database,
             .Request = std::move(settings.Request),
             .UserToken = UserToken,

@@ -11,7 +11,7 @@
 #include <map>
 #include <optional>
 
-namespace NKikimr::NPQ::NScheme {
+namespace NKikimr::NPQ::NSchema {
 
 enum class EOperation {
     Create,

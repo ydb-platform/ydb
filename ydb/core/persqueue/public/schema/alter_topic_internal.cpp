@@ -5,7 +5,7 @@
 #include <ydb/services/persqueue_v1/actors/events.h>
 #include <ydb/services/persqueue_v1/actors/schema/common/grpc_proxy_actor.h>
 
-namespace NKikimr::NPQ::NScheme {
+namespace NKikimr::NPQ::NSchema {
 
 class TAlterTopicInternalActor : public NPQ::TBaseActor<TAlterTopicInternalActor>
                                , public NPQ::TConstantLogPrefix {
@@ -24,7 +24,7 @@ public:
     void Bootstrap() {
         Become(&TAlterTopicInternalActor::StateWork);
 
-        Register(NPQ::NScheme::CreateAlterTopicActor(SelfId(), {
+        Register(NPQ::NSchema::CreateAlterTopicActor(SelfId(), {
             .Database = Settings.Database,
             .Request = Settings.Request,
             .UserToken = std::move(Settings.UserToken),
@@ -47,7 +47,7 @@ public:
     }
 
 private:
-    void Handle(NPQ::NScheme::TEvAlterTopicResponse::TPtr& ev) {
+    void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
         LOG_E("Handle TEvAlterTopicResponse. Status: " << ev->Get()->Status << ", ErrorMessage: " << ev->Get()->ErrorMessage);
 
         Promise.SetValue({
@@ -61,7 +61,7 @@ private:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NPQ::NScheme::TEvAlterTopicResponse, Handle);
+            hFunc(NPQ::NSchema::TEvAlterTopicResponse, Handle);
         }
     }
 
@@ -77,4 +77,4 @@ NActors::IActor* CreateAlterTopicActor(
     return new TAlterTopicInternalActor(std::move(promise), std::move(settings));
 }
 
-} // namespace NKikimr::NPQ::NScheme
+} // namespace NKikimr::NPQ::NSchema

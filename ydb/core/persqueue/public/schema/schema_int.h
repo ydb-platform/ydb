@@ -5,7 +5,7 @@
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/library/services/services.pb.h>
 
-namespace NKikimr::NPQ::NScheme {
+namespace NKikimr::NPQ::NSchema {
 
 class TTopicAltererStrategy {
 public:
@@ -32,4 +32,4 @@ struct TTopicAltererSettings {
 
 IActor* CreateTopicAlterer(NKikimrServices::EServiceKikimr service, TTopicAltererSettings&& settings);
         
-} // namespace NKikimr::NPQ::NScheme
+} // namespace NKikimr::NPQ::NSchema

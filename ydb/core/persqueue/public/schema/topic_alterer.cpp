@@ -5,7 +5,7 @@
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
 
-namespace NKikimr::NPQ::NScheme {
+namespace NKikimr::NPQ::NSchema {
 
 TTopicAlterer::TTopicAlterer(NKikimrServices::EServiceKikimr service, TTopicAltererSettings&& settings)
     : TBaseActor<TTopicAlterer>(service)
@@ -217,4 +217,4 @@ IActor* CreateTopicAlterer(NKikimrServices::EServiceKikimr service, TTopicAltere
     return new TTopicAlterer(service, std::move(settings));
 }
 
-} // namespace NKikimr::NPQ::NScheme
+} // namespace NKikimr::NPQ::NSchema

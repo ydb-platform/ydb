@@ -8,7 +8,7 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
-namespace NKikimr::NPQ::NScheme {
+namespace NKikimr::NPQ::NSchema {
 
 TResult ApplyChangesInt(
     const Ydb::Topic::AlterTopicRequest& request,
@@ -377,4 +377,4 @@ NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlter
         .IsCdcStreamCompatible = true,
     });
 }
-} // namespace NKikimr::NPQ::NScheme
+} // namespace NKikimr::NPQ::NSchema

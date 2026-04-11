@@ -6,7 +6,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
-namespace NKikimr::NPQ::NScheme {
+namespace NKikimr::NPQ::NSchema {
 
 TResult ValidatePartitionStrategy(const ::NKikimrPQ::TPQTabletConfig& config) {
     if (!config.HasPartitionStrategy()) {
@@ -181,4 +181,4 @@ TResult ValidateConsumersConfig(
     return TResult();
 }
     
-} // namespace NKikimr::NPQ::NScheme
+} // namespace NKikimr::NPQ::NSchema

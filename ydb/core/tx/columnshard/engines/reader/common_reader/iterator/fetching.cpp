@@ -63,6 +63,9 @@ TStepAction::TStepAction(
 
 void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs, const TString& currentExecutionResult) const {
     auto iterator = source->GetExecutionContext().GetProgramIteratorVerified();
+    if (!iterator->IsValid()) {
+        return;
+    }
     const auto& currentCategoryName = iterator->GetCurrentNode().GetSignalCategoryName();
     const auto& scanOrbit = source->GetContext()->GetCommonContext()->GetScanOrbit();
     if (!NLWTrace::HasShuttles(source->GetDataSourceOrbit())

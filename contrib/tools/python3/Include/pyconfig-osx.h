@@ -1690,13 +1690,7 @@
 #define PY_SUPPORT_TIER 1
 
 /* Define if you want to build an interpreter with many run-time checks. */
-#if !defined(NDEBUG) && !defined(Py_LIMITED_API) && !defined(DISABLE_PYDEBUG)
-#define Py_DEBUG
-#define GC_NDEBUG
-#define ABIFLAGS "d"
-#else
-#define ABIFLAGS ""
-#endif
+/* #undef Py_DEBUG */
 
 /* Defined if Python is built as a shared library. */
 /* #undef Py_ENABLE_SHARED */
@@ -1927,9 +1921,7 @@
 /* #undef WITH_NEXT_FRAMEWORK */
 
 /* Define if you want to compile in Python-specific mallocs */
-#ifndef address_sanitizer_enabled
 #define WITH_PYMALLOC 1
-#endif
 
 /* Define if you want pymalloc to be disabled when running under valgrind */
 /* #undef WITH_VALGRIND */

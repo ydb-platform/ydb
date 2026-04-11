@@ -1,8 +1,8 @@
 --- contrib/tools/python3/Include/pyconfig.h	(index)
 +++ contrib/tools/python3/Include/pyconfig.h	(working tree)
 @@ -13,3 +13,296 @@
- #if defined(_musl_)
- #   include "pyconfig-musl.h"
+ #ifdef address_sanitizer_enabled
+ #undef WITH_PYMALLOC
  #endif
 +
 +#if WITH_MIMALLOC

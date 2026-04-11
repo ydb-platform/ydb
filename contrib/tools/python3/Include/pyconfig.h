@@ -12,6 +12,24 @@
 #   include "pyconfig-musl.h"
 #endif
 
+#undef Py_DEBUG
+
+/* Define if you want to build an interpreter with many run-time checks. */
+#if !defined(NDEBUG) && !defined(Py_LIMITED_API) && !defined(DISABLE_PYDEBUG)
+#define Py_DEBUG
+#define GC_NDEBUG
+#endif
+
+#ifdef Py_DEBUG
+#define ABIFLAGS "d"
+#else
+#define ABIFLAGS ""
+#endif
+
+#ifdef address_sanitizer_enabled
+#undef WITH_PYMALLOC
+#endif
+
 #if WITH_MIMALLOC
 
 #define _mi_abandoned_await_readers _python3__mi_abandoned_await_readers

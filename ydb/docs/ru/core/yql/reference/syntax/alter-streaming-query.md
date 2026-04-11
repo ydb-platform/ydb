@@ -145,11 +145,11 @@ ALTER STREAMING QUERY my_streaming_query SET (
 DO BEGIN
 
 INSERT INTO
-    output_topic
+    ydb_source.output_topic
 SELECT
     *
 FROM
-    input_topic;
+    ydb_source.input_topic;
 
 END DO
 ```

@@ -115,7 +115,7 @@ private:
     const ui32 RecordsCount;
     bool IsPageSkippedByFilter(const std::shared_ptr<NCommon::IDataSource>& source) const;
     std::shared_ptr<arrow::Table> BuildPageResultBatch(const std::shared_ptr<NCommon::IDataSource>& source) const;
-    void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const;
+    void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const ui32 resultRowsCount) const;
 
 protected:
     virtual TConclusion<bool> DoExecuteInplace(
@@ -154,24 +154,6 @@ public:
         : TBase("FETCHING_COLUMNS")
         , Columns(columns) {
         AFL_VERIFY(Columns.GetColumnsCount());
-    }
-};
-
-class TStartPortionAccessorFetchingStep: public IFetchingStep {
-private:
-    using TBase = IFetchingStep;
-    void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const;
-
-protected:
-    virtual TConclusion<bool> DoExecuteInplace(
-        const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const override;
-    virtual TString DoDebugString() const override {
-        return TStringBuilder();
-    }
-
-public:
-    TStartPortionAccessorFetchingStep()
-        : TBase("START_FETCHING_ACCESSOR") {
     }
 };
 
@@ -267,7 +249,7 @@ class TDetectInMemFlag: public IFetchingStep {
 private:
     using TBase = IFetchingStep;
     TColumnsSetIds Columns;
-    void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const ui64 columnRawBytes) const;
+    void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const ui64 columnRawBytes, const ui64 columnBlobBytes) const;
 
 public:
     virtual TConclusion<bool> DoExecuteInplace(

@@ -19,24 +19,24 @@ namespace NKikimr::NOlap::NReader {
         NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "programNodeId", "durationMs", "executionDurationMs", "rowsCount", "executionResult", "details")) \
     PROBE(ProgramFilter, \
         GROUPS("DataSource"), \
-        TYPES(ui64, ui64, ui64, ui64, ui32, TString, ui32, TDuration, TDuration, ui32, TString, ui32, TString), \
-        NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "programNodeId", "durationMs", "executionDurationMs", "rowsCount", "executionResult", "filteredRows", "details")) \
+        TYPES(ui64, ui64, ui64, ui64, ui32, TString, ui32, TDuration, TDuration, ui32, ui32, TString, TString), \
+        NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "programNodeId", "durationMs", "executionDurationMs", "rowsCount", "filteredRows", "executionResult", "details")) \
     PROBE(ProgramAggregation, \
         GROUPS("DataSource"), \
         TYPES(ui64, ui64, ui64, ui64, ui32, TString, ui32, TDuration, TDuration, ui32, TString, TString), \
         NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "programNodeId", "durationMs", "executionDurationMs", "rowsCount", "executionResult", "details")) \
     PROBE(ProgramFetchOriginalData, \
         GROUPS("DataSource"), \
-        TYPES(ui64, ui64, ui64, ui64, ui32, TString, ui32, TDuration, TDuration, ui32, TString, ui64, ui64, TString), \
-        NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "programNodeId", "durationMs", "executionDurationMs", "rowsCount", "executionResult", "blobBytes", "rawBytes", "details")) \
+        TYPES(ui64, ui64, ui64, ui64, ui32, TString, ui32, TDuration, TDuration, ui32, ui64, ui64, TString, TString), \
+        NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "programNodeId", "durationMs", "executionDurationMs", "rowsCount", "blobBytes", "rawBytes", "executionResult", "details")) \
     PROBE(ProgramAssembleOriginalData, \
         GROUPS("DataSource"), \
         TYPES(ui64, ui64, ui64, ui64, ui32, TString, ui32, TDuration, TDuration, ui32, TString, TString), \
         NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "programNodeId", "durationMs", "executionDurationMs", "rowsCount", "executionResult", "details")) \
     PROBE(ProgramCheckIndexData, \
         GROUPS("DataSource"), \
-        TYPES(ui64, ui64, ui64, ui64, ui32, TString, ui32, TDuration, TDuration, ui32, TString, ui32, TString), \
-        NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "programNodeId", "durationMs", "executionDurationMs", "rowsCount", "executionResult", "filteredRows", "details")) \
+        TYPES(ui64, ui64, ui64, ui64, ui32, TString, ui32, TDuration, TDuration, ui32, ui32, TString, TString, TString), \
+        NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "programNodeId", "durationMs", "executionDurationMs", "rowsCount", "filteredRows", "indexStatus", "executionResult", "details")) \
     PROBE(ProgramCheckHeaderData, \
         GROUPS("DataSource"), \
         TYPES(ui64, ui64, ui64, ui64, ui32, TString, ui32, TDuration, TDuration, ui32, TString, TString), \
@@ -47,8 +47,8 @@ namespace NKikimr::NOlap::NReader {
         NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "programNodeId", "durationMs", "executionDurationMs", "rowsCount", "executionResult", "details")) \
     PROBE(ProgramReserveMemory, \
         GROUPS("DataSource"), \
-        TYPES(ui64, ui64, ui64, ui64, ui32, TString, ui32, TDuration, TDuration, ui32, TString, ui64, TString), \
-        NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "programNodeId", "durationMs", "executionDurationMs", "rowsCount", "executionResult", "reservedBytes", "details")) \
+        TYPES(ui64, ui64, ui64, ui64, ui32, TString, ui32, TDuration, TDuration, ui32, ui64, TString, TString), \
+        NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "programNodeId", "durationMs", "executionDurationMs", "rowsCount", "reservedBytes", "executionResult", "details")) \
     PROBE(AssemblerStep, \
         GROUPS("DataSource"), \
         TYPES(ui64, ui64, ui64, ui64, ui32, TString, TDuration, TDuration, ui32, ui64, ui32), \
@@ -71,8 +71,8 @@ namespace NKikimr::NOlap::NReader {
         NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "durationMs", "rowsCount")) \
     PROBE(DetectInMemFlag, \
         GROUPS("DataSource"), \
-        TYPES(ui64, ui64, ui64, ui64, ui32, TString, TDuration, ui64, bool, ui32), \
-        NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "durationMs", "totalColumnRawBytes", "sourceInMemory", "rowsCount")) \
+        TYPES(ui64, ui64, ui64, ui64, ui32, TString, TDuration, ui64, ui64, bool, ui32), \
+        NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "durationMs", "totalColumnBlobBytes", "totalColumnRawBytes", "sourceInMemory", "rowsCount")) \
     PROBE(InitializeSource, \
         GROUPS("DataSource"), \
         TYPES(ui64, ui64, ui64, ui64, ui32, TString, TDuration, ui32), \

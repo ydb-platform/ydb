@@ -173,29 +173,11 @@ NKikimr::TConclusion<bool> TFilterCutLimit::DoExecuteInplace(
     return true;
 }
 
-void TStartPortionAccessorFetchingStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
-    const TDuration durationMs = source->GetAndResetWaitDuration();
-    LWTRACK(StartPortionAccessorFetching, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, source->GetRecordsCount());
-}
-
-TConclusion<bool> TStartPortionAccessorFetchingStep::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
-    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("sacc"));
-    if (source->HasPortionAccessor()) {
-        ReportTracing(source, step);
-        return true;
-    }
-    ReportTracing(source, step);
-    return !source->MutableAs<IDataSource>()->StartFetchingAccessor(source, step);
-}
-
-void TDetectInMemFlag::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const ui64 columnRawBytes) const {
+void TDetectInMemFlag::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const ui64 columnRawBytes, const ui64 columnBlobBytes) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
     LWTRACK(DetectInMemFlag, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
             source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, columnRawBytes, source->IsSourceInMemory(), source->GetRecordsCount());
+            step.GetTracingName(), durationMs, columnBlobBytes,columnRawBytes, source->IsSourceInMemory(), source->GetRecordsCount());
 }
 
 TConclusion<bool> TDetectInMemFlag::DoExecuteInplace(
@@ -205,19 +187,21 @@ TConclusion<bool> TDetectInMemFlag::DoExecuteInplace(
         source->MutableAs<IDataSource>()->InitUsedRawBytes();
     }
     if (source->HasSourceInMemoryFlag()) {
-        ReportTracing(source, step, 0UL);
+        ReportTracing(source, step, 0UL, 0UL);
         return true;
     }
     ui64 columnRawBytes = 0;
+    ui64 columnBlobBytes = 0;
     if (Columns.GetColumnsCount() && source->GetContext()->GetReadMetadata()->GetProgram().GetGraphOptional() &&
         !source->GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations()) {
         columnRawBytes = source->GetColumnRawBytes(Columns.GetColumnIds());
+        columnBlobBytes = source->GetColumnBlobBytes(Columns.GetColumnIds());
         source->SetSourceInMemory(
             columnRawBytes < NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
     } else {
         source->SetSourceInMemory(true);
     }
-    ReportTracing(source, step, columnRawBytes);
+    ReportTracing(source, step, columnRawBytes, columnBlobBytes);
     return true;
 }
 
@@ -346,11 +330,11 @@ bool TBuildResultStep::IsPageSkippedByFilter(const std::shared_ptr<NCommon::IDat
     return false;
 }
 
-void TBuildResultStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+void TBuildResultStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const ui32 resultRowsCount) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
     LWTRACK(BuildResult, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
             source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, source->GetRecordsCount());
+            step.GetTracingName(), durationMs, resultRowsCount);
 }
 
 std::shared_ptr<arrow::Table> TBuildResultStep::BuildPageResultBatch(const std::shared_ptr<NCommon::IDataSource>& source) const {
@@ -386,7 +370,7 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("empty_source", sSource->DebugJson().GetStringRobust());
     }
     source->MutableStageResult().SetResultChunk(std::move(resultBatch), StartIndex, RecordsCount);
-    ReportTracing(source, step);
+    ReportTracing(source, step, recordsCount);
     const ui32 resultColumnsCount = resultBatch ? resultBatch->num_columns() : 0;
     const ui64 blobBytes = source->GetTotalBytesRead();
     NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
@@ -398,9 +382,15 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(
 
 void TPrepareResultStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
+    ui32 filteredRows = 0;
+    if (!source->GetStageResult().IsEmpty()) {
+        const auto& notAppliedFilter = source->GetStageResult().GetNotAppliedFilter();
+        filteredRows = notAppliedFilter ? notAppliedFilter->GetFilteredCount().value_or(source->GetStageResult().GetBatch()->num_rows())
+                                        : source->GetStageResult().GetBatch()->num_rows();
+    }
     LWTRACK(PrepareResult, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
             source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, source->GetRecordsCount());
+            step.GetTracingName(), durationMs, filteredRows);
 }
 
 TConclusion<bool> TPrepareResultStep::DoExecuteInplace(

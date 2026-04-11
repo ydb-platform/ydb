@@ -6,7 +6,12 @@
 #include "sub_columns_fetching.h"
 
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
+#include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
+#include <ydb/core/formats/arrow/program/index.h>
+#include <ydb/core/formats/arrow/program/original.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
+#include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 
 #include <util/string/builder.h>
 #include <yql/essentials/minikql/mkql_terminator.h>
@@ -58,8 +63,24 @@ TStepAction::TStepAction(
 
 void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs, const TString& currentExecutionResult) const {
     auto iterator = source->GetExecutionContext().GetProgramIteratorVerified();
-    const auto& step = source->GetExecutionContext().GetCursorStep();
     const auto& currentCategoryName = iterator->GetCurrentNode().GetSignalCategoryName();
+    if (!NLWTrace::HasShuttles(source->GetDataSourceOrbit())
+        && !LWPROBE_ENABLED(ProgramConst)
+        && !LWPROBE_ENABLED(ProgramCalculation)
+        && !LWPROBE_ENABLED(ProgramProjection)
+        && !LWPROBE_ENABLED(ProgramFilter)
+        && !LWPROBE_ENABLED(ProgramAggregation)
+        && !LWPROBE_ENABLED(ProgramFetchOriginalData)
+        && !LWPROBE_ENABLED(ProgramAssembleOriginalData)
+        && !LWPROBE_ENABLED(ProgramCheckIndexData)
+        && !LWPROBE_ENABLED(ProgramCheckHeaderData)
+        && !LWPROBE_ENABLED(ProgramStreamLogic)
+        && !LWPROBE_ENABLED(ProgramReserveMemory)) {
+        source->MutableExecutionContext().SetPrevCategoryName(currentCategoryName);
+        source->MutableExecutionContext().SetPrevExecutionResult(currentExecutionResult);
+        return;
+    }
+    const auto& step = source->GetExecutionContext().GetCursorStep();
     const TString tracingName = source->GetExecutionContext().GetPrevCategoryName() + " - " + currentCategoryName;
     const TString tracingExecutionResult = source->GetExecutionContext().GetPrevExecutionResult() + " - " + currentExecutionResult;
     const TDuration finishDurationMs = source->GetAndResetWaitDuration();
@@ -71,59 +92,131 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
 #define PROGRAM_PROBE_ARGS source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), \
                     source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(), \
                     tracingName, iterator->GetCurrentNodeId(), finishDurationMs, \
-                    executionDurationMs, source->GetRecordsCount(), tracingExecutionResult
+                    executionDurationMs, filteredRows
+#define PROGRAM_PROBE_TAIL tracingExecutionResult, details
     switch (processorType) {
         case NArrow::NSSA::EProcessorType::Const:
-            LWTRACK(ProgramConst, PROGRAM_PROBE_ARGS, details);
+            LWTRACK(ProgramConst, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::Calculation:
-            LWTRACK(ProgramCalculation, PROGRAM_PROBE_ARGS, details);
+            LWTRACK(ProgramCalculation, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::Projection:
-            LWTRACK(ProgramProjection, PROGRAM_PROBE_ARGS, details);
+            LWTRACK(ProgramProjection, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::Filter:
-            LWTRACK(ProgramFilter, PROGRAM_PROBE_ARGS, filteredRows, details);
+            LWTRACK(ProgramFilter, PROGRAM_PROBE_ARGS, filteredRows, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::Aggregation:
-            LWTRACK(ProgramAggregation, PROGRAM_PROBE_ARGS, details);
+            LWTRACK(ProgramAggregation, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::FetchOriginalData:
             {
-                std::set<ui32> fetchColumnIds;
-                for (auto&& col : processor->GetOutput()) {
-                    fetchColumnIds.insert(col.GetColumnId());
-                }
-                ui64 blobBytes = source->GetColumnBlobBytes(fetchColumnIds);
-                ui64 rawBytes = source->GetColumnRawBytes(fetchColumnIds);
-                if (source->HasPortionAccessor()) {
-                    const auto& accessor = source->GetPortionAccessor();
-                    blobBytes += accessor.GetIndexBlobBytes(fetchColumnIds, false);
-                    rawBytes += accessor.GetIndexRawBytes(fetchColumnIds, false);
+                ui64 blobBytes = 0;
+                ui64 rawBytes = 0;
+                auto* fetchProcessor = dynamic_cast<const NArrow::NSSA::TOriginalColumnDataProcessor*>(processor.get());
+                if (fetchProcessor) {
+                    std::set<ui32> dataColumnIds;
+                    for (auto&& [colId, addr] : fetchProcessor->GetDataAddresses()) {
+                        dataColumnIds.insert(colId);
+                    }
+                    if (!dataColumnIds.empty()) {
+                        blobBytes += source->GetColumnBlobBytes(dataColumnIds);
+                        rawBytes += source->GetColumnRawBytes(dataColumnIds);
+                    }
+                    if (!fetchProcessor->GetIndexContext().empty() && source->HasPortionAccessor()) {
+                        const auto& accessor = source->GetPortionAccessor();
+                        std::set<ui32> indexEntityIds;
+                        const auto& indexInfo = source->GetSourceSchema()->GetIndexInfo();
+                        for (auto&& [colId, idxCtx] : fetchProcessor->GetIndexContext()) {
+                            for (auto&& [subCol, ops] : idxCtx.GetOperationsBySubColumn().GetData()) {
+                                NIndexes::NRequest::TOriginalDataAddress addr(colId, subCol);
+                                for (auto&& op : ops) {
+                                    for (auto&& skipIdx : indexInfo.FindSkipIndexes(addr, op)) {
+                                        indexEntityIds.insert(skipIdx->GetIndexId());
+                                    }
+                                }
+                            }
+                        }
+                        if (!indexEntityIds.empty()) {
+                            blobBytes += accessor.GetIndexBlobBytes(indexEntityIds, false);
+                            rawBytes += accessor.GetIndexRawBytes(indexEntityIds, false);
+                        }
+                    }
                 }
                 source->AddBytesRead(blobBytes);
-                LWTRACK(ProgramFetchOriginalData, PROGRAM_PROBE_ARGS, blobBytes, rawBytes, details);
+                LWTRACK(ProgramFetchOriginalData, PROGRAM_PROBE_ARGS, blobBytes, rawBytes, PROGRAM_PROBE_TAIL);
             }
             break;
         case NArrow::NSSA::EProcessorType::AssembleOriginalData:
-            LWTRACK(ProgramAssembleOriginalData, PROGRAM_PROBE_ARGS, details);
+            LWTRACK(ProgramAssembleOriginalData, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::CheckIndexData:
-            LWTRACK(ProgramCheckIndexData, PROGRAM_PROBE_ARGS, filteredRows, details);
+            {
+                TString indexStatus = "Unknown";
+                ui32 indexFilteredRows = source->GetRecordsCount();
+                auto* indexProcessor = dynamic_cast<const NArrow::NSSA::TIndexCheckerProcessor*>(processor.get());
+                if (indexProcessor) {
+                    const auto& idxCtx = indexProcessor->GetIndexContext();
+                    NIndexes::NRequest::TOriginalDataAddress addr(idxCtx.GetColumnId(), idxCtx.GetSubColumnName());
+                    auto skipIndexes = source->GetSourceSchema()->GetIndexInfo().FindSkipIndexes(addr, idxCtx.GetOperation());
+                    bool hasActualIndexData = false;
+                    if (!skipIndexes.empty() && source->HasPortionAccessor()) {
+                        std::set<ui32> indexEntityIds;
+                        for (auto&& skipIdx : skipIndexes) {
+                            indexEntityIds.insert(skipIdx->GetIndexId());
+                        }
+                        hasActualIndexData = source->GetPortionAccessor().GetIndexBlobBytes(indexEntityIds, false) > 0;
+                    }
+                    if (skipIndexes.empty() || !hasActualIndexData) {
+                        indexStatus = "NoIndex";
+                        indexFilteredRows = source->GetRecordsCount();
+                    } else {
+                        // After DoExecute in index.cpp:
+                        // - AllDenied/AllAccepted: output column stored, filter NOT modified
+                        // - Partial: no output column, filter modified via AddFilter
+                        const ui32 outputColumnId = indexProcessor->GetOutputColumnIdOnce();
+                        const auto& outputAccessor = resources.GetAccessorOptional(outputColumnId);
+                        if (outputAccessor) {
+                            // Output column exists → AllDenied or AllAccepted
+                            auto* sparsed = dynamic_cast<const NArrow::NAccessor::TSparsedArray*>(outputAccessor.get());
+                            if (sparsed && sparsed->GetDefaultValue() && sparsed->GetDefaultValue()->is_valid) {
+                                auto* uint8Scalar = dynamic_cast<const arrow::UInt8Scalar*>(sparsed->GetDefaultValue().get());
+                                if (uint8Scalar && uint8Scalar->value == 0) {
+                                    indexStatus = "AllDenied";
+                                    indexFilteredRows = 0;
+                                } else {
+                                    indexStatus = "AllAccepted";
+                                    indexFilteredRows = source->GetRecordsCount();
+                                }
+                            } else {
+                                indexStatus = "AllAccepted";
+                                indexFilteredRows = source->GetRecordsCount();
+                            }
+                        } else {
+                            // No output column → Partial (filter was applied via AddFilter)
+                            indexStatus = "Partial";
+                            indexFilteredRows = resources.GetFilter().GetFilteredCount().value_or(source->GetRecordsCount());
+                        }
+                    }
+                }
+                LWTRACK(ProgramCheckIndexData, PROGRAM_PROBE_ARGS, indexFilteredRows, indexStatus, PROGRAM_PROBE_TAIL);
+            }
             break;
         case NArrow::NSSA::EProcessorType::CheckHeaderData:
-            LWTRACK(ProgramCheckHeaderData, PROGRAM_PROBE_ARGS, details);
+            LWTRACK(ProgramCheckHeaderData, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::StreamLogic:
-            LWTRACK(ProgramStreamLogic, PROGRAM_PROBE_ARGS, details);
+            LWTRACK(ProgramStreamLogic, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::ReserveMemory:
-            LWTRACK(ProgramReserveMemory, PROGRAM_PROBE_ARGS, source->GetReservedMemory(), details);
+            LWTRACK(ProgramReserveMemory, PROGRAM_PROBE_ARGS, source->GetReservedMemory(), PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::Unknown:
             break;
     }
 #undef PROGRAM_PROBE_ARGS
+#undef PROGRAM_PROBE_TAIL
     source->MutableExecutionContext().SetPrevCategoryName(currentCategoryName);
     source->MutableExecutionContext().SetPrevExecutionResult(currentExecutionResult);
 }

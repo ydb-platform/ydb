@@ -164,7 +164,7 @@ class YamlConfigurator(object):
 
     @property
     def hosts_ports(self):
-        return [host['port'] for host in self.static_config_dict.get('hosts', [])]
+        return [host.get('port', 19001) for host in self.static_config_dict.get('hosts', [])]
 
     @property
     def static_config_dict(self):

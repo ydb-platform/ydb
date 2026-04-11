@@ -39,6 +39,7 @@ TString TRequestInput::DebugString() const {
         }
         sb << p->GetPortionInfo()->GetPathId().GetRawValue() << ":" << p->GetPortionInfo()->GetPortionId();
         if (++count >= 5) {
+            sb << " ...";
             break;
         }
     }

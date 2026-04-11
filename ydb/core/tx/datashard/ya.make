@@ -266,7 +266,6 @@ PEERDIR(
     ydb/core/engine/minikql
     ydb/core/formats
     ydb/core/io_formats/ydb_dump
-    ydb/core/kqp/runtime
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme

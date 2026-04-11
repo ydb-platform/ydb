@@ -155,7 +155,7 @@ def fetch_repository_issues(
     org_name: str = ORG_NAME,
     repo_name: str = REPO_NAME,
     since: Optional[datetime] = None,
-    include_comment_bodies: bool = True,
+    include_comment_bodies: bool = False,
     include_timeline_items: bool = False,
 ) -> List[Dict[str, Any]]:
     """Fetch all issues from GitHub repository with comprehensive information"""
@@ -179,7 +179,7 @@ def fetch_repository_issues(
     timeline_items_block = ""
     if include_timeline_items:
         timeline_items_block = """
-              timelineItems(last: 50, itemTypes: [CLOSED_EVENT, CONNECTED_EVENT, CROSS_REFERENCED_EVENT]) {
+              timelineItems(last: 100, itemTypes: [CLOSED_EVENT, CONNECTED_EVENT, CROSS_REFERENCED_EVENT]) {
                 nodes {
                   __typename
                   ... on ClosedEvent {
@@ -327,6 +327,43 @@ def fetch_repository_issues(
     elapsed = time.time() - start_time
     print(f"Fetched {len(issues)} issues total (took {elapsed:.2f}s)")
     return issues
+
+
+def fetch_all_issue_comment_nodes(issue_id: str) -> List[Dict[str, Any]]:
+    """All issue comments via GraphQL pagination (bodies only). Use when list issues query is capped at 100."""
+    if not issue_id:
+        return []
+    query = """
+    query ($issueId: ID!, $after: String) {
+      node(id: $issueId) {
+        ... on Issue {
+          comments(first: 100, after: $after) {
+            nodes {
+              body
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+      }
+    }
+    """
+    all_nodes: List[Dict[str, Any]] = []
+    after: Optional[str] = None
+    has_next_page = True
+    while has_next_page:
+        result = run_query(query, {"issueId": issue_id, "after": after})
+        node = (result.get("data") or {}).get("node") or {}
+        comments = node.get("comments") or {}
+        batch = comments.get("nodes") or []
+        all_nodes.extend(batch)
+        page_info = comments.get("pageInfo") or {}
+        has_next_page = bool(page_info.get("hasNextPage"))
+        after = page_info.get("endCursor")
+    return all_nodes
+
 
 def get_project_fields_for_issues(org_name: str, project_id: str, issue_numbers: List[int]) -> Dict[int, Dict[str, Any]]:
     """Get project fields for specific issues from GitHub project"""
@@ -820,7 +857,12 @@ def main():
                         since_time = None
                 
                 # Fetch issues from GitHub
-                issues = fetch_repository_issues(ORG_NAME, REPO_NAME, since_time)
+                issues = fetch_repository_issues(
+                    ORG_NAME,
+                    REPO_NAME,
+                    since_time,
+                    include_comment_bodies=False,
+                )
             
             # Validate that issues were fetched
             if issues is None:

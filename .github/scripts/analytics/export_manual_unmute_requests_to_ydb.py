@@ -12,7 +12,10 @@ import time
 import ydb
 
 from ydb_wrapper import YDBWrapper
-from export_issues_to_ydb import fetch_repository_issues
+from export_issues_to_ydb import fetch_repository_issues, fetch_all_issue_comment_nodes
+
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(__file__), "..")))
+from github_issue_utils import parse_body
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "tests"))
 from mute_thresholds import get_thresholds
@@ -28,30 +31,6 @@ ORG_NAME = "ydb-platform"
 REPO_NAME = "ydb"
 
 MUTE_CONTROL_MARKER = "<!--mute_control_v1-->"
-DEFAULT_BRANCH = "main"
-DEFAULT_BUILD_TYPE = "relwithdebinfo"
-
-
-def _parse_body_for_branches(body):
-    start = "<!--branch_list_start-->"
-    end = "<!--branch_list_end-->"
-    if start in body and end in body:
-        idx1 = body.find(start) + len(start)
-        idx2 = body.find(end, idx1)
-        values = [x.strip() for x in body[idx1:idx2].split("\n") if x.strip()]
-        if values:
-            return values
-    return [DEFAULT_BRANCH]
-
-
-def _parse_issue_tests(body):
-    start = "<!--mute_list_start-->"
-    end = "<!--mute_list_end-->"
-    if start not in body or end not in body:
-        return []
-    idx1 = body.find(start) + len(start)
-    idx2 = body.find(end, idx1)
-    return [x.strip() for x in body[idx1:idx2].split("\n") if x.strip().startswith("ydb/")]
 
 
 def _parse_control_items(comment_body):
@@ -144,7 +123,7 @@ def collect_rows(default_window_days, fast_window_days, wait_hours):
         ORG_NAME,
         REPO_NAME,
         since=None,
-        include_comment_bodies=True,
+        include_comment_bodies=False,
         include_timeline_items=True,
     )
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -159,10 +138,17 @@ def collect_rows(default_window_days, fast_window_days, wait_hours):
         if not issue_number:
             continue
 
+        issue_id = issue.get("id")
+        if not issue_id:
+            continue
+
+        parsed = parse_body(body)
+        branches = parsed.branches
+        build_type = parsed.build_type
+        tests_from_body = set(parsed.tests)
+
         issue_state = issue.get("state", "")
-        branches = _parse_body_for_branches(body)
-        tests_from_body = set(_parse_issue_tests(body))
-        comments_nodes = ((issue.get("comments") or {}).get("nodes") or [])
+        comments_nodes = fetch_all_issue_comment_nodes(issue_id)
         close_actor_login, close_actor_type, linked_pr_numbers = _parse_issue_timeline(issue)
 
         control_items = {}
@@ -184,7 +170,6 @@ def collect_rows(default_window_days, fast_window_days, wait_hours):
             )
 
             requested_at = _to_dt(item.get("requested_at"))
-            resolved_at = _to_dt(item.get("resolved_at"))
             wait_hours_left = None
             if requested_at is not None:
                 ready_at = requested_at + datetime.timedelta(hours=wait_hours)
@@ -197,7 +182,7 @@ def collect_rows(default_window_days, fast_window_days, wait_hours):
                     "issue_number": int(issue_number),
                     "full_name": full_name,
                     "branch": branch,
-                    "build_type": DEFAULT_BUILD_TYPE,
+                    "build_type": build_type,
                     "issue_state": issue_state,
                     "issue_closed_by_login": close_actor_login,
                     "issue_closed_by_type": close_actor_type,

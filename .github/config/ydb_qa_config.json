@@ -23,7 +23,8 @@
               "manual_unmute_requests": "test_results/analytics/manual_unmute_requests",
               "binary_size": "binary_size",
               "issues": "github_data/issues",
-              "pull_requests": "github_data/pull_requests"
+              "pull_requests": "github_data/pull_requests",
+              "digest_queue": "test_results/analytics/digest_queue"
 
           }
       },

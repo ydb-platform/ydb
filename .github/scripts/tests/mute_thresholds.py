@@ -62,4 +62,3 @@ def load_thresholds():
 
 def get_thresholds():
     return load_thresholds()
-

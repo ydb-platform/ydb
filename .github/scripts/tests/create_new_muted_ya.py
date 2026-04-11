@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 import argparse
 import datetime
+import json
 import os
 import re
 import ydb
 import logging
 import sys
-from pathlib import Path
 from collections import defaultdict
 
 # Add the parent directory to the path to import update_mute_issues
@@ -26,6 +26,9 @@ from mute_thresholds import get_thresholds
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
 from ydb_wrapper import YDBWrapper
 
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from github_issue_utils import DEFAULT_BUILD_TYPE, canonical_team_slug, make_profile_id
+
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -33,12 +36,17 @@ dir = os.path.dirname(__file__)
 repo_path = f"{dir}/../../../"
 muted_ya_path = '.github/config/muted_ya.txt'
 
-# Constants for mute logic time windows (configurable)
+# Constants for mute logic time windows (configurable).
 THRESHOLDS = get_thresholds()
 MUTE_DAYS = THRESHOLDS["mute_window_days"]
 UNMUTE_DAYS = THRESHOLDS["default_unmute_window_days"]
 DELETE_DAYS = THRESHOLDS["delete_window_days"]
 FAST_UNMUTE_DAYS = THRESHOLDS["manual_fast_unmute_window_days"]
+
+_DIGEST_NOTIFICATION_CONFIG = os.path.normpath(
+    os.path.join(dir, '..', '..', 'config', 'mute_issue_and_digest_config.json')
+)
+
 
 def is_chunk_test(test):
     # First, check the is_test_chunk field if it exists.
@@ -64,7 +72,7 @@ def get_wildcard_unmute_candidates(aggregated_for_unmute, mute_check, is_unmute_
 
     result = []
     for pattern, chunks in wildcard_groups.items():
-        passed_chunks = [chunk for chunk in chunks if is_unmute_candidate(chunk, aggregated_for_unmute)]
+        passed_chunks = [chunk for chunk in chunks if is_unmute_candidate(chunk)]
         if len(passed_chunks) == len(chunks) and chunks:
             debug = create_debug_string(
                 passed_chunks[0],
@@ -92,7 +100,7 @@ def get_wildcard_delete_candidates(aggregated_for_delete, mute_check, is_delete_
 
     result = []
     for pattern, chunks in wildcard_groups.items():
-        passed_chunks = [chunk for chunk in chunks if is_delete_candidate(chunk, aggregated_for_delete)]
+        passed_chunks = [chunk for chunk in chunks if is_delete_candidate(chunk)]
         if len(passed_chunks) == len(chunks) and chunks:
             debug = create_debug_string(
                 passed_chunks[0],
@@ -103,25 +111,13 @@ def get_wildcard_delete_candidates(aggregated_for_delete, mute_check, is_delete_
     return result
 
 
-def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
-    # Get today's date.
-    today = datetime.date.today()
-    start_date = today - datetime.timedelta(days=days_window-1)
-    end_date = today
-    
+def execute_query(branch='main', build_type=DEFAULT_BUILD_TYPE, days_window=7, ydb_wrapper=None):
     logging.info(f"Executing query for branch='{branch}', build_type='{build_type}', days_window={days_window}")
-    logging.info(f"Date range: {start_date} to {end_date}")
     
-    try:
-        with YDBWrapper() as ydb_wrapper:
-            # Check credentials
-            if not ydb_wrapper.check_credentials():
-                return []
-            
-            # Get table path from config
-            tests_monitor_table = ydb_wrapper.get_table_path("tests_monitor")
-            
-            query_string = f'''
+    def _run(w):
+        tests_monitor_table = w.get_table_path("tests_monitor")
+        
+        query_string = f'''
     SELECT 
         test_name, 
         suite_folder, 
@@ -140,34 +136,35 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
         days_in_state,
         is_test_chunk
     FROM `{tests_monitor_table}`
-    WHERE date_window >= CurrentUtcDate() - 7*Interval("P1D")
+    WHERE date_window >= CurrentUtcDate() - {days_window}*Interval("P1D")
         AND branch = '{branch}' 
         AND build_type = '{build_type}'
     '''
-            
-            logging.info(f"SQL Query:\n{query_string}")
-            
-            logging.info("Successfully connected to YDB")
-            
-            logging.info("Starting to fetch results...")
-            results = ydb_wrapper.execute_scan_query(query_string, query_name=f"get_tests_monitor_data_{branch}")
-            
-            # Filter out suite-level entries (aggregates, not individual tests)
-            # Similar to generate-summary.py which skips results with suite=True
-            # Suite tests have test_name like "unittest", "py3test", "gtest"
-            suite_test_names = {'unittest', 'py3test', 'gtest'}
-            filtered_results = [
-                result for result in results
-                if result.get('test_name') and result.get('test_name') not in suite_test_names
-            ]
-            
-            logging.info(f"Query completed successfully. Total rows returned: {len(results)}, after filtering suite tests: {len(filtered_results)}")
-            return filtered_results
         
+        logging.info(f"SQL Query:\n{query_string}")
+        
+        results = w.execute_scan_query(query_string, query_name=f"get_tests_monitor_data_{branch}")
+        
+        suite_test_names = {'unittest', 'py3test', 'gtest'}
+        filtered_results = [
+            result for result in results
+            if result.get('test_name') and result.get('test_name') not in suite_test_names
+        ]
+        
+        logging.info(f"Query completed. Total rows: {len(results)}, after filtering: {len(filtered_results)}")
+        return filtered_results
+
+    try:
+        if ydb_wrapper:
+            return _run(ydb_wrapper)
+        with YDBWrapper() as w:
+            if not w.check_credentials():
+                return []
+            return _run(w)
+
     except Exception as e:
         logging.error(f"Error executing query: {e}")
         logging.error(f"Query parameters: branch='{branch}', build_type='{build_type}', days_window={days_window}")
-        logging.error(f"Date range: {start_date} to {end_date}")
         raise
 
 
@@ -233,6 +230,7 @@ def aggregate_test_data(all_data, period_days):
                     'mute_count': 0,
                     'skip_count': 0,
                     'owner': test.get('owner'),
+                    'owner_date': test.get('date_window'),
                     'is_muted': test.get('is_muted'),
                     'is_muted_date': test.get('date_window'),  # Store the date used for is_muted.
                     'state': test.get('state'),
@@ -255,7 +253,13 @@ def aggregate_test_data(all_data, period_days):
                 if to_days(test.get('date_window', 0)) > to_days(aggregated[full_name].get('is_muted_date', 0)):
                     aggregated[full_name]['is_muted'] = test.get('is_muted')
                     aggregated[full_name]['is_muted_date'] = test.get('date_window')
-            
+
+                # Owner must follow the latest day in the window (tests_monitor owner can change
+                # when TESTOWNERS is updated); the first row is the earliest date due to sort order.
+                if to_days(test.get('date_window', 0)) > to_days(aggregated[full_name].get('owner_date', 0)):
+                    aggregated[full_name]['owner'] = test.get('owner')
+                    aggregated[full_name]['owner_date'] = test.get('date_window')
+
             # Accumulate aggregated counters.
             aggregated[full_name]['pass_count'] += test.get('pass_count', 0)
             aggregated[full_name]['fail_count'] += test.get('fail_count', 0)
@@ -265,6 +269,7 @@ def aggregate_test_data(all_data, period_days):
     # Compute success_rate, build summary, and collapse state history for each test.
     date_window_range = f"{start_date.strftime('%Y-%m-%d')}:{today.strftime('%Y-%m-%d')}"
     for test_data in aggregated.values():
+        test_data.pop('owner_date', None)
         test_data['date_window'] = date_window_range
         total_runs = test_data['pass_count'] + test_data['fail_count'] + test_data['mute_count'] + test_data['skip_count']
         if total_runs > 0:
@@ -346,65 +351,42 @@ def create_debug_string(test, success_rate=None, period_days=None, date_window=N
     debug_string += f", p-{test.get('pass_count')}, f-{test.get('fail_count')},m-{test.get('mute_count')}, s-{test.get('skip_count')}, runs-{runs}, mute state: {mute_state}, test state {state}"
     return debug_string
 
-def is_mute_candidate(test, aggregated_data):
+def is_mute_candidate(test):
     """Check whether a test is a mute candidate for the given period."""
-    # Find this test in aggregated data.
-    test_data = None
-    for agg_test in aggregated_data:
-        if agg_test['full_name'] == test.get('full_name'):
-            test_data = agg_test
-            break
-    
-    if not test_data:
+    if test.get('is_muted', False):
         return False
-    
-    # Update test fields used by debug output.
-    test['pass_count'] = test_data['pass_count']
-    test['fail_count'] = test_data['fail_count']
-    test['period_days'] = test_data.get('period_days')
-    test['is_muted'] = test_data.get('is_muted', False)
-    
-    # A test already muted cannot be considered flaky for new mute.
-    if test_data.get('is_muted', False):
-        return False
-    
-    total_runs = test_data['pass_count'] + test_data['fail_count']
-    result = (test_data['fail_count'] >= 3 and total_runs > 10) or (test_data['fail_count'] >= 2 and total_runs <= 10)
-    
-    # Add detailed logging for diagnostics.
-    if not test_data.get('is_muted', False):  # Log only for currently unmuted tests.
-        logging.debug(f"MUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{test_data['fail_count']}, state:{test_data.get('state')}, muted:{test_data.get('is_muted')}, result:{result}")
-    
+
+    total_runs = test.get('pass_count', 0) + test.get('fail_count', 0)
+    fail_count = test.get('fail_count', 0)
+    result = (fail_count >= 3 and total_runs > 10) or (fail_count >= 2 and total_runs <= 10)
+
+    logging.debug(f"MUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{fail_count}, state:{test.get('state')}, muted:{test.get('is_muted')}, result:{result}")
+
     return result
 
-def is_unmute_candidate(test, aggregated_data, fast_aggregated_data=None, fast_override_days_by_test=None):
-    """Check whether a test is an unmute candidate, with optional per-test fast override."""
+def is_unmute_candidate(test, aggregated_data=None, fast_aggregated_data=None, fast_override_days_by_test=None):
+    """Check whether a test is an unmute candidate with optional fast-window override."""
     full_name = test.get('full_name')
     fast_override_days_by_test = fast_override_days_by_test or {}
     use_fast_window = full_name in fast_override_days_by_test and fast_aggregated_data is not None
 
     source = fast_aggregated_data if use_fast_window else aggregated_data
-    if isinstance(source, dict):
-        test_data = source.get(full_name)
-    else:
-        test_data = None
-        for agg_test in source:
-            if agg_test['full_name'] == full_name:
-                test_data = agg_test
-                break
+    test_data = test
+    if source is not None:
+        if isinstance(source, dict):
+            test_data = source.get(full_name)
+        else:
+            test_data = None
+            for agg_test in source:
+                if agg_test.get('full_name') == full_name:
+                    test_data = agg_test
+                    break
 
-    if not test_data:
-        return False
+        if not test_data:
+            return False
 
-    # Update test fields used by debug output.
-    test['pass_count'] = test_data['pass_count']
-    test['fail_count'] = test_data['fail_count']
-    test['mute_count'] = test_data['mute_count']
-    test['period_days'] = test_data.get('period_days')
-    test['is_muted'] = test_data.get('is_muted', False)
-
-    total_runs = test_data['pass_count'] + test_data['fail_count'] + test_data['mute_count']
-    total_fails = test_data['fail_count'] + test_data['mute_count']
+    total_runs = test_data.get('pass_count', 0) + test_data.get('fail_count', 0) + test_data.get('mute_count', 0)
+    total_fails = test_data.get('fail_count', 0) + test_data.get('mute_count', 0)
 
     result = total_runs >= 4 and total_fails == 0
 
@@ -412,57 +394,36 @@ def is_unmute_candidate(test, aggregated_data, fast_aggregated_data=None, fast_o
         mode = "FAST" if use_fast_window else "DEFAULT"
         logging.debug(
             f"UNMUTE_CHECK[{mode}]: {full_name} - runs:{total_runs}, fails:{total_fails}, "
-            f"mute_count:{test_data['mute_count']}, state:{test_data.get('state')}, "
+            f"mute_count:{test_data.get('mute_count')}, state:{test_data.get('state')}, "
             f"muted:{test_data.get('is_muted')}, result:{result}"
         )
 
     return result
 
-def is_delete_candidate(test, aggregated_data):
+def is_delete_candidate(test):
     """Check whether a test is a delete-from-mute candidate for the given period."""
-    # Find this test in aggregated data.
-    test_data = None
-    for agg_test in aggregated_data:
-        if agg_test['full_name'] == test.get('full_name'):
-            test_data = agg_test
-            break
-    
-    if not test_data:
-        return False
-    
-    # Update test fields used by debug output.
-    test['pass_count'] = test_data['pass_count']
-    test['fail_count'] = test_data['fail_count']
-    test['mute_count'] = test_data['mute_count']
-    test['skip_count'] = test_data['skip_count']
-    test['period_days'] = test_data.get('period_days')
-    test['is_muted'] = test_data.get('is_muted', False)
-    
-    pass_count = test_data['pass_count']
-    fail_count = test_data['fail_count']
-    mute_count = test_data['mute_count']
-    skip_count = test_data['skip_count']
+    pass_count = test.get('pass_count', 0)
+    fail_count = test.get('fail_count', 0)
+    mute_count = test.get('mute_count', 0)
+    skip_count = test.get('skip_count', 0)
     total_runs = pass_count + fail_count + mute_count + skip_count
 
-    # Delete stale muted tests with no runs at all,
-    # and muted tests that were only skipped during the whole delete window.
     only_skipped_while_muted = (
-        test_data.get('is_muted', False)
+        test.get('is_muted', False)
         and skip_count > 0
         and pass_count == 0
         and fail_count == 0
         and mute_count == 0
     )
     result = total_runs == 0 or only_skipped_while_muted
-    
-    # Add detailed logging for diagnostics.
-    if test_data.get('is_muted', False):  # Log only for currently muted tests.
+
+    if test.get('is_muted', False):
         logging.debug(
             f"DELETE_CHECK: {test.get('full_name')} - runs:{total_runs}, "
             f"p:{pass_count}, f:{fail_count}, m:{mute_count}, s:{skip_count}, "
-            f"muted:{test_data.get('is_muted')}, only_skipped_while_muted:{only_skipped_while_muted}, result:{result}"
+            f"muted:{test.get('is_muted')}, only_skipped_while_muted:{only_skipped_while_muted}, result:{result}"
         )
-    
+
     return result
 
 def create_file_set(aggregated_for_mute, filter_func, mute_check=None, use_wildcards=False, resolution=None):
@@ -548,33 +509,30 @@ def apply_and_add_mutes(
 
     try:
         # 1. Mute candidates.
-        def is_mute_candidate_wrapper(test):
-            return is_mute_candidate(test, aggregated_for_mute)
         
         to_mute, to_mute_debug = create_file_set(
-            aggregated_for_mute, is_mute_candidate_wrapper, use_wildcards=True, resolution='to_mute'
+            aggregated_for_mute, is_mute_candidate, use_wildcards=True, resolution='to_mute'
         )
         write_file_set(os.path.join(output_path, 'to_mute.txt'), to_mute, to_mute_debug)
         
         # 2. Unmute candidates.
         fast_override_days_by_test = fast_override_days_by_test or {}
         aggregated_for_fast_unmute_index = {
-            test['full_name']: test for test in (aggregated_for_fast_unmute or [])
+            test.get('full_name'): test for test in (aggregated_for_fast_unmute or []) if test.get('full_name')
         }
 
-        def is_unmute_candidate_wrapper(test):
+        def is_unmute_non_chunk(test):
             if is_chunk_test(test):
-                return False  # Do not unmute chunks individually.
+                return False
             return is_unmute_candidate(
                 test,
-                aggregated_for_unmute,
+                aggregated_data=aggregated_for_unmute,
                 fast_aggregated_data=aggregated_for_fast_unmute_index,
                 fast_override_days_by_test=fast_override_days_by_test,
             )
-        
-        # Regular unmute candidates (non-chunk tests only).
+
         to_unmute, to_unmute_debug = create_file_set(
-            aggregated_for_unmute, is_unmute_candidate_wrapper, mute_check, resolution='to_unmute'
+            aggregated_for_unmute, is_unmute_non_chunk, mute_check, resolution='to_unmute'
         )
         
         # Wildcard unmute patterns:
@@ -583,9 +541,9 @@ def apply_and_add_mutes(
         wildcard_unmute = get_wildcard_unmute_candidates(
             aggregated_for_unmute,
             mute_check,
-            lambda test, _: is_unmute_candidate(
-                test,
-                aggregated_for_unmute,
+            lambda chunk: is_unmute_candidate(
+                chunk,
+                aggregated_data=aggregated_for_unmute,
                 fast_aggregated_data=aggregated_for_fast_unmute_index,
                 fast_override_days_by_test=fast_override_days_by_test,
             ),
@@ -600,14 +558,13 @@ def apply_and_add_mutes(
         write_file_set(os.path.join(output_path, 'to_unmute.txt'), to_unmute, to_unmute_debug)
         
         # 3. Delete-from-mute candidates (to_delete).
-        def is_delete_candidate_wrapper(test):
+        def is_delete_non_chunk(test):
             if is_chunk_test(test):
-                return False  # Do not delete chunks individually.
-            return is_delete_candidate(test, aggregated_for_delete)
-        
-        # Regular delete candidates (non-chunk tests only).
+                return False
+            return is_delete_candidate(test)
+
         to_delete, to_delete_debug = create_file_set(
-            aggregated_for_delete, is_delete_candidate_wrapper, mute_check, resolution='to_delete'
+            aggregated_for_delete, is_delete_non_chunk, mute_check, resolution='to_delete'
         )
         
         # Wildcard delete patterns:
@@ -747,10 +704,7 @@ def apply_and_add_mutes(
         logging.error(f"Error processing test data: {e}. Check your query results for valid keys.")
         return []
 
-    return {
-        'to_mute_count': len(to_mute),
-        'to_unmute': to_unmute,
-    }
+    return len(to_mute)
 
 
 
@@ -768,7 +722,7 @@ def read_tests_from_file(file_path):
     return result
 
 
-def create_mute_issues(all_tests, file_path, close_issues=True):
+def create_mute_issues(all_tests, file_path, close_issues=True, branch='main', build_type=DEFAULT_BUILD_TYPE):
     tests_from_file = read_tests_from_file(file_path)
     muted_tests_in_issues = get_muted_tests_from_issues()
     prepared_tests_by_suite = {}
@@ -783,35 +737,71 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
     if close_issues:
         closed_issues, partially_unmuted_issues = close_unmuted_issues(muted_tests_set)
     
-    # First, collect all tests into temporary dictionary
-    for test in all_tests:
-        for test_from_file in tests_from_file:
-            if test['full_name'] == test_from_file['full_name']:
-                if test['full_name'] in muted_tests_in_issues:
-                    logging.info(
-                        f"test {test['full_name']} already have issue, {muted_tests_in_issues[test['full_name']][0]['url']}"
-                    )
-                else:
-                    key = f"{test_from_file['testsuite']}:{test['owner']}"
-                    if not temp_tests_by_suite.get(key):
-                        temp_tests_by_suite[key] = []
-                    temp_tests_by_suite[key].append(
-                        {
-                            'mute_string': f"{ test.get('suite_folder')} {test.get('test_name')}",
-                            'test_name': test.get('test_name'),
-                            'suite_folder': test.get('suite_folder'),
-                            'full_name': test.get('full_name'),
-                            'success_rate': test.get('success_rate'),
-                            'days_in_state': test.get('days_in_state'),
-                            'date_window': test.get('date_window', 'N/A'),
-                            'owner': test.get('owner'),
-                            'state': test.get('state'),
-                            'summary': test.get('summary'),
-                            'fail_count': test.get('fail_count'),
-                            'pass_count': test.get('pass_count'),
-                            'branch': test.get('branch'),
-                        }
-                    )
+    monitor_by_name = {}
+    for t in sorted(all_tests, key=lambda x: x.get('date_window') or 0):
+        if t.get('full_name'):
+            bt = t.get('build_type') or DEFAULT_BUILD_TYPE
+            monitor_by_name[(t['full_name'], bt)] = t
+
+    for test_from_file in tests_from_file:
+        full_name = test_from_file['full_name']
+
+        # Do not create issues for chunks and wildcard rows in muted_ya.
+        if '*/*' in test_from_file.get('testcase', ''):
+            logging.info(f"Skipping chunk wildcard pattern: {full_name}")
+            continue
+
+        issue_key = (full_name, build_type)
+        if issue_key in muted_tests_in_issues:
+            logging.info(
+                f"test {full_name} ({build_type}) already have issue, {muted_tests_in_issues[issue_key][0]['url']}"
+            )
+            continue
+
+        monitor = monitor_by_name.get((full_name, build_type))
+        if monitor and is_chunk_test(monitor):
+            logging.info(f"Skipping chunk test: {full_name}")
+            continue
+        if monitor:
+            entry = {
+                'mute_string': f"{monitor.get('suite_folder')} {monitor.get('test_name')}",
+                'test_name': monitor.get('test_name'),
+                'suite_folder': monitor.get('suite_folder'),
+                'full_name': full_name,
+                'success_rate': monitor.get('success_rate'),
+                'days_in_state': monitor.get('days_in_state'),
+                'date_window': monitor.get('date_window', 'N/A'),
+                'owner': monitor.get('owner'),
+                'state': monitor.get('state'),
+                'summary': monitor.get('summary'),
+                'fail_count': monitor.get('fail_count'),
+                'pass_count': monitor.get('pass_count'),
+                'branch': monitor.get('branch'),
+                'build_type': monitor.get('build_type', DEFAULT_BUILD_TYPE),
+            }
+        else:
+            entry = {
+                'mute_string': f"{test_from_file['testsuite']} {test_from_file['testcase']}",
+                'test_name': test_from_file['testcase'],
+                'suite_folder': test_from_file['testsuite'],
+                'full_name': full_name,
+                'success_rate': 0,
+                'days_in_state': 0,
+                'date_window': 'N/A',
+                'owner': 'unknown',
+                'state': 'Muted',
+                'summary': 'added manually, no monitor data',
+                'fail_count': 0,
+                'pass_count': 0,
+                'branch': branch,
+                'build_type': build_type,
+            }
+            logging.info(f"test {full_name} not in monitor, using fallback data")
+
+        key = f"{test_from_file['testsuite']}:{canonical_team_slug(entry['owner'])}"
+        if not temp_tests_by_suite.get(key):
+            temp_tests_by_suite[key] = []
+        temp_tests_by_suite[key].append(entry)
     
     # Split groups larger than 40 tests
     for key, tests in temp_tests_by_suite.items():
@@ -825,19 +815,36 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
                 prepared_tests_by_suite[chunk_key] = chunk
 
     results = []
+    queue_items = []
     for item in prepared_tests_by_suite:
         title, body = generate_github_issue_title_and_body(prepared_tests_by_suite[item])
-        owner_value = prepared_tests_by_suite[item][0]['owner'].split('/', 1)[1] if '/' in prepared_tests_by_suite[item][0]['owner'] else prepared_tests_by_suite[item][0]['owner']
+        raw_owner = prepared_tests_by_suite[item][0]['owner']
+        owner_value = canonical_team_slug(raw_owner)
         result = create_and_add_issue_to_project(title, body, state='Muted', owner=owner_value)
         if not result:
             break
         else:
+            issue_url = result['issue_url']
             results.append(
                 {
-                    'message': f"Created issue '{title}' for TEAM:@ydb-platform/{owner_value}, url {result['issue_url']}",
+                    'message': f"Created issue '{title}' for TEAM:@ydb-platform/{owner_value}, url {issue_url}",
                     'owner': owner_value
                 }
             )
+            try:
+                issue_number = int(issue_url.rstrip('/').split('/')[-1])
+            except (ValueError, IndexError):
+                issue_number = None
+            if issue_number:
+                first_test = prepared_tests_by_suite[item][0]
+                queue_items.append({
+                    'github_issue_number': issue_number,
+                    'github_issue_url': issue_url,
+                    'github_issue_title': title,
+                    'owner_team': owner_value,
+                    'branch': first_test.get('branch', 'main'),
+                    'build_type': first_test.get('build_type', DEFAULT_BUILD_TYPE),
+                })
 
     # Sort results by owner
     results.sort(key=lambda x: x['owner'])
@@ -914,9 +921,137 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
             f.write("\n")
             
         with open(os.environ['GITHUB_OUTPUT'], 'a') as gh_out:
-            gh_out.write(f"created_issues_file={file_path}")
+            gh_out.write(f"created_issues_file={file_path}\n")
             
         print(f"Result saved to env variable GITHUB_OUTPUT by key created_issues_file")
+
+    return queue_items
+
+
+def load_configured_digest_profile_ids():
+    """Profile IDs listed in mute_issue_and_digest_config.json (branch:build_type).
+
+    Only these may be written to digest_queue so unsent rows always match a send_digest profile.
+    """
+    try:
+        with open(_DIGEST_NOTIFICATION_CONFIG, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        logging.warning(
+            'Digest config not found at %s — not enqueueing to digest_queue',
+            _DIGEST_NOTIFICATION_CONFIG,
+        )
+        return set()
+    except json.JSONDecodeError as exc:
+        logging.warning(
+            'Invalid digest config %s: %s — not enqueueing to digest_queue',
+            _DIGEST_NOTIFICATION_CONFIG,
+            exc,
+        )
+        return set()
+    profiles = data.get('profiles') or []
+    ids = {
+        make_profile_id(p['branch'], p['build_type'])
+        for p in profiles
+        if p.get('branch') and p.get('build_type')
+    }
+    if not ids:
+        logging.warning(
+            'No profiles in %s — not enqueueing to digest_queue',
+            _DIGEST_NOTIFICATION_CONFIG,
+        )
+    return ids
+
+
+def enqueue_to_digest_queue(ydb_wrapper, queue_items):
+    """Write newly created issues into digest_queue so send_digest.py can find them."""
+    if not queue_items:
+        return
+
+    allowed_profiles = load_configured_digest_profile_ids()
+    if not allowed_profiles:
+        logging.info('No digest profiles configured — skip digest_queue enqueue')
+        return
+
+    filtered = []
+    for item in queue_items:
+        pid = make_profile_id(item['branch'], item['build_type'])
+        if pid in allowed_profiles:
+            filtered.append(item)
+        else:
+            logging.info(
+                'Skip digest enqueue for issue #%s (profile %r not in mute_issue_and_digest_config.json)',
+                item.get('github_issue_number'),
+                pid,
+            )
+    if not filtered:
+        logging.info('No queue items match configured digest profiles — nothing enqueued')
+        return
+
+    try:
+        table_path = ydb_wrapper.get_table_path("digest_queue")
+    except KeyError:
+        logging.warning("digest_queue not found in YDB config — skipping enqueue")
+        return
+
+    create_table_sql = """\
+CREATE TABLE IF NOT EXISTS `{table_path}` (
+    `profile_id`          Utf8      NOT NULL,
+    `github_issue_number` Uint64    NOT NULL,
+    `github_issue_url`    Utf8,
+    `github_issue_title`  Utf8,
+    `owner_team`          Utf8,
+    `branch`              Utf8,
+    `build_type`          Utf8,
+    `enqueued_at`         Timestamp NOT NULL,
+    `sent_at`             Timestamp,
+    PRIMARY KEY (profile_id, github_issue_number)
+)
+WITH (
+    STORE = COLUMN
+)
+"""
+    ydb_wrapper.create_table(
+        table_path,
+        create_table_sql.format(table_path=table_path),
+    )
+
+    now_dt = datetime.datetime.now(tz=datetime.timezone.utc)
+
+    rows = []
+    for item in filtered:
+        branch = item['branch']
+        build_type = item['build_type']
+        profile_id = make_profile_id(branch, build_type)
+        rows.append({
+            'profile_id':          profile_id,
+            'github_issue_number': item['github_issue_number'],
+            'github_issue_url':    item['github_issue_url'],
+            'github_issue_title':  item['github_issue_title'],
+            'owner_team':          item['owner_team'],
+            'branch':              branch,
+            'build_type':          build_type,
+            'enqueued_at':         now_dt,
+            'sent_at':             None,
+        })
+
+    column_types = (
+        ydb.BulkUpsertColumns()
+        .add_column('profile_id',          ydb.PrimitiveType.Utf8)
+        .add_column('github_issue_number', ydb.PrimitiveType.Uint64)
+        .add_column('github_issue_url',    ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('github_issue_title',  ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('owner_team',          ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('branch',              ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('build_type',          ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column('enqueued_at',         ydb.PrimitiveType.Timestamp)
+        .add_column('sent_at',             ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+    )
+
+    ydb_wrapper.bulk_upsert_batches(
+        table_path, rows, column_types, query_name="enqueue_digest_items"
+    )
+    logging.info(f"Enqueued {len(rows)} issue(s) into digest_queue")
 
 
 def mute_worker(args):
@@ -925,10 +1060,10 @@ def mute_worker(args):
         if not ydb_wrapper.check_credentials():
             return 1
 
+        build_type = getattr(args, 'build_type', DEFAULT_BUILD_TYPE)
         logging.info(f"Starting mute worker with mode: {args.mode}")
         logging.info(f"Branch: {args.branch}")
-        build_type = getattr(args, 'build_type', 'relwithdebinfo')
-        logging.info(f"Build type: {build_type}")
+        logging.info(f"build_type: {build_type}")
         
         # Use provided muted_ya file or fallback to default.
         input_muted_ya_path = getattr(args, 'muted_ya_file', muted_ya_path)
@@ -938,10 +1073,9 @@ def mute_worker(args):
         mute_check.load(input_muted_ya_path)
         logging.info(f"Loaded muted_ya.txt with {len(mute_check.regexps)} test patterns")
 
-        logging.info("Executing single query for 7 days window...")
-        
-        # Single query for maximum window (7 days).
-        all_data = execute_query(args.branch, build_type=build_type, days_window=7)
+        all_data = execute_query(
+            args.branch, build_type=build_type, days_window=7, ydb_wrapper=ydb_wrapper
+        )
         logging.info(f"Query returned {len(all_data)} test records")
         
         # Use unified aggregation for different periods.
@@ -962,16 +1096,15 @@ def mute_worker(args):
             output_path = args.output_folder
             os.makedirs(output_path, exist_ok=True)
             logging.info(f"Creating mute files in: {output_path}")
-
             stable_unmute_candidates = {
                 test.get('full_name')
                 for test in aggregated_for_unmute
-                if test.get('full_name') and is_unmute_candidate(test, aggregated_for_unmute)
+                if test.get('full_name') and is_unmute_candidate(test, aggregated_data=aggregated_for_unmute)
             }
             stable_delete_candidates = {
                 test.get('full_name')
                 for test in aggregated_for_delete
-                if test.get('full_name') and is_delete_candidate(test, aggregated_for_delete)
+                if test.get('full_name') and is_delete_candidate(test)
             }
 
             overrides, manual_rows = collect_manual_unmute_request_rows(
@@ -1006,10 +1139,28 @@ def mute_worker(args):
         elif args.mode == 'create_issues':
             file_path = args.file_path
             logging.info(f"Creating issues from file: {file_path}")
-            
-            # Reuse already aggregated data for issue creation.
-            create_mute_issues(aggregated_for_mute, file_path, close_issues=args.close_issues)
-        
+
+            profile_id = make_profile_id(args.branch, build_type)
+            allowed_profiles = load_configured_digest_profile_ids()
+            if profile_id not in allowed_profiles:
+                logging.info(
+                    f"Profile {profile_id!r} not in mute_issue_and_digest_config.json — skipping issue creation"
+                )
+                return 0
+
+            queue_items = create_mute_issues(
+                all_data,
+                file_path,
+                close_issues=args.close_issues,
+                branch=args.branch,
+                build_type=build_type,
+            )
+
+            try:
+                enqueue_to_digest_queue(ydb_wrapper, queue_items or [])
+            except Exception as exc:
+                logging.warning(f"Failed to enqueue issues for digest: {exc}")
+
         logging.info("Mute worker completed successfully")
 
 
@@ -1021,19 +1172,29 @@ if __name__ == "__main__":
     update_muted_ya_parser = subparsers.add_parser('update_muted_ya', help='create new muted_ya')
     update_muted_ya_parser.add_argument('--output_folder', default=repo_path, required=False, help='Output folder.')
     update_muted_ya_parser.add_argument('--branch', default='main', help='Branch to get history')
-    update_muted_ya_parser.add_argument('--build_type', default='relwithdebinfo', help='Build type for monitor query')
     update_muted_ya_parser.add_argument('--muted_ya_file', default=muted_ya_path, help='Path to input muted_ya.txt file')
+    update_muted_ya_parser.add_argument(
+        '--build-type',
+        default=DEFAULT_BUILD_TYPE,
+        dest='build_type',
+        help='tests_monitor build_type slice (default: relwithdebinfo)',
+    )
 
     create_issues_parser = subparsers.add_parser(
         'create_issues',
-        help='create issues by muted_ya like files',
+        help='sync issues with muted_ya file: create missing, close orphaned, enqueue to digest',
     )
     create_issues_parser.add_argument(
-        '--file_path', default=f'{repo_path}/mute_update/to_mute.txt', required=False, help='file path'
+        '--file_path', default=muted_ya_path, required=False, help='Path to muted_ya.txt'
     )
     create_issues_parser.add_argument('--branch', default='main', help='Branch to get history')
-    create_issues_parser.add_argument('--build_type', default='relwithdebinfo', help='Build type for monitor query')
-    create_issues_parser.add_argument('--close_issues', action='store_true', default=True, help='Close issues when all tests are unmuted (default: True)')
+    create_issues_parser.add_argument('--close_issues', action=argparse.BooleanOptionalAction, default=True, help='Close issues when all tests are unmuted (default: True)')
+    create_issues_parser.add_argument(
+        '--build-type',
+        default=DEFAULT_BUILD_TYPE,
+        dest='build_type',
+        help='tests_monitor build_type when loading monitor rows (default: relwithdebinfo)',
+    )
 
     args = parser.parse_args()
 

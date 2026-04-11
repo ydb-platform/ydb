@@ -53,4 +53,3 @@ def build_manual_unmute_row_payload(
         "manual_wait_hours": wait_hours_total,
         "resolution_reason": resolution_reason,
     }
-

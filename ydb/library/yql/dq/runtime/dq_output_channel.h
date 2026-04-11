@@ -52,8 +52,6 @@ public:
 
     virtual void Terminate() = 0;
 
-    virtual void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) = 0;
-
     virtual void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId, ui64 channelId) = 0;
     
     virtual bool IsLocal() const = 0;

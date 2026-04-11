@@ -852,7 +852,7 @@ public:
                     if (outputChannelDesc.GetSrcEndpoint().HasActorId() && outputChannelDesc.GetDstEndpoint().HasActorId()) {
                         auto outputActorId = NActors::ActorIdFromProto(outputChannelDesc.GetSrcEndpoint().GetActorId());
                         auto inputActorId = NActors::ActorIdFromProto(outputChannelDesc.GetDstEndpoint().GetActorId());
-                        outputChannel->Bind(outputActorId, inputActorId);
+                        outputChannel->Bind(outputActorId, inputActorId, channelId);
                     }
 
                     auto ret = AllocatedHolder->OutputChannels.emplace(channelId, outputChannel);

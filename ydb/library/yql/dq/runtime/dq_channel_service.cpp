@@ -2068,7 +2068,8 @@ bool TFastDqInputChannel::Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMay
     return popResult;
 }
 
-void TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) {
+void TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId, ui64 channelId) {
+    Y_UNUSED(channelId);
     IsLocalChannel = outputActorId.NodeId() == inputActorId.NodeId();
     auto service = Service.lock();
     Y_ENSURE(service, "Channel has been binded or service is not available");

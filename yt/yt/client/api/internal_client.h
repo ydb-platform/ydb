@@ -237,7 +237,7 @@ struct IInternalClient
 
     virtual TFuture<void> ForsakeChaosCoordinator(
         NHydra::TCellId chaosCellId,
-        NHydra::TCellId coordiantorCellId,
+        NHydra::TCellId coordinatorCellId,
         const TForsakeChaosCoordinatorOptions& options = {}) = 0;
 
     virtual TFuture<void> RemoveChaosCellMailbox(

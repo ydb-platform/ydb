@@ -123,11 +123,11 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
         WaitTime += delta;
     }
     StartWaitTime = TInstant::Now();
-    ++TotalSourcesCount;
     TotalBlobBytes += ev->Get()->GetBlobBytes();
     TotalRawBytes += ev->Get()->GetRawBytes();
     TotalRowsCount += ev->Get()->GetFilteredRows();
     if (ev->Get()->GetSourceId() > 0) {
+        ++TotalSourcesCount;
         LWTRACK(ScanFinishSource, *ScanOrbit, PathId, TabletId, TxId, ScanId, (ui64)ev->Get()->GetSourceId(),
                 ev->Get()->GetBlobBytes(), ev->Get()->GetRawBytes(), ev->Get()->GetColumnsCount(), ev->Get()->GetFilteredRows(), ev->Get()->GetTotalRows());
     }

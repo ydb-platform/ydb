@@ -19,8 +19,8 @@ namespace NKikimr::NOlap::NReader {
         NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "programNodeId", "durationMs", "executionDurationMs", "rowsCount", "executionResult", "details")) \
     PROBE(ProgramFilter, \
         GROUPS("DataSource"), \
-        TYPES(ui64, ui64, ui64, ui64, ui32, TString, ui32, TDuration, TDuration, ui32, ui32, TString, TString), \
-        NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "programNodeId", "durationMs", "executionDurationMs", "rowsCount", "filteredRows", "executionResult", "details")) \
+        TYPES(ui64, ui64, ui64, ui64, ui32, TString, ui32, TDuration, TDuration, ui32, TString, TString), \
+        NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "programNodeId", "durationMs", "executionDurationMs", "rowsCount", "executionResult", "details")) \
     PROBE(ProgramAggregation, \
         GROUPS("DataSource"), \
         TYPES(ui64, ui64, ui64, ui64, ui32, TString, ui32, TDuration, TDuration, ui32, TString, TString), \

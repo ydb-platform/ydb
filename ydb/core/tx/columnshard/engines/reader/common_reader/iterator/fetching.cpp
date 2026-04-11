@@ -105,7 +105,7 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
             LWTRACK(ProgramProjection, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::Filter:
-            LWTRACK(ProgramFilter, PROGRAM_PROBE_ARGS, filteredRows, PROGRAM_PROBE_TAIL);
+            LWTRACK(ProgramFilter, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::Aggregation:
             LWTRACK(ProgramAggregation, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_TAIL);

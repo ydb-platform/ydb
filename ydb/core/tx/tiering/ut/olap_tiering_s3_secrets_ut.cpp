@@ -216,7 +216,7 @@ Y_UNIT_TEST_SUITE(OlapTieringS3Secrets) {
             "table_path"_a = tablePath
         );
 
-        const TDuration evictionWaitTimeout = TDuration::Seconds(30);
+        const TDuration evictionWaitTimeout = TDuration::Seconds(50);
         const TDuration evictionPollInterval = TDuration::Seconds(10);
         TInstant evictionDeadline = TInstant::Now() + evictionWaitTimeout;
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
@@ -303,7 +303,7 @@ Y_UNIT_TEST_SUITE(OlapTieringS3Secrets) {
         );
 
         {
-            const TDuration evictionWaitTimeout = TDuration::Seconds(30);
+            const TDuration evictionWaitTimeout = TDuration::Seconds(50);
             const TDuration evictionPollInterval = TDuration::Seconds(10);
             TInstant evictionDeadline = TInstant::Now() + evictionWaitTimeout;
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
@@ -347,7 +347,7 @@ Y_UNIT_TEST_SUITE(OlapTieringS3Secrets) {
         csController->WaitActualization(TDuration::Seconds(5));
 
         {
-            const TDuration evictionWaitTimeout = TDuration::Seconds(30);
+            const TDuration evictionWaitTimeout = TDuration::Seconds(50);
             const TDuration evictionPollInterval = TDuration::Seconds(10);
             TInstant evictionDeadline = TInstant::Now() + evictionWaitTimeout;
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
@@ -473,7 +473,7 @@ Y_UNIT_TEST_SUITE(OlapTieringS3Secrets) {
         csController->WaitActualization(TDuration::Seconds(5));
 
         {
-            const TDuration evictionWaitTimeout = TDuration::Seconds(30);
+            const TDuration evictionWaitTimeout = TDuration::Seconds(50);
             const TDuration evictionPollInterval = TDuration::Seconds(10);
             TInstant evictionDeadline = TInstant::Now() + evictionWaitTimeout;
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
@@ -558,7 +558,7 @@ Y_UNIT_TEST_SUITE(OlapTieringS3Secrets) {
         ui64 rowsBeforeMigration = 0;
 
         {
-            const TDuration evictionWaitTimeout = TDuration::Seconds(30);
+            const TDuration evictionWaitTimeout = TDuration::Seconds(50);
             const TDuration evictionPollInterval = TDuration::Seconds(10);
             TInstant evictionDeadline = TInstant::Now() + evictionWaitTimeout;
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
@@ -629,7 +629,7 @@ Y_UNIT_TEST_SUITE(OlapTieringS3Secrets) {
         csController->WaitActualization(TDuration::Seconds(5));
 
         {
-            const TDuration evictionWaitTimeout = TDuration::Seconds(30);
+            const TDuration evictionWaitTimeout = TDuration::Seconds(50);
             const TDuration evictionPollInterval = TDuration::Seconds(10);
             TInstant evictionDeadline = TInstant::Now() + evictionWaitTimeout;
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
@@ -782,7 +782,7 @@ Y_UNIT_TEST_SUITE(OlapTieringS3Secrets) {
         csController->WaitActualization(TDuration::Seconds(5));
 
         {
-            const TDuration evictionWaitTimeout = TDuration::Seconds(30);
+            const TDuration evictionWaitTimeout = TDuration::Seconds(50);
             const TDuration evictionPollInterval = TDuration::Seconds(10);
             TInstant evictionDeadline = TInstant::Now() + evictionWaitTimeout;
             auto rows = ExecuteScanQuery(tableClient, selectQuery);

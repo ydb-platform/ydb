@@ -1,19 +1,19 @@
 # Обогащение данных
 
-Обогащение данных — добавление к событиям из потока дополнительной информации из справочника. Например, событие содержит только идентификатор, а справочник позволяет добавить к нему название или другие атрибуты. В качестве справочника можно использовать данные из [локальной таблицы]({#enrichment-local-table}) или из [объектного хранилища S3](#enrichment-s3)
+Обогащение данных — добавление к событиям из потока дополнительной информации из справочника. Например, событие содержит только идентификатор, а справочник позволяет добавить к нему название или другие атрибуты. В качестве справочника можно использовать данные из [локальной таблицы](#enrichment-local-table) или из [объектного хранилища S3](#enrichment-s3).
 
 В [потоковых запросах](../../concepts/streaming-query.md) справочник подключают с помощью конструкции `JOIN`. Поток должен быть слева, справочник — справа.
 
 {% note warning %}
 
 Справочник полностью загружается в память при запуске запроса. Если данные в справочнике изменились, для получения актуальной версии справочника необходимо перезапустить запрос с помощью [ALTER STREAMING QUERY](../../yql/reference/syntax/alter-streaming-query.md).
-В будущих вресиях {{ ydb-short-name }} данное ограничение будет снято.
+В будущих версиях {{ ydb-short-name }} данное ограничение будет снято.
 
 {% endnote %}
 
 Создайте внешний источник данных для работы с топиками. Для хранения токена используется [секрет](../../yql/reference/syntax/create-secret.md), источник создаётся через [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md).
 
-```sql
+```yql
 -- Секрет с токеном для подключения к YDB
 CREATE SECRET `secrets/ydb_token` WITH (value = "<ydb_token>");
 
@@ -36,18 +36,17 @@ CREATE EXTERNAL DATA SOURCE ydb_source WITH (
 
 Подробнее об использованных в запросах функциях:
 
-- [TableRow](../../yql/reference/builtins/basic#tablerow)
-- [Yson::From](../../yql/reference/udf/list/yson#ysonfrom)
-- [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson)
-- [Unwrap](../../yql/reference/builtins/basic#unwrap)
-- [ToBytes](../../yql/reference/builtins/basic#to-from-bytes).
+- [TableRow](../../yql/reference/builtins/basic.md#tablerow)
+- [Yson::From](../../yql/reference/udf/list/yson.md#ysonfrom)
+- [Yson::SerializeJson](../../yql/reference/udf/list/yson.md#ysonserializejson)
+- [Unwrap](../../yql/reference/builtins/basic.md#unwrap)
+- [ToBytes](../../yql/reference/builtins/basic.md#to-from-bytes).
 
 ## Обогащение из локальной таблицы {#enrichment-local-table}
 
 Справочник хранится в [таблице](../../concepts/datamodel/table.md) `services_dict` в текущей базе данных.
 
-
-```sql
+```yql
 CREATE STREAMING QUERY query_with_table_join AS
 DO BEGIN
 
@@ -55,7 +54,7 @@ DO BEGIN
 $topic_data = SELECT
     *
 FROM
-    input_topic
+    ydb_source.input_topic
 WITH (
     FORMAT = json_each_row,
     SCHEMA = (
@@ -78,7 +77,7 @@ ON
 
 -- Запись в выходной топик (JSON)
 INSERT INTO
-    output_topic
+    ydb_source.output_topic
 SELECT
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
 FROM
@@ -86,8 +85,6 @@ FROM
 
 END DO
 ```
-
-
 
 ## Обогащение из S3 {#enrichment-s3}
 
@@ -97,13 +94,13 @@ END DO
 
 Создайте дополнительный [внешний источник данных](../../yql/reference/syntax/create-external-data-source.md) для чтения справочника из S3:
 
-```sql
+```yql
 -- Источник данных S3 для чтения справочника
 CREATE EXTERNAL DATA SOURCE s3_source WITH (
     SOURCE_TYPE = "ObjectStorage",
     LOCATION = "<s3_endpoint>",
     AUTH_METHOD = "NONE"
-)
+);
 ```
 
 Где:
@@ -112,9 +109,7 @@ CREATE EXTERNAL DATA SOURCE s3_source WITH (
 
 ## Создание потокового запроса
 
-
-
-```sql
+```yql
 CREATE STREAMING QUERY query_with_join AS
 DO BEGIN
 

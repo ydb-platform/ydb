@@ -64,7 +64,9 @@ TStepAction::TStepAction(
 void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs, const TString& currentExecutionResult) const {
     auto iterator = source->GetExecutionContext().GetProgramIteratorVerified();
     const auto& currentCategoryName = iterator->GetCurrentNode().GetSignalCategoryName();
+    const auto& scanOrbit = source->GetContext()->GetCommonContext()->GetScanOrbit();
     if (!NLWTrace::HasShuttles(source->GetDataSourceOrbit())
+        && !(scanOrbit && NLWTrace::HasShuttles(*scanOrbit))
         && !LWPROBE_ENABLED(ProgramConst)
         && !LWPROBE_ENABLED(ProgramCalculation)
         && !LWPROBE_ENABLED(ProgramProjection)
@@ -124,10 +126,10 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
                         blobBytes += source->GetColumnBlobBytes(dataColumnIds);
                         rawBytes += source->GetColumnRawBytes(dataColumnIds);
                     }
-                    if (!fetchProcessor->GetIndexContext().empty() && source->HasPortionAccessor()) {
+                    if (!fetchProcessor->GetIndexContext().empty() && source->HasPortionAccessor() && source->GetSourceSchemaOptional()) {
                         const auto& accessor = source->GetPortionAccessor();
                         std::set<ui32> indexEntityIds;
-                        const auto& indexInfo = source->GetSourceSchema()->GetIndexInfo();
+                        const auto& indexInfo = source->GetSourceSchemaOptional()->GetIndexInfo();
                         for (auto&& [colId, idxCtx] : fetchProcessor->GetIndexContext()) {
                             for (auto&& [subCol, ops] : idxCtx.GetOperationsBySubColumn().GetData()) {
                                 NIndexes::NRequest::TOriginalDataAddress addr(colId, subCol);
@@ -156,10 +158,10 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
                 TString indexStatus = "Unknown";
                 ui32 indexFilteredRows = source->GetRecordsCount();
                 auto* indexProcessor = dynamic_cast<const NArrow::NSSA::TIndexCheckerProcessor*>(processor.get());
-                if (indexProcessor) {
+                if (indexProcessor && source->GetSourceSchemaOptional()) {
                     const auto& idxCtx = indexProcessor->GetIndexContext();
                     NIndexes::NRequest::TOriginalDataAddress addr(idxCtx.GetColumnId(), idxCtx.GetSubColumnName());
-                    auto skipIndexes = source->GetSourceSchema()->GetIndexInfo().FindSkipIndexes(addr, idxCtx.GetOperation());
+                    auto skipIndexes = source->GetSourceSchemaOptional()->GetIndexInfo().FindSkipIndexes(addr, idxCtx.GetOperation());
                     bool hasActualIndexData = false;
                     if (!skipIndexes.empty() && source->HasPortionAccessor()) {
                         std::set<ui32> indexEntityIds;

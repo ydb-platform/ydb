@@ -331,6 +331,10 @@ public:
         return Schema;
     }
 
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchemaOptional() const override {
+        return Schema;
+    }
+
     const TReplaceKeyAdapter& GetStart() const {
         return Start;
     }

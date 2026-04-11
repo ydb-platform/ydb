@@ -260,6 +260,11 @@ public:
 
     virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const;
 
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchemaOptional() const {
+        static std::shared_ptr<ISnapshotSchema> defaultValue;
+        return defaultValue;
+    }
+
     virtual TString GetColumnStorageId(const ui32 /*columnId*/) const;
 
     virtual TString GetEntityStorageId(const ui32 /*entityId*/) const;

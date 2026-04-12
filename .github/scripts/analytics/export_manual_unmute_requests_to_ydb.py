@@ -6,71 +6,28 @@ Export manual fast-unmute control state from GitHub issues to YDB.
 
 import datetime
 import os
-import re
 import sys
 import time
-import ydb
 
-from ydb_wrapper import YDBWrapper
-from export_issues_to_ydb import fetch_repository_issues, fetch_all_issue_comment_nodes
+import ydb
 
 sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(__file__), "..")))
 from github_issue_utils import parse_body
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "tests"))
+from update_mute_issues import _parse_control_items
 from mute_thresholds import get_thresholds
 from manual_unmute_contract import (
     MANUAL_UNMUTE_TABLE_SCHEMA,
     build_manual_unmute_row_payload,
-    normalize_manual_unmute_status,
     render_manual_unmute_create_table_sql,
 )
+from export_issues_to_ydb import fetch_repository_issues, fetch_all_issue_comment_nodes
+from ydb_wrapper import YDBWrapper
 
 
 ORG_NAME = "ydb-platform"
 REPO_NAME = "ydb"
-
-MUTE_CONTROL_MARKER = "<!--mute_control_v1-->"
-
-
-def _parse_control_items(comment_body):
-    if not comment_body or MUTE_CONTROL_MARKER not in comment_body:
-        return {}
-    start_idx = comment_body.find(f"{MUTE_CONTROL_MARKER}:start")
-    end_idx = comment_body.find(f"{MUTE_CONTROL_MARKER}:end", start_idx if start_idx >= 0 else 0)
-    if start_idx < 0 or end_idx < 0:
-        return {}
-
-    payload = comment_body[start_idx:end_idx]
-    items = {}
-    for raw in payload.split("\n"):
-        line = raw.strip()
-        if not line.startswith("- ["):
-            continue
-        m = re.search(r"`([^`]+)`", line)
-        if not m:
-            continue
-        test_name = m.group(1).strip()
-        requested = line.startswith("- [x]") or line.startswith("- [X]")
-        state_match = re.search(r"state:([a-z_]+)", line)
-        status_match = re.search(r"status:([a-z0-9_]+)", line)
-        reason_match = re.search(r"reason:([a-z0-9_]+)", line)
-        requested_at_match = re.search(r"requested_at:([0-9T:\\-+Z]+)", line)
-        resolved_at_match = re.search(r"resolved_at:([0-9T:\\-+Z]+)", line)
-        status = normalize_manual_unmute_status(
-            status_match.group(1) if status_match else "",
-            requested=requested,
-        )
-
-        items[test_name] = {
-            "requested": requested,
-            "state": state_match.group(1) if state_match else "active",
-            "status": status,
-            "reason": reason_match.group(1) if reason_match else "",
-            "requested_at": requested_at_match.group(1) if requested_at_match else "",
-            "resolved_at": resolved_at_match.group(1) if resolved_at_match else "",
-        }
-    return items
 
 
 def _parse_issue_timeline(content):
@@ -119,6 +76,7 @@ def _effective_unmute_window(status, default_window_days, fast_window_days):
 
 
 def collect_rows(default_window_days, fast_window_days, wait_hours):
+    """Build export rows from GitHub."""
     issues = fetch_repository_issues(
         ORG_NAME,
         REPO_NAME,

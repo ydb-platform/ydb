@@ -6,46 +6,44 @@ import configparser
 import time
 import json
 import argparse
-from datetime import datetime, timezone, timedelta
 import requests
+from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any, Optional
 from ydb_wrapper import YDBWrapper
 
-# Configuration
-ORG_NAME = 'ydb-platform'
-REPO_NAME = 'ydb'
+ORG_NAME = "ydb-platform"
+REPO_NAME = "ydb"
+
 PROJECT_ID = None #'45'  # Optional: set to None to skip project data
 
-
-# YDB configuration is now handled by ydb_wrapper
 
 def run_query(query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
     """Execute GraphQL query against GitHub API"""
     GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
     HEADERS = {"Authorization": f"Bearer {GITHUB_TOKEN}", "Content-Type": "application/json"}
-    
+
     request = requests.post(
-        'https://api.github.com/graphql', 
-        json={'query': query, 'variables': variables}, 
-        headers=HEADERS
+        "https://api.github.com/graphql",
+        json={"query": query, "variables": variables},
+        headers=HEADERS,
     )
-    
+
     if request.status_code == 200:
         response = request.json()
-        if 'errors' in response:
-            for error in response['errors']:
+        if "errors" in response:
+            for error in response["errors"]:
                 print(f"GraphQL Error: {error.get('message', 'Unknown error')}")
                 raise Exception(f"GraphQL Error: {error.get('message', 'Unknown error')}")
         return response
-    else:
-        raise Exception(f"Query failed with status {request.status_code}: {request.text}")
+    raise Exception(f"Query failed with status {request.status_code}: {request.text}")
+
 
 def get_last_update_time(ydb_wrapper: YDBWrapper, table_path: str) -> Optional[datetime]:
     """Get the latest updated_at timestamp from existing records"""
     try:
         query = f"SELECT MAX(updated_at) as max_updated_at FROM `{table_path}`"
         results = ydb_wrapper.execute_scan_query(query)
-        
+
         if results and results[0]['max_updated_at']:
             # Convert timestamp to datetime
             timestamp = results[0]['max_updated_at']
@@ -61,12 +59,11 @@ def get_last_update_time(ydb_wrapper: YDBWrapper, table_path: str) -> Optional[d
         return None
 
 
-
 def fetch_single_issue(org_name: str, repo_name: str, issue_number: int) -> Optional[Dict[str, Any]]:
     """Fetch a single issue by number from GitHub repository"""
     print(f"Debug mode: Fetching issue #{issue_number} from repository {org_name}/{repo_name}...")
     start_time = time.time()
-    
+
     issue_query = """
     {
       organization(login: "%s") {
@@ -133,23 +130,24 @@ def fetch_single_issue(org_name: str, repo_name: str, issue_number: int) -> Opti
       }
     }
     """
-    
+
     query = issue_query % (org_name, repo_name, issue_number)
     result = run_query(query)
-    
-    if result and 'data' in result:
-        repository = result['data']['organization']['repository']
-        issue = repository.get('issue')
-        
+
+    if result and "data" in result:
+        repository = result["data"]["organization"]["repository"]
+        issue = repository.get("issue")
+
         if issue is None:
             print(f"Issue #{issue_number} not found")
             return None
-        
+
         elapsed = time.time() - start_time
         print(f"Fetched issue #{issue_number} (took {elapsed:.2f}s)")
         return issue
-    
+
     return None
+
 
 def fetch_repository_issues(
     org_name: str = ORG_NAME,
@@ -164,17 +162,16 @@ def fetch_repository_issues(
     else:
         print(f"Fetching all issues from repository {org_name}/{repo_name}...")
     start_time = time.time()
-    
+
     issues = []
     has_next_page = True
     end_cursor = "null"
-    
-    # Convert datetime to GitHub API format if needed
+
     since_filter = ""
     if since:
-        since_str = since.strftime('%Y-%m-%dT%H:%M:%SZ')
+        since_str = since.strftime("%Y-%m-%dT%H:%M:%SZ")
         since_filter = f', filterBy: {{since: "{since_str}"}}'
-    
+
     comments_body_field = "body" if include_comment_bodies else "bodyText"
     timeline_items_block = ""
     if include_timeline_items:
@@ -296,7 +293,7 @@ def fetch_repository_issues(
       }
     }
     """
-    
+
     total_fetched = 0
     while has_next_page:
         query = repository_issues_query % (
@@ -308,29 +305,29 @@ def fetch_repository_issues(
             timeline_items_block,
         )
         result = run_query(query)
-        
-        if result and 'data' in result:
-            repository_issues = result['data']['organization']['repository']['issues']
-            current_batch = repository_issues['nodes']
-            
+
+        if result and "data" in result:
+            repository_issues = result["data"]["organization"]["repository"]["issues"]
+            current_batch = repository_issues["nodes"]
+
             issues.extend(current_batch)
             total_fetched += len(current_batch)
-            
+
             print(f"Fetched {len(current_batch)} issues from repository (total: {total_fetched})")
-            
-            page_info = repository_issues['pageInfo']
-            has_next_page = page_info['hasNextPage']
-            end_cursor = f'"{page_info["endCursor"]}"' if page_info['endCursor'] else "null"
+
+            page_info = repository_issues["pageInfo"]
+            has_next_page = page_info["hasNextPage"]
+            end_cursor = f'"{page_info["endCursor"]}"' if page_info["endCursor"] else "null"
         else:
             has_next_page = False
-    
+
     elapsed = time.time() - start_time
     print(f"Fetched {len(issues)} issues total (took {elapsed:.2f}s)")
     return issues
 
 
 def fetch_all_issue_comment_nodes(issue_id: str) -> List[Dict[str, Any]]:
-    """All issue comments via GraphQL pagination (bodies only). Use when list issues query is capped at 100."""
+    """All issue comments via GraphQL pagination (bodies only)."""
     if not issue_id:
         return []
     query = """

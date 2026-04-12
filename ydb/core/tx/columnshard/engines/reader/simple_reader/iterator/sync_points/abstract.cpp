@@ -98,7 +98,6 @@ void ISyncPoint::AddSource(std::shared_ptr<NCommon::IDataSource>&& source) {
         "tablet_id", Context->GetCommonContext()->GetReadMetadata()->GetTabletId());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", source->GetSourceIdx());
     AFL_VERIFY(!AbortFlag);
-    source->SetSourcesAheadQueueEnterTime(TMonotonic::Now());
     source->MutableAs<IDataSource>()->SetPurposeSyncPointIndex(GetPointIndex());
     AFL_VERIFY(!!source);
     if (!LastSourceIdx) {
@@ -116,6 +115,7 @@ void ISyncPoint::InitSourceTracingMetrics(const std::shared_ptr<NCommon::IDataSo
     if (!NLWTrace::HasShuttles(source->GetDataSourceOrbit())) {
         return;
     }
+    source->SetSourcesAheadQueueEnterTime(TMonotonic::Now());
     ui32 sourcesAhead = 0;
     for (const auto& s : SourcesSequentially) {
         if (s->GetSourceIdx() == source->GetSourceIdx()) {

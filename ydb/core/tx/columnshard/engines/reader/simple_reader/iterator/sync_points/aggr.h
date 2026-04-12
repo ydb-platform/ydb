@@ -131,7 +131,7 @@ private:
 
     virtual ESourceAction OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) override {
         LWTRACK(SyncAggrSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-                source->GetTxId(), source->GetDeprecatedPortionId(), GetPointName(), source->GetRecordsCount(), source->GetReservedMemory(),
+                source->GetTxId(), source->GetDeprecatedPortionId(), GetPointName(), source->GetFilteredRowsCount(), source->GetReservedMemory(),
                 source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead(), DebugString());
         --InFlightControl;
         if (InFlightControl.Val() == 0) {

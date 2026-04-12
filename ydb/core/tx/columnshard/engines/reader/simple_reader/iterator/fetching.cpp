@@ -387,15 +387,9 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(
 void TPrepareResultStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step,
     const TDuration executionDurationMs) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
-    ui32 filteredRows = 0;
-    if (!source->GetStageResult().IsEmpty()) {
-        const auto& notAppliedFilter = source->GetStageResult().GetNotAppliedFilter();
-        filteredRows = notAppliedFilter ? notAppliedFilter->GetFilteredCount().value_or(source->GetStageResult().GetBatch()->num_rows())
-                                        : source->GetStageResult().GetBatch()->num_rows();
-    }
     LWTRACK(PrepareResult, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
             source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, executionDurationMs, filteredRows, source->GetReservedMemory(),
+            step.GetTracingName(), durationMs, executionDurationMs, source->GetFilteredRowsCount(), source->GetReservedMemory(),
             source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead());
 }
 

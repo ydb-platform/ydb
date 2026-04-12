@@ -21,7 +21,7 @@ bool TSyncPointResult::IsSourcePrepared(const std::shared_ptr<NCommon::IDataSour
 
 ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) {
     LWTRACK(ResultSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-            source->GetTxId(), source->GetDeprecatedPortionId(), GetPointName(), source->GetRecordsCount(), source->GetReservedMemory(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), GetPointName(), source->GetFilteredRowsCount(), source->GetReservedMemory(),
             source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead(), DebugString());
     if (Next) {
         if (source->HasStageResult() && source->GetStageResult().IsEmpty()) {

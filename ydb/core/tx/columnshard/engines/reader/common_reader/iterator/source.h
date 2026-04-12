@@ -177,6 +177,15 @@ public:
         return SourcesAhead;
     }
 
+    ui32 GetFilteredRowsCount() const {
+        if (!HasStageResult() || GetStageResult().IsEmpty()) {
+            return 0;
+        }
+        const auto& notAppliedFilter = GetStageResult().GetNotAppliedFilter();
+        return notAppliedFilter ? notAppliedFilter->GetFilteredCount().value_or(GetStageResult().GetBatch()->num_rows())
+                                : GetStageResult().GetBatch()->num_rows();
+    }
+
     void AddExecutionDuration(const TDuration d) {
         TotalExecutionDuration += d;
     }

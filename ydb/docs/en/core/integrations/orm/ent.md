@@ -73,7 +73,7 @@ func main() {
 
 ## Transactions {#transactions}
 
-Every request in {{ ydb-short-name }} is executed within a transaction. Ent supports two modes for working with transactions.
+With the high-level CRUD builders, write operations run inside short-lived transactions via the driver's [`retry.DoTx`](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/retry#DoTx), while typical reads use [`retry.Do`](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/retry#Do) without an interactive `database/sql` transaction. `Client.BeginTx()` follows the explicit `database/sql` transaction model instead. Ent therefore supports two distinct ways to work with {{ ydb-short-name }}.
 
 ### Non-interactive transactions {#non-interactive-transactions}
 

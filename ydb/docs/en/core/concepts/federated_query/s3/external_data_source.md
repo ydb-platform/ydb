@@ -21,19 +21,19 @@ CREATE EXTERNAL DATA SOURCE object_storage WITH (
 To set up a connection to a private bucket, you need to run a few SQL queries. First, create [secrets](../../datamodel/secrets.md) containing `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
 
 ```yql
-CREATE OBJECT aws_access_id (TYPE SECRET) WITH (value=`<id>`);
-CREATE OBJECT aws_access_key (TYPE SECRET) WITH (value=`<key>`);
+CREATE SECRET aws_access_id WITH (value='<id>');
+CREATE SECRET aws_access_key WITH (value='<key>');
 ```
 
-The next step is to create an external connection named `object_storage`, which points to a specific S3 bucket named `bucket` and uses `AUTH_METHOD="AWS"`. The parameters `AWS_ACCESS_KEY_ID_SECRET_NAME`, `AWS_SECRET_ACCESS_KEY_SECRET_NAME`, and `AWS_REGION` are filled in for `AWS`. The values of these parameters are described above.
+The next step is to create an external connection named `object_storage`, which points to a specific S3 bucket named `bucket` and uses `AUTH_METHOD="AWS"`. The parameters `AWS_ACCESS_KEY_ID_SECRET_PATH`, `AWS_SECRET_ACCESS_KEY_SECRET_PATH`, and `AWS_REGION` are filled in for `AWS`. The values of these parameters are described above.
 
 ```yql
 CREATE EXTERNAL DATA SOURCE object_storage WITH (
   SOURCE_TYPE="ObjectStorage",
   LOCATION="https://object_storage_domain/bucket/",
   AUTH_METHOD="AWS",
-  AWS_ACCESS_KEY_ID_SECRET_NAME="aws_access_id",
-  AWS_SECRET_ACCESS_KEY_SECRET_NAME="aws_access_key",
+  AWS_ACCESS_KEY_ID_SECRET_PATH="aws_access_id",
+  AWS_SECRET_ACCESS_KEY_SECRET_PATH="aws_access_key",
   AWS_REGION="ru-central-1"
 );
 ```

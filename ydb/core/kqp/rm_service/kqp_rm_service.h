@@ -36,7 +36,7 @@ struct TKqpResourcesRequest {
 
     TString ToString() const {
         return TStringBuilder() << "TKqpResourcesRequest{ ExecutionUnits: " << ExecutionUnits << ", Memory: " << Memory
-            << "ExternalMemory: " << ExternalMemory << " }";
+            << ", ExternalMemory: " << ExternalMemory << " }";
     }
 };
 

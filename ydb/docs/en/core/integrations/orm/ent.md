@@ -30,7 +30,7 @@ This article describes how to connect an Ent-based Go application to {{ ydb-shor
     replace ariga.io/atlas => github.com/ydb-platform/ariga-atlas v0.0.1
     ```
 
-4) After that, you can generate a project as described in the [Quick Introduction](https://entgo.io/docs/getting-started/). For example, try running:
+4) Generate a project as described in the [quick introduction](https://entgo.io/docs/getting-started/). For example:
 
     ```bash
     go run -mod=mod entgo.io/ent/cmd/ent new User

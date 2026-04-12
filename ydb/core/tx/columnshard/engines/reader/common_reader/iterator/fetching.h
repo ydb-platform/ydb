@@ -22,6 +22,13 @@ private:
     TFetchingScriptCursor Cursor;
     bool FinishedFlag = false;
     ui64 CachedSourceId = 0;
+    ui64 CachedBlobBytes = 0;
+    ui64 CachedRawBytes = 0;
+    ui32 CachedFilteredRows = 0;
+    ui32 CachedTotalRows = 0;
+    ui64 CachedTotalReservedBytes = 0;
+
+    void CacheSourceStats();
 
 protected:
     virtual bool DoApply(IDataReader& owner) override;
@@ -34,6 +41,26 @@ public:
 
     virtual ui64 GetSourceId() const override {
         return CachedSourceId;
+    }
+
+    virtual ui64 GetBlobBytes() const override {
+        return CachedBlobBytes;
+    }
+
+    virtual ui64 GetRawBytes() const override {
+        return CachedRawBytes;
+    }
+
+    virtual ui32 GetFilteredRows() const override {
+        return CachedFilteredRows;
+    }
+
+    virtual ui32 GetTotalRows() const override {
+        return CachedTotalRows;
+    }
+
+    virtual ui64 GetTotalReservedBytes() const override {
+        return CachedTotalReservedBytes;
     }
 
     template <class T>

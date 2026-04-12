@@ -374,12 +374,11 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(
     }
     source->MutableStageResult().SetResultChunk(std::move(resultBatch), StartIndex, RecordsCount);
     ReportTracing(source, step, recordsCount, TMonotonic::Now() - startExecution);
-    const ui32 resultColumnsCount = resultBatch ? resultBatch->num_columns() : 0;
     const ui64 blobBytes = source->GetTotalBytesRead();
     NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
         new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step),
             source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard(), source->GetDeprecatedPortionId(),
-            blobBytes, sSource->GetUsedRawBytes(), resultColumnsCount, recordsCount, source->GetRecordsCount(),
+            blobBytes, sSource->GetUsedRawBytes(), recordsCount, source->GetRecordsCount(),
             source->GetReservedMemory()));
     return false;
 }

@@ -202,7 +202,6 @@ struct TEvPrivate {
         ui64 SourceId = 0;
         ui64 BlobBytes = 0;
         ui64 RawBytes = 0;
-        ui32 ColumnsCount = 0;
         ui32 FilteredRows = 0;
         ui32 TotalRows = 0;
         ui64 TotalReservedBytes = 0;
@@ -224,10 +223,6 @@ struct TEvPrivate {
             return RawBytes;
         }
 
-        ui32 GetColumnsCount() const {
-            return ColumnsCount;
-        }
-
         ui32 GetFilteredRows() const {
             return FilteredRows;
         }
@@ -242,14 +237,13 @@ struct TEvPrivate {
 
         TEvTaskProcessedResult(
             TConclusion<std::shared_ptr<NOlap::NReader::IApplyAction>>&& result, TCounterGuard&& scanCounters, ui64 sourceId = 0,
-            ui64 blobBytes = 0, ui64 rawBytes = 0, ui32 columnsCount = 0, ui32 filteredRows = 0, ui32 totalRows = 0,
+            ui64 blobBytes = 0, ui64 rawBytes = 0, ui32 filteredRows = 0, ui32 totalRows = 0,
             ui64 totalReservedBytes = 0)
             : Result(std::move(result))
             , ScanCounter(std::move(scanCounters))
             , SourceId(sourceId)
             , BlobBytes(blobBytes)
             , RawBytes(rawBytes)
-            , ColumnsCount(columnsCount)
             , FilteredRows(filteredRows)
             , TotalRows(totalRows)
             , TotalReservedBytes(totalReservedBytes) {

@@ -138,6 +138,10 @@ public:
         return *UsedRawBytes;
     }
 
+    virtual ui64 GetUsedRawBytesOptional() const override {
+        return UsedRawBytes.value_or(0);
+    }
+
     void SetUsedRawBytes(const ui64 value) {
         AFL_VERIFY(!UsedRawBytes);
         UsedRawBytes = value;

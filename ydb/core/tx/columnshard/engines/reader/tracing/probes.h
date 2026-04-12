@@ -27,8 +27,8 @@ namespace NKikimr::NOlap::NReader {
         NAMES("pathId", "tabletId", "txId", "scanId", "sourceId", "blobBytes", "rawBytes")) \
     PROBE(ScanFinishSource, \
         GROUPS("Scan"), \
-        TYPES(ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui32, ui32, ui32, ui64), \
-        NAMES("pathId", "tabletId", "txId", "scanId", "sourceId", "blobBytes", "rawBytes", "columnsCount", "filteredRows", "totalRows", "totalReservedBytes")) \
+        TYPES(ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui32, ui32, ui64), \
+        NAMES("pathId", "tabletId", "txId", "scanId", "sourceId", "blobBytes", "rawBytes", "filteredRows", "totalRows", "totalReservedBytes")) \
     PROBE(ColumnEngineForLogsSelect, \
         GROUPS("Scan"), \
         TYPES(ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui64), \

@@ -129,7 +129,7 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
     if (ev->Get()->GetSourceId() > 0) {
         ++TotalSourcesCount;
         LWTRACK(ScanFinishSource, *ScanOrbit, PathId, TabletId, TxId, ScanId, (ui64)ev->Get()->GetSourceId(),
-                ev->Get()->GetBlobBytes(), ev->Get()->GetRawBytes(), ev->Get()->GetColumnsCount(), ev->Get()->GetFilteredRows(), ev->Get()->GetTotalRows(),
+                ev->Get()->GetBlobBytes(), ev->Get()->GetRawBytes(), ev->Get()->GetFilteredRows(), ev->Get()->GetTotalRows(),
                 ev->Get()->GetTotalReservedBytes());
     }
     auto g = Stats->MakeGuard("task_result", IS_INFO_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN));

@@ -208,6 +208,12 @@ public:
         return TotalBytesRead;
     }
 
+    ui64 ExtractTotalBytesRead() {
+        const ui64 result = TotalBytesRead;
+        TotalBytesRead = 0;
+        return result;
+    }
+
     NLWTrace::TOrbit& GetDataSourceOrbit() {
         return DataSourceOrbit;
     }
@@ -293,6 +299,10 @@ public:
     virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchemaOptional() const {
         static std::shared_ptr<ISnapshotSchema> defaultValue;
         return defaultValue;
+    }
+
+    virtual ui64 GetUsedRawBytesOptional() const {
+        return 0;
     }
 
     virtual TString GetColumnStorageId(const ui32 /*columnId*/) const;

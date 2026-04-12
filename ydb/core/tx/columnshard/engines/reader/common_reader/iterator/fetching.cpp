@@ -33,19 +33,30 @@ TConclusion<bool> TStepAction::DoExecuteImpl() {
     if (Source->GetContext()->IsAborted()) {
         AFL_VERIFY(!FinishedFlag);
         FinishedFlag = true;
+        CacheSourceStats();
         return true;
     }
     auto executeResult = Cursor.Execute(Source);
     if (executeResult.IsFail()) {
         AFL_VERIFY(!FinishedFlag);
         FinishedFlag = true;
+        CacheSourceStats();
         return executeResult;
     }
     if (*executeResult) {
         AFL_VERIFY(!FinishedFlag);
         FinishedFlag = true;
+        CacheSourceStats();
     }
     return FinishedFlag;
+}
+
+void TStepAction::CacheSourceStats() {
+    CachedBlobBytes = Source->ExtractTotalBytesRead();
+    CachedRawBytes = Source->GetUsedRawBytesOptional();
+    CachedFilteredRows = Source->GetFilteredRowsCount();
+    CachedTotalRows = Source->GetRecordsCount();
+    CachedTotalReservedBytes = Source->GetReservedMemory();
 }
 
 TStepAction::TStepAction(

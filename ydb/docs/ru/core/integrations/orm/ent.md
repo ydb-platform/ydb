@@ -179,4 +179,4 @@ affected, err := client.User.Delete().
 
 - [Репозиторий ydb-platform/ent на GitHub](https://github.com/ydb-platform/ent)
 - [Пример проекта](https://github.com/ydb-platform/ent/tree/ydb-develop/examples/ydb)
-- [Документация ent](https://entgo.io/docs/getting-started)
+- [Документация Ent](https://entgo.io/docs/getting-started)

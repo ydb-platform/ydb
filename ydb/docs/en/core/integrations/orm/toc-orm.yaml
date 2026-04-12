@@ -15,5 +15,5 @@ items:
   href: sqlalchemy.md
 - name: Django
   href: django.md
-- name: ent
+- name: Ent
   href: ent.md

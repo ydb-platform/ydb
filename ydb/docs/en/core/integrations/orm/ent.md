@@ -169,14 +169,14 @@ If you still need interactive transactions, you may write a retry wrapper manual
 
 ### No native Enum types {#no-native-enums}
 
-{{ ydb-short-name }} does not support enum types in DDL statements. Ent maps enum fields to the `Utf8` (string) type, with validation handled at the application level.
+{{ ydb-short-name }} does not support enum types in DDL statements. The Ent integration maps enum fields to the `Utf8` (string) type, with validation handled at the application level.
 
 ### Primary key requirements {#primary-key-requirements}
 
-{{ ydb-short-name }} requires explicit primary keys for all tables. Make sure your ent schemas define appropriate ID fields.
+{{ ydb-short-name }} requires explicit primary keys for all tables. Define appropriate ID fields in your Ent schemas.
 
 ## See also
 
 - [ydb-platform/ent repository on GitHub](https://github.com/ydb-platform/ent)
 - [Example project](https://github.com/ydb-platform/ent/tree/ydb-develop/examples/ydb)
-- [ent documentation](https://entgo.io/docs/getting-started)
+- [Ent documentation](https://entgo.io/docs/getting-started)

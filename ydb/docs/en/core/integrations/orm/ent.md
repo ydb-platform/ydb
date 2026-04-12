@@ -18,7 +18,7 @@ This article describes how to connect an Ent-based Go application to {{ ydb-shor
     go get entgo.io/ent/cmd/ent@latest
     ```
 
-2) In your `go.mod` file, replace ent with the fork that supports YDB:
+2) In your `go.mod` file, replace Ent with the fork that supports {{ ydb-short-name }}:
 
     ```text
     replace entgo.io/ent => github.com/ydb-platform/ent v0.0.1

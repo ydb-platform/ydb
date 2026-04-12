@@ -33,6 +33,12 @@ TRUNCATE TABLE `my_table`;
 
 ## See also
 
+<<<<<<< HEAD
 * [CREATE TABLE](./create_table/index.md)
 * [ALTER TABLE](./alter_table/index.md)
 * [DROP TABLE](./drop_table.md)
+=======
+* [CREATE TABLE](create_table/index.md)
+* [ALTER TABLE](alter_table/index.md)
+* [DROP TABLE](drop_table.md)
+>>>>>>> 4a883929856 (DOCSUP-123457: Перевод секретов. Организация процесса перевода (1 архив) (1 шт.) (#34191))

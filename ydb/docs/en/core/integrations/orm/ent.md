@@ -24,7 +24,7 @@ This article describes how to connect an Ent-based Go application to {{ ydb-shor
     replace entgo.io/ent => github.com/ydb-platform/ent v0.0.1
     ```
 
-3) You also need to replace the atlas implementation (the migration engine used by ent) with a fork that supports YDB:
+3) Replace **Atlas** (the migration engine used by Ent) with the fork that supports {{ ydb-short-name }}:
 
     ```text
     replace ariga.io/atlas => github.com/ydb-platform/ariga-atlas v0.0.1

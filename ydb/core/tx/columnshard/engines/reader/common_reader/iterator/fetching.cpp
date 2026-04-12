@@ -98,22 +98,23 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
                     source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(), \
                     tracingName, iterator->GetCurrentNodeId(), finishDurationMs, \
                     executionDurationMs, filteredRows
+#define PROGRAM_PROBE_RESERVED source->GetReservedMemory()
 #define PROGRAM_PROBE_TAIL tracingExecutionResult, details
     switch (processorType) {
         case NArrow::NSSA::EProcessorType::Const:
-            LWTRACK(ProgramConst, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_TAIL);
+            LWTRACK(ProgramConst, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::Calculation:
-            LWTRACK(ProgramCalculation, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_TAIL);
+            LWTRACK(ProgramCalculation, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::Projection:
-            LWTRACK(ProgramProjection, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_TAIL);
+            LWTRACK(ProgramProjection, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::Filter:
-            LWTRACK(ProgramFilter, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_TAIL);
+            LWTRACK(ProgramFilter, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::Aggregation:
-            LWTRACK(ProgramAggregation, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_TAIL);
+            LWTRACK(ProgramAggregation, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::FetchOriginalData:
             {
@@ -150,11 +151,11 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
                     }
                 }
                 source->AddBytesRead(blobBytes);
-                LWTRACK(ProgramFetchOriginalData, PROGRAM_PROBE_ARGS, blobBytes, rawBytes, PROGRAM_PROBE_TAIL);
+                LWTRACK(ProgramFetchOriginalData, PROGRAM_PROBE_ARGS, blobBytes, rawBytes, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
             }
             break;
         case NArrow::NSSA::EProcessorType::AssembleOriginalData:
-            LWTRACK(ProgramAssembleOriginalData, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_TAIL);
+            LWTRACK(ProgramAssembleOriginalData, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::CheckIndexData:
             {
@@ -205,22 +206,23 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
                         }
                     }
                 }
-                LWTRACK(ProgramCheckIndexData, PROGRAM_PROBE_ARGS, indexFilteredRows, indexStatus, PROGRAM_PROBE_TAIL);
+                LWTRACK(ProgramCheckIndexData, PROGRAM_PROBE_ARGS, indexFilteredRows, indexStatus, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
             }
             break;
         case NArrow::NSSA::EProcessorType::CheckHeaderData:
-            LWTRACK(ProgramCheckHeaderData, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_TAIL);
+            LWTRACK(ProgramCheckHeaderData, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::StreamLogic:
-            LWTRACK(ProgramStreamLogic, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_TAIL);
+            LWTRACK(ProgramStreamLogic, PROGRAM_PROBE_ARGS, PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::ReserveMemory:
-            LWTRACK(ProgramReserveMemory, PROGRAM_PROBE_ARGS, source->GetReservedMemory(), PROGRAM_PROBE_TAIL);
+            LWTRACK(ProgramReserveMemory, PROGRAM_PROBE_ARGS, source->GetReservedMemory(), PROGRAM_PROBE_RESERVED, PROGRAM_PROBE_TAIL);
             break;
         case NArrow::NSSA::EProcessorType::Unknown:
             break;
     }
 #undef PROGRAM_PROBE_ARGS
+#undef PROGRAM_PROBE_RESERVED
 #undef PROGRAM_PROBE_TAIL
     source->MutableExecutionContext().SetPrevCategoryName(currentCategoryName);
     source->MutableExecutionContext().SetPrevExecutionResult(currentExecutionResult);

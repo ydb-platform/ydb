@@ -1,8 +1,11 @@
 #include "result.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/plain_read_data.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
+
+LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
 bool TSyncPointResult::IsSourcePrepared(const std::shared_ptr<NCommon::IDataSource>& source) const {
     if (!Next) {
@@ -17,6 +20,8 @@ bool TSyncPointResult::IsSourcePrepared(const std::shared_ptr<NCommon::IDataSour
 }
 
 ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) {
+    LWTRACK(ResultSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetDeprecatedPortionId(), GetPointName(), source->GetRecordsCount(), source->GetReservedMemory(), DebugString());
     if (Next) {
         if (source->HasStageResult() && source->GetStageResult().IsEmpty()) {
             return ESourceAction::Finish;

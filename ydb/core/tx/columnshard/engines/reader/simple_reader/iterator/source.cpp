@@ -13,6 +13,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/dictionary_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/sub_columns_fetching.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
@@ -22,6 +23,8 @@
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
+
+LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
 void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching) {
     AFL_VERIFY(fetching);
@@ -79,10 +82,17 @@ void IDataSource::DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::
 
 void IDataSource::DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) {
     TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT_EMPTY", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-    ResourceGuards.clear();
+    ClearMemoryGuards();
     StageResult = TFetchedResult::BuildEmpty();
     StageResult->SetPages({});
     ClearStageData();
+}
+
+void IDataSource::ClearMemoryGuards() {
+    const ui64 freedBytes = GetResourceGuardsMemory();
+    LWTRACK(MemoryFree, DataSourceOrbit, GetRawPathId(), GetTabletId(), GetTxId(), (ui64)GetSourceIdx(), freedBytes);
+    ResourceGuards.clear();
+    SourceGroupGuard.reset();
 }
 
 void IDataSource::DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) {

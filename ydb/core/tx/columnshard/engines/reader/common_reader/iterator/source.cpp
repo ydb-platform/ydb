@@ -161,7 +161,7 @@ void IDataSource::OnStartProcessing() {
     const ui64 portionBlobBytes = HasPortionAccessor() ? GetPortionAccessor().GetPortionInfo().GetTotalBlobBytes() : 0;
     const ui64 portionRawBytes = HasPortionAccessor() ? GetPortionAccessor().GetPortionInfo().GetTotalRawBytes() : 0;
     LWTRACK(StartSourceProcessing, DataSourceOrbit, GetRawPathId(), GetTabletId(), GetTxId(), GetDeprecatedPortionId(),
-            portionBlobBytes, portionRawBytes);
+            portionBlobBytes, portionRawBytes, GetReservedMemory());
     LWTRACK(ScanStartSource, *GetContext()->GetCommonContext()->GetScanOrbit(), GetRawPathId(), GetTabletId(),
             GetTxId(), GetContext()->GetCommonContext()->GetScanId(), GetDeprecatedPortionId(),
             portionBlobBytes, portionRawBytes);
@@ -292,7 +292,7 @@ void IDataSource::OnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& 
     const TDuration durationMs = GetAndResetWaitDuration();
     LWTRACK(SourceFinished, DataSourceOrbit, GetRawPathId(), GetTabletId(),
             GetTxId(), GetDeprecatedPortionId(), 0,
-            ExecutionContext.GetPrevCategoryName() + " - " + "SourceFinished(Empty)", durationMs, GetTotalDuration(), GetTotalBytesRead(), GetTotalExecutionDuration());
+            ExecutionContext.GetPrevCategoryName() + " - " + "SourceFinished(Empty)", durationMs, GetTotalDuration(), GetTotalBytesRead(), GetTotalExecutionDuration(), GetReservedMemory());
 }
 
 void IDataSource::BuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr) {
@@ -308,7 +308,7 @@ void IDataSource::BuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr
     const TDuration durationMs = GetAndResetWaitDuration();
     LWTRACK(SourceFinished, DataSourceOrbit, GetRawPathId(), GetTabletId(),
             GetTxId(), GetDeprecatedPortionId(), 0,
-            ExecutionContext.GetPrevCategoryName() + " - " + "SourceFinished", durationMs, GetTotalDuration(), GetTotalBytesRead(), GetTotalExecutionDuration());
+            ExecutionContext.GetPrevCategoryName() + " - " + "SourceFinished", durationMs, GetTotalDuration(), GetTotalBytesRead(), GetTotalExecutionDuration(), GetReservedMemory());
 }
 
 bool IDataSource::AddTxConflict() {

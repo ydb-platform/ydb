@@ -105,10 +105,7 @@ public:
         }
     }
 
-    void ClearMemoryGuards() {
-        ResourceGuards.clear();
-        SourceGroupGuard.reset();
-    }
+    void ClearMemoryGuards();
 
     ui32 GetPurposeSyncPointIndex() const {
         AFL_VERIFY(PurposeSyncPointIndex);
@@ -171,8 +168,7 @@ public:
         ClearStageData();
         MutableExecutionContext().Stop();
         StageResult.reset();
-        ResourceGuards.clear();
-        SourceGroupGuard = nullptr;
+        ClearMemoryGuards();
     }
 
     void SetIsStartedByCursor() {

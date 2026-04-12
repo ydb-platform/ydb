@@ -16,7 +16,7 @@ LWTRACE_USING(YDB_CS_DATA_SOURCE);
 void TColumnBlobsFetchingStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs, const ui64 blobBytes, const ui64 rawBytes) const {
     LWTRACK(ColumnBlobsFetching, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
             source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), source->GetAndResetWaitDuration(), executionDurationMs, Columns.GetColumnsCount(), blobBytes, rawBytes, source->GetRecordsCount());
+            step.GetTracingName(), source->GetAndResetWaitDuration(), executionDurationMs, Columns.GetColumnsCount(), blobBytes, rawBytes, source->GetRecordsCount(), source->GetReservedMemory());
 }
 
 TConclusion<bool> TColumnBlobsFetchingStep::DoExecuteInplace(
@@ -43,7 +43,7 @@ void TAssemblerStep::ReportTracing(const std::shared_ptr<IDataSource>& source, c
     const TDuration finishDurationMs = source->GetAndResetWaitDuration();
     LWTRACK(AssemblerStep, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
             source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), finishDurationMs, executionDurationMs, Columns->GetColumnsCount(), bytesAssembled, source->GetRecordsCount());
+            step.GetTracingName(), finishDurationMs, executionDurationMs, Columns->GetColumnsCount(), bytesAssembled, source->GetRecordsCount(), source->GetReservedMemory());
 }
 
 TConclusion<bool> TAssemblerStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {

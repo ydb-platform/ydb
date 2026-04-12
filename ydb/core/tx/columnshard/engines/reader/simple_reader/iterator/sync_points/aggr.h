@@ -2,8 +2,11 @@
 #include "abstract.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/plain_read_data.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
+
+LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
 class TScanWithLimitCollection;
 
@@ -127,6 +130,8 @@ private:
     }
 
     virtual ESourceAction OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) override {
+        LWTRACK(SyncAggrSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+                source->GetTxId(), source->GetDeprecatedPortionId(), GetPointName(), source->GetRecordsCount(), source->GetReservedMemory(), DebugString());
         --InFlightControl;
         if (InFlightControl.Val() == 0) {
             for (auto&& i : SourcesToAggregate) {

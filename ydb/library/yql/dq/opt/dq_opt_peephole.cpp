@@ -1145,7 +1145,7 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner(
         typeInfos.push_back(expandTypeAnnFromNode(input));
         typeInfos.push_back(expandTypeAnnFromNode(wideCombiner.KeyExtractor()));
         typeInfos.push_back(expandTypeAnnFromNode(wideCombiner.InitHandler()));
-        typeInfos.push_back(expandTypeAnnFromNode(dest));
+        typeInfos.push_back(expandTypeAnnFromNode(wideCombiner.FinishHandler()));
         children.push_back(ctx.NewList(node.Pos(), std::move(typeInfos)));
         dest.Ptr()->ChangeChildrenInplace(std::move(children));
     };

@@ -2320,12 +2320,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             const auto& table = tableDesc->ResultSet.at(0);
             UNIT_ASSERT_VALUES_EQUAL(table.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindTable);
             UNIT_ASSERT(table.SecurityObject->CheckAccess(NACLib::GenericFull, NACLib::TUserToken("test@builtin", {})));
-
-            const auto& result = ExecQuery("SELECT Plan FROM `.sys/streaming_queries`");
-            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
-            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
-                UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Plan").GetOptionalUtf8(), R"("UseLlvm":true)");
-            });
         }
 
         CheckScriptExecutionsCount(1, 1);
@@ -2333,6 +2327,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
         ReadTopicMessages(outputTopicName, {"key1value1"});
+
+        {
+            Sleep(TDuration::Seconds(4));
+            const auto& result = ExecQuery("SELECT Plan FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Plan").GetOptionalUtf8(), R"("UseLlvm":true)");
+            });
+        }
 
         ExecQuery(fmt::format(R"(
             CREATE TABLE test_table2 (Key Int32 NOT NULL, PRIMARY KEY (Key));

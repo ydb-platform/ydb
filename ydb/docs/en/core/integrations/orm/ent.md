@@ -161,7 +161,7 @@ If you still need interactive transactions, you may write a retry wrapper manual
 
 ### No correlated subqueries {#no-correlated-subqueries}
 
-{{ ydb-short-name }} does not support correlated subqueries with `EXISTS` or `NOT EXISTS`. Ent automatically rewrites such queries to use `IN` with subqueries instead.
+{{ ydb-short-name }} does not support correlated subqueries with `EXISTS` or `NOT EXISTS`. The Ent integration automatically rewrites such queries to use `IN` with subqueries instead.
 
 ### Float/Double index restriction {#float-index-restriction}
 

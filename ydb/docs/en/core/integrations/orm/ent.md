@@ -82,7 +82,7 @@ When using the standard CRUD builders (`.Create()`, `.Query()`, `.Update()`, `.D
 - **Write operations** (Create, Update, Delete) go through [`retry.DoTx`](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/retry#DoTx) — the SDK begins a transaction, executes the operation as a callback, commits, and on a transient error rolls back and re-executes the callback from scratch.
 - **Read operations** (Query) go through [`retry.Do`](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/retry#Do) — the SDK obtains a connection, executes the read callback, and retries on transient errors. No explicit transaction is created; the read runs with an implicit snapshot.
 
-This is the recommended way to work with {{ ydb-short-name }} through ent. Automatic retries and session management are handled transparently.
+This is the recommended way to work with {{ ydb-short-name }} through Ent. Automatic retries and session management are handled transparently.
 
 ### Interactive transactions {#interactive-transactions}
 

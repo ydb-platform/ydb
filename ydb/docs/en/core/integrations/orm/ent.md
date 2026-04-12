@@ -77,7 +77,7 @@ With the high-level CRUD builders, write operations run inside short-lived trans
 
 ### Non-interactive transactions {#non-interactive-transactions}
 
-When using the standard CRUD builders (`.Create()`, `.Query()`, `.Update()`, `.Delete()`), ent executes operations through ydb-go-sdk's retry helpers:
+When using the standard CRUD builders (`.Create()`, `.Query()`, `.Update()`, `.Delete()`), Ent executes operations through ydb-go-sdk's retry helpers:
 
 - **Write operations** (Create, Update, Delete) go through [`retry.DoTx`](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/retry#DoTx) — the SDK begins a transaction, executes the operation as a callback, commits, and on a transient error rolls back and re-executes the callback from scratch.
 - **Read operations** (Query) go through [`retry.Do`](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/retry#Do) — the SDK obtains a connection, executes the read callback, and retries on transient errors. No explicit transaction is created; the read runs with an implicit snapshot.

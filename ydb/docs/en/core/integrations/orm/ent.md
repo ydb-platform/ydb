@@ -157,7 +157,7 @@ If you still need interactive transactions, you may write a retry wrapper manual
 
 ### No nested transactions {#no-nested-transactions}
 
-{{ ydb-short-name }} uses flat transactions and does not support nested transactions. The ent driver for {{ ydb-short-name }} handles this by returning a no-op transaction when nested transactions are requested.
+{{ ydb-short-name }} uses flat transactions and does not support nested transactions. The Ent driver for {{ ydb-short-name }} returns a no-op (empty) nested transaction object when nested transactions are requested.
 
 ### No correlated subqueries {#no-correlated-subqueries}
 

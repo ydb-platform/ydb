@@ -139,6 +139,8 @@ protected:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
     NLWTrace::TOrbit DataSourceOrbit;
     TMonotonic LastProbeTimestamp;
+    TMonotonic SourcesAheadQueueEnterTime;
+    ui32 SourcesAhead = 0;
     TMonotonic SourceCreatedTimestamp;
     TDuration TotalExecutionDuration;
     ui64 TotalBytesRead = 0;
@@ -154,6 +156,25 @@ public:
         const TDuration result = LastProbeTimestamp ? (now - LastProbeTimestamp) : TDuration::Zero();
         LastProbeTimestamp = now;
         return result;
+    }
+
+    void SetSourcesAheadQueueEnterTime(const TMonotonic t) {
+        SourcesAheadQueueEnterTime = t;
+    }
+
+    TDuration GetSourcesAheadQueueWaitDuration() const {
+        if (!SourcesAhead || !SourcesAheadQueueEnterTime) {
+            return TDuration::Zero();
+        }
+        return TMonotonic::Now() - SourcesAheadQueueEnterTime;
+    }
+
+    void SetSourcesAhead(const ui32 count) {
+        SourcesAhead = count;
+    }
+
+    ui32 GetSourcesAhead() const {
+        return SourcesAhead;
     }
 
     void AddExecutionDuration(const TDuration d) {

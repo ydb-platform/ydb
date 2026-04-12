@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/plain_read_data.h>
 
+#include <library/cpp/lwtrace/all.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
@@ -19,6 +20,7 @@ void ISyncPoint::OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& source
     AFL_DEBUG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG)("event_log", sourceInput->GetEventsReport())("count", SourcesSequentially.size())(
         "source_idx", sourceInput->GetSourceIdx());
     AFL_VERIFY(sourceInput->IsSyncSection())("source_idx", sourceInput->GetSourceIdx());
+    InitSourceTracingMetrics(sourceInput);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "OnSourcePrepared")("source_idx", sourceInput->GetSourceIdx())(
         "prepared", IsSourcePrepared(sourceInput));
     AFL_VERIFY(SourcesSequentially.size());
@@ -96,6 +98,7 @@ void ISyncPoint::AddSource(std::shared_ptr<NCommon::IDataSource>&& source) {
         "tablet_id", Context->GetCommonContext()->GetReadMetadata()->GetTabletId());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", source->GetSourceIdx());
     AFL_VERIFY(!AbortFlag);
+    source->SetSourcesAheadQueueEnterTime(TMonotonic::Now());
     source->MutableAs<IDataSource>()->SetPurposeSyncPointIndex(GetPointIndex());
     AFL_VERIFY(!!source);
     if (!LastSourceIdx) {
@@ -107,6 +110,20 @@ void ISyncPoint::AddSource(std::shared_ptr<NCommon::IDataSource>&& source) {
     if (auto genSource = OnAddSource(source)) {
         genSource->MutableAs<IDataSource>()->StartProcessing(genSource);
     }
+}
+
+void ISyncPoint::InitSourceTracingMetrics(const std::shared_ptr<NCommon::IDataSource>& source) const {
+    if (!NLWTrace::HasShuttles(source->GetDataSourceOrbit())) {
+        return;
+    }
+    ui32 sourcesAhead = 0;
+    for (const auto& s : SourcesSequentially) {
+        if (s->GetSourceIdx() == source->GetSourceIdx()) {
+            break;
+        }
+        ++sourcesAhead;
+    }
+    source->SetSourcesAhead(sourcesAhead);
 }
 
 void ISyncPoint::OnSourceFinished() {

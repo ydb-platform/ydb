@@ -330,11 +330,13 @@ bool TBuildResultStep::IsPageSkippedByFilter(const std::shared_ptr<NCommon::IDat
     return false;
 }
 
-void TBuildResultStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const ui32 resultRowsCount) const {
+void TBuildResultStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step,
+    const ui32 resultRowsCount, const TDuration executionDurationMs) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
     LWTRACK(BuildResult, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
             source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, resultRowsCount, source->GetReservedMemory());
+            step.GetTracingName(), durationMs, executionDurationMs, resultRowsCount, source->GetReservedMemory(),
+            source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead());
 }
 
 std::shared_ptr<arrow::Table> TBuildResultStep::BuildPageResultBatch(const std::shared_ptr<NCommon::IDataSource>& source) const {
@@ -359,6 +361,7 @@ std::shared_ptr<arrow::Table> TBuildResultStep::BuildPageResultBatch(const std::
 
 TConclusion<bool> TBuildResultStep::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    const TMonotonic startExecution = TMonotonic::Now();
     auto context = source->GetContext();
     auto resultBatch = BuildPageResultBatch(source);
     auto* sSource = source->MutableAs<IDataSource>();
@@ -370,7 +373,7 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("empty_source", sSource->DebugJson().GetStringRobust());
     }
     source->MutableStageResult().SetResultChunk(std::move(resultBatch), StartIndex, RecordsCount);
-    ReportTracing(source, step, recordsCount);
+    ReportTracing(source, step, recordsCount, TMonotonic::Now() - startExecution);
     const ui32 resultColumnsCount = resultBatch ? resultBatch->num_columns() : 0;
     const ui64 blobBytes = source->GetTotalBytesRead();
     NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
@@ -381,7 +384,8 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(
     return false;
 }
 
-void TPrepareResultStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+void TPrepareResultStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step,
+    const TDuration executionDurationMs) const {
     const TDuration durationMs = source->GetAndResetWaitDuration();
     ui32 filteredRows = 0;
     if (!source->GetStageResult().IsEmpty()) {
@@ -391,11 +395,13 @@ void TPrepareResultStep::ReportTracing(const std::shared_ptr<NCommon::IDataSourc
     }
     LWTRACK(PrepareResult, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
             source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, filteredRows, source->GetReservedMemory());
+            step.GetTracingName(), durationMs, executionDurationMs, filteredRows, source->GetReservedMemory(),
+            source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead());
 }
 
 TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    const TMonotonic startExecution = TMonotonic::Now();
     const auto context = source->GetContext();
     NCommon::TFetchingScriptBuilder acc(*context);
     if (source->IsSourceInMemory()) {
@@ -418,7 +424,7 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
     auto plan = std::move(acc).Build();
     AFL_VERIFY(!plan->IsFinished(0));
     source->MutableAs<IDataSource>()->InitFetchingPlan(plan);
-    ReportTracing(source, step);
+    ReportTracing(source, step, TMonotonic::Now() - startExecution);
     if (StartResultBuildingInplace) {
         TFetchingScriptCursor cursor(plan, 0);
         return cursor.Execute(source);

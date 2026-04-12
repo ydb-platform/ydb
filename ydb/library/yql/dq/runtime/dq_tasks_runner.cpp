@@ -758,16 +758,16 @@ public:
         }
 
         TVector<IDqOutputConsumer::TPtr> outputConsumers(task.OutputsSize());
-        for (ui32 i = 0; i < task.OutputsSize(); ++i) {
-            bool isBroadcast = task.GetDqChannelVersion() >= 3u;
-            // used only for broadcast
-            TVector<TDqChannelSettings> broadcastSettings;
-
+        for (ui32 i = 0; i < task.OutputsSize(); ++i) {            
             const auto& outputDesc = task.GetOutputs(i);
 
             if (outputDesc.GetTypeCase() == NDqProto::TTaskOutput::kEffects) {
                 TaskHasEffects = true;
             }
+
+            bool isBroadcast = outputDesc.GetTypeCase() == NDqProto::TTaskOutput::kBroadcast && task.GetDqChannelVersion() >= 3u;
+            // used only for broadcast
+            TVector<TDqChannelSettings> broadcastSettings;
 
             TVector<IDqOutput::TPtr> outputs{Reserve(isBroadcast ? 1 :std::max<ui64>(outputDesc.ChannelsSize(), 1))};
             TOutputTransformInfo* transform = nullptr;

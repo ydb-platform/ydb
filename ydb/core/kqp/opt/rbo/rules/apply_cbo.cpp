@@ -27,17 +27,22 @@ TSimpleSharedPtr<TOrderingsStateMachine> BuildShuffleEliminationFSM(
         }
     }
 
+    auto resolveColumn = [&](const TInfoUnit& column) -> TInfoUnit {
+        auto& mapping = rootLineage.Mapping;
+        if (mapping.contains(column)) {
+            return mapping.at(column).GetInfoUnit();
+        }
+
+        return column;
+    };
+
     // Collect interesting orderings and FDs from join conditions
     for (auto node : cboTree->TreeNodes) {
         auto join = CastOperator<TOpJoin>(node);
         TVector<TJoinColumn> leftKeys, rightKeys;
         for (auto [leftKey, rightKey] : join->JoinKeys) {
-            auto mappedLeft = rootLineage.Mapping.count(leftKey)
-                ? rootLineage.Mapping.at(leftKey).GetInfoUnit()
-                : leftKey;
-            auto mappedRight = rootLineage.Mapping.count(rightKey)
-                ? rootLineage.Mapping.at(rightKey).GetInfoUnit()
-                : rightKey;
+            auto mappedLeft = resolveColumn(leftKey);
+            auto mappedRight = resolveColumn(rightKey);
 
             leftKeys.emplace_back(mappedLeft.GetAlias(), mappedLeft.GetColumnName());
             rightKeys.emplace_back(mappedRight.GetAlias(), mappedRight.GetColumnName());
@@ -61,9 +66,7 @@ TSimpleSharedPtr<TOrderingsStateMachine> BuildShuffleEliminationFSM(
         if (!metadata.ShuffledByColumns.empty()) {
             TVector<TJoinColumn> shuffledBy;
             for (const auto& col : metadata.ShuffledByColumns) {
-                auto mapped = rootLineage.Mapping.count(col)
-                    ? rootLineage.Mapping.at(col).GetInfoUnit()
-                    : col;
+                auto mapped = resolveColumn(col);
                 shuffledBy.emplace_back(mapped.GetAlias(), mapped.GetColumnName());
             }
             fdStorage.AddShuffling(TShuffling(shuffledBy), &tableAliasMap);
@@ -72,9 +75,7 @@ TSimpleSharedPtr<TOrderingsStateMachine> BuildShuffleEliminationFSM(
         if (!metadata.KeyColumns.empty()) {
             TVector<TJoinColumn> sortedBy;
             for (const auto& col : metadata.KeyColumns) {
-                auto mapped = rootLineage.Mapping.count(col)
-                    ? rootLineage.Mapping.at(col).GetInfoUnit()
-                    : col;
+                auto mapped = resolveColumn(col);
                 sortedBy.emplace_back(mapped.GetAlias(), mapped.GetColumnName());
             }
             TVector<TOrdering::TItem::EDirection> dirs(sortedBy.size(), TOrdering::TItem::EDirection::EAscending);

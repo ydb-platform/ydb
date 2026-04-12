@@ -587,19 +587,6 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
         << ", MayRunTasksLocally " << TasksGraph.GetMeta().MayRunTasksLocally
         << ", snapshot: {" << GetSnapshot().TxId << ", " << GetSnapshot().Step << "}");
 
-
-    // explicit requirement to execute task on the same node because it has dependencies
-    // on datashard tx.
-    if (TasksGraph.GetMeta().LocalComputeTasks) {
-        for (ui64 taskId : ComputeTasks) {
-            auto result = ExecuteDataComputeTask(taskId, ComputeTasks.size());
-            if (!result.empty()) {
-                return MakeActorStartFailureError(ExecuterId, result);
-            }
-        }
-        ComputeTasks.clear();
-    }
-
     PrepareCheckpoints();
 
     if (nComputeTasks == 0 && TasksPerNode.size() == 1 && (AsyncIoFactory != nullptr) && TasksGraph.GetMeta().SinglePartitionOptAllowed) {

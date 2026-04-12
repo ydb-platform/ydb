@@ -53,7 +53,6 @@ public:
         NWilson::TSpan& ExecuterSpan;
         TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig;
-        const bool LocalComputeTasks;
         const ui64 MkqlMemoryLimit;
         const NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
         const bool AllowSinglePartitionOpt;

@@ -1134,6 +1134,7 @@ class TBroadcastOutputChannel : public IDqOutputChannel
             // IsLocalChannel = outputActorId.NodeId() == inputActorId.NodeId();
             auto service = Service.lock();
             Y_ENSURE(service, "Channel has been binded or service is not available");
+            Y_ENSURE(!Binded[channelId]);
 
             // if (IsLocalChannel)
             // {

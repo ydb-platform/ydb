@@ -3,7 +3,7 @@
 [ent](https://entgo.io/) is an entity framework for Go that simplifies building and maintaining applications with large data models. Ent provides code generation based on schema definitions, type-safe queries, and automatic migrations.
 
 {{ ydb-short-name }} supports integration with ent through the [ydb-platform/ent](https://github.com/ydb-platform/ent) fork, which adds the `ydb` dialect and YQL query generation support.
-
+This article describes how to connect an Ent-based Go application to {{ ydb-short-name }} using that fork and the compatible [ydb-platform/ariga-atlas](https://github.com/ydb-platform/ariga-atlas) migration tooling.
 {% note warning %}
 
 {{ ydb-short-name }} support in ent is currently in **preview** and requires the [Atlas migration engine](https://entgo.io/docs/migrate#atlas-integration) for schema management.

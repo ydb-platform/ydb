@@ -6,7 +6,7 @@
 This article describes how to connect an Ent-based Go application to {{ ydb-short-name }} using that fork and the compatible [ydb-platform/ariga-atlas](https://github.com/ydb-platform/ariga-atlas) migration tooling.
 {% note warning %}
 
-{{ ydb-short-name }} support in ent is currently in **preview** and requires the [Atlas migration engine](https://entgo.io/docs/migrate#atlas-integration) for schema management.
+{{ ydb-short-name }} support in Ent is currently in **preview** and requires the [Atlas migration engine](https://entgo.io/docs/migrate#atlas-integration) for schema management.
 
 {% endnote %}
 

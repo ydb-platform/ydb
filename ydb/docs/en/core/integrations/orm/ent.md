@@ -95,7 +95,7 @@ Use interactive transactions only when you need explicit control over commit/rol
 
 ## Automatic retry mechanism {#retry-mechanism}
 
-Since {{ ydb-short-name }} is a distributed database, it requires special handling for transient errors (network issues, temporary unavailability, etc.). The ent driver for {{ ydb-short-name }} integrates with the [retry package from ydb-go-sdk](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/retry) to automatically handle these scenarios.
+Because {{ ydb-short-name }} is a distributed database, transient errors (network issues, temporary unavailability, and similar) need explicit handling. The Ent driver for {{ ydb-short-name }} integrates with the [retry package from ydb-go-sdk](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3/retry) to handle these scenarios automatically where possible.
 
 {% note info %}
 

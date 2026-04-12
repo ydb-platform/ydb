@@ -2,7 +2,6 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/trace/trace.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <library/cpp/logger/log.h>
 

@@ -30,7 +30,7 @@
     replace ariga.io/atlas => github.com/ydb-platform/ariga-atlas v0.0.1
     ```
 
-4) После этого можно генерировать проект, как сказано в [Quick Introduction](https://entgo.io/docs/getting-started/). Например, попробовать выполнить команду
+4) Сгенерируйте проект, как описано в [кратком введении](https://entgo.io/docs/getting-started/). Например:
 
     ```bash
     go run -mod=mod entgo.io/ent/cmd/ent new User

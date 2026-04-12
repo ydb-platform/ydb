@@ -12,7 +12,7 @@ This article describes how to connect an Ent-based Go application to {{ ydb-shor
 
 ## Installation
 
-1) Install ent:
+1) Install the Ent CLI (for example, with a recent Go toolchain):
 
     ```bash
     go get entgo.io/ent/cmd/ent@latest

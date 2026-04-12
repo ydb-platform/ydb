@@ -86,7 +86,7 @@ This is the recommended way to work with {{ ydb-short-name }} through Ent. Autom
 
 ### Interactive transactions {#interactive-transactions}
 
-When you call `Client.BeginTx()`, ent opens a transaction via the standard `database/sql` API and returns a `Tx` object. You then perform operations on it and manually call `Commit()` or `Rollback()`. In this mode:
+When you call `Client.BeginTx()`, Ent opens a transaction via the standard `database/sql` API and returns a `Tx` object. You then perform operations on it and manually call `Commit()` or `Rollback()`. In this mode:
 
 - There is **no callback** for the SDK to re-execute, so automatic retries are not possible.
 - Session and transaction lifetime are managed by your code.

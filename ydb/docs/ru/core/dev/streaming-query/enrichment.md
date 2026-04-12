@@ -46,11 +46,13 @@ CREATE EXTERNAL DATA SOURCE ydb_source WITH (
 
 Справочник хранится в [таблице](../../concepts/datamodel/table.md) `services_dict` в текущей базе данных.
 
+### Создание потокового запроса
+
 ```yql
 CREATE STREAMING QUERY query_with_table_join AS
 DO BEGIN
 
--- События из топика
+-- Чтение событий из входного топика
 $topic_data = SELECT
     *
 FROM
@@ -64,7 +66,7 @@ WITH (
     )
 );
 
--- Присоединение справочника из локальной таблицы
+-- Присоединение справочника к потоку по ServiceId
 $joined_data = SELECT
     s.Name AS Name,
     t.*
@@ -107,7 +109,7 @@ CREATE EXTERNAL DATA SOURCE s3_source WITH (
 
 - `<s3_endpoint>` — URL S3-хранилища, например `https://storage.yandexcloud.net/<bucket>` для Yandex Cloud.
 
-## Создание потокового запроса
+### Создание потокового запроса
 
 ```yql
 CREATE STREAMING QUERY query_with_join AS

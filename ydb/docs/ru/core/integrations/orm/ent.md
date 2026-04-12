@@ -24,7 +24,7 @@
     replace entgo.io/ent => github.com/ydb-platform/ent v0.0.1
     ```
 
-3) Также потребуется заменить реализацию atlas (движок миграций, который использует ent) на форк с поддержкой YDB:
+3) Замените **Atlas** (движок миграций, который использует Ent) на форк с поддержкой {{ ydb-short-name }}:
 
     ```text
     replace ariga.io/atlas => github.com/ydb-platform/ariga-atlas v0.0.1

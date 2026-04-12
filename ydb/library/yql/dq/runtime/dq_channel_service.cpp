@@ -3,7 +3,6 @@
 
 #include "dq_arrow_helpers.h"
 #include "dq_channel_service_impl.h"
-#include "dq_broadcast_channel.cpp"
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/dq/actors/dq.h>

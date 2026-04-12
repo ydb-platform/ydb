@@ -20,6 +20,8 @@
 #include <yql/essentials/minikql/defs.h>
 
 #include <util/system/backtrace.h>
+#include <util/system/mutex.h>
+#include <util/stream/file.h>
 
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -30,6 +32,8 @@ using NUdf::TUnboxedValue;
 using NUdf::TUnboxedValuePod;
 
 namespace {
+
+TMutex OutputMutex;
 
 bool HasMemoryForProcessing() {
     return !TlsAllocState->IsMemoryYellowZoneEnabled();
@@ -973,6 +977,8 @@ protected:
         TUnboxedValuePod* const tempKey = TempKeyBuffer.data();
         const ui32 tempKeySize = TempKeyBuffer.size();
 
+        ++InputRowCount;
+
         if (HasGenericAggregation) {
             LoadItem(input);
             if (PassthroughKeys) {
@@ -1127,6 +1133,7 @@ public:
         const bool forLLVM,
         const bool isAggregator,
         const bool enableSpilling,
+        [[maybe_unused]] const std::string& guid,
         const TDqHashCombineTestParams testParams
     )
         : TBase(memInfo)
@@ -1136,6 +1143,7 @@ public:
         , ForLLVM(forLLVM)
         , IsAggregation(isAggregator)
         , EnableSpilling(enableSpilling && ctx.SpillerFactory)
+        , Guid(guid)
         , InputUnpackedWidth(inputUnpackedWidth)
         , Nodes(nodes)
         , WideFieldsIndex(wideFieldsIndex)
@@ -1155,6 +1163,8 @@ public:
             } else {
                 MaxRowCount = GetStaticMaxRowCount(memoryHelper.KeySizeBound.value() + memoryHelper.StateSizeBound.value(), MemoryLimit);
             }
+            IsEstimating = false;
+            MaxRowCount = 64ULL * 1024 * 1024;
         } else {
             MaxRowCount = 64ULL * 1024;
             MapAutoGrowEnabled = true;
@@ -1220,6 +1230,14 @@ public:
     }
 
     virtual ~TBaseAggregationState() {
+        if (!Guid.empty()) {
+            TGuard<TMutex> guard(OutputMutex);
+            TFileOutput aggStats(TFile("agg_stats.txt", ForAppend | OpenAlways));
+            aggStats << Guid << "\tInputRows\t" << InputRowCount << Endl;
+            aggStats << Guid << "\tOutputRows\t" << OutputRowCount << Endl;
+            aggStats.Finish();
+        }
+
         if (ForLLVM) {
             // LLVM code doesn't ref inputs so we need to just forget the contents of the input buffer without unref-ing
             for (TUnboxedValue& val : InputBuffer) {
@@ -1414,6 +1432,7 @@ protected:
     const bool ForLLVM;
     const bool IsAggregation;
     const bool EnableSpilling;
+    const std::string Guid;
 
     bool IsEstimating = false;
     size_t EstimateBatchSize = 0;
@@ -1451,6 +1470,9 @@ protected:
     size_t SampledInputRealMemoryUsage = 0;
     std::optional<double> InputRowMemoryUsageMultiplier;
 
+    size_t InputRowCount = 0;
+    size_t OutputRowCount = 0;
+
     TCoroTask CurrentAsyncTask;
 
     const TDqHashCombineTestParams TestParams;
@@ -1476,11 +1498,12 @@ public:
         const bool forLLVM,
         const bool isAggregator,
         const bool enableSpilling,
+        const std::string& guid,
         const TDqHashCombineTestParams testParams
     )
         : TBaseAggregationState(
             memInfo, ctx, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes,
-            keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling, testParams
+            keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling, guid, testParams
         )
         , OutputRowCounter(outputRowCounter)
         , StartMoment(TInstant::Now()) // Temporary. Helps correlate debug outputs with SVGs
@@ -1585,6 +1608,7 @@ public:
         GenericAggregation->ExtractState(statePtr, outputPtrs);
 
         OutputRowCounter.Inc();
+        ++OutputRowCount;
 
         if (HasGenericAggregation) {
             auto keyIter = key;
@@ -1640,11 +1664,12 @@ public:
         const bool forLLVM,
         const bool isAggregator,
         const bool enableSpilling,
+        const std::string guid,
         const TDqHashCombineTestParams testParams
     )
         : TBaseAggregationState(
             memInfo, ctx, memoryHelper, memoryLimit, inputTypes.size() - 1, nodes, wideFieldsIndex,
-            keyTypes, keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling, testParams
+            keyTypes, keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling, guid, testParams
         )
         , OutputRowCounter(outputRowCounter)
         , InputTypes(inputTypes)
@@ -1826,6 +1851,7 @@ public:
                 }
             }
 
+            ++OutputRowCount;
             ++currentBlockSize;
         }
 
@@ -1970,7 +1996,7 @@ public:
         const std::vector<TType*>& inputTypes, const std::vector<TType*>& outputTypes,
         size_t inputWidth, const std::vector<TType*>& keyItemTypes, const std::vector<TType*>& stateItemTypes,
         NDqHashOperatorCommon::TCombinerNodes&& nodes, TKeyTypes&& keyTypes, ui64 memoryLimit, size_t maxOutputBlockLen,
-        const bool isAggregator, const bool enableSpilling
+        const bool isAggregator, const bool enableSpilling, const std::string& guid
     )
         : TBaseComputation(mutables, source, EValueRepresentation::Boxed)
         , BlockMode(blockMode)
@@ -1988,6 +2014,7 @@ public:
         , MemoryHelper(keyItemTypes, stateItemTypes)
         , IsAggregator(isAggregator)
         , EnableSpilling(enableSpilling)
+        , Guid(guid)
     {
     }
 
@@ -2311,11 +2338,11 @@ private:
         if (!BlockMode) {
             state = ctx.HolderFactory.Create<TWideAggregationState>(
                 ctx, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex,
-                KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, forLLVM, IsAggregator, EnableSpilling, TestParams);
+                KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, forLLVM, IsAggregator, EnableSpilling, Guid, TestParams);
         } else {
             state = ctx.HolderFactory.Create<TBlockAggregationState>(
                 ctx, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, Nodes, WideFieldsIndex,
-                KeyTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, forLLVM, IsAggregator, EnableSpilling, TestParams);
+                KeyTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, forLLVM, IsAggregator, EnableSpilling, Guid, TestParams);
         }
     }
 
@@ -2334,6 +2361,7 @@ private:
     const TMemoryEstimationHelper MemoryHelper;
     const bool IsAggregator;
     const bool EnableSpilling;
+    const std::string Guid;
     TDqHashCombineTestParams TestParams;
 };
 
@@ -2349,7 +2377,7 @@ public:
         const std::vector<TType*>& inputTypes, const std::vector<TType*>& outputTypes,
         size_t inputWidth, const std::vector<TType*>& keyItemTypes, const std::vector<TType*>& stateItemTypes,
         NDqHashOperatorCommon::TCombinerNodes&& nodes, TKeyTypes&& keyTypes, ui64 memoryLimit, size_t maxOutputBlockLen,
-        const bool isAggregator, const bool enableSpilling
+        const bool isAggregator, const bool enableSpilling, const std::string& guid
     )
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , BlockMode(blockMode)
@@ -2367,6 +2395,7 @@ public:
         , MemoryHelper(keyItemTypes, stateItemTypes)
         , IsAggregator(isAggregator)
         , EnableSpilling(enableSpilling)
+        , Guid(guid)
     {
     }
 
@@ -2400,11 +2429,11 @@ private:
         if (!BlockMode) {
             state = ctx.HolderFactory.Create<TWideAggregationState>(
                 ctx, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex,
-                KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, false, IsAggregator, EnableSpilling, TestParams);
+                KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, false, IsAggregator, EnableSpilling, Guid, TestParams);
         } else {
             state = ctx.HolderFactory.Create<TBlockAggregationState>(
                 ctx, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, Nodes, WideFieldsIndex,
-                KeyTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, false, IsAggregator, EnableSpilling, TestParams);
+                KeyTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, false, IsAggregator, EnableSpilling, Guid, TestParams);
         }
     }
 
@@ -2431,6 +2460,7 @@ private:
     const TMemoryEstimationHelper MemoryHelper;
     const bool IsAggregator;
     const bool EnableSpilling;
+    const std::string Guid;
     TDqHashCombineTestParams TestParams;
 };
 
@@ -2454,6 +2484,11 @@ IComputationNode* WrapDqHashOperator(TCallable& callable, const TComputationNode
     ui64 memLimit = 0;
     bool enableSpilling = false;
     bool isAggregator = false;
+
+    std::string guid;
+    if (operatorParams->GetValuesCount() > 1) {
+        guid = AS_VALUE(TDataLiteral, operatorParams->GetValue(1))->AsValue().AsStringRef();
+    }
 
     if (kind == EOperatorKind::Combiner) {
         memLimit = AS_VALUE(TDataLiteral, operatorParams->GetValue(NDqHashOperatorParams::CombineParamMemLimit))->AsValue().Get<ui64>();
@@ -2485,7 +2520,8 @@ IComputationNode* WrapDqHashOperator(TCallable& callable, const TComputationNode
             memLimit > 0 ? memLimit : DefaultMemoryLimit,
             maxOutputBlockLen,
             isAggregator,
-            enableSpilling);
+            enableSpilling,
+            guid);
     } else {
         IComputationWideFlowNode* flowInput = dynamic_cast<IComputationWideFlowNode*>(input);
         MKQL_ENSURE(flowInput != nullptr, "Flow input is expected to be IComputationWideFlowNode*");
@@ -2503,7 +2539,8 @@ IComputationNode* WrapDqHashOperator(TCallable& callable, const TComputationNode
             memLimit > 0 ? memLimit : DefaultMemoryLimit,
             maxOutputBlockLen,
             isAggregator,
-            enableSpilling);
+            enableSpilling,
+            guid);
     }
 }
 

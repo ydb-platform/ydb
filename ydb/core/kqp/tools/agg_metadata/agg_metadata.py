@@ -3,6 +3,7 @@
 import sys
 import argparse
 import json
+import collections
 from typing import Self
 import itertools
 
@@ -202,7 +203,15 @@ def print_lambda_with_custom_args(yql_lambda, new_args, title=None):
     printer.finalize()
     print('```')
 
-def parse_and_process(file_name):
+
+class Stat:
+    def __init__(self):
+        self.inrows = 0
+        self.outrows = 0
+        self.cardinality = 0
+
+
+def parse_and_process(file_name, stats):
     with open(file_name, 'rt') as inf:
         input = inf.read().split('\n')
     program = parse(input)
@@ -237,7 +246,12 @@ def parse_and_process(file_name):
     for combiner in combiners:
         _, _, mem_limit, key_lambda, init_lambda, update_lambda, finalize_lambda, type_info = combiner
         is_aggregate = not mem_limit.value
-        in_type, key_type, state_type, result_type = type_info.list
+        in_type, key_type, state_type, result_type = type_info.list[:4]
+        if len(type_info.list) > 4:
+            stat = stats.get(type_info.list[4].value, None)
+        else:
+            stat = None
+
         print()
         prefix = '####'
         if is_aggregate:
@@ -245,6 +259,11 @@ def parse_and_process(file_name):
         else:
             print(prefix, 'Combiner:')
         print()
+
+        if stat:
+            print('Input rows: ', stat.inrows)
+            print('Output rows: %d (%.2f%%)' % (stat.outrows, (float(stat.outrows) * 100.0 / stat.inrows) if (stat.inrows > 0) else 0.0))
+            print()
 
         def type_list(expr):
             converted = convert_type(expr)
@@ -279,12 +298,37 @@ def parse_and_process(file_name):
         print_lambda_with_custom_args(finalize_lambda, key_args + state_args, 'Build result')
         print('{% endcut %}')
 
-
-
 def climain():
-    input_files = sys.argv[1:]
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument('--stats', default=None, type=str, help='aggregator stats file')
+    argparser.add_argument('ast_files', nargs='+')
+    args = argparser.parse_args()
+
+    input_files = args.ast_files
+
+    stats = collections.defaultdict(Stat)
+
+    if args.stats:
+        with open(args.stats, 'rt') as inf:
+            for line in inf:
+                line = line.strip()
+                if not line:
+                    continue
+                guid, kind, value = line.strip().split('\t')
+                stat = stats[guid]
+                if kind == 'InputRows':
+                    stat.inrows += int(value)
+                elif kind == 'OutputRows':
+                    stat.outrows += int(value)
+                elif kind == 'InputCardinality':
+                    stat.cardinality += int(value)
+
+    print('Stats for %d ops' % len(stats), file=sys.stderr)
+
+    print('{% toc page="" %}\n')
+
     for f in input_files:
-        parse_and_process(f)
+        parse_and_process(f, stats)
 
 if __name__ == '__main__':
     climain()

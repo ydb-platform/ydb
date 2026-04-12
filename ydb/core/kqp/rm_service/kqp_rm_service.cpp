@@ -956,7 +956,7 @@ private:
             payload.SetUsedMemory(0);
             payload.SetExecutionUnits(0);
             auto* pool = payload.MutableMemory()->Add();
-            pool->SetPool(1);
+            pool->SetPool(1); // legacy ScanQuery pool id
             pool->SetAvailable(0);
         } else {
             with_lock (ResourceManager->Lock) {
@@ -966,7 +966,7 @@ private:
 
                 payload.SetExecutionUnits(ResourceManager->ExecutionUnitsResource.load());
                 auto* pool = payload.MutableMemory()->Add();
-                pool->SetPool(1);
+                pool->SetPool(1); // legacy ScanQuery pool id
                 pool->SetAvailable(ResourceManager->TotalMemoryResource->Available());
             }
         }

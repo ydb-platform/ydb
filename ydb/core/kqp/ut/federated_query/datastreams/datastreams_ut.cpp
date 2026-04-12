@@ -2278,6 +2278,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingWithSchemaSecretsTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetEnableLlvmUsageForQueryService(true);
+
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
         constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
         constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
         CreateTopic(inputTopicName);
@@ -2293,6 +2297,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             GRANT ALL ON `/Root/test_table1` TO `test@builtin`;
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
+                PRAGMA ydb.UseLlvm = "true";
+                PRAGMA ydb.EnableLlvm = "true";
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT key || value FROM `{pq_source}`.`{input_topic}` WITH (
                     FORMAT = "json_each_row",
@@ -2314,6 +2320,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             const auto& table = tableDesc->ResultSet.at(0);
             UNIT_ASSERT_VALUES_EQUAL(table.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindTable);
             UNIT_ASSERT(table.SecurityObject->CheckAccess(NACLib::GenericFull, NACLib::TUserToken("test@builtin", {})));
+
+            const auto& result = ExecQuery("SELECT Plan FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Plan").GetOptionalUtf8(), R"("UseLlvm":true)");
+            });
         }
 
         CheckScriptExecutionsCount(1, 1);

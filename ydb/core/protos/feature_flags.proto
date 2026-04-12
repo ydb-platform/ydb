@@ -289,4 +289,5 @@ message TFeatureFlags {
     reserved 251; // EnableOltpSinkForTopicOnlyTx
     optional bool EnableExternalDataSourceAuthMethodIam = 252 [default = false];
     optional bool EnableInterpileTrafficOptimization = 253 [default = false];
+    optional bool EnableLlvmUsageForQueryService = 254 [default = false];
 }

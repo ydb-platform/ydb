@@ -1656,6 +1656,13 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                         stats.SetLocalInflightBytes((usage.LocalInflightBytes + 512_KB) / 1_MB);
                     }
                 }
+
+                for (const auto& [stageId, useLlvm] : UseLlvmByStageId) {
+                    const auto it = protoStages.find(stageId);
+                    if (it != protoStages.end()) {
+                        it->second->SetUseLlvm(useLlvm);
+                    }
+                }
             }
 
             stats.SetExecuterCpuTimeUs(ExecuterCpuTime.MicroSeconds());

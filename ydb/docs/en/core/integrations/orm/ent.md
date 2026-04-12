@@ -36,7 +36,7 @@ This article describes how to connect an Ent-based Go application to {{ ydb-shor
     go run -mod=mod entgo.io/ent/cmd/ent new User
     ```
 
-5) Finally, run:
+5) Run `go mod tidy` to refresh `go.mod` and `go.sum`:
 
     ```bash
     go mod tidy

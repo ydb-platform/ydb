@@ -12,6 +12,8 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
+ydb/core/kqp/ut/federated_query/s3 KqpFederatedQuery.TestReadLargeParquetFile
+ydb/core/kqp/ut/federated_query/s3 sole chunk chunk
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter+StreamLookup
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter-StreamLookup
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
@@ -56,6 +58,7 @@ ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_ch
 ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_pg_pg-kqprun]
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Olap_WriteToTopicAndTable_4_Query
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Olap_WriteToTopicAndTable_4_Table
+ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Query
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Table
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync10
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestSdkFreeSessionAfterBadSessionQueryService

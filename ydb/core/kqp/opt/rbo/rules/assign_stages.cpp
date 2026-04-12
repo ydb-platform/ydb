@@ -103,7 +103,7 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
             props.StageGraph.Connect(*rightStage, newStageId, MakeIntrusive<TShuffleConnection>(rightShuffleKeys, rightInputStorageType));
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages join";
-    } else if (input->Kind == EOperator::Filter || input->Kind == EOperator::Map) {
+    } else if (input->Kind == EOperator::Filter || input->Kind == EOperator::Map || input->Kind == EOperator::Project || input->Kind == EOperator::AddDependencies) {
         auto childOp = CastOperator<IUnaryOperator>(input)->GetInput();
         const auto prevStageId = *(childOp->Props.StageId);
         UpdateNumOfConsumers(childOp);
@@ -190,7 +190,7 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
 
         YQL_CLOG(TRACE, CoreDq) << "Assign stage to Aggregation ";
     } else {
-        Y_ENSURE(false, "Unknown operator encountered");
+        Y_ENSURE(false, "Unknown operator encountered: " << (int)input->Kind);
     }
 
     return true;

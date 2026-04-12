@@ -181,6 +181,87 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;
             YQL_CLOG(TRACE, CoreDq) << "Converted UnionAll " << opStageId;
+        } else if (op->Kind == EOperator::AddDependencies) {
+            // TOpAddDependencies: after decorrelation the dependency columns are already in the
+            // stream from the join; just pass it through.
+            if (!currentStageBody) {
+                auto [stageArg, stageInput] = graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *op->Children[0]->Props.StageId);
+                stageArgs[opStageId].push_back(stageArg);
+                currentStageBody = stageInput;
+            }
+            stages[opStageId] = currentStageBody;
+            stagePos[opStageId] = op->Pos;
+            YQL_CLOG(TRACE, CoreDq) << "Converted AddDependencies " << opStageId;
+        } else if (op->Kind == EOperator::Project) {
+            auto project = CastOperator<TOpProject>(op);
+            if (!currentStageBody) {
+                auto [stageArg, stageInput] = graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *op->Children[0]->Props.StageId);
+                stageArgs[opStageId].push_back(stageArg);
+                currentStageBody = stageInput;
+            }
+
+            const auto childIUs = op->Children[0]->GetOutputIUs();
+            const auto& projectList = project->ProjectList;
+
+            // Check whether any ProjectList entry is missing from the child's output IUs.
+            // This can happen when the rename rule and CBO assign different alias prefixes
+            // (e.g. "l1.l_orderkey" in ProjectList vs "l2.l_orderkey" in the physical stream).
+            bool needsProjection = false;
+            for (const auto& projIU : projectList) {
+                if (std::find(childIUs.begin(), childIUs.end(), projIU) == childIUs.end()) {
+                    needsProjection = true;
+                    break;
+                }
+            }
+
+            if (needsProjection) {
+                // Build index mapping: for each projIU find its position in childIUs.
+                // First try an exact match; fall back to matching by column name only
+                // (handles alias-prefix mismatches introduced by YQL lambda variable naming).
+                TVector<size_t> argIndices;
+                argIndices.reserve(projectList.size());
+                for (const auto& projIU : projectList) {
+                    auto exactIt = std::find(childIUs.begin(), childIUs.end(), projIU);
+                    if (exactIt != childIUs.end()) {
+                        argIndices.push_back(exactIt - childIUs.begin());
+                        continue;
+                    }
+                    auto colIt = std::find_if(childIUs.begin(), childIUs.end(), [&projIU](const TInfoUnit& iu) {
+                        return iu.GetColumnName() == projIU.GetColumnName();
+                    });
+                    Y_ENSURE(colIt != childIUs.end(),
+                        "TOpProject: column '" << projIU.GetFullName() << "' not found in child output");
+                    argIndices.push_back(colIt - childIUs.begin());
+                }
+
+                // ExpandMap: narrow struct (child IU names) → wide (one arg per child IU)
+                auto wideStream = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(currentStageBody, childIUs, ctx);
+
+                // NarrowMap: wide → narrow struct with ProjectList names, selecting the right args
+                currentStageBody = ctx.Builder(op->Pos)
+                    .Callable("NarrowMap")
+                        .Add(0, wideStream)
+                        .Lambda(1)
+                            .Params("wide_input", childIUs.size())
+                            .Callable("AsStruct")
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                for (ui32 i = 0; i < projectList.size(); ++i) {
+                                    parent.List(i)
+                                        .Atom(0, NPhysicalConvertionUtils::GetFullName(projectList[i]))
+                                        .Arg(1, "wide_input", argIndices[i])
+                                    .Seal();
+                                }
+                                return parent;
+                            })
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Build();
+            }
+
+            stages[opStageId] = currentStageBody;
+            stagePos[opStageId] = op->Pos;
+            YQL_CLOG(TRACE, CoreDq) << "Converted Project " << opStageId;
         } else if (op->Kind == EOperator::Aggregate) {
             auto aggregate = CastOperator<TOpAggregate>(op);
 
@@ -192,7 +273,7 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;
         } else {
-            Y_ENSURE(false, "Could not generate physical plan");
+            Y_ENSURE(false, "Could not generate physical plan, operator kind: " << (int)op->Kind);
         }
     }
 

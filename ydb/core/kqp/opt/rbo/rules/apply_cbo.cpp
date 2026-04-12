@@ -269,6 +269,28 @@ TIntrusivePtr<IOperator> TOptimizeCBOTreeRule::SimpleMatchAndApply(const TIntrus
     TSimpleSharedPtr<TOrderingsStateMachine> orderingsFSM;
     if (enableShuffleElimination) {
         orderingsFSM = BuildShuffleEliminationFSM(cboTree, tableAliasMap);
+
+        // Initialize LogicalOrderings for each rel based on its initial shuffle (e.g. ColumnStore table
+        // partitioned by its PK). The FSM is built first so we can look up the ordering index.
+        for (auto& rel : rels) {
+            auto rboRel = std::static_pointer_cast<TRBORelOptimizerNode>(rel);
+            if (!rboRel->Op->Props.Metadata.has_value()) {
+                continue;
+            }
+            const auto& shuffledByColumns = rboRel->Op->Props.Metadata->ShuffledByColumns;
+            if (shuffledByColumns.empty()) {
+                continue;
+            }
+
+            TVector<TJoinColumn> shuffledBy;
+            for (const auto& iu : shuffledByColumns) {
+                auto resolved = cboTree->TreeRoot->Props.Metadata->MapColumn(iu);
+                shuffledBy.emplace_back(resolved.GetAlias(), resolved.GetColumnName());
+            }
+
+            auto orderingIdx = orderingsFSM->FDStorage.FindShuffling(TShuffling(shuffledBy), &tableAliasMap);
+            rel->Stats.LogicalOrderings = orderingsFSM->CreateState(orderingIdx);
+        }
     }
 
     auto providerCtx = TRBOProviderContext(ctx.KqpCtx, optLevel, useBlockHashJoin);

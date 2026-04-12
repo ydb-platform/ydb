@@ -35,6 +35,10 @@ A [cluster configuration](../../../../maintenance/manual/config-overview.md) is 
 
 The `admin database restore` command restores the database from a backup on the file system. The backup must have been previously exported with the `admin database dump` command or prepared manually as described in the [{#T}](../file-structure.md) article:
 
+{% include [limitation](./limitation-restore-column-tables.md) %}
+
+{% include [limitation](./limitation-restore-secrets.md) %}
+
 ```bash
 {{ ydb-cli }} [connection options] admin database restore -i <PATH> [options]
 ```
@@ -63,6 +67,10 @@ Restoring database schema objects follows the same process described in [Schema 
 ## Schema objets {#schema-objects}
 
 The `tools restore` command creates the items of the database schema in the database, and populates them with the data previously exported there with the `tools dump` command or prepared manually as per the rules from the [{#T}](../file-structure.md) article:
+
+{% include [limitation](./limitation-restore-column-tables.md) %}
+
+{% include [limitation](./limitation-restore-secrets.md) %}
 
 ```bash
 {{ ydb-cli }} [connection options] tools restore -p <PATH> -i <PATH> [options]

@@ -1,11 +1,11 @@
 #pragma once
 
-#include "schemeshard_build_index.h"
-#include "schemeshard_build_index_helpers.h"
-#include "schemeshard_build_index_tx_base.h"
-#include "schemeshard_impl.h"
-#include "schemeshard_index_build_info.h"
-#include "schemeshard_index_utils.h"
+#include <ydb/core/tx/schemeshard/index/build_index.h>
+#include <ydb/core/tx/schemeshard/index/build_index_helpers.h>
+#include <ydb/core/tx/schemeshard/index/build_index_tx_base.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
+#include <ydb/core/tx/schemeshard/index/index_utils.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

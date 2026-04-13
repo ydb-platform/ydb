@@ -7537,7 +7537,6 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
                 *descr->MutableTypeInfo() = *columnType.TypeInfo;
             }
             descr->SetFamily(colInfo.Family);
-            // todo: fix
             descr->SetNotNull(colInfo.NotNull);            
         }
     }

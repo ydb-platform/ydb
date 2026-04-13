@@ -375,7 +375,7 @@ public:
 
     void ForwardResponse(TEvKqp::TEvQueryResponse::TPtr& ev) {
         QueryResponse = std::unique_ptr<TEvKqp::TEvQueryResponse>(ev->Release().Release());
-        if (KQP_REQ_LOG_ENABLED()) {
+        if (KQP_REQ_LOG_ENABLED() && QueryState) {
             TLogQuery::LogForwardedCompleted(
                 ForwardedQueryText, ForwardedDatabase, ForwardedQueryType, ForwardedQueryAction,
                 QueryState->StartTime, QueryResponse->Record, CurrentReqLogId);
@@ -532,7 +532,7 @@ public:
             (pool_id, QueryState->UserRequestContext->PoolId),
             (trace_id, TraceId()));
 
-        if (KQP_REQ_LOG_ENABLED()) {
+        if (KQP_REQ_LOG_ENABLED() && QueryState) {
             auto reqId = TLogQuery::LogStarted(*QueryState);
             if (!reqId.empty()) {
                 CurrentReqLogId = reqId;
@@ -3104,7 +3104,7 @@ public:
         // Skip when RequestEv is null: the request was forwarded to KqpWorkerActor and
         // already logged by ForwardResponse via LogForwardedCompleted. Logging here would
         // both duplicate the entry and crash accessing fields owned by the released RequestEv.
-        if (KQP_REQ_LOG_ENABLED() && QueryState->RequestEv) {
+        if (KQP_REQ_LOG_ENABLED() && QueryState && QueryState->RequestEv) {
             TLogQuery::LogCompleted(*QueryState, record, CurrentReqLogId);
         }
 

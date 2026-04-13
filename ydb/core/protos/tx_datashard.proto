@@ -280,6 +280,7 @@ message TKqpReadRangesSourceSettings {
     optional NKqpProto.EIsolationLevel IsolationLevel = 24 [default = ISOLATION_LEVEL_UNDEFINED];
 
     optional string Database = 25;
+    optional string PoolId = 28;
 
     // Vector top-K pushdown for brute force vector search
     optional NKikimrKqp.TReadVectorTopK VectorTopK = 26;
@@ -320,8 +321,9 @@ message TKqpVectorResolveSettings {
     // Input root cluster ID column (for the prefixed index)
     optional uint32 RootClusterColumnIndex = 16;
 
-    // Database name for KqpReadActor
+    // Database name and pool id for KqpReadActor
     optional string Database = 17;
+    optional string PoolId = 21;
 
     // Parameters for finding overlapping clusters (multiple clusters per row)
     optional uint32 OverlapClusters = 18;
@@ -2289,6 +2291,9 @@ message TEvRead {
 
     // Optional bit flags with hints
     optional uint32 Hints = 13;
+
+    // Resource Pool to support quota via Workload Manager
+    optional string PoolId = 14;
 
     // Request must contain either keys, queries or program
     // mixed requests are not supported

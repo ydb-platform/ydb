@@ -1,5 +1,6 @@
 #include "kqp_compute_scheduler_service.h"
 
+#include "kqp_schedulable_read.h"
 #include "log.h"
 #include "tree/dynamic.h"
 
@@ -65,6 +66,8 @@ public:
 
             hFunc(NActors::TEvents::TEvWakeup, Handle);
 
+            hFunc(TEvGetReadFactory, Handle);
+
             default:
                 LOG_E("Unexpected event: " << ev->GetTypeRewrite());
         }
@@ -112,8 +115,10 @@ public:
         if (const auto& cpuLimitPercent = ev->Get()->Params.TotalCpuLimitPercentPerNode; cpuLimitPercent >= 0) {
             if (cpuLimitPercent == 0) {
                 attrs.CpuLimit = 0;
+                attrs.ReadLimit = TDuration::Zero();
             } else {
                 attrs.CpuLimit = std::max<ui64>(1, cpuLimitPercent * Scheduler->GetTotalCpuLimit() / 100);
+                attrs.ReadLimit = TDuration::MilliSeconds(cpuLimitPercent * 10);
             }
         }
 
@@ -156,8 +161,10 @@ public:
             if (const auto& cpuLimitPercent = ev->Get()->Config->TotalCpuLimitPercentPerNode; cpuLimitPercent >= 0) {
                 if (cpuLimitPercent == 0) {
                     attrs.CpuLimit = 0;
+                    attrs.ReadLimit = TDuration::Zero();
                 } else {
                     attrs.CpuLimit = std::max<ui64>(1, cpuLimitPercent * Scheduler->GetTotalCpuLimit() / 100);
+                    attrs.ReadLimit = TDuration::MilliSeconds(cpuLimitPercent * 10);
                 }
             }
 
@@ -210,6 +217,12 @@ public:
     void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
         Scheduler->UpdateFairShare();
         Schedule(Options.UpdateFairSharePeriod, new NActors::TEvents::TEvWakeup());
+    }
+
+    void Handle(TEvGetReadFactory::TPtr& ev) {
+        auto response = MakeHolder<TEvReadFactoryResponse>();
+        response->Factory = std::make_shared<TSchedulableReadFactory>(Scheduler);
+        Send(ev->Sender, response.Release(), 0, 0);
     }
 
 private:
@@ -295,7 +308,19 @@ void TComputeScheduler::AddOrUpdatePool(const TString& databaseId, const TString
     if (auto pool = database->GetPool(poolId)) {
         pool->Update(attrs);
     } else {
-        database->AddPool(std::make_shared<TPool>(poolId, KqpCounters, attrs));
+        pool = std::make_shared<TPool>(poolId, KqpCounters, attrs);
+        database->AddPool(pool);
+
+        // Add read query
+
+        bool allowMinFairShare = (!pool->CpuLimit || *pool->CpuLimit > 0)
+            && (FairShareMode >= NHdrf::NSnapshot::ELeafFairShare::ALLOW_OVERLIMIT);
+
+        // Since they are not visible by query id - use the same id for each pool
+        auto query = std::make_shared<TQuery>(READ_QUERY_ID, &DelayParams, allowMinFairShare, NHdrf::TStaticAttributes());
+        pool->AddQuery(query);
+
+        ReadQueries.emplace(poolId, query);
     }
 }
 
@@ -323,6 +348,16 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const NHdrf::TDatabaseId& database
     }
 
     return query;
+}
+
+NHdrf::NDynamic::TQueryPtr TComputeScheduler::GetReadQuery(const NHdrf::TPoolId& poolId) const {
+    TReadGuard lock(Mutex);
+
+    if (auto queryIt = ReadQueries.find(poolId); queryIt != ReadQueries.end()) {
+        return queryIt->second;
+    }
+
+    return {}; // TODO: no such pool?
 }
 
 bool TComputeScheduler::RemoveQuery(const NHdrf::TQueryId& queryId) {

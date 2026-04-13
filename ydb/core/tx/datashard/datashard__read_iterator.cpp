@@ -1,6 +1,5 @@
 #include "datashard_failpoints.h"
 #include "datashard_impl.h"
-#include "datashard_integrity_trails.h"
 #include "datashard_read_operation.h"
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
@@ -11,6 +10,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_read.h>
 
 #include <ydb/library/actors/core/monotonic_provider.h>
 
@@ -2487,6 +2487,14 @@ public:
             request->ReadSpan.EndOk();
             Self->DeleteReadIterator(it);
         }
+
+        if (!state.PoolId.empty()) {
+            Reader->UpdateCycles();
+
+            auto schedulableRead = Self->SchedulableReads.at(state.PoolId);
+            schedulableRead->ReturnQuota(Reader->ElapsedCycles());
+            state.PoolId.clear();
+        }
     }
 
 private:
@@ -3724,8 +3732,23 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         isHeadRead = false;
     }
 
-    // TODO: check WM Scheduler quota here - and reply overloaded in case no quota.
-    // TODO: make sure there is no instant re-read from KqpReadActor.
+    if (record.HasPoolId()) {
+        auto readIt = SchedulableReads.find(record.GetPoolId());
+        if (readIt == SchedulableReads.end()) {
+            readIt = SchedulableReads.emplace(record.GetPoolId(), SchedulableReadFactory->Get(record.GetPoolId())).first;
+            YQL_ENSURE(readIt->second);
+        }
+
+        // Default quota of 10ms is equal to internal datashard quota
+        if (!readIt->second->TryConsumeQuota(TDuration::MilliSeconds(10))) {
+            // TODO: make sure there is no instant re-read from KqpReadActor.
+            replyWithError(
+                Ydb::StatusIds::OVERLOADED,
+                TStringBuilder() << "Request " << readId.ReadId << " rejected, quota exceeded for PoolId=" << record.GetPoolId()
+                    << " (shard# " << TabletID() << " node# " << SelfId().NodeId() << " state# " << DatashardStateName(State) << ")");
+            return;
+        }
+    }
 
     TActorId sessionId;
     if (readId.Sender.NodeId() != SelfId().NodeId()) {
@@ -3751,7 +3774,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         std::forward_as_tuple(readId),
         std::forward_as_tuple(
             readId, localReadId, TPathId(record.GetTableId().GetOwnerId(), record.GetTableId().GetTableId()),
-            sessionId, readVersion, isHeadRead,
+            sessionId, readVersion, isHeadRead, record.GetPoolId(),
             AppData()->MonotonicTimeProvider->Now()));
     Y_ENSURE(pr.second);
 
@@ -4012,6 +4035,13 @@ void TDataShard::DeleteReadIterator(TReadIteratorsLocalMap::iterator localIt) {
     auto readIt = ReadIterators.find(localIt->second->ReadId);
     Y_ENSURE(readIt != ReadIterators.end());
     DeleteReadIterator(readIt);
+
+    // Return unused quota
+    if (auto* state = localIt->second; !state->PoolId.empty()) {
+        auto schedulableRead = SchedulableReads.at(state->PoolId);
+        schedulableRead->ReturnQuota(0);
+        state->PoolId.clear();
+    }
 }
 
 void TDataShard::ReadIteratorsOnNodeDisconnected(const TActorId& sessionId, const TActorContext &ctx) {

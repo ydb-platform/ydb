@@ -73,6 +73,8 @@ struct TKqpBufferTableLookupSettings {
     TIntrusivePtr<TKqpCounters> Counters;
 
     NWilson::TTraceId ParentTraceId;
+
+    TString PoolId;
 };
 
 std::pair<IKqpBufferTableLookup*, NActors::IActor*> CreateKqpBufferTableLookup(TKqpBufferTableLookupSettings&& settings);

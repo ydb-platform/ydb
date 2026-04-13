@@ -34,6 +34,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
 
         std::optional<ui64> CpuLimit;
         std::optional<ui64> CpuGuarantee;
+        std::optional<TDuration> ReadLimit; // per second
 
         auto GetCpuLimit() const {
             return CpuLimit.value_or(Infinity());
@@ -56,6 +57,9 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
             }
             if (other.CpuGuarantee) {
                 CpuGuarantee = other.CpuGuarantee;
+            }
+            if (other.ReadLimit) {
+                ReadLimit = other.ReadLimit;
             }
         }
     };
@@ -173,6 +177,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf {
         NMonitoring::TDynamicCounters::TCounterPtr Demand;
         NMonitoring::TDynamicCounters::TCounterPtr Usage;
         NMonitoring::TDynamicCounters::TCounterPtr UsageResume;
+        NMonitoring::TDynamicCounters::TCounterPtr Read;
         NMonitoring::TDynamicCounters::TCounterPtr Throttle;
         NMonitoring::TDynamicCounters::TCounterPtr FairShare;
         NMonitoring::TDynamicCounters::TCounterPtr InFlight;

@@ -1,16 +1,14 @@
 #pragma once
 
 #include "datashard.h"
-#include <ydb/core/tx/locks/locks.h>
 
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
+#include <ydb/core/tx/locks/locks.h>
 
 #include <util/digest/multi.h>
 
 #include <memory>
-#include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 namespace NKikimr::NDataShard {
@@ -127,13 +125,14 @@ public:
     TReadIteratorState(
             const TReadIteratorId& readId, ui64 localReadId, const TPathId& pathId,
             const TActorId& sessionId, const TRowVersion& readVersion, bool isHeadRead,
-            TMonotonic ts)
+            const TString& poolId, TMonotonic ts)
         : ReadId(readId)
         , LocalReadId(localReadId)
         , PathId(pathId)
         , ReadVersion(readVersion)
         , IsHeadRead(isHeadRead)
         , SessionId(sessionId)
+        , PoolId(poolId)
         , StartTs(ts)
     {}
 
@@ -206,6 +205,7 @@ public:
     ui64 TotalRowsLimit = Max<ui64>();
 
     TActorId SessionId;
+    TString PoolId;
     TMonotonic StartTs;
     bool IsFinished = false;
     bool ReadContinuePending = false;

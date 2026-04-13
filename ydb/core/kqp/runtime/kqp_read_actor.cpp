@@ -892,6 +892,10 @@ public:
             *record.MutableVectorTopK() = Settings->GetVectorTopK();
         }
 
+        if (Settings->HasPoolId()) {
+            record.SetPoolId(Settings->GetPoolId());
+        }
+
         CA_LOG_D(TStringBuilder() << "Send EvRead to shardId: " << state->TabletId << ", tablePath: " << Settings->GetTable().GetTablePath()
             << ", ranges: " << DebugPrintRanges(KeyColumnTypes, ev->Ranges, *AppData()->TypeRegistry)
             << ", limit: " << limit

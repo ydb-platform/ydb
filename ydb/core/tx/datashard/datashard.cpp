@@ -7,14 +7,15 @@
 #include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
-#include <ydb/library/formats/arrow/size_calcer.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
-#include <ydb/core/protos/datashard_config.pb.h>
-#include <ydb/core/protos/query_stats.pb.h>
-
 #include <ydb/library/actors/core/monotonic_provider.h>
+#include <ydb/library/formats/arrow/size_calcer.h>
+
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
@@ -396,6 +397,9 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
     if (!IsFollower()) {
         Execute(CreateTxInitSchema(), ctx);
         Become(&TThis::StateInactive);
+
+        // Get factory from KQP Scheduler
+        ctx.Send(NKqp::MakeKqpSchedulerServiceId(ctx.SelfID.NodeId()), new NKqp::NScheduler::TEvGetReadFactory);
     } else {
         SyncConfig();
         State = TShardState::Readonly;
@@ -2842,6 +2846,10 @@ bool TDataShard::NeedMediatorStateRestored() const {
 }
 
 void TDataShard::CheckMediatorStateRestored() {
+    if (!SchedulableReadFactory) {
+        return;
+    }
+
     if (!MediatorStateWaiting ||
         !RegistrationSended ||
         !MediatorTimeCastEntry ||
@@ -4941,6 +4949,11 @@ void TDataShard::OnTableCreated(TTransactionContext &txc, const TActorContext &c
         PersistUnprotectedReadsEnabled(txc);
         SendRegistrationRequestTimeCast(ctx);
     }
+}
+
+void TDataShard::Handle(NKqp::NScheduler::TEvReadFactoryResponse::TPtr& ev) {
+    SchedulableReadFactory = ev->Get()->Factory;
+    CheckMediatorStateRestored();
 }
 
 } // NDataShard

@@ -22,7 +22,6 @@
 #include "datashard_user_table.h"
 #include "datashard_write.h"
 #include "incr_restore_scan.h"
-#include "datashard_integrity_trails.h"
 #include "datashard_tli.h"
 #include "multi_txids.h"
 #include "progress_queue.h"
@@ -43,6 +42,7 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/engine/mkql_engine_flat_host.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/tablet/pipe_tracker.h>
 #include <ydb/core/tablet/tablet_exception.h>
@@ -1005,7 +1005,7 @@ class TDataShard
             struct Source :     Column<5, NScheme::NTypeIds::Uint8> { using Type = TChangeRecord::ESource; };
             struct UserSID :    Column<6, NScheme::NTypeIds::Utf8> { using Type = TString; };
             struct UserTraceId :  Column<7, NScheme::NTypeIds::String> { using Type = TString; };
-            
+
             using TKey = TableKey<LockId, LockOffset>;
             using TColumns = TableColumns<LockId, LockOffset, Kind, Body, Source, UserSID, UserTraceId>;
         };
@@ -1478,6 +1478,8 @@ class TDataShard
     void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvVacuum::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(NKqp::NScheduler::TEvReadFactoryResponse::TPtr&);
 
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
@@ -3197,6 +3199,9 @@ private:
     TIntrusiveList<TGlobalTxIdAwaiter> GlobalTxIdAwaiters;
     TVector<ui64> GlobalTxIdCache;
 
+    NKqp::NScheduler::TSchedulableReadFactoryPtr SchedulableReadFactory;
+    THashMap<NKqp::NScheduler::NHdrf::TPoolId, NKqp::NScheduler::TSchedulableReadPtr> SchedulableReads;
+
 public:
     struct TBreakerInfo {
         ui64 QuerySpanId;
@@ -3294,6 +3299,7 @@ protected:
             HFuncTraced(TEvPrivate::TEvRemoveSchemaSnapshots, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsResult, Handle);
             HFunc(TEvPrivate::TEvBuildTableStatsError, Handle);
+            hFunc(NKqp::NScheduler::TEvReadFactoryResponse, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateInactive unhandled event type: " << ev->GetTypeRewrite()

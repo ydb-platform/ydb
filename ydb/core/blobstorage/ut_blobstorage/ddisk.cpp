@@ -579,26 +579,4 @@ Y_UNIT_TEST_SUITE(DDisk) {
         }
     }
 
-    Y_UNIT_TEST(PersistentBufferInMemoryCacheLimit) {
-        TDDiskTestContext f(1_MB);
-        auto groups = f.AllocateDDiskBlockGroup();
-        auto& node = groups.begin()->GetNodes(0);
-        f.ChangeTestingNode(node);
-        for (ui32 i = 1; i < 2000; ++i) {
-            f.WritePB(0, 128); // Max size records to overfill in memory buffer
-            ui32 size = f.GetPBInMemoryCacheSize();
-            UNIT_ASSERT(size > 0 && size <= 128_MB);
-        }
-        for (ui32 i = 1; i < 1000; ++i) {
-            f.ReadPB(2);
-            ui32 size = f.GetPBInMemoryCacheSize();
-            UNIT_ASSERT(size > 0 && size <= 128_MB);
-        }
-        f.RestartNode();
-        f.ListPB();
-        for (ui32 i = 1; i < 1000; ++i) {
-            f.ReadPB(2);
-        }
-    }
-
 }

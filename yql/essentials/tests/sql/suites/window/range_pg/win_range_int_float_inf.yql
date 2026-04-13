@@ -1,5 +1,4 @@
 PRAGMA WindowNewPipeline;
-/* custom error: Failed to parse data: YSON parsing failed: util/string/cast.cpp:623: cannot parse float(inf) */
 
 $data = [
     <|a: pgfloat4('1'), count: 5|>,
@@ -19,7 +18,7 @@ $win_result = (
         w1 AS (
             ORDER BY
                 a ASC
-            RANGE BETWEEN pgfloat8('Infinity') PRECEDING AND pgfloat8('Infinity') FOLLOWING
+            RANGE BETWEEN pgfloat8('Inf') PRECEDING AND pgfloat8('Inf') FOLLOWING
         )
 );
 

@@ -29,6 +29,7 @@
 #include <yql/essentials/public/result_format/yql_codec_results.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
 #include <yql/essentials/utils/fp_bits.h>
+#include <yql/essentials/utils/parse_double.h>
 #include <library/cpp/yson/detail.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <util/string/split.h>
@@ -3369,10 +3370,10 @@ NUdf::TUnboxedValue PgValueFromString(const TStringBuf s, ui32 pgTypeId) {
         return ScalarDatumToPod(Int64GetDatum(FromString<i64>(s)));
     }
     case FLOAT4OID: {
-        return ScalarDatumToPod(Float4GetDatum(FromString<float>(s)));
+        return ScalarDatumToPod(Float4GetDatum(FloatFromString(s)));
     }
     case FLOAT8OID: {
-        return ScalarDatumToPod(Float8GetDatum(FromString<double>(s)));
+        return ScalarDatumToPod(Float8GetDatum(DoubleFromString(s)));
     }
     case BYTEAOID:
     case VARCHAROID:

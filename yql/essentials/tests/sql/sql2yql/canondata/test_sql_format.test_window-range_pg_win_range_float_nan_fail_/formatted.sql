@@ -1,6 +1,6 @@
 PRAGMA WindowNewPipeline;
 
-/* custom error: Failed to parse data: YSON parsing failed: util/string/cast.cpp:623: cannot parse float(nan) */
+/* custom error: invalid preceding or following size in window function */
 $data = [
     <|a: pgfloat4('1.0'), count: 1|>,
     <|a: pgfloat4('2.0'), count: 1|>,

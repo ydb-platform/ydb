@@ -2853,7 +2853,6 @@ void TQueueLeader::TSendBatch::Execute(TQueueLeader* leader) {
     builder.Start();
 }
 
-
 void TQueueLeader::TDeleteBatch::AddEntry(TDeleteMessageBatchRequestProcessing& reqInfo, size_t i) {
     RLOG_SQS_REQ_DEBUG(reqInfo.Event->Get()->RequestId, "Add message[" << i << "] to delete batch. BatchId: " << BatchId);
     Entries.emplace_back(reqInfo.Event->Get()->RequestId, reqInfo.Event->Get()->Messages[i], i);

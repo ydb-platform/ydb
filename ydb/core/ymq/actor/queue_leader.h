@@ -312,18 +312,6 @@ private:
         size_t IndexInRequest = 0;
     };
 
-    struct TDeduplicateBatchEntry {
-        TDeduplicateBatchEntry(const TString& requestId, const TString& deduplicationMessageId)
-            : RequestId(requestId)
-            , DeduplicationMessageId(deduplicationMessageId)
-        {
-        }
-
-        TString RequestId;
-        TString SenderId;
-        TString DeduplicationMessageId;
-    };
-
     struct TDeleteBatchEntry {
         TDeleteBatchEntry(const TString& requestId, const TSqsEvents::TEvDeleteMessageBatch::TMessageEntry& message, size_t index)
             : RequestId(requestId)

@@ -231,43 +231,60 @@ void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
 
     auto renamesWithTransform = GetRenamesWithTransforms(planProps);
 
-    for (const auto& column : inputMetadata.KeyColumns) {
-        const auto it = std::find_if(renamesWithTransform.begin(), renamesWithTransform.end(), [&column](const std::pair<TInfoUnit, TInfoUnit>& rename) {
-            // Check that a key column has been renamed into something new
-            return column == rename.second;
-        });
+    // Pre-compute output IUs once; used below to detect pass-through columns
+    // that survive a projection without appearing in the rename list.
+    auto outputIUs = Project ? GetOutputIUs() : TVector<TInfoUnit>{};
 
-        if (it != renamesWithTransform.end()) {
-            // Add the new name to column list
-            Props.Metadata->KeyColumns.push_back(it->first);
+    auto isDroppedByProjection = [&](const TInfoUnit& column,
+                                     const std::pair<TInfoUnit, TInfoUnit>* renameIt) -> bool {
+        if (!Project) {
+            return false;
+        }
+        if (renameIt != nullptr) {
+            // Column was renamed/transformed — it is in the output.
+            return false;
+        }
+        // Column not in the rename list: it either passes through unchanged or was dropped.
+        // It survives iff its name appears directly in the output IUs.
+        return std::find(outputIUs.begin(), outputIUs.end(), column) == outputIUs.end();
+    };
+
+    for (const auto& column : inputMetadata.KeyColumns) {
+        const auto it = std::find_if(renamesWithTransform.begin(), renamesWithTransform.end(),
+            [&column](const std::pair<TInfoUnit, TInfoUnit>& rename) {
+                return column == rename.second;
+            });
+
+        const auto* renamePtr = (it != renamesWithTransform.end()) ? &*it : nullptr;
+
+        if (renamePtr) {
+            Props.Metadata->KeyColumns.push_back(renamePtr->first);
         } else {
             Props.Metadata->KeyColumns.push_back(column);
         }
 
-        if (Project && it == renamesWithTransform.end()) {
+        if (isDroppedByProjection(column, renamePtr)) {
             Props.Metadata->KeyColumns = {};
             break;
         }
     }
 
-    // NOTE: propagate
     // Propagate ShuffledByColumns through Map, applying column renames
     for (const auto& column : inputMetadata.ShuffledByColumns) {
-        const auto it = std::find_if(
-            renamesWithTransform.begin(), renamesWithTransform.end(),
+        const auto it = std::find_if(renamesWithTransform.begin(), renamesWithTransform.end(),
             [&column](const std::pair<TInfoUnit, TInfoUnit>& rename) {
                 return column == rename.second;
-            }
-        );
+            });
 
-        if (it != renamesWithTransform.end()) {
-            Props.Metadata->ShuffledByColumns.push_back(it->first);
+        const auto* renamePtr = (it != renamesWithTransform.end()) ? &*it : nullptr;
+
+        if (renamePtr) {
+            Props.Metadata->ShuffledByColumns.push_back(renamePtr->first);
         } else {
             Props.Metadata->ShuffledByColumns.push_back(column);
         }
 
-        if (Project && it == renamesWithTransform.end()) {
-            // Column not in projection — shuffle guarantee broken
+        if (isDroppedByProjection(column, renamePtr)) {
             Props.Metadata->ShuffledByColumns = {};
             break;
         }
@@ -330,6 +347,11 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Metadata->Type = EStatisticsType::BaseTable;
     Props.Metadata->KeyColumns = KeyColumns;
     Props.Metadata->ColumnsCount = GetOutputIUs().size();
+
+    // Aggregate restructures data — the input shuffle guarantee no longer holds.
+    // A future optimisation could set this to KeyColumns when the GROUP BY columns
+    // are a subset of the partition keys, but clearing is always safe.
+    Props.Metadata->ShuffledByColumns = {};
 
     // Aggregate acts list a source in terms of lineage
     // FIXME: We currently delete all lineage of columns before Aggregate, maybe this is suboptimal in some future cases?
@@ -419,9 +441,17 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         Props.Metadata->ColumnLineage.Merge(GetRightInput()->Props.Metadata->ColumnLineage);
     }
 
-    // NOTE: propagate
+    // After a hash join the output rows are co-located by the join keys.
+    // Left keys are always valid (left rows always appear in the output for the
+    // join kinds we support here). Right keys are also valid when the right
+    // side's columns appear in the output — they are equivalent to the left
+    // keys via the equi-join condition and downstream SE can use either name.
+    bool rightColumnsInOutput = (JoinKind != "LeftOnly" && JoinKind != "LeftSemi");
     for (const auto& [leftKey, rightKey] : JoinKeys) {
         Props.Metadata->ShuffledByColumns.push_back(leftKey);
+        if (rightColumnsInOutput) {
+            Props.Metadata->ShuffledByColumns.push_back(rightKey);
+        }
     }
 }
 

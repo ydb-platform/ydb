@@ -28,6 +28,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/kafka_proxy
+    ydb/core/security/certificate_check/test_utils
     ydb/core/persqueue/ut/common
     ydb/core/testlib/default
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils

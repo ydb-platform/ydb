@@ -434,13 +434,18 @@ void TConsumerActor::CommitIfNeeded() {
 }
 
 void TConsumerActor::UpdateChildPartitionsOnCommit() {
-    if (LastCommittedOffset != PartitionEndOffset) {
-        return;
-    }
     if (GetPartitionConfig().GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active) {
         return;
     }
-    bool update = ChildPartitionsOrderManager.SetSendFullStateToAll(TChildPartitionsOrderManager::ESendReasons::ParentDone);
+    bool update = false;
+    if (LastCommittedOffset == PartitionEndOffset) {
+        update = ChildPartitionsOrderManager.SetSendFullStateToAll(TChildPartitionsOrderManager::ESendReasons::ParentDone, Storage->GetMetrics().InflightMessageCount);
+    }
+    if (!update) {
+        if (PartitionEndOffset <= Storage->GetLastOffset()) {
+           update = ChildPartitionsOrderManager.SetSendFullStateToAll(TChildPartitionsOrderManager::ESendReasons::Commit, Storage->GetMetrics().InflightMessageCount);
+        }
+    }
     if (update) {
         UpdateLockedGroupsIdInChildPartitions(false);
     }
@@ -1113,7 +1118,7 @@ bool TConsumerActor::EnumerateChildrenPartitionsWithKeepOrder() {
         ChildPartitionsOrderManager.ChildrenPartitionWithKeepOrder[childPartitionId] = TChildPartitionsOrderManager::TChildrenPartitionWithKeepOrder{
             .TabletId = childTabletId,
             .Cookie = ChildrenPartitionWithKeepOrderCookie++,
-            .SendFullStateReasons = TChildPartitionsOrderManager::ESendReasons::Initial,
+            .SendReasons = {.Reasons = TChildPartitionsOrderManager::ESendReasons::Initial},
         };
     }
     return !ChildPartitionsOrderManager.Empty();
@@ -1134,9 +1139,12 @@ void TConsumerActor::UpdateLockedGroupsIdInChildPartitions(bool force) {
     const auto& partitionConfig = GetPartitionConfig();
     const NKikimrPQ::ETopicPartitionStatus status = partitionConfig.GetStatus();
     Y_ASSERT(status != ETopicPartitionStatus::Active);
-    const bool allRead = (PartitionEndOffset <= Storage->GetLastOffset()) && (Storage->GetMessageCount() == 0);
+    const bool almostAllRead = (PartitionEndOffset <= Storage->GetLastOffset());
+    const bool allRead = almostAllRead && (Storage->GetMessageCount() == 0);
     const EReadWithKeepOrder childMode = allRead
         ? EReadWithKeepOrder::READ_WITH_KEEP_ORDER_ALLOW_ALL
+        : almostAllRead && ChildPartitionsOrderManager.EnableSendFullBlacklist
+        ? EReadWithKeepOrder::READ_WITH_KEEP_ORDER_BLACKLIST
         : EReadWithKeepOrder::READ_WITH_KEEP_ORDER_BLOCK_ALL;
     for (auto& [childPartitionId, state] : ChildPartitionsOrderManager.ChildrenPartitionWithKeepOrder) {
         if (!(force || state.NeedSendFullState())) {
@@ -1152,7 +1160,12 @@ void TConsumerActor::UpdateLockedGroupsIdInChildPartitions(bool force) {
         update->SetConsumerGeneration(Config.GetGeneration());
         update->SetStep(ChildPartitionsOrderManager.ConsumerStep);
         update->SetMode(childMode);
-
+        if (childMode == EReadWithKeepOrder::READ_WITH_KEEP_ORDER_BLACKLIST) {
+            auto* list = update->MutableFullBlacklist();
+            for (ui32 lockedHash : Storage->GetMessageGroupsIdFromSelfAndParent()) {
+                list->AddParentLockedMessageGroupsIdHash(lockedHash);
+            }
+        }
         LOG_D("UpdateLockedGroupsIdInChildPartitions: updating child partition " << childPartitionId << "; reason=" << state.SendFullStateReasonsAsString() << "; update=" << ShortDebugString(record));
         auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev.release(), state.TabletId, true, state.Cookie);
         Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery);

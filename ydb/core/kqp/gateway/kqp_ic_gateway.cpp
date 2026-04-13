@@ -1050,7 +1050,7 @@ public:
         IActor* requestHandler = NPQ::NSchema::CreateAlterTopicActor(std::move(schemaTxPromise), {
             .Database = Database,
             .Request = std::move(settings.Request),
-            .UserToken = UserToken,
+            .UserToken = GetTokenCompat().empty() ? nullptr : UserToken,
             .IfExists = settings.MissingOk
         });
         RegisterActor(requestHandler);

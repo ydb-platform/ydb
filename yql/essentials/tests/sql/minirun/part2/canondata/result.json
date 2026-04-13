@@ -1925,6 +1925,48 @@
             "uri": "https://{canondata_backend}/1937492/16b10ce7fc7dfcf541647941523166f94c0957eb/resource.tar.gz#test.test_version-version-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[window-range_pg/win_range_always_empty--Debug]": [
+        {
+            "checksum": "7dd3c4a937fb569944a8ab76d9dc8f17",
+            "size": 1801,
+            "uri": "https://{canondata_backend}/1937367/dc014a2231454d5ef3ad4180900ed3344d6616e9/resource.tar.gz#test.test_window-range_pg_win_range_always_empty--Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-range_pg/win_range_always_empty--Results]": [
+        {
+            "checksum": "fba88b25997a814712291ff97ada4197",
+            "size": 1425,
+            "uri": "https://{canondata_backend}/1937001/baea66927e7bfe3a039b95bd8e46b655ecb1abfa/resource.tar.gz#test.test_window-range_pg_win_range_always_empty--Results_/results.txt"
+        }
+    ],
+    "test.test[window-range_pg/win_range_cast_bound_many--Debug]": [
+        {
+            "checksum": "06890c015ba3319bd4009c5e1179edf6",
+            "size": 1861,
+            "uri": "https://{canondata_backend}/1937367/dc014a2231454d5ef3ad4180900ed3344d6616e9/resource.tar.gz#test.test_window-range_pg_win_range_cast_bound_many--Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-range_pg/win_range_cast_bound_many--Results]": [
+        {
+            "checksum": "9b4312f14d0a0477bfa6a695a4c9a5ce",
+            "size": 1808,
+            "uri": "https://{canondata_backend}/1900335/c6cb7928ae818ab9aaef8dc6112a5374b89c9f39/resource.tar.gz#test.test_window-range_pg_win_range_cast_bound_many--Results_/results.txt"
+        }
+    ],
+    "test.test[window-range_pg/win_range_int64_order_by_multiply--Debug]": [
+        {
+            "checksum": "767ee2c6deefef9307be1c1646d3627b",
+            "size": 2008,
+            "uri": "https://{canondata_backend}/1937367/dc014a2231454d5ef3ad4180900ed3344d6616e9/resource.tar.gz#test.test_window-range_pg_win_range_int64_order_by_multiply--Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-range_pg/win_range_int64_order_by_multiply--Results]": [
+        {
+            "checksum": "f042429c5eb168c4d51c3cf5e39f9380",
+            "size": 1237,
+            "uri": "https://{canondata_backend}/1937001/baea66927e7bfe3a039b95bd8e46b655ecb1abfa/resource.tar.gz#test.test_window-range_pg_win_range_int64_order_by_multiply--Results_/results.txt"
+        }
+    ],
     "test.test[window-win_func_cume_dist-default.txt-Debug]": [
         {
             "checksum": "c76e9b4417d128a3d5313b5825a03072",

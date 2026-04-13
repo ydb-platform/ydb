@@ -4,79 +4,100 @@ Below are examples of the code for enabling metrics in Prometheus in different {
 
 {% list tabs %}
 
-- Go (native)
+- Go
 
-   ```go
-   package main
+  {% list tabs %}
 
-   import (
-       "context"
+  - Native SDK
 
-       "github.com/prometheus/client_golang/prometheus"
-       metrics "github.com/ydb-platform/ydb-go-sdk-prometheus/v2"
-       "github.com/ydb-platform/ydb-go-sdk/v3"
-       "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-   )
+      ```go
+      package main
 
-   func main() {
-       ctx := context.Background()
-       registry := prometheus.NewRegistry()
-       db, err := ydb.Open(ctx,
-           os.Getenv("YDB_CONNECTION_STRING"),
-           metrics.WithTraces(
-               registry,
-               metrics.WithDetails(trace.DetailsAll),
-               metrics.WithSeparator("_"),
-           ),
-       )
-       if err != nil {
-           panic(err)
-       }
-       defer db.Close(ctx)
-       ...
-   }
-   ```
+      import (
+          "context"
 
-- Go (database/sql)
+          "github.com/prometheus/client_golang/prometheus"
+          metrics "github.com/ydb-platform/ydb-go-sdk-prometheus/v2"
+          "github.com/ydb-platform/ydb-go-sdk/v3"
+          "github.com/ydb-platform/ydb-go-sdk/v3/trace"
+      )
 
-   ```go
-   package main
+      func main() {
+          ctx := context.Background()
+          registry := prometheus.NewRegistry()
+          db, err := ydb.Open(ctx,
+              os.Getenv("YDB_CONNECTION_STRING"),
+              metrics.WithTraces(
+                  registry,
+                  metrics.WithDetails(trace.DetailsAll),
+                  metrics.WithSeparator("_"),
+              ),
+          )
+          if err != nil {
+              panic(err)
+          }
+          defer db.Close(ctx)
+          ...
+      }
+      ```
 
-   import (
-       "context"
-       "database/sql"
+  - database/sql
 
-       "github.com/prometheus/client_golang/prometheus"
-       metrics "github.com/ydb-platform/ydb-go-sdk-prometheus/v2"
-       "github.com/ydb-platform/ydb-go-sdk/v3"
-       "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-   )
+      ```go
+      package main
 
-   func main() {
-       ctx := context.Background()
-       registry := prometheus.NewRegistry()
-       nativeDriver, err := ydb.Open(ctx,
-           os.Getenv("YDB_CONNECTION_STRING"),
-           metrics.WithTraces(
-               registry,
-               metrics.WithDetails(trace.DetailsAll),
-               metrics.WithSeparator("_"),
-           ),
-       )
-       if err != nil {
-           panic(err)
-       }
-       defer nativeDriver.Close(ctx)
+      import (
+          "context"
+          "database/sql"
 
-       connector, err := ydb.Connector(nativeDriver)
-       if err != nil {
-           panic(err)
-       }
+          "github.com/prometheus/client_golang/prometheus"
+          metrics "github.com/ydb-platform/ydb-go-sdk-prometheus/v2"
+          "github.com/ydb-platform/ydb-go-sdk/v3"
+          "github.com/ydb-platform/ydb-go-sdk/v3/trace"
+      )
 
-       db := sql.OpnDB(connector)
-       defer db.Close()
-       ...
-   }
-   ```
+      func main() {
+          ctx := context.Background()
+          registry := prometheus.NewRegistry()
+          nativeDriver, err := ydb.Open(ctx,
+              os.Getenv("YDB_CONNECTION_STRING"),
+              metrics.WithTraces(
+                  registry,
+                  metrics.WithDetails(trace.DetailsAll),
+                  metrics.WithSeparator("_"),
+              ),
+          )
+          if err != nil {
+              panic(err)
+          }
+          defer nativeDriver.Close(ctx)
 
+          connector, err := ydb.Connector(nativeDriver)
+          if err != nil {
+              panic(err)
+          }
+
+          db := sql.OpenDB(connector)
+          defer db.Close()
+          ...
+      }
+      ```
+
+  {% endlist %}
+
+- Java
+
+  This functionality is not currently supported.
+
+<<<<<<< HEAD
+=======
+- Python
+
+  This functionality is not currently supported.
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+>>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 {% endlist %}

@@ -1,131 +1,363 @@
 # Inserting data
 
-Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for batch insert:
+Below are examples of using the {{ ydb-short-name }} SDK built-in tools to perform inserts:
 
 {% list tabs %}
 
-- Go (native)
+- Go
 
-   ```go
-   package main
+  {% list tabs %}
 
-   import (
-     "context"
-     "os"
+  - Native SDK
 
-     "github.com/ydb-platform/ydb-go-sdk/v3"
-     "github.com/ydb-platform/ydb-go-sdk/v3/table"
-     "github.com/ydb-platform/ydb-go-sdk/v3/table/types"
-   )
+    ```go
+    package main
 
-   func main() {
-     ctx, cancel := context.WithCancel(context.Background())
-     defer cancel()
-     db, err := ydb.Open(ctx,
-       os.Getenv("YDB_CONNECTION_STRING"),
-       ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-     )
-     if err != nil {
-       panic(err)
-     }
-     defer db.Close(ctx)
-     // execute upsert with native ydb data
-     err = db.Table().DoTx( // Do retry operation on errors with best effort
-       ctx, // context manages exiting from Do
-       func(ctx context.Context, tx table.TransactionActor) (err error) { // retry operation
-         res, err := tx.Execute(ctx, `
-             PRAGMA TablePathPrefix("/path/to/table");
-             DECLARE $seriesID AS Uint64;
-             DECLARE $seasonID AS Uint64;
-             DECLARE $episodeID AS Uint64;
-             DECLARE $views AS Uint64;
-             UPSERT INTO episodes ( series_id, season_id, episode_id, views )
-             VALUES ( $seriesID, $seasonID, $episodeID, $views );
-           `,
-           table.NewQueryParameters(
-             table.ValueParam("$seriesID", types.Uint64Value(1)),
-             table.ValueParam("$seasonID", types.Uint64Value(1)),
-             table.ValueParam("$episodeID", types.Uint64Value(1)),
-             table.ValueParam("$views", types.Uint64Value(1)), // increment views
-           ),
-         )
-         if err != nil {
-           return err
-         }
-         if err = res.Err(); err != nil {
-           return err
-         }
-         return res.Close()
-       }, table.WithIdempotent(),
-     )
-     if err != nil {
-       fmt.Printf("unexpected error: %v", err)
-     }
-   }
-   ```
+    import (
+      "context"
+      "os"
 
-- Go (database/sql)
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/table"
+      "github.com/ydb-platform/ydb-go-sdk/v3/table/types"
+    )
 
-   ```go
-   package main
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      // execute upsert with native ydb data
+      err = db.Table().DoTx( // Do retry operation on errors with best effort
+        ctx, // context manages exiting from Do
+        func(ctx context.Context, tx table.TransactionActor) (err error) { // retry operation
+          res, err := tx.Execute(ctx, `
+              PRAGMA TablePathPrefix("/path/to/table");
+              DECLARE $seriesID AS Uint64;
+              DECLARE $seasonID AS Uint64;
+              DECLARE $episodeID AS Uint64;
+              DECLARE $views AS Uint64;
+              UPSERT INTO episodes ( series_id, season_id, episode_id, views )
+              VALUES ( $seriesID, $seasonID, $episodeID, $views );
+            `,
+            table.NewQueryParameters(
+              table.ValueParam("$seriesID", types.Uint64Value(1)),
+              table.ValueParam("$seasonID", types.Uint64Value(1)),
+              table.ValueParam("$episodeID", types.Uint64Value(1)),
+              table.ValueParam("$views", types.Uint64Value(1)), // increment views
+            ),
+          )
+          if err != nil {
+            return err
+          }
+          if err = res.Err(); err != nil {
+            return err
+          }
+          return res.Close()
+        }, table.WithIdempotent(),
+      )
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+    }
+    ```
 
-   import (
-     "context"
-     "database/sql"
-     "os"
+  - database/sql
 
-     _ "github.com/ydb-platform/ydb-go-sdk/v3"
-     "github.com/ydb-platform/ydb-go-sdk/v3/retry"
-     "github.com/ydb-platform/ydb-go-sdk/v3/types"
-   )
+    ```go
+    package main
 
-   func main() {
-     db, err := sql.Open("ydb", os.Getenv("YDB_CONNECTION_STRING"))
-     if err != nil {
-       panic(err)
-     }
-     defer db.Close(ctx)
-     // execute upsert with native ydb data
-     err = retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
-       if _, err = tx.ExecContext(ctx,`
-           PRAGMA TablePathPrefix("/local");
-           REPLACE INTO series
-           SELECT
-             series_id,
-             title,
-             series_info,
-             comment
-           FROM AS_TABLE($seriesData);
-         `,
-         sql.Named("seriesData", types.ListValue(
-           types.StructValue(
-             types.StructFieldValue("series_id", types.Uint64Value(1)),
-             types.StructFieldValue("title", types.TextValue("IT Crowd")),
-             types.StructFieldValue("series_info", types.TextValue(
-               "The IT Crowd is a British sitcom produced by Channel 4, written by Graham Linehan, produced by "+
-               "Ash Atalla and starring Chris O'Dowd, Richard Ayoade, Katherine Parkinson, and Matt Berry.",
-             )),
-             types.StructFieldValue("comment", types.NullValue(types.TypeText)),
-           ),
-           types.StructValue(
-             types.StructFieldValue("series_id", types.Uint64Value(2)),
-             types.StructFieldValue("title", types.TextValue("Silicon Valley")),
-             types.StructFieldValue("series_info", types.TextValue(
-               "Silicon Valley is an American comedy television series created by Mike Judge, John Altschuler and "+
-               "Dave Krinsky. The series focuses on five young men who founded a startup company in Silicon Valley.",
-             )),
-             types.StructFieldValue("comment", types.TextValue("lorem ipsum")),
-           ),
-         )),
-       ); err != nil {
-         return err
-       }
-       return nil
-     }, retry.WithDoTxRetryOptions(retry.WithIdempotent(true)))
-     if err != nil {
-       fmt.Printf("unexpected error: %v", err)
-     }
-   }
-   ```
+    import (
+      "context"
+      "database/sql"
+      "os"
 
+      _ "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/retry"
+      "github.com/ydb-platform/ydb-go-sdk/v3/types"
+    )
+
+    func main() {
+      db, err := sql.Open("ydb", os.Getenv("YDB_CONNECTION_STRING"))
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      // execute upsert with native ydb data
+      err = retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
+        if _, err = tx.ExecContext(ctx,`
+            PRAGMA TablePathPrefix("/local");
+            REPLACE INTO series
+            SELECT
+              series_id,
+              title,
+              series_info,
+              comment
+            FROM AS_TABLE($seriesData);
+          `,
+          sql.Named("seriesData", types.ListValue(
+            types.StructValue(
+              types.StructFieldValue("series_id", types.Uint64Value(1)),
+              types.StructFieldValue("title", types.TextValue("IT Crowd")),
+              types.StructFieldValue("series_info", types.TextValue(
+                "The IT Crowd is a British sitcom produced by Channel 4, written by Graham Linehan, produced by "+
+                "Ash Atalla and starring Chris O'Dowd, Richard Ayoade, Katherine Parkinson, and Matt Berry.",
+              )),
+              types.StructFieldValue("comment", types.NullValue(types.TypeText)),
+            ),
+            types.StructValue(
+              types.StructFieldValue("series_id", types.Uint64Value(2)),
+              types.StructFieldValue("title", types.TextValue("Silicon Valley")),
+              types.StructFieldValue("series_info", types.TextValue(
+                "Silicon Valley is an American comedy television series created by Mike Judge, John Altschuler and "+
+                "Dave Krinsky. The series focuses on five young men who founded a startup company in Silicon Valley.",
+              )),
+              types.StructFieldValue("comment", types.TextValue("lorem ipsum")),
+            ),
+          )),
+        ); err != nil {
+          return err
+        }
+        return nil
+      }, retry.WithDoTxRetryOptions(retry.WithIdempotent(true)))
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+    }
+    ```
+
+  {% endlist %}
+
+- Java
+
+  {% list tabs %}
+
+  - Native SDK
+
+    Use `SessionRetryContext` and `TableSession.executeDataQuery` with a `$seriesData` parameter of type `List<Struct<...>>`. Build values for `AS_TABLE($seriesData)` the same way as row structs in the [batch insert](./bulk-upsert.md) example.
+
+    ```java
+    SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
+
+    String yql = """
+            PRAGMA TablePathPrefix("/local");
+            DECLARE $seriesData AS List<Struct<
+                series_id: Uint64,
+                title: Utf8,
+                series_info: Utf8,
+                comment: Optional<Utf8>
+            >>;
+            UPSERT INTO series
+            SELECT series_id, title, series_info, comment FROM AS_TABLE($seriesData);
+            """;
+
+    Params params = Params.of("$seriesData", seriesDataListValue);
+
+    retryCtx.supplyResult(session -> session.executeDataQuery(yql, TxControl.serializableRw(), params))
+            .join();
+    ```
+
+  - JDBC
+
+    ```java
+    try (Connection conn = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local");
+         PreparedStatement ps = conn.prepareStatement(
+                 """
+                 REPLACE INTO series (series_id, title, series_info, comment)
+                 SELECT series_id, title, series_info, comment FROM AS_TABLE($seriesData);
+                 """
+         )) {
+        // Set $seriesData according to the query type (see JDBC driver documentation)
+    }
+    ```
+
+    In Spring Boot, Hibernate, JOOQ, and other JDBC stacks, the driver also tries to optimize **large** sequences of inserts and updates: when needed, **UPSERT**, `INSERT`, `UPDATE`, and `DELETE` are **batched** on the driver side (including large batches from ORMs).
+
+  {% endlist %}
+
+<<<<<<< HEAD
+=======
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    Use `QuerySessionPool` and `execute_with_retries` with a parameterized YQL query. The query uses the container type `List<Struct<...>>`, so you can pass several rows in one call.
+
+    ```python
+    import os
+    import ydb
+
+    with ydb.Driver(
+        connection_string=os.environ["YDB_CONNECTION_STRING"],
+        credentials=ydb.credentials_from_env_variables(),
+    ) as driver:
+        driver.wait(timeout=5)
+        pool = ydb.QuerySessionPool(driver)
+
+        series_struct_type = ydb.StructType()
+        series_struct_type.add_member("series_id", ydb.PrimitiveType.Uint64)
+        series_struct_type.add_member("title", ydb.PrimitiveType.Utf8)
+        series_struct_type.add_member("series_info", ydb.PrimitiveType.Utf8)
+        series_struct_type.add_member("comment", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+
+        series_data = [
+            {
+                "series_id": 1,
+                "title": "IT Crowd",
+                "series_info": "The IT Crowd is a British sitcom...",
+                "comment": None,
+            },
+            {
+                "series_id": 2,
+                "title": "Silicon Valley",
+                "series_info": "Silicon Valley is an American comedy...",
+                "comment": "lorem ipsum",
+            },
+        ]
+
+        pool.execute_with_retries(
+            """
+            DECLARE $seriesData AS List<Struct<
+                series_id: Uint64,
+                title: Utf8,
+                series_info: Utf8,
+                comment: Optional<Utf8>
+            >>;
+
+            UPSERT INTO series
+            (
+                series_id,
+                title,
+                series_info,
+                comment
+            )
+            SELECT
+                series_id,
+                title,
+                series_info,
+                comment
+            FROM AS_TABLE($seriesData);
+            """,
+            {"$seriesData": (series_data, ydb.ListType(series_struct_type))},
+            retry_settings=ydb.RetrySettings(idempotent=True),
+        )
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import os
+    import ydb
+    import asyncio
+
+    async def ydb_init():
+        async with ydb.aio.Driver(
+            connection_string=os.environ["YDB_CONNECTION_STRING"],
+            credentials=ydb.credentials_from_env_variables(),
+        ) as driver:
+            await driver.wait()
+            pool = ydb.aio.QuerySessionPool(driver)
+
+            series_struct_type = ydb.StructType()
+            series_struct_type.add_member("series_id", ydb.PrimitiveType.Uint64)
+            series_struct_type.add_member("title", ydb.PrimitiveType.Utf8)
+            series_struct_type.add_member("series_info", ydb.PrimitiveType.Utf8)
+            series_struct_type.add_member("comment", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+
+            series_data = [
+                {"series_id": 1, "title": "IT Crowd", "series_info": "The IT Crowd is a British sitcom...", "comment": None},
+                {"series_id": 2, "title": "Silicon Valley", "series_info": "Silicon Valley is an American comedy...", "comment": "lorem ipsum"},
+            ]
+
+            await pool.execute_with_retries(
+                """
+                DECLARE $seriesData AS List<Struct<
+                    series_id: Uint64,
+                    title: Utf8,
+                    series_info: Utf8,
+                    comment: Optional<Utf8>
+                >>;
+
+                UPSERT INTO series (series_id, title, series_info, comment)
+                SELECT series_id, title, series_info, comment FROM AS_TABLE($seriesData);
+                """,
+                {"$seriesData": (series_data, ydb.ListType(series_struct_type))},
+                retry_settings=ydb.RetrySettings(idempotent=True),
+            )
+
+    asyncio.run(ydb_init())
+    ```
+
+  - SQLAlchemy
+
+    When using {{ ydb-short-name }} through SQLAlchemy, use the `ydb_sqlalchemy.upsert` helper to build an `UPSERT INTO` statement from a table and values. You can insert one row or several rows in one call:
+
+    ```python
+    import os
+    import sqlalchemy as sa
+    from sqlalchemy import Column, Integer, MetaData, String, Table
+    import ydb_sqlalchemy as ydb_sa
+
+    engine = sa.create_engine(os.environ["YDB_SQLALCHEMY_URL"])
+
+    series = Table(
+        "series",
+        MetaData(),
+        Column("series_id", Integer, primary_key=True),
+        Column("title", String),
+        Column("series_info", String),
+        Column("comment", String, nullable=True),
+    )
+
+    with engine.connect() as connection:
+        stmt = ydb_sa.upsert(series).values(
+            [
+                {
+                    "series_id": 1,
+                    "title": "IT Crowd",
+                    "series_info": "The IT Crowd is a British sitcom...",
+                    "comment": None,
+                },
+                {
+                    "series_id": 2,
+                    "title": "Silicon Valley",
+                    "series_info": "Silicon Valley is an American comedy...",
+                    "comment": "lorem ipsum",
+                },
+            ]
+        )
+        connection.execute(stmt)
+        connection.commit()
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  ```javascript
+  import { Driver } from '@ydbjs/core'
+  import { query } from '@ydbjs/query'
+
+  const driver = new Driver('grpc://localhost:2136/local')
+  await driver.ready()
+
+  const users = [
+    { id: 1, name: 'Alice' },
+    { id: 2, name: 'Bob' },
+  ]
+
+  const sql = query(driver)
+  await sql`UPSERT INTO users SELECT * FROM AS_TABLE(${users})`
+  ```
+
+
+>>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 {% endlist %}

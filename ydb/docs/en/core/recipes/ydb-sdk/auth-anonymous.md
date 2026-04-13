@@ -2,107 +2,119 @@
 
 <!-- markdownlint-disable blanks-around-fences -->
 
-Below are examples of the code for anonymous authentication in different {{ ydb-short-name }} SDKs.
+Below are examples of anonymous authentication in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
 
-- Go (native)
+- Go
 
-  By default, anonymous authentication is used.
-  You can explicitly enable anonymous authentication as follows:
+  {% list tabs %}
 
-  ```go
-  package main
+  - Native SDK
 
-  import (
-    "context"
+    Anonymous authentication is the default.
+    You can enable it explicitly as follows:
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-  )
+    ```go
+    package main
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAnonymousCredentials(),
+    import (
+      "context"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAnonymousCredentials(),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      ...
     }
-    defer db.Close(ctx)
-    ...
-  }
-  ```
+    ```
 
-- Go (database/sql)
+  - database/sql
 
-  By default, anonymous authentication is used.
-  You can explicitly enable anonymous authentication as follows:
+    Anonymous authentication is the default.
+    You can enable it explicitly as follows:
 
-  ```go
-  package main
+    ```go
+    package main
 
-  import (
-    "context"
-    "database/sql"
-    "os"
+    import (
+      "context"
+      "database/sql"
+      "os"
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      ydb.WithAnonymousCredentials(),
+      "github.com/ydb-platform/ydb-go-sdk/v3"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAnonymousCredentials(),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      db := sql.OpenDB(connector)
+      defer db.Close()
+      ...
     }
-    defer nativeDriver.Close(ctx)
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    db := sql.OpenDB(connector)
-    defer db.Close()
-    ...
-  }
-  ```
+    ```
+
+  {% endlist %}
 
 - Java
 
-  ```java
-  public void work(String connectionString) {
-      AuthProvider authProvider = NopAuthProvider.INSTANCE;
+  {% list tabs %}
 
-      GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-              .withAuthProvider(authProvider)
-              .build());
+  - Native SDK
 
-      QueryClient queryClient = QueryClient.newClient(transport).build();
+    ```java
+    public void work(String connectionString) {
+        AuthProvider authProvider = NopAuthProvider.INSTANCE;
 
-      doWork(queryClient);
+        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                .withAuthProvider(authProvider)
+                .build();
+             QueryClient queryClient = QueryClient.newClient(transport).build()) {
 
-      queryClient.close();
-      transport.close();
-  }
-  ```
+            doWork(queryClient);
+        }
+    }
+    ```
 
-- JDBC
+  - JDBC
 
-  ```java
-  public void work() {
-      // Without additional properties, the driver uses anonymous authentication
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
-        doWork(connection);
-      }
-  }
-  ```
+    ```java
+    public void work() throws SQLException {
+        // Connection with no extra options — anonymous authentication
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
+            doWork(connection);
+        }
+    }
+    ```
 
-- Node.js
+    In Spring Boot, ORMs, and other JDBC wrappers, use the same JDBC URL as above (for example `spring.datasource.url`).
+
+  {% endlist %}
+
+- JavaScript
 
   {% include [auth-anonymous](../../_includes/nodejs/auth-anonymous.md) %}
 

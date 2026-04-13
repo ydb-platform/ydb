@@ -7,6 +7,7 @@ RECURSE(
     http
     interconnect
     log_backend
+    metrics
     memory_log
     prof
     testlib

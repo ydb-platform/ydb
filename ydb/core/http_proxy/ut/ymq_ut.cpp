@@ -36,6 +36,18 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         return NYdb::TDriver(driverConfig);
     }
 
+    void EnableCompatibility(auto& kikimrServer,auto& driver) {
+        NYdb::NQuery::TQueryClient queryClient(driver);
+
+        auto execute = queryClient.ExecuteQuery(Sprintf(R"__(
+            INSERT INTO `%s/.Settings` (Account, Name, Value) VALUES ('cloud4', 'MigrationCompatibility', 'true')
+        )__", kikimrServer->GetRuntime()->GetAppData().SqsConfig.GetRoot().c_str()), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(execute.IsSuccess(), execute.GetIssues().ToString());
+
+        // Wait for user settings to be updated.
+        Sleep(TDuration::Seconds(1));
+    }
+
     Y_UNIT_TEST_F(TestCreateQueue, THttpProxyTestMock) {
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
         CreateQueue({{"QueueName", "ExampleQueueName"}});
@@ -457,16 +469,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
 
         NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
-
-        NYdb::NQuery::TQueryClient queryClient(driver);
-
-        auto execute = queryClient.ExecuteQuery(Sprintf(R"__(
-            INSERT INTO `%s/.Settings` (Account, Name, Value) VALUES ('cloud4', 'MigrationCompatibility', 'true')
-        )__", KikimrServer->GetRuntime()->GetAppData().SqsConfig.GetRoot().c_str()), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(execute.IsSuccess(), execute.GetIssues().ToString());
-
-        // Wait for user settings to be updated.
-        Sleep(TDuration::Seconds(1));
+        EnableCompatibility(KikimrServer, driver);
 
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
         auto queueUrl = GetByPath<TString>(json, "QueueUrl");
@@ -2648,8 +2651,9 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         }
     }
 
-    Y_UNIT_TEST_F(TestSendMessage_Deduplication_Compat, THttpProxyTestMock) {
+    Y_UNIT_TEST_F(TestSendMessage_Deduplication_Compatibility, THttpProxyTestMock) {
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
 
         auto queueName = "ExampleQueueName.fifo";
         auto json = CreateQueue({
@@ -2671,6 +2675,58 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         });
 
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        SendMessage({
+            {"QueueUrl", resultQueueUrl},
+            {"MessageBody", "MessageBody-0"},
+            {"MessageGroupId", "MessageGroupId-0"},
+            {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+        });
+
+        // check
+        {
+            auto json = ReceiveMessage({
+                {"QueueUrl", resultQueueUrl},
+                {"WaitTimeSeconds", 1},
+                {"VisibilityTimeout", 1}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], "MessageBody-0");
+        }
+        {
+            auto json = ReceiveMessage({
+                {"QueueUrl", resultQueueUrl},
+                {"WaitTimeSeconds", 1},
+                {"VisibilityTimeout", 1}
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(json["Messages"].GetType(), NJson::EJsonValueType::JSON_UNDEFINED, "Message was deduplicated and not writen to the topic: " << json.GetStringRobust());
+        }
+    }
+
+    Y_UNIT_TEST_F(TestSendMessage_Deduplication_Compatibility_WithUserSettings, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+
+        auto queueName = "ExampleQueueName.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"ReceiveMessageWaitTimeSeconds", "3"},
+                {"VisibilityTimeout", "1"},
+            }}
+        });
+
+        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        SendMessage({
+            {"QueueUrl", resultQueueUrl},
+            {"MessageBody", "MessageBody-0"},
+            {"MessageGroupId", "MessageGroupId-0"},
+            {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+        });
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+        EnableCompatibility(KikimrServer, driver);
 
         SendMessage({
             {"QueueUrl", resultQueueUrl},

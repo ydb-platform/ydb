@@ -390,44 +390,31 @@ public:
 
     static constexpr int DefaultMaxListKeys = 1000;
 
-    struct TListContext {
-        const TString& Marker;
-        int MaxKeys;
-        Aws::S3::Model::ListObjectsResult& Result;
-        bool Truncated = false;
-
-        bool Add(const TString& path) {
-            if (!Marker.empty() && path <= Marker) {
-                return true;
-            }
-            if (static_cast<int>(Result.GetContents().size()) >= MaxKeys) {
-                Truncated = true;
-                return false;
-            }
-            Aws::S3::Model::Object obj;
-            obj.SetKey(Aws::String(path.data(), path.size()));
-            Result.AddContents(std::move(obj));
-            return true;
-        }
-    };
-
-    void ListFilesRecursive(const TFsPath& dir, TListContext& ctx) {
+    bool ListFilesRecursive(const TFsPath& dir, const TString& marker, int maxKeys,
+                            Aws::S3::Model::ListObjectsResult& result) {
         TVector<TString> children;
         dir.ListNames(children);
         Sort(children);
         for (const auto& name : children) {
             TFsPath child = dir / name;
             if (child.IsDirectory()) {
-                ListFilesRecursive(child, ctx);
-                if (ctx.Truncated) {
-                    return;
+                if (ListFilesRecursive(child, marker, maxKeys, result)) {
+                    return true;
                 }
             } else if (child.IsFile()) {
-                if (!ctx.Add(child.GetPath())) {
-                    return;
+                const TString& path = child.GetPath();
+                if (!marker.empty() && path <= marker) {
+                    continue;
                 }
+                if (static_cast<int>(result.GetContents().size()) >= maxKeys) {
+                    return true;
+                }
+                Aws::S3::Model::Object obj;
+                obj.SetKey(Aws::String(path.data(), path.size()));
+                result.AddContents(std::move(obj));
             }
         }
+        return false;
     }
 
     void Handle(TEvListObjectsRequest::TPtr& ev) {
@@ -453,13 +440,13 @@ public:
             }
 
             Aws::S3::Model::ListObjectsResult awsResult;
-            TListContext ctx{marker, maxKeys, awsResult};
+            bool truncated = false;
 
             if (dirPath.Exists() && dirPath.IsDirectory()) {
-                ListFilesRecursive(dirPath, ctx);
+                truncated = ListFilesRecursive(dirPath, marker, maxKeys, awsResult);
             }
 
-            awsResult.SetIsTruncated(ctx.Truncated);
+            awsResult.SetIsTruncated(truncated);
 
             Aws::Utils::Outcome<Aws::S3::Model::ListObjectsResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvListObjectsResponse>(std::move(outcome));

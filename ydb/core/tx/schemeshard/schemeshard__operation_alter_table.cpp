@@ -167,7 +167,6 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         .EnableTablePgTypes = AppData()->FeatureFlags.GetEnableTablePgTypes(),
         .EnableTableDatetime64 = AppData()->FeatureFlags.GetEnableTableDatetime64(),
         .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
-        .EnableSetColumnConstraint = AppData()->FeatureFlags.GetEnableSetColumnConstraint(),
     };
 
 

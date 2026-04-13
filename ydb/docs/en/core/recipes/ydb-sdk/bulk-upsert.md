@@ -1,6 +1,6 @@
 # Bulk upsert of data
 
-{{ ydb-short-name }} supports bulk upsert of many records without atomicity guarantees. The upsert process is split into multiple independent parallel transactions, each covering a single partition. For that reason, this approach is more effective than using YQL. If successful, the `BulkUpsert` method guarantees inserting all the data transmitted by the query.
+{{ ydb-short-name }} supports bulk insert of many rows without atomicity guarantees. The write is split into several independent transactions, each touching a single partition, with parallel execution. This makes the approach more efficient than plain YQL. On success, the `BulkUpsert` method guarantees that all data passed in the request is inserted.
 
 {% note warning %}
 
@@ -8,11 +8,15 @@ When you load data to [column-oriented tables](../../concepts/datamodel/table.md
 
 {% endnote %}
 
-Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for bulk upsert:
+Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk insert:
 
 {% list tabs %}
 
-- Go (native)
+- Go
+
+  {% list tabs %}
+
+  - Native SDK
 
   {% cut "Bulk upsert with native {{ ydb-short-name }} data" %}
 
@@ -221,13 +225,18 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
 
   {% endcut %}
 
-- Go (database/sql)
+  - database/sql
 
-  The implementation of {{ ydb-short-name }} `database/sql` doesn't support bulk nontransactional upsert of data.
+    The {{ ydb-short-name }} `database/sql` driver does not support non-transactional bulk insert.
+    For bulk insert, use [transactional insert](./upsert.md).
 
-  For bulk upsert, use [transactional upsert](./upsert.md).
+  {% endlist %}
 
 - Java
+
+  {% list tabs %}
+
+  - Native SDK
 
   ```java
     private static final String TABLE_NAME = "bulk_upsert";
@@ -281,7 +290,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
     }
   ```
 
-- JDBC
+  - JDBC
 
   ```java
     private static final int BATCH_SIZE = 1000;
@@ -310,4 +319,100 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
     }
   ```
 
+<<<<<<< HEAD
+=======
+    In Spring Boot, Hibernate, JOOQ, and other ORM stacks on JDBC you can run native YQL (including from repositories and `@Query`). The driver tries to optimize large inserts; `UPDATE`, `INSERT`, `DELETE`, `UPSERT` through JDBC are batched on the driver side when appropriate.
+
+  {% endlist %}
+
+- Python
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    import posixpath
+    import ydb
+
+    def bulk_upsert(driver: ydb.Driver, path: str):
+        column_types = (
+            ydb.BulkUpsertColumns()
+            .add_column("id", ydb.PrimitiveType.Uint64)
+            .add_column("val", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        )
+        rows = [
+            {"id": 1, "val": "1"},
+            {"id": 2, "val": "2"},
+            {"id": 3, "val": "3"},
+        ]
+        driver.table_client.bulk_upsert(posixpath.join(path, "tablename"), rows, column_types)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import os
+    import posixpath
+    import ydb
+    import asyncio
+
+    async def bulk_upsert(driver: ydb.aio.Driver, path: str):
+        column_types = (
+            ydb.BulkUpsertColumns()
+            .add_column("id", ydb.PrimitiveType.Uint64)
+            .add_column("val", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        )
+        rows = [
+            {"id": 1, "val": "1"},
+            {"id": 2, "val": "2"},
+            {"id": 3, "val": "3"},
+        ]
+        await driver.table_client.bulk_upsert(
+            posixpath.join(path, "tablename"), rows, column_types
+        )
+
+    async def main():
+        async with ydb.aio.Driver(
+            connection_string=os.environ["YDB_CONNECTION_STRING"],
+            credentials=ydb.credentials_from_env_variables(),
+        ) as driver:
+            await driver.wait()
+            await bulk_upsert(driver, "/local")
+
+    asyncio.run(main())
+    ```
+
+  - SQLAlchemy
+
+    ```python
+    import os
+    import sqlalchemy as sa
+    import ydb
+
+    engine = sa.create_engine(os.environ["YDB_SQLALCHEMY_URL"])
+    with engine.connect() as connection:
+        dbapi_conn = connection.connection
+
+        column_types = (
+              ydb.BulkUpsertColumns()
+              .add_column("id", ydb.PrimitiveType.Uint64)
+              .add_column("val", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+          )
+        rows = [
+            {"id": 1, "val": "1"},
+            {"id": 2, "val": "2"},
+            {"id": 3, "val": "3"},
+        ]
+
+        dbapi_conn.bulk_upsert("tablename", rows, column_types)
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+>>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 {% endlist %}

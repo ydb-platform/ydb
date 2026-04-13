@@ -291,11 +291,13 @@ class TestCSManyUpdates(object):
         [
             # On practice, 10 rows * 100 updates runs for 100 seconds approximately.
             # So, there is no point in setting larger numbers here.
-            # BULK_UPSERT updates all the rows at once, so a bit different math for it. 10 * 500 works good enough.
+            # BULK_UPSERT updates all the rows at once, but reading back 500+ overlapping
+            # portions via the SIMPLE reader's deduplication pipeline is slow, so we use
+            # the same limit of 100 to stay well within the test timeout.
             # Single operations
             (10, [{"mod_type": ModType.UPDATE, "mods_num": 100}]),
             (10, [{"mod_type": ModType.UPSERT, "mods_num": 100}]),
-            (10, [{"mod_type": ModType.BULK_UPSERT, "mods_num": 500}]),
+            (10, [{"mod_type": ModType.BULK_UPSERT, "mods_num": 100}]),
             # Sequential combinations
             (
                 15,

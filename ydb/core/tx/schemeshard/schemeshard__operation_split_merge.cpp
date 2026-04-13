@@ -271,9 +271,8 @@ public:
         // Clear TTL lag counters for src shards (O(k) instead of O(N)).
         if (tableInfo->IsTTLEnabled()) {
             for (const TShardIdx& srcIdx : allSrcShardIdxs) {
-                auto it = tableInfo->GetShard2PartitionIdx().find(srcIdx);
-                if (it != tableInfo->GetShard2PartitionIdx().end()) {
-                    if (auto& lag = tableInfo->GetPartitions()[it->second].LastCondEraseLag) {
+                if (auto* p = tableInfo->GetPartitionStore().FindPtr(srcIdx)) {
+                    if (auto& lag = p->LastCondEraseLag) {
                         context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
                         lag.Clear();
                     }
@@ -283,19 +282,17 @@ public:
 
         auto oldAggrStats = tableInfo->GetStats().Aggregated;
 
-        // srcFirstIdx must be computed before ApplySplitMerge updates Shard2PartitionIdx.
-        // splitStartIdx is the DB persistence boundary: 0 for a full rewrite (flag off),
-        // srcFirstIdx for a partial rewrite (flag on).  The two MUST be kept separate:
-        // ApplySplitMerge always needs the actual position of the first src shard.
-        const ui64 oldPartitionCount = tableInfo->GetPartitions().size();
+        // srcFirstIdx: position of the first src shard in the current partition array.
+        // O(k): use the Position field embedded in TTableShardInfo instead of
+        // scanning the whole Partitions vector.
         const ui64 kAdded = dstPartitions.size();
-        ui64 srcFirstIdx = oldPartitionCount; // sentinel — will be overwritten
-        for (const auto& srcIdx : allSrcShardIdxs) {
-            const auto it = tableInfo->GetShard2PartitionIdx().find(srcIdx);
-            if (it != tableInfo->GetShard2PartitionIdx().end()) {
-                srcFirstIdx = Min(srcFirstIdx, it->second);
-            }
+        ui64 srcFirstIdx = Max<ui64>(); // sentinel — will be overwritten
+        for (const TShardIdx& s : allSrcShardIdxs) {
+            const auto* p = tableInfo->GetPartitionStore().FindPtr(s);
+            Y_ABORT_UNLESS(p);
+            srcFirstIdx = Min(srcFirstIdx, p->Position);
         }
+        Y_ABORT_UNLESS(srcFirstIdx != Max<ui64>());
         const ui64 splitStartIdx = AppData()->FeatureFlags.GetEnableSplitMergePartialPersistence()
             ? srcFirstIdx
             : 0;
@@ -563,8 +560,8 @@ public:
             ui64 piPrev = srcPartitionIdxs[i-1];
 
             if (pi != piPrev + 1) {
-                auto shardIdx = tableInfo->GetPartitions()[pi].ShardIdx;
-                auto shardIdxPrev = tableInfo->GetPartitions()[piPrev].ShardIdx;
+                auto shardIdx = tableInfo->GetPartitions()[pi]->ShardIdx;
+                auto shardIdxPrev = tableInfo->GetPartitions()[piPrev]->ShardIdx;
 
                 errStr = TStringBuilder()
                     << "Partitions are not consecutive at index " << i << " : #" << piPrev << "(" << context.SS->ShardInfos[shardIdxPrev].TabletID << ")"
@@ -576,7 +573,7 @@ public:
         TString firstRangeBegin;
         if (srcPartitionIdxs[0] != 0) {
             // Take the end of previous shard
-            firstRangeBegin = tableInfo->GetPartitions()[srcPartitionIdxs[0]-1].EndOfRange;
+            firstRangeBegin = tableInfo->GetPartitions()[srcPartitionIdxs[0]-1]->EndOfRange;
         } else {
             TVector<TCell> firstKey;
             ui32 keyColCount = 0;
@@ -595,11 +592,11 @@ public:
         TString prevRangeEnd = firstRangeBegin;
         for (ui64 pi : srcPartitionIdxs) {
             auto* srcRange = op.SplitDescription->AddSourceRanges();
-            auto shardIdx = tableInfo->GetPartitions()[pi].ShardIdx;
+            auto shardIdx = tableInfo->GetPartitions()[pi]->ShardIdx;
             srcRange->SetShardIdx(ui64(shardIdx.GetLocalId()));
             srcRange->SetTabletID(ui64(context.SS->ShardInfos[shardIdx].TabletID));
             srcRange->SetKeyRangeBegin(prevRangeEnd);
-            TString rangeEnd = tableInfo->GetPartitions()[pi].EndOfRange;
+            TString rangeEnd = tableInfo->GetPartitions()[pi]->EndOfRange;
             srcRange->SetKeyRangeEnd(rangeEnd);
             prevRangeEnd = rangeEnd;
         }
@@ -611,7 +608,7 @@ public:
         auto idx = context.SS->RegisterShardInfo(datashardInfo);
 
         ui64 lastSrcPartition = srcPartitionIdxs.back();
-        TString lastRangeEnd = tableInfo->GetPartitions()[lastSrcPartition].EndOfRange;
+        TString lastRangeEnd = tableInfo->GetPartitions()[lastSrcPartition]->EndOfRange;
 
         TTxState::TShardOperation dstShardOp(idx, ETabletType::DataShard, TTxState::CreateParts);
         dstShardOp.RangeEnd = lastRangeEnd;
@@ -643,7 +640,7 @@ public:
             return false;
         }
 
-        auto srcShardIdx = tableInfo->GetPartitions()[srcPartitionIdx].ShardIdx;
+        auto srcShardIdx = tableInfo->GetPartitions()[srcPartitionIdx]->ShardIdx;
         const auto forceShardSplitSettings = context.SS->SplitSettings.GetForceShardSplitSettings();
 
         if (tableInfo->GetExpectedPartitionCount() + count - 1 > tableInfo->GetMaxPartitionsCount() &&
@@ -672,19 +669,19 @@ public:
         }
 
         // Last dst shard ends where src shard used to end
-        rangeEnds.push_back(tableInfo->GetPartitions()[srcPartitionIdx].EndOfRange);
+        rangeEnds.push_back(tableInfo->GetPartitions()[srcPartitionIdx]->EndOfRange);
 
         op.SplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>();
         auto* srcRange = op.SplitDescription->AddSourceRanges();
         srcRange->SetShardIdx(ui64(srcShardIdx.GetLocalId()));
         srcRange->SetTabletID(ui64(context.SS->ShardInfos[srcShardIdx].TabletID));
-        srcRange->SetKeyRangeEnd(tableInfo->GetPartitions()[srcPartitionIdx].EndOfRange);
+        srcRange->SetKeyRangeEnd(tableInfo->GetPartitions()[srcPartitionIdx]->EndOfRange);
 
         // Check that ranges are sorted in ascending order
         TVector<TCell> prevKey;
         if (srcPartitionIdx != 0) {
             // Take the end of previous shard
-            TSerializedCellVec key(tableInfo->GetPartitions()[srcPartitionIdx-1].EndOfRange);
+            TSerializedCellVec key(tableInfo->GetPartitions()[srcPartitionIdx-1]->EndOfRange);
             prevKey.assign(key.GetCells().begin(), key.GetCells().end());
         } else {
             // Or start from (NULL, NULL, .., NULL)
@@ -743,7 +740,7 @@ public:
         TString firstRangeBegin;
         if (srcPartitionIdxs[0] != 0) {
             // Take the end of previous shard
-            firstRangeBegin = tableInfo->GetPartitions()[srcPartitionIdxs[0]-1].EndOfRange;
+            firstRangeBegin = tableInfo->GetPartitions()[srcPartitionIdxs[0]-1]->EndOfRange;
         } else {
             TVector<TCell> firstKey;
             ui32 keyColCount = 0;
@@ -762,11 +759,11 @@ public:
         TString prevRangeEnd = firstRangeBegin;
         for (ui64 pi : srcPartitionIdxs) {
             auto* srcRange = op.SplitDescription->AddSourceRanges();
-            auto shardIdx = tableInfo->GetPartitions()[pi].ShardIdx;
+            auto shardIdx = tableInfo->GetPartitions()[pi]->ShardIdx;
             srcRange->SetShardIdx(ui64(shardIdx.GetLocalId()));
             srcRange->SetTabletID(ui64(context.SS->ShardInfos[shardIdx].TabletID));
             srcRange->SetKeyRangeBegin(prevRangeEnd);
-            TString rangeEnd = tableInfo->GetPartitions()[pi].EndOfRange;
+            TString rangeEnd = tableInfo->GetPartitions()[pi]->EndOfRange;
             srcRange->SetKeyRangeEnd(rangeEnd);
             prevRangeEnd = rangeEnd;
         }
@@ -778,7 +775,7 @@ public:
         auto idx = context.SS->RegisterShardInfo(datashardInfo);
 
         ui64 lastSrcPartition = srcPartitionIdxs.back();
-        TString lastRangeEnd = tableInfo->GetPartitions()[lastSrcPartition].EndOfRange;
+        TString lastRangeEnd = tableInfo->GetPartitions()[lastSrcPartition]->EndOfRange;
 
         TTxState::TShardOperation dstShardOp(idx, ETabletType::DataShard, TTxState::CreateParts);
         dstShardOp.RangeEnd = lastRangeEnd;
@@ -892,8 +889,6 @@ public:
             return result;
         }
 
-        const THashMap<TShardIdx, ui64>& shardIdx2partition = tableInfo->GetShard2PartitionIdx();
-
         TVector<ui64> srcPartitionIdxs;
         i64 totalSrcPartCount = 0;
         for (ui32 si = 0; si < info.SourceTabletIdSize(); ++si) {
@@ -915,7 +910,9 @@ public:
                 return result;
             }
 
-            if (!shardIdx2partition.contains(srcShardIdx)) {
+            const auto* partition = tableInfo->GetPartitionStore().FindPtr(srcShardIdx);
+
+            if (partition == nullptr) {
                 TString errMsg = TStringBuilder()
                     << "shard doesn't present at schemeshard at table"
                     << ", tablet: " << srcTabletId
@@ -925,7 +922,7 @@ public:
                 return result;
             }
 
-            if (context.SS->ShardInfos.FindPtr(srcShardIdx)->PathId != path.Base()->PathId || !shardIdx2partition.contains(srcShardIdx)) {
+            if (context.SS->ShardInfos.FindPtr(srcShardIdx)->PathId != path.Base()->PathId) {
                 TString errMsg = TStringBuilder() << "TabletId " << srcTabletId << " is not a partition of table " << info.GetTablePath();
                 setResultError(NKikimrScheme::StatusInvalidParameter, errMsg);
                 return result;
@@ -949,7 +946,7 @@ public:
                 totalSrcPartCount += stats->PartCount;
             }
 
-            auto pi = shardIdx2partition.at(srcShardIdx);
+            const auto pi = partition->Position;
             Y_VERIFY_S(pi < tableInfo->GetPartitions().size(), "pi: " << pi << " partitions.size: " << tableInfo->GetPartitions().size());
             srcPartitionIdxs.push_back(pi);
         }
@@ -1013,7 +1010,7 @@ public:
 
         // Fill Src shards for tx
         for (ui64 pi : srcPartitionIdxs) {
-            auto srcShardIdx = tableInfo->GetPartitions()[pi].ShardIdx;
+            auto srcShardIdx = tableInfo->GetPartitions()[pi]->ShardIdx;
             op.Shards.emplace_back(srcShardIdx, ETabletType::DataShard, TTxState::TransferData);
         }
 

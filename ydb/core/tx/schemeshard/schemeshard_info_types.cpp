@@ -1855,6 +1855,7 @@ void TTableInfo::DeserializeAlterExtraData(const TString& str) {
 #endif
 
 void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
+    Y_ENSURE(PartitionStore.empty());
     Y_ENSURE(Partitions.empty());
     Y_ENSURE(SplitOpsInFlight.empty());
 
@@ -1864,21 +1865,34 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
     Stats.Aggregated.PartCount = newPartitioning.size();
     ExpectedPartitionCount = newPartitioning.size();
 
-    for (const auto& p : newPartitioning) {
-        CondEraseSchedule.PushRaw(p.NextCondErase, p.ShardIdx);
+    // Insert into PartitionStore (THashMap: stable element addresses on insert).
+    // Then build the ordered pointer view.
+    PartitionStore.reserve(newPartitioning.size());
+    Partitions.reserve(newPartitioning.size());
+    for (auto& p : newPartitioning) {
+        const TShardIdx idx = p.ShardIdx;
+        auto [it, _] = PartitionStore.emplace(idx, std::move(p));
+        Partitions.push_back(&it->second);
     }
+    newPartitioning.clear();
 
-    Partitions = std::move(newPartitioning);
     PreserializedTablePartitions.clear();
     PreserializedTablePartitionsNoKeys.clear();
     PreserializedTableSplitBoundaries.clear();
 
-    Shard2PartitionIdx.clear();
-    for (ui32 i = 0; i < Partitions.size(); ++i) {
-        Shard2PartitionIdx[Partitions[i].ShardIdx] = i;
+    // Only schedule TTL sweeps when TTL is actually enabled — non-TTL tables
+    // don't need entries in CondEraseSchedule at all.
+    if (IsTTLEnabled()) {
+        for (auto* p : Partitions) {
+            CondEraseSchedule.PushRaw(p->NextCondErase, p->ShardIdx);
+        }
+        CondEraseSchedule.BuildHeap();
     }
 
-    CondEraseSchedule.BuildHeap();
+    for (ui64 i = 0; i < Partitions.size(); ++i) {
+        Partitions[i]->Position = i;
+    }
+
     VerifyConsistency();
 }
 
@@ -1949,23 +1963,39 @@ void TTableInfo::UpdatePartitioning(TVector<TTableShardInfo>&& newPartitioning) 
         ExpectedPartitionCount = newPartitioning.size();
     }
 
-    // Push schedule entries for new shards only.
+    // Rebuild PartitionStore and ordered view from the new partitioning.
+    THashMap<TShardIdx, TTableShardInfo> newStore;
+    newStore.reserve(newPartitioning.size());
+    TPartitionsVec newOrder;
+    newOrder.reserve(newPartitioning.size());
+
+    for (auto& p : newPartitioning) {
+        const TShardIdx idx = p.ShardIdx;
+        auto [it, _] = newStore.emplace(idx, std::move(p));
+        newOrder.push_back(&it->second);
+    }
+    newPartitioning.clear();
+
+    PartitionStore = std::move(newStore);
+    Partitions = std::move(newOrder);
+
+    // Push schedule entries for new shards only (when TTL is enabled).
     // Removed shards were already erased from CondEraseSchedule in removeOneShard.
-    for (const auto& np : newPartitioning) {
-        if (!Shard2PartitionIdx.contains(np.ShardIdx)) {
-            CondEraseSchedule.Push(np.NextCondErase, np.ShardIdx);
+    if (IsTTLEnabled()) {
+        for (auto* p : Partitions) {
+            if (!CondEraseSchedule.Contains(p->ShardIdx)) {
+                CondEraseSchedule.Push(p->NextCondErase, p->ShardIdx);
+            }
         }
     }
 
-    Partitions = std::move(newPartitioning);
+    for (ui64 i = 0; i < Partitions.size(); ++i) {
+        Partitions[i]->Position = i;
+    }
+
     PreserializedTablePartitions.clear();
     PreserializedTablePartitionsNoKeys.clear();
     PreserializedTableSplitBoundaries.clear();
-
-    Shard2PartitionIdx.clear();
-    for (ui32 i = 0; i < Partitions.size(); ++i) {
-        Shard2PartitionIdx[Partitions[i].ShardIdx] = i;
-    }
 
     VerifyConsistency();
 }
@@ -1977,7 +2007,6 @@ void TTableInfo::ApplySplitMerge(
 ) {
     const ui64 kRemoved = removedShards.size();
     const ui64 kAdded = dstPartitions.size();
-    const i64 delta = (i64)kAdded - (i64)kRemoved;
 
     // splitFirstIdx is the position of the first src shard, pre-computed by the
     // caller (who needs it for PersistTablePartitioningDeletion anyway).
@@ -2038,29 +2067,40 @@ void TTableInfo::ApplySplitMerge(
     for (const TShardIdx& s : removedShards) {
         CondEraseSchedule.Erase(s);
     }
-    for (const auto& dst : dstPartitions) {
-        CondEraseSchedule.Push(dst.NextCondErase, dst.ShardIdx);
-    }
 
-    // --- Shard2PartitionIdx: targeted update ---
+    // --- PartitionStore: erase src, insert dst ---
+    // Surviving entries' addresses are stable (THashMap separate chaining).
     for (const TShardIdx& s : removedShards) {
-        Shard2PartitionIdx.erase(s);
+        PartitionStore.erase(s);
     }
-    // Shift surviving entries at [splitEndIdx, oldN) — must happen before Partitions.erase.
-    for (ui64 i = splitEndIdx; i < Partitions.size(); ++i) {
-        Shard2PartitionIdx[Partitions[i].ShardIdx] = (ui64)((i64)i + delta);
+    TVector<TTableShardInfo*> dstPtrs;
+    dstPtrs.reserve(kAdded);
+    for (auto& dst : dstPartitions) {
+        const TShardIdx idx = dst.ShardIdx;
+        auto [it, _] = PartitionStore.emplace(idx, std::move(dst));
+        dstPtrs.push_back(&it->second);
     }
-    for (ui64 i = 0; i < kAdded; ++i) {
-        Shard2PartitionIdx[dstPartitions[i].ShardIdx] = splitFirstIdx + i;
+    dstPartitions.clear();
+
+    if (IsTTLEnabled()) {
+        for (auto* dst : dstPtrs) {
+            CondEraseSchedule.Push(dst->NextCondErase, dst->ShardIdx);
+        }
     }
 
-    // --- Partitions: in-place erase + insert (O(N-splitFirstIdx) moves, no copies) ---
+    // --- Partitions (pointer vector): erase src ptrs, insert dst ptrs ---
+    // Moving raw pointers is cheap and does not affect the pointed-to objects.
     Partitions.erase(Partitions.begin() + splitFirstIdx, Partitions.begin() + splitEndIdx);
     Partitions.insert(
         Partitions.begin() + splitFirstIdx,
-        std::make_move_iterator(dstPartitions.begin()),
-        std::make_move_iterator(dstPartitions.end())
+        dstPtrs.begin(),
+        dstPtrs.end()
     );
+
+    // Update Position for newly-inserted dst shards and all right-shifted survivors.
+    for (ui64 i = splitFirstIdx; i < Partitions.size(); ++i) {
+        Partitions[i]->Position = i;
+    }
 
     PreserializedTablePartitions.clear();
     PreserializedTablePartitionsNoKeys.clear();
@@ -2070,21 +2110,35 @@ void TTableInfo::ApplySplitMerge(
 }
 
 void TTableInfo::VerifyConsistency() const {
-    Y_ABORT_UNLESS(Shard2PartitionIdx.size() == Partitions.size());
+    Y_ABORT_UNLESS(PartitionStore.size() == Partitions.size());
     Y_ABORT_UNLESS(Stats.PartitionStats.size() == Partitions.size());
     Y_ABORT_UNLESS(Stats.Aggregated.PartCount == Partitions.size());
 
     for (ui32 i = 0; i < Partitions.size(); ++i) {
-        const auto it = Shard2PartitionIdx.find(Partitions[i].ShardIdx);
-        Y_ABORT_UNLESS(it != Shard2PartitionIdx.end());
-        Y_ABORT_UNLESS(it->second == i);
-        Y_ABORT_UNLESS(Stats.PartitionStats.contains(Partitions[i].ShardIdx));
+        const TTableShardInfo* p = Partitions[i];
+        Y_ABORT_UNLESS(p);
+        // Pointer must come from PartitionStore (same address).
+        Y_ABORT_UNLESS(PartitionStore.FindPtr(p->ShardIdx) == p);
+        Y_ABORT_UNLESS(Stats.PartitionStats.contains(p->ShardIdx));
         if (i + 1 < Partitions.size()) {
-            Y_ABORT_UNLESS(!Partitions[i].EndOfRange.empty());
+            Y_ABORT_UNLESS(!p->EndOfRange.empty());
         }
+        // Position must reflect actual index in Partitions.
+        Y_ABORT_UNLESS(p->Position == i);
     }
 
     Y_ABORT_UNLESS(CondEraseSchedule.IsValidHeap());
+
+    // Each live shard is either waiting in CondEraseSchedule or currently
+    // being erased (popped into InFlightCondErase by AddInFlightCondErase).
+    if (IsTTLEnabled()) {
+        Y_ABORT_UNLESS(CondEraseSchedule.Container().size() + InFlightCondErase.size() == Partitions.size());
+        for (const auto* p : Partitions) {
+            Y_ABORT_UNLESS(CondEraseSchedule.Contains(p->ShardIdx) || InFlightCondErase.contains(p->ShardIdx));
+        }
+    } else {
+        Y_ABORT_UNLESS(CondEraseSchedule.Empty());
+    }
 }
 
 void TTableInfo::UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now) {
@@ -2443,11 +2497,11 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
         return false;
     }
 
-    if (!Shard2PartitionIdx.contains(shardIdx)) {
+    const TTableShardInfo* partitionInfo = PartitionStore.FindPtr(shardIdx);
+    if (!partitionInfo) {
         return false;
     }
-
-    i64 partitionIdx = *Shard2PartitionIdx.FindPtr(shardIdx);
+    const i64 partitionIdx = static_cast<i64>(partitionInfo->Position);
 
     shardsToMerge.clear();
     ui64 totalSize = 0;
@@ -2469,7 +2523,7 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
         << " " << shardMergeReason;
 
     for (i64 pi = partitionIdx - 1; pi >= 0; --pi) {
-        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, now, shardMergeReason)) {
+        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi]->ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, now, shardMergeReason)) {
             break;
         }
     }
@@ -2477,7 +2531,7 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
     Reverse(shardsToMerge.begin(), shardsToMerge.end());
 
     for (ui64 pi = partitionIdx + 1; pi < GetPartitions().size(); ++pi) {
-        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, now, shardMergeReason)) {
+        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi]->ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, cpuMergeThreshold, mainTableForIndex, now, shardMergeReason)) {
             break;
         }
     }

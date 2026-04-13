@@ -1,7 +1,8 @@
-#include <ydb/mvp/core/mvp_test_runtime.h>
 #include <ydb/mvp/meta/mvp.h>
 #include <ydb/mvp/meta/support_links/events.h>
 #include <ydb/mvp/meta/support_links/grafana_dashboard_search_source.h>
+
+#include <ydb/mvp/core/mvp_test_runtime.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -9,7 +10,12 @@
 #include <ydb/library/actors/http/http_proxy.h>
 
 #include <library/cpp/cgiparam/cgiparam.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/generic/algorithm.h>
+#include <util/generic/hash_set.h>
+#include <util/generic/vector.h>
 
 #include <utility>
 
@@ -44,17 +50,25 @@ NMVP::TMetaSettings MakeMetaSettings(TStringBuf grafanaEndpoint = "https://grafa
     return settings;
 }
 
-NMVP::TSupportLinkEntryConfig MakeConfig(TStringBuf url = TStringBuf(), TStringBuf tag = TStringBuf(), TStringBuf folder = TStringBuf()) {
+NMVP::TSupportLinkEntryConfig MakeConfig(
+    TStringBuf url = TStringBuf(),
+    const TVector<TString>& tag = {},
+    const TVector<TString>& folders = {})
+{
     NMVP::TSupportLinkEntryConfig config;
     config.SetSource("grafana/dashboard/search");
     if (!url.empty()) {
         config.SetUrl(TString(url));
     }
-    if (!tag.empty()) {
-        config.SetTag(TString(tag));
+    for (const TString& value : tag) {
+        if (!value.empty()) {
+            config.AddTag(value);
+        }
     }
-    if (!folder.empty()) {
-        config.SetFolder(TString(folder));
+    for (const TString& folder : folders) {
+        if (!folder.empty()) {
+            config.AddFolder(folder);
+        }
     }
     return config;
 }
@@ -136,10 +150,76 @@ public:
         const auto request = event->Get()->Request;
         const TString url(request->URL);
         const bool targetsSearchApi = url.Contains("/api/search");
-        const bool hasTag = url.Contains("tag=ydb-common");
-        const bool hasFolder = url.Contains("folderUIDs=team-folder");
-        const TString body = "[]";
-        const TString statusLine = (targetsSearchApi && hasTag && hasFolder)
+        TCgiParameters query;
+        const size_t queryPos = url.find('?');
+        if (queryPos != TString::npos) {
+            query.Scan(TStringBuf(url).SubStr(queryPos + 1));
+        }
+
+        THashSet<TString> requestTags;
+        for (const TString& value : query.Range("tag")) {
+            requestTags.insert(value);
+        }
+
+        THashSet<TString> requestFolders;
+        for (const TString& value : query.Range("folderUIDs")) {
+            requestFolders.insert(value);
+        }
+
+        struct TDashboardCandidate {
+            TString Title;
+            TString Url;
+            THashSet<TString> Tags;
+            TString FolderUid;
+        };
+
+        const TVector<TDashboardCandidate> dashboards = {
+            {
+                .Title = "YDB Cluster Overview",
+                .Url = "/d/matched/dashboard",
+                .Tags = {"ydb-common", "ydb-storage"},
+                .FolderUid = "ops-folder",
+            },
+            {
+                .Title = "YDB Database Overview",
+                .Url = "/d/missing-tag/dashboard",
+                .Tags = {"ydb-common"},
+                .FolderUid = "ops-folder",
+            },
+            {
+                .Title = "YDB Storage Overview",
+                .Url = "/d/wrong-folder/dashboard",
+                .Tags = {"ydb-common", "ydb-storage"},
+                .FolderUid = "other-folder",
+            },
+        };
+
+        NJson::TJsonValue responseJson(NJson::JSON_ARRAY);
+        if (targetsSearchApi) {
+            for (const auto& dashboard : dashboards) {
+                bool matchesTags = true;
+                for (const TString& tag : requestTags) {
+                    if (!dashboard.Tags.contains(tag)) {
+                        matchesTags = false;
+                        break;
+                    }
+                }
+
+                const bool matchesFolders = requestFolders.empty() || requestFolders.contains(dashboard.FolderUid);
+                if (!matchesTags || !matchesFolders) {
+                    continue;
+                }
+
+                NJson::TJsonValue item(NJson::JSON_MAP);
+                item["type"] = "dash-db";
+                item["title"] = dashboard.Title;
+                item["url"] = dashboard.Url;
+                responseJson.AppendValue(std::move(item));
+            }
+        }
+
+        TString body = NJson::WriteJson(responseJson, false);
+        const TString statusLine = targetsSearchApi
             ? "HTTP/1.1 200 OK"
             : "HTTP/1.1 400 Bad Request";
 
@@ -285,19 +365,21 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
             "meta.meta_database_token_name is required for source=grafana/dashboard/search");
     }
 
-    Y_UNIT_TEST(ResolveRequestsSearchApiWithTagAndFolder) {
+    Y_UNIT_TEST(ResolveUsesAllTagAndFolderFiltersInSearchRequest) {
         TMetaDatabaseTokenNameGuard tokenNameGuard("meta-token");
         TTestActorRuntime runtime;
 
         auto source = NMVP::MakeGrafanaDashboardSearchSource(
-            MakeConfig("/api/search", "ydb-common", "team-folder"),
+            MakeConfig("/api/search", TVector<TString>{"ydb-common", "ydb-storage"}, TVector<TString>{"team-folder", "ops-folder"}),
             MakeMetaSettings());
         auto httpProxyId = runtime.Register(new TSearchApiRequestCheckActor());
 
         TAutoPtr<NActors::IEventHandle> handle;
         auto* response = ResolveSource(runtime, source, {}, MakeUrlParameters(""), httpProxyId, handle);
         UNIT_ASSERT_VALUES_EQUAL(response->Errors.size(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(response->Links.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(response->Links.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Links[0].Title, "YDB Cluster Overview");
+        UNIT_ASSERT_VALUES_EQUAL(response->Links[0].Url, "https://grafana.example.net/d/matched/dashboard");
     }
 
     Y_UNIT_TEST(ResolveBuildsDashboardLinksFromSearchResponse) {
@@ -311,7 +393,9 @@ Y_UNIT_TEST_SUITE(SupportLinksGrafanaDashboardSearchSource) {
             {"title":"Skip me"}
         ])json";
         auto httpProxyId = runtime.Register(new TGrafanaSearchReplyActor(body));
-        auto source = NMVP::MakeGrafanaDashboardSearchSource(MakeConfig("/api/search", "ydb-common"), MakeMetaSettings());
+        auto source = NMVP::MakeGrafanaDashboardSearchSource(
+            MakeConfig("/api/search", TVector<TString>{"ydb-common"}),
+            MakeMetaSettings());
 
         THashMap<TString, TString> clusterInfo;
         clusterInfo["k8s_namespace"] = "ydb-workspace";

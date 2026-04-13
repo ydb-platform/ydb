@@ -80,11 +80,15 @@ private:
     TString BuildSearchUrl() const {
         TString url = Config.GetUrl().empty() ? TString("/api/search") : Config.GetUrl();
         url = IsAbsoluteUrl(url) ? url : JoinUrl(GrafanaEndpoint, url);
-        if (Config.HasTag() && !Config.GetTag().empty()) {
-            url = AppendQueryParam(url, "tag", Config.GetTag());
+        for (size_t i = 0; i < Config.TagSize(); ++i) {
+            if (!Config.GetTag(i).empty()) {
+                url = AppendQueryParam(url, "tag", Config.GetTag(i));
+            }
         }
-        if (Config.HasFolder() && !Config.GetFolder().empty()) {
-            url = AppendQueryParam(url, "folderUIDs", Config.GetFolder());
+        for (size_t i = 0; i < Config.FolderSize(); ++i) {
+            if (!Config.GetFolder(i).empty()) {
+                url = AppendQueryParam(url, "folderUIDs", Config.GetFolder(i));
+            }
         }
         return url;
     }
@@ -136,12 +140,12 @@ private:
             TString title;
             TString dashboardUrl;
             if (item.Has("title") && item["title"].GetType() == NJson::JSON_STRING) {
-                title = item["title"].GetStringRobust();
+                title = item["title"].GetString();
             }
             if (item.Has("url") && item["url"].GetType() == NJson::JSON_STRING) {
-                dashboardUrl = item["url"].GetStringRobust();
+                dashboardUrl = item["url"].GetString();
             } else if (item.Has("uri") && item["uri"].GetType() == NJson::JSON_STRING) {
-                dashboardUrl = item["uri"].GetStringRobust();
+                dashboardUrl = item["uri"].GetString();
             }
 
             if (dashboardUrl.empty()) {
@@ -167,7 +171,7 @@ private:
             return false;
         }
 
-        const TString type = item["type"].GetStringRobust();
+        const TString type = item["type"].GetString();
         return type == "dash-db" || type == "dashboard";
     }
 

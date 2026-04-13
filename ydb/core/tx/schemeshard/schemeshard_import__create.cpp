@@ -50,6 +50,26 @@ concept HasIndexPopulationMode = requires(const T& t) {
     { t.index_population_mode() } -> std::same_as<Ydb::Import::ImportFromS3Settings::IndexPopulationMode>;
 };
 
+bool IsLocalColumnTableIndex(const Ydb::Table::TableIndex& index) {
+    switch (index.type_case()) {
+        case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
+        case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
+            return true;
+        default:
+            return false;
+    }
+}
+
+void SkipLocalIndexes(TItem& item) {
+    if (!item.Table) {
+        return;
+    }
+    while (item.NextIndexIdx < item.Table->indexes_size() &&
+           IsLocalColumnTableIndex(item.Table->indexes(item.NextIndexIdx))) {
+        ++item.NextIndexIdx;
+    }
+}
+
 THashMap<EState, int> CountItemsByState(const TVector<TItem>& items) {
     THashMap<EState, int> counter;
     for (const auto& item : items) {
@@ -1865,6 +1885,7 @@ private:
                 Self->EraseEncryptionKey(db, *importInfo);
             } else {
                 const auto needToBuildIndexes = NeedToBuildIndexes(*importInfo, itemIdx);
+                SkipLocalIndexes(item);
                 if (needToBuildIndexes && item.Table && item.NextIndexIdx < item.Table->indexes_size()) {
                     item.State = EState::BuildIndexes;
                     AllocateTxId(*importInfo, itemIdx);
@@ -1884,7 +1905,12 @@ private:
                 Cancel(*importInfo, itemIdx, "issues during index building");
                 Self->EraseEncryptionKey(db, *importInfo);
             } else {
-                if (item.Table && ++item.NextIndexIdx < item.Table->indexes_size()) {
+                if (item.Table) {
+                    ++item.NextIndexIdx;
+                    SkipLocalIndexes(item);
+                }
+
+                if (item.Table && item.NextIndexIdx < item.Table->indexes_size()) {
                     AllocateTxId(*importInfo, itemIdx);
                 } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
                            AppData()->FeatureFlags.GetEnableChangefeedsImport()) {

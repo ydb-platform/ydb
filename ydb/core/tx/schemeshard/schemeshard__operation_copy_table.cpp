@@ -957,9 +957,18 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
     auto copying = tx.GetCreateTable();
     Y_ABORT_UNLESS(copying.HasCopyFromTable());
 
-    auto cdcPeerOp = tx.HasCreateCdcStream() ? &tx.GetCreateCdcStream() : nullptr;
-
     TPath srcPath = TPath::Resolve(copying.GetCopyFromTable(), context.SS);
+
+    if (srcPath.IsResolved() && srcPath.Base()->IsColumnTable()) {
+        auto schema = TransactionTemplate(tx.GetWorkingDir(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
+        schema.SetFailOnExist(tx.GetFailOnExist());
+        auto operation = schema.MutableCreateColumnTable();
+        operation->SetName(copying.GetName());
+        operation->SetCopyFromTable(copying.GetCopyFromTable());
+        return {CreateReadOnlyCopyColumnTable(nextId, schema)};
+    }
+
+    auto cdcPeerOp = tx.HasCreateCdcStream() ? &tx.GetCreateCdcStream() : nullptr;
 
     {
         TPath::TChecker checks = srcPath.Check();

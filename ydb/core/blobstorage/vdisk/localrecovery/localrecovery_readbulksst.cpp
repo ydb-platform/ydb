@@ -57,15 +57,23 @@ namespace NKikimr {
             Process(ctx);
         }
 
-        void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ev);
-            ActiveActors.KillAndClear(ctx);
-            TThis::Die(ctx);
+        void HandlePoison() {
+            ActiveActors.KillAndClear(TActivationContext::AsActorContext());
+            this->PassAway();
+        }
+
+        void Handle(const TEvents::TEvActorDied::TPtr&) {
+            // One LevelSegmentLoader termintaed unsuccessfully
+            // send TEvActorDied to the parent and Die
+            // This actor only has one child actor at a time, no need to clear ActiveActors
+            this->Send(Recipient, new TEvents::TEvActorDied);
+            this->PassAway();
         }
 
         STRICT_STFUNC(StateFunc,
             HTemplFunc(THullSegLoaded, Handle)
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            hFunc(TEvents::TEvActorDied, Handle)
+            cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison)
         )
 
     public:

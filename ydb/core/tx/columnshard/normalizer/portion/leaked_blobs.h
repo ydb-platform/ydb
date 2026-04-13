@@ -219,6 +219,7 @@ private:
 };
 
 class TLeakedBlobsStats {
+    const ui64 TabletId;
     NActors::NLog::EPriority LogLevel = NActors::NLog::PRI_WARN;
     ui64 StoppedOnPortions = 0;
     ui64 StoppedOnIndices = 0;
@@ -240,6 +241,10 @@ class TLeakedBlobsStats {
     ui64 ColumnsLoaded = 0;
     ui64 BlobsToDeleteLoaded = 0;
 public:
+    explicit TLeakedBlobsStats(const ui64 tabletId)
+        : TabletId(tabletId) {
+    }
+
     void SetLogLevel(const NActors::NLog::EPriority logLevel) {
         LogLevel = logLevel;
     }
@@ -307,9 +312,7 @@ public:
         return (StoppedOnPortions + StoppedOnIndices + StoppedOnColumns + StoppedOnBlobsToDelete) % 10 == 0;
     }
 
-    void PrintToLog() const {
-        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", "leaked_blobs")("event", "stats")("stopped_on_portions", StoppedOnPortions)("stopped_on_indices", StoppedOnIndices)("stopped_on_columns", StoppedOnColumns)("stopped_on_blobs_to_delete", StoppedOnBlobsToDelete)("portions_loaded", PortionsLoaded)("portions_skipped", PortionsSkipped)("portions_only_indices_in_bs", PortionsOnlyIndicesInBs)("portions_in_bs", PortionsInBs)("indices_loaded", IndicesLoaded)("indices_inplaced", IndicesInplaced)("indices_in_foreign_storage", IndicesInForeignStorage)("indices_need_column_v2", IndicesNeedColumnV2)("indices_have_its_own_blob", IndicesHaveItsOwnBlob)("columns_loaded", ColumnsLoaded)("blobs_to_delete_loaded", BlobsToDeleteLoaded)("completed", Completed);
-    }
+    void PrintToLog() const;
 };
 
 class TLeakedBlobsNormalizer: public TNormalizationController::INormalizerComponent {

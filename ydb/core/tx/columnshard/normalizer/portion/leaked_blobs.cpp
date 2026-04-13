@@ -54,7 +54,7 @@ public:
 
     void ApplyOnComplete(const TNormalizationController& /* normController */) const override {
         ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)(
-            "normalizer", "leaked_blobs")("event", "apply_on_complete")("changes", DebugStringImpl(PrintLeakedBlobIds));
+            "normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", TabletId)("event", "apply_on_complete")("changes", DebugStringImpl(PrintLeakedBlobIds));
     }
 
     ui64 GetSize() const override {
@@ -92,6 +92,9 @@ private:
     TVector<TTabletChannelInfo> Channels;
     THashSet<TLogoBlobID> CSBlobIds;
     THashSet<TLogoBlobID> BSBlobIds;
+    ui64 TotalBlobsCount = 0;
+    ui64 DoNotKeepCount = 0;
+    ui64 KeepCount = 0;
     TActorId CSActorId;
     ui64 CSTabletId;
     bool PrintLeakedBlobIds = false;
@@ -108,8 +111,8 @@ private:
         for (auto&& i : CSBlobIds) {
             AFL_VERIFY(BSBlobIds.erase(i))("error", "have to use broken blobs repair")("blob_id", i);
         }
-        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", "leaked_blobs")(
-            "event", "found leaked blobs")("leaked_blobs_count", BSBlobIds.size());
+        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())(
+            "tablet_id", CSTabletId)("event", "found leaked blobs")("leaked_blobs_count", BSBlobIds.size())("total_blobs_count", TotalBlobsCount)("do_not_keep_count", DoNotKeepCount)("keep_count", KeepCount);
         TActorContext::AsActorContext().Send(
             CSActorId, 
             std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(
@@ -160,7 +163,14 @@ public:
         AFL_VERIFY(WaitingRequests.erase(ev->Cookie));
         for (auto& resp : msg->Responses) {
             AFL_VERIFY(!resp.Buffer);
-            BSBlobIds.emplace(resp.Id);
+            DoNotKeepCount += resp.DoNotKeep;
+            KeepCount += resp.Keep;
+            TotalBlobsCount++;
+            if (resp.DoNotKeep && !resp.Keep) {
+                continue;
+            } else {
+                BSBlobIds.emplace(resp.Id);
+            }
         }
         CheckFinish();
     }
@@ -201,10 +211,15 @@ public:
     }
 };
 
+void TLeakedBlobsStats::PrintToLog() const {
+    ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", TabletId)("event", "stats")("stopped_on_portions", StoppedOnPortions)("stopped_on_indices", StoppedOnIndices)("stopped_on_columns", StoppedOnColumns)("stopped_on_blobs_to_delete", StoppedOnBlobsToDelete)("portions_loaded", PortionsLoaded)("portions_skipped", PortionsSkipped)("portions_only_indices_in_bs", PortionsOnlyIndicesInBs)("portions_in_bs", PortionsInBs)("indices_loaded", IndicesLoaded)("indices_inplaced", IndicesInplaced)("indices_in_foreign_storage", IndicesInForeignStorage)("indices_need_column_v2", IndicesNeedColumnV2)("indices_have_its_own_blob", IndicesHaveItsOwnBlob)("columns_loaded", ColumnsLoaded)("blobs_to_delete_loaded", BlobsToDeleteLoaded)("completed", Completed);
+}
+
 TLeakedBlobsNormalizer::TLeakedBlobsNormalizer(const TNormalizationController::TInitContext& info)
     : TBase(info)
     , Channels(info.GetStorageInfo()->Channels)
-    , DsGroupSelector(info.GetStorageInfo()) {
+    , DsGroupSelector(info.GetStorageInfo())
+    , Stats(TabletId) {
 }
 
 TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
@@ -217,7 +232,8 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TLeakedBlobsNormalizer::DoInit(
     NColumnShard::TTablesManager tablesManager(
         controller.GetStoragesManager(), controller.GetDataAccessorsManager(), std::make_shared<TPortionIndexStats>(), TabletId);
     if (!tablesManager.InitFromDB(db, nullptr)) {
-        ACFL_TRACE("normalizer", "TPortionsNormalizer")("error", "can't initialize tables manager");
+        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())(
+            "tablet_id", TabletId)("error", "can't initialize tables manager");
         return TConclusionStatus::Fail("Can't load index");
     }
     if (!tablesManager.HasPrimaryIndex()) {
@@ -490,7 +506,7 @@ void TLeakedBlobsNormalizer::ReadParamsFromDescription() {
 
     BatchCursor = TBatchCursor(BatchSize);
     Stats.SetLogLevel(LogLevel);
-    ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", "leaked_blobs")("batch_size", BatchSize)("print_leaked_blob_ids", PrintLeakedBlobIds)("log_level", static_cast<ui32>(LogLevel));
+    ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", TabletId)("batch_size", BatchSize)("print_leaked_blob_ids", PrintLeakedBlobIds)("log_level", static_cast<ui32>(LogLevel));
 }
 
 }   // namespace NKikimr::NOlap

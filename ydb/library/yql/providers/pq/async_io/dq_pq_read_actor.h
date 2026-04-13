@@ -18,8 +18,8 @@
 namespace NYql::NDq {
 class TDqAsyncIoFactory;
 
-const i64 PQReadDefaultFreeSpace = 16_MB;
-const TDuration PqDefaultCheckPartitionCountPeriod = TDuration::Seconds(60);
+constexpr i64 PQReadDefaultFreeSpace = 16_MB;
+constexpr TDuration PqDefaultCheckPartitionCountPeriod = TDuration::Seconds(60);
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     NPq::NProto::TDqPqTopicSource&& settings,

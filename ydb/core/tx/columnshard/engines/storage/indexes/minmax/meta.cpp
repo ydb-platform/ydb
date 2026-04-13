@@ -9,7 +9,6 @@
 #include <cstring>
 
 namespace NKikimr::NOlap::NIndexes::NMinMax {
-using namespace NArrow::NAccessor::NArrowCompare;
 
 bool TIndexMeta::DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const {
     switch (op.GetOperation()) {
@@ -84,6 +83,7 @@ bool TIndexMeta::Skip(NArrow::NAccessor::TMinMax chunkValue, const std::shared_p
     if (!chunkValue.Min()->is_valid) {
         return true;
     } else {
+        using namespace NArrow::NAccessor::NArrowCompare;
         switch (op.GetOperation()) {
             case NArrow::NSSA::TIndexCheckOperation::EOperation::Equals:
                 return requestValue < chunkValue.Min() || requestValue > chunkValue.Max();
@@ -99,6 +99,15 @@ bool TIndexMeta::Skip(NArrow::NAccessor::TMinMax chunkValue, const std::shared_p
                 Y_ABORT("unexpected operation for min_max index");
         }
     }
+}
+
+bool TIndexMeta::IsAvailableType(const NScheme::TTypeInfo type) {
+    auto dataTypeResult = NArrow::GetArrowType(type);
+    if (!dataTypeResult.ok()) {
+        return false;
+    }
+    auto typedId = (*dataTypeResult)->id();
+    return arrow::is_primitive(typedId) || arrow::is_base_binary_like(typedId);
 }
 
 NJson::TJsonValue TIndexMeta::DoSerializeDataToJson(const TString& data, const TIndexInfo& indexInfo) const {

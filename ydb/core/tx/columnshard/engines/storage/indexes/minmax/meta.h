@@ -39,15 +39,7 @@ public:
     {
     }
 
-    static bool IsAvailableType(const NScheme::TTypeInfo type) {
-        auto dataTypeResult = NArrow::GetArrowType(type);
-        if (!dataTypeResult.ok()) {
-            return false;
-        }
-        auto typedId = (*dataTypeResult)->id();
-        return (arrow::is_primitive(typedId) || arrow::is_base_binary_like(typedId)) &&
-               !(typedId == arrow::Type::TIMESTAMP /*not supported yet, see https://github.com/ydb-platform/ydb/issues/35699 */);
-    }
+    static bool IsAvailableType(const NScheme::TTypeInfo type);
 
     virtual TString GetClassName() const override {
         return GetClassNameStatic();

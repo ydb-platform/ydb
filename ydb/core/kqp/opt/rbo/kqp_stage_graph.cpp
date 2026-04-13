@@ -134,9 +134,6 @@ TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, 
         .Build();
 
     if (HashFuncType) {
-        // UseSpilling (index 2) must be initialised before HashFunc (index 3):
-        // the generated builder enforces consecutive optional field ordering.
-        builder.UseSpilling().Build(false);
         builder.HashFunc().Build(ToString(*HashFuncType));
     }
 

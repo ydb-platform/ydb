@@ -231,8 +231,6 @@ void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
 
     auto renamesWithTransform = GetRenamesWithTransforms(planProps);
 
-    // Pre-compute output IUs once; used below to detect pass-through columns
-    // that survive a projection without appearing in the rename list.
     auto outputIUs = Project ? GetOutputIUs() : TVector<TInfoUnit>{};
 
     auto isDroppedByProjection = [&](const TInfoUnit& column,
@@ -241,11 +239,8 @@ void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
             return false;
         }
         if (renameIt != nullptr) {
-            // Column was renamed/transformed — it is in the output.
             return false;
         }
-        // Column not in the rename list: it either passes through unchanged or was dropped.
-        // It survives iff its name appears directly in the output IUs.
         return std::find(outputIUs.begin(), outputIUs.end(), column) == outputIUs.end();
     };
 
@@ -348,9 +343,6 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Metadata->KeyColumns = KeyColumns;
     Props.Metadata->ColumnsCount = GetOutputIUs().size();
 
-    // Aggregate restructures data — the input shuffle guarantee no longer holds.
-    // A future optimisation could set this to KeyColumns when the GROUP BY columns
-    // are a subset of the partition keys, but clearing is always safe.
     Props.Metadata->ShuffledByColumns = {};
 
     // Aggregate acts list a source in terms of lineage
@@ -441,17 +433,8 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         Props.Metadata->ColumnLineage.Merge(GetRightInput()->Props.Metadata->ColumnLineage);
     }
 
-    // After a hash join the output rows are co-located by the join keys.
-    // Left keys are always valid (left rows always appear in the output for the
-    // join kinds we support here). Right keys are also valid when the right
-    // side's columns appear in the output — they are equivalent to the left
-    // keys via the equi-join condition and downstream SE can use either name.
-    bool rightColumnsInOutput = (JoinKind != "LeftOnly" && JoinKind != "LeftSemi");
     for (const auto& [leftKey, rightKey] : JoinKeys) {
         Props.Metadata->ShuffledByColumns.push_back(leftKey);
-        if (rightColumnsInOutput) {
-            Props.Metadata->ShuffledByColumns.push_back(rightKey);
-        }
     }
 }
 

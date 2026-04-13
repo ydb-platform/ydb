@@ -116,6 +116,11 @@ void TLocalBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregat
     Aggregator->AddCount(FillLevel);
 }
 
+void TLocalBuffer::SetLevelChangeCallback(IDqOutput::TLevelChangeCallback callback) {
+    std::lock_guard lock(Mutex);
+    LevelChangeCallback = std::move(callback);
+}
+
 void TLocalBuffer::Push(TDataChunk&& data) {
     if (!FinishPushed && !Finished.load()) {
         if (data.Finished) {
@@ -175,6 +180,9 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
         }
         if (Aggregator) {
             Aggregator->UpdateCount(FillLevel, fillLevel);
+        }
+        if (LevelChangeCallback) {
+            LevelChangeCallback(FillLevel, fillLevel);
         }
         FillLevel = fillLevel;
         NeedToNotifyOutput.store(true);
@@ -272,6 +280,9 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
     if (FillLevel != fillLevel) {
         if (Aggregator) {
             Aggregator->UpdateCount(FillLevel, fillLevel);
+        }
+        if (LevelChangeCallback) {
+            LevelChangeCallback(FillLevel, fillLevel);
         }
         FillLevel = fillLevel;
         NotifyOutput(Queue.empty() || Finished.load());
@@ -459,6 +470,9 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
     if (FillLevel != fillLevel) {
         if (Aggregator) {
             Aggregator->UpdateCount(FillLevel, fillLevel);
+        }
+        if (LevelChangeCallback) {
+            LevelChangeCallback(FillLevel, fillLevel);
         }
         FillLevel = fillLevel;
         NeedToNotifyOutput.store(true);
@@ -662,6 +676,11 @@ void TOutputBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggrega
     std::lock_guard lock(Descriptor->FlowControlMutex);
     Descriptor->Aggregator = aggregator;
     Descriptor->Aggregator->AddCount(Descriptor->FillLevel);
+}
+
+void TOutputBuffer::SetLevelChangeCallback(IDqOutput::TLevelChangeCallback callback) {
+    std::lock_guard lock(Descriptor->FlowControlMutex);
+    Descriptor->LevelChangeCallback = std::move(callback);
 }
 
 void TOutputBuffer::Push(TDataChunk&& data) {

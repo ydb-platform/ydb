@@ -1,6 +1,8 @@
 #include "dq_output_consumer.h"
 #include "dq_scatter_bucket_index.h"
 
+#include <yql/essentials/utils/log/log.h>
+
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
@@ -1012,11 +1014,11 @@ private:
 
 class TDqOutputScatterConsumer : public IDqOutputConsumer {
 public:
-    TDqOutputScatterConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth)
+    TDqOutputScatterConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth, ui32 primaryChannelIdx = 0)
         : Outputs(std::move(outputs))
         , OutputWidth(outputWidth)
         , Tmp(outputWidth.Defined() ? *outputWidth : 0u)
-        , BucketIndex(std::make_shared<TScatterBucketIndex>(static_cast<ui32>(Outputs.size())))
+        , BucketIndex(std::make_shared<TScatterBucketIndex>(static_cast<ui32>(Outputs.size()), primaryChannelIdx))
     {
         // Scatter consumer requires every output to support LevelChangeCallback.
         // This is the only mechanism that keeps the bucket index and the fill aggregator
@@ -1050,16 +1052,16 @@ public:
 
     void Consume(TUnboxedValue&& value) final {
         YQL_ENSURE(!OutputWidth.Defined());
-        const ui32 idx = BucketIndex->PickBest();
+        auto [idx, level] = BucketIndex->PickBest();
+        ++PicksByLevel[static_cast<ui32>(level)];
         Outputs[idx]->Push(std::move(value));
-        // UpdateFillLevel() triggers the callback which refreshes both the aggregator
-        // and BucketIndex for the level increase caused by Push().
         BucketIndex->Update(idx, Outputs[idx]->UpdateFillLevel());
     }
 
     void WideConsume(TUnboxedValue* values, ui32 count) final {
         YQL_ENSURE(OutputWidth.Defined() && OutputWidth == count);
-        const ui32 idx = BucketIndex->PickBest();
+        auto [idx, level] = BucketIndex->PickBest();
+        ++PicksByLevel[static_cast<ui32>(level)];
         std::copy(values, values + count, Tmp.begin());
         Outputs[idx]->WidePush(Tmp.data(), count);
         BucketIndex->Update(idx, Outputs[idx]->UpdateFillLevel());
@@ -1078,6 +1080,12 @@ public:
     }
 
     void Finish() override {
+        const ui32 activeCount = static_cast<ui32>(Outputs.size()) - BucketIndex->InactiveCount();
+        YQL_CLOG(DEBUG, ProviderDq) << "[Scatter] outputs=" << Outputs.size()
+            << " active=" << activeCount
+            << " picks: NoLimit=" << PicksByLevel[0]
+            << " SoftLimit=" << PicksByLevel[1]
+            << " HardLimit=" << PicksByLevel[2];
         for (auto& output : Outputs) {
             output->Finish();
         }
@@ -1103,6 +1111,9 @@ private:
     TUnboxedValueVector Tmp;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     std::shared_ptr<TScatterBucketIndex> BucketIndex;
+    // Routing stats: indexed by EDqFillLevel value (NoLimit=0, SoftLimit=1, HardLimit=2).
+    // If all rows land in NoLimit, fill-based routing never triggered — pure round-robin.
+    std::array<ui64, TScatterBucketIndex::kLevelCount> PicksByLevel = {};
 };
 
 } // namespace
@@ -1222,8 +1233,8 @@ IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&&
     return MakeIntrusive<TDqOutputBroadcastConsumer>(std::move(outputs), outputWidth);
 }
 
-IDqOutputConsumer::TPtr CreateOutputScatterConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth) {
-    return MakeIntrusive<TDqOutputScatterConsumer>(std::move(outputs), outputWidth);
+IDqOutputConsumer::TPtr CreateOutputScatterConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth, ui32 primaryChannelIdx) {
+    return MakeIntrusive<TDqOutputScatterConsumer>(std::move(outputs), outputWidth, primaryChannelIdx);
 }
 
 } // namespace NYql::NDq

@@ -199,6 +199,7 @@ struct TTableShardInfo {
     TInstant LastCondErase;
     TInstant NextCondErase;
     mutable TMaybe<TDuration> LastCondEraseLag;
+    ui64 Position = 0;  // index in TTableInfo::Partitions; maintained by TTableInfo, not persisted
 
     // TODO: remove this ctor. It's used for vector.resize() that is not clear.
     TTableShardInfo() = default;
@@ -768,7 +769,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     }
 
 private:
-    using TPartitionsVec = TVector<TTableShardInfo>;
+    using TPartitionsVec = TVector<TTableShardInfo*>;
 
     // Indexed min-heap keyed by TShardIdx.
     // Pos map enables O(log N) targeted Erase (O(1) position lookup + O(log N) sift).
@@ -830,6 +831,8 @@ private:
         }
 
         bool Empty() const { return Heap.empty(); }
+        bool Contains(const TShardIdx& shardIdx) const { return Pos.contains(shardIdx); }
+        void Clear() { Heap.clear(); Pos.clear(); }
         const TEntry& Top() const { return Heap[0]; }
         const TVector<TEntry>& Container() const { return Heap; }
 
@@ -893,8 +896,10 @@ private:
         THashMap<TShardIdx, ui32> Pos;
     };
 
-    TPartitionsVec Partitions;
-    THashMap<TShardIdx, ui64> Shard2PartitionIdx; // shardIdx -> index in Partitions
+    // Stable-address store: THashMap uses separate chaining, so element references
+    // survive insert.  Also serves as the O(1) ShardIdx lookup index.
+    THashMap<TShardIdx, TTableShardInfo> PartitionStore;
+    TPartitionsVec Partitions;  // ordered by EndOfRange; raw ptrs into PartitionStore
     TCondEraseSchedule CondEraseSchedule;
     THashMap<TShardIdx, TActorId> InFlightCondErase; // shard to pipe client
     mutable TMaybe<ui32> TTLColumnId;
@@ -905,18 +910,8 @@ private:
     TAggregatedStats Stats;
     bool ShardsStatsDetached = false;
 
-    TPartitionsVec::iterator FindPartition(const TShardIdx& shardIdx) {
-        auto it = Shard2PartitionIdx.find(shardIdx);
-        if (it == Shard2PartitionIdx.end()) {
-            return Partitions.end();
-        }
-
-        const auto partitionIdx = it->second;
-        if (partitionIdx >= Partitions.size()) {
-            return Partitions.end();
-        }
-
-        return Partitions.begin() + partitionIdx;
+    TTableShardInfo* FindPartition(const TShardIdx& shardIdx) {
+        return PartitionStore.FindPtr(shardIdx);
     }
 
 public:
@@ -935,9 +930,15 @@ public:
     }
 
     static TTableInfo::TPtr DeepCopy(const TTableInfo& other) {
-        // CondEraseSchedule entries store TShardIdx keys, which are valid in
-        // the copied Partitions vector without any fixup.
-        return TTableInfo::TPtr(new TTableInfo(other));
+        TTableInfo::TPtr copy(new TTableInfo(other));
+        // Partitions holds raw pointers into PartitionStore; after the value copy
+        // they point into other's store — rebuild them to point into the copy's.
+        copy->Partitions.resize(other.Partitions.size());
+        for (ui64 i = 0; i < other.Partitions.size(); ++i) {
+            copy->Partitions[i] = copy->PartitionStore.FindPtr(other.Partitions[i]->ShardIdx);
+            Y_ABORT_UNLESS(copy->Partitions[i]);
+        }
+        return copy;
     }
 
     struct TCreateAlterDataFeatureFlags {
@@ -1051,7 +1052,7 @@ public:
     // In-place split/merge: replaces the contiguous src shard range with dst shards.
     void ApplySplitMerge(TVector<TTableShardInfo>&& dstPartitions, const THashSet<TShardIdx>& removedShards, ui64 splitFirstIdx);
 
-    const TVector<TTableShardInfo>& GetPartitions() const {
+    const TVector<TTableShardInfo*>& GetPartitions() const {
         return Partitions;
     }
 
@@ -1092,8 +1093,8 @@ public:
         return SplitOpsInFlight;
     }
 
-    const THashMap<TShardIdx, ui64>& GetShard2PartitionIdx() const {
-        return Shard2PartitionIdx;
+    const THashMap<TShardIdx, TTableShardInfo>& GetPartitionStore() const {
+        return PartitionStore;
     }
 
     ui64 GetExpectedPartitionCount() const {
@@ -1327,9 +1328,23 @@ public:
             return nullptr;
         }
         const TShardIdx& shardIdx = CondEraseSchedule.Top().second;
-        auto it = Shard2PartitionIdx.find(shardIdx);
-        Y_ABORT_UNLESS(it != Shard2PartitionIdx.end());
-        return &Partitions[it->second];
+        const auto* p = PartitionStore.FindPtr(shardIdx);
+        Y_ABORT_UNLESS(p);
+        return p;
+    }
+
+    // Schedule any partition not already in the schedule or in-flight.
+    void ScheduleAllCondErase() {
+        for (const auto* p : Partitions) {
+            if (!CondEraseSchedule.Contains(p->ShardIdx) && !InFlightCondErase.contains(p->ShardIdx)) {
+                CondEraseSchedule.Push(p->NextCondErase, p->ShardIdx);
+            }
+        }
+    }
+
+    void ClearCondEraseSchedule() {
+        CondEraseSchedule.Clear();
+        InFlightCondErase.clear();
     }
 
     const auto& GetInFlightCondErase() const {
@@ -1351,20 +1366,20 @@ public:
     void RescheduleCondErase(const TShardIdx& shardIdx) {
         Y_ENSURE(InFlightCondErase.contains(shardIdx));
 
-        auto it = FindPartition(shardIdx);
-        Y_ENSURE(it != Partitions.end());
+        auto* p = FindPartition(shardIdx);
+        Y_ENSURE(p);
 
-        CondEraseSchedule.Push(it->NextCondErase, shardIdx);
+        CondEraseSchedule.Push(p->NextCondErase, shardIdx);
         InFlightCondErase.erase(shardIdx);
     }
 
     void UpdateNextCondErase(const TShardIdx& shardIdx, const TInstant& now, const TDuration& next) {
-        auto it = FindPartition(shardIdx);
-        Y_ENSURE(it != Partitions.end());
+        auto* p = FindPartition(shardIdx);
+        Y_ENSURE(p);
 
-        it->LastCondErase = now;
-        it->NextCondErase = now + next;
-        it->LastCondEraseLag = TDuration::Zero();
+        p->LastCondErase = now;
+        p->NextCondErase = now + next;
+        p->LastCondEraseLag = TDuration::Zero();
     }
 
     bool IsUsingSequence(const TString& name) {

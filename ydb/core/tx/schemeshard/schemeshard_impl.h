@@ -632,7 +632,7 @@ public:
      */
     bool GetBindingsRoomsChanges(
             const TPathId domainId,
-            const TVector<TTableShardInfo>& partitions,
+            const TVector<TTableShardInfo*>& partitions,
             const NKikimrSchemeOp::TPartitionConfig& partitionConfig,
             TBindingsRoomsChanges& changes,
             TString& errStr);
@@ -810,7 +810,7 @@ public:
     void PersistChannelsBinding(NIceDb::TNiceDb& db, const TShardIdx shardId, const TChannelsBindings& bindedChannels);
     void PersistTablePartitioning(NIceDb::TNiceDb &db, const TPathId pathId, const TTableInfo::TPtr tableInfo, ui64 startIdx = 0);
     void PersistTablePartitioningDeletion(NIceDb::TNiceDb& db, const TPathId tableId, const TTableInfo::TPtr tableInfo, ui64 startIdx = 0);
-    void PersistTablePartitionCondErase(NIceDb::TNiceDb& db, const TPathId& pathId, ui64 id, const TTableInfo::TPtr tableInfo);
+    void PersistTablePartitionCondErase(NIceDb::TNiceDb& db, const TPathId& pathId, const TTableShardInfo* partition, const TTableInfo::TPtr tableInfo);
     void PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, ui64 partitionId, const TPartitionStats& stats);
     void PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, const TShardIdx& shardIdx, const TTableInfo::TPtr tableInfo);
     void PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, const TTableInfo::TPtr tableInfo, ui64 startIdx = 0);

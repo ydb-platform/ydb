@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
@@ -881,6 +882,209 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
         runtime.Send(delayed.Release(), 0, true);
         WaitForCondErase(runtime, TEvCondEraseResp::ProtoRecordType::SCHEME_ERROR);
+    }
+
+    Y_UNIT_TEST(SplitDuringInFlightCondErase) {
+        // Regression: VerifyConsistency() asserted CondEraseSchedule.size() ==
+        // Partitions.size(), which fails when one shard has a TTL erase in-flight
+        // (AddInFlightCondErase pops it from CondEraseSchedule) while a *different*
+        // shard is split. The correct invariant is
+        //   CondEraseSchedule.size() + InFlightCondErase.size() == Partitions.size().
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // Two partitions: (-inf,100) → FakeHiveTablets+0, [100,+inf) → FakeHiveTablets+1.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "ts"  Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } }
+            TTLSettings { Enabled { ColumnName: "ts" } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Intercept the first TEvConditionalEraseRowsRequest.
+        // The TTL min-heap fires FakeHiveTablets+0 first (smaller ShardIdx), so
+        // FakeHiveTablets+0 ends up in InFlightCondErase while FakeHiveTablets+1
+        // remains in CondEraseSchedule.
+        THolder<IEventHandle> blocked;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (!blocked && ev->GetTypeRewrite() == TEvCondEraseReq::EventType) {
+                blocked.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        runtime.AdvanceCurrentTime(TDuration::Hours(1));
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&blocked](IEventHandle&) { return bool(blocked); });
+            runtime.DispatchEvents(opts);
+        }
+        runtime.SetObserverFunc(prevObserver);
+
+        // Split FakeHiveTablets+1 (still in CondEraseSchedule, not in-flight).
+        // ApplySplitMerge calls VerifyConsistency at the end. State after split:
+        //   Partitions = [F+0, dst1, dst2]  (size 3)
+        //   CondEraseSchedule = {dst1, dst2} (size 2)
+        //   InFlightCondErase = {F+0}        (size 1)
+        // Old broken check: 2 == 3 → abort. Fixed check: 2 + 1 == 3 → ok.
+        TestSplitTable(runtime, ++txId, "/MyRoot/TTLTable", Sprintf(R"(
+            SourceTabletId: %lu
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 150 } } } }
+        )", TTestTxConfig::FakeHiveTablets + 1));
+        env.TestWaitNotification(runtime, txId);
+
+        // Release the held erase so FakeHiveTablets+0 can respond.
+        runtime.Send(blocked.Release(), 0, true);
+        WaitForCondErase(runtime);
+    }
+
+    Y_UNIT_TEST(MoveTableDuringInFlightCondErase) {
+        // UpdatePartitioning (called during MoveTable) clears InFlightCondErase and
+        // reschedules all partitions.  After the move, the shard is in CondEraseSchedule
+        // and fires exactly one erase request in the next TTL cycle.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "ts"  Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+            TTLSettings { Enabled { ColumnName: "ts" SysSettings { MaxShardsInFlight: 0 } } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Block the erase request so the shard enters InFlightCondErase.
+        THolder<IEventHandle> blocked;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (!blocked && ev->GetTypeRewrite() == TEvCondEraseReq::EventType) {
+                blocked.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        runtime.AdvanceCurrentTime(TDuration::Hours(1));
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&blocked](IEventHandle&) { return bool(blocked); });
+            runtime.DispatchEvents(opts);
+        }
+        runtime.SetObserverFunc(prevObserver);
+
+        // Move the table while the shard is in InFlightCondErase.
+        TestMoveTable(runtime, ++txId, "/MyRoot/TTLTable", "/MyRoot/TTLTableMoved");
+        env.TestWaitNotification(runtime, txId);
+
+        // Drop the blocked request; after repartitioning the shard is in CondEraseSchedule.
+        blocked.Reset();
+
+        // Count erase requests emitted in the next TTL cycle.
+        ui32 extraRequests = 0;
+        auto countObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvCondEraseReq::EventType) {
+                ++extraRequests;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        runtime.AdvanceCurrentTime(TDuration::Hours(1));
+        runtime.DispatchEvents({}, TDuration::Seconds(10));
+        runtime.SetObserverFunc(countObserver);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(extraRequests, 1,
+            "Shard must be rescheduled on the destination table after MoveTable");
+    }
+
+    Y_UNIT_TEST(DisableTTLClearsPendingCondErase) {
+        // ClearCondEraseSchedule() must also clear InFlightCondErase when TTL is
+        // disabled.  If it does not, re-enabling TTL leaves a stale entry in
+        // InFlightCondErase while ScheduleAllCondErase() repopulates
+        // CondEraseSchedule with the same shard.  TTxRunConditionalErase then
+        // checks InFlightCondErase.size() >= MaxShardsInFlight and skips the
+        // request — no TEvConditionalEraseRowsRequest is ever sent.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // Single partition, MaxShardsInFlight=1 so one stale InFlightCondErase
+        // entry is enough to block all subsequent erase requests.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLTable"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "ts"  Type: "Timestamp" }
+            KeyColumnNames: ["key"]
+            TTLSettings {
+                Enabled {
+                    ColumnName: "ts"
+                    SysSettings { MaxShardsInFlight: 1 }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Hold one erase request so the shard lands in InFlightCondErase.
+        THolder<IEventHandle> blocked;
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (!blocked && ev->GetTypeRewrite() == TEvCondEraseReq::EventType) {
+                blocked.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        runtime.AdvanceCurrentTime(TDuration::Hours(1));
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&blocked](IEventHandle&) { return bool(blocked); });
+            runtime.DispatchEvents(opts);
+        }
+        runtime.SetObserverFunc(prevObserver);
+        // Drop the request — datashard never sees it, no response will arrive.
+        blocked.Reset();
+
+        // Disable TTL.  Must clear InFlightCondErase, not only CondEraseSchedule.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLTable"
+            TTLSettings { Disabled {} }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Re-enable TTL.  ScheduleAllCondErase() repopulates CondEraseSchedule.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TTLTable"
+            TTLSettings {
+                Enabled {
+                    ColumnName: "ts"
+                    SysSettings { MaxShardsInFlight: 1 }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // After re-enabling TTL, the erase request must arrive within the first
+        // scheduler cycle.  ScheduleConditionalEraseRun always posts the next
+        // wakeup at +1 minute, so a 10-second deadline is enough to catch the
+        // already-past-due timer, but not enough to spin through repeated retries.
+        // In the bug case InFlightCondErase.size() >= MaxShardsInFlight (1 >= 1)
+        // blocks every TTxRunConditionalErase attempt; no request is ever sent;
+        // the next timer lands outside the 10-second window; DispatchEvents
+        // returns at quiescence instantly, and UNIT_ASSERT_C fires immediately.
+        TBlockEvents<TEvCondEraseReq> eraseReqs(runtime);
+        runtime.AdvanceCurrentTime(TDuration::Hours(1));
+        {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&eraseReqs](IEventHandle&) { return !eraseReqs.empty(); });
+            runtime.DispatchEvents(opts, TDuration::Seconds(10));
+        }
+        UNIT_ASSERT_C(!eraseReqs.empty(), "TTL erase was blocked — InFlightCondErase was not cleared on disable");
     }
 
     Y_UNIT_TEST(ShouldCheckQuotas) {

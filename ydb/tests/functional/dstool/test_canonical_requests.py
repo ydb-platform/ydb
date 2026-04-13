@@ -360,6 +360,19 @@ class Test(TestBase):
 
     def test_pdisk_check_leaked_slots(self):
         retry_assertions(self.check_pdisk_metrics_collected)
+
+        self._trace('pdisk', 'list')  # to allow common.fetch_json_info
+
+        def check_whiteboard_pdisk_info_available():
+            base_config = self.cluster.client.query_base_config().BaseConfig
+            pdisk_node_ids = sorted({pdisk.NodeId for pdisk in base_config.PDisk})
+            pdisk_whiteboard_info = common.fetch_json_info('pdiskinfo', nodes=pdisk_node_ids)
+            for pdisk in base_config.PDisk:
+                wb_info = pdisk_whiteboard_info.get((pdisk.NodeId, pdisk.PDiskId), {})
+                assert 'NumActiveSlots' in wb_info
+
+        retry_assertions(check_whiteboard_pdisk_info_available)
+
         vdisk_evict_cmd = ['vdisk', 'evict', '--ignore-degraded-group-check', '--ignore-failure-model-group-check']
         return [
             self._trace(*vdisk_evict_cmd, '--vdisk-ids', '[82000000:_:0:0:0]', with_grpc_calls=True),

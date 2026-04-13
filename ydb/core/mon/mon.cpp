@@ -31,6 +31,10 @@
 
 #include <util/system/hostname.h>
 
+#include <algorithm>
+#include <limits>
+#include <queue>
+
 namespace NActors {
 
 namespace {

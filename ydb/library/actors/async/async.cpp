@@ -1,7 +1,6 @@
 #include "async.h"
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/events.h>
-#include <ydb/library/actors/core/executor_thread.h>
 
 namespace NActors::NDetail {
 
@@ -30,7 +29,7 @@ namespace NActors::NDetail {
         {
             TActivationContext* ctx = TlsActivationContext;
             Y_ABORT_UNLESS(ctx, "Unexpected missing activation context");
-            ActorSystem = ctx->ExecutorThread.ActorSystem;
+            ActorSystem = ctx->GetActorSystem();
             Mailbox = &ctx->Mailbox;
         }
 
@@ -86,7 +85,7 @@ namespace NActors::NDetail {
         {
             TActivationContext* ctx = TlsActivationContext;
             Y_ABORT_UNLESS(ctx, "Unexpected missing activation context");
-            ActorSystem = ctx->ExecutorThread.ActorSystem;
+            ActorSystem = ctx->GetActorSystem();
             Mailbox = &ctx->Mailbox;
         }
 

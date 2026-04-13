@@ -1,6 +1,5 @@
 #include "actor_tracker.h"
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/core/hfunc.h>
 
 namespace NActors {
@@ -78,7 +77,7 @@ namespace NActors {
         // we have finished processing the query; send TEvPoisonTaken message and Die
         if (currentValue == StopBit && RegisteredActors.empty()) {
             ctx.Send(KillerActorId, new TEvents::TEvPoisonTaken);
-            ctx.ExecutorThread.UnregisterActor(&ctx.Mailbox, ctx.SelfID);
+            ctx.UnregisterActor(&ctx.Mailbox, ctx.SelfID);
         }
     }
 

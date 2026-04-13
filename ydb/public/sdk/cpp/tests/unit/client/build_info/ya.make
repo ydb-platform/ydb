@@ -1,4 +1,4 @@
-UNITTEST()
+GTEST()
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
@@ -11,11 +11,10 @@ FORK_SUBTESTS()
 
 PEERDIR(
     ydb/public/sdk/cpp/src/client/driver
-    ydb/public/sdk/cpp/src/client/table
 )
 
 SRCS(
-    driver_ut.cpp
+    build_info_ut.cpp
 )
 
 END()

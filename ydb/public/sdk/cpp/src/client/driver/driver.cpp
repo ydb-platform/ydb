@@ -1,4 +1,5 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/driver/constants.h>
@@ -309,15 +310,15 @@ TDriverConfig& TDriverConfig::AppendBuildInfo(std::string_view segment) {
         return *this;
     }
     if (!IsValidBuildInfoSegment(segment)) {
-        ythrow yexception() << "Invalid build info segment '" << segment
+        throw TContractViolation(TStringBuilder() << "Invalid build info segment '" << segment
             << "'. Expected format: <name>/<X>.<Y>.<Z>"
-               " (name: [a-z0-9-]+, X/Y/Z: [a-z0-9]+)";
+               " (name: [a-z0-9-]+, X/Y/Z: [a-z0-9]+)");
     }
     auto& extra = Impl_->BuildInfoExtra;
     size_t newLength = extra.size() + (extra.empty() ? 0 : 1) + segment.size();
     if (newLength > MaxBuildInfoExtraLength) {
-        ythrow yexception() << "Build info extra exceeds maximum length of "
-            << MaxBuildInfoExtraLength << " bytes";
+        throw TContractViolation(TStringBuilder() << "Build info extra exceeds maximum length of "
+            << MaxBuildInfoExtraLength << " bytes");
     }
     if (!extra.empty()) {
         extra += ';';

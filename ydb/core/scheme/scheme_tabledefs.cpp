@@ -80,6 +80,18 @@ bool TSerializedTableRange::IsEmpty(TConstArrayRef<NScheme::TTypeInfo> types) co
     return (cmp < 0);
 }
 
+TKeyDesc::TKeyDesc(const TVector<NScheme::TTypeInfo> &keyColumnTypes)
+    : RowOperation(ERowOperation::Unknown)
+    , KeyColumnTypes(keyColumnTypes.begin(), keyColumnTypes.end())
+    , Reverse(false)
+    , Status(EStatus::Unknown)
+    , Partitioning(std::make_shared<TPartitioning>())
+{}
+
+THolder<TKeyDesc> TKeyDesc::CreateMiniKeyDesc(const TVector<NScheme::TTypeInfo> &keyColumnTypes) {
+    return THolder<TKeyDesc>(new TKeyDesc(keyColumnTypes));
+}
+
 void TKeyDesc::Out(IOutputStream& o, TKeyDesc::EStatus x) {
 #define KEYDESCRIPTION_STATUS_TO_STRING_IMPL(name, ...) \
     case EStatus::name: \

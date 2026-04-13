@@ -141,7 +141,7 @@ public:
             BlockSize,
             "");
 
-        NPDisk::TDiskFormat format;
+        NPDisk::TDiskFormat format = {};
         format.Clear(false);
         initReply->DiskFormat = NPDisk::TDiskFormatPtr(new NPDisk::TDiskFormat(format), +[](NPDisk::TDiskFormat* ptr) {
             delete ptr;

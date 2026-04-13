@@ -44,6 +44,7 @@ private:
     TKqpPhyQuerySettings GetPhysicalQuerySettings() const;
     TKqpPhyTxSettings GetPhysicalTxSettings() const;
     TExprNode::TPtr GetFinalStage(const TExprNode::TPtr& stage) const;
+    TVector<TKqpParamBinding> CollectParamBindings(const TVector<TExprNode::TPtr>& physicalStages);
 
     TOpRoot& Root;
     TStageGraph Graph;

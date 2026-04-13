@@ -1,3 +1,5 @@
+* Added support of describe for scheme objects with type 'secret' via new TSecretClient
+
 * Added support for METRICS_LEVEL for the CreateTable/AlterTable requests.
 
 * Added support for the new alter table compact action in TableClient and compaction operation in OperationClient in SDK

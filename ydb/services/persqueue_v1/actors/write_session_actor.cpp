@@ -8,6 +8,7 @@
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/base/wilson_tracing_control.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/base/feature_flags.h>
@@ -17,6 +18,7 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/library/actors/core/log.h>
 #include <google/protobuf/util/time_util.h>
+#include <util/string/cast.h>
 #include <util/string/hex.h>
 #include <util/string/vector.h>
 #include <util/string/escape.h>
@@ -119,6 +121,8 @@ inline void FillExtraFieldsForDataChunk(
             logType = item.second;
         } else if (item.first == "file") {
             file = item.second;
+        } else if (item.first == WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX) {
+            continue;
         } else {
             auto res = data.MutableExtraFields()->AddItems();
             res->SetKey(item.first);
@@ -717,7 +721,9 @@ void TWriteSessionActor<UseMigrationProtocol>::ProceedPartition(const ui32 parti
         return;
     }
 
-    CreatePartitionWriterCache(ctx);
+    if (!CreatePartitionWriterCache(ctx)) {
+        return;
+    }
 
     State = ES_WAIT_WRITER_INIT;
 
@@ -735,7 +741,7 @@ void TWriteSessionActor<UseMigrationProtocol>::ProceedPartition(const ui32 parti
 }
 
 template <bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const TActorContext& ctx)
+bool TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const TActorContext& ctx)
 {
     NPQ::TPartitionWriterOpts opts;
 
@@ -743,6 +749,25 @@ void TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const 
     opts.WithSourceId(SourceId);
     opts.WithInitialSeqNo(InitialSeqNo);
     opts.WithExpectedGeneration(ExpectedGeneration);
+
+    if constexpr (!UseMigrationProtocol) {
+        for (const auto& item : InitRequest.write_session_meta()) {
+            if (item.first == WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX) {
+                bool trackProducerId = opts.TrackProducerId;
+                if (!TryFromString<bool>(item.second, trackProducerId)) {
+                    CloseSession(
+                        Sprintf("invalid value for write_session_meta key '%s': expected boolean, got '%s'",
+                                TString{WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX}.c_str(),
+                                item.second.c_str()),
+                        PersQueue::ErrorCode::BAD_REQUEST,
+                        ctx);
+                    return false;
+                }
+                opts.WithTrackProducerId(trackProducerId);
+                break;
+            }
+        }
+    }
 
     if constexpr (UseMigrationProtocol) {
         opts.WithTopicPath(InitRequest.topic());
@@ -769,6 +794,7 @@ void TWriteSessionActor<UseMigrationProtocol>::CreatePartitionWriterCache(const 
                                                      opts);
 
     PartitionWriterCache = ctx.RegisterWithSameMailbox(actor.release());
+    return true;
 }
 
 template <bool UseMigrationProtocol>

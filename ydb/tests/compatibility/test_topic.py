@@ -36,6 +36,9 @@ class Workload:
 
         if topic_writer is not None:
             write_loop(topic_writer)
+            # Long-lived writer: write() only enqueues; without flush, partition stats
+            # lag behind message_count until close(). Short-lived `with writer` flushes on exit.
+            topic_writer.flush()
         else:
             with self.driver.topic_client.writer(self.topic_name, producer_id="producer-id") as writer:
                 write_loop(writer)

@@ -4,6 +4,7 @@
 #include "load_actor_adapter.h"
 
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
+#include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
@@ -33,6 +34,7 @@ TPartitionActor::TPartitionActor(
           tablet,
           NKikimr::TTabletStorageInfoPtr(info),
           nullptr)
+    , StorageConfig(GetNbsService()->StorageConfig)
 {
     LOG_INFO(
         NActors::TActivationContext::AsActorContext(),
@@ -62,20 +64,6 @@ void TPartitionActor::OnActivateExecutor(const TActorContext& ctx)
         NKikimrServices::NBS_PARTITION,
         "Started NBS partition: actor id %s",
         SelfId().ToString().data());
-
-    // Initialize StorageConfig from NBS service
-    if (auto nbsService = GetNbsService()) {
-        const auto& nbsConfig = nbsService->GetConfig();
-        if (nbsConfig.has_nbsstorageconfig()) {
-            StorageConfig =
-                std::make_shared<NYdb::NBS::NStorage::TStorageConfig>(
-                    nbsConfig.nbsstorageconfig());
-            LOG_INFO(
-                ctx,
-                NKikimrServices::NBS_PARTITION,
-                "Initialized StorageConfig from NBS service config");
-        }
-    }
 
     if (!Executor()->GetStats().IsFollower()) {
         LOG_INFO(
@@ -160,7 +148,8 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
     TDirectBlockGroupsConnections directBlockGroupsConnections)
 {
     TVector<IDirectBlockGroupPtr> directBlockGroups;
-    auto executors = ExecutorPool.GetExecutors(NumDirectBlockGroups);
+    auto executors =
+        GetNbsService()->ExecutorPool.GetExecutors(NumDirectBlockGroups);
 
     for (size_t i = 0; i < NumDirectBlockGroups; i++) {
         const auto& conn =
@@ -269,6 +258,7 @@ void TPartitionActor::Start(
             .BlockSize = VolumeConfig.GetBlockSize(),
             .StripeSize = StorageConfig->GetStripeSize(),
             .BlocksCount = blockCount,
+            .VChunkSize = StorageConfig->GetVChunkSize(),
             .VhostQueuesCount = 1};
         service->VhostServer->StartEndpoint(
             std::move(socketPath),

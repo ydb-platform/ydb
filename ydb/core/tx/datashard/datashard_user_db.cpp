@@ -365,12 +365,15 @@ void TDataShardUserDb::UpsertRowInt(
 {
     TSmallVec<TCell> keyCells = ConvertTableKeys(key);
 
-    CheckWriteConflicts(tableId, keyCells);
+    const TUserTable& tableInfo = *Self.GetUserTables().at(tableId.PathId.LocalPathId);
+    TConstArrayRef<TCell> uniqueKey = GetUniqueIndexKey(keyCells, tableInfo.UniqueIndexKeySize);
+
+    CheckWriteConflicts(tableId, uniqueKey);
 
     if (LockTxId) {
-        Self.SysLocksTable().SetWriteLock(tableId, keyCells);
+        Self.SysLocksTable().SetWriteLock(tableId, uniqueKey);
     } else {
-        Self.SysLocksTable().BreakLocks(tableId, keyCells);
+        Self.SysLocksTable().BreakLocks(tableId, uniqueKey);
     }
     Self.SetTableUpdateTime(tableId, Now);
 
@@ -733,7 +736,7 @@ private:
     bool SelfFound = false;
 };
 
-void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<const TCell> keyCells) {
+void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TConstArrayRef<const TCell> keyCells) {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected CheckWriteConflicts for an unknown table");
 
@@ -796,10 +799,7 @@ void TDataShardUserDb::CheckWriteConflicts(const TTableId& tableId, TArrayRef<co
 
     // We are not actually interested in the row version, we only need to
     // detect uncommitted transaction skips on the path to that version.
-    auto res = Db.SelectRowVersion(
-        localTableId, keyCells, /* readFlags */ 0,
-        nullptr, txObserver
-    );
+    auto res = Db.SelectRowVersionByKeyPrefix(localTableId, keyCells, txObserver);
 
     if (res.Ready == NTable::EReady::Page) {
         if (mustFindConflicts || LockTxId) {

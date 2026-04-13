@@ -30,8 +30,10 @@ import ydb
 from datetime import datetime, timezone
 from pathlib import Path
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from github_issue_utils import make_profile_id
+_scripts = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _scripts not in sys.path:
+    sys.path.insert(0, _scripts)
+from github_issue_utils import canonical_team_slug, make_profile_id
 
 # ISO weekday: Monday=1 … Sunday=7 (datetime.isoweekday())
 _DEFAULT_SCHEDULE_WEEKDAYS = frozenset((1, 2, 3, 4, 5))
@@ -210,7 +212,7 @@ def _group_by_team(rows: list) -> dict:
     """Return {team_name: [{url, title}, ...]}."""
     teams: dict = {}
     for row in rows:
-        team = (row.get("owner_team") or "Unknown").strip() or "Unknown"
+        team = canonical_team_slug(row.get("owner_team"))
         teams.setdefault(team, []).append(
             {
                 "url":   row.get("github_issue_url") or "",

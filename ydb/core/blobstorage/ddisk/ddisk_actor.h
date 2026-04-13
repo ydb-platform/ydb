@@ -641,13 +641,15 @@ namespace NKikimr::NDDisk {
         };
 
         std::map<std::tuple<ui64, ui32>, TPersistentBuffer> PersistentBuffers;
+        std::map<TInstant, std::set<std::tuple<ui64, ui32, ui64>>> PersistentBuffersImMemoryCacheUptime;
         ui64 PersistentBufferInMemoryCacheSize = 0;
         TInstant StartedAt;
 
         ui64 CalcPersistentBufferInMemoryCacheSize();
         TString PersistentBufferToString();
 
-        void SanitizePersistentBufferInMemoryCache(TPersistentBuffer::TRecord& record, bool force = false);
+        void SanitizePersistentBufferInMemoryCache();
+        void SanitizePersistentBufferInMemoryCache(ui64 tabletId, ui32 generation, ui64 lsn, TPersistentBuffer::TRecord& record);
 
         static constexpr ui32 MaxSectorsPerBufferRecord = 128;
 

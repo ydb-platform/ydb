@@ -338,7 +338,7 @@ namespace NKikimr::NDDisk {
             template<typename TEvent>
             TPendingEvent(TAutoPtr<TEventHandle<TEvent>> ev, const char *name)
                 : Ev(ev.Release())
-                , QueueSpan(TWilson::DDiskInternals, NWilson::TTraceId(Ev->TraceId), name, NWilson::EFlags::AUTO_END,
+                , QueueSpan(TWilson::DDiskTopLevel, NWilson::TTraceId(Ev->TraceId), name, NWilson::EFlags::AUTO_END,
                     TActivationContext::ActorSystem())
             {}
 

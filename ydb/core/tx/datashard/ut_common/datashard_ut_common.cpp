@@ -14,7 +14,7 @@
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
-#include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
+#include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>

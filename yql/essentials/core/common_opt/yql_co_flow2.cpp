@@ -36,22 +36,6 @@ bool AllowPullUpExtendOverEquiJoin(const TOptimizeContext& optCtx) {
     return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
-bool AllowPayloadRenameOverWindow(const TOptimizeContext& optCtx) {
-    YQL_ENSURE(optCtx.Types);
-    static const char OptName[] = "PayloadRenameOverWindow";
-    return !IsOptimizerDisabled<OptName>(*optCtx.Types);
-}
-
-bool CheckWindowFramesFieldSubsetEnabled(const TOptimizeContext& optCtx) {
-    if (AllowPayloadRenameOverWindow(optCtx)) {
-        // payload renaming requires checking window frame subset before fusing
-        return true;
-    }
-    YQL_ENSURE(optCtx.Types);
-    static const char OptName[] = "CheckWindowFramesFieldSubset";
-    return !IsOptimizerDisabled<OptName>(*optCtx.Types);
-}
-
 THashSet<TStringBuf> GetAggregationInputKeys(const TCoAggregate& node) {
     TMaybe<TStringBuf> sessionColumn;
     const auto sessionSetting = GetSetting(node.Settings().Ref(), "session");
@@ -2403,12 +2387,10 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 }
             }
 
-            if (AllowPayloadRenameOverWindow(optCtx)) {
-                if (self.Input().Maybe<TCoCalcOverWindowBase>() || self.Input().Maybe<TCoCalcOverWindowGroup>()) {
-                    auto ret = PayloadRenameOverWindow(self, ctx);
-                    if (ret != self.Ptr()) {
-                        return ret;
-                    }
+            if (self.Input().Maybe<TCoCalcOverWindowBase>() || self.Input().Maybe<TCoCalcOverWindowGroup>()) {
+                auto ret = PayloadRenameOverWindow(self, ctx);
+                if (ret != self.Ptr()) {
+                    return ret;
                 }
             }
         }
@@ -3088,10 +3070,8 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         const TStructExprType& inputItemType = *input->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
         TExprNodeList parentCalcs = ExtractCalcsOverWindow(node, ctx);
-        if (CheckWindowFramesFieldSubsetEnabled(optCtx)) {
-            if (!CheckWindowFramesFieldSubset(parentCalcs, inputItemType)) {
-                return node;
-            }
+        if (!CheckWindowFramesFieldSubset(parentCalcs, inputItemType)) {
+            return node;
         }
 
         TExprNodeList calcs = ExtractCalcsOverWindow(node->HeadPtr(), ctx);

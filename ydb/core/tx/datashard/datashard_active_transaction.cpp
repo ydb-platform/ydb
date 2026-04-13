@@ -27,7 +27,6 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
     , ErrCode(NKikimrTxDataShard::TError::OK)
     , TxSize(0)
     , IsReleased(false)
-    , BuiltTaskRunner(false)
     , IsReadOnly(true)
     , AllowCancelROwithReadsets(self->AllowCancelROwithReadsets())
     , Cancelled(false)
@@ -76,8 +75,6 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
             ErrCode = NKikimrTxDataShard::TError::SCHEME_ERROR;
             ErrStr = "Trying to read from table that doesn't exist";
         }
-    } else if (IsKqpTx()) {
-        Y_ENSURE(false, "kqp tx support is removed");
     } else {
         Y_ENSURE(Tx.HasMiniKQL());
         if (Tx.GetLlvmRuntime()) {
@@ -134,15 +131,11 @@ bool TValidatedDataTx::ReValidateKeys(const NTable::TScheme& scheme)
     using EResult = NMiniKQL::IEngineFlat::EResult;
     Y_UNUSED(scheme);
 
-    if (IsKqpTx()) {
-        Y_ENSURE(false, "kqp tx support is removed");
-    } else {
-        EResult result = EngineBay.ReValidateKeys();
-        if (result != EResult::Ok) {
-            ErrStr = EngineBay.GetEngine()->GetErrors();
-            ErrCode = ConvertErrCode(result);
-            return false;
-        }
+    EResult result = EngineBay.ReValidateKeys();
+    if (result != EResult::Ok) {
+        ErrStr = EngineBay.GetEngine()->GetErrors();
+        ErrCode = ConvertErrCode(result);
+        return false;
     }
 
     return true;

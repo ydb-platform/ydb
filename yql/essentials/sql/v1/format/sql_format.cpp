@@ -3402,8 +3402,8 @@ public:
             }
 
             NYql::TIssues parserIssues;
-            auto message = NSQLTranslationV1::SqlAST(Parsers_, currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
-            if (!message) {
+            google::protobuf::Message* message = NSQLTranslationV1::SqlAST(Parsers_, currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Arena);
+            if (!message || IsEmptyQuery(message)) {
                 finalFormattedQuery << currentQuery;
                 if (!currentQuery.EndsWith("\n")) {
                     finalFormattedQuery << "\n";

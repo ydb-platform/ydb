@@ -13,7 +13,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard_backup.h>
-#include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
+#include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>

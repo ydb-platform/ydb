@@ -721,6 +721,7 @@ public:
     void GenerateTenantNodesCheckers();
     void GenerateSysTabletsNodesCheckers();
     void GenerateClusterNodesCheckers();
+    void PopulateNodesWithSysTablets();
 
     bool IsStateStorageReplicaNode(ui32 nodeId) {
         return StateStorageReplicas.contains(nodeId);
@@ -801,12 +802,12 @@ public:
     bool HostHasSysTablet(const TString &hostName) const {
         ui32 nodeId;
         if (TryFromString(hostName, nodeId)) {
-            return HasNode(nodeId) && NodeToTabletTypes.contains(nodeId);
+            return HasNode(nodeId) && NodesWithSysTablets.contains(nodeId);
         }
 
         auto pr = HostNameToNodeId.equal_range(hostName);
         for (auto it = pr.first; it != pr.second; ++it) {
-            if (NodeToTabletTypes.contains(it->second)) {
+            if (NodesWithSysTablets.contains(it->second)) {
                 return true;
             }
         }
@@ -1097,6 +1098,7 @@ public:
     bool IsLocalBootConfDiffersFromConsole = false;
     NKikimrConfig::TBootstrap BootstrapConfig;
     THashMap<ui32, TVector<NKikimrConfig::TBootstrap::ETabletType>> NodeToTabletTypes;
+    THashSet<ui32> NodesWithSysTablets;
 
     THashMap<TPileId, TSysNodesCheckers> SysNodesCheckers;
 

@@ -913,7 +913,7 @@ bool TCms::CheckSysTabletsNode(const TActionOptions &opts,
 void TCms::SortActionsBySysTabletPriority(
     TPermissionRequest &request) const
 {
-    if (ClusterInfo->HostsWithSysTablets.empty()) {
+    if (ClusterInfo->NodesWithSysTablets.empty()) {
         return;
     }
 
@@ -1986,6 +1986,7 @@ void TCms::Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx
         info->GenerateSysTabletsNodesCheckers();
 
     info->GenerateClusterNodesCheckers();
+    info->PopulateNodesWithSysTablets();
 
     AdjustInfo(info, ctx);
 

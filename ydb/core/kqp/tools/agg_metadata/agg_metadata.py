@@ -197,7 +197,7 @@ def print_lambda_with_custom_args(yql_lambda, new_args, title=None):
 
     print('```')
     prog = List(False)
-    prog.list = [yql_lambda]
+    prog.list = yql_lambda.list[2:]
     printer = TerminalPrinter()
     print_list(sys.stdout, prog, {}, Context(tabstops=4, printer=printer))
     printer.finalize()

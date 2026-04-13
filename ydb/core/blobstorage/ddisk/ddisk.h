@@ -78,12 +78,12 @@ namespace NKikimr::NDDisk {
 
     struct TBlockSelector {
         ui64 VChunkIndex;
-        ui32 OffsetInBytes;
+        ui64 OffsetInBytes;
         ui32 Size;
 
         TBlockSelector() = default;
 
-        TBlockSelector(ui64 vChunkIndex, ui32 offsetInBytes, ui32 size)
+        TBlockSelector(ui64 vChunkIndex, ui64 offsetInBytes, ui32 size)
             : VChunkIndex(vChunkIndex)
             , OffsetInBytes(offsetInBytes)
             , Size(size)
@@ -408,7 +408,7 @@ struct TPersistentBufferFormat {
 
         TEvReadPersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
                 const std::optional<TString>& errorReason = std::nullopt,
-                ui64 vChunkIndex = 0, ui32 offsetInBytes = 0, ui32 sizeInBytes = 0,
+                ui64 vChunkIndex = 0, ui64 offsetInBytes = 0, ui32 sizeInBytes = 0,
                 TRope data = {}) {
             Record.SetStatus(status);
             if (errorReason) {

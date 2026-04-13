@@ -40,7 +40,7 @@ message TQueryCredentials {
 
 message TBlockSelector {
     uint64 VChunkIndex = 1;
-    uint32 OffsetInBytes = 2;  // 4 KiB alignment
+    uint64 OffsetInBytes = 2;  // 4 KiB alignment
     uint32 Size = 3;           // 4 KiB alignment
 }
 
@@ -172,7 +172,7 @@ message TEvReadPersistentBufferResult {
     optional string ErrorReason = 2;
     TReadResult ReadResult = 3;
     uint64 VChunkIndex = 4;
-    uint32 OffsetInBytes = 5;
+    uint64 OffsetInBytes = 5;
     uint32 SizeInBytes = 6;
 }
 

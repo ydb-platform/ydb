@@ -167,7 +167,7 @@ void TDDiskActor::TDirectIoOpBase::OnDrop() noexcept {
     SelfRecycle();
 }
 
-void TDDiskActor::TDirectIoOpBase::PrepareWrite(TRope&& data, ui64 offset, TChunkIdx chunkIdx, ui32 chunkOffset) {
+void TDDiskActor::TDirectIoOpBase::PrepareWrite(TRope&& data, ui64 offset, TChunkIdx chunkIdx, ui64 chunkOffset) {
     Y_ABORT_UNLESS(data.size() <= MaxRwCount);
     const size_t dataSize = data.size();
     Data.reset();
@@ -192,7 +192,7 @@ void TDDiskActor::TDirectIoOpBase::PrepareWrite(TRope&& data, ui64 offset, TChun
     ChunkOffsetInBytes = chunkOffset;
 }
 
-void TDDiskActor::TDirectIoOpBase::PrepareRead(size_t size, ui64 offset, TChunkIdx chunkIdx, ui32 chunkOffset) {
+void TDDiskActor::TDirectIoOpBase::PrepareRead(size_t size, ui64 offset, TChunkIdx chunkIdx, ui64 chunkOffset) {
     Y_ABORT_UNLESS(size <= MaxRwCount);
     Data.reset();
 

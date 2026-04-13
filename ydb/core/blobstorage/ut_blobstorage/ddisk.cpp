@@ -164,7 +164,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
             Cerr << "list\n";
 
-            THashSet<std::tuple<ui64, ui32, ui32>> returnedLsns;
+            THashSet<std::tuple<ui64, ui64, ui32>> returnedLsns;
             for (const auto& item : rr.GetRecords()) {
                 const auto& sel = item.GetSelector();
                 if (sel.GetVChunkIndex() != VChunkIndex) {
@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 returnedLsns.emplace(item.GetLsn(), sel.GetOffsetInBytes(), sel.GetSize());
             }
 
-            THashSet<std::tuple<ui64, ui32, ui32>> ourLsns;
+            THashSet<std::tuple<ui64, ui64, ui32>> ourLsns;
             for (const auto& [lsn, item] : PersistentBuffers) {
                 const auto& [offsetInBytes, size, buffer] = item;
                 ourLsns.emplace(lsn, offsetInBytes, size);

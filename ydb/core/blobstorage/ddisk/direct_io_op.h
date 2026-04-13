@@ -36,8 +36,8 @@ public:
 
     virtual void ClearForRecycle() noexcept;
 
-    void PrepareWrite(TRope&& data, ui64 offset, TChunkIdx chunkIdx, ui32 chunkOffset);
-    void PrepareRead(size_t size, ui64 offset, TChunkIdx chunkIdx, ui32 chunkOffset);
+    void PrepareWrite(TRope&& data, ui64 offset, TChunkIdx chunkIdx, ui64 chunkOffset);
+    void PrepareRead(size_t size, ui64 offset, TChunkIdx chunkIdx, ui64 chunkOffset);
 
     void Reinit(const IEventHandle* ev = nullptr);
 
@@ -59,7 +59,7 @@ public:
     // methods to use when we fallback to PDisk instead of direct I/O
 
     TChunkIdx GetChunkIdx() const { return ChunkIdx; }
-    ui32 GetChunkOffset() const { return ChunkOffsetInBytes; }
+    ui64 GetChunkOffset() const { return ChunkOffsetInBytes; }
 
     using NPDisk::TUringOperationBase::SetResult;
 
@@ -81,7 +81,7 @@ private:
 
     // PDisk fallback data
     TChunkIdx ChunkIdx = 0;
-    ui32 ChunkOffsetInBytes = 0;
+    ui64 ChunkOffsetInBytes = 0;
 
     NWilson::TSpan Span;
 

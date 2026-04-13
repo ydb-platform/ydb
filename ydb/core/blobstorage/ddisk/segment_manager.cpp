@@ -28,7 +28,7 @@ void TSegmentManager::DropSegment(ui64 tabletId, ui64 vchunkIndex, TSegment drop
     Y_VERIFY(outdated != nullptr);
 
     auto [dropBegin, dropEnd] = dropSegment;
-    TSegmentIt segmentIt = SegmentsInFlight.lower_bound({tabletId, vchunkIndex, dropBegin, ui32(0)});
+    TSegmentIt segmentIt = SegmentsInFlight.lower_bound({tabletId, vchunkIndex, dropBegin, ui64(0)});
 
     while (segmentIt != SegmentsInFlight.end()) {
         auto [segTabletId, segVChunkIndex, begin, end] = segmentIt->first;

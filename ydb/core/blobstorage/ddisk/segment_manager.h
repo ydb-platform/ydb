@@ -8,7 +8,7 @@ namespace NKikimr::NDDisk {
 
     class TSegmentManager {
     public:
-        using TSegment = std::tuple<ui32, ui32>; // [begin; end)
+        using TSegment = std::tuple<ui64, ui64>; // [begin; end)
         
         struct TOutdatedRequest {
             ui64 SyncIndex;
@@ -18,7 +18,7 @@ namespace NKikimr::NDDisk {
     private:
         struct TRequestInFlight;
         using TRequestIt = THashMap<ui64, TRequestInFlight>::iterator;
-        using TSegmentLocation = std::tuple<ui64, ui64, ui32, ui32>; // (tablet_id, vchunk_id, begin, end)
+        using TSegmentLocation = std::tuple<ui64, ui64, ui64, ui64>; // (tablet_id, vchunk_id, begin, end)
         using TSegmentIt = TMap<TSegmentLocation, TRequestIt>::iterator;
 
         struct TRequestInFlight {

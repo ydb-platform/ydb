@@ -109,8 +109,8 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    std::vector<std::tuple<ui32, ui32, TRope>> TDDiskActor::SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex,
-        ui64 lsn, ui32 offsetInBytes, ui32 sizeInBytes, TRope&& payload, const std::vector<TPersistentBufferSectorInfo>& sectors) {
+    std::vector<std::tuple<ui32, ui64, TRope>> TDDiskActor::SlicePersistentBuffer(ui64 tabletId, ui32 generation, ui64 vchunkIndex,
+        ui64 lsn, ui64 offsetInBytes, ui32 sizeInBytes, TRope&& payload, const std::vector<TPersistentBufferSectorInfo>& sectors) {
         auto headerData = TRcBuf::UninitializedPageAligned(SectorSize);
         TPersistentBufferHeader *header = (TPersistentBufferHeader*)headerData.GetDataMut();
         memset(header, 0, SectorSize);
@@ -133,7 +133,7 @@ namespace NKikimr::NDDisk {
             loc.Checksum = CalculateChecksum(it, SectorSize);
         }
         header->HeaderChecksum = 0;
-        std::vector<std::tuple<ui32, ui32, TRope>> parts;
+        std::vector<std::tuple<ui32, ui64, TRope>> parts;
         parts.reserve(sectors.size());
         for (ui32 sectorIdx = 0, first = 0; sectorIdx <= sectors.size(); sectorIdx++) {
             if (sectorIdx == sectors.size()
@@ -146,7 +146,10 @@ namespace NKikimr::NDDisk {
                     data = headerData;
                 }
                 payload.ExtractFront(partSize, &data);
-                parts.emplace_back(sectors[first].ChunkIdx, sectors[first].SectorIdx * SectorSize, std::move(data));
+                parts.emplace_back(
+                    sectors[first].ChunkIdx,
+                    static_cast<ui64>(sectors[first].SectorIdx) * SectorSize,
+                    std::move(data));
                 first = sectorIdx;
             }
         }
@@ -243,7 +246,7 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    TRope TrimData(TRope&& data, ui32 offset, ui32 size, ui32 selectorOffset, ui32 selectorSize) {
+    TRope TrimData(TRope&& data, ui64 offset, ui32 size, ui64 selectorOffset, ui32 selectorSize) {
         Y_ABORT_UNLESS(selectorOffset >= offset && offset + size >= selectorOffset + selectorSize);
         auto start = data.Begin() + (selectorOffset - offset);
         return data.Extract(start, start + selectorSize);
@@ -563,7 +566,7 @@ namespace NKikimr::NDDisk {
                     auto* partOp = static_cast<TPersistentBufferPartIoOp*>(op.get());
                     partOp->SetCookie(operationCookie);
                     partOp->SetPartCookie(cookie);
-                    auto dataOffset = pr.Sectors[first].SectorIdx * SectorSize;
+                    const ui64 dataOffset = static_cast<ui64>(pr.Sectors[first].SectorIdx) * SectorSize;
                     auto size = (pr.Sectors[sectorIdx - 1].SectorIdx - pr.Sectors[first].SectorIdx + 1) * SectorSize;
                     auto offset = DiskFormat->Offset(pr.Sectors[first].ChunkIdx, 0, dataOffset);
                     op->PrepareRead(size, offset, pr.Sectors[first].ChunkIdx, dataOffset);
@@ -575,7 +578,7 @@ namespace NKikimr::NDDisk {
         }
     }
 
-    void TDDiskActor::ReplyReadPersistentBuffer(ui64 operationCookie, ui64 vChunkIndex, ui32 offsetInBytes, ui32 size, TRope&& data) {
+    void TDDiskActor::ReplyReadPersistentBuffer(ui64 operationCookie, ui64 vChunkIndex, ui64 offsetInBytes, ui32 size, TRope&& data) {
         auto inflightIt = PersistentBufferDiskOperationInflight.find(operationCookie);
         Y_ABORT_UNLESS(inflightIt != PersistentBufferDiskOperationInflight.end());
         auto& inflight = inflightIt->second;
@@ -677,7 +680,7 @@ namespace NKikimr::NDDisk {
             auto zeroingData = TRcBuf::UninitializedPageAligned(SectorSize);
             memset(zeroingData.GetDataMut(), 0, SectorSize);
 
-            auto chunkOffset = pr.Sectors[0].SectorIdx * SectorSize;
+            const ui64 chunkOffset = static_cast<ui64>(pr.Sectors[0].SectorIdx) * SectorSize;
             auto diskOffset = DiskFormat->Offset(pr.Sectors[0].ChunkIdx, 0, chunkOffset);
             std::unique_ptr<TDirectIoOpBase> op = AllocateOp<TPersistentBufferPartIoOp>();
             auto* partOp = static_cast<TPersistentBufferPartIoOp*>(op.get());

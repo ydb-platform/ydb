@@ -167,6 +167,38 @@ Y_UNIT_TEST_SUITE(TDDiskActorSyncWithDDisk) {
             "Expected error reason to contain 'undelivered', got: " << record.GetSegmentResults(0).GetErrorReason());
     }
 
+    Y_UNIT_TEST(SyncOverflowedOffsetStillReturnsResultPerInputSegment) {
+        TTestContext ctx;
+        NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
+
+        constexpr ui64 BlocksPerUi32Wrap = (1ull << 32) / MinBlockSize; // 1,048,576 blocks for 4 KiB sectors
+        const ui64 overflowedOffset64 = BlocksPerUi32Wrap * ui64(MinBlockSize);
+        const ui32 overflowedOffset = static_cast<ui32>(overflowedOffset64);
+        UNIT_ASSERT_VALUES_EQUAL(overflowedOffset64, 1ull << 32);
+        UNIT_ASSERT_VALUES_EQUAL(overflowedOffset, 0u);
+
+        auto syncEv = std::make_unique<NDDisk::TEvSyncWithDDisk>(
+            creds,
+            std::make_tuple(ui32(1), ui32(999), ui32(1)),
+            std::optional<ui64>(42));
+        syncEv->AddSegment(NDDisk::TBlockSelector(0, 0, MinBlockSize));
+        syncEv->AddSegment(NDDisk::TBlockSelector(0, overflowedOffset, MinBlockSize));
+
+        auto result = ctx.SendAndGrab<NDDisk::TEvSyncWithDDiskResult>(syncEv.release());
+        AssertStatus<NDDisk::TEvSyncWithDDiskResult>(result, TReplyStatus::ERROR);
+
+        const auto& record = result->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(record.SegmentResultsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(record.GetSegmentResults(0).GetStatus()),
+            static_cast<int>(TReplyStatus::OUTDATED));
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(record.GetSegmentResults(1).GetStatus()),
+            static_cast<int>(TReplyStatus::ERROR));
+        UNIT_ASSERT_C(record.GetSegmentResults(1).GetErrorReason().Contains("undelivered"),
+            "Expected error reason to contain 'undelivered', got: " << record.GetSegmentResults(1).GetErrorReason());
+    }
+
     Y_UNIT_TEST(Smoke_1Tablet_2VChunks_1Segment) {
         TestSyncWithDDisk(1, 2, 8, 1);
     }

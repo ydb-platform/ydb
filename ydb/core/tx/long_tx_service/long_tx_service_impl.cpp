@@ -1,11 +1,16 @@
 #include "long_tx_service_impl.h"
 #include "lwtrace_probes.h"
+#include "snapshots_exchange.h"
 
+#include <util/string/builder.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/domain.h>
-#include <ydb/library/actors/core/log.h>
+#include <ydb/core/protos/long_tx_service_config.pb.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_handle.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/library/actors/core/actor.h>
-#include <util/string/builder.h>
+#include <ydb/library/actors/core/log.h>
+#include <atomic>
 
 #define TXLOG_LOG(priority, stream) \
     LOG_LOG_S(*TlsActivationContext, priority, NKikimrServices::LONG_TX_SERVICE, LogPrefix << stream)
@@ -26,6 +31,25 @@ static constexpr bool InterconnectUndeliveryBroken = true;
 void TLongTxServiceActor::Bootstrap() {
     LogPrefix = TStringBuilder() << "TLongTxService [Node " << SelfId().NodeId() << "] ";
     RegisterLongTxServiceProbes();
+<<<<<<< HEAD
+=======
+
+    TSnapshotExchangeCounters snapshotExchangeCounters;
+    if (Settings.Counters) {
+        snapshotExchangeCounters.SnapshotsCollectionTimeMs = Settings.Counters->SnapshotsCollectionTimeMs;
+        snapshotExchangeCounters.SnapshotsPropagationTimeMs = Settings.Counters->SnapshotsPropagationTimeMs;
+        snapshotExchangeCounters.TimeSinceLastRemoteSnapshotsUpdateMs = Settings.Counters->TimeSinceLastRemoteSnapshotsUpdateMs;
+    }
+
+    auto* snapshotExchangeActor = CreateSnapshotExchangeActor(
+        LocalSnapshotsStorage,
+        RemoteSnapshotsStorage,
+        snapshotExchangeCounters);
+    SnapshotsExchangeActorId = RegisterWithSameMailbox(snapshotExchangeActor);
+    Send(SelfId(), new TEvPrivate::TEvSnapshotMaintenance());
+
+    TXLOG_NOTICE("Started, SelfId: " << SelfId());
+>>>>>>> 30e4a301764 (Snapshot Locking (#36668))
     Become(&TThis::StateWork);
 }
 
@@ -83,6 +107,9 @@ void TLongTxServiceActor::HandlePoison() {
         SessionSubscribeActor->PassAway();
         SessionSubscribeActor->Self = nullptr;
         SessionSubscribeActor = nullptr;
+    }
+    if (SnapshotsExchangeActorId) {
+        Send(SnapshotsExchangeActorId, new TKikimrEvents::TEvPoison());
     }
     PassAway();
 }
@@ -342,7 +369,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr&
     }
 
     auto* msg = ev->Get();
-    const TString& databaseName = GetDatabaseNameOrLegacyDefault(msg->Record.GetDatabaseName());
+    const TString& databaseName = GetDatabaseNameOrLegacyDefault(msg->DatabaseName);
     TXLOG_DEBUG("Received TEvAcquireReadSnapshot from " << ev->Sender << " for database " << databaseName);
 
     LWTRACK(AcquireReadSnapshotRequest, msg->Orbit, databaseName);
@@ -361,6 +388,7 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr&
         auto& req = state.PendingUserRequests.emplace_back();
         req.Sender = ev->Sender;
         req.Cookie = ev->Cookie;
+        req.TableIds = std::move(msg->TableIds);
         req.Orbit = std::move(msg->Orbit);
     }
 
@@ -407,9 +435,22 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
     Y_ABORT_UNLESS(state && state->ActiveRequests.contains(ev->Cookie), "Unexpected database snapshot state");
 
     if (msg->Status == Ydb::StatusIds::SUCCESS) {
+        const auto now = AppData()->TimeProvider->Now();
         for (auto& userReq : req->UserRequests) {
+            auto snapshotHandle = [&]() {
+                if (AppData()->FeatureFlags.GetEnableSnapshotsLocking()) {
+                    TLocalSnapshotInfo snapshotInfo(msg->Snapshot, userReq.Sender, std::move(userReq.TableIds), now);
+                    NKqp::TSnapshotHandle snapshotHandle(snapshotInfo.AliveFlag);
+                    LocalSnapshotsStorage->Insert(std::move(snapshotInfo));
+
+                    return std::move(snapshotHandle);
+                } else {
+                    return NKqp::TSnapshotHandle{};
+                }
+            }();
+            
             LWTRACK(AcquireReadSnapshotSuccess, userReq.Orbit, msg->Snapshot.Step, msg->Snapshot.TxId);
-            Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(databaseName, msg->Snapshot, std::move(userReq.Orbit)), 0, userReq.Cookie);
+            Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(databaseName, msg->Snapshot, std::move(snapshotHandle), std::move(userReq.Orbit)), 0, userReq.Cookie);
         }
         for (auto& beginReq : req->BeginTxRequests) {
             auto txId = beginReq.TxId;
@@ -1053,5 +1094,328 @@ void TLongTxServiceActor::RemoveUnavailableLock(TProxyNodeState& node, TProxyLoc
     node.Locks.erase(lockId);
 }
 
+<<<<<<< HEAD
+=======
+TLongTxServiceActor::TLockStateHandle TLongTxServiceActor::GetAwaiterHandle(const TLockInfo& awaiterInfo) {
+    if (awaiterInfo.LockNodeId == SelfId().NodeId()) {
+        auto lockIt = Locks.find(awaiterInfo.LockId);
+        if (lockIt == Locks.end()) {
+            TXLOG_WARN("Local awaiter id: " << awaiterInfo.LockId << " not found");
+            return TLockStateHandle{};
+        }
+        return TLockStateHandle(lockIt->second);
+    } else {
+        auto& node = ConnectProxyNode(awaiterInfo.LockNodeId);
+        if (node.State == EProxyState::Disconnected) {
+            TXLOG_WARN("Proxy node for remote awaiter id: " << awaiterInfo << " not found");
+            return TLockStateHandle{};
+        }
+
+        auto lockIt = node.Locks.find(awaiterInfo.LockId);
+        if (lockIt == node.Locks.end()) {
+            TXLOG_WARN("Proxy lock for remote awaiter id: " << awaiterInfo << " not found");
+            return TLockStateHandle{};
+        }
+        return TLockStateHandle(lockIt->second);
+    }
+}
+
+void TLongTxServiceActor::UpdateLockWaitEdges(
+        TLockStateHandle awaiter, const TVector<TWaitEdgeInfo>& added, const TVector<TWaitEdgeId>& removed) {
+    TLockInfo awaiterInfo = awaiter.LockInfo(SelfId());
+
+    // 1. Update the local graph.
+
+    TVector<TWaitEdgeInfo> actuallyAdded;
+    for (const auto& addedEdge : added) {
+        auto existingIt = WaitEdges.find(addedEdge.Id);
+        if (existingIt != WaitEdges.end()) {
+            if (existingIt->second.Blocker.LockInfo(SelfId()) != addedEdge.Blocker) {
+                TXLOG_ERROR("Unexpected blocker: " << existingIt->second.Blocker.LockInfo(SelfId())
+                    << " for duplicate added edge id: " << addedEdge.Id
+                    << ", expected: " << addedEdge.Blocker.LockId);
+            }
+            continue;
+        }
+
+        TLockStateHandle blocker;
+        if (addedEdge.Blocker.LockNodeId == SelfId().NodeId()) {
+            auto lockIt = Locks.find(addedEdge.Blocker.LockId);
+            if (lockIt == Locks.end()) {
+                continue;
+            }
+            blocker = TLockStateHandle{lockIt->second};
+        } else {
+            auto& node = ConnectProxyNode(addedEdge.Blocker.LockNodeId);
+            if (node.State == EProxyState::Disconnected) {
+                continue;
+            }
+
+            auto lockIt = node.Locks.find(addedEdge.Blocker.LockId);
+            if (lockIt != node.Locks.end()) {
+                blocker = TLockStateHandle(lockIt->second);
+            } else {
+                blocker = TLockStateHandle(SubscribeToProxyLock(node, addedEdge.Blocker.LockId));
+            }
+        }
+
+        auto insertHappened = WaitEdges.try_emplace(addedEdge.Id, addedEdge.Id, awaiter, blocker).second;
+        Y_ABORT_UNLESS(insertHappened);
+        actuallyAdded.push_back(addedEdge);
+
+        TXLOG_DEBUG("Added wait edge id: " << addedEdge.Id
+            << ", awaiter: " << awaiterInfo
+            << ", blocker: " << addedEdge.Blocker);
+    }
+
+    TVector<TWaitEdgeId> actuallyRemoved;
+    for (const auto& id : removed) {
+        auto it = WaitEdges.find(id);
+        if (it == WaitEdges.end()) {
+            continue;
+        }
+        Y_ABORT_UNLESS(it->second.Awaiter);
+        Y_ABORT_UNLESS(it->second.Blocker);
+
+        if (it->second.Awaiter.Impl != awaiter.Impl) {
+            TXLOG_ERROR("Unexpected awaiter: " << awaiterInfo
+                << " for removed edge id: " << id
+                << ", expected: " << awaiter.LockInfo(SelfId()));
+            continue;
+        }
+
+        auto blockerInfo = it->second.Blocker.LockInfo(SelfId());
+        WaitEdges.erase(it);
+        actuallyRemoved.push_back(id);
+
+        TXLOG_DEBUG("Removed wait edge id: " << id
+            << ", awaiter: " << awaiterInfo
+            << ", blocker: " << blockerInfo);
+    }
+
+    // 2. Send notifications
+
+    if (TLockState* localAwaiter = awaiter.LocalState()) {
+        if (!actuallyAdded.empty() || !actuallyRemoved.empty()) {
+            for (const auto& [sessionId, subscribers] : localAwaiter->RemoteSubscribers) {
+                for (const auto& [subscriber, _] : subscribers) {
+                    auto updateEv = MakeHolder<TEvLongTxService::TEvUpdateLockWaitEdges>(awaiterInfo);
+                    for (const auto& edge : actuallyAdded) {
+                        if (edge.Id.OwnerId.NodeId() != subscriber.NodeId()) {
+                            updateEv->AddAddedEdge(edge.Id, edge.Blocker);
+                        }
+                    }
+                    for (const auto& edgeId : actuallyRemoved) {
+                        if (edgeId.OwnerId.NodeId() != subscriber.NodeId()) {
+                            updateEv->AddRemovedEdge(edgeId);
+                        }
+                    }
+
+                    if (!updateEv->Empty()) {
+                        SendViaSession(
+                            sessionId, subscriber, updateEv.Release(), IEventHandle::FlagTrackDelivery);
+                    }
+                }
+            }
+        }
+    } else {
+        // Notify remote lock about new local edges.
+        TProxyLockState* proxyAwaiter = awaiter.ProxyState();
+        auto& node = proxyAwaiter->ProxyNode;
+        if (node.State == EProxyState::Connected) {
+            auto updateEv = MakeHolder<TEvLongTxService::TEvUpdateLockWaitEdges>(awaiterInfo);
+            for (const auto& edge : actuallyAdded) {
+                if (edge.Id.OwnerId.NodeId() == SelfId().NodeId()) {
+                    updateEv->AddAddedEdge(edge.Id, edge.Blocker);
+                }
+            }
+            for (const auto& edgeId : actuallyRemoved) {
+                if (edgeId.OwnerId.NodeId() == SelfId().NodeId()) {
+                    updateEv->AddRemovedEdge(edgeId);
+                }
+            }
+
+            if (!updateEv->Empty()) {
+                SendViaSession(
+                    node.Session, MakeLongTxServiceID(node.NodeId),
+                    updateEv.Release(), IEventHandle::FlagTrackDelivery);
+            }
+        }
+
+        // Otherwise the edges will be sent when we re-subscribe to locks in the TEvNodeConnected handler.
+    }
+}
+
+template<typename TProtoList, typename TFilter>
+void TLongTxServiceActor::SyncLockWaitEdgesSubset(
+        TLockStateHandle awaiter, const TProtoList& newEdges, TFilter edgeFilter) {
+    THashSet<TWaitEdgeId> prevWaitEdges;
+    for (auto& edge : awaiter.WaitNode().Blockers) {
+        if (edgeFilter(edge.Id)) {
+            prevWaitEdges.insert(edge.Id);
+        }
+    }
+
+    TVector<TWaitEdgeInfo> addedEdges;
+    for (const auto& edge : newEdges) {
+        TWaitEdgeId edgeId(ActorIdFromProto(edge.GetId().GetOwner()), edge.GetId().GetRequestId());
+        if (edgeFilter(edgeId)) {
+            auto prevIt = prevWaitEdges.find(edgeId);
+            if (prevIt == prevWaitEdges.end()) {
+                addedEdges.push_back(TWaitEdgeInfo{
+                    .Id = edgeId,
+                    .Blocker = TLockInfo(edge.GetBlockerLockId(), edge.GetBlockerLockNode()),
+                });
+            } else {
+                prevWaitEdges.erase(prevIt);
+            }
+        }
+    }
+
+    TVector<TWaitEdgeId> removedEdges(prevWaitEdges.begin(), prevWaitEdges.end());
+
+    UpdateLockWaitEdges(awaiter, addedEdges, removedEdges);
+}
+
+void TLongTxServiceActor::RemoveWaitNodeEdges(TWaitNode& waitNode) {
+    while (!waitNode.Awaiters.Empty()) {
+        WaitEdges.erase(waitNode.Awaiters.Back()->Id); // Unlinks the edge from the list.
+    }
+    while (!waitNode.Blockers.Empty()) {
+        WaitEdges.erase(waitNode.Blockers.Back()->Id); // Unlinks the edge from the list.
+    }
+}
+
+void TLongTxServiceActor::Handle(TEvLongTxService::TEvWaitingLockAdd::TPtr& ev) {
+    auto edgeId = TWaitEdgeId(ev->Sender, ev->Get()->RequestId);
+    TXLOG_DEBUG("Received TEvWaitingLockAdd for awaiter: " << ev->Get()->Lock
+        << ", blocker: " << ev->Get()->OtherLock
+        << ", edge id: " << edgeId);
+
+    auto awaiter = GetAwaiterHandle(ev->Get()->Lock);
+    if (!awaiter) {
+        return;
+    }
+
+    TVector<TWaitEdgeInfo> added {
+        TWaitEdgeInfo {
+            .Id = edgeId,
+            .Blocker = ev->Get()->OtherLock,
+        },
+    };
+    UpdateLockWaitEdges(awaiter, added, {});
+}
+
+void TLongTxServiceActor::Handle(TEvLongTxService::TEvWaitingLockRemove::TPtr& ev) {
+    auto edgeId = TWaitEdgeId(ev->Sender, ev->Get()->RequestId);
+    TXLOG_DEBUG("Received TEvWaitingLockRemove for edge id: " << edgeId);
+
+    auto edgeIt = WaitEdges.find(edgeId);
+    if (edgeIt == WaitEdges.end()) {
+        return;
+    }
+    auto& edge = edgeIt->second;
+    UpdateLockWaitEdges(edge.Awaiter, {}, {edgeId});
+}
+
+void TLongTxServiceActor::Handle(TEvLongTxService::TEvUpdateLockWaitEdges::TPtr& ev) {
+    const auto& record = ev->Get()->Record;
+    TLockInfo awaiterInfo(record.GetLockId(), record.GetLockNode());
+
+    TXLOG_DEBUG("Received TEvUpdateLockWaitEdges from " << ev->Sender
+        << " for awaiter: " << awaiterInfo
+        << ", added count: " << record.GetAdded().size()
+        << ", removed count: " << record.GetRemoved().size());
+
+    auto awaiter = GetAwaiterHandle(awaiterInfo);
+    if (!awaiter) {
+        return;
+    }
+
+    TVector<TWaitEdgeInfo> addedEdges;
+    for (const auto& added : ev->Get()->Record.GetAdded()) {
+        TWaitEdgeId id(ActorIdFromProto(added.GetId().GetOwner()), added.GetId().GetRequestId());
+        TLockInfo blocker(added.GetBlockerLockId(), added.GetBlockerLockNode());
+        addedEdges.push_back(TWaitEdgeInfo{
+            .Id = id,
+            .Blocker = blocker,
+        });
+    }
+
+    TVector<TWaitEdgeId> removedEdges;
+    for (const auto& removedId : ev->Get()->Record.GetRemoved()) {
+        TWaitEdgeId id(ActorIdFromProto(removedId.GetOwner()), removedId.GetRequestId());
+        removedEdges.push_back(id);
+    }
+
+    UpdateLockWaitEdges(awaiter, addedEdges, removedEdges);
+}
+
+void TLongTxServiceActor::Handle(TEvLongTxService::TEvGetLockWaitGraph::TPtr& ev) {
+    auto response = MakeHolder<TEvLongTxService::TEvGetLockWaitGraphResult>();
+    response->WaitEdges.reserve(WaitEdges.size());
+    for (const auto& [id, edge] : WaitEdges) {
+        response->WaitEdges.push_back(TEvLongTxService::TEvGetLockWaitGraphResult::TWaitEdge{
+            .Id = id,
+            .Awaiter = edge.Awaiter.LockInfo(SelfId()),
+            .Blocker = edge.Blocker.LockInfo(SelfId()),
+        });
+    }
+
+    Send(ev->Sender, response.Release(), 0, ev->Cookie);
+}
+
+void TLongTxServiceActor::Handle(TEvPrivate::TEvSnapshotMaintenance::TPtr&) {
+    UpdateImmutableSnapshotsRegistry();
+    TXLOG_DEBUG("Scheduled next TEvSnapshotMaintenance event in "
+        << AppData()->LongTxServiceConfig.GetSnapshotsRegistryUpdateIntervalSeconds() << " seconds");
+    Schedule(
+        TDuration::Seconds(AppData()->LongTxServiceConfig.GetSnapshotsRegistryUpdateIntervalSeconds()),
+        new TEvPrivate::TEvSnapshotMaintenance());
+}
+
+void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {    
+    if (!AppData()->FeatureFlags.GetEnableSnapshotsLocking()) {
+        TXLOG_DEBUG("Snapshots locking is disabled, clearing local and remote snapshots storage");
+        LocalSnapshotsStorage->Clear();
+        RemoteSnapshotsStorage->Clear();
+        AppData()->SnapshotRegistryHolder->Set(nullptr);
+        return;
+    }
+
+    LocalSnapshotsStorage->CleanExpired();
+    if (!RemoteSnapshotsStorage->IsReady()) {
+        TXLOG_DEBUG("Remote snapshots storage is not ready, skipping update");
+        return;
+    }
+
+    auto registryBuilder = CreateImmutableSnapshotRegistryBuilder();
+    registryBuilder->SetSnapshotBorder(RemoteSnapshotsStorage->GetBorder());
+
+    size_t localSnapshotsCount = 0;
+    for (const auto& snapshotInfo : LocalSnapshotsStorage->View()) {
+        registryBuilder->AddSnapshot(snapshotInfo.TableIds, snapshotInfo.Snapshot);
+        ++localSnapshotsCount;
+    }
+
+    size_t remoteSnapshotsCount = 0;
+    for (const auto& remoteSnapshotInfo : RemoteSnapshotsStorage->View()) {
+        registryBuilder->AddSnapshot(
+            remoteSnapshotInfo.TableIds,
+            remoteSnapshotInfo.Snapshot);
+        ++remoteSnapshotsCount;
+    }
+
+    if (Settings.Counters) {
+        Settings.Counters->RemoteSnapshotsInRegistry->Set(remoteSnapshotsCount);
+    }
+
+    AppData()->SnapshotRegistryHolder->Set(std::move(*registryBuilder).Build());
+    TXLOG_DEBUG("Updated immutable snapshots registry. "
+        << "Local snapshots count: " << localSnapshotsCount
+        << ", Remote snapshots count: " << remoteSnapshotsCount);
+}
+
+>>>>>>> 30e4a301764 (Snapshot Locking (#36668))
 } // namespace NLongTxService
 } // namespace NKikimr

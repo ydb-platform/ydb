@@ -511,10 +511,11 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             auto tableClient = kikimr.GetTableClient();
             auto it = tableClient.StreamExecuteScanQuery(R"(
                 --!syntax_v1
-                SELECT COUNT(*) FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
-                WHERE Kind == "SPLIT_COMPACTED"
+                SELECT count(*) FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats` group by CompactionLevel,
             )").GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
             auto rows = CollectRows(it);
             UNIT_ASSERT_C(!rows.empty(), "No portion stats returned");
             const ui64 compactedCount = GetUint64(rows[0].at("column0"));

@@ -29,6 +29,8 @@ private:
     YDB_READONLY(i64, RecordsCount, 0);
 
 public:
+    using TPortionSlicePtr = NKikimr::NOlap::TPortionInfo::TConstPtr;
+
     NJson::TJsonValue SerializeToJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("bytes", Bytes);
@@ -41,12 +43,15 @@ public:
         return TStringBuilder() << "{bytes=" << Bytes << ";count=" << Count << ";records=" << RecordsCount << "}";
     }
 
-    void AddPortion(const std::shared_ptr<TPortionInfo>& p) {
+    /// Accepts any slice of column portions (including `shared_ptr<TPortionInfo>` via implicit conversion).
+    void AddPortion(TPortionSlicePtr p) {
+        AFL_VERIFY(!!p);
         Bytes += p->GetTotalBlobBytes();
         Count += 1;
         RecordsCount += p->GetRecordsCount();
     }
-    void RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
+    void RemovePortion(TPortionSlicePtr p) {
+        AFL_VERIFY(!!p);
         Bytes -= p->GetTotalBlobBytes();
         Count -= 1;
         RecordsCount -= p->GetRecordsCount();
@@ -59,6 +64,7 @@ public:
 class TPortionsGroupInfo: public TSimplePortionsGroupInfo {
 private:
     using TBase = TSimplePortionsGroupInfo;
+    using TPortionSlicePtr = TBase::TPortionSlicePtr;
     std::shared_ptr<TPortionCategoryCounters> Signals;
 
 public:
@@ -66,11 +72,11 @@ public:
         : Signals(signals) {
     }
 
-    void AddPortion(const std::shared_ptr<TPortionInfo>& p) {
+    void AddPortion(TPortionSlicePtr p) {
         TBase::AddPortion(p);
         Signals->AddPortion(p);
     }
-    void RemovePortion(const std::shared_ptr<TPortionInfo>& p) {
+    void RemovePortion(TPortionSlicePtr p) {
         TBase::RemovePortion(p);
         Signals->RemovePortion(p);
     }

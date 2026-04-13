@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/core/formats/arrow/rows/view.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/library/accessor/positive_integer.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/signals/agent.h>
@@ -81,14 +83,14 @@ public:
         return result;
     }
 
-    void AddPortion(const std::shared_ptr<const NOlap::TPortionInfo>& p) {
+    void AddPortion(const std::shared_ptr<const TPortionInfo>& p) {
         AFL_VERIFY(p);
         AddPortion(*p);
     }
 
     void AddPortion(const TPortionInfo& p);
 
-    void RemovePortion(const std::shared_ptr<const NOlap::TPortionInfo>& p) {
+    void RemovePortion(const std::shared_ptr<const TPortionInfo>& p) {
         AFL_VERIFY(p);
         RemovePortion(*p);
     }

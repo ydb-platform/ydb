@@ -2124,8 +2124,8 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         node.VDisksMoved = true;
         node.VDiskStateInfo.clear();
         env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
-
         // prepared
+
         auto permission1 = env.CheckRequest("user", request1.GetRequestId(), false, TStatus::ALLOW, 1);
         env.CheckRejectRequest("user", request1.GetRequestId(), false, TStatus::WRONG_REQUEST);
         env.CheckDonePermission("user", permission1.GetPermissions(0).GetId());
@@ -3108,6 +3108,91 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         for (size_t i = 0; i < resp2.PermissionsSize(); ++i) {
             UNIT_ASSERT(sysNodeHosts.contains(resp2.GetPermissions(i).GetAction().GetHost()));
         }
+    }
+
+    Y_UNIT_TEST(WhiteboardSysTabletsNodeSortOrder)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8, 0));
+
+        NKikimrConfig::TBootstrap emptyBootstrap;
+        TFakeNodeWhiteboardService::BootstrapConfig = emptyBootstrap;
+
+        auto addLeaderTablet = [&](ui32 nodeIndex, ui64 tabletId,
+                                   NKikimrTabletBase::TTabletTypes::EType type) {
+            NKikimrWhiteboard::TTabletStateInfo info;
+            info.SetTabletId(tabletId);
+            info.SetType(type);
+            info.SetState(NKikimrWhiteboard::TTabletStateInfo::Active);
+            info.SetLeader(true);
+            TFakeNodeWhiteboardService::Info[env.GetNodeId(nodeIndex)]
+                .TabletStateInfo[tabletId] = info;
+        };
+
+        addLeaderTablet(0, 10000, NKikimrTabletBase::TTabletTypes::SchemeShard);
+        addLeaderTablet(1, 10001, NKikimrTabletBase::TTabletTypes::Hive);
+
+        env.EnableSysNodeChecking();
+        env.RestartCms();
+
+        THashSet<TString> sysNodeHosts;
+        sysNodeHosts.insert(ToString(env.GetNodeId(0)));
+        sysNodeHosts.insert(ToString(env.GetNodeId(1)));
+
+        auto resp = env.CheckPermissionRequest("user", true, true, false, true,
+            MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(3), 60000000));
+
+        UNIT_ASSERT_VALUES_EQUAL(resp.PermissionsSize(), 4);
+        UNIT_ASSERT(!sysNodeHosts.contains(resp.GetPermissions(0).GetAction().GetHost()));
+        UNIT_ASSERT(!sysNodeHosts.contains(resp.GetPermissions(1).GetAction().GetHost()));
+        UNIT_ASSERT(sysNodeHosts.contains(resp.GetPermissions(2).GetAction().GetHost()));
+        UNIT_ASSERT(sysNodeHosts.contains(resp.GetPermissions(3).GetAction().GetHost()));
+    }
+
+    Y_UNIT_TEST(WhiteboardSysTabletsFollowerNotCountedAsSys)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8, 0));
+
+        NKikimrConfig::TBootstrap emptyBootstrap;
+        TFakeNodeWhiteboardService::BootstrapConfig = emptyBootstrap;
+
+        auto addTablet = [&](ui32 nodeIndex, ui64 tabletId,
+                             NKikimrTabletBase::TTabletTypes::EType type,
+                             bool leader) {
+            NKikimrWhiteboard::TTabletStateInfo info;
+            info.SetTabletId(tabletId);
+            info.SetType(type);
+            info.SetState(NKikimrWhiteboard::TTabletStateInfo::Active);
+            info.SetLeader(leader);
+            TFakeNodeWhiteboardService::Info[env.GetNodeId(nodeIndex)]
+                .TabletStateInfo[tabletId] = info;
+        };
+
+        addTablet(0, 10000, NKikimrTabletBase::TTabletTypes::SchemeShard, true);
+        addTablet(1, 10001, NKikimrTabletBase::TTabletTypes::SchemeShard, false);
+        addTablet(2, 10002, NKikimrTabletBase::TTabletTypes::Hive, false);
+
+        env.EnableSysNodeChecking();
+        env.RestartCms();
+
+        THashSet<TString> sysNodeHosts;
+        sysNodeHosts.insert(ToString(env.GetNodeId(0)));
+
+        auto resp = env.CheckPermissionRequest("user", true, true, false, true,
+            MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(3), 60000000));
+
+        UNIT_ASSERT_VALUES_EQUAL(resp.PermissionsSize(), 4);
+        UNIT_ASSERT(!sysNodeHosts.contains(resp.GetPermissions(0).GetAction().GetHost()));
+        UNIT_ASSERT(!sysNodeHosts.contains(resp.GetPermissions(1).GetAction().GetHost()));
+        UNIT_ASSERT(!sysNodeHosts.contains(resp.GetPermissions(2).GetAction().GetHost()));
+        UNIT_ASSERT(sysNodeHosts.contains(resp.GetPermissions(3).GetAction().GetHost()));
     }
 }
 

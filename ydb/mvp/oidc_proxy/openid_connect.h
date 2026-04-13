@@ -71,6 +71,7 @@ TString DecodeToken(const TStringBuf& cookie);
 TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName);
 TString GetAddressWithoutPort(const TString& address);
 TString GenerateRandomBase64(size_t byteNumber = 32);
+TString GetRequestIdForLogs(const NHttp::THttpIncomingRequestPtr& request);
 
 
 struct TProxiedRequestParams {

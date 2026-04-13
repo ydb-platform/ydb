@@ -30,14 +30,15 @@ void TExtensionWhoamiWorker::Bootstrap() {
 }
 
 void TExtensionWhoamiWorker::Handle(TEvPrivate::TEvGetProfileResponse::TPtr event) {
-    BLOG_D("Whoami Extension Info: OK");
+    BLOG_D("rid=" << GetRequestIdForLogs(Context ? Context->Params.Request : nullptr) << " Whoami Extension Info: OK");
     IamResponse = std::move(event);
     RequestContext.reset();
     ApplyIfReady();
 }
 
 void TExtensionWhoamiWorker::Handle(TEvPrivate::TEvErrorResponse::TPtr event) {
-    BLOG_D("Whoami Extension Info " << event->Get()->Status << ": " << event->Get()->Message << ", " << event->Get()->Details);
+    BLOG_D("rid=" << GetRequestIdForLogs(Context ? Context->Params.Request : nullptr)
+        << " Whoami Extension Info " << event->Get()->Status << ": " << event->Get()->Message << ", " << event->Get()->Details);
     IamError = std::move(event);
     RequestContext.reset();
     ApplyIfReady();
@@ -122,7 +123,7 @@ void TExtensionWhoamiWorker::ApplyExtension() {
         if (!error) {
             error = "Can not process request to protected resource";
         }
-        BLOG_D("Incoming client error for protected resource: " << error);
+        BLOG_D("rid=" << GetRequestIdForLogs(params.Request) << " Incoming client error for protected resource: " << error);
         SetExtendedError(errorJson, "Ydb", "ClientError", error);
     }
 

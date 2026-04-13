@@ -32,10 +32,14 @@ void TExtensionManager::SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncoming
     auto& params = ExtensionCtx->Params;
     params.HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
     params.ResponseError = event->Get()->GetError();
+    BLOG_D("TExtensionManager::SetOverrideResponse rid=" << GetRequestIdForLogs(params.Request)
+        << " has_response=" << (event->Get()->Response ? 1 : 0)
+        << " error=" << params.ResponseError);
 
     auto response = std::move(event->Get()->Response);
-    if (!response)
+    if (!response) {
         return;
+    }
 
     params.StatusOverride = response->Status;
     auto headers = NHttp::THeaders(response->Headers);
@@ -44,6 +48,10 @@ void TExtensionManager::SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncoming
     }
     params.MessageOverride = response->Message;
     params.BodyOverride = response->Body;
+    BLOG_D("TExtensionManager::SetOverrideResponse rid=" << GetRequestIdForLogs(params.Request)
+        << " status=" << params.StatusOverride
+        << " message=" << params.MessageOverride
+        << " body_size=" << params.BodyOverride.size());
 }
 
 void TExtensionManager::AddExtensionWhoami() {
@@ -86,6 +94,10 @@ void TExtensionManager::ArrangeExtensions(const NHttp::THttpIncomingRequestPtr& 
 void TExtensionManager::StartExtensionProcess(NHttp::THttpIncomingRequestPtr request,
                                               NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
     SetRequest(std::move(request));
+    BLOG_D("TExtensionManager::StartExtensionProcess rid=" << GetRequestIdForLogs(ExtensionCtx->Params.Request)
+        << " method=" << (ExtensionCtx->Params.Request ? ExtensionCtx->Params.Request->Method : TStringBuf("-"))
+        << " url=" << (ExtensionCtx->Params.Request ? ExtensionCtx->Params.Request->GetURI() : TString())
+        << " steps=" << ExtensionCtx->Steps.size());
     SetOverrideResponse(std::move(event));
 
     const auto step = ExtensionCtx->Steps.Next();

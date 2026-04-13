@@ -1,6 +1,6 @@
 # bridge_config
 
-This section describes the cluster piles for bridge mode. Specify the list of pile names used for binding hosts and other entities. In bridge mode, you must also specify the name of the corresponding pile for each host in the `hosts` section (the `bridge_pile_name` field), see [hosts](./hosts.md#hosts-bridge).
+This section describes cluster [piles](../../concepts/glossary.md#pile) for [bridge mode](../../concepts/bridge.md). List the pile names used to bind hosts and other entities. In bridge mode, each host must also specify the corresponding pile name in the `hosts` section (`bridge_pile_name` field); see [Bridge mode specifics](hosts.md#hosts-bridge).
 
 ## Syntax
 

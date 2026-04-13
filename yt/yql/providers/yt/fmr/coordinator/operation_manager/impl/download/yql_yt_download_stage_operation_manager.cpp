@@ -67,6 +67,11 @@ public:
         return result;
     }
 
+    std::vector<TString> GetExpectedOutputTableIds(const TOperationParams& params) const override {
+        const auto& downloadParams = std::get<TDownloadOperationParams>(params);
+        return {downloadParams.Output.FmrTableId.Id};
+    }
+
     std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& context) override {
         std::vector<TPartIdInfo> groupsToClear;
         TDownloadTaskParams& downloadTaskParams = std::get<TDownloadTaskParams>(context.Task->TaskParams);

@@ -37,6 +37,8 @@ namespace NKikimr::NDDisk {
             EvWritePersistentBuffers,
             EvWritePersistentBuffersResult,
             EvReadThenWritePersistentBuffers,
+            EvGetPersistentBufferInfo,
+            EvPersistentBufferInfo,
         };
     };
 
@@ -199,6 +201,8 @@ struct TPersistentBufferFormat {
     struct TEvListPersistentBuffer;
     struct TEvListPersistentBufferResult;
     struct TEvReadThenWritePersistentBuffers;
+    struct TEvGetPersistentBufferInfo;
+    struct TEvPersistentBufferInfo;
 
     DECLARE_DDISK_EVENT(Connect) {
         using TResult = TEvConnectResult;
@@ -469,6 +473,38 @@ struct TPersistentBufferFormat {
             Record.SetFreeSpace(freeSpace);
             Record.SetPDiskNormalizedOccupancy(normalizedOccupancy);
         }
+    };
+
+
+    struct TEvPersistentBufferInfo : public TEventLocal<TEvPersistentBufferInfo, TEv::EvPersistentBufferInfo> {
+        struct TTabletInfo {
+            ui64 TabletId;
+            ui32 Generation;
+            ui64 FirstLsn;
+            ui64 LastLsn;
+            TInstant FirstLsnTimestamp;
+            TInstant LastLsnTimestamp;
+            ui32 LsnsCount;
+            ui32 Size;
+        };
+
+        TInstant StartedAt;
+        ui32 AllocatedChunks;
+        ui32 MaxChunks;
+        ui32 SectorSize;
+        ui32 ChunkSize;
+        ui32 FreeSectors;
+        ui32 InMemoryCacheSize;
+        ui32 InMemoryCacheLimit;
+        ui32 DiskOperationsInflight;
+        ui32 PendingEvents;
+        std::vector<TTabletInfo> TabletInfos;
+        std::vector<std::vector<std::tuple<ui32, ui32>>> FreeSpace;
+    };
+
+    struct TEvGetPersistentBufferInfo : public TEventLocal<TEvGetPersistentBufferInfo, TEv::EvGetPersistentBufferInfo> {
+        bool DescribeFreeSpace = false;
+        bool DescribeTablets = false;
     };
 
     DECLARE_DDISK_EVENT(ListPersistentBuffer) {

@@ -402,7 +402,8 @@ public:
 };
 
 struct TCBOSettings {
-    ui32 MaxDPhypDPTableSize = 100000;
+    ui32 CBOTimeout = 1'000ULL; // 1s
+    ui32 CBOHardTimeout = UINT32_MAX; // disabled by default
     ui32 ShuffleEliminationJoinNumCutoff = 14;
 };
 

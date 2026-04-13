@@ -106,6 +106,7 @@ SRCS(
     labeled_counters.proto
     load_test.proto
     local.proto
+    long_tx_service_config.proto
     long_tx_service.proto
     maintenance.proto
     memory_controller_config.proto

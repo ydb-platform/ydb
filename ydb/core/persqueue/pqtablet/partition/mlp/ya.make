@@ -20,6 +20,7 @@ PEERDIR(
     ydb/core/persqueue/public/describer
     ydb/core/persqueue/public/write_meta
     ydb/core/util
+    ydb/core/ymq/proto
 )
 
 GENERATE_ENUM_SERIALIZATION(mlp_consumer_order.h)

@@ -256,8 +256,8 @@ message TFeatureFlags {
     optional bool EnableConditionalEraseResponseBatching = 229 [default = false];
     optional bool EnablePDiskDataEncryption = 230 [default = true];
     optional bool EnableForcedCompactions = 231 [default = false];
-    optional bool EnableLocalBloomFilterIndex = 232 [default = false];
-    optional bool EnableLocalBloomNgramFilterIndex = 233 [default = false];
+    optional bool EnableLocalBloomFilterIndex = 232 [default = true];
+    optional bool EnableLocalBloomNgramFilterIndex = 233 [default = true];
     optional bool EnableSetDropDefaultValue = 234 [ default = false];
     optional bool EnableStreamingQueriesPqSinkDeduplication = 235 [default = false];
     optional bool EnableBlobIdInSectorChecksum = 236 [default = false];
@@ -286,4 +286,8 @@ message TFeatureFlags {
     optional bool EnableSharedReadingInStreamingQueries = 248 [default = false];
     optional bool EnableCsDictionaryEncoding = 249 [default = true];
     optional bool EnableTopicPartitionSplitBasedOnKllSketch = 250 [default = false];
+    reserved 251; // EnableOltpSinkForTopicOnlyTx
+    optional bool EnableSnapshotsLocking = 252 [default = true];
+    optional bool EnableExternalDataSourceAuthMethodIam = 253 [default = false];
+    optional bool EnableInterpileTrafficOptimization = 254 [default = false];
 }

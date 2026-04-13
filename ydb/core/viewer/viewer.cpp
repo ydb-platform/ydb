@@ -213,7 +213,7 @@ public:
             for (const auto& [name, handler] : JsonHandlers.JsonHandlersIndex) {
                 // temporary handling of new handlers
                 if (handler->IsHttpEvent()) {
-                    if (name == "/viewer/capabilities") {
+                    if (name == "/viewer/capabilities" || name == "/viewer/json/capabilities") {
                         // this handler is used to discover capabilities, including auth requirements, so it must be always available without authentication
                         mon->RegisterActorHandler({
                             .Path = name,
@@ -577,10 +577,24 @@ private:
         return instantTime;
     }
 
+    static bool IsPathSafe(const TString& path) {
+        TStringBuf remaining(path);
+        while (remaining) {
+            TStringBuf component = remaining.NextTok('/');
+            if (component == "..") {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool ReplyWithFile(NMon::TEvHttpInfo::TPtr& ev, const TString& name) {
         if (name == "/api/viewer.yaml") {
             Send(ev->Sender, new NMon::TEvHttpInfoRes(GetHTTPOKYAML(ev->Get(), Dump(GetSwaggerYaml()), GetCompileTime()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return true;
+        }
+        if (!IsPathSafe(name)) {
+            return false;
         }
         TString filename("content" + name);
         TString blob;

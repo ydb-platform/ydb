@@ -3948,6 +3948,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             NYdb::NQuery::TExecuteQuerySettings scanSettings;
             scanSettings.ExecMode(NYdb::NQuery::EExecMode::Explain);
             auto it = client.StreamExecuteQuery(R"(
+	    	PRAGMA ydb.UseBlockHashJoin = "false";
                 PRAGMA ydb.OptimizerHints =
                 '
                     JoinType(T1 T2 Shuffle)

@@ -166,7 +166,7 @@
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Java
 
@@ -194,5 +194,13 @@
     В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC укажите ту же JDBC-строку подключения и параметры балансировки, что и при прямом использовании драйвера (например, `spring.datasource.url` с нужными query-параметрами или свойства `DataSource`).
 
   {% endlist %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

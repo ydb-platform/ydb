@@ -5,12 +5,9 @@
 #include <ydb/core/tx/locks/sys_tables.h>
 
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
-#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
-#include <ydb/core/kqp/runtime/kqp_compute.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
@@ -312,7 +309,7 @@ public:
             UserDb.GetLockNodeId(),
             UserDb.GetUsesMvccSnapshot(),
             UserDb.GetIsImmediateTx(),
-            UserDb.GetIsWriteTx(), 
+            UserDb.GetIsWriteTx(),
             Scheme
         );
         return GetKeyValidator().IsValidKey(key, options);
@@ -355,7 +352,7 @@ public:
     }
 
     void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands,
-        const TString& userSID) override 
+        const TString& userSID) override
     {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).UpdateRow(row, commands);
@@ -374,29 +371,29 @@ public:
     }
 
     void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
-        const ui32 defaultFilledColumnCount, const TString& userSID) override 
+        const ui32 defaultFilledColumnCount, const TString& userSID) override
     {
         UserDb.UpsertRow(tableId, key, ops, defaultFilledColumnCount, userSID);
     }
 
-    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, 
-        const TString& userSID) override 
+    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
+        const TString& userSID) override
     {
         UserDb.UpsertRow(tableId, key, ops, userSID);
     }
 
-    void ReplaceRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, 
-        const TString& userSID) override 
+    void ReplaceRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
+        const TString& userSID) override
     {
         UserDb.ReplaceRow(tableId, key, ops, userSID);
     }
 
-    void InsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const TString& userSID) override 
+    void InsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const TString& userSID) override
     {
         UserDb.InsertRow(tableId, key, ops, userSID);
     }
 
-    void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const TString& userSID) override 
+    void UpdateRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, const TString& userSID) override
     {
         UserDb.UpdateRow(tableId, key, ops, userSID);
     }
@@ -405,7 +402,7 @@ public:
     {
         UserDb.IncrementRow(tableId, key, ops, insertMissing, userSID);
     }
-    
+
     void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TString& userSID) override {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).EraseRow(row);
@@ -423,7 +420,7 @@ public:
     void EraseRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TString& userSID) override
     {
         UserDb.EraseRow(tableId, key, userSID);
-    }    
+    }
 
     // Returns whether row belong this shard.
     bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override {
@@ -511,7 +508,7 @@ private:
 
 //
 
-TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId, 
+TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId,
     const TString& userSID)
     : StepTxId(stepTxId)
     , KeyValidator(*self)
@@ -540,44 +537,10 @@ TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorC
                     backtrace ? backtrace->PrintToString().data() : "");
             };
     }
-
-    KqpLogFunc = [actorSystem, tabletId, txId](const TStringBuf& message) {
-        LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER,
-            "Shard %" << tabletId << ", txid %" << txId << ": " << message);
-    };
-
-    ComputeCtx = MakeHolder<TKqpDatashardComputeContext>(self, GetUserDb(), EngineHost->GetSettings().DisableByKeyFilter);
-    ComputeCtx->Database = &txc.DB;
-
-    KqpAlloc = std::make_shared<TScopedAlloc>(__LOCATION__, TAlignedPagePoolCounters(), AppData(ctx)->FunctionRegistry->SupportsSizedAllocators());
-    KqpTypeEnv = MakeHolder<TTypeEnvironment>(*KqpAlloc);
-    KqpAlloc->Release();
-
-    auto kqpApplyCtx = MakeHolder<TKqpDatashardApplyContext>();
-    kqpApplyCtx->Host = EngineHost.Get();
-    kqpApplyCtx->ShardTableStats = &EngineHostCounters;
-    kqpApplyCtx->Env = KqpTypeEnv.Get();
-
-    KqpApplyCtx.Reset(kqpApplyCtx.Release());
-
-    KqpExecCtx.FuncRegistry = AppData(ctx)->FunctionRegistry;
-    KqpExecCtx.ComputeCtx = ComputeCtx.Get();
-    KqpExecCtx.ComputationFactory = GetKqpDatashardComputeFactory(ComputeCtx.Get(), userSID);
-    KqpExecCtx.RandomProvider = TAppData::RandomProvider.Get();
-    KqpExecCtx.TimeProvider = TAppData::TimeProvider.Get();
-    KqpExecCtx.ApplyCtx = KqpApplyCtx.Get();
-    KqpExecCtx.TypeEnv = KqpTypeEnv.Get();
-    if (auto rm = NKqp::TryGetKqpResourceManager()) {
-        KqpExecCtx.PatternCache = rm->GetPatternCache();
-    }
 }
 
 TEngineBay::~TEngineBay() {
-    if (KqpTasksRunner) {
-        KqpTasksRunner.Reset();
-        auto guard = TGuard(*KqpAlloc);
-        KqpTypeEnv.Reset();
-    }
+
 }
 
 TEngineBay::TSizes TEngineBay::CalcSizes(bool needsTotalKeysSize) const {
@@ -619,9 +582,6 @@ void TEngineBay::SetMvccVersion(TRowVersion mvccVersion) {
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
     host->SetMvccVersion(mvccVersion);
-
-    Y_ENSURE(ComputeCtx);
-    ComputeCtx->SetMvccVersion(mvccVersion);
 }
 
 void TEngineBay::SetVolatileTxId(ui64 txId) {
@@ -720,35 +680,6 @@ void TEngineBay::SetLockTxId(ui64 lockTxId, ui32 lockNodeId) {
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
     host->GetUserDb().SetLockTxId(lockTxId);
     host->GetUserDb().SetLockNodeId(lockNodeId);
-
-    if (ComputeCtx) {
-        ComputeCtx->SetLockTxId(lockTxId, lockNodeId);
-    }
-}
-
-NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(NKikimrTxDataShard::TKqpTransaction& tx) {
-    if (!KqpTasksRunner) {
-        NYql::NDq::TDqTaskRunnerSettings settings;
-
-        if (tx.HasRuntimeSettings() && tx.GetRuntimeSettings().HasStatsMode()) {
-            settings.StatsMode = tx.GetRuntimeSettings().GetStatsMode();
-        } else {
-            settings.StatsMode = NYql::NDqProto::DQ_STATS_MODE_NONE;
-        }
-
-        settings.OptLLVM = "OFF";
-        settings.TerminateOnError = false;
-        Y_ENSURE(KqpAlloc);
-        KqpAlloc->SetLimit(10_MB);
-        KqpTasksRunner = NKqp::CreateKqpTasksRunner(std::move(*tx.MutableTasks()), KqpAlloc, KqpExecCtx, settings, KqpLogFunc);
-    }
-
-    return *KqpTasksRunner;
-}
-
-TKqpDatashardComputeContext& TEngineBay::GetKqpComputeCtx() {
-    Y_ENSURE(ComputeCtx);
-    return *ComputeCtx;
 }
 
 } // NDataShard

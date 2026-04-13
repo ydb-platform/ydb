@@ -671,4 +671,64 @@
   })
   ```
 
+- Rust
+
+  Повторные попытки для запросов к Table API выполняет `TableClient::retry_transaction`: callback получает транзакцию, внутри вызываются `query` и при необходимости `commit`.
+
+  ```rust
+  use ydb::{AccessTokenCredentials, ClientBuilder, Query, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string(
+          "grpc://localhost:2136?database=local",
+      )?
+      .with_credentials(AccessTokenCredentials::from("..."))
+      .client()?;
+
+      client.wait().await?;
+
+      let row = client
+          .table_client()
+          .retry_transaction(|mut tx| async move {
+              let res = tx
+                  .query(Query::new(
+                      "SELECT series_id, title FROM series WHERE series_id = 1",
+                  ))
+                  .await?;
+              Ok(res.into_only_row()?.remove_field_by_name("title")?)
+          })
+          .await?;
+
+      let _title: String = row.try_into()?;
+      Ok(())
+  }
+  ```
+
+- PHP
+
+  В {{ ydb-short-name }} PHP SDK повторные попытки для запросов к Table API задаются через `Table::retryTransaction()` (транзакция + коммит + ретраи при поддерживаемых ошибках) или `Table::retrySession()` (одна сессия без обёртки «транзакция целиком»). Второй аргумент `retryTransaction` — признак идемпотентности (`true` расширяет набор ошибок, при которых выполняется повтор).
+
+  Пример с `retryTransaction`:
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Session;
+  use YdbPlatform\Ydb\Ydb;
+
+  $ydb = new Ydb($config);
+
+  $result = $ydb->table()->retryTransaction(
+      function (Session $session) {
+          return $session->query(
+              'SELECT series_id, title FROM series WHERE series_id = 1;'
+          );
+      },
+      true
+  );
+
+  // $result->rows(), $result->rowCount(), ...
+  ```
+
 {% endlist %}

@@ -1183,6 +1183,10 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
     const bool addBearerToToken = settings.GetAddBearerToToken();
+    const auto configuredReadBufferBytes = settings.GetReadSessionBufferBytes();
+    const i64 effectiveReadBufferBytes = configuredReadBufferBytes
+        ? static_cast<i64>(configuredReadBufferBytes)
+        : bufferSize;
 
     TDqPqReadActor* actor = new TDqPqReadActor(
         inputIndex,
@@ -1197,7 +1201,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,
         counters,
-        settings.GetReadSessionBufferBytes() ? settings.GetReadSessionBufferBytes() : bufferSize,
+        effectiveReadBufferBytes,
         pqGateway,
         topicPartitionsCount,
         enableStreamingQueriesCounters,
@@ -1266,6 +1270,11 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 infoAggregator,
                 checkPartitionCountPeriod);
         }
+
+        const TStringBuf format(settings.GetFormat());
+        const TStringBuf normalizedFormat = format.empty() ? TStringBuf("raw") : format;
+        YQL_ENSURE(normalizedFormat == "json_each_row"sv || normalizedFormat == "raw"sv,
+            "Row dispatcher (shared reading) supports only json_each_row and raw formats, got: " << format);
 
         return CreateDqPqRdReadActor(
             args.TypeEnv,

@@ -375,6 +375,34 @@
 
   {% endlist %}
 
+- Python
+
+  Python SDK использует стандартную библиотеку для логирования - `logging`. Для включения определенного режима логирования:
+
+  ```python
+  import logging
+
+  logging.getLogger('ydb').setLevel(logging.DEBUG)
+  ```
+
+- JavaScript
+
+  Для логирования событий внутри sdk используется библиотека [debug](https://www.npmjs.com/package/debug).
+  Для включения логов необходимо задать переменную окружения `DEBUG` со значением фильтра по событиям sdk - `DEBUG=ydbjs:*`.
+
+- Rust
+
+  Внутри крейта `ydb` сообщения идут через стандартную для Rust экосистемы библиотеку [`tracing`](https://docs.rs/tracing) (это имя крейта; сюда же относятся обычные текстовые логи уровня debug/trace, не только «распределённая трассировка»). Чтобы видеть вывод в консоль, до создания клиента подключите подписчика, например [`tracing_subscriber::fmt`](https://docs.rs/tracing-subscriber) с нужным уровнем (`TRACE` для максимальной детализации). Пример: [`basic-logs.rs`](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/basic-logs.rs).
+
+  ```rust
+  tracing_subscriber::fmt()
+      .with_max_level(tracing::Level::TRACE)
+      .init();
+
+  let client = ydb::ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+      .client()?;
+  ```
+
 - PHP
 
   В YDB PHP SDK для логирования вам нужно использовать класс, который реализует `\Psr\Log\LoggerInterface`.
@@ -391,20 +419,5 @@
   ]
   $ydb = new \YdbPlatform\Ydb\Ydb($config);
   ```
-
-- Python
-
-  Python SDK использует стандартную библиотеку для логирования - `logging`. Для включения определенного режима логирования:
-
-  ```python
-  import logging
-
-  logging.getLogger('ydb').setLevel(logging.DEBUG)
-  ```
-
-- JavaScript
-
-  Для логирования событий внутри sdk используется библиотека [debug](https://www.npmjs.com/package/debug).
-  Для включения логов необходимо задать переменную окружения `DEBUG` со значением фильтра по событиям sdk - `DEBUG=ydbjs:*`.
 
 {% endlist %}

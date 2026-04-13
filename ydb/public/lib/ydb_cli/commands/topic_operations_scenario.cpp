@@ -306,6 +306,7 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .Direct = Direct,
             .Codec = Codec,
             .UseTransactions = UseTransactions,
+            .TrackProducerIdInTx = !NoTrackProducerIdInTx,
             .UseAutoPartitioning = useAutoPartitioning,
             .CommitIntervalMs = TxCommitIntervalMs != 0 ? TxCommitIntervalMs : CommitPeriodSeconds * 1000, // seconds to ms conversion
             .CommitMessages = CommitMessages,

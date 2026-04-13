@@ -180,3 +180,61 @@ $closure = $makeClosure(2);
 SELECT $closure(1); -- 3
 ```
 
+## PositionOf {#positionof}
+
+#### Сигнатура
+
+```yql
+PositionOf(x)->Struct<File:String, Row:Uint32, Column:Uint32>
+```
+
+Функция доступна начиная с версии [2026.01](../changelog/2026.01.md).
+Возвращает позицию узла в исходном тексте. Для именованных выражений возвращает позицию исходного узла.
+
+#### Пример
+
+```yql
+SELECT PositionOf(1); -- ("File": "<main>", "Row": 1, "Column": 19)
+```
+
+## WithIssue {#with_issue}
+
+#### Сигнатура
+
+```yql
+WithIssue(x, File:String, Row: Uint32, Column: Uint32, Message: String)->TypeOf(x)
+```
+
+Функция доступна начиная с версии [2026.01](../changelog/2026.01.md).
+Добавляет в стек валидации пользовательский фрейм с заданной позицией и сообщением. Не имеет эффекта, если запрос прошел валидацию успешно.
+Типичное использование - привязка к файлу с DSL.
+
+#### Пример
+
+```yql
+-- декорирование выражения
+SELECT WithIssue(
+    1 + "foo", -- для получения ошибки
+    "my_file",
+    100,
+    200,
+    "my_message"
+);
+
+-- декорирование подзапроса
+DEFINE SUBQUERY $sub() AS
+    SELECT 1 + "foo"; -- для получения ошибки
+END DEFINE;
+
+$sub = ($world)->{
+    return WithIssue(
+        $sub($world),
+        "my_file",
+        100,
+        200,
+        "my_message"
+    );
+};
+
+PROCESS $sub();
+```

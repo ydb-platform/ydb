@@ -6,6 +6,8 @@ SRCS(
     long_tx_service.cpp
     long_tx_service_impl.cpp
     lwtrace_probes.cpp
+    snapshots_exchange.cpp
+    snapshots_storage.cpp
 )
 
 PEERDIR(

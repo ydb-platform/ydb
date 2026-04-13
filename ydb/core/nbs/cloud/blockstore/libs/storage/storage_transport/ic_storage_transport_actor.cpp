@@ -216,7 +216,7 @@ void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
             msg->Lsn,
             msg->Instruction,
             msg->PersistentBufferIds,
-            msg->ReplyTimeoutMicroseconds);
+            msg->ReplyTimeout.MicroSeconds());
 
         const auto& sglist = guard.Get();
         TRope rope = TRope::Uninitialized(SgListGetSize(sglist));

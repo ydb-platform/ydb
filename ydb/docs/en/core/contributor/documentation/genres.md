@@ -27,7 +27,7 @@ Guides are practical, step-by-step instructions that help users accomplish a spe
 - Addresses specific use cases or scenarios
 - Can include screenshots to illustrate steps
 
-Guides are primarily found in role-specific folders like ["For DevOps"](../../devops/index.md), ["For Developers"](../../dev/index.md), and ["For Security Engineers"](../../security/index.md), as well as in the ["Troubleshooting"](../../troubleshooting/index.md) section.
+Guides are primarily found in role-specific folders like ["For DevOps"](../../devops/index.md), ["For Application Developers"](../../dev/index.md), and ["For Security Engineers"](../../security/index.md), as well as in the ["Troubleshooting"](../../troubleshooting/index.md) section.
 
 ## Reference {#reference}
 

@@ -10,7 +10,7 @@ bool TArraySubscriptOffsets::IsRange() const {
     return ToOffset > 0;
 }
 
-const TStringBuf TJsonPathItem::GetString() const {
+TStringBuf TJsonPathItem::GetString() const {
     return std::get<TStringBuf>(Data);
 }
 
@@ -214,7 +214,7 @@ EJsonPathMode TJsonPathReader::ReadMode(TUint& pos) {
     return static_cast<EJsonPathMode>(ReadUint(pos));
 }
 
-const TStringBuf TJsonPathReader::ReadString(TUint& pos) {
+TStringBuf TJsonPathReader::ReadString(TUint& pos) {
     TUint length = ReadUint(pos);
     TStringBuf result(Path_->Begin() + pos, length);
     pos += length;

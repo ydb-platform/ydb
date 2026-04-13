@@ -172,7 +172,7 @@ template <>
 struct TTypeBuilderHelper<NUdf::TPersonStruct> {
     static TType* Build(const IFunctionTypeInfoBuilder& builder) {
         auto structBuilder = builder.Struct(3);
-        structBuilder->AddField<char*>("FirstName", &TPersonStruct::MetaIndexes[0])
+        structBuilder->AddField<char*>("FirstName", TPersonStruct::MetaIndexes.data())
             .AddField<char*>("LastName", &TPersonStruct::MetaIndexes[1])
             .AddField<ui32>("Age", &TPersonStruct::MetaIndexes[2]);
         auto structType = structBuilder->Build();
@@ -191,7 +191,7 @@ struct TTypeBuilderHelper<NUdf::TPersonStructWithOptList> {
         auto listTags = builder.List()->Item<ui32>().Build();
         auto optionalListTags = builder.Optional()->Item(listTags).Build();
         auto structBuilder = builder.Struct(3);
-        structBuilder->AddField<char*>("FirstName", &TPersonStructWithOptList::MetaIndexes[0])
+        structBuilder->AddField<char*>("FirstName", TPersonStructWithOptList::MetaIndexes.data())
             .AddField<char*>("LastName", &TPersonStructWithOptList::MetaIndexes[1])
             .AddField<ui32>("Age", &TPersonStructWithOptList::MetaIndexes[2])
             .AddField("Tags", optionalListTags, &TPersonStructWithOptList::MetaIndexes[3]);
@@ -602,7 +602,7 @@ static std::array<const NUdf::TPersonStruct*, 3> DICT_DIGIT2PERSON_BROKEN_CONTEN
 const ui32 DICT_DIGIT2PERSON_BROKEN_PERSON_INDEX = 1;
 const ui32 DICT_DIGIT2PERSON_BROKEN_STRUCT_INDEX = 2;
 
-const std::vector<std::pair<ui32, NUdf::IBoxedValuePtr>> MakeDictDigiT2PersonBroken() {
+std::vector<std::pair<ui32, NUdf::IBoxedValuePtr>> MakeDictDigiT2PersonBroken() {
     std::vector<std::pair<ui32, NUdf::IBoxedValuePtr>> DICT_DIGIT2PERSON_BROKEN = {
         {333, new TBrokenStructBoxedValue<NUdf::TPersonStruct>(STRUCT_PERSON_HITHCOCK, RAW_INDEX_NO_HOLE)},
         {5, new TBrokenStructBoxedValue<NUdf::TPersonStruct>(STRUCT_PERSON_JONNIE, DICT_DIGIT2PERSON_BROKEN_STRUCT_INDEX)},

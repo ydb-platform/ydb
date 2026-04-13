@@ -63,6 +63,7 @@ namespace {
         , IsPersistentBufferActor(isPersistentBufferActor)
         , PersistentBufferFormat(std::move(pbFormat))
     {
+        StartedAt = TInstant::Now();
         TVector<double> latencyHistBounds;
         if (BaseInfo.DeviceType == NPDisk::DEVICE_TYPE_NVME) {
             latencyHistBounds = NvmeLatencyHistBoundsMs;
@@ -277,6 +278,7 @@ namespace {
             hFunc(TEvErasePersistentBuffer, Handle)
             hFunc(TEvBatchErasePersistentBuffer, Handle)
             hFunc(TEvListPersistentBuffer, Handle)
+            hFunc(TEvGetPersistentBufferInfo, Handle)
 
             hFunc(TEvPrivate::TEvReadPersistentBufferPart, Handle)
             hFunc(TEvPrivate::TEvWritePersistentBufferPart, Handle)

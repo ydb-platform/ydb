@@ -9,6 +9,9 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 class TDirectBlockGroupMock: public IDirectBlockGroup
 {
 public:
+    using TScheduleHandler =
+        std::function<void(TDuration delay, TCallback callback)>;
+
     using TReadBlocksFromDDiskHandler =
         std::function<NThreading::TFuture<TDBGReadBlocksResponse>(
             ui32 vChunkIndex,
@@ -45,7 +48,7 @@ public:
             std::vector<ui8> hostIndexes,
             ui64 lsn,
             TBlockRange64 range,
-            ui32 replyTimeoutMicroseconds,
+            TDuration replyTimeout,
             const TGuardedSgList& guardedSglist,
             NWilson::TTraceId traceId)>;
     using TSyncWithPBufferHandler =
@@ -68,6 +71,7 @@ public:
         std::function<NThreading::TFuture<TListPBufferResponse>(ui8 hostIndex)>;
 
     TExecutorPtr Executor;
+    TScheduleHandler ScheduleHandler;
     TReadBlocksFromDDiskHandler ReadBlocksFromDDiskHandler;
     TReadBlocksFromPBufferHandler ReadBlocksFromPBufferHandler;
     TWriteBlocksToDDiskHandler WriteBlocksToDDiskHandler;
@@ -79,6 +83,8 @@ public:
     TListPBuffersHandler ListPBuffersHandler;
 
     TExecutorPtr GetExecutor() override;
+
+    void Schedule(TDuration delay, TCallback callback) override;
 
     void EstablishConnections() override;
 
@@ -118,7 +124,7 @@ public:
         std::vector<ui8> hostIndexes,
         ui64 lsn,
         TBlockRange64 range,
-        ui32 replyTimeoutMicroseconds,
+        TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) override;
 

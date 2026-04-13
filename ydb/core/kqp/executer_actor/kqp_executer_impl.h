@@ -663,7 +663,7 @@ protected:
         YQL_ENSURE(Stats);
 
         if (state.HasStats()) {
-            Stats->UpdateTaskStats(taskId, state.GetStats(), nullptr, (NYql::NDqProto::EComputeState) state.GetState(),
+            Stats->UpdateTaskStats(computeActor.NodeId(), taskId, state.GetStats(), nullptr, (NYql::NDqProto::EComputeState) state.GetState(),
                 TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs()));
 
             if (CollectBasicStats(Request.StatsMode)) {
@@ -774,6 +774,12 @@ protected:
         }
 
         static_cast<TDerived*>(this)->CheckExecutionComplete();
+    }
+
+    void HandleNodeState(NYql::NDq::TEvDqCompute::TEvNodeState::TPtr& ev) {
+        if (CollectProfileStats(Request.StatsMode)) {
+            Stats->UpdateNodeStats(ev->Sender.NodeId(), ev->Get()->Record);
+        }
     }
 
     void HandleHttpInfo(NMon::TEvHttpInfo::TPtr& ev) {
@@ -1829,7 +1835,8 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
-    std::shared_ptr<NYql::NDq::IDqChannelService> channelService);
+    std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
+    TVector<NKikimr::TTableId> tableIdsForSnapshot);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, NFormats::TFormatsSettings formatsSettings,

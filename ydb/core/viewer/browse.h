@@ -30,6 +30,8 @@ class TBrowse : public TActorBootstrapped<TBrowse> {
     THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
     THashSet<TActorId> Handlers;
     TActorId TxProxy = MakeTxProxyID();
+    bool MissingChildSchemeDescribeProbe = false;
+    TString MissingChildSegmentName;
 
 public:
     IViewer::TBrowseContext BrowseContext;
@@ -283,10 +285,58 @@ public:
                 return StepOnPath(ctx, currentName);
             }
         }
+        // Segment missing from Children (ACL): Describe full path to get 403 vs missing-path 400.
+        if (!BrowseContext.UserToken.empty() && TxProxy) {
+            TString probePath = CurrentPath;
+            if (!probePath.EndsWith('/')) {
+                probePath += '/';
+            }
+            probePath += currentName;
+            MissingChildSchemeDescribeProbe = true;
+            MissingChildSegmentName = currentName;
+            THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
+            request->Record.SetUserToken(BrowseContext.UserToken);
+            NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath();
+            record->SetPath(probePath);
+            ctx.Send(TxProxy, request.Release(), IEventHandle::FlagTrackDelivery);
+            ++Requests;
+            ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestSent(TxProxy, TEvTxUserProxy::EvNavigate));
+            return;
+        }
         return HandleBadRequest(ctx, "The path is not found");
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) {
+        if (MissingChildSchemeDescribeProbe) {
+            MissingChildSchemeDescribeProbe = false;
+            DescribeResult.Reset(ev->Release());
+            ++Responses;
+            ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestCompleted(TxProxy, TEvTxUserProxy::EvNavigate));
+            const auto& pbRecordProbe(DescribeResult->GetRecord());
+            if (pbRecordProbe.GetStatus() == NKikimrScheme::EStatus::StatusAccessDenied) {
+                return HandleAccessDenied(ctx, "Access denied");
+            }
+            if (pbRecordProbe.GetStatus() == NKikimrScheme::EStatus::StatusPathDoesNotExist) {
+                return HandleBadRequest(ctx, "The path is not found");
+            }
+            if (pbRecordProbe.GetStatus() != NKikimrScheme::EStatus::StatusSuccess) {
+                return HandleBadRequest(ctx, "Error getting schema information");
+            }
+            if (!pbRecordProbe.HasPathDescription() || !pbRecordProbe.GetPathDescription().HasSelf()) {
+                return HandleBadRequest(ctx, "The path is not found");
+            }
+            const auto& pbPathDescriptionProbe = pbRecordProbe.GetPathDescription();
+            const auto& pbSelfProbe = pbPathDescriptionProbe.GetSelf();
+            if (!CurrentPath.EndsWith('/')) {
+                CurrentPath += '/';
+            }
+            CurrentPath += MissingChildSegmentName;
+            CurrentType = GetPathTypeFromSchemeShardType(pbSelfProbe.GetPathType());
+            Final = (CurrentType == NKikimrViewer::EObjectType::Topic);
+            BrowseInfo.Clear();
+            MetaInfo.Clear();
+            return StepOnPath(ctx, MissingChildSegmentName);
+        }
         DescribeResult.Reset(ev->Release());
         ++Responses;
         ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestCompleted(TxProxy, TEvTxUserProxy::EvNavigate));
@@ -303,6 +353,8 @@ public:
                     }
                 }
             }
+        } else if (pbRecord.GetStatus() == NKikimrScheme::EStatus::StatusAccessDenied) {
+            return HandleAccessDenied(ctx, "Access denied");
         } else {
             return HandleBadRequest(ctx, "Error getting schema information");
         }
@@ -364,6 +416,11 @@ public:
 
     void HandleBadRequest(const TActorContext& ctx, const TString& error) {
         ctx.Send(Owner, new NMon::TEvHttpInfoRes(TString("HTTP/1.1 400 Bad Request\r\n\r\n") + error, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Die(ctx);
+    }
+
+    void HandleAccessDenied(const TActorContext& ctx, const TString& error) {
+        ctx.Send(Owner, new NMon::TEvHttpInfoRes(TString("HTTP/1.1 403 Forbidden\r\n\r\n") + error, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }
 
@@ -508,6 +565,11 @@ public:
 
     void HandleBadRequest(const TActorContext& ctx, const TString& error) {
         ctx.Send(Owner, new NMon::TEvHttpInfoRes(TString("HTTP/1.1 400 Bad Request\r\n\r\n") + error, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        Die(ctx);
+    }
+
+    void HandleAccessDenied(const TActorContext& ctx, const TString& error) {
+        ctx.Send(Owner, new NMon::TEvHttpInfoRes(TString("HTTP/1.1 403 Forbidden\r\n\r\n") + error, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }
 

@@ -5,6 +5,5 @@
 * **[Ansible](ansible/index.md)**: для развёртываний на физическом оборудовании и виртуальных машинах.
 * **[Kubernetes](kubernetes/index.md)**: для развёртываний в контейнерах.
 * **[Вручную](manual/index.md)**: для ручного развёртывания.
-* **[Enterprise Manager](enterprise-manager/index.md)**: для развёртывания {{ ydb-short-name }} Enterprise Manager — инструмента управления кластерами через веб-интерфейс.
 
 Вне зависимости от выбранного способа управления инфраструктурой, перед началом работы рекомендуется ознакомиться с [системными требованиями {{ ydb-short-name }}](../concepts/system-requirements.md).

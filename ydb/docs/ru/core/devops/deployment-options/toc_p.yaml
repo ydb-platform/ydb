@@ -14,8 +14,3 @@ items:
   include:
     mode: link
     path: manual/toc_p.yaml
-- name: Enterprise Manager
-  href: enterprise-manager/index.md
-  include:
-    mode: link
-    path: enterprise-manager/toc_p.yaml

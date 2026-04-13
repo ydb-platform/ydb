@@ -23,8 +23,8 @@ namespace NKikimr::NOlap::NReader {
         NAMES("pathId", "tabletId", "txId", "scanId", "elapsedMs")) \
     PROBE(ScanStartSource, \
         GROUPS("Scan"), \
-        TYPES(ui64, ui64, ui64, ui64, ui64, ui64, ui64), \
-        NAMES("pathId", "tabletId", "txId", "scanId", "sourceId", "blobBytes", "rawBytes")) \
+        TYPES(ui64, ui64, ui64, ui64, ui64, ui64, ui64, TString, TString, TString, TString), \
+        NAMES("pathId", "tabletId", "txId", "scanId", "sourceId", "blobBytes", "rawBytes", "minPk", "maxPk", "minSnapshot", "maxSnapshot")) \
     PROBE(ScanFinishSource, \
         GROUPS("Scan"), \
         TYPES(ui64, ui64, ui64, ui64, ui64, ui64, ui64, ui32, ui32, ui64), \

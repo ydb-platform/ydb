@@ -158,13 +158,23 @@ ui32 IDataSource::GetRecordsCount() const {
 void IDataSource::OnStartProcessing() {
     AFL_VERIFY(!SourceCreatedTimestamp);
     SourceCreatedTimestamp = TMonotonic::Now();
+    if (!NLWTrace::HasShuttles(DataSourceOrbit)
+        && !NLWTrace::HasShuttles(*GetContext()->GetCommonContext()->GetScanOrbit())
+        && !LWPROBE_ENABLED(StartSourceProcessing)
+        && !LWPROBE_ENABLED(ScanStartSource)) {
+        return;
+    }
     const ui64 portionBlobBytes = HasPortionAccessor() ? GetPortionAccessor().GetPortionInfo().GetTotalBlobBytes() : 0;
     const ui64 portionRawBytes = HasPortionAccessor() ? GetPortionAccessor().GetPortionInfo().GetTotalRawBytes() : 0;
+    TString minPk = HasPortionAccessor() ? GetPortionAccessor().GetPortionInfo().IndexKeyStart().DebugString() : TString{};
+    TString maxPk = HasPortionAccessor() ? GetPortionAccessor().GetPortionInfo().IndexKeyEnd().DebugString() : TString{};
+    const TString minSnapshot = TStringBuilder() << GetRecordSnapshotMin();
+    const TString maxSnapshot = TStringBuilder() << GetRecordSnapshotMax();
     LWTRACK(StartSourceProcessing, DataSourceOrbit, GetRawPathId(), GetTabletId(), GetTxId(), GetDeprecatedPortionId(),
-            portionBlobBytes, portionRawBytes, GetReservedMemory());
+            portionBlobBytes, portionRawBytes, GetReservedMemory(), minPk, maxPk, minSnapshot, maxSnapshot);
     LWTRACK(ScanStartSource, *GetContext()->GetCommonContext()->GetScanOrbit(), GetRawPathId(), GetTabletId(),
             GetTxId(), GetContext()->GetCommonContext()->GetScanId(), GetDeprecatedPortionId(),
-            portionBlobBytes, portionRawBytes);
+            portionBlobBytes, portionRawBytes, minPk, maxPk, minSnapshot, maxSnapshot);
 }
 
 void IDataSource::StartAsyncSection() {

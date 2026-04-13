@@ -331,11 +331,20 @@ bool TBuildResultStep::IsPageSkippedByFilter(const std::shared_ptr<NCommon::IDat
 }
 
 void TBuildResultStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step,
-    const ui32 resultRowsCount, const TDuration executionDurationMs) const {
+    const TDuration executionDurationMs) const {
+    if (!LWPROBE_ENABLED(BuildResult) && !NLWTrace::HasShuttles(source->GetDataSourceOrbit())) {
+        return;
+    }
     const TDuration durationMs = source->GetAndResetWaitDuration();
+    ui32 pageFilteredRowsCount = RecordsCount;
+    const auto& notAppliedFilter = source->GetStageResult().GetNotAppliedFilter();
+    if (notAppliedFilter && !notAppliedFilter->IsTotalAllowFilter()) {
+        const auto pageFilter = notAppliedFilter->Slice(StartIndex, RecordsCount);
+        pageFilteredRowsCount = pageFilter.GetFilteredCount().value_or(RecordsCount);
+    }
     LWTRACK(BuildResult, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
             source->GetTxId(), source->GetDeprecatedPortionId(), step.GetStepIndex(),
-            step.GetTracingName(), durationMs, executionDurationMs, resultRowsCount, source->GetReservedMemory(),
+            step.GetTracingName(), durationMs, executionDurationMs, pageFilteredRowsCount, RecordsCount, source->GetReservedMemory(),
             source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead());
 }
 
@@ -373,7 +382,7 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("empty_source", sSource->DebugJson().GetStringRobust());
     }
     source->MutableStageResult().SetResultChunk(std::move(resultBatch), StartIndex, RecordsCount);
-    ReportTracing(source, step, recordsCount, TMonotonic::Now() - startExecution);
+    ReportTracing(source, step, TMonotonic::Now() - startExecution);
     const ui64 blobBytes = source->GetTotalBytesRead();
     NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
         new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step),

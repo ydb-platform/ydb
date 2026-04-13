@@ -63,8 +63,8 @@ namespace NKikimr::NOlap::NReader {
         NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "durationMs", "executionDurationMs", "reservedBytes", "success", "totalReservedBytes")) \
     PROBE(StartSourceProcessing, \
         GROUPS("Orbit", "DataSource"), \
-        TYPES(ui64, ui64, ui64, ui64, ui64, ui64, ui64), \
-        NAMES("pathId", "tabletId", "txId", "sourceId", "blobBytes", "rawBytes", "totalReservedBytes")) \
+        TYPES(ui64, ui64, ui64, ui64, ui64, ui64, ui64, TString, TString, TString, TString), \
+        NAMES("pathId", "tabletId", "txId", "sourceId", "blobBytes", "rawBytes", "totalReservedBytes", "minPk", "maxPk", "minSnapshot", "maxSnapshot")) \
     PROBE(Deduplication, \
         GROUPS("DataSource"), \
         TYPES(ui64, ui64, ui64, ui64, ui32, TString, TDuration, ui32, ui64), \
@@ -103,8 +103,8 @@ namespace NKikimr::NOlap::NReader {
         NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "durationMs", "rowsCount", "totalReservedBytes")) \
     PROBE(BuildResult, \
         GROUPS("DataSource"), \
-        TYPES(ui64, ui64, ui64, ui64, ui32, TString, TDuration, TDuration, ui32, ui64, TDuration, ui32), \
-        NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "durationMs", "executionDurationMs", "rowsCount", "totalReservedBytes", "sourcesAheadQueueWaitMs", "sourcesAhead")) \
+        TYPES(ui64, ui64, ui64, ui64, ui32, TString, TDuration, TDuration, ui32, ui32, ui64, TDuration, ui32), \
+        NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "durationMs", "executionDurationMs", "rowsCount", "pageRecordsCount", "totalReservedBytes", "sourcesAheadQueueWaitMs", "sourcesAhead")) \
     PROBE(PrepareResult, \
         GROUPS("DataSource"), \
         TYPES(ui64, ui64, ui64, ui64, ui32, TString, TDuration, TDuration, ui32, ui64, TDuration, ui32), \
@@ -139,8 +139,8 @@ namespace NKikimr::NOlap::NReader {
         NAMES("pathId", "tabletId", "txId", "sourceId", "stepIndex", "name", "durationMs", "totalDurationMs", "totalBytesRead", "totalExecutionTimeMs", "totalReservedBytes")) \
     PROBE(ResultSyncPoint, \
         GROUPS("DataSource"), \
-        TYPES(ui64, ui64, ui64, ui64, TString, ui32, ui64, TDuration, ui32, TString), \
-        NAMES("pathId", "tabletId", "txId", "sourceId", "name", "rowsCount", "totalReservedBytes", "sourcesAheadQueueWaitMs", "sourcesAhead", "details")) \
+        TYPES(ui64, ui64, ui64, ui64, TString, ui32, ui32, ui64, TDuration, ui32, TString), \
+        NAMES("pathId", "tabletId", "txId", "sourceId", "name", "rowsCount", "resultChunkRowsCount", "totalReservedBytes", "sourcesAheadQueueWaitMs", "sourcesAhead", "details")) \
     PROBE(LimitSyncPoint, \
         GROUPS("DataSource"), \
         TYPES(ui64, ui64, ui64, ui64, TString, ui32, ui64, TDuration, ui32, TString), \

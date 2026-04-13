@@ -115,7 +115,7 @@ private:
     const ui32 RecordsCount;
     bool IsPageSkippedByFilter(const std::shared_ptr<NCommon::IDataSource>& source) const;
     std::shared_ptr<arrow::Table> BuildPageResultBatch(const std::shared_ptr<NCommon::IDataSource>& source) const;
-    void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const ui32 resultRowsCount, const TDuration executionDurationMs) const;
+    void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs) const;
 
 protected:
     virtual TConclusion<bool> DoExecuteInplace(

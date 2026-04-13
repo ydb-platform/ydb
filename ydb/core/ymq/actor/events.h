@@ -141,6 +141,9 @@ struct TSqsEvents {
         EvActionCounterChanged,
         EvLocalCounterChanged,
 
+        EvDeduplicateMessageBatch,
+        EvDeduplicateMessageBatchResponse,
+
         EvEnd,
     };
 
@@ -708,6 +711,29 @@ struct TSqsEvents {
             ui64 SequenceNumber = 0;
         };
         std::vector<TMessageResult> Statuses;
+    };
+
+    struct TEvDeduplicateMessageBatch : public NActors::TEventLocal<TEvDeduplicateMessageBatch, EvDeduplicateMessageBatch> {
+        TString RequestId;
+        TString SenderId;
+        std::vector<TString> DeduplicationMessageIds;
+    };
+
+    struct TEvDeduplicateMessageBatchResponse : public NActors::TEventLocal<TEvDeduplicateMessageBatchResponse, EvDeduplicateMessageBatchResponse> {
+        TEvDeduplicateMessageBatchResponse(std::unordered_map<TString, ui64>&& blockedDeduplicationMessageIds)
+            : StatusCode(Ydb::StatusIds::SUCCESS)
+            , BlockedDeduplicationMessageIds(std::move(blockedDeduplicationMessageIds))
+        {
+        }
+
+        TEvDeduplicateMessageBatchResponse(Ydb::StatusIds::StatusCode statusCode)
+            : StatusCode(statusCode)
+        {
+        }
+
+        Ydb::StatusIds::StatusCode StatusCode = Ydb::StatusIds::SUCCESS;
+        // deduplication message id -> sequenceNumber
+        std::unordered_map<TString, ui64> BlockedDeduplicationMessageIds;
     };
 
     // Request to try to receive message batch.

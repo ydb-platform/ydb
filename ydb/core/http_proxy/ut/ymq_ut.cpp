@@ -2647,4 +2647,54 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], "MessageBody-0");
         }
     }
+
+    Y_UNIT_TEST_F(TestSendMessage_Deduplication_Compat, THttpProxyTestMock) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        auto queueName = "ExampleQueueName.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"ReceiveMessageWaitTimeSeconds", "3"},
+                {"VisibilityTimeout", "1"},
+            }}
+        });
+
+        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        SendMessage({
+            {"QueueUrl", resultQueueUrl},
+            {"MessageBody", "MessageBody-0"},
+            {"MessageGroupId", "MessageGroupId-0"},
+            {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+        });
+
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        SendMessage({
+            {"QueueUrl", resultQueueUrl},
+            {"MessageBody", "MessageBody-0"},
+            {"MessageGroupId", "MessageGroupId-0"},
+            {"MessageDeduplicationId", "MessageDeduplicationId-0"}
+        });
+
+        // check
+        {
+            auto json = ReceiveMessage({
+                {"QueueUrl", resultQueueUrl},
+                {"WaitTimeSeconds", 1},
+                {"VisibilityTimeout", 1}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], "MessageBody-0");
+        }
+        {
+            auto json = ReceiveMessage({
+                {"QueueUrl", resultQueueUrl},
+                {"WaitTimeSeconds", 1},
+                {"VisibilityTimeout", 1}
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(json["Messages"].GetType(), NJson::EJsonValueType::JSON_UNDEFINED, "Message was deduplicated and not writen to the topic: " << json.GetStringRobust());
+        }
+    }
 } // Y_UNIT_TEST_SUITE(TestYmqHttpProxy)

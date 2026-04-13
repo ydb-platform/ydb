@@ -160,6 +160,33 @@
   await using var driver = await Driver.CreateInitialized(config);
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  import { Driver } from '@ydbjs/core'
+
+  const driver = new Driver('grpc://localhost:2136/local')
+  await driver.ready()
+  ```
+
+- Rust
+
+  ```rust
+  use ydb::{AccessTokenCredentials, ClientBuilder, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+          .with_credentials(AccessTokenCredentials::from("..."))
+          .client()?;
+      client.wait().await?;
+      Ok(())
+  }
+  ```
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 - PHP
 
   ```php
@@ -186,14 +213,6 @@
   ];
 
   $ydb = new Ydb($config);
-  ```
-
-- Rust
-
-  ```rust
-  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
-        .with_credentials(AccessTokenCredentials::from("..."))
-        .client()?
   ```
 
 {% endlist %}

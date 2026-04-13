@@ -29,6 +29,14 @@
   [Примеры на GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/Topic)
 
 
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ## Инициализация соединения с топиками
@@ -137,6 +145,76 @@
   }.Build();
   ```
 
+<<<<<<< HEAD
+=======
+- Python
+
+  Для работы с топиками создаётся экземпляр драйвера {{ ydb-short-name }}. Клиент топиков доступен через атрибут `topic_client` и используется для управляющих операций с топиками, а также создания писателей и читателей.
+
+  {% list tabs %}
+  - Native SDK
+
+    ```python
+    import os
+    import ydb
+
+    driver_config = ydb.DriverConfig(
+        endpoint=os.environ["YDB_ENDPOINT"],
+        database=os.environ["YDB_DATABASE"],
+    )
+    driver = ydb.Driver(driver_config)
+    driver.wait(timeout=5)
+    # driver.topic_client — клиент для работы с топиками
+    writer = driver.topic_client.writer(topic_path)
+    reader = driver.topic_client.reader(topic=topic_path, consumer=consumer_name)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    import os
+    import ydb
+
+    driver_config = ydb.DriverConfig(
+        endpoint=os.environ["YDB_ENDPOINT"],
+        database=os.environ["YDB_DATABASE"],
+    )
+    async with ydb.aio.Driver(driver_config) as driver:
+        await driver.wait(timeout=5)
+        # driver.topic_client — клиент для работы с топиками
+        writer = driver.topic_client.writer(topic_path)
+        reader = driver.topic_client.reader(topic=topic_path, consumer=consumer_name)
+    ```
+
+  {% endlist %}
+
+  Подробнее про [соединение с БД](../../concepts/connect.md) и [аутентификацию](../../security/authentication.md).
+
+- JavaScript
+
+  ```javascript
+  const t = topic(driver);
+
+  await using reader = t.createReader({
+    topic: "/Root/demo-topic",
+    consumer: "demo-consumer",
+  });
+
+  await using writer = t.createWriter({
+    topic: "/Root/demo-topic",
+    producer: "demo-producer",
+  });
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ## Управление топиками {#manage}
@@ -227,6 +305,33 @@
   });
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  const topicService = driver.createClient(TopicServiceDefinition);
+  await topicService.createTopic(
+    create(CreateTopicRequestSchema, {
+      path: "/path-to-my-topic",
+      partitioningSettings: {
+        minActivePartitions: 1n,
+        maxActivePartitions: 100n,
+      },
+      consumers: [{ name: "my-consumer" }],
+    }),
+  );
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Изменение топика {#alter-topic}
@@ -298,6 +403,14 @@
                           .build())
                   .build());
 
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ### Получение информации о топике {#describe-topic}
@@ -354,6 +467,28 @@
   TopicDescription description = topicDescriptionResult.getValue();
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  const topicService = driver.createClient(TopicServiceDefinition);
+  await topicService.describeTopic(
+    create(DescribeTopicRequestSchema, {
+      path: "/path-to-my-topic",
+    }),
+  );
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Удаление топика {#drop-topic}
@@ -392,6 +527,28 @@
   await topicClient.DropTopic(topicName);
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  const topicService = driver.createClient(TopicServiceDefinition);
+  await topicService.dropTopic(
+    create(DropTopicRequestSchema, {
+      path: "/path-to-my-topic",
+    }),
+  );
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ## Запись сообщений {#write}
@@ -513,6 +670,26 @@
   }.Build();
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  await using writer = createTopicWriter(driver, {
+    topic: topicName,
+    producer: producerName,
+  });
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Запись сообщений {#writing-messages}
@@ -659,6 +836,30 @@
   var asyncWriteTask = writer.WriteAsync("Hello, Example YDB Topics!"); // Task<WriteResult>
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  // Пишет сообщение во внутренний буфер
+  writer.write(Buffer.from("Hello, world!", "utf-8"));
+
+  // Для немедленной отправки нужно вызвать flush
+  await writer.flush();
+
+  // Или закрыть писатель
+  await writer.close();
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Запись сообщений с подтверждением о сохранении на сервере
@@ -788,6 +989,39 @@
   await writer.WriteAsync("Hello, Example YDB Topics!", writeCts.Token);
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  Все сообщения записываются во внутренний буфер. Для отправки на сервер есть 3 механизма: два автоматических и один ручной. Ручной - это вызов метода `writer.flush` который возвращает последний seqno записанный на сервере. Автоматическая отправка происходит по условиям:
+  - Превышение размера внутреннего буфера `maxBufferBytes` (значение по умолчанию = 256MiB).
+  - По тику интервала периодической отправки `flushIntervalMs` (значение по умолчанию = 10ms).
+
+  ```javascript
+  await using writer = createTopicWriter(driver, {
+    topic: topicName,
+    producer: producerName,
+    // Callback that is called when writer receives an acknowledgment for a message.
+    onAck: (seqNo, status) => {
+      console.log("ACK", seqNo, status);
+    },
+  })
+
+  writer.write(Buffer.from("Hello, world!", "utf-8"));
+
+  // Чтобы получить последний записанный seqNo на сервере.
+  await writer.flush();
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Выбор кодека для сжатия сообщений {#codec}
@@ -850,6 +1084,37 @@
           .build();
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  await using writer = t.createWriter({
+    codec: Codec.RAW,
+  });
+
+  await using writer = t.createWriter({
+    codec: Codec.GZIP,
+  });
+
+  await using writer = t.createWriter({
+    codec: Codec.LZOP,
+  });
+
+  await using writer = t.createWriter({
+    codec: 10000, // CUSTOM (допустимый диапазон: 10000–19999)
+  });
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Запись сообщений без дедупликации {#nodedup}
@@ -872,6 +1137,29 @@
 
   Для включения дедупликации нужно в настройках сессии записи указать опцию `ProducerId` или явно включить дедупликацию, вызвав метод `DeduplicationEnabled()`, например, как в секции ["Подключение к топику"](#start-writer).
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Go
+
+  В **ydb-go-sdk** при создании писателя, если не передавать `topicoptions.WithWriterProducerID`, SDK всё равно подставляет идентификатор производителя (генерирует его автоматически). Режим записи без дедупликации, эквивалентный отсутствию `ProducerId` в примере для C++ выше, в текущей версии SDK недоступен.
+
+- Java
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Запись метаданных на уровне сообщения {#messagemeta}
@@ -966,6 +1254,27 @@
   );
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  writer.write(Buffer.from("Hello, world!", "utf-8"), {
+    metadataItems: {
+      "meta-key": new TextEncoder().encode("meta-value"),
+    },
+  });
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Запись в транзакции {#write-tx}
@@ -1185,6 +1494,21 @@
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 
@@ -1343,6 +1667,26 @@
   }.Build();
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  await using reader = createTopicReader(driver, {
+    topic: topicName,
+    consumer: consumerName,
+  });
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 Вы также можете использовать расширенный вариант создания подключения, чтобы указать несколько топиков и задать параметры чтения. Следующий код создаст подключение к топикам `my-topic` и `my-specific-topic` через читателя `my-consumer`:
@@ -1417,6 +1761,64 @@
   }.Build();
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  await using reader = createTopicReader(driver, {
+    topic: {
+      path: topicPath,
+      partitionIds: [1n, 2n, 3n],
+    },
+    consumer: consumerName,
+  });
+
+  await using reader = createTopicReader(driver, {
+    topic: {
+      path: topicPath,
+      maxLag: "1s", // number, import('ms').StringValue, protobuff Duration
+    },
+    consumer: consumerName,
+  });
+
+  await using reader = createTopicReader(driver, {
+    topic: {
+      path: topicPath,
+      readFrom: new Date(), // number, Date, protobuf Timestamp
+    },
+    consumer: consumerName,
+  });
+
+  await using reader = createTopicReader(driver, {
+    topic: [
+      {
+        path: topicPath,
+        partitionIds: [1n, 2n, 3n],
+      },
+      {
+        path: topicPath2,
+        maxLag: "1s",
+      },
+      {
+        path: topicPath3,
+        readFrom: new Date(),
+      },
+      // ...
+    ],
+    consumer: consumerName,
+  });
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Чтение сообщений {#reading-messages}
@@ -1455,6 +1857,21 @@
 
   {% include [_includes/reading_messages_common.md](_includes/reading_messages_common.md) %}
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 
@@ -1522,6 +1939,26 @@
   }
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  for await (let batch of reader.read()) {
+    for await (let msg of batch) {
+    }
+  }
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 #### Чтение сообщений пакетом
@@ -1610,6 +2047,24 @@
   }
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  for await (let batch of reader.read()) {
+  }
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Чтение с подтверждением обработки сообщений {#commit}
@@ -1706,6 +2161,27 @@
   }
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  for await (let batch of reader.read()) {
+    for (let msg of batch) {
+      await reader.commit(msg);
+    }
+  }
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 #### Чтение сообщений пакетом с подтверждением
@@ -1815,6 +2291,25 @@
   }
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  for await (let batch of reader.read()) {
+    await reader.commit(batch);
+  }
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Чтение с хранением позиции на клиентской стороне {#client-commit}
@@ -1910,6 +2405,32 @@
 
   Также поддерживается настройка читателя `setReadFrom` для чтения событий с отметками времени записи не меньше данной.
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  await using reader = createTopicReader(driver, {
+    topic: topicName,
+    consumer: consumerName,
+    onPartitionSessionStart: (evt) => {
+      return {
+        readOffset: 0n,
+        commitOffset: 0n,
+      };
+    },
+  });
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Чтение без указания Consumer'а {#no-consumer}
@@ -1968,6 +2489,21 @@
   )
   ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Чтение в транзакции {#read-tx}
@@ -2153,7 +2689,25 @@
   }
   ```
 
+<<<<<<< HEAD
 {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+=======
+  {% endlist %}
+
+  {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 
 {% endlist %}
 
@@ -2233,8 +2787,27 @@
 
       // Confirm that session can be closed
       event.confirm();
+<<<<<<< HEAD
   }
   ```
+=======
+    }
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 
 {% endlist %}
 
@@ -2305,8 +2878,27 @@
   @Override
   public void onPartitionSessionClosed(PartitionSessionClosedEvent event) {
       logger.info("Partition session {} is closed.", event.getPartitionSession().getPartitionId());
+<<<<<<< HEAD
   }
   ```
+=======
+    }
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 
 {% endlist %}
 
@@ -2503,6 +3095,25 @@
 
   С практической точки зрения для конечного пользователя режимы не отличаются. Режим полной поддержки отличается от режима совместимости тем, кто гарантирует порядок чтения — клиент или сервер. Режим совместимости достигается серверной обработкой и, как правило, работает медленнее.
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Java
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ### Подтверждение обработки вне читателя {#commit-outside-the-reader}
@@ -2515,6 +3126,7 @@
 
   Подтверждения обработки вне читателя производится с помощью метода `topic_client.commit_offset`:
 
+<<<<<<< HEAD
   ```python
   driver.topic_client.commit_offset(
       topic_path,
@@ -2522,6 +3134,65 @@
       partition_id,
       offset,
   )
+=======
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    driver.topic_client.commit_offset(
+        topic_path,
+        consumer_name,
+        partition_id,
+        offset,
+        reader.read_session_id,  # опционально: не прерывает активную сессию чтения
+    )
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    await driver.topic_client.commit_offset(
+        topic_path,
+        consumer_name,
+        partition_id,
+        offset,
+        reader.read_session_id,  # опционально: не прерывает активную сессию чтения
+    )
+    ```
+
+  {% endlist %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Java
+
+  ```java
+  TopicClient client = ...;
+
+  String sessionID = reader.getSessionId();
+  // У AsyncReader идентификатор сессии можно получить при обработке события SessionStartedEvent
+
+  client.commitOffset(
+      topicPath,
+      CommitOffsetSettings.newBuilder()
+          .setReadSessionId(sessionID)
+          .setPartitionId(partitionID)
+          .setConsumer(consumer)
+          .setOffset(offset)
+          .build()
+  ).join().expectSuccess("Error commit!");
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

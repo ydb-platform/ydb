@@ -54,7 +54,7 @@ To move part of the static group from host `node_id:1` to `node_id:10`:
     ```
 
       Change the `path` and disk `pdisk_category` if they differ on the host with `node_id: 10`.
-4. Go to the Embedded UI monitoring page and ensure that the static group VDisk appeared on the target physical disk and is replicating. For more details, see [{#T}](../../../reference/embedded-ui/ydb-monitoring.md#static-group).
+4. Go to the YDB UI monitoring page and ensure that the static group VDisk appeared on the target physical disk and is replicating. For more details, see [{#T}](../../../reference/ydb-ui/ydb-monitoring.md#static-group).
 5. Remove the target static group configuration from the configuration file and enable automatic static group configuration management.
 
 {% endcut %}

@@ -4,7 +4,7 @@ Each {{ ydb-short-name }} component writes messages of different levels to logs.
 
 ## Logging Setup {#log_setup}
 
-Logging configuration for individual components can be done in the [embedded interface](../../reference/embedded-ui/logs.md#change_log_level) of {{ ydb-short-name }}.
+Logging configuration for individual components can be done in the [YDB UI](../../reference/ydb-ui/logs.md#change_log_level) of {{ ydb-short-name }}.
 
 Currently, there are two options for starting {{ ydb-short-name }} logging: manually and using systemd.
 

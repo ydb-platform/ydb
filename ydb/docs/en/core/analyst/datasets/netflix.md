@@ -16,9 +16,9 @@ Data on movies and TV shows available on Netflix.
 
     {% list tabs %}
 
-    - Embedded UI
+    - YDB UI
 
-      For more information on [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
+      For more information on [YDB UI](../../reference/ydb-ui/ydb-monitoring).
 
       ```sql
       CREATE TABLE `netflix` (
@@ -79,7 +79,7 @@ Identify the top three countries with the most content added to Netflix in 2020:
 
 {% list tabs %}
 
-- Embedded UI
+- YDB UI
 
   ```sql
   SELECT

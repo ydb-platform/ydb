@@ -16,9 +16,9 @@
 
 {% list tabs %}
 
-- Embedded UI
+- YDB UI
 
-  Подробнее про [Embedded UI](../../reference/embedded-ui/ydb-monitoring/index.md).
+  Подробнее про [YDB UI](../../reference/ydb-ui/ydb-monitoring/index.md).
 
   ```sql
   CREATE TABLE `vgsales` (
@@ -77,7 +77,7 @@ ydb import file csv --header --null-value "" --path vgsales vgsales.csv
 
 {% list tabs %}
 
-- Embedded UI
+- YDB UI
 
   ```sql
   SELECT

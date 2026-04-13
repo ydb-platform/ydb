@@ -16,9 +16,9 @@ The dataset includes 513 million chess position evaluations performed by the Sto
 
     {% list tabs %}
 
-    - Embedded UI
+    - YDB UI
 
-      For more information on [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
+      For more information on [YDB UI](../../reference/ydb-ui/ydb-monitoring).
 
       ```sql
       CREATE TABLE `evals` (
@@ -69,7 +69,7 @@ Identify positions with the highest number of moves analyzed by the Stockfish en
 
 {% list tabs %}
 
-- Embedded UI
+- YDB UI
 
   ```sql
   SELECT

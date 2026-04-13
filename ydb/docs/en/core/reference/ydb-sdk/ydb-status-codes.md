@@ -438,7 +438,7 @@ Create a new session.
 
 </div>
 
-The request was canceled on the server. For example, a user canceled a long-running query in the [Embedded UI](../embedded-ui/index.md), or the query included the [cancel_after](../../dev/timeouts.md#cancel) timeout option.
+The request was canceled on the server. For example, a user canceled a long-running query in the [YDB UI](../ydb-ui/index.md), or the query included the [cancel_after](../../dev/timeouts.md#cancel) timeout option.
 
 If the query took too long to complete, try optimizing it. If you used the `cancel_after` timeout option, increase the timeout value.
 

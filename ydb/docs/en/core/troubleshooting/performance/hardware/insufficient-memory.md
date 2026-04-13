@@ -18,7 +18,7 @@ Additionally, which components within the  {{ ydb-short-name }} process consume 
 
 1. Determine whether any {{ ydb-short-name }} nodes recently restarted for unknown reasons. Exclude cases of {{ ydb-short-name }} version upgrades and other planned maintenance. This could reveal nodes terminated by OOM killer and restarted by `systemd`.
 
-    1. Open [Embedded UI](../../../reference/embedded-ui/index.md).
+    1. Open [YDB UI](../../../reference/ydb-ui/index.md).
 
     1. On the **Nodes** tab, look for nodes that have low uptime.
 

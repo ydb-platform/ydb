@@ -33,14 +33,14 @@ For example, you can generate a [load on Distributed Storage](load-actors-storag
 
 You can run load using the following tools:
 
-* Cluster Embedded UI: Allows you to create, based on a configuration, and start a load actor either on the current node or all tenant nodes at once.
+* Cluster YDB UI: Allows you to create, based on a configuration, and start a load actor either on the current node or all tenant nodes at once.
 * The `ydbd` utility: Allows you to send the actor configuration to any cluster node specifying the nodes to create and run the actor on.
 
 The use case described below shows how to create and run the KqpLoad actor. The actor accesses the `/slice/db` database as a key-value store using 64 threads with a 30-second load. Before the test, the actor creates the necessary tables and deletes them once the test is completed. When being created, the actor is automatically assigned a tag. The same tag will be assigned to the test result.
 
 {% list tabs group=tool %}
 
-- Embedded UI
+- YDB UI
 
     1. Open the page for managing load actors on the desired node (for example, `http://<address>:8765/actors/load`, where `address` is the address of the cluster node to run the load on).
     2. Paste the actor configuration into the input/output field:
@@ -117,11 +117,11 @@ The use case described below shows how to create and run the KqpLoad actor. The 
 
 ## Viewing test results {#view-results}
 
-You can view the test results using the Embedded UI. For a description of output parameters, see the documentation of the respective actor.
+You can view the test results using the YDB UI. For a description of output parameters, see the documentation of the respective actor.
 
 {% list tabs group=tool %}
 
-- Embedded UI
+- YDB UI
 
     1. Open the page for managing load actors on the desired node (for example, `http://<address>:<port>/actors/load`, where `address` is the node address and `port` is the HTTP port used for monitoring the node under load).
     2. Click **Results**.

@@ -83,7 +83,7 @@ Administration, monitoring, security, and optimization.
 
 ### Monitoring and Diagnostics
 
-  - [Embedded UI](../../reference/embedded-ui/index.md): Web interface for cluster monitoring and diagnostics.
+  - [YDB UI](../../reference/ydb-ui/index.md): Web interface for cluster monitoring and diagnostics.
   - [Metrics Reference](../../reference/observability/metrics/index.md): Full list of metrics for monitoring systems.
   - [Ready-to-use Grafana Dashboards](../../reference/observability/metrics/grafana-dashboards.md): Templates for quick monitoring setup.
 

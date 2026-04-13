@@ -29,7 +29,7 @@ config:
 
 ![High-level overview of configuration V2 management](_assets/config-v2-overview.png)
 
-The {{ ydb-short-name }} cluster itself is responsible for managing the state of the configuration file, and it is also the single source of truth about how it is currently configured. The [distributed configuration](../../../concepts/glossary.md#distributed-configuration) mechanism is responsible for reliable storage of the current state. You can see the current state of the cluster configuration using the console command [ydb admin cluster config fetch](../../../reference/ydb-cli/commands/configuration/cluster/fetch.md), and the state of each specific node through its [Embedded UI](../../../reference/embedded-ui/index.md).
+The {{ ydb-short-name }} cluster itself is responsible for managing the state of the configuration file, and it is also the single source of truth about how it is currently configured. The [distributed configuration](../../../concepts/glossary.md#distributed-configuration) mechanism is responsible for reliable storage of the current state. You can see the current state of the cluster configuration using the console command [ydb admin cluster config fetch](../../../reference/ydb-cli/commands/configuration/cluster/fetch.md), and the state of each specific node through its [YDB UI](../../../reference/ydb-ui/index.md).
 
 Changing the {{ ydb-short-name }} cluster configuration is performed by the administrator as follows:
 

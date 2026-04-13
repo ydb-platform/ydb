@@ -32,9 +32,9 @@ Furthermore, if the system clock drift exceeds 30 seconds, {{ ydb-short-name }} 
 
 To diagnose system clock drift on {{ ydb-short-name }} servers, use the following methods:
 
-1. Use **Healthcheck** in the [Embedded UI](../../../reference/embedded-ui/index.md):
+1. Use **Healthcheck** in the [YDB UI](../../../reference/ydb-ui/index.md):
 
-    1. In the [Embedded UI](../../../reference/embedded-ui/index.md), go to the **Databases** tab and click on the database.
+    1. In the [YDB UI](../../../reference/ydb-ui/index.md), go to the **Databases** tab and click on the database.
 
     1. On the **Navigation** tab, ensure the required database is selected.
 
@@ -57,11 +57,11 @@ To diagnose system clock drift on {{ ydb-short-name }} servers, use the followin
     {% endnote %}
 
 
-1. Open the [Interconnect overview](../../../reference/embedded-ui/interconnect-overview.md) page in the [Embedded UI](../../../reference/embedded-ui/index.md). Interconnect metrics (including indicators related to clock skew across nodes) help assess the scope of the issue alongside the overall picture of connectivity latency and errors.
+1. Open the [Interconnect overview](../../../reference/ydb-ui/interconnect-overview.md) page in the [YDB UI](../../../reference/ydb-ui/index.md). Interconnect metrics (including indicators related to clock skew across nodes) help assess the scope of the issue alongside the overall picture of connectivity latency and errors.
 
     {% note info %}
 
-    An increase in system clock skew according to interconnect monitoring (as shown in the Embedded UI and collected via cluster metrics) may be caused by actual clock drift, exhaustion of resources in the interconnect CPU pool, or network equipment overload.
+    An increase in system clock skew according to interconnect monitoring (as shown in the YDB UI and collected via cluster metrics) may be caused by actual clock drift, exhaustion of resources in the interconnect CPU pool, or network equipment overload.
 
     {% endnote %}
 

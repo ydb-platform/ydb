@@ -6,7 +6,7 @@
 
 1. Проверьте наличие скачков на графиках панели мониторинга **[DB overview > Storage](../../../reference/observability/metrics/grafana-dashboards.md#dboverview)** в Grafana.
 
-1. Во [встроенном UI](../../../reference/embedded-ui/index.md) на вкладке **Storage** проанализируйте список доступных групп хранения и их потребление места на диске.
+1. В [YDB UI](../../../reference/ydb-ui/index.md) на вкладке **Storage** проанализируйте список доступных групп хранения и их потребление места на диске.
 
     {% note tip %}
 

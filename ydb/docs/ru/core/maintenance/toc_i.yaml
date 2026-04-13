@@ -3,5 +3,5 @@ items:
   include: { mode: link, path: ../troubleshooting/toc_p.yaml }
 - name: Обслуживание кластера
   items:
-  - name: Встроенный UI
-    include: { mode: link, path: ../reference/embedded-ui/toc_p.yaml }
+  - name: YDB UI
+    include: { mode: link, path: ../reference/ydb-ui/toc_p.yaml }

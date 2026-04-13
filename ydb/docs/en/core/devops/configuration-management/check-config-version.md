@@ -2,12 +2,12 @@
 
 There are two main ways to check which configuration mechanism version ([V1](../configuration-management/configuration-v1/config-overview.md) or [V2](../configuration-management/configuration-v2/config-overview.md)) the nodes of your {{ ydb-short-name }} cluster are using:
 
-1. [Embedded UI](#embedded-ui)
+1. [YDB UI](#ydb-ui)
 2. [Cluster metrics](#metrics)
 
-## With Embedded UI {#embedded-ui}
+## With YDB UI {#ydb-ui}
 
-This method can be used if metrics collection from the {{ ydb-short-name }} cluster to the monitoring system is not configured. You can check the configuration version for a specific node or switch between nodes in the built-in web interface [Embedded UI](../../reference/embedded-ui/index.md):
+This method can be used if metrics collection from the {{ ydb-short-name }} cluster to the monitoring system is not configured. You can check the configuration version for a specific node or switch between nodes in [YDB UI](../../reference/ydb-ui/index.md):
 
 1. Open the `configs_dispatcher` actor page for any cluster node in your browser:
 

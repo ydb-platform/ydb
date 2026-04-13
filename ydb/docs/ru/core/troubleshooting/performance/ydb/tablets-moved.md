@@ -32,9 +32,9 @@
 
 Измените настройки балансировщика Hive:
 
-1. Откройте [Встроенный UI](../../../reference/embedded-ui/index.md).
+1. Откройте [YDB UI](../../../reference/ydb-ui/index.md).
 
-1. Нажмите на ссылку **Developer UI** в правом верхнем углу Встроенного UI.
+1. Нажмите на ссылку **Developer UI** в правом верхнем углу YDB UI.
 
 1. В **Developer UI** перейдите на страницу **Tablets > Hive > App**.
 

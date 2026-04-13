@@ -204,11 +204,11 @@ Intended for applications or users restricted to a single database.
     ||
 || `viewer_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) with the viewer access level.
 
-This level allows viewing the cluster state, which is not publicly accessible (including most pages in the [Embedded UI](../embedded-ui/ydb-monitoring.md)). No changes are allowed.
+This level allows viewing the cluster state, which is not publicly accessible (including most pages in the [YDB UI](../ydb-ui/ydb-monitoring.md)). No changes are allowed.
     ||
 || `monitoring_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) with the monitoring access level.
 
-This level grants additional privileges to monitor and modify the cluster state. For example, it allows performing a backup, restoring a database, or executing YQL statements in the Embedded UI.
+This level grants additional privileges to monitor and modify the cluster state. For example, it allows performing a backup, restoring a database, or executing YQL statements in the YDB UI.
     ||
 || `administration_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) with the administration access level.
 
@@ -262,7 +262,7 @@ It is recommended to add user groups and separate service accounts to the `*_all
 
 Access level lists represent layers of additional privileges:
 
-- An access subject that is not included in any access level list can view only publicly available information about the cluster (for example, [a list of databases on the cluster](../embedded-ui/ydb-monitoring.md#tenant_list_page) or [a list of cluster nodes](../embedded-ui/ydb-monitoring.md#node_list_page)).
+- An access subject that is not included in any access level list can view only publicly available information about the cluster (for example, [a list of databases on the cluster](../ydb-ui/ydb-monitoring.md#tenant_list_page) or [a list of cluster nodes](../ydb-ui/ydb-monitoring.md#node_list_page)).
 - The `database_allowed_sids` list defines the "database" role: these users are less privileged than viewers and cannot issue any backend call without specifying a database; cluster-wide requests are not allowed.
 - The `viewer_allowed_sids`, `monitoring_allowed_sids`, and `administration_allowed_sids` lists form a hierarchy: administration implies monitoring and viewer; monitoring implies viewer. A subject only needs to be in the one list that matches their role — inclusion in a higher list automatically grants all lower privileges.
 

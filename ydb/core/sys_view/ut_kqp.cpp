@@ -1128,6 +1128,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     ExpectedSlotCount,
                     Guid,
                     Kind,
+                    MaintenanceStatus,
                     NodeId,
                     NumActiveSlots,
                     Path,
@@ -1156,7 +1157,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        TYsonFieldChecker check(ysonString, 18);
+        TYsonFieldChecker check(ysonString, 19);
 
         check.Uint64(0u); // AvailableSize
         check.Uint64(999u); // BoxId
@@ -1164,6 +1165,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64(16); // ExpectedSlotCount
         check.Uint64(123u); // Guid
         check.Uint64(0u); // Kind
+        check.String("NO_REQUEST"); // MaintenanceStatus
         check.Uint64(env.GetServer().GetRuntime()->GetNodeId(0)); // NodeId
         check.Uint64(2); // NumActiveSlots
         check.StringContains("pdisk_1.dat"); // Path

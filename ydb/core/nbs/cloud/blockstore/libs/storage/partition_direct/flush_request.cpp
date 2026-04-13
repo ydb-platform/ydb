@@ -12,11 +12,11 @@ TFlushRequestExecutor::TFlushRequestExecutor(
     IDirectBlockGroupPtr directBlockGroup,
     TRoute route,
     TFlushHint hint,
-    NWilson::TTraceId traceId)
+    NWilson::TSpan span)
     : ActorSystem(actorSystem)
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
-    , TraceId(std::move(traceId))
+    , Span(std::move(span))
     , Route(route)
     , Hint(std::move(hint))
 {
@@ -43,7 +43,7 @@ void TFlushRequestExecutor::Run()
         VChunkConfig.GetHostIndex(Route.Source),
         VChunkConfig.GetHostIndex(Route.Destination),
         Hint.Segments,
-        NWilson::TTraceId(TraceId));
+        Span.GetTraceId());
     future.Subscribe(
         [self = shared_from_this()]   //
         (const NThreading::TFuture<TDBGFlushResponse>& f)

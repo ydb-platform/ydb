@@ -42,7 +42,7 @@ private:
     };
 
     struct TMessageInfo {
-        TMessageInfo(const std::string& key, TWriteMessage&& message, std::uint32_t partition);
+        TMessageInfo(const std::string& key, const std::string& choosePartitionKey, TWriteMessage&& message, std::uint32_t partition);
 
         std::string Key;
         std::string Data;
@@ -155,7 +155,7 @@ private:
         
         void DoWork();
 
-        void AddMessage(const std::string& key, TWriteMessage&& message, std::uint32_t partition);
+        void AddMessage(const std::string& key, const std::string& choosePartitionKey, TWriteMessage&& message, std::uint32_t partition);
         void ScheduleResendMessages(std::uint32_t partition, std::uint64_t afterSeqNo);
         void RebuildPendingMessagesIndex(std::uint32_t partition);
         void HandleAck();
@@ -299,20 +299,22 @@ private:
     // Partition chooser
 
     struct IPartitionChooser {
-        virtual std::uint32_t ChoosePartition(const std::string_view key) = 0;
+        // this method returns the partition ID and the choose partition key for the given key
+        // the choose partition key is used to identify the partition
+        virtual std::pair<std::uint32_t, std::string> ChoosePartition(const std::string_view key) = 0;
         virtual ~IPartitionChooser() = default;
     };
 
     struct TBoundPartitionChooser : IPartitionChooser {
         TBoundPartitionChooser(TProducer* producer);
-        std::uint32_t ChoosePartition(const std::string_view key) override;
+        std::pair<std::uint32_t, std::string> ChoosePartition(const std::string_view key) override;
     private:
         TProducer* Producer;
     };
 
     struct THashPartitionChooser : IPartitionChooser {
         THashPartitionChooser(std::vector<std::uint32_t>&& partitions);
-        std::uint32_t ChoosePartition(const std::string_view key) override;
+        std::pair<std::uint32_t, std::string> ChoosePartition(const std::string_view key) override;
     private:
         std::vector<std::uint32_t> Partitions;
     };

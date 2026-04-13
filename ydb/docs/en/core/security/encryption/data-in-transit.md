@@ -13,7 +13,7 @@ As {{ ydb-short-name }} is a distributed system typically running on a cluster, 
 * {{ ydb-short-name }} as a client:
 
   * [LDAP](../../security/authentication.md#ldap) for user authentication.
-  * [Federated queries](../../concepts/federated_query/index.md), a feature that allows {{ ydb-short-name }} to query various external data sources. Some sources are queried directly from the `ydbd` process, while others are proxied via a separate connector process.
+  * [Federated queries](../../concepts/query_execution/federated_query/index.md), a feature that allows {{ ydb-short-name }} to query various external data sources. Some sources are queried directly from the `ydbd` process, while others are proxied via a separate connector process.
   * [Tracing](../../reference/observability/tracing/setup.md) data sent to an external collector via gRPC.
 
 * In [asynchronous replication](../../concepts/async-replication.md) between two {{ ydb-short-name }} databases, one serves as a client to the other.

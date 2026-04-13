@@ -18,18 +18,18 @@ CREATE EXTERNAL DATA SOURCE external_data_source WITH (
 Where:
 
 * `external_data_source` — name of the external data source.
-* `source_type` — type of external data source. Allowed values: [`ClickHouse`](#clickhouse), [`PostgreSQL`](#postgresql), [`ObjectStorage`](#object_storage).
-* `ip_address_or_fqdn:port` — full network address of the external data source, including port. The address may be an IP or FQDN.
-* `use_tls` — flag requiring a secure (TLS) connection. Allowed values: `TRUE`, `FALSE`.
-* `auth_method` — authentication method for the external source. For `ClickHouse` and `PostgreSQL` sources, only `BASIC` is supported. For `ObjectStorage`, only `NONE` is supported at this time.
+* `source_type` — type of the external data source. Possible values: [`ClickHouse`](#clickhouse), [`PostgreSQL`](#postgresql), [`ObjectStorage`](#object_storage).
+* `ip_address_or_fqdn:port` — full network address of the external data source, including the port. The network address can be an IP address or FQDN.
+* `use_tls` — flag indicating that the connection must use a secure (TLS) connection. Possible values: `TRUE`, `FALSE`.
+* `auth_method` — authentication method for the external data source. For external sources of types `ClickHouse` and `PostgreSQL`, only the `BASIC` authentication type is supported. For the `ObjectStorage` external source, only the `NONE` authentication type is currently supported.
 * `login` — login used to connect to the external data source.
-* `password_secret_path` — [secret](../../../concepts/datamodel/secrets.md) that stores the password for the external data source.
+* `password_secret_path` — [secret](../../../concepts/datamodel/secrets.md) containing the password for connecting to the external data source.
 
-For TLS, the system uses certificates installed on {{ ydb-full-name }} servers.
+When using secure TLS channels, system certificates located on {{ ydb-full-name }} servers are used.
 
 ## Example
 
-The following creates an external data source named `TestDataSource` for a ClickHouse cluster at `192.168.1.1:8443`, with login `admin` and secret `test_secret`:
+The query below creates an external data source named `TestDataSource` to a ClickHouse cluster with IP address `192.168.1.1` and port `8443`, with login `admin` and secret `test_secret`:
 
 ```yql
 CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
@@ -44,18 +44,20 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
 
 ## Connecting to ClickHouse {#clickhouse}
 
-To connect to a ClickHouse cluster, create an `EXTERNAL DATA SOURCE` and set:
+To create a connection to a ClickHouse cluster, create an external data source `EXTERNAL DATA SOURCE` and specify:
 
-- `SOURCE_TYPE` to `ClickHouse`.
-- `LOCATION` to the full network address of the ClickHouse cluster, including port (IP or FQDN). Connections currently always use the HTTP protocol.
-- `USE_TLS` to indicate whether TLS is required.
-- `AUTH_METHOD` to `BASIC`.
-- `LOGIN` to the ClickHouse login.
-- `PASSWORD_SECRET_PATH` to a [secret](../../../concepts/datamodel/secrets.md) with the ClickHouse password.
+- in the `SOURCE_TYPE` field, the value `ClickHouse`;
+- in the `LOCATION` field, the full network address of the ClickHouse cluster, including the port. The network address can be an IP address or FQDN. Connection to the ClickHouse cluster is currently always made over the HTTP protocol;
+- in the `USE_TLS` field, the flag indicating that the connection to the ClickHouse cluster must use a secure (TLS) connection;
+- in the `AUTH_METHOD` field, the value `BASIC`;
+- in the `LOGIN` field, the login used to connect to the ClickHouse cluster;
+- in the `PASSWORD_SECRET_PATH` field, the [secret](../../../concepts/datamodel/secrets.md) containing the password for connecting to the ClickHouse cluster.
 
-For TLS, the system uses certificates installed on {{ ydb-full-name }} servers.
+When using secure TLS channels, system certificates located on {{ ydb-full-name }} servers are used.
 
 ### Example
+
+The query below creates an external data source named `TestDataSource` to a ClickHouse cluster with IP address `192.168.1.1` and port `8443`, with login `admin` and secret `test_secret`:
 
 ```yql
 CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
@@ -70,25 +72,25 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
 
 ## Connecting to PostgreSQL {#postgresql}
 
-To connect to a PostgreSQL cluster, create an `EXTERNAL DATA SOURCE` with:
+To create a connection to a PostgreSQL cluster, create an `EXTERNAL DATA SOURCE` object and specify in the fields:
 
-- `SOURCE_TYPE` set to `PostgreSQL`;
-- `LOCATION` set to the full address of the PostgreSQL cluster, including port (IP or FQDN);
-- `USE_TLS` set according to whether TLS is required;
-- `AUTH_METHOD` set to `BASIC`;
-- `LOGIN` set to the PostgreSQL login;
-- `PASSWORD_SECRET_PATH` set to a [secret](../../../concepts/datamodel/secrets.md) with the PostgreSQL password.
+- in the `SOURCE_TYPE` field, the value `PostgreSQL`;
+- in the `LOCATION` field, the full network address of the PostgreSQL cluster, including the port. The network address can be an IP address or FQDN;
+- in the `USE_TLS` field, the flag indicating that the connection to the PostgreSQL cluster must use a secure (TLS) connection;
+- in the `AUTH_METHOD` field, the value `BASIC`;
+- in the `LOGIN` field, the login used to connect to the PostgreSQL cluster;
+- in the `PASSWORD_SECRET_PATH` field, the [secret](../../../concepts/datamodel/secrets.md) containing the password for connecting to the PostgreSQL cluster.
 
-Connections use the standard [Frontend/Backend Protocol](https://www.postgresql.org/docs/current/protocol.html) over TCP. For TLS, the system uses certificates installed on {{ ydb-full-name }} servers.
+Connection to the PostgreSQL cluster is currently always made over the standard [Frontend/Backend Protocol](https://www.postgresql.org/docs/current/protocol.html) over TCP. When using secure TLS channels, system certificates located on {{ ydb-full-name }} servers are used.
 
 ### Example
 
-The following creates an external data source named `TestDataSource` for a PostgreSQL cluster at `192.168.1.2:5432`, with login `admin` and secret `test_secret`:
+The query below creates an external data source named `TestDataSource` to a PostgreSQL cluster with IP address `192.168.1.1` and port `5432`, with login `admin` and secret `test_secret`:
 
 ```yql
 CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
   SOURCE_TYPE="PostgreSQL",
-  LOCATION="192.168.1.2:5432",
+  LOCATION="192.168.1.1:5432",
   USE_TLS="TRUE",
   AUTH_METHOD="BASIC",
   LOGIN="admin",
@@ -98,30 +100,30 @@ CREATE EXTERNAL DATA SOURCE TestDataSource WITH (
 
 ## Connecting to S3 ({{ objstorage-name }}) {#object_storage}
 
-To create an external data source for a data bucket in S3 ({{ objstorage-name }}), create an `EXTERNAL DATA SOURCE` with:
+To create an external data source pointing to a bucket with data in S3 ({{ objstorage-name }}), create an `EXTERNAL DATA SOURCE` object and specify in the fields:
 
-- `SOURCE_TYPE` set to `ObjectStorage`;
-- `LOCATION` set to the network path to the bucket;
-- `AUTH_METHOD` set to `NONE`.
+- in the `SOURCE_TYPE` field, the value `ObjectStorage`;
+- in the `LOCATION` field, the network path to the bucket;
+- in the `AUTH_METHOD` field, the value `NONE`.
 
 {% note info %}
 
-Only buckets that do not require authentication are supported at this time.
+Currently, only buckets that are not protected by authentication are supported.
 
 {% endnote %}
 
-You can connect to any data source that exposes an [AWS S3](https://docs.aws.amazon.com/AmazonS3/latest/API/Welcome.html)-compatible API, including custom URLs for S3-compatible systems.
+Connection is possible to any data sources that support the [AWS S3](https://docs.aws.amazon.com/AmazonS3/latest/API/Welcome.html) access protocol. Any URLs to systems supporting this protocol can be specified.
 
-Typical `LOCATION` values for bucket `bucket`:
+Typical `LOCATION` field values when connecting to different systems for bucket `bucket`:
 
-| System | URL |
+| System name | URL |
 |------|-------|
 | {{ objstorage-name }} | `https://storage.yandexcloud.net/bucket/` |
 | AWS S3 | `http://s3.amazonaws.com/bucket/` |
 
 ### Example
 
-The following creates an external data source named `TestDataSource` pointing to folder `folder` in bucket `bucket` in {{ objstorage-name }}:
+The query below creates an external data source named `TestDataSource` pointing to directory `folder` in bucket `bucket` in {{ objstorage-name }}:
 
 ```yql
 CREATE EXTERNAL DATA SOURCE TestDataSource WITH (

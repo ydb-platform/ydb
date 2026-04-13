@@ -13,6 +13,7 @@ ENDIF()
 SRCS(
     compaction_ut.cpp
     compression_ut.cpp
+    dictionary_ut.cpp
 )
 
 PEERDIR(

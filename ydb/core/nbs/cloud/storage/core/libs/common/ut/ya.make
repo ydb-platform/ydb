@@ -13,6 +13,7 @@ SRCS(
     block_data_ref_ut.cpp
     context_ut.cpp
     guarded_sglist_ut.cpp
+    scheduler_ut.cpp
     sglist_iter_ut.cpp
     sglist_ut.cpp
 )

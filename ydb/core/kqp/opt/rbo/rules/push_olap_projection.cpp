@@ -81,26 +81,27 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
     ui32 projectionIndex = 0;
     TVector<TMapElement> newMapElements;
     for (ui32 mapIndex = 0; mapIndex < mapElements.size(); ++mapIndex) {
-        TMapElement newMapElement = mapElements[mapIndex];
+        TMapElement mapElement = mapElements[mapIndex];
         if (inMapIndices[projectionIndex] == mapIndex) {
             const auto& [colName, projection, replace, olapOperation] = projectionCandidates[projectionIndex++];
             Y_ENSURE(colName.find("__kqp_olap_projection") == TString::npos, "Multiple projections for same column is not supported");
             if (!notSuitableToPushMembers.count(colName)) {
                 olapOperationsForProjections.emplace_back(GetColName(colName), olapOperation);
-                // Replace an original expression with just a member.
+                // Replace old expression with new.
+                auto oldLambda = TCoLambda(mapElement.GetExpression().Node);
                 // clang-format off
                 auto newLambda = Build<TCoLambda>(ctx.ExprCtx, projection->Pos())
                     .Args({"arg"})
                     .Body<TExprApplier>()
-                        .Apply(TExprBase(replace))
-                        .With(TCoMember(replace).Struct(), "arg")
+                        .Apply(TExprBase(ctx.ExprCtx.ReplaceNode(oldLambda.Body().Ptr(), *projection, replace)))
+                        .With(oldLambda.Args().Arg(0), "arg")
                     .Build()
                 .Done().Ptr();
                 // clang-format on
-                newMapElement = TMapElement(mapElements[mapIndex].GetElementName(), TExpression(newLambda, &ctx.ExprCtx, &props));
+                mapElement = TMapElement(mapElements[mapIndex].GetElementName(), TExpression(newLambda, &ctx.ExprCtx, &props));
             }
         }
-        newMapElements.push_back(newMapElement);
+        newMapElements.push_back(mapElement);
     }
 
     if (olapOperationsForProjections.empty()) {
@@ -118,14 +119,22 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
         projections.push_back(olapProjection);
     }
 
-    auto olapProcess = TCoLambda(read->OlapFilterLambda);
+    const auto olapProcess =
+        read->OlapFilterLambda ? TCoLambda(read->OlapFilterLambda) :
+            // clang-format off
+            Build<TCoLambda>(ctx.ExprCtx, read->Pos)
+                .Args({"arg_0"})
+                .Body("arg_0")
+            .Done();
+            // clang-format on
+
     // clang-format off
     auto olapProjections = Build<TKqpOlapProjections>(ctx.ExprCtx, olapProcess.Pos())
         .Input(olapProcess.Body())
         .Projections()
             .Add(projections)
-            .Build()
-        .Done();
+        .Build()
+    .Done();
     // clang-format on
 
     // clang-format off
@@ -134,8 +143,8 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
         .Body<TExprApplier>()
             .Apply(olapProjections)
             .With(olapProcess.Args().Arg(0), "arg")
-            .Build()
-        .Done().Ptr();
+        .Build()
+    .Done().Ptr();
     // clang-format on
 
     YQL_CLOG(TRACE, ProviderKqp) << "Pushed OLAP projection: " << KqpExprToPrettyString(TExprBase(newLambda), ctx.ExprCtx);

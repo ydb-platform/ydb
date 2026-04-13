@@ -1,11 +1,14 @@
 #pragma once
 
 #include "direct_block_group.h"
-#include "partition_direct_service.h"
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
+
+#include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -20,25 +23,27 @@ public:
         ui32 regionIndex,
         TVector<IDirectBlockGroupPtr> directBlockGroups,
         ui32 syncRequestsBatchSize,
-        TDuration traceSamplePeriod);
+        ui64 vChunkSize,
+        TDuration writeHandoffDelay,
+        TDuration traceSamplePeriod,
+        NMonitoring::TDynamicCounterPtr counters);
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
-        NWilson::TTraceId traceId);
+        const NWilson::TTraceId& traceId);
 
     NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
-        NWilson::TTraceId traceId);
+        EWriteMode writeMode,
+        TDuration pbufferReplyTimeout,
+        ui64 lsn,
+        const NWilson::TTraceId& traceId);
 
 private:
     NActors::TActorSystem* const ActorSystem;
     TVector<std::shared_ptr<TVChunk>> VChunks;
-
-    // Striping
-    [[nodiscard]] size_t GetVChunkIndex(ui64 blockIndex) const;
-    [[nodiscard]] size_t GetVChunkOffset(ui64 blockIndex) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -71,7 +71,7 @@ ALTER TABLE episodes
   ADD INDEX title_index GLOBAL ON (title)
 ```
 
-Please note that this example uses [synchronous secondary index](../concepts/secondary_indexes.md#sync). Building an index in {{ ydb-short-name }} is an asynchronous operation. Even if the index creation query is successful, it is advisable to wait for some time because the index may not be ready for use immediately. You can manage asynchronous operations through the [CLI](../reference/ydb-cli/commands/secondary_index.md#add).
+Please note that this example uses [synchronous secondary index](../concepts/query_execution/secondary_indexes.md#sync). Building an index in {{ ydb-short-name }} is an asynchronous operation. Even if the index creation query is successful, it is advisable to wait for some time because the index may not be ready for use immediately. You can manage asynchronous operations through the [CLI](../reference/ydb-cli/commands/secondary_index.md#add).
 
 Let's build the query plan using the secondary index `title_index`. Secondary indexes to be used need to be explicitly specified in the `VIEW` clause.
 

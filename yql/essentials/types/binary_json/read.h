@@ -37,7 +37,7 @@ public:
      *
      * @param offset Offset to the beginning of TSEntry
      */
-    const TStringBuf ReadString(ui32 offset) const;
+    TStringBuf ReadString(ui32 offset) const;
 
     /**
      * @brief Reads number from Number index
@@ -150,7 +150,7 @@ public:
     /**
      * @brief Get value corresponding to given key in object
      */
-    TMaybe<TEntryCursor> Lookup(const TStringBuf key) const;
+    TMaybe<TEntryCursor> Lookup(TStringBuf key) const;
 
     /**
      * @brief Get iterator to object key-value pairs

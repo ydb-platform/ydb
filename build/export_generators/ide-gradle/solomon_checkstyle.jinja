@@ -1,0 +1,23 @@
+{%- if solomon_checkstyle and not(proto_template) -%}
+{# empty line #}
+checkstyle {
+    toolVersion = "{{ ver_checkstyle_tool }}"
+    configFile = File("$arcadia_root/solomon/checkstyle.xml")
+}
+
+tasks.withType<Checkstyle>() {
+    exclude(
+        "**/codegen.collect/**",
+        "**/generated/**"
+    )
+}
+
+tasks.named("compileJava") {
+    finalizedBy("checkstyleMain")
+}
+
+tasks.named("compileTestJava") {
+    finalizedBy("checkstyleTest")
+}
+{# empty line #}
+{%- endif -%}

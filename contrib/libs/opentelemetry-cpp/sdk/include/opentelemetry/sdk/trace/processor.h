@@ -29,6 +29,13 @@ class Recordable;
 class OPENTELEMETRY_EXPORT SpanProcessor
 {
 public:
+  SpanProcessor() = default;
+
+  SpanProcessor(const SpanProcessor &)            = delete;
+  SpanProcessor(SpanProcessor &&)                 = delete;
+  SpanProcessor &operator=(const SpanProcessor &) = delete;
+  SpanProcessor &operator=(SpanProcessor &&)      = delete;
+
   virtual ~SpanProcessor() = default;
 
   /**

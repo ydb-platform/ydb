@@ -1,9 +1,12 @@
 #pragma once
 
+#include <ydb/core/nbs/cloud/blockstore/config/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/public.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/startable.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_pool.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/public.h>
 
 #include <ydb/core/protos/config.pb.h>
@@ -23,6 +26,13 @@ struct TNbsService: public IStartable
     TVHostStatsSimplePtr VHostStats;
     NVhost::TVhostCallbacks VhostCallbacks;
     NKikimrConfig::TNbsConfig Config;
+    TStorageConfigPtr StorageConfig;
+    TExecutorPool ExecutorPool;
+
+    // Shared across all disks for write hand-off deadlines (wall clock).
+    const ITimerPtr Timer;
+    // Single scheduler thread for the whole NBS service and all partitions.
+    const ISchedulerPtr Scheduler;
 
     explicit TNbsService(const NKikimrConfig::TNbsConfig& config);
 

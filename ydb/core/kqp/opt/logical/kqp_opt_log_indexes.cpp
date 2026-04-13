@@ -1,3 +1,4 @@
+#include <ydb/core/base/json_index.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -325,8 +326,23 @@ struct TReadMatch {
         YQL_ENSURE(tableDesc.Metadata);
         auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
         if (indexDesc->Type != TIndexDescription::EType::GlobalFulltextPlain
-            && indexDesc->Type != TIndexDescription::EType::GlobalFulltextRelevance
-            && indexDesc->Type != TIndexDescription::EType::GlobalJson) {
+            && indexDesc->Type != TIndexDescription::EType::GlobalFulltextRelevance) {
+            return {};
+        }
+
+        return read;
+    }
+
+    static TReadMatch MatchJsonRead(const TExprBase& node, const TKqpOptimizeContext& kqpCtx) {
+        auto read = TReadMatch::Match(node, kqpCtx);
+        if (!read || read.Index().Value().empty()) {
+            return {};
+        }
+
+        const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
+        YQL_ENSURE(tableDesc.Metadata);
+        auto [_, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
+        if (indexDesc->Type != TIndexDescription::EType::GlobalJson) {
             return {};
         }
 
@@ -1857,6 +1873,133 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
         .Lambda(NewLambdaFrom(ctx, flatMap.Lambda().Pos(), result.Replaces, flatMap.Lambda().Args().Ref(), newLambdaBody.Body()))
         .Done();
     return res;
+}
+
+// Parses jsonPathStr, collects search tokens via CollectJsonPath and builds TKqpReadTableFullTextIndexSettings
+std::optional<TKqpReadTableFullTextIndexSettings> BuildFullTextSettingsFromJsonPath(const TString& jsonPathStr, const TExprBase& node, TExprContext& ctx) {
+    NYql::TIssues parseIssues;
+    const auto jsonPath = NYql::NJsonPath::ParseJsonPath(jsonPathStr, parseIssues, 1);
+    if (!parseIssues.Empty()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Failed to parse jsonpath expression: " << parseIssues.ToOneLineString()));
+        return std::nullopt;
+    }
+
+    auto collectResult = NJsonIndex::CollectJsonPath(jsonPath, NJsonIndex::ECallableType::JsonExists);
+    if (collectResult.IsError()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Failed to extract search terms from jsonpath expression: " << collectResult.GetError().GetMessage()));
+        return std::nullopt;
+    }
+
+    if (collectResult.GetTokens().empty()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Failed to extract search terms from jsonpath expression, no tokens found"));
+        return std::nullopt;
+    }
+
+    TVector<TExprNode::TPtr> tokenNodes;
+    tokenNodes.reserve(collectResult.GetTokens().size());
+    for (const auto& token : collectResult.GetTokens()) {
+        tokenNodes.push_back(Build<TCoString>(ctx, node.Pos()).Literal().Build(token).Done().Ptr());
+    }
+
+    TStringBuf defaultOperator = collectResult.GetTokensMode() == NJsonIndex::TCollectResult::ETokensMode::Or ? "or" : "and";
+
+    auto settings = TKqpReadTableFullTextIndexSettings{};
+    settings.SetDefaultOperator(Build<TCoString>(ctx, node.Pos()).Literal().Build(defaultOperator).Done().Ptr());
+    settings.SetMinimumShouldMatch(Build<TCoString>(ctx, node.Pos()).Literal().Build("").Done().Ptr());
+    settings.SetTokens(ctx.NewList(node.Pos(), std::move(tokenNodes)));
+    return settings;
+}
+
+TMaybeNode<TExprBase> KqpRewriteFlatMapOverJsonRead(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    if (!node.Maybe<TCoFlatMap>()) {
+        return node;
+    }
+
+    auto flatMap = node.Maybe<TCoFlatMap>().Cast();
+
+    auto read = TReadMatch::MatchJsonRead(flatMap.Input(), kqpCtx);
+    if (!read) {
+        return node;
+    }
+
+    const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
+    YQL_ENSURE(tableDesc.Metadata);
+    auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
+    if (indexDesc->Type != TIndexDescription::EType::GlobalJson) {
+        return {};
+    }
+
+    auto body = flatMap.Lambda().Body();
+    if (!body.Maybe<TCoOptionalIf>()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Expected OptionalIf in lambda body"));
+        return {};
+    }
+
+    auto optionalIf = body.Maybe<TCoOptionalIf>().Cast();
+    if (!optionalIf.Predicate().Maybe<TCoCoalesce>()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Expected Coalesce in predicate"));
+        return {};
+    }
+
+    auto coalesce = optionalIf.Predicate().Maybe<TCoCoalesce>().Cast();
+    if (!coalesce.Predicate().Maybe<TCoJsonExists>()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Expected JsonExists in predicate"));
+        return {};
+    }
+
+    auto jsonExists = coalesce.Predicate().Maybe<TCoJsonExists>().Cast();
+
+    if (!jsonExists.Json().Maybe<TCoMember>()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Expected Member in Json"));
+        return {};
+    }
+
+    if (!jsonExists.JsonPath().Maybe<TCoUtf8>()) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Expected Utf8 in JsonPath"));
+        return {};
+    }
+
+    auto jsonColumnName = jsonExists.Json().Maybe<TCoMember>().Cast().Name().StringValue();
+    auto jsonPathStr = jsonExists.JsonPath().Maybe<TCoUtf8>().Cast().Literal().StringValue();
+
+    const auto& variables = jsonExists.Variables().Ref();
+    if (!variables.GetTypeAnn() || variables.GetTypeAnn()->GetKind() != ETypeAnnotationKind::EmptyDict) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+            TStringBuilder() << "Variables are not supported at the moment"));
+        return {};
+    }
+
+    // Compile jsonpath to search tokens at query compile time to surface parse errors
+    auto settings = BuildFullTextSettingsFromJsonPath(jsonPathStr, node, ctx);
+    if (!settings) {
+        return {};
+    }
+
+    auto searchColumns = Build<TCoAtomList>(ctx, node.Pos())
+        .Add(Build<TCoAtom>(ctx, node.Pos()).Value(jsonColumnName).Done())
+        .Done();
+
+    auto newInput = Build<TKqlReadTableFullTextIndex>(ctx, node.Pos())
+        .Table(read.Table())
+        .Index(read.Index())
+        .Columns(read.Columns())
+        .Query<TExprList>().Build()
+        .QueryColumns(searchColumns.Ptr())
+        .Settings(settings->BuildNode(ctx, node.Pos()))
+        .Done();
+
+    return Build<TCoFlatMap>(ctx, read.Pos())
+        .Input(newInput)
+        .Lambda(flatMap.Lambda())
+        .Done();
 }
 
 // The index and main table have same number of rows, so we can push a copy of TCoTopSort or TCoTake

@@ -11,6 +11,14 @@
 
 namespace NYdb::inline Dev {
 
+namespace NMetrics {
+    class IMetricRegistry;
+} // namespace NMetrics
+
+namespace NTrace {
+    class ITraceProvider;
+} // namespace NTrace
+
 class IConnectionsParams {
 public:
     virtual ~IConnectionsParams() = default;
@@ -38,6 +46,8 @@ public:
     virtual uint64_t GetMaxOutboundMessageSize() const = 0;
     virtual uint64_t GetMaxMessageSize() const = 0;
     virtual std::shared_ptr<IExecutor> GetExecutor() const = 0;
+    virtual std::shared_ptr<NMetrics::IMetricRegistry> GetExternalMetricRegistry() const = 0;
+    virtual std::shared_ptr<NTrace::ITraceProvider> GetTraceProvider() const = 0;
 };
 
 } // namespace NYdb

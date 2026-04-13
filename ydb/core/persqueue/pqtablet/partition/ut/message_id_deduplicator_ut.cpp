@@ -1,8 +1,11 @@
 #include <ydb/core/persqueue/common/partition_id.h>
 #include <ydb/core/persqueue/pqtablet/partition/message_id_deduplicator.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/protos/pqdata_mlp.pb.h>
 
 #include <library/cpp/testing/gtest/gtest.h>
+
+#include <util/string/builder.h>
 
 using namespace NKikimr::NPQ;
 
@@ -136,4 +139,3 @@ TEST(TDeduplicatorTest, AddManyMessages_SameTime_DifferentBucket) {
 
     scenario.AssertWALLoad();
 }
-

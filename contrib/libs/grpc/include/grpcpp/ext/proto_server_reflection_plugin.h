@@ -19,11 +19,15 @@
 #ifndef GRPCPP_EXT_PROTO_SERVER_REFLECTION_PLUGIN_H
 #define GRPCPP_EXT_PROTO_SERVER_REFLECTION_PLUGIN_H
 
+#include <memory>
+
 #include <grpcpp/impl/server_builder_plugin.h>
 #include <grpcpp/support/config.h>
 
 namespace grpc {
 class ProtoServerReflection;
+class ProtoServerReflectionBackend;
+class ProtoServerReflectionV1;
 class ServerInitializer;
 
 namespace reflection {
@@ -31,15 +35,17 @@ namespace reflection {
 class ProtoServerReflectionPlugin : public grpc::ServerBuilderPlugin {
  public:
   ProtoServerReflectionPlugin();
-  TString name() override;
+  ::TString name() override;
   void InitServer(ServerInitializer* si) override;
   void Finish(ServerInitializer* si) override;
-  void ChangeArguments(const TString& name, void* value) override;
+  void ChangeArguments(const ::TString& name, void* value) override;
   bool has_async_methods() const override;
   bool has_sync_methods() const override;
 
  private:
-  std::shared_ptr<grpc::ProtoServerReflection> reflection_service_;
+  std::shared_ptr<grpc::ProtoServerReflectionBackend> backend_;
+  std::shared_ptr<grpc::ProtoServerReflection> reflection_service_v1alpha_;
+  std::shared_ptr<grpc::ProtoServerReflectionV1> reflection_service_v1_;
 };
 
 /// Add proto reflection plugin to \a ServerBuilder.

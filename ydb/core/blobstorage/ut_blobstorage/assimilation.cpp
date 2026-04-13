@@ -30,6 +30,12 @@ void RunAssimilationTest(bool reverse) {
     size_t numBlobs = 1000 + RandomNumber(100'000u);
 
     runtime->WrapInActorContext(edge, [&] {
+        SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvStatus(TInstant::Max()));
+    });
+    auto ev = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvStatusResult>(edge, false);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrProto::OK);
+
+    runtime->WrapInActorContext(edge, [&] {
         for (size_t i = 0; i < numBlocks; ++i) {
             const ui64 tabletId = 1 + i;
             const ui32 generation = 1;

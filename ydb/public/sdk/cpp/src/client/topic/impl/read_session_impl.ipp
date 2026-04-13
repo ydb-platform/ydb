@@ -191,7 +191,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TInt
                                                               std::move(compressedMessages),
                                                               stream);
 
-                queue.ApplyCallbackToEventImpl(data, std::move(accumulator), deferred);
+                queue.ApplyCallbackToEventImpl(std::move(data), std::move(accumulator), deferred);
             } else {
                 moveToReadyQueue(std::move(front));
             }
@@ -2760,7 +2760,7 @@ bool TReadSessionEventsQueue<UseMigrationProtocol>::HasDataEventCallback() const
 }
 
 template <bool UseMigrationProtocol>
-void TReadSessionEventsQueue<UseMigrationProtocol>::ApplyCallbackToEventImpl(TADataReceivedEvent<UseMigrationProtocol>& data,
+void TReadSessionEventsQueue<UseMigrationProtocol>::ApplyCallbackToEventImpl(TADataReceivedEvent<UseMigrationProtocol>&& data,
                                                                              TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>&& eventsInfo,
                                                                              TDeferredActions<UseMigrationProtocol>& deferred)
 {
@@ -2856,11 +2856,14 @@ void TDataDecompressionInfo<UseMigrationProtocol>::Cleanup() {
 
     ui64 sourceSize = 0;
     ui64 messagesCount = 0;
-    while (!Tasks.empty()) {
-        const auto& task = Tasks.front();
-        sourceSize += task.AddedDataSize();
-        messagesCount += task.AddedMessagesCount();
-        Tasks.pop_front();
+    {
+        std::lock_guard lock(session->Lock);
+        while (!Tasks.empty()) {
+            const auto& task = Tasks.front();
+            sourceSize += task.AddedDataSize();
+            messagesCount += task.AddedMessagesCount();
+            Tasks.pop_front();
+        }
     }
 
     OnTaskCanceled(sourceSize, messagesCount);

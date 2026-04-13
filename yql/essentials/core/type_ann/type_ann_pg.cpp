@@ -49,6 +49,20 @@ bool AdjustPgUnknownType(TVector<const TItemExprType*>& outputItems, TExprContex
     return replaced;
 }
 
+// No need to infer optinality, becase PG-types are optional by default.
+TVector<TExprNode::TPtr> InferPgGroupRefTypes(const TExprNode& groupExprs, TExprContext& ctx) {
+    TVector<TExprNode::TPtr> types(Reserve(groupExprs.ChildrenSize()));
+
+    for (size_t i = 0; i < groupExprs.ChildrenSize(); ++i) {
+        const auto& g = *groupExprs.Child(i);
+        const auto& lambda = g.Tail();
+
+        types.emplace_back(ExpandType(g.Pos(), *lambda.GetTypeAnn(), ctx));
+    }
+
+    return types;
+}
+
 TExprNodePtr WrapWithPgCast(TExprNodePtr&& node, ui32 targetTypeId, TExprContext& ctx) {
     return ctx.Builder(node->Pos())
         .Callable("PgCast")
@@ -87,7 +101,7 @@ TExprNodePtr FindLeftCombinatorOfNthSetItem(const TExprNode* setItems, const TEx
             Y_ENSURE(0 <= sp);
         }
     }
-    Y_UNREACHABLE();
+    YQL_ENSURE(false, "Unreachable");
 }
 
 IGraphTransformer::TStatus InferPgCommonType(
@@ -437,7 +451,7 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
             } else if (const auto* typePtr = std::get_if<const NPg::TTypeDesc*>(&procOrType)) {
                 output = WrapWithPgCast(std::move(children[2]), (*typePtr)->TypeId, ctx.Expr);
             } else {
-                Y_UNREACHABLE();
+                YQL_ENSURE(false, "Unreachable");
             }
             return IGraphTransformer::TStatus::Repeat;
         } catch (const yexception& e) {
@@ -1884,7 +1898,7 @@ IGraphTransformer::TStatus PgTypeModWrapper(const TExprNode::TPtr& input, TExprN
     }
 
     if (pgType->GetName() == "interval" || pgType->GetName() == "_interval") {
-        if (mods.size() < 1) {
+        if (mods.empty()) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "At least one modifier is expected for pginterval"));
             return IGraphTransformer::TStatus::Error;
         }

@@ -18,7 +18,6 @@
 #include <util/digest/murmur.h>
 #include <util/digest/city.h>
 #include <util/digest/numeric.h>
-#include <util/string/cast.h>
 
 #include <openssl/sha.h>
 

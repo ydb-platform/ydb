@@ -156,17 +156,136 @@ curl_with_retry "${YDB_CLI_STORAGE_URL}/release/${YDB_CLI_VERSION}/${CURRENT_OS}
 
 chmod +x "${TMP_YDB}"
 # Check that all is ok, and print full version to stdout.
-${TMP_YDB} version || echo "Installation failed. Please contact support. System info: $(uname -a)"
+if ydb_full_version=$("${TMP_YDB}" version < /dev/null 2>&1); then
+    echo "${ydb_full_version} installed successfully."
+else
+    echo "Installation failed. Please contact support. System info: $(uname -a)"
+    exit 1
+fi
 
 mkdir -p "${YDB_CLI_INSTALL_PATH}/bin"
 YDB_CLI="${YDB_CLI_INSTALL_PATH}/bin/${YDB_CLI_BIN}"
 mv -f "${TMP_YDB}" "${YDB_CLI}"
 mkdir -p "${YDB_CLI_INSTALL_PATH}/install"
 
+COMPLETION_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/ydb"
+
+function generate_completion_files() {
+    mkdir -p "${COMPLETION_DIR}"
+
+    if "${YDB_CLI}" config completion bash < /dev/null > "${COMPLETION_DIR}/completion.bash.inc" 2>/dev/null; then
+        :
+    else
+        echo "Warning: failed to generate bash completion script"
+        rm -f "${COMPLETION_DIR}/completion.bash.inc"
+    fi
+
+    local zsh_completion
+    if zsh_completion=$("${YDB_CLI}" config completion zsh < /dev/null 2>/dev/null); then
+        {
+            printf '%s\n' 'if ! (( $+functions[compdef] )); then'
+            printf '%s\n' '  autoload -Uz compinit'
+            printf '%s\n' '  compinit'
+            printf '%s\n' 'fi'
+            printf '\n'
+            printf '%s\n' "${zsh_completion}"
+            printf '\n'
+            printf '%s\n' 'compdef _ydb ydb'
+        } > "${COMPLETION_DIR}/completion.zsh.inc"
+    else
+        echo "Warning: failed to generate zsh completion script"
+    fi
+}
+
+function bash_completion_installed() {
+    [ -f /usr/share/bash-completion/bash_completion ] && return 0
+    [ -f /etc/bash_completion ] && return 0
+    [ -f /opt/homebrew/etc/bash_completion ] && return 0
+    [ -f /usr/local/etc/bash_completion ] && return 0
+    return 1
+}
+
+function completion_already_in_rc() {
+    local rc_file="$1"
+    local inc_name="$2"
+    [ -f "${rc_file}" ] && grep -qF "ydb/${inc_name}" "${rc_file}"
+}
+
+function print_bash_completion_warning() {
+    local yellow="\033[33m"
+    local reset="\033[0m"
+    if ! bash_completion_installed; then
+        printf "${yellow}%s${reset}\n" "Warning: bash-completion does not seem to be installed. Shell completion requires it."
+    fi
+}
+
+function print_completion_instructions() {
+    local green="\033[32m"
+    local reset="\033[0m"
+    local src_zsh='_ydb_comp="${XDG_DATA_HOME:-$HOME/.local/share}/ydb/completion.zsh.inc" && [ -f "$_ydb_comp" ] && source "$_ydb_comp"'
+    local src_bash='_ydb_comp="${XDG_DATA_HOME:-$HOME/.local/share}/ydb/completion.bash.inc" && [ -f "$_ydb_comp" ] && source "$_ydb_comp"'
+    case "${SHELL_NAME}" in
+        zsh)
+            if completion_already_in_rc "${HOME}/.zshrc" "completion.zsh.inc"; then
+                return
+            fi
+            echo ""
+            printf "${green}%s${reset}\n" "(!) To enable tab completion for commands and options, run:"
+            echo ""
+            echo "  echo '${src_zsh}' >> ~/.zshrc"
+            echo ""
+            ;;
+        bash)
+            if completion_already_in_rc "${HOME}/.bashrc" "completion.bash.inc"; then
+                return
+            fi
+            echo ""
+            printf "${green}%s${reset}\n" "(!) To enable tab completion for commands and options, run:"
+            echo ""
+            echo "  echo '${src_bash}' >> ~/.bashrc"
+            echo ""
+            print_bash_completion_warning
+            ;;
+        *)
+            local show_bash=true
+            local show_zsh=true
+            if completion_already_in_rc "${HOME}/.bashrc" "completion.bash.inc"; then
+                show_bash=false
+            fi
+            if completion_already_in_rc "${HOME}/.zshrc" "completion.zsh.inc"; then
+                show_zsh=false
+            fi
+            if [ "${show_bash}" = "false" ] && [ "${show_zsh}" = "false" ]; then
+                return
+            fi
+            echo ""
+            printf "${green}%s${reset}\n" "(!) To enable tab completion for commands and options, run one of these:"
+            echo ""
+            if [ "${show_bash}" = "true" ]; then
+                echo "  bash:"
+                echo "    echo '${src_bash}' >> ~/.bashrc"
+                print_bash_completion_warning
+                echo ""
+            fi
+            if [ "${show_zsh}" = "true" ]; then
+                echo "  zsh:"
+                echo "    echo '${src_zsh}' >> ~/.zshrc"
+            fi
+            echo ""
+            ;;
+    esac
+}
+
+generate_completion_files
+if [ -f "${COMPLETION_DIR}/completion.bash.inc" ] || [ -f "${COMPLETION_DIR}/completion.zsh.inc" ]; then
+    print_completion_instructions
+fi
+
 case "${SHELL_NAME}" in
     bash | zsh)
         ;;
     *)
+        echo ""
         echo "ydb is installed to ${YDB_CLI}"
         exit 0
         ;;

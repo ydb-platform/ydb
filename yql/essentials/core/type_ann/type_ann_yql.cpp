@@ -6,6 +6,90 @@
 
 namespace NYql::NTypeAnnImpl {
 
+namespace {
+
+/*
+    Consider the following YQL fragment:
+    ```yql
+    GROUP BY
+        a,
+        GROUPING SETS (
+            (a, b),
+            (a),
+            ()
+        ),
+        ROLLUP (a, b)
+    ```
+
+    Here is corresponding "group_sets" option YQLs:
+    ```yqls
+    '(
+        '( '('"0")                           )
+        '( '('"0" '"1") '('"0") '()          )
+        '( '()          '('"0") '('"0" '"1") )
+    )
+    ```
+
+    Indexes are refered to "group_exprs" entries.
+*/
+
+template <class T>
+TVector<T> IntersectionOfSorted(const TVector<T>& lhs, const TVector<T>& rhs) {
+    Y_DEBUG_ABORT_UNLESS(std::ranges::is_sorted(lhs));
+    Y_DEBUG_ABORT_UNLESS(std::ranges::is_sorted(rhs));
+
+    TVector<T> sorted(Reserve(Max(lhs.size(), rhs.size())));
+    std::ranges::set_intersection(lhs, rhs, std::back_inserter(sorted));
+    return sorted;
+}
+
+template <class T>
+TVector<T> UnionOfSorted(const TVector<T>& lhs, const TVector<T>& rhs) {
+    Y_DEBUG_ABORT_UNLESS(std::ranges::is_sorted(lhs));
+    Y_DEBUG_ABORT_UNLESS(std::ranges::is_sorted(rhs));
+
+    TVector<T> sorted(Reserve(lhs.size() + rhs.size()));
+    std::ranges::set_union(lhs, rhs, std::back_inserter(sorted));
+    return sorted;
+}
+
+TVector<ui32> GroupingSortedNotNullIndexes(const TExprNode& grouping) {
+    TVector<ui32> indexes(Reserve(grouping.ChildrenSize()));
+    for (const auto& atom : grouping.Children()) {
+        indexes.emplace_back(FromString<ui32>(atom->Content()));
+    }
+
+    Sort(indexes);
+    return indexes;
+}
+
+TVector<ui32> GroupingSetSortedNotNullIndexes(const TExprNode& groupingSet) {
+    if (groupingSet.ChildrenSize() == 0) {
+        return {};
+    }
+
+    TVector<ui32> indexes = GroupingSortedNotNullIndexes(*groupingSet.Child(0));
+    for (size_t i = 1; i < groupingSet.ChildrenSize(); ++i) {
+        const auto& child = groupingSet.Child(i);
+
+        TVector<ui32> grouping = GroupingSortedNotNullIndexes(*child);
+        indexes = IntersectionOfSorted(indexes, grouping);
+    }
+
+    return indexes;
+}
+
+TVector<ui32> GroupingSetsSortedNotNullIndexes(const TExprNode& groupingSets) {
+    TVector<ui32> indexes;
+    for (const auto& child : groupingSets.Children()) {
+        TVector<ui32> groupingSet = GroupingSetSortedNotNullIndexes(*child);
+        indexes = UnionOfSorted(indexes, groupingSet);
+    }
+    return indexes;
+}
+
+} // namespace
+
 IGraphTransformer::TStatus PromoteYqlAggOptions(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx)
 {
@@ -50,6 +134,39 @@ IGraphTransformer::TStatus PromoteYqlAggOptions(
     options = AddSetting(*options, options->Pos(), "yql_agg_promoted", /*value=*/nullptr, ctx.Expr);
     output = ctx.Expr.ChangeChild(*input, input->ChildrenSize() - 1, std::move(options));
     return IGraphTransformer::TStatus::Repeat;
+}
+
+TVector<TExprNode::TPtr> InferYqlGroupRefTypes(
+    const TExprNode& groupExprs, const TExprNode& groupSets, TExprContext& ctx)
+{
+    TVector<TExprNode::TPtr> types(Reserve(groupExprs.ChildrenSize()));
+
+    const TVector<ui32> notNulls = GroupingSetsSortedNotNullIndexes(groupSets);
+    const auto isNullable = [&](ui32 index) -> bool {
+        return !std::ranges::binary_search(notNulls, index);
+    };
+
+    for (ui32 i = 0; i < groupExprs.ChildrenSize(); ++i) {
+        const auto& g = *groupExprs.Child(i);
+        const auto& lambda = g.Tail();
+        const TTypeAnnotationNode& typeAnn = *lambda.GetTypeAnn();
+
+        TExprNode::TPtr type = ExpandType(g.Pos(), typeAnn, ctx);
+
+        if (isNullable(i) && !typeAnn.IsOptionalOrNull()) {
+            // clang-format off
+            type = ctx.Builder(g.Pos())
+                .Callable("OptionalType")
+                    .Add(0, std::move(type))
+                .Seal()
+                .Build();
+            // clang-format on
+        }
+
+        types.emplace_back(std::move(type));
+    }
+
+    return types;
 }
 
 IGraphTransformer::TStatus YqlAggFactoryWrapper(

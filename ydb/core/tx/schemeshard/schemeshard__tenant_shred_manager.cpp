@@ -571,7 +571,7 @@ struct TSchemeShard::TTxCancelShredShards : public TSchemeShard::TRwTxBase {
 
     TTxCancelShredShards(TSelf *self, const std::vector<TShardIdx>& shredShards)
         : TRwTxBase(self)
-        , ShredShards(std::move(shredShards))
+        , ShredShards(shredShards)
     {}
 
     TTxType GetTxType() const override { return TXTYPE_CANCEL_SHARDS_SHRED; }

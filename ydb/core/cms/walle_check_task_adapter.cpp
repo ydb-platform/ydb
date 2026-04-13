@@ -41,8 +41,11 @@ public:
         if (State->ScheduledRequests.contains(task.RequestId)) {
             auto &req = State->ScheduledRequests.find(task.RequestId)->second;
 
-            for (auto &action : req.Request.GetActions())
+            for (auto &action : req.Request.GetActions()) {
                 *info.AddHosts() = action.GetHost();
+                for (auto &device : action.GetDevices())
+                    *info.AddDevices() = device;
+            }
 
             TAutoPtr<TEvCms::TEvCheckRequest> event = new TEvCms::TEvCheckRequest;
             event->Record.SetUser(WALLE_CMS_USER);
@@ -53,8 +56,13 @@ public:
             Become(&TThis::StateWork, ctx, TDuration::Seconds(10), new TEvents::TEvWakeup());
         } else {
             for (auto &id : task.Permissions) {
-                if (State->Permissions.contains(id))
-                    *info.AddHosts() = State->Permissions.find(id)->second.Action.GetHost();
+                if (State->Permissions.contains(id)) {
+                    const auto &action = State->Permissions.find(id)->second.Action;
+                    *info.AddHosts() = action.GetHost();
+
+                    for (auto &device : action.GetDevices())
+                        *info.AddDevices() = device;
+                }
             }
 
             if (!info.HostsSize()) {

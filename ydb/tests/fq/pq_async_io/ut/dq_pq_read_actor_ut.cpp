@@ -484,7 +484,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
     }
 
     Y_UNIT_TEST_F(TestRescaling, TFixture) {
-        const TString topicName = "ReadFromTopic";
+        const TString topicName = "TestRescaling";
         PQCreateStream(topicName);
         InitSource(topicName);
 

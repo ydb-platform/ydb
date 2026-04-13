@@ -499,6 +499,7 @@ private:
 
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
+        *ActorAlive = false;
         ClearMkqlData();
 
         for (auto& clusterState : Clusters) {
@@ -924,8 +925,12 @@ private:
             .Subscribe([
                 index = clusterState.Index,
                 actorSystem = TActivationContext::ActorSystem(),
-                selfId = SelfId()](const auto& describeTopicFuture)
+                selfId = SelfId(),
+                actorAlive = ActorAlive](const auto& describeTopicFuture)
             {
+                if (!*actorAlive) {
+                    return;
+                }
                 try {
                     auto& describeTopic = describeTopicFuture.GetValue();
                     if (!describeTopic.IsSuccess()) {
@@ -1129,6 +1134,7 @@ private:
     TInstant LastActiveTime = TInstant::Now();
     bool CaNotified = false;
     const TDuration CheckPartitionCountPeriod;
+    std::shared_ptr<std::atomic<bool>> ActorAlive = std::make_shared<std::atomic<bool>>(true);
 };
 
 ui32 ExtractPartitionsFromParams(

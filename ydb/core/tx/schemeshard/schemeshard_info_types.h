@@ -941,6 +941,9 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         return *TTLColumnId;
     }
 
+    // todo(flown4qqqq): rewrite it into fast way
+    ui32 GetColumnIdByNameSlow(const TString& columnName);
+
 private:
     using TPartitionsVec = TVector<TTableShardInfo*>;
 

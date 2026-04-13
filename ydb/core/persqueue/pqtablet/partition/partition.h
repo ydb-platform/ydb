@@ -631,12 +631,12 @@ private:
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
             hFuncTraced(TEvPQ::TEvRunCompaction, Handle);
             hFuncTraced(TEvPQ::TEvForceCompaction, Handle);
-            hFuncTraced(TEvPQ::TEvMLPReadRequest, Handle);
-            hFuncTraced(TEvPQ::TEvMLPCommitRequest, Handle);
-            hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
-            hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
-            hFuncTraced(TEvPQ::TEvMLPPurgeRequest, Handle);
-            hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPReadRequest, HandleOnInit);
+            hFuncTraced(TEvPQ::TEvMLPCommitRequest, HandleOnInit);
+            hFuncTraced(TEvPQ::TEvMLPUnlockRequest, HandleOnInit);
+            hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, HandleOnInit);
+            hFuncTraced(TEvPQ::TEvMLPPurgeRequest, HandleOnInit);
+            hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, HandleOnInit);
             hFuncTraced(TEvPQ::TEvMLPConsumerState, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerMonRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerStatus, Handle);

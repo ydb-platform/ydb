@@ -111,6 +111,7 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
 
         env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
 
+        // todo(flown4qqqq)
         Sleep(TDuration::Seconds(4));
 
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, tablePath), 0u);

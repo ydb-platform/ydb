@@ -373,6 +373,12 @@ void TLlvmSettings::Fill(NYql::TKikimrConfiguration::TPtr config, const NKikimrK
     }
 }
 
+void TLlvmSettings::DisableByDefault() {
+    if (!UseLlvmExternalDirective) {
+        UseLlvmExternalDirective = false;
+    }
+}
+
 bool TLlvmSettings::GetUseLlvm(const NYql::NDqProto::TProgram::TSettings& kqpSettingsProto) const {
     TStagePredictor stagePredictor;
     stagePredictor.DeserializeFromKqpSettings(kqpSettingsProto);

@@ -3032,7 +3032,7 @@ void TKqpTasksGraph::ResolveShards(TGraphMeta::TShardToNodeMap&& shardsToNodes) 
     }
 }
 
-size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
+size_t TKqpTasksGraph::BuildAllTasks(const std::optional<TLlvmSettings>& llvmSettings,
     const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats)
 {
     size_t sourceScanPartitionsCount = 0;

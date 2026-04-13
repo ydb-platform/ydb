@@ -142,6 +142,8 @@ private:
 public:
     void Fill(TIntrusivePtr<NYql::TKikimrConfiguration> config, const NKikimrKqp::EQueryType qType);
 
+    void DisableByDefault();
+
     bool GetUseLlvm(const NYql::NDqProto::TProgram::TSettings& kqpSettingsProto) const;
 };
 

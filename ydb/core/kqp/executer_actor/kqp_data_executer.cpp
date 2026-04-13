@@ -61,6 +61,7 @@ public:
         const TActorId& creator, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
         const TGUCSettings::TPtr& GUCSettings,
+        const std::optional<TLlvmSettings>& llvmSettings,
         TPartitionPrunerConfig partitionPrunerConfig,
         const TShardIdToTableInfoPtr& shardIdToTableInfo,
         const IKqpTransactionManagerPtr& txManager,
@@ -73,12 +74,17 @@ public:
             database, userToken, std::move(formatsSettings), counters,
             executerConfig, userRequestContext, statementResultIndex, TWilsonKqp::DataExecuter,
             "DataExecuter", bufferActorId, txManager, std::move(batchOperationSettings), channelService)
+        , LlvmSettings(llvmSettings)
         , ShardIdToTableInfo(shardIdToTableInfo)
         , ReadOnlyTx(IsReadOnlyTx())
         , WaitCAStatsTimeout(TDuration::MilliSeconds(executerConfig.TableServiceConfig.GetQueryLimits().GetWaitCAStatsTimeoutMs()))
         , QueryServiceConfig(queryServiceConfig)
         , Generation(generation)
     {
+        if (LlvmSettings) {
+            LlvmSettings->DisableByDefault();
+        }
+
         TasksGraph.GetMeta().AllowOlapDataQuery = executerConfig.TableServiceConfig.GetAllowOlapDataQuery();
         Target = creator;
 
@@ -628,7 +634,10 @@ private:
         size_t sourceScanPartitionsCount = 0;
 
         if (!graphRestored) {
-            sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get());
+            if (LlvmSettings && !AppData()->FeatureFlags.GetEnableLlvmUsageForQueryService()) {
+                LlvmSettings.reset();
+            }
+            sourceScanPartitionsCount = TasksGraph.BuildAllTasks(LlvmSettings, ResourcesSnapshot, Stats.get());
         }
 
         TIssue validateIssue;
@@ -1219,6 +1228,7 @@ private:
     }
 
 private:
+    std::optional<TLlvmSettings> LlvmSettings;
     TShardIdToTableInfoPtr ShardIdToTableInfo;
 
     bool HasExternalSources = false;
@@ -1252,13 +1262,13 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
+    const std::optional<TLlvmSettings>& llvmSettings, TPartitionPrunerConfig partitionPrunerConfig, const TShardIdToTableInfoPtr& shardIdToTableInfo,
     const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
     TMaybe<NBatchOperations::TSettings> batchOperationSettings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, ui64 generation,
     std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
 {
     return new TKqpDataExecuter(std::move(request), database, userToken, std::move(formatsSettings), counters, executerConfig,
-        std::move(asyncIoFactory), creator, userRequestContext, statementResultIndex, federatedQuerySetup, GUCSettings,
+        std::move(asyncIoFactory), creator, userRequestContext, statementResultIndex, federatedQuerySetup, GUCSettings, llvmSettings,
         std::move(partitionPrunerConfig), shardIdToTableInfo, txManager, bufferActorId, std::move(batchOperationSettings), queryServiceConfig, generation,
         channelService);
 }

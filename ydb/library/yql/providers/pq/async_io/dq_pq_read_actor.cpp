@@ -139,7 +139,7 @@ struct TEvPrivate {
     };
 
     struct TEvCheckPartitionCount : public TEventLocal<TEvCheckPartitionCount, EvCheckPartitionCount> {
-        TEvCheckPartitionCount(ui32 clusterIndex)
+        explicit TEvCheckPartitionCount(ui32 clusterIndex)
             : ClusterIndex(clusterIndex)
         {}
         const ui32 ClusterIndex = 0;

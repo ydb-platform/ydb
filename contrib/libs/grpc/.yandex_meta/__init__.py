@@ -135,7 +135,6 @@ grpc = CMakeNinjaNixProject(
         "src/proto/grpc/health/v1/ya.make",
         "src/proto/grpc/reflection/v1/ya.make",
         "src/proto/grpc/reflection/v1alpha/ya.make",
-        "src/proto/grpc/status/ya.make",
     ],
     ignore_targets=[
         "check_epollexclusive",
@@ -208,7 +207,6 @@ grpc = CMakeNinjaNixProject(
         "src/proto/grpc/channelz/**/*.proto",
         "src/proto/grpc/health/**/*.proto",
         "src/proto/grpc/reflection/**/*.proto",
-        "src/proto/grpc/status/**/*.proto",
     ],
     copy_sources_except=[
         # Proto library with testing services

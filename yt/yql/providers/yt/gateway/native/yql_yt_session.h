@@ -58,6 +58,9 @@ struct TSession: public TSessionBase {
     const TQContext QContext_;
     const IYtFullCapture::TPtr FullCapture_;
 
+    TMutex SecureTmpFolderPreparationsMutex_;
+    THashMap<TString, NThreading::TFuture<void>> SecureTmpFolderPreparationsByCluster_;
+
 private:
     void StopQueueAndTracker();
     TAsyncQueue::TPtr QueueOwned_;

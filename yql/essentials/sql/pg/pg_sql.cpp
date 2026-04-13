@@ -3473,7 +3473,7 @@ public:
         }
 
         TCaseBranch result;
-        result.Pred = VL(&preds[0], preds.size());
+        result.Pred = VL(preds.data(), preds.size());
         result.Value = L(A("If"), left.Pred, left.Value, right.Value);
         return result;
     }

@@ -1073,6 +1073,10 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
     const bool addBearerToToken = settings.GetAddBearerToToken();
+    const auto configuredReadBufferBytes = settings.GetReadSessionBufferBytes();
+    const i64 effectiveReadBufferBytes = configuredReadBufferBytes
+        ? static_cast<i64>(configuredReadBufferBytes)
+        : bufferSize;
 
     TDqPqReadActor* actor = new TDqPqReadActor(
         inputIndex,
@@ -1087,7 +1091,7 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         computeActorId,
         counters,
-        settings.GetReadSessionBufferBytes() ? settings.GetReadSessionBufferBytes() : bufferSize,
+        effectiveReadBufferBytes,
         pqGateway,
         topicPartitionsCount,
         enableStreamingQueriesCounters,

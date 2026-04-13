@@ -382,6 +382,7 @@ TWorkloadCommandRun::TWorkloadCommandRun(NYdbWorkload::TWorkloadParams& params, 
     , Params(params)
     , Type(workload.Type)
 {
+    Aliases = workload.Aliases;
 }
 
 int TWorkloadCommandRun::Run(TConfig& config) {

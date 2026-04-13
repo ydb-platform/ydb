@@ -107,7 +107,7 @@ CREATE EXTERNAL DATA SOURCE s3_source WITH (
 
 Где:
 
-- `<s3_endpoint>` — URL S3-хранилища, например `https://storage.yandexcloud.net/<bucket>` для Yandex Cloud.
+- `<s3_endpoint>` — URL S3-хранилища, например `https://storage.yandexcloud.net/<bucket>/` для Yandex Cloud.
 
 ### Создание потокового запроса
 

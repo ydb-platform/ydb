@@ -121,6 +121,13 @@ TSplittedYsonByColumnGroups SplitYsonByColumnGroupsRaw(TStringBuf tableContent, 
     const auto& rows = parser.GetAllColumnsRows();
     const ui64 numRows = rows.size();
 
+    if (numRows > 0) {
+        std::vector<TString> firstRowCols;
+        for (const auto& col : rows[0].Columns) {
+            firstRowCols.push_back(TString(col.Name));
+        }
+    }
+
     // Resolve group index for each column (one hash lookup per column),
     // compute exact byte sizes per group buffer.
     // Cache resolved group indices to avoid rehashing.
@@ -286,6 +293,13 @@ TString GetNeededColumnsFromYsonData(const TString& ysonInputs, const std::vecto
 }
 
 TString GetYsonUnion(const std::vector<TString>& ysonInputs, const std::vector<TString>& neededColumns) {
+    if (ysonInputs.empty()) {
+        return {};
+    }
+    if (ysonInputs.size() == 1 && neededColumns.empty()) {
+        return ysonInputs[0];
+    }
+
     TStringStream unionYsonStream;
     TBinaryYsonWriter writer(&unionYsonStream, NYson::EYsonType::ListFragment);
     NYT::NYson::IYsonConsumer* outputConsumer = &writer;
@@ -310,8 +324,8 @@ TString GetYsonUnion(const std::vector<TString>& ysonInputs, const std::vector<T
             if (isCurrentColumnNeeeded) {
                 outputConsumer->OnBeginList();
                 ++listDepth;
-                break;
             }
+            break;
 
         case NYsonPull::EEventType::EndList:
             if (isCurrentColumnNeeeded) {
@@ -345,7 +359,7 @@ TString GetYsonUnion(const std::vector<TString>& ysonInputs, const std::vector<T
 
         case NYsonPull::EEventType::Key:
             if (mapDepth == 1) {
-                isCurrentColumnNeeeded = columnsToKeep.contains(event.AsString()) || columnsToKeep.empty(); // If columns to keep is not set, we add all columns.
+                isCurrentColumnNeeeded = columnsToKeep.contains(event.AsString()) || columnsToKeep.empty();
             }
             if (isCurrentColumnNeeeded) {
                 outputConsumer->OnKeyedItem(event.AsString());
@@ -359,7 +373,6 @@ TString GetYsonUnion(const std::vector<TString>& ysonInputs, const std::vector<T
             const auto& scalar = event.AsScalar();
             if (listDepth > 0) {
                 outputConsumer->OnListItem();
-                // YsonPull doesn't have OnListItem() method needed for sax parser, so call it manually.
             }
             switch (scalar.Type()) {
             case NYsonPull::EScalarType::Entity:
@@ -389,10 +402,10 @@ TString GetYsonUnion(const std::vector<TString>& ysonInputs, const std::vector<T
             break;
         }
 
-        case NYsonPull::EEventType::EndStream: {
+        case NYsonPull::EEventType::EndStream:
             ++finishedReadersNum;
             ++readerIndex;
-        }
+            break;
 
         case NYsonPull::EEventType::BeginAttributes:
         case NYsonPull::EEventType::EndAttributes:

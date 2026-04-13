@@ -188,6 +188,17 @@ private:
             localSortTaskParams.Output.PartId = newPartId;
             result.PartIdsToUpdate[localSortTaskParams.Output.TableId].emplace_back(newPartId);
 
+            for (const auto& input : task.Inputs) {
+                if (auto* fmrInput = std::get_if<TFmrTableInputRef>(&input)) {
+                    YQL_CLOG(INFO, FastMapReduce) << "Sort.LocalSort task input: table=" << fmrInput->TableId
+                        << " columnGroups=" << (fmrInput->SerializedColumnGroups.empty() ? "(empty)" : fmrInput->SerializedColumnGroups.substr(0, 200))
+                        << " ranges=" << fmrInput->TableRanges.size();
+                }
+            }
+            YQL_CLOG(INFO, FastMapReduce) << "Sort.LocalSort task output: table=" << localSortTaskParams.Output.TableId
+                << " partId=" << localSortTaskParams.Output.PartId
+                << " columnGroups=" << (localSortTaskParams.Output.SerializedColumnGroups.empty() ? "(empty)" : localSortTaskParams.Output.SerializedColumnGroups.substr(0, 200));
+
             GeneratedTasks_.push_back(TGeneratedTaskInfo{
                 .TaskType = ETaskType::LocalSort,
                 .TaskParams = std::move(localSortTaskParams)
@@ -241,6 +252,9 @@ private:
             input.SortOrder = sortOperationParams.Output.SortOrder;
             input.SortColumns = sortOperationParams.Output.SortColumns;
 
+            YQL_CLOG(INFO, FastMapReduce) << "Sort.DoSortedPartition: input table=" << input.FmrTableId.Id
+                << " columnGroups=" << (input.SerializedColumnGroups.empty() ? "(empty)" : input.SerializedColumnGroups.substr(0, 200));
+
             inputTables.push_back(input);
         }
 
@@ -279,7 +293,8 @@ private:
             if (auto ytTable = std::get_if<TYtTableRef>(&table)) {
                 ytInputTables.emplace_back(*ytTable);
             } else {
-                fmrInputTables.emplace_back(std::get<TFmrTableRef>(table));
+                auto& fmrTable = std::get<TFmrTableRef>(table);
+                fmrInputTables.emplace_back(fmrTable);
             }
         }
 

@@ -2119,6 +2119,10 @@ public:
     TBuildIndexScanManager& GetBuildIndexScanManager() { return BuildIndexScanManager; }
     const TBuildIndexScanManager& GetBuildIndexScanManager() const { return BuildIndexScanManager; }
 
+    void ClearPendingBuildIndexFinalResponse(ui64 buildId) {
+        PendingBuildIndexFinalResponses.erase(buildId);
+    }
+
     TCdcStreamHeartbeatManager& GetCdcStreamHeartbeatManager() { return CdcStreamHeartbeatManager; }
     const TCdcStreamHeartbeatManager& GetCdcStreamHeartbeatManager() const { return CdcStreamHeartbeatManager; }
     void EmitHeartbeats();
@@ -2835,6 +2839,7 @@ private:
     TCdcStreamHeartbeatManager CdcStreamHeartbeatManager;
     TMultiTxIdManager MultiTxIdManager;
     TBuildIndexScanManager BuildIndexScanManager;
+    THashMap<ui64, THolder<TEvDataShard::TEvBuildIndexProgressResponse>> PendingBuildIndexFinalResponses;
 
     TReplicationSourceOffsetsServerLink ReplicationSourceOffsetsServer;
 
@@ -3499,6 +3504,14 @@ protected:
         }
         THolder<TEvDataShard::TEvStateChanged> ev(new TEvDataShard::TEvStateChanged(ctx.SelfID, TabletID(), state));
         NTabletPipe::SendData(ctx, StateReportPipe, ev.Release());
+    }
+
+    void ResendPendingBuildIndexFinalResponses(const TActorContext& ctx) {
+        for (auto& [buildId, response] : PendingBuildIndexFinalResponses) {
+            auto copy = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+            copy->Record = response->Record;
+            NTabletPipe::SendData(ctx, StateReportPipe, copy.Release());
+        }
     }
 
     TDuration GetStatsReportInterval(const TAppData&) const;

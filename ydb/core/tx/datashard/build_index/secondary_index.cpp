@@ -529,6 +529,7 @@ public:
         if (const auto* old = scans.FindPtr(buildId)) {
             if (old->SeqNoGeneration != seqNoGeneration || old->SeqNoRound != seqNoRound) {
                 Self->BuildIndexScanManager.PersistRemove(db, buildId, old->SeqNoGeneration, old->SeqNoRound);
+                Self->PendingBuildIndexFinalResponses.erase(buildId);
             }
         }
 
@@ -561,16 +562,16 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) {
         auto& record = Ev->Get()->Record;
-        const ui64 buildId = record.GetId();
+        BuildId = record.GetId();
         const ui64 seqNoGeneration = record.GetRequestSeqNoGeneration();
         const ui64 seqNoRound = record.GetRequestSeqNoRound();
 
         const auto& scans = Self->BuildIndexScanManager.GetScans();
-        if (const auto* info = scans.FindPtr(buildId)) {
+        if (const auto* info = scans.FindPtr(BuildId)) {
             if (info->SeqNoGeneration == seqNoGeneration && info->SeqNoRound == seqNoRound) {
                 ShouldForward = true;
                 NIceDb::TNiceDb db(txc.DB);
-                Self->BuildIndexScanManager.PersistRemove(db, buildId, seqNoGeneration, seqNoRound);
+                Self->BuildIndexScanManager.PersistRemove(db, BuildId, seqNoGeneration, seqNoRound);
             }
         }
 
@@ -585,12 +586,16 @@ public:
                 Self->StateReportPipe = ctx.Register(
                     NTabletPipe::CreateClient(ctx.SelfID, Self->CurrentSchemeShardId, clientConfig));
             }
+            auto copy = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+            copy->Record = Ev->Get()->Record;
+            Self->PendingBuildIndexFinalResponses[BuildId] = std::move(copy);
             NTabletPipe::SendData(ctx, Self->StateReportPipe, Ev->Release().Release());
         }
     }
 
 private:
     TEvDataShard::TEvBuildIndexProgressResponse::TPtr Ev;
+    ui64 BuildId = 0;
     bool ShouldForward = false;
 };
 

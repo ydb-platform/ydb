@@ -78,6 +78,13 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
             rec.SetSnapshotTxId(snapshot.TxId);
             rec.SetSnapshotStep(snapshot.Step);
 
+            auto observerHolder = runtime.AddObserver<TEvDataShard::TEvBuildIndexProgressResponse>(
+                [&](TEvDataShard::TEvBuildIndexProgressResponse::TPtr& event) {
+                    auto copy = MakeHolder<TEvDataShard::TEvBuildIndexProgressResponse>();
+                    copy->Record = event->Get()->Record;
+                    runtime.Send(new IEventHandle(sender, event->Sender, copy.Release()));
+                });
+
             runtime.SendToPipe(tid, sender, ev, 0, GetPipeConfigWithRetries());
 
             while (true) {
@@ -101,6 +108,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
                 UNIT_ASSERT_VALUES_EQUAL_C(reply->Record.GetStatus(), expected, issues.ToString());
                 break;
             }
+
+            observerHolder.Remove();
         }
     }
 

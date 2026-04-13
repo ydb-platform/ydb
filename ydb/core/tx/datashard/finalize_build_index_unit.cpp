@@ -81,6 +81,7 @@ public:
         if (const auto* info = scans.FindPtr(buildIndexId)) {
             DataShard.GetBuildIndexScanManager().PersistRemove(db, buildIndexId, info->SeqNoGeneration, info->SeqNoRound);
         }
+        DataShard.ClearPendingBuildIndexFinalResponse(buildIndexId);
 
         const TSnapshotKey key(pathId, step, txId);
         DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);

@@ -2282,12 +2282,7 @@
             },
             {
                 "ColumnId": 4,
-                "ColumnName": "SenderActorId",
-                "ColumnType": "String"
-            },
-            {
-                "ColumnId": 5,
-                "ColumnName": "RequestProto",
+                "ColumnName": "ResponseType",
                 "ColumnType": "String"
             }
         ],
@@ -2298,8 +2293,7 @@
                     1,
                     2,
                     3,
-                    4,
-                    5
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,

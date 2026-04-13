@@ -518,10 +518,8 @@ void TSchemeShard::Resume(const TDeque<TIndexBuildId>& indexIds, const TActorCon
     for (const auto& id : indexIds) {
         if (const auto* opPtr = SetColumnConstraintOperations.FindPtr(id); opPtr) {
             Execute(CreateTxSetColumnConstraintProgress(id), ctx);
-        } else if (const auto* buildInfoPtr = IndexBuilds.FindPtr(id); buildInfoPtr && buildInfoPtr->get()->IsBroken) {
+        } else if (const auto* buildInfoPtr = IndexBuilds.FindPtr(id); buildInfoPtr && !buildInfoPtr->get()->IsBroken) {
             Execute(CreateTxProgress(id), ctx);
-        } else {
-            Y_UNREACHABLE();
         }
     }
 }

@@ -24,11 +24,65 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
 
   [Examples on GitHub](https://github.com/ydb-platform/ydb-python-sdk/tree/main/examples/topic)
 
+<<<<<<< HEAD
+=======
+- C#
+
+  [Examples on GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/Topic)
+
+- JavaScript
+
+  [Examples on GitHub](https://github.com/ydb-platform/ydb-js-sdk/tree/main/examples/topic)
+
+>>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 {% endlist %}
 
 ## Initializing a connection {#init}
 
 {% list tabs group=lang %}
+
+- Go
+
+  Use a {{ ydb-short-name }} driver instance created with `ydb.Open`. The topic client is available via `db.Topic()`.
+
+  ```go
+  package main
+
+  import (
+    "context"
+    "os"
+
+    "github.com/ydb-platform/ydb-go-sdk/v3"
+    "github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions"
+  )
+
+  func main() {
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    db, err := ydb.Open(ctx,
+      os.Getenv("YDB_CONNECTION_STRING"),
+    )
+    if err != nil {
+      panic(err)
+    }
+    defer db.Close(ctx)
+
+    // db.Topic() — client for topics
+    writer, err := db.Topic().StartWriter("topic-path")
+    if err != nil {
+      panic(err)
+    }
+
+    reader, err := db.Topic().StartReader("consumer-name",
+      topicoptions.ReadTopic("topic-path"),
+    )
+    if err != nil {
+      panic(err)
+    }
+    _ = writer
+    _ = reader
+  }
+  ```
 
 - C++
 
@@ -774,6 +828,10 @@ auto session = topicClient.CreateWriteSession(settings);
 
 If, on other hand, you want to ensure deduplication is enabled, you can specify the ProducerId option or call the `DeduplicationEnabled()` method from WriteSessionSettings. The '[Connecting to a topic for message writes](#start-writer)' section has an example of write session that has deduplication enabled.
 
+- Go
+
+  In **ydb-go-sdk**, when you create a writer without explicitly passing `topicoptions.WithWriterProducerID`, the SDK still assigns a producer ID (it generates one automatically). A mode equivalent to omitting `ProducerId` in the C++ example above is not available in the current SDK version.
+
 {% endlist %}
 
 ### Using message metadata feature {#messagemeta}
@@ -860,6 +918,44 @@ All the metadata provided when writing a message is sent to a consumer with the 
       print(f"{meta_key}: {meta_value}")
   ```
 
+<<<<<<< HEAD
+=======
+- C#
+
+  ```c#
+  await writer.WriteAsync(
+      new Ydb.Sdk.Services.Topic.Writer.Message<string>("Hello Example YDB Topics!")
+          { Metadata = { new Metadata("meta-key", "meta-value"u8.ToArray()) } }
+  );
+  ```
+
+- Go
+
+  Set metadata in the `Metadata` field of `topicwriter.Message`:
+
+  ```go
+  err := writer.Write(ctx, topicwriter.Message{
+    Data: strings.NewReader("message-data"),
+    Metadata: map[string][]byte{
+      "meta-key":    []byte("meta-value"),
+      "another-key": []byte("value"),
+    },
+  })
+  ```
+
+  When reading, metadata is available on the message:
+
+  ```go
+  msg, err := reader.ReadMessage(ctx)
+  if err != nil {
+    return err
+  }
+  for k, v := range msg.Metadata {
+    fmt.Printf("%s: %s\n", k, string(v))
+  }
+  ```
+
+>>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))
 {% endlist %}
 
 ### Write in a transaction {#write-tx}
@@ -1626,6 +1722,24 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 
 {% list tabs group=lang %}
 
+- Go
+
+  Pass an empty string as the consumer name and use the `topicoptions.WithReaderWithoutConsumer(false)` option (this mode is **experimental**; see [VERSIONING](https://github.com/ydb-platform/ydb-go-sdk/blob/master/VERSIONING.md) in the SDK repository). In the read selector, specify the topic path and partition list. Message commits are not available in this mode (`CommitModeNone`); on reconnects you must restore progress on the client side—see [client-side offset storage](#client-commit).
+
+  ```go
+  reader, err := db.Topic().StartReader(
+    "",
+    topicoptions.ReadSelectors{{
+      Path:       "topic-path",
+      Partitions: []int64{0, 1, 2},
+    }},
+    topicoptions.WithReaderWithoutConsumer(false),
+  )
+  if err != nil {
+    return err
+  }
+  ```
+
 - Java
 
   To read without a Consumer, the `withoutConsumer()` method should be called explicitly on the `ReaderSettings` builder:
@@ -2107,3 +2221,31 @@ In case of a _hard interruption_, the client receives a notification that it is 
   From a practical perspective, these modes do not differ for the end user. However, the full support mode differs from the compatibility mode in terms of who guarantees the order of reading—the client or the server. Compatibility mode is achieved through server-side processing and generally operates slower.
 
 {% endlist %}
+<<<<<<< HEAD
+=======
+
+### Commit outside the reader {#commit-outside-the-reader}
+
+Most often, committing is conveniently done within the reader that has read the messages. However, there are scenarios where committing needs to be performed by a separate process. In such cases, a method of committing outside the reader is necessary.
+
+{% list tabs group=lang %}
+
+- Go
+
+  This functionality is not currently supported in the Go SDK.
+
+- Python
+
+  Commit outside the reader is done using the `topic_client.commit_offset` method:
+
+  ```python
+  driver.topic_client.commit_offset(
+      topic_path,
+      consumer_name,
+      partition_id,
+      offset,
+  )
+  ```
+
+{% endlist %}
+>>>>>>> 26186944f5a (DOCSUP-127029: [YDBDOCS-1972] docs: align RU YDB SDK docs with nested tab structure. Организация процесса перевода (1 архив) (1 шт.) (#37826))

@@ -1,7 +1,7 @@
-#include "schemeshard__operation_common.h"
-#include "schemeshard__operation_part.h"
-#include "schemeshard_cdc_stream_common.h"
-#include "schemeshard_impl.h"
+#include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
+#include <ydb/core/tx/schemeshard/schemeshard_cdc_stream_common.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>

@@ -1,6 +1,6 @@
-#include "schemeshard__operation_common.h"
-#include "schemeshard__operation_part.h"
-#include "schemeshard_index_utils.h"
+#include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
+#include <ydb/core/tx/schemeshard/index/index_utils.h>
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "schemeshard_impl.h"
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

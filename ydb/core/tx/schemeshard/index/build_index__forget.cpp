@@ -1,7 +1,7 @@
-#include "schemeshard_build_index.h"
-#include "schemeshard_build_index_helpers.h"
-#include "schemeshard_build_index_tx_base.h"
-#include "schemeshard_impl.h"
+#include <ydb/core/tx/schemeshard/index/build_index.h>
+#include <ydb/core/tx/schemeshard/index/build_index_helpers.h>
+#include <ydb/core/tx/schemeshard/index/build_index_tx_base.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 namespace NKikimr::NSchemeShard {
 

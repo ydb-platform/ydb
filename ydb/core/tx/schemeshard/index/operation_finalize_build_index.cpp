@@ -1,13 +1,10 @@
-#include "schemeshard__operation_common.h"
-#include "schemeshard__operation_part.h"
-#include "schemeshard_impl.h"
+#include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
+#include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-
-// Consistently publish shadow data and create snapshot of a table in one transaction
-// Used for example in unique index build to validate index state while allowing online changes
 
 namespace {
 
@@ -20,7 +17,7 @@ private:
 
     TString DebugHint() const override {
         return TStringBuilder()
-            << "TPrepareIndexValidation TConfigureParts"
+            << "TFinalizeBuildIndex TConfigureParts"
             << " operationId# " << OperationId;
     }
 
@@ -52,12 +49,16 @@ public:
                                << " at tabletId# " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxPrepareIndexValidation);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxFinalizeBuildIndex);
+        Y_ABORT_UNLESS(txState->BuildIndexId);
 
         TPathId pathId = txState->TargetPathId;
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
 
         txState->ClearShardsInProgress();
+
+        const TTxId snapshotTxId = context.SS->TablesWithSnapshots.at(pathId);
+        const TStepId snapshotStepId = context.SS->SnapshotsStepIds.at(snapshotTxId);
 
         for (ui32 i = 0; i < txState->Shards.size(); ++i) {
             TShardIdx shardIdx = txState->Shards[i].Idx;
@@ -66,18 +67,23 @@ public:
             auto seqNo = context.SS->StartRound(*txState);
 
             NKikimrTxDataShard::TFlatSchemeTransaction tx;
+            auto* op = tx.MutableFinalizeBuildIndex();
+            pathId.ToProto(op->MutablePathId());
 
-            auto* createSnapshot = tx.MutablePrepareIndexValidation();
-            pathId.ToProto(createSnapshot->MutableIndexId());
-            createSnapshot->SetSnapshotName("Snapshot0");
-            createSnapshot->SetTableSchemaVersion(table->AlterVersion+1);
+            op->SetSnapshotTxId(ui64(snapshotTxId));
+            op->SetSnapshotStep(ui64(snapshotStepId));
+            op->SetTableSchemaVersion(table->AlterVersion+1);
+            op->SetBuildIndexId(ui64(txState->BuildIndexId));
+            if (txState->BuildIndexOutcome) {
+                op->MutableOutcome()->CopyFrom(*txState->BuildIndexOutcome);
+            }
 
             context.SS->FillSeqNo(tx, seqNo);
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         DebugHint() << " ProgressState"
                                     << " SEND TFlatSchemeTransaction to datashard: " << datashardId
-                                    << " with publish shadow data request"
+                                    << " with drop snapshot request"
                                     << " operationId: " << OperationId
                                     << " seqNo: " << seqNo
                                     << " at schemeshard: " << ssId);
@@ -97,7 +103,7 @@ private:
 
     TString DebugHint() const override {
         return TStringBuilder()
-            << "TPrepareIndexValidation TPropose"
+            << "TFinalizeBuildIndex TPropose"
             << " operationId# " << OperationId;
     }
 
@@ -134,29 +140,47 @@ public:
                                << ", stepId: " << step);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxPrepareIndexValidation);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxFinalizeBuildIndex);
 
         NIceDb::TNiceDb db(context.GetDB());
-        context.SS->SnapshotsStepIds[OperationId.GetTxId()] = step;
-        context.SS->PersistSnapshotStepId(db, OperationId.GetTxId(), step);
+        TPathId tableId = txState->TargetPathId;
+        TTxId snapshotTxId = context.SS->TablesWithSnapshots.at(tableId);
+        context.SS->SnapshotsStepIds.erase(snapshotTxId);
+        context.SS->SnapshotTables.at(snapshotTxId).erase(tableId);
+        if (context.SS->SnapshotTables.at(snapshotTxId).empty()) {
+            context.SS->SnapshotTables.erase(snapshotTxId);
+        }
+        context.SS->TablesWithSnapshots.erase(tableId);
+
+        context.SS->PersistDropSnapshot(db, snapshotTxId, tableId);
 
         const TTableInfo::TPtr tableInfo = context.SS->Tables.at(txState->TargetPathId);
         tableInfo->AlterVersion += 1;
-        tableInfo->MutablePartitionConfig().SetShadowData(false);
-        tableInfo->MutablePartitionConfig().MutableCompactionPolicy()->SetKeepEraseMarkers(false);
+
+        for(auto& column: tableInfo->Columns) {
+            if (column.second.IsDropped())
+                continue;
+
+            if (!column.second.IsBuildInProgress)
+                continue;
+
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                       DebugHint() << " HandleReply ProgressState"
+                                   << " at tablet: " << ssId
+                                   << " terminating build column process at column "
+                                   << column.second.Name);
+
+            column.second.IsBuildInProgress = false;
+            context.SS->PersistTableFinishColumnBuilding(db, txState->TargetPathId, tableInfo, column.first);
+        }
+
         context.SS->PersistTableAlterVersion(db, txState->TargetPathId, tableInfo);
 
-        auto tablePath = context.SS->PathsById.at(txState->TargetPathId);
-        context.SS->ClearDescribePathCaches(tablePath);
-        context.OnComplete.PublishToSchemeBoard(OperationId, txState->TargetPathId);
+        context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Sub(1);
 
-        if (context.SS->Indexes.contains(tablePath->ParentPathId)) {
-            auto parentDir = context.SS->PathsById.at(tablePath->ParentPathId);
-            ++parentDir->DirAlterVersion;
-            context.SS->PersistPathDirAlterVersion(db, parentDir);
-            context.SS->ClearDescribePathCaches(parentDir);
-            context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
-        }
+        auto tablePath = context.SS->PathsById.at(tableId);
+        context.SS->ClearDescribePathCaches(tablePath);
+        context.OnComplete.PublishToSchemeBoard(OperationId, tableId);
 
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
         return true;
@@ -171,7 +195,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
-        Y_ABORT_UNLESS(txState->TxType == TTxState::TxPrepareIndexValidation);
+        Y_ABORT_UNLESS(txState->TxType == TTxState::TxFinalizeBuildIndex);
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
@@ -191,7 +215,7 @@ private:
 
     TString DebugHint() const override {
         return TStringBuilder()
-            << "TPrepareIndexValidation TCreateTxShards"
+            << "TFinalizeBuildIndex TCreateTxShards"
             << " operationId: " << OperationId;
     }
 
@@ -221,6 +245,7 @@ public:
             NTableState::UpdatePartitioningForTableModification(OperationId, *txState, context);
         }
 
+
         NIceDb::TNiceDb db(context.GetDB());
 
         context.SS->ChangeTxState(db, OperationId, TTxState::ConfigureParts);
@@ -229,7 +254,7 @@ public:
     }
 };
 
-class TPrepareIndexValidation: public TSubOperation {
+class TFinalizeBuildIndex: public TSubOperation {
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
     }
@@ -274,13 +299,13 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        auto& publish = Transaction.GetPrepareIndexValidation();
+        auto finalizeMainTable = Transaction.GetFinalizeBuildIndexMainTable();
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
-        const TString& tableName = publish.GetTableName();
+        const TString& tableName = finalizeMainTable.GetTableName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TPrepareIndexValidation Propose"
+                     "TFinalizeBuildIndex Propose"
                          << ", path: " << parentPathStr << "/" << tableName
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
@@ -288,11 +313,6 @@ public:
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(tableName);
-
-        if (!Transaction.GetInternal()) {
-            result->SetError(NKikimrScheme::EStatus::StatusNameConflict, "PrepareIndexValidation is an internal operation");
-            return result;
-        }
 
         {
             TPath::TChecker checks = path.Check();
@@ -304,8 +324,7 @@ public:
                 .NotDeleted()
                 .IsTable()
                 .NotUnderDeleting()
-                .NotUnderOperation()
-                .IsInsideTableIndexPath();
+                .NotUnderOperation();
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -327,6 +346,7 @@ public:
             }
         }
 
+
         TString errStr;
 
         TPathElement::TPtr pathEl = path.Base();
@@ -338,26 +358,25 @@ public:
             return result;
         }
 
-        {
-            Y_ABORT_UNLESS(context.SS->Tables.contains(tablePathId));
-            TTableInfo::TPtr tableInfo = context.SS->Tables.at(tablePathId);
-            const NKikimrSchemeOp::TPartitionConfig &srcPartitionConfig = tableInfo->PartitionConfig();
-            if (!srcPartitionConfig.GetShadowData()) {
-                errStr = TStringBuilder()
-                    << "Shadow data is not enabled for table"
-                    << ", tableId:" << tablePathId
-                    << ", txId: " << OperationId.GetTxId();
-                result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
-                return result;
-            }
-        }
-
-        if (context.SS->TablesWithSnapshots.contains(tablePathId)) {
+        if (!context.SS->TablesWithSnapshots.contains(tablePathId)) {
             errStr = TStringBuilder()
-                << "Snapshots already present for table"
+                << "No snapshot presents for table"
                 << ", tableId:" << tablePathId
                 << ", txId: " << OperationId.GetTxId();
-            result->SetError(TEvSchemeShard::EStatus::StatusAlreadyExists, errStr);
+            result->SetError(TEvSchemeShard::EStatus::StatusPathDoesNotExist, errStr);
+            return result;
+        }
+
+        TTxId snapshotTxId = context.SS->TablesWithSnapshots.at(tablePathId);
+        if (TTxId(finalizeMainTable.GetSnapshotTxId()) != snapshotTxId) {
+            errStr = TStringBuilder()
+                << "No snapshot with requested txId presents for table"
+                << ", tableId:" << tablePathId
+                << ", txId: " << OperationId.GetTxId()
+                << ", requested snapshotTxId: " << finalizeMainTable.GetSnapshotTxId()
+                << ", snapshotTxId: " << snapshotTxId
+                << ", snapshotStepId: " << context.SS->SnapshotsStepIds.at(snapshotTxId);
+            result->SetError(TEvSchemeShard::EStatus::StatusPathDoesNotExist, errStr);
             return result;
         }
 
@@ -366,7 +385,13 @@ public:
         pathEl->LastTxId = OperationId.GetTxId();
         pathEl->PathState = NKikimrSchemeOp::EPathState::EPathStateAlter;
 
-        context.SS->CreateTx(OperationId, TTxState::TxPrepareIndexValidation, tablePathId);
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxFinalizeBuildIndex, tablePathId);
+        txState.BuildIndexId = TTxId(finalizeMainTable.GetBuildIndexId());
+
+        if (finalizeMainTable.HasOutcome()) {
+            txState.BuildIndexOutcome = std::make_shared<NKikimrSchemeOp::TBuildIndexOutcome>();
+            txState.BuildIndexOutcome->CopyFrom(finalizeMainTable.GetOutcome());
+        }
 
         context.SS->PersistTxState(db, OperationId);
 
@@ -376,22 +401,17 @@ public:
         context.SS->ChangeTxState(db, OperationId, TTxState::CreateParts);
         context.OnComplete.ActivateTx(OperationId);
 
-        context.DbChanges.PersistTableSnapshot(tablePathId, OperationId.GetTxId());
-        context.SS->TablesWithSnapshots.emplace(tablePathId, OperationId.GetTxId());
-        context.SS->SnapshotTables[OperationId.GetTxId()].insert(tablePathId);
-        context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Add(1);
-
         SetState(NextState());
         return result;
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_ABORT("no AbortPropose for TPrepareIndexValidation");
+        Y_ABORT("no AbortPropose for TFinalizeBuildIndex");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TPrepareIndexValidation AbortUnsafe"
+                     "TFinalizeBuildIndex AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
                          << ", at schemeshard: " << context.SS->TabletID());
@@ -404,13 +424,13 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreatePrepareIndexValidation(TOperationId id, const TTxTransaction& tx) {
-    return MakeSubOperation<TPrepareIndexValidation>(id, tx);
+ISubOperation::TPtr CreateFinalizeBuildIndexMainTable(TOperationId id, const TTxTransaction& tx) {
+    return MakeSubOperation<TFinalizeBuildIndex>(id, tx);
 }
 
-ISubOperation::TPtr CreatePrepareIndexValidation(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateFinalizeBuildIndexMainTable(TOperationId id, TTxState::ETxState state) {
     Y_ABORT_UNLESS(state != TTxState::Invalid);
-    return MakeSubOperation<TPrepareIndexValidation>(id, state);
+    return MakeSubOperation<TFinalizeBuildIndex>(id, state);
 }
 
 }

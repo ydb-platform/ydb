@@ -1,7 +1,7 @@
 #pragma once
 
-#include "schemeshard_info_types.h"
-#include "schemeshard_types.h"
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/tx/schemeshard/schemeshard_types.h>
 
 #include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/table_index.h>

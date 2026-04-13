@@ -1,10 +1,10 @@
-#include "schemeshard_build_index_tx_base.h"
+#include <ydb/core/tx/schemeshard/index/build_index_helpers.h>
+#include <ydb/core/tx/schemeshard/index/build_index_tx_base.h>
 
-#include "schemeshard__operation_side_effects.h"
-#include "schemeshard_billing_helpers.h"
-#include "schemeshard_build_index_helpers.h"
-#include "schemeshard_identificators.h"
-#include "schemeshard_impl.h"
+#include <ydb/core/tx/schemeshard/schemeshard__operation_side_effects.h>
+#include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>

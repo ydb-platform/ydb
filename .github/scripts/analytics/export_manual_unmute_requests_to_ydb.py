@@ -113,7 +113,7 @@ def _has_existing_rows(ydb_wrapper, table_path):
     return bool(result[0].get("max_exported_at"))
 
 
-def collect_rows(default_window_days, fast_window_days, wait_hours, incremental_only):
+def collect_rows(default_window_days, fast_window_days, incremental_only):
     """Build export rows from GitHub (issues in org mute Project V2 only)."""
     stage_started_at = time.time()
     project_nodes = fetch_all_issues(ORG_NAME, PROJECT_ID)
@@ -286,18 +286,16 @@ def load_thresholds():
     return (
         int(data["default_unmute_window_days"]),
         fast_window_days,
-        0,
     )
 
 
 def main():
     start = time.time()
-    default_window_days, fast_window_days, wait_hours = load_thresholds()
+    default_window_days, fast_window_days = load_thresholds()
     print(
         "Thresholds:"
         f" default_unmute_window_days={default_window_days},"
-        f" manual_fast_unmute_window_days={fast_window_days},"
-        f" manual_wait_hours={wait_hours} (disabled)"
+        f" manual_fast_unmute_window_days={fast_window_days}"
     )
 
     with YDBWrapper() as ydb_wrapper:
@@ -310,7 +308,6 @@ def main():
         rows = collect_rows(
             default_window_days,
             fast_window_days,
-            wait_hours,
             incremental_only=incremental_only,
         )
         print(f"Collected {len(rows)} manual unmute rows")

@@ -11,6 +11,7 @@ _REQUIRED_KEYS = (
     "default_unmute_window_days",
     "delete_window_days",
     "manual_fast_unmute_window_days",
+    "manual_fast_unmute_min_passes",
     "control_comment_part_max_tests",
 )
 

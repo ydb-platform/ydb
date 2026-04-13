@@ -11,7 +11,6 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from github_issue_utils import parse_body
 from mute_thresholds import get_thresholds
 from manual_unmute_contract import (
-    MANUAL_FAST_UNMUTE_STATUS,
     normalize_manual_unmute_status,
 )
 
@@ -34,11 +33,8 @@ GITHUB_MAX_BODY_LENGTH = 65000  # Setting slightly below 65536 to be safe
 FAST_UNMUTE_AUTO_COMMENT_MARKER = "<!--fast-unmute-auto:v1-->"
 UNMUTE_LIST_START_MARKER = "<!--unmute_list_start-->"
 UNMUTE_LIST_END_MARKER = "<!--unmute_list_end-->"
-MUTE_CONTROL_MARKER = "<!--mute_control_v1-->"
 # Machine-readable row state: separate line, hex-only inside <!-- ... --> (no "--" in payload; GFM hides reliably).
 MUTE_CTRL_META_PREFIX = "mute_ctrl_meta:"
-# Legacy comments used `<!--mute_control_v1-->:start ...` (comment closed early, ":start" was visible).
-# New format keeps the whole marker inside one HTML comment so nothing leaks into the rendered text.
 THRESHOLDS = get_thresholds()
 MANUAL_FAST_UNMUTE_WINDOW_DAYS = THRESHOLDS["manual_fast_unmute_window_days"]
 DEFAULT_UNMUTE_WINDOW_DAYS = THRESHOLDS["default_unmute_window_days"]
@@ -447,13 +443,12 @@ def _extract_unmuted_tests_from_comment(comment_body):
     if not comment_body:
         return set()
 
-    if UNMUTE_LIST_START_MARKER in comment_body and UNMUTE_LIST_END_MARKER in comment_body:
-        start_idx = comment_body.find(UNMUTE_LIST_START_MARKER) + len(UNMUTE_LIST_START_MARKER)
-        end_idx = comment_body.find(UNMUTE_LIST_END_MARKER)
-        payload = comment_body[start_idx:end_idx]
-    else:
-        # Backward-compatible fallback for legacy comments without markers.
-        payload = comment_body
+    if UNMUTE_LIST_START_MARKER not in comment_body or UNMUTE_LIST_END_MARKER not in comment_body:
+        return set()
+
+    start_idx = comment_body.find(UNMUTE_LIST_START_MARKER) + len(UNMUTE_LIST_START_MARKER)
+    end_idx = comment_body.find(UNMUTE_LIST_END_MARKER)
+    payload = comment_body[start_idx:end_idx]
 
     tests = set()
     for line in payload.split('\n'):
@@ -572,29 +567,6 @@ def _normalize_requested_at(value):
     return _isoformat_z(dt) if dt else ""
 
 
-_MONTHS_EN_SHORT = (
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-)
-
-
-def _format_utc_display(dt_value):
-    """Readable UTC for GitHub comments (fixed English, no locale)."""
-    dt = dt_value.astimezone(datetime.timezone.utc).replace(microsecond=0)
-    mon = _MONTHS_EN_SHORT[dt.month - 1]
-    return f'{dt.day} {mon} {dt.year}, {dt.hour:02d}:{dt.minute:02d} UTC'
-
-
 def _split_tests_into_chunks(test_names):
     names = sorted(set(test_names))
     if not names:
@@ -611,22 +583,16 @@ def _control_part_end():
 
 
 def _extract_mute_control_payload(comment_body):
-    """Text between mute_control start/end markers (new hidden HTML comments or legacy visible suffix)."""
+    """Text between canonical mute control start/end markers."""
     if not comment_body:
         return None
     m_new = re.search(r"<!--\s*mute_control_v1:start\s+part:\d+/\d+\s*-->", comment_body)
-    if m_new:
-        m_end = re.search(r"<!--\s*mute_control_v1:end\s*-->", comment_body[m_new.end() :])
-        if not m_end:
-            return None
-        return comment_body[m_new.end() : m_new.end() + m_end.start()]
-    legacy_start = comment_body.find(f"{MUTE_CONTROL_MARKER}:start")
-    if legacy_start >= 0:
-        legacy_end = comment_body.find(f"{MUTE_CONTROL_MARKER}:end", legacy_start)
-        if legacy_end < 0:
-            return None
-        return comment_body[legacy_start:legacy_end]
-    return None
+    if not m_new:
+        return None
+    m_end = re.search(r"<!--\s*mute_control_v1:end\s*-->", comment_body[m_new.end() :])
+    if not m_end:
+        return None
+    return comment_body[m_new.end() : m_new.end() + m_end.start()]
 
 
 def _render_control_comment(issue_number, part_idx, part_total, items):
@@ -734,46 +700,31 @@ def _parse_control_items(comment_body):
         test_name = m.group(1).strip()
         requested = stripped.startswith("- [x]") or stripped.startswith("- [X]")
 
-        meta_dict = None
-        if i + 1 < len(lines_list):
-            mhex = meta_hex_re.fullmatch(lines_list[i + 1].strip())
-            if mhex:
-                meta_dict = _decode_mute_control_line_meta(mhex.group(1))
-                if meta_dict is not None:
-                    i += 2
-                    status = normalize_manual_unmute_status(
-                        meta_dict.get("status") or "",
-                        requested=requested,
-                    )
-                    items[test_name] = {
-                        "requested": requested,
-                        "state": meta_dict.get("state") or "active",
-                        "status": status,
-                        "reason": meta_dict.get("reason") or "",
-                        "requested_at": _normalize_requested_at(meta_dict.get("requested_at") or ""),
-                        "resolved_at": _normalize_requested_at(meta_dict.get("resolved_at") or ""),
-                    }
-                    continue
-                meta_dict = None
+        if i + 1 >= len(lines_list):
+            i += 1
+            continue
+        mhex = meta_hex_re.fullmatch(lines_list[i + 1].strip())
+        if not mhex:
+            i += 1
+            continue
+        meta_dict = _decode_mute_control_line_meta(mhex.group(1))
+        if meta_dict is None:
+            i += 2
+            continue
 
-        state_match = re.search(r"state:([a-z_]+)", stripped)
-        status_match = re.search(r"status:([a-z0-9_]+)", stripped)
-        reason_match = re.search(r"reason:([a-z0-9_]+)", stripped)
-        requested_at_match = re.search(r"requested_at:([0-9T:\-+Z]+)", stripped)
-        resolved_at_match = re.search(r"resolved_at:([0-9T:\-+Z]+)", stripped)
         status = normalize_manual_unmute_status(
-            status_match.group(1) if status_match else "",
+            meta_dict.get("status") or "",
             requested=requested,
         )
         items[test_name] = {
             "requested": requested,
-            "state": state_match.group(1) if state_match else "active",
+            "state": meta_dict.get("state") or "active",
             "status": status,
-            "reason": reason_match.group(1) if reason_match else "",
-            "requested_at": _normalize_requested_at(requested_at_match.group(1) if requested_at_match else ""),
-            "resolved_at": _normalize_requested_at(resolved_at_match.group(1) if resolved_at_match else ""),
+            "reason": meta_dict.get("reason") or "",
+            "requested_at": _normalize_requested_at(meta_dict.get("requested_at") or ""),
+            "resolved_at": _normalize_requested_at(meta_dict.get("resolved_at") or ""),
         }
-        i += 1
+        i += 2
     return items
 
 
@@ -840,21 +791,6 @@ def edit_issue_comment(comment_id, comment):
         print(f"Error: Failed to update comment {comment_id}")
 
 
-def delete_issue_comment(comment_id):
-    query = """
-    mutation ($commentId: ID!) {
-      deleteIssueComment(input: {id: $commentId}) {
-        clientMutationId
-      }
-    }
-    """
-    result = run_query(query, {"commentId": comment_id})
-    if not result.get('errors'):
-        print(f"Deleted comment {comment_id}")
-    else:
-        print(f"Error: Failed to delete comment {comment_id}: {result.get('errors')}")
-
-
 def _list_control_comments(issue_id):
     comments = get_issue_comments_with_ids(issue_id)
     return [
@@ -867,9 +803,7 @@ def _list_control_comments(issue_id):
 def _comment_body_has_mute_control_start(body):
     if not body:
         return False
-    if re.search(r"<!--\s*mute_control_v1:start\s+part:\d+/\d+\s*-->", body):
-        return True
-    return f"{MUTE_CONTROL_MARKER}:start" in body
+    return bool(re.search(r"<!--\s*mute_control_v1:start\s+part:\d+/\d+\s*-->", body))
 
 
 def _derive_resolution_reason(test_name, had_manual_request, stable_unmute_candidates, delete_candidates):
@@ -1121,28 +1055,6 @@ def collect_manual_unmute_request_rows(
         f"rows_total={len(request_rows)}"
     )
     return overrides, request_rows
-
-
-def collect_fast_unmute_overrides(
-    branch='main',
-    build_type='relwithdebinfo',
-    stable_unmute_candidates=None,
-    delete_candidates=None,
-    require_non_bot_close_actor=True,
-    require_linked_development_pr=True,
-    add_auto_comment=True,
-):
-    """Backward-compatible wrapper returning only overrides."""
-    overrides, _rows = collect_manual_unmute_request_rows(
-        branch=branch,
-        build_type=build_type,
-        stable_unmute_candidates=stable_unmute_candidates,
-        delete_candidates=delete_candidates,
-        require_non_bot_close_actor=require_non_bot_close_actor,
-        require_linked_development_pr=require_linked_development_pr,
-        add_auto_comment=add_auto_comment,
-    )
-    return overrides
 
 
 def generate_github_issue_title_and_body(test_data):

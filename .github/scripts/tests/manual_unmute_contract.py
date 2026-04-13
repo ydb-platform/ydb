@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
-PENDING_FAST_UNMUTE_WAIT_STATUS = "pending_fast_unmute_wait"
-READY_FOR_FAST_UNMUTE_STATUS = "ready_for_fast_unmute"
+MANUAL_FAST_UNMUTE_STATUS = "manual_fast_unmute"
 IDLE_STATUS = "idle"
 
 # Canonical schema for test_results/analytics/manual_unmute_requests.
@@ -26,9 +25,6 @@ MANUAL_UNMUTE_TABLE_SCHEMA = [
     ("resolution_reason", "Utf8", True),
     ("exported_at", "Timestamp", False),
 ]
-
-# Backward-compatible short form used by existing call sites.
-MANUAL_UNMUTE_TABLE_COLUMNS = [(name, type_name) for name, type_name, _ in MANUAL_UNMUTE_TABLE_SCHEMA]
 
 MANUAL_UNMUTE_TABLE_PRIMARY_KEY = ("branch", "build_type", "full_name", "issue_number")
 MANUAL_UNMUTE_TABLE_PARTITION_BY_HASH = ("branch",)
@@ -57,7 +53,7 @@ def render_manual_unmute_create_table_sql(table_path):
 
 def normalize_manual_unmute_status(status, requested=False):
     if not status:
-        return PENDING_FAST_UNMUTE_WAIT_STATUS if requested else IDLE_STATUS
+        return MANUAL_FAST_UNMUTE_STATUS if requested else IDLE_STATUS
     return status
 
 

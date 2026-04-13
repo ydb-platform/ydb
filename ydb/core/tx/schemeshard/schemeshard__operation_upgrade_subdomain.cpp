@@ -239,16 +239,16 @@ public:
         }
 
         for (ui32 partNum = 0; partNum < tableInfo->GetPartitions().size(); ++partNum) {
-            const TTableShardInfo& partition = tableInfo->GetPartitions().at(partNum);
+            const TTableShardInfo* partition = tableInfo->GetPartitions().at(partNum);
 
             auto partDescr = descr.AddPartitions();
             partDescr->SetId(partNum);
-            partDescr->SetRangeEnd(partition.EndOfRange);
-            partDescr->MutableShardIdx()->SetOwnerId(partition.ShardIdx.GetOwnerId());
-            partDescr->MutableShardIdx()->SetLocalId(ui64(partition.ShardIdx.GetLocalId()));
-            if (tableInfo->PerShardPartitionConfig.contains(partition.ShardIdx)) {
+            partDescr->SetRangeEnd(partition->EndOfRange);
+            partDescr->MutableShardIdx()->SetOwnerId(partition->ShardIdx.GetOwnerId());
+            partDescr->MutableShardIdx()->SetLocalId(ui64(partition->ShardIdx.GetLocalId()));
+            if (tableInfo->PerShardPartitionConfig.contains(partition->ShardIdx)) {
                 TString partitionConfig;
-                Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->PerShardPartitionConfig.at(partition.ShardIdx).SerializeToString(&partitionConfig);
+                Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->PerShardPartitionConfig.at(partition->ShardIdx).SerializeToString(&partitionConfig);
                 partDescr->SetPartitionConfig(partitionConfig);
             }
         }
@@ -326,8 +326,8 @@ public:
                 *event->Record.MutableTable() = DescribeTable(context, pathId);
 
                 TTableInfo::TPtr tableInfo = context.SS->Tables.at(pathId);
-                for (auto part: tableInfo->GetPartitions()) {
-                    TShardIdx shardIdx = part.ShardIdx;
+                for (const auto* part: tableInfo->GetPartitions()) {
+                    TShardIdx shardIdx = part->ShardIdx;
                     *migrateShards->Add() = DescribeShard(context, shardIdx);
                 }
 
@@ -855,8 +855,8 @@ public:
                 {
                     Y_ABORT_UNLESS(context.SS->Tables.contains(pId));
                     TTableInfo::TPtr table = context.SS->Tables.at(pId);
-                    for (auto item: table->GetPartitions()) {
-                        auto shardIdx = item.ShardIdx;
+                    for (const auto* item: table->GetPartitions()) {
+                        auto shardIdx = item->ShardIdx;
                         const auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
 
                         bool inserted = false;

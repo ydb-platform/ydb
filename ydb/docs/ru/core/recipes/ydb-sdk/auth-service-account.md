@@ -168,24 +168,11 @@
 - C# (.NET)
 
   ```C#
-  using Ydb.Sdk;
-  using Ydb.Sdk.Yc;
+  using Ydb.Sdk.Ado;
 
-  const string endpoint = "grpc://localhost:2136";
-  const string database = "/local";
-
-  var saProvider = new ServiceAccountProvider(
-      saFilePath: "path/to/sa_file.json" // Path to file with service account JSON info);
-  );
-  await saProvider.Initialize();
-
-  var config = new DriverConfig(
-      endpoint: endpoint,
-      database: database,
-      credentials: saProvider
-  );
-
-  await using var driver = await Driver.CreateInitialized(config);
+  await using var dataSource = new YdbDataSource(
+      "Host=ydb.serverless.yandexcloud.net;Port=2135;Database=/ru-central1/.../...;ServiceAccountKeyFilePath=path/to/sa_file.json");
+  await using var connection = await dataSource.OpenConnectionAsync();
   ```
 
 - PHP

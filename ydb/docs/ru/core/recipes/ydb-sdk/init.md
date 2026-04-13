@@ -172,14 +172,11 @@
 - C# (.NET)
 
   ```C#
-  using Ydb.Sdk;
+  using Ydb.Sdk.Ado;
 
-  var config = new DriverConfig(
-      endpoint: "grpc://localhost:2136",
-      database: "/local"
-  );
-
-  await using var driver = await Driver.CreateInitialized(config);
+  await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local");
+  await using var connection = await dataSource.OpenConnectionAsync();
+  // ...
   ```
 
 - JavaScript

@@ -217,10 +217,12 @@
   {% endcut %}
 
   ```csharp
-  using Ydb.Sdk.Services.Query;
+  using Ydb.Sdk.Ado;
 
-  // ImplicitTx - один запрос без явной транзакции
-  var response = await queryClient.Exec("SELECT 1");
+  // ImplicitTx — один запрос без явной транзакции, фиксируется автоматически
+  await using var connection = await dataSource.OpenRetryableConnectionAsync();
+  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
+  await command.ExecuteNonQueryAsync();
   ```
 
 - JavaScript
@@ -531,10 +533,15 @@
   {% endcut %}
 
   ```csharp
-  using Ydb.Sdk.Services.Query;
+  using Ydb.Sdk.Ado;
 
-  // Режим Serializable Read-Write используется по умолчанию
-  var response = await queryClient.Exec("SELECT 1");
+  // SerializableRw — режим по умолчанию, самый строгий уровень изоляции:
+  // транзакция видит только зафиксированные данные и сама фиксируется атомарно
+  await using var connection = await dataSource.OpenConnectionAsync();
+  await using var transaction = await connection.BeginTransactionAsync(TransactionMode.SerializableRw);
+  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
+  await using var reader = await command.ExecuteReaderAsync();
+  await transaction.CommitAsync();
   ```
 
 - JavaScript
@@ -787,11 +794,21 @@
   ```csharp
   using Ydb.Sdk.Ado;
 
+  // OnlineRo — данные максимально актуальны на момент каждой операции чтения;
+  // данные в рамках одной транзакции согласованы
   await using var connection = await dataSource.OpenConnectionAsync();
   await using var transaction = await connection.BeginTransactionAsync(TransactionMode.OnlineRo);
   await using var command = new YdbCommand(connection) { CommandText = "SELECT 1" };
   await using var reader = await command.ExecuteReaderAsync();
   await transaction.CommitAsync();
+
+  // OnlineInconsistentRo — максимальная производительность, минимальная согласованность:
+  // данные могут быть несогласованы даже в рамках одной операции чтения
+  await using var connection2 = await dataSource.OpenConnectionAsync();
+  await using var transaction2 = await connection2.BeginTransactionAsync(TransactionMode.OnlineInconsistentRo);
+  await using var command2 = new YdbCommand(connection2) { CommandText = "SELECT 1" };
+  await using var reader2 = await command2.ExecuteReaderAsync();
+  await transaction2.CommitAsync();
   ```
 
   {% endcut %}
@@ -809,13 +826,6 @@
   Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
 
   {% endcut %}
-
-  ```csharp
-  using Ydb.Sdk.Ado;
-  using Ydb.Sdk.Services.Query;
-
-  var response = await queryClient.ReadAllRows("SELECT 1", txMode: TransactionMode.OnlineRo);
-  ```
 
 - JavaScript
 
@@ -1053,8 +1063,9 @@
 
   ```csharp
   using Ydb.Sdk.Ado;
-  using Ydb.Sdk.Services.Query;
 
+  // StaleRo — данные могут быть незначительно устаревшими относительно актуального состояния;
+  // обеспечивает максимальную скорость чтения за счёт ослабленной согласованности
   await using var connection = await dataSource.OpenConnectionAsync();
   await using var transaction = await connection.BeginTransactionAsync(TransactionMode.StaleRo);
   await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
@@ -1080,9 +1091,14 @@
 
   ```csharp
   using Ydb.Sdk.Ado;
-  using Ydb.Sdk.Services.Query;
 
-  var response = await queryClient.ReadAllRows("SELECT 1", txMode: TransactionMode.StaleRo);
+  // StaleRo — данные могут быть незначительно устаревшими относительно актуального состояния;
+  // обеспечивает максимальную скорость чтения за счёт ослабленной согласованности
+  await using var connection = await dataSource.OpenConnectionAsync();
+  await using var transaction = await connection.BeginTransactionAsync(TransactionMode.StaleRo);
+  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
+  await using var reader = await command.ExecuteReaderAsync();
+  await transaction.CommitAsync();
   ```
 
 - JavaScript
@@ -1333,13 +1349,6 @@
   Используйте ydb-dotnet-sdk или ADO.NET для этого уровня изоляции.
 
   {% endcut %}
-
-  ```csharp
-  using Ydb.Sdk.Ado;
-  using Ydb.Sdk.Services.Query;
-
-  var response = await queryClient.ReadAllRows("SELECT 1", TransactionMode.SnapshotRo);
-  ```
 
 - JavaScript
 
@@ -1639,9 +1648,13 @@
 
   ```csharp
   using Ydb.Sdk.Ado;
-  using Ydb.Sdk.Services.Query;
 
-  var response = await queryClient.ReadAllRows("SELECT 1", TransactionMode.SnapshotRw);
+  // SnapshotRw — согласованное чтение данных на определённый момент времени с возможностью записи
+  await using var connection = await dataSource.OpenConnectionAsync();
+  await using var transaction = await connection.BeginTransactionAsync(TransactionMode.SnapshotRw);
+  await using var command = new YdbCommand(connection) { CommandText = "SELECT 1", Transaction = transaction };
+  await using var reader = await command.ExecuteReaderAsync();
+  await transaction.CommitAsync();
   ```
 
 - JavaScript

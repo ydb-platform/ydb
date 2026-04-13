@@ -166,13 +166,13 @@ namespace NActors {
         std::atomic<float> SharedCpuQuota = 0.0;
         TMutex ChangeThreadsLock;
 
-        float MinThreadCount;
-        i16 MinFullThreadCount;
-        float MaxThreadCount;
-        i16 MaxFullThreadCount;
-        float DefaultThreadCount;
-        i16 DefaultFullThreadCount;
-        IHarmonizer *Harmonizer;
+        float MinThreadCount = 0.0;
+        i16 MinFullThreadCount = 0;
+        float MaxThreadCount = 0.0;
+        i16 MaxFullThreadCount = 0;
+        float DefaultThreadCount = 0.0;
+        i16 DefaultFullThreadCount = 0;
+        IHarmonizer *Harmonizer = nullptr;
         ui64 SoftProcessingDurationTs = 0;
         bool HasOwnSharedThread = false;
         ui16 MaxLocalQueueSize = 0;

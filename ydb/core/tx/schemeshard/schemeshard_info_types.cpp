@@ -316,6 +316,17 @@ void TSubDomainInfo::AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopic
     topics.UsedReserveSize += (newAggr.UsedReserveSize - oldAggr.UsedReserveSize);
 }
 
+// todo(flown4qqqq): rewrite it into fast way
+ui32 TTableInfo::GetColumnIdByNameSlow(const TString& columnName) {
+    for (const auto& [id, col] : Columns) {
+        if (!col.IsDropped() && col.Name == columnName) {
+            return id;
+        }
+    }
+
+    return Max<ui32>();
+}
+
 TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     TPtr source,
     NKikimrSchemeOp::TTableDescription& op,

@@ -874,7 +874,6 @@ public:
         TString Body;  // serialized NKikimrSchemeOp::TModifyScheme
     };
 
-    ui64 GetTypeSpecificAlterVersion(TPathId pathId, NKikimrSchemeOp::EPathType pathType) const;
     void PersistSchemeChangeRecord(NIceDb::TNiceDb& db, const TSchemeChangeRecordData& entry);
     NTabletFlatExecutor::ITransaction* CreateTxRegisterSubscriber(TEvSchemeShard::TEvRegisterSubscriber::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxFetchSchemeChangeRecords(TEvSchemeShard::TEvFetchSchemeChangeRecords::TPtr& ev);

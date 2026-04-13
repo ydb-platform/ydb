@@ -1009,7 +1009,7 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
         TString pathName = path->Name;
         NKikimrSchemeOp::EPathType objectType = path->PathType;
         TString userSid = path->Owner;
-        ui64 schemaVersion = ss->GetTypeSpecificAlterVersion(pathId, path->PathType);
+        ui64 schemaVersion = ss->GetPathVersion(TPath::Init(pathId, ss)).GetGeneralVersion();
 
         TString body;
         {

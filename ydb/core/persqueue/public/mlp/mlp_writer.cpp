@@ -91,7 +91,7 @@ size_t SerializeTo(TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueueP
     if (item.MessageDeduplicationId.has_value()) {
         cmdWrite.SetMessageDeduplicationId(*item.MessageDeduplicationId);
         auto* m = proto.AddMessageMeta();
-        m->set_key(MESSAGE_ATTRIBUTE_DEDUPLICATION_ID);        
+        m->set_key(MESSAGE_ATTRIBUTE_DEDUPLICATION_ID);
         m->set_value(*item.MessageDeduplicationId);
     }
     if (item.Delay != TDuration::Zero()) {

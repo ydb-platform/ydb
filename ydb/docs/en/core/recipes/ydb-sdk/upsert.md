@@ -1,132 +1,185 @@
 # Inserting data
 
-Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for batch insert:
+Below are examples of using the {{ ydb-short-name }} SDK built-in tools to perform inserts:
 
 {% list tabs %}
 
-- Go (native)
+- Go
 
-   ```go
-   package main
+  {% list tabs %}
 
-   import (
-     "context"
-     "os"
+  - Native SDK
 
-     "github.com/ydb-platform/ydb-go-sdk/v3"
-     "github.com/ydb-platform/ydb-go-sdk/v3/table"
-     "github.com/ydb-platform/ydb-go-sdk/v3/table/types"
-   )
+    ```go
+    package main
 
-   func main() {
-     ctx, cancel := context.WithCancel(context.Background())
-     defer cancel()
-     db, err := ydb.Open(ctx,
-       os.Getenv("YDB_CONNECTION_STRING"),
-       ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
-     )
-     if err != nil {
-       panic(err)
-     }
-     defer db.Close(ctx)
-     // execute upsert with native ydb data
-     err = db.Table().DoTx( // Do retry operation on errors with best effort
-       ctx, // context manages exiting from Do
-       func(ctx context.Context, tx table.TransactionActor) (err error) { // retry operation
-         res, err := tx.Execute(ctx, `
-             PRAGMA TablePathPrefix("/path/to/table");
-             DECLARE $seriesID AS Uint64;
-             DECLARE $seasonID AS Uint64;
-             DECLARE $episodeID AS Uint64;
-             DECLARE $views AS Uint64;
-             UPSERT INTO episodes ( series_id, season_id, episode_id, views )
-             VALUES ( $seriesID, $seasonID, $episodeID, $views );
-           `,
-           table.NewQueryParameters(
-             table.ValueParam("$seriesID", types.Uint64Value(1)),
-             table.ValueParam("$seasonID", types.Uint64Value(1)),
-             table.ValueParam("$episodeID", types.Uint64Value(1)),
-             table.ValueParam("$views", types.Uint64Value(1)), // increment views
-           ),
-         )
-         if err != nil {
-           return err
-         }
-         if err = res.Err(); err != nil {
-           return err
-         }
-         return res.Close()
-       }, table.WithIdempotent(),
-     )
-     if err != nil {
-       fmt.Printf("unexpected error: %v", err)
-     }
-   }
-   ```
+    import (
+      "context"
+      "os"
 
-- Go (database/sql)
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/table"
+      "github.com/ydb-platform/ydb-go-sdk/v3/table/types"
+    )
 
-   ```go
-   package main
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      // execute upsert with native ydb data
+      err = db.Table().DoTx( // Do retry operation on errors with best effort
+        ctx, // context manages exiting from Do
+        func(ctx context.Context, tx table.TransactionActor) (err error) { // retry operation
+          res, err := tx.Execute(ctx, `
+              PRAGMA TablePathPrefix("/path/to/table");
+              DECLARE $seriesID AS Uint64;
+              DECLARE $seasonID AS Uint64;
+              DECLARE $episodeID AS Uint64;
+              DECLARE $views AS Uint64;
+              UPSERT INTO episodes ( series_id, season_id, episode_id, views )
+              VALUES ( $seriesID, $seasonID, $episodeID, $views );
+            `,
+            table.NewQueryParameters(
+              table.ValueParam("$seriesID", types.Uint64Value(1)),
+              table.ValueParam("$seasonID", types.Uint64Value(1)),
+              table.ValueParam("$episodeID", types.Uint64Value(1)),
+              table.ValueParam("$views", types.Uint64Value(1)), // increment views
+            ),
+          )
+          if err != nil {
+            return err
+          }
+          if err = res.Err(); err != nil {
+            return err
+          }
+          return res.Close()
+        }, table.WithIdempotent(),
+      )
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+    }
+    ```
 
-   import (
-     "context"
-     "database/sql"
-     "os"
+  - database/sql
 
-     _ "github.com/ydb-platform/ydb-go-sdk/v3"
-     "github.com/ydb-platform/ydb-go-sdk/v3/retry"
-     "github.com/ydb-platform/ydb-go-sdk/v3/types"
-   )
+    ```go
+    package main
 
-   func main() {
-     db, err := sql.Open("ydb", os.Getenv("YDB_CONNECTION_STRING"))
-     if err != nil {
-       panic(err)
-     }
-     defer db.Close(ctx)
-     // execute upsert with native ydb data
-     err = retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
-       if _, err = tx.ExecContext(ctx,`
-           PRAGMA TablePathPrefix("/local");
-           REPLACE INTO series
-           SELECT
-             series_id,
-             title,
-             series_info,
-             comment
-           FROM AS_TABLE($seriesData);
-         `,
-         sql.Named("seriesData", types.ListValue(
-           types.StructValue(
-             types.StructFieldValue("series_id", types.Uint64Value(1)),
-             types.StructFieldValue("title", types.TextValue("IT Crowd")),
-             types.StructFieldValue("series_info", types.TextValue(
-               "The IT Crowd is a British sitcom produced by Channel 4, written by Graham Linehan, produced by "+
-               "Ash Atalla and starring Chris O'Dowd, Richard Ayoade, Katherine Parkinson, and Matt Berry.",
-             )),
-             types.StructFieldValue("comment", types.NullValue(types.TypeText)),
-           ),
-           types.StructValue(
-             types.StructFieldValue("series_id", types.Uint64Value(2)),
-             types.StructFieldValue("title", types.TextValue("Silicon Valley")),
-             types.StructFieldValue("series_info", types.TextValue(
-               "Silicon Valley is an American comedy television series created by Mike Judge, John Altschuler and "+
-               "Dave Krinsky. The series focuses on five young men who founded a startup company in Silicon Valley.",
-             )),
-             types.StructFieldValue("comment", types.TextValue("lorem ipsum")),
-           ),
-         )),
-       ); err != nil {
-         return err
-       }
-       return nil
-     }, retry.WithDoTxRetryOptions(retry.WithIdempotent(true)))
-     if err != nil {
-       fmt.Printf("unexpected error: %v", err)
-     }
-   }
-   ```
+    import (
+      "context"
+      "database/sql"
+      "os"
+
+      _ "github.com/ydb-platform/ydb-go-sdk/v3"
+      "github.com/ydb-platform/ydb-go-sdk/v3/retry"
+      "github.com/ydb-platform/ydb-go-sdk/v3/types"
+    )
+
+    func main() {
+      db, err := sql.Open("ydb", os.Getenv("YDB_CONNECTION_STRING"))
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      // execute upsert with native ydb data
+      err = retry.DoTx(ctx, db, func(ctx context.Context, tx *sql.Tx) error {
+        if _, err = tx.ExecContext(ctx,`
+            PRAGMA TablePathPrefix("/local");
+            REPLACE INTO series
+            SELECT
+              series_id,
+              title,
+              series_info,
+              comment
+            FROM AS_TABLE($seriesData);
+          `,
+          sql.Named("seriesData", types.ListValue(
+            types.StructValue(
+              types.StructFieldValue("series_id", types.Uint64Value(1)),
+              types.StructFieldValue("title", types.TextValue("IT Crowd")),
+              types.StructFieldValue("series_info", types.TextValue(
+                "The IT Crowd is a British sitcom produced by Channel 4, written by Graham Linehan, produced by "+
+                "Ash Atalla and starring Chris O'Dowd, Richard Ayoade, Katherine Parkinson, and Matt Berry.",
+              )),
+              types.StructFieldValue("comment", types.NullValue(types.TypeText)),
+            ),
+            types.StructValue(
+              types.StructFieldValue("series_id", types.Uint64Value(2)),
+              types.StructFieldValue("title", types.TextValue("Silicon Valley")),
+              types.StructFieldValue("series_info", types.TextValue(
+                "Silicon Valley is an American comedy television series created by Mike Judge, John Altschuler and "+
+                "Dave Krinsky. The series focuses on five young men who founded a startup company in Silicon Valley.",
+              )),
+              types.StructFieldValue("comment", types.TextValue("lorem ipsum")),
+            ),
+          )),
+        ); err != nil {
+          return err
+        }
+        return nil
+      }, retry.WithDoTxRetryOptions(retry.WithIdempotent(true)))
+      if err != nil {
+        fmt.Printf("unexpected error: %v", err)
+      }
+    }
+    ```
+
+  {% endlist %}
+
+- Java
+
+  {% list tabs %}
+
+  - Native SDK
+
+    Use `SessionRetryContext` and `TableSession.executeDataQuery` with a `$seriesData` parameter of type `List<Struct<...>>`. Build values for `AS_TABLE($seriesData)` the same way as row structs in the [batch insert](./bulk-upsert.md) example.
+
+    ```java
+    SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
+
+    String yql = """
+            PRAGMA TablePathPrefix("/local");
+            DECLARE $seriesData AS List<Struct<
+                series_id: Uint64,
+                title: Utf8,
+                series_info: Utf8,
+                comment: Optional<Utf8>
+            >>;
+            UPSERT INTO series
+            SELECT series_id, title, series_info, comment FROM AS_TABLE($seriesData);
+            """;
+
+    Params params = Params.of("$seriesData", seriesDataListValue);
+
+    retryCtx.supplyResult(session -> session.executeDataQuery(yql, TxControl.serializableRw(), params))
+            .join();
+    ```
+
+  - JDBC
+
+    ```java
+    try (Connection conn = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local");
+         PreparedStatement ps = conn.prepareStatement(
+                 """
+                 REPLACE INTO series (series_id, title, series_info, comment)
+                 SELECT series_id, title, series_info, comment FROM AS_TABLE($seriesData);
+                 """
+         )) {
+        // Set $seriesData according to the query type (see JDBC driver documentation)
+    }
+    ```
+
+    In Spring Boot, Hibernate, JOOQ, and other JDBC stacks, the driver also tries to optimize **large** sequences of inserts and updates: when needed, **UPSERT**, `INSERT`, `UPDATE`, and `DELETE` are **batched** on the driver side (including large batches from ORMs).
+
+  {% endlist %}
 
 - Python
 
@@ -134,7 +187,7 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
 
   - Native SDK
 
-    To insert data, use `QuerySessionPool` and `execute_with_retries` with a parameterized YQL query. The query uses the container type `List<Struct<...>>`, which lets you pass multiple rows in one call.
+    Use `QuerySessionPool` and `execute_with_retries` with a parameterized YQL query. The query uses the container type `List<Struct<...>>`, so you can pass several rows in one call.
 
     ```python
     import os
@@ -284,5 +337,24 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools for 
     ```
 
   {% endlist %}
+
+- JavaScript
+
+  ```javascript
+  import { Driver } from '@ydbjs/core'
+  import { query } from '@ydbjs/query'
+
+  const driver = new Driver('grpc://localhost:2136/local')
+  await driver.ready()
+
+  const users = [
+    { id: 1, name: 'Alice' },
+    { id: 2, name: 'Bob' },
+  ]
+
+  const sql = query(driver)
+  await sql`UPSERT INTO users SELECT * FROM AS_TABLE(${users})`
+  ```
+
 
 {% endlist %}

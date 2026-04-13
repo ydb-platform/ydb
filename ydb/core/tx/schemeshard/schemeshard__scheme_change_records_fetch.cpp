@@ -118,10 +118,18 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
             entry->SetSchemaVersion(rowset.GetValue<Schema::SchemeChangeRecords::SchemaVersion>());
             entry->SetCompletedAt(rowset.GetValue<Schema::SchemeChangeRecords::CompletedAt>());
             entry->SetPlanStep(rowset.GetValueOrDefault<Schema::SchemeChangeRecords::PlanStep>(0));
+
+            // Read body from details table (stored separately for precharge efficiency)
             {
-                TString body = rowset.GetValueOrDefault<Schema::SchemeChangeRecords::Body>("");
-                if (!body.empty()) {
-                    entry->SetBody(body);
+                auto detailsRowset = db.Table<Schema::SchemeChangeRecordDetails>().Key(seqId).Select();
+                if (!detailsRowset.IsReady()) {
+                    return false;
+                }
+                if (detailsRowset.IsValid()) {
+                    TString body = detailsRowset.GetValue<Schema::SchemeChangeRecordDetails::Body>();
+                    if (!body.empty()) {
+                        entry->SetBody(body);
+                    }
                 }
             }
 

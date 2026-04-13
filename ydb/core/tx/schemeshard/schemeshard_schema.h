@@ -2344,12 +2344,20 @@ struct Schema : NIceDb::Schema {
         struct SchemaVersion : Column<10, NScheme::NTypeIds::Uint64> {};
         struct CompletedAt :   Column<11, NScheme::NTypeIds::Uint64> {};
         struct PlanStep :      Column<12, NScheme::NTypeIds::Uint64> {};
-        struct Body :          Column<13, NScheme::NTypeIds::String> {};
+        struct BodySize :      Column<13, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<SequenceId>;
         using TColumns = TableColumns<SequenceId, TxId, OperationType, PathOwnerId, PathLocalId,
                                       PathName, ObjectType, Status, UserSID, SchemaVersion,
-                                      CompletedAt, PlanStep, Body>;
+                                      CompletedAt, PlanStep, BodySize>;
+    };
+
+    struct SchemeChangeRecordDetails : Table<135> {
+        struct SequenceId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct Body :       Column<2, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<SequenceId>;
+        using TColumns = TableColumns<SequenceId, Body>;
     };
 
     struct SchemeChangeSubscribers : Table<134> {
@@ -2492,6 +2500,7 @@ struct Schema : NIceDb::Schema {
         WaitingForcedCompactionShards,
         SharedShards,
         SchemeChangeRecords,
+        SchemeChangeRecordDetails,
         SchemeChangeSubscribers
     >;
 

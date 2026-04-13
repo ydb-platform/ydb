@@ -23,8 +23,13 @@ void TSchemeShard::PersistSchemeChangeRecord(NIceDb::TNiceDb& db, const TSchemeC
         NIceDb::TUpdate<T::SchemaVersion>(entry.SchemaVersion),
         NIceDb::TUpdate<T::CompletedAt>(entry.CompletedAt.MicroSeconds()),
         NIceDb::TUpdate<T::PlanStep>(ui64(entry.PlanStep)),
-        NIceDb::TUpdate<T::Body>(entry.Body)
+        NIceDb::TUpdate<T::BodySize>(entry.Body.size())
     );
+    if (!entry.Body.empty()) {
+        db.Table<Schema::SchemeChangeRecordDetails>().Key(entry.SequenceId).Update(
+            NIceDb::TUpdate<Schema::SchemeChangeRecordDetails::Body>(entry.Body)
+        );
+    }
     ++SchemeChangeRecordCount;
     PersistUpdateSchemeChangeRecordCount(db);
 }

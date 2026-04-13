@@ -57,6 +57,7 @@ struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionB
             }
 
             db.Table<Schema::SchemeChangeRecords>().Key(seqId).Delete();
+            db.Table<Schema::SchemeChangeRecordDetails>().Key(seqId).Delete();
             ++deletedCount;
 
             if (!logRowset.Next()) {

@@ -235,10 +235,7 @@ def collect_rows(default_window_days, fast_window_days, incremental_only):
                         status=item.get("status", "idle"),
                         state=item.get("state", "active"),
                         requested=bool(item.get("requested")),
-                        requested_at=None,
                         resolution_reason=item.get("reason", "") or None,
-                        wait_hours=0,
-                        wait_hours_left=0,
                     )
                 )
 

@@ -45,8 +45,7 @@ $gim_latest = (
 );
 
 $default_unmute_days = 7u;
-$manual_fast_unmute_days = 1u;
-$manual_wait_hours = $manual_fast_unmute_days * 24u;
+$manual_fast_unmute_days = 2u;
 
 $mru_latest = (
     SELECT
@@ -55,9 +54,6 @@ $mru_latest = (
         build_type AS build_type,
         manual_unmute_status AS manual_unmute_status,
         resolution_reason AS resolution_reason,
-        manual_requested_at AS manual_requested_at,
-        manual_wait_hours AS manual_wait_hours,
-        hours_until_ready AS hours_until_ready,
         effective_unmute_window_days AS effective_unmute_window_days,
         default_unmute_window_days AS default_unmute_window_days,
         manual_fast_unmute_window_days AS manual_fast_unmute_window_days
@@ -114,9 +110,6 @@ SELECT
     gim.area_override_since AS area_override_since,
     Coalesce(mru.manual_unmute_status, 'none') AS manual_unmute_status,
     mru.resolution_reason AS manual_unmute_reason,
-    mru.manual_requested_at AS manual_unmute_requested_at,
-    Coalesce(mru.manual_wait_hours, $manual_wait_hours) AS manual_unmute_wait_hours,
-    Coalesce(mru.hours_until_ready, 0u) AS manual_unmute_hours_until_ready,
     Coalesce(mru.effective_unmute_window_days, $default_unmute_days) AS effective_unmute_window_days,
     Coalesce(mru.default_unmute_window_days, $default_unmute_days) AS default_unmute_window_days,
     Coalesce(mru.manual_fast_unmute_window_days, $manual_fast_unmute_days) AS manual_fast_unmute_window_days

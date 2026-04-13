@@ -46,8 +46,7 @@ $gim_latest = (
 );
 
 $default_unmute_days = 7u;
-$manual_fast_unmute_days = 1u;
-$manual_wait_hours = $manual_fast_unmute_days * 24u;
+$manual_fast_unmute_days = 2u;
 
 $mru_latest = (
     SELECT
@@ -56,12 +55,10 @@ $mru_latest = (
         build_type AS build_type,
         manual_unmute_status AS manual_unmute_status,
         manual_request_active AS manual_request_active,
-        manual_requested_at AS manual_requested_at,
-        hours_until_ready AS hours_until_ready,
         effective_unmute_window_days AS effective_unmute_window_days,
         default_unmute_window_days AS default_unmute_window_days,
         manual_fast_unmute_window_days AS manual_fast_unmute_window_days,
-        manual_wait_hours AS manual_wait_hours
+        resolution_reason AS resolution_reason
     FROM (
         SELECT
             m.*,
@@ -127,12 +124,10 @@ SELECT
     gim.area_override_since AS area_override_since,
     mru.manual_unmute_status AS manual_unmute_status,
     CAST(Coalesce(mru.manual_request_active, 0u) AS Uint8) AS is_manual_unmute_requested,
-    mru.manual_requested_at AS manual_unmute_requested_at,
+    mru.resolution_reason AS manual_unmute_reason,
     CAST(Coalesce(mru.effective_unmute_window_days, $default_unmute_days) AS Uint32) AS effective_unmute_window_days,
     CAST(Coalesce(mru.default_unmute_window_days, $default_unmute_days) AS Uint32) AS default_unmute_window_days,
-    CAST(Coalesce(mru.manual_fast_unmute_window_days, $manual_fast_unmute_days) AS Uint32) AS manual_fast_unmute_window_days,
-    CAST(Coalesce(mru.manual_wait_hours, $manual_wait_hours) AS Uint32) AS manual_unmute_wait_hours,
-    CAST(Coalesce(mru.hours_until_ready, 0u) AS Uint32) AS manual_unmute_hours_until_ready
+    CAST(Coalesce(mru.manual_fast_unmute_window_days, $manual_fast_unmute_days) AS Uint32) AS manual_fast_unmute_window_days
 FROM `test_results/analytics/tests_monitor` AS tm
 LEFT JOIN $area_fallback AS af
     ON Unicode::ToLower(Cast(Coalesce(String::ReplaceAll(tm.owner, 'TEAM:@ydb-platform/', ''), '') AS Utf8)) = af.owner_team

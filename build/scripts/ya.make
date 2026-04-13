@@ -84,6 +84,7 @@ ELSEIF (PYTHON3)
         generate_mf.py
         generate_pom.py
         generate_win_vfs.py
+        go.py
         go_proto_wrapper.py
         go_tool.py
         iwyu.py

@@ -2583,6 +2583,8 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+=======
+>>>>>>> 31b6e235c67 (fix self issues)
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2715,10 +2717,14 @@ struct Schema : NIceDb::Schema {
         WaitingForcedCompactionShards,
         SharedShards,
         IncrementalRestoreItem,
+<<<<<<< HEAD
         TablePartitionsByShardIdx,
         TablePartitionStatsByShardIdx,
         FullBackups,
         FullBackupItems,
+=======
+        SharedShards,
+>>>>>>> 0bf47704816 (fix self issues)
         SetColumnConstraintOperation
     >;
 

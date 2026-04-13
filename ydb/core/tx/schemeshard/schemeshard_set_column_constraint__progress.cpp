@@ -176,16 +176,9 @@ public:
             auto statusCode = TranslateStatusCode(record.GetStatus());
 
             if (statusCode != Ydb::StatusIds::SUCCESS) {
-                // todo: persist issue
-                // Self->PersistSetColumnConstraintAddIssue(db, operationInfo, TStringBuilder()
-                //     << "At " << operationInfo.OperationState << " state got unsuccess propose result"
-                //     << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
-                //     << ", reason: " << record.GetReason());
-                // todo: forget operation on error
-                // if (!Self->PersistSetColumnConstraintForget(db, operationInfo)) {
-                //     return false;
-                // }
-                // EraseBuildInfo(operationInfo);
+                // todo (flown4qqqq): persist issue
+                // todo (flown4qqqq): forget operation on error
+                // todo (flown4qqqq): EraseBuildInfo(operationInfo);
             }
 
             ReplyOnCreation(operationInfo, statusCode);

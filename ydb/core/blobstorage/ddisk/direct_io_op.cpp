@@ -169,6 +169,7 @@ void TDDiskActor::TDirectIoOpBase::OnDrop() noexcept {
 
 void TDDiskActor::TDirectIoOpBase::PrepareWrite(TRope&& data, ui64 offset, TChunkIdx chunkIdx, ui64 chunkOffset) {
     Y_ABORT_UNLESS(data.size() <= MaxRwCount);
+    Y_ABORT_UNLESS(chunkOffset <= Max<ui32>());
     const size_t dataSize = data.size();
     Data.reset();
 
@@ -189,11 +190,12 @@ void TDDiskActor::TDirectIoOpBase::PrepareWrite(TRope&& data, ui64 offset, TChun
     PrepareIov(AlignedDataHolder.UnsafeGetDataMut(), dataSize, offset);
 
     ChunkIdx = chunkIdx;
-    ChunkOffsetInBytes = chunkOffset;
+    ChunkOffsetInBytes = static_cast<ui32>(chunkOffset);
 }
 
 void TDDiskActor::TDirectIoOpBase::PrepareRead(size_t size, ui64 offset, TChunkIdx chunkIdx, ui64 chunkOffset) {
     Y_ABORT_UNLESS(size <= MaxRwCount);
+    Y_ABORT_UNLESS(chunkOffset <= Max<ui32>());
     Data.reset();
 
     AlignedDataHolder = TRcBuf::UninitializedPageAligned(size);
@@ -201,7 +203,7 @@ void TDDiskActor::TDirectIoOpBase::PrepareRead(size_t size, ui64 offset, TChunkI
     PrepareIov(AlignedDataHolder.GetDataMut(), size, offset);
 
     ChunkIdx = chunkIdx;
-    ChunkOffsetInBytes = chunkOffset;
+    ChunkOffsetInBytes = static_cast<ui32>(chunkOffset);
 }
 
 TRope TDDiskActor::TDirectIoOpBase::ExtractData() {

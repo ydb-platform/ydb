@@ -59,7 +59,7 @@ public:
     // methods to use when we fallback to PDisk instead of direct I/O
 
     TChunkIdx GetChunkIdx() const { return ChunkIdx; }
-    ui64 GetChunkOffset() const { return ChunkOffsetInBytes; }
+    ui32 GetChunkOffset() const { return ChunkOffsetInBytes; }
 
     using NPDisk::TUringOperationBase::SetResult;
 
@@ -81,7 +81,7 @@ private:
 
     // PDisk fallback data
     TChunkIdx ChunkIdx = 0;
-    ui64 ChunkOffsetInBytes = 0;
+    ui32 ChunkOffsetInBytes = 0;
 
     NWilson::TSpan Span;
 

@@ -20,12 +20,11 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::SendPDiskWrite(std::unique_ptr<TDirectIoOpBase> op) {
         const ui64 cookie = NextCookie++;
-        Y_ABORT_UNLESS(op->GetChunkOffset() <= Max<ui32>());
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkWriteRaw(
             PDiskParams->Owner,
             PDiskParams->OwnerRound,
             op->GetChunkIdx(),
-            static_cast<ui32>(op->GetChunkOffset()),
+            op->GetChunkOffset(),
             op->ExtractData()), 0, cookie);
 
         WriteCallbacks.try_emplace(
@@ -35,12 +34,11 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::SendPDiskRead(std::unique_ptr<TDirectIoOpBase> op) {
         const ui64 cookie = NextCookie++;
-        Y_ABORT_UNLESS(op->GetChunkOffset() <= Max<ui32>());
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvChunkReadRaw(
             PDiskParams->Owner,
             PDiskParams->OwnerRound,
             op->GetChunkIdx(),
-            static_cast<ui32>(op->GetChunkOffset()),
+            op->GetChunkOffset(),
             op->GetTotalSize()), 0, cookie);
 
         ReadCallbacks.try_emplace(

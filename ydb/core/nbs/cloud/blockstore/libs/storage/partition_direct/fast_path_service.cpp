@@ -44,12 +44,16 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
     ui64 blockCount,
     ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
-    const TStorageConfig& storageConfig)
+    const TStorageConfig& storageConfig,
+    NMonitoring::TDynamicCounterPtr counters)
 {
     const ui64 regionsCount =
         AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
     TVector<std::shared_ptr<TRegion>> regions(regionsCount);
     for (size_t i = 0; i < regionsCount; i++) {
+        NMonitoring::TDynamicCounterPtr regionCounters =
+            counters->GetSubgroup("region", ToString(i));
+
         regions[i] = std::make_shared<TRegion>(
             TActorContext::ActorSystem(),
             partitionDirectService,
@@ -58,7 +62,8 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
             storageConfig.GetSyncRequestsBatchSize(),
             storageConfig.GetVChunkSize(),
             storageConfig.GetWriteHandoffDelay(),
-            storageConfig.GetTraceSamplePeriod());
+            storageConfig.GetTraceSamplePeriod(),
+            regionCounters);
     }
 
     return regions;
@@ -88,7 +93,11 @@ TFastPathService::TFastPathService(
           blockCount,
           blockSize,
           std::move(directBlockGroups),
-          *storageConfig))
+          *storageConfig,
+          MakeCountersChain(
+              counters,
+              storageConfig->GetDDiskPoolName(),
+              tabletId)))
     , TraceSamplePeriod(storageConfig->GetTraceSamplePeriod())
     , Counters(MakeCountersChain(
           std::move(counters),

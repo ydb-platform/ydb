@@ -9,6 +9,7 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/set.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -306,6 +307,10 @@ public:
 
     // Returns the number of in-flight write requests.
     [[nodiscard]] size_t GetInflightCount() const;
+    [[nodiscard]] size_t GetFlushPendingCount() const;
+    [[nodiscard]] size_t GetErasePendingCount() const;
+    [[nodiscard]] ui64 GetMinFlushPendingLsn() const;
+    [[nodiscard]] ui64 GetMinErasePendingLsn() const;
 
     // ILockableRanges implementation
     void LockPBuffer(ui64 lsn) override;
@@ -351,11 +356,12 @@ private:
     THashSet<ui64> ReadyToClone;
 
     // Ranges that are written PBuffers with quorum and ready to be flushed to
-    // DDisk.
-    THashSet<ui64> ReadyToFlush;
+    // DDisk. Using TSet for O(1) min LSN access.
+    TSet<ui64> ReadyToFlush;
 
     // Ranges that are fully transferred to DDisk and can be erased.
-    THashSet<ui64> ReadyToErase;
+    // Using TSet for O(1) min LSN access.
+    TSet<ui64> ReadyToErase;
 
     // In-flight reads and the locks they create.
     ILockableRanges::TLockRangeHandle InflightDDiskReadsGenerator = 0;

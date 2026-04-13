@@ -95,9 +95,37 @@ public:
             return Reply(NKikimrScheme::StatusPreconditionFailed, "Cannot set constraint on index");
         }
 
-        std::vector<std::string> notNullColumns(settings.GetNotNullColumns().begin(), settings.GetNotNullColumns().end());
+        std::vector<std::string> sortedNotNullColumns(settings.GetNotNullColumns().begin(), settings.GetNotNullColumns().end());
+        std::sort(sortedNotNullColumns.begin(), sortedNotNullColumns.end());
 
-        // todo(flown4qqqq) : check that columns with these names exist
+        // Checking the existence of columns in a table for O(std::sort)
+        {
+            Y_ABORT_UNLESS(Self->Tables.contains(tablePath.Base()->PathId));
+            const auto& tableInfo = Self->Tables.at(tablePath.Base()->PathId);
+            Y_ABORT_UNLESS(tableInfo);
+
+            std::vector<std::string> allColumnNames;
+            allColumnNames.reserve(tableInfo->Columns.size());
+            for (const auto& [_, columnInfo] : tableInfo->Columns) {
+                allColumnNames.push_back(columnInfo.Name);
+            }
+
+            std::sort(allColumnNames.begin(), allColumnNames.end());
+            ui32 currentId = 0;
+
+            for (const auto& s : sortedNotNullColumns) {
+                while (currentId < allColumnNames.size() && allColumnNames[currentId] != s) {
+                    currentId++;
+                }
+
+                if (currentId == allColumnNames.size()) {
+                    TString error = TStringBuilder()
+                        << "Column with name `" << s << "` doesnt exist.";
+
+                    return Reply(NKikimrScheme::StatusInvalidParameter, std::move(error));
+                }
+            }
+        }
 
         auto operationInfo = std::make_shared<TSetColumnConstraintOperationInfo>();
         operationInfo->Id = BuildId;
@@ -109,7 +137,7 @@ public:
         operationInfo->SenderCookie = Request->Cookie;
         operationInfo->StartTime = TAppData::TimeProvider->Now();
 
-        operationInfo->NotNullColumns = std::move(notNullColumns);
+        operationInfo->NotNullColumns = std::move(sortedNotNullColumns);
 
         if (request.HasUserSID()) {
             operationInfo->UserSID = request.GetUserSID();

@@ -137,6 +137,27 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
         }
     }
 
+    Y_UNIT_TEST(InvalidDatabase) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+
+        auto response = TestSetColumnConstraint(
+            runtime, ++txId,
+            TTestTxConfig::SchemeShard,
+            "/NonExistentDB",
+            "/NonExistentDB/Table",
+            {"value"});
+
+        Cerr << "SET COLUMN CONSTRAINT RESPONSE: " << response.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.GetStatus(),
+            Ydb::StatusIds::BAD_REQUEST,
+            response.ShortDebugString());
+    }
+
     Y_UNIT_TEST(InvalidTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -158,18 +179,30 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
             response.ShortDebugString());
     }
 
-    Y_UNIT_TEST(InvalidDatabase) {
+
+    Y_UNIT_TEST(InvalidColumn) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
         ui64 txId = 100;
 
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
         auto response = TestSetColumnConstraint(
             runtime, ++txId,
             TTestTxConfig::SchemeShard,
-            "/NonExistentDB",
-            "/NonExistentDB/Table",
-            {"value"});
+            "/MyRoot",
+            "/MyRoot/Table",
+            {"non_existent_column"});
 
         Cerr << "SET COLUMN CONSTRAINT RESPONSE: " << response.ShortDebugString() << Endl;
 

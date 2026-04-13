@@ -1233,7 +1233,6 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         w->SetUncompressedSize(writeRequest.blocks_uncompressed_sizes(messageIndex));
         w->SetClientDC(ClientDC);
         w->SetIgnoreQuotaDeadline(true);
-        w->SetDoNotLookupDeduplicationIdInMetadata(true);
         payloadSize += w->GetData().size() + w->GetSourceId().size();
     };
 
@@ -1253,7 +1252,6 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         w->SetUncompressedSize(msg.uncompressed_size());
         w->SetClientDC(ClientDC);
         w->SetIgnoreQuotaDeadline(true);
-        w->SetDoNotLookupDeduplicationIdInMetadata(true);
 
         payloadSize += w->GetData().size() + w->GetSourceId().size();
 

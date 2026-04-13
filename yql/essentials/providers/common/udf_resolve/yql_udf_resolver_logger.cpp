@@ -135,6 +135,10 @@ public:
         return Underlying_->ContainsModule(moduleName);
     }
 
+    bool IsPartial() const override {
+        return Underlying_->IsPartial();
+    }
+
 private:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     IUdfResolver::TPtr Underlying_;

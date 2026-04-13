@@ -236,6 +236,19 @@ Y_UNIT_TEST_SUITE(ConfigProto) {
             "/AppConfig/QueryServiceConfig/Yt/RemoteFilePatterns/Pattern/Pattern",
             "/AppConfig/QueryServiceConfig/Yt/RemoteFilePatterns/Cluster/Cluster",
             "/AppConfig/QueryServiceConfig/Yt/RemoteFilePatterns/Path/Path",
+            "/AppConfig/QueryServiceConfig/Yt/TvmTool/Port/Port",
+            "/AppConfig/QueryServiceConfig/Yt/TvmTool/SelfAlias/SelfAlias",
+            "/AppConfig/QueryServiceConfig/Yt/TvmAuth/TvmSecretPath/TvmSecretPath",
+            "/AppConfig/QueryServiceConfig/Yt/TvmAuth/SelfTvmId/SelfTvmId",
+            "/AppConfig/QueryServiceConfig/Yt/TvmAuth/DiskCacheDir/DiskCacheDir",
+            "/AppConfig/QueryServiceConfig/Yt/TvmAuth/Destinations/Alias/Alias",
+            "/AppConfig/QueryServiceConfig/Yt/TvmAuth/Destinations/TvmId/TvmId",
+            "/AppConfig/QueryServiceConfig/Yt/Blackbox/Host/Host",
+            "/AppConfig/QueryServiceConfig/Yt/Blackbox/Port/Port",
+            "/AppConfig/QueryServiceConfig/Yt/Blackbox/TvmAlias/TvmAlias",
+            "/AppConfig/QueryServiceConfig/Yt/Idm/Host/Host",
+            "/AppConfig/QueryServiceConfig/Yt/Idm/Port/Port",
+            "/AppConfig/QueryServiceConfig/Yt/Idm/TvmAlias/TvmAlias",
             "/AppConfig/QueryServiceConfig/Generic/DefaultSettings/Value/Value",
             "/AppConfig/FederatedQueryConfig/Gateways/S3/ClusterMapping/Settings/Value/Value",
             "/AppConfig/QueryServiceConfig/S3/ClusterMapping/Settings/Value/Value",
@@ -338,6 +351,19 @@ Y_UNIT_TEST_SUITE(ConfigProto) {
             {73, 15, 100, 1, 1}, // /AppConfig/QueryServiceConfig/Yt/RemoteFilePatterns/Pattern/Pattern
             {73, 15, 100, 2, 2}, // /AppConfig/QueryServiceConfig/Yt/RemoteFilePatterns/Cluster/Cluster
             {73, 15, 100, 3, 3}, // /AppConfig/QueryServiceConfig/Yt/RemoteFilePatterns/Path/Path
+            {73, 15, 16, 1, 1}, // /AppConfig/QueryServiceConfig/Yt/TvmTool/Port/Port
+            {73, 15, 16, 2, 2}, // /AppConfig/QueryServiceConfig/Yt/TvmTool/SelfAlias/SelfAlias
+            {73, 15, 17, 1, 1}, // /AppConfig/QueryServiceConfig/Yt/TvmAuth/TvmSecretPath/TvmSecretPath
+            {73, 15, 17, 2, 2}, // /AppConfig/QueryServiceConfig/Yt/TvmAuth/SelfTvmId/SelfTvmId
+            {73, 15, 17, 3, 3}, // /AppConfig/QueryServiceConfig/Yt/TvmAuth/DiskCacheDir/DiskCacheDir
+            {73, 15, 17, 4, 1, 1}, // /AppConfig/QueryServiceConfig/Yt/TvmAuth/Destinations/Alias/Alias
+            {73, 15, 17, 4, 2, 2}, // /AppConfig/QueryServiceConfig/Yt/TvmAuth/Destinations/TvmId/TvmId
+            {73, 15, 18, 1, 1}, // /AppConfig/QueryServiceConfig/Yt/Blackbox/Host/Host
+            {73, 15, 18, 2, 2}, // /AppConfig/QueryServiceConfig/Yt/Blackbox/Port/Port
+            {73, 15, 18, 3, 3}, // /AppConfig/QueryServiceConfig/Yt/Blackbox/TvmAlias/TvmAlias
+            {73, 15, 19, 1, 1}, // /AppConfig/QueryServiceConfig/Yt/Idm/Host/Host
+            {73, 15, 19, 2, 2}, // /AppConfig/QueryServiceConfig/Yt/Idm/Port/Port
+            {73, 15, 19, 3, 3}, // /AppConfig/QueryServiceConfig/Yt/Idm/TvmAlias/TvmAlias
             {58, 9, 6, 1, 100, 2, 2}, // /AppConfig/FederatedQueryConfig/Gateways/Solomon/ClusterMapping/Settings/Value/Value
             {58, 9, 5, 1, 100, 2, 2}, // /AppConfig/FederatedQueryConfig/Gateways/S3/ClusterMapping/Settings/Value/Value
             {58, 9, 6, 2, 2, 2}, // /AppConfig/FederatedQueryConfig/Gateways/Solomon/DefaultSettings/Value/Value

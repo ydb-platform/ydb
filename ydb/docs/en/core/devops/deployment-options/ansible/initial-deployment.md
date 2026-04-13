@@ -355,7 +355,7 @@ There are multiple options to specify which exactly {{ ydb-short-name }} executa
 * `ydb_archive`: a local filesystem path for a {{ ydb-short-name }} distribution archive [downloaded](../../../downloads/index.md#ydb-server) or otherwise prepared in advance.
 * `ydbd_binary` and `ydb_cli_binary`: local filesystem paths for {{ ydb-short-name }} server and client executables, [downloaded](../../../downloads/index.md#ydb-server) or otherwise prepared in advance.
 
-Installing a [connector](../../../concepts/federated_query/architecture.md#connectors) may be necessary for using [federated queries](../../../concepts/federated_query/index.md). The playbook can deploy the [fq-connector-go](../manual/federated-queries/connector-deployment.md#fq-connector-go) to the hosts with dynamic nodes. Use the following settings:
+Installing a [connector](../../../concepts/query_execution/federated_query/architecture.md#connectors) may be necessary for using [federated queries](../../../concepts/query_execution/federated_query/index.md). The playbook can deploy the [fq-connector-go](../manual/federated-queries/connector-deployment.md#fq-connector-go) to the hosts with dynamic nodes. Use the following settings:
 
 * `ydb_install_fq_connector` - set to `true` for installing the connector.
 * Choose one of the available options for deploying fq-connector-go executables:
@@ -431,7 +431,7 @@ After all the preparations explained above are complete, the actual initial clus
 ansible-playbook ydb_platform.ydb.initial_setup
 ```
 
-Shortly after start, you'll be asked to confirm full wipe of the configured disk drives. Then, it can take tens of minutes to finish deployment depending on the environment and settings. Under the hood, this playbook follows roughly the same steps as explained in instructions for [manual {{ ydb-short-name }} cluster deployment](../manual/initial-deployment/index.md).
+Shortly after start, you'll be asked to confirm full wipe of the configured disk drives. Then, it can take tens of minutes to finish deployment depending on the environment and settings. Under the hood, this playbook follows roughly the same steps as explained in instructions for [manual {{ ydb-short-name }} cluster deployment](../manual/initial-deployment.md).
 
 ### Checking the Cluster State {#cluster-state}
 

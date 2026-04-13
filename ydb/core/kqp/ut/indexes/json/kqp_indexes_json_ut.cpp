@@ -219,10 +219,10 @@ void ValidatePredicate(TQueryClient& db, const std::string& table, const std::st
     };
 
     auto mainResult = db.ExecuteQuery(query(table, "", predicate), TTxControl::NoTx()).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(mainResult.GetStatus(), EStatus::SUCCESS, mainResult.GetIssues().ToString());
+    UNIT_ASSERT_C(mainResult.IsSuccess(), mainResult.GetIssues().ToString());
 
     auto indexResult = db.ExecuteQuery(query(table, indexTable, predicate), TTxControl::NoTx()).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(indexResult.GetStatus(), EStatus::SUCCESS, indexResult.GetIssues().ToString());
+    UNIT_ASSERT_C(indexResult.IsSuccess(), indexResult.GetIssues().ToString());
 
     // Cerr << "MAIN: " << Endl << FormatResultSetYson(mainResult.GetResultSet(0)) << Endl;
     // Cerr << "INDEX: " << Endl << FormatResultSetYson(indexResult.GetResultSet(0)) << Endl;
@@ -231,7 +231,7 @@ void ValidatePredicate(TQueryClient& db, const std::string& table, const std::st
     CompareYson(FormatResultSetYson(mainResult.GetResultSet(0)), FormatResultSetYson(indexResult.GetResultSet(0)));
 }
 
-void ValidateError(TQueryClient& db, const std::string& table, const std::string& indexTable, const std::string& predicate, const std::string& errorMessage) {
+void ValidateError(TQueryClient& db, const std::string& table, const std::string& indexTable, const std::string& predicate) {
     auto query = [&](const std::string& table, const std::string& indexTable, const std::string& predicate) {
         return std::format(R"(
             SELECT * FROM {} {} WHERE {} ORDER BY Key;
@@ -239,8 +239,8 @@ void ValidateError(TQueryClient& db, const std::string& table, const std::string
     };
 
     auto result = db.ExecuteQuery(query(table, indexTable, predicate), TTxControl::NoTx()).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), errorMessage);
+    UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Failed to extract search terms from jsonpath expression");
 }
 
 void TestSelectJsonExists(bool isJsonDocument, bool isStrict,
@@ -269,6 +269,29 @@ void TestSelectJsonExists(bool isJsonDocument, bool isStrict,
     }
 
     body(db, jsonExists);
+}
+
+TExecuteQueryResult WriteJsonIndexWithKeys(TQueryClient& db, const std::string& stmt, const std::string& tableName,
+    const std::string& jsonType, const std::vector<std::pair<ui64, ui64>>& values, bool withReturning = false)
+{
+    TStringBuilder query;
+    query << stmt << " INTO " << tableName << " (Key, Text, Data) VALUES\n";
+
+    for (size_t i = 0; i < values.size(); ++i) {
+        const auto [key, value] = values[i];
+        query << "(" << key << ", " << jsonType << "('{\"k" << value << "\": [\"v" << value << "\", " << value << ", " << (value % 2 == 0 ? "true" : "false") << "]}'), \"data " << value << "\")";
+        if (i + 1 < values.size()) {
+            query << ", ";
+        } else {
+            query << "\n";
+        }
+    }
+
+    if (withReturning) {
+        query << "RETURNING *";
+    }
+
+    return db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
 }
 
 }  // namespace
@@ -332,7 +355,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Text)
             )";
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Error: JSON column 'Text' must have type 'Json' or 'JsonDocument' but got Uint64");
         }
     }
@@ -362,7 +385,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Field1, Field2)
             )";
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "JSON index supports only 1 key column, but 2 are requested");
         }
     }
@@ -383,7 +406,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 );
             )";
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
         {
@@ -391,7 +414,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Field1)
             )";
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Error: JSON index requires primary key column 'Key' to be of type 'Uint64' but got Uint32");
         }
     }
@@ -421,7 +444,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Field1)
             )";
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Error: JSON index requires exactly one primary key column of type 'Uint64', but table has 2 primary key columns");
         }
     }
@@ -437,7 +460,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Text)
             )";
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
         }
     }
 
@@ -456,7 +479,719 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
                 );
             )";
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(UpsertJsonIndex, IsJsonDocument, WithReturning) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        auto jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+
+        CreateTestTable(db, jsonType);
+
+        {
+            auto writeResult = WriteJsonIndexWithKeys(db, "UPSERT", "TestTable", jsonType, {{1, 1}, {2, 2}, {3, 3}, {4, 4}}, WithReturning);
+            UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+
+            if (WithReturning) {
+                if (IsJsonDocument) {
+                    CompareYson(R"([
+                        [["data 1"];[1u];["{\"k1\":[\"v1\",1,false]}"]];
+                        [["data 2"];[2u];["{\"k2\":[\"v2\",2,true]}"]];
+                        [["data 3"];[3u];["{\"k3\":[\"v3\",3,false]}"]];
+                        [["data 4"];[4u];["{\"k4\":[\"v4\",4,true]}"]]
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                } else {
+                    CompareYson(R"([
+                        [["data 1"];[1u];["{\"k1\": [\"v1\", 1, false]}"]];
+                        [["data 2"];[2u];["{\"k2\": [\"v2\", 2, true]}"]];
+                        [["data 3"];[3u];["{\"k3\": [\"v3\", 3, false]}"]];
+                        [["data 4"];[4u];["{\"k4\": [\"v4\", 4, true]}"]]
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                }
+            }
+        }
+
+        {
+            std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Text)
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\2k1"];
+                [[1u];"\2k1\0\0"];
+                [[1u];"\2k1\0\3v1"];
+                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[2u];""];
+                [[2u];"\2k2"];
+                [[2u];"\2k2\0\1"];
+                [[2u];"\2k2\0\3v2"];
+                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[3u];""];
+                [[3u];"\2k3"];
+                [[3u];"\2k3\0\0"];
+                [[3u];"\2k3\0\3v3"];
+                [[3u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[4u];""];
+                [[4u];"\2k4"];
+                [[4u];"\2k4\0\1"];
+                [[4u];"\2k4\0\3v4"];
+                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+
+        {
+            auto writeResult = WriteJsonIndexWithKeys(db, "UPSERT", "TestTable", jsonType, {{1, 3}, {3, 2}, {5, 5}}, WithReturning);
+            UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+
+            if (WithReturning) {
+                if (IsJsonDocument) {
+                    CompareYson(R"([
+                        [["data 5"];[5u];["{\"k5\":[\"v5\",5,false]}"]];
+                        [["data 2"];[3u];["{\"k2\":[\"v2\",2,true]}"]];
+                        [["data 3"];[1u];["{\"k3\":[\"v3\",3,false]}"]]
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                } else {
+                    CompareYson(R"([
+                        [["data 5"];[5u];["{\"k5\": [\"v5\", 5, false]}"]];
+                        [["data 2"];[3u];["{\"k2\": [\"v2\", 2, true]}"]];
+                        [["data 3"];[1u];["{\"k3\": [\"v3\", 3, false]}"]]
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                }
+            }
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[1u];"\2k3\0\3v3"];
+                [[1u];"\2k3\0\0"];
+                [[1u];"\2k3"];
+                [[1u];""];
+                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[2u];""];
+                [[2u];"\2k2"];
+                [[2u];"\2k2\0\1"];
+                [[2u];"\2k2\0\3v2"];
+                [[3u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[3u];"\2k2\0\3v2"];
+                [[3u];"\2k2\0\1"];
+                [[3u];"\2k2"];
+                [[3u];""];
+                [[4u];""];
+                [[4u];"\2k4"];
+                [[4u];"\2k4\0\1"];
+                [[4u];"\2k4\0\3v4"];
+                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"];
+                [[5u];""];
+                [[5u];"\2k5"];
+                [[5u];"\2k5\0\0"];
+                [[5u];"\2k5\0\3v5"];
+                [[5u];"\2k5\0\4\0\0\0\0\0\0\x14@"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(ReplaceJsonIndex, IsJsonDocument, WithReturning) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        auto jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+
+        CreateTestTable(db, jsonType);
+
+        {
+            auto writeResult = WriteJsonIndexWithKeys(db, "REPLACE", "TestTable", jsonType, {{1, 1}, {2, 2}, {3, 3}, {4, 4}}, WithReturning);
+            UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+
+            if (WithReturning) {
+                if (IsJsonDocument) {
+                    CompareYson(R"([
+                        [["data 1"];[1u];["{\"k1\":[\"v1\",1,false]}"]];
+                        [["data 2"];[2u];["{\"k2\":[\"v2\",2,true]}"]];
+                        [["data 3"];[3u];["{\"k3\":[\"v3\",3,false]}"]];
+                        [["data 4"];[4u];["{\"k4\":[\"v4\",4,true]}"]]
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                } else {
+                    CompareYson(R"([
+                        [["data 1"];[1u];["{\"k1\": [\"v1\", 1, false]}"]];
+                        [["data 2"];[2u];["{\"k2\": [\"v2\", 2, true]}"]];
+                        [["data 3"];[3u];["{\"k3\": [\"v3\", 3, false]}"]];
+                        [["data 4"];[4u];["{\"k4\": [\"v4\", 4, true]}"]]
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                }
+            }
+        }
+
+        {
+            std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Text)
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\2k1"];
+                [[1u];"\2k1\0\0"];
+                [[1u];"\2k1\0\3v1"];
+                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[2u];""];
+                [[2u];"\2k2"];
+                [[2u];"\2k2\0\1"];
+                [[2u];"\2k2\0\3v2"];
+                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[3u];""];
+                [[3u];"\2k3"];
+                [[3u];"\2k3\0\0"];
+                [[3u];"\2k3\0\3v3"];
+                [[3u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[4u];""];
+                [[4u];"\2k4"];
+                [[4u];"\2k4\0\1"];
+                [[4u];"\2k4\0\3v4"];
+                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+
+        {
+            auto writeResult = WriteJsonIndexWithKeys(db, "REPLACE", "TestTable", jsonType, {{1, 3}, {3, 2}, {5, 5}}, WithReturning);
+            UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+
+            if (WithReturning) {
+                if (IsJsonDocument) {
+                    CompareYson(R"([
+                        [["data 5"];[5u];["{\"k5\":[\"v5\",5,false]}"]];
+                        [["data 2"];[3u];["{\"k2\":[\"v2\",2,true]}"]];
+                        [["data 3"];[1u];["{\"k3\":[\"v3\",3,false]}"]]
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                } else {
+                    CompareYson(R"([
+                        [["data 5"];[5u];["{\"k5\": [\"v5\", 5, false]}"]];
+                        [["data 2"];[3u];["{\"k2\": [\"v2\", 2, true]}"]];
+                        [["data 3"];[1u];["{\"k3\": [\"v3\", 3, false]}"]]
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                }
+            }
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[1u];"\2k3\0\3v3"];
+                [[1u];"\2k3\0\0"];
+                [[1u];"\2k3"];
+                [[1u];""];
+                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[2u];""];
+                [[2u];"\2k2"];
+                [[2u];"\2k2\0\1"];
+                [[2u];"\2k2\0\3v2"];
+                [[3u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[3u];"\2k2\0\3v2"];
+                [[3u];"\2k2\0\1"];
+                [[3u];"\2k2"];
+                [[3u];""];
+                [[4u];""];
+                [[4u];"\2k4"];
+                [[4u];"\2k4\0\1"];
+                [[4u];"\2k4\0\3v4"];
+                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"];
+                [[5u];""];
+                [[5u];"\2k5"];
+                [[5u];"\2k5\0\0"];
+                [[5u];"\2k5\0\3v5"];
+                [[5u];"\2k5\0\4\0\0\0\0\0\0\x14@"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(InsertJsonIndex, IsJsonDocument, WithReturning) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        auto jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+
+        CreateTestTable(db, jsonType);
+
+        {
+            auto writeResult = WriteJsonIndexWithKeys(db, "INSERT", "TestTable", jsonType, {{1, 1}, {2, 2}, {3, 3}, {4, 4}}, WithReturning);
+            UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+
+            if (WithReturning) {
+                if (IsJsonDocument) {
+                    CompareYson(R"([
+                        [["data 1"];[1u];["{\"k1\":[\"v1\",1,false]}"]];
+                        [["data 2"];[2u];["{\"k2\":[\"v2\",2,true]}"]];
+                        [["data 3"];[3u];["{\"k3\":[\"v3\",3,false]}"]];
+                        [["data 4"];[4u];["{\"k4\":[\"v4\",4,true]}"]]
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                } else {
+                    CompareYson(R"([
+                        [["data 1"];[1u];["{\"k1\": [\"v1\", 1, false]}"]];
+                        [["data 2"];[2u];["{\"k2\": [\"v2\", 2, true]}"]];
+                        [["data 3"];[3u];["{\"k3\": [\"v3\", 3, false]}"]];
+                        [["data 4"];[4u];["{\"k4\": [\"v4\", 4, true]}"]]
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                }
+            }
+        }
+
+        {
+            std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Text)
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\2k1"];
+                [[1u];"\2k1\0\0"];
+                [[1u];"\2k1\0\3v1"];
+                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[2u];""];
+                [[2u];"\2k2"];
+                [[2u];"\2k2\0\1"];
+                [[2u];"\2k2\0\3v2"];
+                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[3u];""];
+                [[3u];"\2k3"];
+                [[3u];"\2k3\0\0"];
+                [[3u];"\2k3\0\3v3"];
+                [[3u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[4u];""];
+                [[4u];"\2k4"];
+                [[4u];"\2k4\0\1"];
+                [[4u];"\2k4\0\3v4"];
+                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto writeResult = WriteJsonIndexWithKeys(db, "INSERT", "TestTable", jsonType, {{5, 3}, {6, 2}}, WithReturning);
+            UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+
+            if (WithReturning) {
+                if (IsJsonDocument) {
+                    CompareYson(R"([
+                        [["data 3"];[5u];["{\"k3\":[\"v3\",3,false]}"]];
+                        [["data 2"];[6u];["{\"k2\":[\"v2\",2,true]}"]];
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                } else {
+                    CompareYson(R"([
+                        [["data 3"];[5u];["{\"k3\": [\"v3\", 3, false]}"]];
+                        [["data 2"];[6u];["{\"k2\": [\"v2\", 2, true]}"]];
+                    ])", FormatResultSetYson(writeResult.GetResultSet(0)));
+                }
+            }
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\2k1"];
+                [[1u];"\2k1\0\0"];
+                [[1u];"\2k1\0\3v1"];
+                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[2u];""];
+                [[2u];"\2k2"];
+                [[2u];"\2k2\0\1"];
+                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[2u];"\2k2\0\3v2"];
+                [[3u];""];
+                [[3u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[3u];"\2k3\0\3v3"];
+                [[3u];"\2k3\0\0"];
+                [[3u];"\2k3"];
+                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"];
+                [[4u];""];
+                [[4u];"\2k4"];
+                [[4u];"\2k4\0\1"];
+                [[4u];"\2k4\0\3v4"];
+                [[5u];"\2k3"];
+                [[5u];"\2k3\0\0"];
+                [[5u];""];
+                [[5u];"\2k3\0\3v3"];
+                [[5u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[6u];"\2k2\0\1"];
+                [[6u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[6u];"\2k2"];
+                [[6u];""];
+                [[6u];"\2k2\0\3v2"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            auto writeResult = WriteJsonIndexWithKeys(db, "INSERT", "TestTable", jsonType, {{1, 1}, {7, 7}}, WithReturning);
+            UNIT_ASSERT_C(!writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\2k1"];
+                [[1u];"\2k1\0\0"];
+                [[1u];"\2k1\0\3v1"];
+                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[2u];""];
+                [[2u];"\2k2"];
+                [[2u];"\2k2\0\1"];
+                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[2u];"\2k2\0\3v2"];
+                [[3u];""];
+                [[3u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[3u];"\2k3\0\3v3"];
+                [[3u];"\2k3\0\0"];
+                [[3u];"\2k3"];
+                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"];
+                [[4u];""];
+                [[4u];"\2k4"];
+                [[4u];"\2k4\0\1"];
+                [[4u];"\2k4\0\3v4"];
+                [[5u];"\2k3"];
+                [[5u];"\2k3\0\0"];
+                [[5u];""];
+                [[5u];"\2k3\0\3v3"];
+                [[5u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[6u];"\2k2\0\1"];
+                [[6u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[6u];"\2k2"];
+                [[6u];""];
+                [[6u];"\2k2\0\3v2"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(UpdateJsonIndex, IsJsonDocument, WithReturning) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        auto jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+
+        CreateTestTable(db, jsonType);
+
+        {
+            auto writeResult = WriteJsonIndexWithKeys(db, "INSERT", "TestTable", jsonType, {{1, 1}, {2, 2}, {3, 3}, {4, 4}}, /* withReturning */ false);
+            UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Text)
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\2k1"];
+                [[1u];"\2k1\0\0"];
+                [[1u];"\2k1\0\3v1"];
+                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[2u];""];
+                [[2u];"\2k2"];
+                [[2u];"\2k2\0\1"];
+                [[2u];"\2k2\0\3v2"];
+                [[2u];"\2k2\0\4\0\0\0\0\0\0\0@"];
+                [[3u];""];
+                [[3u];"\2k3"];
+                [[3u];"\2k3\0\0"];
+                [[3u];"\2k3\0\3v3"];
+                [[3u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+                [[4u];""];
+                [[4u];"\2k4"];
+                [[4u];"\2k4\0\1"];
+                [[4u];"\2k4\0\3v4"];
+                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            TStringBuilder query;
+            query << "UPDATE `/Root/TestTable` "
+                  << "SET Text = " << jsonType << "('{\"k10\": [\"v10\", 10, true]}'), "
+                  << "Data = \"data 10\" "
+                  << "WHERE Key IN (2, 3)";
+            if (WithReturning) {
+                query << " RETURNING *";
+            }
+
+            auto updateResult = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(updateResult.IsSuccess(), updateResult.GetIssues().ToString());
+
+            if (WithReturning) {
+                if (IsJsonDocument) {
+                    CompareYson(R"([
+                        [["data 10"];[3u];["{\"k10\":[\"v10\",10,true]}"]];
+                        [["data 10"];[2u];["{\"k10\":[\"v10\",10,true]}"]]
+                    ])", FormatResultSetYson(updateResult.GetResultSet(0)));
+                } else {
+                    CompareYson(R"([
+                        [["data 10"];[3u];["{\"k10\": [\"v10\", 10, true]}"]];
+                        [["data 10"];[2u];["{\"k10\": [\"v10\", 10, true]}"]]
+                    ])", FormatResultSetYson(updateResult.GetResultSet(0)));
+                }
+            }
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\2k1"];
+                [[1u];"\2k1\0\0"];
+                [[1u];"\2k1\0\3v1"];
+                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[2u];""];
+                [[2u];"\3k10"];
+                [[2u];"\3k10\0\1"];
+                [[2u];"\3k10\0\3v10"];
+                [[2u];"\3k10\0\4\0\0\0\0\0\0$@"];
+                [[3u];""];
+                [[3u];"\3k10"];
+                [[3u];"\3k10\0\1"];
+                [[3u];"\3k10\0\3v10"];
+                [[3u];"\3k10\0\4\0\0\0\0\0\0$@"];
+                [[4u];""];
+                [[4u];"\2k4"];
+                [[4u];"\2k4\0\1"];
+                [[4u];"\2k4\0\3v4"];
+                [[4u];"\2k4\0\4\0\0\0\0\0\0\x10@"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            TStringBuilder query;
+            query << "UPDATE `/Root/TestTable` "
+                  << "SET Text = " << jsonType << "('{\"k100\": [\"v100\", 100, false]}'), "
+                  << "Data = \"data 100\"";
+            if (WithReturning) {
+                query << " RETURNING *";
+            }
+
+            auto updateResult = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(updateResult.IsSuccess(), updateResult.GetIssues().ToString());
+
+            if (WithReturning) {
+                if (IsJsonDocument) {
+                    CompareYson(R"([
+                        [["data 100"];[4u];["{\"k100\":[\"v100\",100,false]}"]];
+                        [["data 100"];[3u];["{\"k100\":[\"v100\",100,false]}"]];
+                        [["data 100"];[2u];["{\"k100\":[\"v100\",100,false]}"]];
+                        [["data 100"];[1u];["{\"k100\":[\"v100\",100,false]}"]]
+                    ])", FormatResultSetYson(updateResult.GetResultSet(0)));
+                } else {
+                    CompareYson(R"([
+                        [["data 100"];[4u];["{\"k100\": [\"v100\", 100, false]}"]];
+                        [["data 100"];[3u];["{\"k100\": [\"v100\", 100, false]}"]];
+                        [["data 100"];[2u];["{\"k100\": [\"v100\", 100, false]}"]];
+                        [["data 100"];[1u];["{\"k100\": [\"v100\", 100, false]}"]]
+                    ])", FormatResultSetYson(updateResult.GetResultSet(0)));
+                }
+            }
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\4k100"];
+                [[1u];"\4k100\0\0"];
+                [[1u];"\4k100\0\3v100"];
+                [[1u];"\4k100\0\4\0\0\0\0\0\0Y@"];
+                [[2u];""];
+                [[2u];"\4k100"];
+                [[2u];"\4k100\0\0"];
+                [[2u];"\4k100\0\3v100"];
+                [[2u];"\4k100\0\4\0\0\0\0\0\0Y@"];
+                [[3u];""];
+                [[3u];"\4k100"];
+                [[3u];"\4k100\0\0"];
+                [[3u];"\4k100\0\3v100"];
+                [[3u];"\4k100\0\4\0\0\0\0\0\0Y@"];
+                [[4u];""];
+                [[4u];"\4k100"];
+                [[4u];"\4k100\0\0"];
+                [[4u];"\4k100\0\3v100"];
+                [[4u];"\4k100\0\4\0\0\0\0\0\0Y@"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(DeleteJsonIndex, IsJsonDocument, WithReturning) {
+        auto kikimr = Kikimr();
+        auto db = kikimr.GetQueryClient();
+
+        auto jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+
+        CreateTestTable(db, jsonType);
+
+        {
+            auto writeResult = WriteJsonIndexWithKeys(db, "INSERT", "TestTable", jsonType, {{1, 1}, {2, 2}, {3, 3}, {4, 4}}, /* withReturning */ false);
+            UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                ALTER TABLE `/Root/TestTable` ADD INDEX json_idx GLOBAL USING json ON (Text)
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            TStringBuilder query;
+            query << "DELETE FROM `/Root/TestTable` WHERE Key IN (2, 4)";
+            if (WithReturning) {
+                query << " RETURNING *";
+            }
+
+            auto deleteResult = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(deleteResult.IsSuccess(), deleteResult.GetIssues().ToString());
+
+            if (WithReturning) {
+                if (IsJsonDocument) {
+                    CompareYson(R"([
+                        [["data 4"];[4u];["{\"k4\":[\"v4\",4,true]}"]];
+                        [["data 2"];[2u];["{\"k2\":[\"v2\",2,true]}"]]
+                    ])", FormatResultSetYson(deleteResult.GetResultSet(0)));
+                } else {
+                    CompareYson(R"([
+                        [["data 4"];[4u];["{\"k4\": [\"v4\", 4, true]}"]];
+                        [["data 2"];[2u];["{\"k2\": [\"v2\", 2, true]}"]]
+                    ])", FormatResultSetYson(deleteResult.GetResultSet(0)));
+                }
+            }
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1u];""];
+                [[1u];"\2k1"];
+                [[1u];"\2k1\0\0"];
+                [[1u];"\2k1\0\3v1"];
+                [[1u];"\2k1\0\4\0\0\0\0\0\0\xF0?"];
+                [[3u];""];
+                [[3u];"\2k3"];
+                [[3u];"\2k3\0\0"];
+                [[3u];"\2k3\0\3v3"];
+                [[3u];"\2k3\0\4\0\0\0\0\0\0\x08@"];
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        {
+            TStringBuilder query;
+            query << "DELETE FROM `/Root/TestTable`";
+            if (WithReturning) {
+                query << " RETURNING *";
+            }
+
+            auto deleteResult = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(deleteResult.IsSuccess(), deleteResult.GetIssues().ToString());
+
+            if (WithReturning) {
+                if (IsJsonDocument) {
+                    CompareYson(R"([
+                        [["data 3"];[3u];["{\"k3\":[\"v3\",3,false]}"]];
+                        [["data 1"];[1u];["{\"k1\":[\"v1\",1,false]}"]]
+                    ])", FormatResultSetYson(deleteResult.GetResultSet(0)));
+                } else {
+                    CompareYson(R"([
+                        [["data 3"];[3u];["{\"k3\": [\"v3\", 3, false]}"]];
+                        [["data 1"];[1u];["{\"k1\": [\"v1\", 1, false]}"]]
+                    ])", FormatResultSetYson(deleteResult.GetResultSet(0)));
+                }
+            }
+        }
+
+        {
+            std::string query = R"(
+                SELECT * FROM `/Root/TestTable/json_idx/indexImplTable` ORDER BY Key;
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson("[]", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 
@@ -560,81 +1295,403 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         });
     }
 
-    Y_UNIT_TEST_QUAD(SelectJsonExists_StartsWithPredicate, IsJsonDocument, IsStrict) {
+    // All 6 literal types with == inside a filter, plus @ itself (not a sub-member)
+    Y_UNIT_TEST_QUAD(SelectJsonExists_FilterEqual, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ starts with \"text\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k3 starts with \"te\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k8 starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2 starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2.k3 starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2.k3.k4 starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.* starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.* starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2.* starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.*.k1 starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.*.k1 starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0] starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0, 3] starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[1 to 3] starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[last] starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*] starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[0] starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[1 to last] starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[*] starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[last] starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0].k1 starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0, 3].k1 starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[1 to 3].k1 starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[last].k1 starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*].k1 starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*].* starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.*[*] starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[*].k1 starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.type() starts with \"s\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.keyvalue().name starts with \"k\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.keyvalue().value starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.*.type() starts with \"s\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0].type() starts with \"s\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*].type() starts with \"s\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2.keyvalue().name starts with \"k\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.\"\" starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.\"\".\"\" starts with \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[0 to last].k1 starts with \"1\""));
+            // @.field == literal, all literal types
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k2 == -1.5)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k3 == \"text\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k4 == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k2 == false)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k5 == null)"));
+            // Both sides are paths (index terms merged with AND)
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == @.k1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k3 == @.k4)"));
+            // @ itself as the filter path (not a sub-member), all literal types
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ == 1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ == -1.5)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ == \"1\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ == false)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ == null)"));
         });
     }
 
-    Y_UNIT_TEST_QUAD(SelectJsonExists_LikeRegexPredicate, IsJsonDocument, IsStrict) {
+    // All comparison operators in a filter
+    Y_UNIT_TEST_QUAD(SelectJsonExists_FilterComparisonOps, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 like_regex \"1\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ like_regex \".*\""));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[*].k1 like_regex \"1\""));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 <= -1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 > 0)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 >= -2)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 != 0)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (+1 == @.k1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (-(+(-10)) > @.k1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (\"text\" == @.k3)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (null == @.k5)"));
         });
     }
 
-    Y_UNIT_TEST_QUAD(SelectJsonExists_IsUnknownPredicate, IsJsonDocument, IsStrict) {
+    // AND and OR boolean operators inside filter predicates
+    Y_UNIT_TEST_QUAD(SelectJsonExists_FilterLogicalOps, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("($ starts with \"abc\") is unknown"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 && @.k3 == \"text\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k4 == true && @.k5 == null)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 > 0 && @.k1 < 100)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@.k1 == 1) || (@.k1 == 0))"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@.k4 == true) || (@.k2 == false))"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@.k1 == 10) || (@.k1 == 20))"));
         });
     }
 
-    Y_UNIT_TEST_QUAD(SelectJsonExists_ExistsPredicate, IsJsonDocument, IsStrict) {
+    // Corner cases for the filter context path: deep nesting, array subscript, empty key
+    Y_UNIT_TEST_QUAD(SelectJsonExists_FilterPaths, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("exists($)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("exists($.key)"));
-            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("exists($.key[1, 2, 3])"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1.k2.k3.k4 == \"1\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1[0] == 1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k6[2] == false)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 == 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.\"\" == null)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.\"\" == 1)"));
+        });
+    }
+
+    // Predicates and boolean operators inside filter
+    Y_UNIT_TEST_QUAD(SelectJsonExists_Predicates, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+            // Predicates are not allowed in JsonExists without a filter
+            ValidateError(db, "TestTable", "json_idx", jsonExists("exists($.k1)"));
+            ValidateError(db, "TestTable", "json_idx", jsonExists("$.k1 starts with \"abc\""));
+            ValidateError(db, "TestTable", "json_idx", jsonExists("$.k1 like_regex \"abc\""));
+            ValidateError(db, "TestTable", "json_idx", jsonExists("($.k1 == 10) is unknown"));
+            ValidateError(db, "TestTable", "json_idx", jsonExists("$.k1 == 10"));
+            ValidateError(db, "TestTable", "json_idx", jsonExists("$.k1 != 10"));
+            ValidateError(db, "TestTable", "json_idx", jsonExists("$.k1 > 10"));
+            ValidateError(db, "TestTable", "json_idx", jsonExists("$.k1 < 10"));
+            ValidateError(db, "TestTable", "json_idx", jsonExists("$.k1 >= 10"));
+            ValidateError(db, "TestTable", "json_idx", jsonExists("$.k1 <= 10"));
+            ValidateError(db, "TestTable", "json_idx", jsonExists("!($.k1 == 10)"));
+            ValidateError(db, "TestTable", "json_idx", jsonExists("$.k1 == 10 && $.k2 == 20"));
+            ValidateError(db, "TestTable", "json_idx", jsonExists("$.k1 == 10 || $.k2 == 20"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (exists(@.k1))"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 starts with \"abc\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 like_regex \"abc\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 != 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 > 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 >= 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 <= 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 10 && @.k2 == 20)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 10 || @.k2 == 20)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (exists(@))"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ starts with \"abc\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ like_regex \"abc\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ == 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ != 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ > 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ < 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ >= 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ <= 10)"));
+
+            // Nested predicates are not allowed even in a filter
+            ValidateError(db, "TestTable", "json_idx", jsonExists("$ ? ((@.k1 == 10) is unknown)"));
+            ValidateError(db, "TestTable", "json_idx", jsonExists("$ ? (!(@.k1 == 10))"));
         });
     }
 
     Y_UNIT_TEST_QUAD(SelectJsonExists_Literals, IsJsonDocument, IsStrict) {
         TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
-            const auto errorMessage = "No search terms were extracted from the query";
-            ValidateError(db, "TestTable", "json_idx", jsonExists("null"), errorMessage);
-            ValidateError(db, "TestTable", "json_idx", jsonExists("1"), errorMessage);
-            ValidateError(db, "TestTable", "json_idx", jsonExists("\"str\""), errorMessage);
-            ValidateError(db, "TestTable", "json_idx", jsonExists("true"), errorMessage);
-            ValidateError(db, "TestTable", "json_idx", jsonExists("false"), errorMessage);
+            ValidateError(db, "TestTable", "json_idx", jsonExists("null"));
+            ValidateError(db, "TestTable", "json_idx", jsonExists("1"));
+            ValidateError(db, "TestTable", "json_idx", jsonExists("\"str\""));
+            ValidateError(db, "TestTable", "json_idx", jsonExists("true"));
+            ValidateError(db, "TestTable", "json_idx", jsonExists("false"));
+        });
+    }
+
+    // Filter with != (inequality) and range comparisons (<, <=, >, >=)
+    Y_UNIT_TEST_QUAD(SelectJsonExists_FilterInequality, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 != 1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k3 != \"text\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k5 != null)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k4 != false)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ != 1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ != null)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@ != \"1\")"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < 0)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 <= 0)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 > 0)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 >= 1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k2 < 0)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (0 < @.k1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (0 >= @.k2)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 > 999)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k99 != 1)"));
+        });
+    }
+
+    // Three-way AND/OR and mixed (AND+OR) filter predicates
+    Y_UNIT_TEST_QUAD(SelectJsonExists_FilterAndOrComplex, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 && @.k4 == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == \"1\" && @.k2 == \"22\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 && @.k2 == false)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 >= 0 && @.k1 <= 1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k4 == true && @.k5 == null)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 || @.k1 == 1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k4 == true || @.k2 == false)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == \"1\" || @.k2 == \"22\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k99 == 1 || @.k98 == 2)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 && @.k3 == \"text\" && @.k4 == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 && @.k3 == \"text\" && @.k4 == false)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 || @.k1 == 1 || @.k1 == \"1\")"));
+
+            // Mixing AND and OR inside filter: OR wins, index search uses OR semantics
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@.k1 == 0 && @.k4 == true) || @.k2 == \"22\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 1 || (@.k1 == \"1\" && @.k2 == \"22\"))"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 == 10 || @.k1 == 20)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2 ? (@.k1 == 2 && @.k2 == true)"));
+        });
+    }
+
+    // Filter with arithmetic operators combined with && and ||: OR dominance
+    Y_UNIT_TEST_QUAD(SelectJsonExists_FilterArithmeticWithBooleanOps, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 + @.k2 == 5 || @.k3 == \"text\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 - @.k2 > 0 || @.k4 == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 * @.k2 != 0 || @.k5 == null)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 / @.k2 < 1 || @.k3 == \"text\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 % @.k2 == 0 || @.k4 == false)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 + @.k2 == 5 && @.k3 == \"text\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 - @.k2 > 0 && @.k4 == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 * @.k2 != 0 && @.k5 == null)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 + @.k2 == 5 || @.k3 + @.k4 == 1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 - @.k2 > 0 || @.k3 - @.k4 < 0)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 + @.k2 == 5 && @.k3 + @.k4 == 1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 + @.k2 == 5 || @.k3 - @.k4 < 0 || @.k5 == null)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@.k1 + @.k2 == 5 && @.k3 == \"text\") || @.k4 == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 || (@.k1 + @.k2 == 5 && @.k3 == \"text\"))"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 + @.k2 == 5 || @.k1 == 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 - @.k2 > 0 && @.k1 == 10)"));
+        });
+    }
+
+    // Filter with path-vs-path comparison operators combined with && and ||: OR dominance
+    Y_UNIT_TEST_QUAD(SelectJsonExists_FilterComparisonWithBooleanOps, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < @.k2 || @.k3 == \"text\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 > @.k2 || @.k4 == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 <= @.k2 || @.k5 == null)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 >= @.k2 || @.k3 == \"text\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == @.k2 || @.k4 == false)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 != @.k2 || @.k3 == \"text\")"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < @.k2 && @.k3 == \"text\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 > @.k2 && @.k4 == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 != @.k2 && @.k5 == null)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < @.k2 || @.k3 > @.k4)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == @.k2 || @.k3 != @.k4)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < @.k2 && @.k3 > @.k4)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < @.k2 && @.k3 > @.k4 || @.k5 == null)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 || @.k2 < @.k3)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 < @.k2 || @.k3 == \"text\" || @.k4 == true)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@.k1 < @.k2 && @.k3 > @.k4) || @.k5 == null)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 == 0 || (@.k2 < @.k3 && @.k4 == true))"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 < @.k2 || @.k1 == 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 > @.k2 && @.k1 == 10)"));
+        });
+    }
+
+    // Filter with paths: deep nesting, array subscripts inside filter, empty key
+    Y_UNIT_TEST_QUAD(SelectJsonExists_FilterPathsDeep, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1.k2.k3.k4 == \"1\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1.k2.k3.k4 == \"2\")"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k6[0] == 1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k6[1] == \"1\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k6[2] == false)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k6[0] == false)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k6[123] == null)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1[0] == 1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1[1] == 2)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1[2] == 3)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 == 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 == 20)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1 == 999)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*] ? (@.k1 == \"1\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[0] ? (@.k1 == \"1\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*] ? (@.\"\" == \"\")"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.\"\" == null)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.\"\" == 1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.\"\" == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.\"\" == false)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.\"\" == \"1\")"));
+        });
+    }
+
+    // Combined key access + array subscript + method with filter
+    Y_UNIT_TEST_QUAD(SelectJsonExists_PathArrayMethodWithFilter, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[*] ? (@.k1 == 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[0] ? (@.k1 == 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[last] ? (@.k1 == 20)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[*] ? (@.k1 == 999)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.* ? (@ == 1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.* ? (@ == \"1\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.* ? (@ == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.* ? (@ == null)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.* ? (@ == 42)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.size() ? (@ == 3)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.size() ? (@ > 0)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.size() == 3)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.size() > 0)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k2.k3 != null)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2 ? (@.k1 == 2 && @.k2 == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2 ? (@.k1 == 2 || @.k2.type() == \"boolean\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@.k1.abs() - @.k2.abs()) == 0)"));
+        });
+    }
+
+    // Nested filter: result of an inner filter (@ ? (pred)) is accessed as an object
+    Y_UNIT_TEST_QUAD(SelectJsonExists_NestedFilter, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0)).k2 == -1.5)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0)).k3 == \"text\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0)).k4 == false)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2 ? ((@ ? (@.k1 == 2)).k2 == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2 ? ((@ ? (@.k1 == 2)).k2 == false)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? (@.k1 == 10)).k1 == 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? (@.k1 == 20)).k1 == 20)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? (@.k1 == 99)).k1 == 99)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*] ? ((@ ? (@.k1 == \"1\")).k2 == \"22\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*] ? ((@ ? (@.k1 == \"x\")).k2 == \"22\")"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2.k3 ? ((@ ? (@.k2 == \"b\")).k2 == \"b\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2.k3 ? ((@ ? (@.k2 == \"b\")).k1 == \"b\")"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 != 0)).k3 == \"text\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 > 0)).k2 == \"22\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k2 < 0)).k1 == 0)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? (@.k1 >= 10)).k1 > 0)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? (@.k1 <= 10)).k1 == 10)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (0 == @.k1)).k4 == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (\"1\" == @.k1)).k2 == \"22\")"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.\"\" == null)).\"\" == null)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.\"\" == 1)).\"\" == 1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*] ? ((@ ? (@.\"\" == \"\")).\"\" == \"\")"));
+        });
+    }
+
+    // Nested filter where the inner predicate uses AND or OR
+    Y_UNIT_TEST_QUAD(SelectJsonExists_NestedFilterAndOr, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k4 == true)).k5 == null)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k3 == \"text\")).k4 == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k4 == false)).k5 == null)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == \"1\" && @.k2 == \"22\")).k1 == \"1\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == \"1\" && @.k2 == \"99\")).k1 == \"1\")"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2 ? ((@ ? (@.k1 == 2 && @.k2 == true)).k2 == true)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0 || @.k1 == 1)).k3 == \"text\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0 || @.k1 == 1)).k4 == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == \"1\" || @.k2 == \"22\")).k2 == \"22\")"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k4 == true || @.k5 == null)).k1 == 0)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k99 == 1 || @.k98 == 2)).k1 == 0)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? (@.k1 == 10 || @.k1 == 20)).k1 > 0)"));
+        });
+    }
+
+    // Nested filter combined with other path constructs: array subscript, wildcards, double nesting
+    Y_UNIT_TEST_QUAD(SelectJsonExists_NestedFilterPaths, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@[0] ? (@.k1 == \"1\")).k2 == \"22\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@[0] ? (@.k1 == 10)).k1 == 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@[last] ? (@.k1 == 20)).k1 == 20)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@[0] ? (@.k1 == 99)).k1 == 10)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$[*] ? ((@[*] ? (@.k1 == 1)).k1 == 1)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@[*] ? (@.k1 == 10)).k1 == 10)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? (@.k2.k3.k4 == \"1\")).k2.k3.k4 == \"1\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2 ? ((@ ? (@.k4[0] == 0)).k3[0].k1 == \"a\")"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? ((@ ? (@.k1 == 0)).k4 == true)).k5 == null)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? ((@ ? (@.k1 == 10)).k1 == 10)).k1 > 0)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (exists($.k1 ? ((@ ? (@.k1 == 10)).k1 > 0)))"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (exists($.k1.k2.k3 ? ((@ ? (@.k2 == \"b\")).k2 == \"b\")))"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2.k3 ? ((@ ? (@.k1 == \"a\")).k1 starts with \"a\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k3 == \"text\")).k3 starts with \"tex\")"));
+        });
+    }
+
+    // Combined key access + array subscript + methods + predicates + filters + literals + nested filter + AND/OR
+    Y_UNIT_TEST_QUAD(SelectJsonExists_Mix, IsJsonDocument, IsStrict) {
+        TestSelectJsonExists(IsJsonDocument, IsStrict, [](TQueryClient& db, const auto& jsonExists) {
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[*] ? (exists(@.k1 ? (@.type() starts with \"s\")))"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k2[*].k3 != null && -@.k1.floor() > +3)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? (@.k1 == 10 || @.k1 == 20)).k1 > 0)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? (@.k1 == 10 || @.k1 == 20)).k1 <= 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? ((@ ? (@.k1 == 10 || @.k1 == 20)).k1 < 0)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k4 == true)).k2 < 0)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k4 == true)).k2 >= -2)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k4 == true)).k3 != \"blah\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k1 == 0 && @.k4 == true)).k2 > -1)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[0] ? ((@ ? (@.k1 == 10)).k1 >= 10)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[last] ? ((@ ? (@.k1 == 20)).k1 > 15)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1[0] ? ((@ ? (@.k1 == 10)).k1 < 5)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k2 ? (-@.k1 < 0 && @.k2 == true)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (@.k1 <= 1 && @.k2 < 0)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1 ? (@.k1.abs() > 5 && @.k1 != null)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? (exists(@.k1) && @.k2 < 0)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k3 starts with \"te\")).k2 < 0)"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$ ? ((@ ? (@.k3 starts with \"te\")).k1 != 99)"));
+
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2.k3[*] ? ((@ ? (@.k1 == \"a\")).k1 > \"\")"));
+            ValidatePredicate(db, "TestTable", "json_idx", jsonExists("$.k1.k2.k4[*] ? (@ != null && @ > 0)"));
         });
     }
 }

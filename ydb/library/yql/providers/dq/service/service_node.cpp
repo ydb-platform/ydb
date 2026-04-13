@@ -57,7 +57,7 @@ namespace NYql {
                     YQL_CLOG(TRACE, ProviderDq) << "New GRPC connection";
                     grpc::experimental::ExternalConnectionAcceptor::NewConnectionParameters params;
                     SetNonBlock(r, true);
-                    params.listener_fd = -1; // static_cast<int>(Socket);
+                    params.listener_fd = static_cast<int>(Socket);
                     params.fd = r;
                     Acceptor->HandleNewConnection(&params);
                 } else if (-r != EAGAIN && -r != EWOULDBLOCK) {

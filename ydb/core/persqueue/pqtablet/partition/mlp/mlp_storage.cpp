@@ -1192,7 +1192,7 @@ bool TStorage::TBatch::Empty() const {
         && DeletedFromSlowZone.empty()
         && CompactedMessages == 0
         && !Purged
-        && !UpdateExternalLockedMessageGroupsId.empty();
+        && UpdateExternalLockedMessageGroupsId.empty();
 }
 
 size_t TStorage::TBatch::AddedMessageCount() const {

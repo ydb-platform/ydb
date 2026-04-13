@@ -27,7 +27,7 @@ TProtobufRawInputSpec::TProtobufRawInputSpec(
 }
 
 const TVector<NYT::TNode>& TProtobufRawInputSpec::GetSchemas() const {
-    if (SavedSchemas_.size() == 0) {
+    if (SavedSchemas_.empty()) {
         SavedSchemas_.push_back(MakeSchemaFromProto(Descriptor_, SchemaOptions_));
         if (TimestampColumn_) {
             auto timestampType = NYT::TNode::CreateList();

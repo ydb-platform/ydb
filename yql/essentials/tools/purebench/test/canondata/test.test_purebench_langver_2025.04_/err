@@ -1,0 +1,23 @@
+Input data size: 12000000
+Generated data size: 12000000
+{
+    "Type" = [
+        "StructType";
+        [
+            [
+                "column0";
+                [
+                    "DataType";
+                    "String"
+                ]
+            ]
+        ]
+    ];
+    "Data" = [
+        [
+            "2025.04"
+        ]
+    ]
+}
+Dry run of test sql...
+Run benchmark...

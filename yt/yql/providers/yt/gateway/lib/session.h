@@ -14,7 +14,8 @@ struct TSessionBase: public TThrRefBase {
         TIntrusivePtr<IRandomProvider> randomProvider,
         TIntrusivePtr<ITimeProvider> timeProvider,
         const TYqlOperationOptions& operationOptions,
-        const TOperationProgressWriter& progressWriter
+        const TOperationProgressWriter& progressWriter,
+        const TSecureTmpStatePtr& useSecureTmp
     );
 
     virtual ~TSessionBase() = default;
@@ -27,6 +28,7 @@ struct TSessionBase: public TThrRefBase {
     TString SessionId_;
     const TYqlOperationOptions OperationOptions_;
     const TOperationProgressWriter ProgressWriter_;
+    const TSecureTmpStatePtr UseSecureTmp_;
 };
 
 } // NYql

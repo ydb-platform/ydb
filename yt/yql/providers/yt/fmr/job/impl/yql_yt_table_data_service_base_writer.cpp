@@ -57,10 +57,10 @@ void TFmrTableDataServiceBaseWriter::DoFlush() {
 
 NThreading::TFuture<void> TFmrTableDataServiceBaseWriter::PutYsonByColumnGroups(const TString& currentYsonContent) {
     std::unordered_map<TString, TString> splittedYsonByColumnGroups;
-    auto columnGroupSplitYsonResult = SplitYsonByColumnGroups(currentYsonContent, ColumnGroupSpec_);
+    auto columnGroupSplitYsonResult = SplitYsonByColumnGroupsRaw(currentYsonContent, ColumnGroupSpec_);
     ui64 recordsCount = columnGroupSplitYsonResult.RecordsCount;
     CurrentChunkRows_ += recordsCount;
-    splittedYsonByColumnGroups = columnGroupSplitYsonResult.SplittedYsonByColumnGroups;
+    splittedYsonByColumnGroups = std::move(columnGroupSplitYsonResult.SplittedYsonByColumnGroups);
 
     with_lock(State_->Mutex) {
         State_->CondVar.Wait(State_->Mutex, [&] {

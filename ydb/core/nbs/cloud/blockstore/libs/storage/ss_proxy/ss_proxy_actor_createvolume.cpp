@@ -1,7 +1,6 @@
 #include "ss_proxy_actor.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/ss_proxy.h>
-// #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/volume_label.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/volume_model.h>
 

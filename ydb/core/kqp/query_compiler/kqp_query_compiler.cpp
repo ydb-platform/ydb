@@ -1519,6 +1519,13 @@ private:
                 fillCol(tableMeta->Columns.FindPtr(column.StringValue()), fullTextProto.MutableQuerySettings()->AddColumns());
             }
 
+            if (settingsObj.Tokens) {
+                for (const auto& tokenNode : TExprBase(settingsObj.Tokens).Cast<TExprList>()) {
+                    fullTextProto.MutableQuerySettings()->AddTokens(
+                        TString(tokenNode.Cast<TCoString>().Literal().Value()));
+                }
+            }
+
         } else if (auto settings = source.Settings().Maybe<TKqpReadSysViewSourceSettings>()) {
             NKqpProto::TKqpSysViewSource& sysViewProto = *protoSource->MutableSysViewSource();
             FillTablesMap(settings.Table().Cast(), settings.Columns().Cast(), tablesMap);

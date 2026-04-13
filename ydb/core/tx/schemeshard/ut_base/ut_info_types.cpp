@@ -243,6 +243,67 @@ ColumnFamilies {
         "{ 0 -> 0, 1 -> 1 }");
     }
 
+    // Helper: call ApplyChanges with minimal args (no appData, no columns)
+    bool ApplyBloomChanges(
+        NKikimrSchemeOp::TPartitionConfig& result,
+        const NKikimrSchemeOp::TPartitionConfig& src,
+        const NKikimrSchemeOp::TPartitionConfig& changes,
+        TString& errDescr)
+    {
+        ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TColumnDescription> columns;
+        return TPartitionConfigMerger::ApplyChanges(result, src, changes, columns, nullptr, false, errDescr);
+    }
+
+    Y_UNIT_TEST(BloomFilterPrefixMerge) {
+        // Existing [3, 1], delta adds [1, 2] -> result should be [1, 2, 3] (merged, sorted, deduped)
+        NKikimrSchemeOp::TPartitionConfig src;
+        src.AddByKeyFilterPrefixes(3);
+        src.AddByKeyFilterPrefixes(1);
+
+        NKikimrSchemeOp::TPartitionConfig changes;
+        changes.AddByKeyFilterPrefixes(1);
+        changes.AddByKeyFilterPrefixes(2);
+
+        NKikimrSchemeOp::TPartitionConfig result;
+        TString errDescr;
+        UNIT_ASSERT(ApplyBloomChanges(result, src, changes, errDescr));
+        UNIT_ASSERT_VALUES_EQUAL(result.ByKeyFilterPrefixesSize(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetByKeyFilterPrefixes(0), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetByKeyFilterPrefixes(1), 2);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetByKeyFilterPrefixes(2), 3);
+    }
+
+    Y_UNIT_TEST(BloomFilterDisableClearsPrefixes) {
+        // Existing config has prefixes [1, 2], delta disables EnableFilterByKey -> prefixes cleared
+        NKikimrSchemeOp::TPartitionConfig src;
+        src.SetEnableFilterByKey(true);
+        src.AddByKeyFilterPrefixes(1);
+        src.AddByKeyFilterPrefixes(2);
+
+        NKikimrSchemeOp::TPartitionConfig changes;
+        changes.SetEnableFilterByKey(false);
+
+        NKikimrSchemeOp::TPartitionConfig result;
+        TString errDescr;
+        UNIT_ASSERT(ApplyBloomChanges(result, src, changes, errDescr));
+        UNIT_ASSERT_VALUES_EQUAL(result.GetEnableFilterByKey(), false);
+        UNIT_ASSERT_VALUES_EQUAL(result.ByKeyFilterPrefixesSize(), 0);
+    }
+
+    Y_UNIT_TEST(BloomFilterDisableAndAddPrefixesConflict) {
+        // Delta has both EnableFilterByKey=false and ByKeyFilterPrefixes -> must be rejected
+        NKikimrSchemeOp::TPartitionConfig src;
+
+        NKikimrSchemeOp::TPartitionConfig changes;
+        changes.SetEnableFilterByKey(false);
+        changes.AddByKeyFilterPrefixes(1);
+
+        NKikimrSchemeOp::TPartitionConfig result;
+        TString errDescr;
+        UNIT_ASSERT(!ApplyBloomChanges(result, src, changes, errDescr));
+        UNIT_ASSERT_STRING_CONTAINS(errDescr, "Cannot disable KEY_BLOOM_FILTER and add bloom filter prefixes");
+    }
+
     Y_UNIT_TEST(IndexBuildInfoAddParent) {
         TIndexBuildInfo info;
 

@@ -13,8 +13,6 @@
 namespace NKikimr {
 namespace NLongTxService {
 
-Y_UNIT_TEST_SUITE(LongTxService) {
-
     namespace {
 
         TTenantTestConfig::TTenantPoolConfig MakeDefaultTenantPoolConfig() {
@@ -29,7 +27,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
             return res;
         }
 
-        TTenantTestConfig MakeTenantTestConfig(bool fakeSchemeShard) {
+        TTenantTestConfig MakeTenantTestConfig(bool fakeSchemeShard, ui32 nodeCount = 2) {
             TTenantTestConfig res = {
                 // Domains {name, schemeshard {{ subdomain_names }}}
                 {{{DOMAIN1_NAME, SCHEME_SHARD1_ID, TVector<TString>()}}},
@@ -42,19 +40,13 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                 // CreateConsole
                 false,
                 // Nodes {tenant_pool_config}
-                {{
-                    // Node0
-                    {
-                        MakeDefaultTenantPoolConfig()
-                    },
-                    // Node1
-                    {
-                        MakeDefaultTenantPoolConfig()
-                    },
-                }},
+                {},
                 // DataCenterCount
                 1
             };
+            for (ui32 i = 0; i < nodeCount; ++i) {
+                res.Nodes.push_back({MakeDefaultTenantPoolConfig()});
+            }
             return res;
         }
 
@@ -77,6 +69,8 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         }
 
     }
+
+Y_UNIT_TEST_SUITE(LongTxService) {
 
     Y_UNIT_TEST(BasicTransactions) {
         TTenantTestRuntime runtime(MakeTenantTestConfig(true));
@@ -361,6 +355,238 @@ Y_UNIT_TEST_SUITE(LongTxService) {
     }
 
 } // Y_UNIT_TEST_SUITE(LongTxService)
+
+Y_UNIT_TEST_SUITE(LockWaitGraph) {
+
+    namespace {
+
+    struct TLockHolder {
+        TLockHandle Handle;
+        TLockInfo Info;
+
+        explicit TLockHolder(TLockHandle handle)
+            : Handle(std::move(handle))
+            , Info(Handle.GetLockId(), Handle.GetLockNodeId())
+        {}
+    };
+
+    TString GetWaitGraphString(TTestActorRuntime& runtime, size_t nodeIdx) {
+        ui32 nodeId = runtime.GetNodeId(nodeIdx);
+        auto sender = runtime.AllocateEdgeActor(nodeIdx);
+        runtime.Send(
+            MakeLongTxServiceID(nodeId),
+            sender,
+            new TEvLongTxService::TEvGetLockWaitGraph,
+            nodeIdx);
+        auto result = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvGetLockWaitGraphResult>(sender);
+        TVector<std::pair<ui64, ui64>> edges;
+        for (const auto& edge : result->Get()->WaitEdges) {
+            edges.emplace_back(edge.Awaiter.LockId, edge.Blocker.LockId);
+        }
+        std::sort(edges.begin(), edges.end());
+
+        TStringBuilder sb;
+        for (auto& [a, b] : edges) {
+            sb << a << " -> " << b << "\n";
+        }
+        return sb;
+    }
+
+    class TMockDatashard {
+    public:
+        TMockDatashard(TTestActorRuntime& runtime, size_t nodeIdx)
+            : Runtime(runtime)
+            , NodeIdx(nodeIdx)
+            , ActorId(Runtime.AllocateEdgeActor(nodeIdx))
+        {}
+
+        void AddLock(const TLockInfo& lock) {
+            const bool inserted = WaitGraph.try_emplace(lock).second;
+            if (inserted) {
+                SendToLongTx(new TEvLongTxService::TEvSubscribeLock(lock.LockId, lock.LockNodeId));
+
+                auto responseEv = Runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvLockStatus>(ActorId);
+                auto& response = responseEv->Get()->Record;
+                UNIT_ASSERT_VALUES_EQUAL(response.GetLockId(), lock.LockId);
+                UNIT_ASSERT_VALUES_EQUAL(response.GetLockNode(), lock.LockNodeId);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    response.GetStatus(), NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED);
+            }
+        }
+
+        // Returns request id.
+        ui64 AddWait(const TLockInfo& awaiter, const TLockInfo& blocker) {
+            Y_ENSURE(WaitGraph.contains(awaiter));
+            Y_ENSURE(WaitGraph.contains(blocker));
+
+            const ui64 reqId = ++LastRequestId;
+            Y_ENSURE(WaitGraph[awaiter].emplace(reqId, blocker).second);
+            SendToLongTx(new TEvLongTxService::TEvWaitingLockAdd(reqId, awaiter, blocker));
+            return reqId;
+        }
+
+        void RemoveWait(const TLockInfo& awaiter, ui64 reqId) {
+            Y_ENSURE(WaitGraph.contains(awaiter));
+            auto& edges = WaitGraph[awaiter];
+            Y_ENSURE(edges.contains(reqId));
+            edges.erase(reqId);
+            SendToLongTx(new TEvLongTxService::TEvWaitingLockRemove(reqId));
+        }
+
+        ~TMockDatashard() {
+            for (const auto& [lock, edges] : WaitGraph) {
+                for (const auto& [reqId, blocker] : edges) {
+                    SendToLongTx(new TEvLongTxService::TEvWaitingLockRemove(reqId));
+                }
+            }
+        }
+
+    private:
+        void SendToLongTx(TAutoPtr<IEventBase> ev) {
+            Runtime.Send(MakeLongTxServiceID(Runtime.GetNodeId(NodeIdx)), ActorId, ev, NodeIdx, true);
+        }
+
+    private:
+        struct TLockInfoHash {
+            ui64 operator()(const TLockInfo& li) const {
+                return CombineHashes(std::hash<ui64>{}(li.LockId), std::hash<ui32>{}(li.LockNodeId));
+            }
+        };
+
+        TTestActorRuntime& Runtime;
+        const size_t NodeIdx;
+        TActorId ActorId;
+        THashMap<TLockInfo, THashMap<ui64, TLockInfo>, TLockInfoHash> WaitGraph;
+        ui64 LastRequestId = 0;
+    };
+
+    }
+
+    // Test simple wait graph updates when locks and wait edges are added/removed.
+    Y_UNIT_TEST(SimpleAddDelete) {
+        TTenantTestRuntime runtime(MakeTenantTestConfig(true, 2));
+        runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
+
+        // Add some locks and wait edges.
+
+        TLockHolder lock1(TLockHandle(123, runtime.GetActorSystem(0)));
+        TLockHolder lock2(TLockHandle(234, runtime.GetActorSystem(0)));
+        TLockHolder lock3(TLockHandle(345, runtime.GetActorSystem(0)));
+        TLockHolder lock4(TLockHandle(456, runtime.GetActorSystem(0)));
+
+        TMockDatashard ds(runtime, /*nodeIdx=*/1);
+
+        ds.AddLock(lock1.Info);
+        ds.AddLock(lock2.Info);
+        ds.AddLock(lock3.Info);
+        ds.AddLock(lock4.Info);
+
+        ds.AddWait(lock4.Info, lock1.Info);
+        ds.AddWait(lock4.Info, lock2.Info);
+        const auto reqId3 = ds.AddWait(lock4.Info, lock3.Info);
+        runtime.SimulateSleep(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetWaitGraphString(runtime, 0),
+            "456 -> 123\n"
+            "456 -> 234\n"
+            "456 -> 345\n");
+
+        // Delete a single edge.
+
+        ds.RemoveWait(lock4.Info, reqId3);
+        runtime.SimulateSleep(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetWaitGraphString(runtime, 0),
+            "456 -> 123\n"
+            "456 -> 234\n");
+
+        // Delete the awaiter. Edges should be cleaned up automatically.
+
+        lock4.Handle.Reset();
+        runtime.SimulateSleep(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetWaitGraphString(runtime, 1),
+            "");
+    }
+
+    // Test that wait edges are correctly propagated across a node chain.
+    Y_UNIT_TEST(NodeChain) {
+        TTenantTestRuntime runtime(MakeTenantTestConfig(true, 5));
+        runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
+
+        TLockHolder lock1(TLockHandle(123, runtime.GetActorSystem(0)));
+        TLockHolder lock2(TLockHandle(234, runtime.GetActorSystem(1)));
+        TLockHolder lock3(TLockHandle(345, runtime.GetActorSystem(3)));
+        TLockHolder lock4(TLockHandle(456, runtime.GetActorSystem(4)));
+
+        TMockDatashard ds1(runtime, /*nodeIdx=*/0);
+        TMockDatashard ds2(runtime, /*nodeIdx=*/2);
+        TMockDatashard ds3(runtime, /*nodeIdx=*/4);
+
+        ds1.AddLock(lock1.Info);
+        ds1.AddLock(lock2.Info);
+        ds1.AddWait(lock1.Info, lock2.Info);
+
+        ds3.AddLock(lock3.Info);
+        ds3.AddLock(lock4.Info);
+        ds3.AddWait(lock3.Info, lock4.Info);
+
+        ds2.AddLock(lock2.Info);
+        ds2.AddLock(lock3.Info);
+        ds2.AddWait(lock2.Info, lock3.Info);
+
+        // Check that the wait chain is correctly propagated back to the first datashard.
+        runtime.SimulateSleep(TDuration::MilliSeconds(50));
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetWaitGraphString(runtime, /*nodeIdx=*/0),
+            "123 -> 234\n"
+            "234 -> 345\n"
+            "345 -> 456\n");
+    }
+
+    // Test that a wait graph cycle is correctly propagated across a 4-node cluster.
+    Y_UNIT_TEST(DistributedWaitCycle) {
+        TTenantTestRuntime runtime(MakeTenantTestConfig(true, 4));
+        runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
+
+        TLockHolder lock1(TLockHandle(123, runtime.GetActorSystem(0)));
+        TLockHolder lock2(TLockHandle(234, runtime.GetActorSystem(1)));
+
+        TMockDatashard ds1(runtime, /*nodeIdx=*/2);
+        TMockDatashard ds2(runtime, /*nodeIdx=*/3);
+
+        // Add a cycle to the wait graph with edges and nodes residing on different nodes.
+
+        ds1.AddLock(lock1.Info);
+        ds2.AddLock(lock2.Info);
+
+        ds1.AddLock(lock2.Info);
+        ds1.AddWait(lock2.Info, lock1.Info);
+
+        ds2.AddLock(lock1.Info);
+        const auto reqId = ds2.AddWait(lock1.Info, lock2.Info);
+
+        // Check that the wait graph is correctly instantiated on all nodes.
+        runtime.SimulateSleep(TDuration::MilliSeconds(50));
+        for (size_t nodeIdx = 0; nodeIdx < runtime.GetNodeCount(); ++nodeIdx) {
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                GetWaitGraphString(runtime, nodeIdx),
+                "123 -> 234\n"
+                "234 -> 123\n",
+                "with nodeIdx: " << nodeIdx);
+        }
+
+        // Break the deadlock and check that the removal is correctly propagated.
+        ds2.RemoveWait(lock1.Info, reqId);
+        runtime.SimulateSleep(TDuration::MilliSeconds(50));
+        for (size_t nodeIdx = 0; nodeIdx < runtime.GetNodeCount(); ++nodeIdx) {
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                GetWaitGraphString(runtime, nodeIdx),
+                "234 -> 123\n",
+                "with nodeIdx: " << nodeIdx);
+        }
+    }
+} // Y_UNIT_TEST_SUITE(LockWaitGraph)
 
 } // namespace NLongTxService
 } // namespace NKikimr

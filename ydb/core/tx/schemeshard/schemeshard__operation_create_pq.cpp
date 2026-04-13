@@ -243,6 +243,7 @@ void ApplySharding(TTxId txId,
         partition->AlterVersion = 1;
         partition->CreateVersion = 1;
         partition->Status = NKikimrPQ::ETopicPartitionStatus::Active;
+        partition->CreationTimestamp = TInstant::Seconds(TAppData::TimeProvider->Now().Seconds());
 
         pqGroup->AddPartition(idx, partition.Release());
     }

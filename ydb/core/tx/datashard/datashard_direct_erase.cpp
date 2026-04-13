@@ -139,8 +139,10 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
             }
         }
 
+        TConstArrayRef<TCell> uniqueKey = GetUniqueIndexKey(keyCells.GetCells(), tableInfo.UniqueIndexKeySize);
+
         if (breakWriteConflicts) {
-            if (!self->BreakWriteConflicts(params.Txc->DB, fullTableId, keyCells.GetCells(), volatileDependencies)) {
+            if (!self->BreakWriteConflicts(params.Txc->DB, fullTableId, uniqueKey, volatileDependencies)) {
                 pageFault = true;
             }
         }
@@ -165,7 +167,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
             continue;
         }
 
-        self->SysLocksTable().BreakLocks(fullTableId, keyCells.GetCells());
+        self->SysLocksTable().BreakLocks(fullTableId, uniqueKey);
 
         if (!volatileDependencies.empty()) {
             if (!params.GlobalTxId) {

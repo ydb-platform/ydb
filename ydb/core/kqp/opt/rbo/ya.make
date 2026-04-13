@@ -21,7 +21,7 @@ PEERDIR(
     ydb/core/kqp/opt/peephole
     ydb/core/kqp/opt/physical
     ydb/core/kqp/opt/rbo/rules
-    ydb/core/kqp/opt/rbo/physical_convertion
+    ydb/core/kqp/opt/rbo/physical_conversion
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann

@@ -155,7 +155,7 @@ namespace {
                 transaction.AddReceivingShards(receivingShardId);
             }
 
-            AFL_ENSURE(transaction.GetSendingShards().size() == 1);
+            AFL_ENSURE(transaction.GetSendingShards().size() <= 1);
             AFL_ENSURE(transaction.GetReceivingShards().size() == 1);
         }
     }
@@ -760,7 +760,7 @@ public:
         YQL_ENSURE(request->ResultSet.size() == 1);
         Partitioning = std::move(request->ResultSet[0].KeyDescription->Partitioning);
 
-        CA_LOG_D("Resolved shards for TableId=" << TableId << ". PartitionsCount=" << Partitioning->size() << ".");
+        CA_LOG_D("Resolved shards for TableId=" << TableId << ". PartitionsCount=" << Partitioning->Size() << ".");
 
         Prepare();
     }
@@ -1028,7 +1028,7 @@ public:
             TxManager->BreakLock(brokenShardId);
             YQL_ENSURE(TxManager->BrokenLocks());
 
-            SetVictimQuerySpanIdFromBrokenLocks(brokenShardId, ev->Get()->Record.GetTxLocks(), TxManager);
+            SetVictimQuerySpanIdFromBrokenLocks(brokenShardId, ev->Get()->Record.GetTxLocks(), TxManager, &ev->Get()->Record);
             if (TableWriteActorSpan) {
                 TableWriteActorSpan.EndError("LOCKS_BROKEN");
             }
@@ -1565,7 +1565,7 @@ private:
     IKqpTableWriterCallbacks* Callbacks;
 
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
-    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
+    std::shared_ptr<const TPartitioning> Partitioning;
     ui64 ResolveAttempts = 0;
 
     IKqpTransactionManagerPtr TxManager;
@@ -1687,6 +1687,7 @@ public:
     void Write(IDataBatchPtr data) {
         AFL_ENSURE(!Closed);
         AFL_ENSURE(!IsError());
+        AFL_ENSURE(BufferedBatches.empty());
 
         if (!data->IsEmpty()) {
             Memory += data->GetMemory();
@@ -4635,7 +4636,7 @@ public:
             CollectTliStats(ev->Get()->Record);
             TxManager->BreakLock(ev->Get()->Record.GetOrigin());
             YQL_ENSURE(TxManager->BrokenLocks());
-            SetVictimQuerySpanIdFromBrokenLocks(ev->Get()->Record.GetOrigin(), ev->Get()->Record.GetTxLocks(), TxManager);
+            SetVictimQuerySpanIdFromBrokenLocks(ev->Get()->Record.GetOrigin(), ev->Get()->Record.GetTxLocks(), TxManager, &ev->Get()->Record);
             if (TryDeferLocksBrokenError(ev->Get()->Record.GetOrigin(), MakeLockIssues(TxManager, getIssues()))) {
                 return;
             }
@@ -5522,14 +5523,14 @@ private:
         return {};
     }
 
-    void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64 size, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
+    void SendData(NMiniKQL::TUnboxedValueBatch&& data, i64, const TMaybe<NYql::NDqProto::TCheckpoint>&, bool finished) final {
         YQL_ENSURE(!data.IsWide(), "Wide stream is not supported yet");
         AFL_ENSURE(!InFlight);
         Closed |= finished;
         Batcher->AddData(data);
-        DataSize += size;
+        DataSize = Batcher->GetMemory();
 
-        CA_LOG_D("Add data: " << size << " / " << DataSize);
+        CA_LOG_D("Add data: " << DataSize << " / " << DataSize);
         if (Closed || GetFreeSpace() <= 0) {
             WriteToBuffer();
         }

@@ -191,7 +191,7 @@ void TFacadeRunOptions::ParseProtoConfig(const TString& cfgFile, google::protobu
 }
 
 void TFacadeRunOptions::Parse(int argc, const char** argv) {
-    User = GetUsername();
+    User = GetEnv("YQL_DETERMINISTIC_MODE") ? "test-user" : GetUsername();
 
     if (EnableCredentials) {
         Token = GetEnv("YQL_TOKEN");
@@ -700,8 +700,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
         moduleResolver = std::make_shared<TModuleResolver>(translators, std::move(modules), ctx.NextUniqueId,
                                                            ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, THolder<TExprContext>(), moduleChecker);
     } else {
-        if (!GetYqlDefaultModuleResolver(ctx, moduleResolver, ClusterMapping_,
-                                         RunOptions_.OptimizeLibs && RunOptions_.Mode >= ERunMode::Validate, moduleChecker)) {
+        if (GetYqlModuleResolver(ctx, moduleResolver, {}, ClusterMapping_, RunOptions_.SqlFlags, RunOptions_.Mode >= ERunMode::Validate, moduleChecker).empty()) {
             *RunOptions_.ErrStream << "Errors loading default YQL libraries:" << Endl;
             ctx.IssueManager.GetIssues().PrintTo(*RunOptions_.ErrStream);
             return -1;
@@ -832,6 +831,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         program->SetFuzzUniversal();
     }
 
+    program->SetAuthenticatedUser(RunOptions_.User);
     program->SetOperationId(RunOptions_.OperationId);
 
     bool fail = false;

@@ -270,7 +270,7 @@ message TPersQueueRequest {
 
     //only one from data, meta or fetch request must be set.
     optional string SecurityToken = 5 [(Ydb.sensitive) = true];
-    optional string Ticket = 6; //if set, check for acl
+    optional string Ticket = 6 [(Ydb.sensitive) = true]; // if set, check for acl
 
     optional string RequestId = 100; //for logging
 }

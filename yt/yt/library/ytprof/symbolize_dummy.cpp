@@ -5,9 +5,9 @@ namespace NYT::NYTProf {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void Symbolize(NProto::Profile* profile, bool filesOnly)
+void Symbolize(NProto::Profile* profile, const TSymbolizeOptions& options)
 {
-    Y_UNUSED(profile, filesOnly);
+    Y_UNUSED(profile, options);
 }
 
 std::pair<void*, void*> GetVdsoRange()

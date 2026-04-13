@@ -2,6 +2,7 @@
 #include "viewer.h"
 #include <ydb/core/viewer/json/json.h>
 #include <ydb/core/viewer/yaml/yaml.h>
+#include <ydb/core/util/wildcard.h>
 
 namespace NKikimr::NViewer {
 
@@ -89,10 +90,22 @@ struct TJsonHandlers {
 
     TJsonHandlerBase* FindHandler(const TString& name) const {
         auto it = JsonHandlersIndex.find(name);
-        if (it == JsonHandlersIndex.end()) {
-            return nullptr;
+        if (it != JsonHandlersIndex.end()) {
+            return it->second.get();
         }
-        return it->second.get();
+
+        size_t bestPatternSize = 0;
+        TJsonHandlerBase* bestHandler = nullptr;
+        for (const auto& [pattern, handler] : JsonHandlersIndex) {
+            if (!pattern.Contains('*')) {
+                continue;
+            }
+            if (IsMatchesWildcard(name, pattern) && pattern.size() > bestPatternSize) {
+                bestPatternSize = pattern.size();
+                bestHandler = handler.get();
+            }
+        }
+        return bestHandler;
     }
 
     int GetCapabilityVersion(const TString& name) const {

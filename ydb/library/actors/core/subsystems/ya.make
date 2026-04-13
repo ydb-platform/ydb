@@ -14,6 +14,7 @@ IF (ALLOCATOR == "B" OR ALLOCATOR == "BS" OR ALLOCATOR == "C")
 ENDIF()
 
 SRCS(
+    inmemory_metrics.cpp
     stats.cpp
 )
 
@@ -29,4 +30,3 @@ IF (SANITIZER_TYPE == "thread")
 ENDIF()
 
 END()
-

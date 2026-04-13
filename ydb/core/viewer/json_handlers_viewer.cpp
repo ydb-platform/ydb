@@ -15,6 +15,7 @@
 #include "viewer_describe_transfer.h"
 #include "viewer_commit_offset.h"
 #include "viewer_feature_flags.h"
+#include "viewer_inmemory_metrics.h"
 #include "viewer_topic_data.h"
 #include "viewer_graph.h"
 #include "viewer_healthcheck.h"
@@ -297,6 +298,18 @@ void InitViewerGraphJsonHandler(TJsonHandlers &handlers) {
     handlers.AddHandler("/viewer/graph", new TJsonHandler<TJsonGraph>(TJsonGraph::GetSwagger()));
 }
 
+void InitViewerInMemoryMetricsJsonHandler(TJsonHandlers& handlers) {
+    handlers.AddHandler("/viewer/inmemory_metrics", new TJsonHandler<TJsonInMemoryMetrics>(TJsonInMemoryMetrics::GetSwagger()));
+    handlers.AddHandler("/viewer/inmemory_metrics/render", new TJsonHandler<TJsonInMemoryMetrics>(TJsonInMemoryMetrics::GetSwagger()));
+    handlers.AddHandler("/viewer/inmemory_metrics/targets", new TJsonHandler<TJsonInMemoryMetricsTargets>(TJsonInMemoryMetricsTargets::GetSwagger()));
+    handlers.AddHandler("/viewer/inmemory_metrics/metrics/find", new TJsonHandler<TJsonInMemoryMetricsGraphiteFind>(TJsonInMemoryMetricsGraphiteFind::GetSwagger()));
+    handlers.AddHandler("/viewer/inmemory_metrics/prometheus/api/v1/query", new TJsonHandler<TJsonInMemoryMetricsPrometheus>(TJsonInMemoryMetricsPrometheus::GetSwagger()));
+    handlers.AddHandler("/viewer/inmemory_metrics/prometheus/api/v1/query_range", new TJsonHandler<TJsonInMemoryMetricsPrometheus>(TJsonInMemoryMetricsPrometheus::GetSwagger()));
+    handlers.AddHandler("/viewer/inmemory_metrics/prometheus/api/v1/series", new TJsonHandler<TJsonInMemoryMetricsPrometheus>(TJsonInMemoryMetricsPrometheus::GetSwagger()));
+    handlers.AddHandler("/viewer/inmemory_metrics/prometheus/api/v1/labels", new TJsonHandler<TJsonInMemoryMetricsPrometheus>(TJsonInMemoryMetricsPrometheus::GetSwagger()));
+    handlers.AddHandler("/viewer/inmemory_metrics/prometheus/api/v1/label/*/values", new TJsonHandler<TJsonInMemoryMetricsPrometheus>(TJsonInMemoryMetricsPrometheus::GetSwagger()));
+}
+
 void InitViewerRenderJsonHandler(TJsonHandlers& handlers) {
     handlers.AddHandler("/viewer/render", new TJsonHandler<TJsonRender>(TJsonRender::GetSwagger()));
 }
@@ -369,6 +382,7 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerNodesJsonHandler(jsonHandlers);
     InitViewerACLJsonHandler(jsonHandlers);
     InitViewerGraphJsonHandler(jsonHandlers);
+    InitViewerInMemoryMetricsJsonHandler(jsonHandlers);
     InitViewerRenderJsonHandler(jsonHandlers);
     InitViewerAutocompleteJsonHandler(jsonHandlers);
     InitViewerCheckAccessJsonHandler(jsonHandlers);

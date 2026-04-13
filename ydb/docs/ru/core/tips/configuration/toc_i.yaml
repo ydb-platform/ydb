@@ -1,0 +1,23 @@
+items:
+- name: "Обзор"
+  href: index.md
+- name: "Оптимизация кэша запросов под требования приложения"
+  href: 01_default-query-cache.md
+- name: "Оптимальный уровень логирования для продакшена"
+  href: 02_full-logging.md
+- name: "Настройка TTL для метрик в мониторинге {{ ydb-short-name }}"
+  href: 03_ttl-for-metrics.md
+- name: "Учет оверкоммита групп хранения при планировании"
+  href: 04_storage-group-overcommit.md
+- name: "Оптимальная настройка run-interval для TTL"
+  href: 05_ttl-run-interval.md
+- name: "Расхождение времени на хостах {{ ydb-short-name }}"
+  href: 06_time_deviation_ydb.md
+- name: "Расхождение времени между клиентскими хостами и кластером {{ ydb-short-name }}"
+  href: 07_time_deviation_client.md
+- name: "Энергосберегающий режим процессора"
+  href: 08_processor_energy_saving_mode.md
+- name: "Память и CPU при совмещении узлов хранения и узлов БД на одном хосте"
+  href: 09_memory-cpu-mixed-hosts.md
+- name: "Минимальный {{ ydb-short-name }}: выбор конфигурации под задачу"
+  href: 10_minimal-ydb.md

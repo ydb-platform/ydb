@@ -1,0 +1,46 @@
+items:
+- name: Общие советы
+  href: common/index.md
+  include:
+    mode: link
+    path: common/toc_i.yaml
+- name: Конфигурация YDB
+  href: configuration/index.md
+  include:
+    mode: link
+    path: configuration/toc_i.yaml
+- name: Настройки таблиц
+  href: tables/index.md
+  include:
+    mode: link
+    path: tables/toc_i.yaml
+- name: Балансировка
+  href: balancer/index.md
+  include:
+    mode: link
+    path: balancer/toc_i.yaml
+- name: Ретраеры
+  href: retry/index.md
+  include:
+    mode: link
+    path: retry/toc_i.yaml
+- name: Запросы
+  href: query/index.md
+  include:
+    mode: link
+    path: query/toc_i.yaml
+- name: Транзакции
+  href: tx/index.md
+  include:
+    mode: link
+    path: tx/toc_i.yaml
+- name: Топики
+  href: topics/index.md
+  include:
+    mode: link
+    path: topics/toc_i.yaml
+- name: YDB CLI
+  href: cli/index.md
+  include:
+    mode: link
+    path: cli/toc_i.yaml

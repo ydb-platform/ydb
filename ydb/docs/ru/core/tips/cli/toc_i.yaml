@@ -1,0 +1,9 @@
+items:
+- name: "Обзор"
+  href: index.md
+- name: "Эффективная работа в интерактивном режиме CLI"
+  href: 01_interactive.md
+- name: "Использование профилей подключения для удобства работы с {{ ydb-short-name }} CLI"
+  href: 02_profiles.md
+- name: "Современная команда ydb sql вместо устаревшей ydb yql"
+  href: 03_ydb-yql.md

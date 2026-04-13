@@ -7,3 +7,4 @@
 * [Ошибки](../errors.md)
 * [YQL](../yql.md)
 * [Аналитика](../analytics.md)
+* [Практические советы](../practical-tips.md)

@@ -1,0 +1,19 @@
+items:
+- name: "Обзор"
+  href: index.md
+- name: "Надежность через автоматические повторы запросов"
+  href: 01_no_retry.md
+- name: "Готовые ретраеры из официальных SDK"
+  href: 02_custom_retry.md
+- name: "Обработка ошибок с правильной стратегией повторов"
+  href: 03_retry_all_errors.md
+- name: "Временные объекты в лямбдах ретраера"
+  href: 04_closure_temp_objects.md
+- name: "Очистка результатов между попытками выполнения"
+  href: 05_no_cleanup.md
+- name: "Обработка стримминговых запросов"
+  href: 06_streaming_queries.md
+- name: "Флаг идемпотентности"
+  href: 07_no_idempotency_flag.md
+- name: "Вложенные вызовы ретраера внутри ретраера"
+  href: 09_retry-inside-retry.md

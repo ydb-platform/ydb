@@ -1,0 +1,9 @@
+items:
+- name: "Обзор"
+  href: index.md
+- name: "Мониторинг лага чтения из топиков"
+  href: 01_read-lag.md
+- name: "Обработка событий с одним ключом в строгом порядке"
+  href: 02_keyed-write.md
+- name: "Осмысленный producerId для отладки и производительности"
+  href: 03_correct-producer-id.md

@@ -1,0 +1,15 @@
+items:
+- name: "Обзор"
+  href: index.md
+- name: "Совмещение начала транзакции с первым запросом"
+  href: 01_begin.md
+- name: "Совмещение последнего запроса в транзакции с коммитом"
+  href: 02_commit.md
+- name: "Оптимизация длительности транзакций"
+  href: 03_long-transactions.md
+- name: "Читающие много строк read-write транзакции"
+  href: 04_many_reads_queries.md
+- name: "Обработка TLI для идемпотентных операций"
+  href: 05_tx-retry-tli-for-idempotent.md
+- name: "Пишущие много строк read-write и write-only транзакции"
+  href: 06_many_writes_queries.md

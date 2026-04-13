@@ -1,0 +1,45 @@
+items:
+- name: "Обзор"
+  href: index.md
+- name: "Запросы YQL от ORM-фреймворков"
+  href: 01_large_yql_from_frameworks.md
+- name: "Вставка данных в таблицы с синхронными индексами"
+  href: 02_insert-with-sync-index.md
+- name: "SQL-инъекции"
+  href: 03_sql-injection.md
+- name: "Порядок результатов с и без ORDER BY"
+  href: 04_without-order-by.md
+- name: "Использование deprecated Scripting Service"
+  href: 06_scripting_yql.md
+- name: "1000 и одна строка {{ ydb-short-name }}"
+  href: 07_1000_rows.md
+- name: "`BulkUpsert` для таблиц с синхронными индексами"
+  href: 08_bulk-upsert-with-sync-indexes.md
+- name: "Оптимизация поиска по префиксу с StartsWith"
+  href: 09_like-vs-startswith.md
+- name: "Ускорение запросов с помощью covering индексов"
+  href: 10_covering-index.md
+- name: "Избежание FullScan на растущих таблицах с помощью индексов"
+  href: 11_fullscan-on-growing-tables.md
+- name: "Параметризованные запросы для производительности"
+  href: 12_parametrized_queries.md
+- name: "Проверка планов запросов после изменений схемы"
+  href: 13_check-plan-after-schema-changes.md
+- name: "Явное указание индекса через VIEW PRIMARY KEY"
+  href: 14_view-primary-key.md
+- name: "Объединение нескольких операций в один запрос"
+  href: 15_multiple_queries.md
+- name: "Оптимальный размер batch для эффективных запросов"
+  href: 16_batch.md
+- name: "Флаг `KeepInCache` для Table Service"
+  href: 16_keshirovanie-zaprosov-keepincache.md
+- name: "`DECLARE` or not `DECLARE`"
+  href: 17_declare-or-not-declare.md
+- name: "Параллельное выполнение запросов на одной сессии и ошибка `SESSION_BUSY`"
+  href: 18_session-busy-race-query.md
+- name: "`INSERT` vs `UPSERT` - выбор оптимальной операции вставки"
+  href: 19_insert-vs-upsert.md
+- name: "Prepared statements vs параметризованные запросы"
+  href: 20_prepared-vs-parametrized.md
+- name: "Эффективная передача эмбеддингов в kNN-поиске {{ ydb-short-name }}"
+  href: 21_knn_list_vs_bytes.md

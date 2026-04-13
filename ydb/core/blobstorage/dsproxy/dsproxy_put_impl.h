@@ -123,7 +123,7 @@ public:
         , History(Info)
     {
         BlobMap.emplace(ev->Id, Blobs.size());
-        Blobs.emplace_back(ev->Id, TRope(ev->Buffer), recipient, cookie, std::move(traceId), std::move(ev->Orbit),
+        Blobs.emplace_back(ev->Id, std::move(ev->Buffer), recipient, cookie, std::move(traceId), std::move(ev->Orbit),
             std::move(ev->ExtraBlockChecks), true, std::move(ev->ExecutionRelay), ev->Deadline);
 
         auto& blob = Blobs.back();
@@ -154,7 +154,7 @@ public:
             Y_ABORT_UNLESS(msg.HandleClass == putHandleClass);
             Y_ABORT_UNLESS(msg.Tactic == tactic);
             BlobMap.emplace(msg.Id, Blobs.size());
-            Blobs.emplace_back(msg.Id, TRope(msg.Buffer), ev->Sender, ev->Cookie, std::move(ev->TraceId),
+            Blobs.emplace_back(msg.Id, std::move(msg.Buffer), ev->Sender, ev->Cookie, std::move(ev->TraceId),
                 std::move(msg.Orbit), std::move(msg.ExtraBlockChecks), false, std::move(msg.ExecutionRelay),
                 msg.Deadline);
 

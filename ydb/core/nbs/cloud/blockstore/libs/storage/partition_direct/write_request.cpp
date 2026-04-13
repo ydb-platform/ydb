@@ -126,7 +126,7 @@ void TWriteRequestExecutor::OnWriteToManyPBuffersResponse(
     } else {
         for (const auto& pbufferResponse: response.Responses) {
             auto location =
-                VChunkConfig.GetPBufferLocation(pbufferResponse.HostId);
+                VChunkConfig.GetPBufferLocation(pbufferResponse.HostIndex);
             if (!HasError(pbufferResponse.Error)) {
                 CompletedWrites.Set(location);
             } else {

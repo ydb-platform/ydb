@@ -32,9 +32,10 @@ PEERDIR(
     ydb/core/nbs/cloud/blockstore/config/protos
     ydb/core/nbs/cloud/blockstore/libs/storage/api
     ydb/core/nbs/cloud/blockstore/libs/storage/core
-    ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map
+    ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos
+    ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport
     ydb/core/nbs/cloud/storage/core/libs/coroutine
 
     ydb/core/protos
@@ -49,6 +50,7 @@ END()
 
 RECURSE(
     dirty_map
+    model
 )
 
 RECURSE_FOR_TESTS(

@@ -47,11 +47,11 @@ bool ValidateFsPath(const TString& path, const TString& pathDescription, TString
 }
 
 TString StripTrailingSlashes(const TString& path) {
-    TString result = path;
-    while (result.size() > 1 && result.back() == '/') {
-        result.pop_back();
+    size_t end = path.size();
+    while (end > 1 && path[end - 1] == '/') {
+        --end;
     }
-    return result;
+    return path.substr(0, end);
 }
 
 } // namespace NKikimr::NGRpcService

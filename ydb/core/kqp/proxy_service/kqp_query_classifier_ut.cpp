@@ -14,15 +14,11 @@ const TString TEST_DB = "/Root/testdb";
 TResourcePoolClassifierConfig MakeClassifierConfig(
     const TString& database, const TString& name, i64 rank,
     const TString& resourcePool,
-    std::optional<TString> memberName = std::nullopt,
-    std::optional<TString> appName = std::nullopt,
-    std::optional<TString> fullScanOn = std::nullopt)
+    std::optional<TString> memberName = std::nullopt)
 {
     NJson::TJsonValue json(NJson::JSON_MAP);
     json["resource_pool"] = resourcePool;
     if (memberName) json["member_name"] = *memberName;
-    if (appName)    json["app_name"] = *appName;
-    if (fullScanOn) json["full_scan_on"] = *fullScanOn;
 
     TResourcePoolClassifierConfig config;
     config.SetDatabase(database);
@@ -65,9 +61,7 @@ TPoolInfoSnapshot::TPoolEntry MakePoolEntry(i32 concurrentQueryLimit = -1) {
 struct TClassifyTestCase {
     TString ResourcePool = "pool_target";
     i64 Rank = 100;
-    std::optional<TString> ClassifierAppName;
     std::optional<TString> ClassifierMemberName;
-    std::optional<TString> FullScanOn;
 
     TString ContextAppName;
     TString ContextMemberName;
@@ -80,8 +74,6 @@ struct TClassifyTestCase {
         i64 Rank;
         TString ResourcePool;
         std::optional<TString> MemberName;
-        std::optional<TString> AppName;
-        std::optional<TString> FullScanOn;
     };
     std::vector<TExtraClassifier> ExtraClassifiers;
 
@@ -89,12 +81,12 @@ struct TClassifyTestCase {
         std::vector<TResourcePoolClassifierConfig> configs;
         configs.push_back(MakeClassifierConfig(
             TEST_DB, "c_main", Rank, ResourcePool,
-            ClassifierMemberName, ClassifierAppName, FullScanOn));
+            ClassifierMemberName));
 
         for (const auto& extra : ExtraClassifiers) {
             configs.push_back(MakeClassifierConfig(
                 TEST_DB, extra.Name, extra.Rank, extra.ResourcePool,
-                extra.MemberName, extra.AppName, extra.FullScanOn));
+                extra.MemberName));
         }
 
         auto classifierSnap = MakeClassifierSnapshot(TEST_DB, std::move(configs));
@@ -130,30 +122,6 @@ struct TClassifyTestCase {
         auto classifier = BuildClassifier();
         classifier.PreCompileClassify();
         return classifier.GetPreClassifyResult();
-    }
-
-    IWmQueryClassifier::TPostClassifyResult RunPostClassify(
-        const TString& queryTablePath, bool isFullScan) const
-    {
-        auto classifier = BuildClassifier();
-        classifier.PreCompileClassify();
-
-        auto* proto = new NKikimrKqp::TPreparedQuery();
-        auto* phyQuery = proto->MutablePhysicalQuery();
-        auto* tx = phyQuery->AddTransactions();
-        auto* stage = tx->AddStages();
-        auto* op = stage->AddTableOps();
-        op->MutableTable()->SetPath(queryTablePath);
-
-        if (isFullScan) {
-            op->MutableReadRange()->MutableKeyRange();
-        } else {
-            auto* range = op->MutableReadRange()->MutableKeyRange();
-            range->MutableFrom()->AddValues();
-        }
-
-        TPreparedQueryHolder holder(proto, nullptr, /*noFillTables=*/true);
-        return classifier.PostCompileClassify(holder);
     }
 };
 
@@ -231,85 +199,6 @@ Y_UNIT_TEST_SUITE(TWmQueryClassifierMemberName) {
         TWmQueryClassifier classifier(poolSnap, classifierSnap, ctx);
         classifier.PreCompileClassify();
         UNIT_ASSERT_VALUES_EQUAL(GetPoolId(classifier.GetPreClassifyResult()), "pool_target");
-    }
-}
-
-Y_UNIT_TEST_SUITE(TWmQueryClassifierAppName) {
-
-    Y_UNIT_TEST(ShouldMatchAppName) {
-        TClassifyTestCase tc;
-        tc.ClassifierAppName = "my_app";
-        tc.ContextAppName = "my_app";
-        UNIT_ASSERT_VALUES_EQUAL(GetPoolId(tc.RunPreClassify()), "pool_target");
-    }
-
-    Y_UNIT_TEST(ShouldNotMatchDifferentAppName) {
-        TClassifyTestCase tc;
-        tc.ClassifierAppName = "expected_app";
-        tc.ContextAppName = "other_app";
-        UNIT_ASSERT_VALUES_EQUAL(GetPoolId(tc.RunPreClassify()), "default");
-    }
-
-    Y_UNIT_TEST(ShouldMatchAnyAppWhenFilterNotSet) {
-        TClassifyTestCase tc;
-        tc.ContextAppName = "some_random_app";
-        UNIT_ASSERT_VALUES_EQUAL(GetPoolId(tc.RunPreClassify()), "pool_target");
-    }
-
-    Y_UNIT_TEST(ShouldMatchCombinedAppNameAndMemberName) {
-        TClassifyTestCase tc;
-        tc.ClassifierAppName = "my_app";
-        tc.ClassifierMemberName = "alice";
-        tc.ContextAppName = "my_app";
-        tc.ContextMemberName = "alice";
-        UNIT_ASSERT_VALUES_EQUAL(GetPoolId(tc.RunPreClassify()), "pool_target");
-    }
-
-}
-
-Y_UNIT_TEST_SUITE(TWmQueryClassifierFullScan) {
-
-    Y_UNIT_TEST(ShouldTriggerPendingCompilation) {
-        TClassifyTestCase tc;
-        tc.FullScanOn = "/Root/testdb/my_table";
-        auto result = tc.RunPreClassify();
-        UNIT_ASSERT(std::holds_alternative<IWmQueryClassifier::TPendingCompilation>(result));
-    }
-
-    Y_UNIT_TEST(ShouldMatchFullScan) {
-        TClassifyTestCase tc;
-        tc.FullScanOn = "/Root/testdb/my_table";
-        auto result = tc.RunPostClassify("/Root/testdb/my_table", /*isFullScan=*/true);
-        UNIT_ASSERT_VALUES_EQUAL(GetPoolId(result), "pool_target");
-    }
-
-    Y_UNIT_TEST(ShouldNotMatchPartialScan) {
-        TClassifyTestCase tc;
-        tc.FullScanOn = "/Root/testdb/my_table";
-        auto result = tc.RunPostClassify("/Root/testdb/my_table", /*isFullScan=*/false);
-        UNIT_ASSERT_VALUES_EQUAL(GetPoolId(result), "default");
-    }
-
-    Y_UNIT_TEST(ShouldNotMatchFullScanOnDifferentTable) {
-        TClassifyTestCase tc;
-        tc.FullScanOn = "/Root/testdb/my_table";
-        auto result = tc.RunPostClassify("/Root/testdb/other_table", /*isFullScan=*/true);
-        UNIT_ASSERT_VALUES_EQUAL(GetPoolId(result), "default");
-    }
-
-    Y_UNIT_TEST(ShouldMatchFullScanWithAppNameAndMemberNameFilter) {
-        TClassifyTestCase tc;
-        tc.ClassifierAppName = "my_app";
-        tc.ClassifierMemberName = "alice";
-        tc.FullScanOn = "/Root/testdb/my_table";
-        tc.ContextAppName = "my_app";
-        tc.ContextMemberName = "alice";
-
-        auto pre = tc.RunPreClassify();
-        UNIT_ASSERT(std::holds_alternative<IWmQueryClassifier::TPendingCompilation>(pre));
-
-        auto post = tc.RunPostClassify("/Root/testdb/my_table", /*isFullScan=*/true);
-        UNIT_ASSERT_VALUES_EQUAL(GetPoolId(post), "pool_target");
     }
 }
 

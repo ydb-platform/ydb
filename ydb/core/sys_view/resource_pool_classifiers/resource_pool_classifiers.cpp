@@ -99,14 +99,6 @@ private:
                     const auto& resourcePool = config.GetConfigJson()["resource_pool"].GetString();
                     return TCell(resourcePool.data(), resourcePool.size());
                 }});
-                insert({TSchema::AppName::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
-                    const auto& appName = config.GetConfigJson()["app_name"].GetString();
-                    return TCell(appName.data(), appName.size());
-                }});
-                insert({TSchema::FullScanOn::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
-                    const auto& fullScanOn = config.GetConfigJson()["full_scan_on"].GetString();
-                    return TCell(fullScanOn.data(), fullScanOn.size());
-                }});
             }
         };
         static TExtractorsMap extractors;

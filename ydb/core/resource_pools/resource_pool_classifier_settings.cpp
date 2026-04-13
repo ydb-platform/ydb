@@ -16,16 +16,6 @@ void TClassifierSettings::TParser::operator()(i64* setting) const {
     }
 }
 
-void TClassifierSettings::TParser::operator()(std::optional<bool>* setting) const {
-    bool result;
-
-    if (TryFromString<bool>(Value, result)) {
-        *setting = result;
-    } else {
-        *setting = std::nullopt;
-    }
-}
-
 void TClassifierSettings::TParser::operator()(TString* setting) const {
     *setting = Value;
 }
@@ -38,10 +28,6 @@ void TClassifierSettings::TParser::operator()(std::optional<TString>* setting) c
 
 TString TClassifierSettings::TExtractor::operator()(i64* setting) const {
     return ToString(*setting);
-}
-
-TString TClassifierSettings::TExtractor::operator()(std::optional<bool>* setting) const {
-    return setting->has_value() ? ToString(setting->value()) : "";
 }
 
 TString TClassifierSettings::TExtractor::operator()(TString* setting) const {
@@ -59,8 +45,6 @@ std::unordered_map<TString, TClassifierSettings::TProperty> TClassifierSettings:
         {"rank", &Rank},
         {"resource_pool", &ResourcePool},
         {"member_name", &MemberName},
-        {"app_name", &AppName},
-        {"full_scan_on", &FullScanOn},
     };
     return properties;
 }

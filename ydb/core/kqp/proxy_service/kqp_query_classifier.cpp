@@ -38,10 +38,6 @@ bool MatchesMemberName(const TString& target, const TClassifyContext& ctx) {
 }
 
 bool MatchesStatic(const NResourcePool::TClassifierSettings& s, const TClassifyContext& ctx) {
-    if (s.AppName && *s.AppName != ctx.AppName) {
-        return false;
-    }
-
     if (s.MemberName && !MatchesMemberName(*s.MemberName, ctx)) {
         return false;
     }
@@ -49,87 +45,12 @@ bool MatchesStatic(const NResourcePool::TClassifierSettings& s, const TClassifyC
     return true;
 }
 
-bool NeedsPreparedQuery(const NResourcePool::TClassifierSettings& s) {
-    return s.FullScanOn.has_value();
-}
-
-bool MatchFullScanFor(const TString& tablePath, const NKqpProto::TKqpPhyQuery& phyQuery) {
-    for (const auto& tx : phyQuery.GetTransactions()) {
-        for (const auto& stage : tx.GetStages()) {
-            for (const auto& op : stage.GetTableOps()) {
-                if (op.GetTable().GetPath() != tablePath) {
-                    continue;
-                }
-
-                if (op.HasReadRange()) {
-                    // Standard Row-store ReadRange:
-                    // A Full Scan occurs if both 'From' and 'To' key bounds are empty,
-                    // meaning the iterator starts at the beginning and reads until the end.
-                    const auto& range = op.GetReadRange().GetKeyRange();
-                    if (range.GetFrom().ValuesSize() == 0 && range.GetTo().ValuesSize() == 0) {
-                        return true;
-                    }
-                }
-                else if (op.HasReadRanges()) {
-                    // Multi-range or In-list ReadRanges:
-                    // In KQP, if the KeyRanges parameter name is empty, it indicates 
-                    // that no specific key filters are provided, resulting in a full table scan.
-                    if (op.GetReadRanges().GetKeyRanges().GetParamName().empty()) {
-                        return true;
-                    }
-                }
-                else if (op.HasReadOlapRange()) {
-                    // Column-store (OLAP) ReadRanges:
-                    // Similar to Row-store, an empty ParamName for KeyRanges tells the 
-                    // column shard to scan all available data blocks.
-                    if (op.GetReadOlapRange().GetKeyRanges().GetParamName().empty()) {
-                        return true;
-                    }
-                }
-            }
-
-            for (const auto& source : stage.GetSources()) {
-                if (!source.HasReadRangesSource()) {
-                    continue;
-                }
-
-                const auto& rs = source.GetReadRangesSource();
-
-                if (rs.GetTable().GetPath() != tablePath) {
-                    Cerr << "Path: " << rs.GetTable().GetPath() << Endl;
-                    continue;
-                }
-
-                if (rs.HasKeyRange()) {
-                    // Explicit key range: full scan if both bounds are empty
-                    const auto& range = rs.GetKeyRange();
-                    if (range.GetFrom().ValuesSize() == 0 && range.GetTo().ValuesSize() == 0) {
-                        return true;
-                    }
-                }
-                else if (rs.HasRanges()) {
-                    // Parameterized ranges: full scan if param name is empty
-                    if (rs.GetRanges().GetParamName().empty()) {
-                        return true;
-                    }
-                }
-                else {
-                    // Neither KeyRange nor Ranges set: no filter → full scan
-                    return true;
-                }
-            }
-        }
-    }
-
+bool NeedsPreparedQuery(const NResourcePool::TClassifierSettings&) {
     return false;
 }
 
-bool MatchesDynamic(const NResourcePool::TClassifierSettings& s, const TPreparedQueryHolder& q) {
-    if (!s.FullScanOn || !*s.FullScanOn) {
-        return true;
-    }
-
-    return MatchFullScanFor(*s.FullScanOn, q.GetPhysicalQuery());
+bool MatchesDynamic(const NResourcePool::TClassifierSettings&, const TPreparedQueryHolder&) {
+    return true;
 }
 
 } // namespace anonymous

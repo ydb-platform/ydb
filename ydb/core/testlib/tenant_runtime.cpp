@@ -21,6 +21,7 @@
 #include <ydb/core/tx/coordinator/coordinator.h>
 #include <ydb/core/tx/long_tx_service/long_tx_service.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/core/tx/mediator/mediator.h>
 #include <ydb/core/tx/replication/controller/controller.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -960,6 +961,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
     // Create LongTx services
     for (size_t i = 0; i< Config.Nodes.size(); ++i) {
+        GetAppData(i).SnapshotRegistryHolder = CreateImmutableSnapshotRegistryHolder();
         IActor* longTxService = NLongTxService::CreateLongTxService();
         TActorId longTxServiceId = Register(longTxService, i);
         EnableScheduleForActor(longTxServiceId, true);

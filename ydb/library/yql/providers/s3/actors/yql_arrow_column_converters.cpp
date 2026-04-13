@@ -889,14 +889,19 @@ void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::sha
     std::vector<int>& columnIndices, std::vector<TColumnConverter>& columnConverters,
     std::unordered_map<TStringBuf, NKikimr::NMiniKQL::TType*, THash<TStringBuf>> rowTypes, const NDB::FormatSettings& settings) {
 
-    for (int i = 0; i < dataSchema->num_fields(); ++i) {
-        switch (dataSchema->field(i)->type()->id()) {
+    for (int i = 0; i < outputSchema->num_fields(); ++i) {
+        auto srcFieldIndex = dataSchema->GetFieldIndex(outputSchema->field(i)->name());
+        if (srcFieldIndex == -1) {
+            throw parquet::ParquetException(TStringBuilder() << "Missing field: " << outputSchema->field(i)->name() << ", found fields in arrow file: " << dataSchema->ToString());
+        };
+        const auto& field = dataSchema->field(srcFieldIndex);
+        switch (field->type()->id()) {
         case arrow::Type::LIST:
             throw parquet::ParquetException(TStringBuilder() << "File contains LIST field "
-                << dataSchema->field(i)->name() << " and can't be parsed");
+                << field->name() << " and can't be parsed");
         case arrow::Type::STRUCT:
             throw parquet::ParquetException(TStringBuilder() << "File contains STRUCT field "
-                << dataSchema->field(i)->name() << " and can't be parsed");
+                << field->name() << " and can't be parsed");
         default:
             ;
         }
@@ -907,7 +912,7 @@ void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::sha
         const auto& targetField = outputSchema->field(i);
         auto srcFieldIndex = dataSchema->GetFieldIndex(targetField->name());
         if (srcFieldIndex == -1) {
-            throw parquet::ParquetException(TStringBuilder() << "Missing field: " << targetField->name() << ", found fields in arrow file: " << dataSchema->ToString());
+            throw parquet::ParquetException(TStringBuilder() << "Missing field: " << outputSchema->field(i)->name() << ", found fields in arrow file: " << dataSchema->ToString());
         };
         auto targetType = targetField->type();
         auto originalType = dataSchema->field(srcFieldIndex)->type();

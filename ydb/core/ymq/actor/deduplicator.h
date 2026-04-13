@@ -43,10 +43,10 @@ public:
             Settings_.QueueName,
             Settings_.QueueVersion,
             true, // is fifo
-            -1, // TODO shard
+            -1, // shard
             Settings_.TablesFormat,
             "", // dlq name
-            0, // dlq shard
+            -1, // dlq shard
             0, // dlq version
             0 // dlq tables format
         );
@@ -69,6 +69,7 @@ public:
     
             SELECT
                 DedupId,
+                MessageId,
                 Offset
             FROM `%s/Deduplication`
             WHERE QueueIdNumberHash = $QueueIdNumberHash
@@ -77,7 +78,7 @@ public:
     
         )__", declareIds.c_str(), queryMaker.GetQueueTablesFolder().c_str(), listIds.c_str());
 
-        RLOG_SQS_ERROR(TLogQueueName(Settings_.UserName, Settings_.QueueName, -1) << " Query: " << query);
+        RLOG_SQS_DEBUG(TLogQueueName(Settings_.UserName, Settings_.QueueName, -1) << " Query: " << query);
     
         auto builder = NYdb::TParamsBuilder();
         builder.AddParam("$QueueIdNumberHash")
@@ -114,11 +115,12 @@ public:
         Y_ABORT_UNLESS(response.YdbResultsSize() == 1);
         NYdb::TResultSetParser parser(response.GetYdbResults(0));
 
-        std::unordered_map<TString, ui64> blockedDeduplicationMessageIds;
+        std::unordered_map<TString, std::pair<TString, ui64>> blockedDeduplicationMessageIds;
         while (parser.TryNextRow()) {
             TString deduplicationId = parser.ColumnParser(0).GetOptionalString().value_or("");
-            ui64 offset = parser.ColumnParser(1).GetOptionalUint64().value_or(0);
-            blockedDeduplicationMessageIds[deduplicationId] = offset;
+            TString messageId = parser.ColumnParser(1).GetOptionalString().value_or("");
+            ui64 offset = parser.ColumnParser(2).GetOptionalUint64().value_or(0);
+            blockedDeduplicationMessageIds[deduplicationId] = {messageId, offset};
         }
 
         Send(Request_->Sender, new TSqsEvents::TEvDeduplicateMessageBatchResponse(std::move(blockedDeduplicationMessageIds)));
@@ -147,7 +149,7 @@ private:
     const TDeduplicatorSettings Settings_;
     const TString RequestId_;
 
-    TBackoff Backoff_ = TBackoff(10, TDuration::Seconds(1), TDuration::Seconds(10));
+    TBackoff Backoff_ = TBackoff(10, TDuration::MilliSeconds(50), TDuration::Seconds(10));
 };
 
 } // namespace NKikimr::NSQS

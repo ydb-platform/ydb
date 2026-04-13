@@ -82,7 +82,7 @@ public:
     TString operator() (EQueryId id) const;
     TString GetMatchQueueAttributesQuery() const;
 
-    const TString& GetQueueTablesFolder() {
+    const TString& GetQueueTablesFolder() const {
         return QueueTablesFolder_;
     }
 

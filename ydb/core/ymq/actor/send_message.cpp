@@ -178,6 +178,8 @@ private:
         Become(&TThis::StateFunc);
 
         auto req = MakeHolder<TSqsEvents::TEvDeduplicateMessageBatch>();
+        req->RequestId = RequestId_;
+        req->SenderId = UserSID_;
 
         for (size_t i = 0, size = IsBatch_ ? BatchRequest().EntriesSize() : 1; i < size; ++i) {
             auto* currentRequest = IsBatch_ ? &BatchRequest().GetEntries(i) : &Request();
@@ -242,7 +244,7 @@ private:
 
                 auto it = BlockedDeduplicationMessageIds_.find(deduplicationId);
                 if (it != BlockedDeduplicationMessageIds_.end()) {
-                    auto [messageId, sequenceNumber] = *it;
+                    const auto& [messageId, sequenceNumber] = it->second;
                     AddResponse(currentRequest, currentResponse, messageId, sequenceNumber);
                     continue;
                 }
@@ -453,7 +455,7 @@ private:
 
     const bool IsBatch_;
     // deduplication message id -> sequenceNumber
-    std::unordered_map<TString, ui64> BlockedDeduplicationMessageIds_;
+    std::unordered_map<TString, std::pair<TString, ui64>> BlockedDeduplicationMessageIds_;
 };
 
 IActor* CreateSendMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

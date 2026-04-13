@@ -2698,7 +2698,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
                 {"WaitTimeSeconds", 1},
                 {"VisibilityTimeout", 1}
             });
-            UNIT_ASSERT_VALUES_EQUAL_C(json["Messages"].GetType(), NJson::EJsonValueType::JSON_UNDEFINED, "Message was deduplicated and not writen to the topic: " << json.GetStringRobust());
+            UNIT_ASSERT_VALUES_EQUAL_C(json["Messages"].GetType(), NJson::EJsonValueType::JSON_UNDEFINED, "Message was deduplicated and not written to the topic: " << json.GetStringRobust());
         }
     }
 
@@ -2750,7 +2750,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
                 {"WaitTimeSeconds", 1},
                 {"VisibilityTimeout", 1}
             });
-            UNIT_ASSERT_VALUES_EQUAL_C(json["Messages"].GetType(), NJson::EJsonValueType::JSON_UNDEFINED, "Message was deduplicated and not writen to the topic: " << json.GetStringRobust());
+            UNIT_ASSERT_VALUES_EQUAL_C(json["Messages"].GetType(), NJson::EJsonValueType::JSON_UNDEFINED, "Message was deduplicated and not written to the topic: " << json.GetStringRobust());
         }
     }
 } // Y_UNIT_TEST_SUITE(TestYmqHttpProxy)

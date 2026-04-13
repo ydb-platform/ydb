@@ -274,6 +274,7 @@ namespace NKikimr {
 
             void UpdateCounters() {
                 KeepState.UpdateMetrics();
+                KeepState.FlushPhantomFlagStorageWriteBufferIfNeeded();
                 Schedule(TDuration::Seconds(15), new TEvents::TEvWakeup);
             }
 

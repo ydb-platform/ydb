@@ -132,5 +132,10 @@ namespace NKikimr {
 
             std::optional<TPhantomFlagStorageData> Data;
         };
+
+        struct TEvPhantomFlagStorageDrop
+                : public TEventLocal<TEvPhantomFlagStorageDrop,
+                                     TEvBlobStorage::EvPhantomFlagStorageDrop>
+        {};
     } // NSyncLog
 } // NKikimr

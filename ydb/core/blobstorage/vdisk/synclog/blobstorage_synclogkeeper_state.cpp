@@ -64,10 +64,8 @@ namespace NKikimr {
             SelfId = selfId;
 
             TPhantomFlagStorageData phantomFlagStorageData = SyncLogPtr->GetPhantomFlagStorageData();
-            if (!phantomFlagStorageData.Chunks.empty()) {
-                PhantomFlagStorageState.InitializePersistent(std::move(phantomFlagStorageData), SelfId, 
-                        SlCtx->ChunkKeeperId);
-            }
+            PhantomFlagStorageState.InitializePersistent(std::move(phantomFlagStorageData), SelfId, 
+                    SlCtx->ChunkKeeperId, SyncLogPtr->GetAppendBlockSize());
         }
 
         // Calculate first lsn in recovery log we must keep
@@ -493,12 +491,10 @@ namespace NKikimr {
             }
 
             if (EnablePhantomFlagStorage) {
-                if (EnablePersistentPhantomFlagStorage) {
-                    PhantomFlagStorageState.InitializePersistent(SyncLogPtr->GetPhantomFlagStorageData(),
-                            SelfId, SlCtx->ChunkKeeperId);
-                }
                 PhantomFlagStorageState.UpdateSyncedMask(SyncedMask);
-                if (!chunks.empty() && !PhantomFlagStorageState.IsActive() && SelfId != TActorId{}) {
+                if (PhantomFlagStorageState.IsActive()) {
+                    PhantomFlagStorageState.SyncLogIsCut();
+                } else if (!chunks.empty() && SelfId != TActorId{}) {
                     PhantomFlagStorageState.StartBuilding();
                     TActivationContext::Register(CreatePhantomFlagStorageBuilderActor(SlCtx, SelfId, snapshot));
                 }
@@ -518,6 +514,10 @@ namespace NKikimr {
 
         void TSyncLogKeeperState::UpdatePhantomFlagStorageData(std::optional<TPhantomFlagStorageData>&& data) {
             SyncLogPtr->UpdatePhantomFlagStorageData(std::move(data));
+        }
+
+        void TSyncLogKeeperState::FlushPhantomFlagStorageWriteBufferIfNeeded() {
+            PhantomFlagStorageState.FlushWriteBufferIfNeeded();
         }
 
     } // NSyncLog

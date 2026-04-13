@@ -11,12 +11,17 @@ namespace NKikimr::NSyncLog {
 using TPhantomFlagStorageDataProto = NKikimrVDiskData::TPhantomFlagStorageData;
 
 enum EPhantomFlagStorageItem : ui8 {
-    Unknown   = 0b00,
-    Flag      = 0b01,
-    Threshold = 0b10,
-    // all types other than Flag and Threshold must contain ui32 field
-    // equal to the total serialized size of structure (including Type)
-    // in the beginning of byte serialization, for compatibility reasons 
+    SkipOneByte = 0b00,
+    Flag        = 0b01,
+    Threshold   = 0b10,
+    Skip        = 0b11,
+    // All types other than Flag and Threshold must contain ui32 field
+    // equal to the total serialized size of structure
+    // (including Type and Size) fields
+    // in the beginning of byte serialization, for compatibility reasons:
+    // when attempting to read unsupported field it fill be interpreted
+    // as Skip{ Size } and skipped
+    // SkipOneByte records are used to skip alignment blocks 
 };
 
 class TPhantomFlagStorageItem {
@@ -41,6 +46,7 @@ public:
     static TPhantomFlagStorageItem DeserializeFromRaw(const char* data);
     void Serialize(TString* buffer) const;
     ui32 SerializedSize() const;
+    static void AlignWriteBlock(TString* buffer, ui32 appendBlockSize, ui32 sizeLimit); 
 
     EPhantomFlagStorageItem GetType() const;
 

@@ -32,7 +32,7 @@ TPhantomFlagStorageItem TPhantomFlagStorageItem::CreateThreshold(ui32 orderNumbe
 }
 
 EPhantomFlagStorageItem TPhantomFlagStorageItem::GetType() const {
-    EPhantomFlagStorageItem res = EPhantomFlagStorageItem::Unknown;
+    EPhantomFlagStorageItem res = EPhantomFlagStorageItem::Skip;
     std::visit(TOverloaded{
         [&](const std::monostate&) {},
         [&](const TSkip&) {},
@@ -57,7 +57,11 @@ TPhantomFlagStorageItem::TFlag TPhantomFlagStorageItem::GetFlag() const {
 void TPhantomFlagStorageItem::Serialize(TString* buffer) const {
     std::visit(TOverloaded{
         [&](const std::monostate&) {},
-        [&](const TSkip&) {},
+        [&](const TSkip& skip) {
+            constexpr static EPhantomFlagStorageItem type = EPhantomFlagStorageItem::Flag;
+            buffer->append(reinterpret_cast<const char*>(&type), sizeof(type));
+            buffer->append(reinterpret_cast<const char*>(&skip), sizeof(skip));
+        },
         [&](const TFlag& flag) {
             constexpr static EPhantomFlagStorageItem type = EPhantomFlagStorageItem::Flag;
             buffer->append(reinterpret_cast<const char*>(&type), sizeof(type));
@@ -75,6 +79,9 @@ TPhantomFlagStorageItem TPhantomFlagStorageItem::DeserializeFromRaw(const char* 
     const EPhantomFlagStorageItem type = *reinterpret_cast<const EPhantomFlagStorageItem*>(data);
     data += sizeof(type);
     switch (type) {
+    case EPhantomFlagStorageItem::SkipOneByte: {
+        return TPhantomFlagStorageItem::CreateSkip(1);
+    }
     case EPhantomFlagStorageItem::Flag: {
         const TLogoBlobRec rec = *reinterpret_cast<const TLogoBlobRec*>(data);
         return TPhantomFlagStorageItem::CreateFlag(&rec);
@@ -84,6 +91,7 @@ TPhantomFlagStorageItem TPhantomFlagStorageItem::DeserializeFromRaw(const char* 
         return TPhantomFlagStorageItem::CreateThreshold(threshold.OrderNumber, threshold.TabletId,
                 threshold.Channel, threshold.Generation, threshold.Step);
     }
+    case EPhantomFlagStorageItem::Skip:
     default: {
         const ui32 size = *reinterpret_cast<const ui32*>(data);
         return TPhantomFlagStorageItem::CreateSkip(size);
@@ -100,6 +108,31 @@ ui32 TPhantomFlagStorageItem::SerializedSize() const {
         [&](const TThreshold&) { res = sizeof(EPhantomFlagStorageItem) + sizeof(TThreshold); },
     }, Data);
     return res;
+}
+
+void TPhantomFlagStorageItem::AlignWriteBlock(TString* buffer, ui32 appendBlockSize, ui32 sizeLimit) {
+    Y_ABORT_UNLESS(buffer);
+    ui32 bufferSize = buffer->size();
+    Y_VERIFY_S(bufferSize <= sizeLimit, "BufferSize# " << bufferSize << " SizeLimit# " << sizeLimit);
+    if (buffer->size() % appendBlockSize == 0) {
+        // write block is already aligned
+        return;
+    }
+
+    ui32 fillSize = std::min(sizeLimit - bufferSize, appendBlockSize - bufferSize % appendBlockSize);
+    ui32 skipRecSize = sizeof(EPhantomFlagStorageItem) + sizeof(TSkip);
+    if (fillSize >= skipRecSize) {
+        // add one Skip record
+        TPhantomFlagStorageItem skip = CreateSkip(fillSize - skipRecSize);
+        skip.Serialize(buffer);
+        fillSize -= skipRecSize;
+    }
+
+    // fill the rest with zeros
+    if (fillSize > 0) {
+        TString zeros(fillSize, '\0');
+        buffer->append(zeros.data(), fillSize);
+    }
 }
 
 void TPhantomFlagStorageData::Deserialize(const TPhantomFlagStorageDataProto& proto) {

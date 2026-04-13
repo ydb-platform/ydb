@@ -11,6 +11,7 @@ struct TPhantomFlagStorageProcessorContext {
     const TIntrusivePtr<TSyncLogCtx> SyncLogCtx;
     const NActors::TActorId SyncLogKeeperId;
     const NActors::TActorId ChunkKeeperId;
+    const ui32 AppendBlockSize;
 };
 
 ////////////////////////////////////////////////////////////////////////////

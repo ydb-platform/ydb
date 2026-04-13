@@ -93,6 +93,7 @@ namespace NKikimr {
             void ProcessLocalSyncData(ui32 orderNumber, const TString& data);
 
             void UpdateMetrics();
+            void FlushPhantomFlagStorageWriteBufferIfNeeded();
 
             TVector<ui32> GetChunksToForget() {
                 return std::exchange(ChunksToForget, {});

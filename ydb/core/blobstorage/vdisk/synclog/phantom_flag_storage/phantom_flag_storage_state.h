@@ -22,7 +22,7 @@ public:
     TPhantomFlagStorageState(TIntrusivePtr<TSyncLogCtx> slCtx);
 
     void InitializePersistent(TPhantomFlagStorageData&& data, TActorId syncLogKeeperId,
-            TActorId chunkKeeperId);
+            TActorId chunkKeeperId, ui32 appendBlockSize);
     void StartBuilding();
 
     // Adds DoNotKeep flags from synclog if needed
@@ -53,6 +53,7 @@ public:
     std::optional<TPhantomFlagStorageData> GetPersistentData() const;
     void UpdatePersistentData(std::optional<TPhantomFlagStorageData>&& data);
     void FlushWriteBufferIfNeeded();
+    void SyncLogIsCut();
 
 private:
     // Adds DoNotKeep flags to storage and Keeps to Thresholds for specified neighbour
@@ -85,8 +86,8 @@ private:
     TMonotonic WriteBufferFlushTimestamp = TMonotonic::Zero();
 
 private:
-    // TODO: configurable value
-    constexpr static ui32 WriteBufferSizeLimit = 32_KB;
+    // TODO: remove write buffer, use sync log
+    constexpr static ui32 WriteBufferSizeLimit = 1_MB;
     constexpr static TDuration WriteBufferFlushPeriod = TDuration::Seconds(30);
 };
 

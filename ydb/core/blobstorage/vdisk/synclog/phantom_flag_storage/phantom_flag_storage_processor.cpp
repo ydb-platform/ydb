@@ -8,6 +8,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_private_events.h>
 #include <ydb/core/blobstorage/vdisk/chunk_keeper/chunk_keeper_events.h>
+#include <ydb/core/util/stlog.h>
 
 #include <unordered_set>
 
@@ -30,7 +31,12 @@ public:
     }
 
     void Bootstrap() {
+        STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP01, VDISKP(Ctx.SyncLogCtx->VCtx,
+                "Bootstrap PhantomFlagStorageProcessor"),
+                (ChunkCount, Data.Chunks.size()),
+                (ChunkSize, Data.ChunkSize));
         Send(Ctx.ChunkKeeperId, new TEvChunkKeeperDiscover(SubsystemId));
+        RequestInFlight = true;
         Become(&TThis::StateInit);
     }
 
@@ -39,11 +45,14 @@ private:
     // State functions
     //////////////////////////////////////////////////////////////////////
     STRICT_STFUNC(StateInit,
+        hFunc(TEvPhantomFlagStorageWriteItems, Handle)
+        hFunc(TEvPhantomFlagStorageDrop, Handle)
         hFunc(TEvChunkKeeperDiscoverResult, HandleInit)
         cFunc(TEvents::TEvPoisonPill::EventType, PassAway)
     )
 
     STRICT_STFUNC(StateWork,
+        hFunc(TEvPhantomFlagStorageDrop, Handle)
         hFunc(TEvChunkKeeperAllocateResult, Handle)
         hFunc(TEvChunkKeeperFreeResult, Handle)
         hFunc(NPDisk::TEvChunkWriteResult, Handle)
@@ -59,6 +68,10 @@ private:
     // Handlers
     //////////////////////////////////////////////////////////////////////
     void HandleInit(const TEvChunkKeeperDiscoverResult::TPtr& ev) {
+        STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP02, VDISKP(Ctx.SyncLogCtx->VCtx,
+                "Handle TEvChunkKeeperDiscoverResult"),
+                (Event, ev->Get()->ToString()));
+        RequestInFlight = false;
         switch (ev->Get()->Status) {
         case NKikimrProto::OK: {
             std::unordered_set<ui32> discoveredChunks;
@@ -97,12 +110,19 @@ private:
     }
 
     void Handle(TEvPhantomFlagStorageWriteItems::TPtr ev) {
+        STLOG(PRI_DEBUG, BS_PHANTOM_FLAG_PROCESSOR, BSPFP03, VDISKP(Ctx.SyncLogCtx->VCtx,
+                "Handle TEvPhantomFlagStorageWriteItems"),
+                (ItemCount, ev->Get()->Items.size()),
+                (WriteQueueSize, WriteQueue.size()));
         std::ranges::move(ev->Get()->Items.begin(), ev->Get()->Items.end(),
                 std::back_inserter(WriteQueue));
         ProcessQueues();
     }
 
     void Handle(const TEvChunkKeeperAllocateResult::TPtr& ev) {
+        STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP04, VDISKP(Ctx.SyncLogCtx->VCtx,
+                "Handle TEvChunkKeeperAllocateResult"),
+                (Event, ev->Get()->ToString()));
         RequestInFlight = false;
         switch (ev->Get()->Status) {
         case NKikimrProto::OK: {
@@ -118,50 +138,82 @@ private:
         default:
             // retry
             AllocateNewChunk();
-            return;
+            break;
         }
+        ProcessQueues();
     }
 
     void Handle(const TEvChunkKeeperFreeResult::TPtr& ev) {
+        STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP05, VDISKP(Ctx.SyncLogCtx->VCtx,
+                "Handle TEvChunkKeeperAllocateResult"),
+                (Event, ev->Get()->ToString()));
         RequestInFlight = false;
         switch (ev->Get()->Status) {
         case NKikimrProto::OK: {
             Data.Chunks.erase(ev->Get()->ChunkIdx);
+            CommitState();
             break;
         }
         default:
             // retry
             DeleteChunk(ev->Get()->ChunkIdx);
-            return;
+            break;
         }
+        ProcessQueues();
     }
 
     void Handle(const NPDisk::TEvChunkWriteResult::TPtr& ev) {
+        STLOG(PRI_DEBUG, BS_PHANTOM_FLAG_PROCESSOR, BSPFP06, VDISKP(Ctx.SyncLogCtx->VCtx,
+                "Handle TEvChunkWriteResult"),
+                (Event, ev->Get()->ToString()));
         CHECK_PDISK_RESPONSE(Ctx.SyncLogCtx->VCtx, ev, TActivationContext::AsActorContext());
         RequestInFlight = false;
         ui32 chunkIdx = ev->Get()->ChunkIdx;
-        ui32 bufferSize = ev->Get()->PartsPtr->ByteSize();
-        Data.Chunks[chunkIdx].DataSize += bufferSize;
+        Data.Chunks[chunkIdx].DataSize += std::exchange(PendingWriteSize, 0);
         if (chunkIdx == TailChunkIdx) {
-            TailAvailableSize -= bufferSize;
+            TailAvailableSize -= PendingWriteSize;
         }
         CommitState();
         ProcessQueues();
     }
 
     void Handle(const NPDisk::TEvChunkReadResult::TPtr& ev) {
+        STLOG(PRI_DEBUG, BS_PHANTOM_FLAG_PROCESSOR, BSPFP07, VDISKP(Ctx.SyncLogCtx->VCtx,
+                "Handle TEvChunkReadResult"),
+                (Event, ev->Get()->ToString()));
         CHECK_PDISK_RESPONSE(Ctx.SyncLogCtx->VCtx, ev, TActivationContext::AsActorContext());
         ui32 chunkIdx = ev->Get()->ChunkIdx;
         PendingRead.ChunksToRead.erase(chunkIdx);
         ProcessReadBuffer(ev->Get()->Data, chunkIdx);
         if (PendingRead.ChunksToRead.empty()) {
             FinalizeRead();
-            ProcessQueues();
         }
+        ProcessQueues();
     }
 
     void Handle(const TEvPhantomFlagStorageGetSnapshot::TPtr& ev) {
+        STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP08, VDISKP(Ctx.SyncLogCtx->VCtx,
+                "Handle TEvPhantomFlagStorageGetSnapshot"));
         EnqueueGetSnapshot(ev->Sender);
+        ProcessQueues();
+    }
+
+    void Handle(const TEvPhantomFlagStorageDrop::TPtr&) {
+        STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP11, VDISKP(Ctx.SyncLogCtx->VCtx,
+                "Handle TEvPhantomFlagStorageDrop"),
+                (ChunkCount, Data.Chunks.size()));
+        TailChunkIdx = std::nullopt;
+        TailAvailableSize = 0;
+        for (const auto& [chunkIdx, chunk] : Data.Chunks) {
+            if (chunk.DataSize > 0) {
+                DeleteChunk(chunkIdx);
+            }
+        }
+        ProcessQueues();
+    }
+
+    void HandlePoison(const TEvents::TEvPoisonPill::TPtr&, const TActorContext&) {
+        PassAway();
     }
 
     //////////////////////////////////////////////////////////////////////
@@ -188,6 +240,15 @@ private:
     }
 
     void ProcessQueues() {
+        if (Stopped) {
+            if (Data.Chunks.empty()) {
+                PassAway();
+            } else if (!RequestInFlight) {
+                DeleteChunk(Data.Chunks.begin()->first);
+            }
+            return;
+        }
+
         while (!RequestInFlight && !RequestQueue.empty()) {
             TRequest request = RequestQueue.front();
             RequestQueue.pop_front();
@@ -207,14 +268,14 @@ private:
             return;
         }
 
-        if (!TailChunkIdx || TailAvailableSize < sizeof(TPhantomFlagStorageItem)) {
+        if (!TailChunkIdx || TailAvailableSize < sizeof(TPhantomFlagStorageItem) + Ctx.AppendBlockSize) {
             AllocateNewChunk();
             return;
         }
 
         while (!WriteQueue.empty()) {
             const TPhantomFlagStorageItem& item = WriteQueue.front();
-            if (TailAvailableSize < PendingWrite.size() + item.SerializedSize()) {
+            if (TailAvailableSize < PendingWrite.size() + item.SerializedSize() + Ctx.AppendBlockSize) {
                 break;
             }
             item.Serialize(&PendingWrite);
@@ -227,9 +288,7 @@ private:
     }
 
     void DeleteChunk(ui32 chunkIdx) {
-        if (!Data.Chunks.contains(chunkIdx)) {
-            RequestInFlight = false;
-        } else {
+        if (Data.Chunks.contains(chunkIdx)) {
             Send(Ctx.ChunkKeeperId, new TEvChunkKeeperFree(chunkIdx, SubsystemId));
         }
     }
@@ -245,6 +304,9 @@ private:
                 PendingRead.ChunksToRead.insert(chunkIdx);
             }
         }
+        STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP11, VDISKP(Ctx.SyncLogCtx->VCtx,
+                "Start reading snapshot"),
+                (ChunkToReadCount, PendingRead.ChunksToRead.size()));
         if (PendingRead.ChunksToRead.empty()) {
             FinalizeRead();
         }
@@ -252,6 +314,9 @@ private:
 
     void FinalizeRead() {
         RequestInFlight = false;
+        STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP09, VDISKP(Ctx.SyncLogCtx->VCtx,
+                "Send Snapshot"),
+                (FlagCount, PendingRead.Flags.size()));
         Send(PendingRead.Requester, new TEvPhantomFlagStorageGetSnapshotResult(
                 TPhantomFlagStorageSnapshot(std::move(PendingRead.Flags),
                                             std::move(PendingRead.Thresholds))));
@@ -270,6 +335,9 @@ private:
         Y_DEBUG_ABORT_UNLESS(TailChunkIdx);
         RequestInFlight = true;
         ui32 offset = Data.Chunks[*TailChunkIdx].DataSize;
+        ui32 maxSize = Data.ChunkSize - (offset + PendingWrite.size());
+        TPhantomFlagStorageItem::AlignWriteBlock(&PendingWrite, Ctx.AppendBlockSize, maxSize);
+        PendingWriteSize = PendingWrite.size();
         auto parts = MakeIntrusive<NPDisk::TEvChunkWrite::TAlignedParts>(std::move(PendingWrite));
         Send(Ctx.SyncLogCtx->PDiskCtx->PDiskId,
              new NPDisk::TEvChunkWrite(Ctx.SyncLogCtx->PDiskCtx->Dsk->Owner, Ctx.SyncLogCtx->PDiskCtx->Dsk->OwnerRound,
@@ -295,7 +363,8 @@ private:
                         threshold.Channel, threshold.Generation, threshold.Step);
                 break;
             }
-            case EPhantomFlagStorageItem::Unknown:
+            case EPhantomFlagStorageItem::Skip:
+            case EPhantomFlagStorageItem::SkipOneByte:
                 break;
             }
 
@@ -304,10 +373,6 @@ private:
                 return;
             }
         }
-    }
-
-    void HandlePoison(const TEvents::TEvPoisonPill::TPtr&, const TActorContext&) {
-        PassAway();
     }
 
 private:
@@ -351,7 +416,9 @@ private:
 
     std::deque<TPhantomFlagStorageItem> WriteQueue;
     TString PendingWrite;
+    ui32 PendingWriteSize = 0;
     TReaderInfo PendingRead;
+    bool Stopped = false;
 
     std::optional<ui32> TailChunkIdx;
     ui64 TailAvailableSize = 0;

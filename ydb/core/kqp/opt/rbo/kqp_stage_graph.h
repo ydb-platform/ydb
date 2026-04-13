@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -67,15 +68,20 @@ private:
 };
 
 struct TShuffleConnection: public TConnection {
-    TShuffleConnection(const TVector<TInfoUnit>& keys, NYql::EStorageType fromSourceStageStorageType = NYql::EStorageType::NA, ui32 outputIndex = 0)
+    TShuffleConnection(const TVector<TInfoUnit>& keys,
+                       NYql::EStorageType fromSourceStageStorageType = NYql::EStorageType::NA,
+                       ui32 outputIndex = 0,
+                       TMaybe<NDq::EHashShuffleFuncType> hashFuncType = {})
         : TConnection("Shuffle", fromSourceStageStorageType, outputIndex)
-        , Keys(keys) {
+        , Keys(keys)
+        , HashFuncType(hashFuncType) {
     }
 
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprNode::TPtr& newStage,
                                             TExprContext& ctx) override;
 
     TVector<TInfoUnit> Keys;
+    TMaybe<NDq::EHashShuffleFuncType> HashFuncType;
 };
 
 struct TMergeConnection: public TConnection {

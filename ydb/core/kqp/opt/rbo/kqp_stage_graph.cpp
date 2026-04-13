@@ -124,15 +124,23 @@ TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, 
     }
 
     // clang-format off
-    return Build<TDqCnHashShuffle>(ctx, pos)
+    auto builder = Build<TDqCnHashShuffle>(ctx, pos)
         .Output()
             .Stage(inputStage)
             .Index().Build(ToString(OutputIndex))
         .Build()
         .KeyColumns()
             .Add(keyColumns)
-        .Build()
-    .Done().Ptr();
+        .Build();
+
+    if (HashFuncType) {
+        // UseSpilling (index 2) must be initialised before HashFunc (index 3):
+        // the generated builder enforces consecutive optional field ordering.
+        builder.UseSpilling().Build(false);
+        builder.HashFunc().Build(ToString(*HashFuncType));
+    }
+
+    return builder.Done().Ptr();
     // clang-format on
 }
 

@@ -99,8 +99,47 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
                 rightShuffleKeys.push_back(key.second);
             }
 
-            props.StageGraph.Connect(*leftStage, newStageId, MakeIntrusive<TShuffleConnection>(leftShuffleKeys, leftInputStorageType));
-            props.StageGraph.Connect(*rightStage, newStageId, MakeIntrusive<TShuffleConnection>(rightShuffleKeys, rightInputStorageType));
+            bool enableSE = ctx.KqpCtx.Config->OptShuffleElimination.Get()
+                .GetOrElse(ctx.KqpCtx.Config->GetDefaultEnableShuffleElimination());
+
+            auto isAlreadyShuffled = [&](const TVector<TInfoUnit>& keys,
+                                          const std::optional<TRBOMetadata>& meta) -> bool {
+                if (!enableSE || !meta.has_value() || meta->ShuffledByColumns.empty()) {
+                    return false;
+                }
+                return std::all_of(keys.begin(), keys.end(), [&meta](const TInfoUnit& key) {
+                    return std::find(meta->ShuffledByColumns.begin(),
+                                     meta->ShuffledByColumns.end(), key)
+                           != meta->ShuffledByColumns.end();
+                });
+            };
+
+            bool leftEliminated  = isAlreadyShuffled(leftShuffleKeys,  join->GetLeftInput()->Props.Metadata);
+            bool rightEliminated = isAlreadyShuffled(rightShuffleKeys, join->GetRightInput()->Props.Metadata);
+
+            // Don't eliminate both sides at once — local join needs separate handling
+            if (leftEliminated && rightEliminated) {
+                rightEliminated = false;
+            }
+
+            // When one side is eliminated, the remaining shuffle must use ColumnShardHashV1
+            // to be compatible with the column store's native partitioning on the other side.
+            TMaybe<NDq::EHashShuffleFuncType> seHashFunc;
+            if (leftEliminated || rightEliminated) {
+                seHashFunc = NDq::EHashShuffleFuncType::ColumnShardHashV1;
+            }
+
+            if (leftEliminated) {
+                props.StageGraph.Connect(*leftStage, newStageId, MakeIntrusive<TMapConnection>(leftInputStorageType));
+            } else {
+                props.StageGraph.Connect(*leftStage, newStageId, MakeIntrusive<TShuffleConnection>(leftShuffleKeys, leftInputStorageType, 0u, seHashFunc));
+            }
+
+            if (rightEliminated) {
+                props.StageGraph.Connect(*rightStage, newStageId, MakeIntrusive<TMapConnection>(rightInputStorageType));
+            } else {
+                props.StageGraph.Connect(*rightStage, newStageId, MakeIntrusive<TShuffleConnection>(rightShuffleKeys, rightInputStorageType, 0u, seHashFunc));
+            }
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages join";
     } else if (input->Kind == EOperator::Filter || input->Kind == EOperator::Map) {

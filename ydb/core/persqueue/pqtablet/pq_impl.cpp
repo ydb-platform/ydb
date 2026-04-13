@@ -1986,15 +1986,17 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             return;
         }
 
-        if (!cmd.HasMessageDeduplicationId() && proto.ParseFromString(cmd.GetData())) {
+        // Look up deduplication id in payload metadata only if oneof DeduplicationId is unset.
+        if (!cmd.HasDoNotLookupDeduplicationIdInMetadata() && !cmd.HasDeduplicationIdValue()
+                && proto.ParseFromString(cmd.GetData())) {
             for (auto& attr : *proto.MutableMessageMeta()) {
                 if (attr.key() == MESSAGE_ATTRIBUTE_DEDUPLICATION_ID) {
                     deduplicationId = attr.value();
                     break;
                 }
             }
-        } else if (cmd.HasMessageDeduplicationId()) {
-            deduplicationId = cmd.GetMessageDeduplicationId();
+        } else if (cmd.HasDeduplicationIdValue()) {
+            deduplicationId = cmd.GetDeduplicationIdValue();
         }
 
         ui32 mSize = MAX_BLOB_PART_SIZE - cmd.GetSourceId().size() - sizeof(ui32) - TClientBlob::OVERHEAD; //megaqc - remove this

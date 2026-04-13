@@ -7,6 +7,7 @@ RECURSE(
     endpoints
     iam
     oauth2_token_exchange
+    observability
     params
     result
     table

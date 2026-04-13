@@ -488,6 +488,9 @@ message TDqMemoryHistoryItem {
     uint64 InputInflightBytes  = 8;
     uint64 OutputInflightBytes = 9;
     uint64 LocalInflightBytes  = 10;
+    uint64 MemQuotaLimit = 11;
+    uint64 MemQuotaUsed  = 12;
+    uint64 MemQuotaExtra = 13;
 }
 
 message TDqNodeStats {

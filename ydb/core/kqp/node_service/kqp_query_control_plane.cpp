@@ -12,6 +12,159 @@
 
 namespace NKikimr::NKqp {
 
+// for CA/task, is NOT thread safe
+
+struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
+
+    TMemoryQuotaManager(std::shared_ptr<NRm::IKqpResourceManager> resourceManager
+        , TIntrusivePtr<NRm::TTxState> tx
+        , ui64 taskId
+        , ui64 limit)
+    : NYql::NDq::TGuaranteeQuotaManager(limit, limit)
+    , ResourceManager(std::move(resourceManager))
+    , Tx(std::move(tx))
+    , TaskId(taskId)
+    {}
+
+    ~TMemoryQuotaManager() override {
+        ResourceManager->FreeResources(*Tx, TaskId, NRm::TKqpResourcesRequest{
+            .ExecutionUnits = 1,
+            .Memory = Limit - Guarantee,
+            .ExternalMemory = Guarantee,
+        });
+    }
+
+    bool AllocateExtraQuota(ui64 extraSize) override {
+        auto result = ResourceManager->AllocateResources(*Tx, TaskId,
+            NRm::TKqpResourcesRequest{.Memory = extraSize});
+
+        if (!result) {
+            AFL_WARN(NKikimrServices::KQP_COMPUTE)
+                ("problem", "cannot_allocate_memory")
+                ("tx_id", Tx->TxId)
+                ("task_id", TaskId)
+                ("memory", extraSize);
+
+            return false;
+        }
+
+        return true;
+    }
+
+    void FreeExtraQuota(ui64 extraSize) override {
+        ResourceManager->FreeResources(*Tx, TaskId, NRm::TKqpResourcesRequest{.Memory = extraSize});
+    }
+
+    bool IsReasonableToUseSpilling() const override {
+        return Tx->IsReasonableToStartSpilling();
+    }
+
+    TString MemoryConsumptionDetails() const override {
+        return Tx->ToString();
+    }
+
+    std::shared_ptr<NRm::IKqpResourceManager> ResourceManager;
+    TIntrusivePtr<NRm::TTxState> Tx;
+    ui64 TaskId;
+};
+
+NYql::NDq::IMemoryQuotaManager::TPtr CreateTaskQuotaManager(std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
+    TIntrusivePtr<NRm::TTxState> tx, ui64 taskId, ui64 initialMemoryLimit) {
+    return std::make_shared<TMemoryQuotaManager>(resourceManager, tx, taskId, initialMemoryLimit);
+}
+
+// for event/messages, IS THREAD SAFE, allows little overquoating
+
+struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
+
+    TChannelQuotaManager(std::shared_ptr<NRm::IKqpResourceManager> resourceManager
+        , TIntrusivePtr<NRm::TTxState> tx
+        , ui64 limit, ui64 step = 1_MB)
+    : ResourceManager(std::move(resourceManager))
+    , Tx(std::move(tx))
+    , AvailableQuota(limit)
+    , Limit(limit)
+    , DataMemoryLimit(limit)
+    , AllocationStep(step)
+    {}
+
+    ~TChannelQuotaManager() {
+        ResourceManager->FreeResources(*Tx, 0, NRm::TKqpResourcesRequest{
+            .Memory = Limit.load() - DataMemoryLimit,
+            .ExternalMemory = DataMemoryLimit,
+        });
+    }
+
+    bool AllocateQuota(ui64 memorySize) override {
+        i64 quota = AvailableQuota.fetch_sub(memorySize);
+
+        if (static_cast<i64>(memorySize) > quota) {
+            ui64 memoryRequired = memorySize - quota;
+            memoryRequired += AllocationStep - 1;
+            memoryRequired &= ~(AllocationStep - 1);
+
+            auto result = ResourceManager->AllocateResources(*Tx, 0, NRm::TKqpResourcesRequest{.Memory = memoryRequired});
+            if (result) {
+                AvailableQuota.fetch_add(memoryRequired);
+                Limit.fetch_add(memoryRequired);
+            } else {
+                AFL_WARN(NKikimrServices::KQP_COMPUTE)
+                    ("problem", "cannot_allocate_memory")
+                    ("tx_id", Tx->TxId)
+                    ("task_id", 0)
+                    ("memory", memoryRequired);
+                if (memoryRequired >= AllocationStep * 10) {
+                    AvailableQuota.fetch_add(memorySize);
+                    return false;
+                }
+            }
+        }
+
+        AllocatedQuota.fetch_add(memorySize);
+        return true;
+    }
+
+    bool IsReasonableToUseSpilling() const override {
+        return false;
+    }
+
+    void FreeQuota(ui64 memorySize) override {
+        auto prevQuota = AllocatedQuota.fetch_sub(memorySize);
+        Y_DEBUG_ABORT_UNLESS(prevQuota >= memorySize);
+        i64 quota = AvailableQuota.fetch_add(memorySize);
+        if (quota > static_cast<i64>(AllocationStep * 10 + DataMemoryLimit)) {
+            AvailableQuota.fetch_sub(AllocationStep);
+            Limit.fetch_sub(AllocationStep);
+            ResourceManager->FreeResources(*Tx, 0, NRm::TKqpResourcesRequest{.Memory = AllocationStep});
+        }
+    }
+
+    ui64 GetCurrentQuota() const override {
+        return AllocatedQuota.load();
+    }
+
+    ui64 GetMaxMemorySize() const override {
+        return AllocatedQuota.load();
+    };
+
+    TString MemoryConsumptionDetails() const override {
+        return TString();
+    }
+
+    std::shared_ptr<NRm::IKqpResourceManager> ResourceManager;
+    TIntrusivePtr<NRm::TTxState> Tx;
+    std::atomic<ui64> AllocatedQuota = 0;
+    std::atomic<i64> AvailableQuota;
+    std::atomic<ui64> Limit;
+    const ui64 DataMemoryLimit;
+    const ui64 AllocationStep;
+};
+
+NYql::NDq::IMemoryQuotaManager::TPtr CreateChannelQuotaManager(std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
+    TIntrusivePtr<NRm::TTxState> tx, ui64 initialMemoryLimit, ui64 allocationStep) {
+    return std::make_shared<TChannelQuotaManager>(resourceManager, tx, initialMemoryLimit, allocationStep);
+}
+
 template <class TTasksCollection>
 TString TasksIdsStr(const TTasksCollection& tasks) {
     TVector<ui64> ids;
@@ -158,12 +311,36 @@ public:
             TxInfo = MakeIntrusive<NRm::TTxState>(ResourceManager_, txId, TInstant::Now(),
                 poolId, msg.GetMemoryPoolPercent(),
                 msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException());
+            ChannelQuotaManager = CreateChannelQuotaManager(ResourceManager_, TxInfo, 0);
         }
 
         auto reportStatsSettings = ReportStatsSettingsFromProto(runtimeSettings);
-
+        auto initialMemoryLimit = CaFactory_->MkqlLightProgramMemoryLimit.load();
         const ui32 tasksCount = msg.GetTasks().size();
+
+        auto rmResult = ResourceManager_->AllocateResources(
+            *TxInfo, 0, NRm::TKqpResourcesRequest{.ExecutionUnits = tasksCount, .ExternalMemory = initialMemoryLimit * tasksCount});
+
+        if (!rmResult) {
+            ReplyError(msg, rmResult.GetStatus(), ev->Cookie, rmResult.GetFailReason());
+
+            State_->MarkRequestAsCancelled(executerId);
+
+            if (auto tasksToAbort = State_->GetTasksByExecuterId(executerId); !tasksToAbort.empty()) {
+                STLOG_E("Node service unable to allocate " << tasksCount << " tasks, reason: " << rmResult.GetFailReason(),
+                    (node_id, SelfId().NodeId()),
+                    (tx_id, txId));
+                for (const auto& [taskId, computeActorId]: tasksToAbort) {
+                    auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::UNSPECIFIED, rmResult.GetFailReason());
+                    Send(computeActorId, abortEv.release());
+                }
+            }
+
+            co_return;
+        }
+
         for (auto& dqTask: *msg.MutableTasks()) {
+
             const auto taskId = dqTask.GetId();
 
             NComputeActor::IKqpNodeComputeActorFactory::TCreateArgs createArgs{
@@ -174,6 +351,8 @@ public:
                 .LockMode = lockMode,
                 .Task = &dqTask,
                 .TxInfo = TxInfo,
+                .TaskQuotaManager = CreateTaskQuotaManager(ResourceManager_, TxInfo, taskId, initialMemoryLimit),
+                .ChannelQuotaManager = ChannelQuotaManager,
                 .ReportStatsSettings = reportStatsSettings,
                 .TraceId = NWilson::TTraceId(ev->TraceId),
                 .Arena = ev->Get()->Arena,
@@ -196,47 +375,23 @@ public:
                 createArgs.UserToken.Reset(MakeIntrusive<NACLib::TUserToken>(msg.GetUserToken()));
             }
 
-            auto result = CaFactory_->CreateKqpComputeActor(std::move(createArgs));
-
-            if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {
-
-                ReplyError(msg, rmResult->GetStatus(), ev->Cookie, rmResult->GetFailReason());
-
-                // TerminateTx(txId, executerId, rmResult->GetFailReason());
-                State_->MarkRequestAsCancelled(executerId);
-
-                if (auto tasksToAbort = State_->GetTasksByExecuterId(executerId); !tasksToAbort.empty()) {
-                    STLOG_E("Node service cancelled the task, because it " << rmResult->GetFailReason(),
-                        (node_id, SelfId().NodeId()),
-                        (tx_id, txId));
-                    for (const auto& [taskId, computeActorId]: tasksToAbort) {
-                        auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::UNSPECIFIED, rmResult->GetFailReason());
-                        Send(computeActorId, abortEv.release());
-                    }
-                }
-
-                co_return;
-            }
-
-            TActorId* actorId = std::get_if<TActorId>(&result);
+            auto actorId = CaFactory_->CreateKqpComputeActor(std::move(createArgs));
             auto* startedTask = reply->Record.AddStartedTasks();
-            Y_ENSURE(actorId);
-
             startedTask->SetTaskId(taskId);
-            ActorIdToProto(*actorId, startedTask->MutableActorId());
-            if (State_->OnTaskStarted(executerId, taskId, *actorId)) {
+            ActorIdToProto(actorId, startedTask->MutableActorId());
+            if (State_->OnTaskStarted(executerId, taskId, actorId)) {
                 STLOG_D("Executing task",
                     (node_id, SelfId().NodeId()),
                     (tx_id, txId),
                     (task_id, taskId),
-                    (compute_actor_id, *actorId),
+                    (compute_actor_id, actorId),
                     (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
             } else {
                 STLOG_D("Task finished in an instant",
                     (node_id, SelfId().NodeId()),
                     (tx_id, txId),
                     (task_id, taskId),
-                    (compute_actor_id, *actorId),
+                    (compute_actor_id, actorId),
                     (trace_id, ev->TraceId.GetHexTraceIdLowerCase()));
             }
         }
@@ -303,6 +458,12 @@ public:
             ev->Record.SetLocalInflightBytes(LocalBufferInflightBytes->Val());
         }
 
+        auto info = ResourceManager_->GetLocalMemInfo();
+
+        ev->Record.SetMemQuotaLimit(info.MemoryLimit);
+        ev->Record.SetMemQuotaUsed(info.MemoryAllocated);
+        ev->Record.SetMemQuotaExtra(info.MemoryExternal);
+
         Send(ExecuterId, ev.Release());
     }
 
@@ -333,6 +494,7 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferInflightBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferWaiterBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferInflightBytes;
+    NYql::NDq::IMemoryQuotaManager::TPtr ChannelQuotaManager;
 };
 
 NActors::IActor* CreateKqpQueryManager(TIntrusivePtr<TKqpCounters>& counters, std::shared_ptr<TNodeState>& state,

@@ -59,8 +59,8 @@ Y_UNIT_TEST_SUITE(Channels20) {
         auto service = serviceReply->Service;
 
         TChannelFullInfo info(1, sender, receiver, 1, 2, TCollectStatsLevel::None);
-        auto senderBuffer = service->GetLocalBuffer(info, false, nullptr);
-        auto receiverBuffer = service->GetLocalBuffer(info, true, nullptr);
+        auto senderBuffer = service->GetLocalBuffer(info, nullptr, false, nullptr);
+        auto receiverBuffer = service->GetLocalBuffer(info, nullptr, true, nullptr);
 
         auto aggregator = std::make_shared<TDqFillAggregator>();
         senderBuffer->SetFillAggregator(aggregator);
@@ -245,8 +245,8 @@ Y_UNIT_TEST_SUITE(Channels20) {
         auto service = serviceReply->Service;
 
         TChannelFullInfo info(1, sender, receiver, 1, 2, TCollectStatsLevel::None);
-        auto senderBuffer = service->GetLocalBuffer(info, false, nullptr);
-        auto receiverBuffer = service->GetLocalBuffer(info, true, nullptr);
+        auto senderBuffer = service->GetLocalBuffer(info, nullptr, false, nullptr);
+        auto receiverBuffer = service->GetLocalBuffer(info, nullptr, true, nullptr);
 
         UNIT_ASSERT(receiverBuffer->IsEmpty());
 
@@ -277,13 +277,13 @@ Y_UNIT_TEST_SUITE(Channels20) {
             runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(0)), sender, new TEvPrivate::TEvServiceLookup(), 0);
             auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(sender)->Release();
             auto service = serviceReply->Service;
-            senderBuffer = service->GetRemoteOutputBuffer(info, nullptr);
+            senderBuffer = service->GetRemoteOutputBuffer(info, nullptr, nullptr);
         }
         {
             runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(1)), receiver, new TEvPrivate::TEvServiceLookup(), 1);
             auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(receiver)->Release();
             auto service = serviceReply->Service;
-            receiverBuffer = service->GetRemoteInputBuffer(info);
+            receiverBuffer = service->GetRemoteInputBuffer(info, nullptr);
         }
 
         senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, true, false));
@@ -323,9 +323,9 @@ Y_UNIT_TEST_SUITE(Channels20) {
         TChannelFullInfo info1(1, sender, receiver, 1, 2, TCollectStatsLevel::None);
         TChannelFullInfo info2(2, sender, receiver, 3, 4, TCollectStatsLevel::None);
 
-        std::shared_ptr<IChannelBuffer> senderBuffer1 = service0->GetRemoteOutputBuffer(info1, nullptr);
-        std::shared_ptr<IChannelBuffer> senderBuffer2 = service0->GetRemoteOutputBuffer(info2, nullptr);
-        std::shared_ptr<IChannelBuffer> receiverBuffer1 = service1->GetRemoteInputBuffer(info1);
+        std::shared_ptr<IChannelBuffer> senderBuffer1 = service0->GetRemoteOutputBuffer(info1, nullptr, nullptr);
+        std::shared_ptr<IChannelBuffer> senderBuffer2 = service0->GetRemoteOutputBuffer(info2, nullptr, nullptr);
+        std::shared_ptr<IChannelBuffer> receiverBuffer1 = service1->GetRemoteInputBuffer(info1, nullptr);
 
         senderBuffer2->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, true, false));
         senderBuffer1->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, true, false));
@@ -339,7 +339,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
         UNIT_ASSERT(ReadBlocked(receiverBuffer1, data));
         UNIT_ASSERT(data.Finished);
 
-        std::shared_ptr<IChannelBuffer> receiverBuffer2 = service1->GetRemoteInputBuffer(info2);
+        std::shared_ptr<IChannelBuffer> receiverBuffer2 = service1->GetRemoteInputBuffer(info2, nullptr);
 
         UNIT_ASSERT(ReadBlocked(receiverBuffer2, data));
         UNIT_ASSERT(data.Buffer.Front().Buf == "Hello");
@@ -364,13 +364,13 @@ Y_UNIT_TEST_SUITE(Channels20) {
             runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(0)), sender, new TEvPrivate::TEvServiceLookup(), 0);
             auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(sender)->Release();
             auto service = serviceReply->Service;
-            senderBuffer = service->GetRemoteOutputBuffer(info, nullptr);
+            senderBuffer = service->GetRemoteOutputBuffer(info, nullptr, nullptr);
         }
         {
             runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(1)), receiver, new TEvPrivate::TEvServiceLookup(), 1);
             auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(receiver)->Release();
             auto service = serviceReply->Service;
-            receiverBuffer = service->GetRemoteInputBuffer(info);
+            receiverBuffer = service->GetRemoteInputBuffer(info, nullptr);
         }
 
         UNIT_ASSERT(receiverBuffer->IsEmpty());
@@ -398,13 +398,13 @@ Y_UNIT_TEST_SUITE(Channels20) {
             runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(0)), sender, new TEvPrivate::TEvServiceLookup(), 0);
             auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(sender)->Release();
             auto service = serviceReply->Service;
-            senderBuffer = service->GetRemoteOutputBuffer(info, nullptr);
+            senderBuffer = service->GetRemoteOutputBuffer(info, nullptr, nullptr);
         }
         {
             runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(1)), receiver, new TEvPrivate::TEvServiceLookup(), 1);
             auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(receiver)->Release();
             auto service = serviceReply->Service;
-            receiverBuffer = service->GetRemoteInputBuffer(info);
+            receiverBuffer = service->GetRemoteInputBuffer(info, nullptr);
         }
 
         senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, true, false));
@@ -446,13 +446,13 @@ Y_UNIT_TEST_SUITE(Channels20) {
             runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(0)), sender, new TEvPrivate::TEvServiceLookup(), 0);
             auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(sender)->Release();
             auto service = serviceReply->Service;
-            senderBuffer = service->GetRemoteOutputBuffer(info, nullptr);
+            senderBuffer = service->GetRemoteOutputBuffer(info, nullptr, nullptr);
         }
         {
             runtime.Send(MakeChannelServiceActorID(runtime.GetNodeId(1)), receiver, new TEvPrivate::TEvServiceLookup(), 1);
             auto serviceReply = runtime.GrabEdgeEvent<TEvPrivate::TEvServiceReply>(receiver)->Release();
             auto service = serviceReply->Service;
-            receiverBuffer = service->GetRemoteInputBuffer(info);
+            receiverBuffer = service->GetRemoteInputBuffer(info, nullptr);
         }
 
         senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, true, false));

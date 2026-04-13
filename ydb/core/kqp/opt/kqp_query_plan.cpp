@@ -3588,6 +3588,21 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                         for (auto& u : node.GetGlobalMemoryUsageMB()) {
                             inputBytes.AppendValue(u.GetInputInflightBytes());
                         }
+
+                        auto& quotaLimit = history.InsertValue("MemQuotaLimit", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            quotaLimit.AppendValue(u.GetMemQuotaLimit());
+                        }
+
+                        auto& quotaAllocated = history.InsertValue("MemQuotaAllocated", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            quotaAllocated.AppendValue(u.GetMemQuotaUsed());
+                        }
+
+                        auto& quotaExternal = history.InsertValue("MemQuotaExternal", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            quotaExternal.AppendValue(u.GetMemQuotaExtra());
+                        }
                     }
                 }
                 break;

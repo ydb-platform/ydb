@@ -635,6 +635,7 @@ void TPlan::LoadNode(const NJson::TJsonValue& node) {
                     if (auto* inputBytes = globNode->GetValueByPath("InputInflightBytes")) {
                         clusterNode->InputInflightBytes.Load(times, *inputBytes, 0, 0);
                     }
+
                     clusterNode->MemPhysicalUsage.DisplayMaxValue = clusterNode->MemPhysicalUsage.MaxValue;
                     clusterNode->MemSysAllocated.DisplayMaxValue = clusterNode->MemSysAllocated.MaxValue;
                     clusterNode->MemSysFragmented.DisplayMaxValue = clusterNode->MemSysFragmented.MaxValue;
@@ -658,6 +659,25 @@ void TPlan::LoadNode(const NJson::TJsonValue& node) {
                         clusterNode->OutputInflightBytes.MaxValue = std::max(clusterNode->OutputInflightBytes.MaxValue, clusterNode->OutputInflightBytes.Values[i].second);
                     }
                     clusterNode->InputInflightBytes.DisplayMaxValue = clusterNode->InputInflightBytes.MaxValue;
+
+                    if (auto* quotaAllocated = globNode->GetValueByPath("MemQuotaAllocated")) {
+                        clusterNode->MemQuotaAllocated.Load(times, *quotaAllocated, 0, 0);
+                    }
+                    clusterNode->MemQuotaAllocated.DisplayMaxValue = clusterNode->MemQuotaAllocated.MaxValue;
+
+                    if (auto* quotaExternal = globNode->GetValueByPath("MemQuotaExternal")) {
+                        clusterNode->MemQuotaExternal.Load(times, *quotaExternal, 0, 0);
+                    }
+                    clusterNode->MemQuotaExternal.DisplayMaxValue = clusterNode->MemQuotaExternal.MaxValue;
+                    for (ui32 i = 0; i < std::min(clusterNode->MemQuotaExternal.Values.size(), clusterNode->MemQuotaAllocated.Values.size()); i++) {
+                        clusterNode->MemQuotaExternal.Values[i].second += clusterNode->MemQuotaAllocated.Values[i].second;
+                        clusterNode->MemQuotaExternal.MaxValue = std::max(clusterNode->MemQuotaExternal.MaxValue, clusterNode->MemQuotaExternal.Values[i].second);
+                    }
+
+                    if (auto* quotaLimit = globNode->GetValueByPath("MemQuotaLimit")) {
+                        clusterNode->MemQuotaLimit.Load(times, *quotaLimit, 0, 0);
+                    }
+                    clusterNode->MemQuotaLimit.DisplayMaxValue = clusterNode->MemQuotaLimit.MaxValue;
                 }
             }
 
@@ -1739,7 +1759,7 @@ void TPlan::MarkLayout() {
             node->OffsetY = nodeOffsetY;
             node->Height =
                 (   // (node->OutputBytes != nullptr)
-                    + 4 /* 3xMEM, CPU */
+                    + 5 /* 4xMEM, CPU */
                     // + (node->InputBytes != nullptr)
                     // + (node->IngressBytes != nullptr)
                 ) * (INTERNAL_HEIGHT + INTERNAL_GAP_Y) + INTERNAL_GAP_Y;
@@ -2849,6 +2869,7 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
     ui64 physicalScale = 0;
     ui64 memoryScale = 0;
     ui64 dataScale = 0;
+    ui64 quotaScale = 0;
 
     for (auto& node : Nodes) {
         physicalScale = std::max(physicalScale, node->MemPhysicalUsage.Average());
@@ -2856,6 +2877,8 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
         memoryScale = std::max(memoryScale, node->MemArrowDefault.Average());
         memoryScale = std::max(memoryScale, node->MemMkqlAllocated.Average());
         dataScale = std::max(dataScale, node->OutputInflightBytes.Average());
+        quotaScale = std::max(quotaScale, node->MemQuotaLimit.Average());
+        quotaScale = std::max(quotaScale, node->MemQuotaExternal.Average());
     }
 
     for (auto& node : Nodes) {
@@ -2911,6 +2934,29 @@ void TPlan::PrintNodes(TStringBuilder& builder, ui64 maxTime, ui32 timelineDelta
             PrintSeries(builder, node->MemSysAllocated.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemLight, Config.Palette.MemLight);
             PrintSeries(builder, node->MemSysFragmented.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.MemMedium, Config.Palette.MemMedium);
             PrintSeries(builder, node->MemPhysicalUsage.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", "red", "none", false);
+            builder << "</g>" << Endl;
+        }
+
+        y0 += INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+
+        if (node->MemQuotaLimit.Values.size()) {
+            PrintStageSummary(builder, Config.SummaryLeft, Config.SummaryWidth, y0, INTERNAL_HEIGHT, {
+                { &node->MemQuotaAllocated, Config.Palette.OutputDark },
+                { &node->MemQuotaExternal, Config.Palette.OutputMedium },
+                // { &node->MemQuotaLimit, "red" },
+            }, quotaScale, "#icon_memory", Config.Palette.OutputDark, "0.6 0.6");
+
+            auto maxValue = node->MemQuotaExternal.MaxValue;
+            // auto maxValue = std::max(node->MemQuotaLimit.MaxValue, node->MemQuotaExternal.MaxValue);
+            builder
+                << "<g><title>"
+                << "Quota Allocated " << FormatBytes(node->MemQuotaAllocated.DisplayMaxValue * 1_MB)
+                << ", Quota External " << FormatBytes(node->MemQuotaExternal.DisplayMaxValue * 1_MB)
+                << ", Quota Limit " + FormatBytes(node->MemQuotaLimit.DisplayMaxValue * 1_MB)
+                << "</title>" << Endl;
+            PrintSeries(builder, node->MemQuotaExternal.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.OutputMedium, Config.Palette.OutputMedium);
+            PrintSeries(builder, node->MemQuotaAllocated.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", Config.Palette.OutputDark, Config.Palette.OutputDark);
+            // PrintSeries(builder, node->MemQuotaLimit.Values, maxValue, px, y0, pw, INTERNAL_HEIGHT, "", "red", "none", false);
             builder << "</g>" << Endl;
         }
 

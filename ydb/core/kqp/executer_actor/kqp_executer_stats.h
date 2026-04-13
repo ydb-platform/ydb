@@ -302,6 +302,9 @@ struct TGlobalMemoryUsage {
     ui64 InputInflightBytes = 0;
     ui64 OutputInflightBytes = 0;
     ui64 LocalInflightBytes = 0;
+    ui64 MemQuotaLimit = 0;
+    ui64 MemQuotaUsed  = 0;
+    ui64 MemQuotaExtra = 0;
 };
 
 struct TNodeExecutionStats {

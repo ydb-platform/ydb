@@ -1,0 +1,11 @@
+items:
+- name: Предварительные требования
+  href: requirements.md
+- name: Скачивание и подготовка пакета
+  href: install.md
+- name: Настройка конфигурации
+  href: configuration.md
+- name: Запуск развёртывания
+  href: deployment.md
+- name: Начало работы
+  href: usage.md

@@ -118,7 +118,7 @@ class WorkloadBase:
 
         entity_factory = multiprocessing.Process if self.use_multiprocessing else threading.Thread
         for f in funcs:
-            p = entity_factory(target=lambda: wrapper(f))
+            p = entity_factory(target=lambda f=f: wrapper(f))
             p.start()
             self.workload_entities.append(p)
 

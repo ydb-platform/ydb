@@ -287,9 +287,16 @@ private:
     }
 
     virtual void SendError(NKikimrIssues::TIssuesIds::EIssueCode issueCode, const std::string& message,
-        NLogin::NSasl::EScramServerError scramErrorCode = NLogin::NSasl::EScramServerError::OtherError,
+        EScramServerError scramErrorCode = EScramServerError::OtherError,
         [[maybe_unused]] const std::string& reason = "") const override final
     {
+        const auto& securityConfig = AppData()->DomainsConfig.GetSecurityConfig();
+        if (securityConfig.GetHideAuthenticationFailureReasons()
+            && (scramErrorCode == EScramServerError::UnknownUser || scramErrorCode == EScramServerError::InvalidProof))
+        {
+            scramErrorCode = EScramServerError::OtherError;
+        }
+
         auto response = std::make_unique<TEvSasl::TEvSaslScramFinalServerResponse>();
         response->Msg = BuildErrorMsg(scramErrorCode);
         response->Issue = MakeIssue(issueCode, TString(message));

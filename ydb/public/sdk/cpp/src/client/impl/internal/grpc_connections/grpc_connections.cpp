@@ -169,6 +169,8 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
     , ChannelPool_(TcpKeepAliveSettings_, params->GetSocketIdleTimeout(), TcpNoDelay_)
 #endif
+    , MetricRegistry_(params->GetExternalMetricRegistry())
+    , TraceProvider_(params->GetTraceProvider())
     , NetworkThreadsNum_(params->GetNetworkThreadsNum())
     , UsePerChannelTcpConnection_(params->GetUsePerChannelTcpConnection())
     , GRpcClientLow_(NetworkThreadsNum_)
@@ -371,21 +373,22 @@ TAsyncListEndpointsResult TGRpcConnectionsImpl::GetEndpoints(TDbDriverStatePtr d
         if (strong && result.DiscoveryStatus.IsTransportError()) {
             strong->StatCollector.IncDiscoveryFailDueTransportError();
         }
-        return NThreading::MakeFuture<TListEndpointsResult>(MutateDiscovery(std::move(result), *strong));
+        return NThreading::MakeFuture<TListEndpointsResult>(MutateDiscovery(std::move(result), strong.get()));
     });
 }
 
-TListEndpointsResult TGRpcConnectionsImpl::MutateDiscovery(TListEndpointsResult result, const TDbDriverState& dbDriverState) {
+TListEndpointsResult TGRpcConnectionsImpl::MutateDiscovery(TListEndpointsResult result, const TDbDriverState* dbDriverState) {
     std::lock_guard lock(ExtensionsLock_);
-    if (!DiscoveryMutatorCb)
+    if (!DiscoveryMutatorCb || !dbDriverState) {
         return result;
+    }
 
     auto endpoint = result.DiscoveryStatus.Endpoint;
     auto ydbStatus = NYdb::TStatus(std::move(result.DiscoveryStatus));
 
     auto aux = IDiscoveryMutatorApi::TAuxInfo {
-        .Database = dbDriverState.Database,
-        .DiscoveryEndpoint = dbDriverState.DiscoveryEndpoint
+        .Database = dbDriverState->Database,
+        .DiscoveryEndpoint = dbDriverState->DiscoveryEndpoint
     };
 
     ydbStatus = DiscoveryMutatorCb(&result.Result, std::move(ydbStatus), aux);
@@ -434,6 +437,14 @@ void TGRpcConnectionsImpl::RegisterExtension(IExtension* extension) {
 
 void TGRpcConnectionsImpl::RegisterExtensionApi(IExtensionApi* api) {
     ExtensionApis_.emplace_back(api);
+}
+
+std::shared_ptr<NMetrics::IMetricRegistry> TGRpcConnectionsImpl::GetExternalMetricRegistry() const {
+    return MetricRegistry_;
+}
+
+std::shared_ptr<NTrace::ITraceProvider> TGRpcConnectionsImpl::GetTraceProvider() const {
+    return TraceProvider_;
 }
 
 void TGRpcConnectionsImpl::SetDiscoveryMutator(IDiscoveryMutatorApi::TMutatorCb&& cb) {

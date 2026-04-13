@@ -569,7 +569,7 @@ TFlushHints TBlocksDirtyMap::MakeFlushHint(size_t batchSize)
         return result;
     }
 
-    THashSet<ui64> readyToFlush;
+    TSet<ui64> readyToFlush;
     readyToFlush.swap(ReadyToFlush);
 
     auto countReadyToFlush = [&](TBlockRange64 range)
@@ -621,7 +621,7 @@ TEraseHints TBlocksDirtyMap::MakeEraseHint(size_t batchSize)
         return result;
     }
 
-    THashSet<ui64> readyToErase;
+    TSet<ui64> readyToErase;
     readyToErase.swap(ReadyToErase);
 
     for (ui64 lsn: readyToErase) {
@@ -743,6 +743,34 @@ void TBlocksDirtyMap::SetFlushWatermark(ELocation location, ui64 bytesOffset)
 size_t TBlocksDirtyMap::GetInflightCount() const
 {
     return Inflight.Size();
+}
+
+size_t TBlocksDirtyMap::GetFlushPendingCount() const
+{
+    return ReadyToFlush.size();
+}
+
+size_t TBlocksDirtyMap::GetErasePendingCount() const
+{
+    return ReadyToErase.size();
+}
+
+ui64 TBlocksDirtyMap::GetMinFlushPendingLsn() const
+{
+    if (ReadyToFlush.empty()) {
+        return 0;
+    }
+    // TSet is ordered, so the first element is the minimum. O(1) access.
+    return *ReadyToFlush.begin();
+}
+
+ui64 TBlocksDirtyMap::GetMinErasePendingLsn() const
+{
+    if (ReadyToErase.empty()) {
+        return 0;
+    }
+    // TSet is ordered, so the first element is the minimum. O(1) access.
+    return *ReadyToErase.begin();
 }
 
 void TBlocksDirtyMap::LockPBuffer(ui64 lsn)

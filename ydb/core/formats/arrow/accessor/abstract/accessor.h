@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.h"
+#include "minmax_utils.h"
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/validator.h>
@@ -38,11 +39,6 @@ private:
 
 public:
     TChunkedArraySerialized(const std::shared_ptr<IChunkedArray>& array, const TString& serializedData);
-};
-
-struct TMinMax {
-    std::shared_ptr<arrow::Scalar> Min;
-    std::shared_ptr<arrow::Scalar> Max;
 };
 
 class IChunkedArray {
@@ -299,7 +295,6 @@ protected:
     TLocalChunkedArrayAddress GetLocalChunkedArray(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const {
         return DoGetLocalChunkedArray(chunkCurrent, position);
     }
-    virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const = 0;
     virtual TMinMax DoGetMinMaxScalars() const = 0;
 
     template <class TCurrentPosition, class TChunkAccessor>
@@ -461,7 +456,7 @@ public:
 
     std::shared_ptr<arrow::Scalar> GetMaxScalar() const {
         AFL_VERIFY(GetRecordsCount());
-        return DoGetMaxScalar();
+        return GetMinMaxScalars().Max();
     }
 
     TMinMax GetMinMaxScalars() const {

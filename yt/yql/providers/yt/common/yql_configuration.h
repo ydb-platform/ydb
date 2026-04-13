@@ -159,4 +159,6 @@ constexpr bool DEFAULT_KEEP_WORLD_DEP_FOR_FILL_OP = false;
 
 constexpr bool DEFAULT_ENABLE_RLS_TABLES_SUPPORT = false;
 
+constexpr ETmpSecurityMode DEFAULT_TMP_FOLDER_SECURITY = ETmpSecurityMode::Disable;
+
 } // NYql

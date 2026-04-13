@@ -1,5 +1,8 @@
 #pragma once
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
+
+#include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -8,6 +11,9 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 class TPartitionDatabase: public NKikimr::NIceDb::TNiceDb
 {
+    using TDirectBlockGroupsConnections =
+        ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupsConnections;
+
 public:
     enum class EBlobIndexScanProgress
     {
@@ -23,11 +29,17 @@ public:
 
     void InitSchema();
 
-    //
-    // Meta
-    //
-    void WriteMeta(const TString& meta);
-    bool ReadMeta(TMaybe<TString>& meta);
+    bool ReadVolumeConfig(
+        TMaybe<NKikimrBlockStore::TVolumeConfig>& volumeConfig);
+
+    bool ReadDirectBlockGroupsConnections(
+        TMaybe<TDirectBlockGroupsConnections>& directBlockGroupsConnections);
+
+    void StoreVolumeConfig(
+        const NKikimrBlockStore::TVolumeConfig& volumeConfig);
+
+    void StoreDirectBlockGroupsConnections(
+        const TDirectBlockGroupsConnections& directBlockGroupsConnections);
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

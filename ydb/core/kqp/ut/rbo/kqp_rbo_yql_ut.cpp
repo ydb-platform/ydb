@@ -9,6 +9,7 @@
 #include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 #include <yql/essentials/utils/log/log.h>
 #include <ydb/public/lib/ut_helpers/ut_helpers_query.h>
+#include <ydb/public/lib/ydb_cli/common/format.h>
 #include <util/system/env.h>
 
 #include <ctime>
@@ -189,6 +190,149 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
      Y_UNIT_TEST_TWIN(Filter, ColumnStore) {
         TestFilter(ColumnStore);
+    }
+
+    Y_UNIT_TEST(Explain) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        {
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            TString t = R"(CREATE TABLE `/Root/t1` (
+                    a Int64	NOT NULL,
+                    b Int64,
+                    c Int64,
+                    primary key(a)
+                ))";
+
+            Y_ENSURE(session.ExecuteSchemeQuery(t).GetValueSync().IsSuccess());
+        }
+
+        {
+            auto db = kikimr.GetQueryClient();
+            auto res = db.GetSession().GetValueSync();
+            NStatusHelpers::ThrowOnError(res);
+            auto session = res.GetSession();
+
+            auto result =
+                session.ExecuteQuery(
+                    R"(
+                        PRAGMA YqlSelect = 'force';
+                        select count(*) from `/Root/t1` as t1;
+                    )",
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+                ).ExtractValueSync();
+
+            result.GetIssues().PrintTo(Cerr);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            auto plan = TString{*result.GetStats()->GetPlan()};
+            Cout << plan << Endl;
+            NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
+            queryPlanPrinter.Print(plan);
+        }
+    }
+
+    bool HasParam(const std::string& ast, const std::string& param) {
+        auto txPos = ast.find("KqpPhysicalTx");
+        if (txPos == std::string::npos) {
+            return false;
+        }
+
+        return ast.find(param, txPos) != std::string::npos;
+    }
+
+     void TestParams(bool columnTables) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto dbSession = db.CreateSession().GetValueSync().GetSession();
+
+        TString schemaQ = R"(
+            CREATE TABLE `/Root/foo` (
+                id Int64 NOT NULL,
+	            name String,
+                b Int64,
+                primary key(id)
+            )
+        )";
+
+        if (columnTables) {
+            schemaQ += R"(WITH (STORE = column))";
+        }
+        schemaQ += ";";
+
+        auto schemaResult = dbSession.ExecuteSchemeQuery(schemaQ).GetValueSync();
+        UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (size_t i = 0; i < 10; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("id").Int64(i)
+                .AddMember("name").String(std::to_string(i) + "_name")
+                .AddMember("b").Int64(i)
+                .EndStruct();
+        }
+        rows.EndList();
+
+        auto resultUpsert = db.BulkUpsert("/Root/foo", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        std::vector<std::string> queries = {
+            R"(
+                declare $param as String;
+                SELECT id as id2 FROM `/Root/foo` WHERE name != $param order by id;
+            )",
+            R"(
+                declare $param1 as String;
+                SELECT id as id2 FROM `/Root/foo` WHERE name == $param1 order by id;
+            )",
+        };
+
+        auto queryClient = kikimr.GetQueryClient();
+        std::vector<std::pair<std::string, std::string>> params = {{"$param", "0_name"}, {"$param1", "1_name"}};
+        std::vector<std::string> results = {
+              R"([[1];[2];[3];[4];[5];[6];[7];[8];[9]])",
+              R"([[1]])"
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto &query = queries[i];
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_C(HasParam(ast, params[i].first), "Params not specified in tx param bindings");
+
+            // clang-format off
+            auto qParams = TParamsBuilder()
+                .AddParam(params[i].first)
+                    .String(params[i].second)
+                .Build()
+            .Build();
+            // clang-format on
+            result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), qParams, NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(Params, ColumnStore) {
+        TestParams(ColumnStore);
     }
 
     void TestConstantFolding(bool columnTables) {
@@ -910,12 +1054,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
        RunTPCHBenchmark(/*columnstore*/ true, {1, 6, 14, 19}, /*new rbo*/ false);
     }
 
-    void PrintStatus(const std::vector<bool>& queries, std::vector<TString>&& errors) {
-        for (ui32 i = 0; i < queries.size(); ++i) {
-            const TString status = queries[i] ? "SUCCESS" : "FAIL";
-            Cout << "Q#" << i + 1 << " " << status << ";" << Endl;
-            if (!queries[i]) {
-                Cout << errors[i] << Endl;
+    void PrintStatus(std::unordered_map<ui32, bool>& queries, std::vector<TString>&& errors) {
+        for (const auto &[id, result] : queries) {
+            const TString status = result ? "SUCCESS" : "FAIL";
+            Cout << "Q#" << id << " " << status << ";" << Endl;
+            if (!result) {
+                Cout << errors[id - 1] << Endl;
             }
         }
     }
@@ -940,20 +1084,22 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateTablesFromPath(session, BenchmarkSchemaPathPrefix[type], BenchmarkSchemaPath[type], columnStore);
 
-        std::vector<bool> queriesCurrentStatus;
+        std::unordered_map<ui32, bool> queriesCurrentStatus;
         std::vector<bool> queriesExpectedStatus;
         std::vector<TString> errors;
         for (ui32 qId = 1, e = BenchmarkQueryCount[type]; qId <= e; ++qId) {
             if (skipList.contains(qId)) {
-                queriesCurrentStatus.emplace_back(false);
-                queriesExpectedStatus.emplace_back(false);
+                queriesCurrentStatus.insert({qId, false});
+                queriesExpectedStatus.push_back(false);
                 errors.emplace_back("Skipped.");
                 continue;
             }
-            queriesExpectedStatus.emplace_back(queriesStatus.empty() ? true : queriesStatus.contains(qId));
+
+            const auto expectedStatus = queriesStatus.empty() ? true : queriesStatus.contains(qId);
+            queriesExpectedStatus.push_back(expectedStatus);
             TString q = GetFullPath(BenchmarkQueryPath[type], ToString(qId) + ".yql");
-            const TString toDecimal =  R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
-            const TString toDecimalMax =  R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
+            const TString toDecimal = R"($to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };)";
+            const TString toDecimalMax = R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
 
             q = toDecimal + "\n" + toDecimalMax + "\n" + q;
 
@@ -961,7 +1107,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             auto session = queryClient.GetSession().GetValueSync().GetSession();
             auto result = session.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
                               .ExtractValueSync();
-            queriesCurrentStatus.emplace_back(result.IsSuccess());
+            queriesCurrentStatus.insert({qId, result.IsSuccess()});
             errors.emplace_back(result.GetIssues().ToString());
         }
 
@@ -970,7 +1116,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
 
         if (compareResults) {
-            UNIT_ASSERT_VALUES_EQUAL(queriesExpectedStatus, queriesCurrentStatus);
+            for (ui32 i = 0; i < queriesExpectedStatus.size(); ++i) {
+                auto status = queriesExpectedStatus[i];
+                if (status) {
+                    UNIT_ASSERT_C(queriesCurrentStatus[i + 1], "Expected success for query: " + ToString(i + 1));
+                }
+            }
         }
     }
 
@@ -1010,9 +1161,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(TPCDS_YQL) {
         // RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore*/ true, {}, {}, /*new rbo*/ false);
-        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1,  2,  3,  7,  13, 19, 21, 25, 26, 29, 30, 32, 33, 34, 37, 42, 43, 46, 48,
+        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1,  2,  3,  7,  11, 13, 19, 21, 22, 25, 26, 29, 30, 32, 33, 34, 37, 42, 43, 46, 48,
                                                                      50, 52, 55, 56, 59, 60, 61, 65, 66, 68, 71, 73, 81, 82, 84, 90, 91, 92, 96},
-                           {15, 31, 58, 64, 72, 85}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/false);
+                           {15, 31, 58, 64, 72, 85}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true);
     }
 
     void InsertIntoSchema0(NYdb::NTable::TTableClient& db, std::string tableName, ui32 numRows) {
@@ -1898,8 +2049,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
-        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
-        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
 
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
@@ -1939,18 +2088,20 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         std::vector<std::string> queries = {
             R"(
-                PRAGMA YqlSelect = 'force';
                 SELECT id FROM `/Root/foo` order by id limit 1 + 2;
             )",
             R"(
-                PRAGMA YqlSelect = 'force';
                 SELECT id FROM `/Root/foo` order by id limit 5;
+            )",
+            R"(
+                SELECT id FROM `/Root/foo` order by id limit 5 offset 1;
             )",
         };
 
         std::vector<std::string> results = {
             R"([[0];[1];[2]])",
-            R"([[0];[1];[2];[3];[4]])"
+            R"([[0];[1];[2];[3];[4]])",
+            R"([[1];[2];[3];[4]])"
         };
 
         auto queryClient = kikimr.GetQueryClient();

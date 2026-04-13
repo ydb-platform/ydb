@@ -209,14 +209,16 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             // note, that for upsertIfExists mode we must break locks, because otherwise we can
             // produce inconsistency.
             if (BreakLocks) {
+                TConstArrayRef<TCell> uniqueKey = GetUniqueIndexKey(keyCells.GetCells(), tableInfo.UniqueIndexKeySize);
+
                 if (breakWriteConflicts) {
-                    if (!self->BreakWriteConflicts(txc.DB, fullTableId, keyCells.GetCells(), volatileDependencies)) {
+                    if (!self->BreakWriteConflicts(txc.DB, fullTableId, uniqueKey, volatileDependencies)) {
                         pageFault = true;
                     }
                 }
 
                 if (!pageFault) {
-                    self->SysLocksTable().BreakLocks(fullTableId, keyCells.GetCells());
+                    self->SysLocksTable().BreakLocks(fullTableId, uniqueKey);
                 }
             }
 

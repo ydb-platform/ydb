@@ -92,6 +92,8 @@
 /ydb/core/tablet_flat @ydb-platform/datashard
 /ydb/core/tx/datashard @ydb-platform/datashard
 /ydb/core/tx/coordinator @ydb-platform/datashard
+/ydb/core/tx/schemeshard/index @ydb-platform/datashard
+/ydb/core/tx/schemeshard/ut_index_build @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_index_build_reboots @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_shred_reboots @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_vector_index_build_reboots @ydb-platform/datashard

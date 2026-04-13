@@ -338,7 +338,7 @@ namespace NKikimr::NDDisk {
             template<typename TEvent>
             TPendingEvent(TAutoPtr<TEventHandle<TEvent>> ev, const char *name)
                 : Ev(ev.Release())
-                , QueueSpan(TWilson::DDiskInternals, NWilson::TTraceId(Ev->TraceId), name, NWilson::EFlags::AUTO_END,
+                , QueueSpan(TWilson::DDiskTopLevel, NWilson::TTraceId(Ev->TraceId), name, NWilson::EFlags::AUTO_END,
                     TActivationContext::ActorSystem())
             {}
 
@@ -632,15 +632,17 @@ namespace NKikimr::NDDisk {
                 std::map<ui64, TRope> DataParts;
                 ui32 PartsCount;
                 ui64 VChunkIndex;
+                TInstant Timestamp;
 
                 TRope JoinData(ui32 sectorSize);
             };
-
             std::map<ui64, TRecord> Records;
+            ui32 Size = 0;
         };
 
         std::map<std::tuple<ui64, ui32>, TPersistentBuffer> PersistentBuffers;
         ui64 PersistentBufferInMemoryCacheSize = 0;
+        TInstant StartedAt;
 
         ui64 CalcPersistentBufferInMemoryCacheSize();
         TString PersistentBufferToString();
@@ -735,6 +737,7 @@ namespace NKikimr::NDDisk {
         void Handle(TEvents::TEvUndelivered::TPtr ev);
         void Handle(TEvListPersistentBuffer::TPtr ev);
         void Handle(TEvPrivate::TEvIssuePersistentBufferChunkAllocation::TPtr ev);
+        void Handle(TEvGetPersistentBufferInfo::TPtr ev);
 
         void Handle(TEvWritePersistentBuffers::TPtr ev);
 

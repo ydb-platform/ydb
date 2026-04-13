@@ -639,9 +639,24 @@ TOpLimit::TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TE
     , LimitPhase(limitPhase) {
 }
 
+TOpLimit::TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& limitCond, const TExpression& offsetCond, const EOpPhase limitPhase)
+    : IUnaryOperator(EOperator::Limit, pos, input)
+    , LimitCond(limitCond)
+    , OffsetCond(offsetCond)
+    , LimitPhase(limitPhase) {
+}
+
 TOpLimit::TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond, const EOpPhase limitPhase)
     : IUnaryOperator(EOperator::Limit, pos, props, input)
     , LimitCond(limitCond)
+    , LimitPhase(limitPhase) {
+}
+
+TOpLimit::TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond,
+                   const std::optional<TExpression> offsetCond, const EOpPhase limitPhase)
+    : IUnaryOperator(EOperator::Limit, pos, props, input)
+    , LimitCond(limitCond)
+    , OffsetCond(offsetCond)
     , LimitPhase(limitPhase) {
 }
 
@@ -660,6 +675,9 @@ TString TOpLimit::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
     TStringBuilder builder;
     builder << "Limit: " << LimitCond.ToString() << " ";
+    if (OffsetCond.has_value()) {
+        builder << "Offset: " << OffsetCond->ToString() << " ";
+    }
     builder << "Phase: " << ToStringPhase(LimitPhase);
     return builder;
 }

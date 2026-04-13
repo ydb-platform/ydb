@@ -284,7 +284,7 @@ std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const TCollection& pa
     }
 
     for (const auto& p : partitions) {
-        result.emplace(GetPartitionId(p), TPartitionGraph::Node(GetPartitionId(p), p.GetTabletId(), p.GetKeyRange().GetFromBound(), p.GetKeyRange().GetToBound()));
+        result.emplace(GetPartitionId(p), TPartitionGraph::Node(GetPartitionId(p), p.GetTabletId(), p.GetKeyRange().GetFromBound(), p.GetKeyRange().GetToBound(), TInstant::Seconds(p.GetCreationTimestampSeconds())));
     }
 
     std::deque<TPartitionGraph::Node*> queue;
@@ -346,11 +346,13 @@ std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const TCollection& pa
     return result;
 }
 
-TPartitionGraph::Node::Node(ui32 id, ui64 tabletId, const TString& from, const TString& to)
+TPartitionGraph::Node::Node(ui32 id, ui64 tabletId, const TString& from, const TString& to, TInstant creationTime)
     : Id(id)
     , TabletId(tabletId)
     , From(from)
-    , To(to) {
+    , To(to)
+    , CreationTime(creationTime)
+{
 }
 
 bool TPartitionGraph::Node::IsRoot() const {

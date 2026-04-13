@@ -7,6 +7,7 @@
 #include "write_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
@@ -14,6 +15,8 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -28,8 +31,10 @@ public:
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
+        ui64 vChunkSize,
         TDuration writeHandoffDelay,
-        TDuration traceSamplePeriod);
+        TDuration traceSamplePeriod,
+        NMonitoring::TDynamicCounterPtr counters);
 
     ~TVChunk();
 
@@ -97,6 +102,10 @@ private:
 
     TBlocksDirtyMap BlocksDirtyMap{BlockSize, BlocksCount};
     bool DirtyMapRestored = false;
+
+    TVChunkCounters Counters;
+
+    void UpdatePendingCounters();
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

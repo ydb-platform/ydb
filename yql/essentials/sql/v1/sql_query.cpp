@@ -11,6 +11,7 @@
 #include "antlr_token.h"
 #include "secret_settings.h"
 
+#include <yql/essentials/sql/v1/proto_parser/statement.h>
 #include <yql/essentials/sql/v1/proto_parser/token.h>
 
 #include <yql/essentials/utils/yql_paths.h>
@@ -295,20 +296,19 @@ bool TransferSettings(std::map<TString, TNodePtr>& out,
 } // namespace
 
 bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core, size_t statementNumber) {
-    TString internalStatementName;
-    TString humanStatementName;
-    ParseStatementName(core, internalStatementName, humanStatementName);
+    TStatementName statementName = TStatementName::From(core);
+
     const auto& altCase = core.Alt_case();
     if (Mode_ == NSQLTranslation::ESqlMode::LIMITED_VIEW && (altCase >= TRule_sql_stmt_core::kAltSqlStmtCore4 &&
                                                              altCase != TRule_sql_stmt_core::kAltSqlStmtCore13 && altCase != TRule_sql_stmt_core::kAltSqlStmtCore18)) {
-        Error() << humanStatementName << " statement is not supported in limited views";
+        Error() << statementName.Human << " statement is not supported in limited views";
         return false;
     }
 
     if (Mode_ == NSQLTranslation::ESqlMode::SUBQUERY && (altCase >= TRule_sql_stmt_core::kAltSqlStmtCore4 &&
                                                          altCase != TRule_sql_stmt_core::kAltSqlStmtCore13 && altCase != TRule_sql_stmt_core::kAltSqlStmtCore6 &&
                                                          altCase != TRule_sql_stmt_core::kAltSqlStmtCore18)) {
-        Error() << humanStatementName << " statement is not supported in subqueries";
+        Error() << statementName.Human << " statement is not supported in subqueries";
         return false;
     }
 
@@ -330,7 +330,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore2: {
             if (Ctx_.ParallelModeCount > 0) {
-                Error() << humanStatementName << " statement is not supported in parallel mode";
+                Error() << statementName.Human << " statement is not supported in parallel mode";
                 return false;
             }
 
@@ -587,7 +587,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore8: {
             if (Ctx_.ParallelModeCount > 0) {
-                Error() << humanStatementName << " statement is not supported in parallel mode";
+                Error() << statementName.Human << " statement is not supported in parallel mode";
                 return false;
             }
 
@@ -617,7 +617,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore11: {
             if (Ctx_.ParallelModeCount > 0) {
-                Error() << humanStatementName << " statement is not supported in parallel mode";
+                Error() << statementName.Human << " statement is not supported in parallel mode";
                 return false;
             }
 
@@ -750,7 +750,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore21: {
             if (Ctx_.ParallelModeCount > 0) {
-                Error() << humanStatementName << " statement is not supported in parallel mode";
+                Error() << statementName.Human << " statement is not supported in parallel mode";
                 return false;
             }
 
@@ -2411,7 +2411,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             YQL_ENSURE(false, "Unreachable");
     }
 
-    Ctx_.IncrementMonCounter("sql_features", internalStatementName);
+    Ctx_.IncrementMonCounter("sql_features", statementName.Internal);
     return !Ctx_.HasPendingErrors;
 }
 
@@ -3278,7 +3278,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     }),
     TableElemExt("Library", [](CB_SIG) -> TMaybe<TNodePtr> {
         auto& ctx = query.Context();
-        if (values.size() < 1) {
+        if (values.empty()) {
             query.Error() << "Expected non-empty file alias";
             return {};
         }
@@ -3975,7 +3975,7 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
             }
 
             TString prefix;
-            if (withFileAlias && (values.size() == 0)) {
+            if (withFileAlias && (values.empty())) {
                 prefix = Ctx_.Settings.FileAliasPrefix;
             }
 
@@ -3996,7 +3996,7 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
             }
 
             TString prefix;
-            if (withFileAlias && (values.size() == 0)) {
+            if (withFileAlias && (values.empty())) {
                 prefix = Ctx_.Settings.FileAliasPrefix;
             }
 
@@ -4087,7 +4087,7 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
                 Ctx_.PragmaYsonAutoConvert = true;
                 return TNodePtr{};
             } else if (normalizedPragma == "strict") {
-                if (values.size() == 0U) {
+                if (values.empty()) {
                     Ctx_.PragmaYsonStrict = true;
                     return TNodePtr{};
                 } else if (values.size() == 1U && values.front().GetLiteral() && TryFromString(*values.front().GetLiteral(), Ctx_.PragmaYsonStrict)) {
@@ -4097,7 +4097,7 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
                 Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
             } else if (normalizedPragma == "disablestrict") {
-                if (values.size() == 0U) {
+                if (values.empty()) {
                     Ctx_.PragmaYsonStrict = false;
                     return TNodePtr{};
                 }
@@ -4112,7 +4112,7 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
                 return {};
             } else if (normalizedPragma == "casttostring" || normalizedPragma == "disablecasttostring") {
                 const bool allow = normalizedPragma == "casttostring";
-                if (values.size() == 0U) {
+                if (values.empty()) {
                     Ctx_.YsonCastToString = allow;
                     return TNodePtr{};
                 }
@@ -4145,7 +4145,7 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
                 return {};
             }
         } else {
-            if (pragmaValueDefault || values.size() < 1) {
+            if (pragmaValueDefault || values.empty()) {
                 Error() << "Expected at least one value in the pragma";
                 Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
@@ -4387,14 +4387,14 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
     }
 
     const auto& query = ast.GetRule_sql_query();
+
     TVector<TNodePtr> blocks;
     Ctx_.PushCurrentBlocks(&blocks);
     Y_DEFER {
         Ctx_.PopCurrentBlocks();
     };
+
     if (query.Alt_case() == TRule_sql_query::kAltSqlQuery1) {
-        size_t statementNumber = 0;
-        const auto& statements = query.GetAlt_sql_query1().GetRule_sql_stmt_list1();
         auto checkExplainToken = [&](const auto& stmt) -> bool {
             if (stmt.HasBlock1()) {
                 auto const& provider = Ctx_.Scoped->CurrService;
@@ -4406,15 +4406,36 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
             return true;
         };
 
-        const auto& firstStmt = statements.GetRule_sql_stmt2();
-        if (!checkExplainToken(firstStmt)) {
+        size_t statementNumber = 0;
+
+        const auto& stmtList = query.GetAlt_sql_query1().GetRule_sql_stmt_list1();
+
+        if (!stmtList.HasBlock2() && Ctx_.Settings.Flags.contains("AllowNoStatements")) {
+            const auto p = Ctx_.Pos();
+            TNodePtr program = BuildList(p);
+            program->Add("return");
+            program->Add("world");
+            return BuildList(p, {std::move(program)});
+        }
+
+        if (!stmtList.HasBlock2()) {
+            Ctx_.Issues.AddIssue(
+                TIssue()
+                    .SetMessage("At least one statement was expected, but got none")
+                    .SetCode(NYql::TIssuesIds::YQL_NO_STATEMENTS, NYql::TSeverityIds::S_ERROR));
             return nullptr;
         }
 
+        const auto& statements = stmtList.GetBlock2();
+
+        const auto& firstStmt = statements.GetRule_sql_stmt1();
+        if (!checkExplainToken(firstStmt)) {
+            return nullptr;
+        }
         if (!Statement(blocks, firstStmt.GetRule_sql_stmt_core2(), statementNumber++)) {
             return nullptr;
         }
-        for (auto block : statements.GetBlock3()) {
+        for (auto block : statements.GetBlock2()) {
             const auto& stmt = block.GetRule_sql_stmt2();
             if (!checkExplainToken(stmt)) {
                 return nullptr;

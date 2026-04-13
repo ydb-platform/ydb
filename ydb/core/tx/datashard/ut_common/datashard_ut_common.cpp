@@ -14,7 +14,7 @@
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
-#include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
+#include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
@@ -162,25 +162,25 @@ void TTester::EmptyShardKeyResolver(TKeyDesc& key) {
 void TTester::SingleShardKeyResolver(TKeyDesc& key) {
     key.Status = TKeyDesc::EStatus::Ok;
 
-    auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
-    partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
-    key.Partitioning = partitions;
+    TVector<TKeyDesc::TPartitionInfo> partitions;
+    partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
+    key.Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
 }
 
 void TTester::ThreeShardPointKeyResolver(TKeyDesc& key) {
     const ui32 ShardBorder1 = 1000;
     const ui32 ShardBorder2 = 2000;
 
-    auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
+    TVector<TKeyDesc::TPartitionInfo> partitions;
     key.Status = TKeyDesc::EStatus::Ok;
     if (key.Range.Point) {
         ui32 key0 = *(ui32*)key.Range.From[0].Data();
         if (key0 < ShardBorder1) {
-            partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
+            partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
         } else if (key0 < ShardBorder2) {
-            partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet1));
+            partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet1));
         } else {
-            partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet2));
+            partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet2));
         }
     } else {
         UNIT_ASSERT(key.Range.From.size() > 0);
@@ -193,14 +193,14 @@ void TTester::ThreeShardPointKeyResolver(TKeyDesc& key) {
         UNIT_ASSERT(from <= to);
 
         if (from < ShardBorder1)
-            partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
+            partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
         if (from < ShardBorder2 && to >= ShardBorder1)
-            partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet1));
+            partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet1));
         if (to >= ShardBorder2)
-            partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet2));
+            partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet2));
     }
 
-    key.Partitioning = partitions;
+    key.Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
 }
 
 TTester::TKeyResolver TTester::GetKeyResolver() const {
@@ -1075,9 +1075,9 @@ TKeyExtractor::TKeyExtractor(TTester& tester, TString programText) {
     for (auto& key : Engine->GetDbKeys()) {
         key->Status = TKeyDesc::EStatus::Ok;
 
-        auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
-        partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
-        key->Partitioning = partitions;
+        TVector<TKeyDesc::TPartitionInfo> partitions;
+        partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
+        key->Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
     }
 }
 
@@ -2149,9 +2149,9 @@ TRowVersion AcquireReadSnapshot(TTestActorRuntime& runtime, const TString& datab
         nodeIndex,
         true);
     auto ev = runtime.GrabEdgeEventRethrow<NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult>(sender);
-    const auto& record = ev->Get()->Record;
-    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), Ydb::StatusIds::SUCCESS);
-    return TRowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
+    const auto* msg = ev->Get();
+    UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
+    return msg->Snapshot;
 }
 
 void AddValueToCells(ui64 value, const TString& columnType, TVector<TCell>& cells, TVector<TString>& stringValues) {

@@ -6,6 +6,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
@@ -32,7 +33,7 @@ struct TDBGWriteBlocksToManyPBuffersResponse
 {
     struct TSinglePersistentBufferResult
     {
-        ui8 HostId{};
+        ui8 HostIndex = 0;
         NProto::TError Error;
     };
 
@@ -93,9 +94,6 @@ struct TDDiskIdLess
     using TDDiskId = NKikimrBlobStorage::NDDisk::TDDiskId;
     bool operator()(const TDDiskId& lhs, const TDDiskId& rhs) const;
 };
-
-using TDDiskIdToHostIndex =
-    TMap<NKikimrBlobStorage::NDDisk::TDDiskId, ui8, TDDiskIdLess>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -269,6 +267,8 @@ public:
 
 private:
     using EConnectionType = NTransport::THostConnection::EConnectionType;
+    using TDDiskIdToHostIndex =
+        TMap<NKikimrBlobStorage::NDDisk::TDDiskId, ui8, TDDiskIdLess>;
 
     struct TDDiskConnection
     {
@@ -297,11 +297,23 @@ private:
     void OnWriteBlocksToManyPBuffersResponse(
         const NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult&
             response,
-        NThreading::TPromise<TDBGWriteBlocksToManyPBuffersResponse> promise);
+        NThreading::TPromise<TDBGWriteBlocksToManyPBuffersResponse> promise,
+        TDuration executionTime);
 
     void DoRestore(
         NThreading::TPromise<TDBGRestoreResponse> promise,
         ui32 vChunkIndex);
+
+    void OnResponse(
+        ui8 hostIndex,
+        TDuration executionTime,
+        EOperation operation,
+        const NProto::TError& error);
+    void OnMultiFlushResponse(
+        ui8 pbufferHostIndex,
+        ui8 ddiskHostIndex,
+        TDuration executionTime,
+        const TVector<NProto::TError>& errors);
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     const ISchedulerPtr Scheduler;
@@ -313,6 +325,7 @@ private:
 
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PBufferConnections;
+    TVector<THostStat> HostStatistics;
     TDDiskIdToHostIndex PBufferIdToHostIndex;
 
     bool Initialized = false;

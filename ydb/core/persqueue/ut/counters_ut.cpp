@@ -762,7 +762,7 @@ void ConsumerDetailedMetrics(const TConsumerDetailedPartitionLevelMetricsTestPar
             histogram->OutputHtml(histogramStr);
             Cerr << "**** Total histogram: **** \n " << histogramStr.Str() << "**** **** **** ****" << Endl;
             auto instant = histogram->FindNamedCounter("Interval", "0ms")->Val();
-            auto oneSec = histogram->FindNamedCounter("Interval", "1000ms")->Val();
+            auto oneSec = histogram->FindNamedCounter("Interval", "100ms")->Val();
             auto twoSec = histogram->FindNamedCounter("Interval", "2500ms")->Val();
             UNIT_ASSERT_VALUES_EQUAL(oneSec + twoSec, 5);
             UNIT_ASSERT(twoSec >= 2);

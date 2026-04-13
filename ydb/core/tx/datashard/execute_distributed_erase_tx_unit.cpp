@@ -158,8 +158,10 @@ public:
                 key.emplace_back(TRawTypeValue(cell.AsRef(), vtype));
             }
 
+            TConstArrayRef<TCell> uniqueKey = GetUniqueIndexKey(keyCells.GetCells(), tableInfo.UniqueIndexKeySize);
+
             if (breakWriteConflicts || checkVolatileDependencies) {
-                if (!DataShard.BreakWriteConflicts(txc.DB, fullTableId, keyCells.GetCells(), volatileDependencies)) {
+                if (!DataShard.BreakWriteConflicts(txc.DB, fullTableId, uniqueKey, volatileDependencies)) {
                     if (breakWriteConflicts) {
                         pageFault = true;
                     } else if (checkVolatileDependencies) {
@@ -186,7 +188,7 @@ public:
                 continue;
             }
 
-            DataShard.SysLocksTable().BreakLocks(fullTableId, keyCells.GetCells());
+            DataShard.SysLocksTable().BreakLocks(fullTableId, uniqueKey);
 
             if (!volatileDependencies.empty() || volatileOrdered) {
                 txc.DB.UpdateTx(tableInfo.LocalTid, NTable::ERowOp::Erase, key, {}, globalTxId);

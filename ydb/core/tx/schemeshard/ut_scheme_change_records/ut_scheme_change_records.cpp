@@ -97,6 +97,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
                 UNIT_ASSERT_VALUES_EQUAL(e.ObjectType, (ui32)NKikimrSchemeOp::EPathTypeTable);
                 UNIT_ASSERT_VALUES_EQUAL(e.Status, (ui32)NKikimrScheme::StatusSuccess);
                 UNIT_ASSERT(e.SequenceId > 0);
+                UNIT_ASSERT_C(e.Body.HasOperationType(), "Body should contain operation description");
+                UNIT_ASSERT_VALUES_EQUAL((ui32)e.Body.GetOperationType(), (ui32)NKikimrSchemeOp::ESchemeOpCreateTable);
                 break;
             }
         }
@@ -130,6 +132,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         for (const auto& e : entries) {
             if (e.OperationType == (ui32)TTxState::TxAlterTable && e.PathName == "Table1") {
                 ++alterCount;
+                UNIT_ASSERT_C(e.Body.HasOperationType(), "Body should contain operation description for ALTER");
+                UNIT_ASSERT_VALUES_EQUAL((ui32)e.Body.GetOperationType(), (ui32)NKikimrSchemeOp::ESchemeOpAlterTable);
             }
         }
         UNIT_ASSERT_C(alterCount >= 1, "ALTER TABLE entry not found in notification log");
@@ -159,6 +163,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         for (const auto& e : entries) {
             if (e.OperationType == (ui32)TTxState::TxDropTable && e.PathName == "Table1") {
                 found = true;
+                UNIT_ASSERT_C(e.Body.HasOperationType(), "Body should contain operation description for DROP");
+                UNIT_ASSERT_VALUES_EQUAL((ui32)e.Body.GetOperationType(), (ui32)NKikimrSchemeOp::ESchemeOpDropTable);
                 break;
             }
         }

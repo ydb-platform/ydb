@@ -22,7 +22,8 @@ void TSchemeShard::PersistSchemeChangeRecord(NIceDb::TNiceDb& db, const TSchemeC
         NIceDb::TUpdate<T::UserSID>(entry.UserSid),
         NIceDb::TUpdate<T::SchemaVersion>(entry.SchemaVersion),
         NIceDb::TUpdate<T::CompletedAt>(entry.CompletedAt.MicroSeconds()),
-        NIceDb::TUpdate<T::PlanStep>(ui64(entry.PlanStep))
+        NIceDb::TUpdate<T::PlanStep>(ui64(entry.PlanStep)),
+        NIceDb::TUpdate<T::Body>(entry.Body)
     );
     ++SchemeChangeRecordCount;
     PersistUpdateSchemeChangeRecordCount(db);

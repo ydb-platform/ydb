@@ -1011,6 +1011,18 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
         TString userSid = path->Owner;
         ui64 schemaVersion = ss->GetTypeSpecificAlterVersion(pathId, path->PathType);
 
+        TString body;
+        {
+            auto opIt = ss->Operations.find(txId);
+            if (opIt != ss->Operations.end()) {
+                const auto& operation = opIt->second;
+                if (!operation->Parts.empty()) {
+                    bool ok = operation->Parts[0]->GetTransaction().SerializeToString(&body);
+                    Y_DEBUG_ABORT_UNLESS(ok);
+                }
+            }
+        }
+
         ss->PersistSchemeChangeRecord(db, {
             .SequenceId = seqId,
             .TxId = txId,
@@ -1023,6 +1035,7 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
             .SchemaVersion = schemaVersion,
             .CompletedAt = ctx.Now(),
             .PlanStep = txState.PlanStep,
+            .Body = body,
         });
 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

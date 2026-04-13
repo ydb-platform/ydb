@@ -118,6 +118,12 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
             entry->SetSchemaVersion(rowset.GetValue<Schema::SchemeChangeRecords::SchemaVersion>());
             entry->SetCompletedAt(rowset.GetValue<Schema::SchemeChangeRecords::CompletedAt>());
             entry->SetPlanStep(rowset.GetValueOrDefault<Schema::SchemeChangeRecords::PlanStep>(0));
+            {
+                TString body = rowset.GetValueOrDefault<Schema::SchemeChangeRecords::Body>("");
+                if (!body.empty()) {
+                    entry->SetBody(body);
+                }
+            }
 
             lastSeqId = seqId;
             ++count;

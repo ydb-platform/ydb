@@ -28,6 +28,7 @@ message TSchemeChangeRecord {
     string UserSID = 9;
     uint64 SchemaVersion = 10;
     uint64 CompletedAt = 11;
+    bytes Body = 13;
 }
 
 message TEvFetchSchemeChangeRecords {

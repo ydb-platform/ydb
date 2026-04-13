@@ -871,6 +871,7 @@ public:
         ui64 SchemaVersion = 0;
         TInstant CompletedAt;
         TStepId PlanStep = InvalidStepId;
+        TString Body;  // serialized NKikimrSchemeOp::TModifyScheme
     };
 
     ui64 GetTypeSpecificAlterVersion(TPathId pathId, NKikimrSchemeOp::EPathType pathType) const;

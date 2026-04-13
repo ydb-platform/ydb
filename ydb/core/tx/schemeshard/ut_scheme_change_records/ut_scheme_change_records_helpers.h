@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NSchemeChangeRecordTestHelpers {
 
@@ -90,6 +91,7 @@ struct TSchemeChangeRecordEntry {
     TString UserSID;
     ui64 SchemaVersion = 0;
     ui64 CompletedAt = 0;
+    NKikimrSchemeOp::TModifyScheme Body;
 };
 
 struct TSchemeChangeRecordsReadResult {
@@ -128,6 +130,9 @@ inline TSchemeChangeRecordsReadResult ReadSchemeChangeRecordsFull(
         entry.UserSID = proto.GetUserSID();
         entry.SchemaVersion = proto.GetSchemaVersion();
         entry.CompletedAt = proto.GetCompletedAt();
+        if (!proto.GetBody().empty()) {
+            Y_ABORT_UNLESS(entry.Body.ParseFromString(TString(proto.GetBody())));
+        }
         result.Entries.push_back(std::move(entry));
     }
 

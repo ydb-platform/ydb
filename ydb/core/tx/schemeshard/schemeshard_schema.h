@@ -2344,11 +2344,12 @@ struct Schema : NIceDb::Schema {
         struct SchemaVersion : Column<10, NScheme::NTypeIds::Uint64> {};
         struct CompletedAt :   Column<11, NScheme::NTypeIds::Uint64> {};
         struct PlanStep :      Column<12, NScheme::NTypeIds::Uint64> {};
+        struct Body :          Column<13, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<SequenceId>;
         using TColumns = TableColumns<SequenceId, TxId, OperationType, PathOwnerId, PathLocalId,
                                       PathName, ObjectType, Status, UserSID, SchemaVersion,
-                                      CompletedAt, PlanStep>;
+                                      CompletedAt, PlanStep, Body>;
     };
 
     struct SchemeChangeSubscribers : Table<134> {

@@ -503,7 +503,7 @@ public:
             QueryState->GetDatabase(),
             QueryState->GetType(),
             action,
-            QueryState->GetQuery());
+            NKikimr::ProtectQueryForLoggingIfSensitive(QueryState->GetQuery()));
 
         STLOG_D("Received request",
             (proxy_request_id, proxyRequestId),
@@ -511,7 +511,7 @@ public:
             (has_tx_control, QueryState->HasTxControl()),
             (action, action),
             (type, QueryState->GetType()),
-            (text, QueryState->GetQuery()),
+            (text, NKikimr::ProtectQueryForLoggingIfSensitive(QueryState->GetQuery())),
             (rpc_actor, QueryState->RequestActorId),
             (database, QueryState->GetDatabase()),
             (database_id, QueryState->UserRequestContext->DatabaseId),
@@ -2591,7 +2591,7 @@ public:
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY:
             case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT: {
                 TString text = QueryState->ExtractQueryText();
-                if (IsQueryAllowedToLog(text)) {
+                if (!NKikimr::IsQueryWithSensitiveInfo(text)) {
                     auto userSID = QueryState->UserToken->GetUserSID();
                     CollectQueryStats(TlsActivationContext->AsActorContext(), stats, queryDuration, text,
                         userSID, QueryState->ParametersSize, database, type, requestUnits);

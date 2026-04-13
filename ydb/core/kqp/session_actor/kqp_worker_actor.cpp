@@ -441,7 +441,7 @@ private:
         LOG_N("Legacy YQL request"
             << ", action: " << (ui32)queryRequest->GetAction()
             << ", type: " << (ui32)queryRequest->GetType()
-            << ", query: \"" << queryRequest->GetQuery().substr(0, 1000) << "\"");
+            << ", query: \"" << NKikimr::ProtectQueryForLoggingIfSensitive(queryRequest->GetQuery()).substr(0, 1000) << "\"");
 
         return false;
     }
@@ -912,7 +912,7 @@ private:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
             case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING: {
                 TString text = ExtractQueryText();
-                if (IsQueryAllowedToLog(text)) {
+                if (!NKikimr::IsQueryWithSensitiveInfo(text)) {
                     auto userSID = QueryState->RequestEv->GetUserToken()->GetUserSID();
                     CollectQueryStats(ctx, stats, queryDuration, text,
                         userSID, QueryState->RequestEv->GetParametersSize(), database, type, requestUnits);

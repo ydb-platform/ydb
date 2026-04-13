@@ -128,7 +128,7 @@ void SlowLogQuery(const TActorContext &ctx, const TKikimrConfiguration* config, 
             << ", status: " << status
             << ", user: " << username
             << ", results: " << resultsSize << 'b'
-            << ", text: \"" << EscapeC(queryText) << '"'
+            << ", text: \"" << EscapeC(NKikimr::ProtectQueryForLoggingIfSensitive(queryText)) << '"'
             << ", parameters: " << paramsText);
     }
 }

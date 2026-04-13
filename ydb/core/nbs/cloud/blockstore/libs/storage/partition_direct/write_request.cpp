@@ -10,29 +10,6 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
-EWriteMode GetWriteModeFromProto(NProto::EWriteMode writeMode)
-{
-    switch (writeMode) {
-        case NProto::EWriteMode::PBufferReplication:
-            return EWriteMode::PBufferReplication;
-        case NProto::EWriteMode::DirectPBuffersFilling:
-            return EWriteMode::DirectPBuffersFilling;
-        default:
-            break;
-    }
-    Y_ABORT_UNLESS(false);
-}
-
-NProto::EWriteMode GetProtoWriteMode(EWriteMode writeMode)
-{
-    switch (writeMode) {
-        case EWriteMode::PBufferReplication:
-            return NProto::EWriteMode::PBufferReplication;
-        case EWriteMode::DirectPBuffersFilling:
-            return NProto::EWriteMode::DirectPBuffersFilling;
-    }
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 TWriteRequestExecutor::TWriteRequestExecutor(

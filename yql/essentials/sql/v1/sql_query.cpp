@@ -4387,14 +4387,14 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
     }
 
     const auto& query = ast.GetRule_sql_query();
+
     TVector<TNodePtr> blocks;
     Ctx_.PushCurrentBlocks(&blocks);
     Y_DEFER {
         Ctx_.PopCurrentBlocks();
     };
+
     if (query.Alt_case() == TRule_sql_query::kAltSqlQuery1) {
-        size_t statementNumber = 0;
-        const auto& statements = query.GetAlt_sql_query1().GetRule_sql_stmt_list1();
         auto checkExplainToken = [&](const auto& stmt) -> bool {
             if (stmt.HasBlock1()) {
                 auto const& provider = Ctx_.Scoped->CurrService;
@@ -4406,15 +4406,36 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
             return true;
         };
 
-        const auto& firstStmt = statements.GetRule_sql_stmt2();
-        if (!checkExplainToken(firstStmt)) {
+        size_t statementNumber = 0;
+
+        const auto& stmtList = query.GetAlt_sql_query1().GetRule_sql_stmt_list1();
+
+        if (!stmtList.HasBlock2() && Ctx_.Settings.Flags.contains("AllowNoStatements")) {
+            const auto p = Ctx_.Pos();
+            TNodePtr program = BuildList(p);
+            program->Add("return");
+            program->Add("world");
+            return BuildList(p, {std::move(program)});
+        }
+
+        if (!stmtList.HasBlock2()) {
+            Ctx_.Issues.AddIssue(
+                TIssue()
+                    .SetMessage("At least one statement was expected, but got none")
+                    .SetCode(NYql::TIssuesIds::YQL_NO_STATEMENTS, NYql::TSeverityIds::S_ERROR));
             return nullptr;
         }
 
+        const auto& statements = stmtList.GetBlock2();
+
+        const auto& firstStmt = statements.GetRule_sql_stmt1();
+        if (!checkExplainToken(firstStmt)) {
+            return nullptr;
+        }
         if (!Statement(blocks, firstStmt.GetRule_sql_stmt_core2(), statementNumber++)) {
             return nullptr;
         }
-        for (auto block : statements.GetBlock3()) {
+        for (auto block : statements.GetBlock2()) {
             const auto& stmt = block.GetRule_sql_stmt2();
             if (!checkExplainToken(stmt)) {
                 return nullptr;

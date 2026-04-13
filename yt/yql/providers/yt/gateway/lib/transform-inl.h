@@ -99,7 +99,7 @@ TCallableVisitFunc TGatewayTransformer<TExecContextPtr>::operator()(TInternName 
                 };
 
                 const TString cluster = ExecCtx_->Cluster_;
-                const TString tmpFolder = GetTablesTmpFolder(*Settings_, cluster);
+                const TString tmpFolder = GetTablesTmpFolder(*Settings_, cluster, ExecCtx_->BaseSession_->UseSecureTmp_, ExecCtx_->BaseSession_->OperationOptions_);
 
 
                 TListLiteral* groupList = AS_VALUE(TListLiteral, callable.GetInput(0));

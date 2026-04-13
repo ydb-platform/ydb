@@ -2514,6 +2514,11 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (input->Head().GetTypeAnn()->HasUniversal() || input->Tail().GetTypeAnn()->HasUniversal()) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         switch (CanCompare<Equality>(input->Head().GetTypeAnn(), input->Tail().GetTypeAnn())) {
             case ECompareOptions::Null:
                 output = MakeBoolNothing(input->Pos(), ctx.Expr);
@@ -14266,6 +14271,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (itemType->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(itemType);
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         if (!EnsureVariantType(input->Head().Pos(), *itemType, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -15309,6 +15319,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         if (!lambdaNode->GetTypeAnn()) {
             return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (lambdaNode->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(lambdaNode->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
         }
 
         // extract_predicate library supports TCoConditionalValueBase in lambda root or just plain predicate lambda

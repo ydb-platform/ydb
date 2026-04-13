@@ -172,7 +172,7 @@ template <>
 struct TTypeBuilderHelper<NUdf::TPersonStruct> {
     static TType* Build(const IFunctionTypeInfoBuilder& builder) {
         auto structBuilder = builder.Struct(3);
-        structBuilder->AddField<char*>("FirstName", &TPersonStruct::MetaIndexes[0])
+        structBuilder->AddField<char*>("FirstName", TPersonStruct::MetaIndexes.data())
             .AddField<char*>("LastName", &TPersonStruct::MetaIndexes[1])
             .AddField<ui32>("Age", &TPersonStruct::MetaIndexes[2]);
         auto structType = structBuilder->Build();
@@ -191,7 +191,7 @@ struct TTypeBuilderHelper<NUdf::TPersonStructWithOptList> {
         auto listTags = builder.List()->Item<ui32>().Build();
         auto optionalListTags = builder.Optional()->Item(listTags).Build();
         auto structBuilder = builder.Struct(3);
-        structBuilder->AddField<char*>("FirstName", &TPersonStructWithOptList::MetaIndexes[0])
+        structBuilder->AddField<char*>("FirstName", TPersonStructWithOptList::MetaIndexes.data())
             .AddField<char*>("LastName", &TPersonStructWithOptList::MetaIndexes[1])
             .AddField<ui32>("Age", &TPersonStructWithOptList::MetaIndexes[2])
             .AddField("Tags", optionalListTags, &TPersonStructWithOptList::MetaIndexes[3]);

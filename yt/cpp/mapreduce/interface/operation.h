@@ -3234,7 +3234,7 @@ struct TJobTraceEvent
 struct IOperation
     : public TThrRefBase
 {
-    virtual ~IOperation() = default;
+    ~IOperation() override = default;
 
     ///
     /// @brief Get operation id.

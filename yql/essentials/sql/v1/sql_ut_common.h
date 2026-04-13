@@ -3,6 +3,10 @@
 
 #include "sql_select_yql.h"
 
+#include <library/cpp/iterator/cartesian_product.h>
+
+#include <util/generic/overloaded.h>
+
 namespace {
 TString ToString(const TParsedTokenList& tokens) {
     TStringBuilder reconstructedQuery;
@@ -266,6 +270,120 @@ Y_UNIT_TEST(NanosecondsKeywordNotReservedForNames) {
 Y_UNIT_TEST(Jubilee) {
     NYql::TAstParseResult res = SqlToYql("USE plato; INSERT INTO Arcadia (r2000000) VALUES (\"2M GET!!!\");");
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(NoStatements) {
+    using NSQLTranslation::TTranslationSettings;
+
+    using TAstParseResult = std::variant<
+        NYql::TAstParseResult,
+        TVector<NYql::TAstParseResult>>;
+
+    using TParser = std::function<TAstParseResult(
+        const TString&, const TTranslationSettings&)>;
+
+    auto translator = [] {
+        NSQLTranslationV1::TLexers lexers = {
+            .Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory(),
+        };
+        NSQLTranslationV1::TParsers parsers = {
+            .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(),
+        };
+        return NSQLTranslationV1::MakeTranslator(lexers, parsers);
+    }();
+
+    const TVector<TString> inputs = {
+        "",
+        " ",
+        "\n",
+        "--!syntax_pg",
+        "-- comment",
+        "/* comment */",
+        ";",
+        ";;",
+        "/* SELECT 1 */;",
+    };
+
+    const TVector<bool> flags = {false, true};
+
+    const TVector<TParser> parsers = {
+        [&](const TString& input, const TTranslationSettings& settings) -> TAstParseResult {
+            NYql::TAstParseResult result = translator->TextToAst(
+                input, settings, /*warningRules=*/nullptr, /*stmtParseInfo=*/nullptr);
+
+            return std::move(result);
+        },
+
+        [&](const TString& input, const TTranslationSettings& settings) -> TAstParseResult {
+            NYql::TIssues issues;
+            google::protobuf::Message* message = translator->TextToMessage(
+                input, "", issues, /*maxErrors=*/8, settings);
+            UNIT_ASSERT_C(message, issues.ToString());
+
+            NSQLTranslation::TSQLHints hints;
+            NYql::TAstParseResult result = translator->TextAndMessageToAst(
+                input, *message, hints, settings);
+
+            return std::move(result);
+        },
+
+        [&](const TString& input, const TTranslationSettings& settings) -> TAstParseResult {
+            TVector<NYql::TAstParseResult> results = translator->TextToManyAst(
+                input, settings, /*warningRules=*/nullptr, /*stmtParseInfo=*/nullptr);
+
+            return std::move(results);
+        },
+    };
+
+    for (const auto& [input, allow, parse] : CartesianProduct(inputs, flags, parsers)) {
+        google::protobuf::Arena arena;
+        TTranslationSettings settings;
+        settings.Arena = &arena;
+
+        if (allow) {
+            settings.Flags.emplace("AllowNoStatements");
+        }
+
+        TAstParseResult result = parse(input, settings);
+
+        if (allow && std::holds_alternative<NYql::TAstParseResult>(result)) {
+            const auto& res = std::get<NYql::TAstParseResult>(result);
+
+            UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+            TWordCountHive stat = {"world"};
+            TString program = VerifyProgram(res, stat);
+
+            UNIT_ASSERT_NO_DIFF(program, "(\n(return world)\n)\n");
+        } else if (allow && std::holds_alternative<TVector<NYql::TAstParseResult>>(result)) {
+            const auto& res = std::get<TVector<NYql::TAstParseResult>>(result);
+
+            UNIT_ASSERT_EQUAL(res.size(), 0);
+        } else {
+            auto res = std::visit(
+                TOverloaded{
+                    [](NYql::TAstParseResult&& x) {
+                        return std::move(x);
+                    },
+                    [](TVector<NYql::TAstParseResult>&& xs) {
+                        UNIT_ASSERT_EQUAL(xs.size(), 1);
+                        return std::move(xs.back());
+                    },
+                }, std::move(result));
+
+            UNIT_ASSERT(!res.IsOk());
+            UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Error: At least one statement was expected, but got none, code: 4603");
+        }
+    }
+}
+
+Y_UNIT_TEST(ParserRecovery) {
+    NYql::TAstParseResult res = SqlToYql(" select1; select2;");
+    UNIT_ASSERT(!res.IsOk());
+
+    TString issues = Err2Str(res);
+    UNIT_ASSERT_STRING_CONTAINS(issues, "extraneous input 'select1' expecting");
+    UNIT_ASSERT_STRING_CONTAINS(issues, "extraneous input 'select2' expecting");
 }
 
 Y_UNIT_TEST(QualifiedAsteriskBefore) {
@@ -5588,6 +5706,7 @@ Y_UNIT_TEST(DropSecretIncorrect) {
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:26: Error: '@' is not allowed prefix for secret name\n");
     }
 }
+
 } // Y_UNIT_TEST_SUITE(SqlParsingOnly)
 
 Y_UNIT_TEST_SUITE(ExternalFunction) {
@@ -8365,7 +8484,7 @@ Y_UNIT_TEST(MultilineComments) {
 #if ANTLR_VER == 3
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: Unexpected token '*' : cannot match to any predicted input...\n\n");
 #else
-    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: mismatched input '*' expecting {';', '(', '$', ALTER, ANALYZE, BACKUP, BATCH, COMMIT, CREATE, DECLARE, DEFINE, DELETE, DISCARD, DO, DROP, EVALUATE, EXPLAIN, EXPORT, FOR, FROM, GRANT, IF, IMPORT, INSERT, PARALLEL, PRAGMA, PROCESS, REDUCE, REPLACE, RESTORE, REVOKE, ROLLBACK, SELECT, SHOW, TRUNCATE, UPDATE, UPSERT, USE, VALUES}\n");
+    UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:0: Error: mismatched input '*' expecting {<EOF>, ';', '(', '$', ALTER, ANALYZE, BACKUP, BATCH, COMMIT, CREATE, DECLARE, DEFINE, DELETE, DISCARD, DO, DROP, EVALUATE, EXPLAIN, EXPORT, FOR, FROM, GRANT, IF, IMPORT, INSERT, PARALLEL, PRAGMA, PROCESS, REDUCE, REPLACE, RESTORE, REVOKE, ROLLBACK, SELECT, SHOW, TRUNCATE, UPDATE, UPSERT, USE, VALUES}\n");
 #endif
     res = SqlToYqlWithAnsiLexer(req);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
@@ -14219,4 +14338,5 @@ Y_UNIT_TEST(CreateViewIfNotExists) {
 }
 
 } // Y_UNIT_TEST_SUITE(CreateViewNewSyntax)
+
 // NOLINTEND(misc-definitions-in-headers)

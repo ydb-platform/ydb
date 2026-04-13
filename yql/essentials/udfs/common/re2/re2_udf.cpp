@@ -324,7 +324,7 @@ TOptionsSchema MakeOptionsSchema(::NKikimr::NUdf::IFunctionTypeInfoBuilder& buil
     TOptionsSchema ret;
     auto structBuilder = builder.Struct(EOptionsField::Count);
 #define FIELD_HANDLE(name, index, type, ...) structBuilder->AddField<type>(TStringRef::Of(#name), &ret.Indices[index]);
-    OPTIONS_MAP(FIELD_HANDLE)
+    OPTIONS_MAP(FIELD_HANDLE) // NOLINT(readability-container-data-pointer)
 #undef FIELD_HANDLE
 
     ret.StructType = structBuilder->Build();

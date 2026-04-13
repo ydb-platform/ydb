@@ -69,10 +69,6 @@ std::shared_ptr<TSparsedArray> TSparsedArray::Make(const IChunkedArray& defaultA
     return std::shared_ptr<TSparsedArray>(new TSparsedArray(std::move(chunk), defaultValue, defaultArray.GetDataType()));
 }
 
-std::shared_ptr<arrow::Scalar> TSparsedArray::DoGetMaxScalar() const {
-    return Record.GetMaxScalar();
-}
-
 TMinMax TSparsedArray::DoGetMinMaxScalars() const {
     return Record.GetMinMaxScalars();
 }
@@ -205,35 +201,12 @@ ui32 TSparsedArrayChunk::GetFirstIndexNotDefault() const {
 }
 
 TMinMax TSparsedArrayChunk::GetMinMaxScalars() const {
-    TMinMax result{ DefaultValue, DefaultValue };
-    if (!ColValue->length()) {
-        return result;
+    TMinMax value = TMinMax::Compute(ColValue);
+    if (value.IsNull() && DefaultValue) {
+        value.Min() = DefaultValue;
+        value.Max() = DefaultValue;
     }
-    auto minMax = NArrow::FindMinMaxPosition(ColValue);
-    auto minScalar = NArrow::TStatusValidator::GetValid(ColValue->GetScalar(minMax.first));
-    auto maxScalar = NArrow::TStatusValidator::GetValid(ColValue->GetScalar(minMax.second));
-
-    if (!DefaultValue || ScalarLess(minScalar, result.Min)) {
-        result.Min = minScalar;
-    }
-
-    if (!DefaultValue || ScalarLess(result.Max, maxScalar)) {
-        result.Max = maxScalar;
-    }
-
-    return result;
-}
-
-std::shared_ptr<arrow::Scalar> TSparsedArrayChunk::GetMaxScalar() const {
-    if (!ColValue->length()) {
-        return DefaultValue;
-    }
-    auto minMax = NArrow::FindMinMaxPosition(ColValue);
-    auto currentScalar = NArrow::TStatusValidator::GetValid(ColValue->GetScalar(minMax.second));
-    if (!DefaultValue || ScalarCompare(DefaultValue, currentScalar) < 0) {
-        return currentScalar;
-    }
-    return DefaultValue;
+    return value;
 }
 
 TSparsedArrayChunk TSparsedArrayChunk::ApplyFilter(const TColumnFilter& filter) const {
@@ -248,7 +221,6 @@ TSparsedArrayChunk TSparsedArrayChunk::ApplyFilter(const TColumnFilter& filter) 
     ui32 skippedCount = 0;
     ui32 filteredCount = 0;
     bool currentAcceptance = filter.GetStartValue();
-    TColumnFilter filterNew = TColumnFilter::BuildAllowFilter();
     auto indexesBuilder = NArrow::MakeBuilder(arrow::uint32(), filter.GetFilteredCountVerified());
     auto valuesBuilder = NArrow::MakeBuilder(ColValue->type(), filter.GetFilteredCountVerified());
     for (auto it = filter.GetFilter().begin(); it != filter.GetFilter().end(); ++it) {

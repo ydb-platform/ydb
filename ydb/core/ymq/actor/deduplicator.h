@@ -94,7 +94,8 @@ public:
     
         auto params = builder.Build();
 
-        RunYqlQuery(query, std::move(params), true, TDuration::Zero(), "/Root" /* TODO database */, TActivationContext::AsActorContext());
+        auto database = AppData()->SqsConfig.GetRoot() == "/Root/SQS" ? "/Root" : AppData()->SqsConfig.GetRoot();
+        RunYqlQuery(query, std::move(params), true, TDuration::Zero(), database, TActivationContext::AsActorContext());
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {

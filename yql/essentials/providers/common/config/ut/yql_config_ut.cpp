@@ -533,7 +533,9 @@ Y_UNIT_TEST(DeprecatedSettingCustomMessage) {
 
 Y_UNIT_TEST(EnumerateSkipsDeprecatedAndUnderscoreNames) {
     TSettingDispatcher dispatcher;
-    TConfSetting<TString> s1, s2, s3;
+    TConfSetting<TString> s1;
+    TConfSetting<TString> s2;
+    TConfSetting<TString> s3;
     dispatcher.AddSetting("Normal", s1);
     dispatcher.AddSetting("DeprecatedOne", s2).Deprecated();
     dispatcher.AddSetting("_HiddenInternal", s3);

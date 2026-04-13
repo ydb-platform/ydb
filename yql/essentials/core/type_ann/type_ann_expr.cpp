@@ -1047,7 +1047,8 @@ public:
         Y_UNUSED(ctx);
         for (auto f : functions) {
             auto lowered = to_lower(f->Name);
-            TStringBuf moduleName, funcName;
+            TStringBuf moduleName;
+            TStringBuf funcName;
             if (!SplitUdfName(lowered, moduleName, funcName)) {
                 ctx.AddError(TIssue(f->Pos, TStringBuilder() << "Invalid function name: " << f->Name));
                 return false;

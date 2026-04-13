@@ -2118,7 +2118,8 @@ bool CompareExpressions(const TExprNode*& one, const TExprNode*& two, TArguments
 
     switch (two->Type()) {
         case TExprNode::Arguments: {
-            ui32 i1 = 0U, i2 = 0U;
+            ui32 i1 = 0U;
+            ui32 i2 = 0U;
             one->ForEachChild([&](const TExprNode& arg) { argumentsMap.emplace(&arg, std::make_pair(level, ++i1)); });
             two->ForEachChild([&](const TExprNode& arg) { argumentsMap.emplace(&arg, std::make_pair(level, ++i2)); });
             return true;
@@ -3870,7 +3871,8 @@ bool CompareExprTreeParts(const TExprNode& one, const TExprNode& two, const TNod
     TNodesPairSet visited;
     map.reserve(argsMap.size());
     std::for_each(argsMap.cbegin(), argsMap.cend(), [&](const TNodeMap<ui32>::value_type& v) { map.emplace(v.first, std::make_pair(0U, v.second)); });
-    auto l = &one, r = &two;
+    auto l = &one;
+    auto r = &two;
     return CompareExpressions(l, r, map, level, visited);
 }
 

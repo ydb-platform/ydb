@@ -59,7 +59,8 @@ public:
             THashSet<TString> requiredModules;
             for (auto udfPtr : functions) {
                 auto& udf = *udfPtr;
-                TStringBuf moduleName, funcName;
+                TStringBuf moduleName;
+                TStringBuf funcName;
                 if (!SplitUdfName(udf.Name, moduleName, funcName) || moduleName.empty() || funcName.empty()) {
                     ctx.AddError(TIssue(udf.Pos, TStringBuilder() << "Incorrect format of function name: " << udf.Name));
                     hasErrors = true;

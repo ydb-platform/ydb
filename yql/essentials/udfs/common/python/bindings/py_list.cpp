@@ -429,7 +429,10 @@ if (PyIndex_Check(slice)) {
 }
 
 if (PySlice_Check(slice)) {
-    Py_ssize_t start, stop, step, size;
+    Py_ssize_t start;
+    Py_ssize_t stop;
+    Py_ssize_t step;
+    Py_ssize_t size;
 
     if (list->CachedLength >= 0) {
         if (PySlice_GetIndicesEx(SLICEOBJ(slice), (list->CachedLength + list->Step - 1) / list->Step, &start, &stop, &step, &size) < 0) {
@@ -997,7 +1000,10 @@ if (PyIndex_Check(slice)) {
 }
 
 if (PySlice_Check(slice)) {
-    Py_ssize_t start, stop, step, size;
+    Py_ssize_t start;
+    Py_ssize_t stop;
+    Py_ssize_t step;
+    Py_ssize_t size;
 
     if (PySlice_GetIndicesEx(SLICEOBJ(slice), list->Length, &start, &stop, &step, &size) < 0) {
         return nullptr;

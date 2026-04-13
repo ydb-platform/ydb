@@ -1703,7 +1703,8 @@ ui32 RegisterGroupExpression(
 }
 
 bool BuildGroupingSets(const TExprNode& data, TExprNode::TPtr& groupSets, TExprNode::TPtr& groupExprs, TExprContext& ctx) {
-    TExprNode::TListType groupSetsItems, groupExprsItems;
+    TExprNode::TListType groupSetsItems;
+    TExprNode::TListType groupExprsItems;
     THashMap<ui64, TVector<ui32>> hashes;
     for (const auto& child : data.Children()) {
         const auto& lambda = child->Tail();
@@ -3537,7 +3538,8 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     }
 
                     if (!scanColumnsOnly) {
-                        TExprNode::TPtr groupSets, groupExprs;
+                        TExprNode::TPtr groupSets;
+                        TExprNode::TPtr groupExprs;
                         if (!BuildGroupingSets(data, groupSets, groupExprs, ctx.Expr)) {
                             return IGraphTransformer::TStatus::Error;
                         }

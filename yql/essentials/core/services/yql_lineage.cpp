@@ -554,7 +554,8 @@ private:
         }
 
         if (value && value->IsCallable("If")) {
-            TLineage left, right;
+            TLineage left;
+            TLineage right;
             left.Fields.ConstructInPlace(Allocator_.get());
             right.Fields.ConstructInPlace(Allocator_.get());
             FillStructLineage(left, value->Child(1), arg, innerLineage, extType, TFieldsLineageMap(Allocator_.get()));
@@ -969,7 +970,8 @@ private:
                 originalName = it->second;
             }
 
-            TStringBuf table, column;
+            TStringBuf table;
+            TStringBuf column;
             SplitTableName(originalName, table, column);
             ui32 index = inputLabels.at(table);
             auto& res = (*lineage.Fields).try_emplace(field->GetName(), TFieldsLineage(Allocator_.get())).first->second;
@@ -994,7 +996,8 @@ private:
                 originalName = it->second;
             }
 
-            TStringBuf table, column;
+            TStringBuf table;
+            TStringBuf column;
             SplitTableName(originalName, table, column);
             ui32 index = inputLabels.at(table);
             auto& res = (*lineage.Fields).try_emplace(field->GetName(), TFieldsLineage(Allocator_.get())).first->second;
@@ -1168,7 +1171,8 @@ void CheckEquvalentLineages(const TString& lineageFirst, const TString& lineageS
     auto lineageNode1 = NYT::NodeFromYsonString(lineageFirst);
     auto lineageNode2 = NYT::NodeFromYsonString(lineageSecond);
 
-    THashMap<i64, NYT::TNode> idToPath1, idToPath2;
+    THashMap<i64, NYT::TNode> idToPath1;
+    THashMap<i64, NYT::TNode> idToPath2;
     IterateTwoLists(lineageNode1["Reads"].AsList(),
                     lineageNode2["Reads"].AsList(),
                     // clang-format off

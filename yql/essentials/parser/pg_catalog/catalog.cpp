@@ -3460,7 +3460,8 @@ const TAggregateDesc& LookupAggregation(const TString& name, const TVector<ui32>
 const TAggregateDesc& LookupAggregation(const TString& name, ui32 stateType, ui32 resultType) {
     TStringBuf realName = name;
     TMaybe<ui32> aggId;
-    TStringBuf left, right;
+    TStringBuf left;
+    TStringBuf right;
     if (realName.TrySplit('#', left, right)) {
         aggId = FromString<ui32>(right);
         realName = left;

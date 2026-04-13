@@ -515,7 +515,8 @@ int Main(int argc, const char** argv)
     TDuration benchmarkSeconds;
     TDuration calibrationSeconds;
     const auto secondsFromString = [](const TString& str) { return TDuration::Seconds(std::stoul(str)); };
-    TString genSql, testSql;
+    TString genSql;
+    TString testSql;
     bool showResults;
     TString udfsDir;
     TString LLVMSettings;

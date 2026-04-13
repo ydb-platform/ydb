@@ -46,4 +46,12 @@ bool ValidateFsPath(const TString& path, const TString& pathDescription, TString
     return ValidatePathComponents(path, pathDescription, error);
 }
 
+TString StripTrailingSlashes(const TString& path) {
+    TString result = path;
+    while (result.size() > 1 && result.back() == '/') {
+        result.pop_back();
+    }
+    return result;
+}
+
 } // namespace NKikimr::NGRpcService

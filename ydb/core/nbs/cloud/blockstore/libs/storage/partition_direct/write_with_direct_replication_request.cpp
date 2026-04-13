@@ -16,7 +16,8 @@ TWriteWithDirectReplicationRequestExecutor::
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         ui64 lsn,
         NWilson::TTraceId traceId,
-        TDuration hedgingDelay)
+        TDuration hedgingDelay,
+        TDuration timeout)
     : TBaseWriteRequestExecutor(
           actorSystem,
           vChunkConfig,
@@ -26,33 +27,48 @@ TWriteWithDirectReplicationRequestExecutor::
           std::move(request),
           lsn,
           std::move(traceId),
-          hedgingDelay)
+          hedgingDelay,
+          timeout)
 {}
 
 void TWriteWithDirectReplicationRequestExecutor::Run()
 {
+    ScheduleRequestTimeoutCallback();
+    ScheduleHedging();
     SendWriteRequest(ELocation::PBuffer0);
     SendWriteRequest(ELocation::PBuffer1);
     SendWriteRequest(ELocation::PBuffer2);
+}
 
-    if (HedgingDelay) {
-        DirectBlockGroup->Schedule(
-            HedgingDelay,
-            [weakSelf = weak_from_this()]()
-            {
-                if (auto self = weakSelf.lock()) {
-                    std::static_pointer_cast<
-                        TWriteWithDirectReplicationRequestExecutor>(self)
-                        ->SendWriteRequestsToHandoffPBuffers();
-                }
-            });
+void TWriteWithDirectReplicationRequestExecutor::ScheduleHedging()
+{
+    if (!HedgingDelay) {
+        return;
     }
+
+    DirectBlockGroup->Schedule(
+        HedgingDelay,
+        [weakSelf = weak_from_this()]()
+        {
+            if (auto self = std::static_pointer_cast<
+                    TWriteWithDirectReplicationRequestExecutor>(
+                    weakSelf.lock()))
+            {
+                self->SendWriteRequestsToHandoffPBuffers();
+            }
+        });
 }
 
 void TWriteWithDirectReplicationRequestExecutor::
     SendWriteRequestsToHandoffPBuffers()
 {
-    if (CompletedWrites.Count() <= QuorumDirectBlockGroupHostCount - 1) {
+    if (Promise.IsReady()) {
+        return;
+    }
+
+    if (CompletedWrites.Count() <= QuorumDirectBlockGroupHostCount - 1 &&
+        !RequestedWrites.Get(ELocation::HOPBuffer0))
+    {
         LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
@@ -64,7 +80,9 @@ void TWriteWithDirectReplicationRequestExecutor::
         SendWriteRequest(ELocation::HOPBuffer0);
     }
 
-    if (CompletedWrites.Count() <= QuorumDirectBlockGroupHostCount - 2) {
+    if (CompletedWrites.Count() <= QuorumDirectBlockGroupHostCount - 2 &&
+        !RequestedWrites.Get(ELocation::HOPBuffer1))
+    {
         LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,

@@ -1932,7 +1932,6 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
         }
 
         ui64 createTimestampMs = 0, writeTimestampMs = 0;
-        NKikimrPQClient::TDataChunk proto;
         std::optional<TString> deduplicationId;
 
         TString errorStr = "";
@@ -1988,16 +1987,20 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
 
         if (cmd.HasMessageDeduplicationId()) {
             deduplicationId = cmd.GetMessageDeduplicationId();
-            Y_ASSERT(deduplicationId.value() == [&] () -> TString {
+
+            auto deduplicationIdFromMetadata = [&cmd] () -> TString {
+                NKikimrPQClient::TDataChunk proto;
                 if (proto.ParseFromString(cmd.GetData())) {
-                    for (auto& attr : *proto.MutableMessageMeta() ) {
+                    for (auto& attr : *proto.MutableMessageMeta()) {
                         if (attr.key() == MESSAGE_ATTRIBUTE_DEDUPLICATION_ID) {
                             return attr.value();
                         }
                     }
                 }
                 return TString();
-            }());
+            };
+
+            Y_ASSERT(deduplicationId.value() == deduplicationIdFromMetadata());
         }
 
         ui32 mSize = MAX_BLOB_PART_SIZE - cmd.GetSourceId().size() - sizeof(ui32) - TClientBlob::OVERHEAD; //megaqc - remove this

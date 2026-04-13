@@ -1,4 +1,3 @@
-// Moved from ydb/core/security/certificate_check/cert_auth_utils.cpp
 #include "test_cert_auth_utils.h"
 
 #include <openssl/bio.h>

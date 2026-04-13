@@ -1,4 +1,3 @@
-// Moved from ydb/core/security/certificate_check/cert_auth_utils.h
 #pragma once
 
 #include <util/datetime/base.h>

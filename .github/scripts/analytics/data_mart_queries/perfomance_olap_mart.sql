@@ -118,13 +118,11 @@ SELECT
     CASE
         WHEN Db LIKE '%sas-daily%' THEN 'sas_small_'
         WHEN Db LIKE '%sas-perf%' THEN 'sas_big_'
-        WHEN Db LIKE '%sas%' THEN 'sas_'
         WHEN Db LIKE '%vla-acceptance%' THEN 'vla_small_'
         WHEN Db LIKE '%vla-perf%' THEN 'vla_big_'
         WHEN Db LIKE '%vla4-8154%' OR Db LIKE '%vla4-8158%' THEN 'vla_2_node_'
         WHEN Db LIKE '%vla4-8157%' THEN 'vla_1_node_'
         WHEN Db LIKE '%vla4-8163%' OR Db LIKE '%vla4-8171%' OR Db LIKE '%vla4-8174%' THEN 'vla_3_node_'
-        WHEN Db LIKE '%vla%' THEN 'vla_'
         WHEN Db LIKE '%etn0vb1kg3p016q1tp3t%b1ggceeul2pkher8vhb6/etn0vb1kg3p016q1tp3t%' THEN 'cloud_slonnn_128_'
         WHEN Db LIKE '%etntj9d0t8v7ud2hrqho%b1ggceeul2pkher8vhb6/etntj9d0t8v7ud2hrqho%' THEN 'cloud_slonnn_64_'
         WHEN Db LIKE '%static-node-1.ydb-cluster.com/Root/db%' THEN 'ansible_'
@@ -136,6 +134,9 @@ SELECT
         WHEN Db LIKE '%ydb-qa-01-sas-000%' THEN 'oltp-3dc-perf6_'
         WHEN Db LIKE '%ydb-qa-01-klg-021%' THEN 'oltp-klg-perf7_'
         WHEN Db LIKE '%ydb-qa-01-klg-030%' THEN 'oltp-klg-perf9_'
+        WHEN Db LIKE '%sas%' THEN 'sas_'
+        WHEN Db LIKE '%vla%' THEN 'vla_'
+        WHEN Db LIKE '%klg%' THEN 'klg_'
         ELSE 'new_db_'
     END || CASE
         WHEN Db LIKE '%load%' THEN 'column'

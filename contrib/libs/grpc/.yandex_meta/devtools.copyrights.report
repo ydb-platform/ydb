@@ -29,17 +29,6 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-KEEP     COPYRIGHT_SERVICE_LABEL 05bdd09fb9fdb384a61f2eb54df462d6
-BELONGS src/proto/grpc/status/ya.make
-    License text:
-        // Copyright 2016 Google Inc.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        src/proto/grpc/status/status.proto [1:1]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 06745079442081a41390888905fc6bdb
 BELONGS ya.make
     License text:
@@ -205,7 +194,7 @@ BELONGS ya.make
         src/cpp/common/tls_certificate_verifier.cc [2:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 0e7dfde444a19e176393b344aaa268da
-BELONGS ya.make
+BELONGS src/proto/grpc/reflection/v1/ya.make
     License text:
         // Copyright 2016 The gRPC Authors
     Scancode info:
@@ -214,9 +203,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         src/proto/grpc/reflection/v1/reflection.proto [1:1]
-    Belongs difference:
-        + ya.make
-        - src/proto/grpc/reflection/v1/ya.make
 
 KEEP     COPYRIGHT_SERVICE_LABEL 0f2ee97b72f8652f2f1b888d86348121
 BELONGS ya.make
@@ -1074,7 +1060,6 @@ BELONGS ya.make
         src/cpp/server/channelz/channelz_service.cc [3:3]
         src/cpp/server/channelz/channelz_service.h [3:3]
         src/cpp/server/channelz/channelz_service_plugin.cc [3:3]
-        src/proto/grpc/lb/v1/load_reporter.proto [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 1c0b49517f30a005a1f30fc39200d3ee
 BELONGS ya.make
@@ -1325,7 +1310,7 @@ BELONGS third_party/address_sorting/ya.make
         third_party/address_sorting/include/address_sorting/address_sorting.h [4:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 7b51323881f67ba78a30a266dca846ec
-BELONGS src/proto/grpc/channelz/ya.make ya.make
+BELONGS src/proto/grpc/channelz/ya.make
     License text:
         // Copyright 2018 The gRPC Authors
     Scancode info:
@@ -1334,21 +1319,6 @@ BELONGS src/proto/grpc/channelz/ya.make ya.make
         Match type      : COPYRIGHT
     Files with this license:
         src/proto/grpc/channelz/channelz.proto [1:1]
-        src/proto/grpc/gcp/altscontext.proto [1:1]
-        src/proto/grpc/gcp/handshaker.proto [1:1]
-        src/proto/grpc/gcp/transport_security_common.proto [1:1]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 8183794cfdcd444d086a2c63a36d9beb
-BELONGS ya.make
-    License text:
-        // Copyright 2020 The gRPC Authors
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        src/proto/grpc/lookup/v1/rls.proto [1:1]
-        src/proto/grpc/lookup/v1/rls_config.proto [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 8275bc623b0a10a5254d8668bcbe64a3
 BELONGS ya.make
@@ -1761,7 +1731,7 @@ BELONGS third_party/upb/ya.make
         third_party/upb/upb/wire/types.h [2:2]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f053023fe408f1896a456d1d28958df9
-BELONGS src/proto/grpc/health/v1/ya.make ya.make
+BELONGS src/proto/grpc/health/v1/ya.make
     License text:
         // Copyright 2015 The gRPC Authors
     Scancode info:
@@ -1770,7 +1740,6 @@ BELONGS src/proto/grpc/health/v1/ya.make ya.make
         Match type      : COPYRIGHT
     Files with this license:
         src/proto/grpc/health/v1/health.proto [1:1]
-        src/proto/grpc/lb/v1/load_balancer.proto [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f32ed637dd1a3ebb1d9856c441fe2fcd
 BELONGS ya.make

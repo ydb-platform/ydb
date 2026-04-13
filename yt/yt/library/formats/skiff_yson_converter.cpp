@@ -2036,7 +2036,7 @@ void CheckTzType(const std::shared_ptr<TSkiffSchema>& skiffSchema, ESimpleLogica
         THROW_ERROR_EXCEPTION("Tuple is expected to have two fields for the TzType representation");
     }
     const auto innerTimeType = children[0]->GetWireType();
-    const auto innerTimezoneType = children[1]->GetWireType() ;
+    const auto innerTimezoneType = children[1]->GetWireType();
     if (innerTimezoneType != EWireType::Uint16) {
         THROW_ERROR_EXCEPTION("The second field in the tuple is expected to be \"uint16\"");
     }

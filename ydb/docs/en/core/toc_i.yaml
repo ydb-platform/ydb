@@ -13,7 +13,7 @@ items:
   include:
     mode: link
     path: devops/toc_p.yaml
-- name: For Developers
+- name: For Application Developers
   href: dev/index.md
   include:
     mode: link

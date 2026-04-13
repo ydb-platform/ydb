@@ -231,7 +231,11 @@ ydb -p <profile_name> sql -s 'select 1' --stats full --format json-unicode
 
 ### Статус выполняющегося запроса
 
+<<<<<<< YDBDOCS-1764
 Информацию о том, как обрабатывается запрос в Workload Manager, можно получить на основе системного представления `.sys/query_sessions`. В этом представлении есть следующие поля:
+=======
+Информацию о том, как обрабатывается запрос в Workload Manager, можно получить на основе системного представления [`.sys/query_sessions`](system-views.md#query-sessions). В этом представлении есть следующие поля:
+>>>>>>> main
 
 - `WmPoolId` `(Utf8)` - Идентификатор пула, в котором выполняется запрос.
 - `WmState` `(Utf8)` - Статус запроса в WM.
@@ -268,9 +272,9 @@ where State = 'EXECUTING'
 
 ## См. также
 
-* [{#T}](../yql/reference/syntax/create-resource-pool.md)
-* [{#T}](../yql/reference/syntax/alter-resource-pool.md)
-* [{#T}](../yql/reference/syntax/drop-resource-pool.md)
-* [{#T}](../yql/reference/syntax/create-resource-pool-classifier.md)
-* [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md)
-* [{#T}](../yql/reference/syntax/drop-resource-pool-classifier.md)
+- [{#T}](../yql/reference/syntax/create-resource-pool.md)
+- [{#T}](../yql/reference/syntax/alter-resource-pool.md)
+- [{#T}](../yql/reference/syntax/drop-resource-pool.md)
+- [{#T}](../yql/reference/syntax/create-resource-pool-classifier.md)
+- [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md)
+- [{#T}](../yql/reference/syntax/drop-resource-pool-classifier.md)

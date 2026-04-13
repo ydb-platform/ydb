@@ -22,10 +22,12 @@ items:
   href: vector-indexes.md
 - name: Vector index type vector_kmeans_tree
   href: vector-indexes-kmeans-tree-type.md
+- name: Fulltext indexes
+  href: fulltext-indexes.md
 - name: Query plans optimization
   href: query-plans-optimization.md
 - name: Resource consumption management
-  href: resource-consumption-management.md  
+  href: resource-consumption-management.md
 - name: Query hints
   href: query-hints.md
 - name: Batch upload

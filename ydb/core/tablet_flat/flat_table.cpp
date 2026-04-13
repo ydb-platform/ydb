@@ -1259,9 +1259,16 @@ TAutoPtr<TTableIter> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, 
         const ITransactionMapPtr& visible,
         const ITransactionObserverPtr& observer) const
 {
-    Y_ENSURE(ColdParts.empty(), "Cannot iterate with cold parts");
-
     const TCelled key(key_, *Scheme->Keys, false);
+    return Iterate(key, tags, env, seek, snapshot, visible, observer);
+}
+
+TAutoPtr<TTableIter> TTable::Iterate(const TCelled& key, TTagsRef tags, IPages* env, ESeek seek,
+        TRowVersion snapshot,
+        const ITransactionMapPtr& visible,
+        const ITransactionObserverPtr& observer) const
+{
+    Y_ENSURE(ColdParts.empty(), "Cannot iterate with cold parts");
     const ui64 limit = seek == ESeek::Exact ? 1 : Max<ui64>();
 
     TAutoPtr<TTableIter> dbIter(new TTableIter(Scheme.Get(), tags, limit, snapshot,
@@ -1601,6 +1608,68 @@ TSelectRowVersionResult TTable::SelectRowVersion(
     }
 
     return augment(ready ? EReady::Gone : EReady::Page);
+}
+
+TSelectRowVersionResult TTable::SelectRowVersionByKeyPrefix(
+        TArrayRef<const TCell> keyPrefix, IPages* env,
+        const ITransactionObserverPtr& observer) const
+{
+    if (keyPrefix.size() == Scheme->Keys->Size()) {
+        // A full key, not a prefix
+        return SelectRowVersion(keyPrefix, env, 0, nullptr, observer);
+    }
+
+    const TCelled key(keyPrefix, *Scheme->Keys, true);
+    TSelectRowVersionResult res(NTable::EReady::Gone);
+
+    auto iter = Iterate(key, {} /*tags*/, env, ESeek::Lower, TRowVersion::Max(), nullptr, nullptr);
+
+    EReady ready;
+    while ((ready = iter->Next(NTable::ENext::Uncommitted)) == NTable::EReady::Data) {
+        if (!TCellVectorsEquals{}(iter->GetKey().Cells().Slice(0, keyPrefix.size()), keyPrefix)) {
+            break;
+        }
+        while (ready == NTable::EReady::Data && iter->IsUncommitted()) {
+            if (iter->Row().GetRowState() != ERowOp::Absent) {
+                // non-lock-only deltas are pushed to OnSkipUncommitted() to result in an optimistic conflict
+                if (observer) {
+                    observer.OnSkipUncommitted(iter->GetUncommittedTxId());
+                }
+            } else {
+                // live lock-only deltas are processed to wait for a pessimistic lock on them
+                auto [lockMode, lockTxId] = iter->GetLockInfo();
+                // Lock is only valid as long as it's not committed or removed
+                if (!CommittedTransactions.Contains(lockTxId) && !RemovedTransactions.Contains(lockTxId)) {
+                    res.LockMode = lockMode;
+                    res.LockTxId = lockTxId;
+                }
+            }
+            ready = iter->SkipUncommitted();
+        }
+        if (ready == NTable::EReady::Page) {
+            break;
+        }
+        // If there is an active pessimistic lock - return it anyway, even if the row does not exist
+        if (res.LockMode != ELockMode::None) {
+            res.Ready = ready;
+            if (ready != NTable::EReady::Gone) {
+                res.RowVersion = iter->GetRowVersion();
+                res.RowTxId = iter->GetDeltaTxId();
+            }
+            return res;
+        }
+        // If there is no pessimistic lock - we'll return any non-removed row from the range
+        if (ready != NTable::EReady::Gone &&
+            iter->Row().GetRowState() != ERowOp::Erase) {
+            res.Ready = NTable::EReady::Data;
+            res.RowVersion = iter->GetRowVersion();
+            res.RowTxId = iter->GetDeltaTxId();
+        }
+    }
+    if (ready == NTable::EReady::Page) {
+        return TSelectRowVersionResult(ready);
+    }
+    return res;
 }
 
 void TTable::DebugDump(IOutputStream& str, IPages* env, const NScheme::TTypeRegistry& reg) const

@@ -1,6 +1,12 @@
 #include "factory.h"
 #include "bearer_credentials_provider.h"
 #include "token_accessor_client_factory.h"
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/replication.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/iam.h>
 #include <yql/essentials/providers/common/structured_token/yql_structured_token.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <util/string/cast.h>
@@ -85,6 +91,23 @@ std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFact
         return WrapWithBearerIfNeeded(NYdb::CreateOAuthCredentialsProviderFactory(parser.GetIAMToken()), addBearerToToken); // OK for any static token (OAuth, IAM).
     }
 
+    if (parser.HasIamAuth()) {
+        NYdb::TIamServiceParams iamParams;
+        const auto& serviceControl = NKikimr::AppData()->ReplicationConfig.GetIamServiceControl();
+
+        TString serviceAccountId;
+        TString resourceId;
+        parser.GetIamAuth(serviceAccountId, resourceId);
+        iamParams.SystemServiceAccountCredentials = NYdb::CreateIamCredentialsProviderFactory();
+        iamParams.Endpoint = serviceControl.GetEndpoint();
+        iamParams.ServiceId = serviceControl.GetServiceId();
+        iamParams.MicroserviceId = serviceControl.GetMicroserviceId();
+        iamParams.ResourceType = serviceControl.GetResourceType();
+        iamParams.ResourceId = resourceId;
+        iamParams.TargetServiceAccountId = serviceAccountId;
+
+        return CreateIamServiceCredentialsProviderFactory(iamParams);
+    }
     if (parser.HasTransientToken()) {
         return NYdb::CreateOAuthCredentialsProviderFactory(parser.GetTransientToken()); // Expected serialized NACLib::TUserToken with authorized user SID and list of group SIDs.
     }

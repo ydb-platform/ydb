@@ -2769,6 +2769,8 @@
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
+  {% endlist %}
+
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}

@@ -301,7 +301,8 @@ private:
             } while ((maybeMsg = EventsMsgQ.Pop(false)));
 
             fo.Flush();
-            EventsQ.Push(std::move(acks), 1 + acks.Acks.size());
+            auto acksSize = acks.Acks.size();
+            EventsQ.Push(std::move(acks), 1 + acksSize);
             EventsQ.Push(TWriteSessionEvent::TReadyToAcceptEvent(IssueContinuationToken()), 1);
 
             if (EventsQ.IsStopped()) {

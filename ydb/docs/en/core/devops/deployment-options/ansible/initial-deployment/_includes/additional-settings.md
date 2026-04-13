@@ -3,7 +3,7 @@ There are several options to specify which {{ ydb-short-name }} executables you 
 - `ydb_version`: automatically download one of the [official {{ ydb-short-name }} releases](../../../../../downloads/index.md#ydb-server) by version number. For example, `23.4.11`.
 - `ydb_archive`: a local filesystem path to a {{ ydb-short-name }} distribution archive [downloaded](../../../../../downloads/index.md#ydb-server) or otherwise prepared in advance.
 
-Installing a [connector](../../../../../concepts/federated_query/architecture.md#connectors) may be required for using [federated queries](../../../../../concepts/federated_query/index.md). The playbook can deploy [fq-connector-go](../../../manual/federated-queries/connector-deployment.md#fq-connector-go) on hosts with dynamic nodes. Use the following settings:
+Installing a [connector](../../../../../concepts/query_execution/federated_query/architecture.md#connectors) may be required for using [federated queries](../../../../../concepts/query_execution/federated_query/index.md). The playbook can deploy [fq-connector-go](../../../manual/federated-queries/connector-deployment.md#fq-connector-go) on hosts with dynamic nodes. Use the following settings:
 
 - `ydb_install_fq_connector` — set to `true` to install the connector.
 - Choose one of the available options for deploying fq-connector-go executables:

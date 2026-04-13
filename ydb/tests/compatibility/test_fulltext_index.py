@@ -22,7 +22,7 @@ class TestFulltextIndex(RollingUpgradeAndDowngradeFixture):
     def create_table(self, table_name):
         query = f"""
             CREATE TABLE {table_name} (
-                key Int64 NOT NULL,
+                key Uint64 NOT NULL,
                 text String NOT NULL,
                 PRIMARY KEY (key)
             )

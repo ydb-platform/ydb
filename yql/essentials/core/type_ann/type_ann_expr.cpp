@@ -1059,9 +1059,11 @@ public:
             }
 
             f->NormalizedName = f->Name;
-            f->CallableType = TypeParser_(meta->CallableType, ctx);
-            if (!f->CallableType) {
-                return false;
+            if (meta->CallableType != "__truncated__") {
+                f->CallableType = TypeParser_(meta->CallableType, ctx);
+                if (!f->CallableType) {
+                    return false;
+                }
             }
 
             if (meta->RunConfigType) {
@@ -1069,7 +1071,6 @@ public:
                 if (!f->RunConfigType) {
                     return false;
                 }
-
             }
 
             f->IsStrict = meta->IsStrict;

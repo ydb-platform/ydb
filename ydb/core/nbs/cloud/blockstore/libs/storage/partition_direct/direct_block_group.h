@@ -8,6 +8,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/public.h>
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
@@ -106,6 +107,8 @@ public:
 
     virtual TExecutorPtr GetExecutor() = 0;
 
+    virtual void Schedule(TDuration delay, TCallback callback) = 0;
+
     virtual void EstablishConnections() = 0;
 
     virtual NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
@@ -119,6 +122,13 @@ public:
         ui32 vChunkIndex,
         ui8 hostIndex,
         ui64 lsn,
+        TBlockRange64 range,
+        const TGuardedSgList& guardedSglist,
+        NWilson::TTraceId traceId) = 0;
+
+    virtual NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToDDisk(
+        ui32 vChunkIndex,
+        ui8 hostIndex,
         TBlockRange64 range,
         const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) = 0;
@@ -137,7 +147,7 @@ public:
         std::vector<ui8> hostIndexes,
         ui64 lsn,
         TBlockRange64 range,
-        ui32 replyTimeoutMicroseconds,
+        TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) = 0;
 
@@ -180,6 +190,8 @@ class TDirectBlockGroup
 public:
     TDirectBlockGroup(
         NActors::TActorSystem* actorSystem,
+        ISchedulerPtr scheduler,
+        ITimerPtr timer,
         TExecutorPtr executor,
         ui64 tabletId,
         ui32 generation,
@@ -191,6 +203,8 @@ public:
     // IDirectBlockGroup implementation
 
     TExecutorPtr GetExecutor() override;
+
+    void Schedule(TDuration delay, TCallback callback) override;
 
     void EstablishConnections() override;
 
@@ -209,6 +223,13 @@ public:
         const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) override;
 
+    NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToDDisk(
+        ui32 vChunkIndex,
+        ui8 hostIndex,
+        TBlockRange64 range,
+        const TGuardedSgList& guardedSglist,
+        NWilson::TTraceId traceId) override;
+
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
         ui32 vChunkIndex,
         ui8 hostIndex,
@@ -223,7 +244,7 @@ public:
         std::vector<ui8> hostIndexes,
         ui64 lsn,
         TBlockRange64 range,
-        ui32 replyTimeoutMicroseconds,
+        TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
         NWilson::TTraceId traceId) override;
 
@@ -283,6 +304,8 @@ private:
         ui32 vChunkIndex);
 
     NActors::TActorSystem* const ActorSystem = nullptr;
+    const ISchedulerPtr Scheduler;
+    const ITimerPtr Timer;
     const TExecutorPtr Executor;
     const TThreadChecker ExecutorThreadChecker{Executor};
     const ui64 TabletId;

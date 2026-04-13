@@ -561,6 +561,7 @@ class TExecutor
     void StartNewBackup();
     void FailBackup(const TString& error);
     void ScheduleRetryBackup() const;
+    TStringBuilder BackupLogPrefix() const;
 
     void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
     void UpdateCachePagesForDatabase(bool pendingOnly = false);
@@ -619,6 +620,8 @@ class TExecutor
     void Handle(NBackup::TEvChangelogFailed::TPtr &ev);
     void Handle(NBackup::TEvWriteChangelogAck::TPtr &ev);
     void Handle(NBackup::TEvStartNewBackup::TPtr &ev);
+    void Handle(NBackup::TEvSnapshotStats::TPtr &ev);
+    void Handle(NBackup::TEvChangelogStats::TPtr &ev);
 
     void UpdateUsedTabletMemory();
     void UpdateCounters(const TActorContext &ctx);

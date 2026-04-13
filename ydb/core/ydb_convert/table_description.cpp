@@ -768,11 +768,11 @@ void FillColumnDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSch
 void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
     const auto& schema = in.GetSchema();
     THashMap<ui32, TString> idToName;
-    for (const auto& col : schema.GetColumns()) {
+    for (auto&& col : schema.GetColumns()) {
         idToName[col.GetId()] = col.GetName();
     }
 
-    for (const auto& olapIndex : schema.GetIndexes()) {
+    for (auto&& olapIndex : schema.GetIndexes()) {
         if (!olapIndex.HasName()) {
             continue;
         }
@@ -783,11 +783,13 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
                 if (!bf.ColumnIdsSize()) {
                     continue;
                 }
+
                 const ui32 colId = bf.GetColumnIds(0);
                 auto it = idToName.find(colId);
                 if (it == idToName.end()) {
                     continue;
                 }
+
                 auto* index = out.add_indexes();
                 index->set_name(olapIndex.GetName());
                 index->add_index_columns(it->second);
@@ -795,6 +797,7 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
                 if (bf.HasFalsePositiveProbability()) {
                     lb->set_false_positive_probability(bf.GetFalsePositiveProbability());
                 }
+
                 break;
             }
             case NKikimrSchemeOp::TOlapIndexDescription::kBloomNGrammFilter: {
@@ -802,10 +805,12 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
                 if (!ng.HasColumnId()) {
                     continue;
                 }
+
                 auto it = idToName.find(ng.GetColumnId());
                 if (it == idToName.end()) {
                     continue;
                 }
+
                 auto* index = out.add_indexes();
                 index->set_name(olapIndex.GetName());
                 index->add_index_columns(it->second);
@@ -813,21 +818,27 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
                 if (ng.HasNGrammSize()) {
                     lng->set_ngram_size(ng.GetNGrammSize());
                 }
+
                 if (ng.HasHashesCount()) {
                     lng->set_hashes_count(ng.GetHashesCount());
                 }
+
                 if (ng.HasFilterSizeBytes()) {
                     lng->set_filter_size_bytes(ng.GetFilterSizeBytes());
                 }
+
                 if (ng.HasRecordsCount()) {
                     lng->set_records_count(ng.GetRecordsCount());
                 }
+
                 if (ng.HasCaseSensitive()) {
                     lng->set_case_sensitive(ng.GetCaseSensitive());
                 }
+
                 if (ng.HasFalsePositiveProbability()) {
                     lng->set_false_positive_probability(ng.GetFalsePositiveProbability());
                 }
+
                 break;
             }
             default:
@@ -838,43 +849,43 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
 
 namespace {
 
-bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescription& tableDesc,
-    const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error)
-{
+bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescription& tableDesc, const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error) {
     if (!in.indexes_size()) {
         return true;
     }
 
-    // Schemeshard assigns column IDs sequentially starting from 1 in schema order.
-    // Replicate that mapping so ColumnIds in index protos match the future assignment.
     THashMap<TString, ui32> nameToId;
     ui32 nextColumnId = 1;
-    for (const auto& col : tableDesc.GetSchema().GetColumns()) {
+    for (auto&& col : tableDesc.GetSchema().GetColumns()) {
         nameToId[col.GetName()] = nextColumnId++;
     }
 
-    auto fail = [&status, &error](const TString& msg) {
+    auto fail = [&status, &error](const TString& msg) -> decltype(auto) {
         status = Ydb::StatusIds::BAD_REQUEST;
         error = msg;
         return false;
     };
 
     ui32 nextIndexId = 1;
-    for (const auto& index : in.indexes()) {
+    for (auto&& index : in.indexes()) {
         if (index.name().empty()) {
             return fail("Index must have a name");
         }
+
         if (index.index_columns_size() != 1) {
             return fail("Only one index column is supported for local bloom indexes");
         }
+
         if (!index.data_columns().empty()) {
             return fail("Data columns are not supported for local bloom indexes");
         }
+
         const TString& colName = index.index_columns(0);
         auto idIt = nameToId.find(colName);
         if (idIt == nameToId.end()) {
             return fail(TStringBuilder() << "Unknown index column: " << colName);
         }
+
         const ui32 columnId = idIt->second;
 
         auto* olapIndex = tableDesc.MutableSchema()->AddIndexes();
@@ -886,6 +897,7 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
                 if (!AppData()->FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                     return fail("Local bloom filter index support is disabled");
                 }
+
                 olapIndex->SetClassName("BLOOM_FILTER");
                 auto* bloom = olapIndex->MutableBloomFilter();
                 const auto& bloomSettings = index.local_bloom_filter_index();
@@ -900,6 +912,7 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
                 if (!AppData()->FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
                     return fail("Local bloom ngram filter index support is disabled");
                 }
+
                 olapIndex->SetClassName("BLOOM_NGRAMM_FILTER");
                 auto* ngram = olapIndex->MutableBloomNGrammFilter();
                 const auto& ngramSettings = index.local_bloom_ngram_filter_index();

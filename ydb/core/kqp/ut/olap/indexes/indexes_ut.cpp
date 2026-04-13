@@ -48,6 +48,18 @@ static void ExecQueryExpectErrorContains(TKikimrRunner& kikimr, bool useQuerySer
     }
 }
 
+static void AssertColumnTableHasLocalBloomPairIndexes(NKikimr::Tests::TClient& client, const TString& path) {
+    auto desc = client.Ls(path);
+    UNIT_ASSERT_C(desc->Record.GetPathDescription().HasColumnTableDescription(), "expected column table at " << path);
+    const auto& indexes = desc->Record.GetPathDescription().GetColumnTableDescription().GetSchema().GetIndexes();
+    std::unordered_set<TString> expected{"idx_bloom", "idx_ngram"};
+    for (auto&& idx : indexes) {
+        expected.erase(idx.GetName());
+    }
+
+    UNIT_ASSERT_C(expected.empty(), "column table " << path << " must contain local indexes idx_bloom and idx_ngram");
+}
+
 Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CreateMinMaxIndex, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
@@ -2367,6 +2379,86 @@ Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(RenameLocalBloomIndex, EUseQueryService) {
 
         UNIT_ASSERT_C(csController->GetIndexesSkippingOnSelect().Val() > 0,
             "Bloom ngram filter should skip at least some portions for a nonexistent value");
+    }
+
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(CopyTableWithBloomIndexes, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+        auto& client = kikimr.GetTestClient();
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapSrc`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_bloom LOCAL USING bloom_filter
+                    ON (resource_id)
+                    WITH (false_positive_probability = 0.01),
+                INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                    ON (resource_id)
+                    WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = true)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        AssertColumnTableHasLocalBloomPairIndexes(client, "/Root/olapSrc");
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto result = session.CopyTable("/Root/olapSrc", "/Root/olapCopy").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        AssertColumnTableHasLocalBloomPairIndexes(client, "/Root/olapCopy");
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto result = session.CopyTables({NYdb::NTable::TCopyItem("/Root/olapSrc", "/Root/olapConsistentCopy")}, NYdb::NTable::TCopyTablesSettings()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        AssertColumnTableHasLocalBloomPairIndexes(client, "/Root/olapConsistentCopy");
+    }
+
+    Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(BackupConsistentCopyTableWithBloomIndexes, EUseQueryService) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.FeatureFlags.SetEnableColumnTablesBackup(true);
+        TKikimrRunner kikimr(settings);
+        auto& client = kikimr.GetTestClient();
+
+        ExecQuery(kikimr, UseQueryService, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapBackupSrc`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_bloom LOCAL USING bloom_filter
+                    ON (resource_id)
+                    WITH (false_positive_probability = 0.01),
+                INDEX idx_ngram LOCAL USING bloom_ngram_filter
+                    ON (resource_id)
+                    WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = true)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))");
+
+        AssertColumnTableHasLocalBloomPairIndexes(client, "/Root/olapBackupSrc");
+        auto status = client.ConsistentCopyTables({std::make_pair("/Root/olapBackupSrc", "/Root/olapBackupDst")}, TDuration::Seconds(20), true);
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NMsgBusProxy::MSTATUS_OK, "ConsistentCopyTables (forBackup) failed");
+        AssertColumnTableHasLocalBloomPairIndexes(client, "/Root/olapBackupDst");
     }
 }
 

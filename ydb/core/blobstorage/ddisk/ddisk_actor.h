@@ -641,7 +641,7 @@ namespace NKikimr::NDDisk {
         };
 
         std::map<std::tuple<ui64, ui32>, TPersistentBuffer> PersistentBuffers;
-        std::map<TInstant, std::set<std::tuple<ui64, ui32, ui64>>> PersistentBuffersImMemoryCacheUptime;
+        std::map<TInstant, std::set<std::tuple<ui64, ui32, ui64>>> PersistentBuffersInMemoryCacheUptime;
         ui64 PersistentBufferInMemoryCacheSize = 0;
         TInstant StartedAt;
 

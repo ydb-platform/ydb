@@ -275,7 +275,7 @@ namespace NKikimr::NDDisk {
                     } else {
                         auto data = TrimData(pr.JoinData(SectorSize), pr.OffsetInBytes, pr.Size, inflight.OffsetInBytes, inflight.Size);
                         PersistentBufferInMemoryCacheSize += pr.Size;
-                        auto [_, inserted2] = PersistentBuffersImMemoryCacheUptime[pr.Timestamp].emplace(inflight.TabletId, inflight.Generation, inflight.Lsn);
+                        auto [_, inserted2] = PersistentBuffersInMemoryCacheUptime[pr.Timestamp].emplace(inflight.TabletId, inflight.Generation, inflight.Lsn);
                         Y_ABORT_UNLESS(inserted2);
                         SanitizePersistentBufferInMemoryCache();
                         ReplyReadPersistentBuffer(opCookie, pr.VChunkIndex, pr.OffsetInBytes, pr.Size, std::move(data));
@@ -337,7 +337,7 @@ namespace NKikimr::NDDisk {
                         buffer.Size += pr.Size;
                         pr.DataParts.emplace(0, std::move(inflight.Data));
                         PersistentBufferInMemoryCacheSize += pr.Size;
-                        auto [_, inserted2] = PersistentBuffersImMemoryCacheUptime[pr.Timestamp].emplace(inflight.TabletId, inflight.Generation, inflight.Lsn);
+                        auto [_, inserted2] = PersistentBuffersInMemoryCacheUptime[pr.Timestamp].emplace(inflight.TabletId, inflight.Generation, inflight.Lsn);
                         Y_ABORT_UNLESS(inserted2);
                         SanitizePersistentBufferInMemoryCache();
                     } else {
@@ -600,17 +600,17 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::SanitizePersistentBufferInMemoryCache() {
         while (PersistentBufferInMemoryCacheSize > PersistentBufferFormat.MaxInMemoryCache) {
             Y_DEBUG_ABORT_UNLESS(PersistentBufferInMemoryCacheSize == CalcPersistentBufferInMemoryCacheSize());
-            auto recordIt = PersistentBuffersImMemoryCacheUptime.begin();
-            Y_ABORT_UNLESS(recordIt != PersistentBuffersImMemoryCacheUptime.end());
+            auto recordIt = PersistentBuffersInMemoryCacheUptime.begin();
+            Y_ABORT_UNLESS(recordIt != PersistentBuffersInMemoryCacheUptime.end());
             auto lsnIt = recordIt->second.begin();
             Y_ABORT_UNLESS(lsnIt != recordIt->second.end());
-            auto pb = PersistentBuffers.at({std::get<0>(*lsnIt), std::get<1>(*lsnIt)});
-            auto pr = pb.Records.at(std::get<2>(*lsnIt));
+            auto& pb = PersistentBuffers.at({std::get<0>(*lsnIt), std::get<1>(*lsnIt)});
+            auto& pr = pb.Records.at(std::get<2>(*lsnIt));
             Y_ABORT_UNLESS(pr.DataParts.size() == pr.PartsCount && pr.PartsCount > 0);
             PersistentBufferInMemoryCacheSize -= pr.Size;
             recordIt->second.erase(lsnIt);
             if (recordIt->second.empty()) {
-                PersistentBuffersImMemoryCacheUptime.erase(recordIt);
+                PersistentBuffersInMemoryCacheUptime.erase(recordIt);
             }
             pr.DataParts.clear();
             pr.PartsCount = 0;
@@ -622,11 +622,12 @@ namespace NKikimr::NDDisk {
             Y_DEBUG_ABORT_UNLESS(PersistentBufferInMemoryCacheSize == CalcPersistentBufferInMemoryCacheSize());
             Y_ABORT_UNLESS(PersistentBufferInMemoryCacheSize >= record.Size);
             PersistentBufferInMemoryCacheSize -= record.Size;
-            auto& icu = PersistentBuffersImMemoryCacheUptime[record.Timestamp];
-            auto count = icu.erase({tabletId, generation, lsn});
+            auto icuIt = PersistentBuffersInMemoryCacheUptime.find(record.Timestamp);
+            Y_ABORT_UNLESS(icuIt != PersistentBuffersInMemoryCacheUptime.end());
+            auto count = icuIt->second.erase({tabletId, generation, lsn});
             Y_ABORT_UNLESS(count == 1);
-            if (icu.empty()) {
-                PersistentBuffersImMemoryCacheUptime.erase(record.Timestamp);
+            if (icuIt->second.empty()) {
+                PersistentBuffersInMemoryCacheUptime.erase(icuIt);
             }
 
             record.DataParts.clear();

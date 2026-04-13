@@ -75,7 +75,7 @@ public:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(NTable::IScan::EStatus status) noexcept final {
+    TAutoPtr<IDestructable> Finish(NTable::IScan::EStatus scanStatus) noexcept final {
         auto response = MakeHolder<TEvDataShard::TEvValidateRowConditionResponse>();
         response->Record.SetId(Request.GetId());
         response->Record.SetTabletId(TabletId);
@@ -97,18 +97,18 @@ public:
             LOG_N("TValidateRowConditionScan: Done (valid)"
                 << " id# " << Request.GetId()
                 << " tabletId# " << TabletId
-                << " scanStatus# " << (int)status);
+                << " scanStatus# " << (int)scanStatus);
         } else if (!IsValid) {
             LOG_N("TValidateRowConditionScan: Done (invalid, NULL found)"
                 << " id# " << Request.GetId()
                 << " tabletId# " << TabletId
-                << " scanStatus# " << (int)status);
+                << " scanStatus# " << (int)scanStatus);
         } else {
             LOG_E("TValidateRowConditionScan: Failed"
                 << " id# " << Request.GetId()
                 << " tabletId# " << TabletId
                 << " buildStatus# " << (int)Status
-                << " scanStatus# " << (int)status);
+                << " scanStatus# " << (int)scanStatus);
         }
 
         TActivationContext::Send(new IEventHandle(Sender, SelfId(), response.Release()));
@@ -185,11 +185,11 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
         return;
     }
 
-    auto sendResponse = [&](NKikimrIndexBuilder::EBuildStatus status, const TString& error = "") {
+    auto sendResponse = [&](NKikimrIndexBuilder::EBuildStatus buildStatus, const TString& error = "") {
         auto response = MakeHolder<TEvDataShard::TEvValidateRowConditionResponse>();
         response->Record.SetId(id);
         response->Record.SetTabletId(TabletID());
-        response->Record.SetStatus(status);
+        response->Record.SetStatus(buildStatus);
         if (!error.empty()) {
             auto* issue = response->Record.AddIssues();
             issue->set_severity(NYql::TSeverityIds::S_ERROR);

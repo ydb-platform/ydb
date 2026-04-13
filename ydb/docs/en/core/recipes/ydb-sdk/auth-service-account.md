@@ -2,122 +2,133 @@
 
 <!-- markdownlint-disable blanks-around-fences -->
 
-Below are examples of the code for authentication using a service account file in different {{ ydb-short-name }} SDKs.
+Below are examples of authentication with a service account file in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
 
-- Go (native)
+- Go
 
-  ```go
-  package main
+  {% list tabs %}
 
-  import (
-    "context"
-    "os"
+  - Native SDK
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    yc "github.com/ydb-platform/ydb-go-yc"
-  )
+    ```go
+    package main
 
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    db, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      yc.WithServiceAccountKeyFileCredentials(
-        os.Getenv("YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"),
-      ),
-      yc.WithInternalCA(), // append Yandex Cloud certificates
+    import (
+      "context"
+      "os"
+
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      yc "github.com/ydb-platform/ydb-go-yc"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      db, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        yc.WithServiceAccountKeyFileCredentials(
+          os.Getenv("YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"),
+        ),
+        yc.WithInternalCA(), // append Yandex Cloud certificates
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer db.Close(ctx)
+      ...
     }
-    defer db.Close(ctx)
-    ...
-  }
-  ```
+    ```
 
-- Go (database/sql)
+  - database/sql
 
-  ```go
-  package main
+    ```go
+    package main
 
-  import (
-    "context"
-    "database/sql"
-    "os"
+    import (
+      "context"
+      "database/sql"
+      "os"
 
-    "github.com/ydb-platform/ydb-go-sdk/v3"
-    yc "github.com/ydb-platform/ydb-go-yc"
-  )
-
-  func main() {
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
-    nativeDriver, err := ydb.Open(ctx,
-      os.Getenv("YDB_CONNECTION_STRING"),
-      yc.WithServiceAccountKeyFileCredentials(
-        os.Getenv("YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"),
-      ),
-      yc.WithInternalCA(), // append Yandex Cloud certificates
+      "github.com/ydb-platform/ydb-go-sdk/v3"
+      yc "github.com/ydb-platform/ydb-go-yc"
     )
-    if err != nil {
-      panic(err)
+
+    func main() {
+      ctx, cancel := context.WithCancel(context.Background())
+      defer cancel()
+      nativeDriver, err := ydb.Open(ctx,
+        os.Getenv("YDB_CONNECTION_STRING"),
+        yc.WithServiceAccountKeyFileCredentials(
+          os.Getenv("YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"),
+        ),
+        yc.WithInternalCA(), // append Yandex Cloud certificates
+      )
+      if err != nil {
+        panic(err)
+      }
+      defer nativeDriver.Close(ctx)
+      connector, err := ydb.Connector(nativeDriver)
+      if err != nil {
+        panic(err)
+      }
+      db := sql.OpenDB(connector)
+      defer db.Close()
+      ...
     }
-    defer nativeDriver.Close(ctx)
-    connector, err := ydb.Connector(nativeDriver)
-    if err != nil {
-      panic(err)
-    }
-    db := sql.OpenDB(connector)
-    defer db.Close()
-    ...
-  }
-  ```
+    ```
+
+  {% endlist %}
 
 - Java
 
-  ```java
-  public void work(String connectionString, String saKeyPath) {
-      AuthProvider authProvider = CloudAuthHelper.getServiceAccountFileAuthProvider(saKeyPath);
+  {% list tabs %}
 
-      GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-              .withAuthProvider(authProvider)
-              .build());
+  - Native SDK
 
-      QueryClient queryClient = QueryClient.newClient(transport).build();
+    ```java
+    public void work(String connectionString, String saKeyPath) {
+        AuthProvider authProvider = CloudAuthHelper.getServiceAccountFileAuthProvider(saKeyPath);
 
-      doWork(queryClient);
+        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                .withAuthProvider(authProvider)
+                .build();
+             QueryClient queryClient = QueryClient.newClient(transport).build()) {
 
-      queryClient.close();
-      transport.close();
-  }
-  ```
+            doWork(queryClient);
+        }
+    }
+    ```
 
-- JDBC
+  - JDBC
 
-  ```java
-  public void work() {
-      Properties props = new Properties();
-      props.setProperty("saKeyFile", "~/keys/sa_key.json");
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
-        doWork(connection);
-      }
+    ```java
+    public void work() throws SQLException {
+        Properties props = new Properties();
+        props.setProperty("saKeyFile", "~/keys/sa_key.json");
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
+            doWork(connection);
+        }
 
-      // Option saKeyFile can be added to a JDBC URL directly
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local?saKeyFile=~/keys/sa_key.json")) {
-        doWork(connection);
-      }
-  }
-  ```
+        // You can also set saKeyFile in the JDBC URL
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local?saKeyFile=~/keys/sa_key.json")) {
+            doWork(connection);
+        }
+    }
+    ```
 
-- Node.js
+    In Spring Boot, ORMs, and other JDBC wrappers, use the same JDBC URL and `saKeyFile` (in the URL or in `DataSource` properties) as above.
+
+  {% endlist %}
+
+- JavaScript
 
   Loading service account data from a file:
 
   {% include [auth-sa-file](../../_includes/nodejs/auth-sa-file.md) %}
 
-  Loading service account data from a third-party source (for example, a secret storage):
+  Loading service account data from a third-party source (for example, a secrets store):
 
   {% include [auth-sa-data](../../_includes/nodejs/auth-sa-data.md) %}
 

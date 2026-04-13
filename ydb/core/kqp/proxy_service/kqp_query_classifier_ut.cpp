@@ -131,11 +131,12 @@ TString GetPoolId(const IWmQueryClassifier::TPreClassifyResult& result) {
     return std::get<IWmQueryClassifier::TResolvedPoolId>(result).PoolId;
 }
 
+/*
 TString GetPoolId(const IWmQueryClassifier::TPostClassifyResult& result) {
     UNIT_ASSERT_C(std::holds_alternative<IWmQueryClassifier::TResolvedPoolId>(result),
         "Expected TResolvedPoolId but got different variant");
     return std::get<IWmQueryClassifier::TResolvedPoolId>(result).PoolId;
-}
+}*/
 
 } // anonymous namespace
 

@@ -4,9 +4,6 @@
 namespace NKikimr::NKqp {
 namespace {
 
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[Classifier] " << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_WORKLOAD_SERVICE, "[Classifier] " << stream)
-
 bool MatchesMemberName(const TString& target, const TClassifyContext& ctx) {
     // Check anonymous user
     if (!ctx.UserToken) {

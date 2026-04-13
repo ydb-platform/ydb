@@ -839,6 +839,24 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    static size_t CountOccurrences(const std::string& str, const std::string& sub) {
+        size_t count = 0;
+        size_t pos = 0;
+        while ((pos = str.find(sub, pos)) != std::string::npos) {
+            ++count;
+            pos += sub.size();
+        }
+        return count;
+    }
+
+    static void PrintConnectionStats(const TString& label, const std::string& ast) {
+        Cout << label
+             << ": HashShuffle=" << CountOccurrences(ast, "DqCnHashShuffle")
+             << " Map=" << CountOccurrences(ast, "DqCnMap")
+             << " Broadcast=" << CountOccurrences(ast, "DqCnBroadcast")
+             << Endl;
+    }
+
     TString GetFullPath(const TString& prefix, const TString& filePath) {
         TString fullPath = SRC_(prefix + filePath);
 
@@ -870,7 +888,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         CreateTablesFromPath(session, "../join/data/", schemaPath, useColumnStore);
     }
 
-    void RunTPCHBenchmark(bool columnStore, std::vector<ui32> queries, bool newRbo) {
+    void RunTPCHBenchmark(bool columnStore, std::vector<ui32> queries, bool newRbo, bool printSEStats = false) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
@@ -902,6 +920,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto result = session.ExplainDataQuery(q).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            if (printSEStats) {
+                PrintConnectionStats(TStringBuilder() << "TPCH_Q" << qId, result.GetAst());
+            }
         }
     }
 
@@ -974,7 +995,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-    void RunTPC_YqlTest(const EBenchType type, ui32 queryId, const bool columnStore, const bool newRbo) {
+    void RunTPC_YqlTest(const EBenchType type, ui32 queryId, const bool columnStore, const bool newRbo, bool printSEStats = false) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
@@ -998,7 +1019,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             auto session = queryClient.GetSession().GetValueSync().GetSession();
             auto result = session.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
                                 .ExtractValueSync();
-            Y_ENSURE(result.IsSuccess());
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            if (printSEStats && result.GetStats() && result.GetStats()->GetAst()) {
+                const char* typeName = (type == EBenchType::TPCH) ? "TPCH" : "TPCDS";
+                PrintConnectionStats(TStringBuilder() << typeName << "_Q" << queryId, *result.GetStats()->GetAst());
+            }
         }
     }
 
@@ -2285,7 +2310,55 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     }
 
     Y_UNIT_TEST(TPCH8) {
-       RunTPCHBenchmark(/*columnstore*/ true, {8}, /*new rbo*/ true);
+       RunTPCHBenchmark(/*columnstore*/ true, {8}, /*new rbo*/ true, /*printSEStats*/ true);
+    }
+
+    Y_UNIT_TEST(TPCH3) {
+        RunTPCHBenchmark(/*columnstore*/ true, {3}, /*new rbo*/ true, /*printSEStats*/ true);
+    }
+
+    Y_UNIT_TEST(TPCH5) {
+        RunTPCHBenchmark(/*columnstore*/ true, {5}, /*new rbo*/ true, /*printSEStats*/ true);
+    }
+
+    Y_UNIT_TEST(TPCH7) {
+        RunTPCHBenchmark(/*columnstore*/ true, {7}, /*new rbo*/ true, /*printSEStats*/ true);
+    }
+
+    Y_UNIT_TEST(TPCH9) {
+        RunTPCHBenchmark(/*columnstore*/ true, {9}, /*new rbo*/ true, /*printSEStats*/ true);
+    }
+
+    Y_UNIT_TEST(TPCH10) {
+        RunTPCHBenchmark(/*columnstore*/ true, {10}, /*new rbo*/ true, /*printSEStats*/ true);
+    }
+
+    Y_UNIT_TEST(TPCH12) {
+        RunTPCHBenchmark(/*columnstore*/ true, {12}, /*new rbo*/ true, /*printSEStats*/ true);
+    }
+
+    Y_UNIT_TEST(TPCH18) {
+        RunTPCHBenchmark(/*columnstore*/ true, {18}, /*new rbo*/ true, /*printSEStats*/ true);
+    }
+
+    Y_UNIT_TEST(TPCDS_Q3) {
+        RunTPC_YqlTest(EBenchType::TPCDS, 3, /*columnstore*/ true, /*newRbo*/ true, /*printSEStats*/ true);
+    }
+
+    Y_UNIT_TEST(TPCDS_Q7) {
+        RunTPC_YqlTest(EBenchType::TPCDS, 7, /*columnstore*/ true, /*newRbo*/ true, /*printSEStats*/ true);
+    }
+
+    Y_UNIT_TEST(TPCDS_Q13) {
+        RunTPC_YqlTest(EBenchType::TPCDS, 13, /*columnstore*/ true, /*newRbo*/ true, /*printSEStats*/ true);
+    }
+
+    Y_UNIT_TEST(TPCDS_Q19) {
+        RunTPC_YqlTest(EBenchType::TPCDS, 19, /*columnstore*/ true, /*newRbo*/ true, /*printSEStats*/ true);
+    }
+
+    Y_UNIT_TEST(TPCDS_Q26) {
+        RunTPC_YqlTest(EBenchType::TPCDS, 26, /*columnstore*/ true, /*newRbo*/ true, /*printSEStats*/ true);
     }
 
     /*

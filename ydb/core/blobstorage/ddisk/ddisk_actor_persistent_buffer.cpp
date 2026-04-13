@@ -400,7 +400,7 @@ namespace NKikimr::NDDisk {
                 NWilson::EFlags::NONE, TActivationContext::ActorSystem())
             .Attribute("tablet_id", static_cast<long>(creds.TabletId))
             .Attribute("vchunk_index", static_cast<long>(selector.VChunkIndex))
-            .Attribute("offset_in_bytes", selector.OffsetInBytes)
+            .Attribute("offset_in_bytes", static_cast<long>(selector.OffsetInBytes))
             .Attribute("size", selector.Size)
             .Attribute("lsn", static_cast<long>(lsn)));
         Counters.Interface.WritePersistentBuffer.Request(selector.Size);
@@ -493,7 +493,7 @@ namespace NKikimr::NDDisk {
                 NWilson::EFlags::NONE, TActivationContext::ActorSystem())
             .Attribute("tablet_id", static_cast<long>(creds.TabletId))
             .Attribute("vchunk_index", static_cast<long>(selector.VChunkIndex))
-            .Attribute("offset_in_bytes", selector.OffsetInBytes)
+            .Attribute("offset_in_bytes", static_cast<long>(selector.OffsetInBytes))
             .Attribute("size", selector.Size)
             .Attribute("lsn", static_cast<long>(lsn)));
 

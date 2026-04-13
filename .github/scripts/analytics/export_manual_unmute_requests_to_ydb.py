@@ -15,19 +15,20 @@ sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(__file__), ".."
 from github_issue_utils import parse_body
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "tests"))
-from update_mute_issues import _parse_control_items
+from update_mute_issues import (
+    ORG_NAME,
+    PROJECT_ID,
+    _parse_control_items,
+    fetch_all_issues,
+)
 from mute_thresholds import get_thresholds
 from manual_unmute_contract import (
     MANUAL_UNMUTE_TABLE_SCHEMA,
     build_manual_unmute_row_payload,
     render_manual_unmute_create_table_sql,
 )
-from export_issues_to_ydb import fetch_repository_issues, fetch_all_issue_comment_nodes
+from export_issues_to_ydb import fetch_all_issue_comment_nodes
 from ydb_wrapper import YDBWrapper
-
-
-ORG_NAME = "ydb-platform"
-REPO_NAME = "ydb"
 
 
 def _parse_issue_timeline(content):
@@ -65,34 +66,104 @@ def _parse_issue_timeline(content):
 def _to_dt(ts):
     if not ts:
         return None
+    s = str(ts).strip()
+    normalized = s.replace("Z", "+00:00")
     try:
-        return datetime.datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        dt = datetime.datetime.fromisoformat(normalized)
     except ValueError:
+        dt = None
+    if dt is None and "T" in s and len(s) >= 19:
+        try:
+            dt = datetime.datetime.strptime(s[:19], "%Y-%m-%dT%H:%M:%S")
+        except ValueError:
+            dt = None
+    if dt is None:
         return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    return dt.astimezone(datetime.timezone.utc)
 
 
-def _effective_unmute_window(status, default_window_days, fast_window_days):
-    return int(fast_window_days if status == "ready_for_fast_unmute" else default_window_days)
+def _is_updated_within_last_day(issue, now):
+    updated_at = _to_dt((issue or {}).get("updatedAt"))
+    if updated_at is None:
+        return False
+    return updated_at >= (now - datetime.timedelta(days=1))
 
 
-def collect_rows(default_window_days, fast_window_days, wait_hours):
-    """Build export rows from GitHub."""
-    issues = fetch_repository_issues(
-        ORG_NAME,
-        REPO_NAME,
-        since=None,
-        include_comment_bodies=False,
-        include_timeline_items=True,
+def _effective_unmute_window(requested, state, default_window_days, fast_window_days):
+    is_manual_active = bool(requested) and (state == "active")
+    return int(fast_window_days if is_manual_active else default_window_days)
+
+
+def _is_open_issue(issue):
+    return ((issue or {}).get("state") or "").upper() == "OPEN"
+
+
+def _has_existing_rows(ydb_wrapper, table_path):
+    try:
+        result = ydb_wrapper.execute_scan_query(
+            f"SELECT MAX(exported_at) AS max_exported_at FROM `{table_path}`"
+        )
+    except Exception as exc:
+        print(f"Warning: failed to check existing rows in {table_path}: {exc}")
+        return False
+    if not result:
+        return False
+    return bool(result[0].get("max_exported_at"))
+
+
+def collect_rows(default_window_days, fast_window_days, wait_hours, incremental_only):
+    """Build export rows from GitHub (issues in org mute Project V2 only)."""
+    stage_started_at = time.time()
+    project_nodes = fetch_all_issues(ORG_NAME, PROJECT_ID)
+    print(
+        f"Fetched {len(project_nodes)} project items from mute project {PROJECT_ID} "
+        f"({ORG_NAME})"
     )
     now = datetime.datetime.now(datetime.timezone.utc)
-    rows = []
+    candidate_issues = []
+    for node in project_nodes:
+        issue = (node or {}).get("content") or {}
+        if not issue.get("id") or issue.get("number") is None:
+            continue
+        if not incremental_only and not _is_open_issue(issue):
+            continue
+        if not incremental_only or _is_updated_within_last_day(issue, now):
+            candidate_issues.append(issue)
+    if incremental_only:
+        print(f"Project issues updated in last 24h: {len(candidate_issues)}")
+    else:
+        print(
+            "No existing manual_unmute_requests rows found: "
+            f"using full project scan for OPEN issues only ({len(candidate_issues)} issues)"
+        )
+    print(
+        "Selection stage done in "
+        f"{time.time() - stage_started_at:.2f}s"
+    )
 
-    for issue in issues:
+    rows = []
+    issue_processing_started_at = time.time()
+    mute_candidate_issues = 0
+    comments_fetch_count = 0
+    total_comments_loaded = 0
+    total_tests_processed = 0
+    total_issue_rows = 0
+    total_candidates = len(candidate_issues)
+
+    for idx, issue in enumerate(candidate_issues, start=1):
+        issue_number = issue.get("number")
+        if idx == 1 or idx % 25 == 0 or idx == total_candidates:
+            print(
+                f"[issue {idx}/{total_candidates}] "
+                f"#{issue_number}: evaluating mute markers"
+            )
         body = issue.get("body", "") or ""
         if "<!--mute_list_start-->" not in body or "<!--mute_list_end-->" not in body:
             continue
+        mute_candidate_issues += 1
 
-        issue_number = issue.get("number")
         if not issue_number:
             continue
 
@@ -106,14 +177,25 @@ def collect_rows(default_window_days, fast_window_days, wait_hours):
         tests_from_body = set(parsed.tests)
 
         issue_state = issue.get("state", "")
+        comments_fetch_count += 1
         comments_nodes = fetch_all_issue_comment_nodes(issue_id)
+        total_comments_loaded += len(comments_nodes)
+        print(
+            f"[issue {idx}/{total_candidates}] "
+            f"#{issue_number}: comments fetched={len(comments_nodes)}"
+        )
         close_actor_login, close_actor_type, linked_pr_numbers = _parse_issue_timeline(issue)
+        if issue_state != "CLOSED":
+            close_actor_login = ""
+            close_actor_type = ""
 
         control_items = {}
         for node in comments_nodes:
             control_items.update(_parse_control_items((node or {}).get("body", "")))
 
         all_tests = sorted(tests_from_body | set(control_items))
+        total_tests_processed += len(all_tests)
+        issue_rows_before = len(rows)
         for full_name in all_tests:
             item = control_items.get(
                 full_name,
@@ -127,14 +209,6 @@ def collect_rows(default_window_days, fast_window_days, wait_hours):
                 },
             )
 
-            requested_at = _to_dt(item.get("requested_at"))
-            wait_hours_left = None
-            if requested_at is not None:
-                ready_at = requested_at + datetime.timedelta(hours=wait_hours)
-                delta = ready_at - now
-                wait_hours_left = max(0, int(delta.total_seconds() // 3600))
-            manual_wait_hours_left = int(wait_hours_left if wait_hours_left is not None else 0)
-
             for branch in branches:
                 row = {
                     "issue_number": int(issue_number),
@@ -146,7 +220,10 @@ def collect_rows(default_window_days, fast_window_days, wait_hours):
                     "issue_closed_by_type": close_actor_type,
                     "linked_pr_count": len(linked_pr_numbers),
                     "effective_unmute_window_days": _effective_unmute_window(
-                        item.get("status", "idle"), default_window_days, fast_window_days
+                        bool(item.get("requested")),
+                        item.get("state", "active"),
+                        default_window_days,
+                        fast_window_days,
                     ),
                     "default_unmute_window_days": int(default_window_days),
                     "manual_fast_unmute_window_days": int(fast_window_days),
@@ -158,16 +235,32 @@ def collect_rows(default_window_days, fast_window_days, wait_hours):
                         status=item.get("status", "idle"),
                         state=item.get("state", "active"),
                         requested=bool(item.get("requested")),
-                        requested_at=requested_at,
+                        requested_at=None,
                         resolution_reason=item.get("reason", "") or None,
-                        wait_hours=int(wait_hours),
-                        wait_hours_left=manual_wait_hours_left,
+                        wait_hours=0,
+                        wait_hours_left=0,
                     )
                 )
 
                 rows.append(
                     row
                 )
+        issue_rows_added = len(rows) - issue_rows_before
+        total_issue_rows += issue_rows_added
+        print(
+            f"[issue {idx}/{total_candidates}] "
+            f"#{issue_number}: tests={len(all_tests)}, rows_added={issue_rows_added}"
+        )
+    print(
+        "Processing summary: "
+        f"candidates={total_candidates}, "
+        f"with_mute_markers={mute_candidate_issues}, "
+        f"comment_fetches={comments_fetch_count}, "
+        f"comments_loaded={total_comments_loaded}, "
+        f"tests_processed={total_tests_processed}, "
+        f"rows_built={total_issue_rows}, "
+        f"duration={time.time() - issue_processing_started_at:.2f}s"
+    )
     return rows
 
 
@@ -193,7 +286,7 @@ def load_thresholds():
     return (
         int(data["default_unmute_window_days"]),
         fast_window_days,
-        fast_window_days * 24,
+        0,
     )
 
 
@@ -204,7 +297,7 @@ def main():
         "Thresholds:"
         f" default_unmute_window_days={default_window_days},"
         f" manual_fast_unmute_window_days={fast_window_days},"
-        f" manual_wait_hours={wait_hours} (derived)"
+        f" manual_wait_hours={wait_hours} (disabled)"
     )
 
     with YDBWrapper() as ydb_wrapper:
@@ -212,8 +305,14 @@ def main():
             return 1
         table_path = ydb_wrapper.get_table_path("manual_unmute_requests")
         create_table(ydb_wrapper, table_path)
+        incremental_only = _has_existing_rows(ydb_wrapper, table_path)
 
-        rows = collect_rows(default_window_days, fast_window_days, wait_hours)
+        rows = collect_rows(
+            default_window_days,
+            fast_window_days,
+            wait_hours,
+            incremental_only=incremental_only,
+        )
         print(f"Collected {len(rows)} manual unmute rows")
         if rows:
             ydb_wrapper.bulk_upsert_batches(

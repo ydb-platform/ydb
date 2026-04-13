@@ -12,9 +12,9 @@
 
 ### Manual fast-unmute request (configurable window):
 - Bot maintains one or more issue comments with checkbox lists (`mute_control_v1`).
-- If a user marks a test with `[x]`, status becomes `pending_fast_unmute_wait`.
-- The request becomes eligible only after full `manual_fast_unmute_window_days * 24` hours from `requested_at`.
-- After cooldown, fast rule applies: in last `manual_fast_unmute_window_days` days runs >= 4 and fail+mute = 0.
+- If a user marks a test with `[x]`, fast-unmute applies immediately for this test.
+- Fast rule is fully config-driven: use `manual_fast_unmute_window_days` and `manual_fast_unmute_min_passes`.
+- Effective criteria: in last `manual_fast_unmute_window_days` days `pass_count > manual_fast_unmute_min_passes` and `fail+mute = 0`.
 - On success, bot keeps a historical strikethrough entry with reason (`stable_manual_fast_window`, `stable_default_window`, `no_runs_default_window`).
 
 ### Remove from mute if in the last 7 days:
@@ -72,11 +72,11 @@ The `.github/workflows/create_issues_for_muted_tests.yml` workflow:
 - Get confirmation from the test owner.
 - After merging, move the issue to Unmuted status, link the PR and issue.
 
-### Fast unmute (1-day window) for manually fixed tests
+### Fast unmute (configurable window) for manually fixed tests
 
 - Attach at least one related PR in the issue **Development** section.
 - Close the mute issue manually (not by bot).
-- Fast-unmute is activated automatically from this signal; no dedicated label is required.
+- Fast-unmute for checked tests is activated immediately (no cooldown); no dedicated label is required.
 
 ## 📊 Dashboard for analyzing muted and flaky tests
 

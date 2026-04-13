@@ -18,7 +18,6 @@ from update_mute_issues import (
     generate_github_issue_title_and_body,
     get_muted_tests_from_issues,
     close_unmuted_issues,
-    collect_manual_unmute_request_rows,
 )
 from mute_thresholds import get_thresholds
 
@@ -42,6 +41,7 @@ MUTE_DAYS = THRESHOLDS["mute_window_days"]
 UNMUTE_DAYS = THRESHOLDS["default_unmute_window_days"]
 DELETE_DAYS = THRESHOLDS["delete_window_days"]
 FAST_UNMUTE_DAYS = THRESHOLDS["manual_fast_unmute_window_days"]
+FAST_UNMUTE_MIN_PASSES = THRESHOLDS["manual_fast_unmute_min_passes"]
 
 _DIGEST_NOTIFICATION_CONFIG = os.path.normpath(
     os.path.join(dir, '..', '..', 'config', 'mute_issue_and_digest_config.json')
@@ -166,6 +166,67 @@ def execute_query(branch='main', build_type=DEFAULT_BUILD_TYPE, days_window=7, y
         logging.error(f"Error executing query: {e}")
         logging.error(f"Query parameters: branch='{branch}', build_type='{build_type}', days_window={days_window}")
         raise
+
+
+def load_fast_unmute_overrides_from_ydb(branch, build_type, ydb_wrapper):
+    """Load ready-for-fast-unmute overrides from analytics/manual_unmute_requests."""
+    table_path = ydb_wrapper.get_table_path("manual_unmute_requests")
+    query_string = f'''
+SELECT
+    full_name,
+    effective_unmute_window_days,
+    exported_at
+FROM `{table_path}`
+WHERE branch = '{branch}'
+    AND build_type = '{build_type}'
+    AND manual_request_active = 1
+'''
+    try:
+        rows = ydb_wrapper.execute_scan_query(
+            query_string,
+            query_name=f"load_manual_fast_unmute_overrides_{branch}_{build_type}",
+        )
+    except Exception as exc:
+        logging.warning(
+            "Failed to load manual fast-unmute overrides from YDB table "
+            f"{table_path}: {exc}"
+        )
+        return {}
+
+    latest_by_test = {}
+    for row in rows:
+        full_name = row.get('full_name')
+        window_days = row.get('effective_unmute_window_days')
+        exported_at = row.get('exported_at')
+        if not full_name or window_days in (None, 0):
+            continue
+
+        previous = latest_by_test.get(full_name)
+        if previous is None:
+            latest_by_test[full_name] = {
+                'window_days': int(window_days),
+                'exported_at': exported_at,
+            }
+            continue
+
+        previous_exported_at = previous.get('exported_at')
+        if previous_exported_at is None or (
+            exported_at is not None and exported_at >= previous_exported_at
+        ):
+            latest_by_test[full_name] = {
+                'window_days': int(window_days),
+                'exported_at': exported_at,
+            }
+
+    overrides = {
+        full_name: payload['window_days']
+        for full_name, payload in latest_by_test.items()
+    }
+    logging.info(
+        "FAST_UNMUTE_OVERRIDES_FROM_YDB: "
+        f"raw_rows={len(rows)}, unique_tests={len(overrides)}"
+    )
+    return overrides
 
 
 def add_lines_to_file(file_path, lines_to_add):
@@ -383,17 +444,31 @@ def is_unmute_candidate(test, aggregated_data=None, fast_aggregated_data=None, f
                     break
 
         if not test_data:
+            if test.get('is_muted', False):
+                mode = "FAST" if use_fast_window else "DEFAULT"
+                if use_fast_window:
+                    logging.debug(
+                        f"UNMUTE_CHECK[{mode}]: {full_name} - skipped, no rows in fast window"
+                    )
+                else:
+                    logging.debug(
+                        f"UNMUTE_CHECK[{mode}]: {full_name} - skipped, no rows in selected window"
+                    )
             return False
 
-    total_runs = test_data.get('pass_count', 0) + test_data.get('fail_count', 0) + test_data.get('mute_count', 0)
+    pass_count = test_data.get('pass_count', 0)
+    total_runs = pass_count + test_data.get('fail_count', 0) + test_data.get('mute_count', 0)
     total_fails = test_data.get('fail_count', 0) + test_data.get('mute_count', 0)
 
-    result = total_runs >= 4 and total_fails == 0
+    if use_fast_window:
+        result = pass_count > FAST_UNMUTE_MIN_PASSES and total_fails == 0
+    else:
+        result = total_runs >= 4 and total_fails == 0
 
     if test_data.get('is_muted', False):
         mode = "FAST" if use_fast_window else "DEFAULT"
         logging.debug(
-            f"UNMUTE_CHECK[{mode}]: {full_name} - runs:{total_runs}, fails:{total_fails}, "
+            f"UNMUTE_CHECK[{mode}]: {full_name} - pass:{pass_count}, runs:{total_runs}, fails:{total_fails}, "
             f"mute_count:{test_data.get('mute_count')}, state:{test_data.get('state')}, "
             f"muted:{test_data.get('is_muted')}, result:{result}"
         )
@@ -517,6 +592,9 @@ def apply_and_add_mutes(
         
         # 2. Unmute candidates.
         fast_override_days_by_test = fast_override_days_by_test or {}
+        aggregated_for_unmute_index = {
+            test.get('full_name'): test for test in (aggregated_for_unmute or []) if test.get('full_name')
+        }
         aggregated_for_fast_unmute_index = {
             test.get('full_name'): test for test in (aggregated_for_fast_unmute or []) if test.get('full_name')
         }
@@ -526,7 +604,7 @@ def apply_and_add_mutes(
                 return False
             return is_unmute_candidate(
                 test,
-                aggregated_data=aggregated_for_unmute,
+                aggregated_data=aggregated_for_unmute_index,
                 fast_aggregated_data=aggregated_for_fast_unmute_index,
                 fast_override_days_by_test=fast_override_days_by_test,
             )
@@ -543,7 +621,7 @@ def apply_and_add_mutes(
             mute_check,
             lambda chunk: is_unmute_candidate(
                 chunk,
-                aggregated_data=aggregated_for_unmute,
+                aggregated_data=aggregated_for_unmute_index,
                 fast_aggregated_data=aggregated_for_fast_unmute_index,
                 fast_override_days_by_test=fast_override_days_by_test,
             ),
@@ -1081,6 +1159,9 @@ def mute_worker(args):
         # Use unified aggregation for different periods.
         aggregated_for_mute = aggregate_test_data(all_data, MUTE_DAYS)  # MUTE_DAYS for mute
         aggregated_for_unmute = aggregate_test_data(all_data, UNMUTE_DAYS)  # UNMUTE_DAYS for unmute
+        aggregated_for_unmute_index = {
+            test.get('full_name'): test for test in aggregated_for_unmute if test.get('full_name')
+        }
         aggregated_for_fast_unmute = aggregate_test_data(all_data, FAST_UNMUTE_DAYS)
         aggregated_for_delete = aggregate_test_data(all_data, DELETE_DAYS)  # DELETE_DAYS for delete
     
@@ -1096,34 +1177,11 @@ def mute_worker(args):
             output_path = args.output_folder
             os.makedirs(output_path, exist_ok=True)
             logging.info(f"Creating mute files in: {output_path}")
-            stable_unmute_candidates = {
-                test.get('full_name')
-                for test in aggregated_for_unmute
-                if test.get('full_name') and is_unmute_candidate(test, aggregated_data=aggregated_for_unmute)
-            }
-            stable_delete_candidates = {
-                test.get('full_name')
-                for test in aggregated_for_delete
-                if test.get('full_name') and is_delete_candidate(test)
-            }
-
-            overrides, manual_rows = collect_manual_unmute_request_rows(
+            fast_override_days_by_test = load_fast_unmute_overrides_from_ydb(
                 branch=args.branch,
                 build_type=build_type,
-                stable_unmute_candidates=stable_unmute_candidates,
-                delete_candidates=stable_delete_candidates,
-                require_linked_development_pr=False,
+                ydb_wrapper=ydb_wrapper,
             )
-            fast_override_days_by_test = {
-                item['full_name']: int(item.get('window_days', FAST_UNMUTE_DAYS))
-                for item in overrides
-                if item.get('full_name')
-            }
-            logging.info(
-                "FAST_UNMUTE_OVERRIDES: "
-                f"raw_rows={len(overrides)}, unique_tests={len(fast_override_days_by_test)}"
-            )
-            logging.info(f"MANUAL_UNMUTE_REQUEST_ROWS: {len(manual_rows)}")
 
             apply_and_add_mutes(
                 all_data,

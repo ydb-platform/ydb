@@ -2,6 +2,7 @@
   "mute_window_days": 4,
   "default_unmute_window_days": 7,
   "delete_window_days": 7,
-  "manual_fast_unmute_window_days": 1,
+  "manual_fast_unmute_window_days": 2,
+  "manual_fast_unmute_min_passes": 2,
   "control_comment_part_max_tests": 200
 }

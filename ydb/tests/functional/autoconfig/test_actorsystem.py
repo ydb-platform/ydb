@@ -6,8 +6,7 @@ import sys
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 
-
-def make_test_for_specific_actor_system(node_type, cpu_count):
+def make_test_for_specific_actor_system(node_type, cpu_count): 
     class TestWithSpecificActorSystem(object):
         @classmethod
         def setup_class(cls):

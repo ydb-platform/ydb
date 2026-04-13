@@ -19,7 +19,6 @@ PEERDIR(
     ydb/core/audit
     ydb/core/base
     ydb/core/protos
-    ydb/core/security/certificate_check/test_utils
     ydb/library/aclib
     ydb/library/aclib/protos
     ydb/library/login

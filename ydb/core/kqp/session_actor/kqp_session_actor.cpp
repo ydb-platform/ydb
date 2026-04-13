@@ -1077,7 +1077,7 @@ public:
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
         auto snapMgrActorId = RegisterWithSameMailbox(snapMgr);
 
-        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(QueryId, std::move(QueryState->Orbit));
+        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(QueryState->GetTableIdsForSnapshot(), QueryId, std::move(QueryState->Orbit));
         Send(snapMgrActorId, ev.release());
     }
 
@@ -1120,7 +1120,9 @@ public:
             return;
         }
         AcquireSnapshotSpan.EndOk();
+
         QueryState->TxCtx->SnapshotHandle.Snapshot = response->Snapshot;
+        QueryState->TxCtx->SnapshotHandle.Handle = std::move(response->SnapshotHandle);
 
         // Can reply inside (in case of deferred-only transactions) and become ReadyState
         ExecuteOrDefer();
@@ -2065,6 +2067,16 @@ public:
             llvmSettings = QueryState->PreparedQuery->GetLlvmSettings();
         }
 
+<<<<<<< HEAD
+=======
+        // Collect tableIds for snapshot acquisition
+        TVector<NKikimr::TTableId> tableIdsForSnapshot;
+        if (QueryState) {
+            tableIdsForSnapshot = QueryState->GetTableIdsForSnapshot();
+        }
+
+        AFL_ENSURE(txCtx->TxManager);
+>>>>>>> 30e4a301764 (Snapshot Locking (#36668))
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             QueryState ? QueryState->GetFormatsSettings() : NFormats::TFormatsSettings{},
@@ -2073,8 +2085,13 @@ public:
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
             (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
+<<<<<<< HEAD
                 ? GUCSettings : nullptr, {}, txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing(),
             llvmSettings, QueryServiceConfig, QueryState ? QueryState->Generation : 0, ChannelService);
+=======
+                ? GUCSettings : nullptr, TPartitionPrunerConfig{}, std::move(tableIdsForSnapshot), txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId, /* batchOperationSettings */ Nothing(),
+            llvmSettings, Settings.QueryService, QueryState ? QueryState->Generation : 0, ChannelService);
+>>>>>>> 30e4a301764 (Snapshot Locking (#36668))
 
         auto exId = RegisterWithSameMailbox(executerActor);
         STLOG_D("Created new KQP executer",

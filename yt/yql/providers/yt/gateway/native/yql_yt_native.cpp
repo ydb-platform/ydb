@@ -9,6 +9,7 @@
 #include <yt/yql/providers/yt/lib/yt_file_download/yql_yt_file_download.h>
 
 #include <yt/yql/providers/yt/gateway/lib/map_builder.h>
+#include <yt/yql/providers/yt/gateway/lib/reduce_builder.h>
 #include <yt/yql/providers/yt/gateway/lib/yt_attrs.h>
 #include <yt/yql/providers/yt/gateway/lib/yt_helpers.h>
 #include <yt/yql/providers/yt/lib/config_clusters/config_clusters.h>
@@ -442,7 +443,7 @@ public:
                 if (r.TableIndicies.empty()) {
                     r.ExecContext = MakeExecCtx(TGetTableInfoOptions(options), session, cluster, nullptr, nullptr);
                 }
-                TString tmpFolder = GetTablesTmpFolder(*options.Config(), cluster);
+                TString tmpFolder = GetTablesTmpFolder(*options.Config(), cluster, session->UseSecureTmp_, session->OperationOptions_);
                 table.Table(NYql::TransformPath(tmpFolder, table.Table(), table.Anonymous(), session->UserName_));
                 r.TableIndicies.push_back(i);
             }
@@ -471,7 +472,7 @@ public:
             TSession::TPtr session = GetSession(options.SessionId());
             session->EnsureInitializedSemaphore(options.Config());
 
-            TString tmpFolder = GetTablesTmpFolder(*options.Config(), options.Cluster());
+            TString tmpFolder = GetTablesTmpFolder(*options.Config(), options.Cluster(), session->UseSecureTmp_, session->OperationOptions_);
             TString tmpTablePath = NYql::TransformPath(tmpFolder,
                 TStringBuilder() << "tmp/" << GetGuidAsString(session->RandomProvider_->GenGuid()), true, session->UserName_);
 
@@ -808,7 +809,7 @@ public:
                 lambda = SerializeRuntimeNode(builder.MakeTuple(tupleNodes), builder.GetTypeEnvironment());
             }
 
-            TString tmpFolder = GetTablesTmpFolder(*options.Config(), cluster);
+            TString tmpFolder = GetTablesTmpFolder(*options.Config(), cluster, session->UseSecureTmp_, session->OperationOptions_);
             TString tmpTablePath = NYql::TransformPath(tmpFolder,
                 TStringBuilder() << "tmp/" << GetGuidAsString(session->RandomProvider_->GenGuid()), true, session->UserName_);
 
@@ -959,7 +960,7 @@ public:
             }
             if (Services_.Config->GetLocalChainTest()) {
                 if (!src.empty()) {
-                    const auto& path = NYql::TransformPath(GetTablesTmpFolder(*options.Config(), src.front().Cluster), src.front().Name, true, session->UserName_);
+                    const auto& path = NYql::TransformPath(GetTablesTmpFolder(*options.Config(), src.front().Cluster, session->UseSecureTmp_, session->OperationOptions_), src.front().Name, true, session->UserName_);
                     const auto it = TestTables.find(path);
                     YQL_ENSURE(TestTables.cend() != it);
                     YQL_ENSURE(TestTables.emplace(dst, it->second).second);
@@ -1195,7 +1196,7 @@ public:
                 }
 
                 auto richYPath = NYT::TRichYPath(table);
-                auto realTableName = NYql::TransformPath(GetTablesTmpFolder(*options.Config(), cluster), table, anon, session->UserName_);
+                auto realTableName = NYql::TransformPath(GetTablesTmpFolder(*options.Config(), cluster, session->UseSecureTmp_, session->OperationOptions_), table, anon, session->UserName_);
                 auto p = entry->Snapshots.FindPtr(std::make_pair(realTableName, epoch));
                 YQL_ENSURE(p, "Table " << table << " has no snapshot");
                 richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(realTableName, NYT::TConfig::Get()->Prefix));
@@ -1346,7 +1347,7 @@ public:
                 execCtx->SetOutput(opBase.Output());
                 YQL_ENSURE(execCtx->OutTables_.size() == 1U, "TODO: Support multi out.");
                 const auto tableName = execCtx->OutTables_.front().Name;
-                const auto tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), cluster);
+                const auto tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), cluster, session->UseSecureTmp_, session->OperationOptions_);
                 const auto realTableName = NYT::AddPathPrefix(NYql::TransformPath(tmpFolder, execCtx->OutTables_.front().Name, true, session->UserName_), NYT::TConfig::Get()->Prefix);
                 auto batchGet = entry->Tx->CreateBatchRequest();
                 auto f = batchGet->Get(realTableName + "/@", TGetOptions()
@@ -1444,7 +1445,7 @@ public:
         try {
             TSession::TPtr session = GetSession(options.SessionId());
             const TString cluster = options.Cluster();
-            const TString tmpFolder = GetTablesTmpFolder(*options.Config(), cluster);
+            const TString tmpFolder = GetTablesTmpFolder(*options.Config(), cluster, session->UseSecureTmp_, session->OperationOptions_);
 
             auto execCtx = MakeExecCtx(std::move(options), session, cluster, nullptr, nullptr);
             auto entry = execCtx->GetOrCreateEntry();
@@ -2314,7 +2315,7 @@ private:
         const std::unordered_map<EYtSettingType, TString>& strOpts)
     {
         for (auto& p: src) {
-            p.Name = NYql::TransformPath(GetTablesTmpFolder(*execCtx->Options_.Config(), p.Cluster), p.Name, true, execCtx->Session_->UserName_);
+            p.Name = NYql::TransformPath(GetTablesTmpFolder(*execCtx->Options_.Config(), p.Cluster, execCtx->Session_->UseSecureTmp_, execCtx->Session_->OperationOptions_), p.Name, true, execCtx->Session_->UserName_);
         }
 
         auto cluster = execCtx->Cluster_;
@@ -2323,7 +2324,7 @@ private:
         const bool enableDynamicTablesWrite = execCtx->Options_.Config()->_EnableDynamicTablesWrite.Get(cluster).GetOrElse(false);
         YQL_ENSURE(!dstIsDynamic || enableDynamicTablesWrite);
 
-        TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), cluster);
+        TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), cluster, execCtx->Session_->UseSecureTmp_, execCtx->Session_->OperationOptions_);
         auto dstPath = NYql::TransformPath(tmpFolder, dst, isAnonymous, execCtx->Session_->UserName_);
         if (execCtx->Hidden) {
             const auto origDstPath = dstPath;
@@ -2720,7 +2721,7 @@ private:
             return MakeFuture();
         }
 
-        const auto tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_);
+        const auto tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_, execCtx->Session_->UseSecureTmp_, execCtx->Session_->OperationOptions_);
         TVector<TString> toRemove;
         for (const auto& p : paths) {
             toRemove.push_back(NYql::TransformPath(tmpFolder, p, true, execCtx->Session_->UserName_));
@@ -3062,7 +3063,7 @@ private:
         }
 
         if (idxsToInferFromContent) {
-            TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_);
+            TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_, execCtx->Session_->UseSecureTmp_, execCtx->Session_->OperationOptions_);
             TString tmpTablePath = NYql::TransformPath(tmpFolder,
                 TStringBuilder() << "tmp/" << GetGuidAsString(execCtx->Session_->RandomProvider_->GenGuid()), true, execCtx->Session_->UserName_);
 
@@ -3506,7 +3507,7 @@ private:
         if (cluster.empty()) {
             cluster = Clusters_->GetDefaultClusterName();
         }
-        TString tmpFolder = GetTablesTmpFolder(*options.Config(), cluster);
+        TString tmpFolder = GetTablesTmpFolder(*options.Config(), cluster, session->UseSecureTmp_, session->OperationOptions_);
         TString tmpTablePath = NYql::TransformPath(tmpFolder,
             TStringBuilder() << "tmp/" << GetGuidAsString(session->RandomProvider_->GenGuid()), true, session->UserName_);
         bool discard = options.FillSettings().Discard;
@@ -3959,7 +3960,9 @@ private:
         });
     }
 
-    static TFuture<void> ExecReduce(const TVector<std::pair<TString, bool>>& reduceBy,
+    static TFuture<void> ExecReduce(
+        TIntrusivePtr<TYqlUserJob> job,
+        const TVector<std::pair<TString, bool>>& reduceBy,
         const TVector<std::pair<TString, bool>>& sortBy,
         bool joinReduce,
         const TMaybe<ui64>& maxDataSizePerJob,
@@ -3967,14 +3970,13 @@ private:
         const TMaybe<ui64>& limit,
         const TVector<TString>& sortLimitBy,
         TString reduceLambda,
-        const TString& inputType,
         const TExpressionResorceUsage& extraUsage,
         const TExecContext<TRunOptions>::TPtr& execCtx
     ) {
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
-        return ret.Apply([reduceBy, sortBy, joinReduce, maxDataSizePerJob, useFirstAsPrimary, limit,
-                          sortLimitBy, reduceLambda, inputType, extraUsage, execCtx, testRun]
+        return ret.Apply([job, reduceBy, sortBy, joinReduce, maxDataSizePerJob, useFirstAsPrimary, limit,
+                          sortLimitBy, reduceLambda, extraUsage, execCtx, testRun]
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
@@ -3996,9 +3998,6 @@ private:
             }
 
             TRawReduceOperationSpec reduceOpSpec;
-            auto job = MakeIntrusive<TYqlUserJob>();
-
-            job->SetInputType(inputType);
 
             for (size_t i: xrange(execCtx->OutTables_.size())) {
                 if (limit && sortLimitBy.empty()) {
@@ -4035,18 +4034,6 @@ private:
                 currentRowOffset += table.Records;
             }
 
-            const bool useSkiff = execCtx->Options_.Config()->UseSkiff.Get(execCtx->Cluster_).GetOrElse(DEFAULT_USE_SKIFF);
-
-            const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
-            job->SetInputSpec(execCtx->GetInputSpec(!useSkiff, nativeTypeCompat, false));
-            job->SetOutSpec(execCtx->GetOutSpec(!useSkiff, nativeTypeCompat));
-            YQL_ENSURE(!groups.empty());
-            if (groups.back() != 0) {
-                job->SetInputGroups(groups);
-            }
-            job->SetTableNames(tables);
-            job->SetRowOffsets(rowOffsets);
-
             if (joinReduce) {
                 reduceOpSpec.JoinBy(ToYTSortColumns(reduceBy));
                 reduceOpSpec.EnableKeyGuarantee(false);
@@ -4065,10 +4052,9 @@ private:
             if (!sortBy.empty()) {
                 std::for_each(sortBy.begin(), sortBy.end(), [&auxColumns](const auto& it) { auxColumns.insert(it.first); });
             }
-            job->SetAuxColumns(auxColumns);
 
-            job->SetUseSkiff(useSkiff, TMkqlIOSpecs::ESystemField::RowIndex | TMkqlIOSpecs::ESystemField::KeySwitch);
-            job->SetYamrInput(execCtx->YamrInput);
+            TReduceJobBuilder reduceJobBuilder;
+            reduceJobBuilder.SetReduceJobParams(job.Get(), execCtx, groups, tables, rowOffsets, auxColumns);
 
             auto tmpFiles = MakeIntrusive<TTempFiles>(execCtx->FileStorage_->GetTemp());
             {
@@ -4085,10 +4071,6 @@ private:
                     execCtx->Options_.OptLLVM("OFF");
                 }
                 job->SetLambdaCode(reduceLambda);
-                job->SetOptLLVM(execCtx->Options_.OptLLVM());
-                job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
-                job->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
-                job->SetLangVer(execCtx->Options_.LangVer());
                 transform.ApplyJobProps(*job);
                 transform.ApplyUserJobSpec(userJobSpec, testRun);
                 FillUserJobSpec(userJobSpec, execCtx, extraUsage, transform.GetUsedMemory(), execCtx->EstimateLLVMMem(nodeCount), testRun);
@@ -4143,14 +4125,10 @@ private:
         auto maxDataSizePerJob = NYql::GetMaxJobSizeForFirstAsPrimary(reduce.Settings().Ref());
         bool useFirstAsPrimary = NYql::HasSetting(reduce.Settings().Ref(), EYtSettingType::FirstAsPrimary);
 
-        TString reduceLambda;
-        {
-            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                execCtx->FunctionRegistry_->SupportsSizedAllocators());
-            alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-            TNativeYtLambdaBuilder builder(alloc, Services_, *execCtx->Session_, execCtx->Options_.LangVer());
-            reduceLambda = builder.BuildLambdaWithIO(*MkqlCompiler_, reduce.Reducer(), ctx);
-        }
+        auto reduceJob = MakeIntrusive<TYqlUserJob>();
+        TReduceJobBuilder reduceJobBuilder;
+        reduceJobBuilder.SetInputType(reduceJob.Get(), reduce);
+        TString reduceLambda = reduceJobBuilder.SetReduceLambdaCode(reduceJob.Get(), reduce, execCtx, ctx);
 
         TVector<TString> sortLimitBy = NYql::GetSettingAsColumnList(reduce.Settings().Ref(), EYtSettingType::SortLimitBy);
         TMaybe<ui64> limit = GetLimit(reduce.Settings().Ref());
@@ -4158,17 +4136,12 @@ private:
             limit.Clear();
         }
         auto extraUsage = execCtx->ScanExtraResourceUsage(reduce.Reducer().Body().Ref(), true);
-        const auto inputTypeSet = NYql::GetSetting(reduce.Settings().Ref(), EYtSettingType::ReduceInputType);
-        TString inputType = NCommon::WriteTypeToYson(inputTypeSet
-            ? inputTypeSet->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()
-            : GetSequenceItemType(reduce.Reducer().Args().Arg(0), true)
-        );
 
-        return execCtx->Session_->Async([reduceBy, sortBy, joinReduce, maxDataSizePerJob, useFirstAsPrimary, limit, sortLimitBy, reduceLambda, inputType, extraUsage, execCtx]() {
+        return execCtx->Session_->Async([reduceJob, reduceBy, sortBy, joinReduce, maxDataSizePerJob, useFirstAsPrimary, limit, sortLimitBy, reduceLambda, extraUsage, execCtx]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
-            return ExecReduce(reduceBy, sortBy, joinReduce, maxDataSizePerJob, useFirstAsPrimary, limit,
-                              sortLimitBy, reduceLambda, inputType, extraUsage, execCtx);
+            return ExecReduce(reduceJob, reduceBy, sortBy, joinReduce, maxDataSizePerJob, useFirstAsPrimary, limit,
+                              sortLimitBy, reduceLambda, extraUsage, execCtx);
         });
     }
 
@@ -4951,7 +4924,7 @@ private:
         }
         auto extraUsage = execCtx->ScanExtraResourceUsage(fill.Content().Ref(), false);
 
-        TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_);
+        TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_, execCtx->Session_->UseSecureTmp_, execCtx->Session_->OperationOptions_);
         TString tmpTablePath = NYql::TransformPath(tmpFolder,
             TStringBuilder() << "tmp/" << GetGuidAsString(execCtx->Session_->RandomProvider_->GenGuid()), true, execCtx->Session_->UserName_);
 
@@ -4986,7 +4959,7 @@ private:
     }
 
     TFuture<void> DoDrop(TYtIsolatedOpBase drop, const TExecContext<TRunOptions>::TPtr& execCtx) {
-        TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_);
+        TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_, execCtx->Session_->UseSecureTmp_, execCtx->Session_->OperationOptions_);
         auto table = drop.Table();
         bool isAnonymous = NYql::HasSetting(table.Settings().Ref(), EYtSettingType::Anonymous);
         TString path = NYql::TransformPath(tmpFolder, table.Name().Value(), isAnonymous, execCtx->Session_->UserName_);
@@ -5000,7 +4973,7 @@ private:
     }
 
     TFuture<void> DoCreateView(TYtCreateView create, const TExecContext<TRunOptions>::TPtr& execCtx) {
-        const auto tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_);
+        const auto tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_, execCtx->Session_->UseSecureTmp_, execCtx->Session_->OperationOptions_);
         const auto table = create.Table();
         const bool isAnonymous = NYql::HasSetting(table.Settings().Ref(), EYtSettingType::Anonymous);
         const auto path = NYql::TransformPath(tmpFolder, table.Name().Value(), isAnonymous, execCtx->Session_->UserName_);
@@ -5019,7 +4992,7 @@ private:
     TFuture<void> DoStatOut(TYtStatOut statOut, const TExecContext<TRunOptions>::TPtr& execCtx) {
         auto input = statOut.Input();
 
-        TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_);
+        TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_, execCtx->Session_->UseSecureTmp_, execCtx->Session_->OperationOptions_);
 
         TString ytTable = TString{GetOutTable(input).Cast<TYtOutTable>().Name().Value()};
         ytTable = NYql::TransformPath(tmpFolder, ytTable, true, execCtx->Session_->UserName_);
@@ -5094,7 +5067,7 @@ private:
 
             auto entry = execCtx->GetOrCreateEntry();
             auto tx = entry->Tx;
-            const TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_);
+            const TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_, execCtx->Session_->UseSecureTmp_, execCtx->Session_->OperationOptions_);
             const NYT::EOptimizeForAttr tmpOptimizeFor = execCtx->Options_.Config()->OptimizeFor.Get(execCtx->Cluster_).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR);
             TVector<NYT::TRichYPath> ytPaths(Reserve(execCtx->Options_.Paths().size()));
             TVector<size_t> pathMap;
@@ -5645,7 +5618,7 @@ private:
             entry = execCtx->GetOrCreateEntry();
         }
 
-        const TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_);
+        const TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config(), execCtx->Cluster_, execCtx->Session_->UseSecureTmp_, execCtx->Session_->OperationOptions_);
         execCtx->SetCacheItem({tmpTable}, {NYT::TNode::CreateMap()}, tmpFolder);
 
         TFuture<bool> future = execCtx->Config_->GetLocalChainTest()
@@ -5727,7 +5700,7 @@ private:
     }
 
     static void ExecDump(const TExecContext<TDumpOptions::TEntries>::TPtr& execCtx, const TYtSettings::TConstPtr& config) {
-        TString tmpFolder = GetTablesTmpFolder(*config, execCtx->Cluster_);
+        TString tmpFolder = GetTablesTmpFolder(*config, execCtx->Cluster_, execCtx->Session_->UseSecureTmp_, execCtx->Session_->OperationOptions_);
 
         auto entry = execCtx->GetEntry();
         YQL_ENSURE(entry->DumpTx, "Dump tx is not available");
@@ -5803,6 +5776,8 @@ private:
         }
 
         if (createTables) {
+            execCtx->PrepareSecureTmpFolder();
+
             TVector<TString> outPaths;
             auto batchCreate = entry->Tx->CreateBatchRequest();
             TVector<TFuture<TLockId>> batchCreateRes;
@@ -5864,6 +5839,8 @@ private:
         const NYT::ITransactionPtr tx)
     {
         auto cluster = execCtx->Cluster_;
+
+        execCtx->PrepareSecureTmpFolder();
 
         NYT::TNode attrs = NYT::TNode::CreateMap();
         PrepareCommonAttributes(attrs, execCtx, cluster, true);
@@ -6036,7 +6013,7 @@ private:
 
                 auto settings = options.Config();
                 const TString cluster = options.Cluster();
-                const TString tmpFolder = GetTablesTmpFolder(*settings, cluster);
+                const TString tmpFolder = GetTablesTmpFolder(*settings, cluster, execCtx->Session_->UseSecureTmp_, session->OperationOptions_);
                 TTransactionCache::TEntry::TPtr entry = execCtx->GetOrCreateEntry();
                 auto tx = entry->Tx;
                 auto tables = options.Tables();

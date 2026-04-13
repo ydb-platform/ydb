@@ -825,7 +825,8 @@
             "Match": {"Type": "Callable", "Name": "FulltextAnalyze"},
             "Children": [
                 {"Index": 0, "Name": "Text", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Settings", "Type": "TCoAtom"}
+                {"Index": 1, "Name": "Settings", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Mode", "Type": "TCoAtom"}
             ]
         },
         {
@@ -930,7 +931,8 @@
             "Match": {"Type": "Callable", "Name": "KqpOpLimit"},
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
-                {"Index": 1, "Name": "Count", "Type": "TExprBase"}
+                {"Index": 1, "Name": "Count", "Type": "TExprBase"},
+                {"Index": 2, "Name": "Offset", "Type": "TExprBase", "Optional" : "true"}
             ]
         },
         {

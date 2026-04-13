@@ -8,12 +8,20 @@
 
 namespace NYql::NFmr {
 
-const std::vector<TString> TableYsonRows = {
+const std::vector<TString> TextTableYsonRows = {
     "{\"key\"=\"075\";\"subkey\"=\"1\";\"value\"=\"abc\"};\n",
     "{\"key\"=\"800\";\"subkey\"=\"2\";\"value\"=\"ddd\"};\n",
     "{\"key\"=\"020\";\"subkey\"=\"3\";\"value\"=\"q\"};\n",
     "{\"key\"=\"150\";\"subkey\"=\"4\";\"value\"=\"qzz\"};\n"
 };
+
+const std::vector<TString> TableYsonRows = [] {
+    std::vector<TString> result;
+    for (const auto& row : TextTableYsonRows) {
+        result.push_back(GetBinaryYson(row));
+    }
+    return result;
+}();
 
 TTableChunkStats WriteDataToTableDataSerice(
     ITableDataService::TPtr tableDataService,
@@ -68,8 +76,8 @@ Y_UNIT_TEST_SUITE(FmrWriterTests) {
         UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[1].DataWeight, secPartSize);
         UNIT_ASSERT_VALUES_EQUAL(gottenPartIdChunkStats[1].SortedChunkStats.IsSorted, false);
 
-        TString expectedFirstChunkTableContent = JoinRange(TStringBuf(), TableYsonRows.begin(), TableYsonRows.begin() + 2);
-        TString expectedSecondChunkTableContent = JoinRange(TStringBuf(), TableYsonRows.begin() + 2, TableYsonRows.end());
+        TString expectedFirstChunkTableContent = JoinRange(TStringBuf(), TextTableYsonRows.begin(), TextTableYsonRows.begin() + 2);
+        TString expectedSecondChunkTableContent = JoinRange(TStringBuf(), TextTableYsonRows.begin() + 2, TextTableYsonRows.end());
 
         TString group = GetTableDataServiceGroup("tableId", "partId");
         auto firstChunkTableContent = tableDataService->Get(group, "0").GetValueSync();

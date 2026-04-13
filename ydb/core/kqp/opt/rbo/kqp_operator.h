@@ -22,7 +22,7 @@ enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Project, Filt
 
 // clang-format off
 #define PHASE_ENUM(X) \
-    X(NotDefined)     \
+    X(Undefined)     \
     X(Intermediate)   \
     X(Final)
 
@@ -53,6 +53,8 @@ struct TOrderEnforcer {
     EOrderEnforcerReason Reason;
     TVector<TSortElement> SortElements;
 };
+
+enum ESortDir : ui32 { None = 0x00, Asc = 0x01, Desc = 0x02 };
 
 /**
  * Per-operator physical plan properties
@@ -241,6 +243,12 @@ public:
     TOpRead(TExprNode::TPtr node);
     TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
             const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, TPositionHandle pos);
+    TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
+            const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const TPhysicalOpProps& props,
+            TPositionHandle pos);
+    TOpRead(const TString& alias, const TVector<TString>& columns, const TVector<TInfoUnit>& outputIUs, const NYql::EStorageType storageType,
+            const TExprNode::TPtr& tableCallable, const TExprNode::TPtr& olapFilterLambda, const TExprNode::TPtr& limit, const ESortDir sortDireciont,
+            const TPhysicalOpProps& props, TPositionHandle pos);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
@@ -257,8 +265,11 @@ public:
     TVector<TString> Columns;
     TVector<TInfoUnit> OutputIUs;
     NYql::EStorageType StorageType;
+    // TODO: put it in read settings.
     TExprNode::TPtr TableCallable;
     TExprNode::TPtr OlapFilterLambda;
+    TExprNode::TPtr Limit;
+    ESortDir SortDir{ESortDir::None};
 };
 
 class TMapElement {
@@ -435,7 +446,10 @@ public:
 class TOpLimit: public IUnaryOperator {
 public:
     TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& limitCond, const EOpPhase limitPhase);
+    TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& limitCond, const TExpression& offsetCond, const EOpPhase limitPhase);
     TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond, const EOpPhase limitPhase);
+    TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond,
+             std::optional<TExpression> offsetCond, const EOpPhase limitPhase);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
@@ -448,25 +462,47 @@ public:
     }
 
     TExpression GetLimitCond() const { return LimitCond; }
+    bool HasOffset() const { return OffsetCond.has_value(); }
+    std::optional<TExpression> GetOffsetCond() const { return OffsetCond; }
 
     // Make private.
     TExpression LimitCond;
 private:
-    EOpPhase LimitPhase;
+    std::optional<TExpression> OffsetCond;
+    EOpPhase LimitPhase{EOpPhase::Undefined};
 };
 
 class TOpSort: public IUnaryOperator {
 public:
     TOpSort(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TSortElement>& sortElements,
             std::optional<TExpression> limitCond = std::nullopt);
+    TOpSort(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TSortElement>& sortElements,
+            std::optional<TExpression> limitCond, const EOpPhase sortPhase);
+
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
+    EOpPhase GetSortPhase() const {
+        return SortPhase;
+    }
+    void SetSortPhase(const EOpPhase phase) {
+        SortPhase = phase;
+    }
+    TVector<TSortElement> GetSortElements() const {
+        return SortElements;
+    }
+    TVector<TSortElement>& GetSortElements() {
+        return SortElements;
+    }
+    bool IsTopSort() const { return LimitCond.has_value(); }
 
     TVector<TSortElement> SortElements;
     std::optional<TExpression> LimitCond;
+
+private:
+    EOpPhase SortPhase{EOpPhase::Undefined};
 };
 
 /***

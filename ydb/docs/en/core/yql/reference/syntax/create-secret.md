@@ -37,3 +37,8 @@ Create a secret in the database root named `secret_name` with value `secret_valu
 ```sql
 CREATE SECRET secret_name WITH (value = "secret_value", inherit_permissions = True);
 ```
+
+## See also {#see-also}
+
+* [ALTER SECRET](alter-secret.md)
+* [DROP SECRET](drop-secret.md)

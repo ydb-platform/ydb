@@ -5,7 +5,9 @@ RECURSE(
     draft
     driver
     endpoints
+    iam
     oauth2_token_exchange
+    observability
     params
     result
     table

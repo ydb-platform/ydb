@@ -20,6 +20,11 @@ namespace openai
 {
 
 /**
+  The type of OpenAI API being used.
+ */
+static constexpr const char *kOpenaiApiType = "openai.api.type";
+
+/**
   The service tier requested. May be a specific tier, default, or auto.
  */
 static constexpr const char *kOpenaiRequestServiceTier = "openai.request.service_tier";
@@ -34,6 +39,22 @@ static constexpr const char *kOpenaiResponseServiceTier = "openai.response.servi
  */
 static constexpr const char *kOpenaiResponseSystemFingerprint =
     "openai.response.system_fingerprint";
+
+namespace OpenaiApiTypeValues
+{
+/**
+  The OpenAI <a href="https://developers.openai.com/api/reference/chat-completions/overview">Chat
+  Completions API</a>.
+ */
+static constexpr const char *kChatCompletions = "chat_completions";
+
+/**
+  The OpenAI <a href="https://developers.openai.com/api/reference/responses/overview">Responses
+  API</a>.
+ */
+static constexpr const char *kResponses = "responses";
+
+}  // namespace OpenaiApiTypeValues
 
 namespace OpenaiRequestServiceTierValues
 {

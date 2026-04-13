@@ -43,6 +43,18 @@ namespace NLongTxService {
             TActorId CommitActor;
         };
 
+        struct TWaitEdge;
+
+        struct TTagAwaiter {};
+        struct TTagBlocker {};
+
+        struct TWaitNode {
+            // Incoming edges waiting for this lock (this == Blocker)
+            TIntrusiveList<TWaitEdge, TTagAwaiter> Awaiters;
+            // Outgoing edges blocking this lock (this == Awaiter)
+            TIntrusiveList<TWaitEdge, TTagBlocker> Blockers;
+        };
+
         enum class ERequestType {
             Commit,
             Rollback,
@@ -78,9 +90,13 @@ namespace NLongTxService {
             TProxyRequestState* Request = nullptr;
         };
 
+        struct TProxyNodeState;
+
         struct TProxyLockState {
+            const ui64 LockId;
+            TProxyNodeState& ProxyNode;
+
             EProxyLockState State = EProxyLockState::Unknown;
-            ui64 LockId = 0;
             ui64 Cookie = 0;
             THashMap<TActorId, ui64> NewSubscribers;
             THashMap<TActorId, ui64> RepliedSubscribers;
@@ -89,8 +105,15 @@ namespace NLongTxService {
             size_t HeapIndex = -1;
             TMonotonic ExpiresAt;
 
+            TWaitNode WaitNode;
+
+            TProxyLockState(ui64 lockId, TProxyNodeState& proxyNode)
+                : LockId(lockId), ProxyNode(proxyNode)
+            {}
+
             bool Empty() const {
-                return NewSubscribers.empty() && RepliedSubscribers.empty();
+                return NewSubscribers.empty() && RepliedSubscribers.empty()
+                    && WaitNode.Awaiters.Empty() && WaitNode.Blockers.Empty();
             }
 
             struct THeapIndex {
@@ -147,15 +170,94 @@ namespace NLongTxService {
         };
 
         struct TLockState {
+            const ui64 LockId;
             ui64 RefCount = 0;
             TInstant Timestamp = TInstant::Zero();
 
             THashMap<TActorId, ui64> LocalSubscribers;
             THashMap<TActorId, THashMap<TActorId, ui64>> RemoteSubscribers;
+
+            TWaitNode WaitNode;
+
+            explicit TLockState(ui64 lockId) : LockId(lockId) {}
         };
 
         struct TSessionState {
             THashSet<ui64> SubscribedLocks;
+        };
+
+        struct TLockStateHandle {
+            std::variant<TLockState*, TProxyLockState*> Impl;
+
+            TLockStateHandle() = default;
+            explicit TLockStateHandle(TLockState& ls) : Impl(&ls) {}
+            explicit TLockStateHandle(TProxyLockState& ls) : Impl(&ls) {}
+
+            explicit operator bool() const {
+                return std::visit([] (auto ptr) { return !!ptr; }, Impl);
+            }
+
+            ui64 LockId() const {
+                return std::visit([](auto ptr) {
+                    return ptr->LockId;
+                }, Impl);
+            }
+
+            ui32 LockNodeId(const TActorId& selfId) const {
+                struct TVisitor {
+                    ui32 SelfNodeId;
+                    ui32 operator()(TLockState*) { return SelfNodeId; }
+                    ui32 operator()(TProxyLockState* ls) { return ls->ProxyNode.NodeId; }
+                };
+                return std::visit(TVisitor{.SelfNodeId = selfId.NodeId()}, Impl);
+            }
+
+            TLockInfo LockInfo(const TActorId& selfId) const {
+                return TLockInfo(LockId(), LockNodeId(selfId));
+            }
+
+            TWaitNode& WaitNode() const {
+                return *std::visit([](auto ptr) {
+                    return &ptr->WaitNode;
+                }, Impl);
+            }
+
+            TLockState* LocalState() const {
+                if (auto ptr = std::get_if<TLockState*>(&Impl)) {
+                    return *ptr;
+                }
+                return nullptr;
+            }
+
+            TProxyLockState* ProxyState() const {
+                if (auto ptr = std::get_if<TProxyLockState*>(&Impl)) {
+                    return *ptr;
+                }
+                return nullptr;
+            }
+        };
+
+
+        struct TWaitEdge
+                : public TIntrusiveListItem<TWaitEdge, TTagAwaiter>
+                , public TIntrusiveListItem<TWaitEdge, TTagBlocker> {
+            TWaitEdgeId Id;
+            TLockStateHandle Awaiter;
+            TLockStateHandle Blocker;
+
+            TWaitEdge(const TWaitEdgeId& id, TLockStateHandle awaiter, TLockStateHandle blocker)
+                : Id(id)
+                , Awaiter(awaiter)
+                , Blocker(blocker)
+            {
+                Awaiter.WaitNode().Blockers.PushBack(this);
+                Blocker.WaitNode().Awaiters.PushBack(this);
+            }
+        };
+
+        struct TWaitEdgeInfo {
+            TWaitEdgeId Id;
+            TLockInfo Blocker;
         };
 
     private:
@@ -301,6 +403,8 @@ namespace NLongTxService {
                 hFunc(TEvLongTxService::TEvUnsubscribeLock, Handle);
                 hFunc(TEvLongTxService::TEvWaitingLockAdd, Handle);
                 hFunc(TEvLongTxService::TEvWaitingLockRemove, Handle);
+                hFunc(TEvLongTxService::TEvUpdateLockWaitEdges, Handle);
+                hFunc(TEvLongTxService::TEvGetLockWaitGraph, Handle);
                 hFunc(TEvInterconnect::TEvNodeConnected, Handle);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
                 hFunc(TEvPrivate::TEvReconnect, Handle);
@@ -327,6 +431,8 @@ namespace NLongTxService {
         void Handle(TEvLongTxService::TEvUnsubscribeLock::TPtr& ev);
         void Handle(TEvLongTxService::TEvWaitingLockAdd::TPtr& ev);
         void Handle(TEvLongTxService::TEvWaitingLockRemove::TPtr& ev);
+        void Handle(TEvLongTxService::TEvUpdateLockWaitEdges::TPtr& ev);
+        void Handle(TEvLongTxService::TEvGetLockWaitGraph::TPtr& ev);
 
     private:
         void SendViaSession(const TActorId& sessionId, const TActorId& recipient,
@@ -340,6 +446,8 @@ namespace NLongTxService {
 
         TProxyNodeState& ConnectProxyNode(ui32 nodeId);
         void SendProxyRequest(ui32 nodeId, ERequestType type, THolder<IEventHandle> ev);
+        // Precondition: the node is not in the Disconnected state.
+        TProxyLockState& SubscribeToProxyLock(TProxyNodeState& node, ui64 lockId);
 
         void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev);
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
@@ -359,6 +467,21 @@ namespace NLongTxService {
         const TString& GetDatabaseNameOrLegacyDefault(const TString& databaseName);
 
     private:
+        TLockStateHandle GetAwaiterHandle(const TLockInfo& awaiterInfo);
+
+        void UpdateLockWaitEdges(
+            TLockStateHandle awaiter,
+            const TVector<TWaitEdgeInfo>& added, const TVector<TWaitEdgeId>& removed);
+
+        template<typename TProtoList, typename TFilter>
+        void SyncLockWaitEdgesSubset(
+            TLockStateHandle awaiter,
+            const TProtoList& newEdges,
+            TFilter edgeFilter);
+
+        void RemoveWaitNodeEdges(TWaitNode& waitNode);
+
+    private:
         const TLongTxServiceSettings Settings;
         TString LogPrefix;
         TSessionSubscribeActor* SessionSubscribeActor = nullptr;
@@ -371,6 +494,8 @@ namespace NLongTxService {
         THashMap<ui64, TLockState> Locks;
         THashMap<TActorId, TSessionState> Sessions;
         ui64 LastCookie = 0;
+
+        THashMap<TWaitEdgeId, TWaitEdge> WaitEdges;
     };
 
 } // namespace NLongTxService

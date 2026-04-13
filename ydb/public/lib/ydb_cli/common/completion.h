@@ -39,5 +39,7 @@ private:
 
 TString MakeCompletionInfo(TStringBuf command, TStringBuf flag);
 
+TString DetectShellFromEnv();
+
 } // namespace NConsoleClient
 } // namespace NYdb

@@ -5,6 +5,18 @@ namespace NKqp {
 
 namespace {
 
+bool IsValidLimit(const TExpression& expression) {
+    return expression.Node && !!TMaybeNode<TCoUint64>(expression.Node->ChildPtr(1));
+}
+
+bool CanPushLimitToSource(const TIntrusivePtr<TOpLimit>& limit, const TIntrusivePtr<IOperator>& input) {
+    if (input->GetKind() != EOperator::Source) {
+        return false;
+    }
+    const auto read = CastOperator<TOpRead>(input);
+    return !read->Limit && read->GetTableStorageType() == NYql::EStorageType::ColumnStorage && IsValidLimit(limit->GetLimitCond());
+}
+
 bool CanPushLimitOverInput(const TIntrusivePtr<IOperator>& input) {
     const auto kind = input->GetKind();
     return ((kind == EOperator::Map) && input->IsSingleConsumer());
@@ -27,8 +39,9 @@ TIntrusivePtr<TOpLimit> EmitFinalAndIntermediateLimits(const TIntrusivePtr<TOpLi
     const auto limitCond = limit->GetLimitCond();
     const auto pos = limit->Pos;
     const auto props = limit->Props;
+    const auto offset = limit->GetOffsetCond();
     const auto intermediateLimit = MakeIntrusive<TOpLimit>(limit->GetInput(), pos, props, limitCond, EOpPhase::Intermediate);
-    return MakeIntrusive<TOpLimit>(intermediateLimit, pos, props, limitCond, EOpPhase::Final);
+    return MakeIntrusive<TOpLimit>(intermediateLimit, pos, props, limitCond, offset, EOpPhase::Final);
 }
 
 } // namespace
@@ -43,7 +56,7 @@ TIntrusivePtr<IOperator> TPropagateLimitThroughStageRule::SimpleMatchAndApply(co
 
     const auto limit = CastOperator<TOpLimit>(input);
     // Split one limit on final and intermediate, we will later propagate intermediate through stages.
-    if (limit->GetLimitPhase() == EOpPhase::NotDefined) {
+    if (limit->GetLimitPhase() == EOpPhase::Undefined) {
         return EmitFinalAndIntermediateLimits(limit);
     }
     Y_ENSURE(limit->GetLimitPhase() == EOpPhase::Intermediate);
@@ -61,6 +74,12 @@ TIntrusivePtr<IOperator> TPropagateLimitThroughStageRule::SimpleMatchAndApply(co
     } else if (CanPushLimitToStage(limit, limitInput)) {
         // Just push limit to stage.
         newOperator->Props.StageId = limitInput->Props.StageId;
+        if (CanPushLimitToSource(limit, limitInput)) {
+            auto read = CastOperator<TOpRead>(limitInput);
+            const auto limitCond = limit->GetLimitCond().Node->ChildPtr(1);
+            newOperator = MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->OutputIUs, read->StorageType, read->TableCallable, read->OlapFilterLambda,
+                                                 limitCond, read->Props, read->Pos);
+        }
     }
 
     return newOperator;

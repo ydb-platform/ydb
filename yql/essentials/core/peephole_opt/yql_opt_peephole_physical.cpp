@@ -3237,6 +3237,25 @@ TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprCont
         .Seal().Build();
 }
 
+bool IsExpandLMapOrShuffleByKeysPromoted(const TTypeAnnotationContext& types) {
+    static const char Flag[] = "PromoteExpandLMapOrShuffleByKeys";
+    return IsOptimizerEnabled<Flag>(types) && !IsOptimizerDisabled<Flag>(types);
+}
+
+TExprNode::TPtr ExpandLMapOrShuffleByKeysAtCommonStage(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    if (IsExpandLMapOrShuffleByKeysPromoted(types)) {
+        return ExpandLMapOrShuffleByKeys(node, ctx, types);
+    }
+    return node;
+}
+
+TExprNode::TPtr ExpandLMapOrShuffleByKeysAtFinalStage(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    if (!IsExpandLMapOrShuffleByKeysPromoted(types)) {
+        return ExpandLMapOrShuffleByKeys(node, ctx, types);
+    }
+    return node;
+}
+
 TExprNode::TPtr ExpandDemux(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
     TExprNode::TListType lists;
@@ -7069,11 +7088,11 @@ TExprNode::TPtr SwapReplicateScalarsWithWideMap(const TExprNode::TPtr& wideMap, 
     const auto& input = wideMap->Head();
     YQL_ENSURE(wideMap->IsCallable("WideMap") && input.IsCallable("ReplicateScalars"));
     auto inputTypes = input.GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
-    YQL_ENSURE(inputTypes.size() > 0);
+    YQL_ENSURE(!inputTypes.empty());
 
     THashSet<ui32> replicatedInputIndexes;
     auto replicateScalarsInputTypes = input.Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
-    YQL_ENSURE(replicateScalarsInputTypes.size() > 0);
+    YQL_ENSURE(!replicateScalarsInputTypes.empty());
     if (input.ChildrenSize() == 1) {
         for (ui32 i = 0; i + 1 < replicateScalarsInputTypes.size(); ++i) {
             if (replicateScalarsInputTypes[i]->IsScalar()) {
@@ -8855,6 +8874,12 @@ TExprNode::TPtr ExpandSqlEqual(const TExprNode::TPtr& node, TExprContext& ctx) {
         return ReduceLeftArg<true, Equals, IsDistinct>(*node, ctx);
     } else if (ETypeAnnotationKind::Optional == rKind) {
         return ReduceRightArg<true, Equals, IsDistinct>(*node, ctx);
+    } else if (ETypeAnnotationKind::Pg == lKind && ETypeAnnotationKind::Null == rKind ||
+               ETypeAnnotationKind::Null == lKind && ETypeAnnotationKind::Pg == rKind) {
+        if constexpr (IsDistinct) {
+            const auto pgArg = ETypeAnnotationKind::Pg == lKind ? node->HeadPtr() : node->TailPtr();
+            return ctx.WrapByCallableIf(Equals, "Not", ctx.NewCallable(node->Pos(), "Exists", {pgArg}));
+        }
     }
 
     return node;
@@ -9343,6 +9368,9 @@ struct TPeepHoleRules {
         {"CalcOverWindow", &ExpandCalcOverWindow},
         {"CalcOverSessionWindow", &ExpandCalcOverWindow},
         {"CalcOverWindowGroup", &ExpandCalcOverWindow},
+        {"LMap", &ExpandLMapOrShuffleByKeysAtCommonStage},
+        {"OrderedLMap", &ExpandLMapOrShuffleByKeysAtCommonStage},
+        {"ShuffleByKeys", &ExpandLMapOrShuffleByKeysAtCommonStage},
     };
 
     const TPeepHoleOptimizerMap SimplifyStageRules = {
@@ -9415,9 +9443,9 @@ struct TPeepHoleRules {
     };
 
     const TExtPeepHoleOptimizerMap FinalStageExtRules = {
-        {"LMap", &ExpandLMapOrShuffleByKeys},
-        {"OrderedLMap", &ExpandLMapOrShuffleByKeys},
-        {"ShuffleByKeys", &ExpandLMapOrShuffleByKeys},
+        {"LMap", &ExpandLMapOrShuffleByKeysAtFinalStage},
+        {"OrderedLMap", &ExpandLMapOrShuffleByKeysAtFinalStage},
+        {"ShuffleByKeys", &ExpandLMapOrShuffleByKeysAtFinalStage},
         {"Exists", &OptimizeExists},
         {"ExpandMap", &OptimizeExpandMap},
         {"NarrowFlatMap", &OptimizeNarrowFlatMap},

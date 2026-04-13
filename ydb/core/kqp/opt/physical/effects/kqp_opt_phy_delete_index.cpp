@@ -83,7 +83,6 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
         auto deleteIndexKeys = project(indexTableColumns);
 
         switch (indexDesc->Type) {
-            case TIndexDescription::EType::GlobalJson:
             case TIndexDescription::EType::GlobalAsync:
                 AFL_ENSURE(false);
             case TIndexDescription::EType::GlobalSync:
@@ -102,8 +101,9 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
                 break;
             }
             case TIndexDescription::EType::GlobalFulltextPlain:
-            case TIndexDescription::EType::GlobalFulltextRelevance: {
-                // For fulltext indexes, we need to tokenize the text and create deleted rows
+            case TIndexDescription::EType::GlobalFulltextRelevance:
+            case TIndexDescription::EType::GlobalJson: {
+                // For fulltext and JSON indexes, we need to tokenize the text and create deleted rows
                 const auto deletePrecompute = ReadInputToPrecompute(deleteIndexKeys, del.Pos(), ctx);
                 deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deletePrecompute, indexTableColumnsSet, indexTableColumns,
                     true /*forDelete*/, del.Pos(), ctx);

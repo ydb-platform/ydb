@@ -73,11 +73,9 @@ struct TIndexDescription {
     };
 
     struct TLocalBloomNgramFilterDescription {
-        ui32 NgramSize = 0;
-        ui32 HashesCount = 0;
-        ui32 FilterSizeBytes = 0;
-        ui32 RecordsCount = 0;
-        bool CaseSensitive = true;
+        std::optional<ui32> NgramSize;
+        std::optional<double> FalsePositiveProbability;
+        std::optional<bool> CaseSensitive;
     };
 
     enum class EType : ui32 {
@@ -320,8 +318,8 @@ struct TIndexDescription {
                 return true;
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:
-                return true;
             case EType::GlobalJson:
+                return true;
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
                 return false;
@@ -1252,6 +1250,7 @@ struct TBackupSettings {
 struct TSecretSettings {
     TString Name;
     TString Value;
+    TString ValueParamName; // when set, the value is taken from parameter at execution
     bool InheritPermissions = false;
 };
 

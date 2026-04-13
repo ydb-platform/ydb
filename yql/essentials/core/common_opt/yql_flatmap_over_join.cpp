@@ -2011,7 +2011,7 @@ TExprBase FlatMapOverEquiJoin(
             TSet<ui32> inputs;
             GatherJoinInputs(andTerm, row, parentsMap, backRenameMap, labels, inputs, usedFields);
 
-            if (!multiUsage && inputs.size() == 0) {
+            if (!multiUsage && inputs.empty()) {
                 YQL_CLOG(DEBUG, Core) << "ConstantPredicatePushdownOverEquiJoin";
                 ret = ConstantPredicatePushdownOverEquiJoin(equiJoin.Ptr(), andTerm, ordered, ctx);
                 extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, {}, isPg, ctx);

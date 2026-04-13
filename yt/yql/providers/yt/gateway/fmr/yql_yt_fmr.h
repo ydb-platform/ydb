@@ -22,6 +22,10 @@ enum class ETablePresenceStatus {
 struct TFmrServices: public TYtBaseServices {
     using TPtr = TIntrusivePtr<TFmrServices>;
 
+    TFmrServices() {
+        CheckSpecDoesntUseNativeYtTypes = false;
+    }
+
     TString CoordinatorServerUrl;
     TString TableDataServiceDiscoveryFilePath;
     IYtJobService::TPtr YtJobService;

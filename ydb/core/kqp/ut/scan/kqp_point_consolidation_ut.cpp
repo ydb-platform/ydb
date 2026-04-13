@@ -26,9 +26,8 @@ public:
     bool Do(const TString& path, NJson::TJsonValue* parent, NJson::TJsonValue& value) {
         Y_UNUSED(path, parent);
 
-        if (value.IsMap() && value.Has("Tasks")) {
+        if (value.IsMap() && value.Has("Tasks") && value.Has("PhysicalStageId")) {
             int taskCount = value["Tasks"].GetIntegerSafe();
-            UNIT_ASSERT(value.Has("PhysicalStageId"));
             int stageId = value["PhysicalStageId"].GetIntegerSafe();
             auto [_, success] = TasksCountPerStage.emplace(stageId, taskCount);
             UNIT_ASSERT_C(success, TStringBuilder() << "duplicatedStage " << stageId);

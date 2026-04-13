@@ -21,7 +21,10 @@ namespace error
 
 /**
   A message providing more detail about an error in human-readable form.
-  <p>
+
+  @deprecated
+  {"note": "Use domain-specific error message attribute. For example, use @code
+  feature_flag.error.message @endcode for feature flag errors.", "reason": "obsoleted"} <p>
   @code error.message @endcode should provide additional context and detail about an error.
   It is NOT RECOMMENDED to duplicate the value of @code error.type @endcode in @code error.message
   @endcode. It is also NOT RECOMMENDED to duplicate the value of @code exception.message @endcode in
@@ -29,7 +32,7 @@ namespace error
   @code error.message @endcode is NOT RECOMMENDED for metrics or spans due to its unbounded
   cardinality and overlap with span status.
  */
-static constexpr const char *kErrorMessage = "error.message";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kErrorMessage = "error.message";
 
 /**
   Describes a class of error the operation ended with.

@@ -455,6 +455,30 @@ struct TEvDescribeSecretsResponse : public TEventLocal<TEvDescribeSecretsRespons
     TDescription Description;
 };
 
+struct TEvDescribeResourceIdResponse : public TEventLocal<TEvDescribeResourceIdResponse, TKqpScriptExecutionEvents::EvDescribeResourceIdResponse> {
+    struct TDescription {
+        TDescription(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+            : Status(status)
+            , Issues(std::move(issues))
+        {}
+
+        TDescription(const TString& resourceId)
+            : ResourceId(resourceId)
+            , Status(Ydb::StatusIds::SUCCESS)
+        {}
+
+        TString ResourceId;
+        Ydb::StatusIds::StatusCode Status;
+        NYql::TIssues Issues;
+    };
+
+    TEvDescribeResourceIdResponse(const TDescription& description)
+        : Description(description)
+    {}
+
+    TDescription Description;
+};
+
 struct TEvScriptExecutionsTablesCreationFinished : public TEventLocal<TEvScriptExecutionsTablesCreationFinished, TKqpScriptExecutionEvents::EvScriptExecutionsTableCreationFinished> {
     TEvScriptExecutionsTablesCreationFinished(bool success, NYql::TIssues issues)
         : Success(success)

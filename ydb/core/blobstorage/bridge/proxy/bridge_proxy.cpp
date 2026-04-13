@@ -322,8 +322,19 @@ namespace NKikimr {
                 // ensure we got right number of responses
                 Y_ABORT_UNLESS(ev->ResponseSz == state.NumResponses);
 
-                if (!MustRestoreFirst && DataIsTrustedInPile(pile)) {
+                if (MustRestoreFirst) {
+                    // we are going to restore data, so we have to collect answers from all piles
+                } else if (DataIsTrustedInPile(pile)) {
+                    // this is response from synced pile, we can fully trust it
                     return ev;
+                } else if (ResponsesPending) {
+                    // we still have some queries in flight, execute them
+                    return nullptr;
+                } else {
+                    // strange situation: we haven't got response from trusted pile?
+                    Y_DEBUG_ABORT("missing response from trusted pile");
+                    return static_cast<TEvBlobStorage::TEvGet&>(*OriginalRequest).MakeErrorResponse(
+                        NKikimrProto::ERROR, "failed to obtain response from trusted pile", self.GroupId);
                 }
 
                 if (!state.Responses) {
@@ -778,7 +789,7 @@ namespace NKikimr {
                     // we have to encrypt this message
                 } else if (bridgePileId == BridgeInfo->SelfNodePile->BridgePileId) {
                     // send this message as is
-                } else {
+                } else if (AppData()->FeatureFlags.GetEnableInterpileTrafficOptimization()) {
                     // enable reducing interpile traffic
                     res = std::make_unique<TEvBlobStorage::TEvPut>(ev.Id, TRope(ev.Buffer), ev.Deadline, ev.HandleClass,
                         ev.Tactic, ev.IssueKeepFlag, ev.IgnoreBlock, ev.AlreadyEncrypted,
@@ -846,7 +857,8 @@ namespace NKikimr {
                         << " RacingGeneration# " << msg->RacingGeneration
                         << " Info.Generation# " << request->Info->GroupGeneration
                         << " Type# " << TypeName<TEvent>()
-                        << " RequestId# " << request->RequestId); // too often restarts do not make sense
+                        << " RequestId# " << request->RequestId
+                        << " ErrorReason# " << msg->ErrorReason); // too often restarts do not make sense
 
                     if (myGeneration < msg->RacingGeneration) {
                         PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), std::move(handle));

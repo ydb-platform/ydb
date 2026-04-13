@@ -111,7 +111,7 @@ TSourcePtr TSqlValues::ValuesSource(const TRule_values_source& node, const TVect
             return BuildWriteValues(pos, "UPDATE", columnsHint, std::move(source));
         }
         case NSQLv1Generated::TRule_values_source::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 }
 
@@ -130,7 +130,7 @@ TSourcePtr TSqlIntoValues::Build(const TRule_into_values_source& node, const TSt
             AltNotImplemented("into_values_source", node);
             return nullptr;
         case NSQLv1Generated::TRule_into_values_source::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 }
 
@@ -145,7 +145,7 @@ TSourcePtr TSqlAsValues::Build(const TRule_values_source& node, const TString& o
             return ValuesSource(node, {}, operationName);
         }
         case NSQLv1Generated::TRule_values_source::ALT_NOT_SET:
-            Y_UNREACHABLE();
+            YQL_ENSURE(false, "Unreachable");
     }
 }
 

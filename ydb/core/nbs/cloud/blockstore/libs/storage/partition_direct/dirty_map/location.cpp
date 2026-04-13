@@ -98,6 +98,35 @@ ELocation TranslatePBufferToDDisk(ELocation location)
     }
 }
 
+size_t GetLocationIndex(ELocation location)
+{
+    switch (location) {
+        case ELocation::PBuffer0:
+            return 0;
+        case ELocation::PBuffer1:
+            return 1;
+        case ELocation::PBuffer2:
+            return 2;
+        case ELocation::HOPBuffer0:
+            return 3;
+        case ELocation::HOPBuffer1:
+            return 4;
+        case ELocation::DDisk0:
+            return 5;
+        case ELocation::DDisk1:
+            return 6;
+        case ELocation::DDisk2:
+            return 7;
+        case ELocation::HODDisk0:
+            return 8;
+        case ELocation::HODDisk1:
+            return 9;
+        case ELocation::Unknown:
+            Y_ABORT_UNLESS(false);
+            return 0;
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TLocationMask::TIterator::TIterator(const TLocationMask& mask)
@@ -151,6 +180,14 @@ ELocation TLocationMask::TIterator::operator->() const
 TLocationMask TLocationMask::MakeEmpty()
 {
     return {};
+}
+
+// static
+TLocationMask TLocationMask::MakeOne(ELocation location)
+{
+    TLocationMask mask;
+    mask.Set(location);
+    return mask;
 }
 
 //    static

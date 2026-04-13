@@ -15,6 +15,30 @@ namespace NKikimr::NDDisk {
 
     }
 
+    std::vector<std::vector<std::tuple<ui32, ui32>>> TPersistentBufferSpaceAllocator::DescribeFreeSpace() {
+        std::vector<std::vector<std::tuple<ui32, ui32>>> res;
+        res.resize(FreeSpaceMap.size());
+        ui32 resIdx = 0;
+        std::vector<ui32> chunkIdx;
+        chunkIdx.reserve(FreeSpaceMap.size());
+        for (auto& [k, _] : FreeSpaceMap) {
+            chunkIdx.push_back(k);
+        }
+        std::sort(chunkIdx.begin(), chunkIdx.end());
+
+        for (ui32 i : chunkIdx) {
+            auto& ch = FreeSpaceMap.at(i);
+            res[resIdx].resize(ch.FreeSectors.size());
+            ui32 fsIdx = 0;
+            for (auto& fs : ch.FreeSectors) {
+                res[resIdx][fsIdx++] = {fs.First, fs.Last};
+            }
+            resIdx++;
+        }
+        Y_DEBUG_ABORT_UNLESS(FreeSpace == VerifyFreeSpace());
+        return res;
+    }
+
     TString TPersistentBufferSpaceAllocator::TChunkSpaceOccupation::ToString() const {
         TStringBuilder sb;
         sb << "ChunkIdx: " << ChunkIdx << ", FreeSpace: " << FreeSpace << ", FreeSectors: [";
@@ -36,7 +60,7 @@ namespace NKikimr::NDDisk {
             sb << s.ChunkIdx << ":" << s.FreeSpace << " ";
         }
         sb << "], Chunks: [\n";
-        for (auto [i, s] : FreeSpaceMap) {
+        for (auto& [i, s] : FreeSpaceMap) {
             sb << s.ToString() << "\n";
         }
         sb << "\n]";
@@ -131,6 +155,7 @@ namespace NKikimr::NDDisk {
         }
         Y_ABORT_UNLESS(result.size() == sectorsCount);
         FreeSpace -= sectorsCount;
+        Y_DEBUG_ABORT_UNLESS(FreeSpace == VerifyFreeSpace());
         return result;
     }
 
@@ -176,6 +201,7 @@ namespace NKikimr::NDDisk {
                 startLoc = i;
             }
         }
+        Y_DEBUG_ABORT_UNLESS(FreeSpace == VerifyFreeSpace());
     }
 
     void TPersistentBufferSpaceAllocator::AddNewChunk(ui32 chunkIdx) {
@@ -183,6 +209,7 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(inserted);
         OwnedChunks.push_back(chunkIdx);
         FreeSpace += SectorsInChunk;
+        Y_DEBUG_ABORT_UNLESS(FreeSpace == VerifyFreeSpace());
     }
 
     void TPersistentBufferSpaceAllocator::MarkOccupied(const std::vector<TPersistentBufferSectorInfo>& locations) {
@@ -197,6 +224,24 @@ namespace NKikimr::NDDisk {
                 startLoc = i;
             }
         }
+        Y_DEBUG_ABORT_UNLESS(FreeSpace == VerifyFreeSpace());
+    }
+
+    ui32 TPersistentBufferSpaceAllocator::TChunkSpaceOccupation::VerifyFreeSpace() {
+        ui32 fs = 0;
+        for (auto& v : FreeSectors) {
+            fs += v.Last - v.First + 1;
+        }
+        Y_ABORT_UNLESS(fs == FreeSpace);
+        return fs;
+    }
+
+    ui32 TPersistentBufferSpaceAllocator::VerifyFreeSpace() {
+        ui32 fs = 0;
+        for (auto& [k, v] : FreeSpaceMap) {
+            fs += v.VerifyFreeSpace();
+        }
+        return fs;
     }
 
 

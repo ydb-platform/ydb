@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import contextlib
 import errno
 import functools
@@ -12,16 +13,44 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
-from collections.abc import Iterator
+from collections.abc import Callable, Generator, Iterator
+from types import TracebackType
+from typing import (
+    TYPE_CHECKING,
+    Literal,
+    TypeVar,
+    cast,
+)
 
-if sys.version_info < (3, 12):
-    from backports import tarfile
+# jaraco/backports.tarfile#1
+if TYPE_CHECKING or sys.version_info >= (3, 12):
+    import tarfile  # pragma: no cover
 else:
-    import tarfile
+    from backports import tarfile  # pragma: no cover
+
+if TYPE_CHECKING:
+    from typing import TypeAlias
+
+    from _typeshed import FileDescriptorOrPath, OptExcInfo, StrPath
+    from typing_extensions import ParamSpec, Self, Unpack
+
+    _FileDescriptorOrPathT = TypeVar(
+        "_FileDescriptorOrPathT", bound=FileDescriptorOrPath
+    )
+    _P = ParamSpec("_P")
+
+_UnpackableOptExcInfo: TypeAlias = tuple[
+    type[BaseException] | None,
+    BaseException | None,
+    TracebackType | None,
+]
+_R = TypeVar("_R")
+_T1_co = TypeVar("_T1_co", covariant=True)
+_T2_co = TypeVar("_T2_co", covariant=True)
 
 
 @contextlib.contextmanager
-def pushd(dir: str | os.PathLike) -> Iterator[str | os.PathLike]:
+def pushd(dir: StrPath) -> Iterator[StrPath]:
     """
     >>> tmp_path = getfixture('tmp_path')
     >>> with pushd(tmp_path):
@@ -38,9 +67,7 @@ def pushd(dir: str | os.PathLike) -> Iterator[str | os.PathLike]:
 
 
 @contextlib.contextmanager
-def tarball(
-    url, target_dir: str | os.PathLike | None = None
-) -> Iterator[str | os.PathLike]:
+def tarball(url: str, target_dir: StrPath | None = None) -> Iterator[StrPath]:
     """
     Get a URL to a tarball, download, extract, yield, then clean up.
 
@@ -83,8 +110,8 @@ def tarball(
         shutil.rmtree(target_dir)
 
 
-def _compose_tarfile_filters(*filters):
-    def compose_two(f1, f2):
+def _compose_tarfile_filters(*filters):  # type: ignore[no-untyped-def]
+    def compose_two(f1, f2):  # type: ignore[no-untyped-def]
         return lambda member, path: f1(f2(member, path), path)
 
     return functools.reduce(compose_two, filters, lambda member, path: member)
@@ -92,16 +119,24 @@ def _compose_tarfile_filters(*filters):
 
 def strip_first_component(
     member: tarfile.TarInfo,
-    path,
+    path: object,
 ) -> tarfile.TarInfo:
     _, member.name = member.name.split('/', 1)
     return member
 
 
-_default_filter = _compose_tarfile_filters(tarfile.data_filter, strip_first_component)
+_default_filter = _compose_tarfile_filters(tarfile.data_filter, strip_first_component)  # type: ignore[no-untyped-call]
 
 
-def _compose(*cmgrs):
+def _compose(
+    *cmgrs: Unpack[
+        tuple[
+            # Flipped from compose_two because of reverse
+            Callable[[_T1_co], contextlib.AbstractContextManager[_T2_co]],
+            Callable[_P, contextlib.AbstractContextManager[_T1_co]],
+        ]
+    ],
+) -> Callable[_P, contextlib._GeneratorContextManager[_T2_co]]:
     """
     Compose any number of dependent context managers into a single one.
 
@@ -121,14 +156,21 @@ def _compose(*cmgrs):
     ...     assert os.path.samefile(os.getcwd(), dir)
     """
 
-    def compose_two(inner, outer):
-        def composed(*args, **kwargs):
+    def compose_two(
+        inner: Callable[_P, contextlib.AbstractContextManager[_T1_co]],
+        outer: Callable[[_T1_co], contextlib.AbstractContextManager[_T2_co]],
+    ) -> Callable[_P, contextlib._GeneratorContextManager[_T2_co]]:
+        def composed(*args: _P.args, **kwargs: _P.kwargs) -> Generator[_T2_co]:
             with inner(*args, **kwargs) as saved, outer(saved) as res:
                 yield res
 
         return contextlib.contextmanager(composed)
 
-    return functools.reduce(compose_two, reversed(cmgrs))
+    # reversed makes cmgrs no longer variadic, breaking type validation
+    # Mypy infers compose_two as Callable[[function, function], function]. See:
+    # - https://github.com/python/typeshed/issues/7580
+    # - https://github.com/python/mypy/issues/8240
+    return functools.reduce(compose_two, reversed(cmgrs))  # type: ignore[return-value, arg-type]
 
 
 tarball_cwd = _compose(pushd, tarball)
@@ -137,7 +179,11 @@ A tarball context with the current working directory pointing to the contents.
 """
 
 
-def remove_readonly(func, path, exc_info):
+def remove_readonly(
+    func: Callable[[_FileDescriptorOrPathT], object],
+    path: _FileDescriptorOrPathT,
+    exc_info: tuple[object, OSError, object],
+) -> None:
     """
     Add support for removing read-only files on Windows.
     """
@@ -151,16 +197,20 @@ def remove_readonly(func, path, exc_info):
         raise
 
 
-def robust_remover():
+def robust_remover() -> Callable[..., None]:
     return (
-        functools.partial(shutil.rmtree, onerror=remove_readonly)
+        functools.partial(
+            # cast for python/mypy#18637 / python/mypy#17585
+            cast("Callable[..., None]", shutil.rmtree),
+            onerror=remove_readonly,
+        )
         if platform.system() == 'Windows'
         else shutil.rmtree
     )
 
 
 @contextlib.contextmanager
-def temp_dir(remover=shutil.rmtree):
+def temp_dir(remover: Callable[[str], object] = shutil.rmtree) -> Generator[str]:
     """
     Create a temporary directory context. Pass a custom remover
     to override the removal behavior.
@@ -182,8 +232,11 @@ robust_temp_dir = functools.partial(temp_dir, remover=robust_remover())
 
 @contextlib.contextmanager
 def repo_context(
-    url, branch: str | None = None, quiet: bool = True, dest_ctx=robust_temp_dir
-):
+    url: str,
+    branch: str | None = None,
+    quiet: bool = True,
+    dest_ctx: Callable[[], contextlib.AbstractContextManager[str]] = robust_temp_dir,
+) -> Generator[str]:
     """
     Check out the repo indicated by url.
 
@@ -201,7 +254,7 @@ def repo_context(
     exe = 'git' if 'git' in url else 'hg'
     with dest_ctx() as repo_dir:
         cmd = [exe, 'clone', url, repo_dir]
-        cmd.extend(['--branch', branch] * bool(branch))
+        cmd.extend(['--branch', branch] * bool(branch))  # type: ignore[list-item]
         stream = subprocess.DEVNULL if quiet else None
         subprocess.check_call(cmd, stdout=stream, stderr=stream)
         yield repo_dir
@@ -241,37 +294,42 @@ class ExceptionTrap:
     False
     """
 
-    exc_info = None, None, None
+    exc_info: OptExcInfo = None, None, None
 
-    def __init__(self, exceptions=(Exception,)):
+    def __init__(self, exceptions: tuple[type[BaseException], ...] = (Exception,)):
         self.exceptions = exceptions
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
     @property
-    def type(self):
+    def type(self) -> type[BaseException] | None:
         return self.exc_info[0]
 
     @property
-    def value(self):
+    def value(self) -> BaseException | None:
         return self.exc_info[1]
 
     @property
-    def tb(self):
+    def tb(self) -> TracebackType | None:
         return self.exc_info[2]
 
-    def __exit__(self, *exc_info):
-        type = exc_info[0]
-        matches = type and issubclass(type, self.exceptions)
+    def __exit__(
+        self,
+        *exc_info: Unpack[_UnpackableOptExcInfo],  # noqa: PYI036 # We can do better than object
+    ) -> builtins.type[BaseException] | None | bool:
+        exc_type = exc_info[0]
+        matches = exc_type and issubclass(exc_type, self.exceptions)
         if matches:
-            self.exc_info = exc_info
+            self.exc_info = exc_info  # type: ignore[assignment]
         return matches
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self.type)
 
-    def raises(self, func, *, _test=bool):
+    def raises(
+        self, func: Callable[_P, _R], *, _test: Callable[[ExceptionTrap], bool] = bool
+    ) -> functools._Wrapped[_P, _R, _P, bool]:
         """
         Wrap func and replace the result with the truth
         value of the trap (True if an exception occurred).
@@ -286,14 +344,14 @@ class ExceptionTrap:
         """
 
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> bool:
             with ExceptionTrap(self.exceptions) as trap:
                 func(*args, **kwargs)
             return _test(trap)
 
         return wrapper
 
-    def passes(self, func):
+    def passes(self, func: Callable[_P, _R]) -> functools._Wrapped[_P, _R, _P, bool]:
         """
         Wrap func and replace the result with the truth
         value of the trap (True if no exception).
@@ -342,16 +400,23 @@ class on_interrupt(contextlib.ContextDecorator):
     ...     on_interrupt('ignore')(do_interrupt)()
     """
 
-    def __init__(self, action='error', /, code=1):
+    def __init__(
+        self, action: Literal['ignore', 'suppress', 'error'] = 'error', /, code: int = 1
+    ):
         self.action = action
         self.code = code
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exctype, excinst, exctb):
+    def __exit__(
+        self,
+        exctype: type[BaseException] | None,
+        excinst: BaseException | None,
+        exctb: TracebackType | None,
+    ) -> None | bool:
         if exctype is not KeyboardInterrupt or self.action == 'ignore':
-            return
+            return None
         elif self.action == 'error':
             raise SystemExit(self.code) from excinst
         return self.action == 'suppress'

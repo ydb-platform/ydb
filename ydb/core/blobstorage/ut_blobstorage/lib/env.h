@@ -442,6 +442,7 @@ struct TEnvironmentSetup {
                         auto *hostconf = config->BlobStorageConfig.AddDefineHostConfig();
                         hostconf->SetHostConfigId(1);
                         auto *drive = hostconf->AddDrive();
+                        drive->SetPath("SectorMap:X:1000");
                         drive->SetType(NKikimrBlobStorage::EPDiskType::NVME);
 
                         auto& ns = config->NameserviceConfig;

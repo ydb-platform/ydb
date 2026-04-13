@@ -6,9 +6,9 @@
 
 1. See the Hive balancer stats.
 
-    1. Open [Embedded UI](../../../../reference/embedded-ui/index.md).
+    1. Open [YDB UI](../../../../reference/ydb-ui/index.md).
 
-    1. Click **Developer UI** in the upper right corner of the Embedded UI.
+    1. Click **Developer UI** in the upper right corner of the YDB UI.
 
     1. In the **Developer UI**, navigate to **Tablets > Hive > App**.
 

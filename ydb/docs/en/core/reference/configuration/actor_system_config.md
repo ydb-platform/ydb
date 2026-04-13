@@ -9,7 +9,7 @@ You can set up your actor system either [automatically](#autoconfig) or [manuall
 
 Automatic configuration adapts to the current system workload. It is recommended in most cases.
 
-You might opt for manual configuration when a certain pool in your actor system is overwhelmed and undermines the overall database performance. You can track the workload on your pools on the [Embedded UI monitoring page](../../reference/embedded-ui/ydb-monitoring.md#node_list_page).
+You might opt for manual configuration when a certain pool in your actor system is overwhelmed and undermines the overall database performance. You can track the workload on your pools on the [YDB UI monitoring page](../../reference/ydb-ui/ydb-monitoring.md#node_list_page).
 
 ## Automatic Configuring {#autoconfig}
 

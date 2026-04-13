@@ -8,10 +8,10 @@ items:
   include:
     mode: link
     path: ../postgresql/toc_p.yaml
-- name: Встроенный UI
+- name: YDB UI
   include:
     mode: link
-    path: embedded-ui/toc_p.yaml
+    path: ydb-ui/toc_p.yaml
 - name: Интеграции
   href: ../integrations/index.md
   include:

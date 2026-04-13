@@ -1,6 +1,6 @@
-1. Use **Diagnostics** in the [Embedded UI](../../../../reference/embedded-ui/index.md) to analyze CPU utilization in all pools:
+1. Use **Diagnostics** in the [YDB UI](../../../../reference/ydb-ui/index.md) to analyze CPU utilization in all pools:
 
-    1. In the [Embedded UI](../../../../reference/embedded-ui/index.md), go to the **Databases** tab and click on the database.
+    1. In the [YDB UI](../../../../reference/ydb-ui/index.md), go to the **Databases** tab and click on the database.
 
     1. On the **Navigation** tab, ensure the required database is selected.
 

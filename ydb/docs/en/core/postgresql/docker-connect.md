@@ -6,7 +6,7 @@
 
 Currently, the PostgreSQL compatibility feature is available for testing in the Docker image: `ghcr.io/ydb-platform/local-ydb:nightly`.
 
-Commands for starting a local Docker container with {{ ydb-short-name }} and open ports for PostgreSQL and Embedded UI:
+Commands for starting a local Docker container with {{ ydb-short-name }} and open ports for PostgreSQL and YDB UI:
 
 {% note tip %}
 

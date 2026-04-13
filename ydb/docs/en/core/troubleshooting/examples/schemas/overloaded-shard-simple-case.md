@@ -4,7 +4,7 @@ This article describes an example of how to diagnose overloaded shards and resol
 
 For more information about overloaded shards and their causes, see [{#T}](../../performance/schemas/overloaded-shards.md).
 
-The article begins by [stating the problem](#initial-issue). Then, we'll examine diagrams in Grafana and information on the **Diagnostics** tab in the [Embedded UI](../../../reference/embedded-ui/index.md) to [solve the problem](#solution) and [observe the solution in action](#aftermath).
+The article begins by [stating the problem](#initial-issue). Then, we'll examine diagrams in Grafana and information on the **Diagnostics** tab in the [YDB UI](../../../reference/ydb-ui/index.md) to [solve the problem](#solution) and [observe the solution in action](#aftermath).
 
 At the end of the article, you can find the steps to [reproduce the situation](#testbed).
 
@@ -64,7 +64,7 @@ Examining the **CPU** Grafana dashboard reveals that CPU usage increased [in the
 
 {% endcut %}
 
-We can also observe overall CPU usage on the **Diagnostics** tab of the [Embedded UI](../../../reference/embedded-ui/index.md):
+We can also observe overall CPU usage on the **Diagnostics** tab of the [YDB UI](../../../reference/ydb-ui/index.md):
 
 ![CPU diagnostics](./_assets/overloaded-shard-simple-case/incident-ui-cpu-usage.png)
 
@@ -100,7 +100,7 @@ This diagram shows that the workload on one data shard increased to 70% at appro
 
 {% endcut %}
 
-To determine which table the overloaded data shard is processing, let's open the **Diagnostics > Top shards** tab in the Embedded UI:
+To determine which table the overloaded data shard is processing, let's open the **Diagnostics > Top shards** tab in the YDB UI:
 
 ![Diagnostics > shards](./_assets/overloaded-shard-simple-case/incident-ui-top-shards.png)
 
@@ -122,7 +122,7 @@ This means that a single data shard processes all requests to this table. Since 
 
 We should enable partitioning by load for the `kv_test` table:
 
-1. In the Embedded UI, select the database.
+1. In the YDB UI, select the database.
 2. Open the **Query** tab.
 3. Run the following query:
 

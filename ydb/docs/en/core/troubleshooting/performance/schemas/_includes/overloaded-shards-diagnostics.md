@@ -1,4 +1,4 @@
-1. Use the Embedded UI or Grafana to see if the {{ ydb-short-name }} nodes are overloaded:
+1. Use the YDB UI or Grafana to see if the {{ ydb-short-name }} nodes are overloaded:
 
     - In the **[DB overview](../../../../reference/observability/metrics/grafana-dashboards.md#dboverview)** Grafana dashboard, analyze the **Overloaded shard count** chart.
 
@@ -13,7 +13,7 @@
         {% endnote %}
 
 
-    - In the [Embedded UI](../../../../reference/embedded-ui/index.md):
+    - In the [YDB UI](../../../../reference/ydb-ui/index.md):
 
         1. Go to the **Databases** tab and click on the database.
 
@@ -29,9 +29,9 @@
 
         Additionally, the information about overloaded shards is provided as a system table. For more information, see [{#T}](../../../../dev/system-views.md#top-overload-partitions).
 
-1. To pinpoint the schema issue, use the [Embedded UI](../../../../reference/embedded-ui/index.md) or [{{ ydb-short-name }} CLI](../../../../reference/ydb-cli/index.md):
+1. To pinpoint the schema issue, use the [YDB UI](../../../../reference/ydb-ui/index.md) or [{{ ydb-short-name }} CLI](../../../../reference/ydb-cli/index.md):
 
-    - In the [Embedded UI](../../../../reference/embedded-ui/index.md):
+    - In the [YDB UI](../../../../reference/ydb-ui/index.md):
 
         1. On the **Databases** tab, click on the database.
 

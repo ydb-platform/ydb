@@ -21,7 +21,7 @@ Adding dynamic nodes allows increasing available computing resources (processor 
 
 To add a dynamic node to the cluster, it is sufficient to start the process serving this node, passing it the path to the cluster configuration folder, the name of the served database, and addresses of any three static cluster nodes in the command line parameters, as shown in the [cluster deployment instructions](../../deployment-options/manual/initial-deployment/deployment-configuration-v2.md#start-dynnode).
 
-After successfully adding a dynamic node to the cluster, information about it will be available on the [cluster monitoring page in the embedded UI](../../../reference/embedded-ui/ydb-monitoring.md).
+After successfully adding a dynamic node to the cluster, information about it will be available on the [cluster monitoring page in the YDB UI](../../../reference/ydb-ui/ydb-monitoring.md).
 
 To remove a dynamic node from the cluster, it is sufficient to stop the dynamic node process.
 
@@ -90,7 +90,7 @@ To add static nodes to the cluster, you need to perform the following sequence o
 
 7. Start processes serving new static cluster nodes on the corresponding servers.
 
-8. Ensure that new static nodes are displayed on the [cluster monitoring page in the embedded UI](../../../reference/embedded-ui/ydb-monitoring.md).
+8. Ensure that new static nodes are displayed on the [cluster monitoring page in the YDB UI](../../../reference/ydb-ui/ydb-monitoring.md).
 
 9. Add additional storage groups to one or more databases by executing commands of the following type on any cluster node:
 
@@ -109,7 +109,7 @@ To add static nodes to the cluster, you need to perform the following sequence o
     * `/Root/testdb` - full path to the database
     * `ssd:1` - storage pool name and number of allocated storage groups
 
-10. Ensure that added storage groups are displayed on the [cluster monitoring page in the embedded UI](../../../reference/embedded-ui/ydb-monitoring.md).
+10. Ensure that added storage groups are displayed on the [cluster monitoring page in the YDB UI](../../../reference/ydb-ui/ydb-monitoring.md).
 
 Removing static nodes from the {{ ydb-short-name }} cluster is performed according to the [documented decommissioning procedure](../../deployment-options/manual/decommissioning.md).
 

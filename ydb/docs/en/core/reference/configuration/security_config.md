@@ -205,11 +205,11 @@ Access levels are defined by the `viewer_allowed_sids`, `monitoring_allowed_sids
 || Parameter | Description ||
 || `viewer_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) with the viewer access level.
 
-This level allows viewing the cluster state, which is not publicly accessible (including most pages in the [Embedded UI](../embedded-ui/ydb-monitoring.md)). No changes are allowed.
+This level allows viewing the cluster state, which is not publicly accessible (including most pages in the [YDB UI](../ydb-ui/ydb-monitoring.md)). No changes are allowed.
     ||
 || `monitoring_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) with the operator access level.
 
-This level grants additional privileges to monitor and modify the cluster state. For example, it allows performing a backup, restoring a database, or executing YQL statements in the Embedded UI.
+This level grants additional privileges to monitor and modify the cluster state. For example, it allows performing a backup, restoring a database, or executing YQL statements in the YDB UI.
     ||
 || `administration_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) with the administrator access level.
 
@@ -241,7 +241,7 @@ It is recommended to add user groups and separate service accounts to the `*_all
 
 Access level lists are layers of additional privileges:
 
-- An access subject that is not included in any access level list can view only publicly available information about the cluster (for example, [a list of databases on the cluster](../embedded-ui/ydb-monitoring.md#tenant_list_page) or [a list of cluster nodes](../embedded-ui/ydb-monitoring.md#node_list_page)).
+- An access subject that is not included in any access level list can view only publicly available information about the cluster (for example, [a list of databases on the cluster](../ydb-ui/ydb-monitoring.md#tenant_list_page) or [a list of cluster nodes](../ydb-ui/ydb-monitoring.md#node_list_page)).
 - Each of the `viewer_allowed_sids`, `monitoring_allowed_sids`, and `administration_allowed_sids` lists adds privileges to the access subject. For the maximum level of privileges, an access subject must be added to all three access level lists.
 - Adding an access subject to the `monitoring_allowed_sids` or `administration_allowed_sids` list without adding it to `viewer_allowed_sids` has no effect.
 

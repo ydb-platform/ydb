@@ -40,7 +40,7 @@ To create and execute a transfer, the user must have write permissions to the ta
 
 ## Diagnostics
 
-Current transfer parameters, including the lambda function text, can be viewed in the [Embedded UI](../reference/embedded-ui/index.md) and in the [description](../reference/ydb-cli/commands/scheme-describe.md) of the transfer instance.
+Current transfer parameters, including the lambda function text, can be viewed in the [YDB UI](../reference/ydb-ui/index.md) and in the [description](../reference/ydb-cli/commands/scheme-describe.md) of the transfer instance.
 
 Data processing speed and delays can be monitored using [consumer metrics](../reference/observability/metrics/index.md#topics) that are used for reading from the topic.
 
@@ -63,7 +63,7 @@ To guarantee that unprocessed messages are not deleted, you should make the cons
 Different types of errors can occur during the transfer process:
 
 * **Temporary failures**. Transport errors, system overload, and other temporary problems. Requests will be retried until successful execution.
-* **Critical errors**. Errors related to access rights, data schema, and other critical aspects. When such errors occur, the transfer will be stopped, and the error text will be displayed on the transfer page in the [Embedded UI](../reference/embedded-ui/index.md) user interface. The error text can also be obtained from the [description](../reference/ydb-cli/commands/scheme-describe.md) of the transfer instance.
+* **Critical errors**. Errors related to access rights, data schema, and other critical aspects. When such errors occur, the transfer will be stopped, and the error text will be displayed on the transfer page in the [YDB UI](../reference/ydb-ui/index.md) user interface. The error text can also be obtained from the [description](../reference/ydb-cli/commands/scheme-describe.md) of the transfer instance.
 
 To resume a transfer operation, eliminate the cause of the error and execute the [`ALTER TRANSFER`](../yql/reference/syntax/alter-transfer.md) command. For example, if the error was in the lambda function, change the lambda function. If the error is not related to the transfer configuration, for example, missing read permissions, then after eliminating the cause of the error, the transfer must be restarted by [temporarily stopping](#pause-and-resume) and then [resuming](#pause-and-resume) its operation.
 

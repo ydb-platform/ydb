@@ -194,7 +194,7 @@ The status (severity) of the current issue:
 
 **Description:** The storage group was configured incorrectly.
 
-**Actions:** In the [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and use the known group `id` to check the configuration of nodes and disks on the nodes.
+**Actions:** In the [YDB UI](../ydb-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and use the known group `id` to check the configuration of nodes and disks on the nodes.
 
 #### Group degraded
 
@@ -202,7 +202,7 @@ The status (severity) of the current issue:
 
 **Logic of work:** `HealthCheck` checks various parameters (fault tolerance mode, number of failed disks, disk status, etc.) and sets the appropriate status for the group accordingly.
 
-**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, apply the `Groups` and `Degraded` filters, and use the known group `id` to check the availability of nodes and disks on the nodes.
+**Actions:** In [YDB UI](../ydb-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, apply the `Groups` and `Degraded` filters, and use the known group `id` to check the availability of nodes and disks on the nodes.
 
 #### Group has no redundancy
 
@@ -210,7 +210,7 @@ The status (severity) of the current issue:
 
 **Logic of work:** `HealthCheck` monitors various parameters (fault tolerance mode, number of failed disks, disk status, etc.) and sets the appropriate status for the group based on these parameters.
 
-**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, apply the `Groups` and `Degraded` filters, and use the known group `id` to check the availability of nodes and disks on those nodes.
+**Actions:** In [YDB UI](../ydb-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, apply the `Groups` and `Degraded` filters, and use the known group `id` to check the availability of nodes and disks on those nodes.
 
 #### Group failed
 
@@ -218,7 +218,7 @@ The status (severity) of the current issue:
 
 **Logic of work:** `HealthCheck` monitors various parameters (fault tolerance mode, number of failed disks, disk status, etc.) and sets the appropriate status for the group accordingly.
 
-**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, apply the `Groups` and `Degraded` filters, and use the known group `id` to check the availability of nodes and disks on those nodes.
+**Actions:** In [YDB UI](../ydb-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, apply the `Groups` and `Degraded` filters, and use the known group `id` to check the availability of nodes and disks on those nodes.
 
 ### VDISK
 
@@ -230,19 +230,19 @@ The status (severity) of the current issue:
 
 **Description:** The disk is not operational.
 
-**Actions:** In [YDB Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
+**Actions:** In [YDB UI](../ydb-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
 
 #### VDisk is being initialized
 
 **Description:** The disk is in the process of initialization.
 
-**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
+**Actions:** In [YDB UI](../ydb-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
 
 #### Replication in progress
 
 **Description:** The disk is accepting queries, but not all data has been replicated.
 
-**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
+**Actions:** In [YDB UI](../ydb-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
 
 #### VDisk have space issue
 
@@ -258,18 +258,18 @@ The status (severity) of the current issue:
 
 **Description:** Indicates state of physical disk.
 
-**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, set the `Nodes` and `Degraded` filters, and use the known node id and PDisk to check the availability of nodes and disks on the nodes.
+**Actions:** In [YDB UI](../ydb-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, set the `Nodes` and `Degraded` filters, and use the known node id and PDisk to check the availability of nodes and disks on the nodes.
 
 #### Available size is less than 12%, Available size is less than 9%, Available size is less than 6%
 
 **Description:** Free space on the physical disk is running out.
-**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, set the `Nodes` and `Out of Space` filters, and use the known node and PDisk identifiers to check the available space.
+**Actions:** In [YDB UI](../ydb-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, set the `Nodes` and `Out of Space` filters, and use the known node and PDisk identifiers to check the available space.
 
 #### PDisk is not available
 
 **Description:** A physical disk is not available.
 
-**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, set the `Nodes` and `Degraded` filters, and use the known node and PDisk identifiers to check the availability of nodes and disks on the nodes.
+**Actions:** In [YDB UI](../ydb-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, set the `Nodes` and `Degraded` filters, and use the known node and PDisk identifiers to check the availability of nodes and disks on the nodes.
 
 ### STORAGE_NODE
 
@@ -317,7 +317,7 @@ The status (severity) of the current issue:
 
 **Description:** The system tablet is either not responding or takes too long to respond.
 
-**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the `Storage` tab and apply the `Nodes` filter. Check the `Uptime` and the nodes' statuses. If the `Uptime` is short, review the logs to determine the reasons for the node restarts.
+**Actions:** In [YDB UI](../ydb-ui/ydb-monitoring.md), navigate to the `Storage` tab and apply the `Nodes` filter. Check the `Uptime` and the nodes' statuses. If the `Uptime` is short, review the logs to determine the reasons for the node restarts.
 
 ### TABLET
 
@@ -325,13 +325,13 @@ The status (severity) of the current issue:
 
 **Description:** Tablets are restarting too frequently.
 
-**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the `Nodes` tab. Check the `Uptime` and the nodes' statuses. If the `Uptime` is short, review the logs to determine the reasons for the node restarts.
+**Actions:** In [YDB UI](../ydb-ui/ydb-monitoring.md), navigate to the `Nodes` tab. Check the `Uptime` and the nodes' statuses. If the `Uptime` is short, review the logs to determine the reasons for the node restarts.
 
 #### Tablets/Followers are dead
 
 **Description:** Tablets are not running (likely cannot be started).
 
-**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the `Nodes` tab. Check the `Uptime` and the nodes' statuses. If the `Uptime` is short, review the logs to determine the reasons for the node restarts.
+**Actions:** In [YDB UI](../ydb-ui/ydb-monitoring.md), navigate to the `Nodes` tab. Check the `Uptime` and the nodes' statuses. If the `Uptime` is short, review the logs to determine the reasons for the node restarts.
 
 ### LOAD_AVERAGE
 

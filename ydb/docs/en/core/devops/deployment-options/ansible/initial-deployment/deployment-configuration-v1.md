@@ -893,11 +893,11 @@ Running the `ydb_platform.ydb.initial_setup` playbook creates a {{ ydb-short-nam
 
 ## Additional steps {#additional-steps}
 
-The easiest way to explore the newly deployed cluster is [Embedded UI](../../../../reference/embedded-ui/index.md), which runs on port 8765 on each server. If you do not have direct browser access to that port, set up SSH tunneling by running `ssh -L 8765:localhost:8765 -i <private-key> <user>@<any-ydb-server-hostname>` on your local machine (add more options if needed). After the connection is established, open [localhost:8765](http://localhost:8765) in your browser. The browser may ask you to accept a security exception. Example:
+The easiest way to explore the newly deployed cluster is [YDB UI](../../../../reference/ydb-ui/index.md), which runs on port 8765 on each server. If you do not have direct browser access to that port, set up SSH tunneling by running `ssh -L 8765:localhost:8765 -i <private-key> <user>@<any-ydb-server-hostname>` on your local machine (add more options if needed). After the connection is established, open [localhost:8765](http://localhost:8765) in your browser. The browser may ask you to accept a security exception. Example:
 
 ![ydb-web-ui](../../../../_assets/ydb-web-console.png)
 
-After the {{ ydb-short-name }} cluster is created, check its state on this Embedded UI page: [http://localhost:8765/monitoring/cluster/tenants](http://localhost:8765/monitoring/cluster/tenants). It might look like this:
+After the {{ ydb-short-name }} cluster is created, check its state on this YDB UI page: [http://localhost:8765/monitoring/cluster/tenants](http://localhost:8765/monitoring/cluster/tenants). It might look like this:
 
 ![ydb-cluster-check](../../../../_assets/ydb-cluster-check.png)
 
@@ -912,7 +912,7 @@ You can check the storage group state in the `storage` section — [http://local
 
 ![ydb-storage-gr-check](../../../../_assets/ydb-storage-gr-check.png)
 
-The `VDisks` indicators should be green, and the `state` status (in the tooltip when hovering over the Vdisk indicator) should be `Ok`. For more on cluster state indicators and monitoring, see [{#T}](../../../../reference/embedded-ui/ydb-monitoring.md).
+The `VDisks` indicators should be green, and the `state` status (in the tooltip when hovering over the Vdisk indicator) should be `Ok`. For more on cluster state indicators and monitoring, see [{#T}](../../../../reference/ydb-ui/ydb-monitoring.md).
 
 ### Cluster testing {#testing}
 

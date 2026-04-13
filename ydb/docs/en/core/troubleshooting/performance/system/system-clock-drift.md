@@ -17,9 +17,9 @@ Furthermore, if the system clock drift exceeds 30 seconds, {{ ydb-short-name }} 
 
 To diagnose the system clock drift, use the following methods:
 
-1. Use **Healthcheck** in the [Embedded UI](../../../reference/embedded-ui/index.md):
+1. Use **Healthcheck** in the [YDB UI](../../../reference/ydb-ui/index.md):
 
-    1. In the [Embedded UI](../../../reference/embedded-ui/index.md), go to the **Databases** tab and click on the database.
+    1. In the [YDB UI](../../../reference/ydb-ui/index.md), go to the **Databases** tab and click on the database.
 
     1. On the **Navigation** tab, ensure the required database is selected.
 
@@ -42,7 +42,7 @@ To diagnose the system clock drift, use the following methods:
     {% endnote %}
 
 
-1. Open the [Interconnect overview](../../../reference/embedded-ui/interconnect-overview.md) page of the [Embedded UI](../../../reference/embedded-ui/index.md).
+1. Open the [Interconnect overview](../../../reference/ydb-ui/interconnect-overview.md) page of the [YDB UI](../../../reference/ydb-ui/index.md).
 
 1. Use such tools as `pssh` or `ansible` to run the command (for example, `date +%s%N`) on all {{ ydb-short-name }} nodes to display the system clock value.
 

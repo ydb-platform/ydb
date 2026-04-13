@@ -13,7 +13,7 @@ The network configuration must allow TCP connections on the following ports (the
 * 22: SSH service
 * 2135, 2136: GRPC for client-cluster interaction.
 * 19001, 19002: Interconnect for intra-cluster node interaction
-* 8765, 8766: HTTP interface of {{ ydb-short-name }} Embedded UI.
+* 8765, 8766: HTTP interface of {{ ydb-short-name }} YDB UI.
 
 Distinct ports are necessary for gRPC, Interconnect and HTTP interface of each dynamic node when hosting multiple dynamic nodes on a single server.
 

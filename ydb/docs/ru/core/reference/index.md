@@ -4,7 +4,7 @@
 
 * [{#T}](../yql/reference/index.md)
 * [{#T}](../postgresql/intro.md)
-* [{#T}](./embedded-ui/index.md)
+* [{#T}](./ydb-ui/index.md)
 * [{#T}](../integrations/index.md)
 * [{#T}](./ydb-cli/index.md)
 * [{#T}](./ydb-sdk/index.md)

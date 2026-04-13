@@ -17,7 +17,7 @@
 
 1. Чтобы определить недавно разделённые или слитые таблетки, выполните следующие шаги:
 
-    1. Во [Встроенном UI](../../../../reference/embedded-ui/index.md) нажмите на ссылку **Developer UI** в правом верхнем углу.
+    1. В [YDB UI](../../../../reference/ydb-ui/index.md) нажмите на ссылку **Developer UI** в правом верхнем углу.
 
     1. Перейдите на страницу **Node Table Monitor** > **All tablets of the cluster**.
 

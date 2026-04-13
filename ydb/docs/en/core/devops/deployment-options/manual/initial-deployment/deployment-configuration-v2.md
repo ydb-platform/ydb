@@ -226,7 +226,7 @@ After running this command, the source file `/tmp/config.yaml` is no longer used
 
 {% endlist %}
 
-After starting the static nodes, verify they are working via the {{ ydb-short-name }} built-in web interface (Embedded UI):
+After starting the static nodes, verify they are working via YDB UI:
 
 1. Open `https://<node.ydb.tech>:8765` in your browser, where `<node.ydb.tech>` is the FQDN of the server running any static node;
 2. Go to the **Nodes** tab;
@@ -425,15 +425,15 @@ Where `<node.ydb.tech>` is the FQDN of the server running the dynamic node that 
 
 ## Verifying Access to the Built-in Web Interface
 
-To verify access to the {{ ydb-short-name }} built-in web interface, open `https://<node.ydb.tech>:8765` in a web browser, where `<node.ydb.tech>` is the FQDN of the server running any {{ ydb-short-name }} static node.
+To verify access to YDB UI, open `https://<node.ydb.tech>:8765` in a web browser, where `<node.ydb.tech>` is the FQDN of the server running any {{ ydb-short-name }} static node.
 
 The web browser must be configured to trust the Certificate Authority that issued the certificates for the {{ ydb-short-name }} cluster; otherwise, a warning about using an untrusted certificate will be displayed.
 
-If authentication is enabled in the cluster, the web browser will display a login and password prompt. After entering valid authentication credentials, the built-in web interface home page should appear. A description of the available features and user interface is provided in [{#T}](../../../../reference/embedded-ui/index.md).
+If authentication is enabled in the cluster, the web browser will display a login and password prompt. After entering valid authentication credentials, the YDB UI home page should appear. A description of the available features and user interface is provided in [{#T}](../../../../reference/ydb-ui/index.md).
 
 {% note info %}
 
-Typically, to provide access to the {{ ydb-short-name }} built-in web interface, a fault-tolerant HTTP load balancer is configured using software such as `haproxy`, `nginx`, or similar. HTTP load balancer configuration details are beyond the scope of the standard {{ ydb-short-name }} installation instructions.
+Typically, to provide access to YDB UI, a fault-tolerant HTTP load balancer is configured using software such as `haproxy`, `nginx`, or similar. HTTP load balancer configuration details are beyond the scope of the standard {{ ydb-short-name }} installation instructions.
 
 {% endnote %}
 

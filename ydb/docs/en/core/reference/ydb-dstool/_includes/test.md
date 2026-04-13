@@ -4,7 +4,7 @@
 ydb-dstool -e <bs_endpoint> cluster list
 ```
 
-* `bs_endpoint`: URI of the cluster's HTTP endpoint, the same endpoint that serves the [Embedded UI](../../embedded-ui/index.md). Example: `http://localhost:8765`.
+* `bs_endpoint`: URI of the cluster's HTTP endpoint, the same endpoint that serves the [YDB UI](../../ydb-ui/index.md). Example: `http://localhost:8765`.
 
 Result:
 

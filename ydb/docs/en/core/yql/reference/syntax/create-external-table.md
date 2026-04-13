@@ -21,8 +21,8 @@ Where:
 * `column1 type1`, `columnN typeN NULL` — column definitions and types;
 * `data_source_name` — name of the [connection](../../../concepts/datamodel/external_data_source.md) to S3 ({{ objstorage-name }}).
 * `path` — path inside the data bucket. The path must refer to an existing folder in the bucket.
-* `format_name` — one of the [supported storage formats](../../../concepts/federated_query/s3/formats.md).
-* `compression_name` — one of the [supported compression algorithms](../../../concepts/federated_query/s3/formats.md#compression).
+* `format_name` — one of the [supported storage formats](../../../concepts/query_execution/federated_query/s3/formats.md).
+* `compression_name` — one of the [supported compression algorithms](../../../concepts/query_execution/federated_query/s3/formats.md#compression).
 
 Only a limited subset of data types is allowed:
 

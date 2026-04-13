@@ -327,7 +327,6 @@ namespace NLongTxService {
             };
 
             struct TEvSnapshotMaintenance : public TEventLocal<TEvSnapshotMaintenance, EvSnapshotMaintenance> {
-                TEvSnapshotMaintenance() = default;
             };
         };
 

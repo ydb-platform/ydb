@@ -23,7 +23,7 @@ public:
    
    virtual const TTrueAtomicSharedPtr<IImmutableSnapshotRegistry>& Get() const = 0;
 
-   virtual void Set(IImmutableSnapshotRegistry* registry) = 0;
+   virtual void Set(std::unique_ptr<IImmutableSnapshotRegistry>&& registry) = 0;
 };
 
 using IImmutableSnapshotRegistryHolderPtr = TIntrusivePtr<IImmutableSnapshotRegistryHolder>;

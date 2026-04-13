@@ -167,8 +167,10 @@ namespace {
 
     private:
         bool RetrySubtree(TActorId childActorId) {
-            THashSet<TActorId> subtree(ChildToSubtree.at(childActorId));
-            ChildToSubtree.erase(childActorId);
+            auto iterChildActorSubtree = ChildToSubtree.find(childActorId);
+            AFL_ENSURE(iterChildActorSubtree != ChildToSubtree.end());
+            THashSet<TActorId> subtree(std::move(iterChildActorSubtree->second));
+            ChildToSubtree.erase(iterChildActorSubtree);
             if (subtree.empty()) {
                 return false;
             }

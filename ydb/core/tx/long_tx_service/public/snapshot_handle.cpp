@@ -16,8 +16,7 @@ TSnapshotHandle::~TSnapshotHandle() {
     }
 }
 
-TSnapshotHandle::TSnapshotHandle(TSnapshotHandle&& other) noexcept
-{
+TSnapshotHandle::TSnapshotHandle(TSnapshotHandle&& other) noexcept {
     std::swap(Alive_, other.Alive_);
 }
 

@@ -135,7 +135,7 @@ public:
 private:
     THashMap<ui32, TNodeSnapshotsState> NodeIdToState;
     TRowVersion SnapshotBorder = TRowVersion::Max();
-    bool Ready = false;;
+    bool Ready = false;
 };
 
 using TRemoteSnapshotsStoragePtr = TIntrusivePtr<TRemoteSnapshotsStorage>;

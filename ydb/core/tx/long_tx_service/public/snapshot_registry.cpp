@@ -53,8 +53,8 @@ namespace {
             return Registry;
         }
 
-        void Set(IImmutableSnapshotRegistry* registry) override {
-            TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> newRegistry(registry);
+        void Set(std::unique_ptr<IImmutableSnapshotRegistry>&& registry) override {
+            TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> newRegistry(registry.release());
             Registry.swap(newRegistry);
         }
     private:

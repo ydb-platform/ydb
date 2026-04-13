@@ -1471,7 +1471,7 @@ void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {
         Settings.Counters->RemoteSnapshotsInRegistry->Set(remoteSnapshotsCount);
     }
 
-    AppData()->SnapshotRegistryHolder->Set(std::move(*registryBuilder).Build().release());
+    AppData()->SnapshotRegistryHolder->Set(std::move(*registryBuilder).Build());
     TXLOG_DEBUG("Updated immutable snapshots registry. "
         << "Local snapshots count: " << localSnapshotsCount
         << ", Remote snapshots count: " << remoteSnapshotsCount);

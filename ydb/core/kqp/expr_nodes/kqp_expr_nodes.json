@@ -908,7 +908,7 @@
         {
             "Name": "TKqpOpJoinFilter",
             "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "KqpOpFilter"},
+            "Match": {"Type": "Callable", "Name": "KqpOpJoinFilter"},
             "Children": [
                 {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
                 {"Index": 1, "Name": "RightInput", "Type": "TExprBase"},

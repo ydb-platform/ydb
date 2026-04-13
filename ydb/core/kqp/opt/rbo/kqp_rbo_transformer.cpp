@@ -359,6 +359,12 @@ TKqpNewRBOTransformer::TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>&
 
 void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     // Initial stages.
+    // Inline join filters. FIXME: Move after inlining when adding support for more advanced decorelation
+    TVector<std::unique_ptr<IRule>> joinFiltersInlineRules;
+    joinFiltersInlineRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
+    joinFiltersInlineRules.emplace_back(std::make_unique<TFuseFiltersRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline join filters", std::move(joinFiltersInlineRules)));
+
     // Predicate pull-up stage.
     TVector<std::unique_ptr<IRule>> filterPullUpRules;
     filterPullUpRules.emplace_back(std::make_unique<TPullUpCorrelatedFilterRule>());

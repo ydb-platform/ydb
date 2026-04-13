@@ -549,9 +549,6 @@ TExprNode::TPtr NormalizeMemberNames(TExprNode::TPtr node, TExprContext& ctx, TP
 }
 
 void SplitByAnd(TExprNode::TPtr node, TVector<TExprNode::TPtr>& predicates) {
-    // TODO: Here we need to build a predicate tree to handle OR.
-    Y_ENSURE(!TCoOr::Match(node.Get()), "OR in join predicate is not supported");
-
     if (!TCoAnd::Match(node.Get())) {
         predicates.push_back(node);
         return;
@@ -652,12 +649,18 @@ TExprNode::TPtr BuildFilter(TExprNode::TPtr input, TExprNode::TPtr lambdaArg, TV
     // clang-format on
 }
 
-TExprNode::TPtr BuildJoinFilter(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, TExprNode::TPtr lambda, TExprContext &ctx, TPositionHandle pos) {
+TExprNode::TPtr BuildJoinFilter(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, TExprNode::TPtr lambdaArg, TExprNode::TPtr predicate, TExprContext &ctx, TPositionHandle pos) {
     // clang-format off
     return Build<TKqpOpJoinFilter>(ctx, pos)
         .LeftInput(leftInput)
         .RightInput(rightInput)
-        .Lambda(lambda)
+        .Lambda<TCoLambda>()
+            .Args({"_filter_arg_"})
+            .Body<TExprApplier>()
+                .Apply(TExprBase(predicate))
+                .With(TExprBase(lambdaArg), "_filter_arg_")
+            .Build()
+        .Build()
     .Done().Ptr();
     // clang-format on
 }
@@ -1266,18 +1269,19 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
                     TExprNode::TPtr rightInput;
                     TVector<TExprNode::TPtr> leftSidePredicates;
                     TVector<TExprNode::TPtr> rightSidePredicates;
+                    TVector<TExprNode::TPtr> joinFilterPredicates;
                     TVector<TExprNode::TPtr> joinFilters;
 
                     TString leftSideAlias;
                     TString rightSideAlias;
 
-                    if (joinKeys.empty()) {
+                    if (joinKeys.empty() && joinPredicates.empty()) {
                         // Ansi cross join.
                         ++ansiCrossJoinCount;
                         continue;
                     }
 
-                    Y_ENSURE(joinKeys.size() && !ansiCrossJoinCount, "Ansi cross joins mixed with other joins");
+                    Y_ENSURE((joinKeys.size() || joinPredicates.size()) && !ansiCrossJoinCount, "Ansi cross joins mixed with other joins");
                     if (tableInputsCount == 2) {
                         joinAliases = GatherJoinAliasesTwoInputs(joinKeys);
                         leftSideAlias = *joinAliases.LeftSideAliases.begin();
@@ -1302,16 +1306,22 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
 
                     if (joinLambda) {
                         auto lambdaArg = TCoLambda(joinLambda).Args().Arg(0).Ptr();
-                        SplitJoinPredicatesByAliases(joinPredicates, leftSideAlias, rightSideAlias, leftSidePredicates, rightSidePredicates, joinFilters);
+                        SplitJoinPredicatesByAliases(joinPredicates, leftSideAlias, rightSideAlias, leftSidePredicates, rightSidePredicates, joinFilterPredicates);
                         if (leftSidePredicates.size()) {
                             leftInput = BuildFilter(leftInput, lambdaArg, leftSidePredicates, ctx, node->Pos());
                         }
                         if (rightSidePredicates.size()) {
                             rightInput = BuildFilter(rightInput, lambdaArg, rightSidePredicates, ctx, node->Pos());
                         }
-                        for (const auto & joinFilter : joinFilters) {
-                            joinFilters.push_back(BuildJoinFilter(leftInput, rightInput, joinFilter, ctx, node->Pos()));
+                        for (const auto & joinFilter : joinFilterPredicates) {
+                            auto joinF = BuildJoinFilter(leftInput, rightInput, lambdaArg, joinFilter, ctx, node->Pos());
+                            YQL_CLOG(TRACE, CoreDq) << "Added join filter " << PrintRBOExpression(joinF, ctx);
+                            joinFilters.push_back(joinF);
                         }
+                    }
+
+                    if (joinKind == "Inner" && joinKeys.empty() && joinFilters.empty()) {
+                        joinKind = "Cross";
                     }
 
                     // clang-format off
@@ -1348,6 +1358,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
                                 .Value("Cross")
                             .Build()
                             .JoinKeys(joinKeys)
+                            .JoinFilters().Build()
                         .Done().Ptr();
                         // clang-format on
                         inputIndex += (inputIndex == 0 ? 2 : 1);

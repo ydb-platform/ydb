@@ -1,6 +1,6 @@
 #include "describer.h"
 
-#define LOG_PREFIX "[" << NActors::TlsActivationContext->AsActorContext().SelfID << "] "
+#define LOG_PREFIX NActors::TlsActivationContext->AsActorContext().SelfID
 #define LOG_E(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
 #define LOG_W(stream) LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
 #define LOG_I(stream) LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
@@ -33,7 +33,7 @@ public:
         schemeRequest->DatabaseName = DatabasePath;
 
         auto addEntry = [&](const TString& topic) {
-            auto split = NKikimr::SplitPath(NKikimr::NormalizePath(DatabasePath, topic));
+            auto split = NKikimr::SplitPath(topic);
 
             schemeRequest->ResultSet.emplace_back();
             auto& entry = schemeRequest->ResultSet.back();
@@ -44,7 +44,9 @@ public:
         };
 
         for (const auto& topic : topicPath) {
-            addEntry(topic);
+            auto normalizedPath = NKikimr::NormalizePath(DatabasePath, CanonizePath(topic));
+            PathToOriginalPath[normalizedPath] = topic;
+            addEntry(normalizedPath);
         }
 
         Send(NKikimr::MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeRequest.release()));
@@ -59,8 +61,8 @@ public:
         for (size_t i = 0; i < result->ResultSet.size(); ++i) {
             const auto& entry = result->ResultSet[i];
             auto realPath = CanonizePath(NKikimr::JoinPath(entry.Path));
+            auto originalPath = PathToOriginalPath[realPath];
 
-            auto originalPath = realPath;
             auto it = CDCPaths.find(realPath);
             if (it != CDCPaths.end()) {
                 originalPath = it->second;
@@ -82,7 +84,7 @@ public:
                 case TSchemeCacheNavigate::EStatus::Ok: {
                     if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
                         LOG_D("Path '" << realPath << "' is a CDC");
-                        CDCPaths[TStringBuilder() << originalPath << "/streamImpl"] = originalPath;
+                        CDCPaths[TStringBuilder() << realPath << "/streamImpl"] = originalPath;
                     } else if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
                         if (!entry.PQGroupInfo || entry.PQGroupInfo->Description.GetBalancerTabletID() == 0) {
                             if (RetryWithSyncVersion) {
@@ -174,6 +176,8 @@ private:
     const TString DatabasePath;
     const std::unordered_set<TString> TopicPaths;
     const TDescribeSettings Settings;
+    // normalized path -> original path
+    std::unordered_map<TString, TString> PathToOriginalPath;
 
     bool RetryWithSyncVersion = false;
     bool UsedSyncVersion = false;

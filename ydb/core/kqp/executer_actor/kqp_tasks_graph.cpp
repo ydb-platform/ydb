@@ -944,10 +944,17 @@ void TKqpTasksGraph::BuildChannelBetweenTasks(const TStageInfo& stageInfo, const
 void TKqpTasksGraph::BuildScatterChannels(const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo,
     ui32 outputIndex, bool enableSpilling, const TChannelLogFunc& logFunc)
 {
+    LOG_D("Scatter channels: srcStage=" << inputStageInfo.Id.StageId << " srcTasks=" << inputStageInfo.Tasks.size()
+        << " dstStage=" << stageInfo.Id.StageId << " dstTasks=" << stageInfo.Tasks.size()
+        << " totalChannels=" << inputStageInfo.Tasks.size() * stageInfo.Tasks.size());
+    const ui32 dstTaskCount = static_cast<ui32>(stageInfo.Tasks.size());
+    ui32 srcTaskLocalIdx = 0;
     for (auto originTaskId : inputStageInfo.Tasks) {
         auto& originTask = GetTask(originTaskId);
         auto& taskOutput = originTask.Outputs[outputIndex];
         taskOutput.Type = TTaskOutputType::Scatter;
+        taskOutput.ScatterPrimaryChannelIdx = dstTaskCount > 0 ? srcTaskLocalIdx % dstTaskCount : 0;
+        ++srcTaskLocalIdx;
 
         for (auto targetTaskId : stageInfo.Tasks) {
             auto& channel = AddChannel();
@@ -1366,11 +1373,12 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
             }
 
             case NKqpProto::TKqpPhyConnection::kParallelUnionAll: {
-                if (GetMeta().EnableScatterConnection) {
-                    BuildScatterChannels(stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log);
-                } else {
-                    BuildParallelUnionAllChannels(stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log, nextOriginTaskId);
-                }
+                BuildParallelUnionAllChannels(stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log, nextOriginTaskId);
+                break;
+            }
+
+            case NKqpProto::TKqpPhyConnection::kScatter: {
+                BuildScatterChannels(stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log);
                 break;
             }
 
@@ -1523,7 +1531,7 @@ void TKqpTasksGraph::FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, con
         }
 
         case TTaskOutputType::Scatter: {
-            outputDesc.MutableScatter();
+            outputDesc.MutableScatter()->set_primary_channel_idx(output.ScatterPrimaryChannelIdx);
             break;
         }
 
@@ -2074,6 +2082,7 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
                 }
                 case NDqProto::TTaskOutput::kScatter: {
                     newOutput.Type = TTaskOutputType::Scatter;
+                    newOutput.ScatterPrimaryChannelIdx = outputInfo.GetScatter().primary_channel_idx();
                     break;
                 }
                 case NDqProto::TTaskOutput::TYPE_NOT_SET: {
@@ -2226,6 +2235,7 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 case NKqpProto::TKqpPhyConnection::kStreamLookup:
                 case NKqpProto::TKqpPhyConnection::kMap:
                 case NKqpProto::TKqpPhyConnection::kParallelUnionAll:
+                case NKqpProto::TKqpPhyConnection::kScatter:
                 case NKqpProto::TKqpPhyConnection::kVectorResolve:
                 case NKqpProto::TKqpPhyConnection::kDqSourceStreamLookup:
                     break;
@@ -2256,7 +2266,8 @@ bool TKqpTasksGraph::BuildComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 ++mapConnectionCount;
                 break;
             }
-            case NKqpProto::TKqpPhyConnection::kParallelUnionAll: {
+            case NKqpProto::TKqpPhyConnection::kParallelUnionAll:
+            case NKqpProto::TKqpPhyConnection::kScatter: {
                 partitionsCount = std::max<ui64>(partitionsCount, originStageInfo.Tasks.size());
                 break;
             }

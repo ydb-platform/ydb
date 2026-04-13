@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     contrib/libs/apache/arrow
+    library/cpp/threading/light_rw_lock
     ydb/library/actors/util
     ydb/library/formats/arrow
     ydb/library/formats/arrow/hash
@@ -13,6 +14,7 @@ PEERDIR(
     ydb/library/yverify_stream
     yql/essentials/minikql
     yql/essentials/minikql/arrow
+    yql/essentials/utils/log
     yql/essentials/minikql/comp_nodes
     yql/essentials/minikql/computation
     yql/essentials/parser/pg_wrapper/interface

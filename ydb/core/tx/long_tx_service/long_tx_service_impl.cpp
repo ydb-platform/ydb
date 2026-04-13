@@ -1305,6 +1305,11 @@ void TLongTxServiceActor::UpdateLockWaitEdges(
 
         // Otherwise the edges will be sent when we re-subscribe to locks in the TEvNodeConnected handler.
     }
+
+    // 3. Run deadlock detection
+    if (!actuallyAdded.empty()) {
+        RunDeadlockDetection();
+    }
 }
 
 template<typename TProtoList, typename TFilter>
@@ -1377,6 +1382,8 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvWaitingLockRemove::TPtr& e
     }
     auto& edge = edgeIt->second;
     UpdateLockWaitEdges(edge.Awaiter, {}, {edgeId});
+
+    Broken.erase(edgeId);
 }
 
 void TLongTxServiceActor::Handle(TEvLongTxService::TEvUpdateLockWaitEdges::TPtr& ev) {
@@ -1424,6 +1431,86 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvGetLockWaitGraph::TPtr& ev
     }
 
     Send(ev->Sender, response.Release(), 0, ev->Cookie);
+}
+
+
+void TLongTxServiceActor::RunDeadlockDetection() {
+    auto hashFunc = [](const TLockStateHandle& lh) { return lh.Hash(); };
+
+    auto lockPriorityCmp = [](const TLockStateHandle& left, const TLockStateHandle& right) {
+        if (left.Timestamp() != right.Timestamp()) {
+            return left.Timestamp() > right.Timestamp();
+        }
+        return left.LockId() > right.LockId();
+    };
+
+    THashSet<TLockStateHandle, decltype(hashFunc)> allAwaiters;
+    for (const auto& [id, edge] : WaitEdges) {
+        allAwaiters.insert(edge.Awaiter);
+    }
+
+    TVector<TLockStateHandle> current;
+    TVector<TLockStateHandle> next;
+    THashMap<TLockStateHandle, const TWaitEdge*, decltype(hashFunc)> prev;
+    THashSet<const TWaitEdge*> toBreak;
+    for (const auto& start : allAwaiters) {
+        current.clear();
+        current.push_back(start);
+        next.clear();
+        prev.clear();
+
+        while (!current.empty()) {
+            bool found = false;
+            for (const auto& node : current) {
+                for (const auto& edge : node.WaitNode().Blockers) {
+                    if (edge.Blocker == start) {
+                        // Found a cycle, now find the best edge to break.
+                        found = true;
+                        const TWaitEdge* bestEdge = nullptr;
+                        const TWaitEdge* curEdge = &edge;
+                        while (true) {
+                            if (!bestEdge
+                                || lockPriorityCmp(curEdge->Awaiter, bestEdge->Awaiter)) {
+                                bestEdge = curEdge;
+                            }
+
+                            if (curEdge->Awaiter == start) {
+                                break;
+                            } else {
+                                curEdge = prev.at(curEdge->Awaiter);
+                            }
+                        }
+
+                        if (bestEdge && bestEdge->Id.OwnerId.NodeId() == SelfId().NodeId()) {
+                            toBreak.insert(bestEdge);
+                        }
+                    } else {
+                        if (prev.emplace(edge.Blocker, &edge).second) {
+                            next.push_back(edge.Blocker);
+                        }
+                    }
+                }
+            }
+
+            if (found) {
+                break;
+            }
+
+            std::swap(current, next);
+            next.clear();
+        }
+    }
+
+    for (auto edge : toBreak) {
+        if (Broken.insert(edge->Id).second) {
+            TXLOG_DEBUG("Breaking new wait edge id: " << edge->Id
+                << ", awaiter: " << edge->Awaiter.LockInfo(SelfId())
+                << ", blocker: " << edge->Blocker.LockInfo(SelfId()));
+            Send(
+                edge->Id.OwnerId,
+                new TEvLongTxService::TEvWaitingLockDeadlock(edge->Id.RequestId));
+        }
+    }
 }
 
 void TLongTxServiceActor::Handle(TEvPrivate::TEvSnapshotMaintenance::TPtr&) {

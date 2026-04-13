@@ -41,7 +41,7 @@ Prefer this format for:
 | `Yson` | `binary` | |
 | `Uuid` | `fixed_size_binary(16)` | 16 bytes in mixed-endian order |
 
-### Temporal types
+### Date and time types
 
 | YQL type | Arrow type | Notes |
 |----------|------------|-------|
@@ -62,7 +62,7 @@ Prefer this format for:
 
 {% note info %}
 
-In Arrow, basic temporal types are represented as unsigned integers, while extended temporal types use signed integers.
+In Arrow, basic date/time types are represented as unsigned integers, while extended date/time types types use signed integers.
 
 {% endnote %}
 
@@ -75,14 +75,14 @@ In Arrow, basic temporal types are represented as unsigned integers, while exten
 | `Struct<name: T, ...>` | `struct<name: T, ...>` | |
 | `Dict<K, V>` | `list<struct<key: K, payload: V>>` | |
 | `Set<T>` | `list<struct<key: T, payload: struct<>>>` | Same as `Dict<T, Void>` |
-| `Variant<T1, ..., Tn>` | `dense_union<field0: T1, ...>` | For n ≤ 128 |
-| `Variant<T1, ..., Tn>` | `dense_union<dense_union<field0: T1, ...>, ...>` | For 128 < n ≤ 16384 |
-| `Variant<name1: T1, ..., nameN: Tn>` | `dense_union<name1: T1, ...>` | For n ≤ 128 |
-| `Variant<name1: T1, ..., nameN: Tn>` | `dense_union<dense_union<name1: T1, ...>, ...>` | For 128 < n ≤ 16384 |
+| `Variant<T1, ..., Tn>` | `dense_union<field0: T1, ...>` | For n <= 128 |
+| `Variant<T1, ..., Tn>` | `dense_union<dense_union<field0: T1, ...>, ...>` | For 128 < n <= 16384 |
+| `Variant<name1: T1, ..., nameN: Tn>` | `dense_union<name1: T1, ...>` | For n <= 128 |
+| `Variant<name1: T1, ..., nameN: Tn>` | `dense_union<dense_union<name1: T1, ...>, ...>` | For 128 < n <= 16384 |
 
 {% note warning %}
 
-`Variant` over tuple or struct cannot be represented in Apache Arrow if the number of child types exceeds 16384 (128 × 128).
+`Variant` over tuple or struct cannot be represented in Apache Arrow if the number of child types exceeds 16384 (128 * 128).
 
 {% endnote %}
 

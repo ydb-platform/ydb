@@ -23,7 +23,7 @@ CREATE EXTERNAL DATA SOURCE ydb_source WITH (
     LOCATION = "<ydb_endpoint>",
     DATABASE_NAME = "<db_name>",
     AUTH_METHOD = "TOKEN",
-    TOKEN_SECRET_NAME = "secrets/ydb_token"
+    TOKEN_SECRET_PATH = "secrets/ydb_token"
 );
 ```
 

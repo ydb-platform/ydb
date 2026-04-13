@@ -193,7 +193,7 @@ DROP STREAMING QUERY query_example;
 ## Что дальше {#next-steps}
 
 - Изучите [форматы данных](../../dev/streaming-query/streaming-query-formats.md), поддерживаемые в потоковых запросах.
-- Узнайте, как [обогащать данные справочником](../../dev/streaming-query/enrichment.md) из локальной таблицы или из S3;
+- Узнайте, как [обогащать данные справочником](../../dev/streaming-query/enrichment.md) из локальной таблицы или из S3.
 - Научитесь [записывать результаты в таблицы](../../dev/streaming-query/table-writing.md).
 
 ## См. также

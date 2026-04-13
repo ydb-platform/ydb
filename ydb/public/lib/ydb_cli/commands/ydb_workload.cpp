@@ -1,4 +1,6 @@
 #include "ydb_workload.h"
+
+#include <ydb/public/lib/ydb_cli/common/query_stats.h>
 #include "ydb_workload_import.h"
 #include "ydb_workload_tpcc.h"
 #include "ydb_workload_testshard.h"

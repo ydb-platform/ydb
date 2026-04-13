@@ -1585,6 +1585,107 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         CreateAndAlterTableWithBloomFilter(true);
     }
 
+    Y_UNIT_TEST(DataShardBloomFilterIndex) {
+        TKikimrSettings settings;
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto getPartitionConfig = [&]() {
+            return kikimr.GetTestClient().Ls("/Root/T")->Record
+                .GetPathDescription().GetTable().GetPartitionConfig();
+        };
+
+        auto execScheme = [&](const TString& q) {
+            auto result = session.ExecuteSchemeQuery(q).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        };
+
+        // CREATE TABLE with two bloom filters at different prefix lengths
+        execScheme(R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/T` (
+                Key1 Uint64,
+                Key2 Uint64,
+                Value String,
+                PRIMARY KEY (Key1, Key2),
+                INDEX idx_bloom1 LOCAL USING bloom_filter ON (Key1),
+                INDEX idx_bloom2 LOCAL USING bloom_filter ON (Key1, Key2)
+            );
+        )");
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1), 2);
+        }
+
+        // KEY_BLOOM_FILTER = DISABLED disables all bloom filters on the table
+        AlterTableSetttings(session, "/Root/T", {{"KEY_BLOOM_FILTER", "DISABLED"}}, false);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetEnableFilterByKey(), false);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 0);
+        }
+
+        // ALTER TABLE ADD INDEX accumulates bloom filter prefixes one by one
+        execScheme(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+            ADD INDEX idx_bloom1 LOCAL USING bloom_filter ON (Key1);
+        )");
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0), 1);
+        }
+
+        execScheme(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+            ADD INDEX idx_bloom2 LOCAL USING bloom_filter ON (Key1, Key2);
+        )");
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1), 2);
+        }
+
+        // KEY_BLOOM_FILTER = DISABLED clears all bloom filters including ByKeyFilterPrefixes
+        AlterTableSetttings(session, "/Root/T", {{"KEY_BLOOM_FILTER", "DISABLED"}}, false);
+        {
+            auto cfg = getPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetEnableFilterByKey(), false);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 0);
+        }
+
+        // Non-prefix columns must be rejected
+        auto expectError = [&](const TString& q) {
+            auto result = session.ExecuteSchemeQuery(q).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        };
+        // Key2 alone is not a prefix of (Key1, Key2)
+        expectError(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+            ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key2);
+        )");
+        // (Key2, Key1) is not a prefix of (Key1, Key2)
+        expectError(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+            ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key2, Key1);
+        )");
+        // data_columns are not supported for local bloom filter index
+        expectError(R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+            ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key1) COVER (Value);
+        )");
+    }
+
     void CreateTableWithReadReplicas(bool compat) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

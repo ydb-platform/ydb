@@ -26,14 +26,21 @@ TRegion::TRegion(
     ui32 regionIndex,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
     ui32 syncRequestsBatchSize,
+    ui64 vChunkSize,
     TDuration writeHandoffDelay,
-    TDuration traceSamplePeriod)
+    TDuration traceSamplePeriod,
+    NMonitoring::TDynamicCounterPtr counters)
     : ActorSystem(actorSystem)
 {
-    for (size_t i = 0; i < VChunksPerRegionCount; i++) {
+    Y_ABORT_UNLESS(vChunkSize > 0 && vChunkSize <= RegionSize);
+    const ui32 vChunksPerRegionCount = RegionSize / vChunkSize;
+    for (size_t i = 0; i < vChunksPerRegionCount; i++) {
         const size_t vChunkIndex =
-            (regionIndex * VChunksPerRegionCount) + static_cast<ui32>(i);
+            (regionIndex * vChunksPerRegionCount) + static_cast<ui32>(i);
         const size_t dbgIndex = i % directBlockGroups.size();
+
+        NMonitoring::TDynamicCounterPtr vChunkCounters =
+            counters->GetSubgroup("vchunk", ToString(vChunkIndex));
 
         auto vChunk = std::make_shared<TVChunk>(
             ActorSystem,
@@ -41,8 +48,10 @@ TRegion::TRegion(
             TVChunkConfig::Make(vChunkIndex),
             directBlockGroups[dbgIndex],
             syncRequestsBatchSize,
+            vChunkSize,
             writeHandoffDelay,
-            traceSamplePeriod);
+            traceSamplePeriod,
+            vChunkCounters);
         vChunk->Start();
         VChunks.push_back(std::move(vChunk));
     }
@@ -65,7 +74,7 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
     TCallContextPtr callContext,
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     EWriteMode writeMode,
-    ui32 pbufferReplyTimeoutMicroseconds,
+    TDuration pbufferReplyTimeout,
     ui64 lsn,
     const NWilson::TTraceId& traceId)
 {
@@ -75,7 +84,7 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
         writeMode,
-        pbufferReplyTimeoutMicroseconds,
+        pbufferReplyTimeout,
         lsn,
         traceId);
 }

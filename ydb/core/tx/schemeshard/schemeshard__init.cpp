@@ -1,7 +1,6 @@
 #include "schemeshard__root_shred_manager.h"
 #include "schemeshard__tenant_shred_manager.h"
 #include "schemeshard_impl.h"
-#include "schemeshard_index_build_info.h"
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
 
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -9,6 +8,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/util/pb.h>
 
 namespace NKikimr {
@@ -2680,6 +2680,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 if (rowset.HaveValue<Schema::PersQueues::AdjacentParent>() &&
                     rowset.GetValue<Schema::PersQueues::AdjacentParent>() != Max<ui32>()) {
                     pqInfo->ParentPartitionIds.insert(rowset.GetValue<Schema::PersQueues::AdjacentParent>());
+                }
+
+                if (rowset.HaveValue<Schema::PersQueues::CreationTimestampSeconds>()) {
+                    pqInfo->CreationTimestamp = TInstant::Seconds(rowset.GetValue<Schema::PersQueues::CreationTimestampSeconds>());
                 }
 
                 auto it = Self->Topics.find(pathId);

@@ -56,6 +56,10 @@ public:
         return TGenerateTasksResult{.Tasks = std::move(generatedTasks)};
     }
 
+    std::vector<TString> GetExpectedOutputTableIds(const TOperationParams& /* params */) const override {
+        return {}; // Upload writes to YT, not to FMR tables
+    }
+
     std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& /* context */) override {
         return {}; // Upload writes to YT, not to FMR tables, nothing to clean in TDS
     }

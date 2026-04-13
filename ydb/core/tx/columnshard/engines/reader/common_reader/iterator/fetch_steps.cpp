@@ -3,6 +3,7 @@
 
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
@@ -10,17 +11,55 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
+LWTRACE_USING(YDB_CS_DATA_SOURCE);
+
 TConclusion<bool> TColumnBlobsFetchingStep::DoExecuteInplace(
     const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
-    return !source->StartFetchingColumns(source, step, Columns);
+    const TDuration durationMs = source->GetAndResetWaitDuration();
+    
+    LWTRACK(ColumnBlobsFetchingStart, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(),
+            step.GetTracingName(), durationMs, Columns.GetColumnsCount(), source->GetRecordsCount());
+    
+    const TMonotonic start = TMonotonic::Now();
+    auto result = !source->StartFetchingColumns(source, step, Columns);
+    const TDuration executionDurationMs = TMonotonic::Now() - start;
+    source->AddExecutionDuration(executionDurationMs);
+    
+    ui64 bytesRead = source->GetColumnBlobBytes(Columns.GetColumnIds());
+    source->AddBytesRead(bytesRead);
+    
+    const TDuration finishDurationMs = source->GetAndResetWaitDuration();
+    LWTRACK(ColumnBlobsFetchingFinish, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(),
+            step.GetTracingName(), finishDurationMs, executionDurationMs, Columns.GetColumnsCount(), bytesRead, source->GetRecordsCount());
+    
+    return result;
 }
 
 ui64 TColumnBlobsFetchingStep::GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const {
     return source->GetColumnBlobBytes(Columns.GetColumnIds());
 }
 
-TConclusion<bool> TAssemblerStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+TConclusion<bool> TAssemblerStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+    const TDuration durationMs = source->GetAndResetWaitDuration();
+    
+    LWTRACK(AssemblerStepStart, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(),
+            step.GetTracingName(), durationMs, Columns->GetColumnsCount(), source->GetRecordsCount());
+    
+    const TMonotonic start = TMonotonic::Now();
     source->AssembleColumns(Columns);
+    const TDuration executionDurationMs = TMonotonic::Now() - start;
+    source->AddExecutionDuration(executionDurationMs);
+    
+    ui64 bytesAssembled = source->GetColumnRawBytes(Columns->GetColumnIds());
+    
+    const TDuration finishDurationMs = source->GetAndResetWaitDuration();
+    LWTRACK(AssemblerStepFinish, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(),
+            step.GetTracingName(), finishDurationMs, executionDurationMs, Columns->GetColumnsCount(), bytesAssembled, source->GetRecordsCount());
+    
     return true;
 }
 
@@ -98,7 +137,18 @@ TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(const std::shared_ptr<ID
         size += sizeLocal;
     }
 
+    const TDuration durationMs = source->GetAndResetWaitDuration();
+    LWTRACK(MemoryAllocationStart, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(), step.GetTracingName(), durationMs, size);
+    
+    const TMonotonic start = TMonotonic::Now();
     auto allocation = std::make_shared<TFetchingStepAllocation>(source, size, step, StageIndex);
+    const TDuration executionDurationMs = TMonotonic::Now() - start;
+    
+    const TDuration finishDurationMs = source->GetAndResetWaitDuration();
+    LWTRACK(MemoryAllocationFinish, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
+            source->GetTxId(), source->GetSourceIdx(), step.GetStepIndex(),
+            step.GetTracingName(), finishDurationMs, executionDurationMs, size, true);
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("smalloc"));
     NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(source->GetContext()->GetProcessMemoryControlId(),
         source->GetContext()->GetCommonContext()->GetScanId(), source->GetMemoryGroupId(), { allocation }, (ui32)StageIndex);

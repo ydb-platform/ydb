@@ -1078,8 +1078,8 @@
 
   ```javascript
   await using writer = createTopicWriter(driver, {
-  	topic: topicName,
-  	producer: producerName,
+    topic: topicName,
+    producer: producerName,
     // Callback that is called when writer receives an acknowledgment for a message.
     onAck: (seqNo, status) => {
       console.log("ACK", seqNo, status);
@@ -1952,21 +1952,25 @@
 
 - Python
 
-  {% cut "asyncio" %}
+  {% list tabs %}
 
-  ```python
-  while True:
-      message = await reader.receive_message()
-      process(message)
-  ```
+  - Native SDK
 
-  {% endcut %}
+    ```python
+    while True:
+        message = reader.receive_message()
+        process(message)
+    ```
 
-  ```python
-  while True:
-      message = reader.receive_message()
-      process(message)
-  ```
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        message = await reader.receive_message()
+        process(message)
+    ```
+
+  {% endlist %}
 
 - Java
 
@@ -2057,21 +2061,25 @@
 
 - Python
 
-  {% cut "asyncio" %}
+  {% list tabs %}
 
-  ```python
-  while True:
-      batch = await reader.receive_batch()
-      process(batch)
-  ```
+  - Native SDK
 
-  {% endcut %}
+    ```python
+    while True:
+        batch = reader.receive_batch()
+        process(batch)
+    ```
 
-  ```python
-  while True:
-    batch = reader.receive_batch()
-    process(batch)
-  ```
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        batch = await reader.receive_batch()
+        process(batch)
+    ```
+
+  {% endlist %}
 
 - Java
 
@@ -2164,23 +2172,27 @@
 
   `commit` - это быстрый вызов: сохраняет данные во внутреннем буфере и сразу возвращает управление, а реальная отправка происходит позже. Поэтому, чтобы не терять последние коммиты перед выходом из программы, читателя нужно закрывать явно.
 
-  {% cut "asyncio" %}
+  {% list tabs %}
 
-  ```python
-  while True:
-      message = await reader.receive_message()
-      process(message)
-      reader.commit(message)
-  ```
+  - Native SDK
 
-  {% endcut %}
+    ```python
+    while True:
+        message = reader.receive_message()
+        process(message)
+        reader.commit(message)
+    ```
 
-  ```python
-  while True:
-      message = reader.receive_message()
-      process(message)
-      reader.commit(message)
-  ```
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        message = await reader.receive_message()
+        process(message)
+        reader.commit(message)
+    ```
+
+  {% endlist %}
 
 - Java
 
@@ -2284,23 +2296,27 @@
 
 - Python
 
-  {% cut "asyncio" %}
+  {% list tabs %}
 
-  ```python
-  while True:
-      batch = await reader.receive_batch()
-      process(batch)
-      reader.commit(batch)
-  ```
+  - Native SDK
 
-  {% endcut %}
+    ```python
+    while True:
+        batch = reader.receive_batch()
+        process(batch)
+        reader.commit(batch)
+    ```
 
-  ```python
-  while True:
-    batch = reader.receive_batch()
-    process(batch)
-    reader.commit(batch)
-  ```
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        batch = await reader.receive_batch()
+        process(batch)
+        reader.commit(batch)
+    ```
+
+  {% endlist %}
 
   `commit` - это быстрый вызов: сохраняет данные во внутреннем буфере и сразу возвращает управление, а реальная отправка происходит позже. Поэтому, чтобы не терять последние коммиты перед выходом из программы, читателя нужно закрывать явно.
 
@@ -2671,37 +2687,41 @@
 
   Для чтения сообщений в рамках транзакции следует использовать метод `reader.receive_batch_with_tx`. Он прочитает пакет сообщений и добавит их коммит в транзакцию, при этом отдельно коммитить эти сообщения не требуется. Читателя сообщений можно использовать повторно в разных транзакциях. При этом важно, чтобы порядок коммита транзакций соответствовал порядку получения сообщений от читателя, так как коммиты сообщений в топике должны выполняться строго по порядку - в противном случае транзакция получит ошибку на попытке сделать коммит. Проще всего это сделать, если использовать читателя в цикле.
 
-  [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_example.py)
+  {% list tabs %}
 
-  {% cut "asyncio" %}
+  - Native SDK
 
-  [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
+    [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_example.py)
 
-  ```python
-  async with driver.topic_client.reader(topic, consumer) as reader:
-      async with ydb.aio.QuerySessionPool(driver) as session_pool:
-          for _ in range(message_count):
+    ```python
+    with driver.topic_client.reader(topic, consumer) as reader:
+        with ydb.QuerySessionPool(driver) as session_pool:
+            for _ in range(message_count):
 
-              async def callee(tx: ydb.aio.QueryTxContext):
-                  batch = await reader.receive_batch_with_tx(tx, max_messages=1)
-                  print(f"Message {batch.messages[0].data.decode()} was read with tx.")
+                def callee(tx: ydb.QueryTxContext):
+                    batch = reader.receive_batch_with_tx(tx, max_messages=1)
+                    print(f"Message {batch.messages[0].data.decode()} was read with tx.")
 
-              await session_pool.retry_tx_async(callee)
-  ```
+                session_pool.retry_tx_sync(callee)
+    ```
 
-  {% endcut %}
+  - Native SDK (Asyncio)
 
-  ```python
-  with driver.topic_client.reader(topic, consumer) as reader:
-      with ydb.QuerySessionPool(driver) as session_pool:
-          for _ in range(message_count):
+    [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
 
-              def callee(tx: ydb.QueryTxContext):
-                  batch = reader.receive_batch_with_tx(tx, max_messages=1)
-                  print(f"Message {batch.messages[0].data.decode()} was read with tx.")
+    ```python
+    async with driver.topic_client.reader(topic, consumer) as reader:
+        async with ydb.aio.QuerySessionPool(driver) as session_pool:
+            for _ in range(message_count):
 
-              session_pool.retry_tx_sync(callee)
-  ```
+                async def callee(tx: ydb.aio.QueryTxContext):
+                    batch = await reader.receive_batch_with_tx(tx, max_messages=1)
+                    print(f"Message {batch.messages[0].data.decode()} was read with tx.")
+
+                await session_pool.retry_tx_async(callee)
+    ```
+
+  {% endlist %}
 
 - Java
 
@@ -2765,7 +2785,11 @@
     }
     ```
 
+  {% endlist %}
+
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
+
+  {% endlist %}
 
 - JavaScript
 
@@ -2821,23 +2845,27 @@
 
   Специальной обработки не требуется.
 
-  {% cut "asyncio" %}
+  {% list tabs %}
 
-  ```python
-  while True:
-      batch = await reader.receive_batch()
-      process(batch)
-      reader.commit(batch)
-  ```
+  - Native SDK
 
-  {% endcut %}
+    ```python
+    while True:
+        batch = reader.receive_batch()
+        process(batch)
+        reader.commit(batch)
+    ```
 
-  ```python
-  while True:
-    batch = reader.receive_batch()
-    process(batch)
-    reader.commit(batch)
-  ```
+  - Native SDK (Asyncio)
+
+    ```python
+    while True:
+        batch = await reader.receive_batch()
+        process(batch)
+        reader.commit(batch)
+    ```
+
+  {% endlist %}
 
 - Java
 
@@ -2919,35 +2947,39 @@
 
   В этом примере обработка сообщений в батче остановится, если в процессе работы партиция будет отобрана. Такая оптимизация требует дополнительного кода на клиенте. В простых случаях, когда обработка отобранных партиций не является проблемой, ее можно не применять.
 
-  {% cut "asyncio" %}
+  {% list tabs %}
 
-  ```python
-  def process_batch(batch):
-      for message in batch.messages:
-          if not batch.alive:
-              return False
-          process(message)
-      return True
+  - Native SDK
 
-  batch = await reader.receive_batch()
-  if process_batch(batch):
-      reader.commit(batch)
-  ```
+    ```python
+    def process_batch(batch):
+        for message in batch.messages:
+            if not batch.alive:
+                return False
+            process(message)
+        return True
 
-  {% endcut %}
+    batch = reader.receive_batch()
+    if process_batch(batch):
+        reader.commit(batch)
+    ```
 
-  ```python
-  def process_batch(batch):
-      for message in batch.messages:
-          if not batch.alive:
-              return False
-          process(message)
-      return True
+  - Native SDK (Asyncio)
 
-  batch = reader.receive_batch()
-  if process_batch(batch):
-      reader.commit(batch)
-  ```
+    ```python
+    def process_batch(batch):
+        for message in batch.messages:
+            if not batch.alive:
+                return False
+            process(message)
+        return True
+
+    batch = await reader.receive_batch()
+    if process_batch(batch):
+        reader.commit(batch)
+    ```
+
+  {% endlist %}
 
 - Java
 
@@ -3118,39 +3150,42 @@
 
   Включение автомасштабирования топика во время его создания производится с помощью аргумента `auto_partitioning_settings` у `create_topic`:
 
-  {% cut "asyncio" %}
+  {% list tabs %}
+  - Native SDK
 
-  ```python
-  await driver.topic_client.create_topic(
-      topic,
-      consumers=[consumer],
-      min_active_partitions=10,
-      max_active_partitions=100,
-      auto_partitioning_settings=ydb.TopicAutoPartitioningSettings(
-          strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
-          up_utilization_percent=80,
-          down_utilization_percent=20,
-          stabilization_window=datetime.timedelta(seconds=300),
-      ),
-  )
-  ```
+    ```python
+    driver.topic_client.create_topic(
+        topic,
+        consumers=[consumer],
+        min_active_partitions=10,
+        max_active_partitions=100,
+        auto_partitioning_settings=ydb.TopicAutoPartitioningSettings(
+            strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
+            up_utilization_percent=80,
+            down_utilization_percent=20,
+            stabilization_window=datetime.timedelta(seconds=300),
+        ),
+    )
+    ```
 
-  {% endcut %}
+  - Native SDK (Asyncio)
 
-  ```python
-      driver.topic_client.create_topic(
-          topic,
-          consumers=[consumer],
-          min_active_partitions=10,
-          max_active_partitions=100,
-          auto_partitioning_settings=ydb.TopicAutoPartitioningSettings(
-              strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
-              up_utilization_percent=80,
-              down_utilization_percent=20,
-              stabilization_window=datetime.timedelta(seconds=300),
-          ),
-      )
-  ```
+    ```python
+    await driver.topic_client.create_topic(
+        topic,
+        consumers=[consumer],
+        min_active_partitions=10,
+        max_active_partitions=100,
+        auto_partitioning_settings=ydb.TopicAutoPartitioningSettings(
+            strategy=ydb.TopicAutoPartitioningStrategy.SCALE_UP,
+            up_utilization_percent=80,
+            down_utilization_percent=20,
+            stabilization_window=datetime.timedelta(seconds=300),
+        ),
+    )
+    ```
+
+  {% endlist %}
 
   Внесение изменений в существующий топик производится с помощью аргумента `alter_auto_partitioning_settings` у `alter_topic`:
 
@@ -3204,33 +3239,72 @@
 
 - Go
 
-  Функциональность на данный момент не поддерживается.
+  Подтверждение обработки вне читателя производится с помощью метода `db.Topic().CommitOffset`:
+
+  ```go
+  // Базовый способ — подтверждение оффсета без активной сессии чтения
+  err := db.Topic().CommitOffset(
+    ctx,
+    topicPath,
+    partitionID,
+    consumer,
+    offset,
+  )
+  ```
+
+  Если в момент подтверждения существует активная сессия чтения (через `StartReader` или `StartListener`), рекомендуется передать её идентификатор с помощью опции `WithCommitOffsetReadSessionID`. Это позволяет серверу не прерывать текущую сессию чтения:
+
+  ```go
+  import (
+    // ...
+    "github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions"
+  )
+
+  // Получение идентификатора сессии чтения
+  sessionID := reader.ReadSessionID()
+  // или: sessionID := listener.ReadSessionID()
+
+  err = db.Topic().CommitOffset(
+    ctx,
+    topicPath,
+    partitionID,
+    consumer,
+    offset,
+    topicoptions.WithCommitOffsetReadSessionID(sessionID),
+  )
+  ```
 
 - Python
 
-  Подтверждения обработки вне читателя производится с помощью метода `topic_client.commit_offset`:
+  Подтверждение обработки вне читателя производится с помощью метода `topic_client.commit_offset`:
 
-  {% cut "asyncio" %}
+  {% list tabs %}
 
-  ```python
-  await driver.topic_client.commit_offset(
-      topic_path,
-      consumer_name,
-      partition_id,
-      offset,
-  )
-  ```
+  - Native SDK
 
-  {% endcut %}
+    ```python
+    driver.topic_client.commit_offset(
+        topic_path,
+        consumer_name,
+        partition_id,
+        offset,
+        reader.read_session_id,  # опционально: не прерывает активную сессию чтения
+    )
+    ```
 
-  ```python
-  driver.topic_client.commit_offset(
-      topic_path,
-      consumer_name,
-      partition_id,
-      offset,
-  )
-  ```
+  - Native SDK (Asyncio)
+
+    ```python
+    await driver.topic_client.commit_offset(
+        topic_path,
+        consumer_name,
+        partition_id,
+        offset,
+        reader.read_session_id,  # опционально: не прерывает активную сессию чтения
+    )
+    ```
+
+  {% endlist %}
 
 - JavaScript
 
@@ -3238,6 +3312,21 @@
 
 - Java
 
-  Функциональность на данный момент не поддерживается.
+  ```java
+  TopicClient client = ...;
+
+  String sessionID = reader.getSessionId();
+  // У AsyncReader идентификатор сессии можно получить при обработке события SessionStartedEvent
+
+  client.commitOffset(
+      topicPath,
+      CommitOffsetSettings.newBuilder()
+          .setReadSessionId(sessionID)
+          .setPartitionId(partitionID)
+          .setConsumer(consumer)
+          .setOffset(offset)
+          .build()
+  ).join().expectSuccess("Error commit!");
+  ```
 
 {% endlist %}

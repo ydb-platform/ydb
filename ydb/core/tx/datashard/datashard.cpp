@@ -3470,8 +3470,9 @@ void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, cons
                         datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
                     }
 
-                    Execute(new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan), 
-                        event->Get()->Record.GetUserSID()), ctx);
+                    auto userSID = event->Get()->Record.GetUserSID();
+                    Execute(new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan),
+                        userSID), ctx);
                     return;
                 }
                 case NEvents::TDataEvents::TEvWrite::EventType: {
@@ -4740,6 +4741,7 @@ private:
     TBreakWriteConflictsTxObserver* const Observer;
 };
 
+// FIXME: This function is very similar to CheckWriteConflicts. Review/rename/merge them.
 bool TDataShard::BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tableId,
         TArrayRef<const TCell> keyCells, absl::flat_hash_set<ui64>& volatileDependencies)
 {
@@ -4763,10 +4765,7 @@ bool TDataShard::BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tabl
 
     // We are not actually interested in the row version, we only need to
     // detect uncommitted transaction skips on the path to that version.
-    auto res = db.SelectRowVersion(
-        localTid, keyCells, /* readFlags */ 0,
-        nullptr,
-        BreakWriteConflictsTxObserver);
+    auto res = db.SelectRowVersionByKeyPrefix(localTid, keyCells, BreakWriteConflictsTxObserver);
 
     if (res.Ready == NTable::EReady::Page) {
         return false;
@@ -4779,6 +4778,7 @@ bool TDataShard::BreakWriteConflicts(NTable::TDatabase& db, const TTableId& tabl
     return true;
 }
 
+// FIXME: There are two BreakWriteConflict functions, here and in datashard_user_db. Leave only one.
 void TDataShard::BreakWriteConflict(ui64 txId, absl::flat_hash_set<ui64>& volatileDependencies) {
     if (auto* info = GetVolatileTxManager().FindByCommitTxId(txId)) {
         if (info->State != EVolatileTxState::Aborting) {

@@ -911,7 +911,7 @@ public:
             }
 
             if (!txs.empty() && txs.front().Body->GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME && isValidParams) {
-                auto tasksGraph = TKqpTasksGraph(Settings.Database, txs, txAlloc, {}, Settings.TableService.GetAggregationConfig(), RequestCounters, {}, nullptr);
+                auto tasksGraph = TKqpTasksGraph(Settings.Database, txs, txAlloc, Settings.TableService.GetAggregationConfig(), RequestCounters, {}, nullptr);
                 tasksGraph.GetMeta().AllowOlapDataQuery = Settings.TableService.GetAllowOlapDataQuery();
                 tasksGraph.GetMeta().UserRequestContext = QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId);
                 tasksGraph.GetMeta().SecureParams = std::move(secureParams);
@@ -1939,6 +1939,8 @@ public:
             (span_id_size, request.TraceId.GetSpanIdSize()),
             (trace_id, TraceId()));
 
+        txCtx->TxManager->SetSkipTopicsConflictCheck(AppData()->FeatureFlags.GetEnableSkipConflictCheckForTopicsInTransaction());
+
         if (!txCtx->BufferActorId
             && (txCtx->HasTableWrite || request.TopicOperations.GetSize() != 0)) {
             txCtx->TxManager->SetTopicOperations(std::move(request.TopicOperations));
@@ -1995,7 +1997,7 @@ public:
         if (QueryState && QueryState->PreparedQuery && Settings.TableService.GetEnableKqpScanQueryUseLlvm()) {
             llvmSettings = QueryState->PreparedQuery->GetLlvmSettings();
         }
-        
+
         AFL_ENSURE(txCtx->TxManager);
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
@@ -2396,7 +2398,7 @@ public:
 
         AFL_ENSURE(QueryState->TxCtx->TxManager);
         QueryState->ParticipantNodes = QueryState->TxCtx->TxManager->GetParticipantNodes();
-    
+
         if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
             const auto executionType = ev->ExecutionType;
 

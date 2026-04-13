@@ -88,6 +88,15 @@ inline TActorId MakeBlobStoragePersistentBufferId(ui32 node, ui32 pdiskId, ui32 
     return TActorId(node, TStringBuf(x, 12));
 }
 
+inline TActorId MakeMonPersistentBufferID(ui32 nodeId) {
+    char x[12] = {'N', 'P', 'B', '_', 'm', 'o', 'n', '_'};
+    x[8] = (char)(nodeId >> 24);
+    x[9] = (char)(nodeId >> 16);
+    x[10] = (char)(nodeId >> 8);
+    x[11] = (char)nodeId;
+    return TActorId(nodeId, TStringBuf(x, 12));
+}
+
 inline TActorId MakeBlobStoragePDiskID(ui32 node, ui32 pDiskID) {
     char x[12] = {'b','s','p','d','i','s','k', 0};
     x[8] = (char)pDiskID;

@@ -35,6 +35,7 @@ namespace NKikimr::NDDisk {
 
     void TWritePersistentBuffersRequestActor::ReplyAndFinish(ui64 cookie) {
         Reply(cookie);
+        Inflights[cookie].Span.End();
         auto cnt = Inflights.erase(cookie);
         Y_ABORT_UNLESS(cnt == 1);
     }
@@ -90,6 +91,7 @@ namespace NKikimr::NDDisk {
         auto itInflight = Inflights.find(cookie);
         Y_ABORT_UNLESS(itInflight != Inflights.end());
         auto& i = itInflight->second;
+
         auto itInflight2 = i.Inflights.find(partCookie);
         Y_ABORT_UNLESS(itInflight2 != i.Inflights.end());
         auto& inflight = itInflight2->second;
@@ -185,10 +187,14 @@ namespace NKikimr::NDDisk {
 
     void TWritePersistentBuffersRequestActor::Handle(TEvWritePersistentBuffers::TPtr ev) {
         auto cookie = NextCookie++;
+        auto span = std::move(NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.WritePersistentBuffers",
+            NWilson::EFlags::NONE, TActivationContext::ActorSystem()));
         auto [it, inserted] = Inflights.try_emplace(cookie, TInflight{
             .Sender = ev->Sender,
             .Cookie = ev->Cookie,
+            .Span = std::move(span),
         });
+
         Y_ABORT_UNLESS(inserted);
         const auto& record = ev->Get()->Record;
         TQueryCredentials creds;

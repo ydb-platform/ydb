@@ -1,12 +1,15 @@
 #include "kqp_opt_join_cost_based.h"
 #include "kqp_opt_dphyp_solver.h"
 #include "kqp_opt_make_join_hypergraph.h"
+#include "kqp_opt_cbo_latency_predictor.h"
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <yql/essentials/utils/log/log.h>
+
+#include <chrono>
 
 namespace NKikimr::NKqp {
 
@@ -370,10 +373,11 @@ private:
             assigner.Assign(*OrderingsFSM);
         }
 
+        auto hardTimeout = std::chrono::milliseconds(OptimizerSettings_.CBOHardTimeout);
         if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverClassic<TNodeSet>>) {
-            return TDPHypSolverClassic<TNodeSet>(hypergraph, this->Pctx);
+            return TDPHypSolverClassic<TNodeSet>(hypergraph, this->Pctx, hardTimeout);
         } else if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverShuffleElimination<TNodeSet>>) {
-            return TDPHypSolverShuffleElimination<TNodeSet>(hypergraph, this->Pctx, *OrderingsFSM);
+            return TDPHypSolverShuffleElimination<TNodeSet>(hypergraph, this->Pctx, *OrderingsFSM, hardTimeout);
         } else {
             static_assert(false, "No such DPHyp implementation");
         }
@@ -388,20 +392,55 @@ private:
         TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, hints);
         TDPHypImpl solver = GetDPHypImpl<TNodeSet, TDPHypImpl>(hypergraph);
         YQL_CLOG(TRACE, CoreDq) << "Enumeration algorithm chosen: " << solver.Type();
-        if (solver.CountCC(OptimizerSettings_.MaxDPhypDPTableSize) >= OptimizerSettings_.MaxDPhypDPTableSize) {
-            YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded";
+
+        // Use fast ML model to predict approximately how long it would take to run full CBO
+        // on this query and find the optimal plan
+        ui64 approxNanosToOptimize = PredictCBOTime(hypergraph);
+        ui64 approxMillisToOptimize = static_cast<ui64>(std::ceil(approxNanosToOptimize / 1'000'000.0));
+        ui64 timeBudgetNanos = OptimizerSettings_.CBOTimeout /* Millis */ * 1'000'000ULL;
+
+        std::string timeBudgetStr = FormatTime(timeBudgetNanos);
+        std::string predictedCBOTimeStr = FormatTime(approxNanosToOptimize);
+
+        YQL_CLOG(TRACE, CoreDq) << "CBO is predicted to take " << predictedCBOTimeStr
+                                << " (" << approxNanosToOptimize << ")";
+
+        if (approxNanosToOptimize > timeBudgetNanos) {
+            YQL_CLOG(TRACE, CoreDq) << "CBO time budget exceeded: "
+                                    << predictedCBOTimeStr << " > " << timeBudgetStr
+                                    << " - CBO disabled for this query";
+
+            TStringBuilder message;
+            message << "Cost based optimizer was disabled for this query because predicted "
+                    << "optimization time (it will take approximately " << predictedCBOTimeStr << ") "
+                    << "exceeds given time budget (" << timeBudgetStr << "). "
+                    << "Use PRAGMA ydb.CBOTimeout='" << approxMillisToOptimize << "' "
+                    << "or higher to run CBO for this query anyway.";
+
             ExprCtx.AddWarning(
                 YqlIssue(
                     {}, TIssuesIds::CBO_ENUM_LIMIT_REACHED,
-                    "Cost Based Optimizer could not be applied to this query: "
-                    "Enumeration is too large, use PRAGMA ydb.MaxDPHypDPTableSize='4294967295' to disable the limitation"
+                    message
                 )
             );
             ComputeStatistics(joinTree, this->Pctx);
             return joinTree;
         }
 
-        auto bestJoinOrder = solver.Solve(hints);
+        std::shared_ptr<TJoinOptimizerNodeInternal> bestJoinOrder;
+        try {
+            bestJoinOrder = solver.Solve(hints);
+        } catch (const std::exception& e) {
+            YQL_CLOG(WARN, CoreDq) << "CBO hard timeout exceeded, falling back to default join order: " << e.what();
+            ExprCtx.AddWarning(YqlIssue(
+                {}, TIssuesIds::CBO_ENUM_LIMIT_REACHED,
+                TStringBuilder() << "Cost based optimizer timed out and was disabled for this query. "
+                                 << "Use PRAGMA ydb.CBOHardTimeout='"
+                                 << OptimizerSettings_.CBOHardTimeout << "' or higher to extend the time budget."
+            ));
+            ComputeStatistics(joinTree, this->Pctx);
+            return joinTree;
+        }
         if (postEnumerationShuffleElimination) {
             Y_ENSURE(OrderingsFSM != nullptr);
 

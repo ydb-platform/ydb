@@ -73,6 +73,9 @@ namespace NTabletFlatExecutor {
     XX(TABLET_LAST_START_TIME_US, "LastStartTimeUs") \
     XX(CACHE_TOTAL_TRY_KEEP_IN_MEMORY, "CacheTotalTryKeepInMemory") \
     XX(REJECT_PROBABILITY, "RejectProbability") \
+    XX(BACKUP_RUNNING, "BackupRunning") \
+    XX(BACKUP_SNAPSHOT_IN_PROGRESS, "BackupSnapshotInProgress") \
+    XX(BACKUP_CHANGELOG_INFLIGHT_BYTES, "BackupChangelogInFlightBytes") \
 
 // don't change order!
 #define FLAT_EXECUTOR_CUMULATIVE_COUNTERS_MAP(XX) \
@@ -126,6 +129,10 @@ namespace NTabletFlatExecutor {
     XX(COMPACTION_READ_LOAD_PAGES, "CompactionReadLoadPages") \
     XX(TX_BYTES_CACHED, "TxCachedBytes") \
     XX(TX_BYTES_WASTED, "TxWastedBytes") \
+    XX(BACKUP_SNAPSHOT_ERRORS, "BackupSnapshotErrors") \
+    XX(BACKUP_CHANGELOG_ERRORS, "BackupChangelogErrors") \
+    XX(BACKUP_SNAPSHOT_BYTES_WRITTEN, "BackupSnapshotBytesWritten") \
+    XX(BACKUP_CHANGELOG_BYTES_WRITTEN, "BackupChangelogBytesWritten") \
 
 // don't change order!
 #define FLAT_EXECUTOR_PERCENTILE_COUNTERS_MAP(XX) \
@@ -144,6 +151,8 @@ namespace NTabletFlatExecutor {
     XX(TX_PERCENTILE_CONSUMED_CPU, "HIST(ConsumedCPU)") \
     XX(TX_PERCENTILE_FOLLOWERSYNC_LATENCY, "FollowerSyncLatency") \
     XX(TX_PERCENTILE_COMMIT_REDO_BYTES, "TxCommitRedoBytes") \
+    XX(TX_PERCENTILE_BACKUP_CHANGELOG_FLUSH_LATENCY, "BackupChangelogFlushLatency") \
+    XX(TX_PERCENTILE_BACKUP_CHANGELOG_LAG, "BackupChangelogLag") \
 
 class TExecutorCounters : public TTabletCountersBase {
 public:

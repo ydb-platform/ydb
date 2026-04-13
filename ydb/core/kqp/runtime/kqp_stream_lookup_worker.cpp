@@ -284,6 +284,9 @@ public:
 
         return requests;
     }
+    size_t ScheduledRequestsCount() final {
+        return ScheduledReads.size();
+    }
 
     TReadList BuildRequests(const TPartitionInfo& partitioning, ui64& readId) final {
         YQL_ENSURE(partitioning);
@@ -663,6 +666,7 @@ public:
         YQL_ENSURE(false);
     }
 
+<<<<<<< HEAD
     std::optional<TString> IsOverloaded(size_t maxRowsProcessing) final {
         if (UnprocessedRows.size() >= maxRowsProcessing ||
             PendingLeftRowsByKey.size() >= maxRowsProcessing ||
@@ -674,6 +678,15 @@ public:
                 << ", result rows: " << ResultRowsBySeqNo.size();
 
             return TString(overloadDescriptor);
+=======
+    size_t ScheduledRequestsCount() final {
+        return ScheduledReads.size();
+    }
+
+    std::pair<ui64, THolder<TEvDataShard::TEvRead>> PopNextRequest() final {
+        if (ScheduledReads.empty()) {
+            return {0, nullptr};
+>>>>>>> b49c65a8e8c (add another variant of backpressure to sl (#37983))
         }
 
         return std::nullopt;

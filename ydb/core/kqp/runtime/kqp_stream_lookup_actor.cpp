@@ -318,6 +318,7 @@ private:
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
         YQL_ENSURE(!batch.IsWide(), "Wide stream is not supported");
+        SentResultsAvailable = false;
 
         if (ResolveShardsInProgress) {
             finished = false;
@@ -328,12 +329,18 @@ private:
         ReadRowsCount += replyResultStats.ReadRowsCount;
         ReadBytesCount += replyResultStats.ReadBytesCount;
 
+<<<<<<< HEAD
         auto overloaded = StreamLookupWorker->IsOverloaded(MaxRowsProcessing);
         if (!overloaded.has_value()) {
             FetchInputRows();
         } else {
             CA_LOG_N("Pausing stream lookup because it's overloaded by reason: "
                 << overloaded.value_or("empty"));
+=======
+        // Fetch input rows if we have less than max in flight reads in the scheduled queue.
+        if (StreamLookupWorker->ScheduledRequestsCount() < MaxInFlightReads) {
+            FetchInputRows();
+>>>>>>> b49c65a8e8c (add another variant of backpressure to sl (#37983))
         }
 
         if (Partitioning) {
@@ -345,9 +352,16 @@ private:
         const bool allRowsProcessed = StreamLookupWorker->AllRowsProcessed();
         const bool hasPendingResults = StreamLookupWorker->HasPendingResults();
 
-        if (hasPendingResults) {
+        // If we have no new reads and no pending results, we can fetch input rows again.
+        bool noNewReads = (
+            Partitioning && Reads.InFlightReads() + StreamLookupWorker->ScheduledRequestsCount() == 0
+            && LastFetchStatus == NUdf::EFetchStatus::Ok);
+        if (hasPendingResults || noNewReads) {
             // has more results
-            Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+            if (!SentResultsAvailable) {
+                Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+                SentResultsAvailable = true;
+            }
         }
 
         finished = inputRowsFinished && allReadsFinished && allRowsProcessed;
@@ -429,7 +443,10 @@ private:
 
         ProcessInputRows();
 
-        Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+        if (!SentResultsAvailable) {
+            Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+            SentResultsAvailable = true;
+        }
     }
 
     void Handle(TEvDataShard::TEvReadResult::TPtr& ev) {
@@ -595,7 +612,10 @@ private:
             shardId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()),
             &guard.GetMutex()->Ref()
         ));
-        Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+        if (!SentResultsAvailable) {
+            Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+            SentResultsAvailable = true;
+        }
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
@@ -668,6 +688,7 @@ private:
         }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
         while ((LastFetchStatus = Input.Fetch(row)) == NUdf::EFetchStatus::Ok) {
             StreamLookupWorker->AddInputRow(std::move(row));
 =======
@@ -683,6 +704,17 @@ private:
                 break;
             }
 >>>>>>> 7b4f249e2a4 (add batch limiter by max increase size (#38306))
+=======
+        size_t fetchCount = 0;
+        while ((LastFetchStatus = Input.Fetch(row)) == NUdf::EFetchStatus::Ok) {
+            StreamLookupWorker->AddInputRow(std::move(row));
+            ++fetchCount;
+            // avoid fetching too many rows at once
+            // todo: it might be better to check memory usage instead of rows count
+            if (fetchCount >= MaxRowsProcessing) {
+                break;
+            }
+>>>>>>> b49c65a8e8c (add another variant of backpressure to sl (#37983))
         }
     }
 
@@ -900,6 +932,7 @@ private:
     const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
     const ui64 QuerySpanId;
     TReads Reads;
+    bool SentResultsAvailable = false;
     NUdf::EFetchStatus LastFetchStatus = NUdf::EFetchStatus::Yield;
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
     const TDuration SchemeCacheRequestTimeout;

@@ -421,8 +421,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
     }
 
     Y_UNIT_TEST(AlterLogTable) {
-        NKikimrConfig::TAppConfig appConfig;
-        TKikimrWithGrpcAndRootSchema server(appConfig);
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
         EnableDebugLogs(server);
 
         auto connection = ConnectToServer(server);
@@ -451,9 +450,9 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             UNIT_ASSERT_C(!descr.GetTtlSettings(), "The table was created without TTL settings");
         }
 
-        // Create table with TTL settings
+        // Create table with TTL settings (OLAP: TTL column must be first in PK or have MAX-index)
         {
-            NYdb::NLogStore::TTtlSettings ttlSettings("saved_at", TDuration::Seconds(2000));
+            NYdb::NLogStore::TTtlSettings ttlSettings("timestamp", TDuration::Seconds(2000));
             NYdb::NLogStore::TLogTableSharding sharding(NYdb::NLogStore::HASH_TYPE_LOGS_SPECIAL, {"timestamp", "uid"}, 4);
             NYdb::NLogStore::TLogTableDescription tableDescr("default", sharding);
             tableDescr.SetTtlSettings(ttlSettings);
@@ -466,7 +465,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             auto descr = res.GetDescription();
             auto ttlSettings = descr.GetTtlSettings();
             UNIT_ASSERT_C(!ttlSettings.Empty(), "The table was created with TTL settings");
-            UNIT_ASSERT_VALUES_EQUAL(ttlSettings->GetDateTypeColumn().GetColumnName(), "saved_at");
+            UNIT_ASSERT_VALUES_EQUAL(ttlSettings->GetDateTypeColumn().GetColumnName(), "timestamp");
             UNIT_ASSERT_VALUES_EQUAL(ttlSettings->GetDateTypeColumn().GetExpireAfter(), TDuration::Seconds(2000));
         }
 
@@ -485,27 +484,27 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             UNIT_ASSERT_C(ttlSettings.Empty(), "Table must not have TTL settings");
         }
 
-        // Change TTL column
+        // Change TTL column to non-first PK column without MAX-index -> SCHEME_ERROR
         {
             NYdb::NLogStore::TAlterLogTableSettings alterLogTableSettings;
             alterLogTableSettings.AlterTtlSettings(NYdb::NTable::TAlterTtlSettings::Set("ingested_at", TDuration::Seconds(2000)));
             auto res = logStoreClient.AlterLogTable("/Root/LogStore/log2", std::move(alterLogTableSettings)).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SCHEME_ERROR, res.GetIssues().ToString());
         }
         {
             auto res = logStoreClient.DescribeLogTable("/Root/LogStore/log2").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
             auto descr = res.GetDescription();
             auto ttlSettings = descr.GetTtlSettings();
-            UNIT_ASSERT_C(!ttlSettings.Empty(), "Table must have TTL settings");
-            UNIT_ASSERT_VALUES_EQUAL(ttlSettings->GetDateTypeColumn().GetColumnName(), "ingested_at");
+            UNIT_ASSERT_C(!ttlSettings.Empty(), "Table must still have TTL settings");
+            UNIT_ASSERT_VALUES_EQUAL(ttlSettings->GetDateTypeColumn().GetColumnName(), "timestamp");
             UNIT_ASSERT_VALUES_EQUAL(ttlSettings->GetDateTypeColumn().GetExpireAfter(), TDuration::Seconds(2000));
         }
 
         // Change TTL expiration time
         {
             NYdb::NLogStore::TAlterLogTableSettings alterLogTableSettings;
-            alterLogTableSettings.AlterTtlSettings(NYdb::NTable::TAlterTtlSettings::Set("saved_at", TDuration::Seconds(86400)));
+            alterLogTableSettings.AlterTtlSettings(NYdb::NTable::TAlterTtlSettings::Set("timestamp", TDuration::Seconds(86400)));
             auto res = logStoreClient.AlterLogTable("/Root/LogStore/log2", std::move(alterLogTableSettings)).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
         }
@@ -515,7 +514,7 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
             auto descr = res.GetDescription();
             auto ttlSettings = descr.GetTtlSettings();
             UNIT_ASSERT_C(!ttlSettings.Empty(), "Table must have TTL settings");
-            UNIT_ASSERT_VALUES_EQUAL(ttlSettings->GetDateTypeColumn().GetColumnName(), "saved_at");
+            UNIT_ASSERT_VALUES_EQUAL(ttlSettings->GetDateTypeColumn().GetColumnName(), "timestamp");
             UNIT_ASSERT_VALUES_EQUAL(ttlSettings->GetDateTypeColumn().GetExpireAfter(), TDuration::Seconds(86400));
         }
 

@@ -32,6 +32,7 @@ __all__ = [
     "TopicWriterInitInfo",
     "TopicWriterMessage",
     "TopicWriterSettings",
+    "TopicWriterBufferFullError",
 ]
 
 import concurrent.futures
@@ -72,6 +73,7 @@ from ._topic_writer.topic_writer import (  # noqa: F401
     RetryPolicy as TopicWriterRetryPolicy,
     PublicWriterInitInfo as TopicWriterInitInfo,
     PublicWriteResult as TopicWriteResult,
+    TopicWriterBufferFullError,
 )
 
 from ydb._topic_writer.topic_writer_asyncio import TxWriterAsyncIO as TopicTxWriterAsyncIO
@@ -339,6 +341,9 @@ class TopicClientAsyncIO:
         # custom encoder executor for call builtin and custom decoders. If None - use shared executor pool.
         # If max_worker in the executor is 1 - then encoders will be called from the thread without parallel.
         encoder_executor: Optional[concurrent.futures.Executor] = None,
+        max_buffer_size_bytes: Optional[int] = None,
+        max_buffer_messages: Optional[int] = None,
+        buffer_wait_timeout_sec: Optional[float] = None,
     ) -> TopicWriterAsyncIO:
         logger.debug("Create writer for topic=%s producer_id=%s", topic, producer_id)
         args = locals().copy()
@@ -368,6 +373,9 @@ class TopicClientAsyncIO:
         # custom encoder executor for call builtin and custom decoders. If None - use shared executor pool.
         # If max_worker in the executor is 1 - then encoders will be called from the thread without parallel.
         encoder_executor: Optional[concurrent.futures.Executor] = None,
+        max_buffer_size_bytes: Optional[int] = None,
+        max_buffer_messages: Optional[int] = None,
+        buffer_wait_timeout_sec: Optional[float] = None,
     ) -> TopicTxWriterAsyncIO:
         logger.debug("Create tx writer for topic=%s tx=%s", topic, tx)
         args = locals().copy()
@@ -666,6 +674,9 @@ class TopicClient:
         # custom encoder executor for call builtin and custom decoders. If None - use shared executor pool.
         # If max_worker in the executor is 1 - then encoders will be called from the thread without parallel.
         encoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
+        max_buffer_size_bytes: Optional[int] = None,
+        max_buffer_messages: Optional[int] = None,
+        buffer_wait_timeout_sec: Optional[float] = None,
     ) -> TopicWriter:
         logger.debug("Create writer for topic=%s producer_id=%s", topic, producer_id)
         args = locals().copy()
@@ -696,6 +707,9 @@ class TopicClient:
         # custom encoder executor for call builtin and custom decoders. If None - use shared executor pool.
         # If max_worker in the executor is 1 - then encoders will be called from the thread without parallel.
         encoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
+        max_buffer_size_bytes: Optional[int] = None,
+        max_buffer_messages: Optional[int] = None,
+        buffer_wait_timeout_sec: Optional[float] = None,
     ) -> TopicWriter:
         logger.debug("Create tx writer for topic=%s tx=%s", topic, tx)
         args = locals().copy()

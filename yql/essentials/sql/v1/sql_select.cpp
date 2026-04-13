@@ -789,7 +789,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
     if (!source) {
         return nullptr;
     }
-    if (node.GetBlock4().size()) {
+    if (!node.GetBlock4().empty()) {
         TVector<TSourcePtr> sources(1, source);
         for (auto& s : node.GetBlock4()) {
             sources.push_back(NamedSingleSource(s.GetRule_named_single_source2(), unorderedSubquery));
@@ -903,7 +903,7 @@ TSourcePtr TSqlSelect::ReduceCore(const TRule_reduce_core& node, const TWriteSet
     if (!source) {
         return {};
     }
-    if (node.GetBlock3().size()) {
+    if (!node.GetBlock3().empty()) {
         TVector<TSourcePtr> sources(1, source);
         for (auto& s : node.GetBlock3()) {
             sources.push_back(NamedSingleSource(s.GetRule_named_single_source2(), true));

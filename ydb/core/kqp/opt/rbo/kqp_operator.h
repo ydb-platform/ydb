@@ -446,7 +446,10 @@ public:
 class TOpLimit: public IUnaryOperator {
 public:
     TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& limitCond, const EOpPhase limitPhase);
+    TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExpression& limitCond, const TExpression& offsetCond, const EOpPhase limitPhase);
     TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond, const EOpPhase limitPhase);
+    TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TExpression& limitCond,
+             std::optional<TExpression> offsetCond, const EOpPhase limitPhase);
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
@@ -459,10 +462,13 @@ public:
     }
 
     TExpression GetLimitCond() const { return LimitCond; }
+    bool HasOffset() const { return OffsetCond.has_value(); }
+    std::optional<TExpression> GetOffsetCond() const { return OffsetCond; }
 
     // Make private.
     TExpression LimitCond;
 private:
+    std::optional<TExpression> OffsetCond;
     EOpPhase LimitPhase{EOpPhase::Undefined};
 };
 

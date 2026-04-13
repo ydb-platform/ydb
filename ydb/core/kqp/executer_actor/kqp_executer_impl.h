@@ -663,7 +663,7 @@ protected:
         YQL_ENSURE(Stats);
 
         if (state.HasStats()) {
-            Stats->UpdateTaskStats(taskId, state.GetStats(), nullptr, (NYql::NDqProto::EComputeState) state.GetState(),
+            Stats->UpdateTaskStats(computeActor.NodeId(), taskId, state.GetStats(), nullptr, (NYql::NDqProto::EComputeState) state.GetState(),
                 TDuration::MilliSeconds(AggregationSettings.GetCollectLongTasksStatsTimeoutMs()));
 
             if (CollectBasicStats(Request.StatsMode)) {
@@ -774,6 +774,12 @@ protected:
         }
 
         static_cast<TDerived*>(this)->CheckExecutionComplete();
+    }
+
+    void HandleNodeState(NYql::NDq::TEvDqCompute::TEvNodeState::TPtr& ev) {
+        if (CollectProfileStats(Request.StatsMode)) {
+            Stats->UpdateNodeStats(ev->Sender.NodeId(), ev->Get()->Record);
+        }
     }
 
     void HandleHttpInfo(NMon::TEvHttpInfo::TPtr& ev) {

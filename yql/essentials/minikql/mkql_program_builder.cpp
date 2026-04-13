@@ -241,7 +241,7 @@ bool ReduceOptionalElements(const TType* type, const TArrayRef<const ui32>& test
 }
 
 static std::vector<TType*> ValidateBlockItems(const TArrayRef<TType* const>& wideComponents, bool unwrap) {
-    MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
+    MKQL_ENSURE(!wideComponents.empty(), "Expected at least one column");
     std::vector<TType*> items;
     items.reserve(wideComponents.size());
     // XXX: Declare these variables outside the loop body to use for the last
@@ -2290,7 +2290,7 @@ TRuntimeNode TProgramBuilder::Prepend(TRuntimeNode item, TRuntimeNode list) {
 }
 
 TRuntimeNode TProgramBuilder::BuildExtend(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& lists) {
-    MKQL_ENSURE(lists.size() > 0, "Expected at least 1 list or flow");
+    MKQL_ENSURE(!lists.empty(), "Expected at least 1 list or flow");
     if (lists.size() == 1) {
         return lists.front();
     }
@@ -4586,7 +4586,7 @@ TRuntimeNode TProgramBuilder::BuildMap(const std::string_view& callableName, TRu
 }
 
 TRuntimeNode TProgramBuilder::Invoke(const std::string_view& funcName, TType* resultType, const TArrayRef<const TRuntimeNode>& args) {
-    MKQL_ENSURE(args.size() >= 1U && args.size() <= 3U, "Expected from one to three arguments.");
+    MKQL_ENSURE(!args.empty() && args.size() <= 3U, "Expected from one to three arguments.");
     std::array<TArgType, 4U> argTypes;
     argTypes.front().first = UnpackOptionalData(resultType, argTypes.front().second)->GetSchemeType();
     auto i = 0U;
@@ -4797,7 +4797,7 @@ TRuntimeNode TProgramBuilder::Concat(TRuntimeNode data1, TRuntimeNode data2) {
 }
 
 TRuntimeNode TProgramBuilder::ConcatMany(const TArrayRef<const TRuntimeNode>& args) {
-    MKQL_ENSURE(args.size() >= 1, "Expected at least one argument");
+    MKQL_ENSURE(!args.empty(), "Expected at least one argument");
     if (args.size() == 1) {
         return args[0];
     }

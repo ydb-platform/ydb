@@ -84,7 +84,7 @@ public:
         const ui64 lsn,
         const NKikimr::NDDisk::TWriteInstruction instruction,
         TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
-        ui32 replyTimeoutMicroseconds,
+        TDuration replyTimeout,
         const TGuardedSgList& data,
         NWilson::TSpan& span) = 0;
 

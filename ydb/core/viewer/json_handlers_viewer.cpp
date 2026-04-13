@@ -378,7 +378,7 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerMultipartCounterHandler(jsonHandlers);
     InitViewerTextStreamCounterHandler(jsonHandlers);
     InitViewerGroupsJsonHandler(jsonHandlers);
-    jsonHandlers.AddHandler("/viewer/storage_stats", new TJsonHandler<TJsonStorageStats>(TJsonStorageStats::GetSwagger()));
+    jsonHandlers.AddHandler("/viewer/storage_stats", new TJsonHandler<TJsonStorageStats>(TJsonStorageStats::GetSwagger()), 2);
     jsonHandlers.AddHandler("/viewer/peers", new TJsonHandler<TJsonPeers>(TJsonPeers::GetSwagger()));
     jsonHandlers.AddHandler("/viewer/database_stats", new THttpHandler<TJsonDatabaseStats>());
 }

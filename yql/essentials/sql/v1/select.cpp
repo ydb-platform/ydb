@@ -2694,7 +2694,7 @@ public:
 
         if (WithExtFunction_) {
             auto preTransform = Y("RemoveSystemMembers", inputLabel);
-            if (Terms_.size() > 0) {
+            if (!Terms_.empty()) {
                 preTransform = Y("Map", preTransform, BuildLambda(Pos_, Y("row"), Q(Terms_[0])));
             }
             block = L(block, Y("let", inputLabel, preTransform));

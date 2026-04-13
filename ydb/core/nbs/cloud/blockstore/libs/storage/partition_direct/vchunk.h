@@ -28,6 +28,7 @@ public:
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
+        ui64 vChunkSize,
         TDuration writeHandoffDelay,
         TDuration traceSamplePeriod);
 
@@ -44,7 +45,7 @@ public:
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         EWriteMode writeMode,
-        ui32 pbufferReplyTimeoutMicroseconds,
+        TDuration pbufferReplyTimeout,
         ui64 lsn,
         const NWilson::TTraceId& traceId);
 
@@ -66,7 +67,7 @@ private:
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         EWriteMode writeMode,
-        ui32 pbufferReplyTimeoutMicroseconds,
+        TDuration pbufferReplyTimeout,
         ui64 lsn,
         std::shared_ptr<NWilson::TSpan> span);
     void OnWriteBlocksResponse(

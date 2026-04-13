@@ -948,7 +948,7 @@ public:
                                      TDeferredActions<UseMigrationProtocol>& deferred,
                                      TCallbackContextPtr<UseMigrationProtocol>& cbContext);
     bool HasDataEventCallback() const;
-    void ApplyCallbackToEventImpl(TADataReceivedEvent<UseMigrationProtocol>& event,
+    void ApplyCallbackToEventImpl(TADataReceivedEvent<UseMigrationProtocol>&& event,
                                   TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>&& eventsInfo,
                                   TDeferredActions<UseMigrationProtocol>& deferred);
 

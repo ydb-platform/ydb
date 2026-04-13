@@ -50,13 +50,8 @@ protected:
     virtual std::optional<ui64> DoGetRawSize() const override {
         return {};
     }
-    virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override {
-        AFL_VERIFY(false);
-        return nullptr;
-    }
     virtual TMinMax DoGetMinMaxScalars() const override {
-        AFL_VERIFY(false);
-        return {};
+        Y_ABORT("Not implemented");
     }
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
 

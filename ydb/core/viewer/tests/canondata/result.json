@@ -92,7 +92,7 @@
                     }
                 ],
                 "name": "TestAsyncReplication",
-                "owner": "root@builtin",
+                "owner": "root",
                 "type": "REPLICATION"
             }
         }
@@ -182,7 +182,7 @@
                         "tx_id": "not-zero-number-text"
                     },
                     "name": "table1",
-                    "owner": "root@builtin",
+                    "owner": "root",
                     "type": "TABLE"
                 },
                 {
@@ -191,7 +191,7 @@
                         "tx_id": "not-zero-number-text"
                     },
                     "name": "topic1",
-                    "owner": "root@builtin",
+                    "owner": "root",
                     "type": "TOPIC"
                 }
             ],
@@ -321,7 +321,7 @@
                         "tx_id": "not-zero-number-text"
                     },
                     "name": "table1",
-                    "owner": "root@builtin",
+                    "owner": "root",
                     "type": "TABLE"
                 },
                 {
@@ -330,7 +330,7 @@
                         "tx_id": "not-zero-number-text"
                     },
                     "name": "test_dir",
-                    "owner": "root@builtin",
+                    "owner": "root",
                     "type": "DIRECTORY"
                 },
                 {
@@ -339,7 +339,7 @@
                         "tx_id": "not-zero-number-text"
                     },
                     "name": "topic1",
-                    "owner": "root@builtin",
+                    "owner": "root",
                     "type": "TOPIC"
                 }
             ],
@@ -469,7 +469,7 @@
                         "tx_id": "not-zero-number-text"
                     },
                     "name": "table1",
-                    "owner": "root@builtin",
+                    "owner": "root",
                     "type": "TABLE"
                 },
                 {
@@ -478,7 +478,7 @@
                         "tx_id": "not-zero-number-text"
                     },
                     "name": "topic1",
-                    "owner": "root@builtin",
+                    "owner": "root",
                     "type": "TOPIC"
                 }
             ],
@@ -734,15 +734,10 @@
         "storage_nodes_database": {
             "FieldsAvailable": "0000010000000110011000000110100000011",
             "FieldsRequired": "0000000000000000000000000000000000011",
-            "FoundNodes": "1",
+            "FoundNodes": "0",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
-            "Nodes": [
-                {
-                    "NodeId": 1
-                }
-            ],
-            "TotalNodes": "1"
+            "TotalNodes": "0"
         },
         "storage_nodes_monitoring": {
             "FieldsAvailable": "0000010000000110011000000110100000011",
@@ -1708,7 +1703,7 @@
                     }
                 ],
                 "name": "TestTransfer",
-                "owner": "root@builtin",
+                "owner": "root",
                 "type": "TRANSFER"
             },
             "source_path": "TestTransferSourceTopic",
@@ -3763,13 +3758,13 @@
             "read": false
         },
         "/Root/dedicated_db": {
-            "read": true
+            "read": false
         },
         "/Root/serverless_db": {
-            "read": true
+            "read": false
         },
         "/Root/shared_db": {
-            "read": true
+            "read": false
         },
         "no-database": {
             "read": false
@@ -4146,7 +4141,7 @@
                         "CreateStep": "not-zero-number-text",
                         "CreateTxId": "not-zero-number-text",
                         "Name": "table1",
-                        "Owner": "root@builtin",
+                        "Owner": "root",
                         "ParentPathId": "1",
                         "PathId": "not-zero-number-text",
                         "PathState": 3,
@@ -4268,7 +4263,7 @@
                         "CreateStep": "not-zero-number-text",
                         "CreateTxId": "not-zero-number-text",
                         "Name": "table1",
-                        "Owner": "root@builtin",
+                        "Owner": "root",
                         "ParentPathId": "1",
                         "PathId": "not-zero-number-text",
                         "PathState": 3,
@@ -4402,7 +4397,7 @@
                         "CreateStep": "not-zero-number-text",
                         "CreateTxId": "not-zero-number-text",
                         "Name": "table1",
-                        "Owner": "root@builtin",
+                        "Owner": "root",
                         "ParentPathId": "1",
                         "PathId": "not-zero-number-text",
                         "PathState": 3,

@@ -234,7 +234,8 @@ void TDDiskDataCopier::OnRangeWritten(
 
     FreshWatermark = (copyRangeState->Range.End + 1) * VolumeConfig->BlockSize;
     DirtyMap->SetReadWatermark(Destination, FreshWatermark);
-    if (FreshWatermark < VChunkSize) {
+    Y_ABORT_UNLESS(VolumeConfig->VChunkSize > 0);
+    if (FreshWatermark < VolumeConfig->VChunkSize) {
         StartCopyRange();
     } else {
         Complete.SetValue(EResult::Ok);

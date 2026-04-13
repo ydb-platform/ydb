@@ -224,10 +224,9 @@ public:
         }
     }
 
-    TKqpRMAllocateResult AllocateResources(TIntrusivePtr<TTxState>& tx, TIntrusivePtr<TTaskState>& task, const TKqpResourcesRequest& resources) override
+    TKqpRMAllocateResult AllocateResources(TIntrusivePtr<TTxState>& tx, ui64 taskId, const TKqpResourcesRequest& resources) override
     {
         const ui64 txId = tx->TxId;
-        const ui64 taskId = task->TaskId;
 
         TKqpRMAllocateResult result;
         if (resources.ExecutionUnits) {
@@ -244,7 +243,7 @@ public:
         }
 
         if (Y_UNLIKELY(resources.Memory == 0)) {
-            tx->Allocated(task, resources);
+            tx->Allocated(resources);
             return result;
         }
 
@@ -272,7 +271,9 @@ public:
             }
 
             hasScanQueryMemory = TotalMemoryResource->AcquireIfAvailable(resources.Memory);
-            task->TotalMemoryCookie = TotalMemoryResource->GetSpillingCookie();
+            if (!tx->TotalMemoryCookie) {
+                tx->TotalMemoryCookie = TotalMemoryResource->GetSpillingCookie();
+            }
 
             if (hasScanQueryMemory && !tx->PoolId.empty() && tx->MemoryPoolPercent > 0) {
                 auto [it, success] = MemoryNamedPools.emplace(tx->MakePoolId(), nullptr);
@@ -289,7 +290,9 @@ public:
                     TotalMemoryResource->Release(resources.Memory);
                 }
 
-                task->PoolMemoryCookie = poolMemory->GetSpillingCookie();
+                if (!tx->PoolMemoryCookie) {
+                    tx->PoolMemoryCookie = poolMemory->GetSpillingCookie();
+                }
             }
         }
 
@@ -338,12 +341,14 @@ public:
             return result;
         }
 
-        tx->Allocated(task, resources);
-        if (!task->ResourceBrokerTaskId) {
-            task->ResourceBrokerTaskId = rbTaskId;
-        } else {
-            bool merged = ResourceBroker->MergeTasksInstant(task->ResourceBrokerTaskId, rbTaskId, SelfId);
-            Y_ABORT_UNLESS(merged);
+        with_lock(tx->Lock) {
+            tx->Allocated(resources);
+            if (!tx->TxResourceBrokerTaskId) {
+                tx->TxResourceBrokerTaskId = rbTaskId;
+            } else {
+                bool merged = ResourceBroker->MergeTasksInstant(tx->TxResourceBrokerTaskId, rbTaskId, SelfId);
+                Y_ABORT_UNLESS(merged);
+            }
         }
 
         LOG_AS_D("TxId: " << txId << ", taskId: " << taskId << ". Allocated " << resources.ToString());
@@ -351,33 +356,32 @@ public:
         return result;
     }
 
-    void FreeResources(TIntrusivePtr<TTxState>& tx, TIntrusivePtr<TTaskState>& task) override {
-        FreeResources(tx, task, task->FreeResourcesRequest());
-    }
+    void FreeResources(TIntrusivePtr<TTxState>& tx, ui64 taskId, const TKqpResourcesRequest& resources) override {
 
-    void FreeResources(TIntrusivePtr<TTxState>& tx, TIntrusivePtr<TTaskState>& task, const TKqpResourcesRequest& resources) override {
+        with_lock(tx->Lock) {
+            auto released = tx->Released(resources);
+            Y_ABORT_UNLESS(released);
+
+            if (tx->TxResourceBrokerTaskId) {
+                if (tx->TxScanQueryMemory.load() == 0) {
+                    bool finished = ResourceBroker->FinishTaskInstant(
+                        TEvResourceBroker::TEvFinishTask(tx->TxResourceBrokerTaskId), SelfId);
+                    Y_DEBUG_ABORT_UNLESS(finished);
+                    tx->TxResourceBrokerTaskId = 0;
+                } else {
+                    bool reduced = ResourceBroker->ReduceTaskResourcesInstant(
+                        tx->TxResourceBrokerTaskId, {0, resources.Memory}, SelfId);
+                    Y_DEBUG_ABORT_UNLESS(reduced);
+                }
+            }
+        }
+
         if (resources.ExecutionUnits) {
             ExecutionUnitsResource.fetch_add(resources.ExecutionUnits);
         }
 
-        Y_ABORT_UNLESS(resources.Memory <= task->ScanQueryMemory);
-
-        if (resources.Memory > 0 && task->ResourceBrokerTaskId) {
-            if (resources.Memory == task->ScanQueryMemory) {
-                bool finished = ResourceBroker->FinishTaskInstant(
-                    TEvResourceBroker::TEvFinishTask(task->ResourceBrokerTaskId), SelfId);
-                Y_DEBUG_ABORT_UNLESS(finished);
-                task->ResourceBrokerTaskId = 0;
-            } else {
-                bool reduced = ResourceBroker->ReduceTaskResourcesInstant(
-                    task->ResourceBrokerTaskId, {0, resources.Memory}, SelfId);
-                Y_DEBUG_ABORT_UNLESS(reduced);
-            }
-        }
-
-        tx->Released(task, resources);
         i64 prev = ExternalDataQueryMemory.fetch_sub(resources.ExternalMemory);
-        Y_DEBUG_ABORT_UNLESS(prev >= 0);
+        Y_DEBUG_ABORT_UNLESS(prev >= resources.ExternalMemory);
 
         if (resources.Memory > 0) {
             with_lock (Lock) {
@@ -395,7 +399,7 @@ public:
             }
         }
 
-        LOG_AS_D("TxId: " << tx->TxId << ", taskId: " << task->TaskId
+        LOG_AS_D("TxId: " << tx->TxId << ", taskId: " << taskId
             << ". Released resources, "
             << "Memory: " << resources.Memory << ", "
             << "Free Tier: " << resources.ExternalMemory << ", "

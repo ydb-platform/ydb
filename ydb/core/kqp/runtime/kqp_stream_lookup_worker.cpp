@@ -278,6 +278,9 @@ public:
                 }).second);
         }
     }
+    size_t ScheduledRequestsCount() final {
+        return ScheduledReads.size();
+    }
 
     std::pair<ui64, THolder<TEvDataShard::TEvRead>> PopNextRequest() final {
         if (ScheduledReads.empty()) {
@@ -615,6 +618,10 @@ public:
 
     void AddInputRow(TConstArrayRef<TCell>) final {
         YQL_ENSURE(false);
+    }
+
+    size_t ScheduledRequestsCount() final {
+        return ScheduledReads.size();
     }
 
     std::pair<ui64, THolder<TEvDataShard::TEvRead>> PopNextRequest() final {

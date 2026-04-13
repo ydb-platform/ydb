@@ -48,9 +48,6 @@ public:
 
     TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) noexcept final {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(static_cast<IActor*>(this));
-        LOG_I("Prepare TValidateRowConditionScan"
-            << " id# " << Request.GetId()
-            << " tabletId# " << TabletId);
         return {EScan::Feed, {}};
     }
 
@@ -64,9 +61,6 @@ public:
         const TConstArrayRef<TCell> rowCells = *row;
         for (const auto& cell : rowCells) {
             if (cell.IsNull()) {
-                LOG_N("TValidateRowConditionScan: NULL found, validation failed"
-                    << " id# " << Request.GetId()
-                    << " tabletId# " << TabletId);
                 IsValid = false;
                 Status = NKikimrIndexBuilder::EBuildStatus::DONE;
                 return EScan::Final;

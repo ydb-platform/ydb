@@ -595,7 +595,7 @@ void ExtractJoinKeysAndPredicates(TExprNode::TPtr node, TVector<TInfoUnit>& join
 }
 
 void SplitJoinPredicatesByAliases(const TVector<TExprNode::TPtr>& joinPredicates, const TString& leftSideAlias, const TString& rightSideAlias,
-                                  TVector<TExprNode::TPtr>& leftSidePredicates, TVector<TExprNode::TPtr>& rightSidePredicates) {
+                                  TVector<TExprNode::TPtr>& leftSidePredicates, TVector<TExprNode::TPtr>& rightSidePredicates, TVector<TExprNode::TPtr>& joinFilters) {
     for (const auto& predicate : joinPredicates) {
         TVector<TInfoUnit> members;
         GetAllMembers(predicate, members);
@@ -611,8 +611,11 @@ void SplitJoinPredicatesByAliases(const TVector<TExprNode::TPtr>& joinPredicates
                 Y_ENSURE(false, "Invalid alias in join predicate" + member.GetAlias());
             }
         }
-        Y_ENSURE((isLeftSidePredicate && !isRightSidePredicate) || (isRightSidePredicate && !isLeftSidePredicate));
-        if (isLeftSidePredicate) {
+
+        if (isLeftSidePredicate && isRightSidePredicate) {
+            joinFilters.push_back(predicate);
+        }
+        else if (isLeftSidePredicate) {
             leftSidePredicates.push_back(predicate);
         } else {
             rightSidePredicates.push_back(predicate);
@@ -645,6 +648,16 @@ TExprNode::TPtr BuildFilter(TExprNode::TPtr input, TExprNode::TPtr lambdaArg, TV
                 .With(TExprBase(lambdaArg), "_filter_arg_")
             .Build()
         .Build()
+    .Done().Ptr();
+    // clang-format on
+}
+
+TExprNode::TPtr BuildJoinFilter(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, TExprNode::TPtr lambda, TExprContext &ctx, TPositionHandle pos) {
+    // clang-format off
+    return Build<TKqpOpJoinFilter>(ctx, pos)
+        .LeftInput(leftInput)
+        .RightInput(rightInput)
+        .Lambda(lambda)
     .Done().Ptr();
     // clang-format on
 }
@@ -1253,6 +1266,8 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
                     TExprNode::TPtr rightInput;
                     TVector<TExprNode::TPtr> leftSidePredicates;
                     TVector<TExprNode::TPtr> rightSidePredicates;
+                    TVector<TExprNode::TPtr> joinFilters;
+
                     TString leftSideAlias;
                     TString rightSideAlias;
 
@@ -1285,14 +1300,17 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
                     auto joinKind = TString(joinType);
                     ToCamelCase(joinKind.MutRef());
 
-                    if (joinLambda && (joinKind == "Left" || joinKind == "Inner")) {
+                    if (joinLambda) {
                         auto lambdaArg = TCoLambda(joinLambda).Args().Arg(0).Ptr();
-                        SplitJoinPredicatesByAliases(joinPredicates, leftSideAlias, rightSideAlias, leftSidePredicates, rightSidePredicates);
+                        SplitJoinPredicatesByAliases(joinPredicates, leftSideAlias, rightSideAlias, leftSidePredicates, rightSidePredicates, joinFilters);
                         if (leftSidePredicates.size()) {
                             leftInput = BuildFilter(leftInput, lambdaArg, leftSidePredicates, ctx, node->Pos());
                         }
                         if (rightSidePredicates.size()) {
                             rightInput = BuildFilter(rightInput, lambdaArg, rightSidePredicates, ctx, node->Pos());
+                        }
+                        for (const auto & joinFilter : joinFilters) {
+                            joinFilters.push_back(BuildJoinFilter(leftInput, rightInput, joinFilter, ctx, node->Pos()));
                         }
                     }
 
@@ -1304,6 +1322,9 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& node, TExprContext& ctx, co
                             .Value(joinKind)
                         .Build()
                         .JoinKeys(BuildJoinKeys(joinKeys, joinAliases, processedInputs, ctx, node->Pos()))
+                        .JoinFilters()
+                            .Add(joinFilters)
+                        .Build()
                     .Done().Ptr();
                     // clang-format on
                     tableInputsCount = 0;

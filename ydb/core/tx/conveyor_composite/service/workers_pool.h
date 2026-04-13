@@ -35,9 +35,9 @@ private:
         YDB_READONLY_DEF(NActors::TActorId, WorkerId);
 
     public:
-        explicit TWorkerInfo(std::unique_ptr<TWorker>&& worker)
+        explicit TWorkerInfo(std::unique_ptr<TWorker>&& worker, bool isBatchPool)
             : Worker(worker.get())
-            , WorkerId(TActivationContext::Register(worker.release())) {
+            , WorkerId(TActivationContext::Register(worker.release(), TActorId(), TMailboxType::HTSwap, isBatchPool ? AppDataVerified()->BatchPoolId : AppDataVerified()->UserPoolId)) {
         }
 
         void OnStartTask() {

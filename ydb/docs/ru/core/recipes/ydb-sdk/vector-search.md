@@ -49,6 +49,47 @@
     NYdb::NQuery::TQueryClient client(driver);
     ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  import { Driver } from '@ydbjs/core'
+  import { query, unsafe, identifier } from '@ydbjs/query'
+
+  const driver = new Driver('grpc://localhost:2136/local')
+  await driver.ready()
+  const sql = query(driver)
+  ```
+
+- Java
+
+    Для запросов используйте `QueryClient` и `SessionRetryContext` (см. [инициализацию драйвера](./init.md)). Ниже — минимальное подключение и создание клиента для YQL Query Service:
+
+    ```java
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.tools.SessionRetryContext;
+
+    String connectionString = System.getenv().getOrDefault("YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+    try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+       QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+      // retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery(...)))
+    }
+    ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 
@@ -111,6 +152,53 @@
     }
     ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  ```javascript
+  await sql`CREATE TABLE IF NOT EXISTS `table_name` (
+    id Utf8,
+    document Utf8,
+    embedding String,
+    PRIMARY KEY (id)
+  );`
+  ```
+
+- Java
+
+  ```java
+  import tech.ydb.common.transaction.TxMode;
+  import tech.ydb.query.tools.QueryReader;
+  import tech.ydb.query.tools.SessionRetryContext;
+  import tech.ydb.table.query.Params;
+
+  void createVectorTable(SessionRetryContext retryCtx, String tableName) {
+      String query = String.format("""
+              CREATE TABLE IF NOT EXISTS `%s` (
+                  id Utf8,
+                  document Utf8,
+                  embedding String,
+                  PRIMARY KEY (id)
+              );""", tableName);
+
+      retryCtx.supplyResult(session -> QueryReader.readFrom(
+              session.createQuery(query, TxMode.NONE, Params.empty())
+      )).join().getValue();
+
+      System.out.println("Vector table created: " + tableName);
+  }
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 
@@ -340,6 +428,34 @@
     }
     ```
 
+<<<<<<< HEAD
+=======
+- JavaScript (альтернативный)
+
+  ```javascript
+  const items = [
+    {
+      id: "first_doc",
+      document: "My Document",
+      embedding: new Float32Array([1.5, 2.5, 3.5])
+    }
+  ]
+
+  await sql`
+    UPSERT INTO `table_name` (id, document, embedding)
+    SELECT id, document, Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
+    FROM AS_TABLE($items);`
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 
@@ -459,6 +575,75 @@
     }
     ```
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Java
+
+    ```java
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
+    import tech.ydb.table.settings.AlterTableSettings;
+
+    void addVectorIndex(
+            GrpcTransport transport,
+            SessionRetryContext queryRetry,
+            SessionRetryContext tableRetry,
+            String tableName,
+            String indexName,
+            String strategy,
+            long dimension,
+            long levels,
+            long clusters) {
+
+        String tempIndexName = indexName + "__temp";
+        String query = String.format("""
+                ALTER TABLE `%s`
+                ADD INDEX %s
+                GLOBAL USING vector_kmeans_tree
+                ON (embedding)
+                WITH (
+                    %s,
+                    vector_type="Float",
+                    vector_dimension=%d,
+                    levels=%d,
+                    clusters=%d
+                );
+                """, tableName, tempIndexName, strategy, dimension, levels, clusters);
+
+        queryRetry.supplyResult(session -> QueryReader.readFrom(
+                session.createQuery(query, TxMode.NONE, Params.empty())
+        )).join().getValue();
+
+        String tablePath = transport.getDatabase() + "/" + tableName;
+        AlterTableSettings settings = new AlterTableSettings()
+                .addRenameIndex(tempIndexName, indexName, true);
+
+        tableRetry.supplyStatus(session -> session.alterTable(tablePath, settings))
+                .join()
+                .expectSuccess("alter table rename index");
+
+        System.out.println("Table index `" + indexName + "` for table `" + tableName + "` added");
+    }
+
+    // SessionRetryContext tableRetry = SessionRetryContext.create(TableClient.newClient(transport).build()).build();
+    ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ## Поиск по вектору {#search-by-vector}
@@ -694,6 +879,32 @@
     }
     ```
 
+<<<<<<< HEAD
+=======
+- JavaScript (alternative)
+
+  ```javascript
+  const limit;
+  const embedding = new Float32Array([1.5, 2.5, 3.5])
+
+  await sql`SELECT
+        id,
+        document,
+        Knn::CosineSimilarity(embedding, Knn::ToBinaryStringFloat(${embedding})) as score
+    FROM `table_name`
+    ORDER BY score DESC
+    LIMIT ${unsafe(limit)};
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}
 
 ## Итоговый пример {#full-example}
@@ -876,4 +1087,101 @@
 
     Полный код программы доступен по [ссылке](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/vector_index_builtin).
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Java
+
+    Пример объединяет шаги из разделов выше: `QueryClient` + `SessionRetryContext` для YQL и `TableClient` + `SessionRetryContext` для `ALTER TABLE` с переименованием индекса. Методы `createVectorTable`, `insertItemsAsBytes`, `searchItemsAsBytes`, `addVectorIndex` и тип `Item` / `ResultItem` — как в соответствующих фрагментах этой страницы.
+
+    ```java
+    import java.util.List;
+    import java.util.Optional;
+
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.TableClient;
+    import tech.ydb.table.query.Params;
+
+    public class VectorSearchJavaExample {
+
+        record Item(String id, String document, float[] embedding) {}
+        record ResultItem(String id, String document, float score) {}
+
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault("YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+            String tableName = "ydb_vector_search";
+            String indexName = "ydb_vector_index";
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build();
+                 TableClient tableClient = TableClient.newClient(transport).build()) {
+
+                SessionRetryContext queryRetry = SessionRetryContext.create(queryClient).build();
+                SessionRetryContext tableRetry = SessionRetryContext.create(tableClient).build();
+
+                dropVectorTableIfExists(queryRetry, tableName);
+                createVectorTable(queryRetry, tableName);
+
+                List<Item> items = List.of(
+                        new Item("1", "vector 1", new float[]{0.98f, 0.1f, 0.01f}),
+                        new Item("2", "vector 2", new float[]{1.0f, 0.05f, 0.05f}),
+                        new Item("3", "vector 3", new float[]{0.9f, 0.1f, 0.1f}),
+                        new Item("4", "vector 4", new float[]{0.03f, 0.0f, 0.99f}),
+                        new Item("5", "vector 5", new float[]{0.0f, 0.0f, 0.99f}),
+                        new Item("6", "vector 6", new float[]{0.0f, 0.02f, 1.0f}),
+                        new Item("7", "vector 7", new float[]{0.0f, 1.05f, 0.05f}),
+                        new Item("8", "vector 8", new float[]{0.02f, 0.98f, 0.1f}),
+                        new Item("9", "vector 9", new float[]{0.0f, 1.0f, 0.05f})
+                );
+
+                insertItemsAsBytes(queryRetry, tableName, items);
+                printResults(searchItemsAsBytes(queryRetry, tableName, new float[]{1, 0, 0},
+                        "CosineSimilarity", 3, Optional.empty()));
+
+                addVectorIndex(transport, queryRetry, tableRetry, tableName, indexName,
+                        "similarity=cosine", 3, 1, 3);
+
+                printResults(searchItemsAsBytes(queryRetry, tableName, new float[]{1, 0, 0},
+                        "CosineSimilarity", 3, Optional.of(indexName)));
+            }
+        }
+
+        static void dropVectorTableIfExists(SessionRetryContext queryRetry, String tableName) {
+            String ddl = String.format("DROP TABLE IF EXISTS `%s`", tableName);
+            queryRetry.supplyResult(s -> QueryReader.readFrom(
+                    s.createQuery(ddl, TxMode.NONE, Params.empty())
+            )).join().getValue();
+            System.out.println("Vector table dropped");
+        }
+
+        static void printResults(List<ResultItem> items) {
+            if (items.isEmpty()) {
+                System.out.println("No items found");
+                return;
+            }
+            for (ResultItem item : items) {
+                System.out.printf("[score=%f] %s: %s%n", item.score(), item.id(), item.document());
+            }
+        }
+    }
+    ```
+
+    Вывод совпадает с примером на Python.
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+>>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 {% endlist %}

@@ -3029,7 +3029,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         for (size_t i = 0; i < messages.size(); ++i) {
             NJson::TJsonValue json;
-            NJson::ReadJsonTree(messages[i], &json);
+            const bool parsed = NJson::ReadJsonTree(messages[i], &json);
+            UNIT_ASSERT_C(parsed, TStringBuilder() << "Failed to parse changefeed message as JSON: " << messages[i]);
 
             auto key = json["key"][0].GetInteger();
             if (key >= 4) {

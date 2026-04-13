@@ -18,7 +18,7 @@ enum EWriteMode {
 
 message TStorageServiceConfig
 {
-    // Schemeshard directory for volumes.
+    // SchemeShard directory for volumes.
     optional string SchemeShardDir = 1;
 
     // Channel configuration.
@@ -32,7 +32,7 @@ message TStorageServiceConfig
     // Number of reties before pipe client reports failure.
     optional uint32 PipeClientRetryCount = 6;
 
-    // Mimimum timeout before pipe client reconnect attempt.
+    // Minimum timeout before pipe client reconnect attempt.
     optional uint32 PipeClientMinRetryTime = 7;
 
     // Maximum timeout before pipe client reconnect attempt.
@@ -61,4 +61,10 @@ message TStorageServiceConfig
 
     // Delay (in microseconds) before writing to handoff persistent buffers.
     optional uint32 WriteHandoffDelay = 16;
+
+    // Size of VChunk (in bytes). Default is 128 MB.
+    optional uint64 VChunkSize = 17;
+
+    // Thread pool size.
+    optional uint32 ThreadPoolSize = 18;
 }

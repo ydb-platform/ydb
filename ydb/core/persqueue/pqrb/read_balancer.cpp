@@ -254,6 +254,9 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
             for (const auto children : p.GetChildPartitionIds()) {
                 ap->MutableChildPartitionIds()->AddAlreadyReserved(children);
             }
+            if (p.HasCreationTimestampSeconds()) {
+                ap->SetCreationTimestampSeconds(p.GetCreationTimestampSeconds());
+            }
         }
     }
 

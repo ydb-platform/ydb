@@ -114,6 +114,7 @@ public:
         OPTION_FIELD_DEFAULT(bool, CreateOperationTracker, true)
         OPTION_FIELD_DEFAULT(TQContext, QContext, {})
         OPTION_FIELD_DEFAULT(IYtFullCapture::TPtr, FullCapture, nullptr)
+        OPTION_FIELD(TSecureTmpStatePtr, UseSecureTmp)
     };
 
     //////////////////////////////////////////////////////////////

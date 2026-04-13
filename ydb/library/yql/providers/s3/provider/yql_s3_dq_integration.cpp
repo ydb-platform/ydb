@@ -29,6 +29,8 @@ using namespace NNodes;
 
 namespace {
 
+constexpr TStringBuf UserSchemaColumnsSetting = "UserSchemaColumns";
+
 TString GetLastName(const TString& fullName) {
     auto n = fullName.find_last_of('/');
     return (n == fullName.npos) ? fullName : fullName.substr(n + 1);
@@ -295,6 +297,36 @@ public:
             }
 
             auto format = s3ReadObject.Object().Format().Ref().Content();
+
+            // For the csv format (no header in file), inject column names from ColumnOrder into settings.
+            // The actor uses this to set file_column_names for the ClickHouse CSV parser.
+            auto buildObjectSettings = [&]() -> TExprNode::TPtr {
+                TExprNode::TListType settingsList;
+                if (const auto& mayObjSettings = s3ReadObject.Object().Settings()) {
+                    settingsList = mayObjSettings.Cast().Ref().ChildrenList();
+                }
+                if (format == "csv"sv) {
+                    if (const auto& maybeColumnOrder = s3ReadObject.ColumnOrder()) {
+                        // Store column names as a nested list of atoms тАФ no string serialization needed.
+                        const auto& columnOrderChildren = maybeColumnOrder.Cast().Ref().ChildrenList();
+                        TExprNode::TListType columnAtoms;
+                        columnAtoms.reserve(columnOrderChildren.size());
+                        for (const auto& child : columnOrderChildren) {
+                            columnAtoms.push_back(ctx.NewAtom(s3ReadObject.Object().Pos(), child->Content()));
+                        }
+                        settingsList.push_back(
+                            ctx.Builder(s3ReadObject.Object().Pos())
+                                .List()
+                                    .Atom(0, UserSchemaColumnsSetting)
+                                    .Add(1, ctx.NewList(s3ReadObject.Object().Pos(), std::move(columnAtoms)))
+                                .Seal()
+                                .Build()
+                        );
+                    }
+                }
+                return ctx.NewList(s3ReadObject.Object().Pos(), std::move(settingsList));
+            };
+
             if (State_->Configuration->SourceCoroActor.GetOrDefault() && format != "raw" && format != "json_list") {
                 return Build<TDqSourceWrap>(ctx, read->Pos())
                     .Input<TS3ParseSettings>()
@@ -308,7 +340,7 @@ public:
                         .Format(s3ReadObject.Object().Format())
                         .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
                         .FilterPredicate(s3ReadObject.FilterPredicate())
-                        .Settings(s3ReadObject.Object().Settings())
+                        .Settings(buildObjectSettings())
                         .Build()
                     .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
                     .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
@@ -392,6 +424,7 @@ public:
 
             if (const auto mayParseSettings = settings.Maybe<TS3ParseSettings>()) {
                 const auto parseSettings = mayParseSettings.Cast();
+                const TStringBuf format = parseSettings.Format().Ref().Content();
                 srcDesc.SetFormat(parseSettings.Format().StringValue().c_str());
                 srcDesc.SetParallelRowGroupCount(State_->Configuration->ArrowParallelRowGroupCount.GetOrDefault());
                 srcDesc.SetRowGroupReordering(State_->Configuration->ArrowRowGroupReordering.GetOrDefault());
@@ -417,12 +450,26 @@ public:
                 if (const auto maySettings = parseSettings.Settings()) {
                     const auto& settings = maySettings.Cast();
                     for (auto i = 0U; i < settings.Ref().ChildrenSize(); ++i) {
-                        srcDesc.MutableSettings()->insert(
-                            {TString(settings.Ref().Child(i)->Head().Content()),
-                             TString(
-                                 settings.Ref().Child(i)->Tail().IsAtom()
-                                     ? settings.Ref().Child(i)->Tail().Content()
-                                     : settings.Ref().Child(i)->Tail().Head().Content())});
+                        const TStringBuf key = settings.Ref().Child(i)->Head().Content();
+                        const auto& valueNode = settings.Ref().Child(i)->Tail();
+                        if (key == UserSchemaColumnsSetting) {
+                            if (format != "csv"sv) {
+                                continue;
+                            }
+                            // Value is a list of column name atoms тАФ iterate without string parsing.
+                            const auto columnCount = valueNode.ChildrenSize();
+                            srcDesc.MutableUserSchemaColumns()->Reserve(columnCount);
+                            for (size_t j = 0U; j < columnCount; ++j) {
+                                srcDesc.AddUserSchemaColumns(TString(valueNode.Child(j)->Content()));
+                            }
+                        } else {
+                            srcDesc.MutableSettings()->insert(
+                                {TString(key),
+                                 TString(
+                                     valueNode.IsAtom()
+                                         ? valueNode.Content()
+                                         : valueNode.Head().Content())});
+                        }
                     }
                 }
             } else if (const auto maySourceSettings = source.Settings().Maybe<TS3SourceSettings>()){

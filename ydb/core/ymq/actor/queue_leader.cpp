@@ -1502,6 +1502,7 @@ void TQueueLeader::AnswerGetConfiguration(TSqsEvents::TEvGetConfiguration::TPtr&
     resp->SchemeCache = SchemeCache_;
     resp->QueueLeader = SelfId();
     resp->QuoterResources = QuoterResources_;
+    resp->Settings = req->Get()->Settings;
 
     if (req->Get()->NeedQueueAttributes) {
         Y_ABORT_UNLESS(QueueAttributes_);

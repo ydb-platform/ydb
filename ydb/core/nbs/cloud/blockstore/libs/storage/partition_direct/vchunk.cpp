@@ -30,6 +30,7 @@ TVChunk::TVChunk(
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     ui32 syncRequestsBatchSize,
+    ui64 vChunkSize,
     TDuration writeHandoffDelay,
     TDuration traceSamplePeriod)
     : ActorSystem(actorSystem)
@@ -38,11 +39,13 @@ TVChunk::TVChunk(
     , DirectBlockGroup(std::move(directBlockGroup))
     , VChunkConfig(vChunkConfig)
     , BlockSize(DefaultBlockSize)
-    , BlocksCount(VChunkSize / BlockSize)
+    , BlocksCount(vChunkSize / BlockSize)
     , SyncRequestsBatchSize(syncRequestsBatchSize)
     , WriteHandoffDelay(writeHandoffDelay)
     , TraceSamplePeriod(traceSamplePeriod)
-{}
+{
+    Y_ABORT_UNLESS(vChunkSize % BlockSize == 0);
+}
 
 TVChunk::~TVChunk() = default;
 

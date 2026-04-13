@@ -1316,7 +1316,7 @@ public:
                 setItemOptions.push_back(QL(QA("group_by"), groupBy));
             }
 
-            if (windowItems.size()) {
+            if (!windowItems.empty()) {
                 auto window = QVL(windowItems.data(), windowItems.size());
                 setItemOptions.push_back(QL(QA("window"), window));
             }
@@ -1850,7 +1850,7 @@ private:
             ctx.PrimaryKey.push_back(QA(StrVal(node)));
         }
 
-        Y_ENSURE(0 < ctx.PrimaryKey.size());
+        Y_ENSURE(!ctx.PrimaryKey.empty());
 
         return true;
     }
@@ -1875,7 +1875,7 @@ private:
             uniq.push_back(QA(nodeName));
         }
 
-        Y_ENSURE(0 < uniq.size());
+        Y_ENSURE(!uniq.empty());
         ctx.UniqConstr.emplace_back(std::move(uniq));
 
         return true;
@@ -2359,7 +2359,7 @@ public:
                 return nullptr;
             }
             auto rawStr = values[0];
-            if (rawStr != "pg_catalog" && rawStr != "public" && rawStr != "" && rawStr != "information_schema") {
+            if (rawStr != "pg_catalog" && rawStr != "public" && !rawStr.empty() && rawStr != "information_schema") {
                 AddError(TStringBuilder() << "VariableSetStmt, search path supports only 'information_schema', 'public', 'pg_catalog', '' but got: '" << rawStr << "'");
                 return nullptr;
             }
@@ -3101,7 +3101,7 @@ public:
         if (schemaname == "public") {
             return Settings_.DefaultCluster;
         }
-        if (schemaname == "" && Settings_.GUCSettings) {
+        if (schemaname.empty() && Settings_.GUCSettings) {
             auto search_path = Settings_.GUCSettings->Get("search_path");
             if (!search_path || *search_path == "public" || search_path->empty()) {
                 return Settings_.DefaultCluster;
@@ -3473,7 +3473,7 @@ public:
         }
 
         TCaseBranch result;
-        result.Pred = VL(&preds[0], preds.size());
+        result.Pred = VL(preds.data(), preds.size());
         result.Value = L(A("If"), left.Pred, left.Value, right.Value);
         return result;
     }
@@ -4767,7 +4767,7 @@ public:
         }
 
         if (isStar) {
-            if (fields.size() == 0) {
+            if (fields.empty()) {
                 return L(A("PgStar"));
             } else {
                 return L(A("PgQualifiedStar"), QAX(fields[0]));

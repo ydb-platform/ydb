@@ -687,11 +687,11 @@ TString GetFormattedStmt(const TStringBuf& stmt) {
         result += stmt.substr(pos);
     }
 
-    if (0 < result.length() && '\n' == result.back()) {
+    if (!result.empty() && '\n' == result.back()) {
         result.pop_back();
     }
 
-    if (0 < result.length() && '\r' == result.back()) {
+    if (!result.empty() && '\r' == result.back()) {
         result.pop_back();
     }
 
@@ -773,7 +773,7 @@ TString FormatFloat(const TString& value, std::function<TString(const TString&)>
     static const TString Minf = "-Infinity";
 
     try {
-        return (value == "")       ? ""
+        return (value.empty())     ? ""
                : (value == "Nan")  ? Nan
                : (value == "Inf")  ? Inf
                : (value == "-Inf") ? Minf

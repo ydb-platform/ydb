@@ -249,7 +249,7 @@ struct TPrepareResponseResultType : TPrepareResponseResultTypeImpl<ResponseEvent
 
 class TDbRequester {
 protected:
-    explicit TDbRequester(TDbPool::TPtr pool = nullptr, TYdbConnectionPtr ydbConnection = nullptr)
+    explicit TDbRequester(TDbPoolPtr pool = nullptr, TYdbConnectionPtr ydbConnection = nullptr)
         : DbPool(std::move(pool))
         , YdbConnection(std::move(ydbConnection))
     {
@@ -282,7 +282,7 @@ protected:
         bool retryTli = true);
 
     static TAsyncStatus ReadModifyWrite(
-        TDbPool::TPtr dbPool,
+        TDbPoolPtr dbPool,
         const TString& readQuery,
         const NYdb::TParams& readParams,
         const std::function<std::pair<TString, NYdb::TParams>(const std::vector<NYdb::TResultSet>&)>& prepare,
@@ -305,7 +305,7 @@ protected:
     }
 
 protected:
-    TDbPool::TPtr DbPool;
+    TDbPoolPtr DbPool;
     TYdbConnectionPtr YdbConnection;
 };
 
@@ -1063,7 +1063,7 @@ private:
     };
 
     static NThreading::TFuture<void> PickTask(
-        TDbPool::TPtr dbPool,
+        TDbPoolPtr dbPool,
         const TPickTaskParams& taskParams,
         const TRequestCounters& requestCounters,
         TDebugInfoPtr debugInfo,

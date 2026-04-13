@@ -1,14 +1,18 @@
 # Prefer a pile with a specific state
 
-Below is example of the code for setting the "prefer pile with a specific state" balancing algorithm in {{ ydb-short-name }} SDK.
+Below is an example of setting the balancing algorithm option that prefers a [pile](../../concepts/glossary.md#pile) in a given [state](../../concepts/bridge.md#pile-states) in the {{ ydb-short-name }} SDK.
 
 If no state is specified when setting the option, the SDK prefers the PRIMARY pile.
 
-This option only makes sense if the cluster is operating in bridge mode. If it is not, the SDK will use [random choice balancing algorithm](./balancing-random-choice.md).
+This option only makes sense if the cluster is operating in [bridge mode](../../concepts/bridge.md). Otherwise, the SDK uses [random choice balancing](./balancing-random-choice.md).
 
 {% list tabs %}
 
-- С++
+- Go
+
+  This functionality is not currently supported.
+
+- C++
 
   ```cpp
   #include <ydb-cpp-sdk/client/driver/driver.h>
@@ -25,5 +29,17 @@ This option only makes sense if the cluster is operating in bridge mode. If it i
     return 0;
   }
   ```
+
+- Python
+
+  This functionality is not currently supported.
+
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+- Java
+
+  This functionality is not currently supported.
 
 {% endlist %}

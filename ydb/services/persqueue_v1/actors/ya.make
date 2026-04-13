@@ -34,7 +34,6 @@ SRCS(
     commit_offset_actor.cpp
     distributed_commit_helper.h
     distributed_commit_helper.cpp
-    distributed_commit_helper_sql.cpp
     events.h
     persqueue_utils.h
     persqueue_utils.cpp

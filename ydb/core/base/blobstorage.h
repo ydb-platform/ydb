@@ -972,6 +972,8 @@ struct TEvBlobStorage {
         EvNodeWardenNotifySyncerFinished,
         EvInterpilePut,
         EvInterpilePutResult,
+        EvNodeWardenListLocalDDisks,
+        EvNodeWardenListLocalDDisksResult,
 
         // Other
         EvRunActor = EvPut + 15 * 512,

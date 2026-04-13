@@ -22,6 +22,10 @@ Parameters specific to vector indexes:
 
 {% include [vector_index_parameters.md](../_includes/vector_index_parameters.md) %}
 
+Parameters specific to fulltext indexes:
+
+{% include [fulltext_index_parameters.md](../_includes/fulltext_index_parameters.md) %}
+
 {% if backend_name == "YDB" %}
 
 You can also add a secondary index using the {{ ydb-short-name }} CLI [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) command.
@@ -40,7 +44,7 @@ ALTER TABLE `series`
   GLOBAL ON (`title`);
 ```
 
-A vector index:
+[Vector index](../../../../dev/vector-indexes.md):
 
 ```yql
 ALTER TABLE `series`
@@ -51,8 +55,18 @@ ALTER TABLE `series`
     vector_type="float",
     vector_dimension=512,
     clusters=128,
-    levels=2
+    levels=2,
+    overlap_clusters=3
   );
+```
+
+A fulltext index:
+
+```yql
+ALTER TABLE `series`
+  ADD INDEX ft_idx GLOBAL USING fulltext_plain
+  ON (title)
+  WITH (tokenizer=standard, use_filter_lowercase=true);
 ```
 
 ## Altering an index {#alter-index}

@@ -7088,11 +7088,11 @@ TExprNode::TPtr SwapReplicateScalarsWithWideMap(const TExprNode::TPtr& wideMap, 
     const auto& input = wideMap->Head();
     YQL_ENSURE(wideMap->IsCallable("WideMap") && input.IsCallable("ReplicateScalars"));
     auto inputTypes = input.GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
-    YQL_ENSURE(inputTypes.size() > 0);
+    YQL_ENSURE(!inputTypes.empty());
 
     THashSet<ui32> replicatedInputIndexes;
     auto replicateScalarsInputTypes = input.Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
-    YQL_ENSURE(replicateScalarsInputTypes.size() > 0);
+    YQL_ENSURE(!replicateScalarsInputTypes.empty());
     if (input.ChildrenSize() == 1) {
         for (ui32 i = 0; i + 1 < replicateScalarsInputTypes.size(); ++i) {
             if (replicateScalarsInputTypes[i]->IsScalar()) {

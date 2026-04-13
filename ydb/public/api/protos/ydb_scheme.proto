@@ -69,8 +69,8 @@ message Entry {
         BACKUP_COLLECTION = 22;
         TRANSFER = 23;
         SYS_VIEW = 24;
+        SECRET = 25;
         STREAMING_QUERY = 26;
-        SECRET = 27;
     }
 
     // Name of scheme entry (dir2 of /dir1/dir2)

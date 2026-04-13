@@ -4,7 +4,7 @@ import logging
 import sys
 
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
-from ydb.tests.stability.nemesis.internal.config import get_orchestrator_settings
+from ydb.tests.stability.nemesis.internal.config import Settings, get_orchestrator_settings
 from ydb.tests.stability.nemesis.internal.orchestrator.install import get_hosts_from_yaml, install_on_hosts, stop_agent_services
 from ydb.tests.tools.nemesis.library import monitor
 from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_execution import run_orchestrator_liveness_cli_batch
@@ -30,7 +30,8 @@ def parse_args():
                         help='Type of nemesis: orchestrator or agent')
     parser.add_argument('--app-host', help='Host to bind the application to')
     parser.add_argument('--app-port', type=int, help='Port to bind the application to')
-    parser.add_argument('--yaml-config-location', help='Path to cluster.yaml config file')
+    parser.add_argument('--yaml-config-location', help='Path to cluster.yaml config file or to cluster template')
+    parser.add_argument('--database-config-location', help='Path to database.yaml config file')
     parser.add_argument('--static-location', help='Path to static files directory')
     parser.add_argument('--mon-port', type=int, default=8765, help='Monitoring port for liveness checks')
     parser.add_argument(
@@ -45,7 +46,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def run_liveness_checks(settings):
+def run_liveness_checks(settings: Settings):
     """
     Run liveness checks synchronously and output JSON result to stdout.
 
@@ -84,7 +85,17 @@ def run_liveness_checks(settings):
         return
 
     # Create cluster object
-    cluster = ExternalKiKiMRCluster(settings.yaml_config_location, None, None)
+    cluster_yaml = None
+    template_yaml = settings.yaml_config_location
+    if settings.database_config_location:
+        template_yaml = settings.database_config_location
+        cluster_yaml = settings.yaml_config_location
+
+    cluster = ExternalKiKiMRCluster(
+        cluster_template=template_yaml,
+        kikimr_configure_binary_path=None,
+        kikimr_path=None,
+        yaml_config=cluster_yaml)
 
     checks: list = []
     try:
@@ -117,6 +128,8 @@ def main():
         argv_kwargs['app_port'] = args.app_port
     if args.yaml_config_location is not None:
         argv_kwargs['yaml_config_location'] = args.yaml_config_location
+    if args.database_config_location is not None:
+        argv_kwargs['database_config_location'] = args.database_config_location
     if args.static_location is not None:
         argv_kwargs['static_location'] = args.static_location
     if getattr(args, 'install_root', None) is not None:

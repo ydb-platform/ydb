@@ -461,6 +461,7 @@ struct TUserTable : public TThrRefBase {
     TReplicationConfig ReplicationConfig;
     TIncrementalBackupConfig IncrementalBackupConfig;
     bool IsBackup = false;
+    ui32 UniqueIndexKeySize = 0;
 
     TMap<TPathId, TTableIndex> Indexes;
 

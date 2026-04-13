@@ -50,6 +50,12 @@ void Convert(const TAws& in, TProperties& out) {
     out["AWS_REGION"] = in.GetAwsRegion();
 }
 
+void Convert(const TIamImpersonate& in, TProperties& out) {
+    out["SERVICE_ACCOUNT_ID"] = in.GetServiceAccountId();
+    out["RESOURCE_ID"] = in.GetResourceId();
+    SetSecretSettingName(in.GetInitialTokenSecretName(), "INITIAL_TOKEN_SECRET", out);
+}
+
 void Convert(const TToken& in, TProperties& out) {
     SetSecretSettingName(in.GetTokenSecretName(), "TOKEN_SECRET", out);
 }
@@ -80,6 +86,10 @@ void Convert(const TAuth& in, TProperties& out) {
     case TAuth::kToken:
         authMethod = "TOKEN";
         Convert(in.GetToken(), out);
+        return;
+    case TAuth::kIam:
+        authMethod = "IAM";
+        Convert(in.GetIam(), out);
         return;
     case TAuth::IDENTITY_NOT_SET:
         return;

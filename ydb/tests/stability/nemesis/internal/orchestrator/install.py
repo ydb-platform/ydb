@@ -84,7 +84,7 @@ def _require_local_path(path: str, *, kind: str) -> None:
             raise FileNotFoundError(f"Local file missing: {path}")
 
 
-def upload_binary(host, settings: Settings, is_orchestrator=False, yaml_config_location=None, app_dir=None):
+def upload_binary(host, settings: Settings, is_orchestrator=False, yaml_config_location=None, database_config_location=None, app_dir=None):
     if app_dir is None:
         app_dir = _get_app_dir()
 
@@ -153,6 +153,22 @@ def upload_binary(host, settings: Settings, is_orchestrator=False, yaml_config_l
                 log_line="upload cluster.yaml",
                 host=host,
             )
+        if database_config_location:
+            _require_local_path(database_config_location, kind="file")
+            _run_external(
+                [
+                    "rsync",
+                    "-aqLW",
+                    "--no-o",
+                    "--no-g",
+                    "--rsh={}".format(ssh_rsh),
+                    "--rsync-path=sudo rsync",
+                    database_config_location,
+                    f"{host}:{root}/cluster_database.yaml",
+                ],
+                log_line="upload cluster_database.yaml",
+                host=host,
+            )
     elif yaml_config_location:
         _require_local_path(yaml_config_location, kind="file")
         _run_external(
@@ -169,7 +185,22 @@ def upload_binary(host, settings: Settings, is_orchestrator=False, yaml_config_l
             log_line="upload cluster.yaml (agent)",
             host=host,
         )
-
+        if database_config_location:
+            _require_local_path(database_config_location, kind="file")
+            _run_external(
+                [
+                    "rsync",
+                    "-aqLW",
+                    "--no-o",
+                    "--no-g",
+                    "--rsh={}".format(ssh_rsh),
+                    "--rsync-path=sudo rsync",
+                    database_config_location,
+                    f"{host}:{root}/cluster_database.yaml",
+                ],
+                log_line="upload cluster_database.yaml",
+                host=host,
+            )
     unit_file = os.path.join(app_dir, f"nemesis-agent.service.{host}")
     _require_local_path(unit_file, kind="file")
     _run_external(
@@ -225,7 +256,7 @@ def get_hosts_from_yaml(yaml_path):
                 host.get("name") or host.get("host")
                 for host in yaml_config.get("config", {}).get("hosts", [])
             ]
-        return hosts
+        return sorted(hosts)
 
 
 def install_on_hosts(hosts, settings: Settings):
@@ -247,7 +278,12 @@ def install_on_hosts(hosts, settings: Settings):
     with open(os.path.join(app_dir, f"nemesis-agent.service.{orchestrator_host}"), "w") as f:
         # Use the copied config location on the orchestrator host
         config_location = f"{root}/cluster.yaml" if settings.yaml_config_location else ""
-        yaml_config_env = f"Environment=YAML_CONFIG_LOCATION={config_location}\n" if config_location else ""
+        database_yaml_location = f"{root}/cluster_database.yaml" if settings.database_config_location else ""
+
+        yaml_config_env = (
+            (f"Environment=YAML_CONFIG_LOCATION={config_location}\n" if config_location else "")
+            + (f"Environment=DATABASE_CONFIG_LOCATION={database_yaml_location}\n" if database_yaml_location else "")
+        )
 
         f.write(
             f"""[Unit]
@@ -290,8 +326,10 @@ WantedBy=multi-user.target
         agent_settings.app_host = host
 
         agent_config_location = f"{root}/cluster.yaml" if settings.yaml_config_location else ""
+        database_yaml_location = f"{root}/cluster_database.yaml" if settings.database_config_location else ""
         agent_yaml_env = (
-            f"Environment=YAML_CONFIG_LOCATION={agent_config_location}\n" if agent_config_location else ""
+            (f"Environment=YAML_CONFIG_LOCATION={agent_config_location}\n" if agent_config_location else "")
+            + (f"Environment=DATABASE_CONFIG_LOCATION={database_yaml_location}\n" if database_yaml_location else "")
         )
 
         with open(os.path.join(app_dir, f"nemesis-agent.service.{host}"), "w") as f:
@@ -333,11 +371,11 @@ WantedBy=multi-user.target
     futures = []
     with ThreadPoolExecutor(max_workers=max(len(hosts), 1)) as executor:
         futures.append(
-            executor.submit(upload_binary, orchestrator_host, settings, True, settings.yaml_config_location, app_dir)
+            executor.submit(upload_binary, orchestrator_host, settings, True, settings.yaml_config_location, settings.database_config_location, app_dir)
         )
         for host in agent_hosts:
             futures.append(
-                executor.submit(upload_binary, host, settings, False, settings.yaml_config_location or None, app_dir)
+                executor.submit(upload_binary, host, settings, False, settings.yaml_config_location or None, settings.database_config_location, app_dir)
             )
 
         for fut in as_completed(futures):

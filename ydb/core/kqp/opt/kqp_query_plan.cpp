@@ -531,6 +531,8 @@ private:
         } else if (connection.Maybe<TDqCnParallelUnionAll>()) {
             planNode.TypeName = "UnionAll";
             planNode.NodeInfo["Parallel"] = "True";
+        } else if (connection.Maybe<TDqCnScatter>()) {
+            planNode.TypeName = "Scatter";
         } else if (connection.Maybe<TDqCnBroadcast>()) {
             planNode.TypeName = "Broadcast";
         } else if (connection.Maybe<TDqCnMap>()) {

@@ -167,6 +167,8 @@ message TTaskOutputSink {
 }
 
 message TTaskOutputScatter {
+    // Index of the first channel to activate; scatter starts here and expands lazily
+    uint32 primary_channel_idx = 1;
 }
 
 message TTaskOutput {

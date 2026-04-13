@@ -175,6 +175,7 @@ struct TTaskOutput {
     TMaybe<TTransform> Transform;
 
     std::optional<EHashShuffleFuncType> HashKind; // defined only for Type = TTaskOutputType::HashPartition
+    ui32 ScatterPrimaryChannelIdx = 0;            // defined only for Type = TTaskOutputType::Scatter
 };
 
 template <class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>

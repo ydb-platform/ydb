@@ -239,6 +239,9 @@ message TKqpPhyCnUnionAll {
 message TKqpPhyCnParallelUnionAll {
 }
 
+message TKqpPhyCnScatter {
+}
+
 message TKqpPhyCnMap {
 }
 
@@ -392,6 +395,7 @@ message TKqpPhyConnection {
         TKqpPhyCnParallelUnionAll ParallelUnionAll = 15;
         TKqpPhyCnVectorResolve VectorResolve = 16;
         TKqpPhyCnDqSourceStreamLookup DqSourceStreamLookup = 17;
+        TKqpPhyCnScatter Scatter = 18;
     };
 }
 

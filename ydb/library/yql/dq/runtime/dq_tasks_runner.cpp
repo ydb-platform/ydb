@@ -220,7 +220,8 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
         }
 
         case NDqProto::TTaskOutput::kScatter: {
-            return CreateOutputScatterConsumer(std::move(outputs), outputWidth);
+            const ui32 primaryIdx = outputDesc.GetScatter().primary_channel_idx();
+            return CreateOutputScatterConsumer(std::move(outputs), outputWidth, primaryIdx);
         }
 
         case NDqProto::TTaskOutput::kRangePartition: {

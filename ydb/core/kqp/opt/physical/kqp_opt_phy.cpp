@@ -146,6 +146,7 @@ public:
         AddHandler(1, &TKqpReadOlapTableRanges::Match, HNDL(AddColumnForEmptyColumnsOlapRead));
 
 
+        AddHandler(2, &TDqPhyStage::Match, HNDL(ReplaceParallelUnionAllWithScatter));
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTableSysView));
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTableFullText));
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTable));
@@ -546,6 +547,70 @@ protected:
         TExprBase output = DqBuildExtendStage(node, ctx, KqpCtx.Config->GetEnableParallelUnionAllConnectionsForExtend());
         DumpAppliedRule("BuildExtendStage", node.Ptr(), output.Ptr(), ctx);
         return output;
+    }
+
+    // Replace if downstream connection is DqCnMerge or KqpCnStreamLookup
+    TMaybeNode<TExprBase> ReplaceParallelUnionAllWithScatter(TExprBase node, TExprContext& ctx,
+        IOptimizationContext&, const TGetParents& getParents)
+    {
+        if (!KqpCtx.Config->GetEnableScatterConnection()) {
+            return node;
+        }
+
+        auto stage = node.Cast<TDqPhyStage>();
+
+        bool hasParallelUnionAll = false;
+        for (const auto& input : stage.Inputs()) {
+            if (input.Maybe<TDqCnParallelUnionAll>()) {
+                hasParallelUnionAll = true;
+                break;
+            }
+        }
+        if (!hasParallelUnionAll) {
+            return node;
+        }
+
+        const auto& parents = *getParents();
+        auto stageIt = parents.find(stage.Raw());
+        bool hasHeavyDownstream = false;
+        if (stageIt != parents.end()) {
+            for (const auto* outputNode : stageIt->second) {
+                auto outputIt = parents.find(outputNode);
+                if (outputIt == parents.end()) {
+                    continue;
+                }
+                for (const auto* connNode : outputIt->second) {
+                    if (TDqCnMerge::Match(connNode) || TKqpCnStreamLookup::Match(connNode)) {
+                        hasHeavyDownstream = true;
+                    }
+                }
+            }
+        }
+        if (!hasHeavyDownstream) {
+            return node;
+        }
+
+        TVector<TExprBase> newInputs;
+        newInputs.reserve(stage.Inputs().Size());
+        for (const auto& input : stage.Inputs()) {
+            if (auto maybeCn = input.Maybe<TDqCnParallelUnionAll>()) {
+                auto cn = maybeCn.Cast();
+                newInputs.push_back(Build<TDqCnScatter>(ctx, input.Pos())
+                    .Output(cn.Output())
+                    .Done());
+            } else {
+                newInputs.push_back(input);
+            }
+        }
+
+        auto result = Build<TDqPhyStage>(ctx, stage.Pos())
+            .Inputs().Add(newInputs).Build()
+            .Program(stage.Program())
+            .Settings(stage.Settings())
+            .Done();
+
+        DumpAppliedRule("ReplaceParallelUnionAllWithScatter", node.Ptr(), result.Ptr(), ctx);
+        return result;
     }
 
     TMaybeNode<TExprBase> RewriteRightJoinToLeft(TExprBase node, TExprContext& ctx) {

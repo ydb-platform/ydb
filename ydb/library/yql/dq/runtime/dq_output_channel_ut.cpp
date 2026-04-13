@@ -1144,7 +1144,9 @@ Y_UNIT_TEST(DistributesAcrossChannels) {
     UNIT_ASSERT_VALUES_EQUAL(rowCount, total);
 
     consumer->Finish();
+    TDqSerializedBatch data;
     for (auto& ch : channels) {
+        Y_UNUSED(ch->PopAll(data));
         UNIT_ASSERT(ch->IsFinished());
     }
 }
@@ -1258,6 +1260,165 @@ Y_UNIT_TEST(BackPressureLoad) {
         }
     }
     UNIT_ASSERT_C(blockCount > 0, "Expected back-pressure to trigger at least once");
+}
+
+}
+
+namespace {
+
+class TMockV2Output : public IDqOutput {
+public:
+    TMockV2Output(ui64 hardLimitBytes, ui64 bytesPerPush)
+        : HardLimitBytes(hardLimitBytes)
+        , BytesPerPush(bytesPerPush)
+    {}
+
+    const TDqOutputStats& GetPushStats() const override { return Stats; }
+    EDqFillLevel GetFillLevel() const override { return Level; }
+    // v2 channels update fill level via callback, not via a polling UpdateFillLevel.
+    // Return the current level so the scatter consumer's post-push BucketIndex.Update is correct.
+    EDqFillLevel UpdateFillLevel() override { return Level; }
+
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> agg) override {
+        Aggregator = std::move(agg);
+        Aggregator->AddCount(Level);
+    }
+
+    bool SupportsLevelChangeCallback() const override { return true; }
+    void SetLevelChangeCallback(TLevelChangeCallback cb) override { Callback = std::move(cb); }
+
+    void Push(NUdf::TUnboxedValue&&) override { DoPush(); }
+    void WidePush(NUdf::TUnboxedValue*, ui32) override { DoPush(); }
+    void Push(NDqProto::TWatermark&&) override {}
+    void Push(NDqProto::TCheckpoint&&) override {}
+    void Finish() override {}
+    void Flush() override {}
+    bool HasData() const override { return InflightBytes > 0; }
+    bool IsFinished() const override { return false; }
+    bool IsEarlyFinished() const override { return false; }
+    NKikimr::NMiniKQL::TType* GetOutputType() const override { return nullptr; }
+
+    // Simulates external consumer Pop: updates fill level and aggregator but
+    // does NOT fire LevelChangeCallback (Variant C).
+    void Drain() {
+        InflightBytes = 0;
+        ApplyLevel(EDqFillLevel::NoLimit, /*fireCallback=*/false);
+    }
+
+    ui64 PushCount = 0;
+
+private:
+    void DoPush() {
+        ++PushCount;
+        InflightBytes += BytesPerPush;
+        auto newLevel = InflightBytes >= HardLimitBytes ? EDqFillLevel::HardLimit : EDqFillLevel::NoLimit;
+        ApplyLevel(newLevel, /*fireCallback=*/true);
+    }
+
+    void ApplyLevel(EDqFillLevel newLevel, bool fireCallback) {
+        if (newLevel == Level) return;
+        if (Aggregator) {
+            Aggregator->UpdateCount(Level, newLevel);
+        }
+        if (fireCallback && Callback) {
+            Callback(Level, newLevel);
+        }
+        Level = newLevel;
+    }
+
+    const ui64 HardLimitBytes;
+    const ui64 BytesPerPush;
+    ui64 InflightBytes = 0;
+    EDqFillLevel Level = EDqFillLevel::NoLimit;
+    std::shared_ptr<TDqFillAggregator> Aggregator;
+    TLevelChangeCallback Callback;
+    mutable TDqOutputStats Stats;
+};
+
+struct TScatterV2Setup {
+    TVector<TMockV2Output*> Mocks;
+    IDqOutputConsumer::TPtr Consumer;
+};
+
+TScatterV2Setup MakeScatterV2(ui32 channelCount, ui64 hardLimitBytes, ui64 bytesPerPush) {
+    TVector<IDqOutput::TPtr> outputs;
+    TScatterV2Setup s;
+    for (ui32 i = 0; i < channelCount; ++i) {
+        auto* mock = new TMockV2Output(hardLimitBytes, bytesPerPush);
+        s.Mocks.push_back(mock);
+        outputs.emplace_back(mock);
+    }
+    s.Consumer = CreateOutputScatterConsumer(std::move(outputs), Nothing());
+    return s;
+}
+
+void ConsumeOne(IDqOutputConsumer::TPtr& consumer) {
+    consumer->Consume(NUdf::TUnboxedValuePod((i32)0));
+}
+
+} // namespace
+
+// Tests for TDqOutputScatterConsumer with v2-style channels (buffer-level callback on Push).
+Y_UNIT_TEST_SUITE(ScatterConsumerV2) {
+
+// Verify scatter consumer construction does not assert when all outputs
+// return SupportsLevelChangeCallback() == true.
+Y_UNIT_TEST(AcceptedByScatter) {
+    TScopedAlloc alloc(__LOCATION__);
+    auto s = MakeScatterV2(3, 1000, 1);
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, s.Consumer->GetFillLevel());
+}
+
+// Verify that the callback fires synchronously inside Push, updating the BucketIndex
+// before UpdateFillLevel() is called. The next Consume must route away from the channel
+// that just became HardLimit.
+Y_UNIT_TEST(AdaptiveRoutingCallbackOnPush) {
+    TScopedAlloc alloc(__LOCATION__);
+    // ch0: one push fills it (200 bytes >= 100-byte limit)
+    // ch1: stays NoLimit (1 byte per push, 1000-byte limit)
+    TVector<IDqOutput::TPtr> outputs;
+    TVector<TMockV2Output*> mocks;
+
+    auto* ch0 = new TMockV2Output(/*hardLimitBytes=*/100, /*bytesPerPush=*/200);
+    mocks.push_back(ch0);
+    outputs.emplace_back(ch0);
+
+    auto* ch1 = new TMockV2Output(/*hardLimitBytes=*/1000, /*bytesPerPush=*/1);
+    mocks.push_back(ch1);
+    outputs.emplace_back(ch1);
+
+    auto consumer = CreateOutputScatterConsumer(std::move(outputs), Nothing());
+
+    // First consume: round-robin → ch0. Push fills it; callback fires synchronously
+    // inside Push, moving ch0 to HardLimit bucket before UpdateFillLevel() is called.
+    ConsumeOne(consumer);
+    UNIT_ASSERT_VALUES_EQUAL(1u, mocks[0]->PushCount);
+    UNIT_ASSERT_VALUES_EQUAL(HardLimit, mocks[0]->GetFillLevel());
+    // min-semantics: ch1 is still NoLimit
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, consumer->GetFillLevel());
+
+    // Next two consumes must go to ch1 because ch0 is in the HardLimit bucket.
+    ConsumeOne(consumer);
+    ConsumeOne(consumer);
+    UNIT_ASSERT_VALUES_EQUAL(1u, mocks[0]->PushCount);  // ch0 not touched again
+    UNIT_ASSERT_VALUES_EQUAL(2u, mocks[1]->PushCount);
+}
+
+// Verify that draining a channel (external Pop, no callback) still updates the fill
+// aggregator, so GetFillLevel() on the consumer correctly returns NoLimit.
+Y_UNIT_TEST(DrainUpdatesFillLevel) {
+    TScopedAlloc alloc(__LOCATION__);
+    auto s = MakeScatterV2(/*channelCount=*/2, /*hardLimitBytes=*/100, /*bytesPerPush=*/200);
+
+    // Fill both channels via scatter.
+    ConsumeOne(s.Consumer);
+    ConsumeOne(s.Consumer);
+    UNIT_ASSERT_VALUES_EQUAL(HardLimit, s.Consumer->GetFillLevel());
+
+    // Drain ch0: aggregator updated without firing LevelChangeCallback (Variant C).
+    // GetFillLevel() must reflect the new minimum (NoLimit for ch0, HardLimit for ch1).
+    s.Mocks[0]->Drain();
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, s.Consumer->GetFillLevel());
 }
 
 }

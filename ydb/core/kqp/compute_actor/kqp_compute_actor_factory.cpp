@@ -193,6 +193,7 @@ public:
         NYql::NDq::TComputeRuntimeSettings runtimeSettings;
 
         runtimeSettings.ReportStatsSettings = args.ReportStatsSettings;
+        runtimeSettings.ExtraMemoryAllocationPool = 1; // all extra allocation are expected from ScanQuery pool
         runtimeSettings.UseSpilling = args.WithSpilling;
         runtimeSettings.StatsMode = args.StatsMode;
         runtimeSettings.WithProgressStats = args.WithProgressStats;

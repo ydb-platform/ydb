@@ -21,7 +21,7 @@ using namespace NSQLv1Generated;
 
 class TRuleFreqTranslation: public TSqlTranslation {
 public:
-    TRuleFreqTranslation(TContext& ctx)
+    explicit TRuleFreqTranslation(TContext& ctx)
         : TSqlTranslation(ctx, ctx.Settings.Mode)
     {
     }
@@ -29,7 +29,7 @@ public:
 
 class TRuleFreqVisitor {
 public:
-    TRuleFreqVisitor(TContext& ctx)
+    explicit TRuleFreqVisitor(TContext& ctx)
         : Translation_(ctx)
     {
         KeywordNames_ = NSQLReflect::LoadLexerGrammar().KeywordNames;

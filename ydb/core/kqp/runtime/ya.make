@@ -4,10 +4,9 @@ SRCS(
     kqp_arrow_memory_pool.cpp
     kqp_buffer_lookup_actor.cpp
     kqp_compute.cpp
-    kqp_effects.cpp
     kqp_full_text_source.cpp
+    kqp_sys_view_source.cpp
     kqp_fulltext_analyze.cpp
-    kqp_output_stream.cpp
     kqp_program_builder.cpp
     kqp_read_actor.cpp
     kqp_read_iterator_common.cpp
@@ -24,7 +23,6 @@ SRCS(
     kqp_stream_lookup_factory.h
     kqp_stream_lookup_worker.cpp
     kqp_stream_lookup_worker.h
-    kqp_tasks_runner.cpp
     kqp_transport.cpp
     kqp_vector_actor.cpp
     kqp_write_actor_settings.cpp
@@ -40,6 +38,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/apache/arrow
+    library/cpp/regex/pire
     library/cpp/threading/hot_swap
     ydb/core/actorlib_impl
     ydb/core/base
@@ -48,9 +47,12 @@ PEERDIR(
     ydb/core/formats
     ydb/core/kqp/common
     ydb/core/kqp/common/buffer
+    ydb/core/persqueue/events
     ydb/core/protos
     ydb/core/scheme
     ydb/core/ydb_convert
+    ydb/library/aclib
+    ydb/library/yql/dq/actors
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/actors/spilling
     ydb/library/yql/dq/common

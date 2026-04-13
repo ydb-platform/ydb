@@ -62,7 +62,7 @@ public:
         // 2. Fairy merge, no optimizations
         ui64 newCount = Count_ + rhs.Count_;
         TVector<T> result(Reserve(Limit_));
-        TReservoir* sides[]{this, &rhs};
+        std::array<TReservoir*, 2> sides{this, &rhs};
         for (size_t i = 0; i < Limit_; ++i) {
             ui64 idx = rnd.GenRand64() % (Count_ + rhs.Count_);
             bool isRight = idx >= Count_;

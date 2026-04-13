@@ -1,4 +1,5 @@
 #include "kqp_column_statistics_requester.h"
+#include "kqp_column_statistics_utils.h"
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <ydb/core/statistics/service/service.h>
@@ -6,7 +7,7 @@
 #include <ydb/core/kqp/gateway/actors/kqp_ic_gateway_actors.h>
 #include <yql/essentials/core/yql_statistics.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/dq/opt/dq_opt_stat.h>
+#include <ydb/core/kqp/opt/cbo/solver/kqp_opt_predicate_selectivity.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr::NKqp {
@@ -69,80 +70,43 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
         }
     );
 
-    if (ColumnsByTableName.empty()) {
+    TVector<NThreading::TFuture<TColumnStatisticsResponse>> futures;
+    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypesCtx, NStat::EStatType::COUNT_MIN_SKETCH, CMColumnsByTableName,
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.CountMinSketch; });
+    AddStatRequest(ActorSystem, futures, Tables, Cluster, Database, TypesCtx, NStat::EStatType::EQ_WIDTH_HISTOGRAM, HistColumnsByTableName,
+                   [](const NYql::TColumnStatistics& stats) { return !!stats.EqWidthHistogramEstimator; });
+
+    if (futures.empty()) {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    struct TTableMeta {
-        TString TableName;
-        THashMap<ui32, TString> ColumnNameByTag;
-    };
-    THashMap<TPathId, TTableMeta> tableMetaByPathId;
-
-    // TODO: Add other statistics, not only COUNT_MIN_SKETCH.
-    auto getStatisticsRequest = MakeHolder<NStat::TEvStatistics::TEvGetStatistics>();
-    getStatisticsRequest->Database = Database;
-    getStatisticsRequest->StatType = NKikimr::NStat::EStatType::COUNT_MIN_SKETCH;
-
-    for (const auto& [table, columns]: ColumnsByTableName) {
-        auto tableMeta = Tables.GetTable(Cluster, table).Metadata;
-        auto& columnsMeta = tableMeta->Columns;
-
-        auto pathId = TPathId(tableMeta->PathId.OwnerId(), tableMeta->PathId.TableId());
-        for (const auto& column: columns) {
-            if (TypesCtx.ColumnStatisticsByTableName.contains(table) && TypesCtx.ColumnStatisticsByTableName[table]->Data.contains(column)) {
-                continue;
+    AsyncReadiness = NThreading::WaitAll(futures).Apply(
+            [this, futures=std::move(futures)](const TFuture<void>&) mutable {
+        for (auto& fut : futures) {
+            if (fut.HasException()) {
+                fut.TryRethrow();
             }
 
-            if (!columnsMeta.contains(column)) {
-                YQL_CLOG(DEBUG, ProviderKikimr) << "Table: " + table + " doesn't contain " + column + " to request for column statistics";
-                continue;
+            auto newStats = fut.ExtractValue();
+            if (!ColumnStatisticsResponse) {
+                ColumnStatisticsResponse = std::move(newStats);
+            } else {
+                // merge statistics
+                for (const auto& [table, column2Stat] : newStats.ColumnStatisticsByTableName) {
+                    auto& oldColumn2Stat = ColumnStatisticsResponse->ColumnStatisticsByTableName[table];
+                    for (const auto& [column, newStat] : column2Stat.Data) {
+                        auto& oldStat = oldColumn2Stat.Data[column];
+                        if (newStat.CountMinSketch) {
+                            oldStat.CountMinSketch = newStat.CountMinSketch;
+                        }
+                        if (newStat.EqWidthHistogramEstimator) {
+                            oldStat.EqWidthHistogramEstimator = newStat.EqWidthHistogramEstimator;
+                        }
+                    }
+                }
             }
-
-            NKikimr::NStat::TRequest req;
-            req.ColumnTag = columnsMeta[column].Id;
-            req.PathId = pathId;
-            getStatisticsRequest->StatRequests.push_back(std::move(req));
-
-            tableMetaByPathId[pathId].TableName = table;
-            tableMetaByPathId[pathId].ColumnNameByTag[req.ColumnTag.value()] = column;
         }
-    }
-
-    if (getStatisticsRequest->StatRequests.empty()) {
-        return IGraphTransformer::TStatus::Ok;
-    }
-
-    using TRequest = NStat::TEvStatistics::TEvGetStatistics;
-    using TResponse = NStat::TEvStatistics::TEvGetStatisticsResult;
-
-    AsyncReadiness = NewPromise<void>();
-    auto promise = NewPromise<TColumnStatisticsResponse>();
-    auto callback = [tableMetaByPathId = std::move(tableMetaByPathId)]
-    (TPromise<TColumnStatisticsResponse> promise, NStat::TEvStatistics::TEvGetStatisticsResult&& response) mutable {
-        if (!response.Success) {
-            promise.SetValue(NYql::NCommon::ResultFromError<TColumnStatisticsResponse>("can't get column statistics!"));
-            return;
-        }
-
-        THashMap<TString, TOptimizerStatistics::TColumnStatMap> columnStatisticsByTableName;
-
-        for (auto&& stat: response.StatResponses) {
-            auto meta = tableMetaByPathId[stat.Req.PathId];
-            auto columnName = meta.ColumnNameByTag[stat.Req.ColumnTag.value()];
-            auto& columnStatistics = columnStatisticsByTableName[meta.TableName].Data[columnName];
-            columnStatistics.CountMinSketch = std::move(stat.CountMinSketch.CountMin);
-        }
-
-        promise.SetValue(TColumnStatisticsResponse{.ColumnStatisticsByTableName = std::move(columnStatisticsByTableName)});
-    };
-    auto statServiceId = NStat::MakeStatServiceID(ActorSystem->NodeId);
-    IActor* requestHandler =
-        new TActorRequestHandler<TRequest, TResponse, TColumnStatisticsResponse>(statServiceId, getStatisticsRequest.Release(), promise, callback);
-    ActorSystem
-        ->Register(requestHandler, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
-
-    promise.GetFuture().Subscribe([this](auto result){ ColumnStatisticsResponse = result.ExtractValue(); AsyncReadiness.SetValue(); });
+    });
 
     return TStatus::Async;
 }
@@ -158,7 +122,7 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoApplyAsyncChanges(TE
 
     for (auto&& [tableName, columnStatistics]:  ColumnStatisticsResponse->ColumnStatisticsByTableName) {
         TypesCtx.ColumnStatisticsByTableName.insert(
-            {std::move(tableName), new TOptimizerStatistics::TColumnStatMap(std::move(columnStatistics))}
+            {std::move(tableName), new NYql::TOptimizerStatistics::TColumnStatMap(std::move(columnStatistics))}
         );
     }
 
@@ -166,7 +130,7 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoApplyAsyncChanges(TE
 }
 
 TFuture<void> TKqpColumnStatisticsRequester::DoGetAsyncFuture(const TExprNode&) {
-    return AsyncReadiness.GetFuture();
+    return AsyncReadiness;
 }
 
 bool TKqpColumnStatisticsRequester::BeforeLambdas(const TExprNode::TPtr& input) {
@@ -218,7 +182,7 @@ bool TKqpColumnStatisticsRequester::AfterLambdas(const TExprNode::TPtr& input) {
         TCoFlatMapBase::Match(input.Get()) && IsPredicateFlatMap(TExprBase(input).Cast<TCoFlatMapBase>().Lambda().Body().Ref())
     ) {
         std::shared_ptr<TOptimizerStatistics> dummyStats = nullptr;
-        auto computer = NDq::TPredicateSelectivityComputer(dummyStats, true);
+        auto computer = TPredicateSelectivityComputer(dummyStats, true);
 
         if (TCoFilterBase::Match(input.Get())) {
             computer.Compute(TExprBase(input).Cast<TCoFilterBase>().Lambda().Body());
@@ -232,7 +196,15 @@ bool TKqpColumnStatisticsRequester::AfterLambdas(const TExprNode::TPtr& input) {
         for (const auto& item: columnStatsUsedMembers.Data) {
             if (auto maybeTableAndColumn = GetTableAndColumnNames(item.Member)) {
                 const auto& [table, column] = *maybeTableAndColumn;
-                ColumnsByTableName[table].insert(std::move(column));
+                using TColumnStatisticsUsedMember = TPredicateSelectivityComputer::TColumnStatisticsUsedMembers::TColumnStatisticsUsedMember;
+                switch (item.PredicateType) {
+                case TColumnStatisticsUsedMember::EEquality:
+                    CMColumnsByTableName[table].insert(std::move(column));
+                    break;
+                case TColumnStatisticsUsedMember::EInequality:
+                    HistColumnsByTableName[table].insert(std::move(column));
+                    break;
+                }
             }
         }
 

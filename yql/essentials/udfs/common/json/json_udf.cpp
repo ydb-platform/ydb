@@ -8,7 +8,7 @@ using namespace NUdf;
 namespace {
 class TGetField: public TBoxedValue {
 public:
-    typedef bool TTypeAwareMarker;
+    using TTypeAwareMarker = bool;
 
 public:
     static TStringRef Name() {

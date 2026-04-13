@@ -11,6 +11,7 @@ SRCS(
 PEERDIR(
     ydb/core/protos
     ydb/core/tablet_flat
+    ydb/library/actors/async
     ydb/library/range_treap
 )
 

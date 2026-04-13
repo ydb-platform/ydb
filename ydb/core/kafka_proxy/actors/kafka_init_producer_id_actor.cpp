@@ -1,5 +1,5 @@
 #include "kafka_init_producer_id_actor.h"
-#include "kafka_init_producer_id_actor_sql.cpp"
+#include "kafka_init_producer_id_actor_sql.h"
 #include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 #include <ydb/core/kafka_proxy/kqp_helper.h>

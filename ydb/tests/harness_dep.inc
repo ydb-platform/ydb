@@ -19,3 +19,9 @@ ENV(YDB_DRIVER_BINARY=${YDB_DRIVER_BINARY})
 DEPENDS(
     ydb/apps/ydb
 )
+
+IF (SANITIZER_TYPE == "thread")
+    SUPPRESSIONS(
+        ${ARCADIA_ROOT}/ydb/tests/tsan.supp
+    )
+ENDIF()

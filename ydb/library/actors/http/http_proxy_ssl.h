@@ -52,7 +52,7 @@ struct TSslHelpers {
         return CreateSslCtx(SSLv23_client_method());
     }
 
-    static TSslHolder<SSL_CTX> CreateServerContext(const TString& certificate, const TString& key) {
+    static TSslHolder<SSL_CTX> CreateServerContext(const TString& certificate, const TString& key, const TString& caFile) {
         TSslHolder<SSL_CTX> ctx = CreateSslCtx(SSLv23_server_method());
         SSL_CTX_set_ecdh_auto(ctx.Get(), 1);
         int res;
@@ -67,6 +67,16 @@ struct TSslHelpers {
             // TODO(xenoxeno): more diagnostics?
             return nullptr;
         }
+        if (!caFile.empty()) {
+            if (SSL_CTX_load_verify_locations(ctx.Get(), caFile.c_str(), nullptr) != 1) {
+                // TODO(yurikiselev): more diagnostics?
+                return nullptr;
+            }
+            // SSL_VERIFY_PEER option requests the client certificate during TLS handshake (mTLS),
+            // but doesn't fail if not provided
+            SSL_CTX_set_verify(ctx.Get(), SSL_VERIFY_PEER, nullptr);
+        }
+
         return ctx;
     }
 
@@ -107,7 +117,7 @@ struct TSslHelpers {
         return true;
     }
 
-    static TSslHolder<SSL_CTX> CreateServerContext(const TString& pem) {
+    static TSslHolder<SSL_CTX> CreateServerContext(const TString& pem, const TString& caFile) {
         TSslHolder<SSL_CTX> ctx = CreateSslCtx(SSLv23_server_method());
         SSL_CTX_set_ecdh_auto(ctx.Get(), 1);
         if (!LoadX509Chain(ctx, pem)) {
@@ -116,6 +126,16 @@ struct TSslHelpers {
         if (!LoadPrivateKey(ctx, pem)) {
             return nullptr;
         }
+        if (!caFile.empty()) {
+            if (SSL_CTX_load_verify_locations(ctx.Get(), caFile.c_str(), nullptr) != 1) {
+                // TODO(yurikiselev): more diagnostics?
+                return nullptr;
+            }
+            // SSL_VERIFY_PEER option requests the client certificate during TLS handshake (mTLS),
+            // but doesn't fail if not provided
+            SSL_CTX_set_verify(ctx.Get(), SSL_VERIFY_PEER, nullptr);
+        }
+
         return ctx;
     }
 
@@ -128,6 +148,40 @@ struct TSslHelpers {
         }
 
         return ssl;
+    }
+
+    // ALPN callback for HTTP/2 negotiation (server-side)
+    // Advertises both "h2" and "http/1.1", prefers "h2"
+    static int AlpnSelectCallback(SSL*, const unsigned char** out, unsigned char* outlen,
+                                   const unsigned char* in, unsigned int inlen, void*) {
+        // Try to select "h2" first, then "http/1.1"
+        static const unsigned char h2[] = { 2, 'h', '2' };
+        static const unsigned char h1[] = { 8, 'h', 't', 't', 'p', '/', '1', '.', '1' };
+
+        if (SSL_select_next_proto(const_cast<unsigned char**>(out), outlen,
+                                   h2, sizeof(h2), in, inlen) == OPENSSL_NPN_NEGOTIATED) {
+            return SSL_TLSEXT_ERR_OK;
+        }
+        if (SSL_select_next_proto(const_cast<unsigned char**>(out), outlen,
+                                   h1, sizeof(h1), in, inlen) == OPENSSL_NPN_NEGOTIATED) {
+            return SSL_TLSEXT_ERR_OK;
+        }
+        return SSL_TLSEXT_ERR_NOACK;
+    }
+
+    // Enable ALPN on a server SSL context for HTTP/2 support
+    static void EnableAlpn(SSL_CTX* ctx) {
+        SSL_CTX_set_alpn_select_cb(ctx, AlpnSelectCallback, nullptr);
+    }
+
+    // Set ALPN protocols for client SSL context (advertise h2 and http/1.1)
+    static void SetClientAlpn(SSL_CTX* ctx) {
+        // Wire format: length-prefixed protocol names
+        static const unsigned char protos[] = {
+            2, 'h', '2',
+            8, 'h', 't', 't', 'p', '/', '1', '.', '1'
+        };
+        SSL_CTX_set_alpn_protos(ctx, protos, sizeof(protos));
     }
 };
 

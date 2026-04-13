@@ -5,12 +5,14 @@
 #include <type_traits>
 #include <tuple>
 #include <cmath>
+#include <compare>
+#include <array>
 
 namespace NYql {
 
 #ifndef _win_
-typedef __int128 i128_t;
-typedef unsigned __int128 ui128_t;
+using i128_t = __int128;
+using ui128_t = unsigned __int128;
 #endif
 
 template <typename TOneHalf, typename TSignedPart = std::make_signed_t<TOneHalf>, typename TUnsignedPart = std::make_unsigned_t<TOneHalf>>
@@ -28,9 +30,13 @@ private:
     TPart Lo_;
     THalf Hi_;
 
-    static constexpr auto FullBitSize = sizeof(TPart) << 4U;
+    static constexpr auto FullByteSize = sizeof(TPart) * 2;
+    static constexpr auto FullBitSize = FullByteSize * 8;
     static constexpr auto PartBitSize = sizeof(TPart) << 3U;
     static constexpr auto QuarterBitSize = sizeof(TPart) << 2U;
+
+    template <typename T>
+    static constexpr bool IsArithmeticSuitable = (std::is_integral_v<T> && sizeof(T) <= FullByteSize) || std::is_floating_point_v<T>;
 
     static constexpr TPart GetUpperQuarter(TPart h) {
         return h >> QuarterBitSize;
@@ -78,6 +84,8 @@ public:
     constexpr TWide& operator=(const TWide& rhs) = default;
     constexpr TWide& operator=(TWide&& rhs) = default;
 
+    // Implicit casts between numbers is not surprising
+    // NOLINTNEXTLINE(google-explicit-constructor)
     constexpr TWide(const TSibling& rhs)
         : Lo_(rhs.Lo_)
         , Hi_(rhs.Hi_)
@@ -92,21 +100,21 @@ public:
     }
 
     template <typename T, std::enable_if_t<std::is_integral<T>::value && sizeof(THalf) < sizeof(T), size_t> Shift = PartBitSize>
-    constexpr TWide(const T rhs)
+    constexpr TWide(const T rhs) // NOLINT(google-explicit-constructor)
         : Lo_(rhs)
         , Hi_(rhs >> Shift)
     {
     }
 
     template <typename T, std::enable_if_t<std::is_integral<T>::value && sizeof(T) <= sizeof(THalf), bool> Signed = std::is_signed<T>::value>
-    constexpr TWide(const T rhs)
+    constexpr TWide(const T rhs) // NOLINT(google-explicit-constructor)
         : Lo_(rhs)
         , Hi_(Signed && rhs < 0 ? ~0 : 0)
     {
     }
 
     template <typename T, typename TArg = std::enable_if_t<std::is_class<T>::value && std::is_same<T, THalf>::value, THalf>>
-    constexpr explicit TWide(const T& rhs)
+    constexpr TWide(const T& rhs) // NOLINT(google-explicit-constructor)
         : Lo_(rhs)
         , Hi_(TIsSigned::value && rhs < 0 ? ~0 : 0)
     {
@@ -299,12 +307,7 @@ public:
     constexpr TWide operator^(const TWide& rhs) const {
         return TWide(*this) ^= rhs;
     }
-    constexpr TWide operator+(const TWide& rhs) const {
-        return TWide(*this) += rhs;
-    }
-    constexpr TWide operator-(const TWide& rhs) const {
-        return TWide(*this) -= rhs;
-    }
+
     constexpr TWide operator*(const TWide& rhs) const {
         return Mul(*this, rhs);
     }
@@ -326,34 +329,109 @@ public:
         return T(*this) & rhs;
     }
 
-    constexpr bool operator==(const TWide& rhs) const {
-        return std::tie(Hi_, Lo_) == std::tie(rhs.Hi_, rhs.Lo_);
+    friend constexpr TWide operator+(const TWide& lhs, const TWide& rhs) {
+        return TWide(lhs) += rhs;
     }
-    constexpr bool operator!=(const TWide& rhs) const {
-        return std::tie(Hi_, Lo_) != std::tie(rhs.Hi_, rhs.Lo_);
+
+    friend constexpr TWide operator-(const TWide& lhs, const TWide& rhs) {
+        return TWide(lhs) -= rhs;
     }
-    constexpr bool operator>=(const TWide& rhs) const {
-        return std::tie(Hi_, Lo_) >= std::tie(rhs.Hi_, rhs.Lo_);
+
+    template <typename U>
+        requires IsArithmeticSuitable<U>
+    friend constexpr auto operator+(const TWide& lhs, const U& rhs) {
+        if constexpr (std::is_floating_point_v<U>) {
+            return static_cast<U>(lhs) + rhs;
+        } else {
+            return TWide(lhs) += TWide(rhs);
+        }
     }
-    constexpr bool operator<=(const TWide& rhs) const {
-        return std::tie(Hi_, Lo_) <= std::tie(rhs.Hi_, rhs.Lo_);
+
+    template <typename U>
+        requires IsArithmeticSuitable<U>
+    friend constexpr auto operator+(const U& lhs, const TWide& rhs) {
+        if constexpr (std::is_floating_point_v<U>) {
+            return lhs + static_cast<U>(rhs);
+        } else {
+            return TWide(lhs) += rhs;
+        }
     }
-    constexpr bool operator>(const TWide& rhs) const {
-        return std::tie(Hi_, Lo_) > std::tie(rhs.Hi_, rhs.Lo_);
+
+    template <typename U>
+        requires IsArithmeticSuitable<U>
+    friend constexpr auto operator-(const TWide& lhs, const U& rhs) {
+        if constexpr (std::is_floating_point_v<U>) {
+            return static_cast<U>(lhs) - rhs;
+        } else {
+            return TWide(lhs) -= TWide(rhs);
+        }
     }
-    constexpr bool operator<(const TWide& rhs) const {
-        return std::tie(Hi_, Lo_) < std::tie(rhs.Hi_, rhs.Lo_);
+
+    template <typename U>
+        requires IsArithmeticSuitable<U>
+    friend constexpr auto operator-(const U& lhs, const TWide& rhs) {
+        if constexpr (std::is_floating_point_v<U>) {
+            return lhs - static_cast<U>(rhs);
+        } else {
+            return TWide(lhs) -= rhs;
+        }
+    }
+
+    friend constexpr bool operator==(const TWide& lhs, const TWide& rhs) = default;
+
+    friend constexpr auto operator<=>(const TWide& lhs, const TWide& rhs) {
+        return std::tie(lhs.Hi_, lhs.Lo_) <=> std::tie(rhs.Hi_, rhs.Lo_);
+    }
+
+    template <typename U>
+        requires IsArithmeticSuitable<U>
+    friend constexpr bool operator==(const TWide& lhs, const U& rhs) {
+        if constexpr (std::is_floating_point_v<U>) {
+            return static_cast<U>(lhs) == rhs;
+        } else {
+            return lhs == TWide(rhs);
+        }
+    }
+
+    template <typename U>
+        requires IsArithmeticSuitable<U>
+    friend constexpr bool operator==(const U& lhs, const TWide& rhs) {
+        if constexpr (std::is_floating_point_v<U>) {
+            return lhs == static_cast<U>(rhs);
+        } else {
+            return TWide(lhs) == rhs;
+        }
+    }
+
+    template <typename U>
+        requires IsArithmeticSuitable<U>
+    friend constexpr auto operator<=>(const TWide& lhs, const U& rhs) {
+        if constexpr (std::is_floating_point_v<U>) {
+            return static_cast<U>(lhs) <=> rhs;
+        } else {
+            return lhs <=> TWide(rhs);
+        }
+    }
+
+    template <typename U>
+        requires IsArithmeticSuitable<U>
+    friend constexpr auto operator<=>(const U& lhs, const TWide& rhs) {
+        if constexpr (std::is_floating_point_v<U>) {
+            return lhs <=> static_cast<U>(rhs);
+        } else {
+            return TWide(lhs) <=> rhs;
+        }
     }
 
 private:
     static constexpr TWide Mul(const TWide& lhs, const TWide& rhs) {
-        const TPart lq[] = {GetLowerQuarter(lhs.Lo_), GetUpperQuarter(lhs.Lo_), GetLowerQuarter(lhs.Hi_), GetUpperQuarter(lhs.Hi_)};
-        const TPart rq[] = {GetLowerQuarter(rhs.Lo_), GetUpperQuarter(rhs.Lo_), GetLowerQuarter(rhs.Hi_), GetUpperQuarter(rhs.Hi_)};
+        const auto lq = std::to_array<TPart>({GetLowerQuarter(lhs.Lo_), GetUpperQuarter(lhs.Lo_), GetLowerQuarter(lhs.Hi_), GetUpperQuarter(lhs.Hi_)});
+        const auto rq = std::to_array<TPart>({GetLowerQuarter(rhs.Lo_), GetUpperQuarter(rhs.Lo_), GetLowerQuarter(rhs.Hi_), GetUpperQuarter(rhs.Hi_)});
 
-        const TPart prod0[] = {TPart(lq[0] * rq[0])};
-        const TPart prod1[] = {TPart(lq[0] * rq[1]), TPart(lq[1] * rq[0])};
-        const TPart prod2[] = {TPart(lq[0] * rq[2]), TPart(lq[1] * rq[1]), TPart(lq[2] * rq[0])};
-        const TPart prod3[] = {TPart(lq[0] * rq[3]), TPart(lq[1] * rq[2]), TPart(lq[2] * rq[1]), TPart(lq[3] * rq[0])};
+        const auto prod0 = std::to_array<TPart>({TPart(lq[0] * rq[0])});
+        const auto prod1 = std::to_array<TPart>({TPart(lq[0] * rq[1]), TPart(lq[1] * rq[0])});
+        const auto prod2 = std::to_array<TPart>({TPart(lq[0] * rq[2]), TPart(lq[1] * rq[1]), TPart(lq[2] * rq[0])});
+        const auto prod3 = std::to_array<TPart>({TPart(lq[0] * rq[3]), TPart(lq[1] * rq[2]), TPart(lq[2] * rq[1]), TPart(lq[3] * rq[0])});
 
         const TPart fourthQ = GetLowerQuarter(prod0[0]);
         const TPart thirdQ = GetUpperQuarter(prod0[0]) + GetLowerQuarter(prod1[0]) + GetLowerQuarter(prod1[1]);
@@ -400,36 +478,36 @@ template <typename T>
 struct THalfOf;
 template <>
 struct THalfOf<i16> {
-    typedef i8 Type;
+    using Type = i8;
 };
 template <>
 struct THalfOf<ui16> {
-    typedef ui8 Type;
+    using Type = ui8;
 };
 template <>
 struct THalfOf<i32> {
-    typedef i16 Type;
+    using Type = i16;
 };
 template <>
 struct THalfOf<ui32> {
-    typedef ui16 Type;
+    using Type = ui16;
 };
 template <>
 struct THalfOf<i64> {
-    typedef i32 Type;
+    using Type = i32;
 };
 template <>
 struct THalfOf<ui64> {
-    typedef ui32 Type;
+    using Type = ui32;
 };
 #ifndef _win_
 template <>
 struct THalfOf<i128_t> {
-    typedef i64 Type;
+    using Type = i64;
 };
 template <>
 struct THalfOf<ui128_t> {
-    typedef ui64 Type;
+    using Type = ui64;
 };
 #endif
 template <typename T>
@@ -439,36 +517,36 @@ template <typename T>
 struct TPairOf;
 template <>
 struct TPairOf<i8> {
-    typedef i16 Type;
+    using Type = i16;
 };
 template <>
 struct TPairOf<ui8> {
-    typedef ui16 Type;
+    using Type = ui16;
 };
 template <>
 struct TPairOf<i16> {
-    typedef i32 Type;
+    using Type = i32;
 };
 template <>
 struct TPairOf<ui16> {
-    typedef ui32 Type;
+    using Type = ui32;
 };
 template <>
 struct TPairOf<i32> {
-    typedef i64 Type;
+    using Type = i64;
 };
 template <>
 struct TPairOf<ui32> {
-    typedef ui64 Type;
+    using Type = ui64;
 };
 #ifndef _win_
 template <>
 struct TPairOf<i64> {
-    typedef i128_t Type;
+    using Type = i128_t;
 };
 template <>
 struct TPairOf<ui64> {
-    typedef ui128_t Type;
+    using Type = ui128_t;
 };
 #endif
 template <typename T>

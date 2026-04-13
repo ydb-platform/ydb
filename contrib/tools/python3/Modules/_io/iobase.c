@@ -8,10 +8,13 @@
 */
 
 
-#define PY_SSIZE_T_CLEAN
 #include "Python.h"
+#include "pycore_call.h"          // _PyObject_CallMethod()
 #include "pycore_long.h"          // _PyLong_GetOne()
-#include "pycore_object.h"
+#include "pycore_object.h"        // _PyType_HasFeature()
+#include "pycore_pyerrors.h"      // _PyErr_ChainExceptions1()
+#include "pycore_weakref.h"       // FT_CLEAR_WEAKREFS()
+
 #include <stddef.h>               // offsetof()
 #include "_iomodule.h"
 
@@ -64,12 +67,19 @@ PyDoc_STRVAR(iobase_doc,
     "with open('spam.txt', 'r') as fp:\n"
     "    fp.write('Spam and eggs!')\n");
 
-/* Use this macro whenever you want to check the internal `closed` status
+
+/* Internal methods */
+
+/* Use this function whenever you want to check the internal `closed` status
    of the IOBase object rather than the virtual `closed` attribute as returned
    by whatever subclass. */
 
+static int
+iobase_is_closed(PyObject *self)
+{
+    return PyObject_HasAttrWithError(self, &_Py_ID(__IOBase_closed));
+}
 
-/* Internal methods */
 static PyObject *
 iobase_unsupported(_PyIO_State *state, const char *message)
 {
@@ -143,18 +153,6 @@ _io__IOBase_truncate_impl(PyObject *self, PyTypeObject *cls,
     return iobase_unsupported(state, "truncate");
 }
 
-static int
-iobase_is_closed(PyObject *self)
-{
-    PyObject *res;
-    int ret;
-    /* This gets the derived attribute, which is *not* __IOBase_closed
-       in most cases! */
-    ret = _PyObject_LookupAttr(self, &_Py_ID(__IOBase_closed), &res);
-    Py_XDECREF(res);
-    return ret;
-}
-
 /* Flush and close methods */
 
 /*[clinic input]
@@ -198,7 +196,7 @@ iobase_check_closed(PyObject *self)
     int closed;
     /* This gets the derived attribute, which is *not* __IOBase_closed
        in most cases! */
-    closed = _PyObject_LookupAttr(self, &_Py_ID(closed), &res);
+    closed = PyObject_GetOptionalAttr(self, &_Py_ID(closed), &res);
     if (closed > 0) {
         closed = PyObject_IsTrue(res);
         Py_DECREF(res);
@@ -267,7 +265,7 @@ static PyObject *
 _io__IOBase_close_impl(PyObject *self)
 /*[clinic end generated code: output=63c6a6f57d783d6d input=f4494d5c31dbc6b7]*/
 {
-    int rc, closed = iobase_is_closed(self);
+    int rc1, rc2, closed = iobase_is_closed(self);
 
     if (closed < 0) {
         return NULL;
@@ -276,19 +274,14 @@ _io__IOBase_close_impl(PyObject *self)
         Py_RETURN_NONE;
     }
 
-    PyObject *res = PyObject_CallMethodNoArgs(self, &_Py_ID(flush));
-
+    rc1 = _PyFile_Flush(self);
     PyObject *exc = PyErr_GetRaisedException();
-    rc = PyObject_SetAttr(self, &_Py_ID(__IOBase_closed), Py_True);
+    rc2 = PyObject_SetAttr(self, &_Py_ID(__IOBase_closed), Py_True);
     _PyErr_ChainExceptions1(exc);
-    if (rc < 0) {
-        Py_CLEAR(res);
+    if (rc1 < 0 || rc2 < 0) {
+        return NULL;
     }
 
-    if (res == NULL)
-        return NULL;
-
-    Py_DECREF(res);
     Py_RETURN_NONE;
 }
 
@@ -305,7 +298,7 @@ iobase_finalize(PyObject *self)
 
     /* If `closed` doesn't exist or can't be evaluated as bool, then the
        object is probably in an unusable state, so ignore. */
-    if (_PyObject_LookupAttr(self, &_Py_ID(closed), &res) <= 0) {
+    if (PyObject_GetOptionalAttr(self, &_Py_ID(closed), &res) <= 0) {
         PyErr_Clear();
         closed = -1;
     }
@@ -321,20 +314,8 @@ iobase_finalize(PyObject *self)
         if (PyObject_SetAttr(self, &_Py_ID(_finalizing), Py_True))
             PyErr_Clear();
         res = PyObject_CallMethodNoArgs((PyObject *)self, &_Py_ID(close));
-        /* Silencing I/O errors is bad, but printing spurious tracebacks is
-           equally as bad, and potentially more frequent (because of
-           shutdown issues). */
         if (res == NULL) {
-#ifndef Py_DEBUG
-            if (_Py_GetConfig()->dev_mode) {
-                PyErr_WriteUnraisable(self);
-            }
-            else {
-                PyErr_Clear();
-            }
-#else
             PyErr_WriteUnraisable(self);
-#endif
         }
         else {
             Py_DECREF(res);
@@ -396,8 +377,7 @@ iobase_dealloc(iobase *self)
     }
     PyTypeObject *tp = Py_TYPE(self);
     _PyObject_GC_UNTRACK(self);
-    if (self->weakreflist != NULL)
-        PyObject_ClearWeakRefs((PyObject *) self);
+    FT_CLEAR_WEAKREFS((PyObject *) self, self->weakreflist);
     Py_CLEAR(self->dict);
     tp->tp_free((PyObject *)self);
     Py_DECREF(tp);
@@ -585,7 +565,7 @@ _io__IOBase_readline_impl(PyObject *self, Py_ssize_t limit)
     PyObject *peek, *buffer, *result;
     Py_ssize_t old_size = -1;
 
-    if (_PyObject_LookupAttr(self, &_Py_ID(peek), &peek) < 0) {
+    if (PyObject_GetOptionalAttr(self, &_Py_ID(peek), &peek) < 0) {
         return NULL;
     }
 
@@ -877,8 +857,8 @@ static PyGetSetDef iobase_getset[] = {
 };
 
 static struct PyMemberDef iobase_members[] = {
-    {"__weaklistoffset__", T_PYSSIZET, offsetof(iobase, weakreflist), READONLY},
-    {"__dictoffset__", T_PYSSIZET, offsetof(iobase, dict), READONLY},
+    {"__weaklistoffset__", Py_T_PYSSIZET, offsetof(iobase, weakreflist), Py_READONLY},
+    {"__dictoffset__", Py_T_PYSSIZET, offsetof(iobase, dict), Py_READONLY},
     {NULL},
 };
 
@@ -951,14 +931,21 @@ _io__RawIOBase_read_impl(PyObject *self, Py_ssize_t n)
         return res;
     }
 
-    n = PyNumber_AsSsize_t(res, PyExc_ValueError);
+    Py_ssize_t bytes_filled = PyNumber_AsSsize_t(res, PyExc_ValueError);
     Py_DECREF(res);
-    if (n == -1 && PyErr_Occurred()) {
+    if (bytes_filled == -1 && PyErr_Occurred()) {
         Py_DECREF(b);
         return NULL;
     }
+    if (bytes_filled < 0 || bytes_filled > n) {
+        Py_DECREF(b);
+        PyErr_Format(PyExc_ValueError,
+                     "readinto returned %zd outside buffer size %zd",
+                     bytes_filled, n);
+        return NULL;
+    }
 
-    res = PyBytes_FromStringAndSize(PyByteArray_AsString(b), n);
+    res = PyBytes_FromStringAndSize(PyByteArray_AsString(b), bytes_filled);
     Py_DECREF(b);
     return res;
 }

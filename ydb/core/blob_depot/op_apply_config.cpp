@@ -59,7 +59,14 @@ namespace NKikimr::NBlobDepot {
             }
         };
 
-        auto responseEvent = std::make_unique<TEvBlobDepot::TEvApplyConfigResult>(TabletID(), ev->Get()->Record.GetTxId());
+        const auto& record = ev->Get()->Record;
+        if (record.HasGroupInfo()) {
+            TStringStream err;
+            GroupInfo = TBlobStorageGroupInfo::Parse(record.GetGroupInfo(), nullptr, &err);
+            Y_DEBUG_ABORT_UNLESS(GroupInfo);
+        }
+
+        auto responseEvent = std::make_unique<TEvBlobDepot::TEvApplyConfigResult>(TabletID(), record.GetTxId());
         auto response = std::make_unique<IEventHandle>(ev->Sender, SelfId(), responseEvent.release(), 0, ev->Cookie);
         Execute(std::make_unique<TTxApplyConfig>(this, *ev->Get(), std::move(response), ev->InterconnectSession));
     }

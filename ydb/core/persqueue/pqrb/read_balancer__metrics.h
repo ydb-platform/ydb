@@ -33,7 +33,7 @@ struct TPartitionMetrics {
 };
 
 struct TCounters {
-    std::vector<ui8> Types;
+    const ui8* Types;
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> Counters;
 };
 
@@ -74,6 +74,11 @@ private:
         TCounters MLPClientLabeledCounters;
         ::NMonitoring::THistogramPtr MLPMessageLockAttemptsCounter;
         ::NMonitoring::THistogramPtr MLPMessageLockingDurationCounter;
+        ::NMonitoring::THistogramPtr MLPWaitingLockingDurationCounter;
+
+        ::NMonitoring::TDynamicCounters::TCounterPtr DeletedByRetentionPolicyCounter;
+        ::NMonitoring::TDynamicCounters::TCounterPtr DeletedByDeadlinePolicyCounter;
+        ::NMonitoring::TDynamicCounters::TCounterPtr DeletedByMovedToDLQCounter;
     };
     absl::flat_hash_map<TString, TConsumerCounters> ConsumerCounters;
 

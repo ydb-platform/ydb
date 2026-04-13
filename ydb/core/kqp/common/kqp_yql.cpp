@@ -204,6 +204,110 @@ TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
 
 } // anonymous namespace end
 
+TKqpReadTableFullTextIndexSettings TKqpReadTableFullTextIndexSettings::Parse(const NNodes::TCoNameValueTupleList& node) {
+
+    TKqpReadTableFullTextIndexSettings settings;
+
+    for (const auto& tuple : node) {
+        TStringBuf name = tuple.Name().Value();
+
+        if (name == TKqpReadTableFullTextIndexSettings::ItemsLimitSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.ItemsLimit = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::SkipLimitSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.SkipLimit = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::BFactorSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.BFactor = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::K1FactorSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.K1Factor = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::DefaultOperatorSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.DefaultOperator = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::MinimumShouldMatchSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.MinimumShouldMatch = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::ModeSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.Mode = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::TokensSettingName) {
+            YQL_ENSURE(tuple.Value().IsValid());
+            settings.Tokens = tuple.Value().Cast().Ptr();
+        } else {
+            YQL_ENSURE(false, "Unknown KqpReadTableFullTextIndex setting name '" << name << "'");
+        }
+    }
+
+    return settings;
+}
+
+NNodes::TCoNameValueTupleList TKqpReadTableFullTextIndexSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
+    TVector<TCoNameValueTuple> settings;
+    settings.reserve(2);
+
+    if (ItemsLimit) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(ItemsLimitSettingName)
+            .Value(ItemsLimit)
+            .Done());
+    }
+
+    if (SkipLimit) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(SkipLimitSettingName)
+            .Value(SkipLimit)
+            .Done());
+    }
+
+    if (BFactor) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(BFactorSettingName)
+            .Value(BFactor)
+            .Done());
+    }
+
+    if (K1Factor) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(K1FactorSettingName)
+            .Value(K1Factor)
+            .Done());
+    }
+
+    if (DefaultOperator) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(DefaultOperatorSettingName)
+            .Value(DefaultOperator)
+            .Done());
+    }
+
+    if (MinimumShouldMatch) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(MinimumShouldMatchSettingName)
+            .Value(MinimumShouldMatch)
+            .Done());
+    }
+
+    if (Mode) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+        .Name().Build(ModeSettingName)
+        .Value(Mode)
+        .Done());
+    }
+
+    if (Tokens) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(TokensSettingName)
+            .Value(Tokens)
+            .Done());
+    }
+
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add(settings)
+        .Done();
+}
+
 TKqpReadTableSettings TKqpReadTableSettings::Parse(const NNodes::TCoNameValueTupleList& node) {
     return ParseInternal(node);
 }
@@ -674,6 +778,8 @@ NNodes::TCoNameValueTupleList TKqpStreamLookupSettings::BuildNode(TExprContext& 
                 break;
             case EStreamLookupStrategyType::LookupRows:
                 return LookupStrategyName;
+            case EStreamLookupStrategyType::LookupUniqueRows:
+                return LookupUniqueStrategyName;
             case EStreamLookupStrategyType::LookupJoinRows:
                 return LookupJoinStrategyName;
             case EStreamLookupStrategyType::LookupSemiJoinRows:
@@ -747,18 +853,18 @@ NNodes::TCoNameValueTupleList TKqpStreamLookupSettings::BuildNode(TExprContext& 
         .Done();
 }
 
-bool TKqpStreamLookupSettings::HasVectorTopDistinct(const NNodes::TCoNameValueTupleList& list) {
+bool TKqpStreamLookupSettings::HasVectorTopColumn(const NNodes::TCoNameValueTupleList& list) {
     for (const auto& tuple : list) {
         auto name = tuple.Name().Value();
-        if (name == VectorTopDistinctSettingName) {
+        if (name == VectorTopColumnSettingName) {
             return true;
         }
     }
     return false;
 }
 
-bool TKqpStreamLookupSettings::HasVectorTopDistinct(const NNodes::TKqlStreamLookupTable& node) {
-    return TKqpStreamLookupSettings::HasVectorTopDistinct(node.Settings());
+bool TKqpStreamLookupSettings::HasVectorTopColumn(const NNodes::TKqlStreamLookupTable& node) {
+    return TKqpStreamLookupSettings::HasVectorTopColumn(node.Settings());
 }
 
 TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TCoNameValueTupleList& list) {
@@ -767,6 +873,8 @@ TKqpStreamLookupSettings TKqpStreamLookupSettings::Parse(const NNodes::TCoNameVa
     auto getLookupStrategyType = [](const TStringBuf& type) {
         if (type == LookupStrategyName) {
             return EStreamLookupStrategyType::LookupRows;
+        } else if (type == LookupUniqueStrategyName) {
+            return EStreamLookupStrategyType::LookupUniqueRows;
         } else if (type == LookupJoinStrategyName) {
             return EStreamLookupStrategyType::LookupJoinRows;
         } else if (type == LookupSemiJoinStrategyName) {

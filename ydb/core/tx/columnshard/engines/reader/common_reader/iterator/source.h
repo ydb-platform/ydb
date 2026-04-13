@@ -19,6 +19,8 @@
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 #include <ydb/core/util/evlog/log.h>
 
+#include <library/cpp/lwtrace/shuttle.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap {
@@ -39,6 +41,8 @@ private:
     std::optional<TMonotonic> CurrentNodeStart;
 
     std::optional<TFetchingScriptCursor> CursorStep;
+    YDB_ACCESSOR_DEF(TString, PrevCategoryName);
+    YDB_ACCESSOR_DEF(TString, PrevExecutionResult);
 
 public:
     void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals);
@@ -74,12 +78,6 @@ public:
     const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>& GetExecutionVisitorVerified() const;
 };
 
-class IPortionDataSource {
-public:
-    virtual ui64 GetPortionId() const = 0;
-    virtual ~IPortionDataSource() = default;
-};
-
 class IDataSource: public ICursorEntity, public NArrow::NSSA::IDataSource {
 public:
     enum class EType {
@@ -94,6 +92,7 @@ private:
     TAtomic SyncSectionFlag = 1;
     YDB_READONLY(EType, Type, EType::Undefined);
     YDB_READONLY(ui32, SourceIdx, 0);
+    YDB_READONLY_DEF(ui64, DeprecatedPortionId);
     static inline TAtomicCounter MemoryGroupCounter = 0;
     YDB_READONLY(ui64, SequentialMemoryGroupIdx, MemoryGroupCounter.Inc());
     YDB_READONLY(TSnapshot, RecordSnapshotMin, TSnapshot::Zero());
@@ -108,6 +107,9 @@ private:
 
     virtual ui64 DoGetEntityId() const override {
         return SourceIdx;
+    }
+    virtual ui64 DoGetDeprecatedPortionId() const override {
+        return DeprecatedPortionId;
     }
 
     virtual ui64 DoGetEntityRecordsCount() const override;
@@ -135,12 +137,52 @@ private:
 
 protected:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
+    NLWTrace::TOrbit DataSourceOrbit;
+    TMonotonic LastProbeTimestamp;
+    TMonotonic SourceCreatedTimestamp;
+    TDuration TotalExecutionDuration;
+    ui64 TotalBytesRead = 0;
     std::unique_ptr<TFetchedResult> StageResult;
     virtual ui32 GetRecordsCountVirtual() const;
 
 public:
 
     ui64 GetReservedMemory() const;
+
+    TDuration GetAndResetWaitDuration() {
+        const TMonotonic now = TMonotonic::Now();
+        const TDuration result = LastProbeTimestamp ? (now - LastProbeTimestamp) : TDuration::Zero();
+        LastProbeTimestamp = now;
+        return result;
+    }
+
+    void AddExecutionDuration(const TDuration d) {
+        TotalExecutionDuration += d;
+    }
+
+    void AddBytesRead(const ui64 bytes) {
+        TotalBytesRead += bytes;
+    }
+
+    TDuration GetTotalDuration() const {
+        return SourceCreatedTimestamp ? (TMonotonic::Now() - SourceCreatedTimestamp) : TDuration::Zero();
+    }
+
+    TDuration GetTotalExecutionDuration() const {
+        return TotalExecutionDuration;
+    }
+
+    ui64 GetTotalBytesRead() const {
+        return TotalBytesRead;
+    }
+
+    NLWTrace::TOrbit& GetDataSourceOrbit() {
+        return DataSourceOrbit;
+    }
+
+    const NLWTrace::TOrbit& GetDataSourceOrbit() const {
+        return DataSourceOrbit;
+    }
 
     const TPortionDataAccessor& GetPortionAccessor() const;
 
@@ -224,7 +266,7 @@ public:
 
     IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
         const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
-        const std::optional<ui64> shardingVersion, const bool hasDeletions);
+        const std::optional<ui64> shardingVersion, const bool hasDeletions, const ui64 deprecatedPortionId);
 
     virtual ~IDataSource() = default;
 
@@ -301,6 +343,22 @@ public:
     const TFetchedResult& GetStageResult() const;
 
     TFetchedResult& MutableStageResult();
+
+    virtual std::optional<ui64> GetPortionIdOptional() const = 0;
+
+    virtual NColumnShard::TInternalPathId GetPathId() const = 0;
+
+    ui64 GetRawPathId() const {
+        return GetPathId().GetRawValue();
+    }
+
+    ui64 GetTabletId() const {
+        return GetContext()->GetCommonContext()->GetReadMetadata()->GetTabletId();
+    }
+
+    ui64 GetTxId() const {
+        return GetContext()->GetCommonContext()->GetReadMetadata()->GetTxId();
+    }
 };
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

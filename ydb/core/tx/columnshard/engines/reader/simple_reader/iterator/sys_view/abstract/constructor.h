@@ -15,10 +15,13 @@ private:
     virtual ui64 DoGetEntityRecordsCount() const override {
         return 0;
     }
+    virtual ui64 DoGetDeprecatedPortionId() const override {
+        return TabletId;
+    }
 
 public:
     TDataSourceConstructor(const ui64 tabletId, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish)
-        : NCommon::TDataSourceConstructor(TReplaceKeyAdapter(std::move(start), false), TReplaceKeyAdapter(std::move(finish), false))
+        : NCommon::TDataSourceConstructor(TReplaceKeyAdapter(std::move(start), false), TReplaceKeyAdapter(std::move(finish), false), false)
         , TabletId(tabletId)
     {
     }

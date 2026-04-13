@@ -76,7 +76,7 @@
                       "BoxId":1,
                       "ErasureSpecies":"mirror-3-dc",
                       "VDiskKind":"Default",
-                      "Kind":"ssd",
+                      "Kind":"hdd",
                       "PDiskFilter":
                         [
                           {

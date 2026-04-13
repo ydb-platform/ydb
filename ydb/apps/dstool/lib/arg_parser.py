@@ -32,7 +32,9 @@ def get_parser(element):
     internal_error()
 
 
-def print_with_word_wrapping(msg='', initial_indent='', subsequent_indent='', file=sys.stdout):
+def print_with_word_wrapping(msg='', initial_indent='', subsequent_indent='', file=None):
+    if file is None:
+        file = sys.stdout
     width, _ = shutil.get_terminal_size()
     if width <= len(initial_indent):
         raise ValueError(f'initial_indent ({len(initial_indent)}) more than width ({width}) in terminal')
@@ -53,7 +55,7 @@ def print_with_word_wrapping(msg='', initial_indent='', subsequent_indent='', fi
                 replace_whitespace=False)
             print(text, file=file)
         else:
-            print(initial_indent)
+            print(initial_indent, file=file)
         initial_indent = subsequent_indent
 
 

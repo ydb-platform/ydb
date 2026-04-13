@@ -22,11 +22,11 @@ using namespace NThreading;
 
 Y_UNIT_TEST_SUITE(TFileStorageTests) {
 
-static TString ReadFileContent(const TString& path) {
+TString ReadFileContent(const TString& path) {
     return TIFStream(path).ReadAll();
 }
 
-static TFileStoragePtr CreateTestFS(TFileStorageConfig params = {}, const TFetchConfig* httpCfg = nullptr) {
+TFileStoragePtr CreateTestFS(TFileStorageConfig params = {}, const TFetchConfig* httpCfg = nullptr) {
     if (httpCfg) {
         TStringStream strCfg;
         SerializeToTextFormat(*httpCfg, strCfg);
@@ -36,7 +36,7 @@ static TFileStoragePtr CreateTestFS(TFileStorageConfig params = {}, const TFetch
     return CreateFileStorage(params);
 }
 
-static std::unique_ptr<TTestHttpServer> CreateTestHttpServer() {
+std::unique_ptr<TTestHttpServer> CreateTestHttpServer() {
     TPortManager pm;
     const ui16 port = pm.GetPort();
     auto result = std::make_unique<TTestHttpServer>(port);
@@ -45,7 +45,7 @@ static std::unique_ptr<TTestHttpServer> CreateTestHttpServer() {
     return result;
 }
 
-static void RemoveUrlMeta(const TFsPath& root) {
+void RemoveUrlMeta(const TFsPath& root) {
     TVector<TFsPath> children;
     root.List(children);
 

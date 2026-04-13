@@ -86,6 +86,12 @@ TString FillAuthProperties(THashMap<TString, TString>& properties, const TExtern
             properties["tokenReference"] = externalSource.DataSourceAuth.GetToken().GetTokenSecretName();
             return {};
 
+        case NKikimrSchemeOp::TAuth::kIam:
+            properties["authMethod"] = "IAM";
+            properties["iamServiceAccountId"] = externalSource.DataSourceAuth.GetIam().GetServiceAccountId();
+            properties["iamResourceId"] = externalSource.DataSourceAuth.GetIam().GetResourceId();
+            return {};
+
         case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
             return {"Identity case is not specified"};
     }
@@ -279,6 +285,7 @@ public:
                             .WithExternalSourceFactory(ExternalSourceFactory)
                             .WithReadAttributes(readAttrs ? std::move(*readAttrs) : THashMap<TString, TString>{})
                             .WithSysViewRewritten(table.GetSysViewRewritten())
+                            .WithTopicsIo(SessionCtx->Config().FeatureFlags.GetEnableTopicsSqlIoOperations())
             );
 
             futures.push_back(future.Apply([result, queryType]
@@ -476,7 +483,12 @@ protected:
     {
         YQL_ENSURE(SessionCtx->Query().Type != EKikimrQueryType::Unspecified);
 
-        if (!GetDispatcher()->Dispatch(cluster, name, value, NCommon::TSettingDispatcher::EStage::STATIC, NCommon::TSettingDispatcher::GetErrorCallback(pos, ctx))) {
+        auto normalizedValue = value;
+        if (name == "DisableBlockExecution" && !normalizedValue) {
+            normalizedValue = "true";
+        }
+
+        if (!GetDispatcher()->Dispatch(cluster, name, normalizedValue, NCommon::TSettingDispatcher::EStage::STATIC, NCommon::TSettingDispatcher::GetErrorCallback(pos, ctx))) {
             return false;
         }
 
@@ -819,11 +831,6 @@ public:
                     return ctx.ChangeChildren(*node, std::move(retChildren));
                 }
             } else if (tableDesc.Metadata->Kind == EKikimrTableKind::View && !IsShowCreate(*read)) {
-                if (!SessionCtx->Config().FeatureFlags.GetEnableViews()) {
-                    ctx.AddError(TIssue(node->Pos(ctx),
-                                        "Views are disabled. Please contact your system administrator to enable the feature"));
-                    return nullptr;
-                }
 
                 ctx.Step
                     .Repeat(TExprStep::ExpandApplyForLambdas)
@@ -838,10 +845,9 @@ public:
 
                 NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
                     SessionCtx->Query().Type,
-                    SessionCtx->Config()._KqpYqlSyntaxVersion.Get().GetRef(),
                     cluster,
                     viewData.QueryText,
-                    SessionCtx->Config().BindingsMode,
+                    SessionCtx->Config().GetYqlBindingsMode(),
                     GUCSettings
                 );
                 settingsBuilder.SetFromConfig(SessionCtx->Config());
@@ -909,6 +915,7 @@ public:
                     .Build()
                 .Columns(result.Columns())
                 .RowsLimit().Build(ToString(rowsLimit))
+                .Discard(result.Discard())
                 .Done();
 
             auto newResults = ctx.ChangeChild(results.Ref(), index - startBlockIndex, newResult.Ptr());

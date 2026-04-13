@@ -71,7 +71,7 @@ inline void TCompressedVectorView::Prefetch(size_t index) const
     Y_PREFETCH_READ(data, 3);
 }
 
-inline TCompressedVectorView::TWord TCompressedVectorView::operator[] (size_t index) const
+inline TCompressedVectorView::TWord TCompressedVectorView::operator[](size_t index) const
 {
     YT_ASSERT(index < GetSize());
     auto width = GetWidth();
@@ -113,7 +113,7 @@ void TCompressedVectorView32::Prefetch(size_t index) const
     Y_PREFETCH_READ(reinterpret_cast<const TWord*>(data) - 1, 3);
 }
 
-ui32 TCompressedVectorView32::operator[] (size_t index) const
+ui32 TCompressedVectorView32::operator[](size_t index) const
 {
     YT_ASSERT(index < GetSize());
     auto width = GetWidth();

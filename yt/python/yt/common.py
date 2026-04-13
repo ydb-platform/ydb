@@ -330,6 +330,10 @@ class YtError(Exception):
         """Hunk tablet store toggle conflict."""
         return self.contains_code(1745)
 
+    def is_hunk_store_allocation_failed(self):
+        """Hunk store allocation failed."""
+        return self.contains_code(1746)
+
     def is_no_such_tablet(self):
         """No such tablet."""
         return self.contains_code(1701)
@@ -337,6 +341,10 @@ class YtError(Exception):
     def is_tablet_not_mounted(self):
         """Tablet is not mounted."""
         return self.contains_code(1702)
+
+    def is_all_writes_disabled(self):
+        """All writes are disabled."""
+        return self.contains_code(1703)
 
     def is_no_such_cell(self):
         """No such cell."""
@@ -899,6 +907,10 @@ def wait(predicate, error_message=None, iter=None, sleep_backoff=None, timeout=N
     else:
         def check_predicate():
             return predicate(), None, None
+
+    result = False
+    last_exception = None
+    last_exception_traceback = None
 
     if timeout is None:
         if iter is None:

@@ -8,6 +8,7 @@ from typing import Optional, Union, Sequence, Dict, Any, Tuple
 import pytz
 
 from clickhouse_connect import common
+from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver.common import dict_copy
 from clickhouse_connect.json_impl import any_to_json
 
@@ -124,7 +125,7 @@ def format_query_value(value: Any, server_tz: tzinfo = pytz.UTC):
     if isinstance(value, DT64Param):
         return value.format(server_tz, False)
     if isinstance(value, datetime):
-        if value.tzinfo is not None or server_tz != pytz.UTC:
+        if value.tzinfo is not None or not tzutil.is_utc_timezone(server_tz):
             value = value.astimezone(server_tz)
         return f"'{value.strftime('%Y-%m-%d %H:%M:%S')}'"
     if isinstance(value, date):

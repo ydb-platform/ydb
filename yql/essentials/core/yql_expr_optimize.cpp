@@ -9,6 +9,8 @@
 #include <util/generic/scope.h>
 #include <util/generic/hash.h>
 
+#include <utility>
+
 
 namespace NYql {
 
@@ -25,7 +27,7 @@ namespace {
         TMaybe<TFunctionStack> FunctionStack;
 
         TOptimizationContext(TOptimizer optimizer, const TNodeOnNodeOwnedMap* replaces, TExprContext& expr, const TOptimizeExprSettings& settings)
-            : Optimizer(optimizer)
+            : Optimizer(std::move(optimizer))
             , Expr(expr)
             , Settings(settings)
             , Replaces(replaces)
@@ -137,7 +139,9 @@ namespace {
             return node;
         }
 
-        YQL_ENSURE(level < 3000U, "Too deep graph!");
+        if (level >= 3000U) {
+            throw TErrorException(0) << "Too deep graph!";
+        }
 
         if (ctx.Settings.ProcessedNodes) {
             if (ctx.Settings.ProcessedNodes->find(node->UniqueId()) != ctx.Settings.ProcessedNodes->cend()) {
@@ -180,7 +184,7 @@ namespace {
                     }
                 }
                 if (bodyChanged) {
-                    if (std::any_of(node->Head().Children().cbegin(), node->Head().Children().cend(), [](const auto& p) { return p->StartsExecution(); })) {
+                    if (ctx.Settings.ReuseLambda || std::any_of(node->Head().Children().cbegin(), node->Head().Children().cend(), [](const auto& p) { return p->StartsExecution(); })) {
                         ret = ctx.Expr.NewLambda(node->Pos(), node->HeadPtr(), std::move(newBody));
                     } else {
                         ret = ctx.Expr.DeepCopyLambda(*current, std::move(newBody));
@@ -277,7 +281,9 @@ namespace {
             return it->second ? it->second : node;
         }
 
-        YQL_ENSURE(level < 3000U, "Too deep graph!");
+        if (level >= 3000U) {
+            throw TErrorException(0) << "Too deep graph!";
+        }
 
         TExprNode::TPtr ret;
         if (node->Type() == TExprNode::Lambda) {
@@ -300,7 +306,7 @@ namespace {
                 }
 
                 if (bodyChanged) {
-                    if (std::any_of(node->Head().Children().cbegin(), node->Head().Children().cend(), [](const auto& p) { return p->StartsExecution(); })) {
+                    if (ctx.Settings.ReuseLambda || std::any_of(node->Head().Children().cbegin(), node->Head().Children().cend(), [](const auto& p) { return p->StartsExecution(); })) {
                         ret = ctx.Expr.NewLambda(node->Pos(), node->HeadPtr(), std::move(newBody));
                     } else {
                         ret = ctx.Expr.DeepCopyLambda(*node, std::move(newBody));
@@ -1030,6 +1036,10 @@ void VisitExpr(const TExprNode& root, const TExprVisitRefFunc& preFunc, const TE
 }
 
 void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func, TNodeSet& visitedNodes) {
+    VisitExprInternal(root, func, {}, visitedNodes);
+}
+
+void VisitExpr(const TExprNode& root, const TExprVisitRefFunc& func, TNodeSet& visitedNodes) {
     VisitExprInternal(root, func, {}, visitedNodes);
 }
 

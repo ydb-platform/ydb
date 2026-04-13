@@ -279,8 +279,6 @@ def sort_dict_recursively(obj):
 
 
 def dump_yaml(data, sort=True):
-    global use_alternative_yaml_parser
-
     if use_alternative_yaml_parser:
         yaml = YAML()
 

@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: jaraco.functools
-Version: 4.3.0
+Version: 4.4.0
 Summary: Functools like those found in stdlib
 Author-email: "Jason R. Coombs" <jaraco@jaraco.com>
 License-Expression: MIT
@@ -29,9 +29,10 @@ Requires-Dist: pytest-ruff>=0.2.1; sys_platform != "cygwin" and extra == "check"
 Provides-Extra: cover
 Requires-Dist: pytest-cov; extra == "cover"
 Provides-Extra: enabler
-Requires-Dist: pytest-enabler>=2.2; extra == "enabler"
+Requires-Dist: pytest-enabler>=3.4; extra == "enabler"
 Provides-Extra: type
-Requires-Dist: pytest-mypy; extra == "type"
+Requires-Dist: pytest-mypy>=1.0.1; extra == "type"
+Requires-Dist: mypy<1.19; platform_python_implementation == "PyPy" and extra == "type"
 Dynamic: license-file
 
 .. image:: https://img.shields.io/pypi/v/jaraco.functools.svg

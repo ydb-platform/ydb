@@ -105,6 +105,10 @@ namespace NYql {
                 return &State_->Configuration->Tokens;
             }
 
+            const THashSet<TString>& GetValidClusters() override {
+                return State_->Configuration->GetValidClusters();
+            }
+
             bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
                 Y_UNUSED(compact);
 
@@ -158,6 +162,10 @@ namespace NYql {
                     const TString& token = properties.Value("token", "");
                     const TString& tokenReference = properties.Value("tokenReference", "");
                     structuredToken = ComposeStructuredTokenJsonForTokenAuthWithSecret(tokenReference, token);
+                } else if (authMethod == "IAM") {
+                    const TString& serviceAccountId = properties.Value("iamServiceAccountId", "");
+                    const TString& resourceId = properties.Value("iamResourceId", "");
+                    structuredToken = ComposeStructuredTokenJsonForIamAuth(serviceAccountId, resourceId);
                 } else {
                     ythrow yexception() << "Unknown auth method: " << authMethod;
                 }

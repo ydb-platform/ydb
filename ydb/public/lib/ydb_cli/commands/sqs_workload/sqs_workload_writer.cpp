@@ -22,24 +22,17 @@ namespace NYdb::NConsoleClient {
         }
 
         Aws::Vector<Aws::SQS::Model::SendMessageBatchRequestEntry>
-        CreateSendMessageBatchRequestEntries(ui64 now, const TSqsWorkloadWriterParams& params) {
+        CreateSendMessageBatchRequestEntries(const TSqsWorkloadWriterParams& params, ui32 messageGroupID, ui32 messageDeduplicationID) {
             Aws::Vector<Aws::SQS::Model::SendMessageBatchRequestEntry> entries;
             for (ui32 i = 0; i < params.BatchSize; ++i) {
-                auto messageBody =
-                    fmt::format("{}{}", now, SQS_MESSAGE_START_TIME_SEPARATOR);
-                while (messageBody.size() < params.MessageSize) {
-                    messageBody.push_back('a');
-                }
-
+                Aws::String messageBody(params.MessageSize, 'a');
                 Aws::SQS::Model::SendMessageBatchRequestEntry entry;
                 entry.WithMessageBody(messageBody).WithId(fmt::format("{}", i));
                 if (params.GroupsAmount > 0) {
-                    auto messageGroupID = std::rand() % params.GroupsAmount;
                     entry.WithMessageGroupId(fmt::format("{}", messageGroupID));
                 }
 
                 if (params.MaxUniqueMessages > 0) {
-                    auto messageDeduplicationID = std::rand() % params.MaxUniqueMessages;
                     entry.WithMessageDeduplicationId(std::format("{}", messageDeduplicationID));
                 }
 
@@ -75,25 +68,21 @@ namespace NYdb::NConsoleClient {
 
     void TSqsWorkloadWriter::RunLoop(const TSqsWorkloadWriterParams& params,
                                      TInstant endTime) {
-        while (Now() < endTime && !params.ErrorFlag->load()) {
-            auto now = Now().MilliSeconds();
+        std::mt19937_64 rng(std::random_device{}());
+        std::uniform_int_distribution<ui32> messageGroupsDistribution(0, params.GroupsAmount - 1);
+        std::uniform_int_distribution<ui32> messageDeduplicationDistribution(0, params.MaxUniqueMessages - 1);
 
+        while (Now() < endTime && !params.ErrorFlag->load()) {
             Aws::SQS::Model::SendMessageBatchRequest sendMessageBatchRequest;
             sendMessageBatchRequest.SetQueueUrl(params.QueueUrl.c_str());
-            sendMessageBatchRequest.SetEntries(CreateSendMessageBatchRequestEntries(
-                now, params));
+            sendMessageBatchRequest.SetEntries(CreateSendMessageBatchRequestEntries(params, messageGroupsDistribution(rng), messageDeduplicationDistribution(rng)));
             sendMessageBatchRequest.SetAdditionalCustomHeaderValue(
                 AMZ_TARGET_HEADER, SQS_TARGET_SEND_MESSAGE_BATCH);
 
-            if (params.SetSubjectToken) {
-                sendMessageBatchRequest.SetAdditionalCustomHeaderValue(
-                    YACLOUD_SUBJECT_TOKEN_HEADER, params.Token.c_str());
-            }
-
             {
                 std::unique_lock locker(*params.Mutex);
-                // Concurrency tasks are running in parallel and also Concurrency tasks are waiting in executor queue
-                while (*params.StartedCount >= params.Concurrency * 2) {
+                // WorkersCount tasks are running in parallel and also WorkersCount tasks are waiting in executor queue
+                while (*params.StartedCount >= params.WorkersCount * 2) {
                     params.FinishedCond->wait(locker);
                 }
 

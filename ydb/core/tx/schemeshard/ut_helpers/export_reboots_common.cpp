@@ -21,6 +21,10 @@ void TestCreate(TTestActorRuntime& runtime, ui64 txId, const TString& scheme, NK
         {EPathTypeCdcStream, &TestCreateCdcStream},
         {EPathTypePersQueueGroup, &TestCreatePQGroup},
         {EPathTypeTableIndex, &TestCreateIndexedTable},
+        {EPathTypeReplication, &TestCreateReplication},
+        {EPathTypeTransfer, &TestCreateTransfer},
+        {EPathTypeExternalDataSource, &TestCreateExternalDataSource},
+        {EPathTypeExternalTable, &TestCreateExternalTable},
     };
 
     auto it = functions.find(pathType);

@@ -9,6 +9,7 @@
 #include <util/string/builder.h>
 
 #include <functional>
+#include <utility>
 
 namespace NYql::NDom {
 
@@ -325,9 +326,9 @@ private:
     template <bool NoSwap>
     class TIterator: public TManagedBoxedValue {
     public:
-        TIterator(TUnboxedValue&& original, const TConverter& converter)
+        TIterator(TUnboxedValue&& original, TConverter converter)
             : Original_(std::move(original))
-            , Converter_(converter)
+            , Converter_(std::move(converter))
         {
         }
 
@@ -394,7 +395,7 @@ private:
         return TUnboxedValuePod(new TIterator<true>(Original_.GetKeysIterator(), Converter_));
     }
 
-    TUnboxedValue GetPayloadsIterator() const {
+    TUnboxedValue GetPayloadsIterator() const override {
         return TUnboxedValuePod(new TIterator<false>(Original_.GetPayloadsIterator(), Converter_));
     }
 

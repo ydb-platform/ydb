@@ -48,11 +48,11 @@ TEST(TColumnSortSchemaTest, ProtobufConversion)
     TSortColumns sortColumns;
     sortColumns.push_back(TColumnSortSchema{
         .Name = "foo",
-        .SortOrder = ESortOrder::Ascending
+        .SortOrder = ESortOrder::Ascending,
     });
     sortColumns.push_back(TColumnSortSchema{
         .Name = "bar",
-        .SortOrder = ESortOrder::Descending
+        .SortOrder = ESortOrder::Descending,
     });
 
     NProto::TSortColumnsExt sortColumnsExt;

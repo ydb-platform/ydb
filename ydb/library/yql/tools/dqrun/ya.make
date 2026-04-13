@@ -37,6 +37,7 @@ IF (NOT OS_WINDOWS)
 
         ydb/library/yql/udfs/common/clickhouse/client
         ydb/library/yql/dq/comp_nodes/llvm16
+        ydb/library/yql/providers/pq/gateway/dummy
         ydb/public/sdk/cpp/src/client/persqueue_public/codecs
     )
 

@@ -1,6 +1,7 @@
 #include "mkql_multihopping.h"
 #include "mkql_saveload.h"
 
+#include <yql/essentials/core/sql_types/hopping.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_stats_registry.h>
@@ -9,6 +10,8 @@
 #include <yql/essentials/minikql/watermark_tracker.h>
 
 #include <util/generic/scope.h>
+#include <util/generic/ymath.h>
+#include <util/generic/is_in.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -21,9 +24,11 @@ const TStatKey Hop_InvalidEventsCount("MultiHop_InvalidEventsCount", true);
 const TStatKey Hop_LateThrownEventsCount("MultiHop_LateThrownEventsCount", true);
 const TStatKey Hop_EmptyTimeCount("MultiHop_EmptyTimeCount", true);
 const TStatKey Hop_KeysCount("MultiHop_KeysCount", true);
+const TStatKey Hop_FarFutureStateSize("MultiHop_FarFutureStateSize", false);
 
 constexpr ui32 StateVersion = 1;
 constexpr ui32 StateVersionWithFutureEvents = 2;
+using EPolicy = NYql::NHoppingWindow::EPolicy;
 
 using TEqualsFunc = std::function<bool(NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod)>;
 using THashFunc = std::function<NYql::NUdf::THashType(NUdf::TUnboxedValuePod)>;
@@ -47,6 +52,10 @@ public:
             ui64 delayHopCount,
             bool dataWatermarks,
             bool watermarkMode,
+            ui64 farFutureSizeLimit,
+            ui64 farFutureTimeLimit,
+            EPolicy earlyPolicy,
+            EPolicy latePolicy,
             TComputationContext& ctx,
             const THashFunc& hash,
             const TEqualsFunc& equal,
@@ -59,6 +68,10 @@ public:
             , DelayHopCount(delayHopCount)
             , Watermark(watermark)
             , WatermarkMode(watermarkMode)
+            , FarFutureSizeLimit(farFutureSizeLimit)
+            , FarFutureTimeLimit(Max(farFutureTimeLimit, intervalHopCount + delayHopCount))
+            , EarlyPolicy(earlyPolicy)
+            , LatePolicy(latePolicy)
             , StatesMap(0, hash, equal)
             , Ctx(ctx)
         {
@@ -226,11 +239,13 @@ public:
                             THROW yexception() << "Invalid state: duplicated time " << time;
                         }
                     }
+                    MKQL_ADD_STAT(Ctx.Stats, Hop_FarFutureStateSize, (i64)keyState.FutureEvents.size());
                 }
                 StatesMap.emplace(key, std::move(keyState));
 
                 key.Ref();
             }
+            MKQL_SET_STAT(Ctx.Stats, Hop_KeysCount, StatesMap.size());
 
             in(Finished);
         }
@@ -254,6 +269,7 @@ public:
             i64 lateEventsThrown = 0;
             i64 newHopsStat = 0;
             i64 emptyTimeCtStat = 0;
+            i64 farFutureStateSizeChange = 0;
 
             Y_DEFER {
                 MKQL_ADD_STAT(Ctx.Stats, Hop_FutureEventsCount, farFutureEventsCount);
@@ -261,6 +277,7 @@ public:
                 MKQL_ADD_STAT(Ctx.Stats, Hop_LateThrownEventsCount, lateEventsThrown);
                 MKQL_ADD_STAT(Ctx.Stats, Hop_NewHopsCount, newHopsStat);
                 MKQL_ADD_STAT(Ctx.Stats, Hop_EmptyTimeCount, emptyTimeCtStat);
+                MKQL_ADD_STAT(Ctx.Stats, Hop_FarFutureStateSize, farFutureStateSizeChange);
             };
 
             for (NUdf::TUnboxedValue item;;) {
@@ -282,13 +299,13 @@ public:
                 const auto status = Stream.Fetch(item);
                 if (status != NUdf::EFetchStatus::Ok) {
                     if (status == NUdf::EFetchStatus::Finish) {
-                        CloseOldBuckets(Max<ui64>(), newHopsStat);
+                        CloseOldBuckets(Max<ui64>(), newHopsStat, farFutureStateSizeChange);
                         Finished = true;
                         continue;
                     } else if (status == NUdf::EFetchStatus::Yield) {
                         if (WatermarkMode) {
                             if (auto watermark = GetWatermark()) {
-                                CloseOldBuckets(watermark->MicroSeconds(), newHopsStat);
+                                CloseOldBuckets(watermark->MicroSeconds(), newHopsStat, farFutureStateSizeChange);
                                 PendingYield = true;
                                 continue;
                             }
@@ -307,36 +324,95 @@ public:
                 }
 
                 const auto ts = time.Get<ui64>();
-                const auto hopIndex = ts / HopTime;
+                auto hopIndex = ts / HopTime;
 
                 const auto initialBufferPosition = WatermarkMode ? GetWatermark().GetOrElse(TInstant::Zero()).MicroSeconds() / HopTime : hopIndex;
                 auto& keyState = GetOrCreateKeyState(key, initialBufferPosition);
                 if (hopIndex < keyState.HopIndex) {
                     ++lateEventsThrown;
-                    continue;
+                    switch (LatePolicy) {
+                        case EPolicy::Close:
+                            Y_DEBUG_ABORT();
+                            [[fallthrough]];
+                        case EPolicy::Drop:
+                            continue;
+                        case EPolicy::Adjust:
+                            hopIndex = keyState.HopIndex;
+                            break;
+                    }
                 }
                 if (Y_UNLIKELY(hopIndex == Max<ui64>())) { // reject invalid timestamp
                     ++invalidEventsThrown;
-                    continue;
+                    switch (EarlyPolicy) {
+                        case EPolicy::Close:
+                            [[fallthrough]];
+                        case EPolicy::Drop:
+                            continue;
+                        case EPolicy::Adjust:
+                            hopIndex = Max<ui64>() - 1;
+                            break;
+                    }
                 }
                 if (WatermarkMode && (hopIndex - keyState.HopIndex >= keyState.Buckets.size())) {
-                    ++farFutureEventsCount;
-                    auto [it, inserted] = keyState.FutureEvents.try_emplace(hopIndex);
-                    auto& [_, value] = *it;
-                    if (inserted) {
-                        value = Self->OutInit->GetValue(Ctx);
-                    } else {
-                        Self->Key->SetValue(Ctx, std::move(key));
-                        Self->State->SetValue(Ctx, std::move(value));
-                        value = Self->OutUpdate->GetValue(Ctx);
+                    if (Y_UNLIKELY(hopIndex - keyState.HopIndex >= FarFutureTimeLimit) && keyState.HopIndex) {
+                        switch (EarlyPolicy) {
+                            case EPolicy::Drop:
+                                continue;
+                            case EPolicy::Adjust:
+                                hopIndex = keyState.HopIndex + FarFutureTimeLimit - 1;
+                                break;
+                            case EPolicy::Close: {
+                                auto closeBeforeIndex = Max<i64>(hopIndex + 1 - FarFutureTimeLimit, 0);
+                                CloseOldBucketsForKey(key, keyState, closeBeforeIndex, newHopsStat, farFutureStateSizeChange);
+                                break;
+                            }
+                        }
                     }
-                    continue;
+                    if (Y_LIKELY(hopIndex - keyState.HopIndex >= keyState.Buckets.size())) {
+                        ++farFutureEventsCount;
+                        auto it = keyState.FutureEvents.find(hopIndex);
+                        if (it == keyState.FutureEvents.end()) {
+                            keyState.FutureEvents.emplace(hopIndex, Self->OutInit->GetValue(Ctx));
+                            ++farFutureStateSizeChange;
+
+                            if (keyState.FutureEvents.size() > FarFutureSizeLimit) {
+                                switch (EarlyPolicy) {
+                                    case EPolicy::Close: {
+                                        // move window so that first hop of FutureEvents became last hop of circular buffer
+                                        auto first = keyState.FutureEvents.begin();
+                                        auto closeBeforeIndex = first->first + 1 - keyState.Buckets.size();
+                                        CloseOldBucketsForKey(key, keyState, closeBeforeIndex, newHopsStat, farFutureStateSizeChange);
+                                        break;
+                                    }
+                                    case EPolicy::Adjust:
+                                        Y_DEBUG_ABORT();
+                                        [[fallthrough]];
+                                    case EPolicy::Drop: {
+                                        // drop last hop in FutureEvents
+                                        auto last = keyState.FutureEvents.end();
+                                        Y_DEBUG_ABORT_UNLESS(last != keyState.FutureEvents.begin());
+                                        --last;
+                                        keyState.FutureEvents.erase(last);
+                                        --farFutureStateSizeChange;
+                                        break;
+                                    }
+                                }
+                                Y_DEBUG_ABORT_UNLESS(keyState.FutureEvents.size() == FarFutureSizeLimit);
+                            }
+                        } else {
+                            auto& value = it->second;
+                            Self->Key->SetValue(Ctx, std::move(key));
+                            Self->State->SetValue(Ctx, std::move(value));
+                            value = Self->OutUpdate->GetValue(Ctx);
+                        }
+                        continue;
+                    }
                 }
 
                 // Overflow is not possible, because hopIndex is a product of a division
                 if (!WatermarkMode) {
                     auto closeBeforeIndex = Max<i64>(hopIndex + 1 - DelayHopCount - IntervalHopCount, 0);
-                    CloseOldBucketsForKey(key, keyState, closeBeforeIndex, newHopsStat);
+                    CloseOldBucketsForKey(key, keyState, closeBeforeIndex, newHopsStat, farFutureStateSizeChange);
                 }
 
                 auto& bucket = keyState.Buckets[hopIndex % keyState.Buckets.size()];
@@ -352,7 +428,7 @@ public:
 
                 if (DataWatermarkTracker) {
                     if (const auto newWatermark = DataWatermarkTracker->HandleNextEventTime(ts)) {
-                        CloseOldBuckets(*newWatermark, newHopsStat);
+                        CloseOldBuckets(*newWatermark, newHopsStat, farFutureStateSizeChange);
                     }
                 }
                 MKQL_SET_STAT(Ctx.Stats, Hop_KeysCount, StatesMap.size());
@@ -402,7 +478,8 @@ public:
             const NUdf::TUnboxedValue& key,
             TKeyState& keyState,
             const ui64 closeBeforeIndex, // Excluded bound
-            i64& newHopsStat)
+            i64& newHopsStat,
+            i64& farFutureStateSizeChange)
         {
             auto& bucketsForKey = keyState.Buckets;
             auto curHopIndex = keyState.HopIndex;
@@ -488,6 +565,7 @@ public:
                 newHopsStat += FinishAggregation(key, curHopIndex, aggregated);
                 if (futureIt->first == curHopIndex) {
                     futureIt = keyState.FutureEvents.erase(futureIt);
+                    --farFutureStateSizeChange;
                     if (futureIt == keyState.FutureEvents.end()) {
                         break;
                     }
@@ -502,18 +580,19 @@ public:
                 keyState.NextHopIndex = futureIt->first + 1;
                 bucket.Value = std::move(futureIt->second);
                 bucket.HasValue = true;
+                --farFutureStateSizeChange;
             }
 
             keyState.HopIndex = closeBeforeIndex;
             return keyState.NextHopIndex <= keyState.HopIndex && keyState.FutureEvents.empty();
         }
 
-        void CloseOldBuckets(ui64 watermarkTs, i64& newHops) {
+        void CloseOldBuckets(ui64 watermarkTs, i64& newHops, i64& farFutureStateSizeChange) {
             const auto watermarkIndex = watermarkTs / HopTime;
             EraseNodesIf(StatesMap, [&](auto& iter) {
                 auto& [key, val] = iter;
                 ui64 closeBeforeIndex = Max<i64>(watermarkIndex + 1 - IntervalHopCount, 0);
-                const auto keyStateBecameEmpty = CloseOldBucketsForKey(key, val, closeBeforeIndex, newHops);
+                const auto keyStateBecameEmpty = CloseOldBucketsForKey(key, val, closeBeforeIndex, newHops, farFutureStateSizeChange);
                 if (keyStateBecameEmpty) {
                     key.UnRef();
                 }
@@ -524,6 +603,7 @@ public:
 
         void ClearState() {
             EraseNodesIf(StatesMap, [&](auto& iter) {
+                MKQL_ADD_STAT(Ctx.Stats, Hop_FarFutureStateSize, -(i64)iter.second.FutureEvents.size());
                 iter.first.UnRef();
                 return true;
             });
@@ -538,6 +618,10 @@ public:
         const ui64 DelayHopCount;
         TWatermark& Watermark;
         bool WatermarkMode;
+        ui64 FarFutureSizeLimit;
+        ui64 FarFutureTimeLimit;
+        EPolicy EarlyPolicy;
+        EPolicy LatePolicy;
         bool PendingYield = false;
 
         using TStatesMap = std::unordered_map<
@@ -576,6 +660,10 @@ public:
         IComputationNode* delay,
         IComputationNode* dataWatermarks,
         IComputationNode* watermarkMode,
+        IComputationNode* farFutureSizeLimit,
+        IComputationNode* farFutureTimeLimitUs,
+        IComputationNode* earlyPolicy,
+        IComputationNode* latePolicy,
         TType* keyType,
         TType* stateType,
         TWatermark& watermark)
@@ -601,6 +689,10 @@ public:
         , Delay(delay)
         , DataWatermarks(dataWatermarks)
         , WatermarkMode(watermarkMode)
+        , FarFutureSizeLimit(farFutureSizeLimit)
+        , FarFutureTimeLimitUs(farFutureTimeLimitUs)
+        , EarlyPolicy(earlyPolicy)
+        , LatePolicy(latePolicy)
         , KeyType(keyType)
         , StateType(stateType)
         , KeyPacker(mutables)
@@ -624,6 +716,19 @@ public:
         const auto delay = Delay->GetValue(ctx).Get<ui64>();
         const auto dataWatermarks = DataWatermarks->GetValue(ctx).Get<bool>();
         const auto watermarkMode = WatermarkMode->GetValue(ctx).Get<bool>();
+#define INIT_OPTIONAL_ARGUMENT(var, Type, Member, Default) \
+    const auto var = (Member ? Member->GetValue(ctx) : NUdf::TUnboxedValue()).GetOrDefault<Type>(static_cast<Type>(NYql::NHoppingWindow::TSettings{}.Default))
+        INIT_OPTIONAL_ARGUMENT(farFutureSizeLimit, ui64, FarFutureSizeLimit, FarFutureSizeLimit);
+        INIT_OPTIONAL_ARGUMENT(farFutureTimeLimitUs, ui64, FarFutureTimeLimitUs, FarFutureTimeLimit.MicroSeconds());
+        INIT_OPTIONAL_ARGUMENT(earlyPolicy, ui32, EarlyPolicy, EarlyPolicy);
+        MKQL_ENSURE(IsIn({static_cast<ui32>(EPolicy::Drop), static_cast<ui32>(EPolicy::Adjust), static_cast<ui32>(EPolicy::Close)}, earlyPolicy),
+                    "Unexpected earlyPolicy " << earlyPolicy);
+        INIT_OPTIONAL_ARGUMENT(latePolicy, ui32, LatePolicy, LatePolicy);
+        MKQL_ENSURE(IsIn({static_cast<ui32>(EPolicy::Drop), static_cast<ui32>(EPolicy::Adjust)}, latePolicy),
+                    "Unexpected latePolicy " << latePolicy);
+        MKQL_ENSURE(!(earlyPolicy == static_cast<ui32>(EPolicy::Adjust) && farFutureSizeLimit != Max<ui64>()),
+                    "Combination of EarlyPolicy=adjust with SizeLimit is not implemented, please set HoppingWindow SizeLimit to 'max' or use different EarlyPolicy");
+#undef INIT_OPTIONAL_ARGUMENT
         const auto intervalHopCount = interval / hopTime;
         const auto delayHopCount = delay / hopTime;
 
@@ -635,6 +740,10 @@ public:
             delayHopCount,
             dataWatermarks,
             watermarkMode,
+            farFutureSizeLimit,
+            CeilDiv(farFutureTimeLimitUs, hopTime),
+            static_cast<EPolicy>(earlyPolicy),
+            static_cast<EPolicy>(latePolicy),
             ctx,
             TValueHasher(KeyTypes, IsTuple, Hash.Get()),
             TValueEqual(KeyTypes, IsTuple, Equate.Get()),
@@ -683,6 +792,10 @@ private:
         DependsOn(Delay);
         DependsOn(DataWatermarks);
         DependsOn(WatermarkMode);
+        DependsOn(FarFutureSizeLimit);
+        DependsOn(FarFutureTimeLimitUs);
+        DependsOn(EarlyPolicy);
+        DependsOn(LatePolicy);
     }
 
     IComputationNode* const Stream;
@@ -709,6 +822,10 @@ private:
     IComputationNode* const Delay;
     IComputationNode* const DataWatermarks;
     IComputationNode* const WatermarkMode;
+    IComputationNode* const FarFutureSizeLimit;
+    IComputationNode* const FarFutureTimeLimitUs;
+    IComputationNode* const EarlyPolicy;
+    IComputationNode* const LatePolicy;
 
     TType* const KeyType;
     TType* const StateType;
@@ -727,7 +844,7 @@ private:
 } // namespace
 
 IComputationNode* WrapMultiHoppingCore(TCallable& callable, const TComputationNodeFactoryContext& ctx, TWatermark& watermark) {
-    MKQL_ENSURE(callable.GetInputsCount() == 21, "Expected 21 args");
+    MKQL_ENSURE(callable.GetInputsCount() > 20, "Expected at least 21 args");
 
     auto hasSaveLoad = !callable.GetInput(12).GetStaticType()->IsVoid();
 
@@ -772,10 +889,19 @@ IComputationNode* WrapMultiHoppingCore(TCallable& callable, const TComputationNo
 
     auto stateType = hasSaveLoad ? callable.GetInput(12).GetStaticType() : nullptr;
 
+#define GET_OPTIONAL_NODE(idx) ((callable.GetInputsCount() > idx && !callable.GetInput(idx).GetStaticType()->IsVoid()) ? LocateNode(ctx.NodeLocator, callable, idx) : nullptr)
+    IComputationNode* farFutureSizeLimit = GET_OPTIONAL_NODE(21);
+    IComputationNode* farFutureTimeLimitUs = GET_OPTIONAL_NODE(22);
+    IComputationNode* earlyPolicy = GET_OPTIONAL_NODE(23);
+    IComputationNode* latePolicy = GET_OPTIONAL_NODE(24);
+#undef GET_OPTIONAL_NODE
+
     return new TMultiHoppingCoreWrapper(ctx.Mutables,
                                         stream, item, key, state, state2, time, inSave, inLoad, keyExtract,
                                         outTime, outInit, outUpdate, outSave, outLoad, outMerge, outFinish,
-                                        hop, interval, delay, dataWatermarks, watermarkMode, keyType, stateType, watermark);
+                                        hop, interval, delay, dataWatermarks, watermarkMode,
+                                        farFutureSizeLimit, farFutureTimeLimitUs, earlyPolicy, latePolicy,
+                                        keyType, stateType, watermark);
 }
 
 } // namespace NMiniKQL

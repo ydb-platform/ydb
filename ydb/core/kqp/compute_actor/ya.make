@@ -13,6 +13,7 @@ SRCS(
     kqp_scan_fetcher_actor.cpp
     kqp_scan_common.cpp
     kqp_scan_events.cpp
+    kqp_compute_events_stats.cpp
 )
 
 PEERDIR(
@@ -22,6 +23,7 @@ PEERDIR(
     ydb/core/kqp/runtime
     ydb/core/tx/datashard
     ydb/core/tx/scheme_cache
+    ydb/library/formats/arrow
     ydb/library/formats/arrow/protos
     ydb/library/formats/arrow/common
     ydb/library/yql/dq/actors/compute

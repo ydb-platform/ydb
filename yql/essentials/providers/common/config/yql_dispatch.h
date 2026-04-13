@@ -3,6 +3,7 @@
 #include "yql_setting.h"
 
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/providers/common/config/yql_config_qplayer.h>
 
 #include <library/cpp/string_utils/parse_size/parse_size.h>
 
@@ -21,6 +22,8 @@
 #include <util/generic/guid.h>
 #include <util/generic/maybe.h>
 #include <util/generic/algorithm.h>
+
+#include <utility>
 
 namespace NYql {
 
@@ -110,8 +113,8 @@ public:
     public:
         using TPtr = TIntrusivePtr<TSettingHandler>;
 
-        TSettingHandler(const TString& name)
-            : Name_(name)
+        explicit TSettingHandler(TString name)
+            : Name_(std::move(name))
         {
         }
 
@@ -234,7 +237,7 @@ public:
         TSettingHandlerImpl& Enum(const TContainer& container) {
             THashSet<TType> allowed(container.cbegin(), container.cend());
             Validators_.push_back([allowed = std::move(allowed)](const TString&, TType value) {
-                if (!allowed.has(value)) {
+                if (!allowed.contains(value)) {
                     throw yexception() << "Value " << value << " is not in set of allowed values: " << JoinSeq(TStringBuf(","), allowed);
                 }
             });
@@ -346,15 +349,16 @@ public:
         bool IgnoreInFullReplay_ = false;
     };
 
-    TSettingDispatcher(const TQContext& qContext = {})
-        : QContext_(qContext)
+    explicit TSettingDispatcher(const TStringBuf& providerName = "", const TQContext& qContext = {})
+        : ProviderName_(providerName)
+        , QContext_(qContext)
     {
     }
 
     TSettingDispatcher(const TSettingDispatcher&) = delete;
 
     template <class TContainer>
-    TSettingDispatcher(const TContainer& validClusters)
+    explicit TSettingDispatcher(const TContainer& validClusters)
         : ValidClusters(validClusters.begin(), validClusters.end())
     {
     }
@@ -368,6 +372,12 @@ public:
     void AddValidCluster(const TString& cluster) {
         ValidClusters.insert(cluster);
     }
+
+    bool IsValidCluster(const TString& cluster) const {
+        return ValidClusters.contains(cluster);
+    }
+
+    const THashSet<TString>& GetValidClusters() const;
 
     template <typename TType, EConfSettingType SettingType>
     TSettingHandlerImpl<TType, SettingType>& AddSetting(const TString& name, TConfSetting<TType, SettingType>& setting) {
@@ -389,11 +399,24 @@ public:
 
     template <class TContainer, typename TFilter>
     void Dispatch(const TString& cluster, const TContainer& clusterValues, const TFilter& filter) {
+        using TAttribute = typename TContainer::value_type;
+
         auto errorCallback = GetDefaultErrorCallback();
-        for (auto& v : clusterValues) {
-            if (filter(v)) {
-                Dispatch(cluster, v.GetName(), v.GetValue(), EStage::CONFIG, errorCallback);
-            }
+        TString activationLabel = TStringBuilder() << ProviderName_ << "_" << cluster;
+
+        TVector<TAttribute> flags;
+        if (auto loadedFlags = NCommon::LoadActivatedFlagsFromQContext<TAttribute>(activationLabel, QContext_)) {
+            flags = std::move(*loadedFlags);
+        } else {
+            CopyIf(clusterValues.begin(), clusterValues.end(), std::back_inserter(flags), filter);
+        }
+
+        for (const auto& flag : flags) {
+            Dispatch(cluster, flag.GetName(), flag.GetValue(), EStage::CONFIG, errorCallback);
+        }
+
+        if (ProviderName_) {
+            NCommon::SaveActivatedFlagsToQContext<TAttribute>(flags, activationLabel, QContext_);
         }
     }
 
@@ -422,13 +445,11 @@ public:
     void Enumerate(std::function<void(std::string_view)> callback);
 
 protected:
-    // FIXME switch usages to an acesssor
-    const THashSet<TString>& GetValidClusters() const;
-
     THashSet<TString> ValidClusters; // NOLINT(readability-identifier-naming)
     THashMap<TString, TSettingHandler::TPtr> Handlers_;
     TSet<TString> Names_;
 
+    const TString ProviderName_;
     const TQContext QContext_;
 };
 

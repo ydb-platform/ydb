@@ -193,17 +193,8 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(8)});
     }
 
-    Y_UNIT_TEST_FLAG(SimpleDuplicates, Overlap) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
-
-        ui64 tenantSchemeShard = 0;
-        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
-
+    std::unique_ptr<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>> DoCreateIndexWithShardedLevel1(
+        TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId, ui64& buildIndexTx, ui64 tenantSchemeShard, bool overlap) {
         TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
             Name: "Table"
             Columns { Name: "key"       Type: "Uint32" }
@@ -226,7 +217,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
 
         std::unique_ptr<TBlockEvents<TEvDataShard::TEvReshuffleKMeansRequest>> reshuffleBlocker;
         std::unique_ptr<TBlockEvents<TEvDataShard::TEvFilterKMeansRequest>> filterBlocker;
-        if (Overlap) {
+        if (overlap) {
             filterBlocker = std::make_unique<TBlockEvents<TEvDataShard::TEvFilterKMeansRequest>>(runtime, [&](const auto& ) {
                 return true;
             });
@@ -236,18 +227,18 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             });
         }
 
-        ui64 buildIndexTx = ++txId;
+        buildIndexTx = ++txId;
         auto sender = runtime.AllocateEdgeActor();
         auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
             "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}
         });
-        if (Overlap) {
+        if (overlap) {
             auto kmeansSettings = request->Record.MutableSettings()->mutable_index()->mutable_global_vector_kmeans_tree_index();
             kmeansSettings->mutable_vector_settings()->set_overlap_clusters(2);
         }
         ForwardToTablet(runtime, tenantSchemeShard, sender, request);
 
-        if (Overlap) {
+        if (overlap) {
             runtime.WaitFor("FilterKMeansRequest", [&]{ return filterBlocker->size(); });
         } else {
             // Wait for the first "reshuffle" request (samples will be already collected on the first level)
@@ -259,28 +250,22 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         }
 
         // Now wait for the 1st level to be finalized
-        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> level1Blocker(runtime, [&](auto& ev) {
+        auto level1Blocker = std::make_unique<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(runtime, [&](auto& ev) {
             const auto& record = ev->Get()->Record;
             if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable) {
                 return true;
             }
             return false;
         });
-        if (Overlap) {
+        if (overlap) {
             filterBlocker->Stop().Unblock();
         } else {
             reshuffleBlocker->Stop().Unblock();
         }
 
         // Reshard the first level table (0build)
-        // First bug checked here: after restarting the schemeshard during reshuffle it
-        //   generates more clusters than requested and dies with VERIFY on shard boundaries (#18278).
-        // Second bug checked here: posting table doesn't contain all rows from the main table
-        //   if the build table was resharded during build (#18355).
-        // Third bug checked here: build with overlap was skipping sample collection on levels > 1
-        //   and 0 clusters were generated if the build table was resharded.
         {
-            const char *buildTable = Overlap
+            const char *buildTable = overlap
                 ? "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable1build"
                 : "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable0build";
             auto indexDesc = DescribePath(runtime, tenantSchemeShard, buildTable, true, true, true);
@@ -298,7 +283,29 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             }
         }
 
-        level1Blocker.Stop().Unblock();
+        return level1Blocker;
+    }
+
+    Y_UNIT_TEST_FLAG(SimpleDuplicates, Overlap) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        // First bug checked here: after restarting the schemeshard during reshuffle it
+        //   generates more clusters than requested and dies with VERIFY on shard boundaries (#18278).
+        // Second bug checked here: posting table doesn't contain all rows from the main table
+        //   if the build table was resharded during build (#18355).
+        // Third bug checked here: build with overlap was skipping sample collection on levels > 1
+        //   and 0 clusters were generated if the build table was resharded.
+        ui64 buildIndexTx = 0;
+        auto level1Blocker = DoCreateIndexWithShardedLevel1(runtime, env, txId, buildIndexTx, tenantSchemeShard, Overlap);
+        level1Blocker->Stop().Unblock();
 
         // Now wait for the index build
         env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
@@ -311,6 +318,49 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             Cerr << "... posting table contains " << rows << " rows" << Endl;
             UNIT_ASSERT_VALUES_EQUAL(rows, (Overlap ? 400 : 200));
         }
+    }
+
+    Y_UNIT_TEST(ForgetOverlapBorders) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        ui64 buildIndexTx = 0;
+        auto level1Blocker = DoCreateIndexWithShardedLevel1(runtime, env, txId, buildIndexTx, tenantSchemeShard, true);
+
+        TBlockEvents<TEvDataShard::TEvFilterKMeansRequest> filterBlocker(runtime, [&](const auto& ) {
+            return true;
+        });
+        level1Blocker->Stop().Unblock();
+        runtime.WaitFor("FilterKMeansRequest level 2", [&]{ return filterBlocker.size(); });
+
+        TBlockEvents<TEvIndexBuilder::TEvUploadSampleKResponse> uploadBorderBlocker(runtime, [&](const auto& ev) {
+            ev->Get()->Record.SetUploadStatus(Ydb::StatusIds::PRECONDITION_FAILED);
+            auto issue = ev->Get()->Record.AddIssues();
+            issue->set_severity(NYql::TSeverityIds::S_ERROR);
+            issue->set_message("Datashard test fail");
+            return true;
+        });
+        filterBlocker.Stop().Unblock();
+        runtime.WaitFor("UploadBorders", [&]{ return uploadBorderBlocker.size() > 0; });
+
+        // Cancel and forget the index build
+        TestCancelBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        // Reboot once more - it crashed here because some KMeansTreeSamples (border rows) were not removed
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(0)});
     }
 
     Y_UNIT_TEST(PrefixedDuplicates) {
@@ -506,7 +556,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 << " expectedRequestUnits = " << formulaRequestUnitsApproximation
                 << " actualRequestUnits = " << actualRequestUnits
                 << Endl;
-            
+
             // Note: in case of any cost changes, documentation is needed to be updated correspondingly.
             // https://yandex.cloud/ru/docs/ydb/pricing/ru-special#vector-index
             // or ensure manually that the difference is not really big
@@ -776,7 +826,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 .SourceWt(TInstant::Seconds(10))
                 .Usage(TBillRecord::RequestUnits(130, TInstant::Seconds(0), TInstant::Seconds(10)));
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            MeteringDataEqual(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
             previousBillId = newBillId;
             meteringBlocker.Unblock();
         }
@@ -842,7 +892,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 .SourceWt(TInstant::Seconds(10))
                 .Usage(TBillRecord::RequestUnits(336, TInstant::Seconds(10), TInstant::Seconds(10)));
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            MeteringDataEqual(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
             previousBillId = newBillId;
             meteringBlocker.Stop().Unblock();
         }
@@ -932,7 +982,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 1 " << buildIndexHtml << Endl;
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 130 (ReadTable: 128, BulkUpsert: 2, " 
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 130 (ReadTable: 128, BulkUpsert: 2, "
                 << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + billedStats.ShortDebugString());
         }
@@ -951,7 +1001,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 .SourceWt(TInstant::Seconds(10))
                 .Usage(TBillRecord::RequestUnits(130, TInstant::Seconds(0), TInstant::Seconds(10)));
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            MeteringDataEqual(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
             previousBillId = newBillId;
             billedStats = expectedBillingStats;
             meteringBlocker.Unblock();
@@ -963,7 +1013,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 2 " << buildIndexHtml << Endl;
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 130 (ReadTable: 128, BulkUpsert: 2, " 
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 130 (ReadTable: 128, BulkUpsert: 2, "
                 << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + billedStats.ShortDebugString());
         }
@@ -979,7 +1029,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 3 " << buildIndexHtml << Endl;
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 155 (ReadTable: 128, BulkUpsert: 27, " 
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 155 (ReadTable: 128, BulkUpsert: 27, "
                 << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + billedStats.ShortDebugString());
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>" + shardReshuffleBillingStats.ShortDebugString());
@@ -999,7 +1049,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 .SourceWt(TInstant::Seconds(20))
                 .Usage(TBillRecord::RequestUnits(153, TInstant::Seconds(10), TInstant::Seconds(20)));
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            MeteringDataEqual(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
             previousBillId = newBillId;
             billedStats = expectedBillingStats;
             meteringBlocker.Unblock();
@@ -1011,7 +1061,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 4 " << buildIndexHtml << Endl;
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 155 (ReadTable: 128, BulkUpsert: 27, " 
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 155 (ReadTable: 128, BulkUpsert: 27, "
                 << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + billedStats.ShortDebugString());
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "<td>" + shardReshuffleBillingStats.ShortDebugString());
@@ -1022,7 +1072,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         expectedBillingStats -= shardReshuffleBillingStats; // already added
         AddUpload(expectedBillingStats, tableRows, buildBytes);
         AddRead(expectedBillingStats, tableRows, tableBytes);
-    
+
         if (doRestarts) {
             runtime.WaitFor("localKMeans", [&]{ return localKMeansBlocker.size(); });
             RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
@@ -1039,7 +1089,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             Cout << "BuildIndex 5 " << buildIndexHtml << Endl;
             Cout << expectedBillingStats.ShortDebugString() << Endl;
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 338 (ReadTable: 128, BulkUpsert: 210, " 
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 338 (ReadTable: 128, BulkUpsert: 210, "
                 << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + expectedBillingStats.ShortDebugString());
         }
@@ -1058,7 +1108,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 .SourceWt(TInstant::Seconds(20))
                 .Usage(TBillRecord::RequestUnits(311, TInstant::Seconds(20), TInstant::Seconds(20)));
             UNIT_ASSERT_VALUES_EQUAL(meteringBlocker.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
+            MeteringDataEqual(meteringBlocker[0]->Get()->MeteringJson, expectedBill.ToString());
             previousBillId = newBillId;
             billedStats = expectedBillingStats;
             meteringBlocker.Unblock();
@@ -1070,7 +1120,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             auto buildIndexHtml = TestGetBuildIndexHtml(runtime, tenantSchemeShard, buildIndexTx);
             Cout << "BuildIndex 6 " << buildIndexHtml << Endl;
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Processed: " + expectedBillingStats.ShortDebugString());
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 338 (ReadTable: 128, BulkUpsert: 210, " 
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, TStringBuilder() << "Request Units: 338 (ReadTable: 128, BulkUpsert: 210, "
                 << "CPU: " << expectedBillingStats.GetCpuTimeUs() / 1500 << ")");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml,  "Billed: " + expectedBillingStats.ShortDebugString());
         }
@@ -1141,9 +1191,12 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             ? TVector<TString>{"prefix", "embedding"}
             : TVector<TString>{"embedding"};
         const TVector<TString> dataColumns = { "covered" };
+        const TVector<NYdb::NTable::TGlobalIndexSettings> partitionSettings = prefixed
+            ? TVector<NYdb::NTable::TGlobalIndexSettings>{ globalIndexSettings, globalIndexSettings, globalIndexSettings }
+            : TVector<NYdb::NTable::TGlobalIndexSettings>{ globalIndexSettings, globalIndexSettings };
         TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", TBuildIndexConfig{
             "by_embedding", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, indexColumns, dataColumns,
-            { globalIndexSettings, globalIndexSettings, globalIndexSettings }, std::move(kmeansTreeSettings)
+            partitionSettings, std::move(kmeansTreeSettings)
         });
 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
@@ -1173,13 +1226,13 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             NLs::SplitBoundaries<ui64>({12345, 54321})
         });
         if (prefixed) {
-        TestDescribeResult(DescribePrivatePath(runtime, JoinFsPaths("/MyRoot/vectors/by_embedding", PrefixTable), true, true), {
-            NLs::IsTable,
-            NLs::PartitionCount(3),
-            NLs::MinPartitionsCountEqual(3),
-            NLs::MaxPartitionsCountEqual(3),
-            NLs::SplitBoundaries<ui64>({12345, 54321})
-        });
+            TestDescribeResult(DescribePrivatePath(runtime, JoinFsPaths("/MyRoot/vectors/by_embedding", PrefixTable), true, true), {
+                NLs::IsTable,
+                NLs::PartitionCount(3),
+                NLs::MinPartitionsCountEqual(3),
+                NLs::MaxPartitionsCountEqual(3),
+                NLs::SplitBoundaries<ui64>({12345, 54321})
+            });
         }
 
         for (size_t i = 0; i != 3; ++i) {
@@ -1423,110 +1476,6 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Init IndexBuild unhandled exception");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Condition violated: `creationConfig.ParseFromString");
         }
-    }
-
-    Y_UNIT_TEST(TTxInit_Checks_EnableVectorIndex) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "vectors"
-            Columns { Name: "id" Type: "Uint64" }
-            Columns { Name: "embedding" Type: "String" }
-            KeyColumnNames: [ "id" ]
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        NYdb::NTable::TGlobalIndexSettings globalIndexSettings;
-
-        std::unique_ptr<NYdb::NTable::TKMeansTreeSettings> kmeansTreeSettings;
-        {
-            Ydb::Table::KMeansTreeSettings proto;
-            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
-                settings {
-                    metric: DISTANCE_COSINE
-                    vector_type: VECTOR_TYPE_FLOAT
-                    vector_dimension: 1024
-                }
-                levels: 5
-                clusters: 4
-            )", &proto));
-            using T = NYdb::NTable::TKMeansTreeSettings;
-            kmeansTreeSettings = std::make_unique<T>(T::FromProto(proto));
-        }
-
-        TBlockEvents<TEvDataShard::TEvLocalKMeansRequest> blocked(runtime, [&](auto&) {
-            return true;
-        });
-
-        const ui64 buildIndexTx = ++txId;
-        AsyncBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", {"embedding"});
-
-        runtime.WaitFor("block", [&]{ return blocked.size(); });
-
-        {
-            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
-            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
-            Cout << "BuildIndex 1 " << buildIndexOperation.DebugString() << Endl << buildIndexHtml << Endl;
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
-                buildIndexOperation.DebugString()
-            );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: NO");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "CancelRequested: NO");
-        }
-
-        // turn off vector index and check that Scheme Shard has not progress it anymore:
-        runtime.GetAppData().FeatureFlags.SetEnableVectorIndex(false);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-
-        {
-            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
-            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
-            Cout << "BuildIndex 2 " << buildIndexOperation.DebugString() << Endl << buildIndexHtml << Endl;
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA,
-                buildIndexOperation.DebugString()
-            );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "CancelRequested: NO");
-        }
-
-        // cancel should work:
-        TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
-
-        {
-            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
-            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
-            Cout << "BuildIndex 3 " << buildIndexOperation.DebugString() << Endl << buildIndexHtml << Endl;
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_CANCELLATION,
-                buildIndexOperation.DebugString()
-            );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: NO");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "CancelRequested: YES");
-        }
-
-        env.TestWaitNotification(runtime, buildIndexTx);
-
-        {
-            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
-            auto buildIndexHtml = TestGetBuildIndexHtml(runtime, TTestTxConfig::SchemeShard, buildIndexTx);
-            Cout << "BuildIndex 4 " << buildIndexOperation.DebugString() << Endl << buildIndexHtml << Endl;
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_CANCELLED,
-                buildIndexOperation.DebugString()
-            );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: NO");
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "CancelRequested: YES");
-        }
-
-        // there should be no more attempts of index build:
-        UNIT_ASSERT_VALUES_EQUAL(blocked.size(), 1);
     }
 
     Y_UNIT_TEST(Shard_Build_Error) {
@@ -1801,15 +1750,12 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             kmeansTreeSettings = std::make_unique<T>(T::FromProto(proto));
         }
 
-        const auto maxShards = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/vectors")
-            .GetPathDescription().GetDomainDescription().GetSchemeLimits().GetMaxShardsInPath();
-
         TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> blocker(runtime, [&](auto& ev) {
             auto& modifyScheme = *ev->Get()->Record.MutableTransaction(0);
             if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable) {
                 auto& op = *modifyScheme.MutableCreateTable();
-                // make shard count exceed the limit to fail the operation
-                op.SetUniformPartitionsCount(maxShards+1);
+                // specify invalid shard count to fail the operation
+                op.SetUniformPartitionsCount(0);
             }
             return false;
         });
@@ -1826,7 +1772,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
                 buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED,
                 buildIndexOperation.DebugString()
             );
-            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Invalid partition count specified");
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Invalid table partition count specified");
         }
 
         blocker.Stop().Unblock();
@@ -1853,6 +1799,180 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             );
         }
 
+    }
+
+    Y_UNIT_TEST(BuildTableWithEmptyShard) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        // Write only 10 rows
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 10);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(3)});
+
+        TBlockEvents<TEvDataShard::TEvFilterKMeansRequest> filterBlocker(runtime, [&](const auto& ) {
+            return true;
+        });
+
+        ui64 buildIndexTx = ++txId;
+        auto sender = runtime.AllocateEdgeActor();
+        auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
+            "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}
+        });
+        auto kmeansSettings = request->Record.MutableSettings()->mutable_index()->mutable_global_vector_kmeans_tree_index();
+        // 20 clusters with 10 rows will be merged into 1 cluster
+        kmeansSettings->mutable_vector_settings()->set_clusters(20);
+        kmeansSettings->mutable_vector_settings()->set_levels(2);
+        kmeansSettings->mutable_vector_settings()->set_overlap_clusters(2);
+        ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+
+        runtime.WaitFor("FilterKMeansRequest", [&]{ return filterBlocker.size(); });
+
+        // Now wait for the 1st level to be finalized
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> level1Blocker(runtime, [&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable) {
+                return true;
+            }
+            return false;
+        });
+        filterBlocker.Stop().Unblock();
+
+        // Reshard the first level table (1build) so that one of the shards becomes empty.
+        // (pretend that it's really luckily presharded to contain the empty child cluster range)
+        {
+            const char* buildTable = "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable1build";
+            auto indexDesc = DescribePath(runtime, tenantSchemeShard, buildTable, true, true, true);
+            auto parts = indexDesc.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT_EQUAL(parts.size(), 1);
+            // There should be only 1 cluster because there are too little rows. So no clusters with ID > 1.
+            TestSplitTable(runtime, tenantSchemeShard, ++txId, buildTable, Sprintf(R"(
+                SourceTabletId: %lu
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 2 } } } }
+            )", parts[0].GetDatashardId()));
+            env.TestWaitNotification(runtime, txId);
+        }
+        level1Blocker.Stop().Unblock();
+
+        // Now wait for the index build
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(1), NLs::PathVersionEqual(6)});
+
+        // Check row count in the posting table
+        {
+            auto rows = CountRows(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable");
+            Cerr << "... posting table contains " << rows << " rows" << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(rows, 10);
+        }
+    }
+
+    Y_UNIT_TEST(GlobalLimit) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto describe = DescribePath(runtime, "/MyRoot/Table");
+        UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), NKikimrScheme::StatusSuccess, "Unexpected status: " << describe.GetStatus());
+        auto curShards = describe.GetPathDescription().GetDomainDescription().GetShardsInside();
+
+        TSchemeLimits lowLimits;
+
+        lowLimits.MaxPaths = 3;
+        lowLimits.MaxShards = curShards + 2;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "idx_global", {"embedding"}, Ydb::StatusIds::PRECONDITION_FAILED);
+        env.TestWaitNotification(runtime, txId);
+
+        lowLimits.MaxPaths = 4;
+        lowLimits.MaxShards = curShards + 1;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "idx_global", {"embedding"}, Ydb::StatusIds::PRECONDITION_FAILED);
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::Table::GlobalIndexSettings shardingProto;
+        shardingProto.set_uniform_partitions(2);
+        auto sharding = NYdb::NTable::TGlobalIndexSettings::FromProto(shardingProto);
+        lowLimits.MaxPaths = 4;
+        lowLimits.MaxShards = curShards + 4;
+        lowLimits.MaxShardsInPath = 1;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
+            "idx_global", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {sharding, sharding}
+        }, Ydb::StatusIds::PRECONDITION_FAILED);
+        env.TestWaitNotification(runtime, txId);
+
+        lowLimits.MaxShardsInPath = 2;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
+            "idx_global", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {sharding, sharding}
+        });
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(PrefixedLimit) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto describe = DescribePath(runtime, "/MyRoot/Table");
+        UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), NKikimrScheme::StatusSuccess, "Unexpected status: " << describe.GetStatus());
+        auto curShards = describe.GetPathDescription().GetDomainDescription().GetShardsInside();
+
+        TSchemeLimits lowLimits;
+
+        lowLimits.MaxPaths = 5;
+        lowLimits.MaxShards = curShards + 4;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "idx_global", {"prefix", "embedding"}, Ydb::StatusIds::PRECONDITION_FAILED);
+        env.TestWaitNotification(runtime, txId);
+
+        lowLimits.MaxPaths = 6;
+        lowLimits.MaxShards = curShards + 3;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "idx_global", {"prefix", "embedding"}, Ydb::StatusIds::PRECONDITION_FAILED);
+        env.TestWaitNotification(runtime, txId);
+
+        lowLimits.MaxPaths = 6;
+        lowLimits.MaxShards = curShards + 4;
+        SetSchemeshardSchemaLimits(runtime, lowLimits);
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", "idx_global", {"prefix", "embedding"});
+        env.TestWaitNotification(runtime, txId);
     }
 
 }

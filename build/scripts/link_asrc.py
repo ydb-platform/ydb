@@ -3,7 +3,6 @@ import os
 import sys
 import tarfile
 
-
 DELIM_JAVA = '__DELIM_JAVA__'
 DELIM_RES = '__DELIM_RES__'
 DELIM_ASSETS = '__DELIM_ASSETS__'

@@ -253,6 +253,15 @@ public:
         const TJournalWriterOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<void>, SetUserBanned, (const std::string&, bool, const TSetUserBannedOptions&),
+        (override));
+
+    MOCK_METHOD(TFuture<bool>, GetUserBanned, (const std::string&, const TGetUserBannedOptions&),
+        (override));
+
+    MOCK_METHOD(TFuture<std::vector<std::string>>, ListBannedUsers, (const TListBannedUsersOptions&),
+        (override));
+
     MOCK_METHOD(TFuture<int>, BuildSnapshot, (const TBuildSnapshotOptions& options),
         (override));
 
@@ -271,6 +280,10 @@ public:
 
     MOCK_METHOD(TFuture<void>, MasterExitReadOnly, (
         const TMasterExitReadOnlyOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<void>, ResetDynamicallyPropagatedMasterCells, (
+        const TResetDynamicallyPropagatedMasterCellsOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<void>, DiscombobulateNonvotingPeers, (
@@ -739,6 +752,13 @@ public:
         const TPollJobShellOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr>, RunJobShellCommand, (
+        NJobTrackerClient::TJobId jobId,
+        const std::optional<std::string>& shellName,
+        const std::string& command,
+        const TRunJobShellCommandOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<void>, AbortJob, (
         NJobTrackerClient::TJobId jobId,
         const TAbortJobOptions& options),
@@ -912,7 +932,7 @@ public:
 
     MOCK_METHOD(TFuture<TFlowExecuteResult>, FlowExecute, (
         const NYPath::TYPath& pipelinePath,
-        const TString& command,
+        const std::string& command,
         const NYson::TYsonString& argument,
         const TFlowExecuteOptions& options),
         (override));

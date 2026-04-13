@@ -180,6 +180,10 @@ protected:
         return ReadySenders + UninitSenders == Senders.size();
     }
 
+    inline bool HasPendingRecords() const {
+        return !Enqueued.empty() || !PendingBody.empty() || !PendingSent.empty();
+    }
+
     void SetPartitionResolver(IPartitionResolverVisitor* partitionResolver) {
         PartitionResolver.Reset(partitionResolver);
     }

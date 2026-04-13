@@ -19,7 +19,7 @@ class TFileStorageConfig;
 
 class IFileStorage: public TThrRefBase {
 public:
-    virtual ~IFileStorage() = default;
+    ~IFileStorage() override = default;
     virtual TFileLinkPtr PutFile(const TString& file, const TString& outFileName = {}) = 0;
     virtual TFileLinkPtr PutFileStripped(const TString& file, const TString& originalMd5 = {}) = 0;
     virtual TFileLinkPtr PutInline(const TString& data) = 0;

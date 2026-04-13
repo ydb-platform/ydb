@@ -6,6 +6,8 @@ PEERDIR(
 
 SRCS(
     yt.proto
+    pq.proto
+    solomon.proto
 )
 
 EXCLUDE_TAGS(GO_PROTO)

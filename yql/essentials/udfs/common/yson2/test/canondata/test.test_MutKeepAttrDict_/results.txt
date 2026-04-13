@@ -1,0 +1,41 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Yson"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        {
+                            "$attributes" = {
+                                "a" = {
+                                    "$type" = "int64";
+                                    "$value" = "1"
+                                }
+                            };
+                            "$value" = {
+                                "b" = {
+                                    "$type" = "int64";
+                                    "$value" = "3"
+                                }
+                            }
+                        }
+                    ]
+                ]
+            }
+        ]
+    }
+]

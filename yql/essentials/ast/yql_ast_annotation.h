@@ -14,7 +14,7 @@ TAstNode* ApplyPositionAnnotations(TAstNode& root, ui32 annotationIndex, TMemory
 // returns false in case of error
 bool ApplyPositionAnnotationsInplace(TAstNode& root, ui32 annotationIndex);
 
-typedef THashMap<const TAstNode*, TVector<const TAstNode*>> TAnnotationNodeMap;
+using TAnnotationNodeMap = THashMap<const TAstNode*, TVector<const TAstNode*>>;
 
 // returns nullptr in case of error
 TAstNode* ExtractAnnotations(TAstNode& root, TAnnotationNodeMap& annotations, TMemoryPool& pool);

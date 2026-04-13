@@ -103,6 +103,6 @@
 
 Подробнее о транзакционных операциях при работе с топиками см. в [{#T}](../datamodel/topic.md#topic-transactions) и [{#T}](../../reference/ydb-sdk/topic.md).
 
-## Транзакции с участием строковых и столбцовых таблиц {#mixed-transactions}
+## Транзакции с участием строковых и колоночных таблиц {#mixed-transactions}
 
 {% include [limitation](../../yql/reference/_includes/limitation-column-row-in-read-only-tx.md) %}

@@ -14,7 +14,7 @@
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
-#include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
+#include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
@@ -162,25 +162,25 @@ void TTester::EmptyShardKeyResolver(TKeyDesc& key) {
 void TTester::SingleShardKeyResolver(TKeyDesc& key) {
     key.Status = TKeyDesc::EStatus::Ok;
 
-    auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
-    partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
-    key.Partitioning = partitions;
+    TVector<TKeyDesc::TPartitionInfo> partitions;
+    partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
+    key.Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
 }
 
 void TTester::ThreeShardPointKeyResolver(TKeyDesc& key) {
     const ui32 ShardBorder1 = 1000;
     const ui32 ShardBorder2 = 2000;
 
-    auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
+    TVector<TKeyDesc::TPartitionInfo> partitions;
     key.Status = TKeyDesc::EStatus::Ok;
     if (key.Range.Point) {
         ui32 key0 = *(ui32*)key.Range.From[0].Data();
         if (key0 < ShardBorder1) {
-            partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
+            partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
         } else if (key0 < ShardBorder2) {
-            partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet1));
+            partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet1));
         } else {
-            partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet2));
+            partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet2));
         }
     } else {
         UNIT_ASSERT(key.Range.From.size() > 0);
@@ -193,14 +193,14 @@ void TTester::ThreeShardPointKeyResolver(TKeyDesc& key) {
         UNIT_ASSERT(from <= to);
 
         if (from < ShardBorder1)
-            partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
+            partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
         if (from < ShardBorder2 && to >= ShardBorder1)
-            partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet1));
+            partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet1));
         if (to >= ShardBorder2)
-            partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet2));
+            partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet2));
     }
 
-    key.Partitioning = partitions;
+    key.Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
 }
 
 TTester::TKeyResolver TTester::GetKeyResolver() const {
@@ -1075,9 +1075,9 @@ TKeyExtractor::TKeyExtractor(TTester& tester, TString programText) {
     for (auto& key : Engine->GetDbKeys()) {
         key->Status = TKeyDesc::EStatus::Ok;
 
-        auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
-        partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
-        key->Partitioning = partitions;
+        TVector<TKeyDesc::TPartitionInfo> partitions;
+        partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
+        key->Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
     }
 }
 
@@ -1109,9 +1109,10 @@ bool TDatashardInitialEventsFilter::operator()(TTestActorRuntimeBase& runtime, T
 }
 
 THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,
-                                                      bool dml)
+                                                      bool dml,
+                                                      const TString& userSID /*= TString()*/)
 {
-    auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+    auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>(userSID);
     if (dml) {
         request->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
         request->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
@@ -1332,14 +1333,16 @@ ui64 AsyncCreateCopyTable(
 }
 
 NKikimrTxDataShard::TEvCompactTableResult CompactTable(
-    TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed)
+    TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed, ui64 cookie)
 {
     auto sender = runtime.AllocateEdgeActor();
     auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId);
     request->Record.SetCompactBorrowed(compactBorrowed);
-    runtime.SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
+    runtime.SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries(), TActorId(), cookie);
 
     auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender);
+    UNIT_ASSERT_C(ev->Cookie == cookie,
+        "Unexpected cookie for EvCompactTableResult " << ev->Cookie << ", expected " << cookie);
     return ev->Get()->Record;
 }
 
@@ -1597,15 +1600,27 @@ ui64 AsyncSplitTable(
         TActorId sender,
         const TString& path,
         ui64 sourceTablet,
-        ui32 splitKey)
+        NKikimrMiniKQL::TValue&& splitKey)
 {
     auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions);
     auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableSplitMergeTablePartitions();
     desc.SetTablePath(path);
     desc.AddSourceTabletId(sourceTablet);
-    desc.AddSplitBoundary()->MutableKeyPrefix()->AddTuple()->MutableOptional()->SetUint32(splitKey);
+    *desc.AddSplitBoundary()->MutableKeyPrefix()->AddTuple()->MutableOptional() = std::move(splitKey);
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request), sender, true);
+}
+
+ui64 AsyncSplitTable(
+        Tests::TServer::TPtr server,
+        TActorId sender,
+        const TString& path,
+        ui64 sourceTablet,
+        ui32 splitKey)
+{
+    NKikimrMiniKQL::TValue protoKey;
+    protoKey.SetUint32(splitKey);
+    return AsyncSplitTable(server, sender, path, sourceTablet, std::move(protoKey));
 }
 
 ui64 AsyncMergeTable(
@@ -1829,6 +1844,7 @@ ui64 AsyncAlterAddStream(
     desc.MutableStreamDescription()->SetFormat(streamDesc.Format);
     desc.MutableStreamDescription()->SetVirtualTimestamps(streamDesc.VirtualTimestamps);
     desc.MutableStreamDescription()->SetSchemaChanges(streamDesc.SchemaChanges);
+    desc.MutableStreamDescription()->SetUserSIDs(streamDesc.UserSIDs);
     if (streamDesc.ResolvedTimestamps) {
         desc.MutableStreamDescription()->SetResolvedTimestampsIntervalMs(streamDesc.ResolvedTimestamps->MilliSeconds());
     }
@@ -2100,10 +2116,11 @@ void ExecSQL(Tests::TServer::TPtr server,
              const TString &sql,
              bool dml,
              Ydb::StatusIds::StatusCode code,
-             NYdb::NUt::TTestContext testCtx)
+             NYdb::NUt::TTestContext testCtx,
+             const TString& userSID)
 {
     auto &runtime = *server->GetRuntime();
-    auto request = MakeSQLRequest(sql, dml);
+    auto request = MakeSQLRequest(sql, dml, userSID);
     runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release(), 0, 0, nullptr));
     auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
     auto& response = ev->Get()->Record;
@@ -2112,6 +2129,15 @@ void ExecSQL(Tests::TServer::TPtr server,
                                    code,
                                    issues.empty() ? response.DebugString() : issues.Get(0).DebugString()
     );
+}
+
+void ExecSQL(Tests::TServer::TPtr server,
+             TActorId sender,
+             const TString &sql,
+             bool dml,
+             const TString &userSID)
+{
+    ExecSQL(server, sender, sql, dml, Ydb::StatusIds::SUCCESS, NYdb::NUt::TTestContext(), userSID);
 }
 
 TRowVersion AcquireReadSnapshot(TTestActorRuntime& runtime, const TString& databaseName, ui32 nodeIndex) {
@@ -2305,6 +2331,18 @@ NKikimrDataEvents::TEvWriteResult Increment(TTestActorRuntime& runtime, TActorId
 NKikimrDataEvents::TEvWriteResult Increment(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus)
 {
     auto request = MakeWriteRequest(txId, txMode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT, tableId, columnIds, cells);
+    return Write(runtime, sender, shardId, std::move(request), expectedStatus);
+}
+
+NKikimrDataEvents::TEvWriteResult UpsertIncrement(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells)
+{
+    auto request = MakeWriteRequest(txId, txMode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT, tableId, columnIds, cells);
+    return Write(runtime, sender, shardId, std::move(request));
+}
+
+NKikimrDataEvents::TEvWriteResult UpsertIncrement(TTestActorRuntime& runtime, TActorId sender, ui64 shardId, const TTableId& tableId, std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const std::vector<ui32>& columnIds, const std::vector<TCell>& cells, NKikimrDataEvents::TEvWriteResult::EStatus expectedStatus)
+{
+    auto request = MakeWriteRequest(txId, txMode, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT, tableId, columnIds, cells);
     return Write(runtime, sender, shardId, std::move(request), expectedStatus);
 }
 
@@ -2870,6 +2908,19 @@ ui64 AsyncAlterSubDomain(
     UNIT_ASSERT_C(ok, "failed to parse schema: " << schema);
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request), sender, true);
+}
+
+ui64 AsyncTruncateTable(
+        const Tests::TServer::TPtr& server,
+        const TActorId& sender,
+        const TString& workingDir,
+        const TString& tableName)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpTruncateTable, workingDir);
+    auto* op = request->Record.MutableTransaction()->MutableModifyScheme()->MutableTruncateTable();
+    op->SetTableName(tableName);
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request), sender);
 }
 
 }

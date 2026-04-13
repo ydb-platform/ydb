@@ -61,6 +61,7 @@ def do(args):
     response = perform_request(request)
     if not is_successful_response(response):
         common.print_request_result(args, request, response)
+        common.dump_group_mapper_error(response, args)
         sys.exit(1)
 
     pdisk_usage_before = common.build_pdisk_usage_map(base_config, count_donors=False, storage_pool=sp)

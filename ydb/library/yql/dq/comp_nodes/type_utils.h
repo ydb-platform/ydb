@@ -5,7 +5,6 @@
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
-#include <algorithm>
 #include <vector>
 
 namespace NKikimr {
@@ -17,9 +16,11 @@ struct TWideUnboxedEqual {
     {}
 
     bool operator()(const NUdf::TUnboxedValuePod* left, const NUdf::TUnboxedValuePod* right) const {
-        for (ui32 i = 0U; i < Types.size(); ++i)
-            if (CompareValues(Types[i].first, true, Types[i].second, left[i], right[i]))
+        for (ui32 i = 0U; i < Types.size(); ++i) {
+            if (CompareValues(Types[i].first, true, Types[i].second, left[i], right[i])) {
                 return false;
+            }
+        }
         return true;
     }
 
@@ -32,18 +33,21 @@ struct TWideUnboxedHasher {
     {}
 
     NUdf::THashType operator()(const NUdf::TUnboxedValuePod* values) const {
-        if (Types.size() == 1U)
-            if (const auto v = *values)
+        if (Types.size() == 1U) {
+            if (const auto v = *values) {
                 return NUdf::GetValueHash(Types.front().first, v);
-            else
+            } else {
                 return HashOfNull;
+            }
+        }
 
         NUdf::THashType hash = 0ULL;
         for (const auto& type : Types) {
-            if (const auto v = *values++)
+            if (const auto v = *values++) {
                 hash = CombineHashes(hash, NUdf::GetValueHash(type.first, v));
-            else
+            } else {
                 hash = CombineHashes(hash, HashOfNull);
+            }
         }
         return hash;
     }

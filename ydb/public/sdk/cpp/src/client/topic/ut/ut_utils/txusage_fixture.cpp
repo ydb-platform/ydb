@@ -36,13 +36,9 @@ TFixture::TTableRecord::TTableRecord(const std::string& key, const std::string& 
 void TFixture::SetUp(NUnitTest::TTestContext&)
 {
     NKikimr::Tests::TServerSettings settings = TTopicSdkTestSetup::MakeServerSettings();
-    settings.SetEnableTopicServiceTx(true);
-    settings.SetEnableTopicSplitMerge(true);
-    settings.SetEnablePQConfigTransactionsAtSchemeShard(true);
-    settings.SetEnableOltpSink(GetEnableOltpSink());
-    settings.SetEnableOlapSink(GetEnableOlapSink());
     settings.SetEnableHtapTx(GetEnableHtapTx());
     settings.SetAllowOlapDataQuery(GetAllowOlapDataQuery());
+    AugmentServerSettings(settings);
 
     Setup = std::make_unique<TTopicSdkTestSetup>(TEST_CASE_NAME, settings);
 
@@ -59,11 +55,20 @@ void TFixture::SetUp(NUnitTest::TTestContext&)
     QueryClient = std::make_unique<NQuery::TQueryClient>(*Driver, querySettings);
 }
 
+void TFixture::AugmentServerSettings(NKikimr::Tests::TServerSettings&)
+{
+}
+
+void TFixture::AugmentWriteSessionSettings(NTopic::TWriteSessionSettings&)
+{
+}
+
 void TFixture::NotifySchemeShard(const TFeatureFlags& flags)
 {
+    Y_UNUSED(flags);
+
     auto request = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationRequest>();
     *request->Record.MutableConfig() = *Setup->GetServer().ServerSettings.AppConfig;
-    request->Record.MutableConfig()->MutableFeatureFlags()->SetEnablePQConfigTransactionsAtSchemeShard(flags.EnablePQConfigTransactionsAtSchemeShard);
 
     auto& runtime = Setup->GetRuntime();
     auto actorId = runtime.AllocateEdgeActor();
@@ -395,6 +400,7 @@ auto TFixture::CreateTopicWriteSession(const std::string& topicPath,
     options.MessageGroupId(messageGroupId);
     options.PartitionId(partitionId);
     options.Codec(ECodec::RAW);
+    AugmentWriteSessionSettings(options);
     return client.CreateWriteSession(options);
 }
 
@@ -1086,16 +1092,6 @@ auto TFixture::GetAvgWriteBytes(const std::string& topicName,
     }
 
     return result;
-}
-
-bool TFixture::GetEnableOltpSink() const
-{
-    return false;
-}
-
-bool TFixture::GetEnableOlapSink() const
-{
-    return false;
 }
 
 bool TFixture::GetEnableHtapTx() const
@@ -2101,16 +2097,6 @@ void TFixtureSinks::CreateColumnTable(const std::string& tablePath)
         .Build();
     auto result = session.CreateTable(path, std::move(desc)).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-}
-
-bool TFixtureSinks::GetEnableOltpSink() const
-{
-    return true;
-}
-
-bool TFixtureSinks::GetEnableOlapSink() const
-{
-    return true;
 }
 
 bool TFixtureSinks::GetEnableHtapTx() const

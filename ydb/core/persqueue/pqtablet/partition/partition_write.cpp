@@ -221,6 +221,11 @@ void TPartition::UpdateWriteBufferIsFullState(const TInstant& now) {
 void TPartition::Handle(TEvPQ::TEvReserveBytes::TPtr& ev, const TActorContext& ctx) {
     LOG_T("TPartition::HandleOnWrite TEvReserveBytes.");
 
+    if (ShouldUseDeduplicationQueue() && !ev->Get()->FromDeduplicatedQueue) {
+        Forward(ev, DeduplicationQueueActor);
+        return;
+    }
+
     const TString& ownerCookie = ev->Get()->OwnerCookie;
     TStringBuf owner = TOwnerInfo::GetOwnerFromOwnerCookie(ownerCookie);
     const ui64& messageNo = ev->Get()->MessageNo;
@@ -632,6 +637,10 @@ void TPartition::ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus) 
     Send(TabletActorId, std::move(ev));
 }
 
+bool TPartition::ShouldUseDeduplicationQueue() const {
+    return DeduplicationQueueActor && !MirroringEnabled(Config);
+}
+
 void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {
     LOG_D("Received TPartition::TEvWrite");
 
@@ -641,11 +650,17 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         return;
     }
 
+    const bool mirroredPartition = MirroringEnabled(Config);
+
+    if (ShouldUseDeduplicationQueue() && ev->Get()->ExternalDeduplicationStatus == TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked) {
+        LOG_D("Forwarding TPartition::TEvWrite to DeduplicationQueueActor");
+        Forward(ev, DeduplicationQueueActor);
+        return;
+    }
+
     ui32 sz = std::accumulate(ev->Get()->Msgs.begin(), ev->Get()->Msgs.end(), 0u, [](ui32 sum, const TEvPQ::TEvWrite::TMsg& msg) {
         return sum + msg.Data.size();
     });
-
-    bool mirroredPartition = MirroringEnabled(Config);
 
     if (mirroredPartition && !ev->Get()->OwnerCookie.empty()) {
         ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -678,6 +693,13 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
         if (it->second.OwnerCookie != ev->Get()->OwnerCookie) {
             ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::WRONG_COOKIE,
                         TStringBuilder() << "incorrect ownerCookie " << ev->Get()->OwnerCookie << ", must be " << it->second.OwnerCookie);
+            return;
+        }
+
+        if (ev->Get()->ExternalDeduplicationStatus == TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Error) {
+            ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                TStringBuilder() << "Unable to check duplication info in parent partition");
+            DropOwner(it, ctx);
             return;
         }
 
@@ -1123,7 +1145,13 @@ ui32 TPartition::RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request)
 {
     ui32 curWrites = 0;
     for (ui32 i = 0; i < request->Record.CmdWriteSize(); ++i) { //change keys for yet to be writed KV pairs
-        auto key = TKey::FromString(request->Record.GetCmdWrite(i).GetKey());
+        const auto& k = request->Record.GetCmdWrite(i).GetKey();
+        if ((k.front() != TKeyPrefix::TypeTmpData) &&
+            (k.front() != TKeyPrefix::ServiceTypeTmpData)) {
+            continue;
+        }
+        // оптимизация. можно не создавать ключ. достаточно проверить первый символ и перевести с учётом типа партиции
+        auto key = TKey::FromString(k);
         if (key.GetType() == TKeyPrefix::TypeTmpData) {
             key.SetType(TKeyPrefix::TypeData);
             request->Record.MutableCmdWrite(i)->SetKey(key.Data(), key.Size());
@@ -1158,7 +1186,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     auto& sourceIdBatch = parameters.SourceIdBatch;
     auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);
 
-    AutopartitioningManager->OnWrite(p.Msg.SourceId, p.Msg.Data.size());
+    AutopartitioningManager->OnWrite(p.Msg.SourceId, p.Msg.Data.size(), p.Msg.ChoosePartitionKey);
 
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
     //check already written
@@ -1292,7 +1320,17 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         curOffset = poffset;
     }
 
-    auto deduplicationResult = DeduplicateByMessageId(p.Msg, curOffset);
+    std::optional<ui64> deduplicationResult;
+    if (p.Msg.ExternalDeduplicationInfo.Status == TEvPQ::TEvWrite::EMessageExternalDeduplicationStatus::Duplicate) {
+        if (const auto originalMessage = p.Msg.ExternalDeduplicationInfo.OriginalPartitionAndOffset; originalMessage.has_value()) {
+            deduplicationResult = originalMessage->Offset;
+        } else {
+            Y_VERIFY_DEBUG_S(false, "Duplicate has no source info");
+            deduplicationResult = 0;
+        }
+    } else {
+        deduplicationResult = DeduplicateByMessageId(p.Msg, curOffset);
+    }
     if (deduplicationResult) {
         LOG_D("Deduplicate message " << p.Msg.SeqNo << " by MessageDeduplicationId");
         p.DeduplicatedByMessageId = true;
@@ -1500,7 +1538,7 @@ void TPartition::AddNewFastWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TE
     }
 
     PQ_ENSURE(BlobEncoder.NewHeadKey.Size == 0);
-    BlobEncoder.NewHeadKey = {key, res.second, CurrentTimestamp, 0, MakeBlobKeyToken(key.ToString())};
+    BlobEncoder.NewHeadKey = {key, res.second, PendingWriteTimestamp, 0, MakeBlobKeyToken(key.ToString())};
 
     WriteCycleSize += write->GetValue().size();
     UpdateWriteBufferIsFullState(ctx.Now());
@@ -1592,8 +1630,15 @@ bool TPartition::RequestBlobQuota()
     }
 
     size_t quotaSize = 0;
+    size_t deduplicationIdQuotaSize = 0;
     for (auto& r : PendingRequests) {
         quotaSize += r.GetWriteSize();
+        if (r.IsWrite()) {
+            auto& write = r.GetWrite();
+            if (write.Msg.MessageDeduplicationId && write.Msg.PartNo == 0) {
+                ++deduplicationIdQuotaSize;
+            }
+        }
     }
 
     if (!quotaSize) {
@@ -1606,7 +1651,7 @@ bool TPartition::RequestBlobQuota()
     }
 
     RemovePendingRequests(QuotaWaitingRequests);
-    RequestBlobQuota(quotaSize);
+    RequestBlobQuota(quotaSize, deduplicationIdQuotaSize);
 
     return true;
 }
@@ -1797,7 +1842,7 @@ bool TPartition::WaitingForSubDomainQuota(const ui64 withSize) const {
     return UserDataSize() + withSize > ReserveSize();
 }
 
-void TPartition::RequestBlobQuota(size_t quotaSize)
+void TPartition::RequestBlobQuota(size_t quotaSize, size_t deduplicationIdQuotaSize)
 {
     LOG_T("TPartition::RequestBlobQuota.");
 
@@ -1805,6 +1850,7 @@ void TPartition::RequestBlobQuota(size_t quotaSize)
 
     TopicQuotaRequestCookie = NextTopicWriteQuotaRequestCookie++;
     BlobQuotaSize = quotaSize;
+    DeduplicationIdQuotaSize = deduplicationIdQuotaSize;
     RequestQuotaForWriteBlobRequest(quotaSize, TopicQuotaRequestCookie);
 }
 
@@ -1815,7 +1861,7 @@ void TPartition::ConsumeBlobQuota()
     }
 
     PQ_ENSURE(TopicQuotaRequestCookie != 0);
-    Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(BlobQuotaSize, TopicQuotaRequestCookie, {}));
+    Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(BlobQuotaSize, DeduplicationIdQuotaSize, TopicQuotaRequestCookie, {}));
 }
 
 } // namespace NKikimr::NPQ

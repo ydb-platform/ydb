@@ -4,8 +4,7 @@
 #include <yql/essentials/public/udf/udf_types.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 class TPrintVisitor: public INodeVisitor {
@@ -13,7 +12,7 @@ class TPrintVisitor: public INodeVisitor {
 
 public:
     struct TIndentScope {
-        TIndentScope(TPrintVisitor* self)
+        explicit TIndentScope(TPrintVisitor* self)
             : Self(self)
         {
             ++Self->Indent_;
@@ -26,7 +25,7 @@ public:
         TPrintVisitor* Self;
     };
 
-    TPrintVisitor(bool singleLine)
+    explicit TPrintVisitor(bool singleLine)
         : SingleLine_(singleLine)
         , Indent_(0)
     {
@@ -875,8 +874,7 @@ TString PrintNode(const TNode* node, bool singleLine) {
     return visitor.ToString();
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 
 template <>
 void Out<NKikimr::NMiniKQL::TType>(

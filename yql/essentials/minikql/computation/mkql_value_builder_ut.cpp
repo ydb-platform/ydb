@@ -12,14 +12,12 @@
 #include <arrow/scalar.h>
 #include <arrow/chunked_array.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 TString PgValueToNativeText(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId);
 TString PgValueToNativeBinary(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId);
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon
 
 namespace NKikimr {
 
@@ -44,7 +42,7 @@ public:
         , HolderFactory_(Alloc_.Ref(), MemInfo_, FunctionRegistry_.Get())
         , Builder_(HolderFactory_, NUdf::EValidatePolicy::Exception)
         , TypeInfoHelper_(new TTypeInfoHelper())
-        , FunctionTypeInfoBuilder_(NYql::UnknownLangVersion, Env_, TypeInfoHelper_, "", nullptr, {})
+        , FunctionTypeInfoBuilder_(NYql::UnknownLangVersion, Env_, TypeInfoHelper_, "", nullptr, TSourcePosition())
     {
         BoolOid_ = NYql::NPg::LookupType("bool").TypeId;
     }
@@ -341,10 +339,10 @@ private:
             UNIT_ASSERT(!isScalar);
             UNIT_ASSERT_VALUES_EQUAL(length, 5);
 
-            ArrowArray arrs[2];
-            Builder_.ExportArrowBlock(val1, 0, &arrs[0]);
+            std::array<ArrowArray, 2> arrs;
+            Builder_.ExportArrowBlock(val1, 0, arrs.data());
             Builder_.ExportArrowBlock(val1, 1, &arrs[1]);
-            NUdf::TUnboxedValue val2 = Builder_.ImportArrowBlock(arrs, 2, isScalar, *atype);
+            NUdf::TUnboxedValue val2 = Builder_.ImportArrowBlock(arrs.data(), 2, isScalar, *atype);
             const auto& d2 = TArrowBlock::From(val2).GetDatum();
             UNIT_ASSERT(d2.is_arraylike() && !d2.is_array());
             UNIT_ASSERT_VALUES_EQUAL(d2.length(), 5);

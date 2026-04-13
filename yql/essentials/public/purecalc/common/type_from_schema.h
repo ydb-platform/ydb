@@ -13,12 +13,12 @@ namespace NPureCalc {
 /**
  * Load struct type from yson. Use methods below to check returned type for correctness.
  */
-const TTypeAnnotationNode* MakeTypeFromSchema(const NYT::TNode&, TExprContext&);
+const TTypeAnnotationNode* MakeTypeFromSchema(const NYT::TNode&, TExprContext&, const TString& issueReportTarget);
 
 /**
  * Extend struct type with additional columns. Type of each extra column is loaded from yson.
  */
-const TStructExprType* ExtendStructType(const TStructExprType*, const THashMap<TString, NYT::TNode>&, TExprContext&);
+const TStructExprType* ExtendStructType(const TStructExprType*, const THashMap<TString, NYT::TNode>&, TExprContext&, const TString& issueReportTarget);
 
 /**
  * Check if the given type can be used as an input schema, i.e. it is a struct.

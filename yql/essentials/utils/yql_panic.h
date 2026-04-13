@@ -11,11 +11,12 @@ namespace NDetail {
 [[noreturn]] void YqlPanic(const ::NPrivate::TStaticBuf& file, int line, const char* function, const TStringBuf& condition, const TStringBuf& message);
 } // namespace NDetail
 
-#define YQL_ENSURE(CONDITION, ...)                                                                                                   \
-    do {                                                                                                                             \
-        if (Y_UNLIKELY(!(CONDITION))) {                                                                                              \
-            ::NYql::NDetail::YqlPanic(__SOURCE_FILE_IMPL__, __LINE__, __FUNCTION__, #CONDITION, TStringBuilder() << "" __VA_ARGS__); \
-        }                                                                                                                            \
+#define YQL_ENSURE(CONDITION, ...)                                                                                                                                                                \
+    do {                                                                                                                                                                                          \
+        static_assert(!std::is_array_v<std::remove_cvref_t<decltype(CONDITION)>>, "An array type always evaluates to true in a condition; this is likely an error in the condition expression."); \
+        if (Y_UNLIKELY(!(CONDITION))) {                                                                                                                                                           \
+            ::NYql::NDetail::YqlPanic(__SOURCE_FILE_IMPL__, __LINE__, __FUNCTION__, #CONDITION, TStringBuilder() << "" __VA_ARGS__);                                                              \
+        }                                                                                                                                                                                         \
     } while (0)
 
 } // namespace NYql

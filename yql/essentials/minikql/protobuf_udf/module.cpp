@@ -1,7 +1,6 @@
 #include "module.h"
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 using namespace NProtoBuf;
 
@@ -79,5 +78,4 @@ void TProtobufBase::BuildFunctionTypeInfo(
     }
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

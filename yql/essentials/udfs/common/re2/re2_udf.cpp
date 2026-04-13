@@ -9,6 +9,8 @@
 #include <util/charset/utf8.h>
 #include <util/string/cast.h>
 
+#include <utility>
+
 using namespace re2;
 using namespace NKikimr;
 using namespace NUdf;
@@ -79,7 +81,7 @@ enum EOptionsField: ui32 {
 
 struct TOptionsSchema {
     TType* StructType;
-    ui32 Indices[EOptionsField::Count];
+    std::array<ui32, EOptionsField::Count> Indices;
 };
 
 RE2::Options ExtractOptions(std::string_view pattern, TUnboxedValuePod optionsValue, const TOptionsSchema& schema, bool posix) {
@@ -124,11 +126,11 @@ public:
             const TOptionsSchema& optionsSchema,
             TSourcePosition pos,
             NYql::TLangVersion currentlangVersion,
-            const TRegexpGroups& regexpGroups = TRegexpGroups())
+            TRegexpGroups regexpGroups = TRegexpGroups())
             : Mode_(mode)
             , OptionsSchema_(optionsSchema)
             , Pos_(pos)
-            , RegexpGroups_(regexpGroups)
+            , RegexpGroups_(std::move(regexpGroups))
             , CurrentLangVersion_(currentlangVersion)
         {
         }
@@ -210,6 +212,7 @@ public:
             }
 
             if (mode == EMode::CAPTURE) {
+                // NOLINTNEXTLINE(modernize-avoid-c-arrays)
                 Captured_ = std::make_unique<StringPiece[]>(Regexp_->NumberOfCapturingGroups() + 1);
             }
 
@@ -268,7 +271,7 @@ private:
                     StringPiece text(piece);
                     std::vector<TUnboxedValue> matches;
                     for (StringPiece w; text.begin() < text.end() && RE2::FindAndConsume(&text, *Regexp_, &w);) {
-                        if (w.size() == 0 && !text.empty()) {
+                        if (w.empty() && !text.empty()) {
                             text.remove_prefix(1);
                         }
                         matches.emplace_back(valueBuilder->SubString(args[0], std::distance(piece.begin(), w.begin()), w.size()));
@@ -300,7 +303,7 @@ private:
     std::unique_ptr<RE2> Regexp_;
     const TRegexpGroups RegexpGroups_;
     EMode Mode_;
-    std::unique_ptr<StringPiece[]> Captured_;
+    std::unique_ptr<StringPiece[]> Captured_; // NOLINT(modernize-avoid-c-arrays)
     const TOptionsSchema OptionsSchema_;
     TSourcePosition Pos_;
     NYql::TLangVersion CurrentLangVersion_;
@@ -321,7 +324,7 @@ TOptionsSchema MakeOptionsSchema(::NKikimr::NUdf::IFunctionTypeInfoBuilder& buil
     TOptionsSchema ret;
     auto structBuilder = builder.Struct(EOptionsField::Count);
 #define FIELD_HANDLE(name, index, type, ...) structBuilder->AddField<type>(TStringRef::Of(#name), &ret.Indices[index]);
-    OPTIONS_MAP(FIELD_HANDLE)
+    OPTIONS_MAP(FIELD_HANDLE) // NOLINT(readability-container-data-pointer)
 #undef FIELD_HANDLE
 
     ret.StructType = structBuilder->Build();
@@ -333,7 +336,7 @@ private:
     const TOptionsSchema Schema_;
 
 public:
-    TOptions(const TOptionsSchema& schema)
+    explicit TOptions(const TOptionsSchema& schema)
         : Schema_(schema)
     {
     }
@@ -393,7 +396,7 @@ public:
 template <bool posix>
 class TIsValidRegexp: public TBoxedValue {
 public:
-    TIsValidRegexp(const TOptionsSchema optionsSchema)
+    explicit TIsValidRegexp(const TOptionsSchema optionsSchema)
         : OptionsSchema_(std::move(optionsSchema))
     {
     }

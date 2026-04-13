@@ -400,6 +400,7 @@ NApi::TCreateNodeOptions SerializeOptionsForCreate(
             NYson::TYsonString(NodeToYsonString(*options.Attributes_, NYson::EYsonFormat::Binary)));
     }
     result.IgnoreExisting = options.IgnoreExisting_;
+    result.IgnoreTypeMismatch = options.IgnoreTypeMismatch_;
     result.Recursive = options.Recursive_;
     return result;
 }
@@ -831,7 +832,7 @@ NApi::TFileWriterOptions SerializeOptionsForWriteFile(
             result.Config->UploadReplicationFactor = *writerOptions->UploadReplicationFactor_;
         }
         if (writerOptions->MinUploadReplicationFactor_) {
-            result.Config->MinUploadReplicationFactor = *writerOptions->UploadReplicationFactor_;
+            result.Config->MinUploadReplicationFactor = *writerOptions->MinUploadReplicationFactor_;
         }
         if (writerOptions->DesiredChunkSize_) {
             result.Config->DesiredChunkSize = *writerOptions->DesiredChunkSize_;
@@ -1059,6 +1060,7 @@ NApi::TTableReaderOptions SerializeOptionsForReadTable(
     }
     result.EnableRowIndex = options.ControlAttributes_.EnableRowIndex_;
     result.EnableRangeIndex = options.ControlAttributes_.EnableRangeIndex_;
+    result.OmitInaccessibleRows = options.OmitInaccessibleRows_;
     return result;
 }
 
@@ -1067,6 +1069,8 @@ NApi::TReadTablePartitionOptions SerializeOptionsForReadTablePartition(
 {
     NApi::TReadTablePartitionOptions result;
     SerializeSuppressableAccessTrackingOptions(&result, options);
+    result.EnableRowIndex = options.ControlAttributes_.EnableRowIndex_;
+    result.EnableRangeIndex = options.ControlAttributes_.EnableRangeIndex_;
     return result;
 }
 
@@ -1192,8 +1196,8 @@ NApi::TDistributedWriteSessionStartOptions SerializeOptionsForStartDistributedTa
     // TODO(achains): Uncomment when TMutatingOptions are supported in native client distributed API.
     // SetMutationId(&result, mutationId);
 
-    if (options.Timeout_) {
-        result.Timeout = *options.Timeout_;
+    if (options.SessionTimeout_) {
+        result.SessionTimeout = *options.SessionTimeout_;
     }
 
     return result;
@@ -1223,8 +1227,8 @@ NApi::TDistributedWriteFileSessionStartOptions SerializeOptionsForStartDistribut
     // TODO(achains): Uncomment when TMutatingOptions are supported in native client distributed API.
     // SetMutationId(&result, mutationId);
 
-    if (options.Timeout_) {
-        result.Timeout = *options.Timeout_;
+    if (options.SessionTimeout_) {
+        result.SessionTimeout = *options.SessionTimeout_;
     }
 
     return result;

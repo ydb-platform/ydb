@@ -6,8 +6,6 @@
 
 #include <yt/yt/library/profiling/sensor.h>
 
-#include <library/cpp/yt/memory/free_list.h>
-
 #include <array>
 
 namespace NYT {
@@ -42,7 +40,7 @@ private:
 
     struct TLargeArenaDeleter
     {
-        void operator() (TLargeArena* arena);
+        void operator()(TLargeArena* arena);
     };
 
     static constexpr int SmallRankCount = 23;

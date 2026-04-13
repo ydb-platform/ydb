@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                  */
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
                     auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
-                    for (auto& [shardId, nodeId]: msg->ShardNodes) {
+                    for (auto& [shardId, nodeId]: msg->ShardsToNodes) {
                         Cerr << "-- nodeId: " << nodeId << Endl;
                         Cerr.Flush();
                         nodeId = runtime.GetNodeId(0);
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                  */
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
                     auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
-                    for (auto& [shardId, nodeId]: msg->ShardNodes) {
+                    for (auto& [shardId, nodeId]: msg->ShardsToNodes) {
                         nodeId = firstNodeId;
                     }
                     break;
@@ -287,7 +287,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
                     auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
-                    for (auto& [shardId, nodeId]: msg->ShardNodes) {
+                    for (auto& [shardId, nodeId]: msg->ShardsToNodes) {
                         tabletId = shardId;
                         Cerr << (TStringBuilder() << "-- tabletId= " << tabletId << Endl);
                         Cerr.Flush();
@@ -404,7 +404,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
                     auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
-                    for (auto& [shardId, nodeId]: msg->ShardNodes) {
+                    for (auto& [shardId, nodeId]: msg->ShardsToNodes) {
                         tabletId = shardId;
                         Cerr << (TStringBuilder() << "-- tabletId= " << tabletId << Endl);
                         Cerr.Flush();
@@ -533,7 +533,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             switch (ev->GetTypeRewrite()) {
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
                     auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
-                    for (auto& [shardId, nodeId]: msg->ShardNodes) {
+                    for (auto& [shardId, nodeId]: msg->ShardsToNodes) {
                         tabletId = shardId;
                         Cerr << (TStringBuilder() << "-- tabletId= " << tabletId << Endl);
                         Cerr.Flush();
@@ -644,7 +644,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                  */
                 case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
                     auto* msg = ev->Get<NKqp::NShardResolver::TEvShardsResolveStatus>();
-                    for (auto& [shardId, nodeId]: msg->ShardNodes) {
+                    for (auto& [shardId, nodeId]: msg->ShardsToNodes) {
                         Cerr << "-- nodeId: " << nodeId << Endl;
                         nodeId = runtime.GetNodeId(0);
                     }

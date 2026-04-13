@@ -40,7 +40,7 @@ void TTreeElement::UpdateBottomUp(ui64 totalLimit) {
     Guarantee = Min<ui64>(GetGuarantee(), Demand);
 }
 
-void TTreeElement::UpdateTopDown(bool allowFairShareOverlimit) {
+void TTreeElement::UpdateTopDown(ELeafFairShare fairShareMode) {
     if (IsRoot()) {
         FairShare = Demand;
     }
@@ -73,7 +73,20 @@ void TTreeElement::UpdateTopDown(bool allowFairShareOverlimit) {
                 child->FairShare = 0;
             }
 
-            child->UpdateTopDown(allowFairShareOverlimit);
+            child->UpdateTopDown(fairShareMode);
+        });
+    }
+    // All-equal variant (when children are queries)
+    // TODO: it's workaround mode - should not be used in the future.
+    else if (fairShareMode == ELeafFairShare::EQUAL_TO_PARENT) {
+        ForEachChild<TQuery>([&](TQuery* query, size_t) {
+            if (query->Demand > 0) {
+                query->FairShare = FairShare;
+            }
+
+            if (auto originalQuery = query->Origin.lock()) {
+                originalQuery->SetSnapshot(query->shared_from_this());
+            }
         });
     }
     // FIFO variant (when children are queries)
@@ -81,7 +94,7 @@ void TTreeElement::UpdateTopDown(bool allowFairShareOverlimit) {
         // TODO: stable sort children by weight
 
         auto leftFairShare = FairShare;
-        allowFairShareOverlimit = allowFairShareOverlimit && (leftFairShare > 0);
+        bool allowFairShareOverlimit = (fairShareMode == ELeafFairShare::ALLOW_OVERLIMIT) && (leftFairShare > 0);
 
         // Give at least 1 fair-share for each demanding child
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) -> bool {

@@ -15,7 +15,7 @@
 #include "helpers.h"
 
 #define BUF_SIZE	4096
-#define NR_BUFS		64
+#define NR_BUFS		128
 #define FSIZE		(BUF_SIZE * NR_BUFS)
 
 #define BR_MASK		(NR_BUFS - 1)
@@ -88,7 +88,7 @@ static int test(const char *filename, int dio, int async)
 	}
 	io_uring_buf_ring_advance(br, NR_BUFS);
 
-	for (i = 0; i < NR_BUFS; i++) {
+	for (i = 0; i < NR_BUFS / 2; i++) {
 		sqe = io_uring_get_sqe(&ring);
 		io_uring_prep_read(sqe, fd, NULL, BUF_SIZE, i * BUF_SIZE);
 		sqe->buf_group = 1;
@@ -99,12 +99,12 @@ static int test(const char *filename, int dio, int async)
 	}
 
 	ret = io_uring_submit(&ring);
-	if (ret != NR_BUFS) {
+	if (ret != NR_BUFS / 2) {
 		fprintf(stderr, "submit: %d\n", ret);
 		return 1;
 	}
 
-	for (i = 0; i < NR_BUFS; i++) {
+	for (i = 0; i < NR_BUFS / 2; i++) {
 		int bid, ud;
 
 		ret = io_uring_wait_cqe(&ring, &cqe);

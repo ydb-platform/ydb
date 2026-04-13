@@ -238,7 +238,7 @@ struct IServiceContext
     //! Changes the response codec.
     virtual void SetResponseCodec(NCompression::ECodec codec) = 0;
 
-    // COPMAT(danilalexeev)
+    // COMPAT(danilalexeev): legacy RPC codecs
     //! Returnes true if response body has been serialized with compression.
     virtual bool IsResponseBodySerializedWithCompression() const = 0;
     virtual void SetResponseBodySerializedWithCompression() = 0;
@@ -265,6 +265,9 @@ struct IServiceContext
 
     //! Replies with a given message when the latter is set.
     void ReplyFrom(TFuture<TSharedRefArray> asyncMessage);
+
+    //! The same as ReplyFrom() but sets response info.
+    void ReplyAndLogFrom(bool incremental, TFuture<std::pair<TSharedRefArray, std::string>> asyncMessages);
 
     //! Replies with a given error when the latter is set.
     void ReplyFrom(TFuture<void> asyncError);

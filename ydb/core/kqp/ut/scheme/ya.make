@@ -3,19 +3,22 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    SIZE(LARGE)
-    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+IF (SANITIZER_TYPE)
+    SIZE(MEDIUM)
+    REQUIREMENTS(cpu:4)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(cpu:2)
 ENDIF()
 
 SRCS(
     kqp_acl_ut.cpp
     kqp_constraints_ut.cpp
     kqp_scheme_ut.cpp
-    kqp_scheme_fulltext_ut.cpp
     kqp_secrets_ut.cpp
+    kqp_scheme_fulltext_ut.cpp
+    kqp_scheme_type_info_ut.cpp
+    kqp_user_management_ut.cpp
 )
 
 PEERDIR(
@@ -24,6 +27,8 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/core/kqp/workload_service/ut/common
     ydb/core/tx/columnshard/hooks/testing
+    ydb/public/sdk/cpp/src/client/arrow
+    ydb/public/sdk/cpp/src/client/draft
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
 )

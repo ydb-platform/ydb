@@ -43,6 +43,24 @@
 using namespace NYql;
 using namespace NYql::NPureCalc;
 
+namespace {
+
+NSQLTranslation::TSqlFlags GetSqlFlags(EBlockEngineMode blockEngineMode) {
+    NSQLTranslation::TSqlFlags flags = {
+        "AnsiOrderByLimitInUnionAll",
+        "AnsiRankForNullableKeys",
+        "DisableAnsiOptionalAs",
+        "DisableCoalesceJoinKeysOnQualifiedAll",
+        "DisableUnorderedSubqueries",
+        "FlexibleTypes"};
+    if (blockEngineMode != EBlockEngineMode::Disable) {
+        flags.insert("EmitAggApply");
+    }
+    return flags;
+}
+
+} // namespace
+
 template <typename TBase>
 TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorMode processorMode)
     : Factory_(std::move(options.Factory))
@@ -57,6 +75,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     , UseSystemColumns_(options.UseSystemColumns)
     , UseWorkerPool_(options.UseWorkerPool)
     , LangVer_(options.LangVer)
+    , IssueReportTarget_(options.IssueReportTarget)
 {
     HandleInternalSettings(options.InternalSettings);
 
@@ -71,13 +90,13 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     const auto inputsCount = inputSchemas.size();
 
     for (ui32 i = 0; i < inputsCount; ++i) {
-        const auto* originalInputType = MakeTypeFromSchema(inputSchemas[i], ExprContext_);
+        const auto* originalInputType = MakeTypeFromSchema(inputSchemas[i], ExprContext_, IssueReportTarget_);
         if (!ValidateInputSchema(originalInputType, ExprContext_, *typeCtx)) {
             ythrow TCompileError("", GetIssues().ToString()) << "invalid schema for #" << i << " input";
         }
 
         const auto* originalStructType = originalInputType->template Cast<TStructExprType>();
-        const auto* structType = ExtendStructType(originalStructType, allVirtualColumns[i], ExprContext_);
+        const auto* structType = ExtendStructType(originalStructType, allVirtualColumns[i], ExprContext_, IssueReportTarget_);
 
         InputTypes_.push_back(structType);
         OriginalInputTypes_.push_back(originalStructType);
@@ -99,7 +118,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
 
     auto outputSchema = options.OutputSpec.GetSchema();
     if (!outputSchema.IsNull()) {
-        OutputType_ = MakeTypeFromSchema(outputSchema, ExprContext_);
+        OutputType_ = MakeTypeFromSchema(outputSchema, ExprContext_, IssueReportTarget_);
         if (!ValidateOutputSchema(OutputType_, ExprContext_, *typeCtx)) {
             ythrow TCompileError("", GetIssues().ToString()) << "invalid output schema";
         }
@@ -172,6 +191,14 @@ TIntrusivePtr<TTypeAnnotationContext> TWorkerFactory<TBase>::PrepareTypeContext(
     auto configProvider = CreateConfigProvider(*typeContext, nullptr, "");
     typeContext->AddDataSource(ConfigProviderName, configProvider);
     typeContext->Initialize(ExprContext_);
+    typeContext->SqlFlags = GetSqlFlags(BlockEngineMode_);
+
+    if (BlockEngineMode_ != EBlockEngineMode::Disable) {
+        typeContext->OptimizerFlags.insert(to_lower(ToString("ExpandLMapOrShuffleByKeysViaBlock")));
+        typeContext->OptimizerFlags.insert(to_lower(ToString("PromoteExpandLMapOrShuffleByKeys")));
+        typeContext->OptimizerFlags.insert(to_lower(ToString("ToFlowOverCollect")));
+        typeContext->OptimizerFlags.insert(to_lower(ToString("ToFlowOverIteratorWithDepends")));
+    }
 
     if (auto modules = dynamic_cast<TModuleResolver*>(moduleResolver.get())) {
         modules->AttachUserData(typeContext->UserDataStorage);
@@ -217,7 +244,6 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         settings.LangVer = LangVer_;
         settings.SyntaxVersion = syntaxVersion;
         settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
-        settings.EmitReadsForExists = true;
         settings.Antlr4Parser = true;
         settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
         settings.DefaultCluster = PurecalcDefaultCluster;
@@ -225,16 +251,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         settings.ModuleMapping = modules;
         settings.EnableGenericUdfs = true;
         settings.File = "generated.sql";
-        settings.Flags = {
-            "AnsiOrderByLimitInUnionAll",
-            "AnsiRankForNullableKeys",
-            "DisableAnsiOptionalAs",
-            "DisableCoalesceJoinKeysOnQualifiedAll",
-            "DisableUnorderedSubqueries",
-            "FlexibleTypes"};
-        if (BlockEngineMode_ != EBlockEngineMode::Disable) {
-            settings.Flags.insert("EmitAggApply");
-        }
+        settings.Flags = GetSqlFlags(BlockEngineMode_);
         for (const auto& [key, block] : UserData_) {
             TStringBuf alias(key.Alias());
             if (block.Usage.Test(EUserDataBlockUsage::Library) && !alias.StartsWith("/lib")) {
@@ -517,7 +534,7 @@ const THashSet<TString>& TWorkerFactory<TBase>::GetUsedColumns() const {
 template <typename TBase>
 TIssues TWorkerFactory<TBase>::GetIssues() const {
     auto issues = ExprContext_.IssueManager.GetCompletedIssues();
-    CheckFatalIssues(issues);
+    CheckFatalIssues(issues, IssueReportTarget_);
     return issues;
 }
 
@@ -573,12 +590,10 @@ DEFINE_WORKER_MAKER(PullStream)
 DEFINE_WORKER_MAKER(PullList)
 DEFINE_WORKER_MAKER(PushStream)
 
-namespace NYql {
-namespace NPureCalc {
+namespace NYql::NPureCalc {
 template class TWorkerFactory<IPullStreamWorkerFactory>;
 
 template class TWorkerFactory<IPullListWorkerFactory>;
 
 template class TWorkerFactory<IPushStreamWorkerFactory>;
-} // namespace NPureCalc
-} // namespace NYql
+} // namespace NYql::NPureCalc

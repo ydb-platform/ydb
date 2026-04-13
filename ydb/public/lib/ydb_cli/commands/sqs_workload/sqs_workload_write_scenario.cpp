@@ -4,33 +4,43 @@
 
 namespace NYdb::NConsoleClient {
 
-    int TSqsWorkloadWriteScenario::Run(const TClientCommand::TConfig&) {
-        auto statsCollector = std::make_shared<TSqsWorkloadStatsCollector>(
-            Concurrency, 0, Quiet, PrintTimestamp, WindowSec.Seconds(),
-            TotalSec.Seconds(), 0, Percentile, ErrorFlag);
-        InitMeasuringHttpClient(statsCollector);
-        InitSqsClient();
+    int TSqsWorkloadWriteScenario::Run(const TClientCommand::TConfig& config) {
+        InitAwsSdk();
+        auto result = RunScenario(config);
+        DestroyAwsSdk();
+        return result;
+    }
+
+    int TSqsWorkloadWriteScenario::RunScenario(const TClientCommand::TConfig& config) {
+        InitStatsCollector(WorkersCount, 0);
+        InitMeasuringHttpClient(StatsCollector);
+        InitSqsClient(config);
 
         auto finishedFlag = std::make_shared<std::atomic_bool>(false);
+        auto queueUrl = GetQueueUrl(Topic, Consumer, QueueName);
+        if (queueUrl.empty()) {
+            DestroySqsClient();
+            return EXIT_FAILURE;
+        }
 
         TSqsWorkloadWriterParams params{
             .TotalSec = TotalSec,
-            .QueueUrl = QueueUrl,
-            .Account = Account,
-            .Token = Token,
+            .QueueUrl = queueUrl,
+            .AwsAccessKeyId = AwsAccessKeyId,
+            .AwsSessionToken = AwsSessionToken,
+            .AwsSecretKey = AwsSecretKey,
             .Log = Log,
             .Mutex = Mutex,
             .FinishedCond = FinishedCond,
             .StartedCount = StartedCount,
             .ErrorFlag = ErrorFlag,
             .SqsClient = SqsClient,
-            .StatsCollector = statsCollector,
+            .StatsCollector = StatsCollector,
             .MaxUniqueMessages = MaxUniqueMessages,
             .BatchSize = BatchSize,
-            .Concurrency = Concurrency,
+            .WorkersCount = WorkersCount,
             .GroupsAmount = GroupsAmount,
             .MessageSize = MessageSize,
-            .SetSubjectToken = SetSubjectToken,
         };
 
         auto f = std::async([&params, finishedFlag]() {
@@ -50,7 +60,7 @@ namespace NYdb::NConsoleClient {
 
         DestroySqsClient();
 
-        if (AnyErrors()) {
+        if (AnyErrors() || params.StatsCollector->GetTotalWriteMessages() == 0) {
             return EXIT_FAILURE;
         }
 

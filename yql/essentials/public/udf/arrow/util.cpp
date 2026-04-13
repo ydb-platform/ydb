@@ -8,8 +8,7 @@
 #include <arrow/record_batch.h>
 #include <arrow/util/bitmap_ops.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 namespace {
 
@@ -177,5 +176,4 @@ const TType* SkipTaggedType(const ITypeInfoHelper& typeInfoHelper, const TType* 
 
     return type;
 }
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

@@ -132,9 +132,6 @@
     "name": "yt.EnableDynamicStoreReadInDQ"
   },
   {
-    "name": "yt.EnableFuseMapToMapReduce"
-  },
-  {
     "name": "yt.EnforceJobUtc"
   },
   {
@@ -181,6 +178,9 @@
   },
   {
     "name": "yt.ForceTmpSecurity"
+  },
+  {
+    "name": "yt.FuseMapToMapReduce"
   },
   {
     "name": "yt.GeobaseDownloadUrl"
@@ -465,6 +465,9 @@
     "name": "yt.QueryCacheChunkLimit"
   },
   {
+    "name": "yt.QueryCacheCombineChunksReplace"
+  },
+  {
     "name": "yt.QueryCacheIgnoreTableRevision"
   },
   {
@@ -592,6 +595,9 @@
   },
   {
     "name": "yt.TmpFolder"
+  },
+  {
+    "name": "yt.TmpSecurity"
   },
   {
     "name": "yt.TopSortMaxLimit"
@@ -1059,6 +1065,9 @@
     "name": "DisableWarnUntypedStringLiterals"
   },
   {
+    "name": "DisableWindowNewPipeline"
+  },
+  {
     "name": "DiscoveryMode"
   },
   {
@@ -1102,6 +1111,9 @@
   },
   {
     "name": "FailOnGroupByExprOverride"
+  },
+  {
+    "name": "FailOnNonPersistableFlattenAndAggrExprs"
   },
   {
     "name": "FeatureR010"
@@ -1237,6 +1249,9 @@
   },
   {
     "name": "WarningMsg"
+  },
+  {
+    "name": "WindowNewPipeline"
   },
   {
     "name": "YqlSelect"

@@ -599,6 +599,7 @@ message TInterconnectDebug {
     optional uint64 Duration = 10;
     optional bool UseProtobufWithPayload = 11;
     optional string ServicePool = 12;
+    optional uint32 NumLoadActors = 15 [default = 1];
 
     optional uint32 ClosePeerSocketNodeId = 100;
     optional uint32 CloseInputSessionNodeId = 101;

@@ -3,19 +3,40 @@
 #include <yql/essentials/sql/v1/highlight/sql_highlight.h>
 #include <yql/essentials/sql/v1/highlight/sql_highlighter.h>
 
-#include <util/charset/utf8.h>
-#include <util/string/strip.h>
+#include <contrib/restricted/patched/replxx/src/util.hxx>
 
-#include <regex>
+#include <util/charset/utf8.h>
+#include <util/string/builder.h>
+#include <util/string/strip.h>
 
 namespace NYdb::NConsoleClient {
     using NSQLHighlight::MakeHighlighter;
     using NSQLHighlight::MakeHighlighting;
 
-    class TYQLHighlighter: public IYQLHighlighter {
-    private:
-        static constexpr size_t InvalidPosition = Max<std::ptrdiff_t>();
+namespace {
 
+    static constexpr size_t InvalidPosition = Max<std::ptrdiff_t>();
+
+    TVector<std::ptrdiff_t> BuildSymbolByByteIndex(TStringBuf text) {
+        TVector<std::ptrdiff_t> index(text.size(), InvalidPosition);
+        for (size_t i = 0, j = 0; i < text.size(); i += UTF8RuneLen(text[i]), j += 1) {
+            index[i] = j;
+        }
+        return index;
+    }
+
+    ftxui::Color ToFtxuiColor(replxx::Replxx::Color rColor) {
+        const int colorIndex = static_cast<int>(rColor);
+        if (rColor == replxx::Replxx::Color::DEFAULT || colorIndex < 0) {
+            return ftxui::Color::Default;
+        }
+
+        return ftxui::Color::Palette256(static_cast<uint8_t>(colorIndex));
+    }
+
+} // anonymous namespace
+
+    class TYQLHighlighter: public IYQLHighlighter {
     public:
         explicit TYQLHighlighter(TColorSchema color)
             : Coloring(color)
@@ -75,18 +96,81 @@ namespace NYdb::NConsoleClient {
             }
         }
 
-        static TVector<std::ptrdiff_t> BuildSymbolByByteIndex(TStringBuf text) {
-            TVector<std::ptrdiff_t> index(text.size(), InvalidPosition);
-            for (size_t i = 0, j = 0; i < text.size(); i += UTF8RuneLen(text[i]), j += 1) {
-                index[i] = j;
-            }
-            return index;
-        }
-
     private:
         TColorSchema Coloring;
         NSQLHighlight::IHighlighter::TPtr Highlighter;
     };
+
+    TString PrintYqlHighlightAnsiColors(const TString& queryUtf8, const TColors& colors) {
+        TStringBuilder result;
+
+        replxx::Replxx::Color lastColor = replxx::Replxx::Color::DEFAULT;
+        result << replxx::ansi_color(lastColor);
+
+        const TVector<std::ptrdiff_t> symbolIndexByByte = BuildSymbolByByteIndex(queryUtf8);
+        for (size_t i = 0; i < queryUtf8.length(); ++i) {
+            if (symbolIndexByByte[i] != InvalidPosition && colors[symbolIndexByByte[i]] != lastColor) {
+                result << replxx::ansi_color(colors[symbolIndexByByte[i]]);
+                lastColor = colors[symbolIndexByByte[i]];
+            }
+            result << queryUtf8[i];
+        }
+
+        result << replxx::ansi_color(replxx::Replxx::Color::DEFAULT);
+        return result;
+    }
+
+    ftxui::Element PrintYqlHighlightFtxuiColors(const TString& queryUtf8, const TColors& colors) {
+        std::vector<ftxui::Element> rows;
+        std::vector<ftxui::Element> currentRow;
+        std::string currentSegment;
+
+        replxx::Replxx::Color lastColor = replxx::Replxx::Color::DEFAULT;
+        const TVector<std::ptrdiff_t> symbolIndexByByte = BuildSymbolByByteIndex(queryUtf8);
+
+        auto flushSegment = [&]() {
+            if (!currentSegment.empty()) {
+                currentRow.push_back(
+                    ftxui::text(currentSegment) | ftxui::color(ToFtxuiColor(lastColor))
+                );
+                currentSegment.clear();
+            }
+        };
+
+        for (size_t i = 0; i < queryUtf8.length(); ++i) {
+            const char c = queryUtf8[i];
+
+            if (c == '\n') {
+                flushSegment();
+                rows.push_back(ftxui::hflow(std::move(currentRow)));
+                currentRow = {};
+                continue;
+            }
+
+            if (const auto symbolIndex = symbolIndexByByte[i]; symbolIndex != InvalidPosition) {
+                if (const auto currentColor = colors[symbolIndex]; currentColor != lastColor) {
+                    flushSegment();
+                    lastColor = currentColor;
+                }
+            }
+
+            if (c == ' ') {
+                flushSegment();
+                currentRow.push_back(ftxui::text(" ") | ftxui::color(ToFtxuiColor(lastColor)));
+                continue;
+            }
+
+            currentSegment += c;
+        }
+
+        flushSegment();
+
+        if (!currentRow.empty()) {
+            rows.push_back(ftxui::hflow(std::move(currentRow)));
+        }
+
+        return ftxui::vbox(std::move(rows));
+    }
 
     IYQLHighlighter::TPtr MakeYQLHighlighter(TColorSchema color) {
         return IYQLHighlighter::TPtr(new TYQLHighlighter(std::move(color)));

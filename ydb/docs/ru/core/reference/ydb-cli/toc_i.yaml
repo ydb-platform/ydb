@@ -45,8 +45,6 @@ items:
       href: commands/explain-plan.md
     - name: Потоковое чтение таблицы
       href: commands/readtable.md
-    - name: Скан запросы
-      href: commands/scan-query.md
   - name: Выгрузка и загрузка данных
     include:
       mode: link
@@ -142,6 +140,8 @@ items:
       href: workload-tpch.md
     - name: TPC-DS нагрузка
       href: workload-tpcds.md
+    - name: Пользовательская нагрузка
+      href: workload-query.md
   - name: Работа с конфигурацией
     href: configs.md
     include:

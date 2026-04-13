@@ -91,7 +91,7 @@ static int test(struct io_uring *ring, int with_iowait, int cpu)
 	io_uring_cqe_seen(ring, cqe);
 
 	if (with_iowait) {
-		if (diff < 90) {
+		if (diff < 50) {
 			fprintf(stderr, "iowait diff too small: %d\n", diff);
 			return T_EXIT_FAIL;
 		}

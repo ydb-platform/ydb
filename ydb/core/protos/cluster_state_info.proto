@@ -1,4 +1,6 @@
+import "ydb/core/protos/cms.proto";
 import "ydb/core/protos/blobstorage_config.proto";
+import "ydb/core/protos/blobstorage_distributed_config.proto";
 import "ydb/core/protos/kqp.proto";
 import "ydb/core/protos/bridge.proto";
 import "ydb/core/protos/node_whiteboard.proto";
@@ -40,4 +42,7 @@ message TClusterStateInfo {
     repeated TClusterStateQueryInfo Queries = 4;
     optional NKikimrBridge.TClusterState BridgeClusterState = 5;
     optional NKikimrBridge.TClusterStateDetails BridgeClusterStateDetails = 6;
+    optional NKikimrBlobStorage.TStorageConfig StorageConfig = 7;
+    optional NKikimrBlobStorage.TStateStorageConfig StateStorageConfig = 8;
+    optional NKikimrCms.TGetSentinelStateResponse SentinelState = 9;
 }

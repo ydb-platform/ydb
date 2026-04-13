@@ -10,7 +10,7 @@ TControlWrapper PredictedDelayMultiplierDefaultControl =
 
 TControlWrapper MaxNumOfSlowDisksDefaultControl =
         TControlWrapper(DefaultMaxNumOfSlowDisks, 1, 2);
-        
+
 TControlWrapper LongRequestThresholdDefaultControl =
         TControlWrapper(DefaultLongRequestThreshold.MilliSeconds(), 1, 1'000'000);
 

@@ -40,7 +40,7 @@ void SetCurrentFiberId(TFiberId id);
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Blocks the current fiber until #future is set.
-//! The fiber is resceduled to #invoker.
+//! The fiber is rescheduled to #invoker.
 void WaitUntilSet(
     TFuture<void> future,
     IInvokerPtr invoker = GetCurrentInvoker());
@@ -58,13 +58,6 @@ TErrorOr<typename TFuture::TValueType> WaitFor(
 template <CFuture TFuture>
 TErrorOr<typename TFuture::TValueType> WaitForFast(
     TFuture future);
-
-//! Similar to #WaitFor but extracts the value from #future via |GetUnique|.
-// TODO(babenko): deprecated, see YT-26319
-template <class T>
-[[nodiscard]] TErrorOr<T> WaitForUnique(
-    TFuture<T> future,
-    IInvokerPtr invoker = GetCurrentInvoker());
 
 //! A possibly blocking version of #WaitFor.
 template <CFuture TFuture>

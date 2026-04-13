@@ -24,13 +24,13 @@ struct TStorageResources {
 
     void Add(const TLeaderTabletInfo::TChannel& channel) {
         IOPS += channel.ChannelInfo->GetIOPS();
-        Throughput += channel.ChannelInfo->GetIOPS();
+        Throughput += channel.ChannelInfo->GetThroughput();
         Size += channel.ChannelInfo->GetSize();
     }
 
     void Subtract(const TLeaderTabletInfo::TChannel& channel) {
         IOPS -= channel.ChannelInfo->GetIOPS();
-        Throughput -= channel.ChannelInfo->GetIOPS();
+        Throughput -= channel.ChannelInfo->GetThroughput();
         Size -= channel.ChannelInfo->GetSize();
     }
 };

@@ -28,6 +28,7 @@ import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_topic.proto";
 import "ydb/public/api/protos/ydb_value.proto";
+import "ydb/public/api/protos/annotations/sensitive.proto";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
@@ -93,6 +94,11 @@ enum EMvccState {
     MvccDisabled = 2;
 }
 
+message TColumnCompression {
+    optional string Algorithm = 1;
+    optional int64 Level = 2;
+}
+
 message TColumnDescription {
     optional string Name = 1;
     optional string Type = 2;
@@ -110,6 +116,7 @@ message TColumnDescription {
     // flag that indicates that column is currently under the build
     // operation.
     optional bool IsBuildInProgress = 11 [default = false];
+    optional TColumnCompression Compression = 13;
 }
 
 message TStorageSettings {
@@ -202,6 +209,7 @@ message TPartitionConfig {
     repeated NKikimrHive.TFollowerGroup FollowerGroups = 23;
     reserved 24; // EMvccState MvccState = 24; no longer used
     optional uint64 KeepSnapshotTimeout = 25; // milliseconds
+    repeated uint32 ByKeyFilterPrefixes = 26; // Build per-part bloom filters on PK prefixes of these lengths (number of leading key columns)
 }
 
 message TSplitBoundary {
@@ -350,10 +358,11 @@ message TTableDescription {
     // Skip automatic index/impl table copying - indexes will be handled separately
     optional bool OmitIndexes = 47 [default = false];
     optional TDropCdcStream DropSrcCdcStream = 48;
-}
+    // Coordinated schema version for backup operations - persisted with AlterData
+    optional uint64 CoordinatedSchemaVersion = 49;
 
-message TDictionaryEncodingSettings {
-   optional bool Enabled = 1;
+    // For unique indexes - number of leading PK columns which should have unique values (for correct locking)
+    optional uint32 UniqueIndexKeySize = 50;
 }
 
 message TCompressionOptions {
@@ -373,12 +382,12 @@ message TOlapColumn {
 
 message TOlapColumnDiff {
     optional string Name = 1;
-    optional TDictionaryEncodingSettings DictionaryEncoding = 4;
+    reserved 4;
     optional TOlapColumn.TSerializer Serializer = 5;
     optional string StorageId = 6;
     optional string DefaultValue = 7;
     optional NKikimrArrowAccessorProto.TRequestedConstructor DataAccessorConstructor = 8;
-    optional string ColumnFamilyName = 9;
+    optional string ColumnFamilyName = 9 [deprecated = true];
 }
 
 message TOlapColumnDescription {
@@ -393,14 +402,14 @@ message TOlapColumnDescription {
     optional NKikimrProto.TTypeInfo TypeInfo = 6;
     optional bool NotNull = 7;
 
-    optional TCompressionOptions Compression = 8[deprecated = true];
-    optional TDictionaryEncodingSettings DictionaryEncoding = 9;
+    optional TCompressionOptions Compression = 8 [deprecated = true];
+    reserved 9;
     optional TOlapColumn.TSerializer Serializer = 10;
     optional string StorageId = 11;
     optional NKikimrColumnShardColumnDefaults.TColumnDefault DefaultValue = 12;
     optional NKikimrArrowAccessorProto.TConstructor DataAccessorConstructor = 13;
-    optional uint32 ColumnFamilyId = 14;
-    optional string ColumnFamilyName = 15;
+    optional uint32 ColumnFamilyId = 14 [deprecated = true];
+    optional string ColumnFamilyName = 15 [deprecated = true];
 }
 
 message TIndexDataExtractor {
@@ -431,7 +440,7 @@ message TSkipIndexBitSetStorage {
 }
 
 message TRequestedBloomFilter {
-    optional double FalsePositiveProbability = 1 [default = 0.1];
+    optional double FalsePositiveProbability = 1;
     repeated string ColumnNames = 3;
     optional TIndexDataExtractor DataExtractor = 4;
     optional TSkipIndexBitSetStorage BitsStorage = 5;
@@ -445,11 +454,17 @@ message TRequestedBloomNGrammFilter {
     optional uint32 RecordsCount = 5;
     optional TIndexDataExtractor DataExtractor = 6;
     optional TSkipIndexBitSetStorage BitsStorage = 7;
-    optional bool CaseSensitive = 8 [default = true];
+    optional bool CaseSensitive = 8;
+    optional double FalsePositiveProbability = 9;
 }
 
 message TRequestedMaxIndex {
     optional string ColumnName = 1;
+}
+
+message TRequestedMinMaxIndex {
+    optional string ColumnName = 1;
+    optional TIndexDataExtractor DataExtractor = 2;
 }
 
 message TRequestedCountMinSketch {
@@ -469,12 +484,19 @@ message TOlapIndexRequested {
         TRequestedMaxIndex MaxIndex = 41;
         TRequestedCountMinSketch CountMinSketch = 42;
         TRequestedBloomNGrammFilter BloomNGrammFilter = 43;
+        TRequestedMinMaxIndex MinMaxIndex = 44;
     }
 }
 
+message TOlapMoveIndex {
+    optional string SourceName = 1;
+    optional string DestinationName = 2;
+    optional bool ReplaceDestination = 3 [default = false];
+}
+
 message TBloomFilter {
-    optional double FalsePositiveProbability = 1 [default = 0.1];
-    optional uint64 MaxBytesCount = 2 [default = 8196];
+    optional double FalsePositiveProbability = 1;
+    optional uint64 MaxBytesCount = 2;
     repeated uint32 ColumnIds = 3;
     optional TIndexDataExtractor DataExtractor = 4;
     optional TSkipIndexBitSetStorage BitsStorage = 5;
@@ -488,11 +510,17 @@ message TBloomNGrammFilter {
     optional uint32 RecordsCount = 5;
     optional TIndexDataExtractor DataExtractor = 6;
     optional TSkipIndexBitSetStorage BitsStorage = 7;
-    optional bool CaseSensitive = 8 [default = true];
+    optional bool CaseSensitive = 8;
+    optional double FalsePositiveProbability = 9;
 }
 
 message TMaxIndex {
     optional uint32 ColumnId = 1;
+}
+
+message TMinMaxIndex {
+    optional uint32 ColumnId = 1;
+    optional TIndexDataExtractor DataExtractor = 2;
 }
 
 message TCountMinSketch {
@@ -515,6 +543,7 @@ message TOlapIndexDescription {
         TMaxIndex MaxIndex = 42;
         TCountMinSketch CountMinSketch = 43;
         TBloomNGrammFilter BloomNGrammFilter = 44;
+        TMinMaxIndex MinMaxIndex = 45;
     }
 }
 
@@ -545,6 +574,8 @@ message TCompactionLevelConstructorContainer {
         optional uint64 PortionsCountLimit = 4;
         optional uint64 PortionsSizeLimit = 5;
         optional uint64 Concurrency = 6;
+        optional uint64 CompactionTaskMemoryLimit = 7;
+        optional uint64 CompactionTaskPortionsCountLimit = 8;
     }
 
     message TOneLayer {
@@ -697,6 +728,7 @@ message TAlterColumnTableSchema {
     optional TColumnTableRequestedOptions Options = 12;
     repeated TFamilyDescription AddColumnFamily = 13;
     repeated TFamilyDescription AlterColumnFamily = 14;
+    repeated TOlapMoveIndex MoveIndex = 15;
 }
 
 // Schema presets are used to manage multiple tables with the same schema
@@ -932,6 +964,12 @@ message TColumnTableDescription {
 
     // For kqp internal use only
     optional bool Temporary = 14;
+
+    optional bool IsRestore = 15;
+
+    optional string CopyFromTable = 16;
+
+    optional bool IsBackup = 17;
 }
 
 message TAlterColumnTable {
@@ -953,16 +991,18 @@ message TReshardColumnTable {
 
 message TLoginCreateUser {
     optional string User = 1;
-    optional string Password = 2;
+    optional string Password = 2 [(Ydb.sensitive) = true];
     optional bool CanLogin = 3 [default = true];
-    optional bool IsHashedPassword = 4 [default = false];
+    optional bool IsHashedPassword = 4 [default = false, deprecated = true];
+    optional string HashedPassword = 5 [(Ydb.sensitive) = true];
 }
 
 message TLoginModifyUser {
     optional string User = 1;
-    optional string Password = 2;
+    optional string Password = 2 [(Ydb.sensitive) = true];
     optional bool CanLogin = 3;
-    optional bool IsHashedPassword = 4 [default = false];
+    optional bool IsHashedPassword = 4 [default = false, deprecated = true];
+    optional string HashedPassword = 5 [(Ydb.sensitive) = true];
 }
 
 message TLoginRemoveUser {
@@ -1052,6 +1092,7 @@ message TCdcStreamDescription {
     optional uint64 ResolvedTimestampsIntervalMs = 10;
     optional TCdcStreamScanProgress ScanProgress = 11;
     optional bool SchemaChanges = 12;
+    optional bool UserSIDs = 13;
 }
 
 message TCreateCdcStream {
@@ -1159,13 +1200,19 @@ message TCreateLongIncrementalBackupOp {
     repeated NKikimrProto.TPathID StreamPathIds = 1;
 }
 
+message TTruncateTable {
+    optional string TableName = 1;
+}
+
 enum EIndexType {
     EIndexTypeInvalid = 0;
     EIndexTypeGlobal = 1;
     EIndexTypeGlobalAsync = 2;
     EIndexTypeGlobalUnique = 3;
     EIndexTypeGlobalVectorKmeansTree = 4;
-    EIndexTypeGlobalFulltext = 5;
+    EIndexTypeGlobalFulltextPlain = 5;
+    EIndexTypeGlobalFulltextRelevance = 6;
+    EIndexTypeGlobalJson = 7;
 }
 
 enum EIndexState {
@@ -1273,6 +1320,10 @@ message TFinalizeBuildIndexMainTable {
     optional TBuildIndexOutcome Outcome = 4;
 }
 
+message TPrepareIndexValidation {
+    optional string TableName = 1;
+}
+
 message TCopyTableConfig { //TTableDescription implemets copying a table in original and full way
     optional string SrcPath = 1;
     optional string DstPath = 2;
@@ -1286,13 +1337,14 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     optional bool AllowUnderSameOperation = 7 [default = false];
 
     optional NKikimrSchemeOp.EPathState TargetPathTargetState = 8;
-    
+
     // Map from index name to CDC stream config for incremental backups
     // Key: index name (e.g., "age_index", "name_index")
     // Value: CDC stream configuration to create on that index's impl table
     map<string, TCreateCdcStream> IndexImplTableCdcStreams = 9;
     // additionally dropes cdc stream on src table consistently with taking snapshot
     optional TDropCdcStream DropSrcCdcStream = 10;
+    map<string, TDropCdcStream> IndexImplTableDropCdcStreams = 11;
 }
 
 message TConsistentTableCopyingConfig {
@@ -1302,7 +1354,7 @@ message TConsistentTableCopyingConfig {
 message TYTSettings {
     optional string Host = 1;
     optional string TablePattern = 2;
-    optional string Token = 3;
+    optional string Token = 3 [(Ydb.sensitive) = true];
     optional uint32 Port = 4 [default = 80];
 
     reserved 5; // YSONasText
@@ -1406,6 +1458,7 @@ message TPersQueueGroupAllocate {
         optional NKikimrPQ.ETopicPartitionStatus Status = 6;
         repeated uint32 ParentPartitionIds = 7;
         optional NKikimrPQ.TPartitionKeyRange KeyRange = 10;
+        optional uint64 CreationTimestampSeconds = 11;
     }
 
     optional string Name = 1;
@@ -1436,6 +1489,7 @@ message TPersQueueGroupDescription {
         optional NKikimrPQ.ETopicPartitionStatus Status = 4;
         repeated uint32 ParentPartitionIds = 5;
         repeated uint32 ChildPartitionIds = 6;
+        optional uint64 CreationTimestampSeconds = 7;
     }
 
     optional string Name = 1; // mandatory
@@ -1512,7 +1566,7 @@ message TBlockStoreVolumeDescription {
     repeated TPartition Partitions = 4; // do not set
     optional uint64 VolumeTabletId = 5; // do not set
     optional uint64 AlterVersion = 6; // do not set
-    optional string MountToken = 7; // do not set
+    optional string MountToken = 7 [(Ydb.sensitive) = true]; // do not set
     optional uint64 TokenVersion = 8; // do not set
 }
 
@@ -1577,7 +1631,7 @@ message TAlterSolomonVolume {
 
 message TBlockStoreAssignOp {
     optional string Name = 1; // mandatory
-    optional string NewMountToken = 2; // unset to unassign
+    optional string NewMountToken = 2 [(Ydb.sensitive) = true]; // unset to unassign
     optional uint64 TokenVersion = 3;
 }
 
@@ -1781,32 +1835,6 @@ message TSetColumnConstraintSettings {
     optional EConstraint Constraint = 2;
 }
 
-message TSetColumnConstraintsInitiate {
-    optional string TableName = 1;
-    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
-}
-
-message TSetColumnConstraintsLock {
-    optional string TableName = 1;
-    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
-}
-
-message TSetColumnConstraintsCheck {
-    optional string TableName = 1;
-    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
-}
-
-message TSetColumnConstraintsFinalize {
-    enum EStatus {
-        SUCCESS = 0;
-        COLUMN_CONSTRAINT_VIOLATION = 1;
-    }
-
-    optional string TableName = 1;
-    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
-    optional EStatus Status = 3;
-}
-
 // End Set Column Constraints
 
 // Request for scheme modification
@@ -1925,13 +1953,21 @@ message TModifyScheme {
 
     optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 85;
 
-    optional TSetColumnConstraintsInitiate SetColumnConstraintsInitiate = 87;
+    reserved 87;
 
     // Secret
     optional TSecretSchemaOp CreateSecret = 88;
     optional TSecretSchemaOp AlterSecret = 89;
 
     optional TStreamingQueryDescription CreateStreamingQuery = 90;
+
+    // This field is needed, because the "truncate table" feature is implemented as a schema operation.
+    // As of right now, it does not actually change the schema,
+    // but in the future it may have an indirect impact on the schema,
+    // for example, by resetting all sequences.
+    optional TTruncateTable TruncateTable = 92;
+
+    optional TPrepareIndexValidation PrepareIndexValidation = 93;
 
     // Some entries are grouped by semantics, so are out of order
 }
@@ -2014,6 +2050,7 @@ enum EPathSubType {
     EPathSubTypeStreamImpl = 3;
     EPathSubTypeVectorKmeansTreeIndexImplTable = 4;
     EPathSubTypeFulltextIndexImplTable = 5;
+    EPathSubTypeJsonIndexImplTable = 6;
 }
 
 enum EPathState {
@@ -2249,6 +2286,12 @@ message TToken {
     optional string TokenSecretName = 2;
 }
 
+message TIamImpersonate {
+    optional string ServiceAccountId = 1;
+    optional string InitialTokenSecretName = 2;
+    optional string ResourceId = 3;
+}
+
 message TAuth {
     oneof identity {
         TNoneAuth None = 3;
@@ -2256,7 +2299,8 @@ message TAuth {
         TBasic Basic = 5;
         TMdbBasic MdbBasic = 6;
         TAws Aws = 7;
-        TToken Token = 8;
+        TToken Token = 8 [(Ydb.sensitive) = true];
+        TIamImpersonate Iam = 9;
     }
 }
 
@@ -2400,14 +2444,18 @@ message TChangePathState {
 
 message TSecretDescription {
     optional string Name = 1;
-    optional string Value = 2; // original, unencrypted value
+    optional string Value = 2 [(Ydb.sensitive) = true]; // original, unencrypted value
     optional uint64 Version = 3;
 }
 
 message TSecretSchemaOp {
     optional string Name = 1;
-    optional string Value = 2; // original, unencrypted value
+    optional string Value = 2 [(Ydb.sensitive) = true]; // original, unencrypted value
     optional bool InheritPermissions = 3;
+    // The following field is needed at KQP for sending between the prepare и execute phases.
+    // However, this field is supposed to be resolved at KQP to the actual value and be cleared.
+    // Schemeshard always uses secret's value from the Value field and asserts that the ValueParamName field is empty.
+    optional string ValueParamName = 4;
 }
 
 message TStreamingQueryProperties {

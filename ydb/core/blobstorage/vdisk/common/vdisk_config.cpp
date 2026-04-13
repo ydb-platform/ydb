@@ -125,7 +125,7 @@ namespace NKikimr {
 
         MaxResponseSize = ui32(8) << ui32(20);                      // 8 MB
         DskTrackerInterval = TDuration::Seconds(1);
-        WhiteboardUpdateInterval = TDuration::Seconds(1);
+        StatsUpdateInterval = TDuration::Seconds(1);
         EnableVDiskCooldownTimeout = false;
 
 #ifdef NDEBUG

@@ -170,6 +170,12 @@ DEALINGS IN THE SOFTWARE.
 
 
 ====================COPYRIGHT====================
+//           Copyright Maksym Zhelyenzyakov 2025-2026.
+// Distributed under the Boost Software License, Version 1.0.
+//      (See accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
 //           Copyright Matthew Pulver 2018 - 2019.
 // Distributed under the Boost Software License, Version 1.0.
 //      (See accompanying file LICENSE_1_0.txt or copy at
@@ -788,6 +794,12 @@ DEALINGS IN THE SOFTWARE.
 // Copyright John Maddock 2017.
 // Copyright Paul A. Bristow 2016, 2017, 2018.
 // Copyright Nicholas Thompson 2018
+
+
+====================COPYRIGHT====================
+// Copyright Matt Borland 2025.
+// Use, modification and distribution are subject to the
+// Boost Software License, Version 1.0.
 
 
 ====================COPYRIGHT====================

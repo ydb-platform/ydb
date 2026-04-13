@@ -185,7 +185,7 @@ TKeyEntry TBinaryJsonReader::ReadKeyEntry(ui32 offset) const {
     return ReadPOD<TKeyEntry>(offset);
 }
 
-const TStringBuf TBinaryJsonReader::ReadString(ui32 offset) const {
+TStringBuf TBinaryJsonReader::ReadString(ui32 offset) const {
     Y_DEBUG_ABORT_UNLESS(StringSEntryStart_ <= offset && offset < StringSEntryStart_ + StringCount_ * sizeof(TSEntry), "Offset is not inside string index");
     ui32 startOffset = 0;
     if (offset == StringSEntryStart_) {
@@ -349,7 +349,7 @@ TString SerializeToJson(TStringBuf binaryJson) {
 namespace {
 
 struct TPODReader {
-    TPODReader(TStringBuf buffer)
+    explicit TPODReader(TStringBuf buffer)
         : TPODReader(buffer, 0, buffer.size())
     {
     }
@@ -385,7 +385,7 @@ struct TPODReader {
 };
 
 struct TBinaryJsonValidator {
-    TBinaryJsonValidator(TStringBuf buffer)
+    explicit TBinaryJsonValidator(TStringBuf buffer)
         : Buffer_(buffer)
     {
     }

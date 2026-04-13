@@ -582,7 +582,8 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
         auto connection = NYdb::TDriver(
             TDriverConfig()
                 .SetAuthToken("test_user@builtin")
-                .UseSecureConnection(NYdbSslTestData::CaCrt)
+                .UseSecureConnection(TKikimrTestWithAuthAndSsl::GetCaCrt())
+                .SetDatabase("/Root")
                 .SetEndpoint(location));
 
         auto client = NYdb::NTable::TTableClient(connection);
@@ -1087,12 +1088,13 @@ Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
                 "  type: DIRECTORY\n"
                 "}\n"
                 "children {\n"
-                "  name: \"TheDirectory\"\n"
-                "  owner: \"root@builtin\"\n"
+                "  name: \".sys\"\n"
+                "  owner: \"metadata@system\"\n"
                 "  type: DIRECTORY\n"
                 "}\n"
-                 "children {\n"
-                "  name: \".sys\"\n"
+                "children {\n"
+                "  name: \"TheDirectory\"\n"
+                "  owner: \"root@builtin\"\n"
                 "  type: DIRECTORY\n"
                 "}\n";
             UNIT_ASSERT_NO_DIFF(tmp, expected);
@@ -5720,9 +5722,8 @@ Y_UNIT_TEST_SUITE(TYqlDateTimeTests) {
 #endif
 
 Y_UNIT_TEST_SUITE(LocalityOperation) {
-Y_UNIT_TEST_TWIN(LocksFromAnotherTenants, UseSink) {
+Y_UNIT_TEST(LocksFromAnotherTenants) {
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
     TKikimrWithGrpcAndRootSchema server(appConfig);
     //server.Server_->SetupLogging(
 

@@ -10,14 +10,18 @@ TEST_SRCS(
     test_types_and_formats.py
 )
 
+FORK_SUBTESTS()
+SPLIT_FACTOR(100)
+
 PY_SRCS(
     base.py
 )
 
 SIZE(LARGE)
 
-TAG(ya:fat)
+REQUIREMENTS(cpu:2)
 
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 TIMEOUT(900)
 
 PEERDIR(

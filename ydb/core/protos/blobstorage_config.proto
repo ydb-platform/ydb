@@ -2,6 +2,7 @@ syntax = "proto3";
 
 import "ydb/core/protos/blobstorage_base.proto";
 import "ydb/core/protos/blobstorage_base3.proto";
+import "ydb/core/protos/blobstorage_ddisk.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/blobstorage_disk_color.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";
@@ -25,8 +26,8 @@ message THostConfigDrive {
 
     // optional PDisk config for these drives; if not set, default configuration is applied; overrides host-wide default
     NKikimrBlobStorage.TPDiskConfig PDiskConfig = 6;
-    uint64 InferPDiskSlotCountFromUnitSize = 7;
-    uint32 InferPDiskSlotCountMax = 8;
+    reserved 7; // uint64 InferPDiskSlotCountFromUnitSize, deprecated in favor of BlobStorageConfig.InferPDiskSlotCount
+    reserved 8; // uint32 InferPDiskSlotCountMax, deprecated in favor of BlobStorageConfig.InferPDiskSlotCount
 }
 
 // Command used to define typical host configuration. It it used while defining new typical host configurations and as
@@ -188,6 +189,39 @@ message TDeleteStoragePool {
     uint64 ItemConfigGeneration = 100;
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Defining DDisk pool. This command allocated NumDDiskGroups groups, each one containing Geometry.NumFailDomainsPerFailRealm
+// DDisks placed in fail domains according to DomainLevelBegin/DomainLevelEnd. There should be only one realm (more than
+// one is not supported). NumVDisksPerFailDomain should be one too. During Direct Block Group allocation resulting DDisks
+// may (but not necessarily) contain mix of different groups allocated here, but according to the pool placement model.
+
+message TDefineDDiskPool {
+    uint64 BoxId = 1; // the box in which we allocate new DDisks
+    string Name = 2; // cluster-unique name of the DDisk pool within the box
+    TGroupGeometry Geometry = 3; // group geometry to map realms/domains
+    repeated TPDiskFilter PDiskFilter = 4; // PDisk filter used for mapping
+    uint32 NumDDiskGroups = 5; // number of DDisk groups of selected geometry
+    uint64 ItemConfigGeneration = 100;
+}
+
+message TReadDDiskPool {
+    uint64 BoxId = 1; // use Max<ui64> to query all the DDisk pools
+    repeated string Name = 2; // if not empty, read only specified DDisk pools
+}
+
+message TDeleteDDiskPool {
+    uint64 BoxId = 1;
+    string Name = 2;
+}
+
+message TMoveDDisk {
+    uint64 BoxId = 1;
+    string Name = 2;
+    NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 3;
+    NKikimrBlobStorage.TPDiskId TargetPDiskId = 4;
+}
+
 enum EDriveStatus {
     UNKNOWN = 0; // value of status is unknown (default)
     ACTIVE = 1; // working as expected
@@ -264,6 +298,10 @@ message TProposeStoragePools {
 message TQueryBaseConfig {
     bool RetrieveDevices = 1;
     bool VirtualGroupsOnly = 2;
+    bool SuppressPDisks = 3;
+    bool SuppressVSlots = 4;
+    bool SuppressGroups = 5;
+    bool SuppressNodes = 6;
 }
 
 message TReadSettings {
@@ -604,6 +642,24 @@ message TReconfigureVirtualGroup {
     optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 2;
 }
 
+message TRecommissionGroups {
+    repeated uint32 GroupIds = 1;
+}
+
+message TInferPDiskSlotCountForDriveTypeSettings {
+    // NodeWarden infers PDiskConfig ExpectedSlotCount and SlotSizeInUnits by the formula
+    // ExpectedSlotCount = TotalSize / (UnitSize * SlotSizeInUnits)
+    // where SlotSizeInUnits = 2^N is chosen to meet ExpectedSlotCount <= MaxSlots
+    optional uint64 UnitSize = 1; // in bytes
+    optional uint32 MaxSlots = 2;
+    optional bool PreferInferredSettingsOverExplicit = 3; // Unless true, PDisk.ExpectedSlotCount overrides inferred settings
+}
+
+message TInferPDiskSlotCountSettings {
+    optional TInferPDiskSlotCountForDriveTypeSettings Rot = 1;
+    optional TInferPDiskSlotCountForDriveTypeSettings Ssd = 2;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // INTERFACE PART
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -655,6 +711,11 @@ message TConfigRequest {
             TMovePDisk MovePDisk = 53;
             TUpdateBridgeGroupInfo UpdateBridgeGroupInfo = 54;
             TReconfigureVirtualGroup ReconfigureVirtualGroup = 55;
+            TRecommissionGroups RecommissionGroups = 56;
+            TDefineDDiskPool DefineDDiskPool = 57;
+            TReadDDiskPool ReadDDiskPool = 58;
+            TDeleteDDiskPool DeleteDDiskPool = 59;
+            TMoveDDisk MoveDDisk = 60;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
@@ -740,8 +801,8 @@ message TBaseConfig {
         string LastSeenSerial = 18;
         bool ReadOnly = 19;
         TMaintenanceStatus.E MaintenanceStatus = 20;
-        uint64 InferPDiskSlotCountFromUnitSize = 21;
-        uint32 InferPDiskSlotCountMax = 22;
+        reserved 21; // uint64 InferPDiskSlotCountFromUnitSize = 21
+        reserved 22; // uint32 InferPDiskSlotCountMax = 22
     }
     message TVSlot {
         message TDonorDisk {
@@ -812,6 +873,7 @@ message TBaseConfig {
     repeated TNode Node = 4;
     repeated TDevice Device = 5;
     TUpdateSettings Settings = 6;
+    TInferPDiskSlotCountSettings InferPDiskSlotCountSettings = 7;
 }
 
 message TMoveCommand {
@@ -840,6 +902,25 @@ message TReassignedItem {
     string FromPath = 5;
     string ToFqdn = 6;
     string ToPath = 7;
+}
+
+message TGroupMapperError {
+    message TStats {
+        string Domain = 1;
+        uint32 AllSlotsAreOccupied = 2;
+        uint32 NotEnoughSpace = 3;
+        uint32 NotAcceptingNewSlots = 4;
+        uint32 NotOperational = 5;
+        uint32 Decommission = 6;
+    }
+    TStats TotalStats = 1;
+    repeated TStats MatchingDomainsStats = 2;
+    uint32 MissingFailRealmsCount = 3;
+    uint32 FailRealmsWithMissingDomainsCount = 4;
+    uint32 DomainsWithMissingDisksCount = 5;
+    uint32 OkDisksCount = 6;
+    string RealmLocationKey = 7;
+    string DomainLocationKey = 8;
 }
 
 message TConfigResponse {
@@ -880,6 +961,7 @@ message TConfigResponse {
                 string DiskSerialNumber = 15;
                 uint32 GroupGenerationProvided = 16;
                 uint32 GroupGenerationExpected = 17;
+                TGroupMapperError GroupMapperError = 18;
             }
         }
 

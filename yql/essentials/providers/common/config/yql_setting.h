@@ -7,8 +7,7 @@
 #include <util/generic/maybe.h>
 #include <util/generic/yexception.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 const TString ALL_CLUSTERS = "$all";
 
@@ -22,9 +21,6 @@ template <typename TType, EConfSettingType SettingType = EConfSettingType::Dynam
 class TConfSetting {
 public:
     TConfSetting() = default;
-    TConfSetting(const TType& value) {
-        PerClusterValue_[ALL_CLUSTERS] = value;
-    }
     TConfSetting(const TConfSetting&) = default;
     TConfSetting(TConfSetting&&) = default;
     ~TConfSetting() = default;
@@ -93,10 +89,6 @@ template <typename TType>
 class TConfSetting<TType, EConfSettingType::Static> {
 public:
     TConfSetting() = default;
-    TConfSetting(const TType& value)
-        : Value_(value)
-    {
-    }
     TConfSetting(const TConfSetting&) = default;
     TConfSetting(TConfSetting&&) = default;
     ~TConfSetting() = default;
@@ -139,5 +131,4 @@ private:
     TMaybe<TType> Value_;
 };
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

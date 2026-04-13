@@ -5,9 +5,11 @@
 #include "receipt.h"
 #include "utils.h"
 
+#include <ydb/core/http_proxy/events.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/ymq/attributes/attributes_md5.h>
 #include <ydb/core/ymq/attributes/attribute_name.h>
+#include <ydb/core/ymq/attributes/attributes.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/error/error.h>
 #include <ydb/services/sqs_topic/queue_url/utils.h>
@@ -33,7 +35,7 @@
 #include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
-#include <ydb/core/persqueue/public/mlp/mlp_message_attributes.h>
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -99,10 +101,12 @@ namespace NKikimr::NSqsTopic::V1 {
                 return Nothing();
             }
 
-            const TDuration waitTime = TDuration::Seconds(request.wait_time_seconds());
+            const std::optional<TDuration> waitTime = request.has_wait_time_seconds()
+                ? std::make_optional(TDuration::Seconds(request.wait_time_seconds())) : std::nullopt;
 
-            const TDuration visibilityTimeout = request.has_visibility_timeout() ? TDuration::Seconds(request.visibility_timeout()) : TDuration::Seconds(NSQS::TLimits::VisibilityTimeout);
-            if (visibilityTimeout > NSQS::TLimits::MaxVisibilityTimeout) {
+            const std::optional<TDuration> visibilityTimeout = request.has_visibility_timeout()
+                ? std::make_optional(TDuration::Seconds(request.visibility_timeout())) : std::nullopt;
+            if (visibilityTimeout && *visibilityTimeout > NSQS::TLimits::MaxVisibilityTimeout) {
                 ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("Visibility timeout is greater than {} hours", NSQS::TLimits::MaxVisibilityTimeout.Hours())));
                 return Nothing();
             }
@@ -115,16 +119,15 @@ namespace NKikimr::NSqsTopic::V1 {
                 }
             }
 
-            auto userToken = MakeIntrusive<NACLib::TUserToken>(this->Request_->GetSerializedToken());
             NKikimr::NPQ::NMLP::TReaderSettings settings{
                 .DatabasePath = this->QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
                 .Consumer = this->QueueUrl_->Consumer,
                 .WaitTime = waitTime,
-                .VisibilityTimeout = visibilityTimeout,
+                .ProcessingTimeout = visibilityTimeout,
                 .MaxNumberOfMessage = static_cast<ui32>(maxNumberOfMessages),
                 .UncompressMessages = true,
-                .UserToken = std::move(userToken),
+                .UserToken = this->Request_->GetInternalToken(),
             };
             return settings;
         }
@@ -149,6 +152,12 @@ namespace NKikimr::NSqsTopic::V1 {
             AFL_ENSURE(message.Codec == Ydb::Topic::Codec::CODEC_RAW)("codec", Ydb::Topic::Codec_Name(message.Codec));
             result.set_m_d_5_of_body(MD5::Calc(result.body()));
 
+            if (message.ApproximateFirstReceiveTimestamp) {
+                result.mutable_attributes()->emplace("ApproximateFirstReceiveTimestamp", ToString(message.ApproximateFirstReceiveTimestamp->MilliSeconds()));
+            }
+            if (message.ApproximateReceiveCount) {
+                result.mutable_attributes()->emplace("ApproximateReceiveCount", ToString(message.ApproximateReceiveCount.value()));
+            }
 
             if (!message.MessageGroupId.empty()) {
                 if (TString v = NPQ::NSourceIdEncoding::Decode(message.MessageGroupId); !v.empty()) {
@@ -158,34 +167,17 @@ namespace NKikimr::NSqsTopic::V1 {
             if (message.SentTimestamp) {
                 result.mutable_attributes()->emplace("SentTimestamp", ToString(message.SentTimestamp.MilliSeconds()));
             }
-            if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::NMLP::NMessageConsts::MessageDeduplicationId)) {
-                result.mutable_attributes()->emplace("MessageDeduplicationId", *value);
+            if (!message.MessageDeduplicationId.empty()) {
+                result.mutable_attributes()->emplace("MessageDeduplicationId", message.MessageDeduplicationId);
             }
 
             result.set_message_id(GenerateMessageId(message.MessageId));
 
-            if (auto* const value = message.MessageMetaAttributes.FindPtr(NPQ::NMLP::NMessageConsts::MessageAttributes)) {
-                NKikimr::NSQS::TMessageAttributes messageAttributes;
-                if (messageAttributes.ParseFromString(*value)) {
-                    result.set_m_d_5_of_message_attributes(NSQS::CalcMD5OfMessageAttributes(messageAttributes.attributes()));
-                    auto* mma = result.mutable_message_attributes();
-                    for (const auto& attribute : messageAttributes.attributes()) {
-                        Ydb::Ymq::V1::MessageAttribute value;
-                        if (attribute.has_binaryvalue()) {
-                            value.set_binary_value(attribute.binaryvalue());
-                        } else if (attribute.has_stringvalue()) {
-                            value.set_string_value(attribute.stringvalue());
-                        } else {
-                            continue;
-                        }
-                        mma->emplace(attribute.name(), std::move(value));
-                    }
-                } else {
-                    LOG_WARN_S(
-                        ctx,
-                        NKikimrServices::SQS,
-                        "Unable to deserialize message attributes");
-                }
+            if (!NSQS::DeserializeUserAttributes(result, message.Attributes)) {
+                LOG_WARN_S(
+                    ctx,
+                    NKikimrServices::SQS,
+                    "Unable to deserialize message attributes");
             }
 
             result.set_receipt_handle(SerializeReceipt(message.MessageId));
@@ -209,6 +201,29 @@ namespace NKikimr::NSqsTopic::V1 {
                     ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, std::format("Error reading from topic: {}", response.ErrorDescription.ConstRef())));
                     return;
                 }
+            }
+
+            ctx.Send(NHttpProxy::MakeMetricsServiceID(),
+                new NHttpProxy::TEvServerlessProxy::TEvCounter{
+                    static_cast<i64>(response.Messages.size()), true, true,
+                    GetResponseMessageCountMetricsLabels(
+                        QueueUrl_->Database,
+                        FullTopicPath_,
+                        QueueUrl_->Consumer,
+                        "ReceiveMessage",
+                        "success")
+                });
+
+            if (response.Messages.empty()) {
+                ctx.Send(NHttpProxy::MakeMetricsServiceID(),
+                    new NHttpProxy::TEvServerlessProxy::TEvCounter{
+                        1, true, true,
+                        GetResponseEmptyCountMetricsLabels(
+                            QueueUrl_->Database,
+                            FullTopicPath_,
+                            QueueUrl_->Consumer,
+                            "ReceiveMessage")
+                    });
             }
 
             Ydb::Ymq::V1::ReceiveMessageResult result;

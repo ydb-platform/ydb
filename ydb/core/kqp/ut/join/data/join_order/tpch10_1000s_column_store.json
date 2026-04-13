@@ -3,11 +3,11 @@
   "args":
     [
       {
-        "op_name":"InnerJoin (Grace)",
+        "op_name":"InnerJoin (BlockHash)",
         "args":
           [
             {
-              "op_name":"InnerJoin (MapJoin)",
+              "op_name":"InnerJoin (Map)",
               "args":
                 [
                   {
@@ -25,13 +25,9 @@
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (Grace)",
+                    "op_name":"InnerJoin (BlockHash)",
                     "args":
                       [
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"orders"
-                        },
                         {
                           "op_name":"HashShuffle",
                           "args":
@@ -41,6 +37,10 @@
                                 "table":"lineitem"
                               }
                             ]
+                        },
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"orders"
                         }
                       ]
                   }

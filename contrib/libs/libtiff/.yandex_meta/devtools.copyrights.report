@@ -384,14 +384,15 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL ea717385f3024bc2714f0b3f66b21801
 BELONGS ya.make
     License text:
-         * Copyright (c) 1985, 1986 The Regents of the University of California.
-         * All rights reserved.
+        Copyright (c) 1985, 1986 The Regents of the University of California.
+        All rights reserved.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        tif_lzw.c [1437:1438]
+        LICENSE.md [32:33]
+        tif_lzw.c [1445:1446]
 
 KEEP     COPYRIGHT_SERVICE_LABEL ef9e24bc2ee738c92b1a0aae6c46127d
 BELONGS ya.make

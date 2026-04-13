@@ -48,6 +48,10 @@
 #include <util/generic/ymath.h>
 
 
+#define LOG_BACKUP_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() << stream)
+#define LOG_BACKUP_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() << stream)
+#define LOG_BACKUP_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, BackupLogPrefix() << stream)
+
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
@@ -151,7 +155,7 @@ bool TExecutor::OnUnhandledException(const std::exception& e) {
             log << "Tablet " << TabletId() << " unhandled exception " << TypeName(e) << ": " << e.what()
                 << '\n' << TBackTrace::FromCurrentException().PrintToString();
         }
-        Broken();
+        Broken(EBrokenReason::Exception);
         return true;
     }
 
@@ -224,8 +228,20 @@ void TExecutor::PassAway() {
     return TActor::PassAway();
 }
 
-void TExecutor::Broken() {
-    GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_broken", true)->Inc();
+static TString BrokenAlertNameException("alerts_exception");
+static TString BrokenAlertNameOther("alerts_broken");
+
+const TString& TExecutor::BrokenAlertName(EBrokenReason reason) {
+    switch (reason) {
+        case EBrokenReason::Exception:
+            return BrokenAlertNameException;
+        default:
+            return BrokenAlertNameOther;
+    }
+}
+
+void TExecutor::Broken(EBrokenReason reason) {
+    GetServiceCounters(AppData()->Counters, "tablets")->GetCounter(BrokenAlertName(reason), true)->Inc();
 
     if (BootLogic)
         BootLogic->Cancel();
@@ -562,7 +578,7 @@ void TExecutor::TranscriptBootOpResult(ui32 res, const TActorContext &ctx) {
             logl << NFmt::Do(*this) << " Broken while booting";
         }
 
-        return Broken();
+        return Broken(EBrokenReason::Storage);
     default:
         Y_TABLET_ERROR("unknown boot result");
     }
@@ -581,7 +597,7 @@ void TExecutor::TranscriptFollowerBootOpResult(ui32 res, const TActorContext &ct
             logl << NFmt::Do(*this) << " Broken while follower booting";
         }
 
-        return Broken();
+        return Broken(EBrokenReason::Storage);
     default:
         Y_TABLET_ERROR("unknown boot result");
     }
@@ -973,7 +989,7 @@ void TExecutor::FollowerAuxUpdate(TString upd) {
 
 void TExecutor::FollowerAttached(ui32 totalFollowers) {
     Stats->FollowersCount = totalFollowers;
-    NeedFollowerSnapshot = true;
+    NeedLogSnapshot = true;
 
     if (CurrentStateFunc() != &TThis::StateWork)
         return;
@@ -1425,7 +1441,7 @@ void TExecutor::Handle(TEvBlobStorage::TEvGetResult::TPtr& ev, const TActorConte
             logl << NFmt::Do(*this) << " Broken while loading blobs";
         }
 
-        return Broken();
+        return Broken(EBrokenReason::Storage);
     }
 }
 
@@ -1450,7 +1466,7 @@ void TExecutor::AdvancePendingPartSwitches() {
         MaybeRelaxRejectProbability();
 
         // Note: followers don't have VacuumLogic
-        if (NeedFollowerSnapshot || VacuumLogic && VacuumLogic->NeedLogSnaphot()) {
+        if (NeedLogSnapshot || VacuumLogic && VacuumLogic->NeedLogSnaphot()) {
             MakeLogSnapshot();
         }
     }
@@ -1968,13 +1984,6 @@ bool TExecutor::CancelTransaction(ui64 id) {
 
     TSeat* seat = it->second.get();
     switch (seat->State) {
-        case ESeatState::None:
-            // Transaction is not paused in any way
-            Y_DEBUG_ABORT_UNLESS(false,
-                "Tablet %" PRIu64 " CancelTransaction(%" PRIu64 ") from inside transaction?",
-                TabletId(), id);
-            return false;
-
         case ESeatState::Active:
             ActivationQueue.Remove(seat);
             Y_ENSURE(ActivateTransactionWaiting > 0);
@@ -2003,9 +2012,7 @@ bool TExecutor::CancelTransaction(ui64 id) {
             return true;
 
         default:
-            Y_DEBUG_ABORT_UNLESS(false,
-                "Tablet %" PRIu64 " CancelTransaction(% " PRIu64 ") for a finished transaction",
-                TabletId(), id);
+            // Transaction is either running right now or it has finished already
             return false;
     }
 
@@ -2576,6 +2583,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
 
         if (auto truncated = std::move(change->Truncated)) {
             commit->WaitFollowerGcAck = true; // as we could collect some page collections
+            NeedLogSnapshot = true;
 
             for (auto& record : truncated) {
                 ui32 table = record.Table;
@@ -2801,7 +2809,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             }
         }
 
-        if (NeedFollowerSnapshot || LogicSnap->MayFlush(false))
+        if (NeedLogSnapshot || LogicSnap->MayFlush(false))
             MakeLogSnapshot();
 
         CompactionLogic->UpdateLogUsage(LogicRedo->GrabLogUsage());
@@ -2831,7 +2839,7 @@ void TExecutor::MakeLogSnapshot() {
     if (!LogicSnap->MayFlush(true) || PendingPartSwitches)
         return;
 
-    NeedFollowerSnapshot = false;
+    NeedLogSnapshot = false;
     THPTimer makeLogSnapTimer;
 
     LogicRedo->FlushBatchedLog();
@@ -3001,7 +3009,7 @@ void TExecutor::Handle(TEvPrivate::TEvBrokenTransaction::TPtr &ev, const TActorC
     Y_UNUSED(ctx);
     Y_ENSURE(BrokenTransaction);
 
-    return Broken();
+    return Broken(EBrokenReason::Transaction);
 }
 
 void TExecutor::Wakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext&) {
@@ -3052,7 +3060,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
                     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_req_nodata", true)->Inc();
                 }
 
-                return Broken();
+                return Broken(EBrokenReason::Storage);
             }
 
             if (requestType == ERequestTypeCookie::StickyPages) {
@@ -3106,7 +3114,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
                     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_pending_nodata", true)->Inc();
                 }
 
-                return Broken();
+                return Broken(EBrokenReason::Storage);
             }
 
             Y_ENSURE(msg->Cookie == 0);
@@ -3200,7 +3208,7 @@ void TExecutor::Handle(TEvTablet::TEvConfirmLeaderResult::TPtr &ev) {
         if (auto logl = Logger->Log(ELnLev::Error)) {
             logl << NFmt::Do(*this) << " Broken on lease confirmation";
         }
-        return Broken();
+        return Broken(EBrokenReason::Storage);
     }
 
     LeaseConfirmed(ev->Cookie);
@@ -3213,7 +3221,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
         if (auto logl = Logger->Log(ELnLev::Error)) {
             logl << NFmt::Do(*this) << " Broken on commit error for step " << msg->Step;
         }
-        return Broken();
+        return Broken(EBrokenReason::Storage);
     }
 
     Y_ENSURE(msg->Generation == Generation());
@@ -3261,7 +3269,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
         LogicSnap->Confirm(msg->Step);
 
         VacuumLogic->OnSnapshotCommited(Generation(), step);
-        if (NeedFollowerSnapshot || VacuumLogic->NeedLogSnaphot())
+        if (NeedLogSnapshot || VacuumLogic->NeedLogSnaphot())
             MakeLogSnapshot();
 
         break;
@@ -3294,6 +3302,17 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
     PlanTransactionActivation();
 
     MaybeRelaxRejectProbability();
+}
+
+void TExecutor::Handle(TEvTablet::TEvSnapshotConfirmed::TPtr &ev, const TActorContext &ctx) {
+    TEvTablet::TEvSnapshotConfirmed *msg = ev->Get();
+
+    Y_ENSURE(msg->Generation == Generation());
+    const ui32 step = msg->Step;
+
+    TActiveTransactionZone activeTransaction(this);
+
+    GcLogic->OnConfirmSnapshot(step, ctx);
 }
 
 void TExecutor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
@@ -3654,7 +3673,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
         }
 
         CheckYellow(std::move(msg->YellowMoveChannels), std::move(msg->YellowStopChannels), /* terminal */ true);
-        return Broken();
+        return Broken(EBrokenReason::Storage);
     }
 
     TActiveTransactionZone activeTransaction(this);
@@ -4077,6 +4096,12 @@ void TExecutor::ForceSendCounters() {
 }
 
 float TExecutor::GetRejectProbability() const {
+    float rejectProbability = CalcRejectProbability();
+    Counters->Simple()[TExecutorCounters::REJECT_PROBABILITY] = rejectProbability * 100;
+    return rejectProbability;
+}
+
+float TExecutor::CalcRejectProbability() const {
     // Limit number of in-flight TXs
     if (Stats->TxInFly > ui64(MaxTxInFly)) {
         HadRejectProbabilityByTxInFly = true;
@@ -4345,6 +4370,7 @@ STFUNC(TExecutor::StateWork) {
         hFunc(NSharedCache::TEvUpdated, Handle);
         HFunc(TEvTablet::TEvDropLease, Handle);
         HFunc(TEvTablet::TEvCommitResult, Handle);
+        HFunc(TEvTablet::TEvSnapshotConfirmed, Handle);
         hFunc(TEvTablet::TEvConfirmLeaderResult, Handle);
         hFunc(TEvTablet::TEvCheckBlobstorageStatusResult, Handle);
         hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
@@ -4358,7 +4384,10 @@ STFUNC(TExecutor::StateWork) {
         hFunc(TEvTablet::TEvGcForStepAckResponse, Handle);
         hFunc(NBackup::TEvSnapshotCompleted, Handle);
         hFunc(NBackup::TEvChangelogFailed, Handle);
-        cFunc(NBackup::TEvStartNewBackup::EventType, StartNewBackup);
+        hFunc(NBackup::TEvStartNewBackup, Handle);
+        hFunc(NBackup::TEvWriteChangelogAck, Handle);
+        hFunc(NBackup::TEvSnapshotStats, Handle);
+        hFunc(NBackup::TEvChangelogStats, Handle);
     default:
         break;
     }
@@ -4801,10 +4830,12 @@ bool TExecutor::HasSchemaChanges(const NTable::TPartView& partView, const NTable
         return false;
     }
 
-    { // Check by key filter existence
-        bool partByKeyFilter = bool(partView->ByKey);
-        bool schemeByKeyFilter = tableInfo.ByKeyFilter;
-        if (partByKeyFilter != schemeByKeyFilter) {
+    { // Check bloom filters
+        TVector<ui32> partPrefixes;
+        for (const auto& [prefixLen, bloom] : partView->ByKeyPrefixes) {
+            if (bloom) partPrefixes.push_back(prefixLen);
+        }
+        if (partPrefixes != tableInfo.ByKeyFilterPrefixes) {
             return true;
         }
     }
@@ -4877,7 +4908,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     comp->Layout.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
     comp->Writer.StickyFlatIndex = !comp->Layout.WriteBTreeIndex;
     comp->Layout.MaxRows = snapshot->Subset->MaxRows();
-    comp->Layout.ByKeyFilter = tableInfo->ByKeyFilter;
+    comp->Layout.ByKeyFilterPrefixes = tableInfo->ByKeyFilterPrefixes;
     comp->Layout.UnderlayMask = comp->Params->UnderlayMask.Get();
     comp->Layout.SplitKeys = comp->Params->SplitKeys.Get();
     comp->Layout.MinRowVersion = snapshot->Subset->MinRowVersion();
@@ -5123,6 +5154,10 @@ void TExecutor::SetPreloadTablesData(THashSet<ui32> tables) {
 }
 
 
+TStringBuilder TExecutor::BackupLogPrefix() const {
+    return TStringBuilder() << "[" << Owner->TabletID() << ":" << Generation0 << "] ";
+}
+
 void TExecutor::StartNewBackup() {
     if (!Owner->NeedBackup()) {
         return;
@@ -5137,6 +5172,7 @@ void TExecutor::StartNewBackup() {
     ui64 tabletId = Owner->TabletID();
 
     if (std::find(excludeTabletIds.begin(), excludeTabletIds.end(), tabletId) != excludeTabletIds.end()) {
+        LOG_BACKUP_D("Tablet excluded from backup");
         return;
     }
 
@@ -5148,12 +5184,18 @@ void TExecutor::StartNewBackup() {
     const auto& tables = scheme.Tables;
     auto exclusion = Owner->BackupExclusion();
 
+    Y_ENSURE(!BackupSnapshotInProgress);
+
+    // Stop the old backup changelog
+    CommitManager->BackupLogic.Stop();
+
     auto* snapshotWriter = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType,
         tabletId, Generation0, Step0, scheme.GetSnapshot(), exclusion);
     auto* changelogWriter = NBackup::CreateChangelogWriter(SelfId(), backupConfig, tabletType,
         tabletId, Generation0, Step0, scheme, exclusion);
 
     if (snapshotWriter && changelogWriter) {
+        LOG_BACKUP_N("Starting new backup" << " Type# " << tabletType << " Gen# " << Generation0 << " Step# " << Step0);
         auto snapshotWriterActor = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
         for (const auto& [tableId, table] : tables) {
             if (exclusion && exclusion->HasTable(tableId)) {
@@ -5163,21 +5205,88 @@ void TExecutor::StartNewBackup() {
             auto opts = TScanOptions().SetResourceBroker("system_tablet_backup", 10);
             QueueScan(tableId, NBackup::CreateSnapshotScan(snapshotWriterActor, tableId, table.Columns, exclusion), 0, opts);
         }
-        CommitManager->SetBackupWriter(Register(changelogWriter, TMailboxType::HTSwap, AppData()->IOPoolId));
+        BackupSnapshotInProgress = true;
+        Counters->Simple()[TExecutorCounters::BACKUP_SNAPSHOT_IN_PROGRESS].Set(1);
+
+        auto changelogWriterActor = Register(changelogWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
+        CommitManager->BackupLogic.Start(SelfId(), changelogWriterActor, backupConfig.GetChangelogInFlightBytesLimit());
+    } else {
+        LOG_BACKUP_D("Backup not configured");
     }
 }
 
-void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
-    Y_ENSURE(ev->Get()->Success, "Backup snapshot failed: " + ev->Get()->Error);
-    Owner->BackupSnapshotComplete(OwnerCtx());
+void TExecutor::Handle(NBackup::TEvWriteChangelogAck::TPtr& ev) {
+    if (ev->Sender != CommitManager->BackupLogic.GetWriter()) {
+        return;
+    }
 
-    if (CommitManager) {
-        Forward(ev, CommitManager->GetBackupWriter());
+    CommitManager->BackupLogic.OnProcessedBytes(ev->Get()->ProcessedBytes);
+}
+
+void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
+    BackupSnapshotInProgress = false;
+    Counters->Simple()[TExecutorCounters::BACKUP_SNAPSHOT_IN_PROGRESS].Set(0);
+    if (ev->Get()->Success) {
+        LOG_BACKUP_N("Snapshot completed" << " Bytes# " << ev->Get()->WrittenBytes);
+        Owner->BackupSnapshotComplete(OwnerCtx());
+
+        if (CommitManager->BackupLogic.IsRunning()) {
+            CommitManager->BackupLogic.OnSnapshotCompleted(ev);
+        } else {
+            ScheduleRetryBackup();
+        }
+    } else {
+        Counters->Cumulative()[TExecutorCounters::BACKUP_SNAPSHOT_ERRORS].Increment(1);
+        FailBackup("Backup snapshot failed: " + ev->Get()->Error);
     }
 }
 
 void TExecutor::Handle(NBackup::TEvChangelogFailed::TPtr& ev) {
-    Y_TABLET_ERROR("Backup changelog failed: " + ev->Get()->Error);
+    if (ev->Sender != CommitManager->BackupLogic.GetWriter()) {
+        return;
+    }
+
+    Counters->Cumulative()[TExecutorCounters::BACKUP_CHANGELOG_ERRORS].Increment(1);
+    FailBackup("Backup changelog failed: " + ev->Get()->Error);
+}
+
+void TExecutor::FailBackup(const TString& error) {
+    const auto& backupConfig = AppData()->SystemTabletBackupConfig;
+
+    if (backupConfig.GetFailBehaviour() == NKikimrConfig::TSystemTabletBackupConfig::TABLET_RESTART) {
+        Y_TABLET_ERROR(error);
+    }
+
+    LOG_BACKUP_E(error);
+    CommitManager->BackupLogic.Stop();
+    ScheduleRetryBackup();
+}
+
+void TExecutor::ScheduleRetryBackup() const {
+    if (!BackupSnapshotInProgress) {
+        auto retryTimeout = TDuration::Seconds(AppData()->SystemTabletBackupConfig.GetRetryBackupTimeoutSeconds());
+        LOG_BACKUP_N("Scheduling backup retry" << " Timeout# " << retryTimeout);
+        Schedule(retryTimeout, new NBackup::TEvStartNewBackup);
+    }
+}
+
+void TExecutor::Handle(NBackup::TEvStartNewBackup::TPtr& ev) {
+    if (ev->Sender != SelfId() && ev->Sender != CommitManager->BackupLogic.GetWriter()) {
+        return;
+    }
+
+    StartNewBackup();
+}
+
+void TExecutor::Handle(NBackup::TEvSnapshotStats::TPtr& ev) {
+    Counters->Cumulative()[TExecutorCounters::BACKUP_SNAPSHOT_BYTES_WRITTEN].Increment(ev->Get()->BytesWritten);
+}
+
+void TExecutor::Handle(NBackup::TEvChangelogStats::TPtr& ev) {
+    const auto* msg = ev->Get();
+    Counters->Cumulative()[TExecutorCounters::BACKUP_CHANGELOG_BYTES_WRITTEN].Increment(msg->BytesWritten);
+    Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_BACKUP_CHANGELOG_FLUSH_LATENCY].IncrementFor(msg->FlushLatency.MicroSeconds());
+    Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_BACKUP_CHANGELOG_LAG].IncrementFor(msg->Lag.MicroSeconds());
 }
 
 }

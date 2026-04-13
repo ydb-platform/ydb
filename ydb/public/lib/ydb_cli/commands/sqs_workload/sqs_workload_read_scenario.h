@@ -10,10 +10,12 @@ namespace NYdb::NConsoleClient {
         int Run(const TClientCommand::TConfig&);
 
         TMaybe<ui32> ErrorMessagesRate;
-        TString ErrorMessagesDestiny;
+        TString ErrorMessagesPolicy;
         ui64 VisibilityTimeoutMs;
         ui64 HandleMessageDelayMs;
-        bool ValidateFifo;
+
+    private:
+        int RunScenario(const TClientCommand::TConfig& config);
     };
 
 } // namespace NYdb::NConsoleClient

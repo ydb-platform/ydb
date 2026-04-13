@@ -62,8 +62,11 @@ struct TTransactionalOptions
     //! Setting it to |true| may result in loss of consistency.
     bool SuppressTransactionCoordinatorSync = false;
     //! For internal use only.
-    //! Setting it to |true| may result in loss of consistency .
+    //! Setting it to |true| may result in loss of consistency.
     bool SuppressUpstreamSync = false;
+    //! For internal use only.
+    //! Setting it to |true| may result in loss of consistency.
+    bool SuppressStronglyOrderedTransactionBarrier = false;
 };
 
 struct TMasterReadOptions
@@ -142,7 +145,7 @@ struct TSelectRowsOptionsBase
     //! Expected schemas for tables in a query (used for replica fallback in replicated tables).
     using TExpectedTableSchemas = THashMap<NYPath::TYPath, NTableClient::TTableSchemaPtr>;
     TExpectedTableSchemas ExpectedTableSchemas;
-    //! Add |$timestamp:columnName| to result if ReadMode is latest_timestamp.
+    //! Adds |$timestamp:columnName| to result if ReadMode is latest_timestamp.
     NTableClient::TVersionedReadOptions VersionedReadOptions;
     //! Limits range expanding.
     ui64 RangeExpansionLimit = 200'000;
@@ -161,6 +164,9 @@ struct TSelectRowsOptionsBase
     bool NewRangeInference = true;
     //! Typed expression builder version.
     std::optional<int> ExpressionBuilderVersion = 1;
+    //! The quality of the the "cardinality" aggregate function estimates.
+    //! 2^HyperLogLogPrecision 8-bit cells will be used.
+    std::optional<int> HyperLogLogPrecision;
 };
 
 struct TSelectRowsOptions

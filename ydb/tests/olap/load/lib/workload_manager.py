@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-import ydb
-import pytest
 import allure
+import pytest
 import time
 import traceback
+import ydb
+import ydb.tests.olap.lib.remote_execution as re
 
 from . import tpch
 from .conftest import LoadSuiteBase
 from .clickbench import ClickbenchParallelBase
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
-from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
+from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType
 from ydb.tests.olap.lib.utils import get_external_param
 from threading import Thread, Event
 from datetime import datetime
@@ -131,31 +132,35 @@ class WorkloadManagerBase(LoadSuiteBase):
             qparams = self._get_query_settings()
             self.save_nodes_state()
             self.before_workload(overall_result)
-            results = YdbCliHelper.workload_run(
-                path=self.get_path(),
-                query_names=self.get_query_list(),
-                iterations=qparams.iterations,
-                workload_type=self.workload_type,
-                timeout=qparams.timeout,
-                check_canonical=self.check_canonical,
-                query_syntax=self.query_syntax,
-                scale=self.scale,
-                query_prefix=qparams.query_prefix,
-                external_path=self.get_external_path(),
-                threads=self.threads,
-                users=self.get_users(),
-            )
-            for query, result in results.items():
-                try:
-                    with allure.step(query):
-                        self.process_query_result(result, query, True)
-                except BaseException:
-                    pass
+            if self.workload_type is not None:
+                results = YdbCliHelper.workload_run(
+                    path=self.get_path(),
+                    query_names=self.get_query_list(),
+                    iterations=qparams.iterations,
+                    workload_type=self.workload_type,
+                    timeout=qparams.timeout,
+                    check_canonical=self.check_canonical,
+                    query_syntax=self.query_syntax,
+                    scale=self.scale,
+                    query_prefix=qparams.query_prefix,
+                    external_path=self.get_external_path(),
+                    threads=self.threads,
+                    users=self.get_users(),
+                )
+                for query, result in results.items():
+                    try:
+                        with allure.step(query):
+                            self.process_query_result(result, query, True)
+                    except BaseException:
+                        pass
+            else:
+                results = {}
             self.after_workload(overall_result)
         finally:
             self.stop_checking.set()
             check_thread.join()
-        overall_result.merge(*results.values())
+        if len(results) > 0:
+            overall_result.merge(*results.values())
         overall_result.iterations.clear()
         self.process_query_result(overall_result, 'test', True)
         if len(self.signal_errors) > 0:
@@ -419,3 +424,147 @@ class TestWorkloadManagerClickbenchComputeSchedulerP1T1(WorkloadManagerClickbenc
 class TestWorkloadManagerClickbenchComputeSchedulerP1T4(WorkloadManagerClickbenchBase, WorkloadManagerComputeSchedulerP1):
     threads = 4
     iterations = ClickbenchParallelBase.iterations
+
+
+class WorkloadManagerOltp(WorkloadManagerComputeScheduler):
+    threads = 1
+    tpcc_warehouses: int = 4500
+    tpcc_threads: int = 0
+    verify_data: bool = False
+    _tpcc_executions: list[tuple[str, re.LongRemoteExecution]] = []
+    _tpcc_thread: Thread = None
+    _tpcc_results: dict[str, YdbCliHelper.WorkloadRunResult]
+    _remote_cli_path: str = ''
+
+    @classmethod
+    def do_setup_class(cls) -> None:
+        super().do_setup_class()
+        cls._remote_cli_path = YdbCliHelper.deploy_remote_cli()
+
+    @classmethod
+    def get_tpcc_path(cls):
+        root = get_external_param(f'table-path-{cls.suite()}', 'tpcc')
+        return f'{root}/w10000'
+
+    @classmethod
+    def _tpcc_thread_func(cls) -> None:
+        cls._tpcc_results = YdbCliHelper.exec_tpcc(cls._tpcc_executions)
+
+    @classmethod
+    def run_tpcc(cls, time: float, user: str):
+        cls._tpcc_executions = YdbCliHelper.create_tpcc_executions(
+            remote_cli_path=cls._remote_cli_path,
+            bench_time=time,
+            path=cls.get_tpcc_path(),
+            warehouses=cls.tpcc_warehouses,
+            users=[user],
+            threads=cls.tpcc_threads
+        )
+        cls._tpcc_thread = Thread(target=cls._tpcc_thread_func)
+        cls._tpcc_thread.start()
+
+    @classmethod
+    def terminate_tpcc(cls):
+        for _, e in cls._tpcc_executions:
+            e.terminate()
+
+    @classmethod
+    def wait_tpcc(cls) -> str:
+        if cls._tpcc_thread is not None:
+            cls._tpcc_thread.join()
+            cls._tpcc_executions = []
+
+    @classmethod
+    def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+        if cls._tpcc_thread is not None:
+            cls.terminate_tpcc()
+            cls.wait_tpcc()
+            result.merge(*[cls._tpcc_results[k] for k in cls._tpcc_results.keys()])
+        super().after_workload(result)
+
+    @classmethod
+    def get_key_measurements(cls) -> tuple[list[LoadSuiteBase.KeyMeasurement], str]:
+        return [
+            LoadSuiteBase.KeyMeasurement('tpcc_efficiency', 'TPC-C Efficiency', [
+                LoadSuiteBase.KeyMeasurement.Interval('#ccffcc'),
+            ], 'Efficiency of TPC-C')
+        ], ''
+
+
+class TestWorkloadManagerOltp100(WorkloadManagerOltp):
+    tpcc_pool_perc = 100
+    timeout: float = 900
+
+    @classmethod
+    def get_resource_pools(cls) -> list[ResourcePool]:
+        return [
+            ResourcePool(f'test_pool_{cls.tpcc_pool_perc}', [f'testuser{cls.tpcc_pool_perc}'], total_cpu_limit_percent_per_node=cls.tpcc_pool_perc, resource_weight=4),
+        ]
+
+    @classmethod
+    def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+        super().before_workload(result)
+        cls.run_tpcc(cls.timeout, user=f'testuser{cls.tpcc_pool_perc}')
+
+    @classmethod
+    def after_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+        if cls._tpcc_thread is not None:
+            cls.wait_tpcc()
+        super().after_workload(result)
+
+    @classmethod
+    def benchmark_setup(cls) -> None:
+        pass
+
+
+class TestWorkloadManagerOltp50(TestWorkloadManagerOltp100):
+    tpcc_pool_perc = 50
+
+
+class WorkloadManagerOltpTpch20Base(WorkloadManagerTpchBase, WorkloadManagerOltp):
+    @classmethod
+    def get_resource_pools(cls) -> list[ResourcePool]:
+        return [
+            ResourcePool('test_pool_20', ['testuser20'], total_cpu_limit_percent_per_node=20, resource_weight=4),
+        ]
+
+    @classmethod
+    def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+        super().before_workload(result)
+        cls.run_tpcc(cls.timeout, user='')
+
+
+class TestWorkloadManagerOltpTpch20s100(WorkloadManagerOltpTpch20Base):
+    tables_size = tpch.TestTpch100.tables_size
+    scale = tpch.TestTpch100.scale
+    timeout = tpch.TestTpch100.timeout
+    iterations = 2
+
+
+class TestWorkloadManagerOltpAdHoc(WorkloadManagerOltp):
+    workload_type = WorkloadType.EXTERNAL
+    iterations = 100
+    threads = 5
+
+    @classmethod
+    def get_query_list(cls) -> list[str]:
+        return [f'SELECT MAX(O_ENTRY_D) FROM `{cls.get_tpcc_path()}/oorder`']
+
+    @classmethod
+    def get_resource_pools(cls) -> list[ResourcePool]:
+        return [
+            ResourcePool('test_pool_10', ['testuser10'], total_cpu_limit_percent_per_node=10, resource_weight=4),
+        ]
+
+    @classmethod
+    def before_workload(cls, result: YdbCliHelper.WorkloadRunResult):
+        super().before_workload(result)
+        cls.run_tpcc(cls.timeout, user='')
+
+    @classmethod
+    def benchmark_setup(cls) -> None:
+        pass
+
+    @classmethod
+    def get_path(cls) -> str:
+        return ''

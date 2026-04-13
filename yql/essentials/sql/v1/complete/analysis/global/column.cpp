@@ -16,7 +16,7 @@ namespace {
 
 class TInferenceVisitor: public TSQLv1BaseVisitor {
 public:
-    TInferenceVisitor(const TNamedNodes* nodes)
+    explicit TInferenceVisitor(const TNamedNodes* nodes)
         : Nodes_(nodes)
     {
     }
@@ -197,7 +197,7 @@ private:
         TString cluster = GetObjectId(ctx->cluster_expr()).GetOrElse("");
         return TColumnContext{
             .Tables = {
-                TTableId{std::move(cluster), std::move(path)},
+                TTableId{.Cluster = std::move(cluster), .Path = std::move(path)},
             },
         };
     }
@@ -218,7 +218,7 @@ private:
 
         return TColumnContext{
             .Tables = {
-                TTableId{std::move(cluster), std::move(path)},
+                TTableId{.Cluster = std::move(cluster), .Path = std::move(path)},
             },
         };
     }

@@ -75,6 +75,18 @@ class TKqpCaFactory : public IKqpNodeComputeActorFactory {
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
+
+    std::atomic<bool> VerboseMemoryLimitException = false;
+
+    // shard scanning policy
+    std::atomic<ui32> AggregationGroupByLimit = 256;
+    std::atomic<ui32> AggregationNoGroupLimit = 1024;
+    std::atomic<ui32> ScanLimit = 3;
+    std::atomic<bool> IsParallelScanningAvailable = false;
+    std::atomic<ui32> ShardSplitFactor = 5;
+    std::atomic<ui32> CriticalTotalRetriesCount = 20;
+    std::atomic<ui32> ReaskShardRetriesCount = 5;
 
     std::atomic<ui64> MkqlLightProgramMemoryLimit = 0;
     std::atomic<ui64> MkqlHeavyProgramMemoryLimit = 0;
@@ -87,22 +99,44 @@ public:
     TKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup)
+        const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+        std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
         : ResourceManager_(resourceManager)
         , AsyncIoFactory(asyncIoFactory)
         , FederatedQuerySetup(federatedQuerySetup)
+        , ChannelService(channelService)
     {
         ApplyConfig(config);
     }
 
     void ApplyConfig(const NKikimrConfig::TTableServiceConfig::TResourceManager& config) override
     {
+        const auto& policy = config.GetShardsScanningPolicy();
+        AggregationGroupByLimit.store(policy.GetAggregationGroupByLimit());
+        AggregationNoGroupLimit.store(policy.GetAggregationNoGroupLimit());
+        ScanLimit.store(policy.GetScanLimit());
+        IsParallelScanningAvailable.store(policy.GetParallelScanningAvailable());
+        ShardSplitFactor.store(policy.GetShardSplitFactor());
+        CriticalTotalRetriesCount.store(policy.GetCriticalTotalRetriesCount());
+        ReaskShardRetriesCount.store(policy.GetReaskShardRetriesCount());
+
+        VerboseMemoryLimitException.store(config.GetVerboseMemoryLimitException());
+
         MkqlLightProgramMemoryLimit.store(config.GetMkqlLightProgramMemoryLimit());
         MkqlHeavyProgramMemoryLimit.store(config.GetMkqlHeavyProgramMemoryLimit());
         MinChannelBufferSize.store(config.GetMinChannelBufferSize());
         ChannelChunkSizeLimit.store(config.GetChannelChunkSizeLimit());
         MinMemAllocSize.store(config.GetMinMemAllocSize());
         MinMemFreeSize.store(config.GetMinMemFreeSize());
+    }
+
+    bool GetVerboseMemoryLimitException() override {
+        return VerboseMemoryLimitException.load();
+    }
+
+    TShardsScanningPolicy GetShardsScanningPolicy() override {
+        return TShardsScanningPolicy(AggregationGroupByLimit.load(), AggregationNoGroupLimit.load(), ScanLimit.load(),
+            IsParallelScanningAvailable.load(), ShardSplitFactor.load(), CriticalTotalRetriesCount.load(), ReaskShardRetriesCount.load());
     }
 
     TActorStartResult CreateKqpComputeActor(TCreateArgs&& args) override {
@@ -154,19 +188,16 @@ public:
                 ("input_channels_count", inputChannelsCount);
         }
 
-        auto& taskOpts = args.Task->GetProgram().GetSettings();
-        auto limit = taskOpts.GetHasMapJoin() || taskOpts.GetHasStateAggregation()
-            ? memoryLimits.MkqlHeavyProgramMemoryLimit
-            : memoryLimits.MkqlLightProgramMemoryLimit;
-
         memoryLimits.MemoryQuotaManager = std::make_shared<TMemoryQuotaManager>(
             ResourceManager_,
             args.MemoryPool,
             std::move(args.TxInfo),
             std::move(task),
-            limit);
+            memoryLimits.MkqlLightProgramMemoryLimit);
 
-        auto runtimeSettings = args.RuntimeSettings;
+        NYql::NDq::TComputeRuntimeSettings runtimeSettings;
+
+        runtimeSettings.ReportStatsSettings = args.ReportStatsSettings;
         runtimeSettings.ExtraMemoryAllocationPool = args.MemoryPool;
         runtimeSettings.UseSpilling = args.WithSpilling;
         runtimeSettings.StatsMode = args.StatsMode;
@@ -185,15 +216,17 @@ public:
         }
 
         NYql::NDq::IMemoryQuotaManager::TWeakPtr memoryQuotaManager = memoryLimits.MemoryQuotaManager;
-        runtimeSettings.TerminateHandler = [memoryQuotaManager, state=args.State, txId=args.TxId, taskId=args.Task->GetId()]
+        runtimeSettings.TerminateHandler = [memoryQuotaManager, state=args.State, txId=args.TxId, executerId=args.ExecuterId, taskId=args.Task->GetId()]
             (bool success, const NYql::TIssues& issues) {
                 if (auto manager = memoryQuotaManager.lock()) {
                     static_cast<TMemoryQuotaManager*>(manager.get())->TerminateHandler(success, issues);
                 }
                 if (state) {
-                    state->OnTaskFinished(txId, taskId, success);
+                    state->OnTaskFinished(txId, executerId, taskId, success);
                 }
             };
+
+        runtimeSettings.ChannelService = ChannelService;
 
         NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta meta;
         const auto tableKindExtract = [](const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta) {
@@ -233,7 +266,7 @@ public:
                 args.ExecuterId, args.TxId, args.Task, AsyncIoFactory, runtimeSettings, memoryLimits,
                 std::move(args.TraceId), std::move(args.Arena),
                 FederatedQuerySetup, GUCSettings,
-                std::move(schedulableOptions), args.BlockTrackingMode, std::move(args.UserToken), args.Database, args.EnableWatermarks);
+                std::move(schedulableOptions), args.BlockTrackingMode, std::move(args.UserToken), args.Database);
             return args.ShareMailbox ? TlsActivationContext->AsActorContext().RegisterWithSameMailbox(computeActor) :
                 TlsActivationContext->AsActorContext().Register(computeActor);
         }
@@ -243,9 +276,10 @@ public:
 std::shared_ptr<IKqpNodeComputeActorFactory> MakeKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
         std::shared_ptr<NRm::IKqpResourceManager> resourceManager,
         NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
-        const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup)
+        const std::optional<TKqpFederatedQuerySetup> federatedQuerySetup,
+        std::shared_ptr<NYql::NDq::IDqChannelService> channelService)
 {
-    return std::make_shared<TKqpCaFactory>(config, resourceManager, asyncIoFactory, federatedQuerySetup);
+    return std::make_shared<TKqpCaFactory>(config, resourceManager, asyncIoFactory, federatedQuerySetup, channelService);
 }
 
 } // namespace NKikimr::NKqp::NComputeActor

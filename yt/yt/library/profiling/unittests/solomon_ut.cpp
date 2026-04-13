@@ -129,6 +129,12 @@ struct TTestMetricConsumer
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TRenameTest
+    : public ::testing::TestWithParam<bool>
+{ };
+
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TSolomonRegistryTest, Registration)
 {
     auto impl = New<TSolomonRegistry>();
@@ -895,8 +901,10 @@ TEST(TSolomonRegistryTest, ExtensionTag)
     ASSERT_TRUE(result.Counters.contains("yt.d.bytes_read{location_type=store;medium=ssd_blobs;location_id=store0;device=sdb;model=M5100}"));
 }
 
-TEST(TSolomonRegistryTest, RenameTag)
+TEST_P(TRenameTest, RenameTag)
 {
+    bool recreate_sensor = GetParam();
+
     auto impl = New<TSolomonRegistry>();
     impl->SetWindowSize(12);
     TProfiler r(impl, "/d");
@@ -910,9 +918,9 @@ TEST(TSolomonRegistryTest, RenameTag)
     tagSet.AddExtensionTag({"model", "M5100"}, -1);
 
     auto mediumTag = tagSet.AddDynamicTag(1);
+    r = r.WithTags(tagSet);
 
-    auto c0 = r.WithTags(tagSet)
-        .Counter("/bytes_read");
+    auto c0 = r.Counter("/bytes_read");
     c0.Increment();
 
     auto result = CollectSensors(impl);
@@ -924,6 +932,11 @@ TEST(TSolomonRegistryTest, RenameTag)
     ASSERT_TRUE(result.Counters.contains("yt.d.bytes_read{location_type=store;medium=ssd_blobs;location_id=store0;device=sdb;model=M5100}"));
 
     r.RenameDynamicTag(mediumTag, "medium", "default");
+
+    if (recreate_sensor) {
+        c0 = r.Counter("/bytes_read");
+    }
+
     c0.Increment();
 
     result = CollectSensors(impl);
@@ -934,6 +947,12 @@ TEST(TSolomonRegistryTest, RenameTag)
     ASSERT_TRUE(result.Counters.contains("yt.d.bytes_read{location_type=store;medium=default}"));
     ASSERT_TRUE(result.Counters.contains("yt.d.bytes_read{location_type=store;location_id=store0;device=sdb;model=M5100;medium=default}"));
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    TRenameTest,
+    TRenameTest,
+    ::testing::Values(false, true)
+);
 
 struct TBlinkingProducer
     : ISensorProducer

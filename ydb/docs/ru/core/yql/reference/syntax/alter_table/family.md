@@ -1,5 +1,11 @@
 # Создание и изменение групп колонок
 
+{% if oss == true and backend_name == "YDB" %}
+
+{% include [OLTP_only_allow_note](../../../../_includes/only_allow_for_oltp_note.md) %}
+
+{% endif %}
+
 Механизм {% if oss == true and backend_name == "YDB" %}[групп](../../../../concepts/datamodel/table.md#column-groups){% else %}групп{% endif %} колонок позволяет увеличить производительность операций неполного чтения строк путем разделения хранения колонок строковой таблицы на несколько групп. Наиболее часто используемый сценарий — организация хранения редко используемых атрибутов в отдельной группе колонок.
 
 
@@ -37,12 +43,6 @@ ALTER TABLE series_with_families
 
 ### Изменение типа хранилища
 
-{% if oss == true and backend_name == "YDB" %}
-
-{% include [OLTP_only_allow_note](../../../../_includes/only_allow_for_oltp_note.md) %}
-
-{% endif %}
-
 Приведённый ниже код для группы колонок `default` в таблице `series_with_families` сменит тип хранилища на `rot`:
 
 ```yql
@@ -57,30 +57,22 @@ ALTER TABLE series_with_families ALTER FAMILY default SET DATA "rot";
 
 ### Изменение кодека сжатия
 
-{% if oss == true and backend_name == "YDB" %}
-
-{% include [codec_zstd_allow_for_olap_note](../../../../_includes/codec_zstd_allow_for_olap_note.md) %}
-
-{% endif %}
-
 Приведённый ниже код для группы колонок `default` в таблице `series_with_families` сменит кодек сжатия на `lz4`:
 
 ```yql
 ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION "lz4";
 ```
 
-### Изменение уровня кодека сжатия
+### Изменение режима кэширования
 
-{% if oss == true and backend_name == "YDB" %}
+При переключении режима кэширования на `in_memory` для существующей таблицы через команду `ALTER TABLE`, все страницы, которые ещё не находятся в памяти, будут подгружены автоматически.
 
-{% include [OLAP_only_allow_note](../../../../_includes/only_allow_for_olap_note.md) %}
+Если для таблицы ранее был активирован режим `in_memory`, а затем через `ALTER TABLE` установлен режим кэширования `regular`, все находящиеся в памяти страницы сохраняются, но впоследствии могут вытесняться из памяти согласно общей политике кэширования.
 
-{% endif %}
-
-Приведённый ниже код для группы колонок `default` в таблице `series_with_families` сменит уровень кодека сжатия, если он поддерживает различные уровни сжатия:
+Приведённый ниже код для группы колонок `default` в таблице `series_with_families` сменит [режим кэширования](../../../../concepts/datamodel/table.md#cache-modes) на `in_memory`:
 
 ```yql
-ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION_LEVEL 5;
+ALTER TABLE series_with_families ALTER FAMILY default SET CACHE_MODE "in_memory";
 ```
 
 Могут быть указаны все параметры группы колонок, описанные в команде [`CREATE TABLE`](../create_table/secondary_index.md)

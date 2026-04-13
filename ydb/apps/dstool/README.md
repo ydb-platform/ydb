@@ -267,6 +267,8 @@ enables pdisk ```"[NODE_ID:PDISK_ID]"```. The ```--allow-working-disks``` comman
 
 ## Do things with vdisks
 
+VDisk ids can be specified in square-bracket hex format like `[8200001b:3:0:7:0]` or round-bracket decimal format like `(2181038107-3-0-7-0)`.
+
 ### List vdisks
 
 ```bash

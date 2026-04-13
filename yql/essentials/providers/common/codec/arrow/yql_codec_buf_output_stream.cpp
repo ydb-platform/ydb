@@ -3,10 +3,8 @@
 #include <yql/essentials/public/udf/arrow/defs.h>
 
 #include <arrow/buffer.h>
-#include <arrow/buffer.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 arrow::Status TOutputBufArrowOutputStream::Write(const void* data, int64_t nbytes) {
     Buffer_.WriteMany(static_cast<const char*>(data), nbytes);
@@ -19,5 +17,4 @@ arrow::Status TOutputBufArrowOutputStream::Flush() {
     return arrow::Status::OK();
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

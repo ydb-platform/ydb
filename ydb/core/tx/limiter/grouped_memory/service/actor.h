@@ -132,6 +132,7 @@ public:
     void Handle(NEvents::TEvExternal::TEvFinishProcessScope::TPtr& ev);
     void Handle(NMemory::TEvConsumerRegistered::TPtr& ev);
     void Handle(NMemory::TEvConsumerLimit::TPtr& ev);
+    void Handle(NMon::TEvHttpInfo::TPtr& ev);
 
     void Bootstrap();
 
@@ -148,14 +149,15 @@ public:
             hFunc(NEvents::TEvExternal::TEvFinishProcessScope, Handle);
             hFunc(NMemory::TEvConsumerRegistered, Handle);
             hFunc(NMemory::TEvConsumerLimit, Handle);
+            hFunc(NMon::TEvHttpInfo, Handle);
             default:
                 AFL_VERIFY(false)("ev_type", ev->GetTypeName());
         }
     }
 private:
-    size_t AcquireManager(ui64 externalProcessId, int delta = 1);
+    size_t AcquireManager(ui64 externalProcessId);
     size_t ReleaseManager(ui64 externalProcessId);
-    size_t GetManager(ui64 externalProcessId);
+    std::optional<size_t> GetManager(ui64 externalProcessId);
 };
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

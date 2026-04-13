@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass
-from typing import Awaitable, Union
+from typing import Awaitable, Optional, Union
 
 from ..issues import ClientInternalError
 
@@ -32,7 +32,7 @@ class OnPartitionGetStartOffsetRequest(BaseReaderEvent):
 
 @dataclass
 class OnPartitionGetStartOffsetResponse:
-    start_offset: int
+    start_offset: Optional[int]
 
 
 class OnInitPartition(BaseReaderEvent):
@@ -43,39 +43,45 @@ class OnShutdownPartition:
     pass
 
 
-TopicEventDispatchType = Union[OnPartitionGetStartOffsetResponse, None]
+TopicEventDispatchType = Optional[OnPartitionGetStartOffsetResponse]
 
 
 class EventHandler:
     def on_commit(self, event: OnCommit) -> Union[None, Awaitable[None]]:
-        pass
+        return None
 
     def on_partition_get_start_offset(
         self,
         event: OnPartitionGetStartOffsetRequest,
     ) -> Union[OnPartitionGetStartOffsetResponse, Awaitable[OnPartitionGetStartOffsetResponse]]:
-        pass
+        return OnPartitionGetStartOffsetResponse(start_offset=None)
 
     def on_init_partition(self, event: OnInitPartition) -> Union[None, Awaitable[None]]:
-        pass
+        return None
 
     def on_shutdown_partition(self, event: OnShutdownPartition) -> Union[None, Awaitable[None]]:
-        pass
+        return None
 
-    async def _dispatch(self, event: BaseReaderEvent) -> Awaitable[TopicEventDispatchType]:
-        f = None
+    async def _dispatch(self, event: BaseReaderEvent) -> TopicEventDispatchType:
         if isinstance(event, OnCommit):
-            f = self.on_commit
+            commit_result = self.on_commit(event)
+            if asyncio.iscoroutine(commit_result):
+                await commit_result
+            return None
         elif isinstance(event, OnPartitionGetStartOffsetRequest):
-            f = self.on_partition_get_start_offset
+            offset_result = self.on_partition_get_start_offset(event)
+            if asyncio.iscoroutine(offset_result):
+                return await offset_result
+            return offset_result  # type: ignore[return-value]
         elif isinstance(event, OnInitPartition):
-            f = self.on_init_partition
+            init_result = self.on_init_partition(event)
+            if asyncio.iscoroutine(init_result):
+                await init_result
+            return None
         elif isinstance(event, OnShutdownPartition):
-            f = self.on_shutdown_partition
+            shutdown_result = self.on_shutdown_partition(event)
+            if asyncio.iscoroutine(shutdown_result):
+                await shutdown_result
+            return None
         else:
             raise ClientInternalError("Unsupported topic reader event")
-
-        if asyncio.iscoroutinefunction(f):
-            return await f(event)
-
-        return f(event)

@@ -808,6 +808,11 @@
                 "ColumnId": 11,
                 "ColumnName": "AdjacentParent",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "CreationTimestampSeconds",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -824,7 +829,8 @@
                     8,
                     9,
                     10,
-                    11
+                    11,
+                    12
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -3271,7 +3277,7 @@
             },
             {
                 "ColumnId": 21,
-                "ColumnName": "MaterializeIndexes",
+                "ColumnName": "IncludeIndexData",
                 "ColumnType": "Bool"
             }
         ],
@@ -6524,6 +6530,11 @@
                 "ColumnId": 21,
                 "ColumnName": "ParentIndex",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 22,
+                "ColumnName": "SysView",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -6550,7 +6561,8 @@
                     18,
                     19,
                     20,
-                    21
+                    21,
+                    22
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6796,6 +6808,11 @@
                 "ColumnId": 5,
                 "ColumnName": "StandaloneSharding",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "IsRestore",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -6806,7 +6823,8 @@
                     2,
                     3,
                     4,
-                    5
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6991,6 +7009,11 @@
                 "ColumnId": 8,
                 "ColumnName": "IsEnabled",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "PasswordHashes",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -7004,7 +7027,8 @@
                     5,
                     6,
                     7,
-                    8
+                    8,
+                    9
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7127,6 +7151,11 @@
                 "ColumnId": 10,
                 "ColumnName": "SchemaChanges",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "UserSIDs",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -7142,7 +7171,8 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7220,6 +7250,11 @@
                 "ColumnId": 10,
                 "ColumnName": "SchemaChanges",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "UserSIDs",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -7235,7 +7270,8 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -9293,6 +9329,219 @@
                     2,
                     3,
                     4
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 130,
+        "TableName": "ForcedCompactions",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "Id",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "State",
+                "ColumnType": "Byte"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "TableOwnerId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "TableLocalId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "Cascade",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "MaxShardsInFlight",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "UserSID",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "StartTime",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "EndTime",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "TotalShardCount",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "DoneShardCount",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "SubdomainOwnerId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "SubdomainLocalId",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8,
+                    9,
+                    10,
+                    11,
+                    12,
+                    13
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 131,
+        "TableName": "WaitingForcedCompactionShards",
+        "TableKey": [
+            1,
+            2
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "OwnerShardIdx",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "LocalShardIdx",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "ForcedCompactionId",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 132,
+        "TableName": "SharedShards",
+        "TableKey": [
+            1,
+            2,
+            3
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "ShardIdx",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "OwnerPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "LocalPathId",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3
                 ],
                 "RoomID": 0,
                 "Codec": 0,

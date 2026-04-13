@@ -15,7 +15,6 @@ from collections import Counter
 from library.python.svn_version import svn_version
 from yql.essentials.tests.postgresql.common import get_out_files, Differ
 
-
 PROGRAM_NAME = "pg-make-test"
 RUNNER = "../pgrun/pgrun"
 SPLITTER = "../pgrun/pgrun split-statements"

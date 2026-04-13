@@ -102,6 +102,7 @@ function onDataShardInfoLoaded(data) {
                                     + '">' + info.Mediator + '</a>');
     $('#tablet-info-generation').text(info.Generation);
     $('#tablet-info-role').text(info.IsFollower ? 'Follower' : 'Leader');
+    $('#tablet-info-follower-id').text(info.FollowerId);
     $('#tablet-info-state').text(info.State + (info.IsActive ? ' (active)' : ' (inactive)'));
     $('#tablet-info-shared-blobs').text(info.HasSharedBlobs);
     $('#tablet-info-change-sender').html('<a href="app?TabletID=' + TabletId + '&page=change-sender">Viewer</a>');
@@ -176,7 +177,7 @@ function loadDataShardInfo() {
         return;
 
     DataShardInfoState.loadingInfo = true;
-    var url = '../cms/api/datashard/json/getinfo?tabletid=' + TabletId;
+    var url = '../cms/api/datashard/json/getinfo?tabletid=' + TabletId + '&followerid=' + FollowerId;
     $.get(url).done(onDataShardInfoLoaded).fail(onDataShardInfoFailed);
 }
 

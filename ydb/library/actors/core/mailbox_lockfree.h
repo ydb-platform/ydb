@@ -205,7 +205,7 @@ namespace NActors {
     public:
         ui32 Hint = 0;
 
-        EActorPack ActorPack = EActorPack::Empty;
+        std::atomic<EActorPack> ActorPack{ EActorPack::Empty };
 
         static constexpr TMailboxType::EType Type = TMailboxType::LockFreeIntrusive;
 

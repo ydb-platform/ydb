@@ -1,5 +1,6 @@
 #pragma once
 #include "dq_hash_join_table.h"
+#include "dq_block_hash_join_settings.h"
 #include <vector>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/alloc.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/layout_converter_common.h>
@@ -222,6 +223,11 @@ template <typename T> [[nodiscard]] T ExtractReadyFuture(NThreading::TFuture<T>&
     return future.ExtractValueSync();
 }
 
+
+
+template<typename T>
+concept JoinMatchFn = std::invocable<T, TSingleTuple> && std::invocable<T, TSides<TSingleTuple>>;
+
 TPackResult GetPage(TFuturePage&& future);
 
 using ProbeSpillingPage = std::optional<TPackResult>;
@@ -242,6 +248,8 @@ struct TFutureTableData {
 struct TTableAndSomeData {
     NJoinTable::TNeumannJoinTable Table;
     TMKQLDeque<TFuturePage> Futures;
+    std::optional<TPackResult> CurrentProbePack;
+    ui32 ProbeResumeIndex = 0;
 };
 
 namespace NJoinPackedTuples {
@@ -249,10 +257,10 @@ template <typename Source> class TInMemoryHashJoin {
   public:
     using TTable = NJoinTable::TNeumannJoinTable;
 
-    TInMemoryHashJoin(TSides<Source> sources, NUdf::TLoggerPtr logger, TString componentName,
-                      TSides<const NPackedTuple::TTupleLayout*> layouts)
-        : Logger_(logger)
-        , LogComponent_(logger->RegisterComponent(componentName))
+    TInMemoryHashJoin(TSides<Source> sources, TComputationContext& ctx, TString componentName,
+                    TSides<const NPackedTuple::TTupleLayout*> layouts)
+        : Logger_(ctx.MakeLogger())
+        , LogComponent_(Logger_->RegisterComponent(componentName))
         , Sources_(std::move(sources))
         , Layouts_(layouts)
         , Table_(Layouts_.Build)
@@ -263,20 +271,19 @@ template <typename Source> class TInMemoryHashJoin {
     }
 
     EFetchResult MatchRows([[maybe_unused]] TComputationContext& ctx,
-                           JoinMatchFun<TSingleTuple> auto consumeOneOrTwoTuples) {
+                           JoinMatchFun<TSingleTuple> auto consumeOneOrTwoTuples, auto isFull) {
         while (!Sources_.Build.Finished()) {
             FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Build.FetchRow();
             switch (AsStatus(var)) {
             case NYql::NUdf::EFetchStatus::Finish: {
-                Table_.BuildWith(Flatten(BuildChunks_));
+                Table_.BuildWith(Flatten(std::move(BuildChunks_)));
                 break;
             }
             case NYql::NUdf::EFetchStatus::Yield: {
                 return EFetchResult::Yield;
             }
             case NYql::NUdf::EFetchStatus::Ok: {
-                auto& packResult = std::get<One<IBlockLayoutConverter::TPackResult>>(var);
-                BuildChunks_.push_back(std::move(packResult.Data));
+                BuildChunks_.push_back(std::move(GetPayload(var)));
                 break;
             }
             default:
@@ -287,18 +294,43 @@ template <typename Source> class TInMemoryHashJoin {
             return EFetchResult::Finish;
         }
 
+        if (FetchedPack_.has_value()) {
+            ui32 idx = 0;
+            for (TSingleTuple probeTuple : *FetchedPack_) {
+                if (idx++ < ResumeIndex_) {
+                    continue;
+                }
+                Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
+                    consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
+                });
+                if (isFull()) {
+                    ResumeIndex_ = idx;
+                    return EFetchResult::One;
+                }
+            }
+            FetchedPack_ = std::nullopt;
+            ResumeIndex_ = 0;
+        }
+
         if (!Sources_.Probe.Finished()) {
-            const FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Probe.FetchRow();
+            FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Probe.FetchRow();
             const NKikimr::NMiniKQL::EFetchResult resEnum = AsResult(var);
 
             if (resEnum == EFetchResult::One) {
-                const IBlockLayoutConverter::TPackResult& thisPackResult =
-                    std::get<One<IBlockLayoutConverter::TPackResult>>(var).Data;
-                thisPackResult.ForEachTuple([&](TSingleTuple probeTuple) {
+                FetchedPack_ = std::move(GetPayload(var));
+                ResumeIndex_ = 0;
+                ui32 idx = 0;
+                for (TSingleTuple probeTuple : *FetchedPack_) {
+                    idx++;
                     Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
                         consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
                     });
-                });
+                    if (isFull()) {
+                        ResumeIndex_ = idx;
+                        return EFetchResult::One;
+                    }
+                }
+                FetchedPack_ = std::nullopt;
             }
 
             return resEnum;
@@ -315,19 +347,24 @@ template <typename Source> class TInMemoryHashJoin {
     TTable Table_;
     TPackResult BuildData_;
     TMKQLVector<IBlockLayoutConverter::TPackResult> BuildChunks_;
+    std::optional<IBlockLayoutConverter::TPackResult> FetchedPack_;
+    ui32 ResumeIndex_ = 0;
 };
 
-template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
+template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THybridHashJoin {
     struct Logger {
+        Logger(TComputationContext& ctx, TString name)
+        : Logger_(ctx.MakeLogger())
+        , LogComponent_(Logger_->RegisterComponent(name)) {}
         NUdf::TLoggerPtr Logger_;
-        NUdf::TLogComponentId LogComponent_;
+        NUdf::TLogComponentId LogComponent_ ;
 
         void LogDebug(TStringRef msg) const {
             UDF_LOG(Logger_, LogComponent_, NYql::NUdf::ELogLevel::Debug, msg);
         }
     };
 
-    using Self = THybridHashJoin<Source, Settings>;
+    using Self = THybridHashJoin<Source, Settings, Kind>;
 
   public:
     using TTable = NJoinTable::TNeumannJoinTable;
@@ -349,37 +386,40 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
 
     struct BuildingInMemoryTable {
         BuildingInMemoryTable(Self& self, TBucketsSpiller<Settings> spiller)
-            : EmptyTable(self.Layouts_.Build)
-            , Spiller(std::move(spiller))
+            : Spiller(std::move(spiller))
         {
+            bool trackUsed = (Kind == EJoinKind::Left) && self.Settings_.LeftIsBuild();
+            for(int index = 0; index < std::ssize(Spiller.GetBuckets()); ++index) {
+                ProbeState.Buckets.push_back(TTable{self.Layouts_.Build, trackUsed});
+            }
             self.Logger_.LogDebug("BuildingInMemoryTable stage started");
         }
 
-        NJoinTable::TNeumannJoinTable EmptyTable;
         TBucketsSpiller<Settings> Spiller;
+        TProbeSpiller<Settings>::State ProbeState;
     };
 
     struct Probing {
-        Probing(Self& self, TTable&& table, TSimpleSpiller<Settings>&& spiller)
-            : Table(std::move(table))
-            , Probe(std::move(self.Sources_).Probe())
-            , Spiller(std::move(spiller))
+        Probing(Self& self, TProbeSpiller<Settings>::State&& init)
+            : Probe(std::move(self.Sources_).Probe())
+            , Spiller(self.Spiller_, self.Layouts_.Probe, std::move(init))
         {
+            using SpillerType = TProbeSpiller<Settings>;
             int inMemoryBuckets =
-                std::accumulate(Spiller.GetState().SpilledBuckets_.begin(), Spiller.GetState().SpilledBuckets_.end(), 0,
-                                [&](int im, const TSides<TBucket>& bucket) { return im += !IsBucketSpilled(bucket); });
+                std::accumulate(Spiller.GetState().Buckets.begin(), Spiller.GetState().Buckets.end(), 0,
+                                [&](int im, const SpillerType::Bucket& bucket) { return im += !SpillerType::IsBucketSpilled(bucket); });
             int spilledBuckets =
-                std::accumulate(Spiller.GetState().SpilledBuckets_.begin(), Spiller.GetState().SpilledBuckets_.end(), 0,
-                                [&](int im, const TSides<TBucket>& bucket) { return im += IsBucketSpilled(bucket); });
+                std::accumulate(Spiller.GetState().Buckets.begin(), Spiller.GetState().Buckets.end(), 0,
+                                [&](int spilled, const SpillerType::Bucket& bucket) { return spilled += SpillerType::IsBucketSpilled(bucket); });
 
             self.Logger_.LogDebug(Sprintf("Probing stage started, in memory buckets: %i, spilled buckets: %i",
                                           inMemoryBuckets, spilledBuckets));
         }
 
-        TTable Table;
         Source Probe;
-        TSimpleSpiller<Settings> Spiller;
+        TProbeSpiller<Settings> Spiller;
         std::optional<TPackResult> FetchedPack;
+        ui32 ResumeIndex = 0;
     };
 
     using DumpedBuckets = std::unordered_map<int, TSpilledBucket>;
@@ -423,7 +463,9 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
     class Sources {
       public:
         Sources(TSides<Source> data) {
-            ForEachSide([&](ESide side) { Data_.SelectSide(side).emplace(std::move(data.SelectSide(side))); });
+            for(ESide side: EachSide) { 
+                Data_.SelectSide(side).emplace(std::move(data.SelectSide(side))); 
+            }
         }
 
         Source Build() && {
@@ -440,13 +482,15 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
         TSides<std::optional<Source>> Data_;
     };
 
-    THybridHashJoin(TSides<Source> sources, NUdf::TLoggerPtr logger, TString componentName,
-                    TSides<const NPackedTuple::TTupleLayout*> layouts, TComputationContext& ctx)
-        : Logger_(logger, logger->RegisterComponent(componentName))
+    THybridHashJoin(TSides<Source> sources, TComputationContext& ctx, TString componentName,
+                    TSides<const NPackedTuple::TTupleLayout*> layouts, TBlockHashJoinSettings settings = {})
+        : Logger_(ctx, componentName)
         , Layouts_(layouts)
-        , Spiller_(ctx.SpillerFactory->CreateSpiller())
+        , Spiller_(ctx.SpillerFactory ? ctx.SpillerFactory->CreateSpiller() : nullptr)
         , Sources_(std::move(sources))
-    {}
+        , Settings_(settings)
+    {
+    }
 
     struct Finish {};
 
@@ -465,15 +509,45 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
     }
 
 
-    EFetchResult MatchRows([[maybe_unused]] TComputationContext& ctx,
-                           std::invocable<TSides<TSingleTuple>> auto consumePairOfTuples) {
-        auto fetchSpillingCondition = [](TPackResult& res) {
-            return [&] {
-                if (!TlsAllocState->GetMaximumLimitValueReached()) {
-                    return false;
+    EFetchResult MatchRows([[maybe_unused]] TComputationContext& ctx, auto consume, auto isFull) {
+        auto notEnoughMemory = [hasSpiller = !!Spiller_] {
+            return hasSpiller && TlsAllocState->IsMemoryYellowZoneEnabled();
+        };
+        auto lookupToTable = [&](TTable& table, TSingleTuple tuple) {
+            bool found = false;
+            if constexpr (Kind == EJoinKind::Left) {
+                if (Settings_.LeftIsBuild()) {
+                    table.Lookup(tuple, [&](TSingleTuple tableMatch) {
+                        found = true;
+                        consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
+                    });
+                } else {
+                    table.Lookup(tuple, [&](TSingleTuple tableMatch) {
+                        found = true;
+                        consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
+                    });
+                    if (!found) {
+                        consume(tuple);
+                    }
                 }
-                return ui64(FreeMemory()) < std::max(ui64(res.AllocatedBytes()), 200_KB);
-            };
+            } else {
+                table.Lookup(tuple, [&](TSingleTuple tableMatch) {
+                    found = true;
+                    if constexpr (Kind == EJoinKind::Inner) {
+                        consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
+                    }
+                });
+                if constexpr (Kind == EJoinKind::LeftOnly) {
+                    if (!found) {
+                        consume(tuple);
+                    }
+                }
+                if constexpr(Kind == EJoinKind::LeftSemi) {
+                    if (found) {
+                        consume(tuple);
+                    }
+                }
+            }
         };
         if (std::get_if<Init>(&State_)) {
             State_ = FetchingBuild{*this};
@@ -492,93 +566,69 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
                     State_ = BuildingInMemoryTable{*this, std::move(state.Spiller)};
                 }
             } else {
-                ESpillResult res = state.Spiller.SpillWhile(fetchSpillingCondition(*state.Pack));
+                ESpillResult res = state.Spiller.SpillWhile(notEnoughMemory);
                 switch (res) {
                 case Spilling:
                     return WaitWhileSpilling();
                 case FinishedSpilling:
                     break;
-                case DontHavePages:
-                    MKQL_ENSURE(false,
-                                "spilling in smaller pages is not implemented");
+                case DontHavePages:{
                     break;
                 }
-                state.Pack->ForEachTuple([&](TSingleTuple tuple) { state.Spiller.AddRow(tuple); });
+                }
+                for (TSingleTuple tuple: *state.Pack) { 
+                    state.Spiller.AddRow(tuple); 
+                }
                 state.Pack = std::nullopt;
             }
         } else if (auto* s = std::get_if<BuildingInMemoryTable>(&State_)) {
             BuildingInMemoryTable& state = *s;
-            TBuckets& buckets = state.Spiller.GetBuckets();
-            const i64 memoryWithoutDummyStorage = TlsAllocState->GetAllocated();
-            auto extraMemoryForBuild = [&] {
-                i64 flattenMemory = 0;
-                i64 inMemoryTuples = 0;
-                for (const auto& bucket : buckets) {
-                    if (!bucket.IsSpilled()) {
-                        for (auto& page : bucket.InMemoryPages) {
-                            flattenMemory += page.AllocatedBytes();
-                            inMemoryTuples += page.NTuples;
-                        }
-                        flattenMemory += bucket.BuildingPage.AllocatedBytes();
-                        inMemoryTuples += bucket.BuildingPage.NTuples;
-                    }
-                }
-
-                return std::max(state.EmptyTable.RequiredMemoryForBuild(inMemoryTuples), flattenMemory);
-            };
-            auto peakMemoryDuringBuild = [&]() -> ui64 {
-                return memoryWithoutDummyStorage + extraMemoryForBuild();
-            };
-
-            {
-                ui64 optimisticPeak = peakMemoryDuringBuild();
-                TMKQLVector<TMKQLVector<std::byte>> dummyStorage;
-                while (optimisticPeak > TlsAllocState->GetLimit() && !TlsAllocState->GetMaximumLimitValueReached()) {
-                    int allocSize = std::min(static_cast<i64>(TlsAllocState->GetLimit() * 0.1), i64{100 * 1 << 20});
-                    dummyStorage.emplace_back();
-                    dummyStorage.back().resize(allocSize, static_cast<std::byte>(allocSize & 1));
-                }
-            }
-            ESpillResult res =
-                state.Spiller.SpillWhile([&] { return peakMemoryDuringBuild() > TlsAllocState->GetLimit(); });
+            ESpillResult res = state.Spiller.SpillWhile(notEnoughMemory);
             switch (res) {
-            case Spilling:
-                return WaitWhileSpilling();
-            case FinishedSpilling:
-                break;
-            case DontHavePages:
-                MKQL_ENSURE(false,
-                            "spilling in smaller pages is not implemented");
-                break;
+                case Spilling:
+                    return WaitWhileSpilling();
+                case FinishedSpilling:
+                    break;
+                case DontHavePages:
+                    break;
             }
-            MKQL_ENSURE(peakMemoryDuringBuild() < TlsAllocState->GetLimit(), "sanity check");
-            MKQL_ENSURE(
-                FreeMemory() > extraMemoryForBuild(),
-                Sprintf("%i > %i, extra allocations because of dummyStorage?", FreeMemory(), extraMemoryForBuild()));
-            TMKQLVector<TPackResult> inMemoryPages;
-            TSimpleSpiller<Settings> probeSpiller(Spiller_, Layouts_.Probe);
-
-            for (int index = 0; index < std::ssize(buckets); ++index) {
-                TBucket& bucket = buckets[index];
-                if (!bucket.IsSpilled()) {
-                    bucket.DetatchBuildingPage();
-                    for (auto& page : bucket.InMemoryPages) {
-                        inMemoryPages.push_back(std::move(page));
+            std::optional<int> smallestBucket = std::nullopt;
+            for (int index = 0; index < std::ssize(state.Spiller.GetBuckets()); ++index) {
+                TBucket& bucket = state.Spiller.GetBuckets()[index];
+                bucket.DetatchBuildingPage();
+                if (!bucket.Empty() && !bucket.IsSpilled()) {
+                    if (!smallestBucket || state.Spiller.GetBuckets()[*smallestBucket].InMemoryPages().size() > bucket.InMemoryPages().size()) {
+                        smallestBucket = index;
                     }
-                } else {
-                    bucket.DetatchBuildingPage();
-                    probeSpiller.GetState().SpilledBuckets_[index].Build = std::move(bucket);
-                    probeSpiller.GetState().SpilledBuckets_[index].Probe.SpilledPages.emplace();
                 }
-                MKQL_ENSURE(bucket.Empty(), "state left in buckets?");
             }
-            buckets.clear();
-            buckets.shrink_to_fit();
-            state.EmptyTable.BuildWith(Flatten(std::move(inMemoryPages)));
-            State_ = Probing{*this, std::move(state.EmptyTable), std::move(probeSpiller)};
+            if (!smallestBucket) {
+                for(int index = 0; index < std::ssize(state.Spiller.GetBuckets()); ++index) {
+                    TBucket& bucket = state.Spiller.GetBuckets()[index];
+                    typename TProbeSpiller<Settings>::Bucket& probeBucket = state.ProbeState.Buckets[index];
+                    if (!bucket.Empty()) {
+                        TTable* table = std::get_if<TTable>(&probeBucket);
+                        MKQL_ENSURE(table && table->Empty(), "sanity check");
+                        MKQL_ENSURE(bucket.IsSpilled(), "only spilled buckets are left after building in-memory tables");
+                        TSides<TBucket> thisBucket;
+                        thisBucket.Build = std::move(bucket);
+                        thisBucket.Probe.SpilledPages.emplace();
+                        probeBucket = std::move(thisBucket);
+                    }
+                }
+                State_ = Probing{*this, std::move(state.ProbeState)};
+            } else {
+                TTable* table = std::get_if<TTable>(&state.ProbeState.Buckets[*smallestBucket]);
+                MKQL_ENSURE(table, "sanity check");
+                TBucket& buildBucket = state.Spiller.GetBuckets()[*smallestBucket];
+
+                table->BuildWith(Flatten(buildBucket.ReleaseInMemoryPages()));
+                MKQL_ENSURE(state.Spiller.GetBuckets()[*smallestBucket].Empty(), "this bucket should be empty now");
+            }
+
         } else if (auto* s = std::get_if<Probing>(&State_)) {
             Probing& state = *s;
-            if (!state.FetchedPack.has_value()) { 
+            if (!state.FetchedPack.has_value()) {
                 FetchResult<TPackResult> var = state.Probe.FetchRow();
                 NYql::NUdf::EFetchStatus status = AsStatus(var);
                 if (status == NYql::NUdf::EFetchStatus::Yield) {
@@ -587,31 +637,37 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
                     state.FetchedPack = std::move(GetPayload(var));
                 } else {
                     MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unexpected enum");
+                    if constexpr (Kind == EJoinKind::Left) {
+                        if (Settings_.LeftIsBuild()) {
+                            EmitUnmatchedFromInMemoryBuckets(state.Spiller, consume);
+                        }
+                    }
                     std::unordered_map<int, TSpilledBucket> alreadyDumped;
                     TMKQLVector<TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>> futures;
-                    for (int index = 0; index < std::ssize(state.Spiller.GetState().SpilledBuckets_); ++index) {
-                        TSides<TBucket>& thisPair = state.Spiller.GetState().SpilledBuckets_[index];
-                        if (IsBucketSpilled(thisPair)) {
-                            ForEachSide([&](ESide side) {
+                    for (int index = 0; index < std::ssize(state.Spiller.GetState().Buckets); ++index) {
+                        if (state.Spiller.IsBucketSpilled(index)) {
+                            TSides<TBucket>& thisPair = *std::get_if<TSides<TBucket>>(&state.Spiller.GetState().Buckets[index]);
+                            for(ESide side: EachSide) {
                                 TBucket& thisBucket = thisPair.SelectSide(side);
                                 thisBucket.DetatchBuildingPage();
-                                for (TPackResult& page : thisBucket.InMemoryPages) {
+                                for( TPackResult& page: thisBucket.DetatchPages()){
+
                                     futures.push_back(TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>{
                                         .Val = SpillPage(*Spiller_, std::move(page)), .Side = side,
                                         .BucketIndex = index});
                                 }
                                 alreadyDumped[index].SelectSide(side) = std::move(*thisBucket.SpilledPages);
                                 thisBucket.SpilledPages = std::nullopt;
-                            });
+                            }
                         }
                     }
-                    for (auto& page : state.Spiller.GetState().InMemoryPages_) {
+                    for (auto& page : state.Spiller.GetState().InMemoryPages) {
                         futures.push_back(TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>{
                             .Val = SpillPage(*Spiller_, std::move(page.Val)), .Side = page.Side,
                             .BucketIndex = page.BucketIndex});
                     }
-                    state.Spiller.GetState().InMemoryPages_.clear();
-                    state.Spiller.GetState().InMemoryPages_.shrink_to_fit();
+                    state.Spiller.GetState().InMemoryPages.clear();
+                    state.Spiller.GetState().InMemoryPages.shrink_to_fit();
                     if (futures.empty()) {
                         if (alreadyDumped.empty()) {
                             State_ = Finish{};
@@ -625,33 +681,38 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
                     }
                 }
             } else {
-                switch (state.Spiller.SpillWhile(fetchSpillingCondition(*state.FetchedPack))) {
+                switch (state.Spiller.SpillWhile(notEnoughMemory)) {
                 case Spilling:
                     return WaitWhileSpilling();
                 case FinishedSpilling:
                     break;
                 case DontHavePages: {
-                    MKQL_ENSURE(
-                        false,
-                        "dont have any pages to spill, "
-                        "spilling in smaller pages is not implemented");
+                    break;
                 }
                 default:
                     MKQL_ENSURE(false, "unhandled ESpillResult case");
                 }
-                state.FetchedPack->ForEachTuple([&](TSingleTuple tuple) {
+                ui32 idx = 0;
+                for (TSingleTuple tuple : *state.FetchedPack) {
+                    if (idx++ < state.ResumeIndex) {
+                        continue;
+                    }
                     int bucketIndex = Settings.BucketIndex(tuple);
-
-                    bool thisBucketSpilled = state.Spiller.GetState().SpilledBuckets_[bucketIndex].Build.IsSpilled();
+                    bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
                     if (thisBucketSpilled) {
                         state.Spiller.AddRow({.Val = tuple, .Side = ESide::Probe, .BucketIndex = bucketIndex});
-                    } else if (!state.Table.Empty()) {
-                        state.Table.Lookup(tuple, [&](TSingleTuple tableMatch) {
-                            consumePairOfTuples(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
-                        });
+                    } else {
+                        TTable* thisTable = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
+                        MKQL_ENSURE(thisTable, "sanity check");
+                        lookupToTable(*thisTable, tuple);
                     }
-                });
+                    if (isFull()) {
+                        state.ResumeIndex = idx;
+                        return EFetchResult::One;
+                    }
+                }
                 state.FetchedPack = std::nullopt;
+                state.ResumeIndex = 0;
             }
         } else if (auto* s = std::get_if<DumpRestOfPages>(&State_)) {
             DumpRestOfPages& state = *s;
@@ -662,7 +723,6 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
                     it->second.SelectSide(future.Side).push_back(ExtractReadyFuture(std::move(future.Val)));
                 }
                 State_ = JoinPairsOfPartitions{*this, std::move(state.AlreadyDumped)};
-                Logger_.LogDebug("started processing spilled buckets");
 
             } else {
                 return WaitWhileSpilling();
@@ -692,7 +752,8 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
                         for (auto& future : tdata->Futures) {
                             vec.push_back(GetPage(std::move(future), ESide::Build));
                         }
-                        NJoinTable::TNeumannJoinTable table{Layouts_.Build};
+                        bool trackUsed = (Kind == EJoinKind::Left) && Settings_.LeftIsBuild();
+                        NJoinTable::TNeumannJoinTable table{Layouts_.Build, trackUsed};
                         table.BuildWith(Flatten(std::move(vec)));
                         state.SelectedPair->Table = TTableAndSomeData{.Table = std::move(table), .Futures = {}};
                     } else {
@@ -705,17 +766,32 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
                     while (table->Futures.size() < MinFuturesInBuffer && !currentProbe.empty()) {
                         table->Futures.push_back(Spiller_->Extract(*GetBackOrNull(currentProbe)));
                     }
-                    if (table->Futures.empty()) {
+                    if (table->CurrentProbePack.has_value()) {
+                        ui32 idx = 0;
+                        for (TSingleTuple probeTuple : *table->CurrentProbePack) {
+                            if (idx++ < table->ProbeResumeIndex) {
+                                continue;
+                            }
+                            lookupToTable(table->Table, probeTuple);
+                            if (isFull()) {
+                                table->ProbeResumeIndex = idx;
+                                return EFetchResult::One;
+                            }
+                        }
+                        table->CurrentProbePack = std::nullopt;
+                        table->ProbeResumeIndex = 0;
+                    } else if (table->Futures.empty()) {
                         MKQL_ENSURE(currentProbe.empty(), "sanity check");
+                        if constexpr (Kind == EJoinKind::Left) {
+                            if (Settings_.LeftIsBuild()) {
+                                table->Table.ForEachUnused(consume);
+                            }
+                        }
                         state.SelectedPair = std::nullopt;
                     } else {
                         if (table->Futures.front().IsReady()) {
-                            TPackResult pack = GetPage(*GetFrontOrNull(table->Futures), ESide::Probe);
-                            pack.ForEachTuple([&](TSingleTuple probeTuple) {
-                                table->Table.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
-                                    consumePairOfTuples({.Build = buildTuple, .Probe = probeTuple});
-                                });
-                            });
+                            table->CurrentProbePack = GetPage(*GetFrontOrNull(table->Futures), ESide::Probe);
+                            table->ProbeResumeIndex = 0;
                         } else {
                             return WaitWhileSpilling();
                         }
@@ -731,11 +807,25 @@ template <typename Source, TSpillerSettings Settings> class THybridHashJoin {
         return EFetchResult::One;
     }
 
+    template <typename TSpiller, typename F>
+    void EmitUnmatchedFromInMemoryBuckets(TSpiller& spiller, F&& consume) {
+        for (int index = 0; index < std::ssize(spiller.GetState().Buckets); ++index) {
+            if (spiller.IsBucketSpilled(index)) {
+                continue;
+            }
+            TTable* table = std::get_if<TTable>(&spiller.GetState().Buckets[index]);
+            if (table && !table->Empty()) {
+                table->ForEachUnused(std::forward<F>(consume));
+            }
+        }
+    }
+
   private:
     const Logger Logger_;
     TSides<const NPackedTuple::TTupleLayout*> Layouts_;
     ISpiller::TPtr Spiller_;
     Sources Sources_;
+    TBlockHashJoinSettings Settings_;
     std::variant<Init, FetchingBuild, BuildingInMemoryTable, Probing, DumpRestOfPages, JoinPairsOfPartitions, Finish>
         State_ = Init{};
 };

@@ -729,6 +729,7 @@ namespace NKikimr {
                         ranks.VirtualLevelToCompact = i;
                     }
                 }
+                Task->MaxRatio = maxRank;
 
                 // fill in compaction task or do nothing
                 if (maxRank < RankThreshold) {

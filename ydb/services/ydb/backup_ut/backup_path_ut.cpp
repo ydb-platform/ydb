@@ -1,104 +1,187 @@
 #include "s3_backup_test_base.h"
+#include "fs_backup_test_base.h"
 
 #include <util/random/random.h>
+#include <util/folder/path.h>
+#include <util/folder/tempdir.h>
 
-#include <contrib/libs/fmt/include/fmt/format.h>
 #include <ydb/library/testlib/helpers.h>
 
 using namespace NYdb;
 
-class TBackupPathTestFixture : public TS3BackupTestFixture {
-    void SetUp(NUnitTest::TTestContext& /* context */) override {
-        using namespace fmt::literals;
-        const bool isOlap = TStringBuf{Name_}.EndsWith("+IsOlap");
+using TBackupPathTestFixture = TS3BackupTestFixture;
+using TBackupPathTestFixtureFs = TFsBackupTestFixture;
 
-        auto res = YdbQueryClient().ExecuteQuery(fmt::format(R"sql(
-            CREATE TABLE `/Root/RecursiveFolderProcessing/Table0` (
-                key Uint32 NOT NULL,
-                value String,
-                PRIMARY KEY (key)
-            ) WITH (
-                STORE = {store}
-                {partition_count}
-            );
+namespace {
 
-            CREATE TABLE `/Root/RecursiveFolderProcessing/dir1/Table1` (
-                key Uint32 NOT NULL,
-                value String,
-                PRIMARY KEY (key)
-            ) WITH (
-                STORE = {store}
-                {partition_count}
-            );
+template <typename TExportSettings>
+struct TBackupTraits;
 
-            CREATE TABLE `/Root/RecursiveFolderProcessing/dir1/dir2/Table2` (
-                key Uint32 NOT NULL,
-                value String,
-                PRIMARY KEY (key)
-            ) WITH (
-                STORE = {store}
-                {partition_count}
-            );
-        )sql", "store"_a = isOlap ? "COLUMN" : "ROW",
-        "partition_count"_a = isOlap ? ", PARTITION_COUNT = 1" : ""), NQuery::TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+template <>
+struct TBackupTraits<NExport::TExportToS3Settings> {
+    using TExportSettings = NExport::TExportToS3Settings;
+    using TImportSettings = NImport::TImportFromS3Settings;
 
-        // Empty dir
-        auto mkdir = YdbSchemeClient().MakeDirectory("/Root/RecursiveFolderProcessing/dir1/dir2/dir3").GetValueSync();
-        UNIT_ASSERT_C(mkdir.IsSuccess(), mkdir.GetIssues().ToString());
+    TExportSettings MakeExportSettings(TS3BackupTestFixture& f, const TString& sourcePath) {
+        return f.MakeExportSettings(sourcePath, "Prefix");
     }
 
-    void TearDown(NUnitTest::TTestContext& /* context */) override {
+    TImportSettings MakeImportSettings(TS3BackupTestFixture& f, const TString& dstPath) {
+        return f.MakeImportSettings("Prefix", dstPath);
+    }
+
+    auto Export(TS3BackupTestFixture& f, const TExportSettings& settings) {
+        return f.YdbExportClient().ExportToS3(settings).GetValueSync();
+    }
+
+    auto Import(TS3BackupTestFixture& f, const TImportSettings& settings) {
+        return f.YdbImportClient().ImportFromS3(settings).GetValueSync();
+    }
+
+    void ValidateFileList(TS3BackupTestFixture& f, const TSet<TString>& paths) {
+        f.ValidateS3FileList(paths);
+    }
+
+    TString FilePrefix() {
+        return "/test_bucket/Prefix/";
     }
 };
 
-Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
-    Y_UNIT_TEST_TWIN(OnlyExportWholeDatabase, IsOlap) {
-        // Export without source path: source path == database root
-        NExport::TExportToS3Settings exportSettings = MakeExportSettings("", "Prefix");
-        auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
-        WaitOpSuccess(res);
+template <>
+struct TBackupTraits<NExport::TExportToFsSettings> {
+    using TExportSettings = NExport::TExportToFsSettings;
+    using TImportSettings = NImport::TImportFromFsSettings;
 
-        ValidateS3FileList({
-            "/test_bucket/Prefix/metadata.json",
-            "/test_bucket/Prefix/SchemaMapping/metadata.json",
-            "/test_bucket/Prefix/SchemaMapping/mapping.json",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/metadata.json",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/scheme.pb",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/permissions.pb",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/data_00.csv",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/metadata.json",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/scheme.pb",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/permissions.pb",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/data_00.csv",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv",
+    TExportSettings MakeExportSettings(TFsBackupTestFixture& f, const TString& sourcePath) {
+        return f.MakeExportSettings(sourcePath);
+    }
 
-            "/test_bucket/Prefix/metadata.json.sha256",
-            "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
-            "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/metadata.json.sha256",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/scheme.pb.sha256",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/permissions.pb.sha256",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/Table0/data_00.csv.sha256",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/metadata.json.sha256",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/scheme.pb.sha256",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/permissions.pb.sha256",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/Table1/data_00.csv.sha256",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/metadata.json.sha256",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb.sha256",
-            "/test_bucket/Prefix/RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv.sha256",
+    TImportSettings MakeImportSettings(TFsBackupTestFixture& f, const TString& dstPath) {
+        return f.MakeImportSettings(dstPath);
+    }
+
+    auto Export(TFsBackupTestFixture& f, const TExportSettings& settings) {
+        return f.YdbExportClient().ExportToFs(settings).GetValueSync();
+    }
+
+    auto Import(TFsBackupTestFixture& f, const TImportSettings& settings) {
+        return f.YdbImportClient().ImportFromFs(settings).GetValueSync();
+    }
+
+    void ValidateFileList(TFsBackupTestFixture& f, const TSet<TString>& paths) {
+        f.ValidateFileList(paths);
+    }
+
+    TString FilePrefix() {
+        return "";
+    }
+};
+
+template <typename TExportSettings, typename TBackupTestFixture>
+void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap) {
+    TBackupTraits<TExportSettings> traits;
+    using TImportSettings = typename TBackupTraits<TExportSettings>::TImportSettings;
+    const TString prefix = traits.FilePrefix();
+
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
+
+    {
+        auto exportSettings = traits.MakeExportSettings(f, "/Root/RecursiveFolderProcessing");
+        exportSettings
+                .AppendItem(typename TExportSettings::TItem{.Src = "Table0", .Dst = "Table0_Prefix"})
+                .AppendItem(typename TExportSettings::TItem{.Src = "dir1/Table1", .Dst = "Table1_Prefix"})
+                .AppendItem(typename TExportSettings::TItem{.Src = "/Root/RecursiveFolderProcessing/dir1/dir2/Table2", .Dst = "Table2_Prefix"});
+        auto res = traits.Export(f, exportSettings);
+        f.WaitOpSuccess(res);
+
+        traits.ValidateFileList(f, {
+            prefix + "metadata.json",
+            prefix + "SchemaMapping/metadata.json",
+            prefix + "SchemaMapping/mapping.json",
+            prefix + "Table0_Prefix/metadata.json",
+            prefix + "Table0_Prefix/scheme.pb",
+            prefix + "Table0_Prefix/permissions.pb",
+            prefix + "Table0_Prefix/data_00.csv",
+            prefix + "Table1_Prefix/metadata.json",
+            prefix + "Table1_Prefix/scheme.pb",
+            prefix + "Table1_Prefix/permissions.pb",
+            prefix + "Table1_Prefix/data_00.csv",
+            prefix + "Table2_Prefix/metadata.json",
+            prefix + "Table2_Prefix/scheme.pb",
+            prefix + "Table2_Prefix/permissions.pb",
+            prefix + "Table2_Prefix/data_00.csv",
+
+            prefix + "metadata.json.sha256",
+            prefix + "SchemaMapping/metadata.json.sha256",
+            prefix + "SchemaMapping/mapping.json.sha256",
+            prefix + "Table0_Prefix/metadata.json.sha256",
+            prefix + "Table0_Prefix/scheme.pb.sha256",
+            prefix + "Table0_Prefix/permissions.pb.sha256",
+            prefix + "Table0_Prefix/data_00.csv.sha256",
+            prefix + "Table1_Prefix/metadata.json.sha256",
+            prefix + "Table1_Prefix/scheme.pb.sha256",
+            prefix + "Table1_Prefix/permissions.pb.sha256",
+            prefix + "Table1_Prefix/data_00.csv.sha256",
+            prefix + "Table2_Prefix/metadata.json.sha256",
+            prefix + "Table2_Prefix/scheme.pb.sha256",
+            prefix + "Table2_Prefix/permissions.pb.sha256",
+            prefix + "Table2_Prefix/data_00.csv.sha256",
         });
     }
 
+    {
+        auto importSettings = traits.MakeImportSettings(f, "/Root/RestorePrefix");
+        importSettings
+                .AppendItem(typename TImportSettings::TItem{.Dst = "/Root/RestorePrefix/Table123", .SrcPath = "dir1/dir2//Table2"})
+                .AppendItem(typename TImportSettings::TItem{.Dst = "/Root/RestorePrefix/Table321", .SrcPath = "Table0"});
+        auto res = traits.Import(f, importSettings);
+        f.WaitOpSuccess(res);
+
+        f.ValidateHasYdbPaths({
+            TBackupTestFixture::TEntryPath::TablePath("/Root/RestorePrefix/Table123", isOlap),
+            TBackupTestFixture::TEntryPath::TablePath("/Root/RestorePrefix/Table321", isOlap),
+        });
+        f.ValidateDoesNotHaveYdbTables({
+            "/Root/RestorePrefix/Table0",
+            "/Root/RestorePrefix/dir1/Table1",
+            "/Root/RestorePrefix/dir1/dir2/Table2",
+        });
+    }
+
+    // Recursive filter by directory
+    {
+        auto importSettings = traits.MakeImportSettings(f, "/Root/RestorePrefix2");
+        importSettings.AppendItem(typename TImportSettings::TItem{.SrcPath = "dir1"});
+        auto res = traits.Import(f, importSettings);
+        f.WaitOpSuccess(res);
+
+        f.ValidateHasYdbPaths({
+            TS3BackupTestFixture::TEntryPath::TablePath("/Root/RestorePrefix2/dir1/Table1", isOlap),
+            TS3BackupTestFixture::TEntryPath::TablePath("/Root/RestorePrefix2/dir1/dir2/Table2", isOlap),
+        });
+        f.ValidateDoesNotHaveYdbTables({
+            "/Root/RestorePrefix2/Table0",
+        });
+    }
+
+    {
+        auto importSettings = traits.MakeImportSettings(f, "/Root/RestorePrefix");
+        importSettings.AppendItem(typename TImportSettings::TItem{.Src = "/Root/RestorePrefix/dir1/dir2/Table2", .Dst = "/Root/RestorePrefix/Table0", .SrcPath = "dir1/dir2/Table2"});
+        UNIT_ASSERT_EXCEPTION(traits.Import(f, importSettings), TContractViolation);
+    }
+}
+
+} // anonymous namespace
+
+Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
+    Y_UNIT_TEST(ImportFilterByYdbObjectPath) {
+        ImportFilterByYdbObjectPathImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
+    }
+}
+
+Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
     Y_UNIT_TEST_TWIN(ExportWholeDatabase, IsOlap) {
         // Export without source path: source path == database root
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("", "Prefix");
             auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
@@ -144,18 +227,15 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
             WaitOpSuccess(res);
 
-            ValidateHasYdbTables({
-                "/Root/RestorePrefix/RecursiveFolderProcessing/Table0",
-                "/Root/RestorePrefix/RecursiveFolderProcessing/dir1/Table1",
-                "/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2",
+            ValidateHasYdbPaths({
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/Table0", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/Table1", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2", IsOlap),
             });
         }
     }
 
     Y_UNIT_TEST_TWIN(ExportWholeDatabaseWithEncryption, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("", "Prefix");
             exportSettings
@@ -205,19 +285,16 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
             WaitOpSuccess(res);
 
-            ValidateHasYdbTables({
-                "/Root/RestorePrefix/RecursiveFolderProcessing/Table0",
-                "/Root/RestorePrefix/RecursiveFolderProcessing/dir1/Table1",
-                "/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2",
+            ValidateHasYdbPaths({
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/Table0", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/Table1", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2", IsOlap),
             });
         }
     }
 
     Y_UNIT_TEST_TWIN(ExportWithCommonSourcePath, IsOlap) {
         // Export with common source path == dir1
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/RecursiveFolderProcessing/dir1", "Prefix");
             auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
@@ -255,18 +332,167 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
             WaitOpSuccess(res);
 
-            ValidateHasYdbTables({
-                "/Root/RestorePrefix/Table1",
-                "/Root/RestorePrefix/dir2/Table2",
+            ValidateHasYdbPaths({
+                TEntryPath::TablePath("/Root/RestorePrefix/Table1", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/dir2/Table2", IsOlap),
+            });
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ExportWithExcludeRegexps, IsOlap) {
+        // Export with common source path == dir1
+        {
+            NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/RecursiveFolderProcessing", "Prefix");
+            exportSettings
+                .AppendExcludeRegexp(".*");
+            auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
+            WaitOpStatus(res, EStatus::BAD_REQUEST); // Nothing to export
+        }
+
+        {
+            NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/RecursiveFolderProcessing", "Prefix");
+            exportSettings
+                .AppendExcludeRegexp("invalid regexp)");
+            auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
+            WaitOpStatus(res, EStatus::BAD_REQUEST); // Invalid regexp
+        }
+
+        {
+            NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/RecursiveFolderProcessing", "Prefix");
+            exportSettings
+                .AppendExcludeRegexp("^Table$") // No matching
+                .AppendExcludeRegexp("^dir1$") // Partial match does not prevent from exporting children - only full path match
+                .AppendExcludeRegexp("^dir1/Table"); // Matches table in directory
+            auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ValidateS3FileList({
+                "/test_bucket/Prefix/metadata.json",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json",
+                "/test_bucket/Prefix/Table0/metadata.json",
+                "/test_bucket/Prefix/Table0/scheme.pb",
+                "/test_bucket/Prefix/Table0/permissions.pb",
+                "/test_bucket/Prefix/Table0/data_00.csv",
+                "/test_bucket/Prefix/dir1/dir2/Table2/metadata.json",
+                "/test_bucket/Prefix/dir1/dir2/Table2/scheme.pb",
+                "/test_bucket/Prefix/dir1/dir2/Table2/permissions.pb",
+                "/test_bucket/Prefix/dir1/dir2/Table2/data_00.csv",
+
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/Table0/metadata.json.sha256",
+                "/test_bucket/Prefix/Table0/scheme.pb.sha256",
+                "/test_bucket/Prefix/Table0/permissions.pb.sha256",
+                "/test_bucket/Prefix/Table0/data_00.csv.sha256",
+                "/test_bucket/Prefix/dir1/dir2/Table2/metadata.json.sha256",
+                "/test_bucket/Prefix/dir1/dir2/Table2/scheme.pb.sha256",
+                "/test_bucket/Prefix/dir1/dir2/Table2/permissions.pb.sha256",
+                "/test_bucket/Prefix/dir1/dir2/Table2/data_00.csv.sha256",
+            });
+        }
+
+        {
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/RestorePrefix");
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ValidateHasYdbPaths({
+                TEntryPath::TablePath("/Root/RestorePrefix/Table0", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/dir1/dir2/Table2", IsOlap),
+            });
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ImportWithExcludeRegexps, IsOlap) {
+        {
+            NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/RecursiveFolderProcessing", "Prefix");
+            auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ValidateS3FileList({
+                "/test_bucket/Prefix/metadata.json",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json",
+                "/test_bucket/Prefix/Table0/metadata.json",
+                "/test_bucket/Prefix/Table0/scheme.pb",
+                "/test_bucket/Prefix/Table0/permissions.pb",
+                "/test_bucket/Prefix/Table0/data_00.csv",
+                "/test_bucket/Prefix/dir1/Table1/metadata.json",
+                "/test_bucket/Prefix/dir1/Table1/scheme.pb",
+                "/test_bucket/Prefix/dir1/Table1/permissions.pb",
+                "/test_bucket/Prefix/dir1/Table1/data_00.csv",
+                "/test_bucket/Prefix/dir1/dir2/Table2/metadata.json",
+                "/test_bucket/Prefix/dir1/dir2/Table2/scheme.pb",
+                "/test_bucket/Prefix/dir1/dir2/Table2/permissions.pb",
+                "/test_bucket/Prefix/dir1/dir2/Table2/data_00.csv",
+
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
+                "/test_bucket/Prefix/Table0/metadata.json.sha256",
+                "/test_bucket/Prefix/Table0/scheme.pb.sha256",
+                "/test_bucket/Prefix/Table0/permissions.pb.sha256",
+                "/test_bucket/Prefix/Table0/data_00.csv.sha256",
+                "/test_bucket/Prefix/dir1/Table1/metadata.json.sha256",
+                "/test_bucket/Prefix/dir1/Table1/scheme.pb.sha256",
+                "/test_bucket/Prefix/dir1/Table1/permissions.pb.sha256",
+                "/test_bucket/Prefix/dir1/Table1/data_00.csv.sha256",
+                "/test_bucket/Prefix/dir1/dir2/Table2/metadata.json.sha256",
+                "/test_bucket/Prefix/dir1/dir2/Table2/scheme.pb.sha256",
+                "/test_bucket/Prefix/dir1/dir2/Table2/permissions.pb.sha256",
+                "/test_bucket/Prefix/dir1/dir2/Table2/data_00.csv.sha256",
+            });
+        }
+
+        {
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/RestorePrefix");
+            importSettings
+                .AppendExcludeRegexp(".*");
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpStatus(res, EStatus::CANCELLED); // Nothing to import
+        }
+
+        {
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/RestorePrefix");
+            importSettings
+                .AppendExcludeRegexp("invalid regexp)");
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpStatus(res, EStatus::BAD_REQUEST); // Nothing to import
+        }
+
+        {
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/RestorePrefix");
+            importSettings
+                .AppendExcludeRegexp("^Table$") // No matching
+                .AppendExcludeRegexp("^dir1$") // Partial match does not prevent from importing children - only full path match
+                .AppendExcludeRegexp("^dir1/Table"); // Matches table in directory
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ValidateHasYdbPaths({
+                TEntryPath::TablePath("/Root/RestorePrefix/Table0", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/dir1/dir2/Table2", IsOlap),
+            });
+        }
+
+        {
+            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/RestorePrefix2");
+            importSettings
+                .AppendItem(NImport::TImportFromS3Settings::TItem{.SrcPath = "dir1"})
+                .AppendExcludeRegexp("Table1");
+            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
+            WaitOpSuccess(res);
+
+            ValidateHasYdbPaths({
+                TEntryPath::TablePath("/Root/RestorePrefix2/dir1/dir2/Table2", IsOlap),
             });
         }
     }
 
     Y_UNIT_TEST_TWIN(ExportWithCommonSourcePathAndExplicitTableInside, IsOlap) {
         // Export with directory path == dir1 + explicit table from this subdir (must remove duplicate)
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("", "Prefix");
             exportSettings
@@ -307,18 +533,15 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
             WaitOpSuccess(res);
 
-            ValidateHasYdbTables({
-                "/Root/RestorePrefix/RecursiveFolderProcessing/dir1/Table1",
-                "/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2",
+            ValidateHasYdbPaths({
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/Table1", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2", IsOlap),
             });
         }
     }
 
     Y_UNIT_TEST_TWIN(RecursiveDirectoryPlusExplicitTable, IsOlap) {
         // Export dir2 + explicit Table0 not from this dir
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("", "Prefix");
             exportSettings
@@ -359,18 +582,15 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
             WaitOpSuccess(res);
 
-            ValidateHasYdbTables({
-                "/Root/RestorePrefix/RecursiveFolderProcessing/Table0",
-                "/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2",
+            ValidateHasYdbPaths({
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/Table0", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2", IsOlap),
             });
         }
     }
 
     Y_UNIT_TEST_TWIN(EmptyDirectoryIsOk, IsOlap) {
         // Specify empty directory and existing table
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/RecursiveFolderProcessing/dir1/dir2", "Prefix");
             exportSettings
@@ -403,16 +623,13 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
             WaitOpSuccess(res);
 
-            ValidateHasYdbTables({
-                "/Root/RestorePrefix/Table2",
+            ValidateHasYdbPaths({
+                TEntryPath::TablePath("/Root/RestorePrefix/Table2", IsOlap),
             });
         }
     }
 
     Y_UNIT_TEST_TWIN(CommonPrefixButExplicitImportItems, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         // Export with common prefix, import with explicitly specifying prefixes for each item
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/RecursiveFolderProcessing/dir1", "Prefix");
@@ -454,18 +671,15 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
             WaitOpSuccess(res);
 
-            ValidateHasYdbTables({
-                "/Root/RestorePrefix/Table1",
-                "/Root/RestorePrefix/dir2/yet/another/dir/Table2",
+            ValidateHasYdbPaths({
+                TEntryPath::TablePath("/Root/RestorePrefix/Table1", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/dir2/yet/another/dir/Table2", IsOlap),
             });
         }
     }
 
     Y_UNIT_TEST_TWIN(ExportDirectoryWithEncryption, IsOlap) {
         // Export directory with encryption
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/RecursiveFolderProcessing/dir1", "Prefix");
             exportSettings
@@ -507,18 +721,15 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
             WaitOpSuccess(res);
 
-            ValidateHasYdbTables({
-                "/Root/RestorePrefix/Table1",
-                "/Root/RestorePrefix/dir2/Table2",
+            ValidateHasYdbPaths({
+                TEntryPath::TablePath("/Root/RestorePrefix/Table1", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/dir2/Table2", IsOlap),
             });
         }
     }
 
     Y_UNIT_TEST_TWIN(EncryptedExportWithExplicitDestinationPath, IsOlap) { // supported, but not recommended
         // Export with encryption with explicitly specifying destination path (not recommended, opens explicit path with table name)
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/RecursiveFolderProcessing", "Prefix");
             exportSettings
@@ -570,19 +781,16 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
             WaitOpSuccess(res);
 
-            ValidateHasYdbTables({
-                "/Root/RestorePrefix/Table0",
-                "/Root/RestorePrefix/dir1/Table1",
-                "/Root/RestorePrefix/dir1/dir2/Table2",
+            ValidateHasYdbPaths({
+                TEntryPath::TablePath("/Root/RestorePrefix/Table0", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/dir1/Table1", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/dir1/dir2/Table2", IsOlap),
             });
         }
     }
 
     Y_UNIT_TEST_TWIN(EncryptedExportWithExplicitObjectList, IsOlap) {
         // Export with encryption with explicitly specifying objects list
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("", ""); // no common prefix => error, not allowed with encryption
             exportSettings
@@ -645,19 +853,16 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
             WaitOpSuccess(res);
 
-            ValidateHasYdbTables({
-                "/Root/RestorePrefix/RecursiveFolderProcessing/Table0",
-                "/Root/RestorePrefix/RecursiveFolderProcessing/dir1/Table1",
-                "/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2",
+            ValidateHasYdbPaths({
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/Table0", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/Table1", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/RecursiveFolderProcessing/dir1/dir2/Table2", IsOlap),
             });
         }
     }
 
     Y_UNIT_TEST_TWIN(ExportCommonSourcePathImportExplicitly, IsOlap) {
         // Export with common source path, import without common path and SchemaMapping
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/RecursiveFolderProcessing", "Prefix");
             auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
@@ -705,8 +910,8 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
             WaitOpSuccess(res);
 
-            ValidateHasYdbTables({
-                "/Root/RestorePrefix/Table0",
+            ValidateHasYdbPaths({
+                TEntryPath::TablePath("/Root/RestorePrefix/Table0", IsOlap),
             });
             ValidateDoesNotHaveYdbTables({
                 "/Root/RestorePrefix/dir1/Table1",
@@ -717,9 +922,6 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
 
     Y_UNIT_TEST_TWIN(ImportFilterByPrefix, IsOlap) {
         // Filter import by prefix
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/RecursiveFolderProcessing", "Prefix");
             exportSettings
@@ -771,8 +973,8 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
             WaitOpSuccess(res);
 
-            ValidateHasYdbTables({
-                "/Root/RestorePrefix/Table0",
+            ValidateHasYdbPaths({
+                TEntryPath::TablePath("/Root/RestorePrefix/Table0", IsOlap),
             });
             ValidateDoesNotHaveYdbTables({
                 "/Root/RestorePrefix/dir1/Table1",
@@ -782,104 +984,11 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
     }
 
     Y_UNIT_TEST_TWIN(ImportFilterByYdbObjectPath, IsOlap) {
-        // Filter import by YDB object path
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
-        {
-            NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/RecursiveFolderProcessing", "Prefix");
-            exportSettings
-                .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "Table0", .Dst = "Table0_Prefix"})
-                .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "dir1/Table1", .Dst = "Table1_Prefix"})
-                .AppendItem(NExport::TExportToS3Settings::TItem{.Src = "/Root/RecursiveFolderProcessing/dir1/dir2/Table2", .Dst = "Table2_Prefix"});
-            auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
-            WaitOpSuccess(res);
-
-            ValidateS3FileList({
-                "/test_bucket/Prefix/metadata.json",
-                "/test_bucket/Prefix/SchemaMapping/metadata.json",
-                "/test_bucket/Prefix/SchemaMapping/mapping.json",
-                "/test_bucket/Prefix/Table0_Prefix/metadata.json",
-                "/test_bucket/Prefix/Table0_Prefix/scheme.pb",
-                "/test_bucket/Prefix/Table0_Prefix/permissions.pb",
-                "/test_bucket/Prefix/Table0_Prefix/data_00.csv",
-                "/test_bucket/Prefix/Table1_Prefix/metadata.json",
-                "/test_bucket/Prefix/Table1_Prefix/scheme.pb",
-                "/test_bucket/Prefix/Table1_Prefix/permissions.pb",
-                "/test_bucket/Prefix/Table1_Prefix/data_00.csv",
-                "/test_bucket/Prefix/Table2_Prefix/metadata.json",
-                "/test_bucket/Prefix/Table2_Prefix/scheme.pb",
-                "/test_bucket/Prefix/Table2_Prefix/permissions.pb",
-                "/test_bucket/Prefix/Table2_Prefix/data_00.csv",
-
-                "/test_bucket/Prefix/metadata.json.sha256",
-                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
-                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
-                "/test_bucket/Prefix/Table0_Prefix/metadata.json.sha256",
-                "/test_bucket/Prefix/Table0_Prefix/scheme.pb.sha256",
-                "/test_bucket/Prefix/Table0_Prefix/permissions.pb.sha256",
-                "/test_bucket/Prefix/Table0_Prefix/data_00.csv.sha256",
-                "/test_bucket/Prefix/Table1_Prefix/metadata.json.sha256",
-                "/test_bucket/Prefix/Table1_Prefix/scheme.pb.sha256",
-                "/test_bucket/Prefix/Table1_Prefix/permissions.pb.sha256",
-                "/test_bucket/Prefix/Table1_Prefix/data_00.csv.sha256",
-                "/test_bucket/Prefix/Table2_Prefix/metadata.json.sha256",
-                "/test_bucket/Prefix/Table2_Prefix/scheme.pb.sha256",
-                "/test_bucket/Prefix/Table2_Prefix/permissions.pb.sha256",
-                "/test_bucket/Prefix/Table2_Prefix/data_00.csv.sha256",
-            });
-        }
-
-        {
-            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/RestorePrefix");
-            importSettings
-                .AppendItem(NImport::TImportFromS3Settings::TItem{.Dst = "/Root/RestorePrefix/Table123", .SrcPath = "dir1/dir2//Table2"})
-                .AppendItem(NImport::TImportFromS3Settings::TItem{.Dst = "/Root/RestorePrefix/Table321", .SrcPath = "Table0"});
-            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
-            WaitOpSuccess(res);
-
-            ValidateHasYdbTables({
-                "/Root/RestorePrefix/Table123",
-                "/Root/RestorePrefix/Table321",
-            });
-            ValidateDoesNotHaveYdbTables({
-                "/Root/RestorePrefix/Table0",
-                "/Root/RestorePrefix/dir1/Table1",
-                "/Root/RestorePrefix/dir1/dir2/Table2",
-            });
-        }
-
-        // Recursive filter by directory
-        {
-            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/RestorePrefix2");
-            importSettings
-                .AppendItem(NImport::TImportFromS3Settings::TItem{.SrcPath = "dir1"});
-            auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
-            WaitOpSuccess(res);
-
-            ValidateHasYdbTables({
-                "/Root/RestorePrefix2/dir1/Table1",
-                "/Root/RestorePrefix2/dir1/dir2/Table2",
-            });
-            ValidateDoesNotHaveYdbTables({
-                "/Root/RestorePrefix2/Table0",
-            });
-        }
-
-        {
-            // Both src path and src prefix are incorrect
-            NImport::TImportFromS3Settings importSettings = MakeImportSettings("Prefix", "/Root/RestorePrefix");
-            importSettings
-                .AppendItem(NImport::TImportFromS3Settings::TItem{.Src = "/Root/RestorePrefix/dir1/dir2/Table2", .Dst = "/Root/RestorePrefix/Table0", .SrcPath = "dir1/dir2/Table2"});
-            UNIT_ASSERT_EXCEPTION(YdbImportClient().ImportFromS3(importSettings).GetValueSync(), TContractViolation);
-        }
+        ImportFilterByYdbObjectPathImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
     }
 
     Y_UNIT_TEST_TWIN(EncryptedImportWithoutCommonPrefix, IsOlap) {
         // Encrypted export with common source path, import without common path and SchemaMapping (error, encrypted export must be with SchemaMapping)
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/RecursiveFolderProcessing", "Prefix");
             exportSettings
@@ -961,9 +1070,6 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
 
     Y_UNIT_TEST_TWIN(FilterByPathFailsWhenNoSchemaMapping, IsOlap) {
         // Export without common destination prefix, trying to import with filter by YDB path (error, because no SchemaMapping)
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("/Root/RecursiveFolderProcessing/dir1", "");
             exportSettings
@@ -1018,9 +1124,6 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
 
     Y_UNIT_TEST_TWIN(ExportRecursiveWithoutDestinationPrefix, IsOlap) {
         // Export recursive, but without destination prefix
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         {
             NExport::TExportToS3Settings exportSettings = MakeExportSettings("", "");
             exportSettings
@@ -1065,18 +1168,14 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
             auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
             WaitOpSuccess(res);
 
-            ValidateHasYdbTables({
-                "/Root/RestorePrefix/Table11",
-                "/Root/RestorePrefix/Table12",
+            ValidateHasYdbPaths({
+                TEntryPath::TablePath("/Root/RestorePrefix/Table11", IsOlap),
+                TEntryPath::TablePath("/Root/RestorePrefix/Table12", IsOlap),
             });
         }
     }
 
-    Y_UNIT_TEST_TWIN(ParallelBackupWholeDatabase, IsOlap)
-    {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
+    Y_UNIT_TEST_TWIN(ParallelBackupWholeDatabase, IsOlap) {
         using namespace fmt::literals;
         {
             auto res = YdbQueryClient().ExecuteQuery(R"sql(
@@ -1126,7 +1225,7 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
                 size_t tableIndex = 0;
                 for (size_t i = 0; i < listResult.GetChildren().size(); ++i) {
                     const auto& child = listResult.GetChildren()[i];
-                    if (child.Type == NYdb::NScheme::ESchemeEntryType::Table) {
+                    if (child.Type == NYdb::NScheme::ESchemeEntryType::Table || child.Type == NYdb::NScheme::ESchemeEntryType::ColumnTable) {
                         ++tablesFound;
                         tableIndex = i;
                     }
@@ -1203,9 +1302,6 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
     }
 
     Y_UNIT_TEST_TWIN(ChecksumsForSchemaMappingFiles, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
         Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
 
         {
@@ -1252,11 +1348,11 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
 
     // Test that covers races between processing and cancellation
     Y_UNIT_TEST_TWIN(CancelWhileProcessing, IsOlap) {
-        if (IsOlap) {
-            return; // TODO: fix me issue@26498
-        }
-
         using namespace fmt::literals;
+        
+        if (IsOlap) {
+            return; // TODO (hcpp): fix me https://github.com/ydb-platform/ydb/issues/35873
+        }
 
         // Make tables for parallel export
         auto createSchemaResult = YdbQueryClient().ExecuteQuery(fmt::format(R"sql(

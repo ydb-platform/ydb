@@ -1,7 +1,6 @@
 #include "mkql_custom_list.h"
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 TForwardListValue::TForwardListValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& stream)
     : TCustomListValue(memInfo)
@@ -133,5 +132,4 @@ NUdf::EFetchStatus TExtendStreamValue::Fetch(NUdf::TUnboxedValue& value) {
     return NUdf::EFetchStatus::Finish;
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -89,7 +89,16 @@ protected:
         return true;  // returns true, when channels were handled synchronously
     }
 
-protected: //TDqComputeActorChannels::ICallbacks
+    void ExtraMonitoringInfo(TStringStream& str, const TCgiParameters&) override {
+        if (TaskRunner) {
+            str << Endl << "TaskRunner" << Endl
+                << "  LastFetchTime: " << TaskRunner->LastFetchTime << Endl
+                << "  LastFetchStatus: " << TaskRunner->LastFetchStatus << Endl
+                << "  OutputDebugString: " << TaskRunner->GetOutputDebugString() << Endl;
+        }
+    }
+
+protected: //TDqComputeActorChannels::ICalbacks
     i64 GetInputChannelFreeSpace(ui64 channelId) const override final {
         const auto* inputChannel = this->InputChannelsMap.FindPtr(channelId);
         YQL_ENSURE(inputChannel, "task: " << this->Task.GetId() << ", unknown input channelId: " << channelId);
@@ -266,7 +275,12 @@ protected:
             TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(), execCtx.GetWakeupCallback(), execCtx.GetErrorCallback()));
         }
 
-        TaskRunner->Prepare(this->Task, limits, execCtx);
+        this->WatermarksTracker.SetNotifyHandler([this]() {
+            // This code is called from TaskRunner (either directly or from input transform/helper code), which is owned by sync CA, so `*this` must be alive at that point
+            this->ScheduleIdlenessCheck();
+        });
+
+        TaskRunner->Prepare(this->Task, limits, execCtx, &this->WatermarksTracker);
 
         for (auto& [channelId, channel] : this->InputChannelsMap) {
             channel.Channel = TaskRunner->GetInputChannel(channelId);
@@ -283,6 +297,9 @@ protected:
 
         for (auto& [channelId, channel] : this->OutputChannelsMap) {
             channel.Channel = TaskRunner->GetOutputChannel(channelId);
+            if (this->Task.GetDqChannelVersion() >= 2u && channel.HasPeer) {
+                channel.Channel->Bind(this->SelfId(), channel.PeerId);
+            }
         }
 
         for (auto& [outputIndex, transform] : this->OutputTransformsMap) {
@@ -313,6 +330,10 @@ protected:
 
     const IDqAsyncOutputBuffer* GetSink(ui64, const typename TBase::TAsyncOutputInfoBase& sinkInfo) const override final {
         return sinkInfo.Buffer.Get();
+    }
+
+    TDqComputeActorWatermarks *GetInputTransformWatermarksTracker(ui64 inputId) override {
+        return TaskRunner ? TaskRunner->GetInputTransformWatermarksTracker(inputId): nullptr;
     }
 
 protected:
@@ -351,12 +372,6 @@ protected:
             std::vector<typename TBase::TOutputChannelInfo::TDrainedChannelMessage> channelData = outputChannel.DrainChannel(drainPackSize);
             ui32 idx = 0;
             for (auto&& i : channelData) {
-                if (auto* w = i.GetWatermarkOptional()) {
-                    CA_LOG_I("Resume inputs by watermark");
-                    // This is excessive, inputs should be resumed after async CA received response with watermark from task runner.
-                    // But, let it be here, it's better to have the same code as in checkpoints
-                    TBase::ResumeInputsByWatermark(TInstant::MicroSeconds(w->GetTimestampUs()));
-                }
                 if (i.GetCheckpointOptional()) {
                     CA_LOG_I("Resume inputs by checkpoint");
                     TBase::ResumeInputsByCheckpoint();

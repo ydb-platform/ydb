@@ -13,7 +13,7 @@
 #include <util/system/compiler.h>
 
 #include <cmath>
-#include <ctype.h>
+#include <cctype>
 
 namespace NYql::NDom {
 
@@ -247,7 +247,7 @@ bool IsEntity(const TUnboxedValuePod value) {
 }
 
 template <bool SkipMapEntity, bool EncodeUtf8>
-void WriteValue(const TUnboxedValuePod value, TJsonWriter& writer);
+void WriteValue(TUnboxedValuePod value, TJsonWriter& writer);
 
 template <bool SkipMapEntity, bool EncodeUtf8>
 void WriteArray(const TUnboxedValuePod value, TJsonWriter& writer) {

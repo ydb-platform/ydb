@@ -7,6 +7,7 @@
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/write_session.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/producer.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/executor_impl.h>
 
 #include <util/generic/overloaded.h>
@@ -15,6 +16,7 @@
 #include <gtest/gtest.h>
 
 #include <future>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/write_session.h>
 
 
 namespace NYdb::inline Dev::NPersQueue::NTests {
@@ -828,6 +830,86 @@ TEST_F(BasicUsage, TEST_NAME(TWriteSession_WriteEncoded_Broken)) {
                     }
                     ++readMessageCount;
                 }
+            },
+            [&](TReadSessionEvent::TCommitOffsetAcknowledgementEvent&) {
+                FAIL();
+            },
+            [&](TReadSessionEvent::TStartPartitionSessionEvent& event) {
+                event.Confirm();
+            },
+            [&](TReadSessionEvent::TStopPartitionSessionEvent& event) {
+                event.Confirm();
+            },
+            [&](TReadSessionEvent::TEndPartitionSessionEvent& event) {
+                event.Confirm();
+            },
+            [&](TReadSessionEvent::TPartitionSessionStatusEvent&) {
+                FAIL() << "Test does not support lock sessions yet";
+            },
+            [&](TReadSessionEvent::TPartitionSessionClosedEvent&) {
+                FAIL() << "Test does not support lock sessions yet";
+            },
+            [&](TSessionClosedEvent&) {
+                FAIL() << "Session closed";
+            }
+        }, event);
+    }
+}
+
+TEST_F(BasicUsage, TEST_NAME(TProducerBasicWrite_NoAutoPartitioning)) {
+    // Basic write test for keyed write session.
+    // Write 10 messages with different keys and check that they are written to different partitions.
+    // Check that the order of messages is preserved.
+    constexpr auto TOPIC_NAME = "test-topic-2";
+    constexpr auto CONSUMER_NAME = "test-consumer-2";
+
+    CreateTopic(TOPIC_NAME, CONSUMER_NAME, 5, 5);
+
+    auto driver = MakeDriver();
+    TTopicClient client(driver);
+
+    auto describeTopicSettings = TDescribeTopicSettings().IncludeStats(true);
+
+    TProducerSettings writeSettings;
+    writeSettings
+        .Path(GetTopicPath(TOPIC_NAME))
+        .Codec(ECodec::RAW);
+    writeSettings.ProducerIdPrefix(CreateGuidAsString());
+    writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+    writeSettings.SubSessionIdleTimeout(TDuration::Seconds(30));
+    writeSettings.PartitioningKeyHasher([](const std::string_view key) -> std::string {
+        return std::string{key};
+    });
+    writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
+
+    auto producer = client.CreateProducer(writeSettings);
+    auto keyedSession = std::dynamic_pointer_cast<TProducer>(producer);
+
+    std::string data = "message";
+    for (size_t i = 0; i < 100; ++i) {
+        auto key = CreateGuidAsString();
+        TWriteMessage msg(key, data);
+        msg.SeqNo(i + 1);
+        ASSERT_TRUE(producer->Write(std::move(msg)).IsQueued());
+    }
+
+    ASSERT_TRUE(producer->Close(TDuration::Seconds(10)).IsSuccess());
+
+    auto after = client.DescribeTopic(GetTopicPath(TOPIC_NAME), describeTopicSettings).GetValueSync();
+    ASSERT_TRUE(after.IsSuccess()) << after.GetIssues().ToOneLineString();
+
+    auto readSettings = TReadSessionSettings()
+        .ConsumerName(GetConsumerName(CONSUMER_NAME))
+        .AppendTopics(GetTopicPath(TOPIC_NAME))
+        ;
+    std::shared_ptr<IReadSession> readSession = client.CreateReadSession(readSettings);
+    std::uint32_t readMessageCount = 0;
+    while (readMessageCount < 100) {
+        std::cerr << "Get event on client\n";
+        auto event = *readSession->GetEvent(true);
+        std::visit(TOverloaded {
+            [&](TReadSessionEvent::TDataReceivedEvent& event) {
+                readMessageCount += event.GetMessages().size();
             },
             [&](TReadSessionEvent::TCommitOffsetAcknowledgementEvent&) {
                 FAIL();

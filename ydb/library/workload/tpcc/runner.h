@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/common/command.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/tx.h>
 
 #include <library/cpp/logger/priority.h>
 
@@ -55,6 +56,7 @@ struct TRunConfig {
     TString Path;
 
     EFormat Format = EFormat::Pretty;
+    NQuery::TTxSettings TxMode = NQuery::TTxSettings::SerializableRW();
 
     TString JsonResultPath;
 
@@ -68,6 +70,7 @@ struct TRunConfig {
     bool HighResHistogram = false;
     bool ExtendedStats = false;
     bool NoTui = false;
+    bool Compact = false;
     EDisplayMode DisplayMode = EDisplayMode::None;
 
     // instead of actual transaction just async sleep and return SUCCESS

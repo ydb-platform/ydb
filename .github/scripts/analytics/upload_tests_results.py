@@ -6,8 +6,9 @@ import os
 import sys
 import ydb
 
-from codeowners import CodeOwners
 from decimal import Decimal
+
+from testowners_utils import get_testowners_for_tests
 from ydb_wrapper import YDBWrapper
 
 max_characters_for_status_description = int(7340032/3)  #workaround for error "cannot split batch in according to limits: there is row with size more then limit (7340032)"
@@ -84,7 +85,9 @@ def parse_build_results_report(test_results_file, build_type, job_name, job_id, 
 
     results = []
     for result in report.get("results", []):
-        if result.get("type") != "test":
+        # Filtering (suite, build, configure) is done by transform_build_results.py
+        status = result.get("status")
+        if not status:
             continue
         
         suite_folder = result.get("path", "")
@@ -105,11 +108,12 @@ def parse_build_results_report(test_results_file, build_type, job_name, job_id, 
         duration = result.get("duration", 0)
         
         # Determine status
+        # Status normalization (OK->PASSED, NOT_LAUNCHED->SKIPPED, mute->MUTE) is done by transform_build_results.py
         status_str = result.get("status", "OK")
         error_type = result.get("error_type", "")
         status_description = result.get("rich-snippet", "")  # Already cleaned by transform_build_results.py
         
-        if result.get("muted", False):
+        if status_str == "MUTE":
             status = "mute"
         elif status_str == "FAILED":
             status = "failure"
@@ -188,32 +192,6 @@ def parse_build_results_report(test_results_file, build_type, job_name, job_id, 
             }
         )
     return results
-
-
-def sort_codeowners_lines(codeowners_lines):
-    def path_specificity(line):
-        # removing comments
-        trimmed_line = line.strip()
-        if not trimmed_line or trimmed_line.startswith('#'):
-            return -1, -1
-        path = trimmed_line.split()[0]
-        return len(path.split('/')), len(path)
-
-    sorted_lines = sorted(codeowners_lines, key=path_specificity)
-    return sorted_lines
-
-def get_codeowners_for_tests(codeowners_file_path, tests_data):
-    with open(codeowners_file_path, 'r') as file:
-        data = file.readlines()
-        owners_obj = CodeOwners(''.join(sort_codeowners_lines(data)))
-        tests_data_with_owners = []
-        for test in tests_data:
-            target_path = test["suite_folder"]
-            owners = owners_obj.of(target_path)
-            test["owners"] = ";;".join(
-                [(":".join(x)) for x in owners])
-            tests_data_with_owners.append(test)
-        return tests_data_with_owners
 
 
 def check_table_schema(wrapper, table_path):
@@ -358,10 +336,6 @@ def main():
 
     args = parser.parse_args()
 
-    dir_path = os.path.dirname(__file__)
-    git_root = f"{dir_path}/../../.."
-    codeowners = f"{git_root}/.github/TESTOWNERS"
-
     try:
         with YDBWrapper() as wrapper:
             # Check credentials
@@ -376,7 +350,7 @@ def main():
             )
 
             # Add owner information
-            result_with_owners = get_codeowners_for_tests(codeowners, results)
+            result_with_owners = get_testowners_for_tests(results)
             
             # Get table paths
             test_table_path = wrapper.get_table_path("test_results")

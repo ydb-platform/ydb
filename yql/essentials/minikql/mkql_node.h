@@ -12,8 +12,7 @@
 
 #include <stack>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TType;
 class INodeVisitor;
@@ -119,7 +118,7 @@ public:
     bool IsMergeable() const;
 
 protected:
-    TNode(TType* type)
+    explicit TNode(TType* type)
         : Type_(type)
         , Cookie_(0)
     {
@@ -265,7 +264,7 @@ public:
     bool IsConvertableTo(const TSingularType<SingularKind>& typeToCompare, bool ignoreTagged = false) const;
 
 private:
-    TSingularType(TTypeType* type)
+    explicit TSingularType(TTypeType* type)
         : TType(SingularKind, type, true)
     {
     }
@@ -298,7 +297,7 @@ public:
     }
 
 private:
-    TSingular(const TTypeEnvironment& env)
+    explicit TSingular(const TTypeEnvironment& env)
         : TNode(GetTypeOfSingular<SingularKind>(env))
     {
     }
@@ -339,7 +338,7 @@ public:
     {
     }
 
-    const TInternName& operator=(const TInternName& other) {
+    TInternName& operator=(const TInternName& other) {
         StrBuf_ = other.StrBuf_;
         return *this;
     }
@@ -348,7 +347,7 @@ public:
         return (size_t)StrBuf_.data();
     }
 
-    operator bool() const {
+    explicit operator bool() const {
         return (bool)StrBuf_;
     }
 
@@ -388,8 +387,7 @@ private:
     TStringBuf StrBuf_;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 
 template <>
 struct THash<NKikimr::NMiniKQL::TInternName> {
@@ -398,8 +396,7 @@ struct THash<NKikimr::NMiniKQL::TInternName> {
     }
 };
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TTypeEnvironment: private TNonCopyable {
 public:
@@ -887,7 +884,7 @@ public:
 
 private:
     TOptionalLiteral(TRuntimeNode item, TOptionalType* type, bool validate = true);
-    TOptionalLiteral(TOptionalType* type, bool validate = true);
+    explicit TOptionalLiteral(TOptionalType* type, bool validate = true);
     using TNode::Equals;
     bool Equals(const TOptionalLiteral& nodeToCompare) const;
 
@@ -1067,7 +1064,7 @@ private:
 
 class TCallablePayload: public NUdf::ICallablePayload {
 public:
-    TCallablePayload(NMiniKQL::TNode* node);
+    explicit TCallablePayload(NMiniKQL::TNode* node);
 
     NUdf::TStringRef GetPayload() const override {
         return Payload_;
@@ -1174,7 +1171,7 @@ public:
     bool IsConvertableTo(const TAnyType& typeToCompare, bool ignoreTagged = false) const;
 
 private:
-    TAnyType(TTypeType* type)
+    explicit TAnyType(TTypeType* type)
         : TType(EKind::Any, type, false)
     {
     }
@@ -1206,7 +1203,7 @@ public:
     void SetItem(TRuntimeNode newItem);
 
 private:
-    TAny(TAnyType* type)
+    explicit TAny(TAnyType* type)
         : TNode(type)
     {
     }
@@ -1701,5 +1698,4 @@ struct TEqualTType {
     }
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

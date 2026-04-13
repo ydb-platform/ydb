@@ -28,7 +28,6 @@
 
 #include <library/cpp/yt/memory/blob.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
 #include <util/network/init.h>
@@ -229,7 +228,7 @@ private:
 
     EMultiplexingBand ActualMultiplexingBand_ = EMultiplexingBand::Default;
 
-    NThreading::TAtomicObject<TError> Error_;
+    TError Error_;
 
     NNet::IAsyncDialerSessionPtr DialerSession_;
 
@@ -388,6 +387,7 @@ private:
     bool CheckTcpReadError(ssize_t result);
     bool CheckTcpWriteError(ssize_t result);
     bool DoSslHandshake();
+    void DoSslShutdown();
     size_t GetSslAckPacketSize();
     void TryEstablishSslSession();
 

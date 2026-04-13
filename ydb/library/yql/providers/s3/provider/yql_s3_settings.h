@@ -39,7 +39,9 @@ protected:
 
     void CheckDisabled(TExprContext& ctx) final {
         if (DisabledValue && TBase::Get() && !DisableReported) {
-            ctx.AddWarning(TIssue(DisabledReason).SetCode(DEFAULT_ERROR, TSeverityIds::S_WARNING));
+            if (DisabledReason) {
+                ctx.AddWarning(TIssue(DisabledReason).SetCode(DEFAULT_ERROR, TSeverityIds::S_WARNING));
+            }
             DisableReported = true;
         }
     }
@@ -80,6 +82,7 @@ public:
     TS3ConfSettingDefault<bool, false> AsyncDecoding;                 // Parse and decode input data at separate mailbox/thread of TaskRunner
     TS3ConfSettingDefault<bool, false> UsePredicatePushdown;
     TS3ConfSettingDefault<bool, false> AsyncDecompressing;            // Decompression and parsing input data in different mailbox/thread
+    TS3ConfSettingOptional<TDuration> OutputKeyFlushTimeout;
 };
 
 struct TS3ClusterSettings {
@@ -125,8 +128,8 @@ struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher
     ui64 GeneratorPathsLimit = 0;
     bool WriteThroughDqIntegration = false;
     ui64 MaxListingResultSizePerPhysicalPartition;
-    bool AllowAtomicUploadCommit = true;
     NDq::TS3ReadActorFactoryConfig S3ReadActorFactoryConfig;
+    TDuration DefaultOutputKeyFlushTimeout;
 
 private:
     std::vector<IS3ConfSettingWithDisableCheck*> DisabledPragmas;

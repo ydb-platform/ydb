@@ -37,7 +37,8 @@ TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> TSubColumnsPartialA
         return OthersData->GetPathAccessor(svPath, recordsCount);
     }
 
-    return std::shared_ptr<NSubColumns::TJsonPathAccessor>{};
+    AFL_VERIFY(!Header.GetOtherStats().GetKeyIndexOptional(svPath));
+    return std::make_shared<NSubColumns::TJsonPathAccessor>(std::make_shared<TTrivialArray>(TThreadSimpleArraysCache::GetNull(arrow::binary(), recordsCount)), TString{});
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

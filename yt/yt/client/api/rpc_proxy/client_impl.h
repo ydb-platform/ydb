@@ -146,6 +146,18 @@ public:
     TFuture<NApi::IPrerequisitePtr> StartChaosLease(
         const TChaosLeaseStartOptions& options = {}) override;
 
+    TFuture<void> SetUserBanned(
+        const std::string& user,
+        bool isBanned,
+        const TSetUserBannedOptions& options = {}) override;
+
+    TFuture<bool> GetUserBanned(
+        const std::string& user,
+        const TGetUserBannedOptions& options = {}) override;
+
+    TFuture<std::vector<std::string>> ListBannedUsers(
+        const TListBannedUsersOptions& options = {}) override;
+
     // Distributed table client
     TFuture<ITableFragmentWriterPtr> CreateTableFragmentWriter(
         const TSignedWriteFragmentCookiePtr& cookie,
@@ -361,6 +373,12 @@ public:
         const NYson::TYsonString& parameters,
         const NApi::TPollJobShellOptions& options) override;
 
+    TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr> RunJobShellCommand(
+        NJobTrackerClient::TJobId jobId,
+        const std::optional<std::string>& shellName,
+        const std::string& command,
+        const NApi::TRunJobShellCommandOptions& options) override;
+
     TFuture<void> AbortJob(
         NJobTrackerClient::TJobId jobId,
         const NApi::TAbortJobOptions& options) override;
@@ -425,6 +443,9 @@ public:
 
     TFuture<void> MasterExitReadOnly(
         const TMasterExitReadOnlyOptions& options) override;
+
+    TFuture<void> ResetDynamicallyPropagatedMasterCells(
+        const TResetDynamicallyPropagatedMasterCellsOptions& options) override;
 
     TFuture<void> DiscombobulateNonvotingPeers(
         NHydra::TCellId cellId,
@@ -643,7 +664,7 @@ public:
 
     TFuture<TFlowExecuteResult> FlowExecute(
         const NYPath::TYPath& pipelinePath,
-        const TString& command,
+        const std::string& command,
         const NYson::TYsonString& argument,
         const TFlowExecuteOptions& options = {}) override;
 

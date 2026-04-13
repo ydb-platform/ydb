@@ -19,7 +19,7 @@ namespace NYql {
 bool TYtTableDescription::Fill(
     const TString& cluster, const TString& table, const TQContext& qContext, TExprContext& ctx,
     IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
-    bool allowViewIsolation, IUdfResolver::TPtr udfResolver) {
+    bool allowViewIsolation, IUdfResolver::TPtr udfResolver, const NSQLTranslation::TSqlFlags& sqlFlags) {
     const TStructExprType* type = RowSpec ? RowSpec->GetType() : nullptr;
     if (!type) {
         TVector<const TItemExprType*> items;
@@ -33,7 +33,7 @@ bool TYtTableDescription::Fill(
 
     if (!TYtTableDescriptionBase::Fill(TString{YtProviderName}, cluster,
         table, type, Meta->SqlView, Meta->SqlViewSyntaxVersion, qContext, Meta->Attrs, ctx,
-        moduleResolver, urlListerManager, randomProvider, allowViewIsolation, udfResolver)) {
+        moduleResolver, urlListerManager, randomProvider, allowViewIsolation, udfResolver, sqlFlags)) {
         return false;
     }
     if (QB2RowSpec) {
@@ -69,6 +69,8 @@ void TYtTableDescription::ToYson(NYson::TYsonWriter& writer, const TString& clus
         writer.OnBooleanScalar(RowSpec && RowSpec->IsSorted());
         writer.OnKeyedItem("IsDynamic");
         writer.OnBooleanScalar(Meta->IsDynamic);
+        writer.OnKeyedItem("HasRLS");
+        writer.OnBooleanScalar(Meta->HasRLS);
         writer.OnKeyedItem("UniqueKeys");
         writer.OnBooleanScalar(RowSpec && RowSpec->UniqueKeys);
         writer.OnKeyedItem("CanWrite");
@@ -249,10 +251,10 @@ void TYtTableDescription::SetConstraintsReady() {
 bool TYtTableDescription::FillViews(
     const TString& cluster, const TString& table, const TQContext& qContext, TExprContext& ctx,
     IModuleResolver* moduleResolver, IUrlListerManager* urlListerManager, IRandomProvider& randomProvider,
-    bool allowViewIsolation, IUdfResolver::TPtr udfResolver) {
+    bool allowViewIsolation, IUdfResolver::TPtr udfResolver, const NSQLTranslation::TSqlFlags& sqlFlags) {
     return TYtTableDescriptionBase::FillViews(
         TString{YtProviderName}, cluster, table, Meta->Attrs, qContext, ctx,
-        moduleResolver, urlListerManager, randomProvider, allowViewIsolation, udfResolver);
+        moduleResolver, urlListerManager, randomProvider, allowViewIsolation, udfResolver, sqlFlags);
 }
 
 const TYtTableDescription& TYtTablesData::GetTable(const TString& cluster, const TString& table, TMaybe<ui32> epoch) const {
@@ -313,6 +315,9 @@ void TYtState::Reset() {
     WalkFoldersState.clear();
     NextEpochId = 1;
     FlowDependsOnId = 0;
+    if (FullCapture_) {
+        FullCapture_->Reset();
+    }
 }
 
 void TYtState::EnterEvaluation(ui64 id) {
@@ -443,9 +448,13 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
         info.Source = CreateYtDataSource(ytState);
         info.Sink = CreateYtDataSink(ytState);
         info.SupportFullResultDataSink = true;
-        info.OpenSession = [gateway, statWriter, qContext, fullCapture](const TString& sessionId, const TString& username,
+        info.OpenSession = [
+            gateway, statWriter, qContext, fullCapture, useSecureTmp = ytState->UseSecureTmp
+        ](
+            const TString& sessionId, const TString& username,
             const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions,
-            TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<ITimeProvider> timeProvider) {
+            TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<ITimeProvider> timeProvider
+        ) {
             gateway->OpenSession(
                 IYtGateway::TOpenSessionOptions(sessionId)
                     .UserName(username)
@@ -456,6 +465,7 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
                     .StatWriter(statWriter)
                     .QContext(qContext)
                     .FullCapture(fullCapture)
+                    .UseSecureTmp(useSecureTmp)
             );
             return NThreading::MakeFuture();
         };
@@ -481,16 +491,10 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
                 return {};
             }
 
-            // todo: get token by cluster name from Auth when it will be implemented
-            if (auto token = ytState->Configuration->Auth.Get()) {
+            if (auto token = ytState->ResolveClusterToken(cluster)) {
                 return *token;
             }
 
-            if (cluster) {
-                if (auto p = ytState->Configuration->Tokens.FindPtr(cluster)) {
-                    return *p;
-                }
-            }
             return {};
         };
 
@@ -579,6 +583,27 @@ bool TYtState::IsHybridEnabledForCluster(const std::string_view& cluster) const 
 bool TYtState::HybridTakesTooLong() const {
     return TimeSpentInHybrid + (HybridInFlightOprations.empty() ? TDuration::Zero() : NMonotonic::TMonotonic::Now() - HybridStartTime)
             > Configuration->HybridDqTimeSpentLimit.Get().GetOrElse(TDuration::Minutes(20));
+}
+
+TMaybe<TString> TYtState::ResolveClusterToken(const TString& cluster) {
+    // todo: get token by cluster name from Auth when it will be implemented
+    if (auto token = Configuration->Auth.Get()) {
+        return *token;
+    }
+
+    if (cluster) {
+        if (auto* token = Configuration->Tokens.FindPtr(cluster)) {
+            if (*token) {
+                return *token;
+            }
+        }
+
+        if (auto ytTokenResolver = Gateway->GetYtTokenResolver()) {
+            return ytTokenResolver->ResolveClusterToken(cluster);
+        }
+    }
+
+    return {};
 }
 
 }

@@ -1,5 +1,6 @@
 #include "yql_config_provider.h"
 
+#include <yql/essentials/providers/common/config/yql_config_qplayer.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
@@ -22,16 +23,19 @@
 #include <util/generic/utility.h>
 #include <util/string/builder.h>
 
+#include <utility>
 #include <vector>
 
 namespace NYql {
+
+const TString YqlCoreActivationLabel = "YqlCore";
 
 namespace {
 using namespace NNodes;
 
 class TConfigCallableExecutionTransformer: public TSyncTransformerBase {
 public:
-    TConfigCallableExecutionTransformer(const TTypeAnnotationContext& types)
+    explicit TConfigCallableExecutionTransformer(const TTypeAnnotationContext& types)
         : Types_(types)
     {
         Y_UNUSED(Types_);
@@ -130,11 +134,13 @@ public:
         }
     };
 
-    TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TString& username, const TAllowSettingPolicy& policy)
+    TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, TString username,
+                    TAllowSettingPolicy policy, bool forPartialTypeCheck)
         : Types_(types)
+        , ForPartialTypeCheck_(forPartialTypeCheck)
         , CoreConfig_(config && config->HasYqlCore() ? &config->GetYqlCore() : nullptr)
-        , Username_(username)
-        , Policy_(policy)
+        , Username_(std::move(username))
+        , Policy_(std::move(policy))
     {
     }
 
@@ -161,17 +167,21 @@ public:
         };
         if (CoreConfig_) {
             TPosition pos;
-            for (auto& flag : CoreConfig_->GetFlags()) {
-                if (filter(flag)) {
-                    TVector<TStringBuf> args;
-                    for (auto& arg : flag.GetArgs()) {
-                        args.push_back(arg);
-                    }
-                    if (!ApplyFlag(pos, flag.GetName(), args, ctx)) {
-                        return false;
-                    }
+            TVector<TCoreAttr> flags;
+            if (auto loadedFlags = NCommon::LoadActivatedFlagsFromQContext<TCoreAttr>(YqlCoreActivationLabel, Types_.QContext)) {
+                flags = std::move(*loadedFlags);
+            } else {
+                const auto& configFlags = CoreConfig_->GetFlags();
+                CopyIf(configFlags.begin(), configFlags.end(), std::back_inserter(flags), filter);
+            }
+            for (const auto& flag : flags) {
+                const auto& flagArgs = flag.GetArgs();
+                TVector<TStringBuf> args(flagArgs.begin(), flagArgs.end());
+                if (!ApplyFlag(pos, flag.GetName(), args, ctx)) {
+                    return false;
                 }
             }
+            NCommon::SaveActivatedFlagsToQContext<TCoreAttr>(flags, YqlCoreActivationLabel, Types_.QContext);
         }
         return true;
     }
@@ -250,7 +260,7 @@ public:
                         }
 
                         TStringBuf command = node->Child(2)->Content();
-                        if (command.length() && '_' == command[0]) {
+                        if (!command.empty() && '_' == command[0]) {
                             ctx.AddError(TIssue(ctx.GetPosition(node->Child(2)->Pos()), "Flags started with underscore are not allowed"));
                             return {};
                         }
@@ -502,7 +512,7 @@ private:
                 return false;
             }
         } else if (name == "LLVM_OFF") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
@@ -580,6 +590,10 @@ private:
                 return false;
             }
 
+            if (ForPartialTypeCheck_) {
+                return true;
+            }
+
             auto dataSource = args[0];
             if (Find(Types_.AvailablePureResultDataSources, dataSource) == Types_.AvailablePureResultDataSources.end()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported datasource for result provider: " << dataSource));
@@ -613,7 +627,7 @@ private:
 
             Types_.FullResultDataSink = dataSink;
         } else if (name == "Diagnostics") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
@@ -657,14 +671,14 @@ private:
                 return false;
             }
         } else if (name == "DisablePullUpFlatMapOverJoin" || name == "PullUpFlatMapOverJoin") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
 
             Types_.PullUpFlatMapOverJoin = (name == "PullUpFlatMapOverJoin");
         } else if (name == "DisableFilterPushdownOverJoinOptionalSide" || name == "FilterPushdownOverJoinOptionalSide") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
@@ -740,18 +754,24 @@ private:
 
             Types_.UseTableMetaFromGraph = res;
         } else if (name == "DiscoveryMode") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
             Types_.DiscoveryMode = true;
+        } else if (name == "WindowNewPipeline" || name == "DisableWindowNewPipeline") {
+            if (!args.empty()) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                return false;
+            }
+            Types_.WindowNewPipeline = (name == "WindowNewPipeline");
         } else if (name == "EnableSystemColumns") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
         } else if (name == "UdfIgnoreCase" || name == "UdfStrictCase") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
@@ -763,7 +783,7 @@ private:
 
             Types_.UdfIndex->SetCaseSentiveSearch(name == "UdfStrictCase");
         } else if (name == "NamedArgsIgnoreCase" || name == "NamedArgsStrictCase") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
@@ -814,13 +834,13 @@ private:
             }
             ctx.IssueManager.SetIssueCountLimit(limit);
         } else if (name == "StrictTableProps") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
             Types_.StrictTableProps = true;
         } else if (name == "DisableStrictTableProps") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
@@ -830,24 +850,24 @@ private:
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
                 return false;
             }
-            auto& userDataBlock = (Types_.UserDataStorageCrutches[TUserDataKey::File(TStringBuf("/home/geodata6.bin"))] = TUserDataBlock{EUserDataType::URL, {}, TString(args[0]), {}, {}});
+            auto& userDataBlock = (Types_.UserDataStorageCrutches[TUserDataKey::File(TStringBuf("/home/geodata6.bin"))] = TUserDataBlock{.Type = EUserDataType::URL, .UrlToken = {}, .Data = TString(args[0]), .Usage = {}, .FrozenFile = {}});
             userDataBlock.Usage.Set(EUserDataBlockUsage::Path);
         } else if (name == "JsonQueryReturnsJsonDocument" || name == "DisableJsonQueryReturnsJsonDocument") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
 
             Types_.JsonQueryReturnsJsonDocument = (name == "JsonQueryReturnsJsonDocument");
         } else if (name == "OrderedColumns" || name == "DisableOrderedColumns") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
             Types_.DeriveColumnOrder = (name == "OrderedColumns");
             Types_.OrderedColumns = (name == "OrderedColumns");
         } else if (name == "DeriveColumnOrder" || name == "DisableDeriveColumnOrder") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
@@ -863,28 +883,28 @@ private:
                 return false;
             }
         } else if (name == "YsonCastToString" || name == "DisableYsonCastToString") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
 
             Types_.YsonCastToString = (name == "YsonCastToString");
         } else if (name == "UseBlocks" || name == "DisableUseBlocks") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
 
             Types_.UseBlocks = (name == "UseBlocks");
         } else if (name == "DebugPositions" || name == "DisableDebugPositions") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
 
             Types_.DebugPositions = (name == "DebugPositions");
         } else if (name == "UseCanonicalLibrarySuffix" || name == "DisableUseCanonicalLibrarySuffix") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
@@ -893,7 +913,7 @@ private:
                 modules->SetUseCanonicalLibrarySuffix(name == "UseCanonicalLibrarySuffix");
             }
         } else if (name == "PgEmitAggApply" || name == "DisablePgEmitAggApply") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
@@ -925,7 +945,7 @@ private:
             }
             Types_.CostBasedOptimizerVersion = version;
         } else if (name == "_EnableMatchRecognize" || name == "DisableMatchRecognize") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
@@ -1013,7 +1033,7 @@ private:
                 Types_.PeepholeFlags.insert(to_lower(ToString(arg)));
             }
         } else if (name == "_EnableStreamLookupJoin" || name == "DisableStreamLookupJoin") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
@@ -1098,35 +1118,53 @@ private:
             Types_.NormalizeDependsOn = res;
         } else if (name == "UseUrlListerForFolder" || name == "DisableUseUrlListerForFolder") {
             // TODO: remove
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
         } else if (name == "EarlyExpandSeq" || name == "DisableEarlyExpandSeq") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
 
             Types_.EarlyExpandSeq = (name == "EarlyExpandSeq");
         } else if (name == "DirectRowDependsOn" || name == "DisableDirectRowDependsOn") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
             Types_.DirectRowDependsOn = ("DirectRowDependsOn" == name);
         } else if (name == "EnableLineage" || name == "DisableLineage") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
             Types_.EnableLineage = ("EnableLineage" == name);
         } else if (name == "EnableStandaloneLineage" || name == "DisableStandaloneLineage") {
-            if (args.size() != 0) {
+            if (!args.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                 return false;
             }
             Types_.EnableStandaloneLineage = ("EnableStandaloneLineage" == name);
+        } else if (name == "LineageOutputLimit") {
+            if (args.size() != 1) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
+                return false;
+            }
+            if (!TryFromString(args[0], Types_.LineageOutputLimit)) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
+                return false;
+            }
+        } else if (name == "LineageMemoryLimit") {
+            if (args.size() != 1) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
+                return false;
+            }
+            if (!TryFromString(args[0], Types_.LineageMemoryLimit)) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected integer, but got: " << args[0]));
+                return false;
+            }
         } else if (name == "Layer") {
             if (args.size() != 1) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected exatly 1 argument, but got " << args.size()));
@@ -1155,18 +1193,25 @@ private:
             return false;
         }
 
+        if (ForPartialTypeCheck_) {
+            return true;
+        }
+
         // file alias
         const auto& fileAlias = args[0];
         TString customUdfPrefix = args.size() > 1 ? TString(args[1]) : "";
         const auto key = TUserDataStorage::ComposeUserDataKey(fileAlias);
         TString errorMessage;
-        const TUserDataBlock* udfSource = nullptr;
+        TUserDataBlock* udfSource = nullptr;
         if (!Types_.QContext.CanRead()) {
             udfSource = Types_.UserDataStorage->FreezeUdfNoThrow(key, errorMessage, customUdfPrefix, Types_.RuntimeLogLevel, fileAlias);
             if (!udfSource) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown file: " << fileAlias << ", details: " << errorMessage));
                 return false;
             }
+        } else {
+            udfSource = &Types_.UserDataStorage->GetUserDataBlock(key);
+            udfSource->CustomUdfPrefix = customUdfPrefix;
         }
 
         IUdfResolver::TImport import;
@@ -1219,6 +1264,10 @@ private:
     }
 
     bool AddFileByUrl(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        if (ForPartialTypeCheck_) {
+            return true;
+        }
+
         if (args.size() < 2 || args.size() > 3) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 2 or 3 arguments, but got " << args.size()));
             return false;
@@ -1249,6 +1298,10 @@ private:
     }
 
     bool SetFileOption(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        if (ForPartialTypeCheck_) {
+            return true;
+        }
+
         if (args.size() != 3) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 3 arguments, but got " << args.size()));
             return false;
@@ -1257,6 +1310,10 @@ private:
     }
 
     bool SetPackageVersion(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        if (ForPartialTypeCheck_) {
+            return true;
+        }
+
         if (args.size() != 2) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 2 arguments, but got " << args.size()));
             return false;
@@ -1333,6 +1390,10 @@ private:
     }
 
     bool AddFolderByUrl(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+        if (ForPartialTypeCheck_) {
+            return true;
+        }
+
         if (args.size() < 2 || args.size() > 3) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 2 or 3 arguments, but got " << args.size()));
             return false;
@@ -1404,6 +1465,7 @@ private:
 
 private:
     TTypeAnnotationContext& Types_;
+    const bool ForPartialTypeCheck_;
     TAutoPtr<IGraphTransformer> TypeAnnotationTransformer_;
     TAutoPtr<IGraphTransformer> ConfigurationTransformer_;
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer_;
@@ -1415,9 +1477,9 @@ private:
 } // namespace
 
 TIntrusivePtr<IDataProvider> CreateConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TString& username,
-                                                  const TAllowSettingPolicy& policy)
+                                                  const TAllowSettingPolicy& policy, bool forPartialTypeCheck)
 {
-    return new TConfigProvider(types, config, username, policy);
+    return new TConfigProvider(types, config, username, policy, forPartialTypeCheck);
 }
 
 const THashSet<TStringBuf>& ConfigProviderFunctions() {

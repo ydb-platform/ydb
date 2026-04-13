@@ -13,10 +13,10 @@
     #include <sys/prctl.h>
 #endif
 
-#include <string.h>
-#include <signal.h>
-#include <errno.h>
-#include <stdlib.h>
+#include <cstring>
+#include <csignal>
+#include <cerrno>
+#include <cstdlib>
 
 namespace NYql {
 
@@ -146,7 +146,7 @@ void SetSignalHandlers(const TSignalHandlerDesc* handlerDescs)
         }
     }
 
-    if (SigProcMask(SIG_BLOCK, &interestedSignals, NULL) == -1) {
+    if (SigProcMask(SIG_BLOCK, &interestedSignals, nullptr) == -1) {
         ythrow TSystemError() << "Cannot set sigprocmask";
     }
 
@@ -157,40 +157,42 @@ void SetSignalHandlers(const TSignalHandlerDesc* handlerDescs)
 
 void InitSignals()
 {
-    TSignalHandlerDesc handlerDescs[] = {
-        {SIGTERM, SignalHandler},
-        {SIGINT, SignalHandler},
-        {SIGQUIT, SignalHandler},
+    auto handlerDescs = std::to_array<TSignalHandlerDesc>({
+        {.Signo = SIGTERM, .Handler = SignalHandler},
+        {.Signo = SIGINT, .Handler = SignalHandler},
+        {.Signo = SIGQUIT, .Handler = SignalHandler},
 #ifdef _unix_
-        {SIGPIPE, SIG_IGN},
-        {SIGHUP, SignalHandler},
-        {SIGUSR1, SignalHandler},
-        {SIGCHLD, SignalHandler},
+        {.Signo = SIGPIPE, .Handler = SIG_IGN},
+        {.Signo = SIGHUP, .Handler = SignalHandler},
+        {.Signo = SIGUSR1, .Handler = SignalHandler},
+        {.Signo = SIGCHLD, .Handler = SignalHandler},
 #endif
-        {-1, nullptr}};
+        {.Signo = -1, .Handler = nullptr},
+    });
 
-    SetSignalHandlers(handlerDescs);
+    SetSignalHandlers(handlerDescs.data());
 }
 
 void InitSignalsWithSelfPipe()
 {
-    TSignalHandlerDesc handlerDescs[] = {
-        {SIGTERM, SignalHandlerWithSelfPipe},
-        {SIGINT, SignalHandlerWithSelfPipe},
-        {SIGQUIT, SignalHandlerWithSelfPipe},
+    auto handlerDescs = std::to_array<TSignalHandlerDesc>({
+        {.Signo = SIGTERM, .Handler = SignalHandlerWithSelfPipe},
+        {.Signo = SIGINT, .Handler = SignalHandlerWithSelfPipe},
+        {.Signo = SIGQUIT, .Handler = SignalHandlerWithSelfPipe},
 #ifdef _unix_
-        {SIGPIPE, SIG_IGN},
-        {SIGHUP, SignalHandlerWithSelfPipe},
-        {SIGUSR1, SignalHandlerWithSelfPipe},
-        {SIGCHLD, SignalHandlerWithSelfPipe},
+        {.Signo = SIGPIPE, .Handler = SIG_IGN},
+        {.Signo = SIGHUP, .Handler = SignalHandlerWithSelfPipe},
+        {.Signo = SIGUSR1, .Handler = SignalHandlerWithSelfPipe},
+        {.Signo = SIGCHLD, .Handler = SignalHandlerWithSelfPipe},
 #endif
-        {-1, nullptr}};
+        {.Signo = -1, .Handler = nullptr},
+    });
 
     TPipe::Pipe(SignalPipeR, SignalPipeW);
     SetNonBlock(SignalPipeR.GetHandle());
     SetNonBlock(SignalPipeW.GetHandle());
 
-    SetSignalHandlers(handlerDescs);
+    SetSignalHandlers(handlerDescs.data());
 }
 
 void CatchInterruptSignal(bool doCatch) {
@@ -212,7 +214,7 @@ void AllowAnySignals()
     sigset_t blockMask;
     SigEmptySet(&blockMask);
 
-    if (SigProcMask(SIG_SETMASK, &blockMask, NULL) == -1) {
+    if (SigProcMask(SIG_SETMASK, &blockMask, nullptr) == -1) {
         ythrow TSystemError() << "Cannot set sigprocmask";
     }
 }

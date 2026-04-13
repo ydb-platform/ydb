@@ -1,13 +1,14 @@
 #pragma once
 
-#include <ydb/library/actors/core/actorsystem.h>
-#include <ydb/library/db_pool/db_pool.h>
-
 #include <ydb/core/fq/libs/common/debug_info.h>
 #include <ydb/core/fq/libs/config/yq_issue.h>
-#include <ydb/core/fq/libs/events/events.h>
-#include <yql/essentials/utils/exceptions.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
+#include <ydb/core/fq/libs/events/events.h>
+
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/db_pool/db_pool.h>
+#include <ydb/core/util/exceptions.h>
 
 namespace NFq {
 
@@ -28,7 +29,7 @@ public:
     virtual TAsyncStatus Execute(NYdb::NTable::TSession& session) = 0;
     void Throw(const TString& message);
 
-    NDbPool::TDbPool::TPtr DbPool;
+    NDbPool::TDbPoolPtr DbPool;
     std::weak_ptr<TDbExecutable> SelfHolder;
     NYql::TIssues Issues;
     NYql::TIssues InternalIssues;
@@ -44,7 +45,7 @@ void ParseProto(TDbExecutable& executable, TProto& proto, TResultSetParser& pars
     }
 }
 
-inline TAsyncStatus Exec(NDbPool::TDbPool::TPtr dbPool, TDbExecutable::TPtr executable,
+inline TAsyncStatus Exec(NDbPool::TDbPoolPtr dbPool, TDbExecutable::TPtr executable,
                                                                     const TString& tablePathPrefix) {
     executable->DbPool = dbPool;
     executable->SelfHolder = executable;
@@ -215,7 +216,7 @@ public:
                 if (self->Steps[self->CurrentStepIndex].ResultCallback) {
                     try {
                         self->Steps[self->CurrentStepIndex].ResultCallback(*self, result.GetResultSets());
-                    } catch (const NYql::TCodeLineException& exception) {
+                    } catch (const NKikimr::TCodeLineException& exception) {
                         NYql::TIssue issue = MakeErrorIssue(exception.Code, exception.GetRawMessage());
                         self->Issues.AddIssue(issue);
                         NYql::TIssue internalIssue = MakeErrorIssue(exception.Code, CurrentExceptionMessage());
@@ -279,4 +280,4 @@ public:
     TState State;
 };
 
-} /* NFq */
+} // namespace NFq

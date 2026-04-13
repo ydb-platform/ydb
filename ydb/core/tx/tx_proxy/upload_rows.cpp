@@ -14,12 +14,13 @@ public:
         const TString& table,
         std::shared_ptr<const TVector<std::pair<TString, Ydb::Type>>> types,
         std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>>&& rows,
+        const TString& userSID,
         EUploadRowsMode mode,
         bool writeToPrivateTable,
         bool writeToIndexImplTable,
         ui64 cookie,
         TBackoff backoff)
-        : TUploadRowsBase(std::move(rows))
+        : TUploadRowsBase(std::move(rows), userSID)
         , Sender(sender)
         , Database(database)
         , Table(table)
@@ -113,6 +114,7 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
         table,
         types,
         std::move(rows),
+        BUILTIN_ACL_NO_USER_SID,
         mode,
         writeToPrivateTable,
         writeToIndexImplTable,

@@ -11,13 +11,27 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TFuture<void> VoidFuture = NDetail::MakeWellKnownFuture(TError());
-const TFuture<bool> TrueFuture = NDetail::MakeWellKnownFuture(TErrorOr<bool>(true));
-const TFuture<bool> FalseFuture = NDetail::MakeWellKnownFuture(TErrorOr<bool>(false));
+namespace NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NDetail {
+class TOKPromiseState
+    : public TPromiseState<void>
+{
+public:
+    constexpr TOKPromiseState()
+        : TPromiseState(TOKFutureTag())
+    { }
+
+    void DestroyRefCounted() final
+    {
+        YT_ABORT();
+    }
+};
+
+constinit NDetail::TOKPromiseState OKPromiseState;
+
+////////////////////////////////////////////////////////////////////////////////
 
 TFutureCallbackCookie TFutureState<void>::Subscribe(TVoidResultHandler handler)
 {
@@ -126,7 +140,7 @@ bool TFutureState<void>::OnCanceled(TCancelHandler handler)
     }
 }
 
-bool TFutureState<void>::Wait(TInstant deadline) const
+bool TFutureState<void>::BlockingWait(TInstant deadline) const
 {
     // Fast path.
     if (Set_ || AbandonedUnset_) {
@@ -148,9 +162,9 @@ bool TFutureState<void>::Wait(TInstant deadline) const
     return ReadyEvent_->Wait(deadline);
 }
 
-bool TFutureState<void>::Wait(TDuration timeout) const
+bool TFutureState<void>::BlockingWait(TDuration timeout) const
 {
-    return Wait(timeout.ToDeadLine());
+    return BlockingWait(timeout.ToDeadLine());
 }
 
 void TFutureState<void>::InstallAbandonedError() const
@@ -280,13 +294,19 @@ void TFutureState<void>::OnLastPromiseRefLost()
         error <<= TErrorAttribute("backtrace_origin", NBacktrace::SymbolizeBacktrace(backtrace));
 #endif
         // Set the promise if the value is still missing.
-        TrySetError(std::move(error));
+        TrySetError(error);
         // Kill the fake weak reference.
         UnrefFuture();
     }));
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
+constinit const TFuture<void> OKFuture(NDetail::TOKFutureTag(), &NDetail::OKPromiseState);
 
 ////////////////////////////////////////////////////////////////////////////////
 

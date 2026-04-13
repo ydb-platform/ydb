@@ -16,6 +16,8 @@ constexpr int DISTRICT_LOW_ID = 1;
 constexpr int DISTRICT_HIGH_ID = 10;
 constexpr int DISTRICT_COUNT = DISTRICT_HIGH_ID - DISTRICT_LOW_ID + 1;
 
+constexpr int C_INVALID_CUSTOMER_ID = 0;
+constexpr int C_FIRST_CUSTOMER_ID = 1;
 constexpr int C_ID_C = 259; // in range [0, 1023]
 constexpr int CUSTOMERS_PER_DISTRICT = 3000;
 
@@ -103,7 +105,7 @@ constexpr const size_t TUI_LOG_LINES = 1000;
 // lower limit, real number is higher
 constexpr const size_t WAREHOUSES_PER_CPU_CORE = 1000;
 
-// according our runs
+// according to our runs
 constexpr const size_t SESSIONS_PER_COMPUTE_CORE = 15;
 constexpr const size_t COMPUTE_CORES_PER_IMPORT_THREAD = 4;
 

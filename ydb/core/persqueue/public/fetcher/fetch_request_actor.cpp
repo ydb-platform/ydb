@@ -355,7 +355,7 @@ public:
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
-        LOG_D("Handle TEvPersQueue::TEvRespons " << record.ShortDebugString());
+        LOG_D("Handle TEvPersQueue::TEvResponse " << record.ShortDebugString());
         AFL_ENSURE(record.HasPartitionResponse());
 
         if (record.GetPartitionResponse().GetCookie() != FetchRequestCurrentPartitionIndex || FetchRequestCurrentReadTablet == 0) {
@@ -397,6 +397,10 @@ public:
         auto [_, topicInfo] = GetTopicInfo(req.Topic);
 
         SetMeteringMode(topicInfo.PQInfo->Description.GetPQTabletConfig().GetMeteringMode());
+        if (topicInfo.PQInfo->Description.GetPQTabletConfig().HasTimestampType()) {
+            auto timestampType = topicInfo.PQInfo->Description.GetPQTabletConfig().GetTimestampType();
+            Response->Response.SetTimestampType(timestampType);
+        }
 
         LOG_D("After processing result FetchRequestBytesLeft=" << FetchRequestBytesLeft);
         if (FetchRequestBytesLeft == 0) {

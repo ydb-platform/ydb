@@ -4,6 +4,7 @@ This module provides a dictionary of workload configurations that is initialized
 only once when first imported, even when imported from multiple places.
 """
 from copy import deepcopy
+import logging
 import yatest.common
 
 _all_stress_utils = None
@@ -102,8 +103,12 @@ def _init_stress_utils():
         'TestShard': {
             'args': [
                 "--endpoint", "grpc://{node_host}:2135",
+                "--owner-idx", "{global_run_id}",
+                "--tsserver-port", "31313",
+                "--tsserver-host", "{node_host}"
             ],
-            'local_path': 'ydb/tests/stress/testshard_workload/workload_testshard'
+            'local_path': 'ydb/tests/stress/testshard_workload/workload_testshard',
+            'nodes_percentage': 1
         },
         'IncrementalBackup': {
             'args': [
@@ -111,6 +116,21 @@ def _init_stress_utils():
                 "--backup-interval", "20"
             ],
             'local_path': 'ydb/tests/stress/backup/backup_stress'
+        },
+        'Streaming': {
+            'args': [
+                "--endpoint", "{node_host}:2135",
+                "--partitions-count", "10",
+                "--prefix", "streaming_stress/run_{global_run_id}"
+            ],
+            'local_path': 'ydb/tests/stress/streaming/streaming'
+        },
+        'TopicSqs': {
+            'args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--sqs-endpoint", "http://{node_host}:8433/{database}",
+            ],
+            'local_path': 'ydb/tests/stress/topic_sqs/topic_sqs'
         },
     }
 
@@ -147,19 +167,39 @@ def _init_stress_utils():
                 'local_path': 'ydb/tests/stress/transfer/transfer'
             }
 
-    filtered_stress_utils_arg = yatest.common.get_param('stress-utils-to-run', None)
+    for config_preset in ['common_channel_read', 'inline_channel_read', 'write_read_delete']:
+        _all_stress_utils[f'KVVolume_{config_preset}'] = {
+            'args': ["--endpoint", "grpc://{node_host}:2135", '--in-flight', '3', '--version', 'v1', '--config-name', config_preset],
+            'local_path': 'ydb/tests/stress/kv_volume/workload_keyvalue_volume'
+        }
+
+    filtered_stress_utils_arg: str = yatest.common.get_param('stress-utils-to-run', None)
 
     if filtered_stress_utils_arg:
         filtered_stress_utils = filtered_stress_utils_arg.split(',')
-        _all_stress_utils = {k: v for k, v in _all_stress_utils.items() if any(filtered_util in k for filtered_util in filtered_stress_utils)}
+        # ! prefix is used for exclusion filtering
+        ignored_stress_utils = [util_name[1:].lower() for util_name in filtered_stress_utils if util_name.startswith('!')]
+        filtered_stress_utils = [util_name.lower() for util_name in filtered_stress_utils if not util_name.startswith('!')]
 
+        logging.info(f'Filtered {filtered_stress_utils} stress utils')
+        logging.info(f'Ignoring {ignored_stress_utils} stress utils')
 
-# Initialize on import
-_init_stress_utils()
+        if len(filtered_stress_utils) == 0:
+            _all_stress_utils = {k: v for k, v in _all_stress_utils.items() if all(ignored_util not in k.lower() for ignored_util in ignored_stress_utils)}
+        else:
+            _all_stress_utils = {k: v for k, v in _all_stress_utils.items() if
+                                 any(filtered_util in k.lower() for filtered_util in filtered_stress_utils) and
+                                 all(ignored_util not in k.lower() for ignored_util in ignored_stress_utils)}
+
+    logging.info(f'Using {get_all_stress_names()} stress utils')
 
 
 def get_all_stress_names():
     return list(_all_stress_utils.keys())
+
+
+# Initialize on import
+_init_stress_utils()
 
 
 def get_stress_util(name, common_args):

@@ -206,16 +206,49 @@ class TKqpPeepholeNewOperatorTransformer : public TOptimizeTransformerBase {
 public:
     TKqpPeepholeNewOperatorTransformer(TTypeAnnotationContext& ctx, TKikimrConfiguration::TPtr config)
         : TOptimizeTransformerBase(&ctx, NYql::NLog::EComponent::ProviderKqp, {})
+        , DqHashOperatorsUseBlocks(config->GetDqHashOperatorsUseBlocks())
+        , DqHashCombineExportTypeInfo(config->GetDqHashCombineExportTypeInfo())
     {
 #define HNDL(name) "KqpPeepholeNewOperator-"#name, Hndl(&TKqpPeepholeNewOperatorTransformer::name)
         if (config->GetUseDqHashCombine()) {
             AddHandler(0, &TCoWideCombiner::Match, HNDL(RewriteWideCombinerToDqHashCombiner));
         }
+        if (config->GetUseDqHashAggregate()) {
+            AddHandler(0, &TCoWideCombiner::Match, HNDL(RewriteWideCombinerToDqHashAggregator));
+        }
 #undef HNDL
     }
 
     TMaybeNode<TExprBase> RewriteWideCombinerToDqHashCombiner(TExprBase node, TExprContext& ctx) {
-        TExprBase output = DqPeepholeRewriteWideCombiner(node, ctx);
+        TExprBase output = DqPeepholeRewriteWideCombinerToDqHashCombiner(node, ctx, DqHashOperatorsUseBlocks, DqHashCombineExportTypeInfo);
+        DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteWideCombinerToDqHashAggregator(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeRewriteWideCombinerToDqHashAggregator(node, ctx, DqHashOperatorsUseBlocks, DqHashCombineExportTypeInfo);
+        DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+private:
+    bool DqHashOperatorsUseBlocks;
+    bool DqHashCombineExportTypeInfo;
+};
+
+class TKqpPeepholeBlockPackUnpackTransformer : public TOptimizeTransformerBase {
+public:
+    TKqpPeepholeBlockPackUnpackTransformer(TTypeAnnotationContext& ctx)
+        : TOptimizeTransformerBase(&ctx, NYql::NLog::EComponent::ProviderKqp, {})
+    {
+#define HNDL(name) "KqpPeepholeBlockPackUnpack-"#name, Hndl(&TKqpPeepholeBlockPackUnpackTransformer::name)
+        AddHandler(0, &TCoWideMap::Match, HNDL(EliminateWideMapPackUnpack));
+#undef HNDL
+    }
+
+private:
+    TMaybeNode<TExprBase> EliminateWideMapPackUnpack(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpEliminateWideMapPackUnpack(node, ctx, *GetTypes());
         DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
         return output;
     }
@@ -244,8 +277,9 @@ private:
 };
 
 struct TKqpPeepholePipelineFinalConfigurator : IPipelineConfigurator {
-    TKqpPeepholePipelineFinalConfigurator(TKikimrConfiguration::TPtr config)
+    TKqpPeepholePipelineFinalConfigurator(TKikimrConfiguration::TPtr config, const bool withFinalStageRules)
         : Config(config)
+        , WithFinalStageRules(withFinalStageRules)
     {}
 
     void AfterCreate(TTransformationPipeline*) const override {}
@@ -255,10 +289,15 @@ struct TKqpPeepholePipelineFinalConfigurator : IPipelineConfigurator {
     }
 
     void AfterOptimize(TTransformationPipeline* pipeline) const override {
-        pipeline->Add(new TKqpPeepholeNewOperatorTransformer(*pipeline->GetTypeAnnotationContext(), Config), "KqpPeepholeNewOperator");
+        if (WithFinalStageRules) {
+            pipeline->Add(new TKqpPeepholeNewOperatorTransformer(*pipeline->GetTypeAnnotationContext(), Config), "KqpPeepholeNewOperator");
+        }
+        pipeline->Add(new TKqpPeepholeBlockPackUnpackTransformer(*pipeline->GetTypeAnnotationContext()), "KqpPeepholeBlockPackUnpack");
     }
+
 private:
     const TKikimrConfiguration::TPtr Config;
+    const bool WithFinalStageRules;
 };
 
 // Sort stages in topological order by their inputs, so that we optimize the ones without inputs first.
@@ -368,7 +407,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
         // Propagate "WideFromBlock" through connections.
         // TODO(ilezhankin): this peephole optimization should be implemented instead as
         //       the original whole-graph transformer |CreateDqBuildWideBlockChannelsTransformer|.
-        if (config->BlockChannelsMode == NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO) {
+        if (config->GetBlockChannelsMode() == NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO) {
             TNodeOnNodeOwnedMap argsMap;
 
             YQL_ENSURE(stage.Inputs().Size() == stage.Program().Args().Size());
@@ -380,7 +419,7 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
             for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
                 auto connection = stage.Inputs().Item(i).Maybe<TDqCnHashShuffle>();
                 if (connection) {
-                    auto hashFuncType = config->DefaultHashShuffleFuncType;
+                    auto hashFuncType = config->GetDqDefaultHashShuffleFuncType();
                     if (connection.Cast().HashFunc().IsValid()) {
                         hashFuncType = FromString<NDq::EHashShuffleFuncType>(connection.Cast().HashFunc().Cast().StringValue());
                     }
@@ -656,7 +695,7 @@ TStatus PeepHoleOptimize(const TExprBase& program, TExprNode::TPtr& newProgram, 
     bool allowNonDeterministicFunctions, bool withFinalStageRules, TSet<TString> disabledOpts)
 {
     TKqpPeepholePipelineConfigurator kqpPeephole(config, disabledOpts);
-    TKqpPeepholePipelineFinalConfigurator kqpPeepholeFinal(config);
+    TKqpPeepholePipelineFinalConfigurator kqpPeepholeFinal(config, withFinalStageRules);
     TPeepholeSettings peepholeSettings;
     peepholeSettings.CommonConfig = &kqpPeephole;
     peepholeSettings.FinalConfig = &kqpPeepholeFinal;

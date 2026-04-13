@@ -5,8 +5,7 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/yexception.h>
 
-namespace NYql {
-namespace NLog {
+namespace NYql::NLog {
 
 enum class ELevel {
     FATAL = TLOG_EMERG,
@@ -125,5 +124,4 @@ public:
 // TODO(YQL-20086): Migrate YDB to TLevelHelpers
 using ELevelHelpers = TLevelHelpers;
 
-} // namespace NLog
-} // namespace NYql
+} // namespace NYql::NLog

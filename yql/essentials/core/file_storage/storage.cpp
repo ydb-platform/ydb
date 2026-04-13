@@ -28,13 +28,14 @@
     #include <pthread.h>
 #endif
 
-#include <errno.h>
+#include <cerrno>
+#include <utility>
 
 namespace NYql {
 
 namespace {
 
-constexpr const char CleanupLockFilename[] = ".cleanup_lock";
+constexpr const char* CleanupLockFilename = ".cleanup_lock";
 
 struct TFileObject {
     TString Name;
@@ -45,25 +46,25 @@ struct TFileObject {
 TFsPath ToFilePath(const TString& path)
 {
     if (path.empty()) {
-        char tempDir[MAX_PATH];
-        if (MakeTempDir(tempDir, nullptr) != 0) {
-            ythrow yexception() << "FileStorage: Can't create temporary directory " << tempDir;
+        std::array<char, MAX_PATH> tempDir;
+        if (MakeTempDir(tempDir.data(), nullptr) != 0) {
+            ythrow yexception() << "FileStorage: Can't create temporary directory " << tempDir.data();
         }
-        return tempDir;
+        return tempDir.data();
     }
     return path;
 }
 
-constexpr char FileLocksDir[] = "locks";
+constexpr const char* FileLocksDir = "locks";
 
 constexpr size_t MaxLockPathInStorage = 4096;
 } // namespace
 
-TFileLink::TFileLink(const TFsPath& path, const TString& storageFileName, ui64 size, const TString& md5, bool deleteOnDestroy)
-    : Path_(path)
-    , StorageFileName_(storageFileName)
+TFileLink::TFileLink(TFsPath path, TString storageFileName, ui64 size, TString md5, bool deleteOnDestroy)
+    : Path_(std::move(path))
+    , StorageFileName_(std::move(storageFileName))
     , Size_(size)
-    , Md5_(md5)
+    , Md5_(std::move(md5))
     , DeleteOnDestroy_(deleteOnDestroy)
 {
 }
@@ -418,36 +419,36 @@ private:
             TFsPath childPath(StorageDir_ / name);
             TFileStat stat(childPath, true);
             if (stat.IsFile()) {
-                files.push_back(TFileObject{name, stat.MTime, stat.Size});
+                files.push_back(TFileObject{.Name = name, .MTime = stat.MTime, .Size = stat.Size});
                 ++actualFiles;
                 actualSize += stat.Size;
             }
         }
 
-        // sort files to get older files first
-        Sort(files, [](const TFileObject& f1, const TFileObject& f2) {
-            if (f1.MTime == f2.MTime) {
-                return f1.Name.compare(f2.Name) < 0;
-            }
-            return f1.MTime < f2.MTime;
-        });
+        if (actualFiles > MaxFiles_ || actualSize > MaxSize_) {
+            // sort files to get older files first
+            Sort(files, [](const TFileObject& f1, const TFileObject& f2) {
+                if (f1.MTime == f2.MTime) {
+                    return f1.Name.compare(f2.Name) < 0;
+                }
+                return f1.MTime < f2.MTime;
+            });
 
-        ui64 filesThreshold = MaxFiles_ / 2;
-        ui64 sizeThreshold = MaxSize_ / 2;
+            for (const TFileObject& f : files) {
+                if (actualFiles <= MaxFiles_ && actualSize <= MaxSize_) {
+                    break;
+                }
 
-        for (const TFileObject& f : files) {
-            if (actualFiles <= filesThreshold && actualSize <= sizeThreshold) {
-                break;
-            }
-
-            YQL_LOG(INFO) << "Removing file from cache (name: " << f.Name
-                          << ", size: " << f.Size
-                          << ", mtime: " << f.MTime << ")";
-            if (!NFs::Remove(StorageDir_ / f.Name)) {
-                YQL_LOG(WARN) << "Failed to remove file " << f.Name.Quote() << ": " << LastSystemErrorText();
-            } else {
-                --actualFiles;
-                actualSize -= f.Size;
+                YQL_LOG(INFO) << "Removing file from cache (name: " << f.Name
+                              << ", size: " << f.Size
+                              << ", mtime: " << f.MTime << ")";
+                if (!NFs::Remove(StorageDir_ / f.Name)) {
+                    YQL_LOG(WARN) << "Failed to remove file " << f.Name.Quote() << ": " << LastSystemErrorText();
+                } else {
+                    --actualFiles;
+                    Y_ENSURE(actualSize >= f.Size);
+                    actualSize -= f.Size;
+                }
             }
         }
 

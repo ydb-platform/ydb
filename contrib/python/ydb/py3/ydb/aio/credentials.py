@@ -40,7 +40,7 @@ class AbstractExpiringTokenCredentials(credentials.AbstractExpiringTokenCredenti
     async def _make_token_request(self):
         pass
 
-    async def get_auth_token(self) -> str:
+    async def get_auth_token(self) -> str:  # type: ignore[override]
         for header, token in await self.auth_metadata():
             if header == YDB_AUTH_TICKET_HEADER:
                 return token
@@ -62,7 +62,7 @@ class AbstractExpiringTokenCredentials(credentials.AbstractExpiringTokenCredenti
 
         except Exception as e:
             self.last_error = str(e)
-            self.logger.error("Failed to refresh token async: %s", e)
+            self.logger.exception("Failed to refresh token async: %s", e)
             if should_raise:
                 raise issues.ConnectionError(
                     "%s: %s.\n%s" % (self.__class__.__name__, self.last_error, self.extra_error_message)

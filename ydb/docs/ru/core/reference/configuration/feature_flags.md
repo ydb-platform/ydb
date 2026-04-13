@@ -1,10 +1,9 @@
 # feature_flags
 
-Секция `feature_flags` включает или отключает определённые функции {{ ydb-short-name }} с помощью булевых флагов. Для включения функции установите соответствующий функциональный флаг в значение `true` в конфигурации кластера. Например, для включения поддержки векторных индексов и автопартиционирования топиков в CDC, нужно добавить следующие строки в конфигурацию:
+Секция `feature_flags` включает или отключает определённые функции {{ ydb-short-name }} с помощью булевых флагов. Для включения функции установите соответствующий функциональный флаг в значение `true` в конфигурации кластера. Например, для включения поддержки автопартиционирования топиков в CDC, нужно добавить следующие строки в конфигурацию:
 
 ```yaml
 feature_flags:
-  enable_vector_index: true
   enable_topic_autopartitioning_for_cdc: true
 ```
 
@@ -12,8 +11,7 @@ feature_flags:
 
 | Флаг          | Функция |
 |---------------------------| ----------------------------------------------------|
-| `enable_vector_index`                                    | [Векторный индекс](../../dev/vector-indexes.md) для приближённого векторного поиска |
-| `enable_batch_updates`                                   | Поддержка запросов `BATCH UPDATE` и `BATCH DELETE` |
+| `enable_fulltext_index`                                  | [Полнотекстовый индекс](../../dev/fulltext-indexes.md) для полнотекстового поиска |
 | `enable_topic_autopartitioning_for_cdc`                  | [Автопартиционирование топиков](../../concepts/cdc.md#topic-partitions) в CDC для строковых таблиц |
 | `enable_access_to_index_impl_tables`                     | Возможность [указания числа реплик](../../yql/reference/syntax/alter_table/indexes.md) для вторичного индекса |
 | `enable_changefeeds_export`, `enable_changefeeds_import` | Поддержка потоков изменений (changefeed) в операциях резервного копирования и восстановления |
@@ -27,4 +25,4 @@ feature_flags:
 | `enable_topic_compactification_by_key`                   | Включение компактификации топиков в [YDB Topics Kafka API](../../reference/kafka-api/index.md)|
 | `enable_kafka_transactions`                              | Включение транзакций в [YDB Topics Kafka API](../../reference/kafka-api/index.md)|
 | `enable_external_data_sources`                           | Включение [внешних источников данных](../../concepts/datamodel/external_data_source.md)|
-
+| `enable_grpc_audit`                                      | Включение [аудита](../../security/audit-log.md#grpc-connection) изменений состояния gRPC-соединения |

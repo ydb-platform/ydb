@@ -3,8 +3,7 @@
 #include <util/system/yassert.h> // Y_ASSERT
 #include "udf_type_size_check.h"
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 namespace NDetails {
 struct TDelete {
@@ -21,6 +20,8 @@ struct TDelete {
 template <typename T, typename D = NDetails::TDelete>
 class TUniquePtr {
 public:
+    // Implicit ownership capturing is okay for smart pointers
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline TUniquePtr(T* ptr = nullptr)
         : Ptr_(ptr)
     {
@@ -123,6 +124,8 @@ public:
     };
 
 public:
+    // Implicit ownership capturing is okay for smart pointers
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline TRefCountedPtr(T* ptr = nullptr)
         : Ptr_(ptr)
     {
@@ -263,5 +266,4 @@ private:
 
 UDF_ASSERT_TYPE_SIZE(IRefCounted, 16);
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

@@ -38,9 +38,10 @@ void DropPath(NIceDb::TNiceDb& db,
     context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
 
     const auto isBackupTable = context.SS->IsBackupTable(path->PathId);
+    const EPathCategory pathCategory = isBackupTable ? EPathCategory::Backup : EPathCategory::Regular;
 
     auto domainInfo = context.SS->ResolveDomainInfo(path->PathId);
-    domainInfo->DecPathsInside(context.SS, 1, isBackupTable);
+    domainInfo->DecPathsInside(context.SS, 1, pathCategory);
 
     auto parentDir = path.Parent();
     DecAliveChildrenDirect(operationId, parentDir.Base(), context, isBackupTable);

@@ -6,7 +6,6 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <yql/essentials/core/yql_cost_function.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -306,7 +305,10 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
     TString rightLabel = join.RightLabel().Maybe<TCoAtom>() ? TString(join.RightLabel().Cast<TCoAtom>().Value()) : "";
 
     TMaybeNode<TCoAtomList> lookupColumns;
-    if (auto read = rightReadMatch.Read.Maybe<TKqlReadTableBase>()) {
+
+    if (rightReadMatch.ExtractMembers) {
+        lookupColumns = rightReadMatch.ExtractMembers.Cast().Members();
+    } else if (auto read = rightReadMatch.Read.Maybe<TKqlReadTableBase>()) {
         lookupColumns = read.Columns().Cast();
     } else {
         auto readRanges = rightReadMatch.Read.Maybe<TKqlReadTableRangesBase>();
@@ -496,7 +498,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     size_t rightPrefixSize;
     TMaybeNode<TExprBase> rightPrefixExpr;
 
-    auto prefixLookup = RewriteReadToPrefixLookup(rightReadMatch->Read, ctx, kqpCtx, kqpCtx.Config->IdxLookupJoinsPrefixPointLimit);
+    auto prefixLookup = RewriteReadToPrefixLookup(rightReadMatch->Read, ctx, kqpCtx, kqpCtx.Config->GetIdxLookupJoinPointsLimit());
     if (prefixLookup) {
         lookupTable = prefixLookup->LookupTableName;
         indexName = prefixLookup->IndexName;
@@ -540,7 +542,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     }
 
     const bool useStreamIndexLookupJoin = (kqpCtx.IsDataQuery() || kqpCtx.IsGenericQuery())
-        && kqpCtx.Config->EnableKqpDataQueryStreamIdxLookupJoin;
+        && kqpCtx.Config->GetEnableKqpDataQueryStreamIdxLookupJoin();
 
     auto leftRowArg = Build<TCoArgument>(ctx, join.Pos())
         .Name("leftRowArg")
@@ -961,7 +963,7 @@ TExprBase KqpJoinToIndexLookup(const TExprBase& node, TExprContext& ctx, const T
         useCBO = false;
     }
 
-    if (!useCBO && kqpCtx.IsScanQuery() && !kqpCtx.Config->EnableKqpScanQueryStreamIdxLookupJoin) {
+    if (!useCBO && kqpCtx.IsScanQuery() && !kqpCtx.Config->GetEnableKqpScanQueryStreamIdxLookupJoin()) {
         return node;
     }
 

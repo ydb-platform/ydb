@@ -20,6 +20,7 @@
 
 #include <util/generic/noncopyable.h>
 #include <util/generic/string.h>
+#include <util/random/random.h>
 
 #include <map>
 #include <memory>
@@ -65,6 +66,7 @@ public:
         , Generation(ev->Get()->GetGeneration())
         , RequestActorId(ev->Get()->GetRequestActorId())
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
+        , IsWarmupCompilation_(ev->Get()->GetIsWarmupCompilation())
         , StartTime(TInstant::Now())
         , KeepSession(ev->Get()->GetKeepSession() || longSession)
         , UserToken(ev->Get()->GetUserToken())
@@ -72,12 +74,11 @@ public:
         , StartedAt(startedAt)
         , FormatsSettings(ev->Get()->GetResultSetFormat(), ev->Get()->GetSchemaInclusionMode(), ev->Get()->GetArrowFormatSettings())
         , RuntimeParameterSizeLimit(runtimeParameterSizeLimit)
+        , RuntimeParameterSizeLimitSatisfied(runtimeParameterSizeLimit > 0)
     {
         RequestEv.reset(ev->Release().Release());
-        bool enableImplicitQueryParameterTypes = tableServiceConfig.GetEnableImplicitQueryParameterTypes() ||
-            AppData()->FeatureFlags.GetEnableImplicitQueryParameterTypes();
 
-        if (enableImplicitQueryParameterTypes && !RequestEv->GetYdbParameters().empty()) {
+        if (!RequestEv->GetYdbParameters().empty()) {
             QueryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
 
             for (const auto& [name, typedValue] : RequestEv->GetYdbParameters()) {
@@ -102,6 +103,15 @@ public:
         if (KqpSessionSpan && AppData()) {
             KqpSessionSpan.Attribute("database", AppData()->TenantName);
         }
+        if (IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
+            if (KqpSessionSpan) {
+                QuerySpanId = *reinterpret_cast<const ui64*>(KqpSessionSpan.GetTraceId().GetSpanIdPtr());
+            } else {
+                while (QuerySpanId == 0) { // avoid 0 as query span id
+                    QuerySpanId = RandomNumber<ui64>();
+                }
+            }
+        }
         if (RequestEv->GetUserRequestContext()) {
             UserRequestContext = RequestEv->GetUserRequestContext();
         } else {
@@ -124,6 +134,7 @@ public:
     // this counter may be used as a cookie by a session actor to reject events
     // with cookie less than current QueryId.
     ui64 QueryId = 0;
+    ui64 QuerySpanId = 0;
     TString Database;
     TMaybe<TString> ApplicationName;
     TString Cluster;
@@ -149,6 +160,7 @@ public:
     ui64 CurrentTx = 0;
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     bool IsDocumentApiRestricted_ = false;
+    bool IsWarmupCompilation_ = false;
 
     TInstant StartTime;
     TInstant ContinueTime;
@@ -201,7 +213,7 @@ public:
     NFormats::TFormatsSettings FormatsSettings;
 
     i32 RuntimeParameterSizeLimit = 0;
-    bool RuntimeParameterSizeLimitSatisfied = true;
+    bool RuntimeParameterSizeLimitSatisfied = false;
 
 
     bool IsLocalExecution(ui32 nodeId) const {
@@ -274,8 +286,8 @@ public:
             QueryDeadlines.CancelAt = now + cancelAfter;
         }
 
-        auto timeoutMs = GetQueryTimeout(GetType(), timeout.MilliSeconds(), tableService, queryService);
-        QueryDeadlines.TimeoutAt = now + timeoutMs;
+        auto timeoutDuration = GetQueryTimeout(GetType(), timeout.MilliSeconds(), tableService, queryService, RequestEv->GetDisableDefaultTimeout());
+        QueryDeadlines.TimeoutAt = now + timeoutDuration;
     }
 
     bool HasTopicOperations() const {
@@ -304,6 +316,10 @@ public:
 
     const NFormats::TFormatsSettings& GetFormatsSettings() const {
         return FormatsSettings;
+    }
+
+    ui64 GetQuerySpanId() const {
+        return QuerySpanId;
     }
 
     // todo: gvit
@@ -337,6 +353,10 @@ public:
                 if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
                     addTable(source.GetReadRangesSource().GetTable());
                 }
+
+                if (source.GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
+                    addTable(source.GetFullTextSource().GetTable());
+                }
             }
 
             for (const auto& sink : stage.GetSinks()) {
@@ -345,6 +365,9 @@ public:
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
                     addTable(settings.GetTable());
+                    for (const auto& index : settings.GetIndexes()) {
+                        addTable(index.GetTable());
+                    }
                 }
             }
         }
@@ -413,12 +436,6 @@ public:
             return false;
         }
 
-        if (TxCtx->EffectiveIsolationLevel == NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW) {
-            // ReadWrite snapshot isolation transaction with can only use uncommitted data.
-            // WriteOnly snapshot isolation transaction is executed like serializable transaction.
-            return !TxCtx->HasTableRead;
-        }
-
         if (TxCtx->NeedUncommittedChangesFlush || AppData()->FeatureFlags.GetEnableForceImmediateEffectsExecution()) {
             if (tx && tx->GetHasEffects()) {
                 YQL_ENSURE(tx->ResultsSize() == 0);
@@ -435,8 +452,8 @@ public:
 
     bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         Y_UNUSED(tx);
-        if (*TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE &&
-                *TxCtx->EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SNAPSHOT_RW) {
+        if (*TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE &&
+                *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW) {
             return false;
         }
 
@@ -445,11 +462,12 @@ public:
             return false;
         }
 
-        if (TxCtx->Locks.GetLockTxId() && !TxCtx->Locks.Broken()) {
+        AFL_ENSURE(!TxCtx->TxManager->BrokenLocks());
+        if (TxCtx->LockHandle.GetLockId() && !TxCtx->TxManager->GetLockIssue()) {
             return true;  // Continue to acquire locks
         }
 
-        if (TxCtx->Locks.Broken()) {
+        if (TxCtx->TxManager->GetLockIssue()) {
             YQL_ENSURE(TxCtx->GetSnapshot().IsValid() && !TxCtx->TxHasEffects());
             return false;  // Do not acquire locks after first lock issue
         }
@@ -482,9 +500,9 @@ public:
 
         if (TxCtx->CanDeferEffects()) {
             // Olap sinks require separate tnx with commit.
-            while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable) {
+            while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable && tx->ResultsSize() == 0) {
                 QueryData->PrepareParameters(tx, PreparedQuery, txTypeEnv);
-                bool success = TxCtx->AddDeferredEffect(tx, QueryData);
+                bool success = TxCtx->AddDeferredEffect(tx, QueryData, GetQuerySpanId());
                 YQL_ENSURE(success);
                 if (CurrentTx + 1 < phyQuery.TransactionsSize()) {
                     ++CurrentTx;

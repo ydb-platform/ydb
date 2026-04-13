@@ -9,6 +9,7 @@ option go_package = "a.yandex-team.ru/yt/go/proto/client/api/rpc_proxy";
 import "yt_proto/yt/core/misc/proto/error.proto";
 import "yt_proto/yt/core/misc/proto/guid.proto";
 import "yt_proto/yt/core/misc/proto/hyperloglog.proto";
+import "yt_proto/yt/core/rpc/proto/rpc.proto";
 import "yt_proto/yt/core/ytree/proto/attributes.proto";
 import "yt_proto/yt/core/ytree/proto/request_complexity_limits.proto";
 import "yt_proto/yt/client/chunk_client/proto/data_statistics.proto";
@@ -637,6 +638,7 @@ message TReqMultiLookup
     optional TTabletReadOptions tablet_read_options = 3;
     optional EReplicaConsistency replica_consistency = 6;
     optional EMultiplexingBand multiplexing_band = 4;
+    optional string execution_pool = 7;
 }
 
 message TRspMultiLookup
@@ -734,6 +736,7 @@ message TReqSelectRows
     optional bool use_order_by_in_join_subqueries = 32;
     optional int32 statistics_aggregation = 33; // EStatisticsAggregation
     optional int32 optimization_level = 35; // EOptimizationLevel
+    optional int32 hyper_log_log_precision = 36;
 
     optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 
@@ -937,6 +940,7 @@ message TReqExplainQuery
     optional bool new_range_inference = 12;
     optional int32 syntax_version = 13 [default = 1];
     optional int64 min_row_count_per_subquery = 14;
+    optional int32 hyper_log_log_precision = 15;
 }
 
 message TRspExplainQuery
@@ -1147,6 +1151,16 @@ message TRspMasterExitReadOnly
 
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqResetDynamicallyPropagatedMasterCells
+{
+}
+
+message TRspResetDynamicallyPropagatedMasterCells
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 message TReqDiscombobulateNonvotingPeers
 {
     required NYT.NProto.TGuid cell_id = 1;
@@ -1321,6 +1335,7 @@ message TTransactionalOptions
     reserved 4;
     optional bool suppress_transaction_coordinator_sync = 5;
     optional bool suppress_upstream_sync = 6;
+    optional bool suppress_strongly_ordered_transaction_barrier = 7;
 }
 
 // 101
@@ -1540,6 +1555,12 @@ message TReplicaInfo
     required int32 mode = 4; // ETableReplicaMode
 }
 
+message TUnfoldedColumns
+{
+    required string table_column = 1;
+    required string index_column = 2;
+}
+
 message TIndexInfo
 {
     required NYT.NProto.TGuid index_table_id = 1;
@@ -1548,6 +1569,7 @@ message TIndexInfo
     optional string unfolded_column = 4;
     optional int32 index_correspondence = 6; // NTableClient::ESecondaryIndexState
     optional TTableSchema evaluated_columns_schema = 7;
+    optional TUnfoldedColumns unfolded_columns = 8;
 }
 
 message TReqGetTableMountInfo
@@ -2194,7 +2216,7 @@ message TColumnarStatistics
     // Per-column hyperloglog digest to approximate number of unique values
     repeated NYT.NProto.THyperLogLogDigest column_hyperloglog_digests = 14;
 
-    optional int64 read_size_estimation = 15;
+    optional int64 read_size_estimate = 15;
 }
 
 message TRspGetColumnarStatistics
@@ -2258,7 +2280,8 @@ message TReqPartitionTables
     optional TFetcherConfig fetcher_config = 3;
     optional TChunkSliceFetcherConfig chunk_slice_fetcher_config = 4;
     required EPartitionTablesMode partition_mode = 5;
-    required int64 data_weight_per_partition = 6;
+    optional int64 data_weight_per_partition = 6;
+    optional int64 compressed_data_size_per_partition = 14;
     optional int32 max_partition_count = 7;
     optional bool enable_key_guarantee = 8;
     optional bool adjust_data_weight_per_partition = 9;
@@ -2612,7 +2635,7 @@ message TReqListJobs
 
     optional string monitoring_descriptor = 28;
 
-    optional NYT.NProto.TGuid distributed_group_main_job_id = 29;
+    optional NYT.NProto.TGuid collective_id = 29;
 
     optional TMasterReadOptions master_read_options = 102;
 }
@@ -2783,6 +2806,19 @@ message TReqPollJobShell
 message TRspPollJobShell
 {
     required bytes result = 1; // YSON
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqRunJobShellCommand
+{
+    required NYT.NProto.TGuid job_id = 1;
+    required string command = 2;
+    optional string shell_name = 3;
+}
+
+message TRspRunJobShellCommand
+{
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3461,8 +3497,8 @@ message TJob
     optional bytes events = 34; // YSON
     optional bytes statistics = 35; // YSON
     optional int64 gang_rank = 36;
-    optional uint64 distributed_group_job_index = 37;
-    optional NYT.NProto.TGuid distributed_group_main_job_id = 38;
+    optional uint64 collective_member_rank = 37;
+    optional NYT.NProto.TGuid collective_id = 38;
 }
 
 message TListJobsStatistics
@@ -3779,7 +3815,7 @@ message TReqStartDistributedWriteSession
 {
     required bytes path = 1; // RichYPath
     required int32 cookie_count = 2;
-    optional int64 timeout = 3;
+    optional int64 session_timeout = 3;
 
     optional TTransactionalOptions transactional_options = 100;
 }
@@ -3834,7 +3870,7 @@ message TReqStartDistributedWriteFileSession
 {
     required bytes path = 1; // RichYPath
     required int32 cookie_count = 2;
-    optional int64 timeout = 3;
+    optional int64 session_timeout = 3;
 
     optional TTransactionalOptions transactional_options = 100;
 }
@@ -3930,3 +3966,18 @@ message TReqWriteShuffleData
 message TRspWriteShuffleData
 {
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqFairSharePoolExt
+{
+    extend NRpc.NProto.TRequestHeader
+    {
+        optional TReqFairSharePoolExt req_fair_share_pool_ext = 202;
+    }
+
+    optional string execution_pool = 1 [default = "default"];
+    optional string execution_tag = 2 [default = "default"];
+}
+
+////////////////////////////////////////////////////////////////////////////////

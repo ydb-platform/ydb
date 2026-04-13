@@ -7,8 +7,18 @@ using namespace NRpc;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TClientAuthenticationIdentity::TClientAuthenticationIdentity(
+    const std::string& user,
+    const std::string& userTag,
+    const std::string& serviceTicket)
+    : NRpc::TAuthenticationIdentity(user, userTag)
+    , ServiceTicket(serviceTicket)
+{ }
+
+////////////////////////////////////////////////////////////////////////////////
+
 TCachedClient::TCachedClient(
-    const TAuthenticationIdentity& identity,
+    const TClientAuthenticationIdentity& identity,
     IClientPtr client)
     : TSyncCacheValueBase(identity)
     , Client_(std::move(client))
@@ -24,12 +34,12 @@ const IClientPtr& TCachedClient::GetClient()
 TClientCache::TClientCache(
     TSlruCacheConfigPtr config,
     IConnectionPtr connection)
-    : TSyncSlruCacheBase<TAuthenticationIdentity, TCachedClient>(std::move(config))
+    : TSyncSlruCacheBase<TClientAuthenticationIdentity, TCachedClient>(std::move(config))
     , Connection_(std::move(connection))
 { }
 
 IClientPtr TClientCache::Get(
-    const TAuthenticationIdentity& identity,
+    const TClientAuthenticationIdentity& identity,
     const TClientOptions& options)
 {
     auto cachedClient = Find(identity);
@@ -40,6 +50,26 @@ IClientPtr TClientCache::Get(
     return cachedClient->GetClient();
 }
 
+IClientPtr TClientCache::Get(
+    const NRpc::TAuthenticationIdentity& identity,
+    const TClientOptions& options)
+{
+    return Get(
+        TClientAuthenticationIdentity(
+            identity.User,
+            identity.UserTag,
+            ""),
+        options);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
+
+size_t THash<NYT::NApi::TClientAuthenticationIdentity>::operator()(const NYT::NApi::TClientAuthenticationIdentity& value) const
+{
+    size_t result = 0;
+    result = THash<NYT::NRpc::TAuthenticationIdentity>()(value);
+    NYT::HashCombine(result, value.ServiceTicket);
+    return result;
+}

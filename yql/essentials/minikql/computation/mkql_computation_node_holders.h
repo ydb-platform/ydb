@@ -23,8 +23,7 @@
 #include <optional>
 #include <vector>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TMemoryUsageInfo;
 
@@ -673,10 +672,12 @@ public:
     {
         MKQL_ENSURE(Size_ > 0U, "Can't create empty array holder.");
         MKQL_MEM_TAKE(GetMemInfo(), GetPtr(), Size_ * sizeof(NUdf::TUnboxedValue));
-        std::memset(GetPtr(), 0, Size_ * sizeof(NUdf::TUnboxedValue));
+        for (ui64 i = 0U; i < Size_; ++i) {
+            new (GetPtr() + i) NUdf::TUnboxedValue();
+        }
     }
 
-    ~TDirectArrayHolderInplace() {
+    ~TDirectArrayHolderInplace() override {
         for (ui64 i = 0U; i < Size_; ++i) {
             (GetPtr() + i)->~TUnboxedValue();
         }
@@ -694,7 +695,7 @@ public:
 private:
     class TIterator: public TTemporaryComputationValue<TIterator> {
     public:
-        TIterator(const TDirectArrayHolderInplace* parent)
+        explicit TIterator(const TDirectArrayHolderInplace* parent)
             : TTemporaryComputationValue(parent->GetMemInfo())
             , Parent_(const_cast<TDirectArrayHolderInplace*>(parent))
         {
@@ -727,7 +728,7 @@ private:
 
     class TKeysIterator: public TTemporaryComputationValue<TKeysIterator> {
     public:
-        TKeysIterator(const TDirectArrayHolderInplace& parent)
+        explicit TKeysIterator(const TDirectArrayHolderInplace& parent)
             : TTemporaryComputationValue(parent.GetMemInfo())
             , Size_(parent.GetSize())
         {
@@ -852,7 +853,11 @@ private:
     }
 
     const NUdf::TUnboxedValue* GetElements() const final {
+#ifdef YQL_EMULATE_LAZY_ITERABLES
+        return nullptr;
+#else  // YQL_EMULATE_LAZY_ITERABLES
         return GetPtr();
+#endif // YQL_EMULATE_LAZY_ITERABLES
     }
 
     bool IsSortedDict() const override {
@@ -1000,10 +1005,10 @@ public:
         TMaybe<ui64> skip, TMaybe<ui64> take,
         TMaybe<ui64> knownLength) const;
 
-    NUdf::TUnboxedValuePod ReverseList(const NUdf::IValueBuilder* builder, const NUdf::TUnboxedValuePod list) const;
-    NUdf::TUnboxedValuePod SkipList(const NUdf::IValueBuilder* builder, const NUdf::TUnboxedValuePod list, ui64 count) const;
-    NUdf::TUnboxedValuePod TakeList(const NUdf::IValueBuilder* builder, const NUdf::TUnboxedValuePod list, ui64 count) const;
-    NUdf::TUnboxedValuePod ToIndexDict(const NUdf::IValueBuilder* builder, const NUdf::TUnboxedValuePod list) const;
+    NUdf::TUnboxedValuePod ReverseList(const NUdf::IValueBuilder* builder, NUdf::TUnboxedValuePod list) const;
+    NUdf::TUnboxedValuePod SkipList(const NUdf::IValueBuilder* builder, NUdf::TUnboxedValuePod list, ui64 count) const;
+    NUdf::TUnboxedValuePod TakeList(const NUdf::IValueBuilder* builder, NUdf::TUnboxedValuePod list, ui64 count) const;
+    NUdf::TUnboxedValuePod ToIndexDict(const NUdf::IValueBuilder* builder, NUdf::TUnboxedValuePod list) const;
 
     template <bool IsStream>
     NUdf::TUnboxedValuePod Collect(NUdf::TUnboxedValuePod list) const;
@@ -1018,7 +1023,7 @@ public:
     NUdf::TUnboxedValuePod CreateIteratorOverList(NUdf::TUnboxedValuePod list) const;
     NUdf::TUnboxedValuePod CreateForwardList(NUdf::TUnboxedValuePod stream) const;
 
-    NUdf::TUnboxedValuePod CloneArray(const NUdf::TUnboxedValuePod list, NUdf::TUnboxedValue*& itemsPtr) const;
+    NUdf::TUnboxedValuePod CloneArray(NUdf::TUnboxedValuePod list, NUdf::TUnboxedValue*& itemsPtr) const;
 
     TMemoryUsageInfo& GetMemInfo() const {
         return MemInfo_;
@@ -1083,7 +1088,7 @@ template <bool SupportEqual, bool SupportHash, bool SupportLess>
 class TKeyTypeContanerHelper {
 public:
     TKeyTypeContanerHelper() = default;
-    TKeyTypeContanerHelper(const TType* type) {
+    explicit TKeyTypeContanerHelper(const TType* type) {
         bool encoded;
         bool useIHash;
         GetDictionaryKeyTypes(type, KeyTypes_, IsTuple_, encoded, useIHash);
@@ -1144,7 +1149,7 @@ private:
 template <class TObject>
 class TMutableObjectOverBoxedValue {
 public:
-    TMutableObjectOverBoxedValue(TComputationMutables& mutables)
+    explicit TMutableObjectOverBoxedValue(TComputationMutables& mutables)
         : ObjectIndex_(mutables.CurValueIndex++)
     {
     }
@@ -1163,5 +1168,4 @@ private:
     const ui32 ObjectIndex_;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -8,7 +8,9 @@
 #include <util/system/env.h>
 
 #include <ydb/core/blob_depot/mon_main.h>
+#include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/testlib/common/test_utils.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway.h>
 #include <ydb/tests/tools/kqprun/runlib/application.h>
@@ -891,14 +893,23 @@ protected:
 
         // Cluster settings
 
-        options.AddLongOption('N', "node-count", "Number of nodes to create")
-            .RequiredArgument("uint")
-            .DefaultValue(RunnerOptions.YdbSettings.NodeCount)
-            .StoreMappedResultT<ui32>(&RunnerOptions.YdbSettings.NodeCount, [](ui32 nodeCount) {
-                if (nodeCount < 1) {
-                    ythrow yexception() << "Number of nodes less than one";
+        options.AddLongOption('N', "node-count", "Number of nodes to create and optionally number of storage groups e. g. -N 10:2 for 10 nodes and 2 storage groups (-N <number of nodes>[:<number of storage groups>])")
+            .RequiredArgument("uint[:uint]")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                TStringBuf nodesCount;
+                TStringBuf groupsCount;
+                TStringBuf(option->CurVal()).Split(':', nodesCount, groupsCount);
+                if (!nodesCount && !groupsCount) {
+                    ythrow yexception() << "Invalid node count setting, use format -N <number of nodes>[:<number of storage groups>]";
                 }
-                return nodeCount;
+
+                if (nodesCount) {
+                    RunnerOptions.YdbSettings.NodeCount = ValidatePositive<ui32>(FromString(nodesCount), "nodes");
+                }
+
+                if (groupsCount) {
+                    RunnerOptions.YdbSettings.StorageGroupCount = ValidatePositive<ui32>(FromString(groupsCount), "storage groups");
+                }
             });
 
         options.AddLongOption("dc-count", "Number of data centers")
@@ -925,17 +936,25 @@ protected:
 
         const auto addTenant = [this](const TString& type, TStorageMeta::TTenant::EType protoType, const NLastGetopt::TOptsParser* option) {
             TStringBuf tenant;
-            TStringBuf nodesCountStr;
-            TStringBuf(option->CurVal()).Split(':', tenant, nodesCountStr);
+            TStringBuf nodesCountWithGroups;
+            TStringBuf(option->CurVal()).Split(':', tenant, nodesCountWithGroups);
             if (tenant.empty()) {
                 ythrow yexception() << type << " tenant name should not be empty";
             }
 
             TStorageMeta::TTenant tenantInfo;
             tenantInfo.SetType(protoType);
-            tenantInfo.SetNodesCount(nodesCountStr ? FromString<ui32>(nodesCountStr) : 1);
-            if (tenantInfo.GetNodesCount() == 0) {
-                ythrow yexception() << type << " tenant should have at least one node";
+
+            TStringBuf nodesCountStr;
+            TStringBuf storageGroupsStr;
+            nodesCountWithGroups.Split(':', nodesCountStr, storageGroupsStr);
+
+            if (nodesCountStr) {
+                tenantInfo.SetNodesCount(ValidatePositive<ui32>(FromString(nodesCountStr), TStringBuilder() << type << " tenant nodes"));
+            }
+
+            if (storageGroupsStr) {
+                tenantInfo.SetStorageGroupsCount(ValidatePositive<ui32>(FromString(storageGroupsStr), TStringBuilder() << type << " tenant storage groups"));
             }
 
             if (!RunnerOptions.YdbSettings.Tenants.emplace(tenant, tenantInfo).second) {
@@ -1020,6 +1039,25 @@ protected:
         }
         queryService.SetProgressStatsPeriodMs(PingPeriod.MilliSeconds());
 
+        if (appConfig.GetTableServiceConfig().GetSpillingServiceConfig().GetLocalFileConfig().GetEnable()) {
+            auto& kqpConfig = *appConfig.MutableKQPConfig();
+
+            bool hasSpillingSetting = false;
+            constexpr char spillingSettings[] = "_KqpEnableSpilling";
+            for (const auto& setting : kqpConfig.GetSettings()) {
+                if (setting.GetName() == spillingSettings) {
+                    hasSpillingSetting = true;
+                    break;
+                }
+            }
+
+            if (!hasSpillingSetting) {
+                auto& setting = *kqpConfig.AddSettings();
+                setting.SetName(spillingSettings);
+                setting.SetValue("true");
+            }
+        }
+
         if (!DefaultLogPriority) {
             DefaultLogPriority = DefaultLogPriorityFromVerbosity(RunnerOptions.YdbSettings.VerbosityLevel);
         }
@@ -1042,6 +1080,10 @@ protected:
                     topic.CancelOnFileFinish = it->second.CancelOnFileFinish;
                     TopicsSettings.erase(it);
                 }
+
+                fileGateway->AddDummyTopic(topic);
+
+                topic.Cluster = "db";
                 fileGateway->AddDummyTopic(topic);
             }
             RunnerOptions.YdbSettings.PqGateway = fileGateway;
@@ -1082,6 +1124,14 @@ private:
             ReplaceYqlTokenTemplate(sql);
         }
     }
+
+    template <typename T>
+    T ValidatePositive(T value, const TString& error) {
+        if (value < 1) {
+            ythrow yexception() << "Number of " << error << " less than one";
+        }
+        return value;
+    }
 };
 
 }  // anonymous namespace
@@ -1089,7 +1139,7 @@ private:
 }  // namespace NKqpRun
 
 int main(int argc, const char* argv[]) {
-    SetupSignalActions();
+    NTestUtils::SetupSignalHandlers();
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
     NMonitoring::TDynamicCounterPtr memoryProfilingCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();

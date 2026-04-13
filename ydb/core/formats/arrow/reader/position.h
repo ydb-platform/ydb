@@ -181,6 +181,10 @@ public:
         return CompareImpl(position, item, itemPosition, item.PositionAddress.size());
     }
 
+    std::partial_ordering ComparePrefix(const ui64 position, const TSortableScanData& item, const ui64 itemPosition, const ui32 prefixSize) const {
+        return CompareImpl(position, item, itemPosition, prefixSize);
+    }
+
     std::partial_ordering ComparePartial(const ui64 position, const TSortableScanData& item, const ui64 itemPosition) const {
         return CompareImpl(position, item, itemPosition, std::min<ui32>(PositionAddress.size(), item.PositionAddress.size()));
     }
@@ -242,6 +246,8 @@ public:
         }
         return result;
     }
+
+    std::shared_ptr<arrow::RecordBatch> MakeRecordBatch(const i64 position) const;
 };
 
 class TRWSortableBatchPosition;
@@ -389,6 +395,8 @@ public:
         return ReverseSort;
     }
     NJson::TJsonValue DebugJson() const;
+    
+    TString DebugString() const;
 
     TRWSortableBatchPosition BuildRWPosition(std::shared_ptr<arrow::RecordBatch> batch, const ui32 position) const;
 
@@ -483,6 +491,12 @@ public:
         return ApplyOptionalReverseForCompareResult(directResult);
     }
 
+    std::partial_ordering ComparePrefix(const TSortableBatchPosition& item, const ui32 prefixSize)  const {
+        Y_ABORT_UNLESS(item.ReverseSort == ReverseSort);
+        const auto directResult = Sorting->ComparePrefix(Position, *item.Sorting, item.GetPosition(), prefixSize);
+        return ApplyOptionalReverseForCompareResult(directResult);
+    }
+
     std::partial_ordering ComparePartial(const TSortableBatchPosition& item) const {
         Y_ABORT_UNLESS(item.ReverseSort == ReverseSort);
         const auto directResult = Sorting->ComparePartial(Position, *item.Sorting, item.GetPosition());
@@ -509,9 +523,20 @@ public:
         return Compare(item) != std::partial_ordering::equivalent;
     }
 
+    explicit operator size_t() const {
+        size_t h = (size_t)Position;
+        h = CombineHashes(h, (size_t)RecordsCount);
+        h = CombineHashes(h, (size_t)ReverseSort);
+        return h;
+    }
+
     std::shared_ptr<arrow::Scalar> GetScalar(const ui32 colIdx) const {
         AFL_VERIFY(colIdx < Sorting->GetColumns().size())("req", colIdx)("size", Sorting->GetColumns().size());
         return Sorting->GetColumns()[colIdx]->GetScalar(Sorting->GetPositionInChunk(colIdx, Position));
+    }
+
+    std::shared_ptr<arrow::RecordBatch> MakeRecordBatch() const {
+        return Sorting->MakeRecordBatch(Position);
     }
 };
 

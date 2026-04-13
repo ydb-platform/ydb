@@ -6,10 +6,11 @@ IF (WITH_VALGRIND)
     ENV(VALGRIND_OPTS=--max-stackframe=16000000)
 ENDIF()
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE)
     SPLIT_FACTOR(20)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -21,9 +22,15 @@ PEERDIR(
     ydb/core/testlib/actors
 )
 
-IF (YDB_ENABLE_PDISK_SHRED) 
+IF (YDB_ENABLE_PDISK_SHRED)
     CFLAGS(
         -DENABLE_PDISK_SHRED
+    )
+ENDIF()
+
+IF (YDB_DISABLE_PDISK_ENCRYPTION)
+    CFLAGS(
+        -DDISABLE_PDISK_ENCRYPTION
     )
 ENDIF()
 
@@ -32,6 +39,7 @@ SRCS(
     blobstorage_pdisk_crypto_ut.cpp
     blobstorage_pdisk_log_cache_ut.cpp
     blobstorage_pdisk_restore_ut.cpp
+    blobstorage_pdisk_scheduler_ut.cpp
     blobstorage_pdisk_ut.cpp
     blobstorage_pdisk_ut_actions.cpp
     blobstorage_pdisk_ut_color_limits.cpp

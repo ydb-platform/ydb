@@ -732,7 +732,8 @@ public:
                     auto tableName = table.Name().Value();
                     auto tableCluster = table.Cluster().StringValue();
                     auto epoch = TEpochInfo::Parse(table.Epoch().Ref());
-                    auto isDynamic = TYtTableBaseInfo::GetMeta(table) -> IsDynamic;
+                    auto meta = TYtTableBaseInfo::GetMeta(table);
+                    auto isDynamic = meta && meta->IsDynamic;
 
                     if (isDynamic && epoch > 0) {
                         const bool useNativeDyntableRead = State_->Configuration->UseNativeDynamicTableRead.Get().GetOrElse(DEFAULT_USE_NATIVE_DYNAMIC_TABLE_READ);
@@ -881,7 +882,7 @@ public:
             return TStatus::Error;
         }
 
-        if (!EnsureTuple(tableContent.Settings().MutableRef(), ctx)) {
+        if (!EnsureTuple(*tableContent.MutableRef().Child(TYtTableContent::idx_Settings), ctx)) {
             return TStatus::Error;
         }
 
@@ -916,7 +917,7 @@ public:
             return TStatus::Error;
         }
 
-        if (!EnsureTuple(tableContent.Settings().MutableRef(), ctx)) {
+        if (!EnsureTuple(*tableContent.MutableRef().Child(TYtBlockTableContent::idx_Settings), ctx)) {
             return TStatus::Error;
         }
 
@@ -1031,9 +1032,15 @@ public:
                 return IGraphTransformer::TStatus::Repeat;
             }
 
-            auto status = EnsureDependsOnTailAndRewrite(input, output, ctx, *State_->Types, 0, 1);
+            bool isUniversal;
+            auto status = EnsureDependsOnTailAndRewrite(input, output, ctx, *State_->Types, 0, 1, isUniversal);
             if (status != IGraphTransformer::TStatus::Ok) {
                 return status;
+            }
+
+            if (isUniversal) {
+                input->SetTypeAnn(ctx.MakeType<TUniversalExprType>());
+                return IGraphTransformer::TStatus::Ok;
             }
         }
 

@@ -43,7 +43,7 @@ TTestFmrGatewayResult CreateTestFmrGateway(const TTestFmrGatewayOptions& options
     fmrServices->FunctionRegistry = functionRegistry.Get();
     fmrServices->JobLauncher = MakeIntrusive<TFmrUserJobLauncher>(
         TFmrUserJobLauncherOptions{.RunInSeparateProcess = false});
-    fmrServices->YtJobService = MakeFileYtJobSerivce();
+    fmrServices->YtJobService = MakeFileYtJobService();
     fmrServices->YtCoordinatorService = MakeFileYtCoordinatorService();
 
     // Setup TableDataService

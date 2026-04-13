@@ -535,6 +535,14 @@ namespace NKikimr {
             NKikimrBlobStorage::TEvControllerGroupMetricsExchange, EvControllerGroupMetricsExchange>
     {};
 
+    struct TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup : TEventPB<TEvControllerAllocateDDiskBlockGroup,
+            NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroup, EvControllerAllocateDDiskBlockGroup>
+    {};
+
+    struct TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult : TEventPB<TEvControllerAllocateDDiskBlockGroupResult,
+            NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult, EvControllerAllocateDDiskBlockGroupResult>
+    {};
+
     struct TEvBlobStorage::TEvPutVDiskToReadOnly : TEventLocal<TEvPutVDiskToReadOnly, EvPutVDiskToReadOnly> {
         const TVDiskID VDiskId;
 
@@ -600,6 +608,37 @@ namespace NKikimr {
             bool selfManagementEnabled, TBridgeInfo::TPtr bridgeInfo,
             std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> committedConfig = nullptr);
         ~TEvNodeWardenStorageConfig();
+    };
+
+    struct TEvInterpilePut
+        : TEventPB<TEvInterpilePut, NKikimrBlobStorage::TEvInterpilePut, TEvBlobStorage::EvInterpilePut>
+    {
+        TEvInterpilePut() = default;
+    };
+
+    struct TEvInterpilePutResult
+        : TEventPB<TEvInterpilePutResult, NKikimrBlobStorage::TEvInterpilePutResult, TEvBlobStorage::EvInterpilePutResult>
+    {
+        TEvInterpilePutResult() = default;
+    };
+
+    struct TEvNodeWardenListLocalDDisks
+        : TEventLocal<TEvNodeWardenListLocalDDisks, TEvBlobStorage::EvNodeWardenListLocalDDisks>
+    {
+        TEvNodeWardenListLocalDDisks() = default;
+    };
+
+    struct TEvNodeWardenListLocalDDisksResult
+        : TEventLocal<TEvNodeWardenListLocalDDisksResult, TEvBlobStorage::EvNodeWardenListLocalDDisksResult>
+    {
+        struct TDDiskInfo {
+            TActorId DDiskId;
+            TActorId PersistentBufferId;
+        };
+
+        std::vector<TDDiskInfo> Infos;
+
+        TEvNodeWardenListLocalDDisksResult() = default;
     };
 
 } // NKikimr

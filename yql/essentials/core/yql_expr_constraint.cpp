@@ -2134,7 +2134,12 @@ private:
     }
 
     TStatus DynamicVariantWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
-        if (auto underlyingType = RemoveOptionalType(input->GetTypeAnn())->Cast<TVariantExprType>()->GetUnderlyingType(); underlyingType->GetKind() == ETypeAnnotationKind::Tuple) {
+        auto type = RemoveOptionalType(input->GetTypeAnn());
+        if (type->GetKind() == ETypeAnnotationKind::Universal) {
+            return TStatus::Ok;
+        }
+
+        if (auto underlyingType = type->Cast<TVariantExprType>()->GetUnderlyingType(); underlyingType->GetKind() == ETypeAnnotationKind::Tuple) {
             TConstraintSet target;
             CopyExcept(target, input->Head().GetConstraintSet(), TVarIndexConstraintNode::Name());
             TMultiConstraintNode::TMapType items;
@@ -3136,6 +3141,10 @@ private:
             input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(columns));
         }
 
+        if (auto c = input->Child(TCoMultiHoppingCore::idx_Input)->GetConstraint<TEmptyConstraintNode>()) {
+            input->AddConstraint(c);
+        }
+
         return TStatus::Ok;
     }
 
@@ -3306,7 +3315,7 @@ public:
     {
     }
 
-    ~TConstraintTransformer() = default;
+    ~TConstraintTransformer() override = default;
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         YQL_PROFILE_SCOPE(DEBUG, "ConstraintTransformer::DoTransform");

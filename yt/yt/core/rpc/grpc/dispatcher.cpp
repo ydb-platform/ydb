@@ -10,7 +10,7 @@
 
 #include <contrib/libs/grpc/include/grpc/grpc.h>
 
-#include <contrib/libs/grpc/src/core/lib/event_engine/thread_pool.h>
+#include <contrib/libs/grpc/src/core/lib/event_engine/thread_pool/thread_pool.h>
 
 #include <contrib/libs/grpc/src/core/lib/iomgr/executor.h>
 
@@ -233,7 +233,7 @@ private:
         YT_LOG_EVENT(
             GrpcInternalLogger,
             level,
-            "%v (File: %qv, Line: %v)",
+            "%v (File: %v, Line: %v)",
             args->message,
             args->file,
             args->line);

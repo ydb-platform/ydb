@@ -6,18 +6,15 @@
 
 #include <unordered_map>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 class TType;
 class TStructType;
 class TProgramBuilder;
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 using TMemoizedTypesMap = std::unordered_map<const TTypeAnnotationNode*, NKikimr::NMiniKQL::TType*>;
 
@@ -32,5 +29,4 @@ NKikimr::NMiniKQL::TType* BuildType(const TExprNode& owner, const TTypeAnnotatio
 const TTypeAnnotationNode* ConvertMiniKQLType(TPosition position, NKikimr::NMiniKQL::TType* type, TExprContext& ctx);
 ETypeAnnotationKind ConvertMiniKQLTypeKind(NKikimr::NMiniKQL::TType* type);
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

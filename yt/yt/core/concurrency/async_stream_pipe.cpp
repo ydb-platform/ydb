@@ -20,7 +20,7 @@ TFuture<void> TAsyncStreamPipe::Write(const TSharedRef& buffer)
 {
     if (!buffer) {
         // Empty buffer has special meaning in our queue, so we don't write it.
-        return VoidFuture;
+        return OKFuture;
     }
 
     auto writeComplete = NewPromise<void>();
@@ -40,7 +40,7 @@ TFuture<TSharedRef> TAsyncStreamPipe::Read()
 TFuture<void> TAsyncStreamPipe::Close()
 {
     Queue_.Enqueue(TItem(TSharedRef(), NewPromise<void>()));
-    return VoidFuture;
+    return OKFuture;
 }
 
 TFuture<void> TAsyncStreamPipe::Abort(const TError& error)
@@ -60,7 +60,7 @@ TFuture<void> TBoundedAsyncStreamPipe::Write(const TSharedRef& buffer)
 {
     if (!buffer) {
         // Empty buffer has special meaning in our queue, so we don't write it.
-        return VoidFuture;
+        return OKFuture;
     }
 
     if (Aborted_.load()) {
@@ -78,7 +78,7 @@ TFuture<void> TBoundedAsyncStreamPipe::Write(const TSharedRef& buffer)
         if (Aborted_.load()) {
             return MakeFuture(Error_);
         }
-        return VoidFuture;
+        return OKFuture;
     }));
 }
 

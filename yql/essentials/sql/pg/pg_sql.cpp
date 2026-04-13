@@ -34,13 +34,13 @@ extern "C" {
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/parser/pg_wrapper/interface/utils.h>
 #include <yql/essentials/parser/pg_wrapper/interface/raw_parser.h>
+#include <yql/essentials/parser/pg_wrapper/arena_ctx.h>
 #include <yql/essentials/parser/pg_wrapper/postgresql/src/backend/catalog/pg_type_d.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
-#include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/utils/log/log_level.h>
 #include <yql/essentials/utils/log/log.h>
 #include <util/string/builder.h>
@@ -50,6 +50,8 @@ extern "C" {
 #include <util/generic/scope.h>
 #include <util/generic/stack.h>
 #include <util/generic/hash_set.h>
+
+#include <ranges>
 
 constexpr auto PREPARED_PARAM_PREFIX = "$p";
 constexpr auto AUTO_PARAM_PREFIX = "a";
@@ -413,7 +415,7 @@ public:
         }
     }
 
-    void OnResult(const List* raw) {
+    void OnResult(const List* raw) override {
         if (!PerStatementResult_) {
             AstParseResults_[StatementId_].Pool = std::make_unique<TMemoryPool>(4096);
             AstParseResults_[StatementId_].Root = ParseResult(raw);
@@ -432,7 +434,7 @@ public:
         }
     }
 
-    void OnError(const TIssue& issue) {
+    void OnError(const TIssue& issue) override {
         AstParseResults_[StatementId_].Issues.AddIssue(issue);
     }
 
@@ -538,6 +540,7 @@ public:
             case T_VariableSetStmt: {
                 // YQL-16284
                 const char* node_name = CAST_NODE(VariableSetStmt, node)->name;
+                // NOLINTNEXTLINE(modernize-avoid-c-arrays)
                 const char* skip_statements[] = {
                     "extra_float_digits",                  // jdbc
                     "application_name",                    // jdbc
@@ -554,10 +557,10 @@ public:
                     "bytea_output",                        // zabbix
                     "datestyle",                           // pgadmin 4
                     "timezone",                            // mediawiki
-                    NULL,
+                    nullptr,
                 };
 
-                for (int i = 0; skip_statements[i] != NULL; i++) {
+                for (int i = 0; skip_statements[i] != nullptr; i++) {
                     const char* skip_name = skip_statements[i];
                     if (stricmp(node_name, skip_name) == 0) {
                         return true;
@@ -961,7 +964,7 @@ public:
             bool hasDistinctAll = false;
             TVector<TAstNode*> distinctOnItems;
             if (x->distinctClause) {
-                if (linitial(x->distinctClause) == NULL) {
+                if (linitial(x->distinctClause) == nullptr) {
                     hasDistinctAll = true;
                 } else {
                     for (int i = 0; i < ListLength(x->distinctClause); ++i) {
@@ -1313,7 +1316,7 @@ public:
                 setItemOptions.push_back(QL(QA("group_by"), groupBy));
             }
 
-            if (windowItems.size()) {
+            if (!windowItems.empty()) {
                 auto window = QVL(windowItems.data(), windowItems.size());
                 setItemOptions.push_back(QL(QA("window"), window));
             }
@@ -1847,7 +1850,7 @@ private:
             ctx.PrimaryKey.push_back(QA(StrVal(node)));
         }
 
-        Y_ENSURE(0 < ctx.PrimaryKey.size());
+        Y_ENSURE(!ctx.PrimaryKey.empty());
 
         return true;
     }
@@ -1872,7 +1875,7 @@ private:
             uniq.push_back(QA(nodeName));
         }
 
-        Y_ENSURE(0 < uniq.size());
+        Y_ENSURE(!uniq.empty());
         ctx.UniqConstr.emplace_back(std::move(uniq));
 
         return true;
@@ -2356,7 +2359,7 @@ public:
                 return nullptr;
             }
             auto rawStr = values[0];
-            if (rawStr != "pg_catalog" && rawStr != "public" && rawStr != "" && rawStr != "information_schema") {
+            if (rawStr != "pg_catalog" && rawStr != "public" && !rawStr.empty() && rawStr != "information_schema") {
                 AddError(TStringBuilder() << "VariableSetStmt, search path supports only 'information_schema', 'public', 'pg_catalog', '' but got: '" << rawStr << "'");
                 return nullptr;
             }
@@ -3091,14 +3094,14 @@ public:
     }
 
     TString ResolveCluster(const TStringBuf schemaname, TString name) {
-        if (NYql::NPg::GetStaticColumns().contains(NPg::TTableInfoKey{"pg_catalog", name})) {
+        if (NYql::NPg::GetStaticColumns().contains(NPg::TTableInfoKey{.Schema = "pg_catalog", .Name = name})) {
             return "pg_catalog";
         }
 
         if (schemaname == "public") {
             return Settings_.DefaultCluster;
         }
-        if (schemaname == "" && Settings_.GUCSettings) {
+        if (schemaname.empty() && Settings_.GUCSettings) {
             auto search_path = Settings_.GUCSettings->Get("search_path");
             if (!search_path || *search_path == "public" || search_path->empty()) {
                 return Settings_.DefaultCluster;
@@ -3150,7 +3153,7 @@ public:
         const auto cluster = ResolveCluster(schemaname, TString(relname));
         const auto sinkOrSource = BuildClusterSinkOrSourceExpression(isSink, cluster);
         const auto key = BuildTableKeyExpression(relname, cluster, isScheme);
-        return {sinkOrSource, key};
+        return {.SinkOrSource = sinkOrSource, .Key = key};
     }
 
     TAstNode* BuildPgObjectExpression(const TStringBuf objectName, const TStringBuf objectType) {
@@ -3177,7 +3180,7 @@ public:
         const auto cluster = ResolveCluster(schemaname, TString(objectName));
         const auto sinkOrSource = BuildClusterSinkOrSourceExpression(true, cluster);
         const auto key = BuildPgObjectExpression(objectName, pgObjectType);
-        return {sinkOrSource, key};
+        return {.SinkOrSource = sinkOrSource, .Key = key};
     }
 
     TReadWriteKeyExprs ParseWriteRangeVar(const RangeVar* value,
@@ -3197,9 +3200,9 @@ public:
 
         const TView* view = nullptr;
         if (StrLength(value->schemaname) == 0) {
-            for (auto rit = State_.CTE.rbegin(); rit != State_.CTE.rend(); ++rit) {
-                auto cteIt = rit->find(value->relname);
-                if (cteIt != rit->end()) {
+            for (auto& rit : std::ranges::reverse_view(State_.CTE)) {
+                auto cteIt = rit.find(value->relname);
+                if (cteIt != rit.end()) {
                     view = &cteIt->second;
                     break;
                 }
@@ -3227,7 +3230,7 @@ public:
         }
 
         if (view) {
-            return TFromDesc{view->Source, alias, colnames.empty() ? view->ColNames : colnames, false};
+            return TFromDesc{.Source = view->Source, .Alias = alias, .ColNames = colnames.empty() ? view->ColNames : colnames, .InjectRead = false};
         }
 
         TString schemaname = value->schemaname;
@@ -3253,7 +3256,7 @@ public:
                 if (!s) {
                     return {};
                 }
-                return TFromDesc{s, alias, colnames, true};
+                return TFromDesc{.Source = s, .Alias = alias, .ColNames = colnames, .InjectRead = true};
             }
         }
 
@@ -3280,10 +3283,10 @@ public:
                                                             L(A("Void")),
                                                             QL());
         return TFromDesc{
-            readExpr,
-            alias,
-            colnames,
-            /* injectRead */ true,
+            .Source = readExpr,
+            .Alias = alias,
+            .ColNames = colnames,
+            .InjectRead = true,
         };
     }
 
@@ -3396,7 +3399,7 @@ public:
             return {};
         }
 
-        return TFromDesc{func, alias, colnames, injectRead};
+        return TFromDesc{.Source = func, .Alias = alias, .ColNames = colnames, .InjectRead = injectRead};
     }
 
     TMaybe<TFromDesc> ParseRangeSubselect(const RangeSubselect* value) {
@@ -3426,7 +3429,7 @@ public:
             return {};
         }
 
-        return TFromDesc{ParseSelectStmt(CAST_NODE(SelectStmt, value->subquery), {.Inner = true}), alias, colnames, false};
+        return TFromDesc{.Source = ParseSelectStmt(CAST_NODE(SelectStmt, value->subquery), {.Inner = true}), .Alias = alias, .ColNames = colnames, .InjectRead = false};
     }
 
     TAstNode* ParseNullTestExpr(const NullTest* value, const TExprSettings& settings) {
@@ -3470,7 +3473,7 @@ public:
         }
 
         TCaseBranch result;
-        result.Pred = VL(&preds[0], preds.size());
+        result.Pred = VL(preds.data(), preds.size());
         result.Value = L(A("If"), left.Pred, left.Value, right.Value);
         return result;
     }
@@ -4764,7 +4767,7 @@ public:
         }
 
         if (isStar) {
-            if (fields.size() == 0) {
+            if (fields.empty()) {
                 return L(A("PgStar"));
             } else {
                 return L(A("PgQualifiedStar"), QAX(fields[0]));
@@ -5269,11 +5272,11 @@ const THashMap<TStringBuf, TString> TConverter::ProviderToInsertModeMap = {
     {NYql::KikimrProviderName, "insert_abort"},
     {NYql::YtProviderName, "append"}};
 
-NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TStmtParseInfo* stmtParseInfo) {
+NYql::TAstParseResult PGToYql(const NYql::TPGParseResult& parseResult, const TString& query, const NSQLTranslation::TTranslationSettings& settings, TStmtParseInfo* stmtParseInfo) {
     TVector<NYql::TAstParseResult> results;
     TVector<TStmtParseInfo> stmtParseInfos;
     TConverter converter(results, settings, query, &stmtParseInfos, false, Nothing());
-    NYql::PGParse(query, converter);
+    parseResult.Visit(converter);
     if (stmtParseInfo) {
         Y_ENSURE(!stmtParseInfos.empty());
         *stmtParseInfo = stmtParseInfos.back();
@@ -5281,6 +5284,12 @@ NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTran
     Y_ENSURE(!results.empty());
     results.back().ActualSyntaxType = NYql::ESyntaxType::Pg;
     return std::move(results.back());
+}
+
+NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TStmtParseInfo* stmtParseInfo) {
+    NYql::TPGParseResult parseResult;
+    NYql::PGParse(query, parseResult);
+    return PGToYql(parseResult, query, settings, stmtParseInfo);
 }
 
 TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TVector<TStmtParseInfo>* stmtParseInfo) {
@@ -6023,7 +6032,7 @@ public:
             }
         }
 
-        Builder_.InsertValues(NPg::TTableInfoKey{"pg_catalog", tableName}, colNames, data);
+        Builder_.InsertValues(NPg::TTableInfoKey{.Schema = "pg_catalog", .Name = tableName}, colNames, data);
         return true;
     }
 
@@ -6208,7 +6217,7 @@ public:
 
 class TSystemFunctionsHandler: public IPGParseEvents {
 public:
-    TSystemFunctionsHandler(TVector<NPg::TProcDesc>& procs)
+    explicit TSystemFunctionsHandler(TVector<NPg::TProcDesc>& procs)
         : Procs_(procs)
     {
     }

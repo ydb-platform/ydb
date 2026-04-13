@@ -1,4 +1,6 @@
 #include "ydb_updater.h"
+#include "download_manager.h"
+#include "progress_bar.h"
 
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/resource/resource.h>
@@ -86,14 +88,24 @@ int TYdbUpdater::Update(bool forceUpdate) {
     }
     const TString downloadUrl = TStringBuilder() << StorageUrl << '/' << LatestVersion << '/' << osVersion
         << '/' << osArch << '/' << binaryName;
-    Cout << "Downloading binary from url " << downloadUrl << Endl;
-    TShellCommand curlCmd(TStringBuilder() << "curl --connect-timeout 60 " << downloadUrl << " -o " << tmpPathToBinary.GetPath());
-    curlCmd.Run().Wait();
-    if (curlCmd.GetExitCode() != 0) {
-        Cerr << "Failed to download from url \"" << downloadUrl << "\". " << curlCmd.GetError() << Endl;
+    TBytesProgressBar progressBar;
+    TDownloadResult downloadResult = DownloadFile(
+        downloadUrl,
+        tmpPathToBinary.GetPath(),
+        [&progressBar](ui64 downloaded, ui64 total) {
+            if (total > 0 && progressBar.GetTotalBytes() == 0) {
+                progressBar.SetTotal(total);
+            }
+            progressBar.SetProgress(downloaded);
+        }
+    );
+
+    if (!downloadResult.Success) {
+        Cerr << Endl << "Failed to download from url \"" << downloadUrl << "\". " << downloadResult.ErrorMessage << Endl;
+        Cerr << "If the problem persists, consider reinstalling YDB CLI: https://ydb.tech/docs/en/reference/ydb-cli/install" << Endl;
+        tmpPathToBinary.DeleteIfExists();
         return EXIT_FAILURE;
     }
-    Cout << "Downloaded to " << tmpPathToBinary.GetPath() << Endl;
 
 #ifndef _win32_
     int chmodResult = Chmod(tmpPathToBinary.GetPath().data(), MODE0777);
@@ -103,8 +115,6 @@ int TYdbUpdater::Update(bool forceUpdate) {
     }
 #endif
 
-    // Check new binary
-    Cout << "Checking downloaded binary by calling 'version' command..." << Endl;
     TShellCommand checkCmd(TStringBuilder() << tmpPathToBinary.GetPath() << " version");
     checkCmd.Run().Wait();
     if (checkCmd.GetExitCode() != 0) {
@@ -112,7 +122,8 @@ int TYdbUpdater::Update(bool forceUpdate) {
         tmpPathToBinary.DeleteIfExists();
         return EXIT_FAILURE;
     }
-    Cout << checkCmd.GetOutput();
+
+    TString versionOutput = StripString(checkCmd.GetOutput());
 
     TFsPath fsPathToBinary(GetExecPath());
 #ifdef _win32_
@@ -120,13 +131,14 @@ int TYdbUpdater::Update(bool forceUpdate) {
     binaryNameOld.Fix();
     binaryNameOld.DeleteIfExists();
     fsPathToBinary.RenameTo(binaryNameOld);
-    Cout << "Old binary renamed to " << binaryNameOld.GetPath() << Endl;
 #else
     fsPathToBinary.DeleteIfExists();
-    Cout << "Old binary removed" << Endl;
 #endif
     tmpPathToBinary.RenameTo(fsPathToBinary);
-    Cout << "New binary renamed to " << fsPathToBinary.GetPath() << Endl;
+
+    TStringBuf version = versionOutput;
+    version.SkipPrefix("YDB CLI ");
+    Cerr << "YDB CLI successfully updated to version " << version << "." << Endl;
 
     return EXIT_SUCCESS;
 }
@@ -208,8 +220,7 @@ bool TYdbUpdater::GetLatestVersion() {
         SetConfigValue("last_check", TInstant::Now().Seconds());
         return true;
     }
-    Cerr << "(!) Couldn't get latest version from url \"" << versionUrl << "\". " << curlCmd.GetError() << Endl
-        << "You can disable further version checks with 'ydb version --disable-checks' command." << Endl;
+    Cerr << "(!) Couldn't get latest version from url \"" << versionUrl << "\". " << curlCmd.GetError() << Endl;
     return false;
 }
 
@@ -220,6 +231,7 @@ void TYdbUpdater::PrintUpdateMessageIfNeeded(bool forceVersionCheck) {
         return;
     }
     if (!GetLatestVersion()) {
+        Cerr << "You can disable further version checks with 'ydb version --disable-checks' command." << Endl;
         return;
     }
     if (MyVersion != LatestVersion) {

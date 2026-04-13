@@ -100,5 +100,56 @@ Y_UNIT_TEST_SUITE(Replication)
         testCase.DropReplication();
         testCase.DropSourceTable();
     }
+
+    Y_UNIT_TEST(TopicAutopartitioning)
+    {
+        MainTestCase testCase;
+
+        testCase.CreateSourceTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                    AUTO_PARTITIONING_PARTITION_SIZE_MB = 1,
+                    AUTO_PARTITIONING_BY_LOAD = ENABLED,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1,
+                    AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 10,
+                    UNIFORM_PARTITIONS = 1
+                );
+            )");
+
+        testCase.CreateReplication();
+
+        Cerr << "Insert much data to trigger split" << Endl << Flush;
+        for (size_t batch = 0; batch < 50; ++batch) {
+            TStringBuilder query;
+            query << "UPSERT INTO `%s` (Key, Message) VALUES ";
+            for (size_t i = 0; i < 100; ++i) {
+                if (i > 0) query << ", ";
+                size_t key = batch * 100 + i;
+                query << "(" << key << ", 'Message-" << TString(10000, 'a') << "')";
+            }
+            query << ";";
+            testCase.ExecuteSourceTableQuery(query);
+        }
+
+        Cerr << "Wait for partition split and data replication" << Endl << Flush;
+        Sleep(TDuration::Seconds(10));
+
+        Cerr << "Verify data replicated from all partitions" << Endl << Flush;
+        TExpectations expectations;
+        for (size_t batch = 0; batch < 50; ++batch) {
+            for (size_t i = 0; i < 100; ++i) {
+                TString msg = TStringBuilder() << "Message-" << TString(10000, 'a');
+                expectations.push_back({_C("Message", std::move(msg))});
+            }
+        }
+        testCase.CheckResult(expectations);
+
+        testCase.DropReplication();
+        testCase.DropSourceTable();
+    }
 }
 

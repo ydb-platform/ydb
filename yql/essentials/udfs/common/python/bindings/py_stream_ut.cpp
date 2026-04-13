@@ -29,7 +29,7 @@ void Ui32StreamValidator(const NUdf::TUnboxedValuePod& value) {
 }
 
 struct TTestStream final: NUdf::TBoxedValue {
-    TTestStream(ui32 maxValue, ui32 yieldOn = Max<ui32>())
+    explicit TTestStream(ui32 maxValue, ui32 yieldOn = Max<ui32>())
         : Current_(0)
         , YieldOn_(yieldOn)
         , MaxValue_(maxValue)

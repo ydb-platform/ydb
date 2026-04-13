@@ -74,10 +74,10 @@ class TBloomFilter
 {
 public:
     TBloomFilter() = default;
-    TBloomFilter(TBloomFilter&& other);
+    TBloomFilter(TBloomFilter&& other) noexcept;
     TBloomFilter(TSharedRef data, int hashCount);
 
-    TBloomFilter& operator=(TBloomFilter&& other);
+    TBloomFilter& operator=(TBloomFilter&& other) noexcept;
 
     bool Contains(TFingerprint fingerprint) const;
 
@@ -95,4 +95,3 @@ void FromProto(TBloomFilter* bloomFilter, const NProto::TBloomFilter& protoBloom
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-

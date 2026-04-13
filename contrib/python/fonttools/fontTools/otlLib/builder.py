@@ -53,18 +53,21 @@ def buildCoverage(glyphs, glyphMap):
             ``font.getReverseGlyphMap()``.
 
     Returns:
-        An ``otTables.Coverage`` object or ``None`` if there are no glyphs
-        supplied.
+        An ``otTables.Coverage`` object (empty if no glyphs supplied).
     """
-
-    if not glyphs:
-        return None
+    # Per the OpenType spec: "For cases in which subtable offset fields are not
+    # documented as permitting NULL values, font compilers must include a subtable
+    # of the indicated format, even if it is a header stub without further data
+    # (for example, a coverage table with no glyph IDs)."
+    # https://github.com/fonttools/fonttools/issues/4003
     self = ot.Coverage()
-    try:
-        self.glyphs = sorted(set(glyphs), key=glyphMap.__getitem__)
-    except KeyError as e:
-        raise ValueError(f"Could not find glyph {e} in font") from e
-
+    if glyphs:
+        try:
+            self.glyphs = sorted(set(glyphs), key=glyphMap.__getitem__)
+        except KeyError as e:
+            raise ValueError(f"Could not find glyph {e} in font") from e
+    else:
+        self.glyphs = []
     return self
 
 
@@ -827,6 +830,19 @@ class ChainContextSubstBuilder(ChainContextualBuilder):
             for sub in rule.lookups:
                 if isinstance(sub, builder_class) and not any(
                     g in mapping and mapping[g] != sub.mapping[g] for g in sub.mapping
+                ):
+                    res = sub
+        return res
+
+    def find_chainable_alternate_subst(self, glyph):
+        """Helper for add_alternate_subst()"""
+        res = None
+        for rule in self.rules[::-1]:
+            if rule.is_subtable_break:
+                return res
+            for sub in rule.lookups:
+                if isinstance(sub, AlternateSubstBuilder) and (
+                    glyph not in sub.alternates
                 ):
                     res = sub
         return res

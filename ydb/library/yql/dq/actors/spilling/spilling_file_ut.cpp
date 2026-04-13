@@ -78,8 +78,8 @@ public:
         return spillingServiceActorId;
     }
 
-    TActorId StartSpillingActor(const TActorId& client, bool removeBlobsAfterRead = true) {
-        auto spillingActor = CreateDqLocalFileSpillingActor(1ul, "test", client, removeBlobsAfterRead);
+    TActorId StartSpillingActor(const TActorId& client, bool removeBlobsAfterRead = true, ESpillingType spillingType = ESpillingType::Compute) {
+        auto spillingActor = CreateDqLocalFileSpillingActor(1ul, "test", client, removeBlobsAfterRead, spillingType);
         auto spillingActorId = Register(spillingActor);
         EnableScheduleForActor(spillingActorId);
 
@@ -406,7 +406,7 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
 
             runtime.Send(new IEventHandle(spillingService, tester, new NMon::TEvHttpInfo(monReq)));
             auto resp = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(tester, TDuration::Seconds(1));
-            UNIT_ASSERT(((NMon::TEvHttpInfoRes*) resp->Get())->Answer.Contains(TStringBuilder() << "Used file descriptors: " << expected));
+            UNIT_ASSERT(((NMon::TEvHttpInfoRes*) resp->Get())->Answer.Contains(TStringBuilder() << "Used file descriptors (compute): " << expected));
         };
 
         // write some blobs; one file per blob is created when MultiPart is true, a file per client otherwise

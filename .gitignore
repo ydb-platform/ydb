@@ -13,6 +13,9 @@
 
 /canonization_show_res.log
 
+*.un~
+*.swp
+
 # C libraries
 *.so
 *.a
@@ -102,7 +105,15 @@ path.bash.inc
 /.editorconfig
 
 # Cursor ignore
+.cursor/
 .cursorignore
+.cursorindexingignore
+
+# Claude Code
+.claude/
 
 # Harness local cluster working directory
 .ydbd_working_dir/
+
+# Pyright config (local IDE settings)
+**/pyrightconfig.json

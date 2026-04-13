@@ -34,13 +34,12 @@ Y_UNIT_TEST(SimpleCounters) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .WaitTime = TDuration::Seconds(1),
-            .VisibilityTimeout = TDuration::Seconds(30),
+            .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 10
         });
         auto result = GetReadResponse(runtime);
 
         UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 10);
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 0);
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 0);
     }
     {
@@ -50,13 +49,12 @@ Y_UNIT_TEST(SimpleCounters) {
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
             .WaitTime = TDuration::Seconds(1),
-            .VisibilityTimeout = TDuration::Seconds(30),
+            .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 10
         });
         auto result = GetReadResponse(runtime);
 
         UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 10);
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.PartitionId, 1);
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].MessageId.Offset, 0);
     }
     {
@@ -113,14 +111,22 @@ Y_UNIT_TEST(SimpleCounters) {
     assertMetric("topic.inflight.locked_messages", 18);
     assertMetric("topic.inflight.committed_messages", 1);
     assertMetric("topic.inflight.delayed_messages", 0);
-    assertMetric("topic.inflight.scheduled_to_dlq_messages", 0);
     assertMetric("topic.inflight.unlocked_messages", 101);
-
+    assertMetric("topic.inflight.scheduled_to_dlq_messages", 0);
+    
     assertMetric("topic.committed_messages", 1);
-    assertMetric("topic.moved_to_dlq_messages", 0);
     assertMetric("topic.purged_messages", 0);
-    assertMetric("topic.deleted_by_deadline_policy_messages", 0);
-    assertMetric("topic.deleted_by_retention_messages", 0);
+
+    auto assertDeletedMetric = [&](const auto& reason, const auto& value) {
+        auto counter = group->GetSubgroup("name", "topic.deleted_messages")->FindNamedCounter("reason", reason);
+        UNIT_ASSERT_C(counter, TStringBuilder() << "metric 'topic.deleted_messages/reason." << reason << " not found");
+        UNIT_ASSERT_VALUES_EQUAL_C(counter->Val(), value, TStringBuilder() << "metric 'topic.deleted_messages.reason." << reason << "'");
+
+    };
+
+    assertDeletedMetric("delete_policy", 0);
+    assertDeletedMetric("move_policy", 0);
+    assertDeletedMetric("retention", 0);
 }
 
 }

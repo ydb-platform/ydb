@@ -51,7 +51,7 @@ void TBuildSnapshotCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& {
             return command->Options.EnableAutomatonReadOnlyBarrier;
         })
-        .Optional(/*init*/ true);
+        .Optional(/*init*/ false);
 }
 
 void TBuildSnapshotCommand::DoExecute(ICommandContextPtr context)
@@ -94,7 +94,7 @@ void TBuildMasterSnapshotsCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& {
             return command->Options.EnableAutomatonReadOnlyBarrier;
         })
-        .Optional(/*init*/ true);
+        .Optional(/*init*/ false);
 }
 
 void TBuildMasterSnapshotsCommand::DoExecute(ICommandContextPtr context)
@@ -163,6 +163,19 @@ void TMasterExitReadOnlyCommand::Register(TRegistrar registrar)
 void TMasterExitReadOnlyCommand::DoExecute(ICommandContextPtr context)
 {
     WaitFor(context->GetClient()->MasterExitReadOnly(Options))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TResetDynamicallyPropagatedMasterCellsCommand::Register(TRegistrar /*registrar*/)
+{ }
+
+void TResetDynamicallyPropagatedMasterCellsCommand::DoExecute(ICommandContextPtr context)
+{
+    WaitFor(context->GetClient()->ResetDynamicallyPropagatedMasterCells(Options))
         .ThrowOnError();
 
     ProduceEmptyOutput(context);

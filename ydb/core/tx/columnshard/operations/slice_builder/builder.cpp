@@ -16,7 +16,7 @@ std::optional<std::vector<NArrow::TSerializedBatch>> TBuildSlicesTask::BuildSlic
         return std::vector<NKikimr::NArrow::TSerializedBatch>();
     }
     const auto splitSettings = NYDBTest::TControllers::GetColumnShardController()->GetBlobSplitSettings();
-    NArrow::TBatchSplitttingContext context(splitSettings.GetMaxBlobSize());
+    NArrow::TBatchSplittingContext context(splitSettings.GetMaxBlobSize());
     context.SetFieldsForSpecialKeys(WriteData.GetPrimaryKeySchema());
     auto splitResult = NArrow::SplitByBlobSize(OriginalBatch, context);
     if (splitResult.IsFail()) {
@@ -75,6 +75,9 @@ private:
         std::vector<NColumnShard::TInsertedPortion> portions;
         for (auto&& i : Portions) {
             portions.emplace_back(i.ExtractPortion());
+        }
+        if (putResult->GetPutStatus() != NKikimrProto::OK) {
+            WriteResult.SetErrorMessage("cannot put blob (write controller): " + ::ToString(putResult->GetPutStatus()), true);
         }
         NColumnShard::TInsertedPortions pack({ WriteResult }, std::move(portions));
         auto result =

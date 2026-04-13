@@ -16,7 +16,7 @@ using namespace NDom;
 
 class TParse: public TBoxedValue {
 public:
-    TParse(TSourcePosition pos)
+    explicit TParse(TSourcePosition pos)
         : Pos_(pos)
     {
     }

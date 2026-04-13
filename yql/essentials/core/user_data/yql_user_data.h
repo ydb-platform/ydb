@@ -5,8 +5,7 @@
 #include <util/generic/vector.h>
 #include <util/generic/hash.h>
 
-namespace NYql {
-namespace NUserData {
+namespace NYql::NUserData {
 
 enum class EType {
     LIBRARY,
@@ -38,5 +37,4 @@ struct TUserData {
         TVector<TUserData>& userData);
 };
 
-} // namespace NUserData
-} // namespace NYql
+} // namespace NYql::NUserData

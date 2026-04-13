@@ -129,7 +129,7 @@ public:
         Tenant->IsExternalHive = Self->FeatureFlags.GetEnableExternalHive();
         Tenant->IsExternalSysViewProcessor = true;
         Tenant->IsExternalStatisticsAggregator = Self->FeatureFlags.GetEnableStatistics();
-        Tenant->IsExternalBackupController = Self->FeatureFlags.GetEnableBackupService();
+        Tenant->IsExternalBackupController = false;
         Tenant->IsGraphShardEnabled = Self->FeatureFlags.GetEnableGraphShard();
 
         if (rec.options().disable_external_subdomain()) {

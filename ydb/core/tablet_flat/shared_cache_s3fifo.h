@@ -169,6 +169,10 @@ public:
         return SmallQueue.Size + MainQueue.Size;
     }
 
+    ui64 GetEvictOpsCounter() const {
+        return EvictOpsCounter;
+    }
+
     TString Dump() const {
         TStringBuilder result;
 
@@ -208,6 +212,8 @@ private:
         ui32 mainQueueReinserts = 0;
 
         while (GetSize() > Limit.TotalLimit) {
+            ++EvictOpsCounter;
+
             if (SmallQueue.Size > Limit.SmallQueueLimit) {
                 TPage* page = Pop(SmallQueue);
                 if (ui32 frequency = TPageTraits::GetFrequency(page); frequency > 0) {
@@ -285,6 +291,7 @@ private:
     TQueue MainQueue;
     TS3FIFOGhostPageQueue<TPageTraits> GhostQueue;
 
+    ui64 EvictOpsCounter = 0;
 };
 
 }

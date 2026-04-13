@@ -20,6 +20,7 @@ struct IActiveRequest
     : public virtual TRefCounted
 {
     virtual TFuture<IResponsePtr> Finish() = 0;
+    virtual TFuture<void> Abort() = 0;
     virtual NConcurrency::IAsyncOutputStreamPtr GetRequestStream() = 0;
     virtual IResponsePtr GetResponse() = 0;
 };
@@ -32,43 +33,43 @@ struct IClient
     : public virtual TRefCounted
 {
     virtual TFuture<IResponsePtr> Get(
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers = nullptr) = 0;
 
     virtual TFuture<IResponsePtr> Post(
-        const TString& url,
+        const std::string& url,
         const TSharedRef& body,
         const THeadersPtr& headers = nullptr) = 0;
 
     virtual TFuture<IResponsePtr> Patch(
-        const TString& url,
+        const std::string& url,
         const TSharedRef& body,
         const THeadersPtr& headers = nullptr) = 0;
 
     virtual TFuture<IResponsePtr> Put(
-        const TString& url,
+        const std::string& url,
         const TSharedRef& body,
         const THeadersPtr& headers = nullptr) = 0;
 
     virtual TFuture<IResponsePtr> Delete(
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers = nullptr) = 0;
 
     virtual TFuture<IActiveRequestPtr> StartPost(
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers = nullptr) = 0;
 
     virtual TFuture<IActiveRequestPtr> StartPatch(
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers = nullptr) = 0;
 
     virtual TFuture<IActiveRequestPtr> StartPut(
-        const TString& url,
+        const std::string& url,
         const THeadersPtr& headers = nullptr) = 0;
 
     virtual TFuture<IResponsePtr> Request(
         EMethod method,
-        const TString& url,
+        const std::string& url,
         const std::optional<TSharedRef>& body,
         const THeadersPtr& headers) = 0;
 };

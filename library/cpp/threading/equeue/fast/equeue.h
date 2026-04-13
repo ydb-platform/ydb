@@ -111,7 +111,7 @@ public:
         while (true) {
             IObjectInQueue* job = nullptr;
 
-            while (thisThreadId >= ActiveThreadCount_) {
+            while (thisThreadId >= ActiveThreadCount_ && !Stopped_) {
                 Sleep(TDuration::Seconds(1));
             }
 
@@ -146,7 +146,7 @@ public:
     }
 
     void SetCurrentMaxQueueSize(size_t v) {
-        Y_ENSURE(v < MaxQueueSize_);
+        Y_ENSURE(v <= MaxQueueSize_);
         CurrentMaxQueueSize_ = v;
     }
 

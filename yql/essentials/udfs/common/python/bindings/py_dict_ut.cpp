@@ -581,8 +581,8 @@ Y_UNIT_TEST(ToPyAsThinList_FromPyAsDict) {
         [](const TType*, const NUdf::IValueBuilder& vb) {
             NUdf::TUnboxedValue* items = nullptr;
             const auto a = vb.NewArray(9U, items);
-            const float f[] = {0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f};
-            std::transform(f, f + 9U, items, [](float v) { return NUdf::TUnboxedValuePod(v); });
+            const auto f = std::to_array<float>({0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f});
+            std::transform(f.data(), f.data() + 9U, items, [](float v) { return NUdf::TUnboxedValuePod(v); });
             return a;
         },
         "def Test(value): return value",

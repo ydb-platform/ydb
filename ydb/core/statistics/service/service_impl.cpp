@@ -21,6 +21,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <yql/essentials/core/minsketch/count_min_sketch.h>
+#include <yql/essentials/core/histogram/eq_width_histogram.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -33,7 +35,6 @@
 namespace NKikimr {
 namespace NStat {
 
-using TEvReadRowsRequest = NGRpcService::TGrpcRequestNoOperationCall<Ydb::Table::ReadRowsRequest, Ydb::Table::ReadRowsResponse>;
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 struct TAggregationStatistics {
@@ -121,8 +122,6 @@ struct TAggregationStatistics {
 class TStatService : public TActorBootstrapped<TStatService> {
 public:
     using TBase = TActorBootstrapped<TStatService>;
-
-    static constexpr TStringBuf StatisticsTable = "/.metadata/_statistics";
 
     TStatService(const TStatServiceSettings& settings)
         : Settings(settings)
@@ -294,7 +293,7 @@ private:
             const auto tag = column.GetTag();
 
             for (auto& statistic : column.GetStatistics()) {
-                if (statistic.GetType() == NKikimr::NStat::COUNT_MIN_SKETCH) {
+                if (statistic.GetType() == static_cast<ui32>(EStatType::COUNT_MIN_SKETCH)) {
                     auto data = statistic.GetData().data();
                     auto sketch = reinterpret_cast<const TCountMinSketch*>(data);
                     auto& current = AggregationStatistics.CountMinSketches[tag];
@@ -517,7 +516,7 @@ private:
 
             auto data = it->second.Statistics->AsStringBuf();
             auto statistics = column->AddStatistics();
-            statistics->SetType(NKikimr::NStat::COUNT_MIN_SKETCH);
+            statistics->SetType(static_cast<ui32>(EStatType::COUNT_MIN_SKETCH));
             statistics->SetData(data.data(), data.size());
         }
 
@@ -649,70 +648,9 @@ private:
         }
     }
 
-    void LoadStatistics(const TString& database, const TString& tablePath,
-                        const TPathId& pathId, ui32 statType, ui32 columnTag, ui64 queryId) {
-        SA_LOG_D("[TStatService::LoadStatistics] QueryId[ " << queryId
-            << " ], PathId[ " << pathId << " ], " << " StatType[ " << statType
-            << " ], ColumnTag[ " << columnTag << " ]");
-
-        auto readRowsRequest = Ydb::Table::ReadRowsRequest();
-        readRowsRequest.set_path(tablePath);
-
-        NYdb::TValueBuilder keys_builder;
-        keys_builder.BeginList()
-            .AddListItem()
-                .BeginStruct()
-                    .AddMember("owner_id").Uint64(pathId.OwnerId)
-                    .AddMember("local_path_id").Uint64(pathId.LocalPathId)
-                    .AddMember("stat_type").Uint32(statType)
-                    .AddMember("column_tag").Uint32(columnTag)
-                .EndStruct()
-            .EndList();
-        auto keys = keys_builder.Build();
-        auto protoKeys = readRowsRequest.mutable_keys();
-        *protoKeys->mutable_type() = NYdb::TProtoAccessor::GetProto(keys.GetType());
-        *protoKeys->mutable_value() = NYdb::TProtoAccessor::GetProto(keys);
-
-        auto actorSystem = TlsActivationContext->ActorSystem();
-        auto rpcFuture = NRpcService::DoLocalRpc<TEvReadRowsRequest>(
-            std::move(readRowsRequest), database, Nothing(), TActivationContext::ActorSystem(), true
-        );
-        rpcFuture.Subscribe([replyTo = SelfId(), queryId, actorSystem](const NThreading::TFuture<Ydb::Table::ReadRowsResponse>& future) mutable {
-            const auto& response = future.GetValueSync();
-            auto query_response = std::make_unique<TEvStatistics::TEvLoadStatisticsQueryResponse>();
-
-            if (response.status() == Ydb::StatusIds::SUCCESS) {
-                NYdb::TResultSetParser parser(response.result_set());
-                const auto rowsCount = parser.RowsCount();
-                Y_ABORT_UNLESS(rowsCount < 2);
-
-                if (rowsCount == 0) {
-                    SA_LOG_E("[TStatService::ReadRowsResponse] QueryId[ "
-                        << queryId << " ], RowsCount[ 0 ]");
-                }
-
-                query_response->Success = rowsCount > 0;
-
-                while(parser.TryNextRow()) {
-                    auto& col = parser.ColumnParser("data");
-                    // may be not optional from versions before fix of bug https://github.com/ydb-platform/ydb/issues/15701
-                    query_response->Data = col.GetKind() == NYdb::TTypeParser::ETypeKind::Optional
-                        ? col.GetOptionalString()
-                        : col.GetString();
-                 }
-            } else {
-                SA_LOG_E("[TStatService::ReadRowsResponse] QueryId[ "
-                    << queryId << " ] " << NYql::IssuesFromMessageAsString(response.issues()));
-                query_response->Success = false;
-            }
-
-            actorSystem->Send(replyTo, query_response.release(), 0, queryId);
-        });
-    }
-
-    void QueryStatistics(const TString& database, const TString& tablePath, ui64 requestId) {
+    void QueryStatistics(const TString& database, ui64 requestId) {
         SA_LOG_D("[TStatService::QueryStatistics] RequestId[ " << requestId
-            << " ], Database[ " << database << " ], TablePath[ " << tablePath << " ]");
+            << " ], Database[ " << database << " ]");
 
         auto it = InFlight.find(requestId);
         if (it == InFlight.end()) {
@@ -728,15 +666,11 @@ private:
         for (const auto& req : request.StatRequests) {
             auto& response = request.StatResponses.emplace_back();
             response.Req = req;
-            if (!req.ColumnTag) {
-                response.Success = false;
-                ++reqIndex;
-                continue;
-            }
             ui64 queryId = NextLoadQueryCookie++;
             LoadQueriesInFlight[queryId] = std::make_pair(requestId, reqIndex);
 
-            LoadStatistics(database, tablePath, req.PathId, request.StatType, *req.ColumnTag, queryId);
+            DispatchLoadStatisticsQuery(
+                SelfId(), queryId, database, req.PathId, request.StatType, req.ColumnTag);
 
             ++request.ReplyCounter;
             ++reqIndex;
@@ -777,7 +711,7 @@ private:
             AddNavigateEntry(navigate->ResultSet, req.PathId, true);
         }
 
-        ui64 cookie = request.StatType == EStatType::COUNT_MIN_SKETCH ? requestId : 0;
+        ui64 cookie = request.StatType == EStatType::SIMPLE ? 0 : requestId;
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()), 0, cookie);
     }
 
@@ -801,8 +735,7 @@ private:
 
             if (navigate->Cookie == 0) {
                 const auto database = JoinPath(entry->Path);
-                const auto tablePath = CanonizePath(database + StatisticsTable);
-                QueryStatistics(database, tablePath, requestId);
+                QueryStatistics(database, requestId);
                 return;
             }
 
@@ -836,9 +769,9 @@ private:
                 SyncNode();
             } else {
                 // In case of StatisticsAggregator tablet could not be found,
-                // we need to cancel the current requests. No need to delete CountMinSketch requests.
+                // we need to cancel the current requests. No need to delete column statistic requests.
                 for (auto it = InFlight.begin(); it != InFlight.end();) {
-                    if (EStatType::COUNT_MIN_SKETCH == it->second.StatType) {
+                    if (it->second.StatType != EStatType::SIMPLE) {
                         ++it;
                         continue;
                     }
@@ -1161,17 +1094,44 @@ private:
                 << ". Request not found in InFlight");
             return;
         }
-
         auto& request = itRequest->second;
-
         auto& response = request.StatResponses[requestIndex];
-        Y_ABORT_UNLESS(request.StatType == EStatType::COUNT_MIN_SKETCH);
 
         const auto msg = ev->Get();
-
         if (msg->Success && msg->Data) {
-            response.Success = true;
-            response.CountMinSketch.CountMin.reset(TCountMinSketch::FromString(msg->Data->data(), msg->Data->size()));
+            switch (request.StatType) {
+            case EStatType::SIMPLE_COLUMN: {
+                NKikimrStat::TSimpleColumnStatistics data;
+                response.Success = data.ParseFromString(*msg->Data);
+                if (response.Success) {
+                    response.SimpleColumn.Data = std::move(data);
+                }
+                break;
+            }
+            case EStatType::COUNT_MIN_SKETCH:
+                response.Success = true;
+                response.CountMinSketch.CountMin.reset(
+                    TCountMinSketch::FromString(msg->Data->data(), msg->Data->size()));
+                break;
+            case EStatType::EQ_WIDTH_HISTOGRAM:
+                response.Success = true;
+                response.EqWidthHistogram.Data =
+                    std::make_shared<TEqWidthHistogram>(msg->Data->data(), msg->Data->size());
+                break;
+            case EStatType::TABLE_SUMMARY: {
+                NKikimrStat::TTableSummaryStatistics data;
+                response.Success = data.ParseFromString(*msg->Data);
+                if (response.Success) {
+                    response.TableSummary.Data = std::move(data);
+                }
+                break;
+            }
+            default:
+                SA_LOG_E("TEvLoadStatisticsQueryResponse, request id = " << requestId
+                    << ". Unexpected stat type: " << static_cast<int>(request.StatType));
+                response.Success = false;
+                break;
+            }
         } else {
             response.Success = false;
         }
@@ -1353,16 +1313,16 @@ private:
 
             str << "InFlight: " << InFlight.size();
             {
-                ui32 simple{ 0 };
-                ui32 countMin{ 0 };
-                for (auto it = InFlight.begin(); it != InFlight.end(); ++it) {
-                    if (it->second.StatType == EStatType::SIMPLE) {
-                        ++simple;
-                    } else if (it->second.StatType == EStatType::COUNT_MIN_SKETCH) {
-                        ++countMin;
-                    }
+                std::unordered_map<EStatType, size_t> counts;
+                for (const auto& [id, req] : InFlight) {
+                    ++counts[req.StatType];
                 }
-                str << "[SIMPLE: " << simple << ", COUNT_MIN_SKETCH: " << countMin << "]" << Endl;
+                str << "[SIMPLE: " << counts[EStatType::SIMPLE]
+                    << ", SIMPLE_COLUMN: " << counts[EStatType::SIMPLE_COLUMN]
+                    << ", COUNT_MIN_SKETCH: " << counts[EStatType::COUNT_MIN_SKETCH]
+                    << ", EQ_WIDTH_HISTOGRAM: " << counts[EStatType::EQ_WIDTH_HISTOGRAM]
+                    << ", TABLE_SUMMARY: " << counts[EStatType::TABLE_SUMMARY]
+                    << "]" << Endl;
             }
             str << "NextRequestId: " << NextRequestId << Endl;
 

@@ -615,7 +615,7 @@ public:
     void Bootstrap() {
         auto ctx = MakeIntrusive<TUserRequestContext>();
         ctx->DatabaseId = DatabaseId;
-        IActor* actor = CreateKqpSchemeExecuter(PhyTx, QueryType, SelfId(), RequestType, Database, UserToken, ClientAddress, false /* temporary */, false /* createTmpDir */, false /* isCreateTableAs */, TString() /* sessionId */, ctx);
+        IActor* actor = CreateKqpSchemeExecuter(PhyTx, QueryType, nullptr, SelfId(), RequestType, Database, UserToken, ClientAddress, false /* temporary */, false /* createTmpDir */, false /* isCreateTableAs */, TString() /* tempDirName */, ctx);
         Register(actor);
         Become(&TThis::WaitState);
     }
@@ -1391,10 +1391,8 @@ public:
             auto& createUser = *schemeTx.MutableAlterLogin()->MutableCreateUser();
 
             createUser.SetUser(settings.UserName);
-            if (settings.Password) {
-                createUser.SetPassword(settings.Password);
-                createUser.SetIsHashedPassword(settings.IsHashedPassword);
-            }
+            createUser.SetPassword(settings.Password);
+            createUser.SetHashedPassword(settings.HashedPassword);
 
             createUser.SetCanLogin(settings.CanLogin);
 
@@ -1440,7 +1438,10 @@ public:
 
             if (settings.Password.has_value()) {
                 alterUser.SetPassword(settings.Password.value());
-                alterUser.SetIsHashedPassword(settings.IsHashedPassword);
+            }
+
+            if (settings.HashedPassword.has_value()) {
+                alterUser.SetHashedPassword(settings.HashedPassword.value());
             }
 
             if (settings.CanLogin.has_value()) {
@@ -1892,7 +1893,6 @@ public:
         request.Transactions.emplace_back(queryHolder.GetPhyTx(0), params);
 
         YQL_ENSURE(!request.Transactions.empty());
-        YQL_ENSURE(request.DataShardLocks.empty());
         YQL_ENSURE(!request.NeedTxId);
         YQL_ENSURE(ContainOnlyLiteralStages(request));
 
@@ -1908,7 +1908,6 @@ public:
 
     TFuture<TExecPhysicalResult> ExecuteLiteral(TExecPhysicalRequest&& request, TQueryData::TPtr params, ui32 txIndex) override {
         YQL_ENSURE(!request.Transactions.empty());
-        YQL_ENSURE(request.DataShardLocks.empty());
         YQL_ENSURE(!request.NeedTxId);
         YQL_ENSURE(ContainOnlyLiteralStages(request));
         auto promise = NewPromise<TExecPhysicalResult>();

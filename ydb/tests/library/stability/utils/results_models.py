@@ -1,3 +1,4 @@
+import json
 from typing import Optional, Self
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 
@@ -47,6 +48,24 @@ class StressUtilRunResult:
     end_time: Optional[float] = None
     execution_time: Optional[float] = None
 
+    def to_dict(self):
+        """Convert object to dictionary for JSON serialization."""
+        return {
+            "run_config": str(self.run_config),
+            "is_success": self.is_success,
+            "is_timeout": self.is_timeout,
+            "iteration_number": self.iteration_number,
+            "stdout": self.stdout,
+            "stderr": self.stderr,
+            "start_time": self.start_time,
+            "end_time": self.end_time,
+            "execution_time": self.execution_time
+        }
+
+    def __repr__(self):
+        """Return JSON representation of the object."""
+        return json.dumps(self.to_dict(), indent=2, default=str)
+
 
 class StressUtilNodeResult:
     """Aggregates results of multiple runs for a single stress test on a node.
@@ -72,13 +91,26 @@ class StressUtilNodeResult:
         """Initialize StressUtilNodeResult with empty runs list."""
         self.runs = []
 
+    def to_dict(self):
+        """Convert object to dictionary for JSON serialization."""
+        node_repr = str(self.node) if self.node is not None else None
+
+        # Convert runs to list of dictionaries
+        runs_dict = [run.to_dict() for run in self.runs] if self.runs else []
+
+        return {
+            "stress_name": self.stress_name,
+            "node": node_repr,
+            "host": self.host,
+            "start_time": self.start_time,
+            "end_time": self.end_time,
+            "total_execution_time": self.total_execution_time,
+            "runs": runs_dict
+        }
+
     def __repr__(self):
-        return (f"StressUtilNodeResult(stress_name={self.stress_name}, "
-                f"node={self.node}, host={self.host}, "
-                f"start_time={self.start_time}, "
-                f"end_time={self.end_time}, "
-                f"total_execution_time={self.total_execution_time}, "
-                f"runs={self.runs})")
+        """Return JSON representation of the object."""
+        return json.dumps(self.to_dict(), indent=2)
 
     def get_successful_runs(self) -> int:
         """Count successful runs across all nodes.

@@ -12,6 +12,8 @@
 #include <util/system/env.h>
 #include <util/generic/queue.h>
 
+#include <utility>
+
 
 namespace NYql {
 
@@ -43,7 +45,7 @@ public:
         TOperationProgressWriter writer,
         bool withFinalize)
         : Types_(types)
-        , Writer_(writer)
+        , Writer_(std::move(writer))
         , WithFinalize_(withFinalize)
         , DeterministicMode_(GetEnv("YQL_DETERMINISTIC_MODE"))
     {
@@ -837,8 +839,8 @@ IGraphTransformer::TStatus ValidateCallable(const TExprNode::TPtr& node, TExprCo
     TExprNode::TListType childrenToCheck;
     dataProvider->GetRequiredChildren(*node, childrenToCheck);
     IGraphTransformer::TStatus combinedStatus = IGraphTransformer::TStatus::Ok;
-    for (ui32 i = 0; i < childrenToCheck.size(); ++i) {
-        combinedStatus = combinedStatus.Combine(ValidateExecution(childrenToCheck[i], ctx, types, visited));
+    for (const auto& child : childrenToCheck) {
+        combinedStatus = combinedStatus.Combine(ValidateExecution(child, ctx, types, visited));
     }
 
     return combinedStatus;

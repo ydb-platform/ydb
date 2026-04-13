@@ -6,8 +6,7 @@
 #include <mutex>
 #include <unordered_map>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 namespace {
 
@@ -31,5 +30,4 @@ TString LoadResourceOnce(TStringBuf resourceId) {
     return Singleton<TLoadedResources>()->Get(resourceId);
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

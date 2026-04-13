@@ -643,6 +643,7 @@ TMaybeNode<TDqStage> DqPushLambdasToStage(const TDqStage& stage, const std::map<
                 .Body(ctx.ReplaceNodes(newProgram->TailPtr(), inputArgReplaces))
             .Build()
             .Settings(TDqStageSettings().BuildNode(ctx, stage.Pos()))
+            .Outputs(stage.Outputs())
             .Done();
 
     optCtx.RemapNode(stage.Ref(), newStage.Ptr());
@@ -1122,7 +1123,7 @@ TExprBase DqBuildLMapOverMuxStage(TExprBase node, TExprContext& ctx, IOptimizati
 
 
 TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
-    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+    const TParentsMap& parentsMap, bool allowStageMultiUsage, bool createStageForAggregation)
 {
     if (!node.Maybe<TCoCombineByKey>().Input().Maybe<TDqCnUnionAll>()) {
         return node;
@@ -1174,7 +1175,8 @@ TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationC
             .Done();
     }
 
-    if (IsDqDependsOnStage(combine.PreMapLambda(), dqUnion.Output().Stage()) ||
+    if (createStageForAggregation ||
+        IsDqDependsOnStage(combine.PreMapLambda(), dqUnion.Output().Stage()) ||
         IsDqDependsOnStage(combine.KeySelectorLambda(), dqUnion.Output().Stage()) ||
         IsDqDependsOnStage(combine.InitHandlerLambda(), dqUnion.Output().Stage()) ||
         IsDqDependsOnStage(combine.UpdateHandlerLambda(), dqUnion.Output().Stage()) ||
@@ -2970,7 +2972,8 @@ TExprBase DqBuildJoin(
     bool useBlockHashJoin,
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
-    bool buildCollectStage
+    bool buildCollectStage,
+    bool blockHashJoinBuildSideLeft
 ) {
     if (!node.Maybe<TDqJoin>()) {
         return node;
@@ -2985,7 +2988,7 @@ TExprBase DqBuildJoin(
     const bool mapJoinCanBeApplied = joinType != "Full"sv && joinType != "Exclusion"sv;
     if (joinAlgo == EJoinAlgoType::MapJoin && mapJoinCanBeApplied) {
         hashJoin = EHashJoinMode::Map;
-    } else if (joinAlgo == EJoinAlgoType::GraceJoin) {
+    } else if (joinAlgo == EJoinAlgoType::GraceJoin || joinAlgo == EJoinAlgoType::ReverseBlockJoin) {
         hashJoin = EHashJoinMode::Grace;
     }
 
@@ -3009,7 +3012,7 @@ TExprBase DqBuildJoin(
     }
 
     if (useHashJoin && (hashJoin == EHashJoinMode::GraceAndSelf || hashJoin == EHashJoinMode::Grace || shuffleMapJoin)) {
-        return DqBuildHashJoin(join, hashJoin, ctx, optCtx, shuffleElimination, shuffleEliminationWithMap, useBlockHashJoin);
+        return DqBuildHashJoin(join, hashJoin, ctx, optCtx, shuffleElimination, shuffleEliminationWithMap, useBlockHashJoin, blockHashJoinBuildSideLeft);
     }
 
     if (joinType == "Full"sv || joinType == "Exclusion"sv) {
@@ -3091,7 +3094,7 @@ TExprBase DqPropagatePrecomuteTake(TExprBase node, TExprContext& ctx, IOptimizat
         return node;
     }
 
-    auto* typeAnn = precompute.Connection().Raw()->GetTypeAnn();
+    auto typeAnn = precompute.Connection().Raw()->GetTypeAnn();
 
     YQL_ENSURE(typeAnn);
     typeAnn = GetSeqItemType(typeAnn);
@@ -3473,9 +3476,9 @@ TMaybeNode<TExprBase> DqUnorderedOverStageInput(TExprBase node, TExprContext& ct
 
 namespace {
 
-bool ValidateStreamLookupJoinFlags(const TDqJoin& join, TExprContext& ctx) {
+bool ValidateStreamLookupJoinFlags(const TDqJoin& join, TExprContext& ctx, bool& rightAny) {
     bool leftAny = false;
-    bool rightAny = false;
+    rightAny = false;
     if (const auto maybeFlags = join.Flags()) {
         for (auto&& flag: maybeFlags.Cast()) {
             auto&& name = flag.StringValue();
@@ -3490,15 +3493,6 @@ bool ValidateStreamLookupJoinFlags(const TDqJoin& join, TExprContext& ctx) {
         if (leftAny) {
             ctx.AddError(TIssue(ctx.GetPosition(maybeFlags.Cast().Pos()), "Streamlookup ANY LEFT join is not implemented"));
             return false;
-        }
-    }
-
-    if (!rightAny) {
-        if (false) { // Temporary change to waring to allow for smooth transition
-            ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Streamlookup: must be LEFT JOIN /*+streamlookup(...)*/ ANY"));
-            return false;
-        } else {
-            ctx.AddWarning(TIssue(ctx.GetPosition(join.Pos()), "(Deprecation) Streamlookup: must be LEFT JOIN /*+streamlookup(...)*/ ANY"));
         }
     }
 
@@ -3518,7 +3512,8 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
         return node;
     }
 
-    if (!ValidateStreamLookupJoinFlags(join, ctx)) {
+    bool rightAny = false;
+    if (!ValidateStreamLookupJoinFlags(join, ctx, rightAny)) {
         return {};
     }
 
@@ -3526,6 +3521,7 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
     TExprNode::TPtr maxCachedRows;
     TExprNode::TPtr maxDelayedRows;
     TExprNode::TPtr isMultiget;
+    TExprNode::TPtr isMultiMatches;
     if (const auto maybeOptions = join.JoinAlgoOptions()) {
         for (auto&& option: maybeOptions.Cast()) {
             auto&& name = option.Name().Value();
@@ -3555,6 +3551,15 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
         maxDelayedRows = ctx.NewAtom(pos, 1'000'000);
     }
 
+    if (!rightAny) {
+        if (isMultiget && isMultiget->IsAtom() && FromString<bool>(isMultiget->Content())) {
+            ctx.AddError(TIssue(ctx.GetPosition(join.Pos()), "Streamlookup: Multiget supports only LEFT JOIN /*+streamlookup(Multiget=true...)*/ ANY, other kinds of join are unimplemented"));
+            return {};
+        }
+        isMultiMatches = ctx.NewAtom(pos, true);
+        isMultiget = ctx.NewAtom(pos, false);
+    }
+
     auto rightInput = join.RightInput().Ptr();
     if (auto maybe = TExprBase(rightInput).Maybe<TCoExtractMembers>()) {
         rightInput = maybe.Cast().Input().Ptr();
@@ -3577,6 +3582,10 @@ TMaybeNode<TExprBase> DqRewriteStreamLookupJoin(TExprBase node, TExprContext& ct
 
     if (isMultiget) {
         cn.IsMultiget(isMultiget);
+    }
+
+    if (isMultiMatches) {
+        cn.IsMultiMatches(isMultiMatches);
     }
 
     auto lambda = Build<TCoLambda>(ctx, pos)

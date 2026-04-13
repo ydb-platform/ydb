@@ -39,6 +39,11 @@
             "uri": "https://{canondata_backend}/1923547/edc65c62e064cae64c748b355e12a480cac0c768/resource.tar.gz#test.test_YQL-8307_/results.txt"
         }
     ],
+    "test.test[empty_message]": [
+        {
+            "uri": "file://test.test_empty_message_/extracted"
+        }
+    ],
     "test.test[map_bytes_v1]": [
         {
             "uri": "file://test.test_map_bytes_v1_/results.txt"

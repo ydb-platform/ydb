@@ -2,10 +2,13 @@
 
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_private.h"
+#include "schemeshard_xxport__helpers.h"
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
+#include <ydb/core/backup/regexp/regexp.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
@@ -46,19 +49,22 @@ struct TGetterSettings {
 
     static TGetterSettings FromImportInfo(const TImportInfo::TPtr& importInfo, TMaybe<NBackup::TEncryptionIV> iv) {
         TGetterSettings settings;
-        Y_ABORT_UNLESS(importInfo->Kind == TImportInfo::EKind::S3);
-        settings.ExternalStorageConfig.reset(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(importInfo->GetS3Settings()));
-        settings.Retries = importInfo->GetS3Settings().number_of_retries();
-        if (importInfo->GetS3Settings().has_encryption_settings()) {
-            settings.Key = NBackup::TEncryptionKey(importInfo->GetS3Settings().encryption_settings().symmetric_key().key());
-        }
-        settings.IV = std::move(iv);
+        std::visit([&settings, &iv](const auto& s) {
+            settings.ExternalStorageConfig = NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, s);
+            settings.Retries = s.number_of_retries();
+            if (s.has_encryption_settings()) {
+                settings.Key = NBackup::TEncryptionKey(s.encryption_settings().symmetric_key().key());
+            }
+            settings.IV = std::move(iv);
+        }, importInfo->Settings);
         return settings;
     }
 
     static TGetterSettings FromRequest(const TEvImport::TEvListObjectsInS3ExportRequest::TPtr& ev) {
         TGetterSettings settings;
-        settings.ExternalStorageConfig.reset(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(ev->Get()->Record.settings()));
+        settings.ExternalStorageConfig.reset(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(
+            AppData()->AwsClientConfig,
+            ev->Get()->Record.settings()));
         settings.Retries = ev->Get()->Record.settings().number_of_retries();
         if (ev->Get()->Record.settings().has_encryption_settings()) {
             settings.Key = NBackup::TEncryptionKey(ev->Get()->Record.settings().encryption_settings().symmetric_key().key());
@@ -113,7 +119,7 @@ protected:
         if (Client) {
             this->Send(Client, new TEvents::TEvPoisonPill());
         }
-        Client = this->RegisterWithSameMailbox(CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
+        Client = this->RegisterWithSameMailbox(CreateStorageWrapper(ExternalStorageConfig->ConstructStorageOperator()));
     }
 
     void PassAway() override {
@@ -148,7 +154,7 @@ protected:
             Delay = Min(Delay * ++Attempt, MaxDelay);
             this->Schedule(Delay, new TEvents::TEvWakeup());
         } else {
-            Reply(shouldRetry ? Ydb::StatusIds::EXTERNAL_ERROR : Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "S3 error: " << error.GetMessage().c_str());
+            Reply(shouldRetry ? Ydb::StatusIds::EXTERNAL_ERROR : Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "S3 error: " << error);
         }
     }
 
@@ -288,34 +294,45 @@ protected:
 
 // Downloads scheme-related objects from S3
 class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
+    static TString GetItemSource(const TImportInfo& importInfo, ui32 itemIdx) {
+        TString srcPrefix = importInfo.GetItemSrcPrefix(itemIdx);
+
+        // Absolute path in the prefix is possible if the backup with SchemaMapping
+        if (importInfo.Kind == TImportInfo::EKind::FS && !srcPrefix.empty() && srcPrefix[0] != '/') {
+            return CanonizePath(TStringBuilder() << importInfo.GetFsSettings().base_path() << "/" << srcPrefix);
+        }
+
+        return srcPrefix;
+    }
+
     static TString MetadataKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx) {
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/metadata.json";
+        return TStringBuilder() << GetItemSource(importInfo, itemIdx) << "/metadata.json";
     }
 
     static TString SchemeKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx, TStringBuf filename) {
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << '/' << filename;
+        return TStringBuilder() << GetItemSource(importInfo, itemIdx) << '/' << filename;
     }
 
     static TString PermissionsKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx) {
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/permissions.pb";
+        return TStringBuilder() << GetItemSource(importInfo, itemIdx) << "/permissions.pb";
     }
 
     static TString MaterializedIndexSchemeKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx, const TString& indexImplTablePrefix) {
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/" << indexImplTablePrefix << "/scheme.pb";
+        return TStringBuilder() << GetItemSource(importInfo, itemIdx) << "/" << indexImplTablePrefix << "/scheme.pb";
     }
 
     static TString ChangefeedDescriptionKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx, const TString& changefeedPrefix) {
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/" << changefeedPrefix << "/changefeed_description.pb";
+        return TStringBuilder() << GetItemSource(importInfo, itemIdx) << "/" << changefeedPrefix << "/changefeed_description.pb";
     }
 
     static TString TopicDescriptionKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx, const TString& changefeedPrefix) {
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/" << changefeedPrefix << "/topic_description.pb";
+        return TStringBuilder() << GetItemSource(importInfo, itemIdx) << "/" << changefeedPrefix << "/topic_description.pb";
     }
 
     static bool IsView(TStringBuf schemeKey) {
@@ -328,6 +345,34 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
     static bool IsTopic(TStringBuf schemeKey) {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateTopic().FileName);
+    }
+
+    static bool IsReplication(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateAsyncReplication().FileName);
+    }
+
+    static bool IsTransfer(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateTransfer().FileName);
+    }
+
+    static bool IsExternalDataSource(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateExternalDataSource().FileName);
+    }
+
+    static bool IsExternalTable(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateExternalTable().FileName);
+    }
+
+    static bool IsSysView(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::NFiles::SystemView().FileName);
+    }
+
+    static bool IsCreatedByQuery(TStringBuf schemeKey) {
+        return IsView(schemeKey)
+            || IsReplication(schemeKey)
+            || IsTransfer(schemeKey)
+            || IsExternalDataSource(schemeKey)
+            || IsExternalTable(schemeKey);
     }
 
     static bool NoObjectFound(Aws::S3::S3Errors errorType) {
@@ -348,6 +393,49 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         GetObject(MetadataKey, result.GetResult().GetContentLength());
     }
 
+    bool CheckAvailableInImport(NKikimrSchemeOp::EPathType pathType) {
+        switch (pathType) {
+            case NKikimrSchemeOp::EPathTypeView:
+                return AppData()->FeatureFlags.GetEnableViewExport();
+            case NKikimrSchemeOp::EPathTypeColumnTable:
+                return AppData()->FeatureFlags.GetEnableColumnTablesBackup();
+            case NKikimrSchemeOp::EPathTypeReplication:
+                return AppData()->Icb->BackupControls.S3Controls.EnableAsyncReplicationImport.AtomicLoad()->Get();
+            case NKikimrSchemeOp::EPathTypeTransfer:
+                return AppData()->Icb->BackupControls.S3Controls.EnableTransferImport.AtomicLoad()->Get();
+            case NKikimrSchemeOp::EPathTypeExternalDataSource:
+                return AppData()->Icb->BackupControls.S3Controls.EnableExternalDataSourceImport.AtomicLoad()->Get();
+            case NKikimrSchemeOp::EPathTypeExternalTable:
+                return AppData()->Icb->BackupControls.S3Controls.EnableExternalTableImport.AtomicLoad()->Get();
+            case NKikimrSchemeOp::EPathTypeSysView:
+                return AppData()->FeatureFlags.GetEnableSysViewPermissionsExport();
+            case NKikimrSchemeOp::EPathTypePersQueueGroup:
+            case NKikimrSchemeOp::EPathTypeTable:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    void HeadNextScheme() {
+        while (++SchemePropertiesIdx < GetXxportProperties().size()) {
+            const auto& properties = GetXxportProperties()[SchemePropertiesIdx];
+            LOG_D("HeadNextScheme"
+                << ": self# " << SelfId()
+                << ", file name# " << properties.FileName);
+            if (!CheckAvailableInImport(properties.PathType)) {
+                LOG_D(TStringBuilder() << properties.FileName << " not available in imports");
+                continue;
+            }
+
+            SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, properties.FileName);
+            SchemeFileType = properties.FileType;
+            return HeadObject(SchemeKey);
+        }
+
+        return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
+    }
+
     void HandleScheme(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
@@ -356,19 +444,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", result# " << result);
 
         if (NoObjectFound(result.GetError().GetErrorType())) {
-            if (IsTable(SchemeKey)) {
-                // try search for a view
-                SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateView().FileName);
-                SchemeFileType = NBackup::EBackupFileType::ViewCreate;
-                HeadObject(SchemeKey);
-            } else if (IsView(SchemeKey)) {
-                // try search for a topic
-                SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateTopic().FileName);
-                SchemeFileType = NBackup::EBackupFileType::TopicCreate;
-                HeadObject(SchemeKey);
-            } else {
-                return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
-            }
+            HeadNextScheme();
             return;
         }
 
@@ -409,7 +485,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ": self# " << SelfId()
             << ", result# " << result);
 
-        const bool canSkip = IndexFillingMode != Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT;
+        const bool canSkip = IndexPopulationMode != Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT;
         if (canSkip && NoObjectFound(result.GetError().GetErrorType())) {
             Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
             auto& item = ImportInfo->Items.at(ItemIdx);
@@ -527,7 +603,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ", schemeKey# " << SchemeKey
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
-        if (IsView(SchemeKey)) {
+        if (IsCreatedByQuery(SchemeKey)) {
             item.CreationQuery = content;
         } else if (IsTopic(SchemeKey)) {
             Ydb::Topic::CreateTopicRequest request;
@@ -535,6 +611,12 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse topic scheme");
             }
             item.Topic = request;
+        } else if (IsSysView(SchemeKey)) {
+            Ydb::Table::DescribeSystemViewResult sysView;
+            if (!google::protobuf::TextFormat::ParseFromString(content, &sysView)) {
+                return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse system view description");
+            }
+            item.SysView = sysView;
         } else if (IsTable(SchemeKey)) {
             Ydb::Table::CreateTableRequest request;
             if (!google::protobuf::TextFormat::ParseFromString(content, &request)) {
@@ -798,10 +880,10 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         Download(PermissionsKey);
     }
 
-    static bool NeedToCheckMaterializedIndexes(Ydb::Import::ImportFromS3Settings::IndexFillingMode mode) {
+    static bool NeedToCheckMaterializedIndexes(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode) {
         switch (mode) {
-        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT:
-        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO:
+        case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT:
+        case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO:
             return true;
         default:
             return false;
@@ -839,13 +921,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                         }
 
                         const TVector<TString> indexColumns(index.index_columns().begin(), index.index_columns().end());
-                        std::optional<Ydb::Table::FulltextIndexSettings::Layout> layout;
-                        if (*indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltext) {
-                            const auto& settings = index.global_fulltext_index().fulltext_settings();
-                            layout = settings.has_layout() ? settings.layout() : Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
-                        }
 
-                        for (const auto& implTable : NTableIndex::GetImplTables(*indexType, indexColumns, layout)) {
+                        for (const auto& implTable : NTableIndex::GetImplTables(*indexType, indexColumns)) {
                             const TString implTablePrefix = TStringBuilder() << index.name() << "/" << implTable;
                             IndexImplTablePrefixes.push_back({implTablePrefix, implTablePrefix});
                         }
@@ -915,7 +992,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
     void StartCheckingMaterializedIndexes() {
         ResetRetries();
-        if (NeedToCheckMaterializedIndexes(IndexFillingMode)) {
+        if (NeedToCheckMaterializedIndexes(IndexPopulationMode)) {
             CheckMaterializedIndexes();
         } else {
             StartDownloadingChangefeeds();
@@ -936,7 +1013,7 @@ public:
         , MetadataKey(MetadataKeyFromSettings(*ImportInfo, itemIdx))
         , SchemeKey(SchemeKeyFromSettings(*ImportInfo, itemIdx, "scheme.pb"))
         , PermissionsKey(PermissionsKeyFromSettings(*ImportInfo, itemIdx))
-        , IndexFillingMode(ImportInfo->GetS3Settings().index_filling_mode())
+        , IndexPopulationMode(ImportInfo->GetIndexPopulationMode())
         , NeedDownloadPermissions(!ImportInfo->GetNoAcl())
         , NeedValidateChecksums(!ImportInfo->GetSkipChecksumValidation())
     {
@@ -1017,13 +1094,14 @@ private:
     TString SchemeKey;
     NBackup::EBackupFileType SchemeFileType = NBackup::EBackupFileType::TableSchema;
     const TString PermissionsKey;
+    ui32 SchemePropertiesIdx = 0;
 
     TVector<TString> ChangefeedsPrefixes;
     ui64 IndexDownloadedChangefeed = 0;
 
     TVector<NBackup::TIndexMetadata> IndexImplTablePrefixes;
     ui64 IndexCheckedMaterializedIndexImplTable = 0;
-    Ydb::Import::ImportFromS3Settings::IndexFillingMode IndexFillingMode;
+    Ydb::Import::ImportFromS3Settings::IndexPopulationMode IndexPopulationMode;
 
     bool NeedDownloadPermissions = true;
     bool NeedValidateChecksums = true;
@@ -1032,15 +1110,15 @@ private:
 
 class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
     static TString MetadataKeyFromSettings(const TImportInfo& importInfo) {
-        return TStringBuilder() << importInfo.GetS3Settings().source_prefix() << "/metadata.json";
+        return TStringBuilder() << importInfo.GetSource() << "/metadata.json";
     }
 
     static TString SchemaMappingKeyFromSettings(const TImportInfo& importInfo) {
-        return TStringBuilder() << importInfo.GetS3Settings().source_prefix() << "/SchemaMapping/mapping.json";
+        return TStringBuilder() << importInfo.GetSource() << "/SchemaMapping/mapping.json";
     }
 
     static TString SchemaMappingMetadataKeyFromSettings(const TImportInfo& importInfo) {
-        return TStringBuilder() << importInfo.GetS3Settings().source_prefix() << "/SchemaMapping/metadata.json";
+        return TStringBuilder() << importInfo.GetSource() << "/SchemaMapping/metadata.json";
     }
 
     void HandleMetadata(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -1385,8 +1463,16 @@ public:
                 return false;
             }
         }
-        if (NBackup::NormalizeExportPrefix(Request->Get()->Record.GetSettings().prefix()).empty()) {
+        const auto& settings = req.GetSettings();
+        if (NBackup::NormalizeExportPrefix(settings.prefix()).empty()) {
             Reply(Ydb::StatusIds::BAD_REQUEST, "Empty S3 prefix specified");
+            return false;
+        }
+
+        try {
+            ExcludeRegexps = NBackup::CombineRegexps(settings.exclude_regexps());
+        } catch (const std::exception& ex) {
+            Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Invalid regexp: " << ex.what());
             return false;
         }
         return true;
@@ -1555,7 +1641,11 @@ public:
                 continue;
             }
 
-            if (PageSize && pos >= StartPos + PageSize) { // Calc only items that suit filter
+            if (IsExcludedFromListing(item.ObjectPath)) {
+                continue;
+            }
+
+            if (PageSize && pos >= StartPos + PageSize) { // Calc only items that suit filters
                 NextPos = pos;
                 break;
             }
@@ -1574,6 +1664,15 @@ public:
         Reply();
     }
 
+    bool IsExcludedFromListing(const TString& path) const {
+        for (const auto& regexp : ExcludeRegexps) {
+            if (regexp.Match(path.c_str())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 private:
     TEvImport::TEvListObjectsInS3ExportRequest::TPtr Request;
     Ydb::Import::ListObjectsInS3ExportResult Result;
@@ -1581,6 +1680,7 @@ private:
     size_t PageSize = 0;
     size_t NextPos = 0;
     TPathFilter PathFilter;
+    std::vector<TRegExMatch> ExcludeRegexps;
 };
 
 class TFSHelper {
@@ -1609,127 +1709,8 @@ public:
     }
 };
 
-class TSchemeGetterFS: public TActorBootstrapped<TSchemeGetterFS> {
-
-    bool ProcessMetadata(const TString& content, TString& error) {
-        try {
-            ImportInfo->Items[ItemIdx].Metadata = NBackup::TMetadata::Deserialize(content);
-            return true;
-        } catch (const std::exception& e) {
-            error = TStringBuilder() << "Failed to parse metadata: " << e.what();
-            return false;
-        }
-    }
-
-    bool ProcessScheme(const TString& content, TString& error) {
-        auto& item = ImportInfo->Items[ItemIdx];
-
-        Ydb::Table::CreateTableRequest table;
-        if (table.ParseFromString(content)) {
-            item.Table = table;
-            return true;
-        }
-
-        error = "Failed to parse scheme as table";
-        return false;
-    }
-
-    void ProcessPermissions(const TString& content) {
-        auto& item = ImportInfo->Items[ItemIdx];
-        Ydb::Scheme::ModifyPermissionsRequest permissions;
-        if (permissions.ParseFromString(content)) {
-            item.Permissions = permissions;
-        }
-    }
-
-    void Reply(bool success, const TString& errorMessage = {}) {
-        LOG_I("TSchemeGetterFS: Reply"
-            << ": self# " << SelfId()
-            << ", importId# " << ImportInfo->Id
-            << ", itemIdx# " << ItemIdx
-            << ", success# " << success
-            << ", error# " << errorMessage);
-
-        Send(ReplyTo, new TEvPrivate::TEvImportSchemeReady(ImportInfo->Id, ItemIdx, success, errorMessage));
-        PassAway();
-    }
-
-public:
-    explicit TSchemeGetterFS(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx)
-        : ReplyTo(replyTo)
-        , ImportInfo(std::move(importInfo))
-        , ItemIdx(itemIdx)
-    {
-        Y_ABORT_UNLESS(ImportInfo->Kind == TImportInfo::EKind::FS);
-    }
-
-    void Bootstrap() {
-        const auto settings = ImportInfo->GetFsSettings();
-        const TString basePath = settings.base_path();
-        
-        Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
-        auto& item = ImportInfo->Items[ItemIdx];
-        
-        TString sourcePath = item.SrcPath;
-        if (sourcePath.empty()) {
-            Reply(false, "Source path is empty for import item");
-            return;
-        }
-
-        const TFsPath itemPath = TFsPath(basePath) / sourcePath;
-        TString error;
-
-        const TString metadataPath = itemPath / "metadata.json";
-        TString metadataContent;
-        
-        if (!TFSHelper::ReadFile(metadataPath, metadataContent, error)) {
-            Reply(false, error);
-            return;
-        }
-
-        if (!ProcessMetadata(metadataContent, error)) {
-            Reply(false, error);
-            return;
-        }
-
-        const TString schemeFileName = NYdb::NDump::NFiles::TableScheme().FileName;
-        const TString schemePath = itemPath / schemeFileName;
-        TString schemeContent;
-        
-        if (!TFSHelper::ReadFile(schemePath, schemeContent, error)) {
-            Reply(false, error);
-            return;
-        }
-
-        if (!ProcessScheme(schemeContent, error)) {
-            Reply(false, error);
-            return;
-        }
-
-        if (!ImportInfo->GetNoAcl()) {
-            const TString permissionsPath = itemPath / "permissions.pb";
-            TString permissionsContent;
-            
-            if (TFSHelper::ReadFile(permissionsPath, permissionsContent, error)) {
-                ProcessPermissions(permissionsContent);
-            }
-        }
-
-        Reply(true);
-    }
-
-private:
-    const TActorId ReplyTo;
-    TImportInfo::TPtr ImportInfo;
-    const ui32 ItemIdx;
-};
-
 IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx, TMaybe<NBackup::TEncryptionIV> iv) {
     return new TSchemeGetter(replyTo, std::move(importInfo), itemIdx, std::move(iv));
-}
-
-IActor* CreateSchemeGetterFS(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx) {
-    return new TSchemeGetterFS(replyTo, std::move(importInfo), itemIdx);
 }
 
 IActor* CreateSchemaMappingGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo) {

@@ -39,7 +39,8 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
         Table::GroupGeneration::Type groupPrevGeneration, Table::GroupGeneration::Type groupGeneration,
         Table::Category::Type kind, Table::RingIdx::Type ringIdx, Table::FailDomainIdx::Type failDomainIdx,
         Table::VDiskIdx::Type vDiskIdx, Table::Mood::Type mood, TGroupInfo *group,
-        TVSlotReadyTimestampQ *vslotReadyTimestampQ, TInstant lastSeenReady, TDuration replicationTime)
+        TVSlotReadyTimestampQ *vslotReadyTimestampQ, TInstant lastSeenReady, TDuration replicationTime,
+        Table::DDiskNumVChunksClaimed::Type ddiskNumVChunksClaimed, Table::PersistentBufferRefs::Type persistentBufferRefs)
     : VSlotId(vSlotId)
     , PDisk(pdisk)
     , GroupId(groupId)
@@ -52,6 +53,8 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
     , Mood(mood)
     , LastSeenReady(lastSeenReady)
     , ReplicationTime(replicationTime)
+    , DDiskNumVChunksClaimed(ddiskNumVChunksClaimed)
+    , PersistentBufferRefs(persistentBufferRefs)
     , VSlotReadyTimestampQ(*vslotReadyTimestampQ)
 {
     Y_ABORT_UNLESS(pdisk);
@@ -107,7 +110,8 @@ void TBlobStorageController::TGroupInfo::CalculateLayoutStatus(TBlobStorageContr
             const TVSlotInfo *slot = VDisksInGroup[index];
             TPDiskId pdiskId = slot->VSlotId.ComprisingPDiskId();
             const auto& location = self->HostRecords->GetLocation(pdiskId.NodeId);
-            layout.AddDisk({mapper, location, pdiskId, geom}, index);
+            const bool decommitted = slot->PDisk && slot->PDisk->Decommitted();
+            layout.AddDisk({mapper, location, pdiskId, geom}, index, decommitted);
         }
 
         LayoutCorrect = layout.IsCorrect();
@@ -689,6 +693,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerConfigResponse:
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest::TPtr ev) {
     const auto& record = ev->Get()->Record;
+    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC52, "received TEvControllerDistconfRequest", (Operation, record.GetOperation()));
 
     // prepare the response
     auto response = std::make_unique<TEvBlobStorage::TEvControllerDistconfResponse>();
@@ -747,6 +752,12 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest
             std::optional<ui64> expectedStorageYamlConfigVersion;
             if (record.HasExpectedStorageConfigVersion()) {
                 expectedStorageYamlConfigVersion.emplace(record.GetExpectedStorageConfigVersion());
+            }
+
+            // in dry run mode, skip the actual commit and return success
+            if (record.GetDryRun()) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::OK);
+                break;
             }
 
             // commit it
@@ -989,10 +1000,10 @@ STFUNC(TBlobStorageController::StateWork) {
         hFunc(TEvBlobStorage::TEvControllerDistconfRequest, Handle);
         fFunc(TEvBlobStorage::EvControllerShredRequest, EnqueueIncomingEvent);
         cFunc(TEvPrivate::EvUpdateShredState, ShredState.HandleUpdateShredState);
-        cFunc(TEvPrivate::EvCommitMetrics, CommitMetrics);
         hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
         cFunc(TEvPrivate::EvCheckSyncerDisconnectedNodes, CheckSyncerDisconnectedNodes);
         hFunc(TEvBlobStorage::TEvControllerUpdateSyncerState, Handle);
+        hFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 STLOG(PRI_ERROR, BS_CONTROLLER, BSC06, "StateWork unexpected event", (Type, type),
@@ -1154,6 +1165,11 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMovePDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateBridgeGroupInfo:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReconfigureVirtualGroup:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kRecommissionGroups:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kDefineDDiskPool:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kReadDDiskPool:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteDDiskPool:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kMoveDDisk:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:
@@ -1222,7 +1238,7 @@ void TBlobStorageController::TStaticGroupInfo::UpdateLayoutCorrect(TBlobStorageC
 
     for (size_t i = 0; i < Info->GetTotalVDisksNum(); ++i) {
         const auto& [nodeId, pdiskId, vdiskSlotId] = DecomposeVDiskServiceId(Info->GetDynamicInfo().ServiceIdForOrderNumber[i]);
-        layout.AddDisk({mapper, controller->HostRecords->GetLocation(nodeId), {nodeId, pdiskId}, geom}, i);
+        layout.AddDisk({mapper, controller->HostRecords->GetLocation(nodeId), {nodeId, pdiskId}, geom}, i, false);
     }
 
     LayoutCorrect = layout.IsCorrect();

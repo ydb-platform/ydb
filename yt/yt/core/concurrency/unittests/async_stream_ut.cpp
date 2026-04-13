@@ -3,6 +3,7 @@
 #include <yt/yt/core/concurrency/async_stream.h>
 #include <yt/yt/core/concurrency/async_stream_helpers.h>
 #include <yt/yt/core/concurrency/async_stream_pipe.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <util/stream/mem.h>
 
@@ -40,7 +41,7 @@ TEST(TAsyncOutputStreamTest, Simple)
     auto readResult1 = ReadAlreadySetValue(pipe);
     ASSERT_EQ(GetString(readResult1), "foo");
     ASSERT_TRUE(writeResult.IsSet());
-    ASSERT_TRUE(writeResult.Get().IsOK());
+    ASSERT_TRUE(WaitForFast(writeResult).IsOK());
 
     auto closeResult = asyncWriter->Close();
     ASSERT_TRUE(writeResult.IsSet());

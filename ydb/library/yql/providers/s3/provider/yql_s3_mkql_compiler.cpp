@@ -97,6 +97,7 @@ TRuntimeNode BuildSerializeCall(
 
     writer.Write("total_size_limit", ToString(config->SerializeMemoryLimit.GetOrDefault()));
     writer.Write("block_size_limit", ToString(config->BlockSizeMemoryLimit.GetOrDefault()));
+    writer.Write("key_flush_timeout_ms", ToString(config->OutputKeyFlushTimeout.Get().GetOrElse(config->DefaultOutputKeyFlushTimeout).MilliSeconds()));
 
     for (const auto& v : settings) {
         writer.Write(v.first, v.second);
@@ -110,7 +111,7 @@ TRuntimeNode BuildSerializeCall(
 
     input = ctx.ProgramBuilder.FromFlow(input);
     const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({input.GetStaticType()})});
-    return ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.SerializeFormat", {}, userType, format + settingsAsJson), {input}));
+    return ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.SerializeFormat", {}, userType, format + settingsAsJson), {input}), {});
 }
 
 TRuntimeNode SerializeForS3(const TS3SinkOutput& wrapper, const TS3Configuration::TPtr& config, NCommon::TMkqlBuildContext& ctx) {

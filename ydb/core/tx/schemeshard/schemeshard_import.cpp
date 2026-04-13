@@ -1,9 +1,10 @@
 #include "schemeshard_import.h"
 
 #include "schemeshard_impl.h"
-#include "schemeshard_index_build_info.h"
 #include "schemeshard_import_getters.h"
 #include "schemeshard_import_helpers.h"
+
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 
 #include <util/generic/xrange.h>
 
@@ -37,7 +38,7 @@ namespace {
 
         return state;
     }
-    
+
     ui32 GetTablePartsFromRequest(const Ydb::Table::CreateTableRequest& table) {
         switch (table.partitions_case()) {
             case Ydb::Table::CreateTableRequest::PartitionsCase::kUniformPartitions:
@@ -89,7 +90,7 @@ namespace {
         }
     }
 
-    void AddBuildIndexesItemProgress(TSchemeShard* ss, const TImportInfo& importInfo, ui32 itemIdx, 
+    void AddBuildIndexesItemProgress(TSchemeShard* ss, const TImportInfo& importInfo, ui32 itemIdx,
         i32 indexIdx, Ydb::Import::ImportItemProgress& itemProgress) {
 
         Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
@@ -292,7 +293,21 @@ void TSchemeShard::PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const T
     }
 }
 
+void TSchemeShard::AddImport(const TImportInfo::TPtr& importInfo) {
+    Imports[importInfo->Id] = importInfo;
+    ImportsByTime.emplace(importInfo->StartTime, importInfo->Id);
+    if (importInfo->Uid) {
+        ImportsByUid[importInfo->Uid] = importInfo;
+    }
+}
+
 void TSchemeShard::PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo& importInfo) {
+    if (importInfo.Uid) {
+        ImportsByUid.erase(importInfo.Uid);
+    }
+    ImportsByTime.erase(std::make_pair(importInfo.StartTime, importInfo.Id));
+    Imports.erase(importInfo.Id);
+
     for (ui32 itemIdx : xrange(importInfo.Items.size())) {
         db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Delete();
     }
@@ -307,6 +322,12 @@ void TSchemeShard::PersistImportState(NIceDb::TNiceDb& db, const TImportInfo& im
         NIceDb::TUpdate<Schema::Imports::StartTime>(importInfo.StartTime.Seconds()),
         NIceDb::TUpdate<Schema::Imports::EndTime>(importInfo.EndTime.Seconds()),
         NIceDb::TUpdate<Schema::Imports::Items>(importInfo.Items.size())
+    );
+}
+
+void TSchemeShard::PersistImportSettings(NIceDb::TNiceDb& db, const TImportInfo& importInfo) {
+    db.Table<Schema::Imports>().Key(importInfo.Id).Update(
+        NIceDb::TUpdate<Schema::Imports::Settings>(importInfo.SettingsSerialized)
     );
 }
 
@@ -338,6 +359,12 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
     if (item.Topic) {
         record.Update(
             NIceDb::TUpdate<Schema::ImportItems::Topic>(item.Topic->SerializeAsString())
+        );
+    }
+
+    if (item.SysView) {
+        record.Update(
+            NIceDb::TUpdate<Schema::ImportItems::SysView>(item.SysView->SerializeAsString())
         );
     }
 
@@ -448,18 +475,15 @@ void TSchemeShard::LoadTableProfiles(const NKikimrConfig::TTableProfilesConfig* 
 }
 
 bool NeedToBuildIndexes(const TImportInfo& importInfo, ui32 itemIdx) {
-    if (importInfo.Kind != TImportInfo::EKind::S3) {
-        return true;
-    }
     Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
     auto& item = importInfo.Items.at(itemIdx);
 
-    switch (importInfo.GetS3Settings().index_filling_mode()) {
-        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_BUILD:
+    switch (importInfo.GetIndexPopulationMode()) {
+        case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD:
             return true;
-        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_AUTO:
+        case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO:
             return item.ChildItems.empty();
-        case Ydb::Import::ImportFromS3Settings::INDEX_FILLING_MODE_IMPORT:
+        case Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT:
             return false;
         default:
             return true;

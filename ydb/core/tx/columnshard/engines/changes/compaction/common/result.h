@@ -20,6 +20,10 @@ public:
         return Chunks;
     }
 
+    void AddPreparedChunk(std::shared_ptr<IPortionDataChunk> chunk) {
+        Chunks.emplace_back(std::move(chunk));
+    }
+
     TString DebugString() const;
 
 };

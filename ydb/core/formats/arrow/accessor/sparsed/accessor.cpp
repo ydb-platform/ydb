@@ -69,8 +69,8 @@ std::shared_ptr<TSparsedArray> TSparsedArray::Make(const IChunkedArray& defaultA
     return std::shared_ptr<TSparsedArray>(new TSparsedArray(std::move(chunk), defaultValue, defaultArray.GetDataType()));
 }
 
-std::shared_ptr<arrow::Scalar> TSparsedArray::DoGetMaxScalar() const {
-    return Record.GetMaxScalar();
+TMinMax TSparsedArray::DoGetMinMaxScalars() const {
+    return Record.GetMinMaxScalars();
 }
 
 ui32 TSparsedArray::GetLastIndex(const std::shared_ptr<arrow::RecordBatch>& batch) {
@@ -126,7 +126,8 @@ TSparsedArrayChunk::TSparsedArrayChunk(
     const ui32 recordsCount, const std::shared_ptr<arrow::RecordBatch>& records, const std::shared_ptr<arrow::Scalar>& defaultValue)
     : RecordsCount(recordsCount)
     , Records(records)
-    , DefaultValue(defaultValue) {
+    , DefaultValue(defaultValue)
+{
     AFL_VERIFY(Records);
     AFL_VERIFY(records->num_columns() == 2);
     ColIndex = Records->GetColumnByName("index");
@@ -199,16 +200,13 @@ ui32 TSparsedArrayChunk::GetFirstIndexNotDefault() const {
     }
 }
 
-std::shared_ptr<arrow::Scalar> TSparsedArrayChunk::GetMaxScalar() const {
-    if (!ColValue->length()) {
-        return DefaultValue;
+TMinMax TSparsedArrayChunk::GetMinMaxScalars() const {
+    TMinMax value = TMinMax::Compute(ColValue);
+    if (value.IsNull() && DefaultValue) {
+        value.Min() = DefaultValue;
+        value.Max() = DefaultValue;
     }
-    auto minMax = NArrow::FindMinMaxPosition(ColValue);
-    auto currentScalar = NArrow::TStatusValidator::GetValid(ColValue->GetScalar(minMax.second));
-    if (!DefaultValue || ScalarCompare(DefaultValue, currentScalar) < 0) {
-        return currentScalar;
-    }
-    return DefaultValue;
+    return value;
 }
 
 TSparsedArrayChunk TSparsedArrayChunk::ApplyFilter(const TColumnFilter& filter) const {
@@ -223,7 +221,6 @@ TSparsedArrayChunk TSparsedArrayChunk::ApplyFilter(const TColumnFilter& filter) 
     ui32 skippedCount = 0;
     ui32 filteredCount = 0;
     bool currentAcceptance = filter.GetStartValue();
-    TColumnFilter filterNew = TColumnFilter::BuildAllowFilter();
     auto indexesBuilder = NArrow::MakeBuilder(arrow::uint32(), filter.GetFilteredCountVerified());
     auto valuesBuilder = NArrow::MakeBuilder(ColValue->type(), filter.GetFilteredCountVerified());
     for (auto it = filter.GetFilter().begin(); it != filter.GetFilter().end(); ++it) {
@@ -304,8 +301,7 @@ void TSparsedArray::TBuilder::AddChunk(
         auto* arr = static_cast<const arrow::UInt32Array*>(indexes.get());
         AFL_VERIFY(arr->Value(arr->length() - 1) < recordsCount)("val", arr->Value(arr->length() - 1))("count", recordsCount);
     }
-    Chunks.emplace_back(
-        recordsCount, arrow::RecordBatch::Make(BuildSchema(Type), indexes->length(), { indexes, values }), DefaultValue);
+    Chunks.emplace_back(recordsCount, arrow::RecordBatch::Make(BuildSchema(Type), indexes->length(), { indexes, values }), DefaultValue);
     RecordsCount += recordsCount;
     AFL_VERIFY(Chunks.size() == 1);
 }

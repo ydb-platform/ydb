@@ -6,7 +6,6 @@ using namespace NSchemeShardUT_Private;  // for helpers.h's Test*() methods
 Y_UNIT_TEST_SUITE(TSchemeShardSysViewTestReboots) {
     Y_UNIT_TEST(CreateSysView) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TestCreateSysView(runtime, ++t.TxId, "/MyRoot/.sys",
                               R"(
@@ -25,7 +24,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTestReboots) {
 
     Y_UNIT_TEST(DropSysView) {
         TTestWithReboots t;
-        t.GetTestEnvOptions().EnableRealSystemViewPaths(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TestCreateSysView(runtime, ++t.TxId, "/MyRoot/.sys",

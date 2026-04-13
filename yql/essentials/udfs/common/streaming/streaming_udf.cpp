@@ -18,6 +18,7 @@
 #include <util/system/sysstat.h>
 
 #include <functional>
+#include <utility>
 
 using namespace NKikimr;
 using namespace NUdf;
@@ -28,7 +29,7 @@ namespace {
 // should be managed externally.
 class TCyclicRWBuffer {
 public:
-    TCyclicRWBuffer(size_t capacity)
+    explicit TCyclicRWBuffer(size_t capacity)
         : Buffer_(capacity)
         , Finished_(false)
         , DataStart_(0)
@@ -174,7 +175,7 @@ class TStringListBufferedInputStream: public IInputStream {
 public:
     TStringListBufferedInputStream(TUnboxedValue rowsStream, const TString& delimiter, size_t bufferSizeBytes,
                                    TThreadSyncData& syncData, TSourcePosition pos)
-        : RowsStream_(rowsStream)
+        : RowsStream_(std::move(rowsStream))
         , Delimiter_(delimiter)
         , SyncData_(syncData)
         , Pos_(pos)
@@ -458,7 +459,7 @@ private:
 private:
     class MatcherCallback: public TKMPStreamMatcher<char>::ICallback {
     public:
-        MatcherCallback(bool& hasMatch)
+        explicit MatcherCallback(bool& hasMatch)
             : HasMatch_(hasMatch)
         {
         }
@@ -490,8 +491,8 @@ private:
 
 class TStreamingOutputListIterator {
 public:
-    TStreamingOutputListIterator(const TStreamingParams& params, const IValueBuilder* valueBuilder, TSourcePosition pos)
-        : StreamingParams_(params)
+    TStreamingOutputListIterator(TStreamingParams params, const IValueBuilder* valueBuilder, TSourcePosition pos)
+        : StreamingParams_(std::move(params))
         , ValueBuilder_(valueBuilder)
         , Pos_(pos)
     {
@@ -611,8 +612,8 @@ private:
 
 class TStreamingOutput: public TBoxedValue {
 public:
-    TStreamingOutput(const TStreamingParams& params, const IValueBuilder* valueBuilder, TSourcePosition pos)
-        : StreamingParams_(params)
+    TStreamingOutput(TStreamingParams params, const IValueBuilder* valueBuilder, TSourcePosition pos)
+        : StreamingParams_(std::move(params))
         , ValueBuilder_(valueBuilder)
         , Pos_(pos)
     {
@@ -684,7 +685,7 @@ private:
 
 class TStreamingProcess: public TBoxedValue {
 public:
-    TStreamingProcess(TSourcePosition pos)
+    explicit TStreamingProcess(TSourcePosition pos)
         : Pos_(pos)
     {
     }
@@ -729,7 +730,7 @@ private:
 
 class TStreamingProcessInline: public TBoxedValue {
 public:
-    TStreamingProcessInline(TSourcePosition pos)
+    explicit TStreamingProcessInline(TSourcePosition pos)
         : Pos_(pos)
     {
     }

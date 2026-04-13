@@ -3,8 +3,9 @@
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/protos/pqdata_transaction.pb.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
-
+#include <library/cpp/iterator/iterate_keys.h>
 
 namespace NKikimr::NSchemeShard::NPQState {
 
@@ -40,7 +41,51 @@ void FillPartition(NKikimrPQ::TPQTabletConfig::TPartition& partition, const TTop
         partition.MutableChildPartitionIds()->AddAlreadyReserved(children);
     }
     partition.SetTabletId(tabletId);
+    if (pq->CreationTimestamp) {
+        partition.SetCreationTimestampSeconds(pq->CreationTimestamp.Seconds());
+    }
 }
+
+struct TPartitionsGraphTraverse {
+    const TTopicInfo& PqGroup;
+    using TVisitedMap = THashMap<ui32, bool>;
+    TVector<ui32> Queue;
+    TVisitedMap Visited;
+
+    explicit TPartitionsGraphTraverse(const TTopicInfo& pqGroup)
+        : PqGroup(pqGroup)
+    {}
+
+    void Add(ui32 partitionId) {
+        if (!PqGroup.Partitions.contains(partitionId)) {
+            return;
+        }
+        auto [_, ins] = Visited.emplace(partitionId, false);
+        if (ins) {
+            Queue.push_back(partitionId);
+        }
+    }
+
+    auto Traverse() Y_LIFETIME_BOUND {
+        while (!Queue.empty()) {
+            const ui32 partitionId = Queue.back();
+            Queue.pop_back();
+            auto& visited = Visited[partitionId];
+            if (std::exchange(visited, true)) {
+                continue;
+            }
+            auto it = PqGroup.Partitions.FindPtr(partitionId);
+            if (it == nullptr) {
+                continue;
+            }
+            for (ui32 pp : (*it)->ParentPartitionIds) {
+                Add(pp);
+            }
+        }
+        return IterateKeys(Visited);
+    }
+};
+
 
 void MakePQTabletConfig(const TOperationContext& context,
                                 NKikimrPQ::TPQTabletConfig& config,
@@ -71,6 +116,7 @@ void MakePQTabletConfig(const TOperationContext& context,
     }
 
     THashSet<ui32> linkedPartitions;
+    TPartitionsGraphTraverse parentPartitions(pqGroup);
 
     for(const auto& pq : pqShard.Partitions) {
         config.AddPartitionIds(pq->PqId);
@@ -88,6 +134,10 @@ void MakePQTabletConfig(const TOperationContext& context,
             }
             linkedPartitions.insert(it->second->ParentPartitionIds.begin(), it->second->ParentPartitionIds.end());
         }
+        parentPartitions.Add(pq->PqId);
+    }
+    for (const ui32 p : parentPartitions.Traverse()) {
+        linkedPartitions.insert(p);
     }
 
     for(auto lp : linkedPartitions) {
@@ -186,48 +236,6 @@ THolder<TEvPersQueue::TEvProposeTransaction> MakeEvProposeTransaction(
     if (bootstrapConfig) {
         Y_ABORT_UNLESS(txType == TTxState::TxCreatePQGroup);
         event->PreSerializedData += bootstrapConfig->GetPreSerializedProposeTransaction();
-    }
-
-    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Propose configure PersQueue" <<
-                ", message: " << event->Record.ShortUtf8DebugString());
-
-    return event;
-}
-
-THolder<TEvPersQueue::TEvUpdateConfig> MakeEvUpdateConfig(
-        TTxId txId,
-        const TTopicInfo& pqGroup,
-        const TTopicTabletInfo& pqShard,
-        const TString& topicName,
-        const TString& topicPath,
-        const std::optional<TBootstrapConfigWrapper>& bootstrapConfig,
-        const TString& cloudId,
-        const TString& folderId,
-        const TString& databaseId,
-        const TString& databasePath,
-        const TString& monitoringProjectId,
-        TTxState::ETxType txType,
-        const TOperationContext& context
-    )
-{
-    auto event = MakeHolder<TEvPersQueue::TEvUpdateConfigBuilder>();
-    event->Record.SetTxId(ui64(txId));
-
-    MakePQTabletConfig(context,
-                       *event->Record.MutableTabletConfig(),
-                       pqGroup,
-                       pqShard,
-                       topicName,
-                       topicPath,
-                       cloudId,
-                       folderId,
-                       databaseId,
-                       databasePath,
-                       monitoringProjectId);
-    if (bootstrapConfig) {
-        Y_ABORT_UNLESS(txType == TTxState::TxCreatePQGroup);
-        event->PreSerializedData += bootstrapConfig->GetPreSerializedUpdateConfig();
     }
 
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -492,9 +500,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                             << ", Partitions size: " << pqShard->Partitions.size()
                             << ", at schemeshard: " << ssId);
 
-            THolder<NActors::IEventBase> event;
-            if (context.SS->EnablePQConfigTransactionsAtSchemeShard) {
-                event = MakeEvProposeTransaction(OperationId.GetTxId(),
+            THolder<NActors::IEventBase> event = MakeEvProposeTransaction(OperationId.GetTxId(),
                                                     *pqGroup,
                                                     *pqShard,
                                                     topicName,
@@ -507,21 +513,6 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                                                     monitoringProjectId,
                                                     txState->TxType,
                                                     context);
-            } else {
-                event = MakeEvUpdateConfig(OperationId.GetTxId(),
-                                            *pqGroup,
-                                            *pqShard,
-                                            topicName,
-                                            topicPath.PathString(),
-                                            bootstrapConfig,
-                                            cloudId,
-                                            folderId,
-                                            databaseId,
-                                            databasePath,
-                                            monitoringProjectId,
-                                            txState->TxType,
-                                            context);
-            }
 
             LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "Propose configure PersQueue"
@@ -591,6 +582,9 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                     info->MutableChildPartitionIds()->Reserve(pq->ChildPartitionIds.size());
                     for (const auto children : pq->ChildPartitionIds) {
                         info->MutableChildPartitionIds()->AddAlreadyReserved(children);
+                    }
+                    if (pq->CreationTimestamp) {
+                        info->SetCreationTimestampSeconds(pq->CreationTimestamp.Seconds());
                     }
                 }
             }

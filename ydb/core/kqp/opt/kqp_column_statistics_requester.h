@@ -1,4 +1,5 @@
 #pragma once
+#include "kqp_column_statistics_utils.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
@@ -63,15 +64,13 @@ private:
 
 private:
     THashMap<TExprNode::TPtr, TExprNode::TPtr> KqpTableByExprNode;
-    THashMap<TString, THashSet<TString>> ColumnsByTableName;
+    THashMap<TString, THashSet<TString>> CMColumnsByTableName;
+    THashMap<TString, THashSet<TString>> HistColumnsByTableName;
 
     //////////////////////////////////////////////////////////////
     /* for waiting response with column statistics */
-    struct TColumnStatisticsResponse : public NYql::IKikimrGateway::TGenericResult {
-        THashMap<TString, TOptimizerStatistics::TColumnStatMap> ColumnStatisticsByTableName;
-    };
     std::optional<TColumnStatisticsResponse> ColumnStatisticsResponse;
-    NThreading::TPromise<void> AsyncReadiness;
+    NThreading::TFuture<void> AsyncReadiness;
 
     //////////////////////////////////////////////////////////////
 

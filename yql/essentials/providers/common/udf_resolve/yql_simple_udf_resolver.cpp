@@ -20,17 +20,18 @@
 #include <util/system/guard.h>
 #include <util/system/spinlock.h>
 
-namespace NYql {
-namespace NCommon {
+#include <utility>
+
+namespace NYql::NCommon {
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
 class TSimpleUdfResolver: public IUdfResolver {
 public:
-    TSimpleUdfResolver(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, const TFileStoragePtr& fileStorage, bool useFakeMD5)
+    TSimpleUdfResolver(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, TFileStoragePtr fileStorage, bool useFakeMD5)
         : FunctionRegistry_(functionRegistry)
-        , FileStorage_(fileStorage)
+        , FileStorage_(std::move(fileStorage))
         , TypeInfoHelper_(new TTypeInfoHelper)
         , UseFakeMD5_(useFakeMD5)
     {
@@ -186,7 +187,7 @@ bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
                 }
 
                 TStringStream err;
-                mkqlUserType = BuildType(*udf.UserType, {env}, err); //
+                mkqlUserType = BuildType(*udf.UserType, TTypeBuilder(env), err);
                 if (!mkqlUserType) {
                     auto issue = TIssue(udf.Pos, TStringBuilder() << "Invalid user type for function: "
                                                                   << udf.Name << ", error: " << err.Str());
@@ -207,7 +208,7 @@ bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
 
             TFunctionTypeInfo funcInfo;
             auto status = functionRegistry.FindFunctionTypeInfo(udf.LangVer, env, typeInfoHelper, nullptr,
-                                                                udf.Name, mkqlUserType, udf.TypeConfig, NUdf::IUdfModule::TFlags::TypesOnly, {}, secureParamsProvider.get(),
+                                                                udf.Name, mkqlUserType, udf.TypeConfig, NUdf::IUdfModule::TFlags::TypesOnly, NUdf::TSourcePosition(), secureParamsProvider.get(),
                                                                 logProvider.Get(), &funcInfo);
             if (!status.IsOk()) {
                 ctx.AddError(TIssue(udf.Pos, TStringBuilder() << "Failed to find UDF function: " << udf.Name
@@ -246,5 +247,4 @@ bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
     return !hasErrors;
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

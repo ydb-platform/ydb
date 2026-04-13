@@ -35,7 +35,7 @@ void TConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 #endif
 
 #define SETUP_BS_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, config, auditMode)
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, config, auditMode, EEmptyDatabaseMode::EmptyDatabaseAllowed)
 
 #define SETUP_BOOTSTRAP_CLUSTER_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
     SETUP_RUNTIME_EVENT_METHOD(methodName,                 \
@@ -46,6 +46,7 @@ void TConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         requestType,                                       \
         YDB_API_DEFAULT_COUNTER_BLOCK(config, methodName), \
         auditMode,                                         \
+        EEmptyDatabaseMode::EmptyDatabaseAllowed,          \
         BOOTSTRAP_CLUSTER,                                 \
         TGrpcRequestOperationCall,                         \
         GRpcRequestProxyId_,                               \

@@ -346,9 +346,8 @@ Y_UNIT_TEST_SUITE(PgCatalog) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(PgDatabase, useSink) {
+    Y_UNIT_TEST(PgDatabase) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetQueryClient();
         auto settings = NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg);

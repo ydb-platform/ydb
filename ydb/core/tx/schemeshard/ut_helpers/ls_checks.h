@@ -110,6 +110,7 @@ namespace NLs {
 
 
     void IsTable(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsColumnTable(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsExternalTable(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsExternalDataSource(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsView(const NKikimrScheme::TEvDescribeSchemeResult& record);
@@ -119,6 +120,8 @@ namespace NLs {
     void IsSecret(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsStreamingQuery(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsDirectory(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsReplication(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsTransfer(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void CheckPathType(const NKikimrScheme::TEvDescribeSchemeResult& record, const NKikimrSchemeOp::EPathType pathType);
     TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount = false);
     TCheckFunc CheckColumnType(const ui64 columnIndex, const TString& columnTypename);
@@ -151,6 +154,7 @@ namespace NLs {
         NKikimrSchemeOp::TTTLSettings::EUnit columnUnit = NKikimrSchemeOp::TTTLSettings::UNIT_AUTO);
     TCheckFunc HasTtlDisabled();
     TCheckFunc IsBackupTable(bool value);
+    TCheckFunc IsRestoreTable(bool value);
     TCheckFunc ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode mode);
     TCheckFunc ReplicationState(NKikimrReplication::TReplicationState::StateCase state);
 
@@ -193,6 +197,7 @@ namespace NLs {
     TCheckFunc StreamFormat(NKikimrSchemeOp::ECdcStreamFormat format);
     TCheckFunc StreamState(NKikimrSchemeOp::ECdcStreamState state);
     TCheckFunc StreamVirtualTimestamps(bool value);
+    TCheckFunc StreamUserSIDs(bool value);
     TCheckFunc StreamResolvedTimestamps(const TDuration& value);
     TCheckFunc StreamSchemaChanges(bool value);
     TCheckFunc StreamAwsRegion(const TString& value);

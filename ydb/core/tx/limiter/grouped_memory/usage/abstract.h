@@ -126,6 +126,12 @@ public:
 
     [[nodiscard]] bool OnAllocated(
         std::shared_ptr<TAllocationGuard>&& guard, const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation);
+
+    TString DebugString() const {
+        return TStringBuilder() << "IAllocation{Identifier=" << Identifier
+                                << ";Memory=" << Memory
+                                << ";Allocated=" << (Allocated ? "true" : "false") << "}";
+    }
 };
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

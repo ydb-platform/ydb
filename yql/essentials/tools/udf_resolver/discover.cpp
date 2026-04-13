@@ -67,7 +67,7 @@ NYql::TResolveResult DoDiscover(const NYql::TResolve& inMsg, IMutableFunctionReg
             TFunctionTypeInfo funcInfo;
             if (!f.second.IsTypeAwareness) {
                 auto status = functionRegistry.FindFunctionTypeInfo(NYql::UnknownLangVersion, env, typeInfoHelper,
-                                                                    nullptr, funcName, nullptr, nullptr, NUdf::IUdfModule::TFlags::TypesOnly, {}, nullptr, logProvider.Get(), &funcInfo);
+                                                                    nullptr, funcName, nullptr, nullptr, NUdf::IUdfModule::TFlags::TypesOnly, NUdf::TSourcePosition(), nullptr, logProvider.Get(), &funcInfo);
 
                 if (!status.IsOk()) {
                     udfRes->SetError("Failed to resolve signature, error: " + status.GetError());

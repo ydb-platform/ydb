@@ -29,6 +29,7 @@
 #include <ydb/library/yql/providers/s3/proto/file_queue.pb.h>
 #include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 #include <ydb/library/yql/providers/s3/serializations/serialization_interval.h>
+#include <ydb/core/util/exceptions.h>
 
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
@@ -44,7 +45,6 @@
 #include <yql/essentials/public/udf/arrow/block_builder.h>
 #include <yql/essentials/public/udf/arrow/block_reader.h>
 #include <yql/essentials/public/udf/arrow/util.h>
-#include <yql/essentials/utils/exceptions.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/parser/pg_wrapper/interface/arrow.h>
 
@@ -138,6 +138,7 @@ namespace NYql::NDq {
 
 using namespace ::NActors;
 using namespace ::NYql::NS3Details;
+using namespace ::NKikimr;
 
 using ::NYql::NS3Lister::ES3PatternVariant;
 using ::NYql::NS3Lister::ES3PatternType;
@@ -276,7 +277,6 @@ class TS3ReadCoroImpl : public TActorCoroImpl, public TSourceErrorHandler {
     static constexpr ui64 MAX_ERROR_TEXT_SIZE = 256_KB;
 
 public:
-
     class THttpRandomAccessFile : public arrow::io::RandomAccessFile {
     public:
         THttpRandomAccessFile(TS3ReadCoroImpl* coro, size_t fileSize) : Coro(coro), FileSize(fileSize) {
@@ -355,10 +355,11 @@ public:
 
     class TCoroReadBuffer : public NDB::ReadBuffer {
     public:
-        TCoroReadBuffer(TS3ReadCoroImpl* coro)
-            : NDB::ReadBuffer(nullptr, 0ULL)
+        explicit TCoroReadBuffer(TS3ReadCoroImpl* coro)
+            : NDB::ReadBuffer(nullptr, 0)
             , Coro(coro)
-        { }
+        {}
+
     private:
         bool nextImpl() final {
             while (!Coro->InputFinished || !Coro->DeferredDataParts.empty()) {
@@ -375,16 +376,18 @@ public:
             }
             return false;
         }
-        TS3ReadCoroImpl *const Coro;
+
+        TS3ReadCoroImpl* const Coro;
         TString RawDataBuffer;
     };
 
     class TCoroDecompressorBuffer : public NDB::ReadBuffer {
     public:
-        TCoroDecompressorBuffer(TS3ReadCoroImpl* coro)
-            : NDB::ReadBuffer(nullptr, 0ULL)
+        explicit TCoroDecompressorBuffer(TS3ReadCoroImpl* coro)
+            : NDB::ReadBuffer(nullptr, 0)
             , Coro(coro)
-        { }
+        {}
+
     private:
         bool nextImpl() final {
             while (!Coro->DecompressedInputFinished || !Coro->DeferredDecompressedDataParts.empty()) {
@@ -399,16 +402,20 @@ public:
                     return true;
                 } else if (Coro->InputBuffer) {
                     Coro->Send(Coro->DecompressorActorId, new TEvS3Provider::TEvDecompressDataRequest(std::move(Coro->InputBuffer)));
+                    Coro->InputBuffer.clear();
+                    if (Coro->InputFinished && Coro->DeferredDataParts.empty()) {
+                        Coro->FinishDecompressor();
+                    }
                 }
             }
             return false;
         }
-        TS3ReadCoroImpl *const Coro;
+
+        TS3ReadCoroImpl* const Coro;
         TString RawDataBuffer;
     };
 
     void RunClickHouseParserOverHttp() {
-
         LOG_CORO_D("RunClickHouseParserOverHttp");
 
         std::unique_ptr<NDB::ReadBuffer> coroBuffer = AsyncDecompressing ? std::unique_ptr<NDB::ReadBuffer>(std::make_unique<TCoroDecompressorBuffer>(this)) : std::unique_ptr<NDB::ReadBuffer>(std::make_unique<TCoroReadBuffer>(this));
@@ -450,16 +457,16 @@ public:
     }
 
     void RunClickHouseParserOverFile() {
-
         LOG_CORO_D("RunClickHouseParserOverFile");
+        YQL_ENSURE(!AsyncDecompressing, "Async decompression is not supported for file input");
 
         TString fileName = Url.substr(7) + Path;
 
-        std::unique_ptr<NDB::ReadBuffer> coroBuffer = AsyncDecompressing ? std::unique_ptr<NDB::ReadBuffer>(std::make_unique<TCoroDecompressorBuffer>(this)) : std::unique_ptr<NDB::ReadBuffer>(std::make_unique<NDB::ReadBufferFromFile>(fileName));
+        std::unique_ptr<NDB::ReadBuffer> coroBuffer = std::unique_ptr<NDB::ReadBuffer>(std::make_unique<NDB::ReadBufferFromFile>(fileName));
         std::unique_ptr<NDB::ReadBuffer> decompressorBuffer;
         NDB::ReadBuffer* buffer = coroBuffer.get();
 
-        if (ReadSpec->Compression && !AsyncDecompressing) {
+        if (ReadSpec->Compression) {
             decompressorBuffer = MakeDecompressor(*buffer, ReadSpec->Compression);
             YQL_ENSURE(decompressorBuffer, "Unsupported " << ReadSpec->Compression << " compression.");
             buffer = decompressorBuffer.get();
@@ -498,10 +505,8 @@ public:
         bool Ready = false;
     };
 
-    struct TReadRangeCompare
-    {
-        bool operator() (const TEvS3Provider::TReadRange& lhs, const TEvS3Provider::TReadRange& rhs) const
-        {
+    struct TReadRangeCompare {
+        bool operator() (const TEvS3Provider::TReadRange& lhs, const TEvS3Provider::TReadRange& rhs) const {
             return (lhs.Offset < rhs.Offset) || (lhs.Offset == rhs.Offset && lhs.Length < rhs.Length);
         }
     };
@@ -515,10 +520,19 @@ public:
     std::map<ui64, ui64> RowGroupReaderIndex;
 
     static void OnResult(TActorSystem* actorSystem, TActorId selfId, TEvS3Provider::TReadRange range, ui64 cookie, IHTTPGateway::TResult&& result) {
-        if (!result.Issues) {
-            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvS3Provider::TEvReadResult2(range, std::move(result.Content)), 0, cookie));
-        } else {
+        if (result.Issues) {
             actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvS3Provider::TEvReadResult2(range, std::move(result.Issues)), 0, cookie));
+        } else if (const auto httpCode = result.Content.HttpResponseCode; httpCode < 200 || httpCode >= 300) {
+            const TString response = result.Content.Extract();
+            TString s3ErrorCode;
+            TString message;
+            if (!ParseS3ErrorResponse(response, s3ErrorCode, message)) {
+                message = response;
+            }
+            SubstGlobal(message, '\r', ' ');
+            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvS3Provider::TEvReadResult2(range, BuildIssues(httpCode, s3ErrorCode, message)), 0, cookie));
+        } else {
+            actorSystem->Send(new IEventHandle(selfId, TActorId{}, new TEvS3Provider::TEvReadResult2(range, std::move(result.Content)), 0, cookie));
         }
     }
 
@@ -532,7 +546,6 @@ public:
         }
         return inflight;
     }
-
 
     TReadCache& GetOrCreate(TEvS3Provider::TReadRange range) {
         auto it = RangeCache.find(range);
@@ -576,7 +589,6 @@ public:
     }
 
     void HandleEvent(TEvS3Provider::TEvReadResult2::THandle& event) {
-
         if (event.Get()->Failure) {
             ythrow TCodeLineException(NYql::NDqProto::StatusIds::INTERNAL_ERROR) << event.Get()->Issues.ToOneLineString();
         }
@@ -592,7 +604,7 @@ public:
         }
 
         if (it->second.Cookie != event.Cookie) {
-            LOG_CORO_W("Mistmatched cookie for range [" << readyRange.Offset << "-" << readyRange.Length << "], received " << event.Cookie << ", expected " << it->second.Cookie);
+            LOG_CORO_W("Mismatched cookie for range [" << readyRange.Offset << "-" << readyRange.Length << "], received " << event.Cookie << ", expected " << it->second.Cookie);
             return;
         }
 
@@ -612,7 +624,6 @@ public:
     }
 
     arrow::Result<std::shared_ptr<arrow::Buffer>> ReadAt(int64_t position, int64_t nbytes) {
-
         LOG_CORO_D("ReadAt STARTED [" << position << "-" << nbytes << "]");
         TEvS3Provider::TReadRange range { .Offset = position, .Length = nbytes };
         auto& cache = GetOrCreate(range);
@@ -635,7 +646,6 @@ public:
     }
 
     void RunCoroBlockArrowParserOverHttp() {
-
         LOG_CORO_D("RunCoroBlockArrowParserOverHttp");
 
         ui64 readerCount = 1;
@@ -804,7 +814,6 @@ public:
     }
 
     void RunCoroBlockArrowParserOverFile() {
-
         LOG_CORO_D("RunCoroBlockArrowParserOverFile");
 
         std::shared_ptr<arrow::io::RandomAccessFile> arrowFile =
@@ -886,14 +895,21 @@ public:
     )
 
     void ProcessOneEvent() {
-        if (!Paused && !DeferredDataParts.empty()) {
-            ExtractDataPart(*DeferredDataParts.front(), true);
-            DeferredDataParts.pop();
-            if (DeferredQueueSize) {
-                DeferredQueueSize->Dec();
+        if (!Paused) {
+            if (!DeferredDecompressedDataParts.empty()) {
+                return;
             }
-            return;
+
+            if (!DeferredDataParts.empty()) {
+                ExtractDataPart(*DeferredDataParts.front(), /* deferred */ true);
+                DeferredDataParts.pop();
+                if (DeferredQueueSize) {
+                    DeferredQueueSize->Dec();
+                }
+                return;
+            }
         }
+
         TAutoPtr<IEventHandle> ev(WaitForEvent().Release());
         StateFunc(ev);
     }
@@ -914,7 +930,7 @@ public:
             auto result = std::move(DeferredDecompressedDataParts.front());
             DeferredDecompressedDataParts.pop();
             if (result->Exception) {
-                throw result->Exception;
+                std::rethrow_exception(result->Exception);
             }
             return result->Data;
         }
@@ -956,7 +972,6 @@ public:
     void Handle(TEvS3Provider::TEvDecompressDataResult::TPtr& ev) {
         CpuTime += ev->Get()->CpuTime;
         DeferredDecompressedDataParts.push(std::move(ev->Release()));
-        
     }
 
     void Handle(TEvS3Provider::TEvDecompressDataFinish::TPtr& ev) {
@@ -965,7 +980,6 @@ public:
     }
 
     void Handle(TEvS3Provider::TEvDownloadFinish::TPtr& ev) {
-
         if (CurlResponseCode == CURLE_OK) {
             CurlResponseCode = ev->Get()->CurlResponseCode;
         }
@@ -1000,7 +1014,7 @@ public:
                 // can't retry here: fail download
                 RetryStuff->RetryState = nullptr;
                 InputFinished = true;
-                FinishDecompressor();
+                FinishDecompressor(/* force */ true);
                 LOG_CORO_W("ReadError: " << Issues.ToOneLineString() << ", LastOffset: " << LastOffset << ", LastData: " << GetLastDataAsText());
                 throw TS3ReadError(); // Don't pass control to data parsing, because it may validate eof and show wrong issues about incorrect data format
             }
@@ -1019,9 +1033,12 @@ public:
         } else {
             LOG_CORO_D("TEvDownloadFinish, LastOffset: " << LastOffset << ", Error: " << ServerReturnedError);
             InputFinished = true;
-            FinishDecompressor();
             if (ServerReturnedError) {
+                FinishDecompressor(/* force */ true);
                 throw TS3ReadError(); // Don't pass control to data parsing, because it may validate eof and show wrong issues about incorrect data format
+            }
+            if (DeferredDataParts.empty()) {
+                FinishDecompressor();
             }
         }
     }
@@ -1042,7 +1059,7 @@ public:
     void Handle(TEvents::TEvPoison::TPtr&) {
         LOG_CORO_D("TEvPoison");
         RetryStuff->Cancel();
-        FinishDecompressor(true);
+        FinishDecompressor(/* force */ true);
         throw TS3ReadAbort();
     }
 
@@ -1197,7 +1214,11 @@ private:
             FatalCode = static_cast<NYql::NDqProto::StatusIds::StatusCode>(err.Code);
             RetryStuff->Cancel();
         } catch (const std::exception& err) {
-            Issues.AddIssue(TIssue(err.what()));
+            Issues.AddIssue(err.what());
+            FatalCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
+            RetryStuff->Cancel();
+        } catch (...) {
+            Issues.AddIssue("Got unknown exception, please contact internal support");
             FatalCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
             RetryStuff->Cancel();
         }
@@ -1221,7 +1242,6 @@ private:
     }
 
     TString GetLastDataAsText() {
-
         if (LastData.empty()) {
             return "[]";
         }
@@ -1293,9 +1313,10 @@ private:
 
 class TS3ReadCoroActor : public TActorCoro {
 public:
-    TS3ReadCoroActor(THolder<TS3ReadCoroImpl> impl)
-        : TActorCoro(THolder<TActorCoroImpl>(impl.Release()))
+    explicit TS3ReadCoroActor(THolder<TS3ReadCoroImpl> impl)
+        : TActorCoro(std::move(impl))
     {}
+
 private:
     void Registered(TActorSystem* actorSystem, const TActorId& parent) override {
         TActorCoro::Registered(actorSystem, parent); // Calls TActorCoro::OnRegister and sends bootstrap event to ourself.
@@ -1310,6 +1331,7 @@ public:
         const TTxId& txId,
         IHTTPGateway::TPtr gateway,
         const THolderFactory& holderFactory,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const TString& url,
         const TS3Credentials& credentials,
         const TString& pattern,
@@ -1338,6 +1360,7 @@ public:
         , ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
+        , Alloc(std::move(alloc))
         , TxId(txId)
         , ComputeActorId(computeActorId)
         , RetryPolicy(retryPolicy)
@@ -1385,6 +1408,13 @@ public:
             RawInflightSize = TaskCounters->GetCounter("RawInflightSize");
         }
         IngressStats.Level = statsLevel;
+    }
+
+    ~TS3StreamReadActor() {
+        if (Alloc) {
+            TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            ClearMkqlData();
+        }
     }
 
     void Bootstrap() {
@@ -1489,10 +1519,7 @@ public:
         if (TaskCounters) {
             HttpInflightLimit->Add(Gateway->GetBuffersSizePerStream());
         }
-        LOG_D(
-            "TS3StreamReadActor",
-            "RegisterCoro with path " << object.GetPath() << " with pathIndex "
-                                      << pathIndex);
+        LOG_D("TS3StreamReadActor", "RegisterCoro with path " << object.GetPath() << " with pathIndex " << pathIndex);
 
         TActorId actorId;
         const auto& authInfo = Credentials.GetAuthInfo();
@@ -1544,11 +1571,13 @@ public:
         TrySendPathBatchRequest();
         return object;
     }
+
     void TrySendPathBatchRequest() {
         if (PathBatchQueue.size() < 2 && !IsFileQueueEmpty && !IsWaitingFileQueueResponse) {
             SendPathBatchRequest();
         }
     }
+
     void SendPathBatchRequest() {
         FileQueueEvents.Send(new TEvS3Provider::TEvGetNextBatch());
         IsWaitingFileQueueResponse = true;
@@ -1668,7 +1697,6 @@ private:
 
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
-
         if (Bootstrapped) {
             LOG_D("TS3StreamReadActor", "PassAway");
             if (Counters) {
@@ -1687,9 +1715,7 @@ private:
             LOG_T("TS3StreamReadActor", "PassAway FileQueue RemoveConfirmedEvents=" << FileQueueEvents.RemoveConfirmedEvents());
             FileQueueEvents.Unsubscribe();
 
-            ContainerCache.Clear();
-            ArrowTupleContainerCache.Clear();
-            ArrowRowContainerCache.Clear();
+            ClearMkqlData();
 
             MemoryQuotaManager->FreeQuota(ReadActorFactoryCfg.DataInflight);
         } else {
@@ -1900,9 +1926,17 @@ private:
         Send(ComputeActorId, ev.release());
     }
 
+    // Should be called with bound MKQL alloc
+    void ClearMkqlData() {
+        ContainerCache.Clear();
+        ArrowTupleContainerCache.Clear();
+        ArrowRowContainerCache.Clear();
+    }
+
     const TS3ReadActorFactoryConfig ReadActorFactoryCfg;
     const IHTTPGateway::TPtr Gateway;
     const THolderFactory& HolderFactory;
+    const std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     TPlainContainerCache ContainerCache;
     TPlainContainerCache ArrowTupleContainerCache;
     TPlainContainerCache ArrowRowContainerCache;
@@ -2105,6 +2139,7 @@ NDB::FormatSettings::TimestampFormat ToTimestampFormat(const TString& formatName
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     const TTypeEnvironment& typeEnv,
     const THolderFactory& holderFactory,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     IHTTPGateway::TPtr gateway,
     NS3::TSource&& params,
     ui64 inputIndex,
@@ -2133,7 +2168,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     const auto& settings = params.GetSettings();
     TString pathPattern = "*";
     ES3PatternVariant pathPatternVariant = ES3PatternVariant::FilePattern;
-    auto hasDirectories = std::find_if(paths.begin(), paths.end(), [](const TPath& a) {
+    const bool hasDirectories = std::find_if(paths.begin(), paths.end(), [](const TPath& a) {
                               return a.IsDirectory;
                           }) != paths.end();
     if (hasDirectories) {
@@ -2201,7 +2236,10 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 
     if (params.HasFormat() && params.HasRowType()) {
         const auto pb = std::make_unique<TProgramBuilder>(typeEnv, functionRegistry);
-        const auto outputItemType = NCommon::ParseTypeFromYson(TStringBuf(params.GetRowType()), *pb, Cerr);
+        const TStringBuf outputTypeYson(params.GetRowType());
+        TStringStream error;
+        const auto outputItemType = NCommon::ParseTypeFromYson(outputTypeYson, *pb, error);
+        YQL_ENSURE(outputItemType, "Failed to parse output type: " << outputTypeYson << ", reason: " << error.Str());
         YQL_ENSURE(outputItemType->IsStruct(), "Row type is not struct");
         const auto structType = static_cast<TStructType*>(outputItemType);
 
@@ -2253,17 +2291,26 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
             }
         }
 
-        readSpec->Format = params.GetFormat();
+        const TString format = params.GetFormat();
+        // csv format (no file header) is handled by csv_with_names parser with a virtual header from SCHEMA.
+        readSpec->Format = (format == "csv") ? "csv_with_names" : format;
 
         if (readSpec->Format == "csv_with_names") {
             readSpec->Settings.csv.empty_as_default = true;
         }
 
-        if (const auto it = settings.find("compression"); settings.cend() != it)
+        if (const auto it = settings.find("compression"); settings.cend() != it) {
             readSpec->Compression = it->second;
+        }
 
-        if (const auto it = settings.find("csvdelimiter"); settings.cend() != it && !it->second.empty())
+        if (const auto it = settings.find("csvdelimiter"); settings.cend() != it && !it->second.empty()) {
             readSpec->Settings.csv.delimiter = it->second[0];
+        }
+
+        if (format == "csv") {
+            const auto& columnNames = params.GetUserSchemaColumns();
+            readSpec->Settings.csv.file_column_names.assign(columnNames.begin(), columnNames.end());
+        }
 
         if (const auto it = settings.find("data.datetime.formatname"); settings.cend() != it) {
             readSpec->Settings.date_time_format_name = ToDateTimeFormat(it->second);
@@ -2309,28 +2356,37 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
 
 #undef SET_FLAG
 #undef SUPPORTED_FLAGS
+
+        // format=csv (no header row): SCHEMA supplies names via file_column_names. If with_names_use_header
+        // stays true, CSVRowInputFormat reads the first data line as header; values like "aa" are then
+        // treated as column names and NOT NULL columns from SCHEMA are reported missing.
+        if (format == "csv" && !readSpec->Settings.csv.file_column_names.empty()) {
+            readSpec->Settings.with_names_use_header = false;
+        }
+
         ui64 sizeLimit = std::numeric_limits<ui64>::max();
         if (const auto it = settings.find("sizeLimit"); settings.cend() != it) {
             sizeLimit = FromString<ui64>(it->second);
         }
 
-        const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), credentials, pathPattern, pathPatternVariant,
+        const auto actor = new TS3StreamReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, std::move(alloc), params.GetUrl(), credentials, pathPattern, pathPatternVariant,
                                                   std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
                                                   cfg, counters, taskCounters, fileSizeLimit, sizeLimit, rowsLimitHint, memoryQuotaManager,
                                                   params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta,
                                                   params.GetAsyncDecoding(), params.GetAsyncDecompressing(), allowLocalFiles);
 
         return {actor, actor};
-    } else {
-        ui64 sizeLimit = std::numeric_limits<ui64>::max();
-        if (const auto it = settings.find("sizeLimit"); settings.cend() != it)
-            sizeLimit = FromString<ui64>(it->second);
-
-        return CreateRawReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, params.GetUrl(), credentials, pathPattern, pathPatternVariant,
-                                            std::move(paths), addPathIndex, computeActorId, sizeLimit, retryPolicy,
-                                            cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint,
-                                            params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta, allowLocalFiles);
     }
+
+    ui64 sizeLimit = std::numeric_limits<ui64>::max();
+    if (const auto it = settings.find("sizeLimit"); settings.cend() != it) {
+        sizeLimit = FromString<ui64>(it->second);
+    }
+
+    return CreateRawReadActor(inputIndex, statsLevel, txId, std::move(gateway), holderFactory, std::move(alloc), params.GetUrl(), credentials, pathPattern, pathPatternVariant,
+                                        std::move(paths), addPathIndex, computeActorId, sizeLimit, retryPolicy,
+                                        cfg, counters, taskCounters, fileSizeLimit, rowsLimitHint,
+                                        params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta, allowLocalFiles);
 }
 
 } // namespace NYql::NDq

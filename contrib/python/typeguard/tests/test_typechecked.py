@@ -571,12 +571,13 @@ def test_debug_instrumentation(monkeypatch, capsys):
         ----------------------------------------------
         def foo(a: str) -> int:
             from typeguard import TypeCheckMemo
-            from typeguard._functions import check_argument_types, check_return_type
+            from typeguard._functions import check_argument_types_internal, \
+check_return_type_internal
             memo = TypeCheckMemo(globals(), locals())
-            check_argument_types('test_debug_instrumentation.<locals>.foo', \
+            check_argument_types_internal('test_debug_instrumentation.<locals>.foo', \
 {'a': (a, str)}, memo)
-            return check_return_type('test_debug_instrumentation.<locals>.foo', 6, \
-int, memo)
+            return check_return_type_internal('test_debug_instrumentation.<locals>.foo', \
+6, int, memo)
         ----------------------------------------------
         """
     )

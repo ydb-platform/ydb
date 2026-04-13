@@ -14,8 +14,8 @@ public:
     TTokenizer(const TTokenizer&) = delete;
     TTokenizer& operator=(const TTokenizer&) = delete;
 
-    TTokenizer(TTokenizer&&) = default;
-    TTokenizer& operator=(TTokenizer&&) = default;
+    TTokenizer(TTokenizer&&) noexcept = default;
+    TTokenizer& operator=(TTokenizer&&) noexcept = default;
 
     void Reset(TYPathBuf path);
 

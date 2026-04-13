@@ -8,8 +8,7 @@
 #include <string_view>
 #include <type_traits>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 //////////////////////////////////////////////////////////////////////////////
 // TStringRefBase
@@ -17,7 +16,7 @@ namespace NUdf {
 template <bool Const>
 class TStringRefBase {
 public:
-    typedef std::conditional_t<Const, const char*, char*> TDataType;
+    using TDataType = std::conditional_t<Const, const char*, char*>;
 
 protected:
     inline constexpr TStringRefBase() noexcept = default;
@@ -29,18 +28,26 @@ protected:
     }
 
 public:
+    // TStringRef is actually a std::string_view
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline constexpr operator std::string_view() const noexcept {
         return {Data_, Size_};
     }
+
+    // TStringRef is actually a TStringBuf
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline constexpr operator TStringBuf() const noexcept {
         return {Data_, Size_};
     }
+
     inline constexpr TDataType Data() const noexcept {
         return Data_;
     }
+
     inline constexpr ui32 Size() const noexcept {
         return Size_;
     }
+
     inline constexpr bool Empty() const noexcept {
         return Size_ == 0;
     }
@@ -48,9 +55,11 @@ public:
     inline constexpr TDataType data() const noexcept {
         return Data_;
     }
+
     inline constexpr ui32 size() const noexcept {
         return Size_;
     }
+
     inline constexpr bool empty() const noexcept {
         return Size_ == 0;
     }
@@ -58,7 +67,7 @@ public:
 protected:
     TDataType Data_ = nullptr;
     ui32 Size_ = 0U;
-    ui8 Reserved_[4] = {};
+    ui8 Reserved_[4] = {}; // NOLINT(modernize-avoid-c-arrays)
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -66,7 +75,7 @@ protected:
 //////////////////////////////////////////////////////////////////////////////
 class TMutableStringRef: public TStringRefBase<false> {
 public:
-    typedef TStringRefBase<false> TBase;
+    using TBase = TStringRefBase<false>;
 
     inline constexpr TMutableStringRef(TDataType data, ui32 size) noexcept
         : TBase(data, size)
@@ -81,7 +90,7 @@ UDF_ASSERT_TYPE_SIZE(TMutableStringRef, 16);
 //////////////////////////////////////////////////////////////////////////////
 class TStringRef: public TStringRefBase<true> {
 public:
-    typedef TStringRefBase<true> TBase;
+    using TBase = TStringRefBase<true>;
 
     inline constexpr TStringRef() noexcept = default;
 
@@ -90,24 +99,29 @@ public:
     {
     }
 
-    template <size_t Size>
+    // Allow a string literal construction
+    template <size_t Size> // NOLINTNEXTLINE(google-explicit-constructor, modernize-avoid-c-arrays)
     inline constexpr TStringRef(const char (&data)[Size]) noexcept
         : TBase(data, Size - 1)
     {
     }
 
+    // Readonly view is okay
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline constexpr TStringRef(const TMutableStringRef& buf) noexcept
         : TBase(buf.Data(), buf.Size())
     {
     }
 
-    template <typename TStringType>
+    // Readonly view is okay
+    template <typename TStringType> // NOLINTNEXTLINE(google-explicit-constructor)
     inline constexpr TStringRef(const TStringType& buf) noexcept
         : TBase(TGetData<TStringType>::Get(buf), TGetSize<TStringType>::Get(buf))
     {
     }
 
     template <size_t size>
+    // NOLINTNEXTLINE(modernize-avoid-c-arrays)
     inline static constexpr TStringRef Of(const char (&str)[size]) noexcept {
         return TStringRef(str);
     }
@@ -202,5 +216,4 @@ private:
 
 UDF_ASSERT_TYPE_SIZE(TStringRef, 16);
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

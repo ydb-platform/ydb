@@ -1,5 +1,6 @@
 #include <ydb/library/actors/core/events.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
+#include <cctype>
 #include "http_proxy.h"
 
 namespace NHttp {
@@ -477,4 +478,68 @@ bool IsReadableContent(TStringBuf contentType) {
     return false;
 }
 
+bool IsValidMethod(TStringBuf s) {
+    for (unsigned char c : s) {
+        if (c < 0x21 || c > 0x7E) {
+            return false;
+        }
+    }
+    return !s.empty();
 }
+
+bool IsValidURL(TStringBuf s) {
+    for (unsigned char c : s) {
+        if (c < 0x21 || c > 0x7E) {
+            return false;
+        }
+    }
+    return !s.empty();
+}
+
+bool IsValidProtocol(TStringBuf s) {
+    for (unsigned char c : s) {
+        if (c < 'A' || c > 'Z') {
+            return false;
+        }
+    }
+    return !s.empty();
+}
+
+bool IsValidVersion(TStringBuf s) {
+    for (unsigned char c : s) {
+        if (!std::isdigit(c) && c != '.') {
+            return false;
+        }
+    }
+    return !s.empty();
+}
+
+bool IsValidStatus(TStringBuf s) {
+    for (unsigned char c : s) {
+        if (!std::isdigit(c)) {
+            return false;
+        }
+    }
+    return !s.empty();
+}
+
+bool IsValidMessage(TStringBuf s) {
+    for (unsigned char c : s) {
+        if (c != '\t' && (c < 0x20 || c > 0x7E)) {
+            return false;
+        }
+    }
+    return true; // empty message is OK
+}
+
+bool IsValidHeaderData(TStringBuf s) {
+    for (unsigned char c : s) {
+        if (c != '\t' && (c < 0x20 || c > 0x7E)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+}
+

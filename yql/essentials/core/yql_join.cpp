@@ -375,7 +375,8 @@ namespace {
                 }
                 leftKeyType = leftKeyType->Cast<TListExprType>()->GetItemType();
             }
-            if (strictKeys && leftKeyType != rightKeyType) {
+            if (strictKeys && !IsSameAnnotation(*leftKeyType, *rightKeyType) &&
+                !leftKeyType->HasUniversal() && !rightKeyType->HasUniversal()) {
                 ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
                     TStringBuilder() << "Strict key type match requested, but keys have different types: ("
                     << leftKeys[i].first << "." << leftKeys[i].second
@@ -1970,8 +1971,8 @@ TExprNode::TPtr PreparePredicate(TExprNode::TPtr predicate, TExprContext& ctx) {
 
     for (ui32 i = 1; i < andParts.size(); ++i) {
         THashSet<const TExprNode*> found;
-        for (ui32 j = 0; j < andParts[i].size(); ++j) {
-            found.insert(andParts[i][j].Get());
+        for (const auto& part : andParts[i]) {
+            found.insert(part.Get());
         }
 
         // remove
@@ -1984,7 +1985,7 @@ TExprNode::TPtr PreparePredicate(TExprNode::TPtr predicate, TExprContext& ctx) {
         }
     }
 
-    if (commonParts.size() == 0) {
+    if (commonParts.empty()) {
         return originalPredicate;
     }
 
@@ -2001,22 +2002,22 @@ TExprNode::TPtr PreparePredicate(TExprNode::TPtr predicate, TExprContext& ctx) {
     }
 
     TExprNode::TListType orArgs;
-    for (ui32 i = 0; i < andParts.size(); ++i) {
+    for (auto& andPart : andParts) {
         TExprNode::TListType restAndArgs;
-        for (ui32 j = 0; j < andParts[i].size(); ++j) {
-            if (commonParts.contains(andParts[i][j].Get())) {
+        for (const auto& part : andPart) {
+            if (commonParts.contains(part.Get())) {
                 continue;
             }
 
-            restAndArgs.push_back(andParts[i][j]);
+            restAndArgs.push_back(part);
         }
 
-        if (restAndArgs.size() >= 1) {
+        if (!restAndArgs.empty()) {
             orArgs.push_back(ctx.NewCallable(predicate->Pos(), "And", std::move(restAndArgs)));
         }
     }
 
-    if (orArgs.size() >= 1) {
+    if (!orArgs.empty()) {
         andArgs.push_back(ctx.NewCallable(predicate->Pos(), "Or", std::move(orArgs)));
     }
 

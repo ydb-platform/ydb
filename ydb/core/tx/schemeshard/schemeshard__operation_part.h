@@ -390,7 +390,7 @@ ISubOperation::TPtr CreateDropTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropTable(TOperationId id, TTxState::ETxState state);
 bool CreateDropTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
 
-TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+ISubOperation::TPtr CreateBuildColumn(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr DropBuildColumn(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
@@ -514,6 +514,8 @@ ISubOperation::TPtr CreateAlterColumnTable(TOperationId id, const TTxTransaction
 ISubOperation::TPtr CreateAlterColumnTable(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateDropColumnTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropColumnTable(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateReadOnlyCopyColumnTable(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateReadOnlyCopyColumnTable(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateNewBSV(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateNewBSV(TOperationId id, TTxState::ETxState state);
@@ -608,6 +610,9 @@ ISubOperation::TPtr CreateInitializeBuildIndexMainTable(TOperationId id, TTxStat
 ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = {});
 ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, TTxState::ETxState state);
 
+ISubOperation::TPtr CreatePrepareIndexValidation(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreatePrepareIndexValidation(TOperationId id, TTxState::ETxState state);
+
 ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, TTxState::ETxState state);
 
@@ -677,6 +682,10 @@ ISubOperation::TPtr CreateAlterBlobDepot(TOperationId id, const TTxTransaction& 
 ISubOperation::TPtr CreateAlterBlobDepot(TOperationId id, TTxState::ETxState state);
 ISubOperation::TPtr CreateDropBlobDepot(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropBlobDepot(TOperationId id, TTxState::ETxState state);
+
+ISubOperation::TPtr CreateTruncateTable(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateTruncateTable(TOperationId id, TTxState::ETxState state);
+TVector<ISubOperation::TPtr> CreateConsistentTruncateTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 // Resource Pool
 // Create

@@ -2,8 +2,7 @@
 
 #include <util/generic/yexception.h>
 
-namespace NYql {
-namespace NCodegen {
+namespace NYql::NCodegen {
 
 ICodegen::TPtr ICodegen::Make(ETarget target, ESanitize sanitize) {
     Y_UNUSED(target);
@@ -21,5 +20,4 @@ bool ICodegen::IsCodegenAvailable() {
     return false;
 }
 
-} // namespace NCodegen
-} // namespace NYql
+} // namespace NYql::NCodegen

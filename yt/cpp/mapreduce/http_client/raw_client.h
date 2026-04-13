@@ -6,6 +6,10 @@
 #include <yt/cpp/mapreduce/interface/client_method_options.h>
 #include <yt/cpp/mapreduce/interface/raw_client.h>
 
+#include <yt/yt/core/http/public.h>
+
+#include <mutex>
+
 namespace NYT::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -289,12 +293,12 @@ public:
     std::unique_ptr<IInputStream> ReadTable(
         const TTransactionId& transactionId,
         const TRichYPath& path,
-        const TMaybe<TFormat>& format,
+        const TFormat& format,
         const TTableReaderOptions& options = {}) override;
 
     std::unique_ptr<IInputStream> ReadTablePartition(
         const TString& cookie,
-        const TMaybe<TFormat>& format,
+        const TFormat& format,
         const TTablePartitionReaderOptions& options = {}) override;
 
     std::unique_ptr<IInputStream> ReadBlobTable(
@@ -404,7 +408,12 @@ public:
     IRawClientPtr Clone(const TClientContext& context) override;
 
 private:
+    void InitPingClient();
+
+private:
     const TClientContext Context_;
+    NHttp::IClientPtr PingHttpClient_;
+    std::once_flag PingClientInitOnceFlag_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

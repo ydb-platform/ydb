@@ -16,7 +16,7 @@ class TVisitorTransformerBase: public TSyncTransformerBase {
 public:
     using THandler = std::function<TStatus(const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&)>;
 
-    TVisitorTransformerBase(bool failOnUnknown)
+    explicit TVisitorTransformerBase(bool failOnUnknown)
         : FailOnUnknown_(failOnUnknown)
     {
     }

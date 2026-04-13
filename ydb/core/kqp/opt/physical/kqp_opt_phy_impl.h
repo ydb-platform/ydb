@@ -11,6 +11,8 @@ NYql::NNodes::TExprBase BuildReadNode(NYql::TPositionHandle pos, NYql::TExprCont
 
 NYql::NNodes::TCoAtom GetReadTablePath(NYql::NNodes::TExprBase input, bool isReadRanges);
 
+NYql::TKqpReadTableFullTextIndexSettings GetFullTextIndexSettings(NYql::NNodes::TExprBase input);
+
 NYql::TKqpReadTableSettings GetReadTableSettings(NYql::NNodes::TExprBase input, bool isReadRanges);
 
 NYql::NNodes::TMaybeNode<NYql::NNodes::TDqPhyPrecompute> BuildLookupKeysPrecompute(

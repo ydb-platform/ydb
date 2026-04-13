@@ -185,8 +185,6 @@ You can extract row data (`query.Row`) using the following methods:
   
  {% endlist %}
 
-{% include [scan_query.md](../_includes/steps/08_scan_query.md) %}
-
 {% note warning %}
 
 If the expected query result is very large, avoid loading all data into memory using helper methods like `query.Client.Query` or `query.Client.QueryResultSet`. These methods return fully materialized results, storing all rows from the server in local client memory. Large result sets can cause an [OOM](https://en.wikipedia.org/wiki/Out_of_memory) problem.

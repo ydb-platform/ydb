@@ -1,5 +1,7 @@
 #include "agent_impl.h"
 
+#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 
@@ -8,8 +10,8 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::InitS3(const TString& name) {
         if (S3BackendSettings) {
             auto& settings = S3BackendSettings->GetSettings();
-            auto externalStorageConfig = NWrappers::IExternalStorageConfig::Construct(settings);
-            S3WrapperId = Register(NWrappers::CreateS3Wrapper(externalStorageConfig->ConstructStorageOperator()));
+            auto externalStorageConfig = NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, settings);
+            S3WrapperId = Register(NWrappers::CreateStorageWrapper(externalStorageConfig->ConstructStorageOperator()));
             S3BasePath = TStringBuilder() << settings.GetObjectKeyPattern() << '/' << name;
         }
     }
@@ -83,7 +85,7 @@ namespace NKikimr::NBlobDepot {
         auto request = std::make_unique<NWrappers::TEvExternalStorage::TEvGetObjectRequest>(
             Aws::S3::Model::GetObjectRequest()
                 .WithBucket(Agent.S3BackendSettings->GetSettings().GetBucket())
-                .WithKey(std::move(key))
+                .WithKey(key)
                 .WithRange(TStringBuilder() << "bytes=" << offset << '-' << offset + len - 1)
         );
         TActivationContext::Send(new IEventHandle(Agent.S3WrapperId, actorId, request.release(), IEventHandle::FlagTrackDelivery));

@@ -56,10 +56,13 @@ PEERDIR(
     ydb/core/blobstorage/bridge/syncer
     ydb/core/blobstorage/common
     ydb/core/blobstorage/crypto
+    ydb/core/blobstorage/ddisk
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/pdisk
+    ydb/core/blobstorage/vdisk
     ydb/core/control/lib
     ydb/library/pdisk_io
+    ydb/library/protobuf_printer
     ydb/library/yaml_config
 )
 

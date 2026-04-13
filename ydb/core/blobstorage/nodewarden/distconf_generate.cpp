@@ -26,8 +26,8 @@ namespace NKikimr::NStorage {
                     return "missing ErasureSpecies in SelfManagementConfig";
                 }
 
-                const auto species = TBlobStorageGroupType::ErasureSpeciesByName(smConfig.GetErasureSpecies());
-                if (species == TBlobStorageGroupType::ErasureSpeciesCount) {
+                TBlobStorageGroupType::EErasureSpecies species;
+                if (!TBlobStorageGroupType::ParseErasureName(species, smConfig.GetErasureSpecies())) {
                     throw TExConfigError() << "invalid erasure specified for static group"
                         << " Erasure# " << smConfig.GetErasureSpecies();
                 }
@@ -483,11 +483,11 @@ namespace NKikimr::NStorage {
             return s.Str();
         };
 
-        TString error;
+        NBsController::TGroupMapperError error;
         const ui32 groupSizeInUnits = 1; // static groups are always single-unit
         if (!mapper.AllocateGroup(groupId.GetRawId(), groupDefinition, replacedDisks, forbid,
                 groupSizeInUnits, requiredSpace, false, {}, error)) {
-            throw TExConfigError() << "group allocation failed Error# " << error
+            throw TExConfigError() << "group allocation failed Error# " << error.ErrorMessage
                 << " groupDefinition# " << dumpGroupDefinition();
         }
 

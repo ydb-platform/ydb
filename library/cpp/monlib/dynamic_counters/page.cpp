@@ -1,6 +1,7 @@
 #include "page.h"
 #include "encode.h"
 
+#include <library/cpp/html/escape/escape.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
@@ -70,8 +71,8 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
                 } else if (name == "@set") {
                     set = value;
                 }
-            } else {
-                parts.push_back(part);
+            } else if (name == "labels") {
+                StringSplitter(value).Split(',').SkipEmpty().AddTo(&parts);
             }
             return true;
         });
@@ -142,7 +143,7 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
     }
 
     auto encoder = CreateEncoder(&out, *format, nameLabel, visibility);
-    if (set && FilterCallback) {
+    if (FilterCallback) {
         encoder = FilterCallback(set, std::move(encoder));
     }
 
@@ -168,13 +169,51 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
     IOutputStream& out = request.Output();
     TStringBuf params = GetParams(request);
     TStringBuilder base;
-    base << Path << '?';
-    if (!params.empty()) {
-        base << params << '&';
+    TString labels;
+    bool wasParam = false;
+    base << Path;
+    StringSplitter(params).Split('&').SkipEmpty().Consume([&](TStringBuf part) {
+        TStringBuf name;
+        TStringBuf value;
+        part.Split('=', name, value);
+        if (name == "labels") {
+            if (!labels.empty()) {
+                labels += ',';
+            }
+            labels += value;
+        }
+        if (name != "labels") {
+            if (!wasParam) {
+                base << '?';
+                wasParam = true;
+            } else {
+                base << '&';
+            }
+            base << part;
+        }
+    });
+
+    if (!labels.empty()) {
+        if (!wasParam) {
+            base << '?';
+            wasParam = true;
+        } else {
+            base << '&';
+        }
+        base << "labels=" << labels;
     }
+
+    const TString escapedBase = NHtml::EscapeAttributeValue(base);
+
     HTML(out) {
         DIV() {
-            out << "<a href='" << base << "@format=json'>Counters as JSON</a>";
+            out << "<a href=\"" << escapedBase;
+            if (!wasParam) {
+                out << '?';
+            } else {
+                out << "&amp;";
+            }
+            out << "@format=json\">Counters as JSON</a>";
             out << " for Solomon";
         }
 
@@ -188,7 +227,18 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
                     auto escValue = value;
                     Quote(escName);
                     Quote(escValue);
-                    out << "\n<a href='" << base << escName << '=' << escValue << "'>" << name << " " << value << "</a>";
+                    out << "\n<a href=\"" << escapedBase;
+                    if (labels.empty()) {
+                        if (!wasParam) {
+                            out << '?';
+                        } else {
+                            out << "&amp;";
+                        }
+                        out << "labels=";
+                    } else {
+                        out << ',';
+                    }
+                    out << escName << '=' << escValue << "\">" << NHtml::EscapeText(name) << " " << NHtml::EscapeText(value) << "</a>";
                 }
             });
         }

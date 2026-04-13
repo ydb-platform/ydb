@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dq_tasks_counters.h"
+#include "dq_channel_service.h"
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
@@ -152,6 +153,7 @@ struct TDqTaskRunnerContext {
     NKikimr::NMiniKQL::TCallableVisitFuncProvider FuncProvider;
     NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv = nullptr;
     std::shared_ptr<NKikimr::NMiniKQL::TComputationPatternLRUCache> PatternCache;
+    std::shared_ptr<IDqChannelService> ChannelService;
 };
 
 class IDqTaskRunnerExecutionContext {
@@ -214,7 +216,6 @@ struct TDqTaskRunnerSettings {
     NDqProto::EDqStatsMode StatsMode = NDqProto::DQ_STATS_MODE_NONE;
     bool TerminateOnError = false;
     bool UseCacheForLLVM = true;
-    TDqComputeActorWatermarks* WatermarksTracker = nullptr;
     TString OptLLVM = "";
     THashMap<TString, TString> SecureParams;
     THashMap<TString, TString> TaskParams;
@@ -428,6 +429,10 @@ public:
         return Task_->GetValuePackerVersion();
     }
 
+    ui32 GetDqChannelVersion() const {
+        return Task_->GetDqChannelVersion();
+    }
+
 private:
 
     // external callback to retrieve parameter value.
@@ -445,7 +450,8 @@ public:
     virtual ui64 GetTaskId() const = 0;
 
     virtual void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
-        const IDqTaskRunnerExecutionContext& execCtx) = 0;
+        const IDqTaskRunnerExecutionContext& execCtx,
+        TDqComputeActorWatermarks* watermarksTracker = nullptr) = 0;
     virtual ERunStatus Run() = 0;
 
     virtual bool HasEffects() const = 0;
@@ -455,6 +461,7 @@ public:
     virtual IDqOutputChannel::TPtr GetOutputChannel(ui64 channelId) = 0;
     virtual IDqAsyncOutputBuffer::TPtr GetSink(ui64 outputIndex) = 0;
     virtual std::optional<std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> GetInputTransform(ui64 inputIndex) = 0;
+    virtual TDqComputeActorWatermarks *GetInputTransformWatermarksTracker(ui64 inputId) = 0;
     virtual std::pair<IDqAsyncOutputBuffer::TPtr, IDqOutputConsumer::TPtr> GetOutputTransform(ui64 outputIndex) = 0;
 
     virtual IRandomProvider* GetRandomProvider() const = 0;
@@ -484,6 +491,9 @@ public:
 
     virtual void SetSpillerFactory(std::shared_ptr<NKikimr::NMiniKQL::ISpillerFactory> spillerFactory) = 0;
     virtual TString GetOutputDebugString() = 0;
+    TInstant LastFetchTime;
+    ERunStatus LastFetchStatus = ERunStatus::PendingInput;
+
 };
 
 TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(

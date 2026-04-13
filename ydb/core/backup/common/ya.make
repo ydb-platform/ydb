@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     checksum.cpp
     encryption.cpp
+    fields_wrappers.cpp
     metadata.cpp
 )
 

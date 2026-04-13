@@ -6,6 +6,7 @@
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/dq/runtime/dq_async_stats.h>
+#include <ydb/library/yql/dq/runtime/dq_channel_service.h>
 #include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <yql/essentials/public/issue/yql_issue.h>
@@ -20,6 +21,7 @@ namespace NDq {
 
 struct TEvDqCompute {
     struct TEvState : public NActors::TEventPB<TEvState, NDqProto::TEvComputeActorState, TDqComputeEvents::EvState> {};
+    struct TEvNodeState : public NActors::TEventPB<TEvNodeState, NDqProto::TEvNodeState, TDqComputeEvents::EvNodeState> {};
     struct TEvStateRequest : public NActors::TEventPB<TEvStateRequest, NDqProto::TEvComputeStateRequest, TDqComputeEvents::EvStateRequest> {};
 
     struct TEvResumeExecution : public NActors::TEventLocal<TEvResumeExecution, TDqComputeEvents::EvResumeExecution> {
@@ -202,6 +204,18 @@ struct TEvDqCompute {
         const TIssues Issues;
         const ui64 Generation;
     };
+
+    struct TEvChannelDiscoveryV2 : public NActors::TEventPB<TEvChannelDiscoveryV2, NDqProto::TEvChannelDiscoveryV2,
+        TDqComputeEvents::EvChannelDiscoveryV2> {};
+
+    struct TEvChannelDataV2 : public NActors::TEventPB<TEvChannelDataV2, NDqProto::TEvChannelDataV2,
+        TDqComputeEvents::EvChannelDataV2> {};
+
+    struct TEvChannelAckV2 : public NActors::TEventPB<TEvChannelAckV2, NDqProto::TEvChannelAckV2,
+        TDqComputeEvents::EvChannelAckV2> {};
+
+    struct TEvChannelUpdateV2 : public NActors::TEventPB<TEvChannelUpdateV2, NDqProto::TEvChannelUpdateV2,
+        TDqComputeEvents::EvChannelUpdateV2> {};
 };
 
 struct TDqExecutionSettings {
@@ -277,6 +291,8 @@ struct TComputeRuntimeSettings {
     inline TCollectStatsLevel GetCollectStatsLevel() const {
         return StatsModeToCollectStatsLevel(StatsMode);
     }
+
+    std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
 };
 
 struct TGuaranteeQuotaManager : public IMemoryQuotaManager {

@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/library/signals/owner.h>
 #include <ydb/core/tx/columnshard/counters/portions.h>
+#include <ydb/core/tx/columnshard/counters/histogram_borders.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -12,11 +13,6 @@ namespace NKikimr::NOlap::NChanges {
 class TGeneralCompactionCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
-    NMonitoring::TDynamicCounters::TCounterPtr FullBlobsAppendCount;
-    NMonitoring::TDynamicCounters::TCounterPtr FullBlobsAppendBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr SplittedBlobsAppendCount;
-    NMonitoring::TDynamicCounters::TCounterPtr SplittedBlobsAppendBytes;
-
     TPortionGroupCounters RepackPortions;
     TPortionGroupCounters RepackInsertedPortions;
     TPortionGroupCounters RepackCompactedPortions;
@@ -24,16 +20,27 @@ private:
     THashMap<ui32, TPortionGroupCounters> RepackPortionsToLevel;
     THashMap<ui32, TPortionGroupCounters> MovePortionsFromLevel;
     THashMap<ui32, TPortionGroupCounters> MovePortionsToLevel;
-    NMonitoring::THistogramPtr HistogramRepackPortionsRawBytes;
-    NMonitoring::THistogramPtr HistogramRepackPortionsBlobBytes;
+    NColumnShard::TDeriviativeHistogram HistogramRepackPortionsRawBytes;
+    NColumnShard::TDeriviativeHistogram HistogramRepackPortionsBlobBytes;
     NMonitoring::THistogramPtr HistogramRepackPortionsCount;
+    NMonitoring::THistogramPtr HistogramRepackPortionsRows;
+    NMonitoring::THistogramPtr HistogramBlobsWrittenCount;
+    NColumnShard::TDeriviativeHistogram HistogramBlobsWrittenBytes;
+    NColumnShard::TDeriviativeHistogram HistogramCompactionDuration;
+    NColumnShard::TDeriviativeHistogram HistogramTaskGenerationDuration;
+    NMonitoring::THistogramPtr HistogramTaskGenerationCount;
 
 public:
     TGeneralCompactionCounters()
         : TBase("GeneralCompaction")
         , RepackPortions("ALL", CreateSubGroup("action", "repack"))
         , RepackInsertedPortions("INSERTED", CreateSubGroup("action", "repack"))
-        , RepackCompactedPortions("COMPACTED", CreateSubGroup("action", "repack")) {
+        , RepackCompactedPortions("COMPACTED", CreateSubGroup("action", "repack"))
+        , HistogramRepackPortionsRawBytes("GeneralCompaction", "RepackPortions/Raw/Bytes", "", NColumnShard::THistorgamBorders::BytesBorders)
+        , HistogramRepackPortionsBlobBytes("GeneralCompaction", "RepackPortions/Blob/Bytes", "", NColumnShard::THistorgamBorders::BytesBorders)
+        , HistogramBlobsWrittenBytes("GeneralCompaction", "BlobsWritten/Bytes", "", NColumnShard::THistorgamBorders::BytesBorders)
+        , HistogramCompactionDuration("GeneralCompaction", "Compaction/Duration", "", NColumnShard::THistorgamBorders::TimeBordersMicroseconds)
+        , HistogramTaskGenerationDuration("GeneralCompaction", "TaskGeneration/Duration", "", NColumnShard::THistorgamBorders::TimeBordersMicroseconds) {
         for (ui32 i = 0; i < 10; ++i) {
             RepackPortionsFromLevel.emplace(
                 i, TPortionGroupCounters("level=" + ::ToString(i), CreateSubGroup("action", "repack").CreateSubGroup("direction", "from")));
@@ -44,21 +51,18 @@ public:
             MovePortionsToLevel.emplace(
                 i, TPortionGroupCounters("level=" + ::ToString(i), CreateSubGroup("action", "move").CreateSubGroup("direction", "to")));
         }
-        FullBlobsAppendCount = TBase::GetDeriviative("FullBlobsAppend/Count");
-        FullBlobsAppendBytes = TBase::GetDeriviative("FullBlobsAppend/Bytes");
-        SplittedBlobsAppendCount = TBase::GetDeriviative("SplittedBlobsAppend/Count");
-        SplittedBlobsAppendBytes = TBase::GetDeriviative("SplittedBlobsAppend/Bytes");
-        HistogramRepackPortionsRawBytes = TBase::GetHistogram("RepackPortions/Raw/Bytes", NMonitoring::ExponentialHistogram(18, 2, 256 * 1024));
-        HistogramRepackPortionsBlobBytes =
-            TBase::GetHistogram("RepackPortions/Blob/Bytes", NMonitoring::ExponentialHistogram(18, 2, 256 * 1024));
-        HistogramRepackPortionsCount = TBase::GetHistogram("RepackPortions/Count", NMonitoring::LinearHistogram(15, 10, 16));
+        HistogramRepackPortionsCount = TBase::GetHistogram("RepackPortions/Count", NMonitoring::ExponentialHistogram(15, 2));
+        HistogramRepackPortionsRows = TBase::GetHistogram("RepackPortions/Rows", NMonitoring::ExponentialHistogram(25, 2));
+        HistogramBlobsWrittenCount = TBase::GetHistogram("BlobsWritten/Count", NMonitoring::ExponentialHistogram(15, 2));
+        HistogramTaskGenerationCount = TBase::GetHistogram("TaskGeneration/Count", NMonitoring::LinearHistogram(20, 0, 1));
     }
 
     static void OnRepackPortions(const TSimplePortionsGroupInfo& portions) {
         Singleton<TGeneralCompactionCounters>()->RepackPortions.OnData(portions);
         Singleton<TGeneralCompactionCounters>()->HistogramRepackPortionsCount->Collect(portions.GetCount());
-        Singleton<TGeneralCompactionCounters>()->HistogramRepackPortionsBlobBytes->Collect(portions.GetBlobBytes());
-        Singleton<TGeneralCompactionCounters>()->HistogramRepackPortionsRawBytes->Collect(portions.GetRawBytes());
+        Singleton<TGeneralCompactionCounters>()->HistogramRepackPortionsBlobBytes.Collect(portions.GetBlobBytes());
+        Singleton<TGeneralCompactionCounters>()->HistogramRepackPortionsRawBytes.Collect(portions.GetRawBytes());
+        Singleton<TGeneralCompactionCounters>()->HistogramRepackPortionsRows->Collect(portions.GetRecordsCount());
     }
 
     static void OnRepackPortionsByLevel(const THashMap<ui32, TSimplePortionsGroupInfo>& portions, const ui32 targetLevelIdx) {
@@ -89,14 +93,18 @@ public:
         Singleton<TGeneralCompactionCounters>()->RepackCompactedPortions.OnData(portions);
     }
 
-    static void OnSplittedBlobAppend(const i64 bytes) {
-        Singleton<TGeneralCompactionCounters>()->SplittedBlobsAppendCount->Add(1);
-        Singleton<TGeneralCompactionCounters>()->SplittedBlobsAppendBytes->Add(bytes);
+    static void OnCompactionWriteIndexCompleted( const ui64 blobsWritten, const ui64 bytesWritten) {
+        Singleton<TGeneralCompactionCounters>()->HistogramBlobsWrittenCount->Collect(blobsWritten);
+        Singleton<TGeneralCompactionCounters>()->HistogramBlobsWrittenBytes.Collect(bytesWritten);
     }
 
-    static void OnFullBlobAppend(const i64 bytes) {
-        Singleton<TGeneralCompactionCounters>()->FullBlobsAppendCount->Add(1);
-        Singleton<TGeneralCompactionCounters>()->FullBlobsAppendBytes->Add(bytes);
+    static void OnCompactionFinished(const ui64 durationMicroSeconds) {
+        Singleton<TGeneralCompactionCounters>()->HistogramCompactionDuration.Collect(durationMicroSeconds);
+    }
+
+    static void OnTasksGeneratred(const ui64 durationMicroSeconds, const ui64 count) {
+        Singleton<TGeneralCompactionCounters>()->HistogramTaskGenerationDuration.Collect(durationMicroSeconds);
+        Singleton<TGeneralCompactionCounters>()->HistogramTaskGenerationCount->Collect(count);
     }
 };
 

@@ -8,9 +8,7 @@
 
 #include <arrow/compute/kernel.h>
 
-namespace NKikimr {
-
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using TFunctionPtr = NUdf::TUnboxedValuePod (*)(const NUdf::TUnboxedValuePod* args);
 
@@ -61,7 +59,7 @@ class TKernelFamily {
 public:
     const arrow::compute::FunctionOptions* FunctionOptions;
 
-    TKernelFamily(const arrow::compute::FunctionOptions* functionOptions = nullptr)
+    explicit TKernelFamily(const arrow::compute::FunctionOptions* functionOptions = nullptr)
         : FunctionOptions(functionOptions)
     {
     }
@@ -118,7 +116,7 @@ using TKernelFamilyMap = std::unordered_map<TString, std::unique_ptr<TKernelFami
 
 class TKernelFamilyBase: public TKernelFamily {
 public:
-    TKernelFamilyBase(const arrow::compute::FunctionOptions* functionOptions = nullptr);
+    explicit TKernelFamilyBase(const arrow::compute::FunctionOptions* functionOptions = nullptr);
 
     const TKernel* FindKernel(const NUdf::TDataTypeId* argTypes, size_t argTypesCount, NUdf::TDataTypeId returnType) const final;
     TVector<const TKernel*> GetAllKernels() const final;
@@ -131,7 +129,7 @@ private:
 
 class IBuiltinFunctionRegistry: public TThrRefBase, private TNonCopyable {
 public:
-    typedef TIntrusivePtr<IBuiltinFunctionRegistry> TPtr;
+    using TPtr = TIntrusivePtr<IBuiltinFunctionRegistry>;
 
     virtual ui64 GetMetadataEtag() const = 0;
 
@@ -154,5 +152,4 @@ public:
     virtual TVector<std::pair<TString, const TKernelFamily*>> GetAllKernelFamilies() const = 0;
 };
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

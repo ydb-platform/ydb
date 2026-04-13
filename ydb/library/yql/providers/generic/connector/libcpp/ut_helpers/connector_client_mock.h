@@ -33,8 +33,9 @@ namespace NYql::NConnector::NTest {
 #define SETTER(name, protoName) EXPR_SETTER(name, Y_CAT(set_, protoName))
 
 #define SUBPROTO_BUILDER(name, fieldExpr, protoType, builderType)                     \
-    builderType name() {                                                              \
-        return builderType(this->Result_->fieldExpr(), static_cast<TBuilder*>(this)); \
+    builderType name(bool skip = false) {                                             \
+        return builderType(skip ? nullptr : this->Result_->fieldExpr(),               \
+                           static_cast<TBuilder*>(this));                             \
     }                                                                                 \
     TBuilder& name(const protoType& proto) {                                          \
         this->Result_->fieldExpr()->CopyFrom(proto);                                  \
@@ -661,6 +662,23 @@ namespace NYql::NConnector::NTest {
         };
 
         template <class TParent = void /* no parent by default */>
+        struct TLimitBuilder: public TProtoBuilder<TParent, NApi::TSelect::TLimit> {
+            using TBuilder = TLimitBuilder<TParent>;
+
+            TLimitBuilder(NApi::TSelect::TLimit* result = nullptr, TParent* parent = nullptr)
+                : TProtoBuilder<TParent, NApi::TSelect::TLimit>(result, parent)
+            {
+                FillWithDefaults();
+            }
+
+            SETTER(Limit, limit);
+            SETTER(Offset, offset);
+
+            void FillWithDefaults() {
+            }
+        };
+
+        template <class TParent = void /* no parent by default */>
         struct TSelectBuilder: public TProtoBuilder<TParent, NApi::TSelect> {
             using TBuilder = TSelectBuilder<TParent>;
 
@@ -674,6 +692,7 @@ namespace NYql::NConnector::NTest {
             DATA_SOURCE_INSTANCE_SUBBUILDER();
             SUBPROTO_BUILDER(What, mutable_what, NApi::TSelect::TWhat, TWhatBuilder<TBuilder>);
             SUBPROTO_BUILDER(Where, mutable_where, NApi::TSelect::TWhere, TWhereBuilder<TBuilder>);
+            SUBPROTO_BUILDER(Limit, mutable_limit, NApi::TSelect::TLimit, TLimitBuilder<TBuilder>);
 
             void FillWithDefaults() {
                 Table(DEFAULT_TABLE);

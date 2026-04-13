@@ -1,0 +1,18 @@
+--- contrib/libs/apache/arrow/cpp/src/arrow/python/common.h	(index)
++++ contrib/libs/apache/arrow/cpp/src/arrow/python/common.h	(working tree)
+@@ -143,7 +143,14 @@ class ARROW_PYTHON_EXPORT OwnedRef {
+     return *this;
+   }
+ 
+-  ~OwnedRef() { reset(); }
++  ~OwnedRef() {
++#ifdef Py_DEBUG
++    if (!Py_IsInitialized()) {
++        return;
++    }
++#endif
++    reset();
++  }
+ 
+   void reset(PyObject* obj) {
+     Py_XDECREF(obj_);

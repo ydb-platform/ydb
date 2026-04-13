@@ -2,9 +2,13 @@
 
 PY3_LIBRARY()
 
-VERSION(0.45.1)
+VERSION(0.46.3)
 
 LICENSE(MIT)
+
+PEERDIR(
+    contrib/python/packaging
+)
 
 NO_LINT()
 
@@ -13,30 +17,16 @@ PY_SRCS(
     wheel/__init__.py
     wheel/__main__.py
     wheel/_bdist_wheel.py
+    wheel/_commands/__init__.py
+    wheel/_commands/convert.py
+    wheel/_commands/pack.py
+    wheel/_commands/tags.py
+    wheel/_commands/unpack.py
+    wheel/_metadata.py
     wheel/_setuptools_logging.py
     wheel/bdist_wheel.py
-    wheel/cli/__init__.py
-    wheel/cli/convert.py
-    wheel/cli/pack.py
-    wheel/cli/tags.py
-    wheel/cli/unpack.py
     wheel/macosx_libfile.py
     wheel/metadata.py
-    wheel/util.py
-    wheel/vendored/__init__.py
-    wheel/vendored/packaging/__init__.py
-    wheel/vendored/packaging/_elffile.py
-    wheel/vendored/packaging/_manylinux.py
-    wheel/vendored/packaging/_musllinux.py
-    wheel/vendored/packaging/_parser.py
-    wheel/vendored/packaging/_structures.py
-    wheel/vendored/packaging/_tokenizer.py
-    wheel/vendored/packaging/markers.py
-    wheel/vendored/packaging/requirements.py
-    wheel/vendored/packaging/specifiers.py
-    wheel/vendored/packaging/tags.py
-    wheel/vendored/packaging/utils.py
-    wheel/vendored/packaging/version.py
     wheel/wheelfile.py
 )
 
@@ -44,10 +34,6 @@ RESOURCE_FILES(
     PREFIX contrib/python/wheel/
     .dist-info/METADATA
     .dist-info/entry_points.txt
-    wheel/vendored/packaging/LICENSE
-    wheel/vendored/packaging/LICENSE.APACHE
-    wheel/vendored/packaging/LICENSE.BSD
-    wheel/vendored/vendor.txt
 )
 
 END()

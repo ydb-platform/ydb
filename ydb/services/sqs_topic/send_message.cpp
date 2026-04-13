@@ -4,9 +4,11 @@
 #include "request.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/http_proxy/events.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/core/ymq/attributes/attributes.h>
 #include <ydb/core/ymq/attributes/attributes_md5.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/error/error.h>
@@ -33,8 +35,8 @@
 #include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
-#include <ydb/core/persqueue/public/mlp/mlp_message_attributes.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/services/sqs_topic/statuses.h>
@@ -53,7 +55,7 @@ namespace NKikimr::NSqsTopic::V1 {
         TString MessageBody;
         TMaybe<TString> MessageGroupId;
         TMaybe<TString> MessageDeduplicationId;
-        TMaybe<TString> SerializedMessageAttributes;
+        std::unordered_multimap<TString, TString> Attributes;
         int DelaySeconds{};
         TString BatchId;
 
@@ -86,6 +88,7 @@ namespace NKikimr::NSqsTopic::V1 {
         ~TSendMessageActorBase() = default;
 
         void Bootstrap(const NActors::TActorContext& ctx) {
+            TBase::CheckAccessWithWriteTopicPermission = true;
             TBase::Bootstrap(ctx);
 
             if (this->Request().queue_url().empty()) {
@@ -95,21 +98,14 @@ namespace NKikimr::NSqsTopic::V1 {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
 
-            TString serializedToken = this->Request_->GetSerializedToken();
-            NPQ::NDescriber::TDescribeSettings describeSettings{
-                .UserToken = MakeIntrusive<NACLib::TUserToken>(serializedToken),
-                .AccessRights = NACLib::EAccessRights::UpdateRow,
-            };
-
             NACLib::TUserToken token(this->Request_->GetSerializedToken());
             ShouldBeCharged_ = FindPtr(AppData(ctx)->PQConfig.GetNonChargeableUser(), token.GetUserSID()) == nullptr;
 
-            DoWrite();
+            this->SendDescribeProposeRequest(ctx);
+            this->Become(&TSendMessageActorBase::StateWork);
         }
 
         void DoWrite() {
-            this->Become(&TSendMessageActorBase::StateWork);
-
             const auto& request = Request();
             Items = ConvertRequestToWriteItems(request);
             for (ui32 i = 0; i < Items.size(); ++i) {
@@ -132,17 +128,38 @@ namespace NKikimr::NSqsTopic::V1 {
                         .MessageBody = std::move(item.MessageBody),
                         .MessageGroupId = toOptional(std::move(item.MessageGroupId)),
                         .MessageDeduplicationId = toOptional(std::move(item.MessageDeduplicationId)),
-                        .SerializedMessageAttributes = toOptional(std::move(item.SerializedMessageAttributes)),
+                        .Attributes = std::move(item.Attributes),
                         .Delay = TDuration::Seconds(item.DelaySeconds),
                     });
                 }
             }
+
+            this->Send(NHttpProxy::MakeMetricsServiceID(),
+                new NHttpProxy::TEvServerlessProxy::TEvCounter{
+                    static_cast<i64>(Items.size()), true, true,
+                    GetRequestMessageCountMetricsLabels(
+                        QueueUrl_->Database,
+                        FullTopicPath_,
+                        QueueUrl_->Consumer,
+                        TDerived::Method)
+                });
+
+            this->Send(NHttpProxy::MakeMetricsServiceID(),
+                new NHttpProxy::TEvServerlessProxy::TEvCounter{
+                    static_cast<i64>(Request().ByteSizeLong()), true, true,
+                    GetRequestSizeMetricsLabels(
+                        QueueUrl_->Database,
+                        FullTopicPath_,
+                        QueueUrl_->Consumer,
+                        TDerived::Method)
+                });
 
             NPQ::NMLP::TWriterSettings writerSettings{
                 .DatabasePath = QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
                 .Messages = std::move(validItems),
                 .ShouldBeCharged = ShouldBeCharged_,
+                .UserToken = this->Request_->GetInternalToken(),
             };
             WriterActor_ = this->RegisterWithSameMailbox(NPQ::NMLP::CreateWriter(this->SelfId(), std::move(writerSettings)));
         }
@@ -156,11 +173,38 @@ namespace NKikimr::NSqsTopic::V1 {
                 return;
             }
 
+            ssize_t successCount = 0;
+            ssize_t failedCount = 0;
+
             for (auto& message : ev->Get()->Messages) {
                 if (message.MessageId.has_value()) {
                     Items[message.Index].MessageId = message.MessageId.value();
+                    ++successCount;
+                } else {
+                    ++failedCount;
                 }
             }
+
+            this->Send(NHttpProxy::MakeMetricsServiceID(),
+                new NHttpProxy::TEvServerlessProxy::TEvCounter{
+                    successCount, true, true,
+                    GetResponseMessageCountMetricsLabels(
+                        QueueUrl_->Database,
+                        FullTopicPath_,
+                        QueueUrl_->Consumer,
+                        TDerived::Method,
+                        "success")
+                });
+            this->Send(NHttpProxy::MakeMetricsServiceID(),
+                new NHttpProxy::TEvServerlessProxy::TEvCounter{
+                    failedCount, true, true,
+                    GetResponseMessageCountMetricsLabels(
+                        QueueUrl_->Database,
+                        FullTopicPath_,
+                        QueueUrl_->Consumer,
+                        TDerived::Method,
+                        "failed")
+                });
 
             static_cast<TDerived*>(this)->ReplyAndDie(TlsActivationContext->AsActorContext());
         }
@@ -168,6 +212,7 @@ namespace NKikimr::NSqsTopic::V1 {
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NPQ::NMLP::TEvWriteResponse, Handle);
+                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
                 default:
                     TBase::StateWork(ev);
             }
@@ -185,7 +230,11 @@ namespace NKikimr::NSqsTopic::V1 {
 
             THashSet<TString> batchIds;
             for (auto& item : Items) {
-                const size_t msgSize = item.MessageBody.size() + (item.SerializedMessageAttributes ? item.SerializedMessageAttributes->size() : 0);
+                size_t msgSize = item.MessageBody.size();
+                for (const auto& [key, value] : item.Attributes) {
+                    msgSize += key.size() + value.size();
+                }
+
                 if (msgSize > NSQS::TLimits::MaxMessageSize) {
                     item.ValidationError = MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "The length the message is more than the limit.");
                 }
@@ -199,7 +248,24 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            Y_UNUSED(ev);
+            const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
+            Y_ABORT_UNLESS(result->ResultSet.size() == 1);
+            const auto& response = result->ResultSet.front();
+            if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+                if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
+                    return this->ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION, TStringBuilder() << "Writing to the Changefeed is not supported"));
+                }
+                if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
+                    return this->ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, TStringBuilder() << "Queue name used by another scheme object"));
+                }
+                // ok
+            } else if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
+                return this->ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist")));
+            } else {
+                return this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
+                                                TStringBuilder() << "Failed to describe topic: " << response.Status));
+            }
+            DoWrite();
         }
 
         void Die(const TActorContext& ctx) override {
@@ -262,24 +328,11 @@ namespace NKikimr::NSqsTopic::V1 {
         if (request.has_message_deduplication_id()) {
             item.MessageDeduplicationId = request.message_deduplication_id();
         }
-        if (request.message_attributes_size()) {
-            NKikimr::NSQS::TMessageAttributes messageAttributes;
-            for (const auto& [attrName, attrValue] : request.message_attributes()) {
-                auto* dstAttribute = messageAttributes.add_attributes();
-                dstAttribute->SetName(attrName);
-                if (const auto& value = attrValue.string_value()) {
-                    dstAttribute->SetStringValue(value);
-                }
-                if (const auto& value = attrValue.binary_value()) {
-                    dstAttribute->SetBinaryValue(value);
-                }
-                dstAttribute->SetDataType(attrValue.data_type());
-            }
-            TString serialized;
-            bool res = messageAttributes.SerializeToString(&serialized);
-            Y_ABORT_UNLESS(res);
-            item.SerializedMessageAttributes = std::move(serialized);
-            item.MD5OfMessageAttributes = NSQS::CalcMD5OfMessageAttributes(messageAttributes.attributes());
+
+        auto [attributes, md5] = NSQS::SerializeUserAttributes(request);
+        if (!attributes.empty()) {
+            item.Attributes = std::move(attributes);
+            item.MD5OfMessageAttributes = std::move(md5);
         }
         item.DelaySeconds = request.delay_seconds();
         item.BatchIndex = 0;
@@ -297,6 +350,7 @@ namespace NKikimr::NSqsTopic::V1 {
     }
 
     class TSendMessageActor: public TSendMessageActorBase<TSendMessageActor, TEvSqsTopicSendMessageRequest> {
+    public:
         const static inline TString Method = "SendMessage";
 
     public:
@@ -330,6 +384,7 @@ namespace NKikimr::NSqsTopic::V1 {
     };
 
     class TSendMessageBatchActor: public TSendMessageActorBase<TSendMessageBatchActor, TEvSqsTopicSendMessageBatchRequest> {
+    public:
         const static inline TString Method = "SendMessageBatch";
 
     public:

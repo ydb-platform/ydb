@@ -3,24 +3,25 @@ LIBRARY()
 SRCS(
     kqp_rbo_transformer.cpp
     kqp_operator.cpp
+    kqp_expression.cpp
+    kqp_stage_graph.cpp
+    kqp_rbo_utils.cpp
     kqp_rbo.cpp
-    kqp_rbo_rules.cpp
-    kqp_convert_to_physical.cpp
     kqp_plan_conversion_utils.cpp
     kqp_rbo_type_ann.cpp
-    kqp_rename_unused_stage.cpp
-    kqp_constant_folding_stage.cpp
     kqp_rewrite_select.cpp
     kqp_rbo_compute_statistics.cpp
     kqp_rbo_statistics.cpp
-    kqp_rbo_dp_cost_based.cpp
 )
 
 PEERDIR(
     ydb/core/kqp/common
+    ydb/core/kqp/opt/cbo
     ydb/core/kqp/opt/logical
     ydb/core/kqp/opt/peephole
     ydb/core/kqp/opt/physical
+    ydb/core/kqp/opt/rbo/rules
+    ydb/core/kqp/opt/rbo/physical_conversion
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann

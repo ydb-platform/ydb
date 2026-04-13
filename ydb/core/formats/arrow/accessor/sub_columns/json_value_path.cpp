@@ -31,6 +31,9 @@ TString QuoteJsonItem(TStringBuf item) {
 }
 
 TJsonPath ToJsonPath(TStringBuf path) {
+    if (!path.StartsWith('"')) {
+        return TString("$.") + QuoteJsonItem(path);
+    }
     return TString("$.") + path;
 }
 
@@ -221,7 +224,7 @@ TConclusionStatus TJsonPathAccessorTrie::Insert(TJsonPathBuf jsonPath, std::shar
     AFL_VERIFY(!currentNode->Accessor);
 
     currentNode->Accessor = std::move(accessor);
-    currentNode->Cookie = std::move(cookie);
+    currentNode->Cookie = cookie;
 
     return TConclusionStatus::Success();
 }

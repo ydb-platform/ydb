@@ -16,7 +16,6 @@ PEERDIR(
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/comp_nodes
     yql/essentials/providers/common/metrics
-    yql/essentials/core/cbo
     yql/essentials/core/dq_integration
     yql/essentials/core/dq_integration/transform
     yql/essentials/minikql/computation
@@ -42,8 +41,7 @@ PEERDIR(
     ydb/library/yql/providers/s3/actors
 
     ydb/library/yql/providers/pq/provider
-    ydb/library/yql/providers/pq/gateway/dummy
-    ydb/library/yql/providers/pq/gateway/native
+    ydb/library/yql/providers/pq/gateway/abstract
     ydb/library/yql/providers/pq/async_io
 
     ydb/library/yql/providers/solomon/provider

@@ -151,6 +151,19 @@ public:
      */
     TDuration GetDuration() const;
 
+    //! Checks if the context is alive for too long.
+    /*!
+     *  The default threshold duration is configured via #SetTraceContextDefaultLeakDurationThreshold
+     *  by can be changed via #SetLeakDurationThreshold.
+     *
+     *  If the deadline is exceeded, then a debug message is logged and a profiling
+     *  counter is incremented (only once per trace context instance).
+     */
+    void CheckForLeak(NProfiling::TCpuInstant now);
+
+    //! Enables changing the per-context leak deadline.
+    void SetLeakDurationThreshold(TDuration threshold);
+
     using TTagList = TCompactVector<std::pair<std::string, std::string>, 4>;
     TTagList GetTags() const;
 
@@ -231,6 +244,7 @@ private:
     std::optional<std::string> TargetEndpoint_;
     std::string LoggingTag_;
     const NProfiling::TCpuInstant StartTime_;
+    std::atomic<NProfiling::TCpuInstant> LeakDeadline_;
 
     std::atomic<bool> Finished_ = false;
     std::atomic<bool> Submitted_ = false;
@@ -248,6 +262,8 @@ private:
     // Must NOT allocate memory while modifying AllocationTagList_ to avoid deadlock with allocator.
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, AllocationTagsLock_);
     TAtomicIntrusivePtr<TAllocationTagList> AllocationTagList_;
+
+    std::atomic<bool> LeakDetected_;
 
     TTraceContext(
         TSpanContext parentSpanContext,
@@ -284,6 +300,11 @@ TTraceContext* TryGetTraceContextFromPropagatingStorage(const NConcurrency::TPro
 //! created trace context.
 TTraceContextPtr CreateTraceContextFromCurrent(const std::string& spanName);
 
+//! Configures the default maximum expected duration of a trace context.
+//! Trace contexts living longer than #threshold are considered leaked.
+//! Can be overridden via #TTraceContext::SetLeakDurationThreshold.
+void SetTraceContextDefaultLeakDurationThreshold(TDuration threshold);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Installs the given trace into the current fiber implicit trace slot.
@@ -291,7 +312,7 @@ class TCurrentTraceContextGuard
 {
 public:
     explicit TCurrentTraceContextGuard(TTraceContextPtr traceContext);
-    TCurrentTraceContextGuard(TCurrentTraceContextGuard&& other);
+    TCurrentTraceContextGuard(TCurrentTraceContextGuard&& other) noexcept;
     ~TCurrentTraceContextGuard();
 
     bool IsActive() const;
@@ -311,7 +332,7 @@ class TNullTraceContextGuard
 {
 public:
     TNullTraceContextGuard();
-    TNullTraceContextGuard(TNullTraceContextGuard&& other);
+    TNullTraceContextGuard(TNullTraceContextGuard&& other) noexcept;
     ~TNullTraceContextGuard();
 
     bool IsActive() const;
@@ -334,13 +355,13 @@ public:
     ~TTraceContextFinishGuard();
 
     TTraceContextFinishGuard(const TTraceContextFinishGuard&) = delete;
-    TTraceContextFinishGuard(TTraceContextFinishGuard&&) = default;
+    TTraceContextFinishGuard(TTraceContextFinishGuard&&) noexcept = default;
 
     TTraceContextFinishGuard& operator=(const TTraceContextFinishGuard&) = delete;
-    TTraceContextFinishGuard& operator=(TTraceContextFinishGuard&&);
+    TTraceContextFinishGuard& operator=(TTraceContextFinishGuard&&) noexcept;
 
     void Release(
-        std::optional<NProfiling::TCpuInstant> finishTime = {});
+        std::optional<NProfiling::TCpuInstant> finishTime = {}) noexcept;
 private:
     TTraceContextPtr TraceContext_;
 };
@@ -353,7 +374,7 @@ class TTraceContextGuard
 {
 public:
     explicit TTraceContextGuard(TTraceContextPtr traceContext);
-    TTraceContextGuard(TTraceContextGuard&& other) = default;
+    TTraceContextGuard(TTraceContextGuard&& other) noexcept = default;
 
     void Release(
         std::optional<NProfiling::TCpuInstant> finishTime = {});
@@ -377,7 +398,7 @@ public:
     explicit TChildTraceContextGuard(
         const std::string& spanName,
         std::optional<NProfiling::TCpuInstant> startTime = {});
-    TChildTraceContextGuard(TChildTraceContextGuard&& other) = default;
+    TChildTraceContextGuard(TChildTraceContextGuard&& other) noexcept = default;
 
     void Finish(
         std::optional<NProfiling::TCpuInstant> finishTime = {});

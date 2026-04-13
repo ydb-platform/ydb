@@ -6,6 +6,7 @@ __all__ = [
     "TopicClientSettings",
     "TopicCodec",
     "TopicConsumer",
+    "TopicConsumerDescription",
     "TopicAlterConsumer",
     "TopicAlterAutoPartitioningSettings",
     "TopicAutoPartitioningSettings",
@@ -31,6 +32,7 @@ __all__ = [
     "TopicWriterInitInfo",
     "TopicWriterMessage",
     "TopicWriterSettings",
+    "TopicWriterBufferFullError",
 ]
 
 import concurrent.futures
@@ -71,6 +73,7 @@ from ._topic_writer.topic_writer import (  # noqa: F401
     RetryPolicy as TopicWriterRetryPolicy,
     PublicWriterInitInfo as TopicWriterInitInfo,
     PublicWriteResult as TopicWriteResult,
+    TopicWriterBufferFullError,
 )
 
 from ydb._topic_writer.topic_writer_asyncio import TxWriterAsyncIO as TopicTxWriterAsyncIO
@@ -87,6 +90,7 @@ from ._grpc.grpcwrapper import ydb_topic as _ydb_topic
 from ._grpc.grpcwrapper import ydb_topic_public_types as _ydb_topic_public_types
 from ._grpc.grpcwrapper.ydb_topic_public_types import (  # noqa: F401
     PublicDescribeTopicResult as TopicDescription,
+    PublicDescribeConsumerResult as TopicConsumerDescription,
     PublicMultipleWindowsStat as TopicStatWindow,
     PublicPartitionStats as TopicPartitionStats,
     PublicCodec as TopicCodec,
@@ -216,8 +220,8 @@ class TopicClientAsyncIO:
         logger.debug("Alter topic request: path=%s", path)
         args = locals().copy()
         del args["self"]
-        req = _ydb_topic_public_types.AlterTopicRequestParams(**args)
-        req = _ydb_topic.AlterTopicRequest.from_public(req)
+        req_params = _ydb_topic_public_types.AlterTopicRequestParams(**args)
+        req = _ydb_topic.AlterTopicRequest.from_public(req_params)
         await self._driver(
             req.to_proto(),
             _apis.TopicService.Stub,
@@ -236,6 +240,35 @@ class TopicClientAsyncIO:
             _apis.TopicService.DescribeTopic,
             _create_result_wrapper(_ydb_topic.DescribeTopicResult),
         )  # type: _ydb_topic.DescribeTopicResult
+        return res.to_public()
+
+    async def describe_consumer(
+        self,
+        path: str,
+        consumer: str,
+        *,
+        include_stats: bool = False,
+        include_location: bool = False,
+    ) -> TopicConsumerDescription:
+        """
+        Describe topic's consumer.
+
+        :param path: full path to topic
+        :param consumer: consumer name
+        :param include_stats: include consumer statistics
+        :param include_location: include partition location
+        :return: consumer description
+        """
+        logger.debug("Describe consumer request: path=%s consumer=%s", path, consumer)
+        args = locals().copy()
+        del args["self"]
+        req = _ydb_topic_public_types.DescribeConsumerRequestParams(**args)
+        res = await self._driver(
+            req.to_proto(),
+            _apis.TopicService.Stub,
+            _apis.TopicService.DescribeConsumer,
+            _create_result_wrapper(_ydb_topic.DescribeConsumerResult),
+        )  # type: _ydb_topic.DescribeConsumerResult
         return res.to_public()
 
     async def drop_topic(self, path: str):
@@ -308,6 +341,9 @@ class TopicClientAsyncIO:
         # custom encoder executor for call builtin and custom decoders. If None - use shared executor pool.
         # If max_worker in the executor is 1 - then encoders will be called from the thread without parallel.
         encoder_executor: Optional[concurrent.futures.Executor] = None,
+        max_buffer_size_bytes: Optional[int] = None,
+        max_buffer_messages: Optional[int] = None,
+        buffer_wait_timeout_sec: Optional[float] = None,
     ) -> TopicWriterAsyncIO:
         logger.debug("Create writer for topic=%s producer_id=%s", topic, producer_id)
         args = locals().copy()
@@ -337,6 +373,9 @@ class TopicClientAsyncIO:
         # custom encoder executor for call builtin and custom decoders. If None - use shared executor pool.
         # If max_worker in the executor is 1 - then encoders will be called from the thread without parallel.
         encoder_executor: Optional[concurrent.futures.Executor] = None,
+        max_buffer_size_bytes: Optional[int] = None,
+        max_buffer_messages: Optional[int] = None,
+        buffer_wait_timeout_sec: Optional[float] = None,
     ) -> TopicTxWriterAsyncIO:
         logger.debug("Create tx writer for topic=%s tx=%s", topic, tx)
         args = locals().copy()
@@ -509,8 +548,8 @@ class TopicClient:
         del args["self"]
         self._check_closed()
 
-        req = _ydb_topic_public_types.AlterTopicRequestParams(**args)
-        req = _ydb_topic.AlterTopicRequest.from_public(req)
+        req_params = _ydb_topic_public_types.AlterTopicRequestParams(**args)
+        req = _ydb_topic.AlterTopicRequest.from_public(req_params)
         self._driver(
             req.to_proto(),
             _apis.TopicService.Stub,
@@ -531,6 +570,37 @@ class TopicClient:
             _apis.TopicService.DescribeTopic,
             _create_result_wrapper(_ydb_topic.DescribeTopicResult),
         )  # type: _ydb_topic.DescribeTopicResult
+        return res.to_public()
+
+    def describe_consumer(
+        self,
+        path: str,
+        consumer: str,
+        *,
+        include_stats: bool = False,
+        include_location: bool = False,
+    ) -> TopicConsumerDescription:
+        """
+        Describe topic's consumer.
+
+        :param path: full path to topic
+        :param consumer: consumer name
+        :param include_stats: include consumer statistics
+        :param include_location: include partition location
+        :return: consumer description
+        """
+        logger.debug("Describe consumer request: path=%s consumer=%s", path, consumer)
+        args = locals().copy()
+        del args["self"]
+        self._check_closed()
+
+        req = _ydb_topic_public_types.DescribeConsumerRequestParams(**args)
+        res = self._driver(
+            req.to_proto(),
+            _apis.TopicService.Stub,
+            _apis.TopicService.DescribeConsumer,
+            _create_result_wrapper(_ydb_topic.DescribeConsumerResult),
+        )  # type: _ydb_topic.DescribeConsumerResult
         return res.to_public()
 
     def drop_topic(self, path: str):
@@ -604,6 +674,9 @@ class TopicClient:
         # custom encoder executor for call builtin and custom decoders. If None - use shared executor pool.
         # If max_worker in the executor is 1 - then encoders will be called from the thread without parallel.
         encoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
+        max_buffer_size_bytes: Optional[int] = None,
+        max_buffer_messages: Optional[int] = None,
+        buffer_wait_timeout_sec: Optional[float] = None,
     ) -> TopicWriter:
         logger.debug("Create writer for topic=%s producer_id=%s", topic, producer_id)
         args = locals().copy()
@@ -634,6 +707,9 @@ class TopicClient:
         # custom encoder executor for call builtin and custom decoders. If None - use shared executor pool.
         # If max_worker in the executor is 1 - then encoders will be called from the thread without parallel.
         encoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
+        max_buffer_size_bytes: Optional[int] = None,
+        max_buffer_messages: Optional[int] = None,
+        buffer_wait_timeout_sec: Optional[float] = None,
     ) -> TopicWriter:
         logger.debug("Create tx writer for topic=%s tx=%s", topic, tx)
         args = locals().copy()

@@ -294,7 +294,17 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         }
     }
 
-    //
+    for (const auto& transaction : record.GetTransaction()) {
+        switch (transaction.GetOperationType()) {
+            case NKikimrSchemeOp::ESchemeOpBackupBackupCollection:
+            case NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection:
+            case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection:
+                response->Record.SetOperationId(ToString(ui64(txId)));
+                break;
+            default:
+                break;
+        }
+    }
 
     return std::move(response);
 }
@@ -1043,6 +1053,8 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateNewTable(NextPartId(), txState);
     case TTxState::ETxType::TxCopyTable:
         return CreateCopyTable(NextPartId(), txState, state);
+    case TTxState::ETxType::TxReadOnlyCopyColumnTable:
+        return CreateReadOnlyCopyColumnTable(NextPartId(), txState);
     case TTxState::ETxType::TxAlterTable:
         return CreateAlterTable(NextPartId(), txState);
     case TTxState::ETxType::TxSplitTablePartition:
@@ -1106,6 +1118,8 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
         return CreateDropKesus(NextPartId(), txState);
     case TTxState::ETxType::TxInitializeBuildIndex:
         return CreateInitializeBuildIndexMainTable(NextPartId(), txState);
+    case TTxState::ETxType::TxPrepareIndexValidation:
+        return CreatePrepareIndexValidation(NextPartId(), txState);
     case TTxState::ETxType::TxFinalizeBuildIndex:
         return CreateFinalizeBuildIndexMainTable(NextPartId(), txState);
     case TTxState::ETxType::TxDropTableIndexAtMainTable:
@@ -1304,6 +1318,9 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxAlterStreamingQuery:
         return CreateAlterStreamingQuery(NextPartId(), txState);
 
+    case TTxState::ETxType::TxTruncateTable:
+        return CreateTruncateTable(NextPartId(), txState);
+
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
@@ -1374,6 +1391,9 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore:
         return {CreateDropOlapStore(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
+        if (tx.GetCreateColumnTable().HasCopyFromTable()) {
+            return {CreateReadOnlyCopyColumnTable(op.NextPartId(), tx)};
+        }
         return {CreateNewColumnTable(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable:
         return {CreateAlterColumnTable(op.NextPartId(), tx)};
@@ -1422,11 +1442,9 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
     case NKikimrSchemeOp::EOperationType::ESchemeOpUpgradeSubDomainDecision:
         return {CreateUpgradeSubDomainDecision(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnBuild:
-        return CreateBuildColumn(op.NextPartId(), tx, context);
+        return {CreateBuildColumn(op.NextPartId(), tx, context)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnBuild:
         return {DropBuildColumn(op.NextPartId(), tx, context)};
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate:
-        return CreateSetConstraintInitiate(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexBuild:
         return CreateBuildIndex(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLock:
@@ -1479,6 +1497,9 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         Y_ABORT("multipart operations are handled before, also they require transaction details");
     case NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable:
         Y_ABORT("multipart operations are handled before, also they require transaction details");
+
+    case NKikimrSchemeOp::EOperationType::ESchemeOpPrepareIndexValidation:
+        return {CreatePrepareIndexValidation(op.NextPartId(), tx)};
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCancelIndexBuild:
         return CancelBuildIndex(op.NextPartId(), tx, context);
@@ -1645,6 +1666,9 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         return {CreateDropStreamingQuery(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterStreamingQuery:
         return {CreateAlterStreamingQuery(op.NextPartId(), tx)};
+
+    case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
+        return CreateConsistentTruncateTable(op.NextPartId(), tx, context);
     }
 
     Y_UNREACHABLE();

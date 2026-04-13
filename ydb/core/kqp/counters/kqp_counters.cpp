@@ -752,6 +752,8 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     YdbGroup = GetServiceCounters(counters, "ydb");
     QueryReplayGroup = KqpGroup->GetSubgroup("subsystem", "unified_agent_query_replay");
     WorkloadManagerGroup = KqpGroup->GetSubgroup("subsystem", "workload_manager");
+    ChannelGroup = KqpGroup->GetSubgroup("subsystem", "compute_channels");
+    TxProxyMon = MakeIntrusive<NTxProxy::TTxProxyMon>(counters);
 
     Init();
 
@@ -789,6 +791,12 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     /* Compile computation pattern service */
     CompiledComputationPatterns = KqpGroup->GetCounter("ComputationPatternCompilation/CompiledComputationPatterns");
     CompileComputationPatternsQueueSize = KqpGroup->GetCounter("ComputationPatternCompilation/CompileComputationPatternsQueueSize");
+
+    /* Warmup */
+    WarmupQueriesFetched = KqpGroup->GetCounter("Warmup/QueriesFetched", false);
+    WarmupQueriesCompiled = KqpGroup->GetCounter("Warmup/QueriesCompiled", false);
+    WarmupQueriesTruncated = KqpGroup->GetCounter("Warmup/QueriesTruncated", false);
+    WarmupQueriesEmptyQueryType = KqpGroup->GetCounter("Warmup/QueriesEmptyQueryType", false);
 
     /* Resource Manager */
     RmComputeActors = KqpGroup->GetCounter("RM/ComputeActors", false);
@@ -935,6 +943,9 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     return WorkloadManagerGroup;
 }
 
+::NMonitoring::TDynamicCounterPtr TKqpCounters::GetChannelCounters() const {
+    return ChannelGroup;
+}
 
 void TKqpCounters::ReportProxyForwardedRequest(TKqpDbCountersPtr dbCounters) {
     TKqpCountersBase::ReportProxyForwardedRequest();

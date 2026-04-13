@@ -17,11 +17,20 @@ class TToDynamicLinearWrapper: public TMutableComputationNode<TToDynamicLinearWr
 public:
     class TValue: public TComputationValue<TValue> {
     public:
-        TValue(TMemoryUsageInfo* memInfo, TUnboxedValue&& value)
+        TValue(TMemoryUsageInfo* memInfo, TUnboxedValue&& value, const TSourcePosition& pos,
+               const NUdf::ITypeInfoHelper::TPtr& typeHelper)
             : TComputationValue(memInfo)
             , Value_(std::move(value))
             , Consumed_(false)
+            , Pos_(pos)
+            , TypeHelper_(typeHelper)
         {
+        }
+
+        ~TValue() {
+            if (!Consumed_) {
+                TypeHelper_->NotifyNotConsumedLinear(Pos_);
+            }
         }
 
     private:
@@ -37,17 +46,20 @@ public:
 
         TUnboxedValue Value_;
         bool Consumed_;
+        const TSourcePosition Pos_;
+        const NUdf::ITypeInfoHelper::TPtr TypeHelper_;
     };
 
-    TToDynamicLinearWrapper(TComputationMutables& mutables, IComputationNode* source)
+    TToDynamicLinearWrapper(TComputationMutables& mutables, IComputationNode* source, const TSourcePosition& pos)
         : TBaseComputation(mutables)
         , Source_(source)
+        , Pos_(pos)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         TUnboxedValue input = Source_->GetValue(ctx);
-        return ctx.HolderFactory.Create<TValue>(std::move(input));
+        return ctx.HolderFactory.Create<TValue>(std::move(input), Pos_, ctx.TypeInfoHelper);
     }
 
 private:
@@ -56,6 +68,7 @@ private:
     }
 
     IComputationNode* const Source_;
+    const TSourcePosition Pos_;
 };
 
 class TFromDynamicLinearWrapper: public TMutableComputationNode<TFromDynamicLinearWrapper> {
@@ -95,9 +108,16 @@ private:
 } // namespace
 
 IComputationNode* WrapToDynamicLinear(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expecting exactly one argument");
+    MKQL_ENSURE(callable.GetInputsCount() == 1 || callable.GetInputsCount() == 4, "Expecting 1 or 4 arguments");
     auto source = LocateNode(ctx.NodeLocator, callable, 0);
-    return new TToDynamicLinearWrapper(ctx.Mutables, source);
+    TSourcePosition pos;
+    if (callable.GetInputsCount() == 4) {
+        pos.File = AS_VALUE(TDataLiteral, callable.GetInput(1))->AsValue().AsStringRef();
+        pos.Row = AS_VALUE(TDataLiteral, callable.GetInput(2))->AsValue().Get<ui32>();
+        pos.Column = AS_VALUE(TDataLiteral, callable.GetInput(3))->AsValue().Get<ui32>();
+    }
+
+    return new TToDynamicLinearWrapper(ctx.Mutables, source, pos);
 }
 
 IComputationNode* WrapFromDynamicLinear(TCallable& callable, const TComputationNodeFactoryContext& ctx) {

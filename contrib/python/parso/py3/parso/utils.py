@@ -2,7 +2,7 @@ import re
 import sys
 from ast import literal_eval
 from functools import total_ordering
-from typing import NamedTuple, Sequence, Union
+from typing import NamedTuple, Union
 
 # The following is a list in Python that are line breaks in str.splitlines, but
 # not in Python. In Python only \r (Carriage Return, 0xD) and \n (Line Feed,
@@ -26,7 +26,7 @@ class Version(NamedTuple):
     micro: int
 
 
-def split_lines(string: str, keepends: bool = False) -> Sequence[str]:
+def split_lines(string: str, keepends: bool = False) -> "list[str]":
     r"""
     Intended for Python code. In contrast to Python's :py:meth:`str.splitlines`,
     looks at form feeds and other special characters as normal text. Just

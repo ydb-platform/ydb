@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-FullJoin (JoinDict)",
+                                        "Node Type": "TopSort-FullJoin (Dict)",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -50,7 +50,7 @@
                                                         "ExternalPlanNodeId": 5
                                                     }
                                                 ],
-                                                "Name": "FullJoin (JoinDict)"
+                                                "Name": "FullJoin (Dict)"
                                             }
                                         ],
                                         "PlanNodeId": 11,

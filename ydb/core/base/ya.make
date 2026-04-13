@@ -88,6 +88,8 @@ SRCS(
     tx_processing.cpp
     user_registry.h
     wilson_tracing_control.cpp
+    json_index.cpp
+    json_index.h
 )
 
 PEERDIR(
@@ -124,8 +126,11 @@ PEERDIR(
     ydb/library/ydb_issue
     ydb/public/api/protos/out
     yql/essentials/minikql
+    yql/essentials/types/binary_json
     library/cpp/deprecated/atomic
 )
+
+YQL_LAST_ABI_VERSION()
 
 IF (NOT OS_WINDOWS)
 PEERDIR(

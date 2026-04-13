@@ -1,9 +1,11 @@
 #include "../mkql_multihopping.h"
 #include "mkql_computation_node_ut.h"
+#include <yql/essentials/core/sql_types/hopping.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_runtime_version.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_graph_saveload.h>
@@ -48,6 +50,7 @@ TStatsMap DefaultStatsMap = {
     {"MultiHop_LateThrownEventsCount", 0},
     {"MultiHop_EmptyTimeCount", 0},
     {"MultiHop_KeysCount", 1},
+    {"MultiHop_FarFutureStateSize", 0},
 };
 
 using TEncoder = std::function<NUdf::TUnboxedValue(const TInputItem&, const THolderFactory&)>;
@@ -141,6 +144,8 @@ std::tuple<TType*, TEncoder, TDecoder> BuildInputType(TSetup<false>& setup) {
     return {structType, encode, decode};
 }
 
+using EHoppingWindowPolicy = NYql::NHoppingWindow::EPolicy;
+
 THolder<IComputationGraph> BuildGraph(
     TSetup<false>& setup,
     TType* itemType,
@@ -148,7 +153,17 @@ THolder<IComputationGraph> BuildGraph(
     ui64 interval,
     ui64 delay,
     bool dataWatermarks,
-    bool watermarkMode) {
+    bool watermarkMode,
+    ui64 farFutureSizeLimit = Max<ui64>(),
+    ui64 farFutureTimeLimitUs = Max<ui64>(),
+    EHoppingWindowPolicy earlyPolicy = EHoppingWindowPolicy::Drop,
+    EHoppingWindowPolicy latePolicy = EHoppingWindowPolicy::Drop) {
+#if MKQL_RUNTIME_VERSION < 70U
+    Y_UNUSED(farFutureSizeLimit);
+    Y_UNUSED(farFutureTimeLimitUs);
+    Y_UNUSED(earlyPolicy);
+    Y_UNUSED(latePolicy);
+#endif
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
     auto inStreamType = pgmBuilder.NewStreamType(itemType);
@@ -214,7 +229,19 @@ THolder<IComputationGraph> BuildGraph(
         pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&interval, sizeof(interval))), // interval
         pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&delay, sizeof(delay))),       // delay
         pgmBuilder.NewDataLiteral<bool>(dataWatermarks),
-        pgmBuilder.NewDataLiteral<bool>(watermarkMode));
+        pgmBuilder.NewDataLiteral<bool>(watermarkMode),
+#if MKQL_RUNTIME_VERSION >= 70U
+        farFutureSizeLimit == NYql::NHoppingWindow::TSettings{}.FarFutureSizeLimit ? pgmBuilder.NewVoid() : pgmBuilder.NewDataLiteral<ui64>(farFutureSizeLimit),
+        farFutureTimeLimitUs == NYql::NHoppingWindow::TSettings{}.FarFutureTimeLimit.MicroSeconds() ? pgmBuilder.NewVoid() : pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Interval>(NUdf::TStringRef((const char*)&farFutureTimeLimitUs, sizeof(farFutureTimeLimitUs))),
+        earlyPolicy == NYql::NHoppingWindow::TSettings{}.EarlyPolicy ? pgmBuilder.NewVoid() : pgmBuilder.NewDataLiteral<ui32>((ui32)earlyPolicy),
+        latePolicy == NYql::NHoppingWindow::TSettings{}.LatePolicy ? pgmBuilder.NewVoid() : pgmBuilder.NewDataLiteral<ui32>((ui32)latePolicy)
+#else
+        {}, // SizeLimit
+        {}, // TimeLimit
+        {}, // EarlyPolicy
+        {}  // LatePolicy
+#endif
+    );
 
     return setup.BuildGraph(pgmReturn, {streamNode});
 }
@@ -230,13 +257,17 @@ void TestImpl(
     ui64 delay = 20,
     bool dataWatermarks = false,
     bool watermarkMode = false,
+    ui64 farFutureSizeLimit = Max<ui64>(),
+    ui64 farFutureTimeLimitUs = Max<ui64>(),
+    EHoppingWindowPolicy earlyPolicy = EHoppingWindowPolicy::Drop,
+    EHoppingWindowPolicy latePolicy = EHoppingWindowPolicy::Drop,
     TFetchFactory fetchFactory = DefaultFetchFactory,
     TSetupFactory setupFactory = DefaultSetupFactory) {
     auto setup = setupFactory();
 
     auto [itemType, encode, decode] = BuildInputType(setup);
 
-    auto graph = BuildGraph(setup, itemType, hop, interval, delay, dataWatermarks, watermarkMode);
+    auto graph = BuildGraph(setup, itemType, hop, interval, delay, dataWatermarks, watermarkMode, farFutureSizeLimit, farFutureTimeLimitUs, earlyPolicy, latePolicy);
 
     size_t index = 0;
     std::vector<TOutputItem> actual;
@@ -290,7 +321,11 @@ void TestWatermarksImpl(
     const TStatsMap& expectedStatsMap,
     ui64 hop = 10,
     ui64 interval = 30,
-    ui64 delay = 20) {
+    ui64 delay = 20,
+    ui64 farFutureSizeLimit = Max<ui64>(),
+    ui64 farFutureTimeLimitUs = Max<ui64>(),
+    EHoppingWindowPolicy earlyPolicy = EHoppingWindowPolicy::Drop,
+    EHoppingWindowPolicy latePolicy = EHoppingWindowPolicy::Drop) {
     TWatermark watermark;
     auto fetchFactory = [watermarks = watermarks, &watermark](TUnboxedValueVector input) -> TFetchCallback {
         return [input = input,
@@ -322,10 +357,15 @@ void TestWatermarksImpl(
         delay,
         false,
         true,
+        farFutureSizeLimit,
+        farFutureTimeLimitUs,
+        earlyPolicy,
+        latePolicy,
         fetchFactory,
         setupFactory);
 }
 
+#if MKQL_RUNTIME_VERSION >= 70U
 Y_UNIT_TEST(TestThrowWatermarkFromPast) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
@@ -372,6 +412,104 @@ Y_UNIT_TEST(TestThrowWatermarkFromPast) {
     TestWatermarksImpl(input, expected, watermarks, expectedStatsMap);
 }
 
+Y_UNIT_TEST(TestAdjustWatermarkFromPastTime0) {
+    const std::vector<TInputItem> input = {
+        // Group; Time; Value
+        {1, 101, 2},
+        {1, 131, 3},
+        {1, 200, 4},
+        {1, 300, 5},
+        {1, 400, 6}};
+    const std::vector<TOutputGroup> expected = {
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({
+            {1, "5 6 Add", 70},
+            {1, "5 6 Add", 80},
+            {1, "5 6 Add", 90},
+            {1, "2", 110},
+            {1, "2", 120},
+            {1, "2", 130},
+            {1, "3", 140},
+            {1, "3", 150},
+            {1, "3", 160},
+            {1, "4", 210},
+            {1, "4", 220},
+            {1, "4", 230},
+        }),
+    };
+    const std::vector<std::pair<ui64, TInstant>> watermarks = {
+        {2, TInstant::MicroSeconds(20)},
+        {3, TInstant::MicroSeconds(40)}};
+    auto expectedStatsMap = DefaultStatsMap;
+    expectedStatsMap["MultiHop_NewHopsCount"] = 12;
+    expectedStatsMap["MultiHop_FarFutureEventsCount"] = 3;
+    expectedStatsMap["MultiHop_KeysCount"] = 1;
+
+    TestWatermarksImpl(input, expected, watermarks, expectedStatsMap,
+                       10,                           // hop
+                       30,                           // interval
+                       20,                           // delay
+                       Max<ui64>(),                  // farFutureSizeLimit
+                       0,                            // farFutureTimeLimit
+                       EHoppingWindowPolicy::Adjust, // earlyPolicy
+                       EHoppingWindowPolicy::Drop);  // latePolicy
+}
+
+Y_UNIT_TEST(TestAdjustWatermarkFromPastTime100) {
+    const std::vector<TInputItem> input = {
+        // Group; Time; Value
+        {1, 101, 2},
+        {1, 131, 3},
+        {1, 200, 4},
+        {1, 300, 5},
+        {1, 400, 6}};
+    const std::vector<TOutputGroup> expected = {
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({
+            {1, "2", 110},
+            {1, "5 6 Add 2 Merge", 120},
+            {1, "5 6 Add 2 Merge", 130},
+            {1, "3 5 6 Add Merge", 140},
+            {1, "3", 150},
+            {1, "3", 160},
+            {1, "4", 210},
+            {1, "4", 220},
+            {1, "4", 230},
+        }),
+    };
+    const std::vector<std::pair<ui64, TInstant>> watermarks = {
+        {2, TInstant::MicroSeconds(20)},
+        {3, TInstant::MicroSeconds(40)}};
+    auto expectedStatsMap = DefaultStatsMap;
+    expectedStatsMap["MultiHop_NewHopsCount"] = 9;
+    expectedStatsMap["MultiHop_FarFutureEventsCount"] = 5;
+    expectedStatsMap["MultiHop_KeysCount"] = 0;
+
+    TestWatermarksImpl(input, expected, watermarks, expectedStatsMap,
+                       10,                           // hop
+                       30,                           // interval
+                       20,                           // delay
+                       Max<ui64>(),                  // farFutureSizeLimit
+                       100,                          // farFutureTimeLimit
+                       EHoppingWindowPolicy::Adjust, // earlyPolicy
+                       EHoppingWindowPolicy::Drop);  // latePolicy
+}
+#endif
+
 Y_UNIT_TEST(TestThrowWatermarkFromFuture) {
     const std::vector<TInputItem> input = {
         // Group; Time; Value
@@ -407,6 +545,55 @@ Y_UNIT_TEST(TestThrowWatermarkFromFuture) {
     expectedStatsMap["MultiHop_KeysCount"] = 0;
 
     TestWatermarksImpl(input, expected, watermarks, expectedStatsMap);
+}
+
+#if MKQL_RUNTIME_VERSION >= 70U
+Y_UNIT_TEST(TestAdjustWatermarkFromFuture) {
+    const std::vector<TInputItem> input = {
+        // Group; Time; Value
+        {1, 101, 2},
+        {1, 131, 3},
+        {1, 200, 4},
+        {1, 300, 5},
+        {1, 400, 6}};
+    const std::vector<TOutputGroup> expected = {
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({
+            {1, "2", 110},
+            {1, "2", 120},
+            {1, "2", 130},
+            {1, "3", 140},
+            {1, "3", 150},
+            {1, "3", 160},
+        }),
+        TOutputGroup({}),
+        TOutputGroup({
+            {1, "4", 1010},
+        }),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({
+            {1, "5 6 Add", 2010},
+        })};
+    const std::vector<std::pair<ui64, TInstant>> watermarks = {
+        {2, TInstant::MicroSeconds(1000)},
+        {3, TInstant::MicroSeconds(2000)}};
+    auto expectedStatsMap = DefaultStatsMap;
+    expectedStatsMap["MultiHop_NewHopsCount"] = 8;
+    expectedStatsMap["MultiHop_LateThrownEventsCount"] = 3;
+    expectedStatsMap["MultiHop_FarFutureEventsCount"] = 2;
+    expectedStatsMap["MultiHop_KeysCount"] = 1;
+
+    TestWatermarksImpl(input, expected, watermarks, expectedStatsMap,
+                       10,                            // hop
+                       30,                            // interval
+                       20,                            // delay
+                       Max<ui64>(),                   // farFutureSizeLimit
+                       Max<ui64>(),                   // farFutureTimeLimit
+                       EHoppingWindowPolicy::Drop,    // earlyPolicy
+                       EHoppingWindowPolicy::Adjust); // latePolicy
 }
 
 Y_UNIT_TEST(TestWatermarkFlow1) {
@@ -453,6 +640,402 @@ Y_UNIT_TEST(TestWatermarkFlow1) {
     expectedStatsMap["MultiHop_FarFutureEventsCount"] = 4;
 
     TestWatermarksImpl(input, expected, watermarks, expectedStatsMap);
+}
+#endif
+
+Y_UNIT_TEST(TestWatermarkFlow1CloseTime0) {
+    const std::vector<TInputItem> input = {
+        // Group; Time; Value
+        {1, 101, 2},
+        {1, 131, 3},
+        {1, 200, 4},
+        {1, 300, 5},
+        {1, 400, 6}};
+    const std::vector<TOutputGroup> expected = {
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({
+            {1, "2", 110},
+        }),
+        TOutputGroup({
+            {1, "2", 120},
+            {1, "2", 130},
+            {1, "3", 140},
+            {1, "3", 150},
+            {1, "3", 160},
+        }),
+        TOutputGroup({}),
+        TOutputGroup({
+            {1, "4", 210},
+            {1, "4", 220},
+            {1, "4", 230},
+        }),
+        TOutputGroup({
+            {1, "5", 310},
+            {1, "5", 320},
+            {1, "5", 330},
+        }),
+        TOutputGroup({
+            {1, "6", 410},
+            {1, "6", 420},
+            {1, "6", 430},
+        }),
+    };
+    const std::vector<std::pair<ui64, TInstant>> watermarks = {
+        {0, TInstant::MicroSeconds(100)},
+        {3, TInstant::MicroSeconds(200)}};
+    auto expectedStatsMap = DefaultStatsMap;
+    expectedStatsMap["MultiHop_NewHopsCount"] = 15;
+    expectedStatsMap["MultiHop_FarFutureEventsCount"] = 0;
+
+    TestWatermarksImpl(input, expected, watermarks, expectedStatsMap,
+                       10,                          // hop
+                       30,                          // interval
+                       20,                          // delay
+                       Max<ui64>(),                 // farFutureSizeLimit
+                       0,                           // farFutureTimeLimit
+                       EHoppingWindowPolicy::Close, // earlyPolicy
+                       EHoppingWindowPolicy::Drop); // latePolicy
+}
+
+#if MKQL_RUNTIME_VERSION >= 70U
+Y_UNIT_TEST(TestWatermarkFlow1CloseTime100) {
+    const std::vector<TInputItem> input = {
+        // Group; Time; Value
+        {1, 101, 2},
+        {1, 131, 3},
+        {1, 200, 4},
+        {1, 300, 5},
+        {1, 400, 6}};
+    const std::vector<TOutputGroup> expected = {
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({
+            {1, "2", 110},
+            {1, "2", 120},
+            {1, "2", 130},
+        }),
+        TOutputGroup({
+            {1, "3", 140},
+            {1, "3", 150},
+            {1, "3", 160},
+        }),
+        TOutputGroup({
+            {1, "4", 210},
+            {1, "4", 220},
+            {1, "4", 230},
+        }),
+        TOutputGroup({
+            {1, "5", 310},
+            {1, "5", 320},
+            {1, "5", 330},
+        }),
+        TOutputGroup({
+            {1, "6", 410},
+            {1, "6", 420},
+            {1, "6", 430},
+        }),
+    };
+    const std::vector<std::pair<ui64, TInstant>> watermarks = {
+        {0, TInstant::MicroSeconds(100)},
+        {3, TInstant::MicroSeconds(200)}};
+    auto expectedStatsMap = DefaultStatsMap;
+    expectedStatsMap["MultiHop_NewHopsCount"] = 15;
+    expectedStatsMap["MultiHop_FarFutureEventsCount"] = 4;
+
+    TestWatermarksImpl(input, expected, watermarks, expectedStatsMap,
+                       10,                          // hop
+                       30,                          // interval
+                       20,                          // delay
+                       Max<ui64>(),                 // farFutureSizeLimit
+                       100,                         // farFutureTimeLimit
+                       EHoppingWindowPolicy::Close, // earlyPolicy
+                       EHoppingWindowPolicy::Drop); // latePolicy
+}
+
+Y_UNIT_TEST(TestWatermarkFlow1CloseCount0) {
+    const std::vector<TInputItem> input = {
+        // Group; Time; Value
+        {1, 101, 2},
+        {1, 131, 3},
+        {1, 200, 4},
+        {1, 300, 5},
+        {1, 400, 6}};
+    const std::vector<TOutputGroup> expected = {
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({
+            {1, "2", 110},
+        }),
+        TOutputGroup({
+            {1, "2", 120},
+            {1, "2", 130},
+            {1, "3", 140},
+            {1, "3", 150},
+            {1, "3", 160},
+        }),
+        TOutputGroup({}),
+        TOutputGroup({
+            {1, "4", 210},
+            {1, "4", 220},
+            {1, "4", 230},
+        }),
+        TOutputGroup({
+            {1, "5", 310},
+            {1, "5", 320},
+            {1, "5", 330},
+        }),
+        TOutputGroup({
+            {1, "6", 410},
+            {1, "6", 420},
+            {1, "6", 430},
+        }),
+    };
+    const std::vector<std::pair<ui64, TInstant>> watermarks = {
+        {0, TInstant::MicroSeconds(100)},
+        {3, TInstant::MicroSeconds(200)}};
+    auto expectedStatsMap = DefaultStatsMap;
+    expectedStatsMap["MultiHop_NewHopsCount"] = 15;
+    expectedStatsMap["MultiHop_FarFutureEventsCount"] = 4;
+
+    TestWatermarksImpl(input, expected, watermarks, expectedStatsMap,
+                       10,                          // hop
+                       30,                          // interval
+                       20,                          // delay
+                       0,                           // farFutureSizeLimit
+                       Max<ui64>(),                 // farFutureTimeLimit
+                       EHoppingWindowPolicy::Close, // earlyPolicy
+                       EHoppingWindowPolicy::Drop); // latePolicy
+}
+
+Y_UNIT_TEST(TestWatermarkFlow1CloseCount1) {
+    const std::vector<TInputItem> input = {
+        // Group; Time; Value
+        {1, 101, 2},
+        {1, 131, 3},
+        {1, 200, 4},
+        {1, 300, 5},
+        {1, 400, 6}};
+    const std::vector<TOutputGroup> expected = {
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({
+            {1, "2", 110},
+        }),
+        TOutputGroup({
+            {1, "2", 120},
+            {1, "2", 130},
+            {1, "3", 140},
+            {1, "3", 150},
+            {1, "3", 160},
+        }),
+        TOutputGroup({}),
+        TOutputGroup({
+            {1, "4", 210},
+            {1, "4", 220},
+            {1, "4", 230},
+        }),
+        TOutputGroup({
+            {1, "5", 310},
+            {1, "5", 320},
+            {1, "5", 330},
+            {1, "6", 410},
+            {1, "6", 420},
+            {1, "6", 430},
+        }),
+    };
+    const std::vector<std::pair<ui64, TInstant>> watermarks = {
+        {0, TInstant::MicroSeconds(100)},
+        {3, TInstant::MicroSeconds(200)}};
+    auto expectedStatsMap = DefaultStatsMap;
+    expectedStatsMap["MultiHop_NewHopsCount"] = 15;
+    expectedStatsMap["MultiHop_FarFutureEventsCount"] = 4;
+
+    TestWatermarksImpl(input, expected, watermarks, expectedStatsMap,
+                       10,                          // hop
+                       30,                          // interval
+                       20,                          // delay
+                       1,                           // farFutureSizeLimit
+                       Max<ui64>(),                 // farFutureTimeLimit
+                       EHoppingWindowPolicy::Close, // earlyPolicy
+                       EHoppingWindowPolicy::Drop); // latePolicy
+}
+
+Y_UNIT_TEST(TestWatermarkFlow1DropTime0) {
+    const std::vector<TInputItem> input = {
+        // Group; Time; Value
+        {1, 101, 2},
+        {1, 131, 3},
+        {1, 200, 4},
+        {1, 300, 5},
+        {1, 400, 6}};
+    const std::vector<TOutputGroup> expected = {
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({
+            {1, "2", 110},
+            {1, "2", 120},
+            {1, "2", 130},
+        }),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+    };
+    const std::vector<std::pair<ui64, TInstant>> watermarks = {
+        {0, TInstant::MicroSeconds(100)},
+        {3, TInstant::MicroSeconds(200)}};
+    auto expectedStatsMap = DefaultStatsMap;
+    expectedStatsMap["MultiHop_NewHopsCount"] = 3;
+    expectedStatsMap["MultiHop_FarFutureEventsCount"] = 0;
+
+    TestWatermarksImpl(input, expected, watermarks, expectedStatsMap,
+                       10,                          // hop
+                       30,                          // interval
+                       20,                          // delay
+                       Max<ui64>(),                 // farFutureSizeLimit
+                       0,                           // farFutureTimeLimit
+                       EHoppingWindowPolicy::Drop,  // earlyPolicy
+                       EHoppingWindowPolicy::Drop); // latePolicy
+}
+
+Y_UNIT_TEST(TestWatermarkFlow1DropTime100) {
+    const std::vector<TInputItem> input = {
+        // Group; Time; Value
+        {1, 101, 2},
+        {1, 131, 3},
+        {1, 200, 4},
+        {1, 300, 5},
+        {1, 400, 6}};
+    const std::vector<TOutputGroup> expected = {
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({
+            // no watermark -> time limit unused
+            {1, "2", 110},
+            {1, "2", 120},
+            {1, "2", 130},
+            {1, "3", 140},
+            {1, "3", 150},
+            {1, "3", 160},
+        }),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+    };
+    const std::vector<std::pair<ui64, TInstant>> watermarks = {
+        {0, TInstant::MicroSeconds(100)},
+        {3, TInstant::MicroSeconds(200)}};
+    auto expectedStatsMap = DefaultStatsMap;
+    expectedStatsMap["MultiHop_NewHopsCount"] = 6;
+    expectedStatsMap["MultiHop_FarFutureEventsCount"] = 1;
+
+    TestWatermarksImpl(input, expected, watermarks, expectedStatsMap,
+                       10,                          // hop
+                       30,                          // interval
+                       20,                          // delay
+                       Max<ui64>(),                 // farFutureSizeLimit
+                       100,                         // farFutureTimeLimit
+                       EHoppingWindowPolicy::Drop,  // earlyPolicy
+                       EHoppingWindowPolicy::Drop); // latePolicy
+}
+
+Y_UNIT_TEST(TestWatermarkFlow1DropCount0) {
+    const std::vector<TInputItem> input = {
+        // Group; Time; Value
+        {1, 101, 2},
+        {1, 131, 3},
+        {1, 200, 4},
+        {1, 300, 5},
+        {1, 400, 6}};
+    const std::vector<TOutputGroup> expected = {
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({
+            {1, "2", 110},
+            {1, "2", 120},
+            {1, "2", 130},
+        }),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+    };
+    const std::vector<std::pair<ui64, TInstant>> watermarks = {
+        {0, TInstant::MicroSeconds(100)},
+        {3, TInstant::MicroSeconds(200)}};
+    auto expectedStatsMap = DefaultStatsMap;
+    expectedStatsMap["MultiHop_NewHopsCount"] = 3;
+    expectedStatsMap["MultiHop_FarFutureEventsCount"] = 4;
+
+    TestWatermarksImpl(input, expected, watermarks, expectedStatsMap,
+                       10,                          // hop
+                       30,                          // interval
+                       20,                          // delay
+                       0,                           // farFutureSizeLimit
+                       Max<ui64>(),                 // farFutureTimeLimit
+                       EHoppingWindowPolicy::Drop,  // earlyPolicy
+                       EHoppingWindowPolicy::Drop); // latePolicy
+}
+
+Y_UNIT_TEST(TestWatermarkFlow1DropCount1) {
+    const std::vector<TInputItem> input = {
+        // Group; Time; Value
+        {1, 101, 2},
+        {1, 131, 3},
+        {1, 200, 4},
+        {1, 300, 5},
+        {1, 400, 6}};
+    const std::vector<TOutputGroup> expected = {
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({
+            {1, "2", 110},
+            {1, "2", 120},
+            {1, "2", 130},
+            {1, "3", 140},
+            {1, "3", 150},
+            {1, "3", 160},
+        }),
+        TOutputGroup({}),
+        TOutputGroup({}),
+        TOutputGroup({
+            {1, "5", 310},
+            {1, "5", 320},
+            {1, "5", 330},
+        }),
+    };
+    const std::vector<std::pair<ui64, TInstant>> watermarks = {
+        {0, TInstant::MicroSeconds(100)},
+        {3, TInstant::MicroSeconds(200)}};
+    auto expectedStatsMap = DefaultStatsMap;
+    expectedStatsMap["MultiHop_NewHopsCount"] = 9;
+    expectedStatsMap["MultiHop_FarFutureEventsCount"] = 4;
+
+    TestWatermarksImpl(input, expected, watermarks, expectedStatsMap,
+                       10,                          // hop
+                       30,                          // interval
+                       20,                          // delay
+                       1,                           // farFutureSizeLimit
+                       Max<ui64>(),                 // farFutureTimeLimit
+                       EHoppingWindowPolicy::Drop,  // earlyPolicy
+                       EHoppingWindowPolicy::Drop); // latePolicy
 }
 
 Y_UNIT_TEST(TestWatermarkFlow2) {
@@ -523,6 +1106,7 @@ Y_UNIT_TEST(TestWatermarkFlow3) {
 
     TestWatermarksImpl(input, expected, watermarks, expectedStatsMap);
 }
+#endif
 
 Y_UNIT_TEST(TestWatermarkFlowOverflow) {
     // TODO this tests fails before this change, but it does not exercise

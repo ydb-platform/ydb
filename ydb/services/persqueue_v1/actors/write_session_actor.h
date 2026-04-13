@@ -33,6 +33,7 @@ template<bool UseMigrationProtocol>
 class TWriteSessionActor
     : public NActors::TActorBootstrapped<TWriteSessionActor<UseMigrationProtocol>>
     , private NPQ::TRlHelpers
+    , public NActors::IActorExceptionHandler
 {
     using TSelf = TWriteSessionActor<UseMigrationProtocol>;
     using TClientMessage = std::conditional_t<UseMigrationProtocol, PersQueue::V1::StreamingWriteClientMessage,
@@ -77,6 +78,7 @@ public:
     void Bootstrap(const NActors::TActorContext& ctx);
 
     void Die(const NActors::TActorContext& ctx) override;
+    bool OnUnhandledException(const std::exception& exc) override;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::FRONT_PQ_WRITE;
@@ -170,7 +172,7 @@ private:
     void CloseSpans(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode);
 
 private:
-    void CreatePartitionWriterCache(const TActorContext& ctx);
+    bool CreatePartitionWriterCache(const TActorContext& ctx);
     void DestroyPartitionWriterCache(const TActorContext& ctx);
     NWilson::TSpan GenerateSpan(NJaegerTracing::ERequestType subrequestType, const TStringBuf name) const;
     NWilson::TSpan GenerateInitSpan() const {

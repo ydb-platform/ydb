@@ -196,7 +196,7 @@ public:
         return DoStartFetchingAccessor(sourcePtr, step);
     }
 
-    virtual TInternalPathId GetPathId() const = 0;
+    virtual TInternalPathId GetPathId() const override = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
     void InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching);
@@ -228,15 +228,15 @@ public:
 
     IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<NCommon::TSpecialReadContext>& context,
         const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
-        const std::optional<ui64> shardingVersion, const bool hasDeletions)
-        : TBase(type, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions)
+        const std::optional<ui64> shardingVersion, const bool hasDeletions, const ui64 deprecatedPortionId)
+        : TBase(type, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions, deprecatedPortionId)
     {
     }
 
     virtual ~IDataSource() = default;
 };
 
-class TPortionDataSource: public IDataSource, public NCommon::IPortionDataSource {
+class TPortionDataSource: public IDataSource {
 private:
     using TBase = IDataSource;
     const TPortionInfo::TConstPtr Portion;
@@ -407,7 +407,7 @@ public:
             context->GetDuplicatesManagerVerified(), new NDuplicateFiltering::TEvRequestFilter(*this, std::move(subscriber)));
     }
 
-    ui64 GetPortionId() const override {
+    std::optional<ui64> GetPortionIdOptional() const override {
         return Portion->GetPortionId();
     }
 
@@ -505,6 +505,10 @@ private:
         return recordsCount;
     }
 
+    std::optional<ui64> GetPortionIdOptional() const override {
+        return std::nullopt;
+    }
+
 public:
     static bool CheckTypeCast(const EType type) {
         return type == NCommon::IDataSource::EType::SimpleAggregation;
@@ -587,7 +591,7 @@ public:
     TAggregationDataSource(
         std::vector<std::shared_ptr<NCommon::IDataSource>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
         : TBase(EType::SimpleAggregation, sources.back()->GetSourceIdx(), context, TSnapshot::Zero(), TSnapshot::Zero(),
-              CalcInputRecordsCount(sources), std::nullopt, false)
+              CalcInputRecordsCount(sources), std::nullopt, false, sources.back()->GetSourceIdx())
         , Sources(std::move(sources))
         , LastSourceIdx(Sources.back()->GetSourceIdx())
         , LastSourceRecordsCount(Sources.back()->GetRecordsCount())

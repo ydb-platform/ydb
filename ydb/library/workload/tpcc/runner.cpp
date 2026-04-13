@@ -137,7 +137,9 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
         std::exit(1);
     }
 
-    CheckPathForRun(connectionConfig, Config.Path, Config.WarehouseCount);
+    if (Config.SimulateTransactionMs == 0 && Config.SimulateTransactionSelect1Count == 0) {
+        CheckPathForRun(connectionConfig, Config.Path, Config.WarehouseCount);
+    }
 
     const size_t terminalsCount = Config.WarehouseCount * TERMINALS_PER_WAREHOUSE;
 
@@ -262,6 +264,7 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
             Config.NoDelays,
             Config.SimulateTransactionMs,
             Config.SimulateTransactionSelect1Count,
+            Config.TxMode,
             TerminalsStopSource.get_token(),
             StopWarmup,
             PerThreadTerminalStats[i % threadCount],
@@ -448,8 +451,17 @@ void TPCCRunner::RunSync() {
         UpdateDisplayIfNeeded(now);
     }
 
-    LOG_D("Finished measurements");
+    if (GetGlobalErrorVariable().load()) {
+        LOG_D("Stopped by error, joining");
+    } else {
+        LOG_D("Finished measurements, joining");
+    }
+
     Join();
+
+    if (GetGlobalErrorVariable().load()) {
+        ythrow yexception() << "critical error, see the logs";
+    }
 
     switch (Config.Format) {
     case TRunConfig::EFormat::Pretty:

@@ -16,7 +16,7 @@ using namespace NDom;
 template <typename TSource>
 class TAsJsonNode: public TBoxedValue {
 public:
-    TAsJsonNode(TSourcePosition pos)
+    explicit TAsJsonNode(TSourcePosition pos)
         : Pos_(pos)
     {
     }
@@ -71,44 +71,44 @@ private:
 };
 
 template <>
-TStringRef TAsJsonNode<TUtf8>::Name() {
+inline TStringRef TAsJsonNode<TUtf8>::Name() {
     return TStringRef::Of("Utf8AsJsonNode");
 }
 
 template <>
-TUnboxedValue TAsJsonNode<TUtf8>::Interpret(const TUnboxedValue& sourceValue, const IValueBuilder* valueBuilder) {
+inline TUnboxedValue TAsJsonNode<TUtf8>::Interpret(const TUnboxedValue& sourceValue, const IValueBuilder* valueBuilder) {
     return MakeString(sourceValue.AsStringRef(), valueBuilder);
 }
 
 template <>
-TStringRef TAsJsonNode<double>::Name() {
+inline TStringRef TAsJsonNode<double>::Name() {
     return TStringRef::Of("DoubleAsJsonNode");
 }
 
 template <>
-TUnboxedValue TAsJsonNode<double>::Interpret(const TUnboxedValue& sourceValue, const IValueBuilder* valueBuilder) {
+inline TUnboxedValue TAsJsonNode<double>::Interpret(const TUnboxedValue& sourceValue, const IValueBuilder* valueBuilder) {
     Y_UNUSED(valueBuilder);
     return MakeDouble(sourceValue.Get<double>());
 }
 
 template <>
-TStringRef TAsJsonNode<bool>::Name() {
+inline TStringRef TAsJsonNode<bool>::Name() {
     return TStringRef::Of("BoolAsJsonNode");
 }
 
 template <>
-TUnboxedValue TAsJsonNode<bool>::Interpret(const TUnboxedValue& sourceValue, const IValueBuilder* valueBuilder) {
+inline TUnboxedValue TAsJsonNode<bool>::Interpret(const TUnboxedValue& sourceValue, const IValueBuilder* valueBuilder) {
     Y_UNUSED(valueBuilder);
     return MakeBool(sourceValue.Get<bool>());
 }
 
 template <>
-TStringRef TAsJsonNode<TJson>::Name() {
+inline TStringRef TAsJsonNode<TJson>::Name() {
     return TStringRef::Of("JsonAsJsonNode");
 }
 
 template <>
-TUnboxedValue TAsJsonNode<TJson>::Interpret(const TUnboxedValue& sourceValue, const IValueBuilder* valueBuilder) {
+inline TUnboxedValue TAsJsonNode<TJson>::Interpret(const TUnboxedValue& sourceValue, const IValueBuilder* valueBuilder) {
     return TryParseJsonDom(sourceValue.AsStringRef(), valueBuilder);
 }
 } // namespace NJson2Udf

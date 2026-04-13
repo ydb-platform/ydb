@@ -2,6 +2,8 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <yql/essentials/sql/v1/node.h>
 
@@ -21,6 +23,9 @@ TStreamingQuerySettings& TStreamingQuerySettings::FromProto(const NKikimrSchemeO
             ResourcePool = value;
         } else if (name == TStreamingQueryMeta::TProperties::QueryTextRevision) {
             QueryTextRevision = TryFromString<ui64>(value).GetOrElse(0);
+        } else if (name == TStreamingQueryMeta::TProperties::StreamingDisposition) {
+            StreamingDisposition = std::make_shared<NYql::NPq::NProto::StreamingDisposition>();
+            Y_VALIDATE(StreamingDisposition->ParseFromString(value), "Failed to parse StreamingDisposition");
         }
     }
 

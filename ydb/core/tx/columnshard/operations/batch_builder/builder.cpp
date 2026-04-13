@@ -94,11 +94,9 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
             merger = std::make_shared<TInsertMerger>(batch, Context.GetActualSchema());
             break;
         }
+        case NEvWrite::EModificationType::UpsertIncrement:
+        case NEvWrite::EModificationType::Increment:
         case NEvWrite::EModificationType::Update: {
-            merger = std::make_shared<TUpdateMerger>(batch, Context.GetActualSchema(), "");
-            break;
-        }
-        case NEvWrite::EModificationType::Increment: {
             merger = std::make_shared<TUpdateMerger>(batch, Context.GetActualSchema(), "");
             break;
         }

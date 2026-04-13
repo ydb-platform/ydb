@@ -3,8 +3,7 @@
 #include <util/generic/string.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-namespace NYql {
-namespace NCommon {
+namespace NYql::NCommon {
 
 struct TServiceCounters {
     ::NMonitoring::TDynamicCounterPtr RootCounters;   // "counters/counters=yq" - root counters for service metrics
@@ -15,15 +14,15 @@ struct TServiceCounters {
     ::NMonitoring::TDynamicCounters::TCounterPtr UptimePublicCounter; // yq_public/query.uptime_seconds
 
     explicit TServiceCounters(
-        const ::NMonitoring::TDynamicCounterPtr& rootCounters,
-        const ::NMonitoring::TDynamicCounterPtr& publicCounters,
+        ::NMonitoring::TDynamicCounterPtr rootCounters,
+        ::NMonitoring::TDynamicCounterPtr publicCounters,
         const TString& subsystemName = "");
 
     explicit TServiceCounters(
         const ::NMonitoring::TDynamicCounterPtr& baseCounters,
         const TString& subsystemName = "");
 
-    explicit TServiceCounters(
+    TServiceCounters(
         const TServiceCounters& serviceCounters,
         const TString& subsystemName = "");
 
@@ -34,5 +33,4 @@ struct TServiceCounters {
     void SetUptimePublicAndServiceCounter(i64 val) const;
 };
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NYql::NCommon

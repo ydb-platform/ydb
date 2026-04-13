@@ -5,26 +5,32 @@
 #include <aws/sqs/SQSClient.h>
 
 namespace NYdb::NConsoleClient {
+    using namespace Aws::SQS::Model;
 
     class TSQSJsonClient: public Aws::SQS::SQSClient {
     public:
         explicit TSQSJsonClient(
             const Aws::Auth::AWSCredentials& credentials,
-            const Aws::Client::ClientConfiguration& clientConfiguration);
+            const Aws::Client::ClientConfiguration& clientConfiguration,
+            const Aws::String& cloudIamToken);
         ~TSQSJsonClient() = default;
 
-        Aws::SQS::Model::SendMessageBatchOutcome SendMessageBatch(
-            const Aws::SQS::Model::SendMessageBatchRequest& request) const override;
-        Aws::SQS::Model::ReceiveMessageOutcome ReceiveMessage(
-            const Aws::SQS::Model::ReceiveMessageRequest& request) const override;
-        Aws::SQS::Model::DeleteMessageBatchOutcome DeleteMessageBatch(
-            const Aws::SQS::Model::DeleteMessageBatchRequest& request)
+        SendMessageBatchOutcome SendMessageBatch(
+            const SendMessageBatchRequest& request) const override;
+        ReceiveMessageOutcome ReceiveMessage(
+            const ReceiveMessageRequest& request) const override;
+        DeleteMessageBatchOutcome DeleteMessageBatch(
+            const DeleteMessageBatchRequest& request)
             const override;
+        GetQueueUrlOutcome GetQueueUrl(
+            const GetQueueUrlRequest& request) const override;
+
 
     private:
         std::shared_ptr<Aws::Http::HttpClient> HttpClient;
         std::shared_ptr<Aws::Client::AWSAuthV4Signer> Signer;
         Aws::String EndpointOverride;
+        Aws::String CloudIamToken;
 
         void AddHeaders(const Aws::Http::HeaderValueCollection&,
                         std::shared_ptr<Aws::Http::HttpRequest>&) const;

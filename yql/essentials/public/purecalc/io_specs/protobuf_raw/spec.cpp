@@ -8,6 +8,8 @@
 #include <yql/essentials/utils/yql_panic.h>
 #include <google/protobuf/reflection.h>
 
+#include <utility>
+
 using namespace NYql;
 using namespace NYql::NPureCalc;
 using namespace google::protobuf;
@@ -17,15 +19,15 @@ using namespace NKikimr::NMiniKQL;
 TProtobufRawInputSpec::TProtobufRawInputSpec(
     const Descriptor& descriptor,
     const TMaybe<TString>& timestampColumn,
-    const TProtoSchemaOptions& options)
+    TProtoSchemaOptions options)
     : Descriptor_(descriptor)
     , TimestampColumn_(timestampColumn)
-    , SchemaOptions_(options)
+    , SchemaOptions_(std::move(options))
 {
 }
 
 const TVector<NYT::TNode>& TProtobufRawInputSpec::GetSchemas() const {
-    if (SavedSchemas_.size() == 0) {
+    if (SavedSchemas_.empty()) {
         SavedSchemas_.push_back(MakeSchemaFromProto(Descriptor_, SchemaOptions_));
         if (TimestampColumn_) {
             auto timestampType = NYT::TNode::CreateList();
@@ -56,11 +58,11 @@ const TProtoSchemaOptions& TProtobufRawInputSpec::GetSchemaOptions() const {
 TProtobufRawOutputSpec::TProtobufRawOutputSpec(
     const Descriptor& descriptor,
     MessageFactory* factory,
-    const TProtoSchemaOptions& options,
+    TProtoSchemaOptions options,
     Arena* arena)
     : Descriptor_(descriptor)
     , Factory_(factory)
-    , SchemaOptions_(options)
+    , SchemaOptions_(std::move(options))
     , Arena_(arena)
 {
     SchemaOptions_.ListIsOptional = true;
@@ -101,10 +103,10 @@ const TProtoSchemaOptions& TProtobufRawOutputSpec::GetSchemaOptions() const {
 TProtobufRawMultiOutputSpec::TProtobufRawMultiOutputSpec(
     TVector<const Descriptor*> descriptors,
     TMaybe<TVector<MessageFactory*>> factories,
-    const TProtoSchemaOptions& options,
+    TProtoSchemaOptions options,
     TMaybe<TVector<Arena*>> arenas)
     : Descriptors_(std::move(descriptors))
-    , SchemaOptions_(options)
+    , SchemaOptions_(std::move(options))
 {
     if (factories) {
         Y_ENSURE(factories->size() == Descriptors_.size(), "number of factories must match number of descriptors");
@@ -860,6 +862,7 @@ public:
             TUnboxedValue result;
             Converter_.DoConvert(message, result);
             WorkerHolder_->Push(std::move(result));
+            WorkerHolder_->CheckState(false);
         }
     }
 
@@ -868,6 +871,7 @@ public:
 
         with_lock (WorkerHolder_->GetScopedAlloc()) {
             WorkerHolder_->OnFinish();
+            WorkerHolder_->CheckState(true);
         }
     }
 };
@@ -900,6 +904,7 @@ public:
             YQL_ENSURE(status != EFetchStatus::Yield, "Yield is not supported in pull mode");
 
             if (status == EFetchStatus::Finish) {
+                WorkerHolder_->CheckState(true);
                 return TOutputSpecTraits<TOutputSpec>::StreamSentinel;
             }
 
@@ -932,6 +937,7 @@ public:
             TUnboxedValue value;
 
             if (!WorkerHolder_->GetOutputIterator().Next(value)) {
+                WorkerHolder_->CheckState(true);
                 return TOutputSpecTraits<TOutputSpec>::StreamSentinel;
             }
 

@@ -2,6 +2,7 @@
 
 #include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
+#include <yql/essentials/parser/pg_wrapper/interface/raw_parser.h>
 
 namespace NSQLTranslation {
 
@@ -14,6 +15,7 @@ using TTranslatorPtr = TIntrusivePtr<ITranslator>;
 namespace NSQLTranslationPG {
 
 NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TStmtParseInfo* stmtParseInfo = nullptr);
+NYql::TAstParseResult PGToYql(const NYql::TPGParseResult& parseResult, const TString& query, const NSQLTranslation::TTranslationSettings& settings, NYql::TStmtParseInfo* stmtParseInfo = nullptr);
 TVector<NYql::TAstParseResult> PGToYqlStatements(const TString& query, const NSQLTranslation::TTranslationSettings& settings, TVector<NYql::TStmtParseInfo>* stmtParseInfo = nullptr);
 std::unique_ptr<NYql::NPg::IExtensionSqlParser> CreateExtensionSqlParser();
 std::unique_ptr<NYql::NPg::ISystemFunctionsParser> CreateSystemFunctionsParser();

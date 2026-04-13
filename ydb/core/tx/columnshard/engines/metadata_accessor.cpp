@@ -42,23 +42,21 @@ std::unique_ptr<NReader::NCommon::ISourcesConstructor> TUserTableAccessor::Selec
     const NReader::TReadDescription& readDescription, const bool isPlain) const {
     AFL_VERIFY(readDescription.PKRangesFilter);
     // here we select portions for a read
-    std::vector<std::shared_ptr<TPortionInfo>> portions =
-        context.GetEngine().Select(
-            PathId.InternalPathId, 
-            readDescription.GetSnapshot(), 
-            *readDescription.PKRangesFilter, 
-            readDescription.readNonconflictingPortions,
-            readDescription.readConflictingPortions,
-            readDescription.ownPortions
-        );
+    std::vector<IColumnEngine::TSelectedPortionInfo> portions =
+        context.GetEngine().Select(PathId.InternalPathId, readDescription.GetSnapshot(), *readDescription.PKRangesFilter,
+            readDescription.readNonconflictingPortions, readDescription.readConflictingPortions, readDescription.ownPortions);
     if (!isPlain) {
         std::deque<NReader::NSimple::TSourceConstructor> sources;
         for (auto&& i : portions) {
-            sources.emplace_back(NReader::NSimple::TSourceConstructor(std::move(i), readDescription.GetSorting()));
+            sources.emplace_back(NReader::NSimple::TSourceConstructor(i.GetPortion(), i.GetIsVisible(), readDescription.GetSorting()));
         }
         return std::make_unique<NReader::NSimple::TPortionsSources>(std::move(sources), readDescription.GetSorting());
     } else {
-        return std::make_unique<NReader::NPlain::TPortionSources>(std::move(portions));
+        std::vector<std::shared_ptr<TPortionInfo>> sources;
+        for (auto&& i : portions) {
+            sources.emplace_back(i.GetPortion());
+        }
+        return std::make_unique<NReader::NPlain::TPortionSources>(std::move(sources));
     }
 }
 

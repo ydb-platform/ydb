@@ -119,10 +119,24 @@ struct TTMStorage {
         return ToDatetime(builder) * 1000000ull + Microsecond;
     }
 
-    inline bool Validate(const NUdf::IDateBuilder& builder) {
+    inline bool Validate(const NUdf::IDateBuilder& builder, TMaybe<i16> timezoneOffset = Nothing()) {
         ui32 datetime;
-        if (!builder.MakeDatetime(Year, Month, Day, Hour, Minute, Second, datetime, TimezoneId)) {
-            return false;
+        if (timezoneOffset.Defined()) {
+            Y_ENSURE(TimezoneId == 0);
+            if (!builder.MakeDatetime(Year, Month, Day, Hour, Minute, Second, datetime)) {
+                return false;
+            }
+            const auto tzOffset = *timezoneOffset.Get() * 60;
+            if (tzOffset >= 0 && datetime < static_cast<ui32>(tzOffset) ||
+                tzOffset < 0 && datetime >= tzOffset + NUdf::MAX_DATETIME)
+            {
+                return false;
+            }
+            datetime -= tzOffset;
+        } else {
+            if (!builder.MakeDatetime(Year, Month, Day, Hour, Minute, Second, datetime, TimezoneId)) {
+                return false;
+            }
         }
 
         ui32 year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
@@ -130,6 +144,12 @@ struct TTMStorage {
             ythrow yexception() << "Error in FullSplitDatetime.";
         }
 
+        Year = year;
+        Month = month;
+        Day = day;
+        Hour = hour;
+        Minute = minute;
+        Second = second;
         DayOfYear = dayOfYear;
         WeekOfYear = weekOfYear;
         WeekOfYearIso8601 = weekOfYearIso8601;
@@ -151,7 +171,7 @@ struct TTMStorage {
         return ((Hour * 60ull + Minute) * 60ull + Second) * 1000000ull + Microsecond;
     }
 
-    const TString ToString() const {
+    TString ToString() const {
         const auto& tzName = NTi::GetTimezones()[TimezoneId];
         return Sprintf("%4d-%02d-%02dT%02d:%02d:%02d.%06d,%.*s",
                        Year, Month, Day, Hour, Minute, Second, Microsecond,

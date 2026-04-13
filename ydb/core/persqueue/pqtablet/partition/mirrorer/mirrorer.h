@@ -2,6 +2,7 @@
 
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
@@ -29,7 +30,7 @@ private:
     const TDuration UPDATE_COUNTERS_INTERVAL = TDuration::Seconds(5);
 
     const TDuration LOG_STATE_INTERVAL = TDuration::Minutes(1);
-    const TDuration INIT_TIMEOUT = TDuration::Minutes(1);
+    const TDuration INIT_TIMEOUT = TDuration::Minutes(2);
     const TDuration RECEIVE_READ_EVENT_TIMEOUT = TDuration::Minutes(1);
     const TDuration WRITE_TIMEOUT = TDuration::Minutes(10);
 

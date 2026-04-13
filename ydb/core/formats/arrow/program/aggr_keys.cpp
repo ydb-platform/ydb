@@ -16,6 +16,7 @@
 #endif
 #include <AggregateFunctions/IAggregateFunction.h>
 #else
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_aggregate.h>
 namespace CH {
 enum class AggFunctionId {
     AGG_UNSPECIFIED = 0,

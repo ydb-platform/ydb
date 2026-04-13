@@ -6,6 +6,7 @@
 #include "storage.h"
 #include "write.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/counters/error_collector.h>
 #include <ydb/core/tx/tiering/manager.h>
@@ -69,7 +70,7 @@ void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* ti
                 return;
             }
         }
-        auto extStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(settings);
+        auto extStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, settings);
         AFL_VERIFY(extStorageConfig);
         DoInitNewExternalOperator(extStorageConfig->ConstructStorageOperator(false), settings);
     } else {

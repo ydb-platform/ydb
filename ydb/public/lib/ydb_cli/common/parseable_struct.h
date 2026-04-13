@@ -3,7 +3,6 @@
 #include "command.h"
 #include "client_command_options.h"
 
-#include <library/cpp/colorizer/colors.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 
 #include <util/generic/algorithm.h>

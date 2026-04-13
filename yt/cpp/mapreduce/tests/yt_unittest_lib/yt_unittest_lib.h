@@ -98,7 +98,7 @@ struct TOwningYaMRRow
     operator TYaMRRow() const;
 };
 
-bool operator == (const TOwningYaMRRow& row1, const TOwningYaMRRow& row2);
+bool operator==(const TOwningYaMRRow& row1, const TOwningYaMRRow& row2);
 
 ////////////////////////////////////////////////////////////////////////////////
 

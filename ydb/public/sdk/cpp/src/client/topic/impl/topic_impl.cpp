@@ -2,6 +2,7 @@
 
 #include "read_session.h"
 #include "write_session.h"
+#include "producer.h"
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -59,6 +60,39 @@ std::shared_ptr<ISimpleBlockingWriteSession> TTopicClient::TImpl::CreateSimpleWr
             alteredSettings, shared_from_this(), Connections_, DbDriverState_
     );
     return std::move(session);
+}
+
+std::shared_ptr<IProducer> TTopicClient::TImpl::CreateProducer(const TProducerSettings& settings) {
+    auto alteredSettings = settings;
+    {
+        std::lock_guard guard(Lock);
+        if (!settings.CompressionExecutor_) {
+            alteredSettings.CompressionExecutor(Settings.DefaultCompressionExecutor_);
+        }
+
+        bool handlersSet = settings.EventHandlers_.AcksHandler_ ||
+            settings.EventHandlers_.SessionClosedHandler_ ||
+            settings.EventHandlers_.CommonHandler_;
+
+        if (!settings.EventHandlers_.HandlersExecutor_) {
+            if (handlersSet) {
+                alteredSettings.EventHandlers_.HandlersExecutor(Settings.DefaultHandlersExecutor_);
+            } else {
+                alteredSettings.EventHandlers_.HandlersExecutor(NTopic::CreateSyncExecutor());
+            }
+        }
+
+        // As we don't support continuation tokens in IProducer interface
+        alteredSettings.EventHandlers_.ReadyToAcceptHandler({});
+
+        if (!settings.EventHandlers_.AcksHandler_) {
+            alteredSettings.EventHandlers_.AcksHandler([&](TWriteSessionEvent::TAcksEvent&) {});
+        }
+    }
+
+    return std::make_shared<TProducer>(
+        alteredSettings, shared_from_this(), Connections_, DbDriverState_
+    );
 }
 
 std::shared_ptr<TTopicClient::TImpl::IReadSessionConnectionProcessorFactory> TTopicClient::TImpl::CreateReadSessionConnectionProcessorFactory() {

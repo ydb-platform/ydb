@@ -121,10 +121,8 @@ static TKikimrRunner GetKikimrWithJoinSettings(
 
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookupJoin);
-    appConfig.MutableTableServiceConfig()->SetEnableConstantFolding(true);
     appConfig.MutableTableServiceConfig()->SetEnableOrderOptimizaionFSM(true);
     appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(TDuration::Minutes(10).MilliSeconds());
-    appConfig.MutableFeatureFlags()->SetEnableViews(true);
     if (!useCBO) {
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(0);
     } else {
@@ -407,7 +405,6 @@ private:
 
 void ExplainJoinOrderTestDataQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore, bool useCBO = true) {
     auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO);
-    kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
     auto db = kikimr.GetQueryClient();
     auto result = db.GetSession().GetValueSync();
     NStatusHelpers::ThrowOnError(result);
@@ -434,7 +431,6 @@ void ExplainJoinOrderTestDataQueryWithStats(const TString& queryPath, const TStr
 
 void TestOlapEstimationRowsCorrectness(const TString& queryPath, const TString& statsPath) {
     auto kikimr = GetKikimrWithJoinSettings(false, GetStatic(statsPath));
-    kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
     auto db = kikimr.GetQueryClient();
     auto result = db.GetSession().GetValueSync();
     NStatusHelpers::ThrowOnError(result);
@@ -574,7 +570,6 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         const TExecuteParams& params = {}
     ) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO, params);
-        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
         auto db = kikimr.GetQueryClient();
         auto result = db.GetSession().GetValueSync();
         NStatusHelpers::ThrowOnError(result);
@@ -615,7 +610,6 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
     void CheckJoinCardinality(const TString& queryPath, const TString& statsPath, const TString& joinKind, double card, bool useStreamLookupJoin, bool useColumnStore) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), true);
-        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
         auto db = kikimr.GetQueryClient();
         auto result = db.GetSession().GetValueSync();
         NStatusHelpers::ThrowOnError(result);
@@ -849,25 +843,29 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     Y_UNIT_TEST_TWIN(TestJoinHint1, ColumnStore) {
-        CheckJoinCardinality("queries/test_join_hint1.sql", "stats/basic.json", "InnerJoin (Grace)", 10e6, false, ColumnStore);
+        CheckJoinCardinality("queries/test_join_hint1.sql", "stats/basic.json", "InnerJoin (BlockHash)", 10e6, false, ColumnStore);
+    }
+
+    Y_UNIT_TEST_TWIN(TestJoinHint1BlockHash, ColumnStore) {
+        CheckJoinCardinality("queries/test_join_hint1_block_hash.sql", "stats/basic.json", "InnerJoin (BlockHash)", 10e6, false, ColumnStore);
     }
 
     Y_UNIT_TEST_TWIN(TestJoinHint2, ColumnStore) {
-        CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (MapJoin)", 1, false, ColumnStore);
+        CheckJoinCardinality("queries/test_join_hint2.sql", "stats/basic.json", "InnerJoin (Map)", 1, false, ColumnStore);
     }
 
     Y_UNIT_TEST(BytesHintForceGraceJoin) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/bytes_hint_force_grace_join.sql", "stats/basic.json", false, true, true);
         auto joinFinder = TFindJoinWithLabels(plan);
         auto join = joinFinder.Find({"R", "S"});
-        UNIT_ASSERT_C(join.Join == "InnerJoin (Grace)", join.Join);
+        UNIT_ASSERT_C(join.Join == "InnerJoin (BlockHash)", join.Join);
     }
 
     Y_UNIT_TEST_TWIN(ShuffleEliminationOneJoin, EnableSeparationComputeActorsFromRead) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/shuffle_elimination_one_join.sql", "stats/tpch1000s.json", false, true, true, {.EnableSeparationComputeActorsFromRead = EnableSeparationComputeActorsFromRead});
         auto joinFinder = TFindJoinWithLabels(plan);
         auto join = joinFinder.Find({"customer", "orders"});
-        UNIT_ASSERT_C(join.Join == "InnerJoin (Grace)", join.Join);
+        UNIT_ASSERT_C(join.Join == "InnerJoin (BlockHash)", join.Join);
         UNIT_ASSERT(!join.LhsShuffled);
         UNIT_ASSERT(join.RhsShuffled);
     }
@@ -878,14 +876,14 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
         {
             auto join = joinFinder.Find({"partsupp", "part"});
-            UNIT_ASSERT_C(join.Join == "InnerJoin (Grace)", join.Join);
+            UNIT_ASSERT_C(join.Join == "InnerJoin (BlockHash)", join.Join);
             UNIT_ASSERT(join.LhsShuffled);
             UNIT_ASSERT(!join.RhsShuffled);
         }
 
         {
             auto join = joinFinder.Find({"partsupp", "part", "supplier"});
-            UNIT_ASSERT_C(join.Join == "InnerJoin (Grace)", join.Join);
+            UNIT_ASSERT_C(join.Join == "InnerJoin (BlockHash)", join.Join);
             UNIT_ASSERT(!join.LhsShuffled);
             UNIT_ASSERT(join.RhsShuffled);
         }
@@ -898,7 +896,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
         auto joinFinder = TFindJoinWithLabels(plan);
         auto join = joinFinder.Find({"t1", "t2"});
-        UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (Grace)");
+        UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (BlockHash)");
         UNIT_ASSERT(!join.LhsShuffled);
         UNIT_ASSERT(join.RhsShuffled);
 
@@ -915,14 +913,14 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto joinFinder = TFindJoinWithLabels(plan);
         {
             auto join = joinFinder.Find({"t1", "t2"});
-            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (Grace)");
+            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (BlockHash)");
             UNIT_ASSERT(!join.LhsShuffled);
             UNIT_ASSERT(join.RhsShuffled);
         }
 
         {
             auto join = joinFinder.Find({"t1", "t2", "t3"});
-            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (Grace)");
+            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (BlockHash)");
             UNIT_ASSERT(join.LhsShuffled);
             UNIT_ASSERT(!join.RhsShuffled);
         }
@@ -940,7 +938,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto joinFinder = TFindJoinWithLabels(plan);
         {
             auto join = joinFinder.Find({"partsupp", "lineitem"});
-            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (Grace)");
+            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (BlockHash)");
             UNIT_ASSERT(!join.LhsShuffled);
             UNIT_ASSERT(join.RhsShuffled);
         }
@@ -954,15 +952,15 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto joinFinder = TFindJoinWithLabels(plan);
         {
             auto join = joinFinder.Find({"customer", "customer_address"});
-            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (MapJoin)");
+            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (Map)");
         }
         {
             auto join = joinFinder.Find({"customer_demographics", "customer", "customer_address"});
-            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (MapJoin)");
+            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (Map)");
         }
         {
             auto join = joinFinder.Find({"customer_demographics", "customer", "customer_address", "store_sales"});
-            UNIT_ASSERT_EQUAL(join.Join, "LeftSemiJoin (Grace)");
+            UNIT_ASSERT_EQUAL(join.Join, "LeftSemiJoin (BlockHash)");
             UNIT_ASSERT(join.LhsShuffled);
             UNIT_ASSERT(join.RhsShuffled);
         }
@@ -977,16 +975,16 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         auto [plan, _] =  ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch9.sql", "stats/tpch100s.json", false, true);
         auto joinFinder = TFindJoinWithLabels(plan);
         auto join = joinFinder.Find({"nation"}, TFindJoinWithLabels::PartialMatch);
-        UNIT_ASSERT_C(join.Join == "InnerJoin (MapJoin)", join.Join);
+        UNIT_ASSERT_C(join.Join == "InnerJoin (Map)", join.Join);
     }
 
     Y_UNIT_TEST(OltpJoinTypeHintCBOTurnOFF) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/oltp_join_type_hint_cbo_turnoff.sql", "stats/basic.json", false, false, false);
         auto joinFinder = TFindJoinWithLabels(plan);
-        UNIT_ASSERT(joinFinder.Find({"R", "S"}).Join == "InnerJoin (Grace)");
-        UNIT_ASSERT(joinFinder.Find({"R", "S", "T"}).Join == "InnerJoin (MapJoin)");
-        UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U"}).Join == "InnerJoin (Grace)");
-        UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U", "V"}).Join == "InnerJoin (MapJoin)");
+        UNIT_ASSERT(joinFinder.Find({"R", "S"}).Join == "InnerJoin (BlockHash)");
+        UNIT_ASSERT(joinFinder.Find({"R", "S", "T"}).Join == "InnerJoin (Map)");
+        UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U"}).Join == "InnerJoin (BlockHash)");
+        UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U", "V"}).Join == "InnerJoin (Map)");
     }
 
     Y_UNIT_TEST_TWIN(TestJoinOrderHintsSimple, ColumnStore) {
@@ -1006,6 +1004,33 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT_C(joinOrder.find(R"(["R","S"])") != TString::npos, joinOrder);
         UNIT_ASSERT_C(joinOrder.find(R"(["T","U"])") != TString::npos, joinOrder);
     }
+
+    Y_UNIT_TEST(JoinOrderHintsNestedEdgesBug) {
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/join_order_hints_nested_edges_bug.sql", "stats/tpcds1000s.json", false, true);
+        auto joinOrder = GetJoinOrder(plan).GetStringRobust();
+        UNIT_ASSERT_C(joinOrder.find(R"([["item","warehouse"],"store"])") != TString::npos, joinOrder);
+    }
+
+    Y_UNIT_TEST(JoinOrderHintsReversedOrder) {
+        // Verifies that a hint can force the join order to be the reverse of what the cost
+        // model would choose. R is much larger than S, so the optimizer naturally puts R
+        // first; JoinOrder((S R)) must override that to produce ["S","R"].
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/join_order_hints_reversed.sql", "stats/basic.json", false, true);
+        UNIT_ASSERT_VALUES_EQUAL(GetJoinOrder(plan).GetStringRobust(), R"(["S","R"])");
+    }
+
+    Y_UNIT_TEST(JoinOrderHintsComplexEdgeBoundary) {
+        // Two hints (item,ship_mode) and (warehouse,date_dim) both partially overlap
+        // with the complex edge {item,warehouse}->store created by the dual-condition
+        // LEFT JOIN on store.
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats(
+            "queries/join_order_hints_complex_edge_boundary.sql",
+            "stats/tpcds1000s.json", false, true);
+        auto joinOrder = GetJoinOrder(plan).GetStringRobust();
+        UNIT_ASSERT_C(joinOrder.find(R"(["item","ship_mode"])") != TString::npos, joinOrder);
+        UNIT_ASSERT_C(joinOrder.find(R"(["warehouse","date_dim"])") != TString::npos, joinOrder);
+    }
+
 
     void CanonizedJoinOrderTest(
         const TString& queryPath, const TString& statsPath, TString correctJoinOrderPath, bool useStreamLookupJoin, bool useColumnStore
@@ -1249,6 +1274,18 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
+    Y_UNIT_TEST(CanonizedJoinOrderTPCDS6) {
+        CanonizedJoinOrderTest(
+            "queries/tpcds6.sql", "stats/tpcds1000s.json", "join_order/tpcds6_1000s.json", false, true
+        );
+    }
+
+    Y_UNIT_TEST(CanonizedJoinOrderTPCDS14) {
+        CanonizedJoinOrderTest(
+            "queries/tpcds14.sql", "stats/tpcds1000s.json", "join_order/tpcds14_1000s.json", false, true
+        );
+    }
+
     Y_UNIT_TEST(CanonizedJoinOrderTPCDS64) {
         CanonizedJoinOrderTest(
             "queries/tpcds64.sql", "stats/tpcds1000s.json", "join_order/tpcds64_1000s.json", false, true
@@ -1276,6 +1313,14 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     Y_UNIT_TEST(CanonizedJoinOrderLookupBug) {
         CanonizedJoinOrderTest(
             "queries/lookupbug.sql", "stats/lookupbug.json", "join_order/lookupbug.json", false, false
+        );
+    }
+
+    Y_UNIT_TEST(CanonizedJoinOrderReuseShuffleWithWrongOrderBug) {
+        CanonizedJoinOrderTest(
+            "queries/reuse_shuffle_with_wrong_order_bug.sql",
+            "stats/tpcc.json",
+            "join_order/reuse_shuffle_with_wrong_order_bug.json", false, true
         );
     }
 

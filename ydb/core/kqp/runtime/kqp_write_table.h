@@ -4,6 +4,7 @@
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/protos/kqp_tablemetadata.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
@@ -85,8 +86,7 @@ std::vector<ui32> GetIndexes(
     const bool preferAdditionalInputColumns);
 
 bool IsEqual(
-    TConstArrayRef<TCell> firstCells,
-    TConstArrayRef<TCell> secondCells,
+    TConstArrayRef<TCell> cells,
     const std::vector<ui32>& newIndexes,
     const std::vector<ui32>& oldIndexes,
     TConstArrayRef<NScheme::TTypeInfo> types);
@@ -96,6 +96,16 @@ std::vector<TConstArrayRef<TCell>> GetRows(
 
 std::vector<TConstArrayRef<TCell>> CutColumns(
     const std::vector<TConstArrayRef<TCell>>& rows, const ui32 columnsCount);
+
+std::vector<ui32> BuildDefaultMap(
+    const THashSet<TStringBuf>& defaultColumns,
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> lookupColumns);
+
+ui32 CountLocalDefaults(
+    const THashSet<TStringBuf>& defaultColumns,
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> lookupColumns);
 
 class TUniqueSecondaryKeyCollector {
 public:
@@ -133,7 +143,7 @@ public:
     virtual void OnPartitioningChanged(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) = 0;
     virtual void OnPartitioningChanged(
-        const std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>& partitioning) = 0;
+        const std::shared_ptr<const TPartitioning>& partitioning) = 0;
 
     using TWriteToken = ui64;
 
@@ -147,6 +157,7 @@ public:
         const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumns,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
+        const ui32 defaultColumnsCount,
         const i64 priority) = 0;
     virtual void Write(
         const TWriteToken token,
@@ -158,6 +169,11 @@ public:
     virtual void FlushBuffer(const TWriteToken token) = 0;
     virtual void FlushBuffers() = 0;
 
+    // Set the QuerySpanId for a write token (for TLI lock-break attribution).
+    virtual void SetTokenQuerySpanId(TWriteToken token, ui64 querySpanId) = 0;
+    // Get the QuerySpanId of the first pending batch for a shard (0 if none).
+    virtual ui64 GetFirstBatchQuerySpanId(ui64 shardId) const = 0;
+
     virtual void Close() = 0;
 
     virtual void AddCoveringMessages() = 0;
@@ -165,6 +181,8 @@ public:
     struct TPendingShardInfo {
         ui64 ShardId;
         bool HasRead;
+        // QuerySpanId of the batch that triggered this shard update (for TLI attribution).
+        ui64 QuerySpanId = 0;
     };
     virtual void ForEachPendingShard(std::function<void(const TPendingShardInfo&)>&& callback) const = 0;
     virtual std::vector<TPendingShardInfo> ExtractShardUpdates() = 0;

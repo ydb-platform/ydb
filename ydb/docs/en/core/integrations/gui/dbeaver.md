@@ -60,13 +60,20 @@ Perform the following steps to establish a connection:
 
 1. In the **User** and **Password** fields, enter the login and password for connecting to the database. A complete list of authentication methods and connection strings for {{ ydb-name }} is provided in the [JDBC driver](https://github.com/ydb-platform/ydb-jdbc-driver) description.
 
+{% note info %}
+
+In Managed installations of {{ ydb-name }} login and password authentication is not available.
+
+{% endnote %}
+
+
 1. Click **Test Connection...** to verify the settings.
 
     If all settings are correct, a message indicating successful connection testing will appear:
 
     ![connection test](./_assets/dbeaver-connection-test.png =400x)
 
-1. Click **Finish** to save the connection.
+2. Click **Finish** to save the connection.
 
 
 ## Working with {{ ydb-name }} {#dbeaver_ydb_connection}

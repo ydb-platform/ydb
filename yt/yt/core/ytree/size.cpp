@@ -89,6 +89,7 @@ void Deserialize(TSize& value, INodePtr node)
 
 void Deserialize(TSize& value, NYson::TYsonPullParserCursor* cursor)
 {
+    MaybeSkipAttributes(cursor);
     if ((*cursor)->GetType() == NYson::EYsonItemType::Int64Value) {
         value = TSize((*cursor)->UncheckedAsInt64());
         cursor->Next();

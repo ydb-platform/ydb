@@ -1,5 +1,7 @@
 #include "pack.h"
 
+#include <array>
+
 ////////////////////////////////////////////////////////////////////////////////
 //
 // Pack
@@ -107,7 +109,7 @@ int UnpackU32(ui32* value, const void* buf) {
 }
 
 int SkipU32(const void* buf) {
-    static const i8 Skip[16] = {1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 4, 5};
+    static const std::array<i8, 16> Skip = {1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 4, 5};
     int i = ((const ui8*)buf)[0] >> 4;
     return Skip[i];
 }
@@ -308,7 +310,7 @@ int UnpackU64(ui64* value, const void* buf) {
 #define REPEAT_128(x) REPEAT_64(x), REPEAT_64(x)
 
 int SkipU64(const void* buf) {
-    static const i8 Skip[256] = {
+    static const std::array<i8, 256> Skip = {
         REPEAT_128(1), REPEAT_64(2), REPEAT_32(3), REPEAT_16(4),
         5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 8, 9};
     return Skip[*(const ui8*)buf];

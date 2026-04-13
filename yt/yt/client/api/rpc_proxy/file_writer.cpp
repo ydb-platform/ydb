@@ -42,7 +42,7 @@ public:
         ValidateNotClosed();
 
         if (!data) {
-            return VoidFuture;
+            return OKFuture;
         }
 
         return Underlying_->Write(data);
@@ -69,7 +69,7 @@ private:
         if (!OpenResult_ || !OpenResult_.IsSet()) {
             THROW_ERROR_EXCEPTION("Cannot write into an unopened file writer");
         }
-        OpenResult_.Get().ThrowOnError();
+        OpenResult_.GetOrCrash().ThrowOnError();
     }
 
     void ValidateNotClosed()
@@ -128,7 +128,7 @@ public:
         ValidateNotClosed();
 
         if (!data) {
-            return VoidFuture;
+            return OKFuture;
         }
 
         return Underlying_->Write(data);
@@ -148,7 +148,7 @@ public:
         if (!WriteResultFuture_.IsSet()) {
             THROW_ERROR_EXCEPTION("Can't get unset write fragment result");
         }
-        return WriteResultFuture_.Get()
+        return WriteResultFuture_.GetOrCrash()
             .ValueOrThrow();
     }
 
@@ -168,7 +168,7 @@ private:
         if (!OpenResult_ || !OpenResult_.IsSet()) {
             THROW_ERROR_EXCEPTION("Cannot write into an unopened file writer");
         }
-        OpenResult_.Get().ThrowOnError();
+        OpenResult_.GetOrCrash().ThrowOnError();
     }
 
     void ValidateNotClosed()

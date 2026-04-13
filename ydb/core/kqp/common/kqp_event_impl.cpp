@@ -47,6 +47,14 @@ TEvKqp::TEvQueryRequest::TEvQueryRequest(
     }
 }
 
+TEvKqp::TEvQueryRequest::TEvQueryRequest(const TString& userSID) : TEvQueryRequest()
+{
+    NACLib::TUserToken::TUserTokenInitFields fields {
+        .UserSID = userSID
+    };
+    Token_ = new NACLib::TUserToken(fields);
+}
+
 void TEvKqp::TEvQueryRequest::PrepareRemote() const {
     if (RequestCtx) {
         if (RequestCtx->GetSerializedToken()) {

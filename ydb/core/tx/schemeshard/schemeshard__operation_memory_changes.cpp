@@ -117,6 +117,10 @@ void TMemoryChanges::GrabResourcePool(TSchemeShard* ss, const TPathId& pathId) {
     Grab<TResourcePoolInfo>(pathId, ss->ResourcePools, ResourcePools);
 }
 
+void TMemoryChanges::GrabNewBackupCollection(TSchemeShard* ss, const TPathId& pathId) {
+    GrabNew(pathId, ss->BackupCollections, BackupCollections);
+}
+
 void TMemoryChanges::GrabBackupCollection(TSchemeShard* ss, const TPathId& pathId) {
     Grab<TBackupCollectionInfo>(pathId, ss->BackupCollections, BackupCollections);
 }
@@ -309,6 +313,16 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->ResourcePools.erase(id);
         }
         ResourcePools.pop();
+    }
+
+    while (BackupCollections) {
+        const auto& [id, elem] = BackupCollections.top();
+        if (elem) {
+            ss->BackupCollections[id] = elem;
+        } else {
+            ss->BackupCollections.erase(id);
+        }
+        BackupCollections.pop();
     }
 
     while (SysViews) {

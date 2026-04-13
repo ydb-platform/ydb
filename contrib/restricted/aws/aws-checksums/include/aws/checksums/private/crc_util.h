@@ -93,8 +93,8 @@ static inline void aws_checksums_init_detection_cache(void) {
     s_detected_clmul = aws_cpu_has_feature(AWS_CPU_FEATURE_CLMUL);
     s_detected_sse42 = aws_cpu_has_feature(AWS_CPU_FEATURE_SSE_4_2);
     s_detected_avx512 = aws_cpu_has_feature(AWS_CPU_FEATURE_AVX512);
-    s_detected_clmul = aws_cpu_has_feature(AWS_CPU_FEATURE_CLMUL);
     s_detected_vpclmulqdq = aws_cpu_has_feature(AWS_CPU_FEATURE_VPCLMULQDQ);
+    s_detection_performed = true;
 }
 
 static inline bool aws_cpu_has_clmul_cached(void) {
@@ -124,5 +124,9 @@ static inline bool aws_cpu_has_vpclmulqdq_cached(void) {
     }
     return s_detected_vpclmulqdq;
 }
+
+#if defined(__SIZEOF_INT128__)
+__uint128_t aws_checksums_multiply_mod_p_reflected(const __uint128_t poly, __uint128_t a, __uint128_t b);
+#endif
 
 #endif /* AWS_CHECKSUMS_PRIVATE_CRC_UTIL_H */

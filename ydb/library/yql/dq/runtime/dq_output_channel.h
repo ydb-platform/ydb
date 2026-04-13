@@ -17,6 +17,8 @@ struct TDqOutputChannelStats : public TDqOutputStats {
     ui64 SpilledBytes = 0;
     ui64 SpilledRows = 0;
     ui64 SpilledBlobs = 0;
+    TInstant FinishCheckTime;
+    bool FinishCheckResult = false;
 };
 
 class IDqOutputChannel : public IDqOutput {
@@ -51,6 +53,7 @@ public:
     virtual void Terminate() = 0;
 
     virtual void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) = 0;
+    virtual bool IsLocal() const = 0;
 };
 
 struct TDqOutputChannelChunkSizeLimitExceeded : public yexception {

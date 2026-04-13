@@ -5,8 +5,7 @@
 #include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 class TYqlMemoryPool: public arrow::MemoryPool {
     arrow::Status Allocate(int64_t size, uint8_t** out) final {
@@ -45,7 +44,7 @@ class TYqlMemoryPool: public arrow::MemoryPool {
         }
     }
 
-    virtual std::string backend_name() const final {
+    std::string backend_name() const final {
         return "yql";
     }
 
@@ -58,5 +57,4 @@ arrow::MemoryPool* GetYqlMemoryPool() {
     return Singleton<TYqlMemoryPool>();
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

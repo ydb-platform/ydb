@@ -4,8 +4,9 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <utility>
+
+namespace NKikimr::NMiniKQL {
 
 template <NYql::TExprNode::EType Type>
 struct TMakeCodeArgs;
@@ -42,14 +43,14 @@ struct TMakeCodeArgs<NYql::TExprNode::Lambda> {
 
 template <NYql::TExprNode::EType Type>
 class TMakeCodeWrapper: public TMutableComputationNode<TMakeCodeWrapper<Type>> {
-    typedef TMutableComputationNode<TMakeCodeWrapper<Type>> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TMakeCodeWrapper<Type>>;
 
 public:
     TMakeCodeWrapper(TComputationMutables& mutables, TVector<IComputationNode*>&& args, ui32 exprCtxMutableIndex, NYql::TPosition pos)
         : TBaseComputation(mutables)
         , Args_(std::move(args))
         , ExprCtxMutableIndex_(exprCtxMutableIndex)
-        , Pos_(pos)
+        , Pos_(std::move(pos))
     {
     }
 
@@ -65,8 +66,8 @@ public:
 
             case NYql::TExprNode::List: {
                 NYql::TExprNode::TListType items;
-                for (ui32 i = 0; i < Args_.size(); ++i) {
-                    auto argValue = Args_[i]->GetValue(ctx);
+                for (const auto& arg : Args_) {
+                    auto argValue = arg->GetValue(ctx);
                     auto iter = argValue.GetListIterator();
                     NUdf::TUnboxedValue codeValue;
                     while (iter.Next(codeValue)) {
@@ -188,5 +189,4 @@ template IComputationNode* WrapMakeCode<NYql::TExprNode::Callable>(TCallable& ca
 
 template IComputationNode* WrapMakeCode<NYql::TExprNode::Lambda>(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

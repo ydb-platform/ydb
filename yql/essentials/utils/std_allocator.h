@@ -4,15 +4,15 @@
 
 template <typename Type>
 struct TStdIAllocator {
-    typedef Type value_type;
-    typedef Type* pointer;
-    typedef const Type* const_pointer;
-    typedef Type& reference;
-    typedef const Type& const_reference;
-    typedef size_t size_type;
-    typedef ptrdiff_t difference_type;
+    using value_type = Type;
+    using pointer = Type*;
+    using const_pointer = const Type*;
+    using reference = Type&;
+    using const_reference = const Type&;
+    using size_type = size_t;
+    using difference_type = ptrdiff_t;
 
-    template <typename U>
+    template <typename U> // NOLINTNEXTLINE(google-explicit-constructor)
     TStdIAllocator(const TStdIAllocator<U>& other) noexcept
         : Allocator(other.Allocator)
     {
@@ -20,7 +20,7 @@ struct TStdIAllocator {
 
     template <typename U>
     struct rebind { // NOLINT(readability-identifier-naming)
-        typedef TStdIAllocator<U> other;
+        using other = TStdIAllocator<U>;
     };
 
     template <typename U>
@@ -43,6 +43,7 @@ struct TStdIAllocator {
         return Allocator->Release(IAllocator::TBlock{.Data = (void*)p, .Len = n * sizeof(value_type)});
     }
 
+    // NOLINTNEXTLINE(google-explicit-constructor)
     TStdIAllocator(IAllocator* allocator)
         : Allocator(allocator)
     {

@@ -103,6 +103,7 @@ message TDqInputChannelStats {
 
     TDqAsyncBufferStats Push = 13;
     TDqAsyncBufferStats Pop = 14;
+    uint64 LocalBytes = 15;
 
     // profile stats
     uint64 DeserializationTimeUs = 6;
@@ -112,15 +113,14 @@ message TDqInputChannelStats {
 
     google.protobuf.Any Extra = 100;
 
-    // deprecated
-    uint64 Chunks_Deprecated = 2;
-    uint64 Bytes_Deprecated = 3;
-    uint64 RowsIn_Deprecated = 4;
-    uint64 RowsOut_Deprecated = 5;
-    uint64 IdleTimeUs_Deprecated = 11;
-    uint64 WaitTimeUs_Deprecated = 10;
-    uint64 FirstMessageMs_Deprecated = 30;
-    uint64 LastMessageMs_Deprecated = 31;
+    reserved 2;
+    reserved 3;
+    reserved 4;
+    reserved 5;
+    reserved 11;
+    reserved 10;
+    reserved 30;
+    reserved 31;
 }
 
 message TDqAsyncOutputBufferStats {
@@ -151,6 +151,7 @@ message TDqOutputChannelStats {
 
     TDqAsyncBufferStats Push = 16;
     TDqAsyncBufferStats Pop = 17;
+    uint64 LocalBytes = 18;
 
     // profile stats
     uint64 SerializationTimeUs = 6;
@@ -164,15 +165,14 @@ message TDqOutputChannelStats {
 
     google.protobuf.Any Extra = 100;
 
-    // deprecated
-    uint64 Chunks_Deprecated = 2;
-    uint64 Bytes_Deprecated = 3;
-    uint64 RowsIn_Deprecated = 4;
-    uint64 RowsOut_Deprecated = 5;
-    uint32 BlockedByCapacity_Deprecated = 7;
-    uint64 BlockedTimeUs_Deprecated = 15;
-    uint64 FirstMessageMs_Deprecated = 30;
-    uint64 LastMessageMs_Deprecated = 31;
+    reserved 2;
+    reserved 3;
+    reserved 4;
+    reserved 5;
+    reserved 7;
+    reserved 15;
+    reserved 30;
+    reserved 31;
 }
 
 message TDqTableStats {
@@ -309,6 +309,7 @@ message TDqComputeActorStats {
     uint64 DurationUs = 2; // task.FinishTimeMs - task.StartTimeMs
     repeated TDqTaskStats Tasks = 3; // in the BASIC_MODE only basic fields are used
     uint64 MaxMemoryUsage = 4;
+    uint64 MemoryUsage = 5;
 
     // profile stats
     uint64 MkqlMaxMemoryUsage = 102;       // MKQL allocations stats
@@ -360,6 +361,7 @@ message TDqAsyncBufferStatsAggr {
     TDqAsyncStatsAggr Push    = 2;
     TDqAsyncStatsAggr Pop     = 3;
     TDqAsyncStatsAggr Egress  = 4; // for Egress only
+    uint64 LocalBytes = 6;
 }
 
 message TDqTableAggrStats {
@@ -470,8 +472,47 @@ message TDqStageStats {
     map<string, TDqStatsAggr> Mkql = 53;
 
     TDqStatsAggr MaxMemoryUsage = 24;
+    TDqStatsAggr MemoryUsageMB = 54;
 
     google.protobuf.Any Extra = 100;
+}
+
+message TDqMemoryHistoryItem {
+    uint64 TimeMs = 1;
+    uint64 MemPhysicalUsage = 2;
+    uint64 MemSysAllocated  = 3;
+    uint64 MemSysFragmented = 4;
+    uint64 MemArrowDefault  = 5;
+    uint64 MemMkqlAllocated = 6;
+    uint64 MemMkqlFreeList  = 7;
+    uint64 InputInflightBytes  = 8;
+    uint64 OutputInflightBytes = 9;
+    uint64 LocalInflightBytes  = 10;
+}
+
+message TDqNodeStats {
+    uint32 NodeId = 1;
+    uint32 TotalTasksCount = 2;
+    uint32 FinishedTasksCount = 3;
+    uint64 BaseTimeMs = 15;
+
+    TDqStatsAggr CpuTimeUs = 4;
+    TDqStatsAggr MaxMemoryUsage = 5;
+    TDqStatsAggr MemoryUsageMB = 16;
+
+    TDqStatsAggr InputBytes = 6;
+    TDqStatsAggr OutputBytes = 7;
+    TDqStatsAggr ResultBytes = 8;
+
+    TDqStatsAggr IngressBytes = 9;
+    TDqStatsAggr EgressBytes = 10;
+
+    TDqStatsAggr SpillingComputeBytes = 11;
+    TDqStatsAggr SpillingChannelBytes = 12;
+    TDqStatsAggr SpillingComputeTimeUs = 13;
+    TDqStatsAggr SpillingChannelTimeUs = 14;
+
+    repeated TDqMemoryHistoryItem GlobalMemoryUsageMB = 17;
 }
 
 // graph execution stats
@@ -493,6 +534,7 @@ message TDqExecutionStats {
     uint64 FirstRowTimeMs = 13;    // first result row timestamp, milliseconds
 
     repeated TDqStageStats Stages = 14;
+    repeated TDqNodeStats Nodes = 18;
     repeated string TxPlansWithStats = 15;
 
     uint64 StatFinishBytes = 16;

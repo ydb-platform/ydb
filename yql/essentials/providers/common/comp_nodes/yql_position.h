@@ -2,10 +2,8 @@
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/minikql/mkql_node.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 NYql::TPosition ExtractPosition(TCallable& callable);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

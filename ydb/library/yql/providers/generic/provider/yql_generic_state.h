@@ -84,7 +84,7 @@ namespace NYql {
             bool HasSplitsForSelect(const TSelectKey& key) const;
 
             void AttachSplitsForSelect(const TSelectKey& key,
-                                       std::vector<NYql::NConnector::NApi::TSplit>& splits);
+                                       std::vector<NYql::NConnector::NApi::TSplit>&& splits);
 
             const std::vector<NYql::NConnector::NApi::TSplit>& GetSplitsForSelect(const TSelectKey& key) const;
         };
@@ -114,7 +114,7 @@ namespace NYql {
         void AddTable(const TTableAddress& tableAddress, TTableMeta&& tableMeta);
         std::optional<TIssue> AttachSplitsToTable(const TTableAddress& tableAddress,
                                                   const TSelectKey& key,
-                                                  std::vector<NYql::NConnector::NApi::TSplit>& splits);
+                                                  std::vector<NYql::NConnector::NApi::TSplit>&& splits);
         TGetTableResult GetTable(const TTableAddress& tableAddress) const;
 
         TTypeAnnotationContext* Types;

@@ -1,0 +1,7 @@
+/* custom error: Expected (optional) struct/tuple or variant based on it, but got: Optional<Int32> */
+SELECT
+    (
+        SELECT
+            1 AS x
+    ).x
+;

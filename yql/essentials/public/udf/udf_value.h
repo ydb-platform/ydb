@@ -7,19 +7,21 @@
 #include "udf_version.h"
 
 #include <yql/essentials/public/decimal/yql_decimal.h>
+#include <yql/essentials/utils/is_pod.h>
 
-#include <util/system/yassert.h>     // FAIL, VERIFY_DEBUG
-#include <util/generic/utility.h>    // Min, Max
-#include <util/generic/yexception.h> // Y_ENSURE
-#include <util/system/compiler.h>    // Y_FORCE_INLINE
+#include <util/system/yassert.h>       // FAIL, VERIFY_DEBUG
+#include <util/generic/utility.h>      // Min, Max
+#include <util/generic/yexception.h>   // Y_ENSURE
+#include <util/system/compiler.h>      // Y_FORCE_INLINE
+#include <util/system/unaligned_mem.h> // ReadUnaligned
 
 #include <algorithm>
 #include <type_traits>
+#include <typeinfo>
 
 class IOutputStream;
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 class TUnboxedValue;
 class TUnboxedValuePod;
@@ -101,14 +103,15 @@ private:
     virtual ui32 GetVariantIndex() const = 0;
     virtual TUnboxedValue GetVariantItem() const = 0;
 
-    // Either Done/Yield with empty result or Ready with non-empty result should be returned
+    // If returning non-Ok (Finish/Yield), either leave result unchanged or set it to empty or
+    // embedded; do not set to string or boxed.
     virtual EFetchStatus Fetch(TUnboxedValue& result) = 0;
 
     // Any iterator.
     virtual bool Skip() = 0;
-    // List iterator.
+    // List iterator. If returning false, either leave value unchanged or set to empty or embedded (not string or boxed).
     virtual bool Next(TUnboxedValue& value) = 0;
-    // Dict iterator.
+    // Dict iterator. If returning false, either leave key/payload unchanged or set to empty or embedded (not string or boxed).
     virtual bool NextPair(TUnboxedValue& key, TUnboxedValue& payload) = 0;
 
     virtual void Apply(IApplyContext& context) const = 0;
@@ -182,6 +185,7 @@ class IBoxedValue6: public IBoxedValue5 {
     friend struct TBoxedValueAccessor;
 
 private:
+    // If returning non-Ok (Finish/Yield), for each result[i] either leave unchanged or set to empty or embedded (not string or boxed).
     virtual EFetchStatus WideFetch(TUnboxedValue* result, ui32 width) = 0;
 };
 #endif
@@ -630,6 +634,9 @@ struct TBoxedValueAccessor {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 36)
     static inline bool Load2(IBoxedValue& value, const TUnboxedValue& data);
 #endif
+
+private:
+    static inline bool CheckPodSafety(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs);
 };
 
 #define MAP_HANDLER(xx)                                                                      \
@@ -750,7 +757,7 @@ private:
 class TBoxedValue: public TBoxedValueLink, public TWithUdfAllocator {
 public:
     TBoxedValue();
-    ~TBoxedValue();
+    ~TBoxedValue() override;
 };
 
 class TManagedBoxedValue: public TBoxedValueBase, public TWithUdfAllocator {
@@ -763,14 +770,14 @@ UDF_ASSERT_TYPE_SIZE(TBoxedValue, 32);
 ///////////////////////////////////////////////////////////////////////////////
 
 struct TRawEmbeddedValue {
-    char Buffer[0xE];
+    char Buffer[0xE]; // NOLINT(modernize-avoid-c-arrays)
     ui8 Size;
     ui8 Meta;
 };
 
 struct TRawBoxedValue {
     IBoxedValue* Value;
-    ui8 Reserved[7];
+    ui8 Reserved[7]; // NOLINT(modernize-avoid-c-arrays)
     ui8 Meta;
 };
 
@@ -781,7 +788,7 @@ struct TRawStringValue {
     ui32 Size;
     union {
         struct {
-            ui8 Skip[3];
+            ui8 Skip[3]; // NOLINT(modernize-avoid-c-arrays)
             ui8 Meta;
         };
         ui32 Offset;
@@ -953,7 +960,7 @@ public:
 
 protected:
     union TRaw {
-        ui64 Halfs[2] = {0, 0};
+        ui64 Halfs[2] = {0, 0}; // NOLINT(modernize-avoid-c-arrays)
 
         TRawEmbeddedValue Embedded;
 
@@ -973,7 +980,7 @@ protected:
                 ui64 FullMeta;
                 struct {
                     ui16 TimezoneId;
-                    ui8 Reserved[4];
+                    ui8 Reserved[4]; // NOLINT(modernize-avoid-c-arrays)
                     ui8 Size;
                     ui8 Meta;
                 };
@@ -1008,11 +1015,7 @@ public:
 
 UDF_ASSERT_TYPE_SIZE(TUnboxedValuePod, 16);
 
-static_assert(std::is_trivially_destructible<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!");
-static_assert(std::is_trivially_copy_assignable<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!");
-static_assert(std::is_trivially_move_assignable<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!");
-static_assert(std::is_trivially_copy_constructible<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!");
-static_assert(std::is_trivially_move_constructible<TUnboxedValuePod>::value, "Incompatible with LLVM codegeneration!");
+static_assert(NYql::IsPod<TUnboxedValuePod>, "Incompatible with LLVM codegeneration!");
 
 //////////////////////////////////////////////////////////////////////////////
 // TUnboxedValue
@@ -1022,7 +1025,12 @@ public:
     inline TUnboxedValue() noexcept = default;
     inline ~TUnboxedValue() noexcept;
 
+    // They are almost the same thing.
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline TUnboxedValue(const TUnboxedValuePod& value) noexcept;
+
+    // They are almost the same thing.
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline TUnboxedValue(TUnboxedValuePod&& value) noexcept;
 
     inline TUnboxedValue(const TUnboxedValue& value) noexcept;
@@ -1047,7 +1055,7 @@ template <typename TResourceData, const char* ResourceTag>
 class TBoxedResource: public TBoxedValue {
 public:
     template <typename... Args>
-    inline TBoxedResource(Args&&... args)
+    inline explicit TBoxedResource(Args&&... args)
         : ResourceData_(std::forward<Args>(args)...)
     {
     }
@@ -1083,16 +1091,16 @@ template <typename TResourceData>
 class TBoxedDynamicResource: public TBoxedValue {
 public:
     template <typename... Args>
-    inline TBoxedDynamicResource(TString&& tag, Args&&... args)
+    inline explicit TBoxedDynamicResource(TString&& tag, Args&&... args)
         : ResourceData_(std::forward<Args>(args)...)
         , Tag_(std::move(tag))
     {
     }
 
     template <typename... Args>
-    inline TBoxedDynamicResource(const TString& tag, Args&&... args)
+    inline explicit TBoxedDynamicResource(TString tag, Args&&... args)
         : ResourceData_(std::forward<Args>(args)...)
-        , Tag_(tag)
+        , Tag_(std::move(tag))
     {
     }
 
@@ -1117,8 +1125,7 @@ private:
 #include "udf_value_inl.h"
 #undef INCLUDE_UDF_VALUE_INL_H
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf
 
 template <>
 inline void Out<NYql::NUdf::TUnboxedValuePod>(class IOutputStream& o, const NYql::NUdf::TUnboxedValuePod& value);
@@ -1135,9 +1142,9 @@ inline void Out<NYql::NUdf::TStringRef>(class IOutputStream& o, const NYql::NUdf
 #include "udf_terminator.h"
 #include <util/stream/output.h>
 #include <tuple>
+#include <utility>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 //////////////////////////////////////////////////////////////////////////////
 // TBoxedValue
@@ -1391,8 +1398,7 @@ inline void TUnboxedValuePod::Dump(IOutputStream& out) const {
     }
 }
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf
 
 template <>
 inline void Out<NYql::NUdf::TUnboxedValuePod>(class IOutputStream& o, const NYql::NUdf::TUnboxedValuePod& value) {

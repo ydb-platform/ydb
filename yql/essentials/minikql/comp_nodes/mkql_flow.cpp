@@ -13,9 +13,10 @@ class TToFlowWrapper: public TFlowSourceCodegeneratorNode<TToFlowWrapper<IsStrea
     typedef TFlowSourceCodegeneratorNode<TToFlowWrapper<IsStream>> TBaseComputation;
 
 public:
-    TToFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* stream)
+    TToFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* stream, TComputationNodePtrVector&& dependencies)
         : TBaseComputation(mutables, kind, EValueRepresentation::Any)
         , Stream(stream)
+        , Dependencies(std::move(dependencies))
     {
     }
 
@@ -80,7 +81,7 @@ public:
         const auto result = PHINode::Create(valueType, 2U, "result", done);
 
         if constexpr (IsStream) {
-            const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(Type::getInt32Ty(context), state, ctx.Codegen, block, valuePtr);
+            const auto status = CallBoxedValueFetch(state, ctx, block, valuePtr);
             const auto ok = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(status->getType(), static_cast<ui32>(NUdf::EFetchStatus::Ok)), "ok", block);
 
             const auto none = BasicBlock::Create(context, "none", ctx.Func);
@@ -93,7 +94,7 @@ public:
             result->addIncoming(special, block);
             BranchInst::Create(done, block);
         } else {
-            const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), state, ctx.Codegen, block, valuePtr);
+            const auto status = CallBoxedValueNext(state, ctx, block, valuePtr);
             result->addIncoming(GetFinish(context), block);
             BranchInst::Create(good, done, status, block);
         }
@@ -111,9 +112,11 @@ public:
 private:
     void RegisterDependencies() const final {
         this->DependsOn(Stream);
+        std::for_each(Dependencies.cbegin(), Dependencies.cend(), std::bind(&TToFlowWrapper::DependsOn, this, std::placeholders::_1));
     }
 
     IComputationNode* const Stream;
+    TComputationNodePtrVector Dependencies;
 };
 
 template <bool IsItemOptional = true>
@@ -121,9 +124,10 @@ class TOptToFlowWrapper: public TFlowSourceCodegeneratorNode<TOptToFlowWrapper<I
     typedef TFlowSourceCodegeneratorNode<TOptToFlowWrapper<IsItemOptional>> TBaseComputation;
 
 public:
-    TOptToFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* optional)
+    TOptToFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* optional, TComputationNodePtrVector&& dependencies)
         : TBaseComputation(mutables, kind, EValueRepresentation::Embedded)
         , Optional(optional)
+        , Dependencies(std::move(dependencies))
     {
     }
 
@@ -173,9 +177,11 @@ public:
 private:
     void RegisterDependencies() const final {
         this->DependsOn(Optional);
+        std::for_each(Dependencies.cbegin(), Dependencies.cend(), std::bind(&TOptToFlowWrapper::DependsOn, this, std::placeholders::_1));
     }
 
     IComputationNode* const Optional;
+    TComputationNodePtrVector Dependencies;
 };
 
 class TFromFlowWrapper: public TCustomValueCodegeneratorNode<TFromFlowWrapper> {
@@ -195,13 +201,15 @@ public:
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            result = Flow->GetValue(CompCtx);
-            if (result.IsFinish()) {
+            NYql::NUdf::TUnboxedValue fetchResult;
+            fetchResult = Flow->GetValue(CompCtx);
+            if (fetchResult.IsFinish()) {
                 return NUdf::EFetchStatus::Finish;
             }
-            if (result.IsYield()) {
+            if (fetchResult.IsYield()) {
                 return NUdf::EFetchStatus::Yield;
             }
+            result = std::move(fetchResult);
             return NUdf::EFetchStatus::Ok;
         }
 
@@ -223,7 +231,12 @@ public:
 
     protected:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override Y_NO_SANITIZE("undefined") {
-            return FetchFunc(Ctx, result);
+            NUdf::TUnboxedValue fetchResult;
+            if (const auto status = FetchFunc(Ctx, fetchResult); NUdf::EFetchStatus::Ok != status) {
+                return status;
+            }
+            result = std::move(fetchResult);
+            return NUdf::EFetchStatus::Ok;
         }
 
         const TFetchPtr FetchFunc;
@@ -311,9 +324,10 @@ class TToWideFlowWrapper: public TWideFlowSourceCodegeneratorNode<TToWideFlowWra
     using TBaseComputation = TWideFlowSourceCodegeneratorNode<TToWideFlowWrapper>;
 
 public:
-    TToWideFlowWrapper(TComputationMutables& mutables, IComputationNode* stream, ui32 width)
+    TToWideFlowWrapper(TComputationMutables& mutables, IComputationNode* stream, ui32 width, TComputationNodePtrVector&& dependencies)
         : TBaseComputation(mutables, EValueRepresentation::Any)
         , Stream(stream)
+        , Dependencies(std::move(dependencies))
         , Width(width)
         , TempStateIndex(std::exchange(mutables.CurValueIndex, mutables.CurValueIndex + Width))
     {
@@ -366,7 +380,7 @@ public:
 
         block = main;
 
-        const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::WideFetch>(indexType, state, ctx.Codegen, block, values, ConstantInt::get(indexType, Width));
+        const auto status = CallBoxedValueWideFetch(state, ctx, block, values, Width);
 
         const auto ok = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(indexType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "ok", block);
         const auto yield = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(indexType, static_cast<ui32>(NUdf::EFetchStatus::Yield)), "yield", block);
@@ -386,9 +400,11 @@ public:
 private:
     void RegisterDependencies() const final {
         this->DependsOn(Stream);
+        std::for_each(Dependencies.cbegin(), Dependencies.cend(), std::bind(&TToWideFlowWrapper::DependsOn, this, std::placeholders::_1));
     }
 
     IComputationNode* const Stream;
+    TComputationNodePtrVector Dependencies;
     const ui32 Width;
     const ui32 TempStateIndex;
 };
@@ -576,10 +592,7 @@ private:
 
         block = fail;
 
-        const auto throwFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TFromWideFlowWrapper::Throw>());
-        const auto throwFuncType = FunctionType::get(Type::getVoidTy(context), {indexType, indexType}, false);
-        const auto throwFuncPtr = CastInst::Create(Instruction::IntToPtr, throwFunc, PointerType::getUnqual(throwFuncType), "thrower", block);
-        CallInst::Create(throwFuncType, throwFuncPtr, {width, ConstantInt::get(width->getType(), Representations.size())}, "", block)->setTailCall();
+        EmitFunctionCall<&TFromWideFlowWrapper::Throw>(Type::getVoidTy(context), {width, ConstantInt::get(width->getType(), Representations.size())}, ctx, block);
         new UnreachableInst(context, block);
 
         return ctx.Func;
@@ -597,23 +610,31 @@ private:
 } // namespace
 
 IComputationNode* WrapToFlow(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args, got " << callable.GetInputsCount());
+    MKQL_ENSURE(callable.GetInputsCount() >= 1, "Expected at least 1 arg");
     const auto type = callable.GetInput(0).GetStaticType();
     const auto outType = AS_TYPE(TFlowType, callable.GetType()->GetReturnType())->GetItemType();
     const auto kind = GetValueRepresentation(outType);
+
+    const auto input = LocateNode(ctx.NodeLocator, callable, 0);
+    TComputationNodePtrVector dependencies;
+    dependencies.reserve(callable.GetInputsCount() - 1);
+    for (ui32 i = 1; i < callable.GetInputsCount(); i++) {
+        dependencies.emplace_back(LocateNode(ctx.NodeLocator, callable, i));
+    }
+
     if (type->IsStream()) {
         if (const auto streamType = AS_TYPE(TStreamType, type); streamType->GetItemType()->IsMulti()) {
             const auto multiType = AS_TYPE(TMultiType, streamType->GetItemType());
-            return new TToWideFlowWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0), multiType->GetElementsCount());
+            return new TToWideFlowWrapper(ctx.Mutables, input, multiType->GetElementsCount(), std::move(dependencies));
         }
-        return new TToFlowWrapper<true>(ctx.Mutables, kind, LocateNode(ctx.NodeLocator, callable, 0));
+        return new TToFlowWrapper<true>(ctx.Mutables, kind, input, std::move(dependencies));
     } else if (type->IsList()) {
-        return new TToFlowWrapper<false>(ctx.Mutables, kind, LocateNode(ctx.NodeLocator, callable, 0));
+        return new TToFlowWrapper<false>(ctx.Mutables, kind, input, std::move(dependencies));
     } else if (type->IsOptional()) {
         if (outType->IsOptional()) {
-            return new TOptToFlowWrapper<true>(ctx.Mutables, kind, LocateNode(ctx.NodeLocator, callable, 0));
+            return new TOptToFlowWrapper<true>(ctx.Mutables, kind, input, std::move(dependencies));
         } else {
-            return new TOptToFlowWrapper<false>(ctx.Mutables, kind, LocateNode(ctx.NodeLocator, callable, 0));
+            return new TOptToFlowWrapper<false>(ctx.Mutables, kind, input, std::move(dependencies));
         }
     }
 

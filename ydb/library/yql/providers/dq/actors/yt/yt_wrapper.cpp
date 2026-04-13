@@ -95,7 +95,7 @@ namespace NYql {
                                 return MakeFuture(TErrorOr<void>(yexception() << "request complete"));
                             }
                             if (err.IsOK() && req->Digest == NYTree::ConvertTo<TString>(err.Value())) {
-                                return VoidFuture;
+                                return OKFuture;
                             }
 
                             return MakeFuture(TErrorOr<void>(yexception() << "wrong checksum"));
@@ -319,7 +319,7 @@ namespace NYql {
                                         NYT::NodeToYsonString(NYT::TNode(ToString(TInstant::Now()))
                                     ))));
                             } catch (...) { }
-                            return VoidFuture;
+                            return OKFuture;
                         } else if (err.IsOK() || err.FindMatching(NYT::NYTree::EErrorCode::ResolveError)) {
                             TCreateNodeOptions options;
                             options.Recursive = true;
@@ -338,7 +338,7 @@ namespace NYql {
                                         return MakeFuture(TErrorOr<void>(yexception() << "request complete"));
                                     }
                                     TVector<NYT::TFuture<void>> futures;
-                                    futures.reserve(attributes.size());
+                                    futures.reserve(attributes.size() + 1);
                                     for (const auto& [k, v]: attributes) {
                                         futures.push_back(
                                             req->Client->SetNode(
@@ -346,6 +346,11 @@ namespace NYql {
                                                 NYT::NYson::TYsonString(NYT::NodeToYsonString(v)),
                                                 NYT::NApi::TSetNodeOptions()));
                                     }
+                                    futures.push_back(
+                                        req->Client->SetNode(
+                                            req->NodePathTmp + "/@expiration_timeout",
+                                            NYT::NYson::TYsonString(NYT::NodeToYsonString(NYT::TNode(86400000))), // 24 hours
+                                            NYT::NApi::TSetNodeOptions()));
                                     return NYT::AllSucceeded(futures).As<void>();
                                 }))
                                 .Apply(BIND([request]() mutable {
@@ -363,12 +368,21 @@ namespace NYql {
                                     auto moveOptions = NYT::NApi::TMoveNodeOptions();
                                     moveOptions.Force = true;
                                     return req->Client->MoveNode(req->NodePathTmp, req->NodePath, moveOptions).As<void>();
+                                }))
+                                .Apply(BIND([request] () {
+                                    auto req = request.Lock();
+                                    if (!req) {
+                                        return MakeFuture(TErrorOr<void>(yexception() << "request complete"));
+                                    }
+                                    auto removeOptions = NYT::NApi::TRemoveNodeOptions();
+                                    removeOptions.Force = true;
+                                    return req->Client->RemoveNode(req->NodePath + "/@expiration_timeout", removeOptions).As<void>();
                                 }));
                         }
 
                         err.ThrowOnError();
 
-                        return VoidFuture;
+                        return OKFuture;
                     }))
                     .Apply(BIND([request, requestId](const TErrorOr<void>& err)
                     {

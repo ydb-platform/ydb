@@ -7,7 +7,7 @@ namespace NSQLComplete {
 
 class TSQLv1NarrowingVisitor: public TSQLv1BaseVisitor {
 public:
-    TSQLv1NarrowingVisitor(const TParsedInput& input);
+    explicit TSQLv1NarrowingVisitor(const TParsedInput& input);
 
 protected:
     bool shouldVisitNextChild(antlr4::tree::ParseTree* node, const std::any& /*currentResult*/) override;

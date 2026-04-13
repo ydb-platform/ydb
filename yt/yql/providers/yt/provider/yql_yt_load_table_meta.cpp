@@ -30,6 +30,45 @@ namespace {
 
 using namespace NNodes;
 
+const NSQLTranslation::TSqlFlags& UncoditionallyAllowedViewCompilationSqlFlags() {
+    static const NSQLTranslation::TSqlFlags flags = {
+        "WindowNewPipeline",
+        "DisableWindowNewPipeline"};
+    return flags;
+}
+
+NSQLTranslation::TSqlFlags FilterAllowedFlags(const NSQLTranslation::TSqlFlags& sqlFlags) {
+    NSQLTranslation::TSqlFlags result;
+    for (const auto& flag : sqlFlags) {
+        if (UncoditionallyAllowedViewCompilationSqlFlags().contains(flag)) {
+            result.insert(flag);
+        }
+    }
+    return result;
+}
+
+// Extract SQL flags used for view compilation from the main query.
+// We must ensure that every SQL VIEW is compiled with the same translator flags as the main query.
+// However, for now, we allow omitting SQL flags since not all clients have been migrated yet.
+NSQLTranslation::TSqlFlags ExtractViewCompilationSqlFlags(TYtState::TPtr ytState) {
+// TODO(YQL-20958): Enable this check when removing TRANSLATOR_FLAGS_IN_MIGRATION_MODE.
+#if !defined(TRANSLATOR_FLAGS_IN_MIGRATION_MODE)
+    YQL_ENSURE(ytState->Types->SqlFlags.Defined(), "SqlFlags must be defined. "
+                                                   "This at least ensures that every SQL VIEW"
+                                                   " is compiled with the same flags as the main query.");
+#else  // !defined(TRANSLATOR_FLAGS_IN_MIGRATION_MODE)
+    if (!ytState->Types->SqlFlags.Defined()) {
+        return NSQLTranslation::TSqlFlags();
+    }
+#endif // !defined(TRANSLATOR_FLAGS_IN_MIGRATION_MODE)
+
+    const auto& sqlFlags = *ytState->Types->SqlFlags;
+    if (!ytState->Configuration->PassSqlFlagsForViewTranslation.Get().GetOrElse(DEFAULT_PASS_SQL_FLAGS_FOR_VIEW_TRANSLATION)) {
+        return FilterAllowedFlags(sqlFlags);
+    }
+    return sqlFlags;
+}
+
 class TYtLoadTableMetadataTransformer : public TGraphTransformerBase {
 private:
     struct TLoadContext: public TThrRefBase {
@@ -107,7 +146,8 @@ public:
                             clusterAndTable.first, clusterAndTable.second, State_->Types->QContext, ctx,
                             State_->Types->Modules.get(), State_->Types->UrlListerManager.Get(), *State_->Types->RandomProvider,
                             State_->Configuration->ViewIsolation.Get().GetOrElse(false),
-                            State_->Types->UdfResolver
+                            State_->Types->UdfResolver,
+                            ExtractViewCompilationSqlFlags(State_)
                         )) {
                             return TStatus::Error;
                         }
@@ -136,6 +176,12 @@ public:
 
         if (opts.Tables().empty()) {
             return TStatus::Ok;
+        }
+
+        if (State_->Configuration->TmpSecurity.Get().GetOrElse(DEFAULT_TMP_FOLDER_SECURITY) == ETmpSecurityMode::Force
+            && !State_->Types->OperationOptions.ProjectSlug)
+        {
+            State_->UseSecureTmp->store(true);
         }
 
         auto config = loadEpoch ? State_->Configuration->GetSettingsVer(settingsVer) : State_->Configuration->Snapshot();
@@ -175,7 +221,7 @@ public:
             .Repeat(TExprStep::ExpandApplyForLambdas)
             .Repeat(TExprStep::ExpandSeq);
         THashMap<std::pair<TString, TString>, TYtTableDescription*> tableDescrs;
-        for (size_t i = 0 ; i < LoadCtx->Result.Data.size(); ++i) {
+        for (size_t i = 0; i < LoadCtx->Result.Data.size(); ++i) {
             tableDescrs.emplace(LoadCtx->Tables[i]);
 
             TString cluster = LoadCtx->Tables[i].first.first;
@@ -261,7 +307,8 @@ public:
                         cluster, tableName, State_->Types->QContext, ctx,
                         State_->Types->Modules.get(), State_->Types->UrlListerManager.Get(), *State_->Types->RandomProvider,
                         State_->Configuration->ViewIsolation.Get().GetOrElse(false),
-                        State_->Types->UdfResolver
+                        State_->Types->UdfResolver,
+                        ExtractViewCompilationSqlFlags(State_)
                     )) {
                         return TStatus::Error;
                     }
@@ -272,19 +319,26 @@ public:
                 tableDesc.Stat = stat;
                 if (HasReadIntents(tableDesc.Intents)) {
                     const auto& securityTagsSet = tableDesc.Stat->SecurityTags;
-                    const TString tmpFolder = GetTablesTmpFolder(*State_->Configuration, cluster);
+                    const TString tmpFolder = GetUserTablesTmpFolder(*State_->Configuration, cluster);
                     if (!securityTagsSet.empty() && tmpFolder.empty()) {
-                        TStringBuilder msg;
-                        msg << "Table " << cluster << "." << tableName
-                            << " contains sensitive data, but is used with the default tmp folder."
-                            << " This may lead to sensitive data being leaked, consider using a protected tmp folder with the TmpFolder pragma.";
-                        auto issue = YqlIssue(TPosition(), EYqlIssueCode::TIssuesIds_EIssueCode_YT_SECURE_DATA_IN_COMMON_TMP, msg);
-                        if (State_->Configuration->ForceTmpSecurity.Get().GetOrElse(false)) {
-                            ctx.AddError(issue);
-                            return TStatus::Error;
-                        } else {
-                            if (!ctx.AddWarning(issue)) {
+                        const auto tmpSecurity = State_->Configuration->TmpSecurity.Get().GetOrElse(DEFAULT_TMP_FOLDER_SECURITY);
+                        if (tmpSecurity != ETmpSecurityMode::Disable && !State_->Types->OperationOptions.ProjectSlug) {
+                            State_->UseSecureTmp->store(true);
+                        }
+
+                        if (tmpSecurity == ETmpSecurityMode::Disable || !State_->Configuration->_SecureTmpRoot.Get(cluster)) {
+                            TStringBuilder msg;
+                            msg << "Table " << cluster << "." << tableName
+                                << " contains sensitive data, but is used with the default tmp folder."
+                                << " This may lead to sensitive data being leaked, consider using a protected tmp folder with the TmpFolder pragma.";
+                            auto issue = YqlIssue(TPosition(), EYqlIssueCode::TIssuesIds_EIssueCode_YT_SECURE_DATA_IN_COMMON_TMP, msg);
+                            if (State_->Configuration->ForceTmpSecurity.Get().GetOrElse(tmpSecurity == ETmpSecurityMode::Force)) {
+                                ctx.AddError(issue);
                                 return TStatus::Error;
+                            } else {
+                                if (!ctx.AddWarning(issue)) {
+                                    return TStatus::Error;
+                                }
                             }
                         }
                     }

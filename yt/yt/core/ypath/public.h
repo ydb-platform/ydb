@@ -8,7 +8,10 @@ namespace NYT::NYPath {
 
 enum class ETokenType;
 class TTokenizer;
-class TRichYPath;
+
+template <class... TValidator>
+class TConstrainedRichYPath;
+using TRichYPath = TConstrainedRichYPath<>;
 
 class TTrie;
 class TTrieView;

@@ -20,10 +20,13 @@
 
 #include <stddef.h>
 
+#include <algorithm>
+#include <memory>
 #include <utility>
 
 #include "y_absl/status/status.h"
 #include "y_absl/status/statusor.h"
+#include "y_absl/strings/match.h"
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/str_join.h"
 #include "y_absl/strings/strip.h"
@@ -43,9 +46,10 @@
 #include "google/protobuf/any.upb.h"
 #include "google/protobuf/duration.upb.h"
 #include "google/protobuf/wrappers.upb.h"
-#include "upb/text_encode.h"
-#include "upb/upb.h"
+#include "upb/base/string_view.h"
+#include "upb/text/encode.h"
 
+#include <grpc/support/json.h>
 #include <grpc/support/log.h>
 
 #include "src/core/ext/xds/upb_utils.h"
@@ -55,35 +59,16 @@
 #include "src/core/ext/xds/xds_resource_type.h"
 #include "src/core/lib/config/core_configuration.h"
 #include "src/core/lib/debug/trace.h"
-#include "src/core/lib/gpr/string.h"
-#include "src/core/lib/gprpp/env.h"
 #include "src/core/lib/gprpp/host_port.h"
 #include "src/core/lib/gprpp/match.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/gprpp/time.h"
 #include "src/core/lib/gprpp/validation_errors.h"
+#include "src/core/lib/json/json_writer.h"
 #include "src/core/lib/load_balancing/lb_policy_registry.h"
 #include "src/core/lib/matchers/matchers.h"
 
 namespace grpc_core {
-
-// TODO(roth): Remove once custom LB policy support is no longer experimental.
-bool XdsCustomLbPolicyEnabled() {
-  auto value = GetEnv("GRPC_EXPERIMENTAL_XDS_CUSTOM_LB_CONFIG");
-  if (!value.has_value()) return false;
-  bool parsed_value;
-  bool parse_succeeded = gpr_parse_bool_value(value->c_str(), &parsed_value);
-  return parse_succeeded && parsed_value;
-}
-
-// TODO(eostroukhov): Remove once this feature is no longer experimental.
-bool XdsOverrideHostEnabled() {
-  auto value = GetEnv("GRPC_EXPERIMENTAL_XDS_ENABLE_OVERRIDE_HOST");
-  if (!value.has_value()) return false;
-  bool parsed_value;
-  bool parse_succeeded = gpr_parse_bool_value(value->c_str(), &parsed_value);
-  return parse_succeeded && parsed_value;
-}
 
 //
 // XdsClusterResource
@@ -110,8 +95,8 @@ TString XdsClusterResource::ToString() const {
             "prioritized_cluster_names=[",
             y_absl::StrJoin(aggregate.prioritized_cluster_names, ", "), "]"));
       });
-  contents.push_back(
-      y_absl::StrCat("lb_policy_config=", Json{lb_policy_config}.Dump()));
+  contents.push_back(y_absl::StrCat("lb_policy_config=",
+                                  JsonDump(Json::FromArray(lb_policy_config))));
   if (lrs_load_reporting_server.has_value()) {
     contents.push_back(y_absl::StrCat("lrs_load_reporting_server_name=",
                                     lrs_load_reporting_server->server_uri()));
@@ -194,23 +179,32 @@ XdsClusterResource::Eds EdsConfigParse(
   if (eds_cluster_config == nullptr) {
     errors->AddError("field not present");
   } else {
-    ValidationErrors::ScopedField field(errors, ".eds_config");
-    const envoy_config_core_v3_ConfigSource* eds_config =
-        envoy_config_cluster_v3_Cluster_EdsClusterConfig_eds_config(
-            eds_cluster_config);
-    if (eds_config == nullptr) {
-      errors->AddError("field not present");
-    } else {
-      if (!envoy_config_core_v3_ConfigSource_has_ads(eds_config) &&
-          !envoy_config_core_v3_ConfigSource_has_self(eds_config)) {
-        errors->AddError("ConfigSource is not ads or self");
-      }
-      // Record EDS service_name (if any).
-      upb_StringView service_name =
-          envoy_config_cluster_v3_Cluster_EdsClusterConfig_service_name(
+    // Validate ConfigSource.
+    {
+      ValidationErrors::ScopedField field(errors, ".eds_config");
+      const envoy_config_core_v3_ConfigSource* eds_config =
+          envoy_config_cluster_v3_Cluster_EdsClusterConfig_eds_config(
               eds_cluster_config);
-      if (service_name.size != 0) {
-        eds.eds_service_name = UpbStringToStdString(service_name);
+      if (eds_config == nullptr) {
+        errors->AddError("field not present");
+      } else {
+        if (!envoy_config_core_v3_ConfigSource_has_ads(eds_config) &&
+            !envoy_config_core_v3_ConfigSource_has_self(eds_config)) {
+          errors->AddError("ConfigSource is not ads or self");
+        }
+      }
+    }
+    // Record EDS service_name (if any).
+    // This field is required if the CDS resource has an xdstp name.
+    eds.eds_service_name = UpbStringToStdString(
+        envoy_config_cluster_v3_Cluster_EdsClusterConfig_service_name(
+            eds_cluster_config));
+    if (eds.eds_service_name.empty()) {
+      y_absl::string_view cluster_name =
+          UpbStringToAbsl(envoy_config_cluster_v3_Cluster_name(cluster));
+      if (y_absl::StartsWith(cluster_name, "xdstp:")) {
+        ValidationErrors::ScopedField field(errors, ".service_name");
+        errors->AddError("must be set if Cluster resource has an xdstp name");
       }
     }
   }
@@ -322,45 +316,42 @@ void ParseLbPolicyConfig(const XdsResourceType::DecodeContext& context,
                          XdsClusterResource* cds_update,
                          ValidationErrors* errors) {
   // First, check the new load_balancing_policy field.
-  if (XdsCustomLbPolicyEnabled()) {
-    const auto* load_balancing_policy =
-        envoy_config_cluster_v3_Cluster_load_balancing_policy(cluster);
-    if (load_balancing_policy != nullptr) {
-      const auto& registry =
-          static_cast<const GrpcXdsBootstrap&>(context.client->bootstrap())
-              .lb_policy_registry();
-      ValidationErrors::ScopedField field(errors, ".load_balancing_policy");
-      const size_t original_error_count = errors->size();
-      cds_update->lb_policy_config = registry.ConvertXdsLbPolicyConfig(
-          context, load_balancing_policy, errors);
-      // If there were no conversion errors, validate that the converted config
-      // parses with the gRPC LB policy registry.
-      if (original_error_count == errors->size()) {
-        auto config =
-            CoreConfiguration::Get()
-                .lb_policy_registry()
-                .ParseLoadBalancingConfig(cds_update->lb_policy_config);
-        if (!config.ok()) errors->AddError(config.status().message());
-      }
-      return;
+  const auto* load_balancing_policy =
+      envoy_config_cluster_v3_Cluster_load_balancing_policy(cluster);
+  if (load_balancing_policy != nullptr) {
+    const auto& registry =
+        static_cast<const GrpcXdsBootstrap&>(context.client->bootstrap())
+            .lb_policy_registry();
+    ValidationErrors::ScopedField field(errors, ".load_balancing_policy");
+    const size_t original_error_count = errors->size();
+    cds_update->lb_policy_config = registry.ConvertXdsLbPolicyConfig(
+        context, load_balancing_policy, errors);
+    // If there were no conversion errors, validate that the converted config
+    // parses with the gRPC LB policy registry.
+    if (original_error_count == errors->size()) {
+      auto config = CoreConfiguration::Get()
+                        .lb_policy_registry()
+                        .ParseLoadBalancingConfig(
+                            Json::FromArray(cds_update->lb_policy_config));
+      if (!config.ok()) errors->AddError(config.status().message());
     }
+    return;
   }
   // Didn't find load_balancing_policy field, so fall back to the old
   // lb_policy enum field.
   if (envoy_config_cluster_v3_Cluster_lb_policy(cluster) ==
       envoy_config_cluster_v3_Cluster_ROUND_ROBIN) {
     cds_update->lb_policy_config = {
-        Json::Object{
+        Json::FromObject({
             {"xds_wrr_locality_experimental",
-             Json::Object{
-                 {"childPolicy",
-                  Json::Array{
-                      Json::Object{
-                          {"round_robin", Json::Object()},
-                      },
-                  }},
-             }},
-        },
+             Json::FromObject({
+                 {"childPolicy", Json::FromArray({
+                                     Json::FromObject({
+                                         {"round_robin", Json::FromObject({})},
+                                     }),
+                                 })},
+             })},
+        }),
     };
   } else if (envoy_config_cluster_v3_Cluster_lb_policy(cluster) ==
              envoy_config_cluster_v3_Cluster_RING_HASH) {
@@ -402,13 +393,13 @@ void ParseLbPolicyConfig(const XdsResourceType::DecodeContext& context,
       }
     }
     cds_update->lb_policy_config = {
-        Json::Object{
+        Json::FromObject({
             {"ring_hash_experimental",
-             Json::Object{
-                 {"minRingSize", min_ring_size},
-                 {"maxRingSize", max_ring_size},
-             }},
-        },
+             Json::FromObject({
+                 {"minRingSize", Json::FromNumber(min_ring_size)},
+                 {"maxRingSize", Json::FromNumber(max_ring_size)},
+             })},
+        }),
     };
   } else {
     ValidationErrors::ScopedField field(errors, ".lb_policy");
@@ -416,18 +407,18 @@ void ParseLbPolicyConfig(const XdsResourceType::DecodeContext& context,
   }
 }
 
-y_absl::StatusOr<XdsClusterResource> CdsResourceParse(
+y_absl::StatusOr<std::shared_ptr<const XdsClusterResource>> CdsResourceParse(
     const XdsResourceType::DecodeContext& context,
     const envoy_config_cluster_v3_Cluster* cluster) {
-  XdsClusterResource cds_update;
+  auto cds_update = std::make_shared<XdsClusterResource>();
   ValidationErrors errors;
   // Check the cluster discovery type.
   if (envoy_config_cluster_v3_Cluster_type(cluster) ==
       envoy_config_cluster_v3_Cluster_EDS) {
-    cds_update.type = EdsConfigParse(cluster, &errors);
+    cds_update->type = EdsConfigParse(cluster, &errors);
   } else if (envoy_config_cluster_v3_Cluster_type(cluster) ==
              envoy_config_cluster_v3_Cluster_LOGICAL_DNS) {
-    cds_update.type = LogicalDnsParse(cluster, &errors);
+    cds_update->type = LogicalDnsParse(cluster, &errors);
   } else if (envoy_config_cluster_v3_Cluster_has_cluster_type(cluster)) {
     ValidationErrors::ScopedField field(&errors, ".cluster_type");
     const auto* custom_cluster_type =
@@ -454,7 +445,7 @@ y_absl::StatusOr<XdsClusterResource> CdsResourceParse(
             ".value[envoy.extensions.clusters.aggregate.v3.ClusterConfig]");
         y_absl::string_view serialized_config =
             UpbStringToAbsl(google_protobuf_Any_value(typed_config));
-        cds_update.type =
+        cds_update->type =
             AggregateClusterParse(context, serialized_config, &errors);
       }
     }
@@ -463,13 +454,13 @@ y_absl::StatusOr<XdsClusterResource> CdsResourceParse(
     errors.AddError("unknown discovery type");
   }
   // Check the LB policy.
-  ParseLbPolicyConfig(context, cluster, &cds_update, &errors);
+  ParseLbPolicyConfig(context, cluster, cds_update.get(), &errors);
   // transport_socket
   auto* transport_socket =
       envoy_config_cluster_v3_Cluster_transport_socket(cluster);
   if (transport_socket != nullptr) {
     ValidationErrors::ScopedField field(&errors, ".transport_socket");
-    cds_update.common_tls_context =
+    cds_update->common_tls_context =
         UpstreamTlsContextParse(context, transport_socket, &errors);
   }
   // Record LRS server name (if any).
@@ -480,7 +471,7 @@ y_absl::StatusOr<XdsClusterResource> CdsResourceParse(
       ValidationErrors::ScopedField field(&errors, ".lrs_server");
       errors.AddError("ConfigSource is not self");
     }
-    cds_update.lrs_load_reporting_server.emplace(
+    cds_update->lrs_load_reporting_server.emplace(
         static_cast<const GrpcXdsBootstrap::GrpcXdsServer&>(context.server));
   }
   // The Cluster resource encodes the circuit breaking parameters in a list of
@@ -502,7 +493,7 @@ y_absl::StatusOr<XdsClusterResource> CdsResourceParse(
             envoy_config_cluster_v3_CircuitBreakers_Thresholds_max_requests(
                 threshold);
         if (max_requests != nullptr) {
-          cds_update.max_concurrent_requests =
+          cds_update->max_concurrent_requests =
               google_protobuf_UInt32Value_value(max_requests);
         }
         break;
@@ -629,33 +620,34 @@ y_absl::StatusOr<XdsClusterResource> CdsResourceParse(
             failure_percentage_ejection;
       }
     }
-    cds_update.outlier_detection = outlier_detection_update;
+    cds_update->outlier_detection = outlier_detection_update;
   }
   // Validate override host status.
-  if (XdsOverrideHostEnabled()) {
-    const auto* common_lb_config =
-        envoy_config_cluster_v3_Cluster_common_lb_config(cluster);
-    if (common_lb_config != nullptr) {
-      ValidationErrors::ScopedField field(&errors, ".common_lb_config");
-      const auto* override_host_status =
-          envoy_config_cluster_v3_Cluster_CommonLbConfig_override_host_status(
-              common_lb_config);
-      if (override_host_status != nullptr) {
-        ValidationErrors::ScopedField field(&errors, ".override_host_status");
-        size_t size;
-        const int32_t* statuses = envoy_config_core_v3_HealthStatusSet_statuses(
-            override_host_status, &size);
-        for (size_t i = 0; i < size; ++i) {
-          auto status = XdsHealthStatus::FromUpb(statuses[i]);
-          if (status.has_value()) {
-            cds_update.override_host_statuses.insert(*status);
-          }
+  const auto* common_lb_config =
+      envoy_config_cluster_v3_Cluster_common_lb_config(cluster);
+  if (common_lb_config != nullptr) {
+    ValidationErrors::ScopedField field(&errors, ".common_lb_config");
+    const auto* override_host_status =
+        envoy_config_cluster_v3_Cluster_CommonLbConfig_override_host_status(
+            common_lb_config);
+    if (override_host_status != nullptr) {
+      ValidationErrors::ScopedField field(&errors, ".override_host_status");
+      size_t size;
+      const int32_t* statuses = envoy_config_core_v3_HealthStatusSet_statuses(
+          override_host_status, &size);
+      for (size_t i = 0; i < size; ++i) {
+        auto status = XdsHealthStatus::FromUpb(statuses[i]);
+        if (status.has_value()) {
+          cds_update->override_host_statuses.insert(*status);
         }
       }
     }
   }
   // Return result.
-  if (!errors.ok()) return errors.status("errors validating Cluster resource");
+  if (!errors.ok()) {
+    return errors.status(y_absl::StatusCode::kInvalidArgument,
+                         "errors validating Cluster resource");
+  }
   return cds_update;
 }
 
@@ -700,10 +692,9 @@ XdsResourceType::DecodeResult XdsClusterResourceType::Decode(
   } else {
     if (GRPC_TRACE_FLAG_ENABLED(*context.tracer)) {
       gpr_log(GPR_INFO, "[xds_client %p] parsed Cluster %s: %s", context.client,
-              result.name->c_str(), cds_resource->ToString().c_str());
+              result.name->c_str(), (*cds_resource)->ToString().c_str());
     }
-    result.resource =
-        std::make_unique<XdsClusterResource>(std::move(*cds_resource));
+    result.resource = std::move(*cds_resource);
   }
   return result;
 }

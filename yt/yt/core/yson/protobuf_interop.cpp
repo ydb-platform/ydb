@@ -849,11 +849,11 @@ public:
     {
         if (IsAttributeDictionary()) {
             return std::make_unique<TProtobufAttributeDictionaryElement>(TProtobufAttributeDictionaryElement{
-                this
+                this,
             });
         } else {
             return std::make_unique<TProtobufMessageElement>(TProtobufMessageElement{
-                this
+                this,
             });
         }
     }

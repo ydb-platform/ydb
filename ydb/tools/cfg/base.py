@@ -313,7 +313,6 @@ class ClusterDetailsProvider(object):
         self.table_profiles_config = self.__cluster_description.get("table_profiles_config")
         self.http_proxy_config = self.__cluster_description.get("http_proxy_config")
         self.blob_storage_config = self.__cluster_description.get("blob_storage_config")
-        self.infer_pdisk_slot_count = self._extract_infer_pdisk_slot_count(self.blob_storage_config)
         self.bootstrap_config = self.__cluster_description.get("bootstrap_config")
         self.memory_controller_config = self.__cluster_description.get("memory_controller_config")
         self.kafka_proxy_config = self.__cluster_description.get("kafka_proxy_config")
@@ -359,15 +358,6 @@ class ClusterDetailsProvider(object):
         subjective_description.set_validator(validator)
         subjective_description.validate()
         return subjective_description
-
-    def _extract_infer_pdisk_slot_count(self, blob_storage_config):
-        if blob_storage_config is None:
-            return None
-        if 'infer_pdisk_slot_count' not in blob_storage_config:
-            return None
-        infer_pdisk_slot_count = blob_storage_config['infer_pdisk_slot_count']
-        del blob_storage_config['infer_pdisk_slot_count']
-        return infer_pdisk_slot_count
 
     @property
     def storage_config_generation(self):

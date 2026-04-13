@@ -24,6 +24,14 @@ TConclusion<bool> TColumnShardScanIterator::ReadNextInterval() {
     return IndexedData->ReadNextInterval();
 }
 
+TString TColumnShardScanIterator::DebugString(const bool verbose) const {
+    return TStringBuilder()
+        << "ready_results:(" << ReadyResults.DebugString() << ");"
+        << "indexed_data:(" << IndexedData->DebugString(verbose) << ");"
+        << Context->GetCounters().StepsCountersDebugString();
+}
+
+
 void TColumnShardScanIterator::DoOnSentDataFromInterval(const TPartialSourceAddress& address) {
     return IndexedData->OnSentDataFromInterval(address);
 }

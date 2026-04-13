@@ -149,8 +149,8 @@ namespace NKikimr {
                 Y_VERIFY_S(ev->Get()->Results.size() == 1, SlCtx->VCtx->VDiskLogPrefix);
                 const ui64 entryPointLsn = ev->Get()->Results[0].Lsn;
                 TCommitHistory commitHistory(TAppData::TimeProvider->Now(), entryPointLsn, EntryPointSerializer.RecoveryLogConfirmedLsn);
-                ctx.Send(NotifyID, new TEvSyncLogCommitDone(commitHistory,
-                    EntryPointSerializer.GetEntryPointDbgInfo(), std::move(Delta)));
+                ctx.Send(NotifyID, new TEvSyncLogCommitDone(commitHistory, EntryPointSerializer.GetEntryPointDbgInfo(),
+                    std::move(Delta), std::move(CommitRecord.DeleteChunks)));
                 Die(ctx);
             }
 
@@ -184,10 +184,9 @@ namespace NKikimr {
                 , SlCtx(std::move(slCtx))
                 , SyncLogSnap(std::move(commitData.SyncLogSnap))
                 , NotifyID(notifyID)
-                , CommitRecord()
                 , EntryPointSerializer(
                     SyncLogSnap,
-                    std::move(commitData.ChunksToDeleteDelayed),
+                    {}, // we don't generate delayed deletion anymore
                     commitData.RecoveryLogConfirmedLsn)
                 , SwapSnap(std::move(commitData.SwapSnap))
                 , Parts(new TWriteParts(SyncLogSnap->DiskSnapPtr->AppendBlockSize))
@@ -197,6 +196,7 @@ namespace NKikimr {
             {
                 CommitRecord.DeleteChunks = std::move(commitData.ChunksToDelete);
                 CommitRecord.IsStartingPoint = true;
+                CommitRecord.DeleteToDecommitted = true;
                 Parts->Reserve(PagesInChunk);
             }
         };

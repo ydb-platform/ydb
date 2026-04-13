@@ -22,6 +22,8 @@ IOutputStream& operator<<(IOutputStream& stream, const TS3ListingOptions& option
 class IS3ListingStrategy {
 public:
     using TPtr = std::shared_ptr<IS3ListingStrategy>;
+    using TListerFactoryMethod = std::function<NThreading::TFuture<NS3Lister::IS3Lister::TPtr>(
+        const NS3Lister::TListingRequest& listingRequest, TS3ListingOptions options)>;
 
     virtual NThreading::TFuture<NS3Lister::TListResult> List(
         const NS3Lister::TListingRequest& listingRequest, const TS3ListingOptions& options) = 0;
@@ -36,5 +38,10 @@ IS3ListingStrategy::TPtr MakeS3ListingStrategy(
     ui64 minDesiredDirectoriesOfFilesPerQuery,
     size_t maxParallelOps,
     bool allowLocalFiles);
+
+IS3ListingStrategy::TPtr MakeCollectingS3ListingStrategy(
+    IS3ListingStrategy::TListerFactoryMethod&& listerFactoryMethod,
+    TString collectingName
+);
 
 } // namespace NYql

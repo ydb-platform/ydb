@@ -325,9 +325,9 @@ Y_UNIT_TEST(Interval64) {
 }
 
 Y_UNIT_TEST(Decimal) {
-    Test("[DataType;Decimal;\"10\";\"1\"]", "\"1.2\"");
-    Test("[DataType;Decimal;\"10\";\"1\"]", "\"-inf\"");
-    Test("[DataType;Decimal;\"10\";\"1\"]", "\"nan\"");
+    Test(R"([DataType;Decimal;"10";"1"])", "\"1.2\"");
+    Test(R"([DataType;Decimal;"10";"1"])", "\"-inf\"");
+    Test(R"([DataType;Decimal;"10";"1"])", "\"nan\"");
 }
 
 Y_UNIT_TEST(Optional1) {
@@ -344,13 +344,13 @@ Y_UNIT_TEST(Optional2) {
 Y_UNIT_TEST(List1) {
     Test("[ListType;[DataType;Int32]]", "[]");
     Test("[ListType;[DataType;Int32]]", "[\"1\"]");
-    Test("[ListType;[DataType;Int32]]", "[\"1\";\"2\"]");
+    Test("[ListType;[DataType;Int32]]", R"(["1";"2"])");
 }
 
 Y_UNIT_TEST(List2) {
     Test("[ListType;[ListType;[DataType;Int32]]]", "[]");
     Test("[ListType;[ListType;[DataType;Int32]]]", "[[];[\"1\"]]");
-    Test("[ListType;[ListType;[DataType;Int32]]]", "[[\"1\";\"2\";\"3\"];[\"4\";\"5\";\"6\"]]");
+    Test("[ListType;[ListType;[DataType;Int32]]]", R"([["1";"2";"3"];["4";"5";"6"]])");
 }
 
 Y_UNIT_TEST(EmptyTuple) {
@@ -358,7 +358,7 @@ Y_UNIT_TEST(EmptyTuple) {
 }
 
 Y_UNIT_TEST(Tuple) {
-    Test("[TupleType;[[DataType;Int32];[DataType;String]]]", "[\"1\";\"foo\"]");
+    Test("[TupleType;[[DataType;Int32];[DataType;String]]]", R"(["1";"foo"])");
 }
 
 Y_UNIT_TEST(EmptyStruct) {
@@ -366,20 +366,20 @@ Y_UNIT_TEST(EmptyStruct) {
 }
 
 Y_UNIT_TEST(Struct) {
-    Test("[StructType;[[foo;[DataType;Int32]];[bar;[DataType;String]]]]", "[\"1\";\"foo\"]");
+    Test("[StructType;[[foo;[DataType;Int32]];[bar;[DataType;String]]]]", R"(["1";"foo"])");
 }
 
 Y_UNIT_TEST(Dict) {
     Test("[DictType;[DataType;Int32];[DataType;String]]", "[]");
-    Test("[DictType;[DataType;Int32];[DataType;String]]", "[[\"1\";\"foo\"]]");
-    Test("[DictType;[DataType;Int32];[DataType;String]]", "[[\"1\";\"foo\"];[\"2\";\"bar\"]]");
+    Test("[DictType;[DataType;Int32];[DataType;String]]", R"([["1";"foo"]])");
+    Test("[DictType;[DataType;Int32];[DataType;String]]", R"([["1";"foo"];["2";"bar"]])");
 }
 
 Y_UNIT_TEST(Variant) {
-    Test("[VariantType;[TupleType;[[DataType;Int32];[DataType;String]]]]", "[\"0\";\"7\"]");
-    Test("[VariantType;[TupleType;[[DataType;Int32];[DataType;String]]]]", "[\"1\";\"foo\"]");
-    Test("[VariantType;[StructType;[[foo;[DataType;Int32]];[bar;[DataType;String]]]]]", "[\"0\";\"7\"]");
-    Test("[VariantType;[StructType;[[foo;[DataType;Int32]];[bar;[DataType;String]]]]]", "[\"1\";\"foo\"]");
+    Test("[VariantType;[TupleType;[[DataType;Int32];[DataType;String]]]]", R"(["0";"7"])");
+    Test("[VariantType;[TupleType;[[DataType;Int32];[DataType;String]]]]", R"(["1";"foo"])");
+    Test("[VariantType;[StructType;[[foo;[DataType;Int32]];[bar;[DataType;String]]]]]", R"(["0";"7"])");
+    Test("[VariantType;[StructType;[[foo;[DataType;Int32]];[bar;[DataType;String]]]]]", R"(["1";"foo"])");
 }
 
 Y_UNIT_TEST(Tagged) {
@@ -387,9 +387,9 @@ Y_UNIT_TEST(Tagged) {
 }
 
 Y_UNIT_TEST(Pg) {
-    Test("[PgType;\"text\";\"S\"]", "#");
-    Test("[PgType;\"text\";\"S\"]", "\"foo\"");
-    Test("[PgType;\"bytea\";\"U\"]", "[\"EjRWeJoAvN4=\"]");
+    Test(R"([PgType;"text";"S"])", "#");
+    Test(R"([PgType;"text";"S"])", "\"foo\"");
+    Test(R"([PgType;"bytea";"U"])", "[\"EjRWeJoAvN4=\"]");
 }
 } // Y_UNIT_TEST_SUITE(ParseData)
 

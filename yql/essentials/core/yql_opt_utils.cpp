@@ -133,6 +133,10 @@ TExprNode::TPtr MakeOptionalBool(TPositionHandle position, bool value, TExprCont
     return ctx.NewCallable(position, "Just", { MakeBool(position, value, ctx)});
 }
 
+TExprNode::TPtr MakeString(TPositionHandle position, TStringBuf buf, TExprContext& ctx) {
+    return ctx.Builder(position).Callable("String").Atom(0, buf).Seal().Build();
+}
+
 TExprNode::TPtr MakePgBool(TPositionHandle position, bool value, TExprContext& ctx) {
     return ctx.NewCallable(position, "PgConst", {
         ctx.NewAtom(position, value ? "t" : "f", TNodeFlags::Default),
@@ -865,13 +869,13 @@ TExprNode::TPtr MakeSingleGroupRow(const TExprNode& aggregateNode, TExprNode::TP
                 .Build());
         } else {
             const auto& multiFields = column->Child(0)->Children();
-            for (ui32 field = 0; field < multiFields.size(); ++field) {
+            for (const auto& multiField : multiFields) {
                 finalRowNodes.push_back(ctx.Builder(pos)
                     .List()
-                        .Atom(0, multiFields[field]->Content())
+                        .Atom(0, multiField->Content())
                         .Callable(1, "Member")
                             .Add(0, opt)
-                            .Atom(1, multiFields[field]->Content())
+                            .Atom(1, multiField->Content())
                         .Seal()
                     .Seal()
                     .Build());
@@ -1598,7 +1602,7 @@ TExprNode::TPtr BuildKeySelector(TPositionHandle pos, const TStructExprType& row
     }
 
     TExprNode::TPtr tuple;
-    if (tupleItems.size() == 0) {
+    if (tupleItems.empty()) {
         tuple = ctx.Builder(pos).Callable("Uint32").Atom(0, 0U).Seal().Build();
     } else if (tupleItems.size() == 1) {
         tuple = tupleItems[0];
@@ -1844,9 +1848,9 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> ReplaceDependsOn(TExprNode::TPtr lam
             if (node->Head().IsList()) {
                 auto dependsOnArgs = node->Head().ChildrenList();
                 bool changed = false;
-                for (size_t i = 0; i < dependsOnArgs.size(); i++) {
-                    if (dependsOnArgs[i].Get() == arg) {
-                        dependsOnArgs[i] = placeHolder;
+                for (auto& dependsOnArg : dependsOnArgs) {
+                    if (dependsOnArg.Get() == arg) {
+                        dependsOnArg = placeHolder;
                         changed = true;
                     }
                 }
@@ -2540,7 +2544,7 @@ bool CheckSupportedTypes(
             return false;
         }
     }
-    if (supportedDataTypes.size()) {
+    if (!supportedDataTypes.empty()) {
         supported.emplace(ETypeAnnotationKind::Data);
     }
     auto checkType = [&] (const TTypeAnnotationNode* type) {
@@ -2814,8 +2818,12 @@ bool IsNormalizedDependsOn(const TExprNode& node) {
     return false;
 }
 
+bool IsForbidConstantDependsEnabled(const TTypeAnnotationContext& types) {
+    return !IsOptimizerDisabled<ForbidConstantDependsOnFuseOptName>(types);
+}
+
 bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeAnnotationContext& types) {
-    if (!IsOptimizerEnabled<ForbidConstantDependsOnFuseOptName>(types) || IsOptimizerDisabled<ForbidConstantDependsOnFuseOptName>(types)) {
+    if (!IsForbidConstantDependsEnabled(types)) {
         return true;
     }
 
@@ -2860,6 +2868,12 @@ bool CanApplyExtractMembersToPartitionsByKeys(const TTypeAnnotationContext* type
     YQL_ENSURE(types);
     static const char OptName[] = "ExtractMembersForPartitionsByKeys";
     return !IsOptimizerDisabled<OptName>(*types);
+}
+
+bool IsEmitPruneKeysEnabled(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char OptName[] = "EmitPruneKeys";
+    return IsOptimizerEnabled<OptName>(*types) && !IsOptimizerDisabled<OptName>(*types);
 }
 
 }

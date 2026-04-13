@@ -70,25 +70,42 @@ class TestViewer(object):
         return requests.post("http://localhost:%s/login" % cls.cluster.nodes[1].mon_port, json=request)
 
     @classmethod
+    def _split_cookies_from_headers(cls, headers):
+        if not headers or 'Cookie' not in headers:
+            return headers, {}
+        headers = dict(headers)
+        cookie_str = headers.pop('Cookie')
+        cookies = {}
+        for part in cookie_str.split(';'):
+            part = part.strip()
+            if '=' in part:
+                name, value = part.split('=', 1)
+                cookies[name.strip()] = value.strip()
+        return headers, cookies
+
+    @classmethod
     def call_viewer_api_get(cls, url, headers=None):
         if headers is None:
             headers = cls.default_headers
+        headers, cookies = cls._split_cookies_from_headers(headers)
         port = cls.cluster.nodes[1].mon_port
-        return requests.get("http://localhost:%s%s" % (port, url), headers=headers)
+        return requests.get("http://localhost:%s%s" % (port, url), headers=headers, cookies=cookies)
 
     @classmethod
     def call_viewer_api_post(cls, url, body=None, headers=None):
         if headers is None:
             headers = cls.default_headers
+        headers, cookies = cls._split_cookies_from_headers(headers)
         port = cls.cluster.nodes[1].mon_port
-        return requests.post("http://localhost:%s%s" % (port, url), json=body, headers=headers)
+        return requests.post("http://localhost:%s%s" % (port, url), json=body, headers=headers, cookies=cookies)
 
     @classmethod
     def call_viewer_api_delete(cls, url, headers=None):
         if headers is None:
             headers = cls.default_headers
+        headers, cookies = cls._split_cookies_from_headers(headers)
         port = cls.cluster.nodes[1].mon_port
-        return requests.delete("http://localhost:%s%s" % (port, url), headers=headers)
+        return requests.delete("http://localhost:%s%s" % (port, url), headers=headers, cookies=cookies)
 
     @classmethod
     def get_result(cls, result):
@@ -178,6 +195,13 @@ class TestViewer(object):
         return cls.call_viewer_delete(url, params)
 
     @classmethod
+    def _make_request(cls, method, url, headers=None, **kwargs):
+        if headers is None:
+            headers = cls.default_headers
+        headers, cookies = cls._split_cookies_from_headers(headers)
+        return method(url, headers=headers, cookies=cookies, **kwargs)
+
+    @classmethod
     def wait_for_cluster_ready(cls):
         wait_time = 0
         max_wait_time = 300
@@ -187,10 +211,10 @@ class TestViewer(object):
                 while True:
                     try:
                         print("Waiting for node %s to be ready" % node_id)
-                        result_counter = cls.get_result(requests.get("http://localhost:%s/viewer/simple_counter?max_counter=1&period=1" % node.mon_port, headers=cls.default_headers))
+                        result_counter = cls.get_result(cls._make_request(requests.get, "http://localhost:%s/viewer/simple_counter?max_counter=1&period=1" % node.mon_port))
                         if result_counter['status_code'] != 200:
                             break
-                        result = cls.get_result(requests.get("http://localhost:%s/viewer/sysinfo?node_id=." % node.mon_port, headers=cls.default_headers))
+                        result = cls.get_result(cls._make_request(requests.get, "http://localhost:%s/viewer/sysinfo?node_id=." % node.mon_port))
                         if 'status_code' in result and result.status_code != 200:
                             break
                         if 'SystemStateInfo' not in result or len(result['SystemStateInfo']) == 0:
@@ -266,16 +290,18 @@ class TestViewer(object):
                 all_good = False
                 print("Waiting for database %s to be ready" % database)
                 while True:
-                    result = cls.get_result(requests.get(
+                    result = cls.get_result(cls._make_request(
+                        requests.get,
                         "http://localhost:%s/viewer/tenantinfo?database=%s" %
-                        (cls.cluster.nodes[1].mon_port, database), headers=cls.default_headers))  # force connect between nodes
+                        (cls.cluster.nodes[1].mon_port, database)))  # force connect between nodes
                     if 'status_code' in result and result['status_code'] != 200:
                         break
                     if 'CoresUsed' not in result['TenantInfo'][0]:
                         break
-                    result = cls.get_result(requests.get(
+                    result = cls.get_result(cls._make_request(
+                        requests.get,
                         "http://localhost:%s/viewer/healthcheck?database=%s" %
-                        (cls.cluster.nodes[1].mon_port, database), headers=cls.default_headers))  # force connect between nodes
+                        (cls.cluster.nodes[1].mon_port, database)))  # force connect between nodes
                     if 'status_code' in result and result['status_code'] != 200:
                         break
                     if result['self_check_result'] != 'GOOD':
@@ -301,16 +327,18 @@ class TestViewer(object):
                         bad += 1
                 if bad > 0:
                     break
-                result = cls.get_result(requests.get(
+                result = cls.get_result(cls._make_request(
+                    requests.get,
                     "http://localhost:%s/storage/groups?fields_required=all" %
-                    (cls.cluster.nodes[1].mon_port), headers=cls.default_headers))  # force connect between nodes
+                    (cls.cluster.nodes[1].mon_port)))  # force connect between nodes
                 if 'status_code' in result and result['status_code'] != 200:
                     break
                 if len(result['StorageGroups']) < 5:
                     break
-                result = cls.get_result(requests.get(
+                result = cls.get_result(cls._make_request(
+                    requests.get,
                     "http://localhost:%s/viewer/cluster" %
-                    (cls.cluster.nodes[1].mon_port), headers=cls.default_headers))  # force connect between nodes
+                    (cls.cluster.nodes[1].mon_port)))  # force connect between nodes
                 if 'status_code' in result and result['status_code'] != 200:
                     break
                 if 'StorageTotal' not in result or result['StorageTotal'] == 0:
@@ -324,6 +352,10 @@ class TestViewer(object):
             time.sleep(1)
             wait_time += 1
         print('Wait for cluster to be ready took %s seconds' % wait_time)
+
+    @classmethod
+    def test_waiting_for_cluster_ready(cls):
+        return {}
 
     @classmethod
     def test_whoami_root(cls):
@@ -461,12 +493,15 @@ class TestViewer(object):
     @classmethod
     def normalize_result(cls, result):
         cls.delete_keys_recursively(result, {'Version',
+                                             'version',
                                              'MemoryUsed',
                                              'WriteThroughput',
                                              'ReadThroughput',
                                              'Read',
                                              'Write',
                                              'size_bytes',
+                                             'GrpcRequestBytes',
+                                             'GrpcResponseBytes',
                                              })
         result = cls.wipe_values_by_key(result, {'LatencyGetFast',
                                                  'LatencyPutTabletLog',
@@ -537,6 +572,7 @@ class TestViewer(object):
                                     'PathId',
                                     'PublicKeys',
                                     'OriginalUserToken',
+                                    'HashesInitParams',
                                     })
 
         # groups
@@ -604,6 +640,11 @@ class TestViewer(object):
     def normalize_result_healthcheck(cls, result):
         result = cls.replace_values_by_key_and_value(result, ['self_check_result'], ['GOOD', 'DEGRADED', 'MAINTENANCE_REQUIRED', 'EMERGENCY'])
         cls.delete_keys_recursively(result, {'issue_log'})
+        return result
+
+    @classmethod
+    def normalize_result_transfer_describe(cls, result):
+        cls.delete_keys_recursively(result, ['stats'])
         return result
 
     @classmethod
@@ -706,6 +747,14 @@ class TestViewer(object):
         ]
 
     @classmethod
+    def test_viewer_groups_with_invalid_database(cls):
+        # Test that the endpoint doesn't crash when provided with an invalid database
+        result = cls.call_viewer("/viewer/groups", {
+            'database': '/invalid_database_name_that_does_not_exist',
+        })
+        return result
+
+    @classmethod
     def test_viewer_sysinfo(cls):
         result = cls.get_viewer_normalized("/viewer/sysinfo")
         return result
@@ -752,11 +801,10 @@ class TestViewer(object):
 
     @classmethod
     def test_viewer_tenantinfo(cls):
-        return cls.get_viewer_normalized("/viewer/tenantinfo")
-
-    @classmethod
-    def test_viewer_tenantinfo_db(cls):
-        return cls.get_viewer_db_normalized("/viewer/tenantinfo")
+        result = cls.get_viewer_db_normalized("/viewer/tenantinfo")
+        for name in cls.databases_and_no_database:
+            result[name]['TenantInfo'].sort(key=lambda x: x['Name'])
+        return result
 
     @classmethod
     def test_viewer_healthcheck(cls):
@@ -812,8 +860,30 @@ class TestViewer(object):
             })]
 
     @classmethod
+    def test_viewer_acl_write_invalid(cls):
+        return cls.post_viewer("/viewer/acl", {
+            'database': cls.dedicated_db,
+            'path': cls.dedicated_db
+        }, headers={
+            'Cookie': 'ydb_session_id=XXX',
+        }, body={
+            'AddAccess': [{
+                'Subject': 'userX',
+                'AccessRights': ['Full']
+            }]
+        })
+
+    @classmethod
     def test_viewer_autocomplete(cls):
-        return cls.get_viewer_db("/viewer/autocomplete", {'prefix': ''})
+        result = {}
+        result['empty'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': ''})
+        result['root'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': '/Root'})
+        result['dedicated_db'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': 'dedicated_db'})
+        result['root_dedicated_db'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': '/Root/dedicated_db'})
+        result['tab'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': 'tab'})
+        result['table1'] = cls.get_viewer_db("/viewer/autocomplete", {'prefix': 'table1'})
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
 
     @classmethod
     def test_viewer_check_access(cls):
@@ -822,11 +892,15 @@ class TestViewer(object):
 
     @classmethod
     def test_viewer_query(cls):
-        return cls.get_viewer_db("/viewer/query", {'query': 'select 7*6', 'schema': 'multi'})
+        result = cls.get_viewer_db("/viewer/query", {'query': 'select 7*6', 'schema': 'multi'})
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
 
     @classmethod
     def test_viewer_query_from_table(cls):
-        return cls.get_viewer_db_not_domain("/viewer/query", {'query': 'select * from table1', 'schema': 'multi'})
+        result = cls.get_viewer_db_not_domain("/viewer/query", {'query': 'select * from table1', 'schema': 'multi'})
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
 
     @classmethod
     def test_viewer_query_from_table_different_schemas(cls):
@@ -837,21 +911,26 @@ class TestViewer(object):
                 'query': 'select * from table1',
                 'schema': schema
                 })
+        cls.delete_keys_recursively(result, {'Version', 'version'})
         return result
 
     @classmethod
     def test_viewer_query_issue_13757(cls):
-        return cls.get_viewer_db("/viewer/query", {
+        result = cls.get_viewer_db("/viewer/query", {
             'query': 'SELECT CAST(<|one:"8912", two:42|> AS Struct<two:Utf8, three:Date?>);',
             'schema': 'multi'
         })
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
 
     @classmethod
     def test_viewer_query_issue_13945(cls):
-        return cls.get_viewer_db("/viewer/query", {
+        result = cls.get_viewer_db("/viewer/query", {
             'query': 'SELECT AsList();',
             'schema': 'multi'
         })
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return result
 
     @classmethod
     def test_pqrb_tablet(cls):
@@ -870,8 +949,8 @@ class TestViewer(object):
             'response_create_topic': response_create_topic,
             'response_tablet_info': response_tablet_info,
         }
-        return cls.replace_values_by_key(result, ['version',
-                                                  'ResponseTime',
+        cls.delete_keys_recursively(result, {'Version', 'version'})
+        return cls.replace_values_by_key(result, ['ResponseTime',
                                                   'ChangeTime',
                                                   'HiveId',
                                                   'NodeId',
@@ -1110,6 +1189,7 @@ class TestViewer(object):
 
         final_result = {"alter" : alter_response, "insert" : insert_response, "update" : update_response, "data" : data_response}
         logging.info("Results: {}".format(final_result))
+        cls.delete_keys_recursively(final_result, {'Version', 'version'})
         return final_result
 
     @classmethod
@@ -1176,6 +1256,8 @@ class TestViewer(object):
 
             time.sleep(1)
 
+        describe_result = cls.normalize_result_transfer_describe(describe_result)
+
         return {
             'topic_result': topic_result,
             'table_result': table_result,
@@ -1193,6 +1275,7 @@ class TestViewer(object):
                                                     'ProcessDuration',
                                                     'id',
                                                     ])
+        cls.delete_keys_recursively(result, {'Version', 'version'})
         return result
 
     @classmethod
@@ -1264,7 +1347,8 @@ class TestViewer(object):
         # Make raw HTTP request to get multipart response
         port = cls.cluster.nodes[1].mon_port
         headers = {'Accept': 'multipart/x-mixed-replace'}
-        response = requests.get("http://localhost:%s%s?%s" % (port, path, urlencode(params)), headers=headers)
+        response = cls._make_request(requests.get, "http://localhost:%s%s?%s" % (port, path, urlencode(params)),
+                                     headers={**cls.default_headers, **headers})
 
         if response.status_code != 200:
             return {"status_code": response.status_code, "text": response.text}
@@ -1653,4 +1737,14 @@ class TestViewer(object):
     def test_viewer_peers(cls):
         result = cls.get_viewer_normalized("/viewer/peers")
         cls.delete_keys_recursively(result, {'ScopeId', 'PoolStats'})
+        return result
+
+    @classmethod
+    def test_viewer_domain_peers(cls):
+        result = cls.get_viewer_normalized("/viewer/nodes", {
+            'tablets': False,
+            'database': cls.domain_name,
+            'fields_required': 'ConnectStatus',
+            'filter_peer_role': 'database',
+        })
         return result

@@ -2,6 +2,7 @@
 import functools
 import logging
 import os
+import re
 import time
 import copy
 import pytest
@@ -55,11 +56,23 @@ CLUSTER_CONFIG = dict(
     extra_feature_flags=['enable_serverless_exclusive_dynamic_nodes'],
     datashard_config={
         'keep_snapshot_timeout': 5000,
+        'stats_report_interval_seconds': 1,
     },
     column_shard_config={
         'disabled_on_scheme_shard': False,
+        'max_read_staleness_ms': 200
+    },
+    table_service_config={
     },
 )
+
+
+# regex matching error mesages when database exceeds its disk space quota
+RE_DISK_SPACE_QUOTA_EXCEEDED = re.compile(r'.*out of disk space.*')
+
+
+def is_disk_space_quota_exceeded_exception(e: BaseException):
+    return RE_DISK_SPACE_QUOTA_EXCEEDED.match(str(e))
 
 
 @pytest.fixture(scope='module', params=[True, False], ids=['enable_alter_database_create_hive_first--true', 'enable_alter_database_create_hive_first--false'])
@@ -381,7 +394,7 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
                         commit_tx=True,
                     )
         except ydb.Unavailable as e:
-            if not ignore_out_of_space or 'DATABASE_DISK_SPACE_QUOTA_EXCEEDED' not in str(e):
+            if not ignore_out_of_space or not is_disk_space_quota_exceeded_exception(e):
                 raise
 
     @restart_coro_on_bad_session
@@ -443,7 +456,7 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
         for start in range(0, 1000, 100):
             IOLoop.current().run_sync(lambda: async_write_keys(path, start=start, cnt=100))
 
-        for _ in range(30):
+        for _ in range(60):
             time.sleep(1)
             described = ydb_cluster.client.describe(database, '')
             logger.debug('database state after write_keys: %s', described)
@@ -454,15 +467,15 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
 
         # Writes should be denied when database moves into DiskQuotaExceeded state
         time.sleep(1)
-        with pytest.raises(ydb.Unavailable, match=r'.*DATABASE_DISK_SPACE_QUOTA_EXCEEDED.*'):
+        with pytest.raises(ydb.Unavailable, match=RE_DISK_SPACE_QUOTA_EXCEEDED):
             IOLoop.current().run_sync(lambda: async_write_key(path, 0, 'test', ignore_out_of_space=False))
-        with pytest.raises(ydb.Unavailable, match=r'.*out of disk space.*'):
+        with pytest.raises(ydb.Unavailable, match=RE_DISK_SPACE_QUOTA_EXCEEDED):
             IOLoop.current().run_sync(lambda: async_bulk_upsert(path, [BulkUpsertRow(0, 'test')]))
 
         for start in range(0, 1000, 100):
             IOLoop.current().run_sync(lambda: async_erase_keys(path, start=start, cnt=100))
 
-        for _ in range(30):
+        for _ in range(60):
             time.sleep(1)
             described = ydb_cluster.client.describe(database, '')
             logger.debug('database state after erase_keys: %s', described)
@@ -575,6 +588,24 @@ def test_discovery(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
     assert_that(hostel_db_endpoints, not_none())
     assert_that(serverless_db_endpoints, not_none())
     assert_that(serverless_db_endpoints, contains_inanyorder(*hostel_db_endpoints))
+
+
+def test_discovery_with_inner_path(ydb_hostel_db, ydb_serverless_db, ydb_endpoint):
+    driver_config = ydb.DriverConfig(
+        ydb_endpoint,
+        ydb_serverless_db
+    )
+
+    driver = ydb.Driver(driver_config)
+    driver.wait(120)
+
+    serverless_inner_path = os.path.join(ydb_serverless_db, "dirA0")
+    driver.scheme_client.make_directory(serverless_inner_path)
+
+    logger.debug("List endpoints of '%s' by path '%s'", ydb_serverless_db, serverless_inner_path)
+    resolver = ydb.DiscoveryEndpointsResolver(ydb.DriverConfig(ydb_endpoint, serverless_inner_path))
+    result = resolver.resolve()
+    assert_that(result.endpoints, not_none())
 
 
 def ydbcli_db_schema_exec(cluster, operation_proto):

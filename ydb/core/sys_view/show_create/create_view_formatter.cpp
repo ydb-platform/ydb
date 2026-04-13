@@ -90,7 +90,7 @@ TString TrimQuotes(TString&& s) {
 }
 
 bool GetTablePathPrefix(const TString& query, const TParsers& parsers, const TTranslationSettings& settings, TString& tablePathPrefix, TIssues& issues) {
-    const auto* message = SqlAST(parsers, query, settings.File, issues, SQL_MAX_PARSER_ERRORS, settings.AnsiLexer, settings.Antlr4Parser, settings.Arena);
+    const auto* message = SqlAST(parsers, query, settings.File, issues, SQL_MAX_PARSER_ERRORS, settings.AnsiLexer, settings.Arena);
     if (!message || message->GetDescriptor()->name() != "TSQLv1ParserAST") {
         issues.AddIssue(TStringBuilder() << "Cannot parse query: " << query.Quote());
         return false;

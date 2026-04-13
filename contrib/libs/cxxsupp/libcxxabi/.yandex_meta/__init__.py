@@ -1,8 +1,12 @@
 from devtools.yamaker import fileutil
 from devtools.yamaker import pathutil
 from devtools.yamaker.platform_macros import make_llvm_nixattr
-from devtools.yamaker.modules import Library
+from devtools.yamaker.modules import Library, Switch, Linkable
 from devtools.yamaker.project import NixSourceProject
+
+EXCEPTION_ONLY_SRCS = ["src/cxa_exception.cpp", "src/cxa_personality.cpp"]
+NOEXCEPT_ONLY_SRCS = ["src/cxa_noexception.cpp"]
+RTTI_ONLY_SRCS = ["src/private_typeinfo.cpp"]
 
 
 def post_install(self):
@@ -45,6 +49,35 @@ def post_install(self):
     )
 
     with self.yamakes["."] as libcxxabi:
+
+        # make that if from https://github.com/llvm/llvm-project/blob/2984a28612bb8c56cd85d858b00319a24c95409a/libcxxabi/src/CMakeLists.txt#L28
+        for src in EXCEPTION_ONLY_SRCS:
+            libcxxabi.SRCS.remove(src)
+        for src in NOEXCEPT_ONLY_SRCS:
+            libcxxabi.SRCS.remove(src)
+        libcxxabi.after(
+            "SRCS",
+            Switch(
+                {
+                    "NO_CXX_EXCEPTIONS": Linkable(SRCS=NOEXCEPT_ONLY_SRCS),
+                    "default": Linkable(SRCS=EXCEPTION_ONLY_SRCS),
+                }
+            ),
+        )
+
+        for src in RTTI_ONLY_SRCS:
+            libcxxabi.SRCS.remove(src)
+
+        libcxxabi.after(
+            "SRCS",
+            Switch(
+                {
+                    "NO_CXX_RTTI": Linkable(BUILD_ONLY_IF="NO_CXX_EXCEPTIONS"),
+                    "default": Linkable(SRCS=RTTI_ONLY_SRCS),
+                }
+            ),
+        )
+
         libcxxabi.after(
             "SRCS",
             """
@@ -103,10 +136,6 @@ libcxxabi = NixSourceProject(
         "src/demangle/*.cpp",
         "src/demangle/*.def",
         "src/demangle/*.h",
-    ],
-    copy_sources_except=[
-        # fake exception implementation which just invokes std::terminate
-        "src/cxa_noexception.cpp",
     ],
     disable_includes=[
         "aix_state_tab_eh.inc",

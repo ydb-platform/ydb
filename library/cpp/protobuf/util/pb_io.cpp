@@ -103,9 +103,9 @@ namespace {
         void PrintErrorMessage(IOutputStream* out, TStringBuf errorLevel, int line, int column, const TProtoStringType& message) {
             (*out) << errorLevel << " parsing text-format ";
             if (line >= 0) {
-                (*out) << TypeName_ << ": " << (line + 1) << ":" << (column + 1) << ": " << message;
+                (*out) << TypeName_ << ": " << (line + 1) << ":" << (column + 1) << ": " << message << '\n';
             } else {
-                (*out) << TypeName_ << ": " << message;
+                (*out) << TypeName_ << ": " << message << '\n';
             }
             out->Flush();
         }

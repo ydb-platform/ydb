@@ -413,7 +413,7 @@ public:
     {
     }
 
-    IComputationNode* operator() (NMiniKQL::TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    IComputationNode* operator()(NMiniKQL::TCallable& callable, const TComputationNodeFactoryContext& ctx) {
         auto name = callable.GetType()->GetName();
         if (name.ChopSuffix("File")) {
             if (name == TStringBuf("YtWrite")) {

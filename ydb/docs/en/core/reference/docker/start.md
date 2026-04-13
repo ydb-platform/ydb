@@ -42,7 +42,7 @@ docker run "${docker_args[@]}"
 
 For more information about environment variables available when running a Docker container with {{ ydb-short-name }}, see [{#T}](configuration.md).
 
-With the parameters specified in the example above and running Docker locally, [Embedded UI](../embedded-ui/index.md) {{ ydb-short-name }} will be available at [http://localhost:8765](http://localhost:8765).
+With the parameters specified in the example above and running Docker locally, [YDB UI](../ydb-ui/index.md) {{ ydb-short-name }} will be available at [http://localhost:8765](http://localhost:8765).
 
 For more information about stopping and deleting a Docker container with {{ ydb-short-name }}, see [{#T}](cleanup.md).
 

@@ -23,7 +23,7 @@ The boot queue, or *Boot queue*, is stored in Hive's memory and is prioritized. 
 
 When processing the queue, a limited number of tablets are processed at once (`max_boot_batch_size` in [configuration](../reference/configuration/hive.md#boot)). This is necessary so that when starting a large number of tablets, Hive does not stop responding to other requests for a long time.
 
-If when processing a tablet it turns out that it cannot be started on any of the nodes, then this tablet is postponed to a separate *Wait queue*. When node availability changes (a new node connects, or a restriction is removed from a node in [Hive UI](../reference/embedded-ui/hive.md)), Hive returns to these tablets and when processing the boot queue alternates tablets from the Boot Queue and tablets from the Wait Queue.
+If when processing a tablet it turns out that it cannot be started on any of the nodes, then this tablet is postponed to a separate *Wait queue*. When node availability changes (a new node connects, or a restriction is removed from a node in [Hive UI](../reference/ydb-ui/hive.md)), Hive returns to these tablets and when processing the boot queue alternates tablets from the Boot Queue and tablets from the Wait Queue.
 
 ```mermaid
 stateDiagram-v2

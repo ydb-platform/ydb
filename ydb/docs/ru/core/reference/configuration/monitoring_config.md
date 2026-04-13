@@ -1,6 +1,6 @@
 # monitoring_config
 
-Секция `monitoring_config` файла конфигурации {{ ydb-short-name }} задаёт параметры [YDB Monitoring](../embedded-ui/ydb-monitoring.md). Ниже описаны настройки, связанные с [аутентификацией](../../security/authentication.md) на отдельных страницах встроенного мониторинга.
+Секция `monitoring_config` файла конфигурации {{ ydb-short-name }} задаёт параметры [YDB Monitoring](../ydb-ui/ydb-monitoring/index.md). Ниже описаны настройки, связанные с [аутентификацией](../../security/authentication.md) на отдельных страницах YDB Monitoring.
 
 ```yaml
 monitoring_config:

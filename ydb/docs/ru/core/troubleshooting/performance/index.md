@@ -13,7 +13,7 @@
 - [Логи {{ ydb-short-name }}](../../devops/observability/logging.md);
 - [Трассировка](../../reference/observability/tracing/setup.md);
 - [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md);
-- [Встроенный UI](../../reference/embedded-ui/index.md);
+- [YDB UI](../../reference/ydb-ui/index.md);
 - [Планы запросов](../../dev/query-plans-optimization.md);
 - Сторонние инструменты мониторинга.
 

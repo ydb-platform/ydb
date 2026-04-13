@@ -318,21 +318,23 @@ common:
   - from: /administration/ydb-dstool-setup.md
     to: /reference/ydb-dstool/install.md
 
-# Redirects for Embedded UI
+# Redirects for YDB UI (legacy embedded monitoring paths)
   - from: /maintenance/embedded_monitoring/ydb_monitoring.md
-    to: /reference/embedded-ui/ydb-monitoring.md
+    to: /reference/ydb-ui/ydb-monitoring/
   - from: /maintenance/embedded_monitoring/overview.md
-    to: /reference/embedded-ui/overview.md
+    to: /reference/ydb-ui/index.md
   - from: /maintenance/embedded_monitoring/hive.md
-    to: /reference/embedded-ui/hive.md
+    to: /reference/ydb-ui/hive.md
   - from: /maintenance/embedded_monitoring/logs.md
-    to: /reference/embedded-ui/logs.md
+    to: /reference/ydb-ui/logs.md
   - from: /maintenance/embedded_monitoring/interconnect_overview.md
-    to: /reference/embedded-ui/interconnect-overview.md
+    to: /reference/ydb-ui/interconnect-overview.md
   - from: /maintenance/embedded_monitoring/charts.md
-    to: /reference/embedded-ui/charts.md
+    to: /reference/ydb-ui/charts.md
   - from: /maintenance/embedded_monitoring/index.md
-    to: /reference/embedded-ui/index.md
+    to: /reference/ydb-ui/index.md
+  - from: /reference/embedded-ui/(.*)$
+    to: /reference/ydb-ui/$1
 
 # Redirects for recipes
   - from: reference/ydb-sdk/recipes/auth-access-token.md

@@ -50,9 +50,9 @@ SELECT season_id, episode_id
            Tables: ["episodes"]
   ```
 
-- Embedded UI
+- YDB UI
 
-  План запроса также можно получить через [Embedded UI](../reference/embedded-ui/ydb-monitoring.md). Для этого необходимо перейти на страницу базы данных в раздел `Query` и нажать `Explain`:
+  План запроса также можно получить через [YDB UI](../reference/ydb-ui/ydb-monitoring/database.md). Для этого необходимо перейти на страницу базы данных в раздел `Query` и нажать `Explain`:
 
   ![explain_ui](../_assets/explain_ui.png)
 
@@ -101,7 +101,7 @@ ALTER TABLE episodes
            Tables: ["episodes/title_index/indexImplTable"]
   ```
 
-- Embedded UI
+- YDB UI
 
   ![explain_ui](../_assets/explain_with_index_ui.png)
 

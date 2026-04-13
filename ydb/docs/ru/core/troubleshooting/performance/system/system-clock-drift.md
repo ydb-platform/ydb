@@ -16,9 +16,9 @@
 
 Чтобы диагностировать расхождение в системном времени серверов {{ ydb-short-name }}, используйте следующие методы:
 
-1. Используйте **Healthcheck** во [Встроенном UI](../../../reference/embedded-ui/index.md):
+1. Используйте **Healthcheck** в [YDB UI](../../../reference/ydb-ui/index.md):
 
-    1. Во [Встроенном UI](../../../reference/embedded-ui/index.md) перейдите на вкладку **Databases** и нажмите на наименование базы данных.
+    1. В [YDB UI](../../../reference/ydb-ui/index.md) перейдите на вкладку **Databases** и нажмите на наименование базы данных.
 
     1. На вкладке **Navigation** убедитесь, что требуемая база данных выбрана.
 
@@ -41,7 +41,7 @@
     {% endnote %}
 
 
-1. Откройте страницу [Interconnect overview](../../../reference/embedded-ui/interconnect-overview.md) во [Встроенном UI](../../../reference/embedded-ui/index.md).
+1. Откройте страницу [Interconnect overview](../../../reference/ydb-ui/interconnect-overview.md) в [YDB UI](../../../reference/ydb-ui/index.md).
 
 1. Используйте такие инструменты, как `pssh` или `ansible`, чтобы выполнить команду (например, `date +%s%N`) на всех узлах {{ ydb-short-name }} и отобразить значение системных часов.
 

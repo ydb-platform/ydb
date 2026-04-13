@@ -29,7 +29,7 @@
 
     {% note tip %}
 
-    Партиционирование по нагрузке отключено, если на вкладке **Diagnostics > Info** во **Встроенном UI** или в выводе команды `ydb scheme describe` отображается строка `Partitioning by load: false`.
+    Партиционирование по нагрузке отключено, если на вкладке **Diagnostics > Info** в **YDB UI** или в выводе команды `ydb scheme describe` отображается строка `Partitioning by load: false`.
 
     {% endnote %}
 
@@ -37,7 +37,7 @@
 
     {% note tip %}
 
-    Чтобы определить количество партиций в таблице, см. значение `PartCount` на вкладке **Diagnostics > Info** во **Встроенном UI**.
+    Чтобы определить количество партиций в таблице, см. значение `PartCount` на вкладке **Diagnostics > Info** в **YDB UI**.
 
     {% endnote %}
 

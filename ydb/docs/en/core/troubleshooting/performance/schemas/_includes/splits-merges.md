@@ -17,7 +17,7 @@
 
 1. To identify recently split or merged tablets, follow these steps:
 
-    1. In the [Embedded UI](../../../../reference/embedded-ui/index.md), click the **Developer UI** link in the upper right corner.
+    1. In the [YDB UI](../../../../reference/ydb-ui/index.md), click the **Developer UI** link in the upper right corner.
 
     1. Navigate to **Node Table Monitor** > **All tablets of the cluster**.
 

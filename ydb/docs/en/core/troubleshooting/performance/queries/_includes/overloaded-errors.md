@@ -6,7 +6,7 @@
 
 1. To check if the spikes in overloaded errors were caused by exceeding the limit of 15000 queries in table partition queues:
 
-    1. In the [Embedded UI](../../../../reference/embedded-ui/index.md), go to the **Databases** tab and click on the database.
+    1. In the [YDB UI](../../../../reference/ydb-ui/index.md), go to the **Databases** tab and click on the database.
 
     1. On the **Navigation** tab, ensure the required database is selected.
 

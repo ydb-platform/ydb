@@ -9,11 +9,11 @@ items:
   include:
     mode: link
     path: ../postgresql/toc_p.yaml
-- name: Embedded UI
-  href: embedded-ui/index.md
+- name: YDB UI
+  href: ydb-ui/index.md
   include:
     mode: link
-    path: embedded-ui/toc_p.yaml
+    path: ydb-ui/toc_p.yaml
 - name: Integrations
   href: ../integrations/index.md
   include:

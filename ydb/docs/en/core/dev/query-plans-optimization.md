@@ -50,9 +50,9 @@ Let's build a query execution plan for this query. You can do this via either UI
            Tables: ["episodes"]
   ```
 
-- Embedded UI
+- YDB UI
 
-  You can also build a query plan via [Embedded UI](../reference/embedded-ui/ydb-monitoring.md). You need to navigate to the database page, go to the `Query` section, type the query text, and click on `Explain`:
+  You can also build a query plan via [YDB UI](../reference/ydb-ui/ydb-monitoring.md). You need to navigate to the database page, go to the `Query` section, type the query text, and click on `Explain`:
 
   ![explain_ui](../_assets/explain_ui.png)
 
@@ -101,7 +101,7 @@ Let's build the query plan using the secondary index `title_index`. Secondary in
            Tables: ["episodes/title_index/indexImplTable"]
   ```
 
-- Embedded UI
+- YDB UI
 
   ![explain_ui](../_assets/explain_with_index_ui.png)
 

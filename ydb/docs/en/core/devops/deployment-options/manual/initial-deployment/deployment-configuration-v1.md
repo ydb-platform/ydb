@@ -653,7 +653,7 @@ sudo chmod 700 /opt/ydb/certs
 
 {% endlist %}
 
-After starting the static nodes, verify they are running via the {{ ydb-short-name }} built-in web interface (Embedded UI):
+After starting the static nodes, verify they are running via YDB UI:
 
 1. Open `https://<node.ydb.tech>:8765` in your browser, where `<node.ydb.tech>` is the FQDN of the server running any static node;
 2. Go to the **Nodes** tab;
@@ -850,15 +850,15 @@ Where `<node.ydb.tech>` is the FQDN of the server running the dynamic node servi
 
 ## Checking Access to the Built-in Web Interface
 
-To check access to the {{ ydb-short-name }} built-in web interface, open `https://<node.ydb.tech>:8765` in your browser, where `<node.ydb.tech>` is the FQDN of the server running any static {{ ydb-short-name }} node.
+To check access to YDB UI, open `https://<node.ydb.tech>:8765` in your browser, where `<node.ydb.tech>` is the FQDN of the server running any static {{ ydb-short-name }} node.
 
 Configure your browser to trust the Certificate Authority that issued certificates for the {{ ydb-short-name }} cluster. Otherwise, you will see a warning about an untrusted certificate.
 
-If authentication is enabled in the cluster, the browser will prompt for login and password. After entering valid credentials, the built-in web interface welcome page will appear. The available features and user interface are described in [{#T}](../../../../reference/embedded-ui/index.md).
+If authentication is enabled in the cluster, the browser will prompt for login and password. After entering valid credentials, the YDB UI home page will appear. The available features and user interface are described in [{#T}](../../../../reference/ydb-ui/index.md).
 
 {% note info %}
 
-A common way to provide access to the {{ ydb-short-name }} built-in web interface is to set up a fault-tolerant HTTP balancer using `haproxy`, `nginx`, or similar software. HTTP balancer configuration details are beyond the scope of the standard {{ ydb-short-name }} installation guide.
+A common way to provide access to YDB UI is to set up a fault-tolerant HTTP balancer using `haproxy`, `nginx`, or similar software. HTTP balancer configuration details are beyond the scope of the standard {{ ydb-short-name }} installation guide.
 
 {% endnote %}
 

@@ -654,7 +654,7 @@ def do(args):
 
     iteration_number = 1
     while True:
-        if args.max_iterations and iteration_number > args.max_iterations:
+        if args.max_iterations > 0 and iteration_number > args.max_iterations:
             break
         common.print_if_not_quiet(args, f"\nStart balancing iteration {iteration_number}", file=sys.stdout)
         if groups_info.unhealthy_groups:

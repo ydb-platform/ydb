@@ -683,15 +683,13 @@ private:
             return {false, std::nullopt};
         }
 
-        if (!TBase::GetSecurityToken()) {
-            if (!TBase::IsTokenRequired()) {
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
-                            "Skip check permission connect db, token is not required, there is no token provided"
-                            << ", database: " << CheckedDatabaseName_
-                            << ", user: " << TBase::GetUserSID()
-                            << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
-                return {false, std::nullopt};
-            }
+        if (!TBase::GetParsedToken()) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
+                        "Skip check permission connect db, anonymous requests allowed"
+                        << ", database: " << CheckedDatabaseName_
+                        << ", user: " << TBase::GetUserSID()
+                        << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
+            return {false, std::nullopt};
         }
 
         if (!SecurityObject_) {

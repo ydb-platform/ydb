@@ -380,7 +380,7 @@ public:
             ExecutionUnitsResource.fetch_add(resources.ExecutionUnits);
         }
 
-        i64 prev = ExternalDataQueryMemory.fetch_sub(resources.ExternalMemory);
+        auto prev = ExternalDataQueryMemory.fetch_sub(resources.ExternalMemory);
         Y_DEBUG_ABORT_UNLESS(prev >= resources.ExternalMemory);
 
         if (resources.Memory > 0) {
@@ -540,7 +540,7 @@ public:
     std::atomic<i32> ExecutionUnitsLimit;
     std::atomic<double> SpillingPercent;
     TIntrusivePtr<TMemoryResource> TotalMemoryResource;
-    std::atomic<i64> ExternalDataQueryMemory = 0;
+    std::atomic<ui64> ExternalDataQueryMemory = 0;
     std::atomic<ui64> MaxNonParallelTopStageExecutionLimit = 1;
     std::atomic<ui64> MaxNonParallelTasksExecutionLimit = 8;
     std::atomic<bool> PreferLocalDatacenterExecution = true;

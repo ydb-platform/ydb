@@ -185,6 +185,7 @@ protected:
     bool WriteToTableShadow = false;
     bool AllowWriteToPrivateTable = false;
     bool AllowWriteToIndexImplTable = false;
+    bool DisableChangeCollection = false;
     bool DiskQuotaExceeded = false;
     bool UpsertIfExists = false;
 
@@ -1191,6 +1192,9 @@ private:
                 }
                 if (UpsertIfExists) {
                     ev->Record.SetUpsertIfExists(true);
+                }
+                if (DisableChangeCollection) {
+                    ev->Record.SetDisableChangeCollection(true);
                 }
                 // Copy protobuf settings without rows
                 retryState->Headers = ev->Record;

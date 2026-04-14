@@ -152,7 +152,8 @@ public:
                 }
 
                 if (*slot == NUdf::EDataSlot::Decimal) {
-                    NUdf::TUnboxedValue param1, param2;
+                    NUdf::TUnboxedValue param1;
+                    NUdf::TUnboxedValue param2;
                     MKQL_ENSURE(iter.Next(param1), "Unexpected end of list");
                     MKQL_ENSURE(iter.Next(param2), "Unexpected end of list");
                     auto dataType = exprCtxPtr->template MakeType<NYql::TDataExprParamsType>(*slot, TStringBuf(param1.AsStringRef()), TStringBuf(param2.AsStringRef()));

@@ -379,7 +379,8 @@ private:
     Y_NO_INLINE void Grow() {
         auto newCapacity = Capacity_ * CalculateRHHashTableGrowFactor(Capacity_);
         auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
-        char *newData, *newDataEnd;
+        char* newData;
+        char* newDataEnd;
         Allocate(newCapacity, newData, newDataEnd);
         Y_DEFER {
             Allocator_.deallocate(newData, newDataEnd - newData);

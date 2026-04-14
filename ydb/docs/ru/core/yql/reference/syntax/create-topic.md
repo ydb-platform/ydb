@@ -50,7 +50,7 @@ CREATE TOPIC topic_path (
 
 {% note info %}
 
-При выборе имени для топика учитывайте общие [правила именования схемных объектов](../../../concepts/datamodel/cluster-namespace.md##object-naming-rules).
+При выборе имени для топика учитывайте общие [правила именования схемных объектов](../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
 
 {% endnote %}
 

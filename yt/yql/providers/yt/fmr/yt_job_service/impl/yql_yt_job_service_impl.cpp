@@ -75,7 +75,7 @@ public:
             cookieCount,
             startOptions);
 
-        TTableWriteDistributedSessionOptions sessionOptions{.PingInterval = options.PingInterval};
+        TTableWriteDistributedSessionOptions sessionOptions{.PingInterval = options.PingInterval, .RetriesBeforeThrow = options.RetriesBeforeThrow};
         return MakeIntrusive<TTableWriteDistributedSession>(
             sessionWithCookies.Session_,
             TVector<NYT::TDistributedWriteTableCookie>(sessionWithCookies.Cookies_),

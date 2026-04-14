@@ -1015,7 +1015,8 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     }
 
     const auto hints = Ctx_.PullHintForToken(selectPos);
-    TColumnsSets uniqueSets, distinctSets;
+    TColumnsSets uniqueSets;
+    TColumnsSets distinctSets;
     for (const auto& hint : hints) {
         if (const auto& name = to_lower(hint.Name); name == "unique") {
             uniqueSets.insert_unique(NSorted::TSimpleSet<TString>(hint.Values.cbegin(), hint.Values.cend()));
@@ -1084,7 +1085,8 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     }
 
     /// \todo merge gtoupByExpr and groupBy in one
-    TVector<TNodePtr> groupByExpr, groupBy;
+    TVector<TNodePtr> groupByExpr;
+    TVector<TNodePtr> groupBy;
     TLegacyHoppingWindowSpecPtr legacyHoppingWindowSpec;
     bool compactGroupBy = false;
     TString groupBySuffix;

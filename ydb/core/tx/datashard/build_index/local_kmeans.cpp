@@ -6,7 +6,6 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/kqp/common/kqp_types.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 
 #include <ydb/core/tx/tx_proxy/proxy.h>

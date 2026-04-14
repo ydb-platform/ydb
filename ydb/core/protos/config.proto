@@ -25,6 +25,7 @@ import "ydb/core/protos/http_config.proto";
 import "ydb/core/protos/key.proto";
 import "ydb/core/protos/kqp.proto";
 import "ydb/core/protos/local.proto";
+import "ydb/core/protos/long_tx_service_config.proto";
 import "ydb/core/protos/memory_controller_config.proto";
 import "ydb/core/protos/netclassifier.proto";
 import "ydb/core/protos/node_broker.proto";
@@ -3155,6 +3156,8 @@ message TAppConfig {
     optional TNbsConfig NbsConfig = 119;
 
     optional TTliConfig TliConfig = 120;
+
+    optional TLongTxServiceConfig LongTxServiceConfig = 121;
 }
 
 message TYdbVersion {

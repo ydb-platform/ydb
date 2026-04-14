@@ -1339,7 +1339,8 @@ class TIterate: public TBoxedValue {
                             continue;
                         }
 
-                        TUnboxedValue key, value;
+                        TUnboxedValue key;
+                        TUnboxedValue value;
                         if (!currState.IsIteratorFinished && currState.Iterator.NextPair(key, value)) {
                             currState.Value = value;
                             res = ValueBuilder_->NewVariant(Fields_.Key, TUnboxedValue(key));
@@ -1393,7 +1394,8 @@ class TIterate: public TBoxedValue {
                             continue;
                         }
 
-                        TUnboxedValue key, value;
+                        TUnboxedValue key;
+                        TUnboxedValue value;
                         if (!currState.IsIteratorFinished && currState.Iterator.NextPair(key, value)) {
                             currState.Value = value;
                             res = ValueBuilder_->NewVariant(Fields_.Key, TUnboxedValue(key));
@@ -1787,7 +1789,8 @@ struct TMutNode {
         Storage = TMutNodeMap();
         auto& map = std::get<TMutNodeMap>(Storage);
         map.reserve(originalValue.GetDictLength());
-        TUnboxedValue k, v;
+        TUnboxedValue k;
+        TUnboxedValue v;
         for (auto it = originalValue.GetDictIterator(); it.NextPair(k, v);) {
             map.emplace(k, v);
         }

@@ -139,6 +139,8 @@ SET(ORIG_SOURCES
     mkql_wide_filter.cpp
     mkql_wide_map.cpp
     mkql_wide_top_sort.cpp
+    mkql_window_range_pg_caller.cpp
+    mkql_window_range_pg_caller.h
     mkql_withcontext.cpp
     mkql_zip.cpp
 )

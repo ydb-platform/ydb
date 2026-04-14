@@ -123,7 +123,7 @@ TCallableVisitFunc TGatewayTransformer<TExecContextPtr>::operator()(TInternName 
                 }
 
                 auto deliveryMode = ForceLocalTableContent_ ? ETableContentDeliveryMode::File : Settings_->TableContentDeliveryMode.Get(cluster).GetOrElse(ETableContentDeliveryMode::Native);
-                bool useSkiff = !useBlocks && Settings_->TableContentUseSkiff.Get(cluster).GetOrElse(DEFAULT_USE_SKIFF);
+                bool useSkiff = !useBlocks && !ForceDisableSkiff_ && Settings_->TableContentUseSkiff.Get(cluster).GetOrElse(DEFAULT_USE_SKIFF);
                 const bool ensureOldTypesOnly = !useSkiff;
                 const ui64 maxChunksForNativeDelivery = Settings_->TableContentMaxChunksForNativeDelivery.Get().GetOrElse(1000ul);
                 const ui64 localDataSizeLimit = Settings_->_LocalTableContentLimit.Get().GetOrElse(DEFAULT_LOCAL_TABLE_CONTENT_LIMIT);

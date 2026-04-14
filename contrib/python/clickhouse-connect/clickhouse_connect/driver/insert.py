@@ -6,7 +6,7 @@ from clickhouse_connect.driver.binding import quote_identifier
 
 from clickhouse_connect.driver.ctypes import data_conv
 from clickhouse_connect.driver.context import BaseQueryContext
-from clickhouse_connect.driver.options import np, pd, pd_time_test
+from clickhouse_connect.driver import options
 from clickhouse_connect.driver.exceptions import ProgrammingError, DataError
 
 if TYPE_CHECKING:
@@ -73,10 +73,10 @@ class InsertContext(BaseQueryContext):
         self._data = None
         if data is None or len(data) == 0:
             return
-        if pd and isinstance(data, pd.DataFrame):
+        if options.pd and isinstance(data, options.pd.DataFrame):
             data = self._convert_pandas(data)
             self.column_oriented = True
-        if np and isinstance(data, np.ndarray):
+        if options.np and isinstance(data, options.np.ndarray):
             data = self._convert_numpy(data)
         if self.column_oriented:
             self._next_block_data = self._column_block_data
@@ -156,21 +156,21 @@ class InsertContext(BaseQueryContext):
                 elif d_type_kind in ('i', 'u') and not df_col.hasnans:
                     data.append(df_col.to_list())
                     continue
-            elif 'datetime' in ch_type.np_type and (pd_time_test(df_col) or 'datetime64[ns' in str(df_col.dtype)):
+            elif 'datetime' in ch_type.np_type and (options.pd_time_test(df_col) or 'datetime64[ns' in str(df_col.dtype)):
                 div = ch_type.nano_divisor
-                data.append([None if pd.isnull(x) else x.value // div for x in df_col])
+                data.append([None if options.pd.isnull(x) else x.value // div for x in df_col])
                 self.column_formats[col_name] = 'int'
                 continue
             if ch_type.nullable:
                 if d_type_kind == 'O':
                     #  This is ugly, but the multiple replaces seem required as a result of this bug:
                     #  https://github.com/pandas-dev/pandas/issues/29024
-                    df_col = df_col.replace({pd.NaT: None}).replace({np.nan: None})
+                    df_col = df_col.replace({options.pd.NaT: None}).replace({options.np.nan: None})
                 elif 'Float' in ch_type.base_type:
-                    data.append([None if pd.isnull(x) else x for x in df_col])
+                    data.append([None if options.pd.isnull(x) else x for x in df_col])
                     continue
                 else:
-                    df_col = df_col.replace({np.nan: None})
+                    df_col = df_col.replace({options.np.nan: None})
             data.append(df_col.to_numpy(copy=False))
         return data
 

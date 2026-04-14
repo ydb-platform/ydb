@@ -21,7 +21,6 @@
 
 #include <inttypes.h>
 #include <string.h>
-#include <util/system/compiler.h> // Y_NO_SANITIZE
 
 #include <memory>
 #include <utility>
@@ -367,7 +366,7 @@ template <typename SubchannelListType, typename SubchannelDataType>
 SubchannelList<SubchannelListType, SubchannelDataType>::SubchannelList(
     LoadBalancingPolicy* policy, const char* tracer,
     ServerAddressList addresses,
-    LoadBalancingPolicy::ChannelControlHelper* helper, const ChannelArgs& args) Y_NO_SANITIZE("undefined")
+    LoadBalancingPolicy::ChannelControlHelper* helper, const ChannelArgs& args)
     : DualRefCounted<SubchannelListType>(tracer),
       policy_(policy),
       tracer_(tracer) {

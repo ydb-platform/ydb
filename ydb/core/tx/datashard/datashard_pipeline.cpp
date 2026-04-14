@@ -577,7 +577,7 @@ TOperation::TPtr TPipeline::GetVolatileOp(ui64 txId)
 
 bool TPipeline::LoadTxDetails(TTransactionContext &txc,
                               const TActorContext &ctx,
-                              TActiveTransaction::TPtr tx, 
+                              TActiveTransaction::TPtr tx,
                               const TString& userSID)
 {
     auto it = DataTxCache.find(tx->GetTxId());
@@ -1571,7 +1571,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
     } else {
         Y_ENSURE(tx->IsReadTable() || tx->IsDataTx());
         auto dataTx = tx->BuildDataTx(Self, txc, ctx, userSID, true);
-        if (dataTx->Ready() && (dataTx->ProgramSize() || dataTx->IsKqpDataTx()))
+        if (dataTx->Ready() && (dataTx->ProgramSize()))
             dataTx->ExtractKeys(true);
 
         if (!dataTx->Ready() && !dataTx->RequirePrepare()) {
@@ -1595,13 +1595,6 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
             tx->SetReadOnlyFlag();
         if (dataTx->NeedDiagnostics())
             tx->SetNeedDiagnosticsFlag();
-        if (dataTx->IsKqpDataTx())
-            tx->SetKqpDataTransactionFlag();
-        if (dataTx->IsKqpScanTx()) {
-            tx->SetKqpScanTransactionFlag();
-            // TODO: support for extracting keys in kqp scan transaction
-            tx->SetGlobalReaderFlag();
-        }
 
         // Additional checks for volatile transactions
         if (tx->HasVolatilePrepareFlag()) {
@@ -1610,22 +1603,6 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
                     << "Volatile distributed tx " << tx->GetTxId()
                     << " at tablet " << Self->TabletID()
                     << " cannot be immediate");
-                return tx;
-            }
-
-            if (!dataTx->IsKqpDataTx()) {
-                badRequest(TStringBuilder()
-                    << "Volatile distributed tx " << tx->GetTxId()
-                    << " at tablet " << Self->TabletID()
-                    << " must be a kqp data tx");
-                return tx;
-            }
-
-            if (dataTx->GetKqpComputeCtx().HasPersistentChannels()) {
-                badRequest(TStringBuilder()
-                    << "Volatile distributed tx " << tx->GetTxId()
-                    << " at tablet " << Self->TabletID()
-                    << " cannot have persistent channels");
                 return tx;
             }
 
@@ -1657,9 +1634,6 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         } else if (tx->IsReadTable() && dataTx->GetReadTableTransaction().HasSnapshotStep() && dataTx->GetReadTableTransaction().HasSnapshotTxId()) {
             badRequest("Ambiguous snapshot info. Cannot use both MVCC and read table snapshots in one transaction");
             return tx;
-        } else if (tx->IsKqpScanTransaction() && dataTx->HasKqpSnapshot()) {
-            badRequest("Ambiguous snapshot info. Cannot use both MVCC and kqp scan snapshots in one transaction");
-            return tx;
         }
 
         auto allowSnapshot = [&]() -> bool {
@@ -1681,14 +1655,6 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         if(tx->IsMvccSnapshotRead() && !allowSnapshot()) {
             badRequest("Snapshot read must be an immediate read-only or locked-write transaction");
             return tx;
-        }
-
-        if (!tx->IsImmediate()) {
-            // No op
-        } else if (tx->IsKqpScanTransaction() && dataTx->HasKqpSnapshot()) {
-            // to be consistent while dependencies calculation
-            auto snapshot = dataTx->GetKqpSnapshot();
-            tx->SetMvccSnapshot(TRowVersion(snapshot.GetStep(), snapshot.GetTxId()));
         }
     }
 
@@ -1774,7 +1740,7 @@ void TPipeline::BuildDataTx(TActiveTransaction *tx, TTransactionContext &txc, co
     Y_ENSURE(dataTx->Ready());
     // TODO: we should have no requirement to have keys
     // for restarted immediate tx.
-    if (dataTx->ProgramSize() || dataTx->IsKqpDataTx())
+    if (dataTx->ProgramSize())
         dataTx->ExtractKeys(false);
 }
 

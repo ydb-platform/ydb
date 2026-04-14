@@ -1,6 +1,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
-#include <ydb/core/tx/schemeshard/schemeshard_index_build_info.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <util/string/strip.h>

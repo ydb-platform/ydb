@@ -8,7 +8,6 @@
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
-#include <ydb/core/tx/datashard/datashard_kqp_compute.h>
 
 namespace NKikimr {
 
@@ -75,8 +74,6 @@ public:
 
     /// @note it expects TValidationInfo keys are materialized outsize of engine's allocs
     void DestroyEngine() {
-        ComputeCtx->Clear();
-
         Engine.Reset();
         EngineHost.Reset();
     }
@@ -104,8 +101,6 @@ public:
     void ResetCounters() { EngineHostCounters = TEngineHostCounters(); }
     const TEngineHostCounters& GetCounters() const { return EngineHostCounters; }
 
-    NMiniKQL::TKqpDatashardComputeContext& GetKqpComputeCtx();
-
 private:
     TStepOrder StepTxId;
     THolder<NMiniKQL::TEngineHost> EngineHost;
@@ -113,8 +108,6 @@ private:
     THolder<NMiniKQL::IEngineFlat> Engine;
     TKeyValidator KeyValidator;
     TEngineHostCounters EngineHostCounters;
-    THolder<NMiniKQL::TKqpDatashardComputeContext> ComputeCtx;
-    THolder<NMiniKQL::TTypeEnvironment> KqpTypeEnv;
 };
 
 }}

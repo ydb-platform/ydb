@@ -8,6 +8,8 @@
 #include <ydb/core/ymq/queues/common/db_queries_maker.h>
 #include <ydb/core/ymq/queues/common/key_hashes.h>
 
+#include <unordered_map>
+
 namespace NKikimr::NSQS {
 
 struct TDeduplicatorSettings {

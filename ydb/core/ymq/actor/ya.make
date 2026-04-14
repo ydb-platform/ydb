@@ -10,6 +10,7 @@ SRCS(
     cleanup_queue_data.cpp
     create_queue.cpp
     create_user.cpp
+    deduplicator.cpp
     delete_message.cpp
     delete_queue.cpp
     delete_user.cpp

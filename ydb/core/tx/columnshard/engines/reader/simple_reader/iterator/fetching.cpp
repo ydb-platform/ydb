@@ -359,7 +359,6 @@ std::shared_ptr<arrow::Table> TBuildResultStep::BuildPageResultBatch(const std::
     if (IsPageSkippedByFilter(source)) {
         return nullptr;
     }
-    auto context = source->GetContext();
     NArrow::TGeneralContainer::TTableConstructionContext contextTableConstruct;
     if (!source->IsSourceInMemory()) {
         contextTableConstruct.SetStartIndex(StartIndex).SetRecordsCount(RecordsCount);
@@ -368,12 +367,8 @@ std::shared_ptr<arrow::Table> TBuildResultStep::BuildPageResultBatch(const std::
         AFL_VERIFY(RecordsCount == source->GetRecordsCount())("records_count", RecordsCount)("source", source->GetRecordsCount());
     }
     contextTableConstruct.SetFilter(source->GetStageResult().GetNotAppliedFilter());
-    std::shared_ptr<arrow::Table> resultBatch;
-    if (!source->GetStageResult().IsEmpty()) {
-        resultBatch = source->GetStageResult().GetBatch()->BuildTableVerified(contextTableConstruct);
-        if (!resultBatch->num_rows()) {
-            resultBatch = nullptr;
-        }
+    if (source->GetStageResult().IsEmpty()) {
+        return nullptr;
     }
     auto resultBatch = source->GetStageResult().GetBatch()->BuildTableVerified(contextTableConstruct);
     return resultBatch->num_rows() ? resultBatch : nullptr;

@@ -3371,7 +3371,7 @@ public:
             MergeLevelRecords(mergeContext, ETags::BridgeGroupState, ETags::GroupState);
             MergeLevelRecords(mergeContext, ETags::VDiskState, ETags::BridgeGroupState);
             MergeLevelRecords(mergeContext, ETags::VDiskState, ETags::GroupState);
-            MergeLevelRecords(mergeContext, ETags::PDiskState, ETags::VDiskState);
+            MergeLevelRecords(mergeContext, ETags::PDiskState);
             MergeLevelRecords(mergeContext, ETags::StateStorageRing);
             MergeLevelRecords(mergeContext, ETags::StateStorageNode, ETags::StateStorageRing);
         }

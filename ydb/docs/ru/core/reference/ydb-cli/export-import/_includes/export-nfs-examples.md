@@ -3,8 +3,8 @@
 Выгрузка всех несистемных объектов базы данных в директорию `/mnt/nfs/backups/export1` на файловой системе:
 
 ```bash
-{{ ydb-cli }} -p quickstart export fs \
-  --base-path /mnt/nfs/backups/export1
+{{ ydb-cli }} -p quickstart export nfs \
+  --fs-path /mnt/nfs/backups/export1
 ```
 
 ### Выгрузка нескольких директорий {#example-specific-dirs}
@@ -12,16 +12,16 @@
 Выгрузка объектов из директорий `dir1` и `dir2` базы данных в директорию `/mnt/nfs/backups/export1` на файловой системе:
 
 ```bash
-{{ ydb-cli }} -p quickstart export fs \
-  --base-path /mnt/nfs/backups/export1 \
+{{ ydb-cli }} -p quickstart export nfs \
+  --fs-path /mnt/nfs/backups/export1 \
   --include dir1 --include dir2
 ```
 
 Либо с использованием альтернативного способа:
 
 ```bash
-{{ ydb-cli }} -p quickstart export fs \
-  --base-path /mnt/nfs/backups \
+{{ ydb-cli }} -p quickstart export nfs \
+  --fs-path /mnt/nfs/backups \
   --item src=dir1,dst=export1/dir1 --item src=dir2,dst=export1/dir2
 ```
 
@@ -35,8 +35,8 @@
 
 ```bash
 openssl rand -out ~/my_secret_key 16
-{{ ydb-cli }} -p quickstart export fs \
-  --base-path /mnt/nfs/backups/export1 \
+{{ ydb-cli }} -p quickstart export nfs \
+  --fs-path /mnt/nfs/backups/export1 \
   --encryption-algorithm AES-128-GCM --encryption-key-file ~/my_secret_key
 ```
 
@@ -48,8 +48,8 @@ openssl rand -out ~/my_secret_key 16
 
 ```bash
 export YDB_ENCRYPTION_KEY=$(openssl rand -hex 32)
-{{ ydb-cli }} -p quickstart export fs \
+{{ ydb-cli }} -p quickstart export nfs \
   --root-path dir1 \
-  --base-path /mnt/nfs/backups/export1 \
+  --fs-path /mnt/nfs/backups/export1 \
   --encryption-algorithm AES-256-GCM
 ```

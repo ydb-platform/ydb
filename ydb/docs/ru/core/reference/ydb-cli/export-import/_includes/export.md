@@ -37,11 +37,11 @@
 
 {% endif %}
 
-{% if export_is_fs %}
+{% if export_is_nfs %}
 
-### Параметры файловой системы {#fs-params}
+### Параметры файловой системы {#nfs-params}
 
-{% include [export-fs-storage-params.md](export-fs-storage-params.md) %}
+{% include [export-nfs-storage-params.md](export-nfs-storage-params.md) %}
 
 {% endif %}
 
@@ -61,7 +61,7 @@
 
 - `source`, `src`, или `s` — путь до выгружаемой директории или таблицы, `.` указывает на корневую директорию базы данных. При указании директории выгружаются все несистемные объекты в ней, а также рекурсивно все несистемные поддиректории.
 {% if export_is_s3 %}- `destination`, `dst`, или `d` —  путь (префикс ключа) в S3 для размещения выгружаемых объектов.{% endif %}
-{% if export_is_fs %}- `destination`, `dst`, или `d` — путь на файловой системе относительно `base-path` для размещения выгружаемых объектов.{% endif %}
+{% if export_is_nfs %}- `destination`, `dst`, или `d` — путь на файловой системе относительно `nfs-path` для размещения выгружаемых объектов.{% endif %}
 
 `--exclude STRING`: Шаблон ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) для исключения путей из выгрузки. Данный параметр может быть указан несколько раз для разных шаблонов.
 
@@ -167,9 +167,9 @@
 
 {% endif %}
 
-{% if export_is_fs %}
+{% if export_is_nfs %}
 
-{% include [export-fs-examples.md](export-fs-examples.md) %}
+{% include [export-nfs-examples.md](export-nfs-examples.md) %}
 
 {% endif %}
 

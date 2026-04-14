@@ -50,9 +50,9 @@
 
 ## Import/Export NFS через {{ ydb-short-name }} CLI {#nfs}
 
-Команда `{{ ydb-cli }} export fs` используется для резервного копирования данных в [NFS](https://ru.wikipedia.org/wiki/Network_File_System) на хостах, где запушена {{ ydb-short-name }}. По [этой ссылке](../../reference/ydb-cli/export-import/export-fs.md) доступна справка по {{ ydb-short-name }} CLI для этой команды.
+Команда `{{ ydb-cli }} export nfs` используется для резервного копирования данных в [NFS](https://ru.wikipedia.org/wiki/Network_File_System) на хостах, где запушена {{ ydb-short-name }}. По [этой ссылке](../../reference/ydb-cli/export-import/export-nfs.md) доступна справка по {{ ydb-short-name }} CLI для этой команды.
 
-Команда `{{ ydb-cli }} import fs` используется для восстановления данных из резервной копии, созданной в [NFS](https://ru.wikipedia.org/wiki/Network_File_System) на хостах, где запушена {{ ydb-short-name }}. По [этой ссылке](../../reference/ydb-cli/export-import/import-fs.md) доступна справка по {{ ydb-short-name }} CLI для этой команды.
+Команда `{{ ydb-cli }} import nfs` используется для восстановления данных из резервной копии, созданной в [NFS](https://ru.wikipedia.org/wiki/Network_File_System) на хостах, где запушена {{ ydb-short-name }}. По [этой ссылке](../../reference/ydb-cli/export-import/import-nfs.md) доступна справка по {{ ydb-short-name }} CLI для этой команды.
 
 {% note info %}
 
@@ -72,4 +72,4 @@
 
 Коллекции резервных копий лучше всего подходят для рабочих сред, требующих регулярного резервного копирования по расписанию, больших наборов данных, где инкрементальное копирование минимизирует передачу данных, а также при необходимости восстановления на определенный момент времени (point-in-time recovery).
 
-Для более простых сценариев, таких как разовые миграции, среды разработки или небольшие базы данных, рассмотрите возможность использования команд [export/import s3](#s3), [export/import fs](#nfs) или [dump/restore](#files).
+Для более простых сценариев, таких как разовые миграции, среды разработки или небольшие базы данных, рассмотрите возможность использования команд [export/import s3](#s3), [export/import nfs](#nfs) или [dump/restore](#files).

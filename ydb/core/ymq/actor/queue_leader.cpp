@@ -626,13 +626,13 @@ void TQueueLeader::HandleGetMessageGroupsWhileWorking(TSqsEvents::TEvGetMessageG
 }
 
 void TQueueLeader::ProcessGetMessageGroups(TSqsEvents::TEvGetMessageGroups::TPtr&& ev) {
-    auto messagCount = Shards_[0].MessagesCount;
+    auto messageCount = Shards_[0].MessagesCount;
     RLOG_SQS_REQ_DEBUG(ev->Get()->RequestId, "Handle TEvGetMessageGroups"
-       << " count: " << messagCount);
+       << " count: " << messageCount);
 
-    if (messagCount == 0) {
+    if (messageCount == 0) {
         Send(ev->Sender, new TSqsEvents::TEvGetMessageGroupsResponse(std::vector<TString>()));
-    } else if (messagCount > 100) {
+    } else if (messageCount > 100) {
         Send(ev->Sender, new TSqsEvents::TEvGetMessageGroupsResponse(Ydb::StatusIds::OVERLOADED));
     } else {
         Register(new TGetMessageGroupsActor(std::move(ev), TGetMessageGroupsSettings{

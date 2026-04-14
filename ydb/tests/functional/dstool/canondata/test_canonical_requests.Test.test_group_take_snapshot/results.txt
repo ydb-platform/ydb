@@ -21,11 +21,3 @@ GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
 GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
 GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
 GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
-GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
-GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
-GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
-GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
-GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
-GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
-GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID
-GET vdisk_stream?pdiskId=1&vdiskSlotId=0&sessionId=SESSION_ID

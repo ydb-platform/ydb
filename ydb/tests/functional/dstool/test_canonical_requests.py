@@ -7,6 +7,7 @@ import pytest
 import yatest
 import yaml
 import urllib.parse
+import random
 
 from io import StringIO
 from unittest.mock import patch
@@ -113,6 +114,7 @@ class TestBase:
 
     def _trace(self, *args, with_grpc_calls=False, with_response=False, canonize_columns=None,
                mock_base_config=None, allow_http_fetch=False, fake_grpc_handler=None):
+        random.seed(42)
         common.cache.clear()
         common.name_cache.clear()
         results = []

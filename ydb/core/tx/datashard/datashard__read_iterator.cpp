@@ -3624,7 +3624,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         return;
     }
 
-    auto replyWithError = [&] (auto code, const auto& msg) {
+    auto replyWithError = [&] (auto code, const auto& msg, bool throttled = false) {
         auto result = MakeEvReadResult(ctx.SelfID.NodeId());
 
         SetStatusError(
@@ -3632,6 +3632,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
             code,
             msg);
         result->Record.SetReadId(readId.ReadId);
+        result->Record.SetThrottled(throttled);
         ctx.Send(ev->Sender, result.release());
 
         request->ReadSpan.EndError(msg);
@@ -3745,7 +3746,8 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
             replyWithError(
                 Ydb::StatusIds::OVERLOADED,
                 TStringBuilder() << "Request " << readId.ReadId << " rejected, quota exceeded for PoolId=" << record.GetPoolId()
-                    << " (shard# " << TabletID() << " node# " << SelfId().NodeId() << " state# " << DatashardStateName(State) << ")");
+                    << " (shard# " << TabletID() << " node# " << SelfId().NodeId() << " state# " << DatashardStateName(State) << ")",
+                true);
             return;
         }
     }

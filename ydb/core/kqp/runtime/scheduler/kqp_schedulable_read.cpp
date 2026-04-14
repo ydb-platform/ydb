@@ -8,6 +8,7 @@ namespace NKikimr::NKqp::NScheduler {
 
 TSchedulableRead::TSchedulableRead(const NHdrf::NDynamic::TQueryPtr& query)
     : TSchedulableTask(query)
+    // TODO: we add demand to virtual query per reading datashard, which is inconvenient.
 {
     if (query->GetParent()->ReadLimit) {
         MaxQuotaMs = query->GetParent()->ReadLimit->MilliSeconds();

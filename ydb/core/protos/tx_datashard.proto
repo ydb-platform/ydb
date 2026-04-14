@@ -2385,6 +2385,10 @@ message TEvReadResult {
     // For newly-detected deferred breaks, this is the current query's SpanId.
     optional uint64 DeferredVictimQuerySpanId = 16;
 
+    // Indicates that initial read was throttled by KQP Compute Scheduler due to lack of read quota.
+    // The reader should retry after some reasonable delay.
+    optional bool Throttled = 17;
+
     // Data for the possibly partial result
     oneof ReadResult {
         TArrowBatch ArrowBatch = 900;

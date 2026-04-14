@@ -3118,7 +3118,6 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpOpJoinFilter::Match(input.Get())) {
                 return AnnotateOpJoinFilter(input, ctx);
-
             }
 
             if (TKqpOpJoin::Match(input.Get())) {

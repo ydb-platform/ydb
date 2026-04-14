@@ -929,6 +929,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         std::vector<std::string> results = {
             R"([[0;0];[1;1];[2;2]])",
             R"([[0;0];[1;1];[2;2]])",
+            R"([[0;0];[1;1];[2;2]])",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -1141,6 +1142,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
             q = toDecimal + "\n" + toDecimalMax + "\n" + q;
 
+            Cerr << "Executing benchmark query " << qId << "\n";
+
             auto queryClient = kikimr.GetQueryClient();
             auto session = queryClient.GetSession().GetValueSync().GetSession();
             auto result = session.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
@@ -1201,7 +1204,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         // RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore*/ true, {}, {}, /*new rbo*/ false);
         RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1,  2,  3,  7,  11, 13, 19, 21, 22, 25, 26, 29, 30, 32, 33, 34, 37, 42, 43, 46, 48,
                                                                      50, 52, 55, 56, 59, 60, 61, 65, 66, 68, 71, 73, 81, 82, 84, 90, 91, 92, 96},
-                           {15, 31, 58, 64, 72, 85}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true);
+                           {15, 31, 58, 64, 72, 78, 85}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true);
     }
 
     void InsertIntoSchema0(NYdb::NTable::TTableClient& db, std::string tableName, ui32 numRows) {

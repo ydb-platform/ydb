@@ -120,6 +120,8 @@ namespace NKikimr::NDDisk {
         template <typename T>
         void FillPool(TSpscCircularQueue<std::unique_ptr<T>>& pool);
 
+        void InitUring();
+
         NPDisk::TDiskFormatPtr DiskFormat{nullptr, nullptr};
 
     private:

@@ -118,7 +118,7 @@ namespace NKikimr::NDDisk {
         STLOG(PRI_DEBUG, BS_DDISK, BSDD03, "TDDiskActor::CreatePersistentBuffer()", (DDiskId, DDiskId), (pbServiceId, pbServiceId), (PersistentBufferActorId, PersistentBufferActorId));
     }
 
-    void TDDiskActor::StartHandlingQueries() {
+    void TDDiskActor::InitUring() {
 #if defined(__linux__)
         NPDisk::TUringRouterConfig config;
         config.QueueDepth = MaxInFlight;
@@ -160,6 +160,10 @@ namespace NKikimr::NDDisk {
             *Counters.DirectIO.FallbackPDiskCount = 1;
         }
 #endif
+    }
+
+    void TDDiskActor::StartHandlingQueries() {
+        InitUring();
         TActivationContext::Send(new IEventHandle(TEvPrivate::EvHandleSingleQuery, 0, SelfId(), SelfId(), nullptr, 0));
     }
 

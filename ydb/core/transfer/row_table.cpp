@@ -83,8 +83,16 @@ const TBackoff DefaultBackoff = TBackoff(TDuration::Seconds(1), TDuration::Secon
 
 }
 template<>
+<<<<<<< HEAD
 IActor* TTableUploader<TData>::CreateUploaderInternal(const TString& tablePath, const std::shared_ptr<TData>& data, ui64 cookie) {
     return NTxProxy::CreateUploadRowsInternal(SelfId(), tablePath, Scheme->Types, data, NTxProxy::EUploadRowsMode::Normal, false, false, cookie, DefaultBackoff);
+=======
+IActor* TTableUploader<TData>::CreateUploaderInternal(
+    const TString& database, const TString& tablePath,
+    const std::shared_ptr<TData>& data, ui64 cookie)
+{
+    return NTxProxy::CreateUploadRowsInternal(SelfId(), database, tablePath, Scheme->Types, data, NTxProxy::EUploadRowsMode::Normal, false, false, false, cookie, DefaultBackoff);
+>>>>>>> d824b4cdac6 (Disable change data collection (CDC) for IsBuildInProgress columns (#38033))
 }
 
 }

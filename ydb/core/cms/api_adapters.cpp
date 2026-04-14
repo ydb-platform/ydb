@@ -1122,6 +1122,7 @@ public:
     }
 
     void HandleDropRequest(TEvCms::TEvManageRequestResponse::TPtr& ev) {
+        --Requests;
         auto cmsState = GetCmsState();
         if (cmsState->MaintenanceTasks.contains(GetTaskUid())) {
             DropPermissions(cmsState->MaintenanceTasks.at(GetTaskUid()));

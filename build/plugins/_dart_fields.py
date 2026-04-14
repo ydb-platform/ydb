@@ -627,29 +627,34 @@ class LintConfigs:
         if not spec_args.get('CONFIG_TYPE') or not spec_args.get('CONFIG_TYPE')[0]:
             return
         linter_name = spec_args['NAME'][0]
-        config_type = spec_args.get('CONFIG_TYPE')[0]
-        if config_type not in consts.LINTER_CONFIG_TYPES[linter_name]:
+        config_types = tuple(spec_args.get('CONFIG_TYPE'))
+        if config_types not in consts.LINTER_CONFIG_TYPES[linter_name]:
             message = "Unknown {} linter config type: {}. Allowed types: {}".format(
-                linter_name, config_type, ', '.join(consts.LINTER_CONFIG_TYPES[linter_name])
+                linter_name, config_types, ', '.join(consts.LINTER_CONFIG_TYPES[linter_name])
             )
             raise DartValueError(message)
         if common_configs_dir := unit.get('MODULE_COMMON_CONFIGS_DIR'):
-            config = os.path.join(common_configs_dir, config_type)
-            path = unit.resolve(unit.resolve_arc_path(config))
-            if os.path.exists(path):
-                return config
-            message = "File not found: {}".format(path)
-            raise DartValueError(message)
+            configs = []
+            for config_type in config_types:
+                config = os.path.join(common_configs_dir, config_type)
+                path = unit.resolve(unit.resolve_arc_path(config))
+                if os.path.exists(path):
+                    configs.append(config)
+                    continue
+                message = "File not found: {}".format(path)
+                raise DartValueError(message)
+            return configs
         else:
             message = "Config type specifier is only allowed with autoincludes"
             raise DartValueError(message)
 
     @classmethod
     def python_configs(cls, unit, flat_args, spec_args):
-        if config := cls._from_config_type(unit, spec_args):
+        if configs := cls._from_config_type(unit, spec_args):
             # specified by config type, autoincludes scheme
-            unit.on_data_files(config)
-            return serialize_list([config])
+            for config in configs:
+                unit.on_data_files(config)
+            return serialize_list(configs)
 
         # default config
         linter_name = spec_args['NAME'][0]
@@ -668,10 +673,11 @@ class LintConfigs:
 
     @classmethod
     def cpp_configs(cls, unit, flat_args, spec_args):
-        if config := cls._from_config_type(unit, spec_args):
+        if configs := cls._from_config_type(unit, spec_args):
             # specified by config type, autoincludes scheme
-            unit.on_data_files(config)
-            return serialize_list([config])
+            for config in configs:
+                unit.on_data_files(config)
+            return serialize_list(configs)
 
         # default config
         linter_name = spec_args['NAME'][0]
@@ -687,6 +693,11 @@ class LintConfigs:
 
     @classmethod
     def custom_explicit_configs(cls, unit, flat_args, spec_args):
+        if configs := cls._from_config_type(unit, spec_args):
+            # specified by config type, autoincludes scheme
+            for config in configs:
+                unit.on_data_files(config)
+            return serialize_list(configs)
         linter_name = spec_args['NAME'][0]
         if not (default_configs_path := spec_args.get('DEFAULT_CONFIGS')):
             return

@@ -13,7 +13,6 @@
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/runtime/dq_channel_service.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 
 namespace NKikimr {

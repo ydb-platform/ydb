@@ -4,7 +4,6 @@
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/formats/arrow/program/collection.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>

@@ -1,5 +1,4 @@
 PRAGMA WindowNewPipeline;
-PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
 
 /* custom error: Error while processing RANGE bound */
 /* custom error: Cannot add type Int32 and Interval */

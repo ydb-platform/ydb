@@ -1,5 +1,4 @@
 PRAGMA WindowNewPipeline;
-PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
 
 /* custom error: Error while processing RANGE bound */
 /* custom error: Expected data or optional, but got EmptyList */

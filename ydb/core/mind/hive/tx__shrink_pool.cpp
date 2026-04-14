@@ -50,18 +50,17 @@ public:
         if (storagePool == nullptr) {
             ReplyWithError("unknown storage pool");
             return true;
-
         }
+        if (NewSize > storagePool->Groups.size()) {
+            ReplyWithError("cannot increase number of groups with ShrinkPool operation");
+            return true;
+        }
+        if (NewSize == 0) {
+            ReplyWithError("cannot remove all groups");
+            return true;
+        }
+
         i64 groupsToRemove = std::ssize(storagePool->Groups) - static_cast<i64>(NewSize);
-        if (groupsToRemove < 0 ) {
-            ReplyWithError("cannot remove negative groups");
-            return true;
-        }
-        if (groupsToRemove >= std::ssize(storagePool->Groups)) {
-            ReplyWithError("not enough groups");
-            return true;
-        }
-
         // groupsToRemove < InactiveGroups - we are cancelling some group removals
         std::ranges::sort(storagePool->InactiveGroups, TGroupCmp(), [storagePool](auto groupId) { return &storagePool->GetStorageGroup(groupId); });
         while (groupsToRemove < std::ssize(storagePool->InactiveGroups)) {
@@ -145,10 +144,7 @@ public:
             if (!inactiveGroups.contains(groupId)) {
                 auto& groupInfo = storagePool.GetStorageGroup(groupId);
                 groupInfo.Status = EGroupState::Active;
-                db.Table<Schema::Group>().Key(groupId).Update(
-                    NIceDb::TUpdate<Schema::Group::StoragePool>(poolName),
-                    NIceDb::TUpdate<Schema::Group::Status>(EGroupState::Active)
-                );
+                db.Table<Schema::Group>().Key(groupId).Delete();
             }
         }
         storagePool.InactiveGroups.assign(inactiveGroups.begin(), inactiveGroups.end());

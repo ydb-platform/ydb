@@ -111,8 +111,8 @@ enum class EResourceToBalance {
 EResourceToBalance ToResourceToBalance(NMetrics::EResource resource);
 
 enum class EGroupState {
-    Inactive,
-    Active
+    Active,
+    Inactive
 };
 
 struct ISubActor {

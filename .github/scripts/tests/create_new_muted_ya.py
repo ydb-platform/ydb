@@ -173,8 +173,8 @@ def execute_query(branch='main', build_type=DEFAULT_BUILD_TYPE, days_window=7, y
 
 
 def load_fast_unmute_overrides_from_ydb(branch, build_type, ydb_wrapper):
-    """Load ready-for-fast-unmute overrides from analytics/manual_unmute_requests."""
-    table_path = ydb_wrapper.get_table_path("manual_unmute_requests")
+    """Load ready-for-fast-unmute overrides from analytics/mute_control_state."""
+    table_path = ydb_wrapper.get_table_path("mute_control_state")
     query_string = f'''
 SELECT
     full_name,

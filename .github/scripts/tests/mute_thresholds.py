@@ -6,11 +6,15 @@ from functools import lru_cache
 
 
 _REQUIRED_KEYS = (
-    "mute_window_days",
-    "default_unmute_window_days",
-    "delete_window_days",
-    "manual_fast_unmute_window_days",
-    "manual_fast_unmute_min_passes",
+    "mute_default_window_days",
+    "mute_default_total_runs_split",
+    "mute_default_fail_threshold_low_runs",
+    "mute_default_fail_threshold_high_runs",
+    "mute_default_unmute_window_days",
+    "mute_default_unmute_min_passes",
+    "mute_manual_unmute_window_days",
+    "mute_manual_unmute_min_passes",
+    "delete_default_window_days",
     "control_comment_part_max_tests",
 )
 

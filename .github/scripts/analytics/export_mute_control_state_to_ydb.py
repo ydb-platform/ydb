@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Export manual fast-unmute control state from GitHub issues to YDB.
+Export mute control state from GitHub issues to YDB.
 """
 
 import datetime
@@ -135,7 +135,7 @@ def collect_rows(default_window_days, fast_window_days, incremental_only):
         print(f"Project issues updated in last 24h: {len(candidate_issues)}")
     else:
         print(
-            "No existing manual_unmute_requests rows found: "
+            "No existing mute_control_state rows found: "
             f"using full project scan for OPEN issues only ({len(candidate_issues)} issues)"
         )
     print(
@@ -279,9 +279,9 @@ def build_column_types():
 
 def load_thresholds():
     data = get_thresholds()
-    fast_window_days = int(data["manual_fast_unmute_window_days"])
+    fast_window_days = int(data["mute_manual_unmute_window_days"])
     return (
-        int(data["default_unmute_window_days"]),
+        int(data["mute_default_unmute_window_days"]),
         fast_window_days,
     )
 
@@ -298,7 +298,7 @@ def main():
     with YDBWrapper() as ydb_wrapper:
         if not ydb_wrapper.check_credentials():
             return 1
-        table_path = ydb_wrapper.get_table_path("manual_unmute_requests")
+        table_path = ydb_wrapper.get_table_path("mute_control_state")
         create_table(ydb_wrapper, table_path)
         incremental_only = _has_existing_rows(ydb_wrapper, table_path)
 
@@ -307,14 +307,14 @@ def main():
             fast_window_days,
             incremental_only=incremental_only,
         )
-        print(f"Collected {len(rows)} manual unmute rows")
+        print(f"Collected {len(rows)} mute control rows")
         if rows:
             ydb_wrapper.bulk_upsert_batches(
                 table_path,
                 rows,
                 build_column_types(),
                 batch_size=500,
-                query_name="export_manual_unmute_requests",
+                query_name="export_mute_control_state",
             )
 
     print(f"Done in {time.time() - start:.2f}s")

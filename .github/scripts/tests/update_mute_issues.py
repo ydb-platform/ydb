@@ -35,6 +35,7 @@ CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"
 GITHUB_MAX_BODY_LENGTH = 65000  # Setting slightly below 65536 to be safe
 FAST_UNMUTE_AUTO_COMMENT_MARKER = "<!--fast-unmute-auto:v1-->"
 MANUAL_RULES_SNAPSHOT_COMMENT_MARKER = "<!--manual-rules-snapshot:v1-->"
+HUMAN_CLOSE_REOPEN_COMMENT_MARKER = "<!--human-close-reopen:v1-->"
 UNMUTE_LIST_START_MARKER = "<!--unmute_list_start-->"
 UNMUTE_LIST_END_MARKER = "<!--unmute_list_end-->"
 # Machine-readable row state: separate line, hex-only inside <!-- ... --> (no "--" in payload; GFM hides reliably).
@@ -330,6 +331,7 @@ def fetch_all_issues(org_name=ORG_NAME, project_id=PROJECT_ID):
           title
           items(first: 100, after: %s) {
             nodes {
+              id
               content {
                 ... on Issue {
                   id
@@ -682,6 +684,29 @@ def _build_fast_unmute_comment(issue_number, closer_login, linked_prs):
         f"{linked_pr_lines}\n\n"
         "Result:\n"
         f"- tests from this issue become eligible for {MANUAL_FAST_UNMUTE_WINDOW_DAYS}-day unmute window in mute update flow"
+    )
+
+
+def _has_human_close_reopen_comment(comments):
+    return any(HUMAN_CLOSE_REOPEN_COMMENT_MARKER in (comment or "") for comment in comments)
+
+
+def _build_human_close_reopen_comment(issue_number, active_tests):
+    shown_tests = sorted(set(active_tests))[:10]
+    test_lines = "\n".join(f"- `{name}`" for name in shown_tests)
+    extra = ""
+    if len(active_tests) > len(shown_tests):
+        extra = f"\n- ... and {len(active_tests) - len(shown_tests)} more"
+    return (
+        f"{HUMAN_CLOSE_REOPEN_COMMENT_MARKER}\n"
+        f"Issue #{issue_number} was closed manually, but there are still muted tests tracked by this issue.\n\n"
+        "Bot actions applied:\n"
+        "- issue reopened to keep tracking explicit\n"
+        "- project status moved to `In Progress`\n"
+        f"- manual-fast rules enabled for remaining active tests (window={MANUAL_FAST_UNMUTE_WINDOW_DAYS}d, "
+        f"pass_count>{MANUAL_FAST_UNMUTE_MIN_PASSES}, fail+mute=0)\n\n"
+        f"Remaining active tests ({len(active_tests)}):\n"
+        f"{test_lines}{extra}"
     )
 
 
@@ -1326,7 +1351,18 @@ def collect_manual_unmute_request_rows(
         'overrides_total': 0,
         'issues_control_source': 0,
         'issues_legacy_source': 0,
+        'issues_reopened_human_close': 0,
+        'issues_set_in_progress': 0,
     }
+
+    status_field_id = None
+    in_progress_option_id = None
+    if sync_issue_comments and AUTO_ENABLE_MANUAL_ON_HUMAN_CLOSE:
+        try:
+            status_field_id, option_ids = get_project_status_option_ids()
+            in_progress_option_id = option_ids.get('in progress')
+        except Exception as exc:
+            print(f"collect_manual_unmute_request_rows: warning failed to load project status options: {exc}")
 
     now = _utc_now()
     updated_since_cutoff = None
@@ -1336,6 +1372,7 @@ def collect_manual_unmute_request_rows(
     for idx, issue in enumerate(issues, start=1):
         stats['issues_total'] += 1
         content = issue.get('content') or {}
+        project_item_id = issue.get('id')
         issue_number = content.get('number')
 
         if idx == 1 or idx % 50 == 0 or idx == total_issues:
@@ -1428,6 +1465,41 @@ def collect_manual_unmute_request_rows(
 
         if linked_prs:
             stats['issues_with_linked_pr'] += 1
+
+        if (
+            sync_issue_comments
+            and AUTO_ENABLE_MANUAL_ON_HUMAN_CLOSE
+            and is_closed
+            and closed_by_human
+            and remaining_tests
+        ):
+            reopened = reopen_issue(issue_id)
+            if reopened:
+                stats['issues_reopened_human_close'] += 1
+                is_closed = False
+                state = 'OPEN'
+
+            if status_field_id and in_progress_option_id and project_item_id:
+                update_issue_status(
+                    issue_id=project_item_id,
+                    status_field_id=status_field_id,
+                    status_option_id=in_progress_option_id,
+                    issue_url=content.get('url', ''),
+                )
+                stats['issues_set_in_progress'] += 1
+            elif status_field_id and not in_progress_option_id:
+                print(
+                    f"collect_manual_unmute_request_rows: warning issue #{issue_number} "
+                    "cannot set status In Progress (status option not found)"
+                )
+
+            comments = get_issue_comments(issue_id)
+            if not _has_human_close_reopen_comment(comments):
+                reason_comment = _build_human_close_reopen_comment(
+                    issue_number=issue_number,
+                    active_tests=remaining_tests,
+                )
+                add_issue_comment(issue_id, reason_comment)
 
         for test_name in tests:
             control_items.setdefault(
@@ -1605,6 +1677,8 @@ def collect_manual_unmute_request_rows(
         f"issues_branch_match={stats['issues_branch_match']}, "
         f"issues_control_source={stats['issues_control_source']}, "
         f"issues_legacy_source={stats['issues_legacy_source']}, "
+        f"issues_reopened_human_close={stats['issues_reopened_human_close']}, "
+        f"issues_set_in_progress={stats['issues_set_in_progress']}, "
         f"overrides_total={stats['overrides_total']}, "
         f"rows_total={len(request_rows)}"
     )
@@ -1717,6 +1791,7 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
             all_issues_with_contet[content['id']]['owner'] = owner
             all_issues_with_contet[content['id']]['tests'] = []
             all_issues_with_contet[content['id']]['branches'] = branches
+            all_issues_with_contet[content['id']]['project_item_id'] = issue.get('id')
 
             for test in tests:
                 all_issues_with_contet[content['id']]['tests'].append(test)
@@ -1745,6 +1820,7 @@ def get_muted_tests_from_issues():
                         'state': issues[issue]['state'],
                         'branches': issues[issue]['branches'],
                         'id': issue,
+                        'project_item_id': issues[issue].get('project_item_id'),
                     }
                 )
     
@@ -1783,6 +1859,28 @@ def close_issue(issue_id):
         print(f"Issue {issue_id} closed")
     else:
         print(f"Error: Issue {issue_id} not closed")
+
+
+def reopen_issue(issue_id):
+    """Reopens GitHub issue using GraphQL API."""
+    query = """
+    mutation ($issueId: ID!) {
+      reopenIssue(input: {issueId: $issueId}) {
+        issue {
+          id
+          url
+        }
+      }
+    }
+    """
+    variables = {"issueId": issue_id}
+    result = run_query(query, variables)
+    if not result.get('errors'):
+        print(f"Issue {issue_id} reopened")
+        return True
+    print(f"Error: Issue {issue_id} not reopened")
+    return False
+
 
 def add_issue_comment(issue_id, comment):
     """Adds a comment to GitHub issue using GraphQL API.
@@ -1864,13 +1962,33 @@ def update_issue_status(issue_id, status_field_id, status_option_id, issue_url):
     else:
         print(f"Error: Failed to update status for issue {issue_url}")
 
-def update_all_closed_issues_status(status_field_id, unmuted_option_id):
-    """Updates status to Unmuted for all closed issues in the project.
+
+def get_project_status_option_ids():
+    """Return status field id and common option ids by lowercase name."""
+    _, project_fields = get_project_v2_fields(ORG_NAME, PROJECT_ID)
+    status_field_id = None
+    option_ids = {}
+    for field in project_fields:
+        if not field.get('name'):
+            continue
+        if field['name'].lower() != "status":
+            continue
+        status_field_id = field['id']
+        for option in field.get('options', []):
+            option_name = (option.get('name') or '').strip().lower()
+            if option_name:
+                option_ids[option_name] = option.get('id')
+        break
+    return status_field_id, option_ids
+
+def update_all_closed_issues_status(status_field_id, unmuted_option_id, target_issue_item_ids=None):
+    """Updates status to Unmuted for selected closed issues in the project.
     
     Args:
         status_field_id (str): The ID of the status field
         unmuted_option_id (str): The ID of the Unmuted status option
     """
+    target_set = set(target_issue_item_ids or [])
     has_next_page = True
     end_cursor = "null"
     
@@ -1920,6 +2038,8 @@ def update_all_closed_issues_status(status_field_id, unmuted_option_id):
         items = result['data']['organization']['projectV2']['items']['nodes']
         for item in items:
             if item['content'] and item['content']['state'] == 'CLOSED':
+                if target_set and item['id'] not in target_set:
+                    continue
                 # Check if status is not already Unmuted
                 current_status = None
                 for field_value in item['fieldValues']['nodes']:
@@ -1980,6 +2100,7 @@ def close_unmuted_issues(muted_tests_set, do_not_close_issues=False):
     issues = get_muted_tests_from_issues()
     closed_issues = []
     partially_unmuted_issues = []
+    closed_issue_ids = set()
     
     # Get status field ID and Unmuted option ID
     _, project_fields = get_project_v2_fields(ORG_NAME, PROJECT_ID)
@@ -2008,7 +2129,8 @@ def close_unmuted_issues(muted_tests_set, do_not_close_issues=False):
                     'tests': set(),
                     'url': issue_data['url'],
                     'state': issue_data['state'],
-                    'status': issue_data['status']
+                    'status': issue_data['status'],
+                    'project_item_id': issue_data.get('project_item_id'),
                 }
             tests_by_issue[issue_id]['tests'].add(test_name)
     
@@ -2026,9 +2148,13 @@ def close_unmuted_issues(muted_tests_set, do_not_close_issues=False):
                         if not do_not_close_issues:
                             close_issue(issue_id)
                         closed_issues.append({
+                            'id': issue_id,
                             'url': issue_info['url'],
                             'tests': sorted(list(issue_info['tests']))
                         })
+                        project_item_id = issue_info.get('project_item_id')
+                        if project_item_id:
+                            closed_issue_ids.add(project_item_id)
                         print(f"{'Would close' if do_not_close_issues else 'Closed'} issue as all its tests are no longer muted: {issue_info['url']}")
                         print(f"Unmuted tests: {', '.join(sorted(unmuted_tests))}")
                     # Если комментарий уже был — ничего не добавлять!
@@ -2046,9 +2172,14 @@ def close_unmuted_issues(muted_tests_set, do_not_close_issues=False):
                         })
                     # Если комментарий уже был — ничего не добавлять!
     
-    # Update status for all closed issues
-    print("Updating status for all closed issues...")
-    update_all_closed_issues_status(status_field_id, unmuted_option_id)
+    # Update status only for issues closed by this automation run.
+    if closed_issue_ids:
+        print(f"Updating status to Unmuted for closed issues: {len(closed_issue_ids)}")
+        update_all_closed_issues_status(
+            status_field_id,
+            unmuted_option_id,
+            target_issue_item_ids=closed_issue_ids,
+        )
     
     return closed_issues, partially_unmuted_issues
 

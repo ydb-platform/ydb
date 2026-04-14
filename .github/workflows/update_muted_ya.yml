@@ -129,8 +129,8 @@ jobs:
       - name: Update test monitor
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
-      - name: Export manual unmute requests to YDB
-        run: python3 .github/scripts/analytics/export_manual_unmute_requests_to_ydb.py
+      - name: Export mute control state to YDB
+        run: python3 .github/scripts/analytics/export_mute_control_state_to_ydb.py
 
       - name: Generate new muted_ya.txt
         run: |

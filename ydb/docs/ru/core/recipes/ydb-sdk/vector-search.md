@@ -1311,7 +1311,7 @@
 
           sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
 
-    {% endcut %}
+      ```
 
     ```python
     def search_items_vector_as_bytes(
@@ -1347,6 +1347,8 @@
                 ),
             },
         )
+
+    ```
 
     - Native SDK (Asyncio)
 
@@ -1629,7 +1631,7 @@
 
           sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
 
-    {% endcut %}
+      ```
 
     ```python
     def search_items_vector_as_float_list(
@@ -1665,6 +1667,8 @@
                 "$embedding": (embedding, ydb.ListType(ydb.PrimitiveType.Float)),
             },
         )
+
+    ```
 
     - Native SDK (Asyncio)
 

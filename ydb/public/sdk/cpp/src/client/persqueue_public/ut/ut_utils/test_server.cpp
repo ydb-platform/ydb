@@ -7,8 +7,7 @@ const TVector<NKikimrServices::EServiceKikimr> TTestServer::LOGGED_SERVICES = {
     NKikimrServices::PQ_WRITE_PROXY,
     NKikimrServices::PQ_PARTITION_CHOOSER,
     NKikimrServices::PERSQUEUE,
-    NKikimrServices::PERSQUEUE_READ_BALANCER,
-    NKikimrServices::PQ_ALTER_TOPIC
+    NKikimrServices::PERSQUEUE_READ_BALANCER
 };
 
 } // namespace NPersQueue

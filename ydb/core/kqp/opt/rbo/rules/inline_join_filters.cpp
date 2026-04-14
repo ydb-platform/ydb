@@ -53,7 +53,7 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
 
     TVector<TMapElement> mapElements;
     THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> renameMap;
-    for (const auto & iu : newFilter->GetOutputIUs()) {
+    for (const auto& iu : newFilter->GetOutputIUs()) {
 
         if (std::find(renameIUs.begin(), renameIUs.end(), iu) != renameIUs.end()) {
             auto newVar = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++));
@@ -67,7 +67,7 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
     auto map = MakeIntrusive<TOpMap>(newFilter, join->Pos, mapElements, true);
 
     TVector<std::pair<TInfoUnit, TInfoUnit>> newJoinKeys;
-    for (const auto & [leftKey, _] : join->JoinKeys) {
+    for (const auto& [leftKey, _] : join->JoinKeys) {
         newJoinKeys.push_back(std::make_pair(leftKey, renameMap.at(leftKey)));
     }
 

@@ -3428,7 +3428,7 @@ state: STATE_ENABLED
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableDescription {
               Name: "Table"
-              Columns { Name: "key" Type: "Uint32" }
+              Columns { Name: "key" Type: "Uint64" }
               Columns { Name: "embedding" Type: "String" }
               Columns { Name: "prefix" Type: "String" }
               Columns { Name: "value" Type: "Utf8" }
@@ -3547,6 +3547,50 @@ state: STATE_ENABLED
                   }
                   clusters: 4
                   levels: 5
+                }
+              }
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalFulltextPlain) {
+        EnvOptions().EnableIndexMaterialization(true);
+        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobalFulltextPlain
+              FulltextIndexDescription {
+                Settings {
+                  columns: {
+                    column: "value"
+                    analyzers: {
+                      tokenizer: STANDARD
+                      use_filter_lowercase: true
+                    }
+                  }
+                }
+              }
+            }
+        )");
+    }
+
+    Y_UNIT_TEST(IndexMaterializationGlobalFulltextRelevance) {
+        EnvOptions().EnableIndexMaterialization(true);
+        IndexMaterialization(Env(), Runtime(), S3Mock(), S3Port(), true, R"(
+            IndexDescription {
+              Name: "index"
+              KeyColumnNames: ["value"]
+              Type: EIndexTypeGlobalFulltextRelevance
+              FulltextIndexDescription {
+                Settings {
+                  columns: {
+                    column: "value"
+                    analyzers: {
+                      tokenizer: STANDARD
+                      use_filter_lowercase: true
+                    }
+                  }
                 }
               }
             }

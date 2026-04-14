@@ -21,7 +21,7 @@ using TNodeSetLimited = std::unordered_set<const TExprNode*, std::hash<const TEx
 
 template <class TKey,
           class TValue>
-using THashMapLimited = THashMap<TKey, TValue, THash<TKey>, TEqualTo<TKey>, TStdIAllocator<std::pair<const TKey, TValue>>>;
+using THashMapLimited = std::unordered_map<TKey, TValue, THash<TKey>, TEqualTo<TKey>, TStdIAllocator<std::pair<const TKey, TValue>>>;
 
 template <class TValue>
 using TVectorLimited = TVector<TValue, TStdIAllocator<const TValue>>;
@@ -226,7 +226,7 @@ private:
     static TFieldLineage ReplaceTransforms(const TFieldLineage& src, ETransformsType newTransforms) {
         return {.InputIndex = src.InputIndex, .Field = src.Field, .Transforms = (src.Transforms == ETransformsType::Copy && newTransforms == ETransformsType::Copy) ? newTransforms : ETransformsType::None};
     }
-    using TFieldLineageSet = THashSet<TFieldLineage, TFieldLineage::TFieldHash, TEqualTo<TFieldLineage>, TStdIAllocator<TFieldLineage>>;
+    using TFieldLineageSet = std::unordered_set<TFieldLineage, TFieldLineage::TFieldHash, TEqualTo<TFieldLineage>, TStdIAllocator<TFieldLineage>>;
 
     struct TFieldsLineage {
         explicit TFieldsLineage(IAllocator* allocator)
@@ -554,7 +554,8 @@ private:
         }
 
         if (value && value->IsCallable("If")) {
-            TLineage left, right;
+            TLineage left;
+            TLineage right;
             left.Fields.ConstructInPlace(Allocator_.get());
             right.Fields.ConstructInPlace(Allocator_.get());
             FillStructLineage(left, value->Child(1), arg, innerLineage, extType, TFieldsLineageMap(Allocator_.get()));
@@ -606,8 +607,7 @@ private:
             for (const auto& i : structType->GetItems()) {
                 auto& res = (*lineage.Fields).try_emplace(i->GetName(), TFieldsLineage(Allocator_.get())).first->second;
                 TFieldLineageSet items(allLineage);
-                // FIXME: switch back to assign operator when crash in it will be fixed, check YQL-21022
-                std::swap(res.Items, items);
+                res.Items = allLineage;
             }
         }
     }
@@ -798,7 +798,8 @@ private:
             auto& res = (*lineage.Fields).try_emplace(x.first, TFieldsLineage(Allocator_.get())).first->second;
             TMaybe<bool> hasStructItems;
             for (const auto& i : inners) {
-                if (auto f = (*i.Fields).FindPtr(x.first)) {
+                if (auto it = (*i.Fields).find(x.first); it != (*i.Fields).end()) {
+                    auto f = &it->second;
                     for (const auto& x : f->Items) {
                         res.Items.insert(x);
                     }
@@ -816,7 +817,8 @@ private:
             if (hasStructItems && *hasStructItems) {
                 res.StructItems.ConstructInPlace(Allocator_.get());
                 for (const auto& i : inners) {
-                    if (auto f = (*i.Fields).FindPtr(x.first)) {
+                    if (auto it = (*i.Fields).find(x.first); it != (*i.Fields).end()) {
+                        auto f = &it->second;
                         if (f->StructItems) {
                             for (const auto& si : *f->StructItems) {
                                 for (const auto& x : si.second) {
@@ -968,7 +970,8 @@ private:
                 originalName = it->second;
             }
 
-            TStringBuf table, column;
+            TStringBuf table;
+            TStringBuf column;
             SplitTableName(originalName, table, column);
             ui32 index = inputLabels.at(table);
             auto& res = (*lineage.Fields).try_emplace(field->GetName(), TFieldsLineage(Allocator_.get())).first->second;
@@ -993,7 +996,8 @@ private:
                 originalName = it->second;
             }
 
-            TStringBuf table, column;
+            TStringBuf table;
+            TStringBuf column;
             SplitTableName(originalName, table, column);
             ui32 index = inputLabels.at(table);
             auto& res = (*lineage.Fields).try_emplace(field->GetName(), TFieldsLineage(Allocator_.get())).first->second;
@@ -1167,7 +1171,8 @@ void CheckEquvalentLineages(const TString& lineageFirst, const TString& lineageS
     auto lineageNode1 = NYT::NodeFromYsonString(lineageFirst);
     auto lineageNode2 = NYT::NodeFromYsonString(lineageSecond);
 
-    THashMap<i64, NYT::TNode> idToPath1, idToPath2;
+    THashMap<i64, NYT::TNode> idToPath1;
+    THashMap<i64, NYT::TNode> idToPath2;
     IterateTwoLists(lineageNode1["Reads"].AsList(),
                     lineageNode2["Reads"].AsList(),
                     // clang-format off

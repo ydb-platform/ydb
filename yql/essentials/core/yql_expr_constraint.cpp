@@ -2457,7 +2457,8 @@ private:
             input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
         }
 
-        bool leftAny = false, rigthAny = false;
+        bool leftAny = false;
+        bool rigthAny = false;
         core.Flags().Ref().ForEachChild([&](const TExprNode& flag) {
             if (flag.IsAtom("LeftAny"))
                leftAny = true;
@@ -2565,7 +2566,8 @@ private:
             input->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
         }
 
-        bool lOneRow = false, rOneRow = false;
+        bool lOneRow = false;
+        bool rOneRow = false;
         if (const auto& flags = join.Flags()) {
             flags.Cast().Ref().ForEachChild([&](const TExprNode& flag) {
                 lOneRow = lOneRow || flag.IsAtom("LeftUnique");
@@ -2644,7 +2646,8 @@ private:
 
     TStatus IsKeySwitchWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
         const TCoIsKeySwitch keySwitch(input);
-        TSmallVec<TConstraintNode::TListType> itemConstraints, stateConstraints;
+        TSmallVec<TConstraintNode::TListType> itemConstraints;
+        TSmallVec<TConstraintNode::TListType> stateConstraints;
         itemConstraints.emplace_back(keySwitch.Item().Ref().GetAllConstraints());
         stateConstraints.emplace_back(keySwitch.State().Ref().GetAllConstraints());
         return UpdateLambdaConstraints(input->ChildRef(TCoIsKeySwitch::idx_ItemKeyExtractor), ctx, itemConstraints)

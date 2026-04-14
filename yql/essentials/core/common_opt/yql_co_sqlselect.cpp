@@ -837,7 +837,8 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(
     auto arguments = ctx.NewArguments(pos, { arg });
     auto root = lambda->TailPtr();
 
-    TExprNode::TPtr newList, newRoot;
+    TExprNode::TPtr newList;
+    TExprNode::TPtr newRoot;
     std::tie(newRoot, newList) = RewriteSubLinksPartial(
         pos, list, root, lambda->Head().HeadPtr(),
         subLinks, subLinkAnns, inputAliases,
@@ -862,7 +863,8 @@ TExprNode::TPtr BuildFilter(
     TOptimizeContext& optCtx,
     bool isYql)
 {
-    TExprNode::TPtr actualList = list, actualFilter = filter;
+    TExprNode::TPtr actualList = list;
+    TExprNode::TPtr actualFilter = filter;
     auto [subLinks, subLinkAnns] = GatherSubLinksWithOriginal(filter, filter);
     if (!subLinks.empty()) {
         std::tie(actualFilter, actualList) = RewriteSubLinks(
@@ -1794,7 +1796,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(
                                 .List(0)
                                     .Atom(0, "")
                                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                                        if (toRemove.size()) {
+                                        if (!toRemove.empty()) {
                                             parent.Callable(1, "RemoveMembers")
                                                 .Arg(0, "row")
                                                 .Add(1, ctx.NewList(pos, std::move(toRemove)))
@@ -1876,7 +1878,8 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(
                             continue;
                         }
 
-                        TExprNode::TPtr left, right;
+                        TExprNode::TPtr left;
+                        TExprNode::TPtr right;
                         if (!IsMemberEquality(andTerm, predicate->Head().Head(), left, right)) {
                             bad = true;
                             break;
@@ -2474,7 +2477,8 @@ TExprNode::TPtr BuildGroup(TPositionHandle pos, TExprNode::TPtr list,
             .Build();
     }
 
-    TVector<ui32> currentSetIndices, setCounts;
+    TVector<ui32> currentSetIndices;
+    TVector<ui32> setCounts;
     currentSetIndices.resize(groupSets->Tail().ChildrenSize());
     for (ui32 i = 0; i < groupSets->Tail().ChildrenSize(); ++i) {
         auto set = groupSets->Tail().Child(i);
@@ -2836,7 +2840,8 @@ TExprNode::TPtr BuildWindows(TPositionHandle pos, const TExprNode::TPtr& list, c
         }
 
         TExprNode::TListType args;
-        TExprNode::TPtr begin, end;
+        TExprNode::TPtr begin;
+        TExprNode::TPtr end;
         bool useRange = false;
         if (HasSetting(frameSettings, "type")) {
             std::tie(begin, end) = BuildFrame(pos, frameSettings, ctx);

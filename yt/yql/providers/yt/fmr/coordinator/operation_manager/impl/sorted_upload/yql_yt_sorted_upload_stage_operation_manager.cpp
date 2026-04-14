@@ -38,6 +38,11 @@ public:
 
         YQL_CLOG(INFO, FastMapReduce) << "Starting SortedUpload operation";
 
+        const auto& inputRef = sortedUploadOperationParams.Input;
+        TSortingColumns sortingColumns;
+        sortingColumns.Columns = inputRef.SortColumns;
+        sortingColumns.SortOrders = inputRef.SortOrder;
+
         std::vector<TGeneratedTaskInfo> generatedTasks;
         ui64 taskOrder = 0;
         for (auto& task: context.PartitionResult.TaskInputs) {
@@ -48,6 +53,7 @@ public:
             sortedUploadTaskParams.Output = sortedUploadOperationParams.Output;
             sortedUploadTaskParams.CookieYson = sortedUploadOperationParams.Cookies[taskOrder];
             sortedUploadTaskParams.Order = taskOrder;
+            sortedUploadTaskParams.SortingColumns = sortingColumns;
 
             generatedTasks.push_back(TGeneratedTaskInfo{
                 .TaskType = ETaskType::SortedUpload,
@@ -68,6 +74,10 @@ public:
     }
     std::vector<TString> GetOperationResult() override {
         return std::move(FragmentResultsYson_);
+    }
+
+    std::vector<TString> GetExpectedOutputTableIds(const TOperationParams& /* params */) const override {
+        return {}; // SortedUpload writes to YT, not to FMR tables
     }
 
     std::vector<TPartIdInfo> GetPartIdsForTask(const GetPartIdsForTaskContext& /* context */) override {

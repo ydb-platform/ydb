@@ -186,7 +186,7 @@ bool ConstIntAggregate(const TExprNode::TChildrenType& values, std::function<TIn
         return true;
     };
 
-    if (values.size() == 0) {
+    if (values.empty()) {
         return false;
     }
     if (!extractValue(0, result)) {
@@ -404,7 +404,8 @@ TExprNode::TPtr RemoveDeadPayloadColumns(const TExprNode::TPtr& node, TExprConte
         separated.emplace_back();
         for (const auto& column : input.EnumerateAllColumns()) {
             if (drops.end() == drops.find(column)) {
-                TStringBuf part1, part2;
+                TStringBuf part1;
+                TStringBuf part2;
                 SplitTableName(column, part1, part2);
                 separated.back().emplace_back(input.MemberName(part1, part2));
             }
@@ -737,7 +738,12 @@ TExprNode::TPtr PullJustFromLogicalOps(const TExprNode::TPtr& node, TExprContext
 template<bool AndOr>
 TExprNode::TPtr SimplifyLogical(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     const auto size = node->ChildrenSize();
-    ui32 nothings = 0U, same = 0U, justs = 0U, negations = 0U, literals = 0U, bools = 0U;
+    ui32 nothings = 0U;
+    ui32 same = 0U;
+    ui32 justs = 0U;
+    ui32 negations = 0U;
+    ui32 literals = 0U;
+    ui32 bools = 0U;
     node->ForEachChild([&](const TExprNode& child) {
         if (child.IsCallable(node->Content()))
             ++same;
@@ -840,7 +846,11 @@ TExprNode::TPtr SimplifyLogical(const TExprNode::TPtr& node, TExprContext& ctx, 
 
 TExprNode::TPtr SimplifyLogicalXor(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     const auto size = node->ChildrenSize();
-    ui32 same = 0U, justs = 0U, negations = 0U, literals = 0U, bools = 0U;
+    ui32 same = 0U;
+    ui32 justs = 0U;
+    ui32 negations = 0U;
+    ui32 literals = 0U;
+    ui32 bools = 0U;
     for (ui32 i = 0U; i < size; ++i) {
         const auto child = node->Child(i);
         if (child->IsCallable("Nothing")) {
@@ -3045,7 +3055,7 @@ TExprNodeList DedupCalcOverWindowsOnSamePartitioning(const TExprNodeList& calcs,
 }
 
 TExprNode::TPtr BuildCalcOverWindowGroup(TCoCalcOverWindowGroup node, TExprNodeList&& calcs, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
-    if (calcs.size() == 0) {
+    if (calcs.empty()) {
         return node.Input().Ptr();
     }
 
@@ -5570,7 +5580,8 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         if (TCoIntegralCtor::Match(&node->Head())) {
             YQL_CLOG(DEBUG, Core) << "Constant fold " << node->Content() << " over " << node->Head().Content() << " '" << node->Head().Head().Content();
             ui64 extracted;
-            bool hasSign, isSigned;
+            bool hasSign;
+            bool isSigned;
             ExtractIntegralValue(node->Head(), true, hasSign, isSigned, extracted);
             const auto atomValue = GetIntegralAtomValue(extracted, hasSign && isSigned);
             return ctx.ChangeChild(node->Head(), 0U, ctx.NewAtom(node->Pos(), atomValue, TNodeFlags::Default));
@@ -7337,7 +7348,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
         if (failureKind == "opt_cycle" || failureKind == "opt_inf") {
             auto children = node->ChildrenList();
-            Y_ENSURE(children.size() >= 1 && children.size() <= 2);
+            Y_ENSURE(!children.empty() && children.size() <= 2);
             if (children.size() < 2) {
                 children.push_back(ctx.NewAtom(node->Pos(),"0"));
             } else {

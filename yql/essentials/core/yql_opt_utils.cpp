@@ -1602,7 +1602,7 @@ TExprNode::TPtr BuildKeySelector(TPositionHandle pos, const TStructExprType& row
     }
 
     TExprNode::TPtr tuple;
-    if (tupleItems.size() == 0) {
+    if (tupleItems.empty()) {
         tuple = ctx.Builder(pos).Callable("Uint32").Atom(0, 0U).Seal().Build();
     } else if (tupleItems.size() == 1) {
         tuple = tupleItems[0];
@@ -2486,7 +2486,8 @@ template TPartOfConstraintBase::TSetType GetPathsToKeys<false>(const TExprNode& 
 TVector<TString> GenNoClashColumns(const TStructExprType& source, TStringBuf prefix, size_t count) {
     if (!prefix.StartsWith("_yql")) {
         YQL_ENSURE(prefix.Contains('.'));
-        TStringBuf table, column;
+        TStringBuf table;
+        TStringBuf column;
         SplitTableName(prefix, table, column);
         YQL_ENSURE(column.StartsWith("_yql"));
     }
@@ -2544,7 +2545,7 @@ bool CheckSupportedTypes(
             return false;
         }
     }
-    if (supportedDataTypes.size()) {
+    if (!supportedDataTypes.empty()) {
         supported.emplace(ETypeAnnotationKind::Data);
     }
     auto checkType = [&] (const TTypeAnnotationNode* type) {

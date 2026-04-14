@@ -516,6 +516,7 @@ public:
             partition->AlterVersion = alterVersion;
             partition->CreateVersion = alterVersion;
             partition->Status = NKikimrPQ::ETopicPartitionStatus::Active;
+            partition->CreationTimestamp = TInstant::Seconds(TAppData::TimeProvider->Now().Seconds());
             for (const auto parent : p.ParentPartitionIds) {
                 partition->ParentPartitionIds.emplace(parent);
             }

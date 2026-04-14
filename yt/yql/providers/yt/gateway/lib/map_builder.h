@@ -110,7 +110,8 @@ public:
         ExecCtxPtr execCtx,
         ITableDownloaderFunc downloader,
         TString& mapLambda,
-        TYqlUserJobBase* mapJob
+        TYqlUserJobBase* mapJob,
+        bool useSkiff = true
     ) {
         alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
         TGatewayLambdaBuilder builder(execCtx->FunctionRegistry_, alloc, nullptr,
@@ -119,6 +120,9 @@ public:
         TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
 
         TGatewayTransformer transform(execCtx, downloader, pgmBuilder);
+        if (!useSkiff) {
+            transform.SetForceDisableSkiff(true);
+        }
         size_t nodeCount = 0;
         builder.UpdateLambdaCode(mapLambda, nodeCount, transform);
         if (nodeCount > execCtx->Options_.Config()->LLVMNodeCountLimit.Get(execCtx->Cluster_).GetOrElse(DEFAULT_LLVM_NODE_COUNT_LIMIT)) {

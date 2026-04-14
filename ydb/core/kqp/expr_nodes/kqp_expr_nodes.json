@@ -931,7 +931,8 @@
             "Match": {"Type": "Callable", "Name": "KqpOpLimit"},
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
-                {"Index": 1, "Name": "Count", "Type": "TExprBase"}
+                {"Index": 1, "Name": "Count", "Type": "TExprBase"},
+                {"Index": 2, "Name": "Offset", "Type": "TExprBase", "Optional" : "true"}
             ]
         },
         {

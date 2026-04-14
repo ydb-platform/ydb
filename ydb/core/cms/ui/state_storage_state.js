@@ -252,7 +252,7 @@ class StateStorageState {
         this.cleanup();
         var csrfToken = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/)?.[1] || '';
         $.ajax({
-            url: '/actors/nodewarden?page=distconf',
+            url: 'actors/nodewarden?page=distconf',
             type: "POST",
             data: '{"GetStateStorageConfig": {"NodesState": true}}',
             dataType: "json",

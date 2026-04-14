@@ -4,8 +4,12 @@
 #include "topic_workload_configurator.h"
 #include "topic_workload_describe.h"
 
+#include <ydb/core/persqueue/public/constants.h>
+
 #include <util/generic/overloaded.h>
 #include <util/generic/guid.h>
+
+#include <string>
 
 using namespace NYdb::NConsoleClient;
 
@@ -165,6 +169,12 @@ std::shared_ptr<TTopicWorkloadWriterProducer> TTopicWorkloadWriterWorker::Create
     }
 
     settings.DirectWriteToPartition(Params.Direct);
+
+    if (Params.UseTransactions) {
+        settings.AppendSessionMeta(
+            std::string{NKikimr::NPQ::WRITE_SESSION_ATTRIBUTE_TRACK_PRODUCER_ID_IN_TX},
+            Params.TrackProducerIdInTx ? "true" : "false");
+    }
 
     producer->SetWriteSession(topicClient.CreateWriteSession(settings));
 

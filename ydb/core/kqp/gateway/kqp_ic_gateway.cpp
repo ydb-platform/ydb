@@ -30,7 +30,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/persqueue_v1/rpc_calls.h>
-#include <ydb/services/persqueue_v1/actors/schema/topic/actors.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>

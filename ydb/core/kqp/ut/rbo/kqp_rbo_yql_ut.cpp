@@ -1458,9 +1458,25 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             std::regex pattern(R"(\{\{\s*([a-zA-Z0-9_]+)\s*\}\})");
             q = std::regex_replace(q, pattern, "`" + tablePrefix + "$1`");
             q = consts + "\n" + q;
-            auto session = db.CreateSession().GetValueSync().GetSession();
-            auto result = session.ExplainDataQuery(q).GetValueSync();
+
+            auto db = kikimr.GetQueryClient();
+            auto res = db.GetSession().GetValueSync();
+            NStatusHelpers::ThrowOnError(res);
+            auto session = res.GetSession();
+
+            auto result =
+                session.ExecuteQuery(q,
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+                ).ExtractValueSync();
+            result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            auto plan = TString{*result.GetStats()->GetPlan()};
+            Cout << plan << Endl;
+
+            NYdb::NConsoleClient::TQueryPlanPrinter queryPlanPrinter(NYdb::NConsoleClient::EDataFormat::PrettyTable, true, Cout, 0);
+            queryPlanPrinter.Print(plan);
         }
     }
 

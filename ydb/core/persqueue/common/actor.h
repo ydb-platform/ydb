@@ -142,11 +142,13 @@ public:
         pipe.Subscribed = true;
     }
 
-    void OnUndelivered(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+    bool OnUndelivered(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         auto& pipe = Pipes[ev->Get()->TabletId];
         if (ev->Cookie == pipe.Cookie) {
             pipe.Subscribed = false;
+            return true;
         }
+        return false;
     }
 
     void Close() {

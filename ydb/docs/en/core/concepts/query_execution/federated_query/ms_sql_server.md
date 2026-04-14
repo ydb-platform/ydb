@@ -7,10 +7,10 @@ To work with an external Microsoft SQL Server database, you need to follow these
 1. Create a [secret](../../datamodel/secrets.md) containing the password for connecting to the database.
 
     ```yql
-    CREATE OBJECT ms_sql_server_datasource_user_password (TYPE SECRET) WITH (value = "<password>");
+    CREATE SECRET ms_sql_server_datasource_user_password WITH (value = "<password>");
     ```
 
-2. Create an [external data source](../../datamodel/external_data_source.md) that describes a specific Microsoft SQL Server database. The `LOCATION` parameter contains the network address of the Microsoft SQL Server instance to connect to. The `DATABASE_NAME` specifies the database name (for example, `master`). The `LOGIN` and `PASSWORD_SECRET_NAME` parameters are used for authentication to the external database. You can enable encryption for connections to the external database using the `USE_TLS="TRUE"` parameter.
+2. Create an [external data source](../../datamodel/external_data_source.md) that describes a specific Microsoft SQL Server database. The `LOCATION` parameter contains the network address of the Microsoft SQL Server instance to connect to. The `DATABASE_NAME` specifies the database name (for example, `master`). The `LOGIN` and `PASSWORD_SECRET_PATH` parameters are used for authentication to the external database. You can enable encryption for connections to the external database using the `USE_TLS="TRUE"` parameter.
 
     ```yql
     CREATE EXTERNAL DATA SOURCE ms_sql_server_datasource WITH (
@@ -19,7 +19,7 @@ To work with an external Microsoft SQL Server database, you need to follow these
         DATABASE_NAME="<database>",
         AUTH_METHOD="BASIC",
         LOGIN="user",
-        PASSWORD_SECRET_NAME="ms_sql_server_datasource_user_password",
+        PASSWORD_SECRET_PATH="ms_sql_server_datasource_user_password",
         USE_TLS="TRUE"
     );
     ```

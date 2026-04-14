@@ -12,8 +12,8 @@
 namespace NYql::NFmr {
 
 struct TTableWriteDistributedSessionOptions {
-    TDuration PingInterval = TDuration::Seconds(1);
-    ui64 RetriesBeforeThrow = 3;
+    TDuration PingInterval = TDuration::Seconds(2);
+    ui64 RetriesBeforeThrow = 5;
 };
 
 class TTableWriteDistributedSession : public IWriteDistributedSession {

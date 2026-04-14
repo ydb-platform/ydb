@@ -5,7 +5,7 @@
 
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/ast/yql_expr_types.h>
-
+#include <yql/essentials/core/yql_expr_type_annotation_pg.h>
 
 namespace NYql::NTypeAnnImpl {
 
@@ -21,8 +21,6 @@ IGraphTransformer::TStatus InferPgCommonType(
     bool& isUniversal);
 
 TVector<TExprNode::TPtr> InferPgGroupRefTypes(const TExprNode& groupExprs, TExprContext& ctx);
-
-TExprNodePtr WrapWithPgCast(TExprNodePtr&& node, ui32 targetTypeId, TExprContext& ctx);
 const TTypeAnnotationNode* ToPgImpl(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext& ctx, bool& isUniversal);
 const TTypeAnnotationNode* FromPgImpl(TPositionHandle pos, const TTypeAnnotationNode* type, TExprContext& ctx, bool& isUniversal);
 

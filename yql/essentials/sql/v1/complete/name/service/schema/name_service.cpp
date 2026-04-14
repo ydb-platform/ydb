@@ -17,14 +17,14 @@ public:
     NThreading::TFuture<TNameResponse> Lookup(const TNameRequest& request) const override {
         if (request.Constraints.Object) {
             return Schema_
-                ->List(ToListRequest(std::move(request)))
+                ->List(ToListRequest(request))
                 .Apply(ToListNameResponse);
         }
 
         if (request.Constraints.Column && !request.Constraints.Column->Tables.empty()) {
             return BatchDescribe(
-                std::move(request.Constraints.Column->Tables),
-                std::move(request.Constraints.Column->WithoutByTableAlias),
+                request.Constraints.Column->Tables,
+                request.Constraints.Column->WithoutByTableAlias,
                 request.Prefix,
                 request.Limit);
         }

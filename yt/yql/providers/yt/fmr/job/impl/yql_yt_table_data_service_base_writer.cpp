@@ -77,7 +77,7 @@ NThreading::TFuture<void> TFmrTableDataServiceBaseWriter::PutYsonByColumnGroups(
     for (auto& [groupName, columnGroupYsonContent]: splittedYsonByColumnGroups) {
         auto tableDataServiceGroup = GetTableDataServiceGroup(TableId_, PartId_);
         auto tableDataServiceChunkId = GetTableDataServiceChunkId(ChunkCount_, groupName);
-        auto future = TableDataService_->Put(tableDataServiceGroup, tableDataServiceChunkId,columnGroupYsonContent).Subscribe(
+        auto future = TableDataService_->Put(tableDataServiceGroup, tableDataServiceChunkId, columnGroupYsonContent).Subscribe(
             [weakState = std::weak_ptr(State_)] (const auto& putFuture) mutable {
                 std::shared_ptr<TFmrWriterState> state = weakState.lock();
                 if (state) {

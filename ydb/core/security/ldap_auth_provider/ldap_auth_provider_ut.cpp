@@ -8,7 +8,7 @@
 
 #include <ydb/core/security/ldap_auth_provider/test_utils/test_settings.h>
 
-namespace NKikimr {
+namespace NKikimr::NCertTestUtils {
 
 namespace {
 

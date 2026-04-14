@@ -1810,6 +1810,76 @@
             "uri": "https://{canondata_backend}/1889210/825f2ccdc23e4a69b3e241b3b72d159316b71a87/resource.tar.gz#test.test_window-no_fuse_with_rename-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[window-range_pg/win_range_int_zero_bounds--Debug]": [
+        {
+            "checksum": "39cbd59ca3b8e10955b6127876e96591",
+            "size": 1784,
+            "uri": "https://{canondata_backend}/1937367/f2234c6c59a609e386ced2491cdb388b72dbd408/resource.tar.gz#test.test_window-range_pg_win_range_int_zero_bounds--Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-range_pg/win_range_int_zero_bounds--Results]": [
+        {
+            "checksum": "10023136ccd3279a618ace3e7d89863c",
+            "size": 2960,
+            "uri": "https://{canondata_backend}/1775319/4e6c0edd5b8e11230cca81b9e15cb1807ceb1dd6/resource.tar.gz#test.test_window-range_pg_win_range_int_zero_bounds--Results_/results.txt"
+        }
+    ],
+    "test.test[window-range_pg/win_range_no_sort_current_row--Debug]": [
+        {
+            "checksum": "860c7888ee4303ac70c6ebb060296e42",
+            "size": 886,
+            "uri": "https://{canondata_backend}/1937367/f2234c6c59a609e386ced2491cdb388b72dbd408/resource.tar.gz#test.test_window-range_pg_win_range_no_sort_current_row--Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-range_pg/win_range_no_sort_current_row--Results]": [
+        {
+            "checksum": "7158a93b2eb68f459c8c76a9fed33b39",
+            "size": 988,
+            "uri": "https://{canondata_backend}/1775319/4e6c0edd5b8e11230cca81b9e15cb1807ceb1dd6/resource.tar.gz#test.test_window-range_pg_win_range_no_sort_current_row--Results_/results.txt"
+        }
+    ],
+    "test.test[window-range_pg/win_range_pgint2_case1--Debug]": [
+        {
+            "checksum": "b105aec6065d82e977e97018cd904c8e",
+            "size": 2596,
+            "uri": "https://{canondata_backend}/1937367/f2234c6c59a609e386ced2491cdb388b72dbd408/resource.tar.gz#test.test_window-range_pg_win_range_pgint2_case1--Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-range_pg/win_range_pgint2_case1--Results]": [
+        {
+            "checksum": "492173b4ee8245eae230273af8c5b223",
+            "size": 2285,
+            "uri": "https://{canondata_backend}/1775319/4e6c0edd5b8e11230cca81b9e15cb1807ceb1dd6/resource.tar.gz#test.test_window-range_pg_win_range_pgint2_case1--Results_/results.txt"
+        }
+    ],
+    "test.test[window-range_pg/win_range_pgtimestamp_case2--Debug]": [
+        {
+            "checksum": "108fe710c314fffc381682eea7fe417a",
+            "size": 1377,
+            "uri": "https://{canondata_backend}/1937367/f2234c6c59a609e386ced2491cdb388b72dbd408/resource.tar.gz#test.test_window-range_pg_win_range_pgtimestamp_case2--Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-range_pg/win_range_pgtimestamp_case2--Results]": [
+        {
+            "checksum": "b254c368cf5ef16c5177bc9202dbb234",
+            "size": 988,
+            "uri": "https://{canondata_backend}/1775319/4e6c0edd5b8e11230cca81b9e15cb1807ceb1dd6/resource.tar.gz#test.test_window-range_pg_win_range_pgtimestamp_case2--Results_/results.txt"
+        }
+    ],
+    "test.test[window-range_pg/win_range_pgtimestamptz_case4--Debug]": [
+        {
+            "checksum": "56a8e58214d48f75ffb91a035240d0d6",
+            "size": 1393,
+            "uri": "https://{canondata_backend}/1937367/f2234c6c59a609e386ced2491cdb388b72dbd408/resource.tar.gz#test.test_window-range_pg_win_range_pgtimestamptz_case4--Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-range_pg/win_range_pgtimestamptz_case4--Results]": [
+        {
+            "checksum": "308d16b8bbbd6f24f88d82bedd080fe3",
+            "size": 988,
+            "uri": "https://{canondata_backend}/1775319/4e6c0edd5b8e11230cca81b9e15cb1807ceb1dd6/resource.tar.gz#test.test_window-range_pg_win_range_pgtimestamptz_case4--Results_/results.txt"
+        }
+    ],
     "test.test[window-win_func_ntile-default.txt-Debug]": [
         {
             "checksum": "35edb309329470b1d78cdb41b901551d",

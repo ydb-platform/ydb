@@ -496,6 +496,8 @@ struct TPersistentBufferFormat {
         ui32 FreeSectors;
         ui32 InMemoryCacheSize;
         ui32 InMemoryCacheLimit;
+        ui32 DiskOperationsInflight;
+        ui32 PendingEvents;
         std::vector<TTabletInfo> TabletInfos;
         std::vector<std::vector<std::tuple<ui32, ui32>>> FreeSpace;
     };

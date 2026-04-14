@@ -21,6 +21,10 @@ class TVolumePerformanceProfile;
 class TResizeVolumeRequestFlags;
 }   // namespace NYdb::NBS::NProto
 
+namespace NYdb::NBS::NBlockStore {
+class TStorageConfig;
+}   // namespace NYdb::NBS::NBlockStore
+
 namespace NYdb::NBS::NStorage {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -75,11 +79,11 @@ ui64 ComputeBlocksCountPerPartition(
     const ui32 partitionsCount);
 
 TPartitionsInfo ComputePartitionsInfo(
-    const TStorageConfig& config,
+    const NBlockStore::TStorageConfig& config,
     const TString& cloudId,
     const TString& folderId,
     const TString& diskId,
-    NYdb::NBS::NProto::EStorageMediaKind mediaKind,
+    NProto::EStorageMediaKind mediaKind,
     ui64 blocksCount,
     ui32 blockSize,
     bool isSystem,
@@ -95,15 +99,15 @@ bool SetMissingParams(
     NKikimrBlockStore::TVolumeConfig& update);
 
 ui64 ComputeMaxBlocks(
-    const TStorageConfig& config,
-    const NYdb::NBS::NProto::EStorageMediaKind mediaKind,
+    const NBlockStore::TStorageConfig& config,
+    const NProto::EStorageMediaKind mediaKind,
     ui32 currentPartitions);
 
 TVolumeParams ComputeVolumeParams(
-    const TStorageConfig& config,
+    const NBlockStore::TStorageConfig& config,
     ui32 blockSize,
     ui64 blocksCount,
-    NYdb::NBS::NProto::EStorageMediaKind mediaKind,
+    NProto::EStorageMediaKind mediaKind,
     ui32 partitionsCount,
     const TString& cloudId,
     const TString& folderId,

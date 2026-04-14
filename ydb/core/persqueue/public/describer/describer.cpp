@@ -61,6 +61,7 @@ public:
         for (size_t i = 0; i < result->ResultSet.size(); ++i) {
             const auto& entry = result->ResultSet[i];
             auto realPath = CanonizePath(NKikimr::JoinPath(entry.Path));
+            Y_ASSERT(PathToOriginalPath.contains(realPath));
             auto originalPath = PathToOriginalPath[realPath];
 
             auto it = CDCPaths.find(realPath);

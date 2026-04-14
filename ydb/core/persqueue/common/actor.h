@@ -138,7 +138,7 @@ public:
     void SendToTablet(ui64 tabletId, IEventBase *ev, ui64 cookie = 0) {
         auto& pipe = Pipes[tabletId];
         auto forward = std::make_unique<TEvPipeCache::TEvForward>(ev, tabletId, !pipe.Subscribed, pipe.GetCookie());
-        ActorOps->Send(MakePipePerNodeCacheID(false), forward.release(), IEventHandle::FlagTrackDelivery, cookie);
+        ActorOps->Send(MakePipePerNodeCacheID(false), forward.release(), 0, cookie);
         pipe.Subscribed = true;
     }
 

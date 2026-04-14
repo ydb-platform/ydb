@@ -11,11 +11,11 @@ std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TIndexConstructor::DoCreat
         auto* columnInfo = currentSchema.GetColumns().GetByName(ColumnName);
         if (!columnInfo) {
             errors.AddError(
-                Sprintf("tried to create minmax index for column %s, but this column doesn't exist in target table", ColumnName.c_str()));
+                Sprintf("tried to create min_max index for column %s, but this column doesn't exist in target table", ColumnName.c_str()));
             return nullptr;
         }
         if (!TIndexMeta::IsAvailableType(columnInfo->GetType())) {
-            errors.AddError(Sprintf("inappropriate column type for minmax index: %s", columnInfo->GetTypeName().c_str()));
+            errors.AddError(Sprintf("inappropriate column type for min_max index: %s", columnInfo->GetTypeName().c_str()));
             return nullptr;
         }
         columnId = columnInfo->GetId();
@@ -30,10 +30,10 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson:
     }
     AFL_VERIFY(DataExtractor);
     if (!jsonInfo.Has("column_name")) {
-        return TConclusionStatus::Fail("column_name must be present in minmax index features");
+        return TConclusionStatus::Fail("column_name must be present in min_max index features");
     }
     if (!jsonInfo["column_name"].GetString(&ColumnName)) {
-        return TConclusionStatus::Fail("column_name must be present in minmax index features as string");
+        return TConclusionStatus::Fail("column_name must be present in min_max index features as string");
     }
     return TConclusionStatus::Success();
 }
@@ -55,7 +55,7 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
 
 void TIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const {
     auto* filterProto = proto.MutableMinMaxIndex();
-    AFL_VERIFY(!!ColumnName)("problem", "not initialized minmax index info trying to serialize");
+    AFL_VERIFY(!!ColumnName)("problem", "not initialized min_max index info trying to serialize");
     filterProto->SetColumnName(ColumnName);
     *filterProto->MutableDataExtractor() = DataExtractor.SerializeToProto();
 }

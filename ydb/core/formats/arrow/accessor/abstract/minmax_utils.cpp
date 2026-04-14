@@ -40,6 +40,11 @@ TMinMax TMinMax::Compute(std::shared_ptr<arrow::Array> arr) {
     return res;
 }
 
+std::shared_ptr<arrow::DataType> TMinMax::ElementType() const {
+    AFL_VERIFY(Min()->type->Equals(Max()->type))("details", "inconsistent TMinMax state");
+    return Min()->type;
+}
+
 TMinMax TMinMax::Compute(std::shared_ptr<arrow::ChunkedArray> arr) {
     auto res = TMinMax::MakeNull(arr->type());
     for (const auto& chunk : arr->chunks()) {
@@ -114,6 +119,7 @@ bool TMinMax::IsNull() const {
 
 void TMinMax::UniteWith(TMinMax other) {
     AFL_VERIFY(other.MinMax.type->Equals(MinMax.type));
+    AFL_VERIFY(other.ElementType()->Equals(ElementType()));
     
     if (other.IsNull()) {
         return;
@@ -123,11 +129,11 @@ void TMinMax::UniteWith(TMinMax other) {
         *this = other;
         return;
     }
-    using namespace NArrowCompare;
-    if (Max() < other.Max()) {
+
+    if (NArrowCompare::Less(Max(), other.Max())) {
         Max() = other.Max();
     }
-    if (Min() > other.Min()) {
+    if (NArrowCompare::Greater(Min(), other.Min())) {
         Min() = other.Min();
     }
 }
@@ -140,19 +146,19 @@ bool cmp(NKikimr::NKernels::EOperation op, const std::shared_ptr<arrow::Scalar>&
     return res.scalar_as<arrow::BooleanScalar>().value;
 }
 
-bool operator<(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
+bool Less(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
     return cmp(NKernels::EOperation::Less, left, right);
 }
 
-bool operator>(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
+bool Greater(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
     return cmp(NKernels::EOperation::Greater, left, right);
 }
 
-bool operator<=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
+bool LessOrEqual(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
     return cmp(NKernels::EOperation::LessEqual, left, right);
 }
 
-bool operator>=(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
+bool GreaterOrEqual(const std::shared_ptr<arrow::Scalar>& left, const std::shared_ptr<arrow::Scalar>& right) {
     return cmp(NKernels::EOperation::GreaterEqual, left, right);
 }
 

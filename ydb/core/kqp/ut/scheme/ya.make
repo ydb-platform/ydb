@@ -30,6 +30,12 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/core/kqp/workload_service/ut/common
     ydb/core/tx/columnshard/hooks/testing
+<<<<<<< HEAD
+=======
+    ydb/public/sdk/cpp/src/client/arrow
+    ydb/public/sdk/cpp/src/client/draft
+    ydb/public/sdk/cpp/src/client/topic
+>>>>>>> d824b4cdac6 (Disable change data collection (CDC) for IsBuildInProgress columns (#38033))
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
 )

@@ -6,6 +6,27 @@
 
 {% list tabs %}
 
+- C++
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/driver/driver.h>
+  #include <ydb-cpp-sdk/client/iam/iam.h>
+
+  NYdb::TDriver CreateDriverWithServiceAccountKeyFile(
+      const std::string& connectionString,
+      const std::string& saKeyFilePath,
+      const std::string& internalCA)
+  {
+      auto config = NYdb::TDriverConfig(connectionString)
+          .UseSecureConnection(internalCA);
+          .SetCredentialsProviderFactory(NYdb::CreateIamJwtFileCredentialsProviderFactory({
+              .JwtFilename = saKeyFilePath
+          });
+
+      return NYdb::TDriver(config);
+  }
+  ```
+
 - Go
 
   {% list tabs %}

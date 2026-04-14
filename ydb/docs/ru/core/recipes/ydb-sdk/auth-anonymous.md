@@ -6,6 +6,22 @@
 
 {% list tabs %}
 
+- C++
+
+  Анонимная аутентификация является аутентификацией по умолчанию.
+  Явным образом анонимную аутентификацию можно включить так:
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/driver/driver.h>
+
+  NYdb::TDriver CreateDriverAnonymous() {
+      auto config = NYdb::TDriverConfig("grpc://localhost:2136/?database=/local")
+          .SetCredentialsProviderFactory(NYdb::CreateInsecureCredentialsProviderFactory());
+
+      return NYdb::TDriver(config);
+  }
+  ```
+
 - Go
 
   {% list tabs %}

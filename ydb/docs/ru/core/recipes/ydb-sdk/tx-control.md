@@ -10,6 +10,21 @@
 
 {% list tabs group=lang %}
 
+- C++
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/query/client.h>
+
+  void ExecuteQuery(NYdb::NQuery::TSession session) {
+    auto result = session.ExecuteQuery(
+        "SELECT 1",
+        NYdb::NQuery::TTxControl::NoTx()
+    ).GetValueSync();
+
+    // ...
+  }
+  ```
+
 - Go
 
   {% list tabs %}
@@ -162,15 +177,6 @@
 
   {% endlist %}
 
-- C++
-
-  ```cpp
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::NoTx()
-  ).GetValueSync();
-  ```
-
 - C#
 
   {% list tabs %}
@@ -249,6 +255,22 @@
 ## Serializable {#serializable}
 
 {% list tabs group=lang %}
+
+- C++
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/query/client.h>
+
+  void ExecuteQuery(NYdb::NQuery::TSession session) {
+      auto settings = NYdb::NQuery::TTxSettings::SerializableRW();
+      auto result = session.ExecuteQuery(
+          "SELECT 1",
+          NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+      ).GetValueSync();
+
+      // ...
+  }
+  ```
 
 - Go
 
@@ -423,16 +445,6 @@
 
   {% endlist %}
 
-- C++
-
-  ```cpp
-  auto settings = NYdb::NQuery::TTxSettings::SerializableRW();
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-  ).GetValueSync();
-  ```
-
 - C#
 
   {% list tabs %}
@@ -579,6 +591,22 @@
 ## Online Read-Only {#online-read-only}
 
 {% list tabs group=lang %}
+
+- C++
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/query/client.h>
+
+  void ExecuteQuery(NYdb::NQuery::TSession session) {
+      auto settings = NYdb::NQuery::TTxSettings::OnlineRO();
+      auto result = session.ExecuteQuery(
+          "SELECT 1",
+          NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+      ).GetValueSync();
+
+      // ...
+  }
+  ```
 
 - Go
 
@@ -752,16 +780,6 @@
 
   {% endlist %}
 
-- C++
-
-  ```cpp
-  auto settings = NYdb::NQuery::TTxSettings::OnlineRO();
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-  ).GetValueSync();
-  ```
-
 - C#
 
   {% list tabs %}
@@ -849,6 +867,22 @@
 ## Stale Read-Only {#stale-read-only}
 
 {% list tabs group=lang %}
+
+- C++
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/query/client.h>
+
+  void ExecuteQuery(NYdb::NQuery::TSession session) {
+      auto settings = NYdb::NQuery::TTxSettings::StaleRO();
+      auto result = session.ExecuteQuery(
+          "SELECT 1",
+          NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+      ).GetValueSync();
+
+      // ...
+  }
+  ```
 
 - Go
 
@@ -1020,16 +1054,6 @@
 
   {% endlist %}
 
-- C++
-
-  ```cpp
-  auto settings = NYdb::NQuery::TTxSettings::StaleRO();
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-  ).GetValueSync();
-  ```
-
 - C#
 
   {% list tabs %}
@@ -1100,6 +1124,22 @@
 ## Snapshot Read-Only {#snapshot-read-only}
 
 {% list tabs group=lang %}
+
+- C++
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/query/client.h>
+
+  void ExecuteQuery(NYdb::NQuery::TSession session) {
+      auto settings = NYdb::NQuery::TTxSettings::SnapshotRO();
+      auto result = session.ExecuteQuery(
+          "SELECT 1",
+          NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+      ).GetValueSync();
+
+      // ...
+  }
+  ```
 
 - Go
 
@@ -1269,16 +1309,6 @@
 
   {% endlist %}
 
-- C++
-
-  ```cpp
-  auto settings = NYdb::NQuery::TTxSettings::SnapshotRO();
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-  ).GetValueSync();
-  ```
-
 - C#
 
   {% list tabs %}
@@ -1350,6 +1380,22 @@
 ## Snapshot Read-Write {#snapshot-read-write}
 
 {% list tabs group=lang %}
+
+- C++
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/query/client.h>
+
+  void ExecuteQuery(NYdb::NQuery::TSession session) {
+      auto settings = NYdb::NQuery::TTxSettings::SnapshotRW();
+      auto result = session.ExecuteQuery(
+          "SELECT 1",
+          NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
+      ).GetValueSync();
+
+      // ...
+  }
+  ```
 
 - Go
 
@@ -1519,16 +1565,6 @@
     ```
 
   {% endlist %}
-
-- C++
-
-  ```cpp
-  auto settings = NYdb::NQuery::TTxSettings::SnapshotRW();
-  auto result = session.ExecuteQuery(
-      "SELECT 1",
-      NYdb::NQuery::TTxControl::BeginTx(settings).CommitTx()
-  ).GetValueSync();
-  ```
 
 - C#
 

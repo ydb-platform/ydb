@@ -6,6 +6,19 @@
 
 {% list tabs %}
 
+- C++
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/driver/driver.h>
+
+  NYdb::TDriver CreateDriverWithAccessToken(const std::string& accessToken) {
+      auto config = NYdb::TDriverConfig("grpcs://localhost:2135/?database=/local")
+          .SetAuthToken(accessToken);
+
+      return NYdb::TDriver(config);
+  }
+  ```
+
 - Go
 
   {% list tabs %}

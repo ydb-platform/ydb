@@ -4,6 +4,26 @@
 
 {% list tabs %}
 
+- С++
+
+  {{ ydb-short-name }} C++ SDK использует алгоритм `prefer_local_dc` (предпочитать ближайший дата-центр) по умолчанию.
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/driver/driver.h>
+
+  int main() {
+    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+
+    auto driverConfig = NYdb::TDriverConfig(connectionString)
+      .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferableLocation());
+
+    NYdb::TDriver driver(driverConfig);
+    // ...
+    driver.Stop(true);
+    return 0;
+  }
+  ```
+
 - Go
 
   {% list tabs %}
@@ -86,26 +106,6 @@
     ```
 
   {% endlist %}
-
-- С++
-
-  {{ ydb-short-name }} C++ SDK использует алгоритм `prefer_local_dc` (предпочитать ближайший дата-центр) по умолчанию.
-
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
-
-  int main() {
-    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
-
-    auto driverConfig = NYdb::TDriverConfig(connectionString)
-      .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferableLocation());
-
-    NYdb::TDriver driver(driverConfig);
-    // ...
-    driver.Stop(true);
-    return 0;
-  }
-  ```
 
 - Python
 

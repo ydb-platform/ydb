@@ -13,6 +13,17 @@
 
 {% list tabs %}
 
+- C++
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/driver/driver.h>
+  #include <ydb-cpp-sdk/client/helpers/helpers.h>
+
+  NYdb::TDriver CreateDriverFromEnvironment(const std::string& connectionString) {
+      return NYdb::TDriver(NYdb::CreateFromEnvironment(connectionString));
+  }
+  ```
+
 - Go
 
   {% list tabs %}

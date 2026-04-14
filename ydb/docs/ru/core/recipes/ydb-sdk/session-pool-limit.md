@@ -14,6 +14,25 @@
 
 {% list tabs %}
 
+- C++
+
+  - `MaxActiveSessions` — максимальный размер пула (по умолчанию 50).
+  - `MinPoolSize` — минимальное число сессий (по умолчанию 10). SDK перестанет закрывать сессии по таймауту по достижении лимита, поэтому число не гарантированное.
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/driver/driver.h>
+  #include <ydb-cpp-sdk/client/query/client.h>
+
+  NYdb::NQuery::TQueryClient CreateQueryClient(const NYdb::TDriver& driver) {
+      NYdb::NQuery::TClientSettings settings;
+      settings.SessionPoolSettings(
+          NYdb::NQuery::TSessionPoolSettings()
+              .MaxActiveSessions(500)
+              .MinPoolSize(10));
+      return NYdb::NQuery::TQueryClient(driver, settings);
+  }
+  ```
+
 - Go
 
   {% list tabs %}

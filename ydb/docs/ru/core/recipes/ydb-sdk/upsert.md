@@ -4,6 +4,73 @@
 
 {% list tabs %}
 
+- C++
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/query/client.h>
+
+  void UpsertSeries(NYdb::NQuery::TQueryClient& client) {
+      NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync(
+          [](NYdb::NQuery::TSession session) {
+              constexpr auto query = R"(
+                  DECLARE $seriesData AS List<Struct<
+                      series_id: Uint64,
+                      title: Utf8,
+                      series_info: Utf8,
+                      comment: Optional<Utf8>
+                  >>;
+
+                  UPSERT INTO series
+                  (
+                      series_id,
+                      title,
+                      series_info,
+                      comment
+                  )
+                  SELECT
+                      series_id,
+                      title,
+                      series_info,
+                      comment
+                  FROM AS_TABLE($seriesData);
+              )";
+
+              auto params = NYdb::TParamsBuilder()
+                  .AddParam("$seriesData")
+                      .BeginList()
+                      .AddListItem()
+                          .BeginStruct()
+                          .AddMember("series_id").Uint64(1)
+                          .AddMember("title").Utf8("IT Crowd")
+                          .AddMember("series_info").Utf8(
+                              "The IT Crowd is a British sitcom produced by Channel 4, written by Graham Linehan, produced by "
+                              "Ash Atalla and starring Chris O'Dowd, Richard Ayoade, Katherine Parkinson, and Matt Berry.")
+                          .AddMember("comment").OptionalUtf8(std::nullopt)
+                          .EndStruct()
+                      .AddListItem()
+                          .BeginStruct()
+                          .AddMember("series_id").Uint64(2)
+                          .AddMember("title").Utf8("Silicon Valley")
+                          .AddMember("series_info").Utf8(
+                              "Silicon Valley is an American comedy television series created by Mike Judge, John Altschuler and "
+                              "Dave Krinsky. The series focuses on five young men who founded a startup company in Silicon Valley.")
+                          .AddMember("comment").OptionalUtf8("lorem ipsum")
+                          .EndStruct()
+                      .EndList()
+                      .Build()
+                  .Build();
+
+              return session.ExecuteQuery(
+                  query,
+                  NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
+                  params).GetValueSync();
+          },
+          NYdb::NQuery::TRetryOperationSettings()
+              .Idempotent(true)
+      ));
+  }
+  ```
+
 - Go
 
   {% list tabs %}

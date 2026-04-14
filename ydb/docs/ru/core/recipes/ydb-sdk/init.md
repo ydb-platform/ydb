@@ -6,6 +6,24 @@
 
 {% list tabs %}
 
+- C++
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/driver/driver.h>
+
+  int main() {
+    auto driverConfig = NYdb::TDriverConfig("grpc://localhost:2136/local");
+
+    NYdb::TDriver driver(driverConfig);
+    
+    // ...
+
+    driver.Stop();
+
+    return 0;
+  }
+  ```
+
 - Go
 
   {% list tabs %}

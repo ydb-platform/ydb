@@ -6,6 +6,24 @@
 
 {% list tabs %}
 
+- C++
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/driver/driver.h>
+
+  int main() {
+    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+
+    auto driverConfig = NYdb::TDriverConfig(connectionString)
+      .SetBalancingPolicy(NYdb::TBalancingPolicy::UseAllNodes());
+
+    NYdb::TDriver driver(driverConfig);
+    // ...
+    driver.Stop(true);
+    return 0;
+  }
+  ```
+
 - Go
 
   {% list tabs %}
@@ -84,24 +102,6 @@
     ```
 
   {% endlist %}
-
-- C++
-
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
-
-  int main() {
-    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
-
-    auto driverConfig = NYdb::TDriverConfig(connectionString)
-      .SetBalancingPolicy(NYdb::TBalancingPolicy::UseAllNodes());
-
-    NYdb::TDriver driver(driverConfig);
-    // ...
-    driver.Stop(true);
-    return 0;
-  }
-  ```
 
 - Python
 

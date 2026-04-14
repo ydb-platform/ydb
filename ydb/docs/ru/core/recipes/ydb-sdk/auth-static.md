@@ -8,16 +8,25 @@
 
 - C++
 
-  ```c++
-  auto driverConfig = NYdb::TDriverConfig()
-    .SetEndpoint(endpoint)
-    .SetDatabase(database)
-    .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
-        .User = "user",
-        .Password = "password",
-    }));
+  ```cpp
+  #include <ydb-cpp-sdk/client/driver/driver.h>
+  #include <ydb-cpp-sdk/client/types/credentials/credentials.h>
 
-  NYdb::TDriver driver(driverConfig);
+  NYdb::TDriver CreateDriverWithStaticCredentials(
+      const std::string& connectionString,
+      const std::string& user,
+      const std::string& password)
+  {
+      auto config = NYdb::TDriverConfig(connectionString);
+          .SetEndpoint(endpoint)
+          .SetDatabase(database)
+          .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
+              .User = user,
+              .Password = password,
+          }));
+
+      return NYdb::TDriver(config);
+  }
   ```
 
 - Go

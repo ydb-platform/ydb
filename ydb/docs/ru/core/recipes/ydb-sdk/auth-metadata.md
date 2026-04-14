@@ -2,9 +2,27 @@
 
 <!-- markdownlint-disable blanks-around-fences -->
 
-Ниже приведены примеры кода аутентификации при помощи переменных окружения в разных {{ ydb-short-name }} SDK.
+Ниже приведены примеры кода аутентификации при помощи сервиса метаданных в разных {{ ydb-short-name }} SDK.
 
 {% list tabs %}
+
+- C++
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/driver/driver.h>
+  #include <ydb-cpp-sdk/client/iam/iam.h>
+
+  NYdb::TDriver CreateDriverWithMetadataCredentials(
+      const std::string& connectionString,
+      const std::string& internalCA)
+  {
+      auto config = NYdb::TDriverConfig(connectionString)
+          .UseSecureConnection(internalCA)
+          .SetCredentialsProviderFactory(NYdb::CreateIamCredentialsProviderFactory());
+
+      return NYdb::TDriver(config);
+  }
+  ```
 
 - Go
 

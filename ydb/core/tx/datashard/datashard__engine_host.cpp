@@ -376,7 +376,7 @@ public:
         UserDb.UpsertRow(tableId, key, ops, defaultFilledColumnCount, userCtx);
     }
 
-    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops, 
+    void UpsertRow(const TTableId& tableId, const TArrayRef<const TRawTypeValue> key, const TArrayRef<const NIceDb::TUpdateOp> ops,
         NACLib::TUserContext::TPtr userCtx) override
     {
         UserDb.UpsertRow(tableId, key, ops, userCtx);
@@ -508,7 +508,7 @@ private:
 
 //
 
-TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId, 
+TEngineBay::TEngineBay(TDataShard* self, TTransactionContext& txc, const TActorContext& ctx, const TStepOrder& stepTxId,
     NACLib::TUserContext::TPtr userCtx)
     : StepTxId(stepTxId)
     , KeyValidator(*self)

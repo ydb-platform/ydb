@@ -577,7 +577,7 @@ TOperation::TPtr TPipeline::GetVolatileOp(ui64 txId)
 
 bool TPipeline::LoadTxDetails(TTransactionContext &txc,
                               const TActorContext &ctx,
-                              TActiveTransaction::TPtr tx, 
+                              TActiveTransaction::TPtr tx,
                               NACLib::TUserContext::TPtr userCtx)
 {
     auto it = DataTxCache.find(tx->GetTxId());

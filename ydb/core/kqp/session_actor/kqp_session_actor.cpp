@@ -492,7 +492,6 @@ public:
         }
 
         MakeNewQueryState(ev);
-
         TTimerGuard timer(this);
         YQL_ENSURE(QueryState->GetDatabase() == Settings.Database,
                 "Wrong database, expected:" << Settings.Database << ", got: " << QueryState->GetDatabase());
@@ -1946,7 +1945,6 @@ public:
         request.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
         request.MaxShardCount = RequestControls.MaxShardCount;
         request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
-
         request.QuerySpanId = QueryState ? QueryState->GetQuerySpanId() : 0;
         request.CaFactory_ = CaFactory_;
         request.ResourceManager_ = ResourceManager_;
@@ -2092,7 +2090,7 @@ public:
             .WriteBufferInitialMemoryLimit = writeBufferInitialMemoryLimit,
             .WriteBufferMemoryLimit = writeBufferMemoryLimit,
             .QuerySpanId = QueryState ? QueryState->GetQuerySpanId() : 0,
-            .UserCtx =  CreateUserContext()
+            .UserCtx =  CreateUserContext(),
         };
 
         auto executerActor = CreateKqpPartitionedExecuter(std::move(settings), ChannelService);

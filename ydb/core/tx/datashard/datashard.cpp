@@ -5,7 +5,7 @@
 #include "probes.h"
 
 #include <ydb/core/base/interconnect_channels.h>
-#include <ydb/core/base/tablet_mon_admin_path.h>
+#include <ydb/core/base/tablet_devui_mon_access.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/library/formats/arrow/size_calcer.h>
@@ -29,6 +29,14 @@ IActor* CreateDataShard(const TActorId &tablet, TTabletStorageInfo *info) {
 }
 
 namespace NDataShard {
+
+namespace {
+// Only return true to deliberately skip the tablet-side secure PathInfo + administrator checks
+bool IsDataShardMonAppRelaxedCgiRoute(TStringBuf /*page*/, TStringBuf /*action*/, bool /*hasPage*/, bool /*hasAction*/) {
+    return false;
+}
+
+} // namespace
 
 using namespace NSchemeShard;
 using namespace NTabletFlatExecutor;
@@ -2312,43 +2320,28 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Handle TEvRemoteHttpInfo: %s", ev->Get()->Query.data());
 
     auto cgi = ev->Get()->Cgi();
+    const bool hasAction = cgi.Has("action");
+    const bool hasPage = cgi.Has("page");
+    const TStringBuf action = hasAction ? TStringBuf(cgi.Get("action")) : TStringBuf();
+    const TStringBuf page = hasPage ? TStringBuf(cgi.Get("page")) : TStringBuf();
+    if (TabletMonDevuiReplyForbiddenUnlessSecureAdmin(ctx, ev->Sender, ev->Get(), ev->Get()->PathInfo(),
+            IsDataShardMonAppRelaxedCgiRoute(page, action, hasPage, hasAction)))
+    {
+        return true;
+    }
 
-    if (const auto& action = cgi.Get("action")) {
-        if (action == "cleanup-borrowed-parts") {
-            if (!IsTabletAppSecureMonPath(ev->Get()->PathInfo())) {
-                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
-                return true;
-            }
-            if (!TabletMonRequestIsAdministrator(ctx, ev->Get())) {
-                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
-                return true;
-            }
+    if (const auto& actionRef = cgi.Get("action")) {
+        if (actionRef == "cleanup-borrowed-parts") {
             HandleMonCleanupBorrowedParts(ev);
             return true;
         }
 
-        if (action == "reset-schema-version") {
-            if (!IsTabletAppSecureMonPath(ev->Get()->PathInfo())) {
-                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
-                return true;
-            }
-            if (!TabletMonRequestIsAdministrator(ctx, ev->Get())) {
-                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
-                return true;
-            }
+        if (actionRef == "reset-schema-version") {
             HandleMonResetSchemaVersion(ev);
             return true;
         }
 
-        if (action == "key-access-sample") {
-            if (!IsTabletAppSecureMonPath(ev->Get()->PathInfo())) {
-                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
-                return true;
-            }
-            if (!TabletMonRequestIsAdministrator(ctx, ev->Get())) {
-                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
-                return true;
-            }
+        if (actionRef == "key-access-sample") {
             TDuration duration = TDuration::Seconds(120);
             EnableKeyAccessSampling(ctx, ctx.Now() + duration);
             ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("Enabled key access sampling for " + duration.ToString()));
@@ -2359,18 +2352,10 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
         return true;
     }
 
-    if (const auto& page = cgi.Get("page")) {
-        if (page == "main") {
+    if (const auto& pageRef = cgi.Get("page")) {
+        if (pageRef == "main") {
             // fallthrough
-        } else if (page == "change-sender") {
-            if (!IsTabletAppSecureMonPath(ev->Get()->PathInfo())) {
-                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
-                return true;
-            }
-            if (!TabletMonRequestIsAdministrator(ctx, ev->Get())) {
-                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
-                return true;
-            }
+        } else if (pageRef == "change-sender") {
             if (OutChangeSender) {
                 ctx.Send(ev->Forward(OutChangeSender));
                 return true;
@@ -2378,15 +2363,7 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
                 ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("Change sender is not running"));
                 return true;
             }
-        } else if (page == "volatile-txs") {
-            if (!IsTabletAppSecureMonPath(ev->Get()->PathInfo())) {
-                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
-                return true;
-            }
-            if (!TabletMonRequestIsAdministrator(ctx, ev->Get())) {
-                ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
-                return true;
-            }
+        } else if (pageRef == "volatile-txs") {
             HandleMonVolatileTxs(ev);
             return true;
         } else {

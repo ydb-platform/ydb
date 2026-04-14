@@ -241,6 +241,14 @@ assert len(EXPECTED_RESULTS_WITH_ENFORCE_USER_TOKEN) == len(
 
 def _data_shard_devui_mon_paths_with_enforce(datashard_tablet_id):
     q = f'TabletID={datashard_tablet_id}'
+    forbidden_on_app = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 403,
+        'root@builtin': 403,
+    }
     mon_ok = {
         None: 401,
         'user@builtin': 403,
@@ -249,16 +257,17 @@ def _data_shard_devui_mon_paths_with_enforce(datashard_tablet_id):
         'monitoring@builtin': 200,
         'root@builtin': 200,
     }
+    datashard_admin_only = {
+        None: 401,
+        'user@builtin': 403,
+        'database@builtin': 403,
+        'viewer@builtin': 403,
+        'monitoring@builtin': 403,
+        'root@builtin': 200,
+    }
     return {
-        f'/tablets/app/secure?{q}': {
-            None: 401,
-            'user@builtin': 403,
-            'database@builtin': 403,
-            'viewer@builtin': 403,
-            'monitoring@builtin': 403,
-            'root@builtin': 200,
-        },
-        f'/tablets/app?{q}': mon_ok,
+        f'/tablets/app/secure?{q}': datashard_admin_only,
+        f'/tablets/app?{q}': forbidden_on_app,
         f'/tablets?{q}': mon_ok,
     }
 

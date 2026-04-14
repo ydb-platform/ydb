@@ -5,7 +5,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
-#include <ydb/core/base/tablet_mon_admin_path.h>
+#include <ydb/core/base/tablet_devui_mon_access.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/monitoring_provider.h>
 #include <ydb/core/base/ticket_parser.h>
@@ -500,11 +500,11 @@ public:
     }
 
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
-        if (NKikimr::IsTabletAppSecureMonPath(Container.GetPathInfo())) {
+        if (NKikimr::IsTabletDevUiSecurePathInfo(Container.GetPathInfo())) {
             const NACLib::TUserToken* userToken = (result && result->UserToken) ? result->UserToken.Get() : nullptr;
             if (!NKikimr::IsAdministrator(AppData(), userToken)) {
                 return ReplyForbiddenAndPassAway(TStringBuilder()
-                    << "Administrator access is required for /tablets/" << NKikimr::TabletAppSecureMonUrlSuffix
+                    << "Administrator access is required for /tablets/" << NKikimr::TabletDevUiSecureMonRelativePath
                     << " (administration_allowed_sids)");
             }
         }

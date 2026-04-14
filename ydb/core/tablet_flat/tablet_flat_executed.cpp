@@ -3,7 +3,7 @@
 #include "flat_executor_counters.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
-#include <ydb/core/base/tablet_mon_admin_path.h>
+#include <ydb/core/base/tablet_devui_mon_access.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 namespace NKikimr {
@@ -249,7 +249,7 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
     auto path = ev->Get()->PathInfo();
     TString queryString = cgi.Print();
 
-    if (path == "/app" || IsTabletAppSecureMonPath(path)) {
+    if (path == "/app" || IsTabletDevUiSecurePathInfo(path)) {
         OnRenderAppHtmlPage(ev, ctx);
         return;
     } else if (path == "/executorInternals" && Executor()) {

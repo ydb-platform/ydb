@@ -24,6 +24,7 @@ The SDK documentation contains the following sections:
 - [{#T}](../error_handling.md)
 - [Code recipes](../../../recipes/ydb-sdk/index.md)
 - [Comparison of SDK features](../feature-parity.md)
+- [Data formats](../data-formats/index.md)
 
 See also:
 

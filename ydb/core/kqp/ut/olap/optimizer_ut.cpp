@@ -470,7 +470,7 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             auto tableClient = kikimr.GetTableClient();
             auto alterQuery = TString(
                 R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, )"
-                R"(`COMPACTION_PLANNER.CLASS_NAME`=`tiling`, )"
+                R"(`COMPACTION_PLANNER.CLASS_NAME`=`tiling++`, )"
                 R"(`COMPACTION_PLANNER.FEATURES`=`{"accumulator_portion_size_limit":40000, "accumulator_trigger_bytes":200000, "portion_expected_size":100000, "k":3}`))"
             );
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -511,11 +511,11 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             auto tableClient = kikimr.GetTableClient();
             auto it = tableClient.StreamExecuteScanQuery(R"(
                 --!syntax_v1
-                SELECT count(*) FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats` group by CompactionLevel,
+                SELECT count(*) FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats` group by CompactionLevel
             )").GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            Cout << result << Endl;
+            // TString result = StreamResultToYson(it);
+            // Cout << result << Endl;
             auto rows = CollectRows(it);
             UNIT_ASSERT_C(!rows.empty(), "No portion stats returned");
             const ui64 compactedCount = GetUint64(rows[0].at("column0"));

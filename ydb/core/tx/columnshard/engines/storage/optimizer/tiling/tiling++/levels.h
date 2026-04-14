@@ -1,5 +1,7 @@
+#pragma once
+
 #include <util/generic/function_ref.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/abstract.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
 #include <ydb/library/intersection_tree/intersection_tree.h>
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {

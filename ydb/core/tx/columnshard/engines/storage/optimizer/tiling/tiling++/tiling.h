@@ -2,7 +2,7 @@
 
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets/planner/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/levels.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/levels.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
@@ -47,9 +47,6 @@ struct Tiling : ICompactionUnit<TKey, TPortion> {
     std::vector<CompactionTask<TKey, TPortion>> DoGetOptimizationTasks(TFunctionRef<bool(typename TPortion::TConstPtr)>) const override;
     TOptimizationPriority DoGetUsefulMetric() const override;
     std::pair<TOptimizationPriority, ui64> GetMiddleUsefulMetric() const;
-
-private:
-    MiddleLevel<TKey, TPortion>& EnsureMiddleLevel(ui64 level);
 };
 
 } // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

@@ -5,7 +5,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/column_features.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/counters.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/tiling_impl.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/actors/core/log.h>
@@ -300,7 +300,7 @@ private:
 class TOptimizerPlannerCoreTilingConstructor: public IOptimizerPlannerConstructor {
 public:
     static TString GetClassNameStatic() {
-        return "tiling";
+        return "tiling++";
     }
 
     TString GetClassName() const override {

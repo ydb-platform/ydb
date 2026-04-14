@@ -1,7 +1,6 @@
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/levels.h>
+#pragma once
 
-#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
-#include <ydb/core/formats/arrow/rows/view.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling++/levels.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NTiling {
 
@@ -224,9 +223,5 @@ TOptimizationPriority MiddleLevel<TKey, TPortion>::DoGetUsefulMetric() const {
     const ui64 maxCount = Intersections.GetMaxCount();
     return TOptimizationPriority::Normalize(Settings.TriggerHight, Settings.OverloadHight, maxCount);
 }
-
-template struct LastLevel<NArrow::TSimpleRow, TPortionInfo>;
-template struct Accumulator<NArrow::TSimpleRow, TPortionInfo>;
-template struct MiddleLevel<NArrow::TSimpleRow, TPortionInfo>;
 
 } // namespace NKikimr::NOlap::NStorageOptimizer::NTiling

@@ -2592,7 +2592,7 @@ message TColumnShardConfig {
     optional uint32 ProxyMaxRetriesPerShard = 60 [default = 10];
 
     oneof DefaultCompaction {
-        string DefaultCompactionPreset = 61 [default = "tiling"];
+        string DefaultCompactionPreset = 61 [default = "tiling++"];
         NKikimrSchemeOp.TCompactionPlannerConstructorContainer DefaultCompactionConstructor = 62;
     }
 

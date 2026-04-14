@@ -198,7 +198,7 @@ private:
         } else {
             if (ev->Get()->Messages.empty()) {
                 if (FeatureFlags_.EnableSQSMigrationCompatibility_) {
-                    if (FeatureFlags_.EnableSQSMigrationFinished_) {
+                    if (FeatureFlags_.EnableSQSMigrationFinished_ || !IsFifo_) {
                         return DoActionTopicImplementation();
                     } else {
                         Send(QueueLeader_, new TSqsEvents::TEvGetMessageGroups(RequestId_));

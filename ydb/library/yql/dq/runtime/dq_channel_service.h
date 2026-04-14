@@ -76,11 +76,11 @@ public:
     TDataChunk(
         NDqProto::TWatermark&& watermark,
         bool leading)
-        : Leading(leading)
-        , Watermark(std::move(watermark)) {
-            Bytes = 1;
-        Timestamp = TInstant::Now();
-    }
+        : Bytes (1)
+        , Leading(leading)
+        , Timestamp(TInstant::Now())
+        , Watermark(std::move(watermark))
+    {}
 
     TChunkedBuffer Buffer;
 

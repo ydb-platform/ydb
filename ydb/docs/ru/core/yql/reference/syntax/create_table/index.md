@@ -86,7 +86,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
 
 Дополнительные параметры создания таблицы. Подробнее в разделе [{#T}](with.md).
 
-{ % note info % }
+{% note info %}
 
 {{ ydb-short-name }} поддерживает два типа таблиц:
 

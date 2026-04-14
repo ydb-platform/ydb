@@ -6,5 +6,6 @@
 
 #define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, stream)
 #define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, stream)
+#define BLOG_INFO(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, stream)
 #define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, stream)
 #define BLOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER, stream)

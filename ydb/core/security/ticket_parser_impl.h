@@ -24,6 +24,7 @@
 #include <ydb/library/ycloud/impl/user_account_service.h>
 
 #include <library/cpp/digest/md5/md5.h>
+#include <library/cpp/ipv6_address/ipv6_address.h>
 
 #include <util/generic/queue.h>
 #include <util/stream/file.h>
@@ -31,7 +32,63 @@
 
 #include <util/string/join.h>
 
+#include <regex>
+
 namespace NKikimr {
+
+inline bool IsGoodFormat(const TString& peername) {
+    static const auto isIPv4 = [](const TString& address) {
+        const auto ip = TIpv6Address::FromString(address);
+        return ip.IsValid() && !ip.IsIpv6();
+    };
+
+    static const auto isIPv6 = [](const TString& address) {
+        const auto ip = TIpv6Address::FromString(address);
+        return ip.IsValid() && ip.IsIpv6();
+    };
+
+    static std::regex fullSchemeV6{R"(ipv6:\[(.+)\]:(\d+))"};
+    if (std::smatch match; std::regex_match(peername.c_str(), match, fullSchemeV6) && match.ready() && match.size() == 3) {
+        const TString address = match.str(1);
+        const TIpPort port = FromStringWithDefault<TIpPort>(match.str(2), 0);
+        return (port != 0) && isIPv6(address);
+    }
+
+    static std::regex fullSchemeV4{R"(ipv4:(.+):(\d+))"};
+    if (std::smatch match; std::regex_match(peername.c_str(), match, fullSchemeV4) && match.ready() && match.size() == 3) {
+        const TString address = match.str(1);
+        const TIpPort port = FromStringWithDefault<TIpPort>(match.str(2), 0);
+        return (port != 0) && isIPv4(address);
+    }
+
+    static std::regex schemeV6{R"(ipv6:(.+))"};
+    if (std::smatch match; std::regex_match(peername.c_str(), match, schemeV6) && match.ready() && match.size() == 2) {
+        const TString address = match.str(1);
+        return isIPv6(address);
+    }
+
+    static std::regex schemeV4{R"(ipv4:(.+))"};
+    if (std::smatch match; std::regex_match(peername.c_str(), match, schemeV4) && match.ready() && match.size() == 2) {
+        const TString address = match.str(1);
+        return isIPv4(address);
+    }
+
+    static std::regex fullV6{R"(\[(.+)\]:(\d+))"};
+    if (std::smatch match; std::regex_match(peername.c_str(), match, fullV6) && match.ready() && match.size() == 3) {
+        const TString address = match.str(1);
+        const TIpPort port = FromStringWithDefault<TIpPort>(match.str(2), 0);
+        return (port != 0) && isIPv6(address);
+    }
+
+    static std::regex fullV4{R"((.+):(\d+))"};
+    if (std::smatch match; std::regex_match(peername.c_str(), match, fullV4) && match.ready() && match.size() == 3) {
+        const TString address = match.str(1);
+        const TIpPort port = FromStringWithDefault<TIpPort>(match.str(2), 0);
+        return (port != 0) && isIPv4(address);
+    }
+
+    return isIPv6(peername) || isIPv4(peername);
+}
 
 inline bool IsRetryableGrpcError(const NYdbGrpc::TGrpcStatus& status) {
     switch (status.GRpcStatusCode) {
@@ -328,6 +385,7 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsAS;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheHit;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheMiss;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterWrongPeernameFormat;
     ::NMonitoring::THistogramPtr CounterTicketsHighPriorityBuildTime;
     ::NMonitoring::THistogramPtr CounterTicketsLowPriorityBuildTime;
 
@@ -967,6 +1025,27 @@ private:
     }
 
     void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
+        if (!IsGoodFormat(ev->Get()->PeerName)) {
+            CounterWrongPeernameFormat->Inc();
+
+            if (AppData()->FeatureFlags.GetEnableTicketParserErrorBasedOnPeernameFormat()) {
+                BLOG_ERROR("Ticket " << MaskTicket(ev->Get()->Ticket) <<
+                           ": invalid peer name format: " << ev->Get()->PeerName <<
+                           " for DB: " << ev->Get()->Database);
+
+                TEvTicketParser::TError error;
+                error.Message = "Wrong peername format: " + ev->Get()->PeerName + " for DB: " + ev->Get()->Database;
+                error.Retryable = false;
+                BLOG_ERROR("Ticket " << MaskTicket(ev->Get()->Ticket) << ": " << error);
+                Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, error), 0, ev->Cookie);
+                return;
+            } else {
+                BLOG_INFO("Ticket " << MaskTicket(ev->Get()->Ticket) <<
+                          ": invalid peer name format: " << ev->Get()->PeerName <<
+                          " for DB: " << ev->Get()->Database);
+            }
+        }
+
         TStringBuf ticket;
         TStringBuf ticketType;
         if (IsTicketCertificate(ev->Get()->Ticket)) {
@@ -2161,6 +2240,7 @@ protected:
         CounterTicketsAS = counters->GetCounter("TicketsAS", true);
         CounterTicketsCacheHit = counters->GetCounter("TicketsCacheHit", true);
         CounterTicketsCacheMiss = counters->GetCounter("TicketsCacheMiss", true);
+        CounterWrongPeernameFormat = counters->GetCounter("WrongPeernameFormat", true);
         CounterTicketsHighPriorityBuildTime = counters->GetSubgroup("TicketsBuildTimeMs", "HighPriority")->GetHistogram("TicketsBuildTimeMs",
             NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 60000}));
         CounterTicketsLowPriorityBuildTime = counters->GetSubgroup("TicketsBuildTimeMs", "LowPriority")->GetHistogram("TicketsBuildTimeMs",

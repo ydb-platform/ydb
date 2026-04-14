@@ -10,6 +10,8 @@
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/threading/local_executor/local_executor.h>
+#include <library/cpp/threading/mux_event/mux_event.h>
 
 #ifndef NDEBUG
 const bool DETAILED_LOG = false;
@@ -171,19 +173,23 @@ public:
         WaitForBootstrap();
     }
 
-    void AssertResourceBrokerSensors(i64 cpu, i64 mem, i64 enqueued, i64 finished, i64 infly) {
+    void AssertResourceBrokerSensors(i64 cpu, i64 mem, i64 enqueued, std::optional<i64> finished, i64 infly) {
         auto q = Counters->GetSubgroup("queue", "queue_kqp_resource_manager");
         UNIT_ASSERT_VALUES_EQUAL(q->GetCounter("CPUConsumption")->Val(), cpu);
         UNIT_ASSERT_VALUES_EQUAL(q->GetCounter("MemoryConsumption")->Val(), mem);
         UNIT_ASSERT_VALUES_EQUAL(q->GetCounter("EnqueuedTasks")->Val(), enqueued);
-        UNIT_ASSERT_VALUES_EQUAL(q->GetCounter("FinishedTasks")->Val(), finished);
+        if (finished) {
+            UNIT_ASSERT_VALUES_EQUAL(q->GetCounter("FinishedTasks")->Val(), *finished);
+        }
         UNIT_ASSERT_VALUES_EQUAL(q->GetCounter("InFlyTasks")->Val(), infly);
 
         auto t = Counters->GetSubgroup("task", "kqp_query");
         UNIT_ASSERT_VALUES_EQUAL(t->GetCounter("CPUConsumption")->Val(), cpu);
         UNIT_ASSERT_VALUES_EQUAL(t->GetCounter("MemoryConsumption")->Val(), mem);
         UNIT_ASSERT_VALUES_EQUAL(t->GetCounter("EnqueuedTasks")->Val(), enqueued);
-        UNIT_ASSERT_VALUES_EQUAL(t->GetCounter("FinishedTasks")->Val(), finished);
+        if (finished) {
+            UNIT_ASSERT_VALUES_EQUAL(t->GetCounter("FinishedTasks")->Val(), *finished);
+        }
         UNIT_ASSERT_VALUES_EQUAL(t->GetCounter("InFlyTasks")->Val(), infly);
     }
 
@@ -271,6 +277,7 @@ public:
         UNIT_TEST(ResourceBrokerNotEnoughResources);
         UNIT_TEST(SingleSnapshotByExchanger);
         UNIT_TEST(Reduce);
+        UNIT_TEST(ConcurrentTasks);
         UNIT_TEST(SnapshotSharingByExchanger);
         UNIT_TEST(NodesMembershipByExchanger);
         UNIT_TEST(DisonnectNodes);
@@ -284,6 +291,7 @@ public:
     void Snapshot();
     void SingleSnapshotByExchanger();
     void Reduce();
+    void ConcurrentTasks();
     void SnapshotSharing();
     void SnapshotSharingByExchanger();
     void NodesMembership();
@@ -464,6 +472,52 @@ void KqpRm::Reduce() {
     rm->FreeResources(tx, task, NRm::TKqpResourcesRequest{.ExecutionUnits = 7, .Memory = 70});
     AssertResourceManagerStats(rm, 1000 - 100 + 70, 100 - 10 + 7);
     AssertResourceBrokerSensors(0, 30, 0, 0, 1);
+}
+
+void KqpRm::ConcurrentTasks() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    auto tx = MakeTx(1, rm);
+
+    std::array<TMuxEvent, 10> events;
+    NPar::LocalExecutor().RunAdditionalThreads(10);
+    std::atomic<ui64> failedAllocations = 0;
+
+    for (auto i = 0u; i < 10u; i++) {
+        NPar::LocalExecutor().Exec([&](int taskId) mutable {
+            auto count = 0u;
+            for (auto n = 0u; n < 20u; n++) {
+                for (auto j = 0u; j < 20u; j++) {
+                    if (!rm->AllocateResources(tx, taskId, NRm::TKqpResourcesRequest{.ExecutionUnits = j, .Memory = j * 10u})) {
+                        failedAllocations++;
+                        Sleep(TDuration::MilliSeconds(j * 10));
+                        break;
+                    }
+                    count += j;
+                }
+                for (auto j = 20u; j > 0u; j--) {
+                    if (count < j) {
+                        break;
+                    }
+                    rm->FreeResources(tx, taskId, NRm::TKqpResourcesRequest{.ExecutionUnits = j, .Memory = j * 10u});
+                    count -= j;
+                }
+            }
+            rm->FreeResources(tx, taskId, NRm::TKqpResourcesRequest{.ExecutionUnits = count, .Memory = count * 10u});
+            events[taskId - 1].Signal();
+        }, i + 1, NPar::TLocalExecutor::MED_PRIORITY);
+    }
+
+    for (auto i = 0; i < 10; i++) {
+        events[i].WaitI();
+    }
+
+    UNIT_ASSERT_GT(failedAllocations.load(), 0);
+    AssertResourceManagerStats(rm, 1000, 100);
+    AssertResourceBrokerSensors(0, 0, 0, std::nullopt, 0);
 }
 
 void KqpRm::SnapshotSharing() {

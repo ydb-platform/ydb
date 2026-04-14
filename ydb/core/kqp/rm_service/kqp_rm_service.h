@@ -175,20 +175,23 @@ public:
             Counters->RmExtraMemFree->Inc();
         }
 
+        auto prevExternalMemory = TxExternalDataQueryMemory.fetch_sub(resources.ExternalMemory);
+        if (prevExternalMemory < resources.ExternalMemory) {
+            return false;
+        }
         Counters->RmExternalMemory->Sub(resources.ExternalMemory);
-        if (TxExternalDataQueryMemory.fetch_sub(resources.ExternalMemory) < resources.ExternalMemory) {
+
+        auto prevMemory = TxScanQueryMemory.fetch_sub(resources.Memory);
+        if (prevMemory < resources.Memory) {
             return false;
         }
-
         Counters->RmMemory->Sub(resources.Memory);
-        if (TxScanQueryMemory.fetch_sub(resources.Memory) < resources.Memory) {
-            return false;
-        }
 
-        Counters->RmComputeActors->Sub(resources.ExecutionUnits);
-        if (TxExecutionUnits.fetch_sub(resources.ExecutionUnits) < resources.ExecutionUnits) {
+        auto prevExecutionUnits = TxExecutionUnits.fetch_sub(resources.ExecutionUnits);
+        if (prevExecutionUnits < resources.ExecutionUnits) {
             return false;
         }
+        Counters->RmComputeActors->Sub(resources.ExecutionUnits);
 
         return true;
     }

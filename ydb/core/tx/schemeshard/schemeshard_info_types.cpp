@@ -316,15 +316,27 @@ void TSubDomainInfo::AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopic
     topics.UsedReserveSize += (newAggr.UsedReserveSize - oldAggr.UsedReserveSize);
 }
 
-// todo(flown4qqqq): rewrite it into fast way
-ui32 TTableInfo::GetColumnIdByNameSlow(const TString& columnName) {
+void TTableInfo::CalculateColumnIdByName() const {
+    ColumnIdByName.clear();
+    ColumnIdByName.reserve(Columns.size());
     for (const auto& [id, col] : Columns) {
-        if (!col.IsDropped() && col.Name == columnName) {
-            return id;
+        if (!col.IsDropped()) {
+            ColumnIdByName[col.Name] = id;
         }
     }
+}
 
-    return Max<ui32>();
+ui32 TTableInfo::GetColumnIdByName(const TString& columnName, bool force) const {
+    if (ColumnIdByName.size() != Columns.size() || force) {
+        CalculateColumnIdByName();
+    }
+
+    auto it = ColumnIdByName.find(columnName);
+    if (it != ColumnIdByName.end() && !Columns.at(it->second).IsDropped()) {
+        return it->second;
+    }
+
+    return InvalidColumnId;
 }
 
 TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(

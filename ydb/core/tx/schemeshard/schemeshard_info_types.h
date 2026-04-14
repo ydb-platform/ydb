@@ -51,6 +51,7 @@
 #include <ydb/services/lib/sharding/sharding.h>
 
 #include <library/cpp/regex/pcre/regexp.h>
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 
 #include <google/protobuf/util/message_differencer.h>
 
@@ -735,10 +736,13 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         return *TTLColumnId;
     }
 
-    // todo(flown4qqqq): rewrite it into fast way
-    ui32 GetColumnIdByNameSlow(const TString& columnName);
+    mutable absl::flat_hash_map<TString, ui32> ColumnIdByName;
+    static constexpr ui32 InvalidColumnId = Max<ui32>();
+    ui32 GetColumnIdByName(const TString& columnName, bool force = false) const;
 
 private:
+    void CalculateColumnIdByName() const;
+
     using TPartitionsVec = TVector<TTableShardInfo>;
 
     struct TSortByNextCondErase {

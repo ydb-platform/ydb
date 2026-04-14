@@ -229,7 +229,7 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
             response.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL_C(
             response.GetIssues(0).message(),
-            "Column with name `non_existent_column` doesn't exist.",
+            "Failed item check: Column 'non_existent_column' does not exist",
             response.ShortDebugString());
     }
 
@@ -270,6 +270,46 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(
             response.GetIssues(0).message(),
             "Failed item check: There are no columns that need to be updated",
+            response.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(DuplicateColumns) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto response = TestSetColumnConstraint(
+            runtime, ++txId,
+            TTestTxConfig::SchemeShard,
+            "/MyRoot",
+            tablePath,
+            {"value", "value"});
+
+        Cerr << "SET COLUMN CONSTRAINT RESPONSE: " << response.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.GetStatus(),
+            Ydb::StatusIds::BAD_REQUEST,
+            response.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.GetIssues().size(),
+            1,
+            response.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.GetIssues(0).message(),
+            "Duplicate column name `value` in not null columns.",
             response.ShortDebugString());
     }
 } // Y_UNIT_TEST_SUITE(SetColumnConstraintTest)

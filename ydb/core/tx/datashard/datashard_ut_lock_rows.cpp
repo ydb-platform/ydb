@@ -1292,8 +1292,8 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
         }
         UNIT_ASSERT_VALUES_EQUAL(lockNodeIdxs.size(), 2u);
 
-        TLockHandle lock1(123, runtime.GetActorSystem(lockNodeIdxs[0]));
-        TLockHandle lock2(234, runtime.GetActorSystem(lockNodeIdxs[1]));
+        TLockHandle lock1(123, runtime.GetActorSystem(lockNodeIdxs[0]), TInstant::Seconds(123456));
+        TLockHandle lock2(234, runtime.GetActorSystem(lockNodeIdxs[1]), TInstant::Seconds(234567));
 
         TWaitGraphInterceptor waitGraph(runtime, /*suppressEvents=*/false);
 
@@ -1313,14 +1313,15 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
         auto req4 = lockRows2.SendRequest(lock1, tableId, TKeysBuilder().Add(11).Build());
         lockRows2.ExpectNoResult();
 
+        // LongTxService should break the deadlock, aborting the request belonging to the youngest lock.
+        lockRows1.ExpectResult(req3, NKikimrDataEvents::TEvLockRowsResult::STATUS_DEADLOCK);
         UNIT_ASSERT_VALUES_EQUAL(
             waitGraph.ToString(),
-            "123 -> 234\n"
-            "234 -> 123\n");
+            "123 -> 234\n");
 
         runtime.SimulateSleep(TDuration::Seconds(1));
         for (size_t nodeIdx = 0; nodeIdx < runtime.GetNodeCount(); ++nodeIdx) {
-            // Check that the wait cycle is instantiated in the LongTxService on all nodes.
+            // Check that the wait edges are instantiated in the LongTxService on all nodes.
             ui32 nodeId = runtime.GetNodeId(nodeIdx);
             auto sender = runtime.AllocateEdgeActor(nodeIdx);
             runtime.Send(
@@ -1339,17 +1340,9 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
             }
             UNIT_ASSERT_VALUES_EQUAL_C(
                 wgStr,
-                "123 -> 234\n"
-                "234 -> 123\n",
+                "123 -> 234\n",
                 "with nodeIdx: " << nodeIdx);
         }
-
-        // break the wait by aborting the request belonging to the youngest lock
-        // TODO: LongTxService should detect the cycle and break it itself.
-        waitGraph.SendDeadlock(234, 123);
-
-        // The third operation should reply with the STATUS_DEADLOCK
-        lockRows1.ExpectResult(req3, NKikimrDataEvents::TEvLockRowsResult::STATUS_DEADLOCK);
 
         // Perhaps unexpectedly row 11 is still locked until the lock is broken or removed
         lockRows2.ExpectNoResult();

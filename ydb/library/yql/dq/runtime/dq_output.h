@@ -126,11 +126,7 @@ public:
     virtual EDqFillLevel GetFillLevel() const = 0;
     virtual EDqFillLevel UpdateFillLevel() = 0;
     virtual void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) = 0;
-    // Returns true if the implementation stores and calls the callback registered
-    // via SetLevelChangeCallback. TDqOutputScatterConsumer requires this to be true
-    // for every output it manages: it relies on the callback to keep its bucket index
-    // and the fill aggregator fresh after external Pop() calls, and does NOT fall back
-    // to O(N) polling in GetFillLevel().
+    // Should be overriden to return true if the implementation supports level change callback.
     virtual bool SupportsLevelChangeCallback() const { return false; }
     // Called on every fill level transition. Required by Scatter consumer.
     // Implementations that override this must also override SupportsLevelChangeCallback()

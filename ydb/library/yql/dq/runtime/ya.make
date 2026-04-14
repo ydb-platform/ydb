@@ -2,7 +2,6 @@ LIBRARY()
 
 PEERDIR(
     contrib/libs/apache/arrow
-    library/cpp/threading/light_rw_lock
     ydb/library/actors/util
     ydb/library/formats/arrow
     ydb/library/formats/arrow/hash

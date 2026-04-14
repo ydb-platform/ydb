@@ -4,6 +4,7 @@
 import os
 
 from ydb.tests.library.nemesis.safety_warden import (
+    CommandExecutor,
     GrepLogFileForMarkers,
     GrepGzippedLogFilesForMarkersSafetyWarden,
     GrepDMesgForPatternsSafetyWarden,
@@ -11,7 +12,7 @@ from ydb.tests.library.nemesis.safety_warden import (
 )
 
 
-def _ensure_executor(executor, list_of_hosts=None, ssh_username=None):
+def _ensure_executor(executor: CommandExecutor, list_of_hosts=None, ssh_username=None):
     """Return *executor* if given, otherwise build a ``RemoteCommandExecutor`` from legacy args."""
     if executor is not None:
         return executor
@@ -21,27 +22,23 @@ def _ensure_executor(executor, list_of_hosts=None, ssh_username=None):
 
 
 def kikimr_start_logs_safety_warden_factory(
-        executor=None,
+        executor: CommandExecutor = None,
         deploy_path="/Berkanavt/kikimr/logs/",
         lines_after=5,
         cut=True,
         modification_days=1,
-        # Legacy parameters (deprecated, use executor instead):
-        list_of_host_names=None,
-        ssh_username=None,
 ):
-    resolved = _ensure_executor(executor, list_of_host_names, ssh_username)
     start_markers = ['VERIFY', 'FAIL ', 'signal 11', 'signal 6', 'signal 15', 'uncaught exception', 'ERROR: AddressSanitizer', 'SIG']
     return [
         GrepLogFileForMarkers(
-            resolved,
+            executor,
             log_file_name=os.path.join(deploy_path, 'kikimr.start'),
             list_of_markers=start_markers,
             lines_after=lines_after,
             cut=cut,
         ),
         GrepGzippedLogFilesForMarkersSafetyWarden(
-            resolved,
+            executor,
             log_file_pattern=os.path.join(deploy_path, 'kikimr.start.*gz'),
             list_of_markers=start_markers,
             modification_days=modification_days,
@@ -52,33 +49,29 @@ def kikimr_start_logs_safety_warden_factory(
 
 
 def kikimr_crit_and_alert_logs_safety_warden_factory(
-        executor=None,
+        executor: CommandExecutor = None,
         deploy_path="/Berkanavt/kikimr/logs/",
-        # Legacy parameters (deprecated, use executor instead):
-        list_of_host_names=None,
-        ssh_username=None,
 ):
-    resolved = _ensure_executor(executor, list_of_host_names, ssh_username)
     crit_markers = [':BS_HULLRECS CRIT:', ':BS_LOGCUTTER CRIT:', 'ALERT', ':BS_LOCALRECOVERY CRIT:']
     alert_markers = ['ALERT']
     return [
         GrepLogFileForMarkers(
-            resolved,
+            executor,
             log_file_name=os.path.join(deploy_path, 'kikimr.crit'),
             list_of_markers=crit_markers,
         ),
         GrepLogFileForMarkers(
-            resolved,
+            executor,
             log_file_name=os.path.join(deploy_path, 'kikimr.alert'),
             list_of_markers=alert_markers,
         ),
         GrepGzippedLogFilesForMarkersSafetyWarden(
-            resolved,
+            executor,
             log_file_pattern=os.path.join(deploy_path, 'kikimr.crit.*gz'),
             list_of_markers=crit_markers,
         ),
         GrepGzippedLogFilesForMarkersSafetyWarden(
-            resolved,
+            executor,
             log_file_pattern=os.path.join(deploy_path, 'kikimr.alert.*gz'),
             list_of_markers=alert_markers,
         ),
@@ -86,18 +79,14 @@ def kikimr_crit_and_alert_logs_safety_warden_factory(
 
 
 def kikimr_grep_dmesg_safety_warden_factory(
-        executor=None,
+        executor: CommandExecutor = None,
         lines_after=5,
-        # Legacy parameters (deprecated, use executor instead):
-        list_of_host_names=None,
-        ssh_username=None,
 ):
-    resolved = _ensure_executor(executor, list_of_host_names, ssh_username)
     markers = ['Out of memory: Kill process']
 
     return [
         GrepDMesgForPatternsSafetyWarden(
-            resolved,
+            executor,
             list_of_markers=markers,
             lines_after=lines_after,
         )

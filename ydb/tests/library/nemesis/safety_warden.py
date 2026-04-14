@@ -21,8 +21,7 @@ logger = logging.getLogger()
 # ---------------------------------------------------------------------------
 
 
-class SafetyWarden(object):
-    __metaclass__ = ABCMeta
+class SafetyWarden(metaclass=ABCMeta):
 
     def __init__(self, name):
         super(SafetyWarden, self).__init__()
@@ -59,10 +58,8 @@ class AggregateSafetyWarden(SafetyWarden):
 # ---------------------------------------------------------------------------
 
 
-class CommandExecutor(object):
+class CommandExecutor(metaclass=ABCMeta):
     """Protocol: execute a shell command and return ``(retcode, list_of_lines)``."""
-
-    __metaclass__ = ABCMeta
 
     @abstractmethod
     def execute_command(self, command, timeout=60):

@@ -443,10 +443,7 @@ class ServiceTags(Enum):
 
 
 # NOTE: Linter constants are used in ya style, ya ide, config validator check
-# (devtools/ya/handlers/style/config_validator, devtools/pr_checks/checker).
-# ya and pr_checks have different release cycles, make sure you preserve compatibility:
-# - don't delete anything from here until you get rid of all usages and roll out the changes;
-# - keep in mind that changes of constants used in multiple tools may get to production at different times;
+# (devtools/ya/handlers/style/config_validator).
 
 
 # Linter names must match `NAME` set in `_ADD_*_LINTER_CHECK`
@@ -502,15 +499,6 @@ LINTER_TO_DEFAULT_CONFIGS = {
     CustomExplicitLinterName.ClangFormatJson: DefaultLinterConfig.Json,
     CustomExplicitLinterName.Yamlfmt: DefaultLinterConfig.Yaml,
 }
-
-# Fill up like
-"""
-{
-    PythonLinterName.Ruff: LinterConfigsValidationRules.Python,
-}
-"""
-# XXX: if a new linter is added to this mapping respective path to rules file must be available in the json
-LINTER_TO_VALIDATION_CONFIGS = {}
 
 LINTER_CONFIG_TYPES = {
     CppLinterName.ClangFormat: (".clang-format",),

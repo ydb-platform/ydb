@@ -131,13 +131,13 @@ TResult ValidateConsumersConfig(
             TStringBuilder() << "read rules count cannot be more than " << MAX_READ_RULES_COUNT << ", provided " << consumerCount};
     }
 
-    THashSet<TString> readRuleConsumers;
+    THashSet<TString> consumers;
     for (auto consumer : config.GetConsumers()) {
-        if (readRuleConsumers.find(consumer.GetName()) != readRuleConsumers.end()) {
+        if (consumers.find(consumer.GetName()) != consumers.end()) {
             return {operation == EOperation::Alter ? Ydb::StatusIds::ALREADY_EXISTS : Ydb::StatusIds::BAD_REQUEST,
                 TStringBuilder() << "Duplicate consumer name " << consumer.GetName()};
         }
-        readRuleConsumers.insert(consumer.GetName());
+        consumers.insert(consumer.GetName());
 
         if (consumer.GetImportant() && consumer.HasAvailabilityPeriodMs()) {
             return {Ydb::StatusIds::BAD_REQUEST,

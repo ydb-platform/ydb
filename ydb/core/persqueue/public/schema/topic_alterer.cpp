@@ -90,6 +90,9 @@ void TTopicAlterer::DoAlter() {
 
     proposal->Record.SetDatabaseName(Settings.Database);
     proposal->Record.SetPeerName(Settings.PeerName);
+    if (Settings.UserToken) {
+        proposal->Record.SetUserToken(Settings.UserToken->GetSerializedToken());
+    }
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *proposal->Record.MutableTransaction()->MutableModifyScheme();
 

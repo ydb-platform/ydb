@@ -19,23 +19,54 @@ PROJECT_ID = None #'45'  # Optional: set to None to skip project data
 
 def run_query(query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
     """Execute GraphQL query against GitHub API"""
-    GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
+    GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if not GITHUB_TOKEN:
+        raise Exception("Neither GITHUB_TOKEN nor GH_TOKEN is set")
     HEADERS = {"Authorization": f"Bearer {GITHUB_TOKEN}", "Content-Type": "application/json"}
+    max_attempts = 5
+    timeout_seconds = 30
 
-    request = requests.post(
-        "https://api.github.com/graphql",
-        json={"query": query, "variables": variables},
-        headers=HEADERS,
-    )
+    for attempt in range(1, max_attempts + 1):
+        try:
+            request = requests.post(
+                "https://api.github.com/graphql",
+                json={"query": query, "variables": variables},
+                headers=HEADERS,
+                timeout=timeout_seconds,
+            )
+        except requests.exceptions.RequestException as exc:
+            if attempt == max_attempts:
+                raise Exception(f"GitHub GraphQL request failed after {max_attempts} attempts: {exc}") from exc
+            sleep_seconds = min(2 ** (attempt - 1), 10)
+            print(
+                f"run_query: transient request failure (attempt {attempt}/{max_attempts}), "
+                f"retrying in {sleep_seconds}s: {exc}"
+            )
+            time.sleep(sleep_seconds)
+            continue
 
-    if request.status_code == 200:
-        response = request.json()
-        if "errors" in response:
-            for error in response["errors"]:
-                print(f"GraphQL Error: {error.get('message', 'Unknown error')}")
-                raise Exception(f"GraphQL Error: {error.get('message', 'Unknown error')}")
-        return response
-    raise Exception(f"Query failed with status {request.status_code}: {request.text}")
+        if request.status_code == 200:
+            response = request.json()
+            if "errors" in response:
+                for error in response["errors"]:
+                    print(f"GraphQL Error: {error.get('message', 'Unknown error')}")
+                    raise Exception(f"GraphQL Error: {error.get('message', 'Unknown error')}")
+            return response
+
+        should_retry = request.status_code in (429, 500, 502, 503, 504)
+        if should_retry and attempt < max_attempts:
+            sleep_seconds = min(2 ** (attempt - 1), 10)
+            print(
+                f"run_query: HTTP {request.status_code} (attempt {attempt}/{max_attempts}), "
+                f"retrying in {sleep_seconds}s"
+            )
+            time.sleep(sleep_seconds)
+            continue
+
+        query_preview = query[:200].replace("\n", " ")
+        raise Exception(
+            f"Query failed with HTTP {request.status_code}. query_preview={query_preview}"
+        )
 
 
 def get_last_update_time(ydb_wrapper: YDBWrapper, table_path: str) -> Optional[datetime]:

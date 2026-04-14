@@ -1,14 +1,17 @@
 import os
 import sys
+import argparse
 import json
 import requests
+import time
+import importlib
 from urllib.parse import quote_plus
 import datetime
 import re
 
 # Import shared GitHub issue utilities
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from github_issue_utils import parse_body
+from github_issue_utils import parse_body, scan_to_utc_date
 from mute_thresholds import get_thresholds
 from manual_unmute_contract import (
     normalize_manual_unmute_status,
@@ -31,12 +34,14 @@ CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"
 
 GITHUB_MAX_BODY_LENGTH = 65000  # Setting slightly below 65536 to be safe
 FAST_UNMUTE_AUTO_COMMENT_MARKER = "<!--fast-unmute-auto:v1-->"
+MANUAL_RULES_SNAPSHOT_COMMENT_MARKER = "<!--manual-rules-snapshot:v1-->"
 UNMUTE_LIST_START_MARKER = "<!--unmute_list_start-->"
 UNMUTE_LIST_END_MARKER = "<!--unmute_list_end-->"
 # Machine-readable row state: separate line, hex-only inside <!-- ... --> (no "--" in payload; GFM hides reliably).
 MUTE_CTRL_META_PREFIX = "mute_ctrl_meta:"
 THRESHOLDS = get_thresholds()
 MANUAL_FAST_UNMUTE_WINDOW_DAYS = THRESHOLDS["manual_fast_unmute_window_days"]
+MANUAL_FAST_UNMUTE_MIN_PASSES = THRESHOLDS["manual_fast_unmute_min_passes"]
 DEFAULT_UNMUTE_WINDOW_DAYS = THRESHOLDS["default_unmute_window_days"]
 MUTE_CONTROL_PART_MAX_TESTS = THRESHOLDS["control_comment_part_max_tests"]
 REASON_NO_RUNS_DEFAULT_WINDOW = "no_runs_default_window"
@@ -89,14 +94,46 @@ def run_query(query, variables=None):
     if not GITHUB_TOKEN:
         raise Exception("Neither GITHUB_TOKEN nor GH_TOKEN is set")
     HEADERS = {"Authorization": f"Bearer {GITHUB_TOKEN}", "Content-Type": "application/json"}
-    request = requests.post(
-        'https://api.github.com/graphql', json={'query': query, 'variables': variables}, headers=HEADERS
-    )
-    if request.status_code == 200:
-        handle_github_errors(request.json())
-        return request.json()
-    else:
-        raise Exception(f"Query failed to run by returning code of {request.status_code}. {query}")
+    max_attempts = 5
+    timeout_seconds = 30
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            request = requests.post(
+                'https://api.github.com/graphql',
+                json={'query': query, 'variables': variables},
+                headers=HEADERS,
+                timeout=timeout_seconds,
+            )
+        except requests.exceptions.RequestException as exc:
+            if attempt == max_attempts:
+                raise Exception(f"GitHub GraphQL request failed after {max_attempts} attempts: {exc}") from exc
+            sleep_seconds = min(2 ** (attempt - 1), 10)
+            print(
+                f"run_query: transient request failure (attempt {attempt}/{max_attempts}), "
+                f"retrying in {sleep_seconds}s: {exc}"
+            )
+            time.sleep(sleep_seconds)
+            continue
+
+        if request.status_code == 200:
+            handle_github_errors(request.json())
+            return request.json()
+
+        should_retry = request.status_code in (429, 500, 502, 503, 504)
+        if should_retry and attempt < max_attempts:
+            sleep_seconds = min(2 ** (attempt - 1), 10)
+            print(
+                f"run_query: HTTP {request.status_code} (attempt {attempt}/{max_attempts}), "
+                f"retrying in {sleep_seconds}s"
+            )
+            time.sleep(sleep_seconds)
+            continue
+
+        query_preview = query[:200].replace("\n", " ")
+        raise Exception(
+            f"Query failed with HTTP {request.status_code}. query_preview={query_preview}"
+        )
 
 
 def get_repository(org_name=ORG_NAME, repo_name=REPO_NAME):
@@ -280,6 +317,7 @@ def fetch_all_issues(org_name=ORG_NAME, project_id=PROJECT_ID):
     issues = []
     has_next_page = True
     end_cursor = "null"
+    page = 0
 
     project_issues_query = """
     {
@@ -401,21 +439,105 @@ def fetch_all_issues(org_name=ORG_NAME, project_id=PROJECT_ID):
     }
     """
     while has_next_page:
+        page += 1
         query = project_issues_query % (org_name, project_id, end_cursor)
 
         result = run_query(query)
 
         if result:
             project_items = result['data']['organization']['projectV2']['items']
-            issues.extend(project_items['nodes'])
+            nodes = project_items['nodes']
+            issues.extend(nodes)
 
             page_info = project_items['pageInfo']
             has_next_page = page_info['hasNextPage']
             end_cursor = f"\"{page_info['endCursor']}\"" if page_info['endCursor'] else "null"
+            print(
+                f"fetch_all_issues: page={page}, items={len(nodes)}, total={len(issues)}, has_next={has_next_page}",
+                flush=True,
+            )
         else:
             has_next_page = False
 
     return issues
+
+
+def fetch_issues_by_numbers(issue_numbers, org_name=ORG_NAME, repo_name=REPO_NAME):
+    """Fetch specific issues directly by number (without full project pagination)."""
+    result_nodes = []
+    for issue_number in sorted(set(int(x) for x in issue_numbers)):
+        query = """
+        {
+          organization(login: "%s") {
+            repository(name: "%s") {
+              issue(number: %d) {
+                id
+                number
+                title
+                url
+                state
+                body
+                createdAt
+                updatedAt
+                closedAt
+                timelineItems(
+                  last: 50,
+                  itemTypes: [CLOSED_EVENT, CONNECTED_EVENT, CROSS_REFERENCED_EVENT]
+                ) {
+                  nodes {
+                    __typename
+                    ... on ClosedEvent {
+                      actor {
+                        __typename
+                        ... on User { login }
+                        ... on Bot { login }
+                      }
+                    }
+                    ... on ConnectedEvent {
+                      subject {
+                        __typename
+                        ... on PullRequest {
+                          number
+                          url
+                          state
+                          isDraft
+                          repository { nameWithOwner }
+                        }
+                      }
+                    }
+                    ... on CrossReferencedEvent {
+                      source {
+                        __typename
+                        ... on PullRequest {
+                          number
+                          url
+                          state
+                          isDraft
+                          repository { nameWithOwner }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        """ % (org_name, repo_name, issue_number)
+
+        result = run_query(query)
+        issue = (
+            result.get("data", {})
+            .get("organization", {})
+            .get("repository", {})
+            .get("issue")
+        )
+        if issue:
+            result_nodes.append({"content": issue})
+            print(f"fetch_issues_by_numbers: loaded issue #{issue_number}", flush=True)
+        else:
+            print(f"fetch_issues_by_numbers: issue #{issue_number} not found", flush=True)
+    return result_nodes
 
 
 def _extract_close_actor(content):
@@ -656,6 +778,276 @@ def _render_control_comment(issue_number, part_idx, part_total, items):
     return "\n".join(lines)
 
 
+def _build_test_history_link(test_name, branch):
+    encoded = quote_plus(f"__in_{test_name}")
+    return (
+        f"{CURRENT_TEST_HISTORY_DASHBOARD}full_name={encoded}"
+        f"&branch={branch}"
+        "&SHOW_ONLY_BRANCH_RUN=true"
+    )
+
+
+def _extract_summary_history_map(issue_body):
+    if not issue_body:
+        return {}
+
+    start_marker = "**Summary history:**"
+    end_marker = "**Test run history:**"
+    start_idx = issue_body.find(start_marker)
+    if start_idx < 0:
+        return {}
+
+    payload = issue_body[start_idx + len(start_marker) :]
+    end_idx = payload.find(end_marker)
+    if end_idx >= 0:
+        payload = payload[:end_idx]
+
+    summary_by_test = {}
+    for raw_line in payload.splitlines():
+        line = raw_line.strip()
+        if not line or ":" not in line:
+            continue
+        test_name, history = line.split(":", 1)
+        test_key = test_name.strip().lstrip("-").strip()
+        history_value = history.strip()
+        if test_key and history_value:
+            summary_by_test[test_key] = history_value
+    return summary_by_test
+
+
+def _is_stable_state_name(state_name):
+    normalized = (state_name or "").strip().lower()
+    if not normalized:
+        return False
+    if "fail" in normalized or "flaky" in normalized:
+        return False
+    return ("pass" in normalized) or ("stable" in normalized)
+
+
+def _is_stable_daily_row(row):
+    fail_count = row.get("fail_count")
+    pass_count = row.get("pass_count")
+    try:
+        if fail_count is not None and int(fail_count) > 0:
+            return False
+        if pass_count is not None and int(pass_count) > 0:
+            return True
+    except (TypeError, ValueError):
+        pass
+    return _is_stable_state_name(row.get("state"))
+
+
+def _format_date_window_label(raw_date_window):
+    day = scan_to_utc_date(raw_date_window)
+    if day is None:
+        return "??-??"
+    return day.strftime("%m-%d")
+
+
+def _load_daily_timeline_from_ydb(test_names, branch, build_type):
+    names = sorted(set(test_names or []))
+    if not names:
+        return {}
+
+    escaped_names = ", ".join("'" + name.replace("'", "''") + "'" for name in names)
+    days_window = int(max(DEFAULT_UNMUTE_WINDOW_DAYS, MANUAL_FAST_UNMUTE_WINDOW_DAYS))
+
+    try:
+        analytics_dir = os.path.join(os.path.dirname(__file__), "..", "analytics")
+        if analytics_dir not in sys.path:
+            sys.path.append(analytics_dir)
+        ydb_wrapper_module = importlib.import_module("ydb_wrapper")
+        YDBWrapper = getattr(ydb_wrapper_module, "YDBWrapper")
+    except Exception as exc:
+        print(f"manual-rules-snapshot: failed to import YDBWrapper: {exc}")
+        return {}
+
+    query = f"""
+SELECT
+    full_name,
+    date_window,
+    state,
+    pass_count,
+    fail_count
+FROM `{{tests_monitor_table}}`
+WHERE branch = '{branch}'
+  AND build_type = '{build_type}'
+  AND date_window >= CurrentUtcDate() - {days_window}*Interval("P1D")
+  AND full_name IN ({escaped_names})
+"""
+
+    try:
+        with YDBWrapper() as ydb_wrapper:
+            if not ydb_wrapper.check_credentials():
+                return {}
+            tests_monitor_table = ydb_wrapper.get_table_path("tests_monitor")
+            rows = ydb_wrapper.execute_scan_query(
+                query.format(tests_monitor_table=tests_monitor_table),
+                query_name=f"manual_rules_snapshot_timeline_{branch}_{build_type}",
+            )
+    except Exception as exc:
+        print(f"manual-rules-snapshot: failed to load timeline from YDB: {exc}")
+        return {}
+
+    grouped = {}
+    for row in rows:
+        full_name = row.get("full_name")
+        if not full_name:
+            continue
+        grouped.setdefault(full_name, []).append(row)
+
+    for full_name in grouped:
+        grouped[full_name].sort(
+            key=lambda item: (
+                scan_to_utc_date(item.get("date_window")) or datetime.date.min,
+                str(item.get("state") or ""),
+            )
+        )
+    return grouped
+
+
+def _ascii_stability_from_rows(rows, highlight_tail_points=0, max_points=None):
+    if not rows:
+        return "n/a"
+
+    if max_points is not None and int(max_points) > 0:
+        rows = rows[-int(max_points):]
+
+    highlight_tail_points = max(int(highlight_tail_points or 0), 0)
+    highlight_from = len(rows) - highlight_tail_points
+    tokens = []
+    for idx, row in enumerate(rows):
+        marker = "+" if _is_stable_daily_row(row) else "-"
+        day = _format_date_window_label(row.get("date_window"))
+        token = f"{day}:{marker}"
+        if highlight_tail_points and idx >= highlight_from:
+            token = f"[{token}]"
+        tokens.append(token)
+    return " ".join(tokens)
+
+
+def _timeline_ok_ratio(rows, rule_window_days):
+    window = max(int(rule_window_days or 0), 1)
+    if not rows:
+        return f"0/{window}"
+    window_rows = rows[-window:]
+    ok_days = sum(1 for row in window_rows if _is_stable_daily_row(row))
+    return f"{ok_days}/{window}"
+
+
+def _rule_description_for_item(item):
+    state = item.get("state", "active")
+    if state == "resolved":
+        reason = item.get("reason") or "resolved"
+        return f"resolved ({reason})"
+
+    requested = bool(item.get("requested"))
+    if requested:
+        return (
+            f"manual-fast window={MANUAL_FAST_UNMUTE_WINDOW_DAYS}d, "
+            f"criteria: fail=0 and pass_count>{MANUAL_FAST_UNMUTE_MIN_PASSES}"
+        )
+
+    return (
+        f"default window={DEFAULT_UNMUTE_WINDOW_DAYS}d, "
+        "criteria: stable-by-default-rules"
+    )
+
+
+def _is_manual_rule_active(item):
+    return bool((item or {}).get("state") == "active" and (item or {}).get("requested"))
+
+
+def _rule_code_for_item(item):
+    state = (item or {}).get("state", "active")
+    if state == "resolved":
+        return "RES"
+    if _is_manual_rule_active(item):
+        return f"M{MANUAL_FAST_UNMUTE_WINDOW_DAYS}"
+    return f"D{DEFAULT_UNMUTE_WINDOW_DAYS}"
+
+
+def _md_escape_cell(value):
+    return str(value).replace("|", "\\|")
+
+
+def _display_test_name(full_name):
+    if not full_name:
+        return ""
+    short = str(full_name).rsplit("/", 1)[-1]
+    if ".py." in short:
+        short = short.split(".py.", 1)[1]
+    return short
+
+
+def _build_manual_rules_snapshot_comment(issue_number, branch, build_type, tests, control_items, ydb_timelines):
+    now_str = _isoformat_z(_utc_now())
+    lines = [
+        MANUAL_RULES_SNAPSHOT_COMMENT_MARKER,
+        "### Manual-unmute rules snapshot (managed by bot)",
+        f"Issue #{issue_number}",
+        f"Generated at: {now_str}",
+        "",
+        (
+            "Manual fast-unmute config (mute_thresholds.json): "
+            f"window_days={MANUAL_FAST_UNMUTE_WINDOW_DAYS}, "
+            f"min_passes={MANUAL_FAST_UNMUTE_MIN_PASSES} (criteria uses pass_count > min_passes, fail=0)"
+        ),
+        (
+            f"Timeline highlighting: for tests on manual-fast path, last {MANUAL_FAST_UNMUTE_WINDOW_DAYS} day points "
+            "are wrapped in []"
+        ),
+        "",
+        "| TEST | RULE | TIMELINE | HISTORY |",
+        "|---|---|---|---|",
+    ]
+
+    for test_name in sorted(set(tests)):
+        item = control_items.get(test_name) or {}
+        short_name = _display_test_name(test_name)
+        rule = _rule_code_for_item(item)
+        manual_active = _is_manual_rule_active(item)
+        rule_window_days = MANUAL_FAST_UNMUTE_WINDOW_DAYS if manual_active else DEFAULT_UNMUTE_WINDOW_DAYS
+        full_rows = ydb_timelines.get(test_name, [])
+        display_days = max(MANUAL_FAST_UNMUTE_WINDOW_DAYS + 2, 4) if manual_active else min(max(DEFAULT_UNMUTE_WINDOW_DAYS, 5), 7)
+        visible_rows = full_rows[-display_days:] if full_rows else []
+        ascii_timeline = _ascii_stability_from_rows(
+            full_rows,
+            highlight_tail_points=MANUAL_FAST_UNMUTE_WINDOW_DAYS if manual_active else 0,
+            max_points=display_days,
+        )
+        ratio = _timeline_ok_ratio(visible_rows, rule_window_days)
+        history_link = _build_test_history_link(test_name, branch)
+        lines.append(
+            "| "
+            f"`{_md_escape_cell(short_name)}` | "
+            f"{_md_escape_cell(rule)} | "
+            f"`{_md_escape_cell(ascii_timeline)} · ok={_md_escape_cell(ratio)}` | "
+            f"[🔗]({_md_escape_cell(history_link)}) |"
+        )
+
+    lines.extend(
+        [
+            "",
+            "Legend:",
+            (
+                f"- `M{MANUAL_FAST_UNMUTE_WINDOW_DAYS}` = manual-fast rule, "
+                f"window={MANUAL_FAST_UNMUTE_WINDOW_DAYS}d, criteria: fail=0 and pass_count>{MANUAL_FAST_UNMUTE_MIN_PASSES}."
+            ),
+            (
+                f"- `D{DEFAULT_UNMUTE_WINDOW_DAYS}` = default rule, "
+                f"window={DEFAULT_UNMUTE_WINDOW_DAYS}d, criteria: (pass+fail+mute)>=4 and (fail+mute)=0."
+            ),
+            "- `RES` = test already resolved in control metadata.",
+            "- Timeline marks: `+` stable day, `-` unstable day; `[]` highlighted recent manual-fast window.",
+            "- `ok=a/b` shows stable days ratio in the active rule window (`b` is window_days from config).",
+            "- `🔗` opens test history in dashboard.",
+        ]
+    )
+
+    return "\n".join(lines)
+
+
 def _encode_mute_control_line_meta(state, status, requested_at, reason, resolved_at):
     payload = {
         "state": state,
@@ -800,6 +1192,17 @@ def _list_control_comments(issue_id):
     ]
 
 
+def _upsert_marked_comment(issue_id, marker, body):
+    comments = get_issue_comments_with_ids(issue_id)
+    marked = [comment for comment in comments if marker in (comment.get("body") or "")]
+    if marked:
+        target = marked[-1]
+        if (target.get("body") or "") != body:
+            edit_issue_comment(target["id"], body)
+        return
+    add_issue_comment(issue_id, body)
+
+
 def _comment_body_has_mute_control_start(body):
     if not body:
         return False
@@ -824,6 +1227,8 @@ def collect_manual_unmute_request_rows(
     add_auto_comment=True,
     updated_since_hours=None,
     sync_issue_comments=True,
+    issue_numbers=None,
+    post_manual_rules_snapshot_comment=False,
 ):
     """Collect manual-unmute request rows and fast-unmute overrides from control comments."""
     stable_unmute_candidates = stable_unmute_candidates or set()
@@ -831,7 +1236,21 @@ def collect_manual_unmute_request_rows(
 
     overrides = []
     request_rows = []
-    issues = fetch_all_issues(ORG_NAME, PROJECT_ID)
+    issue_numbers_set = set(int(x) for x in issue_numbers) if issue_numbers else None
+    print(
+        "collect_manual_unmute_request_rows: "
+        f"start fetch issues (project={PROJECT_ID}, updated_since_hours={updated_since_hours}, "
+        f"issue_numbers={sorted(issue_numbers_set) if issue_numbers_set else 'all'})",
+        flush=True,
+    )
+    if issue_numbers_set:
+        issues = fetch_issues_by_numbers(issue_numbers_set, ORG_NAME, REPO_NAME)
+    else:
+        issues = fetch_all_issues(ORG_NAME, PROJECT_ID)
+    print(
+        f"collect_manual_unmute_request_rows: fetched issues={len(issues)}",
+        flush=True,
+    )
     stats = {
         'issues_total': 0,
         'issues_recent_match': 0,
@@ -846,10 +1265,21 @@ def collect_manual_unmute_request_rows(
     updated_since_cutoff = None
     if updated_since_hours is not None and updated_since_hours > 0:
         updated_since_cutoff = now - datetime.timedelta(hours=int(updated_since_hours))
-
-    for issue in issues:
+    total_issues = len(issues)
+    for idx, issue in enumerate(issues, start=1):
         stats['issues_total'] += 1
         content = issue.get('content') or {}
+        issue_number = content.get('number')
+
+        if idx == 1 or idx % 50 == 0 or idx == total_issues:
+            print(
+                f"collect_manual_unmute_request_rows: progress {idx}/{total_issues}, "
+                f"current_issue={issue_number}",
+                flush=True,
+            )
+
+        if issue_numbers_set is not None and int(issue_number or 0) not in issue_numbers_set:
+            continue
         state = content.get('state')
         if state not in {'OPEN', 'CLOSED'}:
             continue
@@ -872,8 +1302,6 @@ def collect_manual_unmute_request_rows(
         issue_id = content.get('id')
         if not issue_id:
             continue
-        issue_number = content.get('number')
-
         previously_unmuted = _collect_issue_unmuted_tests(issue_id)
         remaining_tests = sorted(set(tests) - previously_unmuted)
         if not remaining_tests:
@@ -1009,6 +1437,26 @@ def collect_manual_unmute_request_rows(
                     linked_prs=linked_prs,
                 )
                 add_issue_comment(issue_id, comment)
+
+        if sync_issue_comments and post_manual_rules_snapshot_comment:
+            ydb_timelines = _load_daily_timeline_from_ydb(
+                test_names=tests,
+                branch=branch,
+                build_type=build_type,
+            )
+            snapshot_comment = _build_manual_rules_snapshot_comment(
+                issue_number=issue_number,
+                branch=branch,
+                build_type=build_type,
+                tests=tests,
+                control_items=control_items,
+                ydb_timelines=ydb_timelines,
+            )
+            _upsert_marked_comment(
+                issue_id=issue_id,
+                marker=MANUAL_RULES_SNAPSHOT_COMMENT_MARKER,
+                body=truncate_issue_body(snapshot_comment),
+            )
 
         for test_name in sorted(set(tests)):
             item = control_items[test_name]
@@ -1497,11 +1945,67 @@ def close_unmuted_issues(muted_tests_set, do_not_close_issues=False):
 
 
 def main():
-
     if "GITHUB_TOKEN" not in os.environ and "GH_TOKEN" not in os.environ:
         print("Error: Env variable GITHUB_TOKEN or GH_TOKEN is missing, skipping")
         return 1
+
+    parser = argparse.ArgumentParser(description="GitHub mute issue utilities")
+    subparsers = parser.add_subparsers(dest="command")
+
+    sync_parser = subparsers.add_parser(
+        "sync-manual-comments",
+        help="Sync manual unmute control comments in issue list",
+    )
+    sync_parser.add_argument("--branch", default="main")
+    sync_parser.add_argument("--build-type", dest="build_type", default="relwithdebinfo")
+    sync_parser.add_argument(
+        "--updated-since-hours",
+        dest="updated_since_hours",
+        type=int,
+        default=24,
+        help="Limit scan to issues updated in last N hours (0 disables filter)",
+    )
+    sync_parser.add_argument(
+        "--issue-number",
+        dest="issue_numbers",
+        action="append",
+        type=int,
+        help="Process only specific issue number (can be passed multiple times)",
+    )
+    sync_parser.add_argument(
+        "--post-manual-rules-snapshot-comment",
+        action="store_true",
+        help=(
+            "Post an extra comment with per-test rule, ascii daily stability sketch, "
+            "and test-history link"
+        ),
+    )
+
+    args = parser.parse_args()
+
+    if args.command == "sync-manual-comments":
+        print(
+            "Syncing manual unmute comments: "
+            f"branch={args.branch}, build_type={args.build_type}, "
+            f"updated_since_hours={args.updated_since_hours}, "
+            f"issue_numbers={args.issue_numbers or 'all'}, "
+            f"post_manual_rules_snapshot_comment={args.post_manual_rules_snapshot_comment}"
+        )
+        overrides, rows = collect_manual_unmute_request_rows(
+            branch=args.branch,
+            build_type=args.build_type,
+            stable_unmute_candidates=set(),
+            delete_candidates=set(),
+            updated_since_hours=args.updated_since_hours,
+            sync_issue_comments=True,
+            issue_numbers=args.issue_numbers,
+            post_manual_rules_snapshot_comment=args.post_manual_rules_snapshot_comment,
+        )
+        print(f"Done: overrides={len(overrides)}, rows={len(rows)}")
+        return 0
+
+    print("No command selected; nothing to do")
     return 0
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

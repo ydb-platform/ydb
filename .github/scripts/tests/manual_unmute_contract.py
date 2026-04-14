@@ -16,9 +16,6 @@ MANUAL_UNMUTE_TABLE_SCHEMA = [
     ("linked_pr_count", "Uint32", True),
     ("manual_unmute_status", "Utf8", True),
     ("manual_request_active", "Uint8", True),
-    ("manual_requested_at", "Timestamp", True),
-    ("hours_until_ready", "Uint32", True),
-    ("manual_wait_hours", "Uint32", True),
     ("effective_unmute_window_days", "Uint32", True),
     ("default_unmute_window_days", "Uint32", True),
     ("manual_fast_unmute_window_days", "Uint32", True),
@@ -61,20 +58,12 @@ def build_manual_unmute_row_payload(
     status,
     state,
     requested,
-    requested_at,
     resolution_reason,
-    wait_hours,
-    wait_hours_left,
 ):
     normalized_status = normalize_manual_unmute_status(status, requested=requested)
     is_active_requested = int(state == "active" and bool(requested))
-    wait_hours_total = int(wait_hours)
-    wait_hours_left_total = int(wait_hours_left)
     return {
         "manual_unmute_status": normalized_status,
         "manual_request_active": is_active_requested,
-        "manual_requested_at": requested_at,
-        "hours_until_ready": wait_hours_left_total,
-        "manual_wait_hours": wait_hours_total,
         "resolution_reason": resolution_reason,
     }

@@ -1,5 +1,4 @@
 #include "dq_output_consumer.h"
-// #include "dq_scatter_bucket_index.h" -- replaced by per-channel atomic<EDqFillLevel> vector
 
 #include <yql/essentials/utils/log/log.h>
 
@@ -16,6 +15,9 @@
 
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <atomic>
+#include <deque>
+#include <memory>
 #include <type_traits>
 #include <ydb/library/formats/arrow/hash/xx_hash.h>
 
@@ -972,7 +974,7 @@ public:
             output->WidePush(Tmp.data(), count);
         }
     }
-с
+
     void Consume(NDqProto::TCheckpoint&& checkpoint) override {
         for (auto& output : Outputs) {
             output->Push(NDqProto::TCheckpoint(checkpoint));
@@ -1012,35 +1014,128 @@ private:
     std::shared_ptr<TDqFillAggregator> Aggregator;
 };
 
-class TDqOutputScatterConsumer : public IDqOutputConsumer {
-    static constexpr ui32 kLevelCount = 3u; // NoLimit=0, SoftLimit=1, HardLimit=2
+// Lock-free adaptive scatter router with lazy channel activation.
+//
+// Per-channel fill levels are stored as atomics, updated by LevelChangeCallback
+// from consumer Pop() threads (release). PickBest() reads them (acquire) and scans
+// only active channels — O(N) where N is small (2-10 channels typically).
+//
+// Lazy activation: starts with a single channel (primaryIdx); additional channels
+// are activated one at a time when all active channels leave NoLimit. This avoids
+// wasting resources (gRPC streams, buffers) when data volume is small.
+//
+// Thread-safety: PickBest(), GetFillLevel(), ActivateNext() are called only from
+// the producer thread — no synchronization needed for IsActive_/InactiveQueue_.
+// ChannelLevels_ atomics are written by consumer threads via callback.
+class TScatterRouter {
+public:
+    static constexpr ui32 kLevelCount = 3u;
 
+    explicit TScatterRouter(ui32 channelCount, ui32 primaryIdx = 0)
+        : ChannelCount_(channelCount)
+    {
+        Y_ENSURE(channelCount > 0, "TScatterRouter requires at least one channel");
+        Y_ENSURE(primaryIdx < channelCount, "primaryIdx out of range");
+
+        ChannelLevels_ = std::shared_ptr<std::atomic<EDqFillLevel>[]>(
+            new std::atomic<EDqFillLevel>[channelCount]
+        );
+        for (ui32 j = 0; j < channelCount; ++j) {
+            ChannelLevels_[j].store(NoLimit, std::memory_order_relaxed);
+        }
+
+        IsActive_.resize(channelCount, false);
+        IsActive_[primaryIdx] = true;
+        ActiveCount_ = 1;
+        RoundRobinPos_ = 0;
+
+        for (ui32 i = 1; i < channelCount; ++i) {
+            InactiveQueue_.push_back((primaryIdx + i) % channelCount);
+        }
+    }
+
+    std::weak_ptr<std::atomic<EDqFillLevel>[]> WeakLevels() const {
+        return ChannelLevels_;
+    }
+
+    ui32 ChannelCount() const { return ChannelCount_; }
+    ui32 ActiveCount() const { return ActiveCount_; }
+
+    EDqFillLevel GetFillLevel() const {
+        bool anySoft = false;
+        for (ui32 j = 0; j < ChannelCount_; ++j) {
+            if (!IsActive_[j]) continue;
+            const auto l = ChannelLevels_[j].load(std::memory_order_acquire);
+            if (l == NoLimit) return NoLimit;
+            if (l == SoftLimit) anySoft = true;
+        }
+        return anySoft ? SoftLimit : HardLimit;
+    }
+
+    std::pair<ui32, EDqFillLevel> PickBest() {
+        const ui32 start = RoundRobinPos_++ % ChannelCount_;
+        ui32 bestIdx = ChannelCount_;
+        EDqFillLevel bestLevel = HardLimit;
+        bool anyNoLimit = false;
+
+        for (ui32 i = 0; i < ChannelCount_; ++i) {
+            const ui32 idx = (start + i) % ChannelCount_;
+            if (!IsActive_[idx]) continue;
+            const auto lvl = ChannelLevels_[idx].load(std::memory_order_acquire);
+            if (lvl == NoLimit) {
+                anyNoLimit = true;
+                bestIdx = idx;
+                bestLevel = NoLimit;
+                break;
+            }
+            if (lvl < bestLevel || bestIdx == ChannelCount_) {
+                bestLevel = lvl;
+                bestIdx = idx;
+            }
+        }
+
+        if (!anyNoLimit && !InactiveQueue_.empty()) {
+            const ui32 nextIdx = InactiveQueue_.front();
+            ActivateNext();
+            return {nextIdx, NoLimit};
+        }
+
+        return {bestIdx, bestLevel};
+    }
+
+private:
+    void ActivateNext() {
+        if (InactiveQueue_.empty()) return;
+        const ui32 idx = InactiveQueue_.front();
+        InactiveQueue_.pop_front();
+        IsActive_[idx] = true;
+        ++ActiveCount_;
+    }
+
+    const ui32 ChannelCount_;
+    std::shared_ptr<std::atomic<EDqFillLevel>[]> ChannelLevels_;
+    TVector<bool> IsActive_;
+    std::deque<ui32> InactiveQueue_;
+    ui32 ActiveCount_ = 0;
+    ui32 RoundRobinPos_ = 0;
+};
+
+class TDqOutputScatterConsumer : public IDqOutputConsumer {
 public:
     TDqOutputScatterConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth, ui32 primaryChannelIdx = 0)
         : Outputs(std::move(outputs))
         , OutputWidth(outputWidth)
         , Tmp(outputWidth.Defined() ? *outputWidth : 0u)
-        , RoundRobinPos_(primaryChannelIdx)
+        , Router_(static_cast<ui32>(Outputs.size()), primaryChannelIdx)
     {
-        // One atomic<EDqFillLevel> per channel, updated by LevelChangeCallback from Pop().
-        // PickBest() and GetFillLevel() do an O(N) scan — lock-free, no mutex.
-        ChannelCount_ = static_cast<ui32>(Outputs.size());
-        auto channelLevels = std::shared_ptr<std::atomic<EDqFillLevel>[]>(
-            new std::atomic<EDqFillLevel>[ChannelCount_]
-        );
-        for (ui32 j = 0; j < ChannelCount_; ++j) {
-            channelLevels[j].store(NoLimit, std::memory_order_relaxed);
-        }
-        ChannelLevels_ = channelLevels;
-
         Aggregator = std::make_shared<TDqFillAggregator>();
+        auto weakLevels = Router_.WeakLevels();
         for (ui32 i = 0; i < Outputs.size(); ++i) {
             YQL_ENSURE(Outputs[i]->SupportsLevelChangeCallback(),
                 "TDqOutputScatterConsumer: output " << i << " does not support LevelChangeCallback. "
                 "Only implementations that override SupportsLevelChangeCallback() (e.g. TDqOutputChannel) "
                 "may be used with Scatter.");
             Outputs[i]->SetFillAggregator(Aggregator);
-            std::weak_ptr<std::atomic<EDqFillLevel>[]> weakLevels = channelLevels;
             Outputs[i]->SetLevelChangeCallback([weakLevels, i](EDqFillLevel /*from*/, EDqFillLevel to) {
                 if (auto levels = weakLevels.lock()) {
                     levels[i].store(to, std::memory_order_release);
@@ -1049,28 +1144,20 @@ public:
         }
     }
 
-    // MIN semantics: return HardLimit only when ALL channels are at HardLimit.
-    // Lock-free: reads per-channel atomics directly without calling UpdateFillLevel().
     EDqFillLevel GetFillLevel() const override {
-        bool anySoft = false;
-        for (ui32 j = 0; j < ChannelCount_; ++j) {
-            const auto l = ChannelLevels_[j].load(std::memory_order_acquire);
-            if (l == NoLimit) return NoLimit;
-            if (l == SoftLimit) anySoft = true;
-        }
-        return anySoft ? SoftLimit : HardLimit;
+        return Router_.GetFillLevel();
     }
 
     void Consume(TUnboxedValue&& value) final {
         YQL_ENSURE(!OutputWidth.Defined());
-        auto [idx, level] = PickBest();
+        auto [idx, level] = Router_.PickBest();
         ++PicksByLevel[static_cast<ui32>(level)];
         Outputs[idx]->Push(std::move(value));
     }
 
     void WideConsume(TUnboxedValue* values, ui32 count) final {
         YQL_ENSURE(OutputWidth.Defined() && OutputWidth == count);
-        auto [idx, level] = PickBest();
+        auto [idx, level] = Router_.PickBest();
         ++PicksByLevel[static_cast<ui32>(level)];
         std::copy(values, values + count, Tmp.begin());
         Outputs[idx]->WidePush(Tmp.data(), count);
@@ -1090,6 +1177,7 @@ public:
 
     void Finish() override {
         YQL_CLOG(DEBUG, ProviderDq) << "[Scatter] outputs=" << Outputs.size()
+            << " active=" << Router_.ActiveCount()
             << " picks: NoLimit=" << PicksByLevel[0]
             << " SoftLimit=" << PicksByLevel[1]
             << " HardLimit=" << PicksByLevel[2];
@@ -1113,31 +1201,12 @@ public:
     }
 
 private:
-    // O(N) scan: pick the least-loaded channel starting from RoundRobinPos_.
-    // Priority: NoLimit > SoftLimit > HardLimit. N is small (2–10 channels).
-    std::pair<ui32, EDqFillLevel> PickBest() {
-        const ui32 start = RoundRobinPos_.fetch_add(1, std::memory_order_relaxed) % ChannelCount_;
-        ui32 softIdx = ChannelCount_, hardIdx = ChannelCount_;
-        for (ui32 i = 0; i < ChannelCount_; ++i) {
-            const ui32 idx = (start + i) % ChannelCount_;
-            const auto lvl = ChannelLevels_[idx].load(std::memory_order_acquire);
-            if (lvl == NoLimit) return {idx, NoLimit};
-            if (lvl == SoftLimit && softIdx == ChannelCount_) softIdx = idx;
-            if (lvl == HardLimit && hardIdx == ChannelCount_) hardIdx = idx;
-        }
-        if (softIdx < ChannelCount_) return {softIdx, SoftLimit};
-        return {hardIdx, HardLimit};
-    }
-
     TVector<IDqOutput::TPtr> Outputs;
     const TMaybe<ui32> OutputWidth;
     TUnboxedValueVector Tmp;
     std::shared_ptr<TDqFillAggregator> Aggregator;
-    std::shared_ptr<std::atomic<EDqFillLevel>[]> ChannelLevels_;
-    ui32 ChannelCount_ = 0;
-    std::atomic<ui32> RoundRobinPos_;
-    // Routing stats: indexed by EDqFillLevel value (NoLimit=0, SoftLimit=1, HardLimit=2).
-    std::array<ui64, kLevelCount> PicksByLevel = {};
+    TScatterRouter Router_;
+    std::array<ui64, TScatterRouter::kLevelCount> PicksByLevel = {};
 };
 
 } // namespace

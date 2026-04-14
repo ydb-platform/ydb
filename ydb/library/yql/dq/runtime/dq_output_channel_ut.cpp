@@ -1,7 +1,7 @@
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
-#include <ydb/library/yql/dq/runtime/dq_scatter_bucket_index.h>
+#include <ydb/library/yql/dq/runtime/dq_output.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/dq/runtime/ut/ut_helper.h>
 
@@ -1298,11 +1298,11 @@ public:
     bool IsEarlyFinished() const override { return false; }
     NKikimr::NMiniKQL::TType* GetOutputType() const override { return nullptr; }
 
-    // Simulates external consumer Pop: updates fill level and aggregator but
-    // does NOT fire LevelChangeCallback (Variant C).
+    // Simulates external consumer Pop: updates fill level, aggregator, and fires
+    // LevelChangeCallback (matching the fixed dq_channel_service.cpp behavior).
     void Drain() {
         InflightBytes = 0;
-        ApplyLevel(EDqFillLevel::NoLimit, /*fireCallback=*/false);
+        ApplyLevel(EDqFillLevel::NoLimit, /*fireCallback=*/true);
     }
 
     ui64 PushCount = 0;
@@ -1340,7 +1340,7 @@ struct TScatterV2Setup {
     IDqOutputConsumer::TPtr Consumer;
 };
 
-TScatterV2Setup MakeScatterV2(ui32 channelCount, ui64 hardLimitBytes, ui64 bytesPerPush) {
+TScatterV2Setup MakeScatterV2(ui32 channelCount, ui64 hardLimitBytes, ui64 bytesPerPush, ui32 primaryChannelIdx = 0) {
     TVector<IDqOutput::TPtr> outputs;
     TScatterV2Setup s;
     for (ui32 i = 0; i < channelCount; ++i) {
@@ -1348,7 +1348,7 @@ TScatterV2Setup MakeScatterV2(ui32 channelCount, ui64 hardLimitBytes, ui64 bytes
         s.Mocks.push_back(mock);
         outputs.emplace_back(mock);
     }
-    s.Consumer = CreateOutputScatterConsumer(std::move(outputs), Nothing());
+    s.Consumer = CreateOutputScatterConsumer(std::move(outputs), Nothing(), primaryChannelIdx);
     return s;
 }
 
@@ -1404,20 +1404,85 @@ Y_UNIT_TEST(AdaptiveRoutingCallbackOnPush) {
     UNIT_ASSERT_VALUES_EQUAL(2u, mocks[1]->PushCount);
 }
 
-// Verify that draining a channel (external Pop, no callback) still updates the fill
-// aggregator, so GetFillLevel() on the consumer correctly returns NoLimit.
+// Verify that draining a channel (via callback) updates the per-channel atomic,
+// so GetFillLevel() on the consumer correctly returns NoLimit.
 Y_UNIT_TEST(DrainUpdatesFillLevel) {
     TScopedAlloc alloc(__LOCATION__);
     auto s = MakeScatterV2(/*channelCount=*/2, /*hardLimitBytes=*/100, /*bytesPerPush=*/200);
 
-    // Fill both channels via scatter.
+    // Fill both channels via scatter (ch0 fills first, ch1 gets activated, then fills).
     ConsumeOne(s.Consumer);
     ConsumeOne(s.Consumer);
     UNIT_ASSERT_VALUES_EQUAL(HardLimit, s.Consumer->GetFillLevel());
 
-    // Drain ch0: aggregator updated without firing LevelChangeCallback (Variant C).
-    // GetFillLevel() must reflect the new minimum (NoLimit for ch0, HardLimit for ch1).
+    // Drain ch0: callback fires, updating ChannelLevels_[0] to NoLimit.
     s.Mocks[0]->Drain();
+    UNIT_ASSERT_VALUES_EQUAL(NoLimit, s.Consumer->GetFillLevel());
+}
+
+// Lazy activation: only primaryChannelIdx starts active; others activate on demand.
+Y_UNIT_TEST(LazyActivationStartsWithPrimary) {
+    TScopedAlloc alloc(__LOCATION__);
+    // 3 channels, each fills on first push (bytesPerPush >= hardLimitBytes).
+    auto s = MakeScatterV2(/*channelCount=*/3, /*hardLimitBytes=*/100, /*bytesPerPush=*/200, /*primaryChannelIdx=*/0);
+
+    // First consume: only ch0 is active, so it gets the row.
+    ConsumeOne(s.Consumer);
+    UNIT_ASSERT_VALUES_EQUAL(1u, s.Mocks[0]->PushCount);
+    UNIT_ASSERT_VALUES_EQUAL(0u, s.Mocks[1]->PushCount);
+    UNIT_ASSERT_VALUES_EQUAL(0u, s.Mocks[2]->PushCount);
+    UNIT_ASSERT_VALUES_EQUAL(HardLimit, s.Mocks[0]->GetFillLevel());
+
+    // Second consume: ch0 is HardLimit, ch1 gets activated (was next in queue) and chosen.
+    ConsumeOne(s.Consumer);
+    UNIT_ASSERT_VALUES_EQUAL(1u, s.Mocks[0]->PushCount);
+    UNIT_ASSERT_VALUES_EQUAL(1u, s.Mocks[1]->PushCount);
+    UNIT_ASSERT_VALUES_EQUAL(0u, s.Mocks[2]->PushCount);
+
+    // Third consume: ch0 and ch1 both HardLimit, ch2 gets activated and chosen.
+    ConsumeOne(s.Consumer);
+    UNIT_ASSERT_VALUES_EQUAL(1u, s.Mocks[0]->PushCount);
+    UNIT_ASSERT_VALUES_EQUAL(1u, s.Mocks[1]->PushCount);
+    UNIT_ASSERT_VALUES_EQUAL(1u, s.Mocks[2]->PushCount);
+}
+
+// Lazy activation with non-zero primaryChannelIdx.
+Y_UNIT_TEST(LazyActivationNonZeroPrimary) {
+    TScopedAlloc alloc(__LOCATION__);
+    auto s = MakeScatterV2(/*channelCount=*/3, /*hardLimitBytes=*/100, /*bytesPerPush=*/200, /*primaryChannelIdx=*/1);
+
+    // First consume goes to ch1 (primary).
+    ConsumeOne(s.Consumer);
+    UNIT_ASSERT_VALUES_EQUAL(0u, s.Mocks[0]->PushCount);
+    UNIT_ASSERT_VALUES_EQUAL(1u, s.Mocks[1]->PushCount);
+    UNIT_ASSERT_VALUES_EQUAL(0u, s.Mocks[2]->PushCount);
+
+    // ch1 filled -> ch2 activated (next in queue after primary=1: order is 2, 0).
+    ConsumeOne(s.Consumer);
+    UNIT_ASSERT_VALUES_EQUAL(0u, s.Mocks[0]->PushCount);
+    UNIT_ASSERT_VALUES_EQUAL(1u, s.Mocks[1]->PushCount);
+    UNIT_ASSERT_VALUES_EQUAL(1u, s.Mocks[2]->PushCount);
+
+    // ch2 filled -> ch0 activated.
+    ConsumeOne(s.Consumer);
+    UNIT_ASSERT_VALUES_EQUAL(1u, s.Mocks[0]->PushCount);
+    UNIT_ASSERT_VALUES_EQUAL(1u, s.Mocks[1]->PushCount);
+    UNIT_ASSERT_VALUES_EQUAL(1u, s.Mocks[2]->PushCount);
+}
+
+// Small data volume: if channels never fill, only the primary channel is used.
+Y_UNIT_TEST(LazyActivationSmallData) {
+    TScopedAlloc alloc(__LOCATION__);
+    // Channels have high limit (1000 bytes), tiny pushes (1 byte) — never fill.
+    auto s = MakeScatterV2(/*channelCount=*/3, /*hardLimitBytes=*/1000, /*bytesPerPush=*/1, /*primaryChannelIdx=*/0);
+
+    for (int i = 0; i < 10; ++i) {
+        ConsumeOne(s.Consumer);
+    }
+    // All 10 rows went to ch0 — the only active channel.
+    UNIT_ASSERT_VALUES_EQUAL(10u, s.Mocks[0]->PushCount);
+    UNIT_ASSERT_VALUES_EQUAL(0u, s.Mocks[1]->PushCount);
+    UNIT_ASSERT_VALUES_EQUAL(0u, s.Mocks[2]->PushCount);
     UNIT_ASSERT_VALUES_EQUAL(NoLimit, s.Consumer->GetFillLevel());
 }
 

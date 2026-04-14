@@ -289,6 +289,9 @@ void TLocalBuffer::StorageWakeupHandler() {
         if (Aggregator) {
             Aggregator->UpdateCount(EDqFillLevel::HardLimit, EDqFillLevel::SoftLimit);
         }
+        if (LevelChangeCallback) {
+            LevelChangeCallback(EDqFillLevel::HardLimit, EDqFillLevel::SoftLimit);
+        }
         FillLevel = EDqFillLevel::SoftLimit;
         NotifyOutput(false);
     }
@@ -493,6 +496,9 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
             if (Aggregator) {
                 Aggregator->UpdateCount(FillLevel, fillLevel);
             }
+            if (LevelChangeCallback) {
+                LevelChangeCallback(FillLevel, fillLevel);
+            }
             FillLevel = fillLevel;
         }
     }
@@ -582,6 +588,9 @@ void TOutputDescriptor::StorageWakeupHandler(TNodeState* nodeState, std::shared_
     if (FillLevel == EDqFillLevel::HardLimit && !Storage->IsFull()) {
         if (Aggregator) {
             Aggregator->UpdateCount(EDqFillLevel::HardLimit, EDqFillLevel::SoftLimit);
+        }
+        if (LevelChangeCallback) {
+            LevelChangeCallback(EDqFillLevel::HardLimit, EDqFillLevel::SoftLimit);
         }
         FillLevel = EDqFillLevel::SoftLimit;
         if (NeedToNotifyOutput.exchange(false)) {

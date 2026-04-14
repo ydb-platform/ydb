@@ -111,8 +111,7 @@ private:
         for (auto&& i : CSBlobIds) {
             AFL_VERIFY(BSBlobIds.erase(i))("error", "have to use broken blobs repair")("blob_id", i);
         }
-        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())(
-            "tablet_id", CSTabletId)("event", "found leaked blobs")("leaked_blobs_count", BSBlobIds.size())("total_blobs_count", TotalBlobsCount)("do_not_keep_count", DoNotKeepCount)("keep_count", KeepCount);
+        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", CSTabletId)("event", "found leaked blobs")("leaked_blobs_count", BSBlobIds.size())("bs_total_blobs_count", TotalBlobsCount)("bs_do_not_keep_count", DoNotKeepCount)("bs_keep_count", KeepCount)("cs_blob_ids_count", CSBlobIds.size());
         TActorContext::AsActorContext().Send(
             CSActorId, 
             std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(

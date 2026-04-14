@@ -111,9 +111,6 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
 
         env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
 
-        // todo(flown4qqqq)
-        Sleep(TDuration::Seconds(4));
-
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, tablePath), 0u);
 
         {
@@ -156,6 +153,14 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
             response.GetStatus(),
             Ydb::StatusIds::BAD_REQUEST,
             response.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.GetIssues().size(),
+            1,
+            response.ShortDebugString());
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            response.GetIssues(0).message(),
+            "path hasn't been resolved",
+            response.ShortDebugString());
     }
 
     Y_UNIT_TEST(InvalidTable) {
@@ -176,6 +181,14 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(
             response.GetStatus(),
             Ydb::StatusIds::BAD_REQUEST,
+            response.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.GetIssues().size(),
+            1,
+            response.ShortDebugString());
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            response.GetIssues(0).message(),
+            "path hasn't been resolved",
             response.ShortDebugString());
     }
 
@@ -209,6 +222,54 @@ Y_UNIT_TEST_SUITE(SetColumnConstraintTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(
             response.GetStatus(),
             Ydb::StatusIds::BAD_REQUEST,
+            response.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.GetIssues().size(),
+            1,
+            response.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.GetIssues(0).message(),
+            "Column with name `non_existent_column` doesn't exist.",
+            response.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(EmptyColumns) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto response = TestSetColumnConstraint(
+            runtime, ++txId,
+            TTestTxConfig::SchemeShard,
+            "/MyRoot",
+            tablePath,
+            {});
+
+        Cerr << "SET COLUMN CONSTRAINT RESPONSE: " << response.ShortDebugString() << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.GetStatus(),
+            Ydb::StatusIds::BAD_REQUEST,
+            response.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.GetIssues().size(),
+            1,
+            response.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response.GetIssues(0).message(),
+            "Failed item check: There are no columns that need to be updated",
             response.ShortDebugString());
     }
 } // Y_UNIT_TEST_SUITE(SetColumnConstraintTest)

@@ -1,75 +1,116 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_set_column_constraint.h"
+#include <ydb/core/tx/schemeshard/index/build_index_helpers.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
 
-void TSchemeShard::PersistCreateSetColumnConstraint([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
-    // todo
+namespace {
+    // This is used for LOG_E macros
+    const TString LogPrefix = "[SetColumnConstraint]";
+} // anonymous namespace
+
+void TSchemeShard::PersistCreateSetColumnConstraint(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    Y_UNUSED(db);
+    Y_UNUSED(operationInfo);
+    LOG_E("PersistCreateSetColumnConstraint is called, but is not implemented yet");
 }
 
-void TSchemeShard::PersistSetColumnConstraintState([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
-    // todo
+void TSchemeShard::PersistSetColumnConstraintState(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    Y_UNUSED(db);
+    Y_UNUSED(operationInfo);
+    LOG_E("PersistSetColumnConstraintState is called, but is not implemented yet");
 }
 
-void TSchemeShard::PersistSetColumnConstraintLockTxId([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
-    // todo
+void TSchemeShard::PersistSetColumnConstraintLockTxId(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    Y_UNUSED(db);
+    Y_UNUSED(operationInfo);
+    LOG_E("PersistSetColumnConstraintLockTxId is called, but is not implemented yet");
 }
 
-void TSchemeShard::PersistSetColumnConstraintLockTxStatus([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
-    // todo
+void TSchemeShard::PersistSetColumnConstraintLockTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    Y_UNUSED(db);
+    Y_UNUSED(operationInfo);
+    LOG_E("PersistSetColumnConstraintLockTxStatus is called, but is not implemented yet");
 }
 
-void TSchemeShard::PersistSetColumnConstraintLockTxDone([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
-    // todo
+void TSchemeShard::PersistSetColumnConstraintLockTxDone(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    Y_UNUSED(db);
+    Y_UNUSED(operationInfo);
+    LOG_E("PersistSetColumnConstraintLockTxDone is called, but is not implemented yet");
 }
 
-void TSchemeShard::PersistSetColumnConstraintLockNullWritesTxId([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
-    // todo
+void TSchemeShard::PersistSetColumnConstraintLockNullWritesTxId(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    Y_UNUSED(db);
+    Y_UNUSED(operationInfo);
+    LOG_E("PersistSetColumnConstraintLockNullWritesTxId is called, but is not implemented yet");
 }
 
-void TSchemeShard::PersistSetColumnConstraintLockNullWritesTxStatus([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
-    // todo
+void TSchemeShard::PersistSetColumnConstraintLockNullWritesTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    Y_UNUSED(db);
+    Y_UNUSED(operationInfo);
+    LOG_E("PersistSetColumnConstraintLockNullWritesTxStatus is called, but is not implemented yet");
 }
 
-void TSchemeShard::PersistSetColumnConstraintLockNullWritesTxDone([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
-    // todo
+void TSchemeShard::PersistSetColumnConstraintLockNullWritesTxDone(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    Y_UNUSED(db);
+    Y_UNUSED(operationInfo);
+    LOG_E("PersistSetColumnConstraintLockNullWritesTxDone is called, but is not implemented yet");
 }
 
-void TSchemeShard::PersistSetColumnConstraintUnlockNullWritesTxId([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
-    // todo
+void TSchemeShard::PersistSetColumnConstraintUnlockNullWritesTxId(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    Y_UNUSED(db);
+    Y_UNUSED(operationInfo);
+    LOG_E("PersistSetColumnConstraintUnlockNullWritesTxId is called, but is not implemented yet");
 }
 
-void TSchemeShard::PersistSetColumnConstraintUnlockNullWritesTxStatus([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
-    // todo
+void TSchemeShard::PersistSetColumnConstraintUnlockNullWritesTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    Y_UNUSED(db);
+    Y_UNUSED(operationInfo);
+    LOG_E("PersistSetColumnConstraintUnlockNullWritesTxStatus is called, but is not implemented yet");
 }
 
-void TSchemeShard::PersistSetColumnConstraintUnlockNullWritesTxDone([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
-    // todo
+void TSchemeShard::PersistSetColumnConstraintUnlockNullWritesTxDone(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    Y_UNUSED(db);
+    Y_UNUSED(operationInfo);
+    LOG_E("PersistSetColumnConstraintUnlockNullWritesTxDone is called, but is not implemented yet");
 }
 
-void TSchemeShard::PersistSetColumnConstraintUnlockTxId([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
-    // todo
+void TSchemeShard::PersistSetColumnConstraintUnlockTxId(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    Y_UNUSED(db);
+    Y_UNUSED(operationInfo);
+    LOG_E("PersistSetColumnConstraintUnlockTxId is called, but is not implemented yet");
 }
 
-void TSchemeShard::PersistSetColumnConstraintUnlockTxStatus([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
-    // todo
+void TSchemeShard::PersistSetColumnConstraintUnlockTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    Y_UNUSED(db);
+    Y_UNUSED(operationInfo);
+    LOG_E("PersistSetColumnConstraintUnlockTxStatus is called, but is not implemented yet");
 }
 
-void TSchemeShard::PersistSetColumnConstraintUnlockTxDone([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
-    // todo
+void TSchemeShard::PersistSetColumnConstraintUnlockTxDone(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    Y_UNUSED(db);
+    Y_UNUSED(operationInfo);
+    LOG_E("PersistSetColumnConstraintUnlockTxDone is called, but is not implemented yet");
 }
 
-void TSchemeShard::PersistSetColumnConstraintValidationSnapshot([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TSetColumnConstraintOperationInfo& operationInfo) {
-    // todo
+void TSchemeShard::PersistSetColumnConstraintValidationSnapshot(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {
+    Y_UNUSED(db);
+    Y_UNUSED(operationInfo);
+    LOG_E("PersistSetColumnConstraintValidationSnapshot is called, but is not implemented yet");
 }
 
-void TSchemeShard::PersistSetColumnConstraintValidationShardStatus([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] TShardIdx shardIdx, [[maybe_unused]] const TIndexBuildShardStatus& status) {
-    // todo
+void TSchemeShard::PersistSetColumnConstraintValidationShardStatus(NIceDb::TNiceDb& db, TShardIdx shardIdx, const TIndexBuildShardStatus& status) {
+    Y_UNUSED(db);
+    Y_UNUSED(shardIdx);
+    Y_UNUSED(status);
+    LOG_E("PersistSetColumnConstraintValidationShardStatus is called, but is not implemented yet");
 }
 
-void TSchemeShard::PersistSetColumnConstraintValidationIssue([[maybe_unused]] NIceDb::TNiceDb& db, [[maybe_unused]] const TString& issue) {
-    // todo
+void TSchemeShard::PersistSetColumnConstraintValidationIssue(NIceDb::TNiceDb& db, const TString& issue) {
+    Y_UNUSED(db);
+    Y_UNUSED(issue);
+    LOG_E("PersistSetColumnConstraintValidationIssue is called, but is not implemented yet");
 }
 
 void TSchemeShard::Handle(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev, const TActorContext& ctx) {

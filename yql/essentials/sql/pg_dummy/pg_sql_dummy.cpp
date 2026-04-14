@@ -1,8 +1,12 @@
 #include <yql/essentials/parser/pg_wrapper/interface/interface.h>
+#include <yql/essentials/parser/pg_wrapper/interface/sign.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack_impl.h>
 #include <yql/essentials/minikql/mkql_buffer.h>
+#include <yql/essentials/parser/pg_wrapper/interface/in_range.h>
 #include <yql/essentials/sql/settings/translator.h>
+
+#include <expected>
 
 namespace NSQLTranslationPG {
 
@@ -293,6 +297,15 @@ void RegisterPgBlockAggs(THashMap<TString, std::unique_ptr<IBlockAggregatorFacto
     Y_UNUSED(registry);
 }
 
+std::expected<bool, TString> PgCompareWithCasts(TStringBuf lhs, ui32 lhsTypeId, TStringBuf rhs, ui32 rhsTypeId, EPgCompareType cmpType) {
+    Y_UNUSED(lhs);
+    Y_UNUSED(lhsTypeId);
+    Y_UNUSED(rhs);
+    Y_UNUSED(rhsTypeId);
+    Y_UNUSED(cmpType);
+    return std::unexpected(TString("PG types are not supported"));
+}
+
 } // namespace NKikimr::NMiniKQL
 
 namespace NYql {
@@ -319,6 +332,34 @@ TColumnConverter BuildPgColumnConverter(const std::shared_ptr<arrow::DataType>& 
 
 ui32 ConvertToPgType(NKikimr::NUdf::EDataSlot slot) {
     Y_UNUSED(slot);
+    throw yexception() << "PG types are not supported";
+}
+
+std::expected<std::strong_ordering, TString> PgSign(TStringBuf value, ui32 typeId) {
+    Y_UNUSED(value);
+    Y_UNUSED(typeId);
+    throw yexception() << "PG types are not supported";
+}
+
+class TPgInRange::TImpl {
+public:
+    TImpl() = default;
+};
+
+TPgInRange::TPgInRange(ui32 procId, NKikimr::NMiniKQL::TPgType* columnType, NKikimr::NMiniKQL::TPgType* offsetType) {
+    Y_UNUSED(columnType);
+    Y_UNUSED(offsetType);
+    Y_UNUSED(procId);
+    throw yexception() << "PG types are not supported";
+}
+
+TPgInRange::~TPgInRange() = default;
+
+TPgInRange::TPgInRange(TPgInRange&&) noexcept = default;
+
+TPgInRange& TPgInRange::operator=(TPgInRange&&) noexcept = default;
+
+THolder<TPgInRange::TCallState> TPgInRange::MakeCallState() const {
     throw yexception() << "PG types are not supported";
 }
 

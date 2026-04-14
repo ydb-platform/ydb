@@ -8,6 +8,17 @@
 
 {% list tabs %}
 
+- C++
+
+  Склонируйте репозпторий [ydb-cpp-sdk](https://github.com/ydb-platform/ydb-cpp-sdk) и выполните команду из командной строки:
+
+  {% include [install/cmd_cpp.md](install/cmd_cpp.md) %}
+
+  - `compiler` - ваш компилятор (`clang` или `gcc`)
+  - `ydb_install_dir` - путь, по которому вы хотите установить SDK.
+
+  Перед выполнением команды убедитесь, что все зависимости установлены.
+
 - Python
 
   Выполните команду из командной строки:

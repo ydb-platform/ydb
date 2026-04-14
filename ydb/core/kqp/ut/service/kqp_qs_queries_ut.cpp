@@ -5976,6 +5976,48 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     }
 
+    Y_UNIT_TEST(CreateTableTopicAndConsumerInSingleQuery) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
+        TKikimrRunner kikimr{serverSettings};
+
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+        auto pq = NYdb::NTopic::TTopicClient(
+            kikimr.GetDriver(),
+            NYdb::NTopic::TTopicClientSettings().Database("/Root"));
+
+        const auto query = Q_(R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/AuditEvents`
+            (
+                id Utf8,
+                createdAt Timestamp,
+                payload String,
+                payloadVersion Utf8,
+                PRIMARY KEY (id)
+            ) WITH (
+                TTL = Interval("P7D") ON `createdAt`
+            );
+
+            ALTER TABLE `/Root/AuditEvents` ADD CHANGEFEED `event_feed` WITH (
+                FORMAT = 'JSON',
+                MODE = 'NEW_IMAGE',
+                RETENTION_PERIOD = Interval("P7D")
+            );
+
+            ALTER TOPIC `/Root/AuditEvents/event_feed` ADD CONSUMER `audit-cdc-consumer`;
+        )");
+        RunQuery(query, session);
+
+        auto desc = pq.DescribeTopic("/Root/AuditEvents/event_feed").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(desc.GetStatus(), EStatus::SUCCESS, desc.GetIssues().ToString());
+        const auto& consumers = desc.GetTopicDescription().GetConsumers();
+        UNIT_ASSERT_VALUES_EQUAL(consumers.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(consumers[0].GetConsumerName(), "audit-cdc-consumer");
+    }
+
     Y_UNIT_TEST(TableSink_OlapRWQueries) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);

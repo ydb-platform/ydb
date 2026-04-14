@@ -565,7 +565,8 @@ struct TPgOptimizerImpl {
         } else if (op->JoinType == LeftJoin || op->JoinType == RightJoin) {
             CHECK(op->LeftJoinKeys.size() == 1 && op->RightJoinKeys.size() == 1, "Only 1 var per join supported");
 
-            std::vector<std::tuple<int, int, TStringBuf, TStringBuf>> leftVars, rightVars;
+            std::vector<std::tuple<int, int, TStringBuf, TStringBuf>> leftVars;
+            std::vector<std::tuple<int, int, TStringBuf, TStringBuf>> rightVars;
             ExtractVars(leftVars, rightVars, op);
 
             IOptimizer::TEq leftEqClass = MakeEqClass(leftVars);

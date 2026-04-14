@@ -218,9 +218,19 @@ TConclusion<bool> TCleanAggregationSources::DoExecuteInplace(
     return true;
 }
 
-TConclusion<bool> TBuildResultStep::DoExecuteInplace(
-    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
-    auto context = source->GetContext();
+bool TBuildResultStep::IsPageSkippedByFilter(const std::shared_ptr<NCommon::IDataSource>& source) const {
+    const auto& notAppliedFilter = source->GetStageResult().GetNotAppliedFilter();
+    if (notAppliedFilter && !notAppliedFilter->IsTotalAllowFilter()) {
+        const auto pageFilter = notAppliedFilter->Slice(StartIndex, RecordsCount);
+        return pageFilter.IsTotalDenyFilter();
+    }
+    return false;
+}
+
+std::shared_ptr<arrow::Table> TBuildResultStep::BuildPageResultBatch(const std::shared_ptr<NCommon::IDataSource>& source) const {
+    if (IsPageSkippedByFilter(source)) {
+        return nullptr;
+    }
     NArrow::TGeneralContainer::TTableConstructionContext contextTableConstruct;
     if (!source->IsSourceInMemory()) {
         contextTableConstruct.SetStartIndex(StartIndex).SetRecordsCount(RecordsCount);
@@ -229,13 +239,17 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(
         AFL_VERIFY(RecordsCount == source->GetRecordsCount())("records_count", RecordsCount)("source", source->GetRecordsCount());
     }
     contextTableConstruct.SetFilter(source->GetStageResult().GetNotAppliedFilter());
-    std::shared_ptr<arrow::Table> resultBatch;
-    if (!source->GetStageResult().IsEmpty()) {
-        resultBatch = source->GetStageResult().GetBatch()->BuildTableVerified(contextTableConstruct);
-        if (!resultBatch->num_rows()) {
-            resultBatch = nullptr;
-        }
+    if (source->GetStageResult().IsEmpty()) {
+        return nullptr;
     }
+    auto resultBatch = source->GetStageResult().GetBatch()->BuildTableVerified(contextTableConstruct);
+    return resultBatch->num_rows() ? resultBatch : nullptr;
+}
+
+TConclusion<bool> TBuildResultStep::DoExecuteInplace(
+    const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+    auto context = source->GetContext();
+    auto resultBatch = BuildPageResultBatch(source);
     auto* sSource = source->MutableAs<IDataSource>();
     const ui32 recordsCount = resultBatch ? resultBatch->num_rows() : 0;
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TBuildResultStep")("source_idx", source->GetSourceIdx())("count", recordsCount);

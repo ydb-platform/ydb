@@ -259,7 +259,8 @@ TExprNode::TPtr BuildNormalRangeLambdaRaw(TPositionHandle pos, const TTypeAnnota
     const auto downKey = isTzKey ? TzRound(key, keyType, true, ctx) : key;
     const auto upKey = isTzKey ? TzRound(key, keyType, false, ctx) : key;
     if (op == "!=") {
-        TRangeBoundary left, right;
+        TRangeBoundary left;
+        TRangeBoundary right;
         left = BuildMinusInf(pos, keyType, ctx);
         right.Value = downKey;
         right.Included = false;
@@ -290,7 +291,8 @@ TExprNode::TPtr BuildNormalRangeLambdaRaw(TPositionHandle pos, const TTypeAnnota
         op = "==";
     }
 
-    TRangeBoundary left, right;
+    TRangeBoundary left;
+    TRangeBoundary right;
     if (op == "==") {
         left.Value = downKey;
         right.Value = upKey;

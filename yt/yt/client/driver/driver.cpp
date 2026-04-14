@@ -443,6 +443,7 @@ public:
             REGISTER_ALL(TReferenceLeaseCommand,            "reference_lease",                        Null,       Structured, true,  false);
             REGISTER_ALL(TUnreferenceLeaseCommand,          "unreference_lease",                      Null,       Structured, true,  false);
             REGISTER_ALL(TForsakeChaosCoordinator,          "forsake_chaos_coordinator",              Null,       Null,       true,  true );
+            REGISTER_ALL(TRemoveChaosCellMailbox,           "remove_chaos_cell_mailbox",              Null,       Null,       true,  true );
             REGISTER_ALL(TGetOrderedTabletSafeTrimRowCount, "get_ordered_tablet_safe_trim_row_count", Null,       Structured, false, false);
             REGISTER_ALL(TGetConnectionOrchidValue,         "get_connection_orchid_value",            Null,       Structured, false, false);
         }

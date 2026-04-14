@@ -2159,9 +2159,9 @@ TRowVersion AcquireReadSnapshot(TTestActorRuntime& runtime, const TString& datab
         nodeIndex,
         true);
     auto ev = runtime.GrabEdgeEventRethrow<NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult>(sender);
-    const auto& record = ev->Get()->Record;
-    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), Ydb::StatusIds::SUCCESS);
-    return TRowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
+    const auto* msg = ev->Get();
+    UNIT_ASSERT_VALUES_EQUAL(msg->Status, Ydb::StatusIds::SUCCESS);
+    return msg->Snapshot;
 }
 
 void AddValueToCells(ui64 value, const TString& columnType, TVector<TCell>& cells, TVector<TString>& stringValues) {

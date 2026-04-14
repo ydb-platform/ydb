@@ -222,7 +222,12 @@ TString DebugPath(NYT::TRichYPath path) {
     return NYT::NodeToCanonicalYsonString(NYT::PathToNode(path), NYT::NYson::EYsonFormat::Text) + " (" + std::to_string(numColumns) + " columns)";
 }
 
-void PreparePathInputQuerySpec(NYT::TNode& spec, const TVector<TRichYPath>& paths) {
+void PreparePathInputQuerySpec(NYT::TNode& spec, const TVector<TRichYPath>& paths, const TExecContext<IYtGateway::TRunOptions>::TPtr& execCtx) {
+    const bool enableQLFilter = execCtx->Options_.Config()->_EnableQLFilter.Get(execCtx->Cluster_).GetOrElse(DEFAULT_ENABLE_QL_FILTER);
+    if (!enableQLFilter) {
+        return;
+    }
+
     if (AllOf(paths, [] (const auto& path) { return !path.InputQuery_; })) {
         return;
     }
@@ -3780,7 +3785,7 @@ private:
                     spec["schema_inference_mode"] = "from_output"; // YTADMINREQ-17692
                 }
 
-                PreparePathInputQuerySpec(spec, mergeOpSpec.Inputs_);
+                PreparePathInputQuerySpec(spec, mergeOpSpec.Inputs_, execCtx);
 
                 CheckSpecForSecrets(spec, execCtx);
 
@@ -3916,7 +3921,7 @@ private:
                 spec["job_count"] = static_cast<i64>(*jobCount);
             }
 
-            PreparePathInputQuerySpec(spec, mapOpSpec.GetInputs());
+            PreparePathInputQuerySpec(spec, mapOpSpec.GetInputs(), execCtx);
 
             CheckSpecForSecrets(spec, execCtx);
 
@@ -4391,7 +4396,7 @@ private:
                 spec["mapper"]["output_streams"] = intermediateStreams;
             }
 
-            PreparePathInputQuerySpec(spec, mapReduceOpSpec.GetInputs());
+            PreparePathInputQuerySpec(spec, mapReduceOpSpec.GetInputs(), execCtx);
 
             CheckSpecForSecrets(spec, execCtx);
 
@@ -4542,7 +4547,7 @@ private:
                 spec["reducer"]["enable_input_table_index"] = true;
             }
 
-            PreparePathInputQuerySpec(spec, mapReduceOpSpec.GetInputs());
+            PreparePathInputQuerySpec(spec, mapReduceOpSpec.GetInputs(), execCtx);
 
             CheckSpecForSecrets(spec, execCtx);
 

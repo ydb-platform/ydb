@@ -95,7 +95,8 @@ int main(int argc, char** argv) {
         Sort(durations.begin(), durations.end());
         durations.erase(durations.begin() + nRepeats * 2 / 3, durations.end());
         nRepeats = durations.size();
-        double sumDurations = 0.0, sumDurationsQ = 0.0;
+        double sumDurations = 0.0;
+        double sumDurationsQ = 0.0;
         for (auto d : durations) {
             sumDurations += d;
             sumDurationsQ += d * d;

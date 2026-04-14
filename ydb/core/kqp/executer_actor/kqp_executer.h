@@ -148,14 +148,17 @@ struct TExecuterConfig : TNonCopyable {
     TIntrusivePtr<TExecuterMutableConfig> MutableConfig;
     const NKikimrConfig::TTableServiceConfig& TableServiceConfig;
     const NKikimrConfig::TTliConfig& TliConfig;
+    NACLib::TUserContext::TPtr UserCtx;
 
     TExecuterConfig(TIntrusivePtr<TExecuterMutableConfig> mutableConfig,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-        const NKikimrConfig::TTliConfig& tliConfig
+        const NKikimrConfig::TTliConfig& tliConfig,
+        NACLib::TUserContext::TPtr userCtx
     )
         : MutableConfig(mutableConfig)
         , TableServiceConfig(tableServiceConfig)
         , TliConfig(tliConfig)
+        , UserCtx(userCtx)
     {}
 
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode GetBlockTrackingMode() const {

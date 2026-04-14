@@ -19,11 +19,11 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                                    TInstant receivedAt,
                                    const TString &txBody,
                                    bool usesMvccSnapshot,
-                                   const TString& userSID,
+                                   NACLib::TUserContext::TPtr userCtx,
                                    bool)
     : StepTxId_(stepTxId)
     , TxBody(txBody)
-    , EngineBay(self, txc, ctx, stepTxId, userSID)
+    , EngineBay(self, txc, ctx, stepTxId, userCtx)
     , ErrCode(NKikimrTxDataShard::TError::OK)
     , TxSize(0)
     , IsReleased(false)
@@ -232,14 +232,14 @@ void TActiveTransaction::FillTxData(TDataShard *self,
                                     const TString &txBody,
                                     const TVector<TSysTables::TLocksTable::TLock> &locks,
                                     ui64 artifactFlags,
-                                    const TString& userSID)
+                                    NACLib::TUserContext::TPtr userCtx)
 {
     UntrackMemory();
 
     Y_ENSURE(!DataTx);
     Y_ENSURE(TxBody.empty());
 
-    UserSID = userSID;
+    UserCtx = userCtx;
     Target = target;
     TxBody = txBody;
     if (locks.size()) {
@@ -249,7 +249,7 @@ void TActiveTransaction::FillTxData(TDataShard *self,
     ArtifactFlags = artifactFlags;
     if (IsDataTx() || IsReadTable()) {
         Y_ENSURE(!DataTx);
-        BuildDataTx(self, txc, ctx, userSID);
+        BuildDataTx(self, txc, ctx, userCtx);
         Y_ENSURE(DataTx->Ready());
 
         if (DataTx->HasStreamResponse())
@@ -270,17 +270,17 @@ void TActiveTransaction::FillTxData(TDataShard *self,
 void TActiveTransaction::FillVolatileTxData(TDataShard *self,
                                             TTransactionContext &txc,
                                             const TActorContext &ctx,
-                                            const TString& userSID)
+                                            NACLib::TUserContext::TPtr userCtx)
 {
     UntrackMemory();
 
     Y_ENSURE(!DataTx);
     Y_ENSURE(!TxBody.empty());
 
-    UserSID = userSID;
+    UserCtx = userCtx;
 
     if (IsDataTx() || IsReadTable()) {
-        BuildDataTx(self, txc, ctx, userSID);
+        BuildDataTx(self, txc, ctx, UserCtx);
         Y_ENSURE(DataTx->Ready());
 
         if (DataTx->HasStreamResponse())
@@ -292,20 +292,20 @@ void TActiveTransaction::FillVolatileTxData(TDataShard *self,
     }
 
     TrackMemory();
-    UserSID = userSID;
+    UserCtx = userCtx;
 }
 
 TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
                                                        TTransactionContext &txc,
                                                        const TActorContext &ctx,
-                                                       const TString& userSID,
+                                                       NACLib::TUserContext::TPtr userCtx,
                                                        bool isPropose)
 {
     Y_ENSURE(IsDataTx() || IsReadTable());
     if (!DataTx) {
         Y_ENSURE(TxBody);
         DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
-                                                    GetReceivedAt(), TxBody, IsMvccSnapshotRead(), userSID, isPropose);
+                                                    GetReceivedAt(), TxBody, IsMvccSnapshotRead(), userCtx, isPropose);
         if (DataTx->HasStreamResponse())
             SetStreamSink(DataTx->GetSink());
     }
@@ -557,9 +557,9 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
         TDataShard *self,
         TTransactionContext &txc,
         const TActorContext &ctx,
-        const TString& userSID)
+        NACLib::TUserContext::TPtr userCtx)
 {
-    UserSID = userSID;
+    UserCtx = userCtx;
     if (!DataTx) {
         ReleasedTxDataSize = 0;
         return ERestoreDataStatus::Ok;
@@ -591,7 +591,7 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
 
     bool extractKeys = DataTx->IsTxInfoLoaded();
     DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
-                                                GetReceivedAt(), TxBody, IsMvccSnapshotRead(), userSID);
+                                                GetReceivedAt(), TxBody, IsMvccSnapshotRead(), userCtx);
     if (DataTx->Ready() && extractKeys) {
         DataTx->ExtractKeys(true);
     }

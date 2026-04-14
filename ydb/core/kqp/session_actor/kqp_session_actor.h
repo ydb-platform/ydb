@@ -105,7 +105,7 @@ IActor* CreateKqpSessionActor(const TActorId& owner,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const TActorId& kqpTempTablesAgentActor,
     std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-    const TString& userSID);
+    NACLib::TUserContext::TPtr userCtx);
 
 IActor* CreateKqpTempTablesManager(
     TKqpTempTablesState tempTablesState, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TActorId& target, const TString& database);

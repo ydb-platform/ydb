@@ -92,10 +92,6 @@ public:
         }
     }
 
-    TString GetUserSID() const {
-        return (UserToken != nullptr) ? UserToken->GetUserSID() : BUILTIN_ACL_NO_USER_SID;
-    }
-
     bool CheckExecutionComplete() {
         if (TBase::CheckExecutionComplete()) {
             return true;

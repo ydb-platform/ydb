@@ -242,7 +242,7 @@ public:
             TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
             const TActorId& kqpTempTablesAgentActor,
             std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-            const TString& userSID)
+            NACLib::TUserContext::TPtr userCtx)
         : Owner(owner)
         , QueryCache(std::move(queryCache))
         , SessionId(sessionId)
@@ -259,7 +259,7 @@ public:
         , KqpTempTablesAgentActor(kqpTempTablesAgentActor)
         , GUCSettings(std::make_shared<TGUCSettings>())
         , ChannelService(channelService)
-        , UserSID(userSID)
+        , UserCtx(userCtx)
     {
         RequestCounters = MakeIntrusive<TKqpRequestCounters>();
         RequestCounters->Counters = Counters;
@@ -1919,6 +1919,21 @@ public:
         return results;
     }
 
+    NACLib::TUserContext::TPtr CreateUserContext() {
+        NACLib::TUserContextBuilder builder;
+
+        if (QueryState != nullptr && QueryState->UserToken != nullptr && !QueryState->UserToken->GetUserSID().empty()) {
+            builder.WithUserSID(QueryState->UserToken->GetUserSID());
+        } else if (UserCtx != nullptr) {
+            builder.WithUserSID(UserCtx->GetUserSID());
+        }
+
+        if (QueryState != nullptr && QueryState->KqpSessionSpan) {
+            builder.WithUserTraceId(QueryState->KqpSessionSpan.GetTraceId());
+        }
+        return builder.Build();
+    }
+
     void SendToExecuter(TKqpTransactionContext* txCtx, IKqpGateway::TExecPhysicalRequest&& request, bool isRollback = false) {
         bool allowSaveState = false;
         if (QueryState) {
@@ -1980,11 +1995,7 @@ public:
                 .Alloc = std::move(alloc)
             };
 
-            if (QueryState != nullptr && QueryState->UserToken != nullptr && !QueryState->UserToken->GetUserSID().empty()) {
-                settings.UserSID = QueryState->UserToken->GetUserSID();
-            } else {
-                settings.UserSID = UserSID;
-            }
+            settings.UserCtx = CreateUserContext();
 
             auto* actor = CreateKqpBufferWriterActor(std::move(settings));
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);
@@ -2010,7 +2021,7 @@ public:
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
             QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(),
             QueryState ? QueryState->GetFormatsSettings() : NFormats::TFormatsSettings{},
-            RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService, Settings.TliConfig),
+            RequestCounters, TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService, Settings.TliConfig, CreateUserContext()),
             AsyncIoFactory, SelfId(),
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
@@ -2058,7 +2069,7 @@ public:
             ? writeBufferMemoryLimit
             : ui64(Settings.MkqlInitialMemoryLimit);
 
-        const auto executerConfig = TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService, Settings.TliConfig);
+        const auto executerConfig = TExecuterConfig(Settings.MutableExecuterConfig, Settings.TableService, Settings.TliConfig, CreateUserContext());
         TKqpPartitionedExecuterSettings settings{
             .Request = std::move(request),
             .SessionActorId = SelfId(),
@@ -2087,6 +2098,7 @@ public:
             .WriteBufferInitialMemoryLimit = writeBufferInitialMemoryLimit,
             .WriteBufferMemoryLimit = writeBufferMemoryLimit,
             .QuerySpanId = QueryState ? QueryState->GetQuerySpanId() : 0,
+            .UserCtx =  CreateUserContext(),
         };
 
         auto executerActor = CreateKqpPartitionedExecuter(std::move(settings), ChannelService);
@@ -3791,7 +3803,7 @@ private:
 
     TGUCSettings::TPtr GUCSettings;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
-    const TString UserSID;
+    NACLib::TUserContext::TPtr UserCtx;
 };
 
 } // namespace
@@ -3807,14 +3819,14 @@ IActor* CreateKqpSessionActor(const TActorId& owner,
     TIntrusivePtr<TModuleResolverState> moduleResolverState, TIntrusivePtr<TKqpCounters> counters,
     const TActorId& kqpTempTablesAgentActor,
     std::shared_ptr<NYql::NDq::IDqChannelService> channelService,
-    const TString& userSID)
+    NACLib::TUserContext::TPtr userCtx)
 {
     return new TKqpSessionActor(
         owner, std::move(queryCache),
         std::move(resourceManager), std::move(caFactory), sessionId, std::move(kqpConfig),
                                 kqpSettings, workerSettings, federatedQuerySetup,
                                 std::move(asyncIoFactory),  std::move(moduleResolverState), counters,
-                                kqpTempTablesAgentActor, channelService, userSID);
+                                kqpTempTablesAgentActor, channelService, userCtx);
 }
 
 }

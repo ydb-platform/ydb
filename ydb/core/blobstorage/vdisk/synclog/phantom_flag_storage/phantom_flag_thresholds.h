@@ -23,11 +23,11 @@ namespace NSyncLog {
 class TPhantomFlagThresholds {
 public:
     struct TThreshold {
-        ui64 TabletId;
-        ui8 Channel;
-        ui32 Generation;
-        ui32 Step;
-        ui8 OrderNumber;
+        ui64 TabletId = 0;
+        ui8 Channel = 0;
+        ui32 Generation = 0;
+        ui32 Step = 0;
+        ui8 OrderNumber = 0;
     };
 
 public:
@@ -64,9 +64,9 @@ private:
     class TTabletThresholds {
     public:
         struct TTabletThreshold {
-            ui32 Generation;
-            ui32 Step;
-            ui8 OrderNumber;
+            ui32 Generation = 0;
+            ui32 Step = 0;
+            ui8 OrderNumber = 0;
         };
 
     public:

@@ -132,20 +132,19 @@ private:
             };
             TailChunkIdx = chunkIdx;
             TailAvailableSize = Data.ChunkSize;
-            ProcessQueues();
             break;
         }
         default:
             // retry
             AllocateNewChunk();
-            break;
+            return;
         }
         ProcessQueues();
     }
 
     void Handle(const TEvChunkKeeperFreeResult::TPtr& ev) {
         STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP05, VDISKP(Ctx.SyncLogCtx->VCtx,
-                "Handle TEvChunkKeeperAllocateResult"),
+                "Handle TEvChunkKeeperFreeResult"),
                 (Event, ev->Get()->ToString()));
         RequestInFlight = false;
         Data.Chunks.erase(ev->Get()->ChunkIdx);
@@ -195,6 +194,9 @@ private:
                 (ChunkCount, Data.Chunks.size()));
         TailChunkIdx = std::nullopt;
         TailAvailableSize = 0;
+        WriteQueue.clear();
+        PendingWrite.clear();
+        PendingWriteSize = 0;
         for (const auto& [chunkIdx, chunk] : Data.Chunks) {
             EnqueueChunkDeletion(chunkIdx);
         }
@@ -278,6 +280,9 @@ private:
     void DeleteChunk(ui32 chunkIdx) {
         if (Data.Chunks.contains(chunkIdx)) {
             Send(Ctx.ChunkKeeperId, new TEvChunkKeeperFree(chunkIdx, SubsystemId));
+        } else {
+            RequestInFlight = false;
+            ProcessQueues();
         }
     }
 
@@ -292,7 +297,7 @@ private:
                 PendingRead.ChunksToRead.insert(chunkIdx);
             }
         }
-        STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP11, VDISKP(Ctx.SyncLogCtx->VCtx,
+        STLOG(PRI_NOTICE, BS_PHANTOM_FLAG_PROCESSOR, BSPFP10, VDISKP(Ctx.SyncLogCtx->VCtx,
                 "Start reading snapshot"),
                 (ChunkToReadCount, PendingRead.ChunksToRead.size()));
         if (PendingRead.ChunksToRead.empty()) {

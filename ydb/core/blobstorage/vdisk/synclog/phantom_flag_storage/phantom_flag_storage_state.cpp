@@ -124,6 +124,7 @@ void TPhantomFlagStorageState::Deactivate() {
     if (IsPersistent) {
         TActivationContext::Send(new IEventHandle(ProcessorId, TActorId{}, new TEvPhantomFlagStorageDrop));
         WriteBuffer.clear();
+        WriteBufferSize = 0;
     } else {
         StoredFlags.clear();
     }

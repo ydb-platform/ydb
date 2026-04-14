@@ -1437,6 +1437,8 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvGetLockWaitGraph::TPtr& ev
 void TLongTxServiceActor::RunDeadlockDetection() {
     auto hashFunc = [](const TLockStateHandle& lh) { return lh.Hash(); };
 
+    // The higher priority, the more likely we are to break the wait by this lock.
+    // We want to abort wait edges of younger locks, so that older transactions can finish their work.
     auto lockPriorityCmp = [](const TLockStateHandle& left, const TLockStateHandle& right) {
         if (left.Timestamp() != right.Timestamp()) {
             return left.Timestamp() > right.Timestamp();
@@ -1444,16 +1446,18 @@ void TLongTxServiceActor::RunDeadlockDetection() {
         return left.LockId() > right.LockId();
     };
 
-    THashSet<TLockStateHandle, decltype(hashFunc)> allAwaiters;
+    THashSet<TLockStateHandle, decltype(hashFunc)> awaitersWithLocalEdges;
     for (const auto& [id, edge] : WaitEdges) {
-        allAwaiters.insert(edge.Awaiter);
+        if (id.OwnerId.NodeId() == SelfId().NodeId()) {
+            awaitersWithLocalEdges.insert(edge.Awaiter);
+        }
     }
 
     TVector<TLockStateHandle> current;
     TVector<TLockStateHandle> next;
     THashMap<TLockStateHandle, const TWaitEdge*, decltype(hashFunc)> prev;
     THashSet<const TWaitEdge*> toBreak;
-    for (const auto& start : allAwaiters) {
+    for (const auto& start : awaitersWithLocalEdges) {
         current.clear();
         current.push_back(start);
         next.clear();

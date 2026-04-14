@@ -3,25 +3,25 @@
 #include "dq_output.h"
 
 #include <util/generic/vector.h>
-#include <library/cpp/threading/light_rw_lock/lightrwlock.h>
 
 #include <array>
-#include <atomic>
 #include <deque>
+#include <mutex>
+#include <utility>
 
 namespace NYql::NDq {
 
+#if 0 // replaced by per-channel atomic<EDqFillLevel> vector in TDqOutputScatterConsumer
 // O(1) adaptive scatter routing index.
 // Channels are bucketed by fill level (NoLimit/SoftLimit/HardLimit); PickBest() picks
 // the least-loaded channel round-robin within the best available level.
 // Starts with a single active channel (primaryIdx); additional channels are activated
 // lazily in Update() when the NoLimit bucket empties.
 //
-// Thread-safety model (v2 local channels):
-//   - PickBest() → shared (read) lock: multiple Consume() threads run concurrently.
-//   - Update() → exclusive (write) lock: called from downstream Pop() threads.
-//   - RRPos_ is a separate atomic array so concurrent readers do not conflict on it.
-//   - Lazy activation is performed inside Update() to keep PickBest() read-only.
+// Thread-safety model:
+//   Single producer thread calls PickBest(); one or more consumer threads call Update()
+//   via LevelChangeCallback from Pop(). A plain mutex serializes all access — no concurrent
+//   readers exist in practice, so a RW-lock would add complexity without benefit.
 class TScatterBucketIndex {
     static_assert(
         static_cast<ui32>(NoLimit) == 0 &&
@@ -33,7 +33,7 @@ public:
     static constexpr ui32 kLevelCount = static_cast<ui32>(HardLimit) + 1;
 
 private:
-    mutable TLightRWLock Lock_;
+    mutable std::mutex Lock_;
 
     std::array<TVector<ui32>, kLevelCount> Buckets_;
     TVector<ui32> ChannelPos_;
@@ -41,10 +41,9 @@ private:
     std::deque<ui32> Inactive_;
     TVector<bool> IsActive_;
 
-    // Per-level round-robin counter; incremented by concurrent readers under shared lock.
-    std::atomic<ui32> RRPos_[kLevelCount] = {};
+    ui32 RoundRobinPos_[kLevelCount] = {};
 
-    // Must be called under exclusive lock.
+    // Must be called under lock.
     void ActivateNextLocked() {
         if (Inactive_.empty()) return;
         const ui32 idx = Inactive_.front();
@@ -79,9 +78,9 @@ public:
         return static_cast<ui32>(Inactive_.size());
     }
 
-    // Cold path: called from downstream Pop() thread via LevelChangeCallback.
+    // Called from downstream Pop() thread via LevelChangeCallback.
     void Update(ui32 idx, EDqFillLevel newLevel) {
-        TLightWriteGuard guard(Lock_);
+        std::lock_guard guard(Lock_);
 
         if (!IsActive_[idx]) return;
 
@@ -101,28 +100,28 @@ public:
         Buckets_[newLevelIdx].push_back(idx);
         ChannelLevel_[idx] = newLevel;
 
-        // If NoLimit just emptied, activate the next inactive channel so
-        // PickBest() always has a candidate without needing to write state itself.
+        // If NoLimit just emptied, activate the next inactive channel.
         if (oldLevelIdx == static_cast<ui32>(NoLimit) && Buckets_[NoLimit].empty()) {
             ActivateNextLocked();
         }
     }
 
-    // Hot path: called from Consume() thread for every row pushed through scatter.
-    // Returns {channelIdx, level} — both read under the same shared lock to avoid
-    // a race between PickBest() and a concurrent Update() on ChannelLevel_.
+    // Called from Consume() thread for every row pushed through scatter.
+    // Returns {channelIdx, level} under lock so both are consistent.
     std::pair<ui32, EDqFillLevel> PickBest() {
-        TLightReadGuard guard(Lock_);
+        std::lock_guard guard(Lock_);
 
         for (auto level : {NoLimit, SoftLimit, HardLimit}) {
             const ui32 levelIdx = static_cast<ui32>(level);
             const auto& bucket = Buckets_[levelIdx];
             if (bucket.empty()) continue;
-            const ui32 pos = RRPos_[levelIdx].fetch_add(1, std::memory_order_relaxed) % bucket.size();
+            const ui32 pos = RoundRobinPos_[levelIdx]++ % bucket.size();
             return {bucket[pos], level};
         }
         Y_UNREACHABLE();
     }
 };
+
+#endif // replaced by per-channel atomic<EDqFillLevel> vector
 
 } // namespace NYql::NDq

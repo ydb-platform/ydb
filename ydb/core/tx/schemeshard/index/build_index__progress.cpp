@@ -1759,8 +1759,7 @@ private:
     // 1500 rows * ~4 KB per vector = ~6 MB scanned per query.
     static constexpr ui64 AutoKMeansSearchThreshold = 1500;
 
-    void SetAutoKMeansTreeParams(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
-        const ui64 n = buildInfo.Processed.GetReadRows();
+    void SetAutoKMeansTreeParams(TTransactionContext& txc, TIndexBuildInfo& buildInfo, ui64 n) {
         const bool withOverlap = buildInfo.KMeans.OverlapClusters > 1;
         const ui32 t = withOverlap ? 4 : 10;
         const double p = withOverlap ? (buildInfo.KMeans.OverlapClusters - 0.5) : 1.0;
@@ -1799,13 +1798,14 @@ private:
     bool FillVectorIndexSamples(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
             if (NoShardsAdded(buildInfo)) {
+                if (buildInfo.KMeans.K == 0 && buildInfo.KMeans.Level == 1 && buildInfo.KMeans.Parent == 0) {
+                    const ui64 n = Self->Tables.at(buildInfo.TablePathId)->GetStats().Aggregated.RowCount;
+                    SetAutoKMeansTreeParams(txc, buildInfo, n);
+                }
                 AddGlobalShardsForCurrentParent(buildInfo);
                 if (!buildInfo.DoneShards.size() && !buildInfo.ToUploadShards.size()) {
                     // No "global" shards to handle - parent only has 1 shard,
                     // it will be handled during the MultiLocal phase
-                    if (buildInfo.KMeans.K == 0 && buildInfo.KMeans.Level == 1 && buildInfo.KMeans.Parent == 0) {
-                        SetAutoKMeansTreeParams(txc, buildInfo);
-                    }
                     return FillVectorIndexNextParent(txc, buildInfo);
                 }
                 // Otherwise, we collect samples
@@ -1815,9 +1815,6 @@ private:
                 return false;
             }
             ClearDoneShards(txc, buildInfo);
-            if (buildInfo.KMeans.K == 0 && buildInfo.KMeans.Level == 1 && buildInfo.KMeans.Parent == 0) {
-                SetAutoKMeansTreeParams(txc, buildInfo);
-            }
             if (buildInfo.Sample.Rows.empty()) {
                 // No samples
                 if (buildInfo.KMeans.Parent == 0) {
@@ -2917,7 +2914,8 @@ struct TSchemeShard::TIndexBuilder::TTxReplySampleK: public TTxShardReply<TEvDat
                 }
                 sample.emplace_back(probabilities[i], std::move(rows[i]));
             }
-            const ui32 effectiveK = buildInfo.KMeans.K != 0 ? buildInfo.KMeans.K : NKikimr::NKMeans::MaxKMeansAutoSampleK;
+            Y_ENSURE(buildInfo.KMeans.K != 0);
+            const ui32 effectiveK = buildInfo.KMeans.K;
             if (buildInfo.Sample.MakeWeakTop(effectiveK)) {
                 from = 0;
             }

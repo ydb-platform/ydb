@@ -204,11 +204,62 @@ def print_lambda_with_custom_args(yql_lambda, new_args, title=None):
     print('```')
 
 
+class Averages:
+    def __init__(self):
+        self.count = 0
+        self.values = []
+
 class Stat:
     def __init__(self):
         self.inrows = 0
         self.outrows = 0
         self.cardinality = 0
+        self.keys = Averages()
+        self.states = Averages()
+        self.keymax = []
+        self.statemax = []
+
+def update_averages(averages: Averages, raw_str: str):
+    fields = raw_str.split('\t')
+    if averages.values and len(fields) != len(averages.values) + 1:
+        raise Exception("Field count mismatch")
+    averages.count += int(fields[0])
+    added_values = [(int(fld) if fld != '' else None) for fld in fields[1:]]
+    if averages.values:
+        averages.values = [(v[0] + v[1] if (v[0] is not None and v[1] is not None) else None) for v in zip(averages.values, added_values)]
+    else:
+        averages.values = added_values
+
+def update_max(max_values, raw_str: str):
+    if raw_str == '':
+        fields = []
+    else:
+        fields = raw_str.split('\t')
+    if max_values and len(fields) != len(max_values):
+        raise Exception("Field count mismatch")
+    added_values = [int(fld) for fld in fields]
+    if max_values:
+        max_values[:] = [max(v[0], v[1]) for v in zip(max_values, added_values)]
+    else:
+        max_values[:] = added_values
+
+def format_size_stats(averages, maxes):
+    sample_count = averages.count
+    result = []
+
+    for avg, max_val in itertools.zip_longest(averages.values, maxes):
+        parts = []
+        if avg is not None and sample_count >= 0:
+            res = ("%.1f" % (avg / sample_count)).rstrip('0').rstrip('.')
+            parts.append(res)
+        if max_val is not None:
+            parts.append(str(max_val))
+        if parts:
+            result.append(' / '.join(parts))
+        else:
+            result.append('')
+
+    return result
 
 
 def parse_and_process(file_name, stats):
@@ -274,14 +325,18 @@ def parse_and_process(file_name, stats):
             return items
 
         tables = []
-        tables.append(('Input', type_list(in_type)))
-        tables.append(('Key', type_list(key_type)))
-        tables.append(('State', type_list(state_type)))
-        tables.append(('Output', type_list(result_type)))
+        tables.append(('Input', type_list(in_type), True))
+        tables.append(('Key', type_list(key_type), True))
+        if stat:
+            tables.append(('KeySize (avg/max)', format_size_stats(stat.keys, stat.keymax), False))
+        tables.append(('State', type_list(state_type), True))
+        if stat:
+            tables.append(('StateSize (avg/max)', format_size_stats(stat.states, stat.statemax), False))
+        tables.append(('Output', type_list(result_type), True))
         max_len = max([len(t[1]) for t in tables])
         print('#|')
-        for title, row in tables:
-            printed_row = ['`' + fld + '`' for fld in row]
+        for title, row, need_escaping in tables:
+            printed_row = ['`' + fld + '`' for fld in row] if need_escaping else row
             printed_row += ([''] * (max_len - len(row)))
             print('|| ' + title + ' | ' + ' | '.join(printed_row) + ' ||')
         print('|#')
@@ -311,10 +366,15 @@ def climain():
     if args.stats:
         with open(args.stats, 'rt') as inf:
             for line in inf:
-                line = line.strip()
+                line = line.strip('\n\r')
                 if not line:
                     continue
-                guid, kind, value = line.strip().split('\t')
+                print(line.replace('\t', '\\t'), file=sys.stderr)
+                try:
+                    guid, kind, value = line.split('\t', 2)
+                except ValueError:
+                    guid, kind = line.split('\t')
+                    value = ''
                 stat = stats[guid]
                 if kind == 'InputRows':
                     stat.inrows += int(value)
@@ -322,6 +382,15 @@ def climain():
                     stat.outrows += int(value)
                 elif kind == 'InputCardinality':
                     stat.cardinality += int(value)
+                elif kind == 'KeySizes':
+                    update_averages(stat.keys, value)
+                elif kind == 'StateSizes':
+                    update_averages(stat.states, value)
+                elif kind == 'KeySizeMax':
+                    update_max(stat.keymax, value)
+                elif kind == 'StateSizeMax':
+                    update_max(stat.statemax, value)
+
 
     print('Stats for %d ops' % len(stats), file=sys.stderr)
 

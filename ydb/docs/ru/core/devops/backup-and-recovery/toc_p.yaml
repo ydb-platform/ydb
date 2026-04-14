@@ -1,7 +1,5 @@
 items:
 - name: Обзор
   href: index.md
-- name: Резервное копирование в NFS
-  href: nfs-backup.md
 - name: Полное и инкрементальное резервное копирование
   href: full-and-incremental-backups.md

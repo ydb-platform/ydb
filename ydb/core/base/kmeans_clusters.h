@@ -72,7 +72,4 @@ void FilterOverlapRows(TVector<std::pair<NTableIndex::NKMeans::TClusterId, doubl
 // Returns (clusters, levels).
 std::pair<ui32, ui32> ComputeOptimalClustersAndLevels(ui64 n, ui32 t, double p, ui64 sThresh);
 
-// Maximum number of clusters, used as upper bound for auto-detection sampling
-inline constexpr ui32 MaxKMeansAutoSampleK = 2048;
-
 }

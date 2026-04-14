@@ -681,7 +681,8 @@ private:
 
         *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
             buildInfo.SpecializedIndexDescription).GetSettings().settings();
-        ev->Record.SetK(buildInfo.KMeans.K != 0 ? buildInfo.KMeans.K : NKikimr::NKMeans::MaxKMeansAutoSampleK);
+        Y_ENSURE(buildInfo.KMeans.K != 0);
+        ev->Record.SetK(buildInfo.KMeans.K);
         ev->Record.SetMaxProbability(buildInfo.Sample.MaxProbability);
         if (buildInfo.KMeans.Parent != 0) {
             auto from = TCell::Make(buildInfo.KMeans.Parent - 1);

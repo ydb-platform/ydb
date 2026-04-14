@@ -434,11 +434,7 @@ void TSchemeShard::PersistBuildIndexSampleToClusters(NIceDb::TNiceDb& db, TIndex
     for (const auto& [_, row] : info.Sample.Rows) {
         clusters.push_back(TString(TSerializedCellVec::ExtractCell(row, 0).AsBuf()));
     }
-    // During auto-K sampling, up to 2*MaxKMeansAutoSampleK rows may have been written
-    // to the DB (since K was 0 at collection time). Delete the full possible range so
-    // stale rows don't get reloaded after a schemeshard restart.
-    const ui32 sampleCap = Max(info.KMeans.K, NKikimr::NKMeans::MaxKMeansAutoSampleK);
-    for (ui32 i = info.KMeans.K; i <= 2 * sampleCap; i++) {
+    for (ui32 i = info.KMeans.K; i <= 2 * info.KMeans.K; i++) {
         db.Table<Schema::KMeansTreeSample>().Key(info.Id, i).Delete();
     }
     for (ui32 i = 0; i < info.Sample.Rows.size(); i++) {

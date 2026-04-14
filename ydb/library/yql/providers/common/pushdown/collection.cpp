@@ -382,6 +382,9 @@ public:
                 && CheckExpressionNodeForPushdown(sqlIf.ThenValue())
                 && CheckExpressionNodeForPushdown(sqlIf.ElseValue());
         }
+        if (auto apply = node.Maybe<TCoApply>()) {
+            return ApplyCanBePushed(apply.Cast());
+        }
         if (auto flatMap = node.Maybe<TCoFlatMap>()) {
             return IsSupportedFlatMap(flatMap.Cast());
         }
@@ -396,6 +399,9 @@ public:
         }
         if (auto maybeMax = node.Maybe<TCoMax>()) {
             return MaxCanBePushed(maybeMax.Cast());
+        }
+        if (auto maybeCompare = node.Maybe<TCoCompare>(); maybeCompare && Settings.IsEnabled(EFlag::PredicateAsExpression)) {
+            return CompareCanBePushed(maybeCompare.Cast());
         }
         if (auto maybeNonDeterministic = node.Maybe<TCoNonDeterministicBase>()) {
             return NonDeterministicCanBePushed(maybeNonDeterministic.Cast());
@@ -535,7 +541,7 @@ private:
             if (!CheckExpressionNodeForPushdown(leftList[i]) || !CheckExpressionNodeForPushdown(rightList[i])) {
                 return false;
             }
-            if (!IsComparableArguments(leftList[i], rightList[i], compare.Maybe<TCoCmpEqual>() || compare.Maybe<TCoCmpNotEqual>())) {
+            if (!IsComparableArguments(leftList[i], rightList[i], compare.Maybe<TCoCmpEqual>() || compare.Maybe<TCoCmpNotEqual>() || compare.Maybe<TCoAggrEqual>() || compare.Maybe<TCoAggrNotEqual>())) {
                 return false;
             }
         }

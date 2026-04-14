@@ -198,13 +198,15 @@ void TKafkaSaslAuthActor::HandleLoginResult(TEvSasl::TEvSaslScramFinalServerResp
 
 void TKafkaSaslAuthActor::Handle(NKikimr::TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const NActors::TActorContext& ctx) {
     if (ev->Get()->HasError()) {
-        if (Context->SaslMechanism == "SCRAM-SHA-256") {
-            AuthResponse = NLogin::NSasl::BuildErrorMsg(NLogin::NSasl::EScramServerError::OtherError);
-        }
+        if (AppData()->EnforceUserTokenRequirement || AppData()->EnforceUserTokenCheckRequirement) {
+            if (Context->SaslMechanism == "SCRAM-SHA-256") {
+                AuthResponse = NLogin::NSasl::BuildErrorMsg(NLogin::NSasl::EScramServerError::OtherError);
+            }
 
-        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, Ydb::StatusIds::UNAUTHORIZED,
-                            "", TString{ev->Get()->Error.Message}, ctx);
-        return;
+            SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, Ydb::StatusIds::UNAUTHORIZED,
+                                "", TString{ev->Get()->Error.Message}, ctx);
+            return;
+        }
     }
 
     UserToken = ev->Get()->Token;

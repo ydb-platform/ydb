@@ -40,9 +40,10 @@ UNMUTE_LIST_END_MARKER = "<!--unmute_list_end-->"
 # Machine-readable row state: separate line, hex-only inside <!-- ... --> (no "--" in payload; GFM hides reliably).
 MUTE_CTRL_META_PREFIX = "mute_ctrl_meta:"
 THRESHOLDS = get_thresholds()
-MANUAL_FAST_UNMUTE_WINDOW_DAYS = THRESHOLDS["manual_fast_unmute_window_days"]
-MANUAL_FAST_UNMUTE_MIN_PASSES = THRESHOLDS["manual_fast_unmute_min_passes"]
-DEFAULT_UNMUTE_WINDOW_DAYS = THRESHOLDS["default_unmute_window_days"]
+MANUAL_FAST_UNMUTE_WINDOW_DAYS = THRESHOLDS["mute_manual_unmute_window_days"]
+MANUAL_FAST_UNMUTE_MIN_PASSES = THRESHOLDS["mute_manual_unmute_min_passes"]
+DEFAULT_UNMUTE_WINDOW_DAYS = THRESHOLDS["mute_default_unmute_window_days"]
+DEFAULT_UNMUTE_MIN_PASSES = THRESHOLDS["mute_default_unmute_min_passes"]
 MUTE_CONTROL_PART_MAX_TESTS = THRESHOLDS["control_comment_part_max_tests"]
 REASON_NO_RUNS_DEFAULT_WINDOW = "no_runs_default_window"
 REASON_STABLE_MANUAL_FAST_WINDOW = "stable_manual_fast_window"
@@ -52,6 +53,8 @@ KNOWN_BOT_LOGINS = {
     "github-actions[bot]",
     "dependabot[bot]",
 }
+# Auto-enable manual path on human-close.
+AUTO_ENABLE_MANUAL_ON_HUMAN_CLOSE = True
 
 def truncate_issue_body(body):
     """Truncates issue body if it exceeds GitHub's maximum length.
@@ -366,6 +369,11 @@ def fetch_all_issues(org_name=ORG_NAME, project_id=PROJECT_ID):
                             repository {
                               nameWithOwner
                             }
+                            labels(first: 20) {
+                              nodes {
+                                name
+                              }
+                            }
                           }
                         }
                       }
@@ -379,6 +387,11 @@ def fetch_all_issues(org_name=ORG_NAME, project_id=PROJECT_ID):
                             isDraft
                             repository {
                               nameWithOwner
+                            }
+                            labels(first: 20) {
+                              nodes {
+                                name
+                              }
                             }
                           }
                         }
@@ -502,6 +515,7 @@ def fetch_issues_by_numbers(issue_numbers, org_name=ORG_NAME, repo_name=REPO_NAM
                           state
                           isDraft
                           repository { nameWithOwner }
+                          labels(first: 20) { nodes { name } }
                         }
                       }
                     }
@@ -514,6 +528,7 @@ def fetch_issues_by_numbers(issue_numbers, org_name=ORG_NAME, repo_name=REPO_NAM
                           state
                           isDraft
                           repository { nameWithOwner }
+                          labels(first: 20) { nodes { name } }
                         }
                       }
                     }
@@ -626,12 +641,27 @@ def _extract_linked_development_pull_requests(content):
         if pr.get('state') not in {'OPEN', 'MERGED'}:
             continue
 
+        if _pr_has_label(pr, "mute-unmute"):
+            continue
+
         number = pr.get('number')
         if number is None:
             continue
         linked_prs[number] = pr
 
     return [linked_prs[number] for number in sorted(linked_prs)]
+
+
+def _pr_has_label(pr, label_name):
+    target = (label_name or "").strip().lower()
+    if not target:
+        return False
+    label_nodes = ((pr or {}).get("labels") or {}).get("nodes") or []
+    for node in label_nodes:
+        name = (node or {}).get("name")
+        if isinstance(name, str) and name.strip().lower() == target:
+            return True
+    return False
 
 
 def _has_fast_unmute_comment(comments):
@@ -741,6 +771,7 @@ def _render_control_comment(issue_number, part_idx, part_total, items):
 
         if state == 'resolved':
             reason_text = reason or REASON_STABLE_DEFAULT_WINDOW
+            reason_display = _format_unmuted_reason_for_comment(reason_text)
             meta_hex = _encode_mute_control_line_meta(
                 "resolved",
                 "resolved",
@@ -748,7 +779,7 @@ def _render_control_comment(issue_number, part_idx, part_total, items):
                 reason_text,
                 resolved_at or "",
             )
-            lines.append(f"- [{check}] ~~`{test_name}`~~ - unmuted: {reason_text}")
+            lines.append(f"- [{check}] ~~`{test_name}`~~ - unmuted: {reason_display}")
             lines.append(f"  <!-- {MUTE_CTRL_META_PREFIX}{meta_hex} -->")
             continue
 
@@ -759,7 +790,17 @@ def _render_control_comment(issue_number, part_idx, part_total, items):
             "",
             "",
         )
-        lines.append(f"- [{'x' if requested else ' '}] `{test_name}`")
+        if requested:
+            waiting_text = (
+                f"muted: waiting test will be stable {MANUAL_FAST_UNMUTE_WINDOW_DAYS} days "
+                f"and pass_count>{MANUAL_FAST_UNMUTE_MIN_PASSES} (fail+mute=0)"
+            )
+        else:
+            waiting_text = (
+                f"muted: waiting test will be stable {DEFAULT_UNMUTE_WINDOW_DAYS} days "
+                f"and pass_count>{DEFAULT_UNMUTE_MIN_PASSES} (fail+mute=0)"
+            )
+        lines.append(f"- [{'x' if requested else ' '}] `{test_name}` - {waiting_text}")
         lines.append(f"  <!-- {MUTE_CTRL_META_PREFIX}{meta_hex} -->")
 
     lines.extend(
@@ -776,6 +817,16 @@ def _render_control_comment(issue_number, part_idx, part_total, items):
         ]
     )
     return "\n".join(lines)
+
+
+def _format_unmuted_reason_for_comment(reason_text):
+    if reason_text == REASON_STABLE_MANUAL_FAST_WINDOW:
+        return f"manual, stable {MANUAL_FAST_UNMUTE_WINDOW_DAYS} days"
+    if reason_text == REASON_STABLE_DEFAULT_WINDOW:
+        return f"stable {DEFAULT_UNMUTE_WINDOW_DAYS} days"
+    if reason_text == REASON_NO_RUNS_DEFAULT_WINDOW:
+        return f"no runs, stable {DEFAULT_UNMUTE_WINDOW_DAYS} days"
+    return reason_text or f"stable {DEFAULT_UNMUTE_WINDOW_DAYS} days"
 
 
 def _build_test_history_link(test_name, branch):
@@ -945,12 +996,12 @@ def _rule_description_for_item(item):
     if requested:
         return (
             f"manual-fast window={MANUAL_FAST_UNMUTE_WINDOW_DAYS}d, "
-            f"criteria: fail=0 and pass_count>{MANUAL_FAST_UNMUTE_MIN_PASSES}"
+            f"criteria: pass_count>{MANUAL_FAST_UNMUTE_MIN_PASSES} and fail+mute=0"
         )
 
     return (
         f"default window={DEFAULT_UNMUTE_WINDOW_DAYS}d, "
-        "criteria: stable-by-default-rules"
+        f"criteria: pass_count>{DEFAULT_UNMUTE_MIN_PASSES} and fail+mute=0"
     )
 
 
@@ -958,13 +1009,27 @@ def _is_manual_rule_active(item):
     return bool((item or {}).get("state") == "active" and (item or {}).get("requested"))
 
 
+def _resolved_window_days(item):
+    reason = ((item or {}).get("reason") or "").strip()
+    if reason == REASON_STABLE_MANUAL_FAST_WINDOW:
+        return int(MANUAL_FAST_UNMUTE_WINDOW_DAYS)
+    return int(DEFAULT_UNMUTE_WINDOW_DAYS)
+
+
+def _rule_window_days_for_item(item):
+    state = (item or {}).get("state", "active")
+    if state == "resolved":
+        return _resolved_window_days(item)
+    if _is_manual_rule_active(item):
+        return int(MANUAL_FAST_UNMUTE_WINDOW_DAYS)
+    return int(DEFAULT_UNMUTE_WINDOW_DAYS)
+
+
 def _rule_code_for_item(item):
     state = (item or {}).get("state", "active")
     if state == "resolved":
-        return "RES"
-    if _is_manual_rule_active(item):
-        return f"M{MANUAL_FAST_UNMUTE_WINDOW_DAYS}"
-    return f"D{DEFAULT_UNMUTE_WINDOW_DAYS}"
+        return f"U{_resolved_window_days(item)}"
+    return f"M{_rule_window_days_for_item(item)}"
 
 
 def _md_escape_cell(value):
@@ -989,9 +1054,10 @@ def _build_manual_rules_snapshot_comment(issue_number, branch, build_type, tests
         f"Generated at: {now_str}",
         "",
         (
-            "Manual fast-unmute config (mute_thresholds.json): "
-            f"window_days={MANUAL_FAST_UNMUTE_WINDOW_DAYS}, "
-            f"min_passes={MANUAL_FAST_UNMUTE_MIN_PASSES} (criteria uses pass_count > min_passes, fail=0)"
+            "Config (mute_thresholds.json): "
+            f"default_window_days={DEFAULT_UNMUTE_WINDOW_DAYS}, default_min_passes={DEFAULT_UNMUTE_MIN_PASSES}; "
+            f"manual_window_days={MANUAL_FAST_UNMUTE_WINDOW_DAYS}, manual_min_passes={MANUAL_FAST_UNMUTE_MIN_PASSES} "
+            "(criteria uses pass_count > min_passes, fail+mute=0)"
         ),
         (
             f"Timeline highlighting: for tests on manual-fast path, last {MANUAL_FAST_UNMUTE_WINDOW_DAYS} day points "
@@ -1007,7 +1073,7 @@ def _build_manual_rules_snapshot_comment(issue_number, branch, build_type, tests
         short_name = _display_test_name(test_name)
         rule = _rule_code_for_item(item)
         manual_active = _is_manual_rule_active(item)
-        rule_window_days = MANUAL_FAST_UNMUTE_WINDOW_DAYS if manual_active else DEFAULT_UNMUTE_WINDOW_DAYS
+        rule_window_days = _rule_window_days_for_item(item)
         full_rows = ydb_timelines.get(test_name, [])
         display_days = max(MANUAL_FAST_UNMUTE_WINDOW_DAYS + 2, 4) if manual_active else min(max(DEFAULT_UNMUTE_WINDOW_DAYS, 5), 7)
         visible_rows = full_rows[-display_days:] if full_rows else []
@@ -1031,17 +1097,16 @@ def _build_manual_rules_snapshot_comment(issue_number, branch, build_type, tests
             "",
             "Legend:",
             (
-                f"- `M{MANUAL_FAST_UNMUTE_WINDOW_DAYS}` = manual-fast rule, "
-                f"window={MANUAL_FAST_UNMUTE_WINDOW_DAYS}d, criteria: fail=0 and pass_count>{MANUAL_FAST_UNMUTE_MIN_PASSES}."
+                f"- `M{DEFAULT_UNMUTE_WINDOW_DAYS}` / `M{MANUAL_FAST_UNMUTE_WINDOW_DAYS}` = muted status "
+                f"(default {DEFAULT_UNMUTE_WINDOW_DAYS}d: pass_count>{DEFAULT_UNMUTE_MIN_PASSES}, fail+mute=0; "
+                f"manual {MANUAL_FAST_UNMUTE_WINDOW_DAYS}d: pass_count>{MANUAL_FAST_UNMUTE_MIN_PASSES}, fail+mute=0)."
             ),
             (
-                f"- `D{DEFAULT_UNMUTE_WINDOW_DAYS}` = default rule, "
-                f"window={DEFAULT_UNMUTE_WINDOW_DAYS}d, criteria: (pass+fail+mute)>=4 and (fail+mute)=0."
+                f"- `U{DEFAULT_UNMUTE_WINDOW_DAYS}` / `U{MANUAL_FAST_UNMUTE_WINDOW_DAYS}` = unmuted status "
+                "after corresponding window criteria are met."
             ),
-            "- `RES` = test already resolved in control metadata.",
-            "- Timeline marks: `+` stable day, `-` unstable day; `[]` highlighted recent manual-fast window.",
-            "- `ok=a/b` shows stable days ratio in the active rule window (`b` is window_days from config).",
-            "- `🔗` opens test history in dashboard.",
+            "- Timeline: `+` stable day, `-` unstable day, `[]` highlighted manual window tail.",
+            "- `ok=a/b` = stable days in active rule window; `🔗` opens dashboard history.",
         ]
     )
 
@@ -1259,6 +1324,8 @@ def collect_manual_unmute_request_rows(
         'issues_with_linked_pr': 0,
         'issues_branch_match': 0,
         'overrides_total': 0,
+        'issues_control_source': 0,
+        'issues_legacy_source': 0,
     }
 
     now = _utc_now()
@@ -1294,7 +1361,7 @@ def collect_manual_unmute_request_rows(
             stats['issues_recent_match'] += 1
 
         parsed = parse_body(body)
-        tests, branches = parsed.tests, parsed.branches
+        tests_from_body, branches = parsed.tests, parsed.branches
         if branch not in branches:
             continue
         stats['issues_branch_match'] += 1
@@ -1302,8 +1369,48 @@ def collect_manual_unmute_request_rows(
         issue_id = content.get('id')
         if not issue_id:
             continue
-        previously_unmuted = _collect_issue_unmuted_tests(issue_id)
-        remaining_tests = sorted(set(tests) - previously_unmuted)
+
+        existing_control_comments = _list_control_comments(issue_id)
+        parsed_control_items = {}
+        for comment in existing_control_comments:
+            parsed_control_items.update(_parse_control_items(comment.get('body', '')))
+        control_items = dict(parsed_control_items)
+
+        # Canonical mode: once control comment exists and is parseable, use it as source of truth.
+        has_canonical_control = bool(control_items)
+        if has_canonical_control:
+            stats['issues_control_source'] += 1
+            tests = sorted(set(control_items.keys()))
+            remaining_tests = [
+                test_name
+                for test_name in tests
+                if (control_items.get(test_name) or {}).get('state') != 'resolved'
+            ]
+        else:
+            stats['issues_legacy_source'] += 1
+            tests = sorted(set(tests_from_body))
+            previously_unmuted = _collect_issue_unmuted_tests(issue_id)
+            remaining_tests = sorted(set(tests) - previously_unmuted)
+            for test_name in tests:
+                control_items.setdefault(
+                    test_name,
+                    {
+                        'requested': False,
+                        'state': 'active',
+                        'status': 'idle',
+                        'reason': '',
+                        'requested_at': '',
+                        'resolved_at': '',
+                    },
+                )
+
+            if existing_control_comments and not parsed_control_items:
+                print(
+                    f"collect_manual_unmute_request_rows: warning issue #{issue_number} "
+                    "has control comment markers but no parseable control rows, using legacy fallback"
+                )
+
+        remaining_tests = sorted(set(remaining_tests))
         if not remaining_tests:
             continue
 
@@ -1319,17 +1426,10 @@ def collect_manual_unmute_request_rows(
             if closed_by_human:
                 stats['issues_non_bot_closed'] += 1
 
-            if require_linked_development_pr and not linked_prs:
-                continue
-
         if linked_prs:
             stats['issues_with_linked_pr'] += 1
 
-        existing_control_comments = _list_control_comments(issue_id)
-        control_items = {}
-        for comment in existing_control_comments:
-            control_items.update(_parse_control_items(comment.get('body', '')))
-        for test_name in sorted(set(tests)):
+        for test_name in tests:
             control_items.setdefault(
                 test_name,
                 {
@@ -1349,7 +1449,7 @@ def collect_manual_unmute_request_rows(
             if item.get('state') == 'resolved':
                 continue
 
-            if closed_by_human and not item.get('requested'):
+            if AUTO_ENABLE_MANUAL_ON_HUMAN_CLOSE and closed_by_human and not item.get('requested'):
                 item['requested'] = True
                 changed = True
 
@@ -1384,7 +1484,7 @@ def collect_manual_unmute_request_rows(
                     item['requested_at'] = ''
                     changed = True
 
-        for test_name in sorted(set(tests)):
+        for test_name in tests:
             item = control_items[test_name]
             if item.get('state') == 'resolved':
                 continue
@@ -1428,7 +1528,14 @@ def collect_manual_unmute_request_rows(
                 else:
                     add_issue_comment(issue_id, rendered)
 
-        if sync_issue_comments and add_auto_comment and is_closed and linked_prs:
+        if (
+            sync_issue_comments
+            and add_auto_comment
+            and AUTO_ENABLE_MANUAL_ON_HUMAN_CLOSE
+            and is_closed
+            and closed_by_human
+            and linked_prs
+        ):
             comments = get_issue_comments(issue_id)
             if not _has_fast_unmute_comment(comments):
                 comment = _build_fast_unmute_comment(
@@ -1458,7 +1565,7 @@ def collect_manual_unmute_request_rows(
                 body=truncate_issue_body(snapshot_comment),
             )
 
-        for test_name in sorted(set(tests)):
+        for test_name in tests:
             item = control_items[test_name]
             is_manual_active = bool(item.get('state') == 'active' and item.get('requested'))
             status = normalize_manual_unmute_status(
@@ -1496,6 +1603,8 @@ def collect_manual_unmute_request_rows(
         f"issues_non_bot_closed={stats['issues_non_bot_closed']}, "
         f"issues_with_linked_pr={stats['issues_with_linked_pr']}, "
         f"issues_branch_match={stats['issues_branch_match']}, "
+        f"issues_control_source={stats['issues_control_source']}, "
+        f"issues_legacy_source={stats['issues_legacy_source']}, "
         f"overrides_total={stats['overrides_total']}, "
         f"rows_total={len(request_rows)}"
     )

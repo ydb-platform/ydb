@@ -37,11 +37,15 @@ muted_ya_path = '.github/config/muted_ya.txt'
 
 # Constants for mute logic time windows (configurable).
 THRESHOLDS = get_thresholds()
-MUTE_DAYS = THRESHOLDS["mute_window_days"]
-UNMUTE_DAYS = THRESHOLDS["default_unmute_window_days"]
-DELETE_DAYS = THRESHOLDS["delete_window_days"]
-FAST_UNMUTE_DAYS = THRESHOLDS["manual_fast_unmute_window_days"]
-FAST_UNMUTE_MIN_PASSES = THRESHOLDS["manual_fast_unmute_min_passes"]
+MUTE_DAYS = THRESHOLDS["mute_default_window_days"]
+MUTE_DEFAULT_TOTAL_RUNS_SPLIT = THRESHOLDS["mute_default_total_runs_split"]
+MUTE_DEFAULT_FAIL_THRESHOLD_LOW_RUNS = THRESHOLDS["mute_default_fail_threshold_low_runs"]
+MUTE_DEFAULT_FAIL_THRESHOLD_HIGH_RUNS = THRESHOLDS["mute_default_fail_threshold_high_runs"]
+UNMUTE_DAYS = THRESHOLDS["mute_default_unmute_window_days"]
+DEFAULT_UNMUTE_MIN_PASSES = THRESHOLDS["mute_default_unmute_min_passes"]
+DELETE_DAYS = THRESHOLDS["delete_default_window_days"]
+FAST_UNMUTE_DAYS = THRESHOLDS["mute_manual_unmute_window_days"]
+FAST_UNMUTE_MIN_PASSES = THRESHOLDS["mute_manual_unmute_min_passes"]
 
 _DIGEST_NOTIFICATION_CONFIG = os.path.normpath(
     os.path.join(dir, '..', '..', 'config', 'mute_issue_and_digest_config.json')
@@ -419,7 +423,11 @@ def is_mute_candidate(test):
 
     total_runs = test.get('pass_count', 0) + test.get('fail_count', 0)
     fail_count = test.get('fail_count', 0)
-    result = (fail_count >= 3 and total_runs > 10) or (fail_count >= 2 and total_runs <= 10)
+    result = (
+        fail_count >= MUTE_DEFAULT_FAIL_THRESHOLD_HIGH_RUNS and total_runs > MUTE_DEFAULT_TOTAL_RUNS_SPLIT
+    ) or (
+        fail_count >= MUTE_DEFAULT_FAIL_THRESHOLD_LOW_RUNS and total_runs <= MUTE_DEFAULT_TOTAL_RUNS_SPLIT
+    )
 
     logging.debug(f"MUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{fail_count}, state:{test.get('state')}, muted:{test.get('is_muted')}, result:{result}")
 
@@ -463,7 +471,7 @@ def is_unmute_candidate(test, aggregated_data=None, fast_aggregated_data=None, f
     if use_fast_window:
         result = pass_count > FAST_UNMUTE_MIN_PASSES and total_fails == 0
     else:
-        result = total_runs >= 4 and total_fails == 0
+        result = pass_count > DEFAULT_UNMUTE_MIN_PASSES and total_fails == 0
 
     if test_data.get('is_muted', False):
         mode = "FAST" if use_fast_window else "DEFAULT"

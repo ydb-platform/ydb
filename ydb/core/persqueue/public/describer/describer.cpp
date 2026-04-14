@@ -213,7 +213,7 @@ TString Description(const TString& topicPath, const EStatus status) {
             return TStringBuilder() << "The topic '" << topicPath << "' has been successfully described";
         case EStatus::NOT_FOUND:
         case EStatus::UNAUTHORIZED:
-            return TStringBuilder() << "You do not have access or the '" << topicPath << "' does not exist";
+            return TStringBuilder() << "You do not have access permissions or the '" << topicPath << "' does not exist";
         case EStatus::NOT_TOPIC:
             return TStringBuilder() << "The '" << topicPath << "' path is not a topic";
         case EStatus::UNKNOWN_ERROR:

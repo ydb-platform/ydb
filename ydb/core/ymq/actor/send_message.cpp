@@ -411,8 +411,13 @@ private:
     }
 
     void Handle(TSqsEvents::TEvDeduplicateMessageBatchResponse::TPtr& ev) {
-        BlockedDeduplicationMessageIds_ = std::move(ev->Get()->BlockedDeduplicationMessageIds);
-        DoActionTopicImplementation();
+        if (ev->Get()->StatusCode == Ydb::StatusIds::SUCCESS) {
+            BlockedDeduplicationMessageIds_ = std::move(ev->Get()->BlockedDeduplicationMessageIds);
+            DoActionTopicImplementation();
+        } else {
+            MakeError(Response_.MutableSendMessage(), NErrors::INTERNAL_FAILURE, "deduplication error");
+            SendReplyAndDie();
+        }
     }
 
     void HandleSendResponseTableImplementation(TSqsEvents::TEvSendMessageBatchResponse::TPtr& ev) {

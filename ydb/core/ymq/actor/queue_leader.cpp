@@ -114,6 +114,11 @@ void TQueueLeader::BecomeWorking() {
     }
     DeduplicateMessageRequests_.clear();
 
+    for (auto&& [reqId, reqInfo] : GetMessageGroupsRequests_) {
+        ProcessGetMessageGroups(std::move(reqInfo));
+    }
+    GetMessageGroupsRequests_.clear();
+
     for (auto&& [reqId, reqInfo] : ReceiveMessageRequests_) {
         ProcessReceiveMessageBatch(reqInfo);
     }

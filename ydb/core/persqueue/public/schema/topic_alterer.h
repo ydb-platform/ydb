@@ -11,6 +11,7 @@
 namespace NKikimr::NPQ::NSchema {
 
 class TTopicAlterer : public TBaseActor<TTopicAlterer>
+                    , public TPipeCacheClient
                     , public TConstantLogPrefix {
     static constexpr size_t MaxWaitTxCompletionRetries = 3;
 public:

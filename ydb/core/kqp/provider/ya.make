@@ -35,7 +35,6 @@ PEERDIR(
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
     ydb/core/kqp/opt/cbo
-    ydb/core/persqueue/public/schema
     yql/essentials/core/services
     yql/essentials/minikql
     yql/essentials/public/decimal

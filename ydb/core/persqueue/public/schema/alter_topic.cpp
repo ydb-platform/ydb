@@ -344,7 +344,7 @@ TResult ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::A
     return TResult();
 }
     
-struct TAlterTopicStrategy : public TTopicAltererStrategy {
+struct TAlterTopicStrategy : public ITopicAltererStrategy {
     TAlterTopicStrategy(Ydb::Topic::AlterTopicRequest&& request)
         : Request(std::move(request))
     {

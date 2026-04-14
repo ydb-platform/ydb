@@ -7,9 +7,9 @@
 
 namespace NKikimr::NPQ::NSchema {
 
-class TTopicAltererStrategy {
+class ITopicAltererStrategy {
 public:
-    virtual ~TTopicAltererStrategy() = default;
+    virtual ~ITopicAltererStrategy() = default;
 
     virtual const TString& GetTopicName() const = 0;
     virtual TResult ApplyChanges(
@@ -24,7 +24,7 @@ struct TTopicAltererSettings {
     TString Database;
     TString PeerName;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    std::unique_ptr<TTopicAltererStrategy> Strategy;
+    std::unique_ptr<ITopicAltererStrategy> Strategy;
     bool IfExists = false;
     ui64 Cookie = 0;
     bool IsCdcStreamCompatible = true;

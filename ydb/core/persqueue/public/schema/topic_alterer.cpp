@@ -9,6 +9,7 @@ namespace NKikimr::NPQ::NSchema {
 
 TTopicAlterer::TTopicAlterer(NKikimrServices::EServiceKikimr service, TTopicAltererSettings&& settings)
     : TBaseActor<TTopicAlterer>(service)
+    , TPipeCacheClient(this)
     , Settings(std::move(settings))
 {
 }
@@ -19,6 +20,7 @@ void TTopicAlterer::Bootstrap() {
 }
 
 void TTopicAlterer::PassAway() {
+    TPipeCacheClient::Close();
     TBaseActor<TTopicAlterer>::PassAway();
 }
 
@@ -156,7 +158,7 @@ void TTopicAlterer::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev
 
 void TTopicAlterer::HandleOnAlter(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
     LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
-    OnUndelivered(ev);
+    TPipeCacheClient::OnUndelivered(ev);
     return ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Scheme shard " << ev->Get()->TabletId << " is unavailable");
 }
 

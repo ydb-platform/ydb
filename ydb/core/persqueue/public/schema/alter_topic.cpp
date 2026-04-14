@@ -377,4 +377,5 @@ NActors::IActor* CreateAlterTopicActor(const NActors::TActorId& parentId, TAlter
         .IsCdcStreamCompatible = true,
     });
 }
+
 } // namespace NKikimr::NPQ::NSchema

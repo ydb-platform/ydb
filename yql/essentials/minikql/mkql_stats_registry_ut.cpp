@@ -37,7 +37,8 @@ Y_UNIT_TEST(Stats) {
 }
 
 Y_UNIT_TEST(ForEach) {
-    static TStatKey Key1("key1", false), Key2("key2", true);
+    static TStatKey Key1("key1", false);
+    static TStatKey Key2("key2", true);
     UNIT_ASSERT(!Key1.IsDeriv());
     UNIT_ASSERT(Key2.IsDeriv());
 
@@ -60,7 +61,8 @@ Y_UNIT_TEST(ForEach) {
 Y_UNIT_TEST(DuplicateKeys) {
     TString error;
     try {
-        static TStatKey Key("my_key", false), SameKey("my_key", false);
+        static TStatKey Key("my_key", false);
+        static TStatKey SameKey("my_key", false);
         // avoid variables elimitation
         Cerr << Key.GetId() << ": " << Key.GetName() << '\n'
              << SameKey.GetId() << ": " << SameKey.GetName() << Endl;

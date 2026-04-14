@@ -940,7 +940,8 @@ private:
         CrossJoins_.clear();
         RestJoins_.clear();
         GatherCross(joinTree);
-        TStringBuf foundCross1, foundCross2;
+        TStringBuf foundCross1;
+        TStringBuf foundCross2;
         auto inCross1 = FindCrossJoinLabel(Labels_[0], foundCross1);
         auto inCross2 = FindCrossJoinLabel(Labels_[1], foundCross2);
         if (inCross1 || inCross2) {
@@ -1094,7 +1095,8 @@ private:
         TMaybe<ui32> found2;
         auto& left = children[1];
         if (!left->IsAtom()) {
-            TMaybe<ui32> leftFound1, leftFound2;
+            TMaybe<ui32> leftFound1;
+            TMaybe<ui32> leftFound2;
             std::tie(left, leftFound1, leftFound2) = AddLink(left);
             if (leftFound1) {
                 found1 = 1u;
@@ -1123,7 +1125,8 @@ private:
 
         auto& right = children[2];
         if (!right->IsAtom()) {
-            TMaybe<ui32> rightFound1, rightFound2;
+            TMaybe<ui32> rightFound1;
+            TMaybe<ui32> rightFound2;
             std::tie(right, rightFound1, rightFound2) = AddLink(right);
             if (rightFound1) {
                 found1 = 2u;
@@ -1198,7 +1201,8 @@ TExprNode::TPtr DecayCrossJoinIntoInner(TExprNode::TPtr equiJoin, const TExprNod
     const TJoinLabels& labels, const TExprNode& row, const THashMap<TString, TString>& backRenameMap,
     TExprContext& ctx, bool rotateJoinTree)
 {
-    TExprNode::TPtr left, right;
+    TExprNode::TPtr left;
+    TExprNode::TPtr right;
     if (!IsMemberEquality(predicate, row, left, right)) {
         return equiJoin;
     }
@@ -1672,7 +1676,8 @@ TExprBase HandleEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoinLa
     THashMap<TString, size_t> column2id;
     THashSet<ui32> makeNoNullInputs;
     for (auto pred : andComponents) {
-        TExprNode::TPtr left, right;
+        TExprNode::TPtr left;
+        TExprNode::TPtr right;
         // TODO: handle case IsEquality() && !IsMemberEquality()
         if (!IsMemberEquality(pred, row, left, right)) {
             rest.push_back(pred);
@@ -1695,7 +1700,8 @@ TExprBase HandleEqualityFilterOverJoin(const TCoFlatMapBase& node, const TJoinLa
             continue;
         }
 
-        TStringBuf leftTable, rightTable;
+        TStringBuf leftTable;
+        TStringBuf rightTable;
         TStringBuf column;
         SplitTableName(leftCol, leftTable, column);
         SplitTableName(rightCol, rightTable, column);

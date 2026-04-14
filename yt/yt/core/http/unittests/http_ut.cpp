@@ -545,6 +545,9 @@ TEST(THttpInputTest, Simple)
             "X-Foo: test\r\n"
             "X-Foo0: test-test-test\r\n"
             "X-FooFooFoo: test-test-test\r\n"
+            "X-FooFoo: test0\r\n"
+            "X-FooFoo: test1\r\n"
+            "X-FooFoo: test2\r\n"
             "\r\n",
             [] (THttpInput* in) {
                 EXPECT_EQ(in->GetMethod(), EMethod::Get);
@@ -554,6 +557,7 @@ TEST(THttpInputTest, Simple)
                 ASSERT_EQ(TString("test"), headers->GetOrThrow("X-Foo"));
                 ASSERT_EQ(TString("test-test-test"), headers->GetOrThrow("X-Foo0"));
                 ASSERT_EQ(TString("test-test-test"), headers->GetOrThrow("X-FooFooFoo"));
+                ASSERT_EQ((std::vector<std::string>{"test0", "test1", "test2"}), ToVector(headers->GetAll("X-FooFoo")));
                 ExpectBodyEnd(in);
             }
         },

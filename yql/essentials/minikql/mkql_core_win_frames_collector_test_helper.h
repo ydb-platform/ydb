@@ -2,6 +2,7 @@
 
 #include <yql/essentials/minikql/mkql_core_win_frames_collector.h>
 #include <yql/essentials/minikql/mkql_core_window_frames_collector_params_deserializer.h>
+#include <yql/essentials/minikql/mkql_window_comparator_bounds.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -33,21 +34,36 @@ struct TIntervalCheckOrEmpty: std::variant<TIntervalCheck, TEmptyInterval> {
     }
 };
 
-template <typename TElement, ESortOrder SortOrder, typename TRangeElement = TElement>
+struct TFakeContext {};
+
+template <typename TElement>
+using TTypeTestWithScale = TRangeTypeWithScale<TFakeContext, TElement>;
+
+template <typename TElement>
+using TColumnTypeTestWithScale = TColumnTypeWithScale<TFakeContext, TElement>;
+
+template <typename TElement, ESortOrder SortOrder>
 struct TTestCase {
+    static_assert(false, "TMaybe must be specialized as TElement");
+};
+
+template <typename TInputType, ESortOrder SortOrder>
+struct TTestCase<TMaybe<TInputType>, SortOrder> {
+    using TElement = TMaybe<TInputType>;
+    using TColumnTypeWithScale = TColumnTypeTestWithScale<TElement>;
+    using TRangeTypeWithScale = TTypeTestWithScale<TElement>;
+    using TVariantBounds = TVariantBounds<TFakeContext, TElement>;
+    using TVariantBound = TVariantBound<TFakeContext, TElement>;
+    using TRangeBound = TRangeBound<TFakeContext, TElement>;
+    using TRangeElement = TInputType;
+
     // Input interval bounds. Requires two: left and right.
     TVector<TInputRowWindowFrame> RowIntervals;
-    TVector<TInputRangeWindowFrame<TRangeVariant>> RangeIntervals;
+    TVector<TInputRangeWindowFrame<TRangeTypeWithScale>> RangeIntervals;
 
     // Incremental bounds - for tracking only right boundary.
-    TVector<TInputRange<TRangeVariant>> RangeIncrementals;
+    TVector<TInputRange<TRangeTypeWithScale>> RangeIncrementals;
     TVector<TInputRow> RowIncrementals;
-
-    // Element getter function - by default returns element as-is (identity) wrapped in TMaybe.
-    std::function<TMaybe<TRangeElement>(const TElement&)> ElementGetter = [](const TElement& elem) -> TMaybe<TRangeElement> {
-        Y_ABORT_UNLESS((std::is_same_v<TElement, TRangeElement>), "ElementGetter must be provided when TRangeElement != TElement");
-        return TMaybe<TRangeElement>(elem);
-    };
 
     TVector<std::variant<TYield, TElement>> InputElements;
 
@@ -66,9 +82,9 @@ struct TTestCase {
 };
 
 template <typename TElement>
-bool ElementsEqual(const TElement& a, const TElement& b) {
+bool ElementsEqual(const TMaybe<TElement>& a, const TMaybe<TElement>& b) {
     if constexpr (std::is_floating_point_v<TElement>) {
-        if (std::isnan(a) && std::isnan(b)) {
+        if (a.Defined() && b.Defined() && std::isnan(*a) && std::isnan(*b)) {
             return true;
         }
     }
@@ -90,25 +106,57 @@ TString FormatQueueContent(const TSafeCircularBuffer<TElement>& queue) {
 }
 
 // Helper function to run a single test case.
-template <typename TElement, ESortOrder SortOrder, typename TRangeElement = TElement>
-void RunTestCase(const TTestCase<TElement, SortOrder, TRangeElement>& testCase) {
+template <typename TElement, ESortOrder SortOrder>
+void RunTestCase(const TTestCase<TElement, SortOrder>& testCase) {
+    using TVariantBounds = TTestCase<TElement, SortOrder>::TVariantBounds;
+    using TVariantBound = TTestCase<TElement, SortOrder>::TVariantBound;
+    using TRangeBound = TTestCase<TElement, SortOrder>::TRangeBound;
+    using TColumnTypeWithScale = TTestCase<TElement, SortOrder>::TColumnTypeWithScale;
+    using TRangeTypeWithScale = TTestCase<TElement, SortOrder>::TRangeTypeWithScale;
+    using TRangeElement = TTestCase<TElement, SortOrder>::TRangeElement;
+
     // Setup variant bounds first.
     TVariantBounds variantBounds;
+    auto makeVariantBound = [](const TInputRange<TRangeTypeWithScale>& bound) -> TVariantBound {
+        if (bound.IsInf()) {
+            return TVariantBound::Inf(bound.GetDirection());
+        }
+        const auto zeroColumn = TColumnTypeWithScale(TNoScaledType<TRangeElement>{0});
+        auto boundValue = TRangeTypeWithScale(bound.GetUnderlyingValue());
+        return TVariantBound(TRangeBound(std::move(boundValue), std::move(zeroColumn), 0), bound.GetDirection());
+    };
     for (const auto& interval : testCase.RowIntervals) {
         variantBounds.AddRow(interval);
     }
     for (const auto& interval : testCase.RangeIntervals) {
-        variantBounds.AddRange(interval);
+        TInputRangeWindowFrame<TRangeBound> frame(makeVariantBound(interval.Min()), makeVariantBound(interval.Max()));
+        variantBounds.AddRange(std::move(frame));
     }
     for (const auto& incremental : testCase.RangeIncrementals) {
-        variantBounds.AddRangeIncremental(incremental);
+        variantBounds.AddRangeIncremental(makeVariantBound(incremental));
     }
     for (const auto& incremental : testCase.RowIncrementals) {
         variantBounds.AddRowIncremental(incremental);
     }
 
+    auto memberExtractor = [](const TElement& value, ui32 memberIndex) {
+        Y_UNUSED(memberIndex);
+        return value;
+    };
+
+    auto nullChecker = [](const TElement& value) -> bool {
+        return !value.Defined();
+    };
+
+    auto elementExtractor =
+        []<typename T>(const TElement& value) -> T {
+        return *value;
+    };
+
+    TFakeContext fakeContext;
+    TDeserializerContext deserializerContext(memberExtractor, nullChecker, elementExtractor);
     // Convert variant bounds to comparator bounds.
-    auto comparatorBounds = ConvertBoundsToComparators<TRangeElement>(variantBounds, SortOrder);
+    auto comparatorBounds = ConvertBoundsToComparators<TElement, TElement, TFakeContext>(variantBounds, SortOrder, deserializerContext);
 
     // Create queue and stream (unbounded buffer).
     TSafeCircularBuffer<TElement> outputQueue(TMaybe<size_t>(), TElement{});
@@ -130,9 +178,11 @@ void RunTestCase(const TTestCase<TElement, SortOrder, TRangeElement>& testCase) 
     TFrameBoundsIndices currentWindows;
 
     // Create aggregator using factory method.
-    auto factory = TCoreWinFramesCollector<TElement, decltype(testCase.ElementGetter), TRangeComparator<TRangeElement>, SortOrder>::CreateFactory(
-        comparatorBounds, testCase.ElementGetter);
-    auto aggregator = factory(outputQueue, stream, currentWindows);
+    // clang-format off
+    auto factory = TCoreWinFramesCollector<TElement, TFakeContext, SortOrder != ESortOrder::Unimportant>::CreateFactory(comparatorBounds);
+    // clang-format on
+    // TQueue& outputQueue, TStream stream, TFrameBoundsIndices& currentFrameBoundsIndices, TContext& context
+    auto aggregator = factory(outputQueue, stream, currentWindows, fakeContext);
 
     // Process elements and check states
     for (size_t i = 0; i < testCase.ExpectedStates.size(); ++i) {

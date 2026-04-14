@@ -310,11 +310,14 @@ Y_UNIT_TEST(TestDeclare) {
 
 Y_UNIT_TEST_SUITE(TCompareExprTrees) {
 void CompileAndCompare(const TString& one, const TString& two, const std::pair<TPosition, TPosition>* const diffPositions = nullptr) {
-    const auto progOne(ParseAst(one)), progTwo(ParseAst(two));
+    const auto progOne(ParseAst(one));
+    const auto progTwo(ParseAst(two));
     UNIT_ASSERT(progOne.IsOk() && progTwo.IsOk());
 
-    TExprContext ctxOne, ctxTwo;
-    TExprNode::TPtr rootOne, rootTwo;
+    TExprContext ctxOne;
+    TExprContext ctxTwo;
+    TExprNode::TPtr rootOne;
+    TExprNode::TPtr rootTwo;
 
     UNIT_ASSERT(CompileExpr(*progOne.Root, rootOne, ctxOne, nullptr, nullptr));
     UNIT_ASSERT(CompileExpr(*progTwo.Root, rootTwo, ctxTwo, nullptr, nullptr));

@@ -156,6 +156,8 @@ namespace NUnifiedAgent::NPrivate {
 
         void SetAgentMaxReceiveMessage(size_t);
 
+        friend class TGrpcCall;
+
     private:
         enum class EPollingStatus {
             Active,
@@ -232,6 +234,12 @@ namespace NUnifiedAgent::NPrivate {
     private:
         void MakeGrpcCall();
 
+        void TouchGrpcCallActivity();
+
+        void ScheduleGrpcCallWatchdog();
+
+        void CheckGrpcCallInactivity();
+
         void DoClose();
 
         void BeginClose(TInstant deadline);
@@ -265,8 +273,10 @@ namespace NUnifiedAgent::NPrivate {
         THolder<TGrpcTimer> MakeGrpcCallTimer;
         THolder<TGrpcTimer> ForceCloseTimer;
         THolder<TGrpcTimer> PollTimer;
+        THolder<TGrpcTimer> GrpcCallWatchdogTimer;
         ui64 GrpcInflightMessages;
         ui64 GrpcInflightBytes;
+        std::atomic<ui64> LastGrpcCallActivityUsec;
 
         std::atomic<size_t> InflightBytes;
         bool CloseRequested;

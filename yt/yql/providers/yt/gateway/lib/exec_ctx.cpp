@@ -152,7 +152,8 @@ void TExecContextBaseSimple::SetInput(TExprBase input, bool forcePathColumns, co
                 }
             }
 
-            bool useQLFilter = NYql::HasSetting(section.Settings().Ref(), EYtSettingType::QLFilter);
+            const bool enableQLFilter = settings->_EnableQLFilter.Get(Cluster_).GetOrElse(DEFAULT_ENABLE_QL_FILTER);
+            const bool useQLFilter = enableQLFilter && NYql::HasSetting(section.Settings().Ref(), EYtSettingType::QLFilter);
             TNodeMap<TMaybe<TString>> inputQueries;
 
             for (auto path: section.Paths()) {

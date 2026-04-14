@@ -31,8 +31,8 @@ enum class EInfBoundary {
 
 // InfBoundary == Right -> [boundary, +inf)
 // InfBoundary == Left  -> (-inf,  boundary]
-template <EInfBoundary InfBoundary, class T, class U>
-Y_FORCE_INLINE constexpr bool IsBelongToInterval(EDirection dir, T from, U delta, T x) {
+template <class T, class U>
+Y_FORCE_INLINE constexpr bool IsBelongToInterval(EInfBoundary InfBoundary, EDirection dir, T from, U delta, T x) {
     Y_DEBUG_ABORT_UNLESS(delta >= 0);
     if constexpr (std::is_floating_point_v<T>) {
         Y_DEBUG_ABORT_UNLESS(!std::isnan(from));
@@ -44,7 +44,7 @@ Y_FORCE_INLINE constexpr bool IsBelongToInterval(EDirection dir, T from, U delta
     if constexpr (std::is_floating_point_v<T> || std::is_floating_point_v<U>) {
         const auto b = (dir == EDirection::Following) ? (from + delta) : (from - delta);
         Y_DEBUG_ABORT_UNLESS(!std::isnan(b));
-        if constexpr (InfBoundary == EInfBoundary::Right) {
+        if (InfBoundary == EInfBoundary::Right) {
             return x >= b;
         } else {
             return x <= b;
@@ -67,7 +67,7 @@ Y_FORCE_INLINE constexpr bool IsBelongToInterval(EDirection dir, T from, U delta
         const auto wx = static_cast<TW>(x);
         const auto b = (dir == EDirection::Following) ? (wf + wd) : (wf - wd);
 
-        if constexpr (InfBoundary == EInfBoundary::Right) {
+        if (InfBoundary == EInfBoundary::Right) {
             return wx >= b; // [b, +inf)
         } else {
             return wx <= b; // (-inf, b]

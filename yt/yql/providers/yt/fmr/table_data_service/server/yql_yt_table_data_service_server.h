@@ -9,6 +9,7 @@ using IFmrServer = IRunnable;
 struct TTableDataServiceServerSettings {
     TString Host = "localhost";
     ui16 Port = 7000;
+    ui32 Threads = 10;
     std::vector<TTvmId> AllowedSourceTvmIds;
 };
 

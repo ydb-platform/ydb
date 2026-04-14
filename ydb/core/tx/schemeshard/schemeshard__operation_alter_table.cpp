@@ -135,7 +135,8 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
             return nullptr;
         }
 
-        bool altersExistingColumn = table->Columns.contains(table->GetColumnIdByNameSlow(col.GetName()));
+        auto colId = table->GetColumnIdByName(col.GetName());
+        bool altersExistingColumn = (colId != TTableInfo::InvalidColumnId);
 
         // Adding a new NOT NULL column to an existing table requires a default,
         // otherwise pre-existing rows would have no value for that column and

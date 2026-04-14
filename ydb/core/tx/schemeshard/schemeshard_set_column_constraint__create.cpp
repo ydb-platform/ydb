@@ -103,31 +103,22 @@ public:
 
         std::sort(sortedNotNullColumns.begin(), sortedNotNullColumns.end());
 
-        // Checking the existence of columns in a table for O(std::sort)
+        if (const auto duplicateIt = std::adjacent_find(sortedNotNullColumns.begin(), sortedNotNullColumns.end()); duplicateIt != sortedNotNullColumns.end()) {
+            TString error = TStringBuilder()
+                << "Duplicate column name `" << *duplicateIt << "` in not null columns.";
+
+            return Reply(NKikimrScheme::StatusInvalidParameter, std::move(error));
+        }
+
         {
             Y_ABORT_UNLESS(Self->Tables.contains(tablePath.Base()->PathId));
             const auto& tableInfo = Self->Tables.at(tablePath.Base()->PathId);
             Y_ABORT_UNLESS(tableInfo);
 
-            std::vector<std::string> allColumnNames;
-            allColumnNames.reserve(tableInfo->Columns.size());
-            for (const auto& [_, columnInfo] : tableInfo->Columns) {
-                allColumnNames.push_back(columnInfo.Name);
-            }
-
-            std::sort(allColumnNames.begin(), allColumnNames.end());
-            ui32 currentId = 0;
-
-            for (const auto& s : sortedNotNullColumns) {
-                while (currentId < allColumnNames.size() && allColumnNames[currentId] != s) {
-                    currentId++;
-                }
-
-                if (currentId == allColumnNames.size()) {
-                    TString error = TStringBuilder()
-                        << "Column with name `" << s << "` doesn't exist.";
-
-                    return Reply(NKikimrScheme::StatusInvalidParameter, std::move(error));
+            for (const auto& columnName : sortedNotNullColumns) {
+                auto id = tableInfo->GetColumnIdByName(TString(columnName));
+                if (id == TTableInfo::InvalidColumnId) {
+                    return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Failed item check: Column '" << columnName << "' does not exist");
                 }
             }
         }

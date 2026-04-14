@@ -2977,8 +2977,6 @@
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
-<<<<<<< HEAD
-=======
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -2987,7 +2985,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
->>>>>>> b8030bc199f (PHP & Rust SDK docs alignment (#37673))
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}

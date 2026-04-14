@@ -1784,6 +1784,16 @@ private:
         desc.MutableSettings()->set_overlap_clusters(buildInfo.KMeans.OverlapClusters);
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistBuildIndexCreationConfig(db, buildInfo);
+
+        auto indexPath = TPath::Init(buildInfo.TablePathId, Self).Child(buildInfo.IndexName);
+        if (indexPath.IsResolved() && Self->Indexes.contains(indexPath->PathId)) {
+            Self->Indexes.at(indexPath->PathId)->SpecializedIndexDescription = desc;
+            const TPathId& pathId = indexPath->PathId;
+            Y_ENSURE(Self->IsLocalId(pathId));
+            db.Table<Schema::TableIndex>().Key(pathId.LocalPathId).Update(
+                NIceDb::TUpdate<Schema::TableIndex::Description>(
+                    Self->Indexes.at(pathId)->SerializeDescription()));
+        }
     }
 
     bool FillVectorIndexSamples(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {

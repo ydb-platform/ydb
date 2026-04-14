@@ -463,7 +463,8 @@ public:
     bool AllRowsProcessed() final {
         return UnprocessedKeys.empty()
             && ReadStateByReadId.empty()
-            && ReadResults.empty();
+            && ReadResults.empty()
+            && ScheduledReads.empty();
     }
 
     void ResetRowsProcessing(ui64 readId) final {
@@ -624,6 +625,11 @@ public:
             }
             it->second.ResultSeqNos.push_back(resultBatch);
             resultBatch->AddJoinKey(it->second.JoinKeyId);
+            if (!success) {
+                for (const auto& cachedRow : it->second.CachedRows) {
+                    resultBatch->TryBuildResultRow(cachedRow);
+                }
+            }
         }
     }
 
@@ -915,7 +921,8 @@ public:
             && ReadStateByReadId.empty()
             && ResultRowsBySeqNo.empty()
             && PendingLeftRowsByKey.empty()
-            && FlushedResultRows.empty();
+            && FlushedResultRows.empty()
+            && ScheduledReads.empty();
     }
 
     void ResetRowsProcessing(ui64 readId) final {

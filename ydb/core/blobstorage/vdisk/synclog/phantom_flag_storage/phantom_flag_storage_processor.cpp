@@ -99,7 +99,7 @@ private:
             break;
         }
         default: {
-            // ChunkKeeper was disabled, terminate this actor
+            // ChunkKeeper is disabled, unable to manage chunks, terminate this actor
             PassAway();
             return;
         }
@@ -148,17 +148,8 @@ private:
                 "Handle TEvChunkKeeperAllocateResult"),
                 (Event, ev->Get()->ToString()));
         RequestInFlight = false;
-        switch (ev->Get()->Status) {
-        case NKikimrProto::OK: {
-            Data.Chunks.erase(ev->Get()->ChunkIdx);
-            CommitState();
-            break;
-        }
-        default:
-            // retry
-            DeleteChunk(ev->Get()->ChunkIdx);
-            break;
-        }
+        Data.Chunks.erase(ev->Get()->ChunkIdx);
+        CommitState();
         ProcessQueues();
     }
 
@@ -169,10 +160,10 @@ private:
         CHECK_PDISK_RESPONSE(Ctx.SyncLogCtx->VCtx, ev, TActivationContext::AsActorContext());
         RequestInFlight = false;
         ui32 chunkIdx = ev->Get()->ChunkIdx;
-        Data.Chunks[chunkIdx].DataSize += std::exchange(PendingWriteSize, 0);
         if (chunkIdx == TailChunkIdx) {
             TailAvailableSize -= PendingWriteSize;
         }
+        Data.Chunks[chunkIdx].DataSize += std::exchange(PendingWriteSize, 0);
         CommitState();
         ProcessQueues();
     }
@@ -205,9 +196,7 @@ private:
         TailChunkIdx = std::nullopt;
         TailAvailableSize = 0;
         for (const auto& [chunkIdx, chunk] : Data.Chunks) {
-            if (chunk.DataSize > 0) {
-                DeleteChunk(chunkIdx);
-            }
+            EnqueueChunkDeletion(chunkIdx);
         }
         ProcessQueues();
     }
@@ -240,15 +229,6 @@ private:
     }
 
     void ProcessQueues() {
-        if (Stopped) {
-            if (Data.Chunks.empty()) {
-                PassAway();
-            } else if (!RequestInFlight) {
-                DeleteChunk(Data.Chunks.begin()->first);
-            }
-            return;
-        }
-
         while (!RequestInFlight && !RequestQueue.empty()) {
             TRequest request = RequestQueue.front();
             RequestQueue.pop_front();
@@ -268,7 +248,15 @@ private:
             return;
         }
 
-        if (!TailChunkIdx || TailAvailableSize < sizeof(TPhantomFlagStorageItem) + Ctx.AppendBlockSize) {
+        if (!TailChunkIdx) {
+            AllocateNewChunk();
+            return;
+        }
+
+        ui32 nextItemSize = (WriteQueue.empty() ? 0 : WriteQueue.front().SerializedSize());
+        ui32 minRequiredSize = PendingWrite.size() + nextItemSize + Ctx.AppendBlockSize;
+
+        if (TailAvailableSize < minRequiredSize + Ctx.AppendBlockSize) {
             AllocateNewChunk();
             return;
         }
@@ -332,10 +320,11 @@ private:
     }
 
     void IssueWrite() {
-        Y_DEBUG_ABORT_UNLESS(TailChunkIdx);
+        Y_ABORT_UNLESS(TailChunkIdx);
         RequestInFlight = true;
         ui32 offset = Data.Chunks[*TailChunkIdx].DataSize;
-        ui32 maxSize = Data.ChunkSize - (offset + PendingWrite.size());
+        Y_ABORT_UNLESS(offset <= Data.ChunkSize);
+        ui32 maxSize = Data.ChunkSize - offset;
         TPhantomFlagStorageItem::AlignWriteBlock(&PendingWrite, Ctx.AppendBlockSize, maxSize);
         PendingWriteSize = PendingWrite.size();
         auto parts = MakeIntrusive<NPDisk::TEvChunkWrite::TAlignedParts>(std::move(PendingWrite));
@@ -418,7 +407,6 @@ private:
     TString PendingWrite;
     ui32 PendingWriteSize = 0;
     TReaderInfo PendingRead;
-    bool Stopped = false;
 
     std::optional<ui32> TailChunkIdx;
     ui64 TailAvailableSize = 0;

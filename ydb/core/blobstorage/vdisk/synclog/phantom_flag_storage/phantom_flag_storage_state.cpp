@@ -17,6 +17,9 @@ TPhantomFlagStorageState::TPhantomFlagStorageState(TIntrusivePtr<TSyncLogCtx> sl
 void TPhantomFlagStorageState::InitializePersistent(TPhantomFlagStorageData&& data,
         TActorId syncLogKeeperId, TActorId chunkKeeperId, ui32 appendBlockSize) {
     IsPersistent = true;
+    if (!data.Chunks.empty()) {
+        Active = true;
+    }
     NActors::IActor* processorActor = CreatePhantomFlagStorageProcessor(std::move(data),
             TPhantomFlagStorageProcessorContext{
                 .SyncLogCtx = SlCtx,
@@ -120,6 +123,7 @@ void TPhantomFlagStorageState::Deactivate() {
     Building = false;
     if (IsPersistent) {
         TActivationContext::Send(new IEventHandle(ProcessorId, TActorId{}, new TEvPhantomFlagStorageDrop));
+        WriteBuffer.clear();
     } else {
         StoredFlags.clear();
     }
@@ -261,6 +265,12 @@ std::optional<TPhantomFlagStorageData> TPhantomFlagStorageState::GetPersistentDa
 
 void TPhantomFlagStorageState::UpdatePersistentData(std::optional<TPhantomFlagStorageData>&& data) {
     PersistentData = std::move(data);
+}
+
+void TPhantomFlagStorageState::Terminate() {
+    if (ProcessorId != TActorId{}) {
+        TActivationContext::Send(new IEventHandle(ProcessorId, TActorId{}, new TEvents::TEvPoisonPill));
+    }
 }
 
 } // namespace NSyncLog

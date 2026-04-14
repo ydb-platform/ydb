@@ -16,7 +16,12 @@ TEvChunkKeeperAllocateResult::TEvChunkKeeperAllocateResult(std::optional<ui32> c
 TString TEvChunkKeeperAllocateResult::ToString() const {
     TStringStream str;
     str << "TEvChunkKeeperAllocateResult{";
-    str << " ChunkIdx# " << ChunkIdx;
+    str << " ChunkIdx# ";
+    if (ChunkIdx) {
+        str << *ChunkIdx;
+    } else {
+        str << "<nullopt>";
+    }
     str << " Status# " << NKikimrProto::EReplyStatus_Name(Status);
     if (!ErrorReason.empty()) {    
         str << " ErrorReason# " << ErrorReason;
@@ -72,7 +77,7 @@ TString TEvChunkKeeperDiscoverResult::ToString() const {
     str << " ChunkCount# " << Chunks.size();
     str << " Chunks# [";
     for (const TChunkInfo& chunk : Chunks) {
-        str << " { ChunksIdx# " << chunk.ChunkIdx;
+        str << " { ChunkIdx# " << chunk.ChunkIdx;
         str << " ShredRequested# " << chunk.ShredRequested << " }";
     }
     str << " ] }";

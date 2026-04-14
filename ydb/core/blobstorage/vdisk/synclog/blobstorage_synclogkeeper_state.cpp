@@ -63,9 +63,11 @@ namespace NKikimr {
             LoggerCtx = std::move(loggerCtx);
             SelfId = selfId;
 
-            TPhantomFlagStorageData phantomFlagStorageData = SyncLogPtr->GetPhantomFlagStorageData();
-            PhantomFlagStorageState.InitializePersistent(std::move(phantomFlagStorageData), SelfId, 
-                    SlCtx->ChunkKeeperId, SyncLogPtr->GetAppendBlockSize());
+            if (EnablePersistentPhantomFlagStorage) {
+                TPhantomFlagStorageData phantomFlagStorageData = SyncLogPtr->GetPhantomFlagStorageData();
+                PhantomFlagStorageState.InitializePersistent(std::move(phantomFlagStorageData), SelfId, 
+                        SlCtx->ChunkKeeperId, SyncLogPtr->GetAppendBlockSize());
+            }
         }
 
         // Calculate first lsn in recovery log we must keep
@@ -518,6 +520,10 @@ namespace NKikimr {
 
         void TSyncLogKeeperState::FlushPhantomFlagStorageWriteBufferIfNeeded() {
             PhantomFlagStorageState.FlushWriteBufferIfNeeded();
+        }
+
+        void TSyncLogKeeperState::Terminate() {
+            PhantomFlagStorageState.Terminate();
         }
 
     } // NSyncLog

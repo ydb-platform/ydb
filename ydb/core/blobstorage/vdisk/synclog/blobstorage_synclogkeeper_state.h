@@ -99,6 +99,8 @@ namespace NKikimr {
                 return std::exchange(ChunksToForget, {});
             }
 
+            void Terminate();
+
         private:
             // VDisk Context
             TIntrusivePtr<TSyncLogCtx> SlCtx;

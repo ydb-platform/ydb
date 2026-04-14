@@ -230,6 +230,7 @@ namespace NKikimr {
                 if (CommitterId) {
                     ctx.Send(CommitterId, new TEvents::TEvPoisonPill());
                 }
+                KeepState.Terminate();
                 Die(ctx);
             }
 

@@ -533,6 +533,8 @@ namespace NKikimr {
                 TPhantomFlagStorageData data;
                 data.Deserialize(pb.GetPhantomFlagStorageData());
                 SyncLogPtr->UpdatePhantomFlagStorageData(std::move(data));
+            } else {
+                SyncLogPtr->UpdatePhantomFlagStorageData(std::nullopt);
             }
 
             return true;

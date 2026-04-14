@@ -58,9 +58,14 @@ void TPhantomFlagStorageItem::Serialize(TString* buffer) const {
     std::visit(TOverloaded{
         [&](const std::monostate&) {},
         [&](const TSkip& skip) {
-            constexpr static EPhantomFlagStorageItem type = EPhantomFlagStorageItem::Flag;
-            buffer->append(reinterpret_cast<const char*>(&type), sizeof(type));
-            buffer->append(reinterpret_cast<const char*>(&skip), sizeof(skip));
+            constexpr static EPhantomFlagStorageItem type = EPhantomFlagStorageItem::Skip;
+            if (skip.Size >= sizeof(type) + sizeof(skip.Size)) {
+                buffer->append(reinterpret_cast<const char*>(&type), sizeof(type));
+                buffer->append(reinterpret_cast<const char*>(&skip), sizeof(skip));
+            } else {
+                TString zeros(skip.Size, '\0');
+                buffer->append(zeros.data(), skip.Size);
+            }
         },
         [&](const TFlag& flag) {
             constexpr static EPhantomFlagStorageItem type = EPhantomFlagStorageItem::Flag;
@@ -83,17 +88,17 @@ TPhantomFlagStorageItem TPhantomFlagStorageItem::DeserializeFromRaw(const char* 
         return TPhantomFlagStorageItem::CreateSkip(1);
     }
     case EPhantomFlagStorageItem::Flag: {
-        const TLogoBlobRec rec = *reinterpret_cast<const TLogoBlobRec*>(data);
+        const TLogoBlobRec rec = ReadUnaligned<TLogoBlobRec>(data);
         return TPhantomFlagStorageItem::CreateFlag(&rec);
     }
     case EPhantomFlagStorageItem::Threshold: {
-        const TThreshold threshold = *reinterpret_cast<const TThreshold*>(data);
+        const TThreshold threshold = ReadUnaligned<TThreshold>(data);
         return TPhantomFlagStorageItem::CreateThreshold(threshold.OrderNumber, threshold.TabletId,
                 threshold.Channel, threshold.Generation, threshold.Step);
     }
     case EPhantomFlagStorageItem::Skip:
     default: {
-        const ui32 size = *reinterpret_cast<const ui32*>(data);
+        const ui32 size = ReadUnaligned<ui32>(data);
         return TPhantomFlagStorageItem::CreateSkip(size);
     }
     }
@@ -123,7 +128,7 @@ void TPhantomFlagStorageItem::AlignWriteBlock(TString* buffer, ui32 appendBlockS
     ui32 skipRecSize = sizeof(EPhantomFlagStorageItem) + sizeof(TSkip);
     if (fillSize >= skipRecSize) {
         // add one Skip record
-        TPhantomFlagStorageItem skip = CreateSkip(fillSize - skipRecSize);
+        TPhantomFlagStorageItem skip = CreateSkip(fillSize);
         skip.Serialize(buffer);
         fillSize -= skipRecSize;
     }

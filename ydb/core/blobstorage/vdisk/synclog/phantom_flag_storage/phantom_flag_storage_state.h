@@ -54,6 +54,7 @@ public:
     void UpdatePersistentData(std::optional<TPhantomFlagStorageData>&& data);
     void FlushWriteBufferIfNeeded();
     void SyncLogIsCut();
+    void Terminate();
 
 private:
     // Adds DoNotKeep flags to storage and Keeps to Thresholds for specified neighbour

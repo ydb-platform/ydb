@@ -75,6 +75,9 @@ struct TPhysicalOpProps {
     std::optional<TRBOStatistics> Statistics;
     std::optional<NKikimr::NKqp::EJoinAlgoType> JoinAlgo;
     std::optional<double> Cost;
+
+    bool LeftShuffleEliminated = false;
+    bool RightShuffleEliminated = false;
 };
 
 /**

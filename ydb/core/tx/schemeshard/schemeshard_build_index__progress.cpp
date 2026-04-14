@@ -487,7 +487,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
     if (buildInfo.IsValidatingUniqueIndex()) {
         // Unlock also indexImplTable
         TPath indexImplTablePath = GetBuildPath(ss, buildInfo, NTableIndex::ImplTable);
-        if (indexImplTablePath.IsResolved() && indexImplTablePath.IsLocked()) {
+        if (indexImplTablePath.IsResolved() && !indexImplTablePath.IsDeleted() && indexImplTablePath.IsLocked()) {
             addUnlock(std::move(indexImplTablePath));
         }
     }

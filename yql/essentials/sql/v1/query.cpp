@@ -162,6 +162,12 @@ INode::TPtr CreateIndexType(TIndexDescription::EType type, const INode& node) {
             return node.Q("globalFulltextRelevance");
         case TIndexDescription::EType::GlobalJson:
             return node.Q("globalJson");
+        case TIndexDescription::EType::GlobalFulltextCompact:
+            return node.Q("globalFulltextCompact");
+        case TIndexDescription::EType::GlobalFulltextCompactRelevance:
+            return node.Q("globalFulltextCompactRelevance");
+        case TIndexDescription::EType::GlobalJsonCompact:
+            return node.Q("globalJsonCompact");
         case TIndexDescription::EType::LocalBloomFilter:
             return node.Q("localBloomFilter");
         case TIndexDescription::EType::LocalBloomNgramFilter:

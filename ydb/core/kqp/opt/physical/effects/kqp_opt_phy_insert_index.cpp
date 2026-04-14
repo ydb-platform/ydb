@@ -118,6 +118,9 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                 case TIndexDescription::EType::GlobalFulltextPlain:
                 case TIndexDescription::EType::GlobalFulltextRelevance:
                 case TIndexDescription::EType::GlobalJson:
+                case TIndexDescription::EType::GlobalFulltextCompact:
+                case TIndexDescription::EType::GlobalFulltextCompactRelevance:
+                case TIndexDescription::EType::GlobalJsonCompact:
                     return true;
                 default:
                     return false;
@@ -212,6 +215,9 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
         std::optional<TExprBase> upsertIndexRows;
         switch (indexDesc->Type) {
             case TIndexDescription::EType::GlobalAsync:
+            case TIndexDescription::EType::GlobalFulltextCompact:
+            case TIndexDescription::EType::GlobalFulltextCompactRelevance:
+            case TIndexDescription::EType::GlobalJsonCompact:
                 AFL_ENSURE(false);
             case TIndexDescription::EType::GlobalSync:
             case TIndexDescription::EType::GlobalSyncUnique: {

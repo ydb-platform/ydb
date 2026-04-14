@@ -1333,6 +1333,9 @@ enum EIndexType {
     EIndexTypeLocalBloomFilter = 8;
     EIndexTypeLocalBloomNgramFilter = 9;
     EIndexTypeLocalMinMax = 10;
+    EIndexTypeGlobalFulltextCompact = 11;
+    EIndexTypeGlobalFulltextCompactRelevance = 12;
+    EIndexTypeGlobalJsonCompact = 13;
 }
 
 enum EIndexState {

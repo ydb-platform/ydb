@@ -1840,6 +1840,15 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
             *index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();
 
             break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_compact_index()->mutable_settings(),
+                tableIndex.GetIndexImplTableDescriptions(0)
+            );
+
+            *index->mutable_global_fulltext_compact_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();
+
+            break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
             FillGlobalIndexSettings(
                 *index->mutable_global_fulltext_relevance_index()->mutable_dict_table_settings(),
@@ -1861,9 +1870,36 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
             *index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();
 
             break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_compact_relevance_index()->mutable_dict_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DictTablePosition)
+            );
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_compact_relevance_index()->mutable_docs_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DocsTablePosition)
+            );
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_compact_relevance_index()->mutable_stats_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::StatsTablePosition)
+            );
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_compact_relevance_index()->mutable_posting_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::PostingTablePosition)
+            );
+
+            *index->mutable_global_fulltext_compact_relevance_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();
+
+            break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson:
             FillGlobalIndexSettings(
                 *index->mutable_global_json_index()->mutable_settings(),
+                tableIndex.GetIndexImplTableDescriptions(0)
+            );
+            break;
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact:
+            FillGlobalIndexSettings(
+                *index->mutable_global_json_compact_index()->mutable_settings(),
                 tableIndex.GetIndexImplTableDescriptions(0)
             );
             break;
@@ -1985,13 +2021,27 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_plain_index().fulltext_settings();
             break;
 
+        case Ydb::Table::TableIndex::kGlobalFulltextCompactIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact);
+            *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_compact_index().fulltext_settings();
+            break;
+
         case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance);
             *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_relevance_index().fulltext_settings();
             break;
 
+        case Ydb::Table::TableIndex::kGlobalFulltextCompactRelevanceIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance);
+            *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_compact_relevance_index().fulltext_settings();
+            break;
+
         case Ydb::Table::TableIndex::kGlobalJsonIndex:
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson);
+            break;
+
+        case Ydb::Table::TableIndex::kGlobalJsonCompactIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact);
             break;
 
         case Ydb::Table::TableIndex::kLocalBloomFilterIndex:

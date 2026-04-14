@@ -2380,6 +2380,28 @@ public:
                                     return SyncError();
                                 }
                                 add_index->mutable_global_json_index();
+                            } else if (type == "globalFulltextCompact") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        TStringBuilder() << "Fulltext index support is disabled"));
+                                    return SyncError();
+                                }
+                                add_index->mutable_global_fulltext_compact_index();
+                            } else if (type == "globalFulltextCompactRelevance") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        TStringBuilder() << "Fulltext index support is disabled"));
+                                    return SyncError();
+                                }
+
+                                add_index->mutable_global_fulltext_compact_relevance_index();
+                            } else if (type == "globalJsonCompact") {
+                                if (!SessionCtx->Config().FeatureFlags.GetEnableJsonIndex()) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(columnTuple.Item(1).Cast<TCoAtom>().Pos()),
+                                        TStringBuilder() << "JSON index support is disabled"));
+                                    return SyncError();
+                                }
+                                add_index->mutable_global_json_compact_index();
                             } else if (type == "localBloomFilter") {
                                 if (table.Metadata->Kind != EKikimrTableKind::Datashard &&
                                     !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
@@ -2447,6 +2469,16 @@ public:
                                 add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings()->add_columns()->set_column(
                                     add_index->index_columns().empty() ? "<none>" : *add_index->index_columns().rbegin()
                                 );
+                            } else if (add_index->type_case() == Ydb::Table::TableIndex::kGlobalFulltextCompactIndex) {
+                                // fulltext index has per-column analyzers settings, single value for now
+                                add_index->mutable_global_fulltext_compact_index()->mutable_fulltext_settings()->add_columns()->set_column(
+                                    add_index->index_columns().empty() ? "<none>" : *add_index->index_columns().rbegin()
+                                );
+                            } else if (add_index->type_case() == Ydb::Table::TableIndex::kGlobalFulltextCompactRelevanceIndex) {
+                                // fulltext index has per-column analyzers settings, single value for now
+                                add_index->mutable_global_fulltext_compact_relevance_index()->mutable_fulltext_settings()->add_columns()->set_column(
+                                    add_index->index_columns().empty() ? "<none>" : *add_index->index_columns().rbegin()
+                                );
                             }
                             auto indexSettings = columnTuple.Item(1).Cast<TCoAtomList>();
                             TIndexDescription::TLocalBloomFilterDescription localBloomFilterDesc;
@@ -2482,6 +2514,18 @@ public:
                                         case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
                                             NKikimr::NFulltext::FillSetting(
                                                 *add_index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings(),
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        case Ydb::Table::TableIndex::kGlobalFulltextCompactIndex: {
+                                            NKikimr::NFulltext::FillSetting(
+                                                *add_index->mutable_global_fulltext_compact_index()->mutable_fulltext_settings(),
+                                                name, value.StringValue(), error);
+                                            break;
+                                        }
+                                        case Ydb::Table::TableIndex::kGlobalFulltextCompactRelevanceIndex: {
+                                            NKikimr::NFulltext::FillSetting(
+                                                *add_index->mutable_global_fulltext_compact_relevance_index()->mutable_fulltext_settings(),
                                                 name, value.StringValue(), error);
                                             break;
                                         }
@@ -2545,6 +2589,7 @@ public:
                         case Ydb::Table::TableIndex::kGlobalAsyncIndex:
                         case Ydb::Table::TableIndex::kGlobalUniqueIndex:
                         case Ydb::Table::TableIndex::kGlobalJsonIndex:
+                        case Ydb::Table::TableIndex::kGlobalJsonCompactIndex:
                             // no settings validation
                             break;
                         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
@@ -2566,6 +2611,22 @@ public:
                         case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
                             TString error;
                             if (!NKikimr::NFulltext::ValidateSettings(add_index->global_fulltext_relevance_index().fulltext_settings(), error)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
+                                return SyncError();
+                            }
+                            break;
+                        }
+                        case Ydb::Table::TableIndex::kGlobalFulltextCompactIndex: {
+                            TString error;
+                            if (!NKikimr::NFulltext::ValidateSettings(add_index->global_fulltext_compact_index().fulltext_settings(), error)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
+                                return SyncError();
+                            }
+                            break;
+                        }
+                        case Ydb::Table::TableIndex::kGlobalFulltextCompactRelevanceIndex: {
+                            TString error;
+                            if (!NKikimr::NFulltext::ValidateSettings(add_index->global_fulltext_compact_relevance_index().fulltext_settings(), error)) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
                                 return SyncError();
                             }

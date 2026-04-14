@@ -158,6 +158,12 @@ TString IndexTypeToName(NYql::TIndexDescription::EType type) {
             return "global sync fulltext_relevance";
         case NYql::TIndexDescription::EType::GlobalJson:
             return "global sync json";
+        case NYql::TIndexDescription::EType::GlobalFulltextCompact:
+            return "global sync fulltext_compact";
+        case NYql::TIndexDescription::EType::GlobalFulltextCompactRelevance:
+            return "global sync fulltext_compact_relevance";
+        case NYql::TIndexDescription::EType::GlobalJsonCompact:
+            return "global sync json_compact";
         case NYql::TIndexDescription::EType::LocalBloomFilter:
             return "local bloom_filter";
         case NYql::TIndexDescription::EType::LocalBloomNgramFilter:
@@ -424,7 +430,10 @@ TExprBase BuildUpsertTableWithIndex(const TKiWriteTable& write, const TCoAtomLis
             return index.second->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree
                 && index.second->Type != TIndexDescription::EType::GlobalFulltextPlain
                 && index.second->Type != TIndexDescription::EType::GlobalFulltextRelevance
-                && index.second->Type != TIndexDescription::EType::GlobalJson;
+                && index.second->Type != TIndexDescription::EType::GlobalJson
+                && index.second->Type != TIndexDescription::EType::GlobalFulltextCompact
+                && index.second->Type != TIndexDescription::EType::GlobalFulltextCompactRelevance
+                && index.second->Type != TIndexDescription::EType::GlobalJsonCompact;
         });
 
         if (onlyStreamIndexes) {
@@ -994,6 +1003,9 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             case TIndexDescription::EType::GlobalFulltextPlain:
             case TIndexDescription::EType::GlobalFulltextRelevance:
             case TIndexDescription::EType::GlobalJson:
+            case TIndexDescription::EType::GlobalFulltextCompact:
+            case TIndexDescription::EType::GlobalFulltextCompactRelevance:
+            case TIndexDescription::EType::GlobalJsonCompact:
             case TIndexDescription::EType::LocalBloomFilter:
             case TIndexDescription::EType::LocalBloomNgramFilter:
             case TIndexDescription::EType::LocalMinMax:

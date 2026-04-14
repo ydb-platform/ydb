@@ -13,6 +13,7 @@ namespace NKikimr::NSchemeShard {
 static constexpr ui32 DefaultMaxShardsInFlight = 32;
 
 using namespace NTabletFlatExecutor;
+using NKikimrSchemeOp::EIndexType;
 
 class TSchemeShard::TIndexBuilder::TTxCreate: public TSchemeShard::TIndexBuilder::TTxSimple<TEvIndexBuilder::TEvCreateRequest, TEvIndexBuilder::TEvCreateResponse> {
 public:
@@ -330,36 +331,26 @@ private:
             }
             break;
         }
-        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextPlainIndex: {
-            if (!Self->EnableFulltextIndex) {
-                explain = "Fulltext index support is disabled";
+        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextPlainIndex:
+            if (!PrepareFulltext(EIndexType::EIndexTypeGlobalFulltextPlain, index.global_fulltext_plain_index().fulltext_settings(), explain)) {
                 return false;
             }
-            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
-            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain;
-            NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
-            *fulltextIndexDescription.MutableSettings() = index.global_fulltext_plain_index().fulltext_settings();
-            if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), explain)) {
-                return false;
-            }
-            buildInfo.SpecializedIndexDescription = fulltextIndexDescription;
             break;
-        }
-        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextRelevanceIndex: {
-            if (!Self->EnableFulltextIndex) {
-                explain = "Fulltext index support is disabled";
+        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextRelevanceIndex:
+            if (!PrepareFulltext(EIndexType::EIndexTypeGlobalFulltextRelevance, index.global_fulltext_relevance_index().fulltext_settings(), explain)) {
                 return false;
             }
-            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
-            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance;
-            NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
-            *fulltextIndexDescription.MutableSettings() = index.global_fulltext_relevance_index().fulltext_settings();
-            if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), explain)) {
-                return false;
-            }
-            buildInfo.SpecializedIndexDescription = fulltextIndexDescription;
             break;
-        }
+        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextCompactIndex:
+            if (!PrepareFulltext(EIndexType::EIndexTypeGlobalFulltextCompact, index.global_fulltext_compact_index().fulltext_settings(), explain)) {
+                return false;
+            }
+            break;
+        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextCompactRelevanceIndex:
+            if (!PrepareFulltext(EIndexType::EIndexTypeGlobalFulltextCompactRelevance, index.global_fulltext_compact_relevance_index().fulltext_settings(), explain)) {
+                return false;
+            }
+            break;
         case Ydb::Table::TableIndex::TypeCase::kGlobalJsonIndex: {
             if (!Self->EnableJsonIndex) {
                 explain = "JSON index support is disabled";
@@ -367,6 +358,15 @@ private:
             }
             buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson;
+            break;
+        }
+        case Ydb::Table::TableIndex::TypeCase::kGlobalJsonCompactIndex: {
+            if (!Self->EnableJsonIndex) {
+                explain = "JSON index support is disabled";
+                return false;
+            }
+            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
+            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact;
             break;
         }
         case Ydb::Table::TableIndex::TypeCase::kLocalBloomFilterIndex:
@@ -386,6 +386,22 @@ private:
         if (!FillIndexTablePartitioning(buildInfo.ImplTableDescriptions, index, status, explain)) {
             return false;
         }
+        return true;
+    }
+
+    bool PrepareFulltext(NKikimrSchemeOp::EIndexType indexType, const Ydb::Table::FulltextIndexSettings& settings, TString& explain) {
+        if (!Self->EnableFulltextIndex) {
+            explain = "Fulltext index support is disabled";
+            return false;
+        }
+        NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
+        *fulltextIndexDescription.MutableSettings() = settings;
+        buildInfo.IndexType = indexType;
+        buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
+        if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), explain)) {
+            return false;
+        }
+        buildInfo.SpecializedIndexDescription = fulltextIndexDescription;
         return true;
     }
 };

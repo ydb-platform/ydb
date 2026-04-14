@@ -25,11 +25,14 @@ TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationCon
             break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain: {
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact: {
             res.IndexTableCount = 1;
             break;
         }
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance: {
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
             res.IndexTableCount = 4;
             break;
         }
@@ -429,6 +432,9 @@ auto CalcFulltextImplTableDescImpl(
 {
     auto tableColumns = ExtractInfo(baseTable);
     THashSet<TString> indexColumns;
+    Y_ENSURE(indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain ||
+        indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance ||
+        indexType == NKikimrSchemeOp::EIndexTypeGlobalJson);
     if (indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance) {
         indexColumns = indexDataColumns;
     }

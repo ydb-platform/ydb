@@ -334,6 +334,15 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson:
             *index.mutable_global_json_index() = Ydb::Table::GlobalJsonIndex();
             break;
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact:
+            *index.mutable_global_fulltext_compact_index() = Ydb::Table::GlobalFulltextCompactIndex();
+            break;
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance:
+            *index.mutable_global_fulltext_compact_relevance_index() = Ydb::Table::GlobalFulltextCompactRelevanceIndex();
+            break;
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact:
+            *index.mutable_global_json_compact_index() = Ydb::Table::GlobalJsonCompactIndex();
+            break;
         default:
             Y_ENSURE(false, InvalidIndexType(info.IndexType));
         }

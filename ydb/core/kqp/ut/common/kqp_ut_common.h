@@ -291,7 +291,10 @@ enum class EIndexTypeSql {
     GlobalVectorKMeansTree,
     GlobalFulltextPlain,
     GlobalFulltextRelevance,
-    GlobalJson
+    GlobalJson,
+    GlobalFulltextCompact,
+    GlobalFulltextCompactRelevance,
+    GlobalJsonCompact
 };
 
 inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
@@ -306,6 +309,9 @@ inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
     case NKqp::EIndexTypeSql::GlobalFulltextPlain:
     case NKqp::EIndexTypeSql::GlobalFulltextRelevance:
     case NKqp::EIndexTypeSql::GlobalJson:
+    case NKqp::EIndexTypeSql::GlobalFulltextCompact:
+    case NKqp::EIndexTypeSql::GlobalFulltextCompactRelevance:
+    case NKqp::EIndexTypeSql::GlobalJsonCompact:
         return "GLOBAL";
     }
 }
@@ -325,6 +331,12 @@ inline NYdb::NTable::EIndexType IndexTypeSqlToIndexType(EIndexTypeSql type) {
         return NYdb::NTable::EIndexType::GlobalFulltextRelevance;
     case EIndexTypeSql::GlobalJson:
         return NYdb::NTable::EIndexType::GlobalJson;
+    case EIndexTypeSql::GlobalFulltextCompact:
+        return NYdb::NTable::EIndexType::GlobalFulltextCompact;
+    case EIndexTypeSql::GlobalFulltextCompactRelevance:
+        return NYdb::NTable::EIndexType::GlobalFulltextCompactRelevance;
+    case EIndexTypeSql::GlobalJsonCompact:
+        return NYdb::NTable::EIndexType::GlobalJsonCompact;
     }
 }
 

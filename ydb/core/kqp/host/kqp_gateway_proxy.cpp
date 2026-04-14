@@ -1092,6 +1092,7 @@ public:
                             case TIndexDescription::EType::GlobalAsync:
                             case TIndexDescription::EType::GlobalSyncUnique:
                             case TIndexDescription::EType::GlobalJson:
+                            case TIndexDescription::EType::GlobalJsonCompact:
                                 // no specialized index description
                                 Y_ASSERT(std::holds_alternative<std::monostate>(index.SpecializedIndexDescription));
                                 break;
@@ -1100,6 +1101,8 @@ public:
                                 break;
                             case TIndexDescription::EType::GlobalFulltextPlain:
                             case TIndexDescription::EType::GlobalFulltextRelevance:
+                            case TIndexDescription::EType::GlobalFulltextCompact:
+                            case TIndexDescription::EType::GlobalFulltextCompactRelevance:
                                 *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(index.SpecializedIndexDescription).GetSettings();
                                 break;
                             default:

@@ -45,7 +45,6 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
             thisChunkIndex.UniteWith(currentScalar);
         }
     }
-    AFL_VERIFY(thisChunkIndex.Max()->type->Equals(thisChunkIndex.Min()->type));
 
     TString serializedIndex = thisChunkIndex.ToBinaryString();
     return { std::make_shared<NChunks::TPortionIndexChunk>(
@@ -67,7 +66,7 @@ bool TIndexMeta::DoCheckValue(const TString& data, const std::optional<ui64> cat
     const std::shared_ptr<arrow::Scalar>& requestValue, const NArrow::NSSA::TIndexCheckOperation& op, const TIndexInfo& info) const {
     AFL_VERIFY(!cat.has_value())("error", "category shouldn't be passed to min_max index");
     auto chunkValue = NArrow::NAccessor::TMinMax::FromBinaryString(data, info.GetColumnFeaturesVerified(GetColumnId()).GetArrowField()->type());
-    if (chunkValue.Min()->type->Equals(arrow::timestamp(arrow::TimeUnit::MICRO))) {
+    if (chunkValue.ElementType()->Equals(arrow::timestamp(arrow::TimeUnit::MICRO))) {
         chunkValue.Min() = chunkValue.Min()->CastTo(arrow::uint64()).ValueOrDie();
         chunkValue.Max() = chunkValue.Max()->CastTo(arrow::uint64()).ValueOrDie();
     }
@@ -83,18 +82,17 @@ bool TIndexMeta::Skip(NArrow::NAccessor::TMinMax chunkValue, const std::shared_p
     if (!chunkValue.Min()->is_valid) {
         return true;
     } else {
-        using namespace NArrow::NAccessor::NArrowCompare;
         switch (op.GetOperation()) {
             case NArrow::NSSA::TIndexCheckOperation::EOperation::Equals:
-                return requestValue < chunkValue.Min() || requestValue > chunkValue.Max();
+                return NArrow::NAccessor::NArrowCompare::Less(requestValue, chunkValue.Min()) || NArrow::NAccessor::NArrowCompare::Greater(requestValue, chunkValue.Max());
             case NArrow::NSSA::TIndexCheckOperation::EOperation::Less:
-                return requestValue <= chunkValue.Min();
+                return NArrow::NAccessor::NArrowCompare::LessOrEqual(requestValue, chunkValue.Min());
             case NArrow::NSSA::TIndexCheckOperation::EOperation::Greater:
-                return requestValue >= chunkValue.Max();
+                return NArrow::NAccessor::NArrowCompare::GreaterOrEqual(requestValue, chunkValue.Max());
             case NArrow::NSSA::TIndexCheckOperation::EOperation::LessOrEqual:
-                return requestValue < chunkValue.Min();
+                return NArrow::NAccessor::NArrowCompare::Less(requestValue, chunkValue.Min());
             case NArrow::NSSA::TIndexCheckOperation::EOperation::GreaterOrEqual:
-                return requestValue > chunkValue.Max();
+                return NArrow::NAccessor::NArrowCompare::Greater(requestValue, chunkValue.Max());
             default:
                 Y_ABORT("unexpected operation for min_max index");
         }

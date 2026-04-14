@@ -773,22 +773,16 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
     }
 
     for (auto&& olapIndex : schema.GetIndexes()) {
-        if (!olapIndex.HasName()) {
-            continue;
-        }
+        Y_ENSURE(olapIndex.HasName(), "Column table index must have a name");
 
         switch (olapIndex.GetImplementationCase()) {
             case NKikimrSchemeOp::TOlapIndexDescription::kBloomFilter: {
                 const auto& bf = olapIndex.GetBloomFilter();
-                if (!bf.ColumnIdsSize()) {
-                    continue;
-                }
+                Y_ENSURE(bf.ColumnIdsSize(), TStringBuilder() << "Bloom index " << olapIndex.GetName() << " has no column ids");
 
                 const ui32 colId = bf.GetColumnIds(0);
                 auto it = idToName.find(colId);
-                if (it == idToName.end()) {
-                    continue;
-                }
+                Y_ENSURE(it != idToName.end(), TStringBuilder() << "Bloom index " << olapIndex.GetName() << " references unknown column id " << colId);
 
                 auto* index = out.add_indexes();
                 index->set_name(olapIndex.GetName());
@@ -799,14 +793,10 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
             }
             case NKikimrSchemeOp::TOlapIndexDescription::kBloomNGrammFilter: {
                 const auto& ng = olapIndex.GetBloomNGrammFilter();
-                if (!ng.HasColumnId()) {
-                    continue;
-                }
+                Y_ENSURE(ng.HasColumnId(), TStringBuilder() << "Bloom ngram index " << olapIndex.GetName() << " has no column id");
 
                 auto it = idToName.find(ng.GetColumnId());
-                if (it == idToName.end()) {
-                    continue;
-                }
+                Y_ENSURE(it != idToName.end(), TStringBuilder() << "Bloom ngram index " << olapIndex.GetName() << " references unknown column id " << ng.GetColumnId());
 
                 auto* index = out.add_indexes();
                 index->set_name(olapIndex.GetName());
@@ -1773,7 +1763,7 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
 
         case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
         case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
-            continue;
+            return returnError(Ydb::StatusIds::UNSUPPORTED, "Local bloom index types are not supported in indexed table creation config");
 
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
             // FIXME: python sdk can create a table with a secondary index without a type

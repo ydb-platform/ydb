@@ -52,12 +52,13 @@ static void AssertColumnTableHasLocalBloomPairIndexes(NKikimr::Tests::TClient& c
     auto desc = client.Ls(path);
     UNIT_ASSERT_C(desc->Record.GetPathDescription().HasColumnTableDescription(), "expected column table at " << path);
     const auto& indexes = desc->Record.GetPathDescription().GetColumnTableDescription().GetSchema().GetIndexes();
-    std::unordered_set<TString> expected{"idx_bloom", "idx_ngram"};
+    std::unordered_set<TString> found;
     for (auto&& idx : indexes) {
-        expected.erase(idx.GetName());
+        found.insert(idx.GetName());
     }
 
-    UNIT_ASSERT_C(expected.empty(), "column table " << path << " must contain local indexes idx_bloom and idx_ngram");
+    const THashSet<TString> expected{"idx_bloom", "idx_ngram"};
+    UNIT_ASSERT_VALUES_EQUAL(found, expected);
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapIndexes) {

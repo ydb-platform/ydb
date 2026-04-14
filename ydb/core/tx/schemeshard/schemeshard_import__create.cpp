@@ -50,7 +50,7 @@ concept HasIndexPopulationMode = requires(const T& t) {
     { t.index_population_mode() } -> std::same_as<Ydb::Import::ImportFromS3Settings::IndexPopulationMode>;
 };
 
-bool IsLocalColumnTableIndex(const Ydb::Table::TableIndex& index) {
+bool IsLocalTableIndex(const Ydb::Table::TableIndex& index) {
     switch (index.type_case()) {
         case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
         case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
@@ -60,14 +60,17 @@ bool IsLocalColumnTableIndex(const Ydb::Table::TableIndex& index) {
     }
 }
 
-void SkipLocalIndexes(TItem& item) {
-    if (!item.Table) {
-        return;
+bool PrepareNextBuildableIndex(const TImportInfo& importInfo, ui32 itemIdx, TItem& item) {
+    if (!NeedToBuildIndexes(importInfo, itemIdx) || !item.Table) {
+        return false;
     }
+
     while (item.NextIndexIdx < item.Table->indexes_size() &&
-           IsLocalColumnTableIndex(item.Table->indexes(item.NextIndexIdx))) {
+           IsLocalTableIndex(item.Table->indexes(item.NextIndexIdx))) {
         ++item.NextIndexIdx;
     }
+
+    return item.NextIndexIdx < item.Table->indexes_size();
 }
 
 THashMap<EState, int> CountItemsByState(const TVector<TItem>& items) {
@@ -1884,9 +1887,7 @@ private:
                 Cancel(*importInfo, itemIdx, "issues during restore " + *issue);
                 Self->EraseEncryptionKey(db, *importInfo);
             } else {
-                const auto needToBuildIndexes = NeedToBuildIndexes(*importInfo, itemIdx);
-                SkipLocalIndexes(item);
-                if (needToBuildIndexes && item.Table && item.NextIndexIdx < item.Table->indexes_size()) {
+                if (PrepareNextBuildableIndex(*importInfo, itemIdx, item)) {
                     item.State = EState::BuildIndexes;
                     AllocateTxId(*importInfo, itemIdx);
                 } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
@@ -1907,10 +1908,9 @@ private:
             } else {
                 if (item.Table) {
                     ++item.NextIndexIdx;
-                    SkipLocalIndexes(item);
                 }
 
-                if (item.Table && item.NextIndexIdx < item.Table->indexes_size()) {
+                if (PrepareNextBuildableIndex(*importInfo, itemIdx, item)) {
                     AllocateTxId(*importInfo, itemIdx);
                 } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
                            AppData()->FeatureFlags.GetEnableChangefeedsImport()) {

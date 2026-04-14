@@ -169,8 +169,8 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
             found.insert(ix.GetName());
         }
 
-        UNIT_ASSERT_C(found.contains("idx_bloom"), "missing idx_bloom after backup");
-        UNIT_ASSERT_C(found.contains("idx_ngram"), "missing idx_ngram after backup");
+        const THashSet<TString> expected{"idx_bloom", "idx_ngram"};
+        UNIT_ASSERT_VALUES_EQUAL(found, expected);
     }
 
     Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnSingleShardTable) {

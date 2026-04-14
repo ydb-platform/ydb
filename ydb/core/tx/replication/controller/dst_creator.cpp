@@ -208,6 +208,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
         NKikimrSchemeOp::TTableDescription* desc = nullptr;
         if (scheme.indexes_size()) {
+            const bool isColumnTable = scheme.store_type() == Ydb::Table::STORE_TYPE_COLUMN;
+            if (isColumnTable) {
+                return Error(NKikimrScheme::StatusSchemeError, "Column table indexes are not supported in replication destination creator");
+            }
+
             NeedToCheck = true;
             TxBody.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
             TxBody.SetInternal(true);

@@ -960,11 +960,16 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
     TPath srcPath = TPath::Resolve(copying.GetCopyFromTable(), context.SS);
 
     if (srcPath.IsResolved() && srcPath.Base()->IsColumnTable()) {
+        if (!copying.GetIsBackup()) {
+            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "CopyTable for column tables is supported only in backup flow")};
+        }
+
         auto schema = TransactionTemplate(tx.GetWorkingDir(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
         schema.SetFailOnExist(tx.GetFailOnExist());
         auto operation = schema.MutableCreateColumnTable();
         operation->SetName(copying.GetName());
         operation->SetCopyFromTable(copying.GetCopyFromTable());
+        operation->SetIsBackup(copying.GetIsBackup());
         return {CreateReadOnlyCopyColumnTable(nextId, schema)};
     }
 

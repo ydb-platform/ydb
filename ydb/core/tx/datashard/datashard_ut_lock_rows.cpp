@@ -8,6 +8,7 @@
 #include "datashard_ut_common_kqp.h"
 
 #include <util/digest/multi.h>
+#include <util/random/fast.h>
 
 namespace {
     struct TRequestId {
@@ -1835,6 +1836,241 @@ Y_UNIT_TEST_SUITE(DataShardLockRows) {
         // Lock (3, 1) by lock 1 (lock must be broken now)
         auto req3 = sendRequestWithUniq(lock1, TKeysBuilder(2).Add(3).Add(1).Build());
         lockRows.ExpectResult(req3, NKikimrDataEvents::TEvLockRowsResult::STATUS_LOCKS_BROKEN);
+    }
+
+    Y_UNIT_TEST(RandomizedDeadlockDetection) {
+        // Run several concurrent "transactions", each of them doing a few locking "rounds",
+        // with some idle timeout between them.
+        //
+        // Each round involves sending TEvLockRows requests to several random shards,
+        // each of them locking a few random rows. To successfully complete, a transaction
+        // must complete all rounds successfully, otherwise it is cancelled.
+        //
+        // The test checks that deadlocks are promptly detected and broken, and the system
+        // as a whole makes sufficient progress.
+
+        const ui64 RNG_SEED = 42;
+        const size_t NODE_COUNT = 5;
+        const size_t SHARD_COUNT = 10;
+        const size_t ROW_COUNT = 100;
+        const size_t MAX_LOCKED_ROWS_PER_SHARD = ROW_COUNT / SHARD_COUNT;
+        const size_t IN_FLIGHT_TXS = 10;
+        const size_t MIN_ROUNDS_PER_TX = 2;
+        const size_t MAX_ROUNDS_PER_TX = 3;
+        const ui64 MAX_IDLE_MS_BETWEEN_ROUNDS = 50;
+        const size_t REQUIRED_SUCCESSFUL_TXS = 100;
+        const size_t MAX_LOOP_ITERS = 5000;
+
+        UNIT_ASSERT_VALUES_EQUAL(ROW_COUNT % SHARD_COUNT, 0);
+
+        TPortManager pm;
+
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false).SetNodeCount(NODE_COUNT);
+        auto [runtime, server, sender] = TestCreateServer(pm, serverSettings);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_INFO);
+
+        {
+            // Create and populate the table.
+            TStringBuilder createQ;
+            createQ << "CREATE TABLE `/Root/table` (key Int32, value Int32, PRIMARY KEY (key))"
+                << " WITH (PARTITION_AT_KEYS = (";
+            for (size_t iShard = 1; iShard < SHARD_COUNT; ++iShard) {
+                if (iShard > 1) {
+                    createQ << ", ";
+                }
+                createQ << iShard * (ROW_COUNT / SHARD_COUNT);
+            }
+            createQ << "))";
+            UNIT_ASSERT_VALUES_EQUAL(KqpSchemeExec(runtime, createQ), "SUCCESS");
+
+            TStringBuilder upsertQ;
+            upsertQ << "UPSERT INTO `/Root/table` (key, value) VALUES ";
+            for (size_t i = 0; i < ROW_COUNT; ++i) {
+                if (i > 0) {
+                    upsertQ << ", ";
+                }
+                upsertQ << "(" << i << ", " << i << ")";
+            }
+            UNIT_ASSERT_VALUES_EQUAL(KqpSimpleExec(runtime, upsertQ), "<empty>");
+        }
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), SHARD_COUNT);
+
+        TVector<TVector<std::unique_ptr<TTestPipe>>> nodePipes;
+        for (size_t nodeIdx = 0; nodeIdx < NODE_COUNT; ++nodeIdx) {
+            TVector<std::unique_ptr<TTestPipe>> pipes;
+            for (size_t shardIdx = 0; shardIdx < shards.size(); ++shardIdx) {
+                pipes.push_back(std::make_unique<TTestPipe>(runtime, shards[shardIdx], nodeIdx));
+            }
+            nodePipes.push_back(std::move(pipes));
+        }
+
+        ui64 nextLockId = 1;
+        TFastRng64 rng(RNG_SEED);
+
+        struct TMockTx {
+            const size_t NodeIdx;
+
+            TActorId EdgeActor;
+            TLockHandle Lock;
+
+            ui64 NextRequestId = 1;
+            THashMap<ui64, size_t> ReqToShardIdx;
+
+            const size_t MaxRounds;
+            size_t CompletedRounds = 0;
+            TMonotonic StartNextRoundAt;
+
+            explicit TMockTx(size_t nodeIdx, size_t maxRounds)
+                : NodeIdx(nodeIdx), MaxRounds(maxRounds)
+            {}
+        };
+
+        TVector<NEvents::TDataEvents::TEvLockRowsResult::TPtr> arrivedResults;
+        auto observer = runtime.AddObserver<NEvents::TDataEvents::TEvLockRowsResult>(
+            [&](auto& ev) {
+                arrivedResults.push_back(std::move(ev));
+            });
+
+        auto pickRows = [&]() -> THashMap<size_t, TVector<int>> {
+            THashMap<size_t, TVector<int>> res;
+
+            TVector<size_t> shards(SHARD_COUNT);
+            std::iota(shards.begin(), shards.end(), 0);
+            Shuffle(shards.begin(), shards.end(), rng);
+            shards.resize(rng.Uniform(1, SHARD_COUNT + 1));
+
+            for (size_t iShard : shards) {
+                const size_t rowsPerShard = ROW_COUNT / SHARD_COUNT;
+                TVector<int> values(rowsPerShard);
+                std::iota(values.begin(), values.end(), rowsPerShard * iShard);
+                Shuffle(values.begin(), values.end(), rng);
+                values.resize(rng.Uniform(1, MAX_LOCKED_ROWS_PER_SHARD + 1));
+                res[iShard] = std::move(values);
+            }
+
+            return res;
+        };
+
+        THashMap<TActorId, TMockTx> actorToTxState;
+        size_t successfulTxs = 0;
+        size_t failedTxs = 0;
+        TMap<NKikimrDataEvents::TEvLockRowsResult_EStatus, size_t> responseStatusStats;
+
+        size_t loopIter = 0;
+        for (; loopIter < MAX_LOOP_ITERS; ++loopIter) {
+            // start new transactions
+            while (actorToTxState.size() < IN_FLIGHT_TXS && successfulTxs < REQUIRED_SUCCESSFUL_TXS) {
+                const size_t nodeIdx = rng.Uniform(NODE_COUNT);
+                TMockTx tx(nodeIdx, rng.Uniform(MIN_ROUNDS_PER_TX, MAX_ROUNDS_PER_TX + 1));
+                tx.EdgeActor = runtime.AllocateEdgeActor(nodeIdx);
+                ui64 lockId = nextLockId++;
+                tx.Lock = TLockHandle(lockId, runtime.GetActorSystem(nodeIdx), runtime.GetCurrentTime());
+                tx.StartNextRoundAt = runtime.GetCurrentMonotonicTime()
+                    + TDuration::MilliSeconds(rng.Uniform(MAX_IDLE_MS_BETWEEN_ROUNDS + 1));
+                auto actorId = tx.EdgeActor;
+                actorToTxState.emplace(actorId, std::move(tx));
+            }
+
+            if (actorToTxState.empty()) {
+                break;
+            }
+
+            // Start new rounds for idle transactions
+            for (auto& [_, tx] : actorToTxState) {
+                if (!tx.ReqToShardIdx.empty() || runtime.GetCurrentMonotonicTime() < tx.StartNextRoundAt) {
+                    continue;
+                }
+
+                auto shardToRows = pickRows();
+                size_t totalRows = 0;
+                for (const auto& [_, rows] : shardToRows) {
+                    totalRows += rows.size();
+                }
+                Cerr << "TX " << tx.Lock.GetLockId()
+                    << " round: " << tx.CompletedRounds << " of " << tx.MaxRounds
+                    << " shards: " << shardToRows.size() << " rows: " << totalRows << Endl;
+
+                for (const auto& [shardIdx, shardRows] : shardToRows) {
+                    ui64 requestId = tx.NextRequestId++;
+
+                    TVector<TCell> cells;
+                    for (int row : shardRows) {
+                        cells.push_back(TCell::Make(row));
+                    }
+                    TSerializedCellMatrix matrix(cells, cells.size(), 1);
+
+                    auto req = std::make_unique<NEvents::TDataEvents::TEvLockRows>(requestId);
+                    req->Record.SetLockId(tx.Lock.GetLockId());
+                    req->Record.SetLockNodeId(runtime.GetNodeId(tx.NodeIdx));
+                    req->Record.SetLockMode(NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE);
+                    req->SetTableId(tableId);
+                    req->Record.AddColumnIds(1);
+                    req->Record.SetPayloadFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+                    req->SetCellMatrix(matrix.ReleaseBuffer());
+
+                    nodePipes.at(tx.NodeIdx).at(shardIdx)->Send(tx.EdgeActor, req.release(), requestId);
+                    tx.ReqToShardIdx[requestId] = shardIdx;
+                }
+            }
+
+            runtime.DispatchEvents({}, TDuration::MilliSeconds(1));
+
+            auto resultsThisCycle = std::move(arrivedResults);
+            arrivedResults.clear();
+
+            for (auto& ev : resultsThisCycle) {
+                auto txIt = actorToTxState.find(ev->Recipient);
+                if (txIt == actorToTxState.end()) {
+                    continue;
+                }
+                auto& tx = txIt->second;
+
+                auto requestId = ev->Get()->Record.GetRequestId();
+                auto shardIt = tx.ReqToShardIdx.find(requestId);
+                if (shardIt == tx.ReqToShardIdx.end()) {
+                    continue;
+                }
+                tx.ReqToShardIdx.erase(shardIt);
+
+                auto status = ev->Get()->Record.GetStatus();
+                ++responseStatusStats[status];
+
+                if (status == NKikimrDataEvents::TEvLockRowsResult::STATUS_SUCCESS) {
+                    if (tx.ReqToShardIdx.empty()) {
+                        ++tx.CompletedRounds;
+                        if (tx.CompletedRounds >= tx.MaxRounds) {
+                            actorToTxState.erase(txIt);
+                            Cerr << "TX " << tx.Lock.GetLockId() << " succeeded" << Endl;
+                            ++successfulTxs;
+                        }
+                    }
+                } else {
+                    for (const auto& [pendingReqId, shardIdx] : tx.ReqToShardIdx) {
+                        auto cancelEv = std::make_unique<NEvents::TDataEvents::TEvLockRowsCancel>(
+                            pendingReqId);
+                        nodePipes.at(tx.NodeIdx).at(shardIdx)->Send(tx.EdgeActor, cancelEv.release());
+                    }
+                    actorToTxState.erase(txIt);
+                    Cerr << "TX " << tx.Lock.GetLockId() << " failed" << Endl;
+                    ++failedTxs;
+                }
+            }
+        }
+
+        Cerr << "Loop iterations: " << loopIter << Endl
+            << "Successful transactions: " << successfulTxs << Endl
+            << "Failed transactions: " << failedTxs << Endl;
+        Cerr << "Response status counts:" << Endl;
+        for (const auto& [status, count] : responseStatusStats) {
+            Cerr << status << ": " << count << Endl;
+        }
+        UNIT_ASSERT_GT(successfulTxs, REQUIRED_SUCCESSFUL_TXS);
+        UNIT_ASSERT(responseStatusStats[NKikimrDataEvents::TEvLockRowsResult::STATUS_DEADLOCK] > 0);
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardLockRows)

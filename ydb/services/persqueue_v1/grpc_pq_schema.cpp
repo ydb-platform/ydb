@@ -3,6 +3,8 @@
 #include "actors/schema_actors.h"
 #include "actors/read_session_actor.h"
 
+#include <ydb/services/persqueue_v1/actors/schema/topic/actors.h>
+
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 
 #include <algorithm>
@@ -138,7 +140,7 @@ void DoAlterTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProv
     Y_VERIFY_DEBUG(dynamic_cast<const Ydb::Topic::AlterTopicRequest*>(p->GetRequest()));
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new alter topic request");
-    f.RegisterActor(new NGRpcProxy::V1::TAlterTopicActor(p));
+    f.RegisterActor(NKikimr::NGRpcProxy::V1::NTopic::CreateAlterTopicActor(p));
 }
 
 void DoDescribeTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {

@@ -1908,6 +1908,20 @@
             "uri": "https://{canondata_backend}/1817427/cd7fe4c1c700931e8c564489ae0d616c780dd82b/resource.tar.gz#test.test_window-win_func_percent_rank-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[window-win_range_bound_decimal_desc_following--Debug]": [
+        {
+            "checksum": "d8ebef22c513552a4ffa22a26f1b1c36",
+            "size": 1784,
+            "uri": "https://{canondata_backend}/1031349/5552049dc3cd667687d95150edafe07b10f060bb/resource.tar.gz#test.test_window-win_range_bound_decimal_desc_following--Debug_/opt.yql"
+        }
+    ],
+    "test.test[window-win_range_bound_decimal_desc_following--Results]": [
+        {
+            "checksum": "0058e6374758af5f4844b49b5fa09c14",
+            "size": 1353,
+            "uri": "https://{canondata_backend}/1031349/5552049dc3cd667687d95150edafe07b10f060bb/resource.tar.gz#test.test_window-win_range_bound_decimal_desc_following--Results_/results.txt"
+        }
+    ],
     "test.test[window-win_range_double--Debug]": [
         {
             "checksum": "83ad599b7aa071627d9ed1b8d6222188",

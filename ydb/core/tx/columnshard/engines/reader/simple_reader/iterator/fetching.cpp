@@ -346,9 +346,12 @@ TConclusion<bool> TCleanAggregationSources::DoExecuteInplace(
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 TConclusion<bool> TBuildResultStep::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
 =======
+=======
+>>>>>>> 26c9455af5c (page skipping has been added (#38042))
 bool TBuildResultStep::IsPageSkippedByFilter(const std::shared_ptr<NCommon::IDataSource>& source) const {
     const auto& notAppliedFilter = source->GetStageResult().GetNotAppliedFilter();
     if (notAppliedFilter && !notAppliedFilter->IsTotalAllowFilter()) {
@@ -358,6 +361,7 @@ bool TBuildResultStep::IsPageSkippedByFilter(const std::shared_ptr<NCommon::IDat
     return false;
 }
 
+<<<<<<< HEAD
 void TBuildResultStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step,
     const TDuration executionDurationMs) const {
     if (!LWPROBE_ENABLED(BuildResult) && !NLWTrace::HasShuttles(source->GetDataSourceOrbit())) {
@@ -376,12 +380,17 @@ void TBuildResultStep::ReportTracing(const std::shared_ptr<NCommon::IDataSource>
             source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead());
 }
 
+=======
+>>>>>>> 26c9455af5c (page skipping has been added (#38042))
 std::shared_ptr<arrow::Table> TBuildResultStep::BuildPageResultBatch(const std::shared_ptr<NCommon::IDataSource>& source) const {
     if (IsPageSkippedByFilter(source)) {
         return nullptr;
     }
+<<<<<<< HEAD
 >>>>>>> 50ef5ffce30 (more traces (#37833))
     auto context = source->GetContext();
+=======
+>>>>>>> 26c9455af5c (page skipping has been added (#38042))
     NArrow::TGeneralContainer::TTableConstructionContext contextTableConstruct;
     if (!source->IsSourceInMemory()) {
         contextTableConstruct.SetStartIndex(StartIndex).SetRecordsCount(RecordsCount);
@@ -390,25 +399,29 @@ std::shared_ptr<arrow::Table> TBuildResultStep::BuildPageResultBatch(const std::
         AFL_VERIFY(RecordsCount == source->GetRecordsCount())("records_count", RecordsCount)("source", source->GetRecordsCount());
     }
     contextTableConstruct.SetFilter(source->GetStageResult().GetNotAppliedFilter());
-    std::shared_ptr<arrow::Table> resultBatch;
-    if (!source->GetStageResult().IsEmpty()) {
-        resultBatch = source->GetStageResult().GetBatch()->BuildTableVerified(contextTableConstruct);
-        if (!resultBatch->num_rows()) {
-            resultBatch = nullptr;
-        }
+    if (source->GetStageResult().IsEmpty()) {
+        return nullptr;
     }
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> 26c9455af5c (page skipping has been added (#38042))
     auto resultBatch = source->GetStageResult().GetBatch()->BuildTableVerified(contextTableConstruct);
     return resultBatch->num_rows() ? resultBatch : nullptr;
 }
 
 TConclusion<bool> TBuildResultStep::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step) const {
+<<<<<<< HEAD
     const TMonotonic startExecution = TMonotonic::Now();
     auto context = source->GetContext();
     auto resultBatch = BuildPageResultBatch(source);
 >>>>>>> 50ef5ffce30 (more traces (#37833))
+=======
+    auto context = source->GetContext();
+    auto resultBatch = BuildPageResultBatch(source);
+>>>>>>> 26c9455af5c (page skipping has been added (#38042))
     auto* sSource = source->MutableAs<IDataSource>();
     const ui32 recordsCount = resultBatch ? resultBatch->num_rows() : 0;
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TBuildResultStep")("source_idx", source->GetSourceIdx())("count", recordsCount);

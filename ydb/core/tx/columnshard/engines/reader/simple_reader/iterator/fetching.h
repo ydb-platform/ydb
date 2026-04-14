@@ -122,11 +122,16 @@ private:
     const ui32 StartIndex;
     const ui32 RecordsCount;
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
     bool IsPageSkippedByFilter(const std::shared_ptr<NCommon::IDataSource>& source) const;
     std::shared_ptr<arrow::Table> BuildPageResultBatch(const std::shared_ptr<NCommon::IDataSource>& source) const;
     void ReportTracing(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step, const TDuration executionDurationMs) const;
 >>>>>>> 50ef5ffce30 (more traces (#37833))
+=======
+    bool IsPageSkippedByFilter(const std::shared_ptr<NCommon::IDataSource>& source) const;
+    std::shared_ptr<arrow::Table> BuildPageResultBatch(const std::shared_ptr<NCommon::IDataSource>& source) const;
+>>>>>>> 26c9455af5c (page skipping has been added (#38042))
 
 protected:
     virtual TConclusion<bool> DoExecuteInplace(

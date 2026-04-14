@@ -496,7 +496,7 @@ class Test(TestBase):
             # No overpopulated pdisks yet, no reassignments are necessary
             _trace_cluster_balance('--only-from-overpopulated-pdisks'),
 
-            # Change GroupSizeInUnits. The pdsik becomes overpopulated
+            # Change GroupSizeInUnits. The pdisk becomes overpopulated
             # ReassignGroupDisk should be invoked
             builder.update_group(group_id=0x80000001, group_size_in_units=8) and None,
             _trace_cluster_balance('--only-from-overpopulated-pdisks', pending_reassigns={0x80000002: (1, 1002, 1000)}),

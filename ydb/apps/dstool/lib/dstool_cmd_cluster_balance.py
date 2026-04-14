@@ -4,9 +4,8 @@ import sys
 import random
 from collections import defaultdict, Counter
 
-description = '''Balance VDisks across PDisks in a storage pool.
-
-This tool ivokes ReassignGroupDisk BSC command. It can operate in several modes:
+description = '''Balance VDisks across PDisks in a storage pool by invoking ReassignGroupDisk BSC command.
+It can operate in several modes:
 
 1. Overpopulated PDisk mode (--only-from-overpopulated-pdisks):
    Moves VDisks from PDisks that exceed their expected slot count to less populated PDisks.

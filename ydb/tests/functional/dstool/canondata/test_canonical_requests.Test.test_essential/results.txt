@@ -57,11 +57,9 @@ dstool
 │  └─ list                              List nodes
 ├─ cluster
 │  ├─ balance                           Balance VDisks across PDisks in a 
-│  │                                    storage pool.
-│  │                                    
-│  │                                    This tool ivokes ReassignGroupDisk BSC 
-│  │                                    command. It can operate in several 
-│  │                                    modes:
+│  │                                    storage pool by invoking 
+│  │                                    ReassignGroupDisk BSC command.
+│  │                                    It can operate in several modes:
 │  │                                    
 │  │                                    1. Overpopulated PDisk mode (--only-
 │  │                                    from-overpopulated-pdisks):

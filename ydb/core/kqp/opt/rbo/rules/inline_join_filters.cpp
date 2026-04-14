@@ -34,36 +34,46 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
         return newFilter;
     }
 
+    // We only support various left joins now
+    if (join->JoinKind != "Left" && join->JoinKind != "LeftSemi" && join->JoinKind != "LeftOnly") {
+        return input;
+    }
+
     auto innerJoin = MakeIntrusive<TOpJoin>(join->GetLeftInput(), join->GetRightInput(), join->Pos, "Inner", join->JoinKeys);
     auto filterExpr = MakeConjunction(join->JoinFilters);
-    if (join->JoinKind == "LeftOnly" || join->JoinKind == "RightOnly") {
+    if (join->JoinKind == "LeftOnly") {
         filterExpr = MakeNegation(filterExpr);
     }
 
     auto newFilter = MakeIntrusive<TOpFilter>(innerJoin, input->Pos, filterExpr);
-    // If this is one of the left joins, we build an inner join with the non-equijoin filter on top, and then add a left join on the
-    // equi-join predicate. The only small exception is left-only join, we negate the predicate
-    if (join->JoinKind == "Left" || join->JoinKind == "LeftSemi" || join->JoinKind == "LeftOnly") {
-        return MakeIntrusive<TOpJoin>(innerJoin, join->GetRightInput(), join->Pos, join->JoinKind, join->JoinKeys);
+
+    // We need to remap the appropriate side of the output columns, so we can join on the same columns again
+    // without confilcts
+    auto renameIUs = join->GetLeftInput()->GetOutputIUs();
+
+    TVector<TMapElement> mapElements;
+    THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> renameMap;
+    for (const auto & iu : newFilter->GetOutputIUs()) {
+
+        if (std::find(renameIUs.begin(), renameIUs.end(), iu) != renameIUs.end()) {
+            auto newVar = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++));
+            mapElements.push_back(TMapElement(newVar, iu, join->Pos, &ctx.ExprCtx, &props));
+            renameMap[iu] = newVar;
+        } else {
+            mapElements.push_back(TMapElement(iu, iu, join->Pos, &ctx.ExprCtx, &props));
+        }
     }
 
-    // Symmetrically with righ joins
-    // FIXME: Maybe we should just flip all the right joins before this
-    else if (join->JoinKind == "Right" || join->JoinKind == "RightSemi" || join->JoinKind == "RightOnly") {
-        return MakeIntrusive<TOpJoin>(innerJoin, join->GetRightInput(), join->Pos, join->JoinKind, join->JoinKeys);
+    auto map = MakeIntrusive<TOpMap>(newFilter, join->Pos, mapElements, true);
+
+    TVector<std::pair<TInfoUnit, TInfoUnit>> newJoinKeys;
+    for (const auto & [leftKey, _] : join->JoinKeys) {
+        newJoinKeys.push_back(std::make_pair(leftKey, renameMap.at(leftKey)));
     }
 
-    // For full outerjoin we need to add two joins
-    else if (join->JoinKind == "Full"){
-        auto leftJoin = MakeIntrusive<TOpJoin>(join->GetLeftInput(), innerJoin, join->Pos, "Left", join->JoinKeys);
-        auto rightJoin = MakeIntrusive<TOpJoin>(leftJoin, join->GetRightInput(), join->Pos, "Left", join->JoinKeys);
-        return rightJoin;
-    }
-
-    // We don't suppport Exclusion Join
-    else {
-        Y_ENSURE(false, TStringBuilder() << "Unsupported join kind for inlining join filers: " << join->JoinKind);
-    }
+    auto result = MakeIntrusive<TOpJoin>(join->GetLeftInput(), map, join->Pos, join->JoinKind, newJoinKeys);
+    
+    return result;
 }
 }
 }

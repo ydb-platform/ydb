@@ -178,6 +178,7 @@ class ClusterKillSlotDaemonNemesis(MonitoredAgentActor):
             self.on_success_inject_fault()
         except Exception as e:
             self._logger.error("Kill slot failed: %s", e)
+            raise
 
     def extract_fault(self, payload=None) -> None:
         del payload
@@ -203,6 +204,7 @@ class ClusterKillNodeDaemonNemesis(MonitoredAgentActor):
             self.on_success_inject_fault()
         except Exception as e:
             self._logger.error("Kill node daemon failed: %s", e)
+            raise
 
     def extract_fault(self, payload=None) -> None:
         del payload
@@ -237,6 +239,7 @@ class ClusterSerialKillNodeNemesis(MonitoredAgentActor):
             self.on_success_inject_fault()
         except Exception as e:
             self._logger.error("Serial kill node failed: %s", e)
+            raise
 
     def extract_fault(self, payload=None) -> None:
         del payload
@@ -273,6 +276,7 @@ class ClusterSerialKillSlotsNemesis(MonitoredAgentActor):
             self.on_success_inject_fault()
         except Exception as e:
             self._logger.error("Serial kill slot failed: %s", e)
+            raise
 
     def extract_fault(self, payload=None) -> None:
         del payload
@@ -391,6 +395,7 @@ class ClusterRollingUpdateNemesis(MonitoredAgentActor):
             self.on_success_inject_fault()
         except Exception as e:
             self._logger.error("rolling update failed: %s", e)
+            raise
 
     def extract_fault(self, payload=None) -> None:
         del payload

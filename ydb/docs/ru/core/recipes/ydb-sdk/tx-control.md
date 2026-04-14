@@ -1556,7 +1556,7 @@
     );
     ```
 
-  - EF
+  - Entity Framework
 
     ```csharp
     var strategy = db.Database.CreateExecutionStrategy();

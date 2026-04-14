@@ -158,7 +158,7 @@
   using Ydb.Sdk.Ado;
 
   await using var dataSource = new YdbDataSource(
-      "Host=ydb.serverless.yandexcloud.net;Port=2135;Database=/ru-central1/.../...;EnableMetadataCredentials=True");
+      "Host=ydb.serverless.yandexcloud.net;Port=2135;Database=/ru-central1/<folder-id>/<database-id>;EnableMetadataCredentials=True");
   await using var connection = await dataSource.OpenConnectionAsync();
   ```
 

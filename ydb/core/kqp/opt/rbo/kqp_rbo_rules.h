@@ -64,6 +64,27 @@ class TInlineSimpleInExistsSubplanRule : public ISimplifiedRule {
 };
 
 /**
+ * Inline join filters
+ */
+class TInlineJoinFiltersRule : public ISimplifiedRule {
+  public:
+    TInlineJoinFiltersRule() : ISimplifiedRule("Inline join filters", ERuleProperties::RequireParents) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+
+/***
+ * Fuse two consequtive filters
+ */
+class TFuseFiltersRule : public ISimplifiedRule {
+  public:
+    TFuseFiltersRule() : ISimplifiedRule("Fuse filters", ERuleProperties::RequireParents) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
  * Push down a non-projecting map operator
  * Currently only pushes below joins that are immediately below
  */

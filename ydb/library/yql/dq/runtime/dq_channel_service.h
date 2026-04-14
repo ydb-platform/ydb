@@ -67,11 +67,11 @@ public:
     TDataChunk(
         NDqProto::TCheckpoint&& checkpoint,
         bool leading)
-        : Leading(leading)
-        , Checkpoint(std::move(checkpoint)) {
-            Bytes = 1;
-        Timestamp = TInstant::Now();
-    }
+        : Bytes(1)
+        , Leading(leading)
+        , Timestamp(TInstant::Now())
+        , Checkpoint(std::move(checkpoint))
+    {}
 
     TDataChunk(
         NDqProto::TWatermark&& watermark,

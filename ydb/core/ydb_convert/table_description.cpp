@@ -794,10 +794,7 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
                 index->set_name(olapIndex.GetName());
                 index->add_index_columns(it->second);
                 auto* lb = index->mutable_local_bloom_filter_index();
-                if (bf.HasFalsePositiveProbability()) {
-                    lb->set_false_positive_probability(bf.GetFalsePositiveProbability());
-                }
-
+                lb->set_false_positive_probability(bf.GetFalsePositiveProbability());
                 break;
             }
             case NKikimrSchemeOp::TOlapIndexDescription::kBloomNGrammFilter: {
@@ -815,30 +812,12 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
                 index->set_name(olapIndex.GetName());
                 index->add_index_columns(it->second);
                 auto* lng = index->mutable_local_bloom_ngram_filter_index();
-                if (ng.HasNGrammSize()) {
-                    lng->set_ngram_size(ng.GetNGrammSize());
-                }
-
-                if (ng.HasHashesCount()) {
-                    lng->set_hashes_count(ng.GetHashesCount());
-                }
-
-                if (ng.HasFilterSizeBytes()) {
-                    lng->set_filter_size_bytes(ng.GetFilterSizeBytes());
-                }
-
-                if (ng.HasRecordsCount()) {
-                    lng->set_records_count(ng.GetRecordsCount());
-                }
-
-                if (ng.HasCaseSensitive()) {
-                    lng->set_case_sensitive(ng.GetCaseSensitive());
-                }
-
-                if (ng.HasFalsePositiveProbability()) {
-                    lng->set_false_positive_probability(ng.GetFalsePositiveProbability());
-                }
-
+                lng->set_ngram_size(ng.GetNGrammSize());
+                lng->set_hashes_count(ng.GetHashesCount());
+                lng->set_filter_size_bytes(ng.GetFilterSizeBytes());
+                lng->set_records_count(ng.GetRecordsCount());
+                lng->set_case_sensitive(ng.GetCaseSensitive());
+                lng->set_false_positive_probability(ng.GetFalsePositiveProbability());
                 break;
             }
             default:
@@ -848,6 +827,26 @@ void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const 
 }
 
 namespace {
+
+template <typename TSettings, typename TProto>
+void FillLocalBloomNgramProto(TProto* ngram, const TSettings& ngramSettings) {
+    const auto derived = NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::BuildDerivedSettings(
+        ngramSettings.has_false_positive_probability()
+            ? ngramSettings.false_positive_probability()
+            : NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability,
+        ngramSettings.ngram_size()
+            ? ngramSettings.ngram_size()
+            : NKikimr::NOlap::NIndexes::NDefaults::NGrammSize,
+        ngramSettings.has_case_sensitive()
+            ? ngramSettings.case_sensitive()
+            : NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive);
+    ngram->SetNGrammSize(derived.NgramSize);
+    ngram->SetCaseSensitive(derived.CaseSensitive);
+    ngram->SetFalsePositiveProbability(derived.FalsePositiveProbability);
+    ngram->SetFilterSizeBytes(derived.FilterSizeBytes);
+    ngram->SetHashesCount(derived.HashesCount);
+    ngram->SetRecordsCount(derived.RecordsCount);
+}
 
 bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescription& tableDesc, const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error) {
     if (!in.indexes_size()) {
@@ -916,25 +915,7 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
                 olapIndex->SetClassName("BLOOM_NGRAMM_FILTER");
                 auto* ngram = olapIndex->MutableBloomNGrammFilter();
                 const auto& ngramSettings = index.local_bloom_ngram_filter_index();
-                const double fpp = ngramSettings.has_false_positive_probability()
-                    ? ngramSettings.false_positive_probability()
-                    : NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability;
-                ngram->SetNGrammSize(ngramSettings.ngram_size()
-                    ? ngramSettings.ngram_size()
-                    : NKikimr::NOlap::NIndexes::NDefaults::NGrammSize);
-                ngram->SetCaseSensitive(ngramSettings.has_case_sensitive()
-                    ? ngramSettings.case_sensitive()
-                    : NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive);
-                ngram->SetFalsePositiveProbability(fpp);
-                ngram->SetFilterSizeBytes(ngramSettings.filter_size_bytes()
-                    ? ngramSettings.filter_size_bytes()
-                    : NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
-                ngram->SetHashesCount(ngramSettings.hashes_count()
-                    ? ngramSettings.hashes_count()
-                    : NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
-                ngram->SetRecordsCount(ngramSettings.records_count()
-                    ? ngramSettings.records_count()
-                    : NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));
+                FillLocalBloomNgramProto(ngram, ngramSettings);
                 ngram->SetColumnId(columnId);
                 break;
             }
@@ -1408,15 +1389,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 upsert->SetClassName("BLOOM_NGRAMM_FILTER");
                 auto* ngram = upsert->MutableBloomNGrammFilter();
                 const auto& ngramSettings = index.local_bloom_ngram_filter_index();
-                const double fpp = ngramSettings.has_false_positive_probability()
-                    ? ngramSettings.false_positive_probability()
-                    : NKikimr::NOlap::NIndexes::NDefaults::FalsePositiveProbability;
-                ngram->SetNGrammSize(ngramSettings.ngram_size() ? ngramSettings.ngram_size() : NKikimr::NOlap::NIndexes::NDefaults::NGrammSize);
-                ngram->SetCaseSensitive(ngramSettings.has_case_sensitive() ? ngramSettings.case_sensitive() : NKikimr::NOlap::NIndexes::NDefaults::CaseSensitive);
-                ngram->SetFilterSizeBytes(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedFilterSizeBytes(fpp));
-                ngram->SetHashesCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcHashesCount(fpp));
-                ngram->SetRecordsCount(NKikimr::NOlap::NIndexes::NBloomNGramm::TConstants::CalcDeprecatedRecordsCount(fpp));
-                ngram->SetFalsePositiveProbability(fpp);
+                FillLocalBloomNgramProto(ngram, ngramSettings);
                 ngram->SetColumnName(index.index_columns(0));
                 break;
             }

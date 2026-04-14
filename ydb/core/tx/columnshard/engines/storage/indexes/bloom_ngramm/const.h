@@ -7,6 +7,15 @@
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
+struct TDerivedSettings {
+    ui32 NgramSize = 0;
+    bool CaseSensitive = false;
+    double FalsePositiveProbability = 0.0;
+    ui32 HashesCount = 0;
+    ui32 FilterSizeBytes = 0;
+    ui32 RecordsCount = 0;
+};
+
 class TConstants {
 public:
     static constexpr ui32 MinNGrammSize = 3;
@@ -53,6 +62,17 @@ public:
             std::ceil((-hashesCount * recordsCount) / std::log(1.0 - std::pow(probability, 1.0 / hashesCount)));
         return std::clamp<ui32>(
             static_cast<ui32>(std::ceil(bitsCount / 8.0)), MinFilterSizeBytes, MaxFilterSizeBytes);
+    }
+
+    static TDerivedSettings BuildDerivedSettings(const double falsePositiveProbability, const ui32 ngramSize, const bool caseSensitive) {
+        TDerivedSettings result;
+        result.NgramSize = ngramSize;
+        result.CaseSensitive = caseSensitive;
+        result.FalsePositiveProbability = falsePositiveProbability;
+        result.HashesCount = CalcHashesCount(falsePositiveProbability);
+        result.FilterSizeBytes = CalcDeprecatedFilterSizeBytes(falsePositiveProbability);
+        result.RecordsCount = CalcDeprecatedRecordsCount(falsePositiveProbability);
+        return result;
     }
 
     static TString GetHashesCountIntervalString();

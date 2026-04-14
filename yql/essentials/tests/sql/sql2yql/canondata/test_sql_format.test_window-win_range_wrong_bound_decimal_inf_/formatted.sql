@@ -1,5 +1,4 @@
 PRAGMA WindowNewPipeline;
-PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
 
 /* custom error: Error while processing RANGE bound for column type: Decimal(3,1) and offset type: Decimal(3,1) */
 /* custom error: Inf is not allowed for RANGE frame bounds */

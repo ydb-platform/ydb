@@ -1,5 +1,4 @@
 PRAGMA WindowNewPipeline;
-PRAGMA config.flags('OptimizerFlags', 'ForbidConstantDependsOnFuse');
 
 $big_one = Decimal('11111111111111111111111111111111111', 35, 0);
 $big_two = Decimal('22222222222222222222222222222222222', 35, 0);

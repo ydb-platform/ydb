@@ -96,6 +96,11 @@ public:
         }
 
         std::vector<std::string> sortedNotNullColumns(settings.GetNotNullColumns().begin(), settings.GetNotNullColumns().end());
+
+        if (settings.NotNullColumnsSize() == 0) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Failed item check: There are no columns that need to be updated");
+        }
+
         std::sort(sortedNotNullColumns.begin(), sortedNotNullColumns.end());
 
         // Checking the existence of columns in a table for O(std::sort)
@@ -120,7 +125,7 @@ public:
 
                 if (currentId == allColumnNames.size()) {
                     TString error = TStringBuilder()
-                        << "Column with name `" << s << "` doesnt exist.";
+                        << "Column with name `" << s << "` doesn't exist.";
 
                     return Reply(NKikimrScheme::StatusInvalidParameter, std::move(error));
                 }

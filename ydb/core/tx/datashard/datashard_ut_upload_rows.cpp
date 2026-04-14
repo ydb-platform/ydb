@@ -44,7 +44,11 @@ static void DoStartUploadTestRows(
         rows->emplace_back(serializedKey, serializedValue);
     }
 
+<<<<<<< HEAD
     auto actor = NTxProxy::CreateUploadRowsInternal(sender, tableName, types, rows, NTxProxy::EUploadRowsMode::Normal, false, false, 0, backoff);
+=======
+    auto actor = NTxProxy::CreateUploadRowsInternal(sender, database, tableName, types, rows, NTxProxy::EUploadRowsMode::Normal, false, false, false, 0, backoff);
+>>>>>>> d824b4cdac6 (Disable change data collection (CDC) for IsBuildInProgress columns (#38033))
     runtime.Register(actor);
 }
 

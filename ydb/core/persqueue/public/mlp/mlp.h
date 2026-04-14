@@ -141,6 +141,7 @@ struct TReaderSettings {
     std::optional<TDuration> ProcessingTimeout;
     ui32 MaxNumberOfMessage = 1;
     bool UncompressMessages = false;
+    std::vector<TString> SkipMessageGroups; // TODO remove after SQS migration was finished
 
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };

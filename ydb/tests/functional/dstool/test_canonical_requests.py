@@ -124,11 +124,10 @@ class TestBase:
         original_invoke_grpc = common.invoke_grpc
 
         def mock_invoke_grpc(func, *params, **kwargs):
-            response = None
-            if mock_base_config is None:
-                response = original_invoke_grpc(func, *params, **kwargs)
-            elif fake_grpc_handler is not None:
+            if fake_grpc_handler is not None:
                 response = fake_grpc_handler.handle(func, *params)
+            else:
+                response = original_invoke_grpc(func, *params, **kwargs)
 
             grpc_calls.append(f'=== Invoke {func} ===')
             for param in params:

@@ -52,11 +52,20 @@ concept HasIndexPopulationMode = requires(const T& t) {
 
 bool IsLocalTableIndex(const Ydb::Table::TableIndex& index) {
     switch (index.type_case()) {
+        case Ydb::Table::TableIndex::kGlobalIndex:
+        case Ydb::Table::TableIndex::kGlobalAsyncIndex:
+        case Ydb::Table::TableIndex::kGlobalUniqueIndex:
+        case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
+        case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
+        case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
+        case Ydb::Table::TableIndex::kGlobalJsonIndex:
+        case Ydb::Table::TableIndex::TYPE_NOT_SET:
+            return false;
         case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
         case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex:
             return true;
         default:
-            return false;
+            Y_ABORT("Unexpected Ydb::Table::TableIndex::type_case");
     }
 }
 

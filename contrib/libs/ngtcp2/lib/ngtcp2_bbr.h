@@ -130,7 +130,6 @@ typedef struct ngtcp2_cc_bbr {
   int in_loss_recovery;
   uint64_t round_count_at_recovery;
   uint64_t max_inflight;
-  ngtcp2_tstamp congestion_recovery_start_ts;
   uint64_t bdp;
 } ngtcp2_cc_bbr;
 

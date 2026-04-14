@@ -16,7 +16,7 @@ namespace NYT::NYPath {
 
 std::pair<TYPath, NYTree::IAttributeDictionaryPtr> ParseRichYPathImpl(TStringBuf str);
 
-TString ConvertToStringImpl(const TYPath& path, const NYTree::IAttributeDictionary& attributes, NYson::EYsonFormat ysonFormat);
+TString ConvertToString(const TYPath& path, const NYTree::IAttributeDictionary& attributes, NYson::EYsonFormat ysonFormat, bool sortAttributes = false);
 
 NChunkClient::TReadRange RangeNodeToReadRange(
     const NTableClient::TComparator& comparator,

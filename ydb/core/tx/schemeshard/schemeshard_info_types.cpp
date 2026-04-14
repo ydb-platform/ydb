@@ -327,7 +327,7 @@ void TTableInfo::CalculateColumnIdByName() const {
 }
 
 ui32 TTableInfo::GetColumnIdByName(const TString& columnName, bool force) const {
-    if (ColumnIdByName.size() != Columns.size() || force) {
+    if (ColumnIdByName.size() == 0 || force) {
         CalculateColumnIdByName();
     }
 

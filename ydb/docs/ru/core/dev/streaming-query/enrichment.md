@@ -11,6 +11,8 @@
 
 {% endnote %}
 
+## Подготовка источника данных для работы с топиками
+
 Создайте внешний источник данных для работы с топиками. Для хранения токена используется [секрет](../../yql/reference/syntax/create-secret.md), источник создаётся через [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md).
 
 ```yql
@@ -32,6 +34,8 @@ CREATE EXTERNAL DATA SOURCE ydb_source WITH (
 - `<ydb_endpoint>` — эндпоинт {{ ydb-short-name }}, например `grpcs://<ydb_host>:2135`
 - `<db_name>` — путь к базе данных {{ ydb-short-name }}, например `/Root/database`.
 
+## Потоковые запросы для обогащения данных
+
 Запросы в примерах ниже читают события из входного топика, присоединяют к каждому событию название сервиса из справочника по `ServiceId` и записывают результат в выходной топик.
 
 Подробнее об использованных в запросах функциях:
@@ -42,11 +46,11 @@ CREATE EXTERNAL DATA SOURCE ydb_source WITH (
 - [Unwrap](../../yql/reference/builtins/basic.md#unwrap)
 - [ToBytes](../../yql/reference/builtins/basic.md#to-from-bytes).
 
-## Обогащение из локальной таблицы {#enrichment-local-table}
+### Обогащение из локальной таблицы {#enrichment-local-table}
 
 Справочник хранится в [таблице](../../concepts/datamodel/table.md) `services_dict` в текущей базе данных.
 
-### Создание потокового запроса
+#### Создание потокового запроса
 
 ```yql
 CREATE STREAMING QUERY query_with_table_join AS
@@ -88,11 +92,11 @@ FROM
 END DO
 ```
 
-## Обогащение из S3 {#enrichment-s3}
+### Обогащение из S3 {#enrichment-s3}
 
 Справочник хранится в S3 и подключается через [внешний источник данных](../../concepts/query_execution/federated_query/s3/external_data_source.md).
 
-### Подготовка источника данных для S3
+#### Подготовка источника данных для S3
 
 Создайте дополнительный [внешний источник данных](../../yql/reference/syntax/create-external-data-source.md) для чтения справочника из S3:
 
@@ -109,7 +113,7 @@ CREATE EXTERNAL DATA SOURCE s3_source WITH (
 
 - `<s3_endpoint>` — URL S3-хранилища, например `https://storage.yandexcloud.net/<bucket>/` для Yandex Cloud.
 
-### Создание потокового запроса
+#### Создание потокового запроса
 
 ```yql
 CREATE STREAMING QUERY query_with_join AS

@@ -9,7 +9,7 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-const TString TEST_DB = "/Root/testdb";
+constexpr char TEST_DB[] = "/Root/testdb";
 
 TResourcePoolClassifierConfig MakeClassifierConfig(
     const TString& database, const TString& name, i64 rank,
@@ -18,7 +18,9 @@ TResourcePoolClassifierConfig MakeClassifierConfig(
 {
     NJson::TJsonValue json(NJson::JSON_MAP);
     json["resource_pool"] = resourcePool;
-    if (memberName) json["member_name"] = *memberName;
+    if (memberName) {
+        json["member_name"] = *memberName;
+    }
 
     TResourcePoolClassifierConfig config;
     config.SetDatabase(database);
@@ -33,7 +35,7 @@ std::shared_ptr<TResourcePoolClassifierSnapshot> MakeClassifierSnapshot(
     std::vector<TResourcePoolClassifierConfig> configs)
 {
     auto snapshot = std::make_shared<TResourcePoolClassifierSnapshot>(TInstant::Now());
-    for (auto& cfg : configs) {
+    for (const auto& cfg : configs) {
         snapshot->MutableResourcePoolClassifierConfigs()[db]
             .emplace(cfg.GetName(), cfg);
         snapshot->MutableResourcePoolClassifierConfigsByRank()[db]
@@ -71,7 +73,7 @@ struct TClassifyTestCase {
 
     struct TExtraClassifier {
         TString Name;
-        i64 Rank;
+        i64 Rank = 0;
         TString ResourcePool;
         std::optional<TString> MemberName;
     };

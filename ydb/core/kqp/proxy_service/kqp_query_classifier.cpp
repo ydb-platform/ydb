@@ -7,7 +7,7 @@ namespace {
 bool MatchesMemberName(const TString& target, const TClassifyContext& ctx) {
     // Check anonymous user
     if (!ctx.UserToken) {
-        return (target == NACLib::TSID());
+        return target == NACLib::TSID();
     }
 
     if (auto it = ctx.MemberNameCache.find(target); it != ctx.MemberNameCache.end()) {
@@ -18,7 +18,7 @@ bool MatchesMemberName(const TString& target, const TClassifyContext& ctx) {
 
     // Check UserSID only for non-system users.
     if (!ctx.UserToken->IsSystemUser()) {
-        found = (target == ctx.UserToken->GetUserSID());
+        found = target == ctx.UserToken->GetUserSID();
     }
 
     // Check GroupSID for all users
@@ -50,7 +50,7 @@ bool MatchesDynamic(const NResourcePool::TClassifierSettings&, const TPreparedQu
     return true;
 }
 
-} // namespace anonymous
+} // anonymous namespace
 
 TWmQueryClassifier::TWmQueryClassifier(const TPoolInfoSnapshotPtr poolInfoSnapshot,
     const TClassifierSnapshotPtr classifierSnapshot, const TClassifyContext context)

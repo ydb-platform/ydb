@@ -350,7 +350,7 @@ private:
             poolHandler = GetOrCreatePoolState(databaseId, poolId, ev->Get()->PoolConfig)->PoolHandler;
         } else {
             LOG_W("Failed to fetch pool: " << poolId
-                << ", DatabaseId: " << databaseId
+                << ", database id: " << databaseId
                 << ", status: " << ev->Get()->Status
                 << ", issues: " << ev->Get()->Issues.ToOneLineString());
         }

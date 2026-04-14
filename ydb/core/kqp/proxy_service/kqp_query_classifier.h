@@ -118,6 +118,7 @@ public:
     TPreClassifyResult GetPreClassifyResult() const override;
 
     void PreCompileClassify();
+
     [[nodiscard]]
     TPostClassifyResult PostCompileClassify(const TPreparedQueryHolder& preparedQuery) const override;
 
@@ -132,14 +133,16 @@ private:
         if (poolId == REJECT_POOL_ID) {
             store = TReject{
                 .Code = Ydb::StatusIds::ABORTED,
-                .Message = TStringBuilder() << "Query is rejected by classifier"
+                .Message = "Query is rejected by classifier"
             };
             return true;
         }
 
         if (!poolInfo) {
             store = TResolvedPoolId{.PoolId = poolId};
-            if (missedPoolIds) missedPoolIds->emplace(poolId);
+            if (missedPoolIds) {
+                missedPoolIds->emplace(poolId);
+            }
             return false;
         }
 

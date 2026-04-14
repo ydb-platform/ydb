@@ -648,9 +648,10 @@ private:
     void BuildPoolInfoSnapshot() {
         TPoolInfoSnapshot::TPoolsMap pools;
 
+        pools.reserve(PoolsCache.size());
         for (const auto& [key, info] : PoolsCache) {
             if (!info.Expired) {
-                pools[key] = {info.Config, info.SecurityObject};
+                pools.emplace(key, TPoolInfoSnapshot::TPoolEntry{info.Config, info.SecurityObject})
             }
         }
         

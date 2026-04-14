@@ -51,7 +51,7 @@ This section contains panels showing database resource utilization.
 | Elapsed Time vs CPU Time | Ratio of real elapsed operation time (`ElapsedMicrosec`) to CPU time (`CpuMicrosec`) by node. Persisting value above 100% means sessions spend time waiting rather than actively executing; this is typically caused by I/O waits or CPU overcommit on the hypervisor side. |
 | RSS size by node | Amount of RAM (Resident set size) consumed by each dynamic node, with cgroup memory limits, in bytes |
 | Storage usage | Total logical database size and its limit (if set), in bytes |
-| Overloaded shards count | Number of DataShards experiencing [CPU overload](../../../troubleshooting/performance/schemas/overloaded-shards.md) (from 50% to 100%). Helps assess the level of system overload. |
+| Overloaded shard count | Number of DataShards experiencing [CPU overload](../../../troubleshooting/performance/schemas/overloaded-shards.md), grouped by CPU load range (from 50% to 100%), in units |
 
 ### Traffic {#ydbessentials-traffic}
 
@@ -70,8 +70,8 @@ This section contains panels showing query and transaction execution time.
 
 | Name | Description |
 |---|---|
-| Queries per second by latency buckets | Query execution time percentiles p50, p90, p95, p99, in milliseconds |
-| Transactions per second by latency buckets | Transaction execution time percentiles p50, p90, p95, p99, in milliseconds |
+| Query latency percentiles (ms) | Query execution time percentiles p50, p90, p95, p99, in milliseconds |
+| Transaction latency percentiles (ms) | Transaction execution time percentiles p50, p90, p95, p99, in milliseconds |
 
 ### Errors {#ydbessentials-errors}
 

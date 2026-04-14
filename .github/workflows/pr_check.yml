@@ -23,8 +23,7 @@ jobs:
     runs-on: [self-hosted, tiny-worker]
     timeout-minutes: 600
     outputs:
-      result: ${{ steps.check-ownership-membership.outputs.result == 'true' && steps.check-is-mergeable.outputs.result == 'true' }}
-      commit_sha: ${{ steps.check-is-mergeable.outputs.commit_sha }}
+      result: ${{ steps.check-ownership-membership.outputs.result == 'true' }}
     steps:
       - name: Reset integrated status
         run: |
@@ -127,85 +126,98 @@ jobs:
                 }
               }
             }
-      - name: check is mergeable
-        id: check-is-mergeable
-        if: steps.check-ownership-membership.outputs.result == 'true'
+  prepare-merge:
+    needs:
+      - check-running-allowed
+    if: needs.check-running-allowed.outputs.result == 'true'
+    runs-on: [self-hosted, tiny-worker]
+    outputs:
+      merge_sha: ${{ steps.create-merge.outputs.merge_sha }}
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          token: ${{ secrets.YDBOT_TOKEN }}
+
+      - name: Create merge commit and push to custom ref
+        id: create-merge
+        env:
+          GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          git config --global user.name YDBot
+          git config --global user.email ydbot@ydb.tech
+          git config --local github.token "${GH_TOKEN}"
+
+          git fetch origin "${BASE_REF}"
+          git checkout -B "pr-${PR_NUMBER}-merge" "origin/${BASE_REF}"
+          git merge "${PR_HEAD_SHA}" --no-ff --no-edit
+
+          MERGE_SHA=$(git rev-parse HEAD)
+          echo "merge_sha=${MERGE_SHA}" >> $GITHUB_OUTPUT
+          git push origin HEAD:refs/pr-ci/${PR_NUMBER}/merge --force
+
+      - name: Post conflict comment
+        if: always() && steps.create-merge.outcome == 'failure'
         uses: actions/github-script@v7
         with:
-          result-encoding: string
+          github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |
-            let pr = context.payload.pull_request;
-            const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-            const header = `<!-- merge pr=${pr.number} -->\n`;
-            
-            const fail_msg = header + ':red_circle: Unable to merge your PR into the base branch. '
-                + 'Please rebase or merge it with the base branch.'
-            
-            let i = 0;
-            
-            while (pr.mergeable == null && i < 60) {
-                console.log("get pull-request status");
-    
-                let result = await github.rest.pulls.get({
-                    ...context.repo,
-                    pull_number: pr.number
-                })
-            
-                pr = result.data;
-              
-                if (pr.mergeable == null) {
-                  await delay(5000);
-                }
-            
-                i += 1;
-            }
-            
-            console.log("pr.mergeable=%o", pr.mergeable);
-            
-            if (pr.mergeable === null) {
-                core.setFailed("Unable to check if the PR is mergeable, please re-run the check.");
-                return false;
-            }
-            
-            const { data: comments } = await github.rest.issues.listComments({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo
+            const prNumber = context.payload.pull_request.number;
+            const header = `<!-- merge pr=${prNumber} -->`;
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = `${header}\n:red_circle: An automated test-merge of this PR into the base branch failed. This may be due to merge conflicts or another error. Please check the workflow logs and resolve any issues (for example by rebasing or merging with the base branch).\n\n[View failed merge attempt](${runUrl})`;
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              ...context.repo,
+              issue_number: prNumber,
+              per_page: 100,
             });
-            
-            const commentToUpdate = comments.find(comment => comment.body.startsWith(header));
-            
-            if (!pr.mergeable) {
-                let commentParams = {
-                    ...context.repo,
-                    issue_number: context.issue.number,
-                    body: fail_msg
-                };
-            
-                if (commentToUpdate) {
-                    await github.rest.issues.updateComment({
-                        ...commentParams,
-                        comment_id: commentToUpdate.id,
-                    });
-                } else {
-                    await github.rest.issues.createComment({...commentParams});
-                }
-                core.setFailed("Merge conflict detected");
-                return false;
-            } else if (commentToUpdate) {
-                await github.rest.issues.deleteComment({
-                    ...context.repo,
-                    issue_number: context.issue.number,
-                    comment_id: commentToUpdate.id,
-                });
+            const existing = comments.find(c => c.body.startsWith(header));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                ...context.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: prNumber,
+                body,
+              });
             }
-            core.info(`commit_sha=${pr.commit_sha}`);
-            core.setOutput('commit_sha', pr.merge_commit_sha);
-            return true;
+
+      - name: Cleanup conflict comment
+        if: steps.create-merge.outcome == 'success'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.YDBOT_TOKEN }}
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const header = `<!-- merge pr=${prNumber} -->`;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              ...context.repo,
+              issue_number: prNumber,
+              per_page: 100,
+            });
+            const existing = comments.find(c => c.body.startsWith(header));
+            if (existing) {
+              await github.rest.issues.deleteComment({
+                ...context.repo,
+                comment_id: existing.id,
+              });
+            }
+
   build_and_test:
     needs:
       - check-running-allowed
-    if: needs.check-running-allowed.outputs.result == 'true' && needs.check-running-allowed.outputs.commit_sha != ''
+      - prepare-merge
+    if: needs.check-running-allowed.outputs.result == 'true' && needs.prepare-merge.outputs.merge_sha != ''
     strategy:
       fail-fast: false
       matrix:
@@ -226,7 +238,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
       with:
-        ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
+        ref: ${{ needs.prepare-merge.outputs.merge_sha }}
         fetch-depth: 2
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials

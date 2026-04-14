@@ -486,7 +486,7 @@ struct TPersistentBufferFormat {
             TInstant FirstLsnTimestamp;
             TInstant LastLsnTimestamp;
             ui32 LsnsCount;
-            ui32 Size;
+            ui64 Size;
         };
 
         TInstant StartedAt;
@@ -495,8 +495,8 @@ struct TPersistentBufferFormat {
         ui32 SectorSize;
         ui32 ChunkSize;
         ui32 FreeSectors;
-        ui32 InMemoryCacheSize;
-        ui32 InMemoryCacheLimit;
+        ui64 InMemoryCacheSize;
+        ui64 InMemoryCacheLimit;
         ui32 DiskOperationsInflight;
         ui32 PendingEvents;
         std::vector<TTabletInfo> TabletInfos;

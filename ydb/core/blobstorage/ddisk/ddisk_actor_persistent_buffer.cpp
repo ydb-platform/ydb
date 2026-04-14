@@ -382,6 +382,19 @@ namespace NKikimr::NDDisk {
         const TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();
         ui32 sectorsCnt = selector.Size / SectorSize + 1;
+
+        if (auto it = PersistentBuffers.find({creds.TabletId, creds.Generation});
+            it != PersistentBuffers.end() && selector.Size + it->second.Size > PersistentBufferFormat.PerTabletStorageLimit) {
+            STLOG(PRI_DEBUG, BS_DDISK, BSDD15, "TDDiskActor::ProcessPersistentBufferWrite tablet space occupation limit is reached",
+                (TabletId, creds.TabletId), (Generation, creds.Generation), (TabletSpaceOccupied, it->second.Size),
+                (WriteDataSize, selector.Size), (PerTabletStorageLimit, PersistentBufferFormat.PerTabletStorageLimit));
+            SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::OVERFILL,
+                TStringBuilder() << "persistent buffer overfill "
+                    << selector.Size << " bytes requested, current tablet space occupation " << it->second.Size << " bytes"));
+            return;
+        }
+
         const auto sectors = PersistentBufferSpaceAllocator.Occupy(sectorsCnt);
         if (sectors.size() == 0) {
             if (PersistentBufferSpaceAllocator.OwnedChunks.size() < PersistentBufferFormat.MaxChunks) {
@@ -390,7 +403,7 @@ namespace NKikimr::NDDisk {
             } else {
                 STLOG(PRI_DEBUG, BS_DDISK, BSDD15, "TDDiskActor::ProcessPersistentBufferWrite not enough space", (FreeSpace, PersistentBufferSpaceAllocator.GetFreeSpace() * SectorSize), (NeedSpace, sectorsCnt * SectorSize));
                 SendReply(*ev, std::make_unique<TEvWritePersistentBufferResult>(
-                    NKikimrBlobStorage::NDDisk::TReplyStatus::BLOCKED,
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::OVERFILL,
                     TStringBuilder() << "persistent buffer overfill "
                         << (sectorsCnt * SectorSize) << " bytes requested, free " << (PersistentBufferSpaceAllocator.GetFreeSpace() * SectorSize) << " bytes"));
             }

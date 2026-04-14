@@ -639,7 +639,7 @@ namespace NKikimr::NDDisk {
                 TRope JoinData(ui32 sectorSize);
             };
             std::map<ui64, TRecord> Records;
-            ui32 Size = 0;
+            ui64 Size = 0;
         };
 
         std::map<std::tuple<ui64, ui32>, TPersistentBuffer> PersistentBuffers;

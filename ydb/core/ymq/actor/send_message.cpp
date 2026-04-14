@@ -415,7 +415,15 @@ private:
             BlockedDeduplicationMessageIds_ = std::move(ev->Get()->BlockedDeduplicationMessageIds);
             DoActionTopicImplementation();
         } else {
-            MakeError(Response_.MutableSendMessage(), NErrors::INTERNAL_FAILURE, "deduplication error");
+            RLOG_SQS_DEBUG("Message deduplication error");
+            if (IsBatch_) {
+                for (size_t i = 0, size = BatchRequest().EntriesSize(); i < size; ++i) {
+                    auto* currentResponse = Response_.MutableSendMessageBatch()->MutableEntries(i);
+                    MakeError(currentResponse, NErrors::INTERNAL_FAILURE);
+                }
+            } else {
+                MakeError(Response_.MutableSendMessage(), NErrors::INTERNAL_FAILURE);
+            }
             SendReplyAndDie();
         }
     }

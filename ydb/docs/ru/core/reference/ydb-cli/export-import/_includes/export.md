@@ -96,7 +96,7 @@
   ┌───────────────────────────────────────────┬───────┬─────...
   | id                                        | ready | stat...
   ├───────────────────────────────────────────┼───────┼─────...
-  | ydb://export/6?id=281474976788395&kind={{ export-kind }} | true  | SUCC...
+  | ydb://export/6?id=281474976788395&kind={{ export-op-kind }} | true  | SUCC...
   ├╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴┴╴╴╴╴╴...
   | Items:
   ...
@@ -105,7 +105,7 @@
 - В режиме вывода `proto-json-base64` идентификатор находится в атрибуте "id":
 
   ```json
-  {"id":"ydb://export/6?id=281474976788395&kind={{ export-kind }}","ready":true, ... }
+  {"id":"ydb://export/6?id=281474976788395&kind={{ export-op-kind }}","ready":true, ... }
   ```
 
 ### Статус выгрузки {#status}
@@ -113,7 +113,7 @@
 Выгрузка данных выполняется в фоновом режиме. Получить информацию о статусе и прогрессе выгрузки можно вызовом команды `operation get`, параметром которой должен быть передан **заключенный в кавычки** идентификатор операции, например:
 
 ```bash
-{{ ydb-cli }} -p quickstart operation get "ydb://export/6?id=281474976788395&kind={{ export-kind }}"
+{{ ydb-cli }} -p quickstart operation get "ydb://export/6?id=281474976788395&kind={{ export-op-kind }}"
 ```
 
 Формат вывода `operation get` также устанавливается опцией `--format`.
@@ -144,7 +144,7 @@
 После выполнения выгрузки воспользуйтесь командой `operation forget` для того, чтобы выгрузка считалась завершённой (была удалена из перечня операций):
 
 ```bash
-{{ ydb-cli }} -p quickstart operation forget "ydb://export/6?id=281474976788395&kind={{ export-kind }}"
+{{ ydb-cli }} -p quickstart operation forget "ydb://export/6?id=281474976788395&kind={{ export-op-kind }}"
 ```
 
 ### Список операций выгрузки {#list}
@@ -184,9 +184,9 @@
 Вы получите вывод, где в каждой новой строке находится идентификатор операции, например:
 
 ```text
-ydb://export/6?id=281474976789577&kind={{ export-kind }}
-ydb://export/6?id=281474976789526&kind={{ export-kind }}
-ydb://export/6?id=281474976788779&kind={{ export-kind }}
+ydb://export/6?id=281474976789577&kind={{ export-op-kind }}
+ydb://export/6?id=281474976789526&kind={{ export-op-kind }}
+ydb://export/6?id=281474976788779&kind={{ export-op-kind }}
 ```
 
 По этим идентификаторам может быть, например, запущен цикл для завершения всех текущих операций:

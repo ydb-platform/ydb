@@ -1,5 +1,6 @@
 ---
-import-kind: fs
+import-kind: nfs
+import-op-kind: fs
 import-source-iz: "из файловой системы"
 import_is_nfs: true
 ---

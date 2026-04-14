@@ -3,6 +3,7 @@
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/core/protos/pqdata_mlp.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 
@@ -164,8 +165,12 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
             .SentTimestamp = TInstant::MilliSeconds(message.GetMessageMeta().GetSentTimestampMilliseconds()),
             .MessageGroupId = messageGroupId,
             .MessageDeduplicationId = messageDeduplicationId,
-            .ApproximateReceiveCount = message.GetMessageMeta().HasApproximateReceiveCount() ? std::make_optional(message.GetMessageMeta().GetApproximateReceiveCount()) : std::nullopt,
-            .ApproximateFirstReceiveTimestamp = message.GetMessageMeta().HasApproximateFirstReceiveTimestampMilliseconds() ? std::make_optional(TInstant::MilliSeconds(message.GetMessageMeta().GetApproximateFirstReceiveTimestampMilliseconds())) : std::nullopt,
+            .ApproximateReceiveCount = message.GetMessageMeta().HasApproximateReceiveCount()
+                ? std::make_optional(message.GetMessageMeta().GetApproximateReceiveCount())
+                : std::nullopt,
+            .ApproximateFirstReceiveTimestamp = message.GetMessageMeta().HasApproximateFirstReceiveTimestampMilliseconds() 
+                ? std::make_optional(TInstant::MilliSeconds(message.GetMessageMeta().GetApproximateFirstReceiveTimestampMilliseconds()))
+                : std::nullopt,
             .Attributes = std::move(attributes),
         });
     }

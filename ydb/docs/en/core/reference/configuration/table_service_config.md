@@ -4,7 +4,7 @@ The `table_service_config` section contains configuration parameters for the tab
 
 ## spilling_service_config
 
-[Spilling](../../concepts/spilling.md) is a memory management mechanism in {{ ydb-short-name }} that temporarily saves data to disk when the system runs out of RAM.
+[Spilling](../../concepts/query_execution/spilling.md) is a memory management mechanism in {{ ydb-short-name }} that temporarily saves data to disk when the system runs out of RAM.
 
 ### Primary Configuration Parameters
 
@@ -139,7 +139,7 @@ However, it's important to consider that spilling itself requires memory. If you
 
 {% note info %}
 
-For information about configuring file descriptor limits during initial deployment, see the [File Descriptor Limits](../../../devops/deployment-options/manual/initial-deployment.html#file-descriptors) section.
+For information about configuring file descriptor limits during initial deployment, see the [File Descriptor Limits](../../devops/deployment-options/manual/initial-deployment/deployment-preparation.md#file-descriptors) section.
 
 {% endnote %}
 
@@ -186,7 +186,7 @@ The following parameters control the enabling and disabling of various spilling 
 **Location:** `table_service_config.spilling_service_config.local_file_config.enable`
 **Type:** `boolean`  
 **Default:** `true`  
-**Description:** Enables or disables the spilling service. When disabled (`false`), [spilling](../../concepts/spilling.md) does not function, which may lead to errors when processing large data volumes.
+**Description:** Enables or disables the spilling service. When disabled (`false`), [spilling](../../concepts/query_execution/spilling.md) does not function, which may lead to errors when processing large data volumes.
 
 ##### Possible errors
 
@@ -247,7 +247,7 @@ table_service_config:
 
 ## See Also
 
-- [Spilling Concept](../../concepts/spilling.md)
+- [Spilling Concept](../../concepts/query_execution/spilling.md)
 - [Spilling Service Architecture](../../contributor/spilling-service.md)
 - [Spilling Troubleshooting](../../troubleshooting/spilling/index.md)
 - [Memory Controller Configuration](memory_controller_config.md)

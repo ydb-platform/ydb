@@ -10,6 +10,9 @@ PY3TEST()
     SPLIT_FACTOR(100)
 
     SIZE(LARGE)
+
+    REQUIREMENTS(cpu:2)
+
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     DEPENDS(
         ydb/apps/ydb

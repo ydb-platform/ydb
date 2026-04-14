@@ -276,7 +276,7 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
                     return pb.NewTuple(valueTupleElements);
                 });
 
-            TRuntimeNode source = pb.ExpandMap(pb.ToFlow(args.Left), [&pb](TRuntimeNode item) -> TRuntimeNode::TList {
+            TRuntimeNode source = pb.ExpandMap(pb.ToFlow(args.Left, {}), [&pb](TRuntimeNode item) -> TRuntimeNode::TList {
                 TRuntimeNode::TList values;
                 for (ui32 idx = 0; idx < AS_TYPE(TTupleType, item.GetStaticType())->GetElementsCount(); ++idx) {
                     values.push_back(pb.Nth(item, idx));

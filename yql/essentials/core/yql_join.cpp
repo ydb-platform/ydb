@@ -1985,7 +1985,7 @@ TExprNode::TPtr PreparePredicate(TExprNode::TPtr predicate, TExprContext& ctx) {
         }
     }
 
-    if (commonParts.size() == 0) {
+    if (commonParts.empty()) {
         return originalPredicate;
     }
 
@@ -2012,12 +2012,12 @@ TExprNode::TPtr PreparePredicate(TExprNode::TPtr predicate, TExprContext& ctx) {
             restAndArgs.push_back(part);
         }
 
-        if (restAndArgs.size() >= 1) {
+        if (!restAndArgs.empty()) {
             orArgs.push_back(ctx.NewCallable(predicate->Pos(), "And", std::move(restAndArgs)));
         }
     }
 
-    if (orArgs.size() >= 1) {
+    if (!orArgs.empty()) {
         andArgs.push_back(ctx.NewCallable(predicate->Pos(), "Or", std::move(orArgs)));
     }
 

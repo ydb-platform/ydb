@@ -8,6 +8,8 @@ SRCS(
     command.cpp
     command_utils.cpp
     common.cpp
+    completion_generator.cpp
+    completion.cpp
     config.cpp
     log.cpp
     csv_parser.cpp
@@ -35,6 +37,7 @@ SRCS(
     recursive_remove.cpp
     retry_func.cpp
     root.cpp
+    scheme_path_completer.cpp
     scheme_printers.cpp
     sys.cpp
     tabbed_table.cpp
@@ -66,6 +69,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/result
     ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/secret
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types

@@ -64,6 +64,16 @@ public:
 
     ui64 GetTotalSize() const { return TotalSize; }
 
+    ui64 GetDiskOffset() const { return DiskOffset; }
+
+    const void* GetIovBase() const {
+#if defined(__linux__)
+        return Iov.iov_base;
+#else
+        return nullptr;
+#endif
+    }
+
     // Reset all submission/completion state so the object can be reused from a pool.
     // Must be called before PrepareIov() when recycling an operation.
     void ResetSubmissionState() {

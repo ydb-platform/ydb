@@ -19,7 +19,7 @@ links:
   - title: Для DevOps инженеров
     description: Как работать с production кластерами YDB
     href: devops/
-  - title: Для разработчиков
+  - title: Для разработчиков приложений
     description: Как разрабатывать приложения с использованием YDB
     href: dev/
   - title: Для инженеров по безопасности

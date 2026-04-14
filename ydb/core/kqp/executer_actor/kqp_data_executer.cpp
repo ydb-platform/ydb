@@ -263,6 +263,7 @@ public:
                 hFunc(TEvents::TEvUndelivered, HandleFinalize);
 
                 IgnoreFunc(TEvDqCompute::TEvState);
+                IgnoreFunc(TEvDqCompute::TEvNodeState);
                 IgnoreFunc(TEvDqCompute::TEvChannelData);
                 IgnoreFunc(TEvDqCompute::TEvResumeExecution);
                 IgnoreFunc(TEvKqpExecuter::TEvStreamDataAck);
@@ -400,6 +401,7 @@ private:
                 hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
                 hFunc(TEvKqpNode::TEvStartKqpTasksResponse, HandleStartKqpTasksResponse);
                 hFunc(TEvDqCompute::TEvState, HandleComputeState);
+                hFunc(TEvDqCompute::TEvNodeState, HandleNodeState);
                 hFunc(TEvDqCompute::TEvChannelData, HandleChannelData);
                 hFunc(TEvDqCompute::TEvResumeExecution, HandleResultData); // from Fast Channels
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
@@ -954,6 +956,7 @@ private:
     STATEFN(WaitShutdownState) {
         switch(ev->GetTypeRewrite()) {
             hFunc(TEvDqCompute::TEvState, HandleShutdown);
+            hFunc(TEvDqCompute::TEvNodeState, HandleShutdown);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleShutdown);
             hFunc(TEvents::TEvPoison, HandleShutdown);
             hFunc(TEvDq::TEvAbortExecution, HandleShutdown);
@@ -967,6 +970,12 @@ private:
     void HandleShutdown(TEvDqCompute::TEvState::TPtr& ev) {
         HandleComputeStats(ev);
 
+        if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
+            PassAway();
+        }
+    }
+
+    void HandleShutdown(TEvDqCompute::TEvNodeState::TPtr&) {
         if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {
             PassAway();
         }

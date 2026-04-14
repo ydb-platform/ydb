@@ -54,7 +54,8 @@ struct TKqpQuerySettings {
             << "DocumentApiRestricted: " << DocumentApiRestricted << ", "
             << "IsInternalCall: " << IsInternalCall << ", "
             << "QueryType: " << QueryType << ", "
-            << "RuntimeParameterSizeLimit: " << RuntimeParameterSizeLimit
+            << "Syntax: " << static_cast<int>(Syntax) << ", "
+            << "RuntimeParameterSizeLimit: " << RuntimeParameterSizeLimit << ", "
             << "RuntimeParameterSizeLimitSatisfied: " << RuntimeParameterSizeLimitSatisfied
             << "}";
         return result;

@@ -1,0 +1,10 @@
+After optimization:
+(
+(return (Self '0))
+)
+After optimization:
+(
+(return (Map (Self '0) (lambda '($1) (AsStruct '('column0 (+ (Member $1 'index) (Int32 '1)))))))
+)
+Elapsed: <DURATION>s
+Bench score: <SCORE>

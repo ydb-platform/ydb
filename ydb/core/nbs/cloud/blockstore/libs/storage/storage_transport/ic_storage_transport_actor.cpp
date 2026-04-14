@@ -7,7 +7,39 @@ namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 using namespace NActors;
 using namespace NKikimr;
 
+namespace {
+
+template <typename TEvent, typename TMap>
+void RejectAllPending(TMap& map)
+{
+    for (auto& request: map) {
+        request.second->Promise.SetValue(
+            TEvent(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
+                "TICStorageTransportActor is destroyed")
+                .Record);
+    }
+}
+
+}   // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
+
+TICStorageTransportActor::~TICStorageTransportActor()
+{
+    RejectAllPending<NDDisk::TEvConnectResult>(ConnectRequests);
+    RejectAllPending<NDDisk::TEvReadPersistentBufferResult>(
+        ReadFromPBufferRequests);
+    RejectAllPending<NDDisk::TEvReadResult>(ReadFromDDiskRequests);
+    RejectAllPending<NDDisk::TEvWritePersistentBufferResult>(
+        WriteToPBufferRequests);
+    RejectAllPending<NDDisk::TEvSyncWithPersistentBufferResult>(
+        FlushFromPBufferRequests);
+    RejectAllPending<NDDisk::TEvErasePersistentBufferResult>(
+        EraseFromPBufferRequests);
+    RejectAllPending<NDDisk::TEvListPersistentBufferResult>(
+        ListPBufferEntriesRequests);
+}
 
 void TICStorageTransportActor::Bootstrap(const TActorContext& ctx)
 {
@@ -85,23 +117,48 @@ void TICStorageTransportActor::HandleWritePersistentBuffer(
         "Sent TEvWriteToPBuffer with requestId# %lu",
         requestId);
 
-    auto request = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
-        msg->Credentials,
-        msg->Selector,
-        msg->Lsn,
-        msg->Instruction);
-
     if (auto guard = msg->Data.Acquire()) {
+        auto request = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
+            msg->Credentials,
+            msg->Selector,
+            msg->Lsn,
+            msg->Instruction);
+
         const auto& sglist = guard.Get();
         TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
         SgListCopy(sglist, CreateSgList(rope));
         request->AddPayload(std::move(rope));
+
+        ctx.Send(MakeHolder<IEventHandle>(
+            msg->ServiceId,
+            ctx.SelfID,
+            request.release(),
+            0,           // flags
+            requestId,   // cookie
+            nullptr,
+            std::move(msg->TraceId)));
+
+        return;
     }
 
+    LOG_ERROR(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Sent TEvWriteToPBuffer with requestId# %lu was failed - can't "
+        "acquire data. Aborting.",
+        requestId);
+
+    auto errorResponse =
+        std::make_unique<NDDisk::TEvWritePersistentBufferResult>();
+    errorResponse->Record.SetStatus(
+        NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
+    errorResponse->Record.SetErrorReason(
+        "NBS TEvWritePersistentBuffer: can't acquire data");
+
     ctx.Send(MakeHolder<IEventHandle>(
-        msg->ServiceId,
         ctx.SelfID,
-        request.release(),
+        ctx.SelfID,
+        errorResponse.release(),
         0,           // flags
         requestId,   // cookie
         nullptr,
@@ -130,6 +187,196 @@ void TICStorageTransportActor::HandleWritePersistentBufferResult(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "WritePersistentBufferEvent with requestId# %lu not found",
+            requestId);
+    }
+}
+
+void TICStorageTransportActor::HandleWriteToManyPersistentBuffers(
+    const TEvTransportPrivate::TEvWriteToManyPBuffers::TPtr& ev,
+    const TActorContext& ctx)
+{
+    auto* msg = ev->Get();
+
+    const ui64 requestId = ++RequestIdGenerator;
+    auto [it, inserted] =
+        WriteToManyPBuffersRequests.emplace(requestId, ev->Release().Release());
+    Y_ABORT_UNLESS(inserted);
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Sent WriteToManyPersistentBuffers/TEvWriteToPBuffers with requestId# "
+        "%lu",
+        requestId);
+
+    if (auto guard = msg->Data.Acquire()) {
+        auto request = std::make_unique<TEvWriteToManyPersistentBuffers>(
+            msg->Credentials,
+            msg->Selector,
+            msg->Lsn,
+            msg->Instruction,
+            msg->PersistentBufferIds,
+            msg->ReplyTimeout.MicroSeconds());
+
+        const auto& sglist = guard.Get();
+        TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
+        SgListCopy(sglist, CreateSgList(rope));
+        request->AddPayload(std::move(rope));
+
+        ctx.Send(MakeHolder<IEventHandle>(
+            msg->ServiceId,
+            ctx.SelfID,
+            request.release(),
+            0,           // flags
+            requestId,   // cookie
+            nullptr,
+            std::move(msg->TraceId)));
+        return;
+    }
+
+    LOG_ERROR(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Sent WriteToManyPersistentBuffers/TEvWriteToPBuffers with "
+        "requestId# %lu was failed - can't acquire data. Immediate error's "
+        "returning.",
+        requestId);
+
+    auto errorResponse =
+        std::make_unique<TEvWriteToManyPersistentBuffersResult>();
+    for (const auto& pbufferId: msg->PersistentBufferIds) {
+        auto* res = errorResponse->Record.AddResult();
+        auto* pbId = res->MutablePersistentBufferId();
+        *pbId = pbufferId;
+        auto* singlePbufferResult = res->MutableResult();
+        singlePbufferResult->SetStatus(
+            NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
+        singlePbufferResult->SetErrorReason(
+            "NBS WriteToManyPersistentBuffers/TEvWriteToPBuffers: can't "
+            "acquire data");
+    }
+    ctx.Send(MakeHolder<IEventHandle>(
+        ctx.SelfID,
+        ctx.SelfID,
+        errorResponse.release(),
+        0,           // flags
+        requestId,   // cookie
+        nullptr,
+        std::move(msg->TraceId)));
+}
+
+void TICStorageTransportActor::HandleWriteToManyPersistentBuffersResult(
+    const TEvWriteToManyPersistentBuffersResult::TPtr& ev,
+    const TActorContext& ctx)
+{
+    const ui64 requestId = ev->Cookie;
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Received TEvWriteToManyPersistentBuffersResult with requestId# %lu",
+        requestId);
+
+    if (auto* r = WriteToManyPBuffersRequests.FindPtr(requestId)) {
+        auto& request = **r;
+        request.Promise.SetValue(std::move(ev->Get()->Record));
+        WriteToManyPBuffersRequests.erase(requestId);
+    } else {
+        // That means that request is already completed
+        // TODO handle this case in writeRequests through weak_ptr with erase
+        LOG_ERROR(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "TEvWriteToManyPersistentBuffersResult with requestId# %lu not "
+            "found",
+            requestId);
+    }
+}
+
+void TICStorageTransportActor::HandleWriteToDDisk(
+    const TEvTransportPrivate::TEvWriteToDDisk::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    auto* msg = ev->Get();
+
+    const ui64 requestId = ++RequestIdGenerator;
+    auto [it, inserted] =
+        WriteToDDiskRequests.emplace(requestId, ev->Release().Release());
+    Y_ABORT_UNLESS(inserted);
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Sent HandleWriteToDDisk with requestId# "
+        "%lu",
+        requestId);
+
+    if (auto guard = msg->Data.Acquire()) {
+        auto request = std::make_unique<NDDisk::TEvWrite>(
+            msg->Credentials,
+            msg->Selector,
+            msg->Instruction);
+
+        const auto& sglist = guard.Get();
+        TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
+        SgListCopy(sglist, CreateSgList(rope));
+        request->AddPayload(std::move(rope));
+
+        ctx.Send(MakeHolder<IEventHandle>(
+            msg->ServiceId,
+            ctx.SelfID,
+            request.release(),
+            0,           // flags
+            requestId,   // cookie
+            nullptr,
+            std::move(msg->TraceId)));
+        return;
+    }
+
+    LOG_ERROR(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Sent HandleWriteToDDisk with requestId# %lu was failed - can't "
+        "acquire data. Immediate error's returning.",
+        requestId);
+
+    auto errorResponse = std::make_unique<NKikimr::NDDisk::TEvWriteResult>(
+        NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
+        "NBS HandleWriteToDDisk: can't acquire data");
+
+    ctx.Send(MakeHolder<IEventHandle>(
+        ctx.SelfID,
+        ctx.SelfID,
+        errorResponse.release(),
+        0,           // flags
+        requestId,   // cookie
+        nullptr,
+        std::move(msg->TraceId)));
+}
+
+void TICStorageTransportActor::HandleWriteToDDiskResult(
+    const NKikimr::NDDisk::TEvWriteResult::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    const ui64 requestId = ev->Cookie;
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Received HandleWriteToDDiskResult with requestId# %lu",
+        requestId);
+
+    if (auto* r = WriteToDDiskRequests.FindPtr(requestId)) {
+        auto& request = **r;
+        request.Promise.SetValue(std::move(ev->Get()->Record));
+        WriteToDDiskRequests.erase(requestId);
+    } else {
+        // That means that request is already completed
+        LOG_ERROR(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "HandleWriteToDDiskResult with requestId# %lu not "
+            "found",
             requestId);
     }
 }
@@ -246,9 +493,24 @@ void TICStorageTransportActor::HandleReadPersistentBufferResult(
         if (auto guard = request.Data.Acquire()) {
             const auto& sglist = guard.Get();
             SgListCopy(CreateSgList(ev->Get()->GetPayload()), sglist);
+            request.Promise.SetValue(std::move(ev->Get()->Record));
+        } else {
+            LOG_ERROR(
+                ctx,
+                NKikimrServices::NBS_PARTITION,
+                "Recieved TEvReadPersistentBufferResult with requestId# %lu "
+                "was failed - can't acquire data. Aborting.",
+                requestId);
+
+            NKikimrBlobStorage::NDDisk::TEvReadPersistentBufferResult
+                errorResult;
+            errorResult.SetStatus(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
+            errorResult.SetErrorReason(
+                "NBS HandleReadPersistentBufferResult: can't acquire data");
+            request.Promise.SetValue(std::move(errorResult));
         }
 
-        request.Promise.SetValue(std::move(ev->Get()->Record));
         ReadFromPBufferRequests.erase(requestId);
     } else {
         LOG_ERROR(
@@ -308,9 +570,23 @@ void TICStorageTransportActor::HandleReadResult(
         if (auto guard = request.Data.Acquire()) {
             const auto& sglist = guard.Get();
             SgListCopy(CreateSgList(ev->Get()->GetPayload()), sglist);
+            request.Promise.SetValue(std::move(ev->Get()->Record));
+        } else {
+            LOG_ERROR(
+                ctx,
+                NKikimrServices::NBS_PARTITION,
+                "Recieved TEvReadResult with requestId# %lu was failed - can't "
+                "acquire data.",
+                requestId);
+
+            NKikimrBlobStorage::NDDisk::TEvReadResult errorResult;
+            errorResult.SetStatus(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
+            errorResult.SetErrorReason(
+                "NBS HandleReadResult: can't acquire data");
+            request.Promise.SetValue(std::move(errorResult));
         }
 
-        request.Promise.SetValue(std::move(ev->Get()->Record));
         ReadFromDDiskRequests.erase(requestId);
     } else {
         // That means that request is already completed
@@ -460,6 +736,16 @@ STFUNC(TICStorageTransportActor::StateWork)
         HFunc(
             NDDisk::TEvWritePersistentBufferResult,
             HandleWritePersistentBufferResult);
+
+        HFunc(
+            TEvTransportPrivate::TEvWriteToManyPBuffers,
+            HandleWriteToManyPersistentBuffers);
+        HFunc(
+            TEvWriteToManyPersistentBuffersResult,
+            HandleWriteToManyPersistentBuffersResult);
+
+        HFunc(TEvTransportPrivate::TEvWriteToDDisk, HandleWriteToDDisk);
+        HFunc(NDDisk::TEvWriteResult, HandleWriteToDDiskResult);
 
         HFunc(
             TEvTransportPrivate::TEvEraseFromPBuffer,

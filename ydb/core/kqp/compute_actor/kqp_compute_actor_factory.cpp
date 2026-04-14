@@ -188,17 +188,12 @@ public:
                 ("input_channels_count", inputChannelsCount);
         }
 
-        auto& taskOpts = args.Task->GetProgram().GetSettings();
-        auto limit = taskOpts.GetHasMapJoin() || taskOpts.GetHasStateAggregation()
-            ? memoryLimits.MkqlHeavyProgramMemoryLimit
-            : memoryLimits.MkqlLightProgramMemoryLimit;
-
         memoryLimits.MemoryQuotaManager = std::make_shared<TMemoryQuotaManager>(
             ResourceManager_,
             args.MemoryPool,
             std::move(args.TxInfo),
             std::move(task),
-            limit);
+            memoryLimits.MkqlLightProgramMemoryLimit);
 
         NYql::NDq::TComputeRuntimeSettings runtimeSettings;
 

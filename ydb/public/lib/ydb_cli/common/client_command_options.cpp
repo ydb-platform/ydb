@@ -145,6 +145,42 @@ TClientCommandOption&  TClientCommandOption::IfPresentDisableCompletion() {
     return *this;
 }
 
+TClientCommandOption& TClientCommandOption::CompletionArgHelp(const TString& help) {
+    Opt->CompletionArgHelp(help);
+    return *this;
+}
+
+TClientCommandOption& TClientCommandOption::Completer(NLastGetopt::NComp::ICompleterPtr completer) {
+    Opt->Completer(std::move(completer));
+    return *this;
+}
+
+TClientCommandOption& TClientCommandOption::ChoicesWithCompletion(TVector<NLastGetopt::NComp::TChoice> choices) {
+    Opt->ChoicesWithCompletion(choices);
+    return *this;
+}
+
+NLastGetopt::NComp::ICompleterPtr SchemePathCompleterForTables();
+NLastGetopt::NComp::ICompleterPtr SchemePathCompleterForTopics();
+NLastGetopt::NComp::ICompleterPtr SchemePathCompleterForDir();
+NLastGetopt::NComp::ICompleterPtr SchemePathCompleterForAll();
+
+TClientCommandOption& TClientCommandOption::SchemePathCompletionForTables() {
+    return CompletionArgHelp("<database path>").Completer(SchemePathCompleterForTables());
+}
+
+TClientCommandOption& TClientCommandOption::SchemePathCompletionForTopics() {
+    return CompletionArgHelp("<database path>").Completer(SchemePathCompleterForTopics());
+}
+
+TClientCommandOption& TClientCommandOption::SchemePathCompletionForDir() {
+    return CompletionArgHelp("<database path>").Completer(SchemePathCompleterForDir());
+}
+
+TClientCommandOption& TClientCommandOption::SchemePathCompletionForAll() {
+    return CompletionArgHelp("<database path>").Completer(SchemePathCompleterForAll());
+}
+
 const NLastGetopt::EHasArg& TClientCommandOption::GetHasArg() const {
     return Opt->GetHasArg();
 }

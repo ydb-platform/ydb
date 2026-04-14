@@ -91,25 +91,25 @@ namespace {
     void SingleShardResolver(TKeyDesc& key) {
         key.Status = TKeyDesc::EStatus::Ok;
 
-        auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
-        partitions->push_back(TKeyDesc::TPartitionInfo(Shard1));
-        key.Partitioning = partitions;
+        TVector<TKeyDesc::TPartitionInfo> partitions;
+        partitions.push_back(TKeyDesc::TPartitionInfo(Shard1));
+        key.Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
     }
 
     void DoubleShardResolver(TKeyDesc& key) {
         key.Status = TKeyDesc::EStatus::Ok;
 
-        auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
-        partitions->push_back(TKeyDesc::TPartitionInfo(Shard1));
-        partitions->push_back(TKeyDesc::TPartitionInfo(Shard2));
-        key.Partitioning = partitions;
+        TVector<TKeyDesc::TPartitionInfo> partitions;
+        partitions.push_back(TKeyDesc::TPartitionInfo(Shard1));
+        partitions.push_back(TKeyDesc::TPartitionInfo(Shard2));
+        key.Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
     }
 
     void TwoShardResolver(TKeyDesc& key) {
         key.Status = TKeyDesc::EStatus::Ok;
-        auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
-        partitions->push_back(TKeyDesc::TPartitionInfo(key.TableId.PathId.LocalPathId == Table1Id ? Shard1 : Shard2));
-        key.Partitioning = partitions;
+        TVector<TKeyDesc::TPartitionInfo> partitions;
+        partitions.push_back(TKeyDesc::TPartitionInfo(key.TableId.PathId.LocalPathId == Table1Id ? Shard1 : Shard2));
+        key.Partitioning = std::make_shared<TPartitioning>(std::move(partitions));
     }
 
     struct TDriver {

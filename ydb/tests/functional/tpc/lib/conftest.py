@@ -12,7 +12,13 @@ class FunctionalTestBase:
     def setup_cluster(cls, table_service_config: dict = {}, memory_controller_config: dict = {}) -> None:
         config_generator = KikimrConfigGenerator(
             domain_name='local',
-            extra_feature_flags=["enable_resource_pools", "enable_resource_pools_counters", "enable_table_pg_types", "enable_pg_syntax"],
+            extra_feature_flags=[
+                "enable_resource_pools",
+                "enable_resource_pools_counters",
+                "enable_table_pg_types",
+                "enable_pg_syntax",
+                "enable_forced_compactions"
+            ],
             use_in_memory_pdisks=True,
             column_shard_config={
                 "alter_object_enabled": True,

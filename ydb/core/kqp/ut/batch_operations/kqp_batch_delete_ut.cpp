@@ -909,6 +909,42 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "BATCH operations are not supported for tables with global sync fulltext_relevance indexes (index: `idx`)");
         }
     }
+
+    Y_UNIT_TEST(TableWithJsonIndex) {
+        auto settings = GetTestSettings().SetWithSampleTables(false);
+
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableJsonIndex(true);
+        settings.SetFeatureFlags(featureFlags);
+
+        auto kikimr = TKikimrRunner(settings);
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE json_idx (
+                    k Uint64 NOT NULL,
+                    v1 Json,
+                    v2 String,
+                    v3 String,
+                    PRIMARY KEY (k),
+                    INDEX idx GLOBAL USING json ON (v1) COVER (v2)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                BATCH DELETE FROM json_idx;
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "BATCH operations are not supported for tables with global sync json indexes (index: `idx`)");
+        }
+    }
 }
 
 } // namespace NKqp

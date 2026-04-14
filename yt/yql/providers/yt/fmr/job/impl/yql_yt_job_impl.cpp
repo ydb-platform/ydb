@@ -274,6 +274,10 @@ public:
             auto& parseRecordSettings = Settings_.ParseRecordSettings;
             YQL_ENSURE(!output.SortingColumns.Columns.empty(), "Local sort output key columns must be set");
 
+            YQL_CLOG(INFO, FastMapReduce) << "LocalSort: output table=" << output.TableId
+                << " outputColumnGroups=" << (output.SerializedColumnGroups.empty() ? "(empty)" : output.SerializedColumnGroups.substr(0, 100))
+                << " sortColumns=" << output.SortingColumns.Columns.size();
+
             auto writerSettings = Settings_.FmrWriterSettings;
             auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceSortedWriter>(
                 output.TableId,
@@ -287,6 +291,9 @@ public:
             std::vector<IBlockIterator::TPtr> blockIterators;
             for (const auto& inputTableRef : taskTableInputRef.Inputs) {
                 if (auto fmrInput = std::get_if<TFmrTableInputRef>(&inputTableRef)) {
+                    YQL_CLOG(INFO, FastMapReduce) << "LocalSort: input table=" << fmrInput->TableId
+                        << " inputColumnGroups=" << (fmrInput->SerializedColumnGroups.empty() ? "(empty)" : fmrInput->SerializedColumnGroups.substr(0, 100))
+                        << " ranges=" << fmrInput->TableRanges.size();
                     blockIterators.emplace_back(MakeIntrusive<TTableDataServiceBlockIterator>(
                         fmrInput->TableId,
                         fmrInput->TableRanges,

@@ -1,5 +1,7 @@
 #include "yql_yt_settings.h"
 
+#include <yt/yql/providers/yt/common/yql_configuration.h>
+
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
@@ -631,6 +633,12 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, _QueryDumpFileCountPerOperationLimit);
     REGISTER_SETTING(*this, KeepWorldDepForFillOp);
     REGISTER_SETTING(*this, CostBasedOptimizerPartial);
+    REGISTER_SETTING(*this, _MinJobStateSizeToPassViaFile);
+    REGISTER_SETTING(*this, _SecureTmpRoot);
+    REGISTER_SETTING(*this, _SecureTmpWaitForAclDelay);
+    REGISTER_SETTING(*this, _SecureTmpWaitForAclMaxAttempts);
+    REGISTER_SETTING(*this, _SecureTmpAttributes).Parser([](const TString& v) { return NYT::NodeFromYsonString(v, ::NYson::EYsonType::Node); });
+    REGISTER_SETTING(*this, TmpSecurity).Parser([](const TString& v) { return FromString<ETmpSecurityMode>(v); });
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {
@@ -639,6 +647,27 @@ EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {
 
 EJoinCollectColumnarStatisticsMode GetJoinCollectColumnarStatisticsMode(const TYtSettings& settings) {
     return settings.JoinCollectColumnarStatistics.Get().GetOrElse(EJoinCollectColumnarStatisticsMode::Async);
+}
+
+TString GetUserTablesTmpFolder(const TYtSettings& settings, const TString& cluster) {
+    return settings.TablesTmpFolder.Get(cluster).GetOrElse(settings.TmpFolder.Get(cluster).GetOrElse({}));
+}
+
+TString GetTablesTmpFolder(const TYtSettings& settings, const TString& cluster, const TSecureTmpStatePtr& useSecureTmp, const TYqlOperationOptions& operationOptions) {
+    YQL_ENSURE(useSecureTmp);
+
+    auto tablesTmpFolder = GetUserTablesTmpFolder(settings, cluster);
+    auto secureTmpRoot = settings._SecureTmpRoot.Get(cluster);
+    if (tablesTmpFolder || !useSecureTmp->load() || !secureTmpRoot) {
+        return tablesTmpFolder;
+    }
+
+    if (operationOptions.ProjectSlug) {
+        return TStringBuilder() << *secureTmpRoot << "/project/" << *operationOptions.ProjectSlug;
+    } else {
+        YQL_ENSURE(operationOptions.AuthenticatedUser);
+        return TStringBuilder() << *secureTmpRoot << "/personal/" << *operationOptions.AuthenticatedUser;
+    }
 }
 
 TYtSettings::TConstPtr TYtConfiguration::Snapshot() const {
@@ -665,7 +694,7 @@ void TYtVersionedConfiguration::CopyNodeVer(const TExprNode& from, const TExprNo
 }
 
 void TYtVersionedConfiguration::FreezeZeroVersion() {
-    if (Y_UNLIKELY(FrozenSettings.empty())) {
+    if (FrozenSettings.empty()) [[unlikely]] {
         FrozenSettings.push_back(Snapshot());
     }
 }

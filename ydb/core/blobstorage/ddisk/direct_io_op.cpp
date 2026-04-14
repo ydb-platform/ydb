@@ -5,14 +5,18 @@
 
 #include <ydb/core/util/hp_timer_helpers.h>
 #include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <util/generic/overloaded.h>
+#include <util/stream/format.h>
 
 #include <cerrno>
 
 namespace NKikimr::NDDisk {
 
 static constexpr size_t MaxRwCount = 0x7ffff000ULL; // INT_MAX & PAGE_MASK on 4K pages, ~ 2 GiB
+static constexpr size_t MinBlockSize = 4096;
 
 using TReplyStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
 
@@ -91,7 +95,23 @@ void TDDiskActor::TDirectIoOpBase::OnComplete(NActors::TActorSystem* actorSystem
     }
 
     if (Y_UNLIKELY(result < 0)) {
-        Reply(actorSystem, UringErrorToStatus(result, opType));
+        const char* opName = opType == TUringOperationBase::EREAD ? "read" : "write";
+        const auto bufAddr = reinterpret_cast<uintptr_t>(GetIovBase());
+        TString reason = TStringBuilder()
+            << "io_uring " << opName << " error:"
+            << " errno=" << (-result) << " (" << strerror(-result) << ")"
+            << " diskOffset=" << GetDiskOffset()
+            << " totalSize=" << GetTotalSize()
+            << " iovLen=" << GetOperationBytes()
+            << " bufAddr=0x" << Hex(bufAddr)
+            << " bufAligned4k=" << (int)(bufAddr % MinBlockSize == 0)
+            << " offsetAligned4k=" << (int)(GetDiskOffset() % MinBlockSize == 0)
+            << " sizeAligned4k=" << (int)(GetOperationBytes() % MinBlockSize == 0)
+            << " chunkIdx=" << ChunkIdx
+            << " chunkOffset=" << ChunkOffsetInBytes
+            << " DDiskId=" << DDiskId;
+        LOG_ERROR_S(*actorSystem, NKikimrServices::BS_DDISK, reason);
+        Reply(actorSystem, UringErrorToStatus(result, opType), std::move(reason));
         Y_UNUSED(guard.release());
         SelfRecycle();
         return;
@@ -149,20 +169,24 @@ void TDDiskActor::TDirectIoOpBase::OnDrop() noexcept {
 
 void TDDiskActor::TDirectIoOpBase::PrepareWrite(TRope&& data, ui64 offset, TChunkIdx chunkIdx, ui32 chunkOffset) {
     Y_ABORT_UNLESS(data.size() <= MaxRwCount);
+    const size_t dataSize = data.size();
     Data.reset();
 
     // Zero-copy path: if the payload is contiguous and page-aligned, reuse the buffer directly.
-    // TODO: should we check page size? And for large writes and huge pages should properly align?
     auto iter = data.Begin();
-    if (iter.ContiguousSize() == data.size()) {
+    if (iter.ContiguousSize() == data.size() &&
+        (reinterpret_cast<uintptr_t>(iter.ContiguousData()) & (MinBlockSize - 1)) == 0) {
         AlignedDataHolder = iter.GetChunk(); // zero-copy: ref-count bump
     } else {
-        AlignedDataHolder = TRcBuf::UninitializedPageAligned(data.size());
-        data.Begin().ExtractPlainDataAndAdvance(AlignedDataHolder.GetDataMut(), data.size());
+        AlignedDataHolder = TRcBuf::UninitializedPageAligned(dataSize);
+        data.Begin().ExtractPlainDataAndAdvance(AlignedDataHolder.GetDataMut(), dataSize);
     }
 
     SetOperationType(EWRITE);
-    PrepareIov(AlignedDataHolder.GetDataMut(), data.size(), offset);
+
+    // UnsafeGetDataMut: writev only reads from the buffer, so we avoid COW
+    // that TRcBuf::GetDataMut() would trigger on shared page-aligned buffers.
+    PrepareIov(AlignedDataHolder.UnsafeGetDataMut(), dataSize, offset);
 
     ChunkIdx = chunkIdx;
     ChunkOffsetInBytes = chunkOffset;
@@ -201,24 +225,29 @@ void TDDiskActor::TDirectIoOpBase::SetResult(i32 result, TRope&& data) {
 // TDDiskActor::TDDiskIoOp
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void TDDiskActor::TDDiskIoOp::Reply(NActors::TActorSystem* actorSystem, TReplyStatus::E status) noexcept {
+void TDDiskActor::TDDiskIoOp::Reply(NActors::TActorSystem* actorSystem, TReplyStatus::E status,
+        TString reason) noexcept {
     const double requestTimeMs = TimePassed();
 
     std::unique_ptr<IEventBase> reply;
     TRope data;
     bool isOk = status == TReplyStatus::OK;
+    std::optional<TString> errorReason;
+    if (reason) {
+        errorReason = std::move(reason);
+    }
 
     switch (GetOperationType()) {
     case TUringOperationBase::EREAD: {
         if (status == TReplyStatus::OK) {
             data = ExtractData();
         }
-        reply = std::make_unique<TEvReadResult>(status, std::nullopt, std::move(data));
+        reply = std::make_unique<TEvReadResult>(status, errorReason, std::move(data));
         Actor.Counters.Interface.Read.Reply(isOk, GetTotalSize(), requestTimeMs);
         break;
     }
     case TUringOperationBase::EWRITE: {
-        reply = std::make_unique<TEvWriteResult>(status);
+        reply = std::make_unique<TEvWriteResult>(status, errorReason);
         Actor.Counters.Interface.Write.Reply(isOk, GetTotalSize(), requestTimeMs);
         break;
     }
@@ -242,24 +271,28 @@ void TDDiskActor::TDDiskIoOp::Reply(NActors::TActorSystem* actorSystem, TReplySt
 // TDDiskActor::TPersistentBufferPartIoOp
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void TDDiskActor::TPersistentBufferPartIoOp::Reply(NActors::TActorSystem* actorSystem, TReplyStatus::E status) noexcept {
+void TDDiskActor::TPersistentBufferPartIoOp::Reply(NActors::TActorSystem* actorSystem, TReplyStatus::E status,
+        TString reason) noexcept {
     std::unique_ptr<IEventBase> reply;
-    TString reason;
     const auto opType = GetOperationType();
     const i32 result = GetResult();
     if (status == TReplyStatus::OVERLOADED) {
-        reason = "io_uring SQ ring full (short I/O retry)";
+        if (!reason) {
+            reason = "io_uring SQ ring full (short I/O retry)";
+        }
     } else if (status != TReplyStatus::OK) {
-        if (result < 0) {
-            const char* opName = opType == TUringOperationBase::EREAD
-                ? "read"
-                : (opType == TUringOperationBase::EWRITE ? "write" : "unknown");
-            reason = TStringBuilder()
-                << opName
-                << " failed: " << strerror(-result)
-                << " (errno " << (-result) << ")";
-        } else {
-            reason = "I/O failed";
+        if (!reason) {
+            if (result < 0) {
+                const char* opName = opType == TUringOperationBase::EREAD
+                    ? "read"
+                    : (opType == TUringOperationBase::EWRITE ? "write" : "unknown");
+                reason = TStringBuilder()
+                    << opName
+                    << " failed: " << strerror(-result)
+                    << " (errno " << (-result) << ")";
+            } else {
+                reason = "I/O failed";
+            }
         }
     }
 
@@ -338,19 +371,23 @@ void TDDiskActor::TInternalSyncWriteOp::SelfRecycle() noexcept {
 // TDDiskActor::TInternalSyncWriteOp
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void TDDiskActor::TInternalSyncWriteOp::Reply(NActors::TActorSystem* actorSystem, TReplyStatus::E status) noexcept {
-    TString reason;
+void TDDiskActor::TInternalSyncWriteOp::Reply(NActors::TActorSystem* actorSystem, TReplyStatus::E status,
+        TString reason) noexcept {
     const i32 result = GetResult();
 
     if (status == TReplyStatus::OVERLOADED) {
-        reason = "io_uring SQ ring full (short I/O retry)";
+        if (!reason) {
+            reason = "io_uring SQ ring full (short I/O retry)";
+        }
     } else if (status != TReplyStatus::OK) {
-        if (result < 0) {
-            reason = TStringBuilder()
-                << "write failed: " << strerror(-result)
-                << " (errno " << (-result) << ")";
-        } else {
-            reason = "write failed";
+        if (!reason) {
+            if (result < 0) {
+                reason = TStringBuilder()
+                    << "write failed: " << strerror(-result)
+                    << " (errno " << (-result) << ")";
+            } else {
+                reason = "write failed";
+            }
         }
     }
 

@@ -438,17 +438,17 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             YQL_ENSURE(joinKindNode->IsAtom(), "Join kind should be atom");
             auto joinKindStr = joinKindNode->Content();
 
-            EJoinKind joinKind;
+            NMiniKQL::EJoinKind joinKind;
             if (joinKindStr == "Inner") {
-                joinKind = EJoinKind::Inner;
+                joinKind = NMiniKQL::EJoinKind::Inner;
             } else if (joinKindStr == "Left") {
-                joinKind = EJoinKind::Left;
+                joinKind = NMiniKQL::EJoinKind::Left;
             } else if (joinKindStr == "LeftSemi") {
-                joinKind = EJoinKind::LeftSemi;
+                joinKind = NMiniKQL::EJoinKind::LeftSemi;
             } else if (joinKindStr == "LeftOnly") {
-                joinKind = EJoinKind::LeftOnly;
+                joinKind = NMiniKQL::EJoinKind::LeftOnly;
             } else if (joinKindStr == "Cross") {
-                joinKind = EJoinKind::Cross;
+                joinKind = NMiniKQL::EJoinKind::Cross;
             } else {
                 YQL_ENSURE(false, "Unsupported join kind: " << joinKindStr);
             }
@@ -479,7 +479,7 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                 for(int index = 0; index < wideStreamComponentsSize(leftInput) - 1; ++index) {
                     renames.emplace_back(index, EJoinSide::kLeft);
                 }
-                if (joinKind != EJoinKind::LeftSemi && joinKind != EJoinKind::LeftOnly) {
+                if (joinKind != NMiniKQL::EJoinKind::LeftSemi && joinKind != NMiniKQL::EJoinKind::LeftOnly) {
                     for(int index = 0; index < wideStreamComponentsSize(rightInput) - 1; ++index) {
                         renames.emplace_back(index, EJoinSide::kRight);       
                     }
@@ -533,12 +533,17 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
     compiler->AddCallable("FulltextAnalyze",
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            YQL_ENSURE(node.ChildrenSize() == 2, "FulltextAnalyze should have 2 arguments: text and settings");
+            YQL_ENSURE(node.ChildrenSize() == 3, "FulltextAnalyze should have 3 arguments: text, settings and mode");
 
             auto textArg = MkqlBuildExpr(*node.Child(0), buildCtx);
             auto settingsArg = MkqlBuildExpr(*node.Child(1), buildCtx);
 
-            return ctx.PgmBuilder().FulltextAnalyze(textArg, settingsArg);
+            auto modeNode = node.Child(2);
+            YQL_ENSURE(modeNode->IsAtom(), "FulltextAnalyze mode should be an atom");
+            ui32 modeValue = FromString<ui32>(modeNode->Content());
+            auto modeArg = ctx.PgmBuilder().NewDataLiteral<ui32>(modeValue);
+
+            return ctx.PgmBuilder().FulltextAnalyze(textArg, settingsArg, modeArg);
         });
 
     return compiler;

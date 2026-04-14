@@ -19,11 +19,6 @@ namespace NACLib {
 // This definition used to mark anonymous user sid
 #define BUILTIN_ACL_NO_USER_SID ""
 
-// This definition used to mark cdc cases which doesn't pass any user SID, but could pass it in future
-#define BUILTIN_ACL_CDC_WITHOUT_USER_SID ""
-
-// Users which mark change data stream records
-#define BUILTIN_ACL_CDC_INITIAL_SCAN BUILTIN_ACL_CDC_WITHOUT_USER_SID
 #define BUILTIN_ACL_CDC_TTL "ttl@" BUILTIN_SYSTEM_DOMAIN
 
 class TUserToken;

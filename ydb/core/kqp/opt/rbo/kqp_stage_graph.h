@@ -98,6 +98,11 @@ struct TSourceConnection: public TConnection {
                                             TExprContext& ctx) override;
 };
 
+template <typename T>
+bool IsConnection(TIntrusivePtr<TConnection> connection) {
+    return dynamic_cast<T*>(connection.get());
+}
+
 /**
  * Stage graph
  *
@@ -129,8 +134,7 @@ struct TStageGraph {
         return newStageId;
     }
 
-    ui32 AddSourceStage(const TVector<TString>& columns, const TVector<TInfoUnit>& renames, const NYql::EStorageType& storageType,
-                       bool needsMap = true) {
+    ui32 AddSourceStage(const TVector<TString>& columns, const TVector<TInfoUnit>& renames, const NYql::EStorageType& storageType, bool needsMap = true) {
         ui32 res = AddStage();
         TVector<std::pair<TString, TInfoUnit>> renamePairs;
         if (needsMap) {
@@ -169,6 +173,15 @@ struct TStageGraph {
         auto &inputs = StageInputs.at(to);
         inputs.push_back(from);
         Connections[std::make_pair(from, to)].push_back(connection);
+    }
+
+    void UpdateConnection(ui32 from, ui32 to, TIntrusivePtr<TConnection> connection) {
+        auto it = Connections.find(std::make_pair(from, to));
+        Y_ENSURE(it != Connections.end(), "Cannot find a connection to update.");
+        auto& connections = it->second;
+        Y_ENSURE(connections.size() == 1);
+        connections.clear();
+        connections.push_back(connection);
     }
 
     TVector<TIntrusivePtr<TConnection>> GetConnections(ui32 from, ui32 to) { return Connections.at(std::make_pair(from, to)); }

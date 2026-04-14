@@ -20,66 +20,77 @@
   NYdb::TDriver driver(driverConfig);
   ```
 
-- Go (native)
+- Go
 
-  Передать логин и пароль можно в составе строки подключения. Например, так:
+  {% list tabs %}
 
-  ```shell
-  "grpcs://login:password@localohost:2135/local"
-  ```
+  - Native SDK
 
-  Также можно передать логин и пароль явно через опцию `ydb.WithStaticCredentials`:
+    Передать логин и пароль можно в составе строки подключения. Например, так:
 
-  {% include [auth-static-with-native](../../../_includes/go/auth-static-with-native.md) %}
+    ```shell
+    "grpcs://login:password@localhost:2135/local"
+    ```
 
-- Go (database/sql)
+    Также можно передать логин и пароль явно через опцию `ydb.WithStaticCredentials`:
 
-  Передать логин и пароль можно в составе строки подключения. Например, так:
+    {% include [auth-static-with-native](../../../_includes/go/auth-static-with-native.md) %}
 
-  {% include [auth-static-database-sql](../../../_includes/go/auth-static-database-sql.md) %}
+  - database/sql
 
-  Также можно передать логин и пароль явно при инициализации драйвера через коннектор с помощью специальной опции `ydb.WithStaticCredentials`:
+    Передать логин и пароль можно в составе строки подключения. Например, так:
 
-  {% include [auth-static-with-database-sql](../../../_includes/go/auth-static-with-database-sql.md) %}
+    {% include [auth-static-database-sql](../../../_includes/go/auth-static-database-sql.md) %}
+
+    Также можно передать логин и пароль явно при инициализации драйвера через коннектор с помощью специальной опции `ydb.WithStaticCredentials`:
+
+    {% include [auth-static-with-database-sql](../../../_includes/go/auth-static-with-database-sql.md) %}
+
+  {% endlist %}
 
 - Java
 
-  ```java
-  public void work(String connectionString, String username, String password) {
-      StaticCredentials authProvider = new StaticCredentials(username, password);
+  {% list tabs %}
 
-      GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
-              .withAuthProvider(authProvider)
-              .build());
+  - Native SDK
 
-      QueryClient queryClient = QueryClient.newClient(transport).build();
+    ```java
+    public void work(String connectionString, String username, String password) {
+        StaticCredentials authProvider = new StaticCredentials(username, password);
 
-      doWork(queryClient);
+        try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                .withAuthProvider(authProvider)
+                .build();
+             QueryClient queryClient = QueryClient.newClient(transport).build()) {
 
-      queryClient.close();
-      transport.close();
-  }
-  ```
+            doWork(queryClient);
+        }
+    }
+    ```
 
-- JDBC
+  - JDBC
 
-  ```java
-  public void work(String username, String password) {
-      Properties props = new Properties();
-      props.setProperty("username", username);
-      props.setProperty("password", password);
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
-        doWork(connection);
-      }
+    ```java
+    public void work(String username, String password) throws SQLException {
+        Properties props = new Properties();
+        props.setProperty("username", username);
+        props.setProperty("password", password);
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props)) {
+            doWork(connection);
+        }
 
-      // Логин и пароль могут быть указаны напрямую
-      try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", username, password)) {
-        doWork(connection);
-      }
-  }
-  ```
+        // Логин и пароль могут быть указаны напрямую
+        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", username, password)) {
+            doWork(connection);
+        }
+    }
+    ```
 
-- Node.js
+    В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC задайте те же JDBC URL, логин и пароль, что и в примере выше (например, `spring.datasource.url`, `spring.datasource.username`, `spring.datasource.password` или эквивалент в конфигурации пула).
+
+  {% endlist %}
+
+- JavaScript
 
   {% include [auth-static](../../_includes/nodejs/auth-static.md) %}
 

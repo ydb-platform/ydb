@@ -1274,6 +1274,7 @@ struct TTopicTabletInfo : TSimpleRefCount<TTopicTabletInfo> {
         TSet<ui32> ChildPartitionIds;
 
         TShardIdx ShardIdx;
+        TInstant CreationTimestamp;
 
         void SetStatus(const TActorContext& ctx, ui32 value) {
             if (value >= NKikimrPQ::ETopicPartitionStatus::Active &&

@@ -149,24 +149,9 @@ ui32 TDictionaryArray::GetIndexImpl(const ui32 index) const {
     return *result;
 }
 
-std::shared_ptr<arrow::Scalar> TDictionaryArray::DoGetMaxScalar() const {
-    std::shared_ptr<arrow::Scalar> result;
-    if (!ArrayDictionary->length()) {
-        return result;
-    }
-    auto minMaxPos = NArrow::FindMinMaxPosition(ArrayDictionary);
-    return NArrow::TStatusValidator::GetValid(ArrayDictionary->GetScalar(minMaxPos.second));
-}
 
 TMinMax TDictionaryArray::DoGetMinMaxScalars() const {
-    TMinMax result;
-    if (!ArrayDictionary->length()) {
-        return result;
-    }
-    auto minMaxPos = NArrow::FindMinMaxPosition(ArrayDictionary);
-    result.Min = NArrow::TStatusValidator::GetValid(ArrayDictionary->GetScalar(minMaxPos.first));
-    result.Max = NArrow::TStatusValidator::GetValid(ArrayDictionary->GetScalar(minMaxPos.second));
-    return result;
+    return TMinMax::Compute(ArrayDictionary);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

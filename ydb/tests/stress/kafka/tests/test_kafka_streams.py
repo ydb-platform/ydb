@@ -31,5 +31,5 @@ class TestYdbTopicWorkload(StressFixture):
             "--target-path", "target-topic",
             "--consumer", "workload-consumer-0",
             "--num-workers", "2",
-            "--duration", "120"
+            "--duration", "360"
         ])

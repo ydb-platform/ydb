@@ -6,6 +6,9 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 namespace {
+    // TODO(flown4qqqq): Implement all Persist* functions in the next pull requests.
+    // For now we intentionally keep them as stubs so current tests work,
+    // because they do not cover restart scenarios yet.
     // This is used for LOG_E macros
     const TString LogPrefix = "[SetColumnConstraint]";
 } // anonymous namespace

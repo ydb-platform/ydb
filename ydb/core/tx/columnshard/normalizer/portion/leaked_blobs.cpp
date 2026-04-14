@@ -8,6 +8,10 @@
 #include <ydb/core/tx/columnshard/engines/portions/constructor_accessor.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/domain.h>
+#include <ydb/core/base/hive.h>
+#include <ydb/core/base/tablet_pipe.h>
 
 #include <ydb/library/actors/core/actor.h>
 
@@ -87,6 +91,122 @@ public:
     }
 };
 
+class THiveHistoryCollector {
+private:
+    const ui64 TabletId;
+    const bool Enabled;
+    const NActors::NLog::EPriority LogLevel;
+    bool Finished = false;
+    TActorId PipeClient;
+    ui64 HiveTabletId = TDomainsInfo::BadTabletId;
+
+    void FinishWithError(const TStringBuf reason) {
+        if (Finished) {
+            return;
+        }
+        Finished = true;
+        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", TabletId)("event", "hive_channel_history")("status", "failed")("reason", reason)("hive_tablet_id", HiveTabletId);
+    }
+
+public:
+    THiveHistoryCollector(const ui64 tabletId, const bool enabled, const NActors::NLog::EPriority logLevel)
+        : TabletId(tabletId)
+        , Enabled(enabled)
+        , LogLevel(logLevel) {
+        if (!Enabled) {
+            Finished = true;
+        }
+    }
+
+    bool IsEnabled() const {
+        return Enabled;
+    }
+
+    bool IsFinished() const {
+        return Finished;
+    }
+
+    void Bootstrap(const TActorContext& ctx) {
+        if (!Enabled) {
+            return;
+        }
+        HiveTabletId = AppData()->DomainsInfo->GetHive();
+        if (HiveTabletId == TDomainsInfo::BadTabletId) {
+            FinishWithError("hive_tablet_id_is_not_available");
+            return;
+        }
+
+        PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, HiveTabletId, NTabletPipe::TClientRetryPolicy::WithRetries()));
+        auto request = std::make_unique<TEvHive::TEvRequestHiveInfo>();
+        request->Record.SetTabletID(TabletId);
+        request->Record.SetReturnChannelHistory(true);
+        NTabletPipe::SendData(ctx.SelfID, PipeClient, request.release());
+    }
+
+    void Handle(TEvHive::TEvResponseHiveInfo::TPtr& ev) {
+        if (!Enabled || Finished) {
+            return;
+        }
+        auto* msg = ev->Get();
+        if (msg->Record.TabletsSize() == 0) {
+            FinishWithError("empty_hive_response");
+            return;
+        }
+
+        TStringBuilder history;
+        history << "[";
+        bool first = true;
+        ui64 recordsCount = 0;
+        for (const auto& tablet : msg->Record.GetTablets()) {
+            for (ui32 channelIdx = 0; channelIdx < tablet.TabletChannelsSize(); ++channelIdx) {
+                const auto& channel = tablet.GetTabletChannels(channelIdx);
+                for (const auto& entry : channel.GetHistory()) {
+                    if (!first) {
+                        history << ";";
+                    }
+                    first = false;
+                    history << "{channel=" << channelIdx << ",from_generation=" << entry.GetGeneration() << ",group_id=" << entry.GetGroup()
+                            << ",timestamp_ms=" << entry.GetTimestamp() << "}";
+                    ++recordsCount;
+                }
+            }
+        }
+        history << "]";
+
+        ACTORS_FORMATTED_LOG(LogLevel, NKikimrServices::TX_COLUMNSHARD)("normalizer", TLeakedBlobsNormalizer::GetClassNameStatic())("tablet_id", TabletId)("event", "hive_channel_history")("status", "ok")("hive_tablet_id", HiveTabletId)("records_count", recordsCount)("history", history);
+
+        Finished = true;
+    }
+
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+        if (!Enabled || Finished) {
+            return;
+        }
+        if (ev->Get()->ClientId != PipeClient) {
+            return;
+        }
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            FinishWithError("pipe_connect_failed");
+        }
+    }
+
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+        if (!Enabled || Finished) {
+            return;
+        }
+        if (ev->Get()->ClientId == PipeClient) {
+            FinishWithError("pipe_destroyed");
+        }
+    }
+
+    void HandleTimeout() {
+        if (!Enabled || Finished) {
+            return;
+        }
+        FinishWithError("timeout");
+    }
+};
+
 class TRemoveLeakedBlobsActor: public TActorBootstrapped<TRemoveLeakedBlobsActor> {
 private:
     TVector<TTabletChannelInfo> Channels;
@@ -102,9 +222,10 @@ private:
     i32 WaitingCount = 0;
     THashSet<ui32> WaitingRequests;
     NColumnShard::TBlobGroupSelector DsGroupSelector;
+    THiveHistoryCollector HiveHistoryCollector;
 
     void CheckFinish() {
-        if (WaitingCount) {
+        if (WaitingCount || !HiveHistoryCollector.IsFinished()) {
             return;
         }
         AFL_VERIFY(CSBlobIds.size() <= BSBlobIds.size())("cs", CSBlobIds.size())("bs", BSBlobIds.size())("error", "have to use broken blobs repair");
@@ -132,10 +253,11 @@ public:
         , CSTabletId(csTabletId)
         , PrintLeakedBlobIds(printLeakedBlobIds)
         , LogLevel(logLevel)
-        , DsGroupSelector(dsGroupSelector) {
+        , DsGroupSelector(dsGroupSelector)
+        , HiveHistoryCollector(csTabletId, printLeakedBlobIds, logLevel) {
     }
 
-    void Bootstrap(const TActorContext& /* ctx */) {
+    void Bootstrap(const TActorContext& ctx) {
         WaitingCount = 0;
 
         for (auto it = Channels.begin(); it != Channels.end(); ++it) {
@@ -149,6 +271,10 @@ public:
                 SendToBSProxy(SelfId(), i.GroupID, request.Release(), ++WaitingCount);
                 WaitingRequests.emplace(WaitingCount);
             }
+        }
+        HiveHistoryCollector.Bootstrap(ctx);
+        if (HiveHistoryCollector.IsEnabled()) {
+            ctx.Schedule(TDuration::Seconds(30), new TEvents::TEvWakeup());
         }
         CheckFinish();
 
@@ -174,9 +300,33 @@ public:
         CheckFinish();
     }
 
+    void Handle(TEvHive::TEvResponseHiveInfo::TPtr& ev, const TActorContext& /*ctx*/) {
+        HiveHistoryCollector.Handle(ev);
+        CheckFinish();
+    }
+
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& /*ctx*/) {
+        HiveHistoryCollector.Handle(ev);
+        CheckFinish();
+    }
+
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& /*ctx*/) {
+        HiveHistoryCollector.Handle(ev);
+        CheckFinish();
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr&, const TActorContext& /*ctx*/) {
+        HiveHistoryCollector.HandleTimeout();
+        CheckFinish();
+    }
+
     STFUNC(StateWait) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvBlobStorage::TEvRangeResult, Handle);
+            HFunc(TEvHive::TEvResponseHiveInfo, Handle);
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            HFunc(TEvents::TEvWakeup, Handle);
             default:
                 AFL_VERIFY(false);
         }

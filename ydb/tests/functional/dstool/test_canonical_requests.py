@@ -188,6 +188,7 @@ class TestBase:
 
             response = original_http_fetch(path, params, *args, **kwargs)
 
+            params = dict(params)
             if 'sessionId' in params:
                 params['sessionId'] = 'SESSION_ID'
             query_string = urllib.parse.urlencode(params, doseq=True)

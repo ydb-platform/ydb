@@ -446,9 +446,9 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
-                {"/Root/Vectors/vector_idx/indexImplLevelTable", 6}, // about levels * clusters = 3 * 2 = 6
-                {"/Root/Vectors/vector_idx/indexImplPostingTable", 12}, // about rows / clusters^levels = 100 / 2^3 = 12.5
-                {"/Root/Vectors", 12} // same as posting
+                {"/Root/Vectors/vector_idx/indexImplLevelTable", 14}, // default levelTop=10 reads all nodes: 2 + 4 + 8 = 14
+                {"/Root/Vectors/vector_idx/indexImplPostingTable", 100}, // all 8 leaf clusters × ~12.5 rows = 100
+                {"/Root/Vectors", 100} // same as posting
             });
 
             // SELECT Key, Value --- same stats
@@ -457,9 +457,9 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
-                {"/Root/Vectors/vector_idx/indexImplLevelTable", 6},
-                {"/Root/Vectors/vector_idx/indexImplPostingTable", 12},
-                {"/Root/Vectors", 12}
+                {"/Root/Vectors/vector_idx/indexImplLevelTable", 14},
+                {"/Root/Vectors/vector_idx/indexImplPostingTable", 100},
+                {"/Root/Vectors", 100}
             });
 
             // KMeansTreeSearchTopSize = 2 --- about twice more
@@ -482,8 +482,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
-                {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 6}, // about levels * clusters = 3 * 2 = 6
-                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 12}, // about rows / clusters^levels = 100 / 2^3 = 12.5
+                {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 14}, // default levelTop=10 reads all nodes: 2 + 4 + 8 = 14
+                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 100}, // all 8 leaf clusters × ~12.5 rows = 100
                 // no main table
             });
 
@@ -493,8 +493,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
-                {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 6},
-                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 12},
+                {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 14},
+                {"/Root/Vectors/vector_idx_covered/indexImplPostingTable", 100},
             });
 
             // KMeansTreeSearchTopSize = 2 --- about twice more
@@ -518,9 +518,9 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx_prefixed/indexImplPrefixTable", 1},
-                {"/Root/Vectors/vector_idx_prefixed/indexImplLevelTable", 4},
-                {"/Root/Vectors/vector_idx_prefixed/indexImplPostingTable", 4}, // about rows / 10 / clusters^levels = 100 / 10 / 2^2 = 2.5
-                {"/Root/Vectors", 4} // same as posting
+                {"/Root/Vectors/vector_idx_prefixed/indexImplLevelTable", 6}, // default levelTop=10 reads all nodes: 2 + 4 = 6
+                {"/Root/Vectors/vector_idx_prefixed/indexImplPostingTable", 10}, // all 4 leaf clusters × ~2.5 rows = 10 (rows with prefix=7)
+                {"/Root/Vectors", 10} // same as posting
             });
         }
     }

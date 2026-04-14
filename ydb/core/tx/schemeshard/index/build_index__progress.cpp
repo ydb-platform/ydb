@@ -1793,6 +1793,9 @@ private:
                 if (!buildInfo.DoneShards.size() && !buildInfo.ToUploadShards.size()) {
                     // No "global" shards to handle - parent only has 1 shard,
                     // it will be handled during the MultiLocal phase
+                    if (buildInfo.KMeans.K == 0 && buildInfo.KMeans.Level == 1 && buildInfo.KMeans.Parent == 0) {
+                        SetAutoKMeansTreeParams(txc, buildInfo);
+                    }
                     return FillVectorIndexNextParent(txc, buildInfo);
                 }
                 // Otherwise, we collect samples

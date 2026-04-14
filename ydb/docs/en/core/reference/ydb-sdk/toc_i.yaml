@@ -7,6 +7,13 @@ items:
     href: auth.md
   - name: Parameterized queries
     href: parameterized_queries.md
+  - name: Data formats
+    href: data-formats/index.md
+    items:
+    - name: Protobuf (Value)
+      href: data-formats/format-protobuf.md
+    - name: Apache Arrow
+      href: data-formats/format-arrow.md
   - name: Working with topics
     href: topic.md
   - name: Working with coordination nodes

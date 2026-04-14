@@ -133,6 +133,14 @@
     }
     ```
 
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 
@@ -273,6 +281,14 @@
       System.out.println("Vector table created: " + tableName);
   }
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -857,6 +873,14 @@
     FROM AS_TABLE($items);`
   ```
 
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 
@@ -1120,7 +1144,7 @@
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Java
 
@@ -1175,6 +1199,14 @@
 
     // SessionRetryContext tableRetry = SessionRetryContext.create(TableClient.newClient(transport).build()).build();
     ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -1279,7 +1311,7 @@
 
           sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
 
-    {% endcut %}
+      ```
 
     ```python
     def search_items_vector_as_bytes(
@@ -1315,6 +1347,8 @@
                 ),
             },
         )
+
+    ```
 
     - Native SDK (Asyncio)
 
@@ -1597,7 +1631,7 @@
 
           sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
 
-    {% endcut %}
+      ```
 
     ```python
     def search_items_vector_as_float_list(
@@ -1633,6 +1667,8 @@
                 "$embedding": (embedding, ydb.ListType(ydb.PrimitiveType.Float)),
             },
         )
+
+    ```
 
     - Native SDK (Asyncio)
 
@@ -1762,6 +1798,14 @@
     ORDER BY score DESC
     LIMIT ${unsafe(limit)};
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -2044,7 +2088,7 @@
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Java
 
@@ -2127,5 +2171,13 @@
     ```
 
     Вывод совпадает с примером на Python.
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

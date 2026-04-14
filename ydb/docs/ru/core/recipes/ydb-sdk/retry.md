@@ -667,7 +667,7 @@
     await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local");
 
     await using var connection = await dataSource.OpenRetryableConnectionAsync();
-    var command = new YdbCommand("SELECT series_id, title FROM series WHERE series_id = @series_id", connection);
+    var command = new YdbCommand("SELECT series_id, title FROM series WHERE series_id = $series_id", connection);
     command.Parameters.Add(new YdbParameter("$series_id", YdbDbType.Uint64, 1U));
 
     await using var reader = await command.ExecuteReaderAsync();

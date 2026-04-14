@@ -103,6 +103,10 @@
     NYdb::NQuery::TQueryClient client(driver);
     ```
 
+- C# (.NET)
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -245,6 +249,10 @@
         std::cout << "Vector table created: " << tableName << std::endl;
     }
     ```
+
+- C# (.NET)
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -527,6 +535,10 @@
     В функции `ConvertVectorToBytes` подразумевается, что на клиенте используется процессор с [little-endian порядком байт](https://ru.wikipedia.org/wiki/Порядок_байтов), например x86\_64. Если используется другой порядок байт, функцию `ConvertVectorToBytes` необходимо адаптировать.
 
     {% endnote %}
+
+- C# (.NET)
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -1145,6 +1157,10 @@
     }
     ```
 
+- C# (.NET)
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -1462,6 +1478,10 @@
         return result;
     }
     ```
+
+- C# (.NET)
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
@@ -2094,6 +2114,10 @@
     ```
 
     Полный код программы доступен по [ссылке](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/vector_index_builtin).
+
+- C# (.NET)
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 

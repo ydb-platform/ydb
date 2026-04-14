@@ -99,7 +99,8 @@ public:
                             if (Settings.UserToken && !entry.SecurityObject->CheckAccess(Settings.AccessRights, *Settings.UserToken)) {
                                 LOG_D("Path '" << realPath << "' UNAUTHORIZED");
                                 Result[originalPath] = TTopicInfo{
-                                    .Status = EStatus::UNAUTHORIZED
+                                    .Status = entry.SecurityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *Settings.UserToken)
+                                            ? EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS : EStatus::UNAUTHORIZED
                                 };
                             } else {
                                 LOG_D("Path '" << realPath << "' SUCCESS");
@@ -201,6 +202,7 @@ Ydb::StatusIds::StatusCode Convert(const EStatus status) {
         case EStatus::NOT_TOPIC:
             return Ydb::StatusIds::NOT_FOUND;
         case EStatus::UNAUTHORIZED:
+        case EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
             return Ydb::StatusIds::UNAUTHORIZED;
         case EStatus::UNKNOWN_ERROR:
             return Ydb::StatusIds::INTERNAL_ERROR;
@@ -214,6 +216,8 @@ TString Description(const TString& topicPath, const EStatus status) {
         case EStatus::NOT_FOUND:
         case EStatus::UNAUTHORIZED:
             return TStringBuilder() << "You do not have access permissions or the '" << topicPath << "' does not exist";
+        case EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
+            return TStringBuilder() << "You do not have access permissions to the '" << topicPath << "' topic";
         case EStatus::NOT_TOPIC:
             return TStringBuilder() << "The '" << topicPath << "' path is not a topic";
         case EStatus::UNKNOWN_ERROR:

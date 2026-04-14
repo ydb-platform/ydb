@@ -14,6 +14,8 @@
 #include <tuple>
 
 namespace NActors {
+    static constexpr TDuration WhiteboardUpdatePeriod = TDuration::Seconds(5);
+
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
     template<typename T>
@@ -1250,7 +1252,7 @@ namespace NActors {
         }
 
         if (connected && reschedule) {
-            Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
+            Schedule(WhiteboardUpdatePeriod, new TEvents::TEvWakeup);
         }
     }
 

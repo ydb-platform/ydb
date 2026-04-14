@@ -442,7 +442,8 @@ namespace NKikimr::NDDisk {
             auto* partOp = static_cast<TPersistentBufferPartIoOp*>(op.get());
             partOp->SetCookie(opCookie);
             partOp->SetPartCookie(cookie);
-            partOp->PrepareWrite(std::move(data), diskOffset, chunkIdx, offset);
+            Y_ABORT_UNLESS(offset <= Max<ui32>());
+            partOp->PrepareWrite(std::move(data), diskOffset, chunkIdx, static_cast<ui32>(offset));
             inflightRecord.Span.Event(UringRouter ? "DirectUringOp" : "Send to pdisk");
             DirectUringOp(op);
         }
@@ -569,7 +570,8 @@ namespace NKikimr::NDDisk {
                     const ui64 dataOffset = static_cast<ui64>(pr.Sectors[first].SectorIdx) * SectorSize;
                     auto size = (pr.Sectors[sectorIdx - 1].SectorIdx - pr.Sectors[first].SectorIdx + 1) * SectorSize;
                     auto offset = DiskFormat->Offset(pr.Sectors[first].ChunkIdx, 0, dataOffset);
-                    op->PrepareRead(size, offset, pr.Sectors[first].ChunkIdx, dataOffset);
+                    Y_ABORT_UNLESS(dataOffset <= Max<ui32>());
+                    op->PrepareRead(size, offset, pr.Sectors[first].ChunkIdx, static_cast<ui32>(dataOffset));
                     DirectUringOp(op);
                     pr.PartsCount++;
                     first = sectorIdx;
@@ -687,7 +689,8 @@ namespace NKikimr::NDDisk {
             partOp->SetCookie(batchEraseCookie);
             partOp->SetPartCookie(cookie);
             partOp->SetIsErase(true);
-            partOp->PrepareWrite(TRope(zeroingData), diskOffset, pr.Sectors[0].ChunkIdx, chunkOffset);
+            Y_ABORT_UNLESS(chunkOffset <= Max<ui32>());
+            partOp->PrepareWrite(TRope(zeroingData), diskOffset, pr.Sectors[0].ChunkIdx, static_cast<ui32>(chunkOffset));
 
             buffer.Size -= pr.Size;
             buffer.Records.erase(jt);

@@ -36,8 +36,8 @@ public:
 
     virtual void ClearForRecycle() noexcept;
 
-    void PrepareWrite(TRope&& data, ui64 offset, TChunkIdx chunkIdx, ui64 chunkOffset);
-    void PrepareRead(size_t size, ui64 offset, TChunkIdx chunkIdx, ui64 chunkOffset);
+    void PrepareWrite(TRope&& data, ui64 offset, TChunkIdx chunkIdx, ui32 chunkOffset);
+    void PrepareRead(size_t size, ui64 offset, TChunkIdx chunkIdx, ui32 chunkOffset);
 
     void Reinit(const IEventHandle* ev = nullptr);
 

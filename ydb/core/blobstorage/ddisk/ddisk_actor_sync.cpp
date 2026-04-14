@@ -313,7 +313,8 @@ namespace NKikimr::NDDisk {
             syncWriteOp->SetSyncId(syncId);
             syncWriteOp->SetRequestId(ev->Cookie);
             syncWriteOp->SetSegment(begin, end);
-            syncWriteOp->PrepareWrite(std::move(segmentData), diskOffset, chunkRef.ChunkIdx, begin);
+            Y_ABORT_UNLESS(begin <= Max<ui32>());
+            syncWriteOp->PrepareWrite(std::move(segmentData), diskOffset, chunkRef.ChunkIdx, static_cast<ui32>(begin));
 
             DirectUringOp(op);
         }

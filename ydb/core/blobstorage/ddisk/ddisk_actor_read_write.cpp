@@ -101,10 +101,11 @@ namespace NKikimr::NDDisk {
         Y_ABORT_UNLESS(data.size() == selector.Size);
 
         auto offset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
+        Y_ABORT_UNLESS(selector.OffsetInBytes <= Max<ui32>());
 
         std::unique_ptr<TDirectIoOpBase> op = AllocateOp<TDDiskIoOp>(ev.Get());
         op->SetSpan(std::move(span));
-        op->PrepareWrite(std::move(data), offset, chunkRef.ChunkIdx, selector.OffsetInBytes);
+        op->PrepareWrite(std::move(data), offset, chunkRef.ChunkIdx, static_cast<ui32>(selector.OffsetInBytes));
 
         DirectUringOp(op);
     }
@@ -173,10 +174,11 @@ namespace NKikimr::NDDisk {
         }
 
         auto offset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
+        Y_ABORT_UNLESS(selector.OffsetInBytes <= Max<ui32>());
 
         std::unique_ptr<TDirectIoOpBase> op = AllocateOp<TDDiskIoOp>(ev.Get());
         op->SetSpan(std::move(span));
-        op->PrepareRead(selector.Size, offset, chunkRef.ChunkIdx, selector.OffsetInBytes);
+        op->PrepareRead(selector.Size, offset, chunkRef.ChunkIdx, static_cast<ui32>(selector.OffsetInBytes));
 
         DirectUringOp(op);
     }

@@ -48,7 +48,7 @@ CREATE EXTERNAL DATA SOURCE ydb_source WITH (
 
 ### Обогащение из локальной таблицы {#enrichment-local-table}
 
-Справочник хранится в [таблице](../../concepts/datamodel/table.md) `services_dict` в текущей базе данных.
+В данном примере справочник хранится в [таблице](../../concepts/datamodel/table.md) `services_dict` в текущей базе данных.
 
 #### Создание потокового запроса
 

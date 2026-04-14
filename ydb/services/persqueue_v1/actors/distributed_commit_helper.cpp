@@ -10,7 +10,8 @@ TDistributedCommitHelper::TDistributedCommitHelper(TString database, TString con
     , Commits(std::move(commits))
     , Step(BEGIN_TRANSACTION_SENDED)
     , Cookie(cookie)
-    , CheckerSettings(generationCheckerSettings)
+    , CheckerSettings(std::move(generationCheckerSettings))
+    , SplitGenerationCheckFromTopicCommit(CheckerSettings.has_value() && CheckerSettings->TopicDatabasePath != database)
 {}
 
 TDistributedCommitHelper::ECurrentStep TDistributedCommitHelper::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
@@ -27,9 +28,18 @@ TDistributedCommitHelper::ECurrentStep TDistributedCommitHelper::Handle(NKqp::TE
         case CHECK_GENERATION:
             CompareGenerations(ev, ctx);
             break;
+        case TOPIC_AWAIT_BEGIN_TX:
+            Step = OFFSETS_SENDED;
+            SendCommits(ev, ctx);
+            break;
         case OFFSETS_SENDED:
             Step = COMMIT_SENDED;
             CommitTx(ctx);
+            break;
+        case METADATA_COMMIT_AWAIT:
+            TopicCommitPhaseActive = true;
+            CloseKqpSession(ctx);
+            SendCreateSessionRequest(ctx);
             break;
         case COMMIT_SENDED:
             Step = DONE;
@@ -46,13 +56,21 @@ void TDistributedCommitHelper::SendCreateSessionRequest(const TActorContext& ctx
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, Cookie);
 }
 
+const TString& TDistributedCommitHelper::RequestDatabase() const {
+    if (TopicCommitPhaseActive) {
+        Y_ABORT_UNLESS(CheckerSettings.has_value());
+        return CheckerSettings->TopicDatabasePath;
+    }
+    return DataBase;
+}
+
 void TDistributedCommitHelper::BeginTransaction(const NActors::TActorContext& ctx) {
     auto begin = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
 
     begin->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_BEGIN_TX);
     begin->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
     begin->Record.MutableRequest()->SetSessionId(KqpSessionId);
-    begin->Record.MutableRequest()->SetDatabase(DataBase);
+    begin->Record.MutableRequest()->SetDatabase(RequestDatabase());
 
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), begin.Release(), 0, Cookie);
 }
@@ -66,6 +84,9 @@ bool TDistributedCommitHelper::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TP
 
     KqpSessionId = record.GetResponse().GetSessionId();
     Y_ABORT_UNLESS(!KqpSessionId.empty());
+    if (SplitGenerationCheckFromTopicCommit && TopicCommitPhaseActive) {
+        Step = TOPIC_AWAIT_BEGIN_TX;
+    }
     BeginTransaction(ctx);
     return true;
 }
@@ -80,7 +101,7 @@ void TDistributedCommitHelper::CloseKqpSession(const TActorContext& ctx) {
 
 THolder<NKqp::TEvKqp::TEvCreateSessionRequest> TDistributedCommitHelper::MakeCreateSessionRequest() {
     auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
-    ev->Record.MutableRequest()->SetDatabase(DataBase);
+    ev->Record.MutableRequest()->SetDatabase(RequestDatabase());
     return ev;
 }
 
@@ -125,8 +146,13 @@ void TDistributedCommitHelper::CompareGenerations(NKqp::TEvKqp::TEvQueryResponse
         ctx.Send(ctx.SelfID, createErrorResponse(Ydb::StatusIds_StatusCode_PRECONDITION_FAILED, errorMessage).Release());
         return;
     }
-    Step = OFFSETS_SENDED;
-    SendCommits(ev, ctx);
+    if (SplitGenerationCheckFromTopicCommit) {
+        Step = METADATA_COMMIT_AWAIT;
+        CommitTx(ctx);
+    } else {
+        Step = OFFSETS_SENDED;
+        SendCommits(ev, ctx);
+    }
 }
 
 void TDistributedCommitHelper::RetrieveGeneration(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -158,7 +184,7 @@ void TDistributedCommitHelper::SendCommits(NKqp::TEvKqp::TEvQueryResponse::TPtr&
     Y_ABORT_UNLESS(!TxId.empty());
 
     auto offsets = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
-    offsets->Record.MutableRequest()->SetDatabase(DataBase);
+    offsets->Record.MutableRequest()->SetDatabase(RequestDatabase());
     offsets->Record.MutableRequest()->SetSessionId(KqpSessionId);
     offsets->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_UNDEFINED);
     offsets->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_TOPIC);
@@ -196,7 +222,7 @@ void TDistributedCommitHelper::CommitTx(const NActors::TActorContext& ctx) {
     commit->Record.MutableRequest()->MutableTxControl()->set_tx_id(TxId);
     commit->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
     commit->Record.MutableRequest()->SetSessionId(KqpSessionId);
-    commit->Record.MutableRequest()->SetDatabase(DataBase);
+    commit->Record.MutableRequest()->SetDatabase(RequestDatabase());
 
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), commit.Release(), 0, Cookie);
 }

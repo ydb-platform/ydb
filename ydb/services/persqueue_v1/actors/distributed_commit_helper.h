@@ -18,6 +18,9 @@ public:
         CHECK_GENERATION,
         OFFSETS_SENDED,
         COMMIT_SENDED,
+        /// Split metadata / topic DB (serverless): commit generation-check tx on shared DB, then topic ops on topic DB.
+        METADATA_COMMIT_AWAIT,
+        TOPIC_AWAIT_BEGIN_TX,
         DONE
     };
 
@@ -46,6 +49,7 @@ public:
     void CloseKqpSession(const TActorContext& ctx);
 
 private:
+    const TString& RequestDatabase() const;
     THolder<NKqp::TEvKqp::TEvCreateSessionRequest> MakeCreateSessionRequest();
     THolder<NKqp::TEvKqp::TEvCloseSessionRequest> MakeCloseSessionRequest();
     void RetrieveGeneration(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx);
@@ -63,6 +67,9 @@ private:
     TString TxId;
     TString KqpSessionId;
     std::optional<GenerationIdCheckerSettings> CheckerSettings;
+    /// When true, generation was checked in `DataBase` (shared); topic commits use `CheckerSettings->TopicDatabasePath`.
+    bool SplitGenerationCheckFromTopicCommit = false;
+    bool TopicCommitPhaseActive = false;
 };
 
 }  // namespace NKikimr::NGRpcProxy::V1

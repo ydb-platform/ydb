@@ -1800,7 +1800,20 @@ private:
         if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
             if (NoShardsAdded(buildInfo)) {
                 if (buildInfo.KMeans.K == 0 && buildInfo.KMeans.Level == 1 && buildInfo.KMeans.Parent == 0) {
-                    const ui64 n = Self->Tables.at(buildInfo.TablePathId)->GetStats().Aggregated.RowCount;
+                    ui64 n = Self->Tables.at(buildInfo.TablePathId)->GetStats().Aggregated.RowCount;
+                    if (buildInfo.KMeans.IsPrefixed) {
+                        // For prefixed index, use average rows per unique prefix
+                        // to pick clusters/levels appropriate for per-prefix subtrees.
+                        auto prefixPath = TPath::Init(buildInfo.TablePathId, Self)
+                            .Dive(buildInfo.IndexName)
+                            .Dive(NTableIndex::NKMeans::PrefixTable);
+                        if (prefixPath.IsResolved() && Self->Tables.contains(prefixPath->PathId)) {
+                            const ui64 prefixCount = Self->Tables.at(prefixPath->PathId)->GetStats().Aggregated.RowCount;
+                            if (prefixCount > 0) {
+                                n /= prefixCount;
+                            }
+                        }
+                    }
                     SetAutoKMeansTreeParams(txc, buildInfo, n);
                 }
                 AddGlobalShardsForCurrentParent(buildInfo);

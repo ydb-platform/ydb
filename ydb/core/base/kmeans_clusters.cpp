@@ -568,7 +568,7 @@ std::pair<ui32, ui32> ComputeOptimalClustersAndLevels(ui64 n, ui32 t, double p, 
         const double c = std::pow(num / den, 1.0 / (l + 1));
         const ui32 clusters = std::clamp<ui32>(static_cast<ui32>(std::round(c)), MinClusters, MaxClusters);
         const double s = clusters + static_cast<double>(clusters) * t * (l - 1)
-                       + static_cast<double>(t) * n * p / std::pow(clusters, l);
+            + static_cast<double>(t) * n * p / std::pow(clusters, l);
         if (s < static_cast<double>(sThresh)) {
             return {clusters, l};
         }

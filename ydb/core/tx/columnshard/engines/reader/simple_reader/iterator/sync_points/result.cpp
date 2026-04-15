@@ -124,6 +124,49 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const std::shared_ptr<
                 ("source_idx", source->GetSourceIdx())("is_finished", isFinished);
             source->MutableAs<IDataSource>()->ContinueCursor(source);
             return ESourceAction::Wait;
+        } else {
+            // In streaming mode, isFinished is always true after each page
+            // (the pages deque has only one entry per streaming page).  When the
+            // current page yields no data after filtering (!HasData()), the
+            // !isFinished branch above is never taken.  We must still advance to
+            // the next page via ContinueCursor() if HasMorePages().
+            const bool isStreamingMode = source->GetAs<IDataSource>()->IsStreamingMode();
+            const bool hasMorePages = source->GetAs<IDataSource>()->HasMorePages();
+            if (isStreamingMode && hasMorePages) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "streaming_empty_page_continue")
+                    ("source_idx", source->GetSourceIdx())
+                    ("is_finished", isFinished)
+                    ("page_index", source->GetAs<IDataSource>()->GetCurrentEarlyPageIndex())
+                    ("total_pages", source->GetAs<IDataSource>()->GetEarlyPages().size())
+                    ("reverse", source->GetAs<IDataSource>()->GetContext()->GetReadMetadata()->IsDescSorted());
+                source->MutableAs<IDataSource>()->ContinueCursor(source);
+                return ESourceAction::Wait;
+            }
+        }
+        // DIAGNOSTIC: detect when a streaming source with remaining pages
+        // falls through to ProvideNext because the current page had no data
+        // after filtering.  If this log fires after the fix above, it means
+        // the fix did not cover all cases.
+        {
+            const bool isStreamingMode = source->GetAs<IDataSource>()->IsStreamingMode();
+            const bool hasMorePages = source->GetAs<IDataSource>()->HasMorePages();
+            const bool hadData = resultChunk && resultChunk->HasData();
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "streaming_empty_page_fallthrough")
+                ("source_idx", source->GetSourceIdx())
+                ("is_finished", isFinished)
+                ("is_streaming_mode", isStreamingMode)
+                ("has_more_pages", hasMorePages)
+                ("had_data", hadData)
+                ("page_index", source->GetAs<IDataSource>()->GetCurrentEarlyPageIndex())
+                ("total_pages", source->GetAs<IDataSource>()->GetEarlyPages().size())
+                ("reverse", source->GetAs<IDataSource>()->GetContext()->GetReadMetadata()->IsDescSorted());
+            if (isStreamingMode && hasMorePages) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "BUG_streaming_premature_finish")
+                    ("source_idx", source->GetSourceIdx())
+                    ("page_index", source->GetAs<IDataSource>()->GetCurrentEarlyPageIndex())
+                    ("total_pages", source->GetAs<IDataSource>()->GetEarlyPages().size())
+                    ("reason", "empty page after filtering in streaming mode falls through to ProvideNext, skipping remaining pages");
+            }
         }
         source->MutableAs<IDataSource>()->ClearResult();
         return ESourceAction::ProvideNext;

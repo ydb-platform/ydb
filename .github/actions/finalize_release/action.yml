@@ -98,7 +98,7 @@ runs:
             echo "PR was closed without merging - this shouldn't happen with auto-merge"
             exit 1
           else
-            echo "PR still pending (attempt $i/24), state: $PR_STATE, waiting 5 minutes..."
+            echo "PR still pending (attempt $i/48), state: $PR_STATE, waiting 5 minutes..."
             sleep 300
           fi
           if [ $((i % 6)) -eq 0 ]; then

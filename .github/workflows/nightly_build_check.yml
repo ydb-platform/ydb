@@ -17,7 +17,7 @@ on:
       telegram-chat-id:
         description: 'Telegram chat ID for failure notifications'
         type: string
-        default: "REPLACE_WITH_CHAT_ID"
+        default: "311589523"
       build-linux-amd:
         type: boolean
         description: Build for Linux (amd64)

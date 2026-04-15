@@ -2,6 +2,7 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/lib/ydb_cli/common/exclude_item.h>
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
@@ -233,6 +234,42 @@ int TCommandExportToYt::Run(TConfig& config) {
     TSchemeClient schemeClient(driver);
     TTableClient tableClient(driver);
     ExpandItems(schemeClient, tableClient, settings, ExclusionPatterns);
+
+    // Collect multi-shard tables exported with append=false.
+    // With append=false each shard takes an exclusive lock in YT sequentially,
+    // so shards overwrite each other and the result contains only data from the last shard.
+    TVector<TString> appendFalseMultiShardTables;
+    tableClient.RetryOperationSync([&settings, &appendFalseMultiShardTables](NTable::TSession session) -> TStatus {
+        appendFalseMultiShardTables.clear();
+        for (const auto& item : settings.Item_) {
+            if (!TString(item.Dst).StartsWith(AppendPrefix)) {
+                auto describeResult = session.DescribeTable(
+                    item.Src,
+                    NTable::TDescribeTableSettings().WithTableStatistics(true)
+                ).ExtractValueSync();
+                if (!describeResult.IsSuccess()) {
+                    return describeResult;
+                }
+                if (describeResult.GetTableDescription().GetPartitionsCount() > 1) {
+                    appendFalseMultiShardTables.push_back(TString(item.Src));
+                }
+            }
+        }
+        return TStatus(EStatus::SUCCESS, {});
+    });
+
+    if (!appendFalseMultiShardTables.empty()) {
+        Cerr << "The following tables have multiple shards but are exported with append=false." << Endl
+             << "Shards take exclusive locks in YT sequentially and will overwrite each other, resulting in data loss:" << Endl;
+        for (const auto& table : appendFalseMultiShardTables) {
+            Cerr << "  " << table << Endl;
+        }
+        Cerr << "Use append=true (the default) to avoid data loss." << Endl;
+
+        if (!config.AssumeYes && !AskYesOrNo("Do you want to proceed?", /* defaultAnswer */ false)) {
+            return EXIT_FAILURE;
+        }
+    }
 
     TExportClient client(driver);
     TExportToYtResponse response = client.ExportToYt(std::move(settings)).GetValueSync();

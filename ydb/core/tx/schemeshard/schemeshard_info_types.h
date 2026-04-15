@@ -51,7 +51,6 @@
 #include <ydb/services/lib/sharding/sharding.h>
 
 #include <library/cpp/regex/pcre/regexp.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 
 #include <google/protobuf/util/message_differencer.h>
 

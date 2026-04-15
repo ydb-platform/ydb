@@ -98,19 +98,21 @@ void WriteColumnToJson(const TString& columnName, NScheme::TTypeId columnType,
         writer.WriteKey(columnName).WriteBool(columnData.AsValue<bool>());
         break;
     case NScheme::NTypeIds::Double:
-        writer.WriteKey(columnName).WriteDouble(columnData.AsValue<double>());
+        writer.WriteKey(columnName).WriteDouble(columnData.AsValue<double>(),
+            EFloatToStringMode::PREC_NDIGITS, std::numeric_limits<double>::max_digits10);
         break;
     case NScheme::NTypeIds::Float:
-        writer.WriteKey(columnName).WriteFloat(columnData.AsValue<float>());
+        writer.WriteKey(columnName).WriteFloat(columnData.AsValue<float>(),
+            EFloatToStringMode::PREC_NDIGITS, std::numeric_limits<float>::max_digits10);
         break;
     case NScheme::NTypeIds::Date:
-        writer.WriteKey(columnName).WriteString(TInstant::Days(columnData.AsValue<ui16>()).ToString());
+        writer.WriteKey(columnName).WriteULongLong(columnData.AsValue<ui16>());
         break;
     case NScheme::NTypeIds::Datetime:
-        writer.WriteKey(columnName).WriteString(TInstant::Seconds(columnData.AsValue<ui32>()).ToString());
+        writer.WriteKey(columnName).WriteULongLong(columnData.AsValue<ui32>());
         break;
     case NScheme::NTypeIds::Timestamp:
-        writer.WriteKey(columnName).WriteString(TInstant::MicroSeconds(columnData.AsValue<ui64>()).ToString());
+        writer.WriteKey(columnName).WriteULongLong(columnData.AsValue<ui64>());
         break;
     case NScheme::NTypeIds::Interval:
         writer.WriteKey(columnName).WriteLongLong(columnData.AsValue<i64>());
@@ -141,11 +143,6 @@ void WriteColumnToJson(const TString& columnName, NScheme::TTypeId columnType,
             .WriteULongLong(pair.first)
             .WriteULongLong(pair.second)
             .EndList();
-        break;
-    }
-    case NScheme::NTypeIds::ActorId: {
-        auto actorId = columnData.AsValue<TActorId>();
-        writer.WriteKey(columnName).WriteString(actorId.ToString());
         break;
     }
     case NScheme::NTypeIds::String:
@@ -545,6 +542,7 @@ public:
         TBufferOutput out(Buffer);
 
         NJsonWriter::TBuf b(NJsonWriter::HEM_RELAXED, &out);
+        b.SetWriteNanAsString(true);
         b.BeginObject();
 
         for (const auto& info : Scheme->Cols) {
@@ -554,7 +552,18 @@ public:
             }
 
             const auto& cell = row.Get(info.Pos);
-            WriteColumnToJson(column.Name, column.PType.GetTypeId(), cell, b);
+
+            try {
+                WriteColumnToJson(column.Name, column.PType.GetTypeId(), cell, b);
+            } catch (const std::exception& e) {
+                TString value;
+                DbgPrintValue(value, cell, column.PType);
+        
+                throw yexception() << "Failed to write column to JSON: " << e.what()
+                    << " Column# " << column.Name
+                    << " Type# " << NScheme::TypeName(column.PType.GetTypeId(), "")
+                    << " Value# " << value;
+            }
         }
 
         b.EndObject();
@@ -833,6 +842,7 @@ public:
         size_t changesStart = Buffer.Size();
         TBufferOutput out(Buffer);
         NJsonWriter::TBuf b(NJsonWriter::HEM_RELAXED, &out);
+        b.SetWriteNanAsString(true);
 
         const auto* msg = ev->Get();
         const ui64 msgSize = msg->GetTotalSize();

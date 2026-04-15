@@ -281,6 +281,20 @@ namespace {
         return str.Str();
     }
 
+    double GetDoubleSafeWithNanInf(const NJson::TJsonValue& value) {
+        if (value.IsString()) {
+            const auto& s = value.GetStringSafe();
+            if (s == "inf") {
+                return std::numeric_limits<double>::infinity();
+            } else if (s == "-inf") {
+                return -std::numeric_limits<double>::infinity();
+            } else if (s == "nan") {
+                return std::numeric_limits<double>::quiet_NaN();
+            }
+        }
+        return value.GetDoubleSafe();
+    }
+
 } // anonymous
 
 void AddTwoCells(TCell& result, const TCell& cell1, const TCell& cell2, const NScheme::TTypeId& typeId) {
@@ -430,9 +444,9 @@ bool MakeCell(TCell& cell, const NJson::TJsonValue& value, const NScheme::TTypeI
         case NScheme::NTypeIds::Uint64:
             return TCellMaker<ui64>::MakeDirect(cell, value.GetUIntegerSafe(), pool, err);
         case NScheme::NTypeIds::Float:
-            return TCellMaker<float>::MakeDirect(cell, value.GetDoubleSafe(), pool, err);
+            return TCellMaker<float>::MakeDirect(cell, GetDoubleSafeWithNanInf(value), pool, err);
         case NScheme::NTypeIds::Double:
-            return TCellMaker<double>::MakeDirect(cell, value.GetDoubleSafe(), pool, err);
+            return TCellMaker<double>::MakeDirect(cell, GetDoubleSafeWithNanInf(value), pool, err);
         case NScheme::NTypeIds::Date:
             return TCellMaker<TInstant, ui16>::Make(cell, value.GetStringSafe(), pool, err, &Days);
         case NScheme::NTypeIds::Datetime:

@@ -3,6 +3,7 @@
 #include "actors/schema_actors.h"
 #include "actors/read_session_actor.h"
 
+#include <ydb/services/persqueue_v1/actors/schema/pqv1/actors.h>
 #include <ydb/services/persqueue_v1/actors/schema/topic/actors.h>
 
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
@@ -121,7 +122,7 @@ void DoDropTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpc
     EnsureReq(p);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new drop topic request");
-    f.RegisterActor(new NGRpcProxy::V1::TDropTopicActor(p));
+    f.RegisterActor(NKikimr::NGRpcProxy::V1::NTopic::CreateDropTopicActor(p));
 }
 
 void DoCreateTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f,
@@ -185,7 +186,7 @@ void DoPQDropTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGR
     EnsureReq(p);
 
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PQ_READ_PROXY, "new Drop topic request");
-    f.RegisterActor(new NGRpcProxy::V1::TPQDropTopicActor(p));
+    f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateDropTopicActor(p));
 }
 
 void DoPQCreateTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider& f,

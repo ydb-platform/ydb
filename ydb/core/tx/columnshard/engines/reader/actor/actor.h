@@ -208,7 +208,7 @@ private:
     ui64 RowsSum = 0;
     ui64 PacksSum = 0;
     ui64 Bytes = 0;
-    ui64 TotalSourcesCount = 0;
+    ui64 TotalPartialSourcesCount = 0;
     ui64 TotalBlobBytes = 0;
     ui64 TotalRawBytes = 0;
     ui64 TotalRowsCount = 0;

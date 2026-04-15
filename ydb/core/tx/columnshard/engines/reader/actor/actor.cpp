@@ -45,7 +45,7 @@ constexpr TDuration COMPUTE_HARD_TIMEOUT = TDuration::Minutes(10);
 
 void TColumnShardScan::PassAway() {
     TDuration duration = StartInstant ? TDuration::MilliSeconds((TMonotonic::Now() - *StartInstant).MilliSeconds()) : TDuration::Zero();
-    LWTRACK(ScanFinished, *ScanOrbit, PathId, TabletId, TxId, ScanId, duration, TotalRowsCount, TotalSourcesCount, TotalBlobBytes, TotalRawBytes);
+    LWTRACK(ScanFinished, *ScanOrbit, PathId, TabletId, TxId, ScanId, duration, TotalRowsCount, TotalPartialSourcesCount, TotalBlobBytes, TotalRawBytes);
     Send(ResourceSubscribeActorId, new TEvents::TEvPoisonPill);
     Send(ReadCoordinatorActorId, new TEvents::TEvPoisonPill);
     IActor::PassAway();
@@ -127,7 +127,7 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
     TotalRawBytes += ev->Get()->GetRawBytes();
     TotalRowsCount += ev->Get()->GetFilteredRows();
     if (ev->Get()->GetSourceId() > 0) {
-        ++TotalSourcesCount;
+        ++TotalPartialSourcesCount;
         LWTRACK(ScanFinishSource, *ScanOrbit, PathId, TabletId, TxId, ScanId, (ui64)ev->Get()->GetSourceId(),
                 ev->Get()->GetBlobBytes(), ev->Get()->GetRawBytes(), ev->Get()->GetFilteredRows(), ev->Get()->GetTotalRows(),
                 ev->Get()->GetTotalReservedBytes());

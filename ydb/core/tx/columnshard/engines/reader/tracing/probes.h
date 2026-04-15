@@ -12,7 +12,7 @@ namespace NKikimr::NOlap::NReader {
     PROBE(ScanFinished, \
         GROUPS("Scan"), \
         TYPES(ui64, ui64, ui64, ui64, TDuration, ui64, ui64, ui64, ui64), \
-        NAMES("pathId", "tabletId", "txId", "scanId", "totalDurationMs", "totalRowsCount", "totalSourcesCount", "totalBlobBytes", "totalRawBytes")) \
+        NAMES("pathId", "tabletId", "txId", "scanId", "totalDurationMs", "totalRowsCount", "totalPartialSourcesCount", "totalBlobBytes", "totalRawBytes")) \
     PROBE(SendResult, \
         GROUPS("Scan"), \
         TYPES(ui64, ui64, ui64, ui64, ui64, ui64, ui64, TDuration, TDuration, TDuration, bool), \

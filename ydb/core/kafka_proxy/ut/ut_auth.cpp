@@ -14,7 +14,7 @@ using namespace NKafka;
 using namespace NYdb;
 
 Y_UNIT_TEST_SUITE(KafkaPlainMessage) {
-    // Test PLAIN message with гnsupported characters in username
+    // Test PLAIN message with unsupported characters in username
     Y_UNIT_TEST(BadUsername) {
         TInsecureTestServer testServer("2");
         TKafkaTestClient client(testServer.Port);

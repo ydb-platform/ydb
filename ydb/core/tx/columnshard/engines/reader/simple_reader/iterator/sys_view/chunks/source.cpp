@@ -3,6 +3,7 @@
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/minmax/meta.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks {
@@ -207,8 +208,17 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
             }
         }
         for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
-            Y_UNUSED(i);
-            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view());
+            TString data;
+            if (i.HasBlobData()) {
+                const auto indexMeta = Schema->GetIndexInfo().GetIndexVerified(i.GetEntityId());
+                if (indexMeta->GetClassName() == NIndexes::NMinMax::TIndexMeta::GetClassNameStatic()) {
+                    const auto json = indexMeta->SerializeDataToJson(i, Schema->GetIndexInfo());
+                    if (json.Has("data")) {
+                        data = json["data"].GetStringRobust();
+                    }
+                }
+            }
+            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(data.data(), data.size()));
         }
         return NArrow::FinishBuilder(std::move(builder));
     }

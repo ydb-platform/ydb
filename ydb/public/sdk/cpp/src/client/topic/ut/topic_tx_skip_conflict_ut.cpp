@@ -208,7 +208,10 @@ protected:
     }
 
     void AugmentWriteSessionSettings(NTopic::TWriteSessionSettings& options) override {
-        options.SetTrackProducerIdInTx(TrackProducerIdInTxMeta == ETrackProducerIdInTxMeta::True);
+        if ((TrackProducerIdInTxMeta == ETrackProducerIdInTxMeta::True) ||
+            (TrackProducerIdInTxMeta == ETrackProducerIdInTxMeta::False)) {
+            options.SetTrackProducerIdInTx(TrackProducerIdInTxMeta == ETrackProducerIdInTxMeta::True);
+        }
     }
 };
 

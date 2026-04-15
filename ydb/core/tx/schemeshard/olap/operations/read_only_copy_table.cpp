@@ -407,14 +407,14 @@ public:
         THolder<TProposeResponse> result;
         result.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
             NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId)));
-
+            
         if (!AppData()->FeatureFlags.GetEnableColumnTablesBackup()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Backups are disabled for the database");
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Read-Only Copy Column Table is supported only for backups. Backups are disabled for the database.");
             return result;
         }
 
         if (!opDescr.GetIsBackup()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Read-Only Copy Column Table is supported only for backups");
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Read-Only Copy Column Table is supported for backup only.");
             return result;
         }        
 

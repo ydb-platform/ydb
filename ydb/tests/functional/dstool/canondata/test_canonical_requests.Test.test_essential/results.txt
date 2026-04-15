@@ -60,6 +60,7 @@ dstool
 ├─ box
 │  └─ list                 List boxes
 ├─ node
+<<<<<<< HEAD
 │  └─ list                 List nodes
 └─ cluster
    ├─ balance              Move vdisks out from overpopulated pdisks.
@@ -68,6 +69,50 @@ dstool
    ├─ workload
    │  └─ run               Create workload to stress failure model
    └─ list                 List cluster
+=======
+│  └─ list                              List nodes
+├─ cluster
+│  ├─ balance                           Balance VDisks across PDisks in a 
+│  │                                    storage pool by invoking 
+│  │                                    ReassignGroupDisk BSC command.
+│  │                                    It can operate in several modes:
+│  │                                    
+│  │                                    1. Overpopulated PDisk mode (--only-
+│  │                                    from-overpopulated-pdisks):
+│  │                                       Moves VDisks from PDisks that exceed 
+│  │                                    their expected slot count to less 
+│  │                                    populated PDisks.
+│  │                                    
+│  │                                    2. Slot-based balancing (--sort-
+│  │                                    by=slots, default):
+│  │                                       Redistributes VDisks to equalize slot
+│  │                                     usage across PDisks.
+│  │                                    
+│  │                                    3. Space-based balancing (--sort-
+│  │                                    by=space_ratio):
+│  │                                       Redistributes VDisks based on 
+│  │                                    available free space ratios.
+│  │                                    
+│  │                                    Use --storage-pool to limit balancing to
+│  │                                     a specific storage pool, or --group-ids
+│  │                                     to target
+│  │                                    specific groups. The tool runs 
+│  │                                    iteratively until balance is achieved or
+│  │                                     no more moves are possible.
+│  ├─ get                               Get cluster wide settings
+│  ├─ set                               Set cluster wide settings
+│  ├─ workload
+│  │  └─ run                            Create workload to stress failure model
+│  └─ list                              List cluster
+└─ nbs
+   └─ partition
+      ├─ create                         Create NBS 2.0 partition
+      ├─ delete                         Delete NBS 2.0 partition
+      ├─ get-load-actor-adapter-actor-id
+      │                                 Get LoadActorAdapter actor id for NBS 
+      │                                 2.0 partition
+      └─ io                             Send IO to NBS 2.0 partition
+>>>>>>> 3b7df014826 (Add test for dstool cluster balance (#38081))
 
 Options:
   {-?|-h|--help}         Print usage

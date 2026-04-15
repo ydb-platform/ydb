@@ -1,4 +1,7 @@
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
+import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bsbase3
+import ydb.core.protos.msgbus_pb2 as kikimr_msgbus
+from ydb.tests.library.common.msgbus_types import MessageBusStatus
 
 # XXX: setting of pytest_plugins should work if specified directly in test modules
 # but somehow it does not
@@ -21,11 +24,16 @@ class BaseConfigBuilder:
         node.HostKey.IcPort = ic_port
         return self
 
-    def add_pdisk(self, node_id=1, pdisk_id=1, expected_slot_count=0, slot_size_in_units=0, enforced_dynamic_slot_size=0):
+    def add_pdisk(self, node_id=1, pdisk_id=1, expected_slot_count=0, slot_size_in_units=0, enforced_dynamic_slot_size=0,
+                  box_id=1, pdisk_type=kikimr_bsbase3.EPDiskType.ROT, drive_status=kikimr_bsconfig.EDriveStatus.ACTIVE):
         pdisk = self._base_config.PDisk.add()
         pdisk.NodeId = node_id
         pdisk.PDiskId = pdisk_id
         pdisk.NumStaticSlots = 0
+        pdisk.BoxId = box_id
+        pdisk.Type = pdisk_type
+        pdisk.DriveStatus = drive_status
+        pdisk.ExpectedSlotCount = expected_slot_count
         pdisk.PDiskConfig.ExpectedSlotCount = expected_slot_count
         pdisk.PDiskConfig.SlotSizeInUnits = slot_size_in_units
         pdisk.PDiskMetrics.SlotCount = expected_slot_count
@@ -111,3 +119,82 @@ class BaseConfigBuilder:
 
     def build(self):
         return dict(BaseConfig=self._base_config, StoragePools=self._storage_pools)
+
+
+class FakeReassignGroupDiskHandler:
+    """Build a fake BlobStorageConfig response for ReassignGroupDisk.
+
+    Mimics BSC behavior from ydb/core/mind/bscontroller/config_cmd.cpp
+    (TConfigState::ExecuteStep + WrapCommand + Finish):
+    - When group_id is in pending_reassigns: returns success with ReassignedItem
+    - Otherwise returns failure with
+      kReassignNotViable, same as TExReassignNotViable in
+      ydb/core/mind/bscontroller/config_fit_groups.cpp
+    """
+
+    def __init__(self, pending_reassigns, base_config):
+        self.pending_reassigns = pending_reassigns
+        self.base_config = base_config
+
+    @staticmethod
+    def find_source_vslot(cmd, base_config):
+        for vslot in base_config['BaseConfig'].VSlot:
+            if (vslot.GroupId == cmd.GroupId
+                    and vslot.FailRealmIdx == cmd.FailRealmIdx
+                    and vslot.FailDomainIdx == cmd.FailDomainIdx
+                    and vslot.VDiskIdx == cmd.VDiskIdx):
+                return vslot
+        return None
+
+    def should_handle(self, bs_request):
+        return all(cmd.HasField('ReassignGroupDisk') for cmd in bs_request.Request.Command)
+
+    def handle(self, func, *params):
+        assert func == 'BlobStorageConfig'
+        bs_request = params[0]
+
+        is_rollback = bs_request.Request.Rollback
+        all_commands_ok = True
+
+        config_response = kikimr_bsconfig.TConfigResponse()
+
+        for command in bs_request.Request.Command:
+            status = config_response.Status.add()
+
+            assert command.HasField('ReassignGroupDisk')
+            cmd = command.ReassignGroupDisk
+            target_vslot = self.pending_reassigns.get(cmd.GroupId)
+
+            if target_vslot is None:
+                status.Success = False
+                status.FailReason = kikimr_bsconfig.TConfigResponse.TStatus.kReassignNotViable
+                all_commands_ok = False
+                continue
+
+            status.Success = True
+            source_vslot = self.find_source_vslot(cmd, self.base_config)
+            item = status.ReassignedItem.add()
+            if source_vslot is not None:
+                item.From.NodeId = source_vslot.VSlotId.NodeId
+                item.From.PDiskId = source_vslot.VSlotId.PDiskId
+                item.From.VSlotId = source_vslot.VSlotId.VSlotId
+            item.To.NodeId = target_vslot[0]
+            item.To.PDiskId = target_vslot[1]
+            item.To.VSlotId = target_vslot[2]
+
+            if not is_rollback:
+                del self.pending_reassigns[cmd.GroupId]
+
+        if is_rollback and all_commands_ok:
+            config_response.Success = False
+            config_response.ErrorDescription = 'fake transaction rollback'
+            config_response.RollbackSuccess = True
+        elif all_commands_ok:
+            config_response.Success = True
+        else:
+            config_response.Success = False
+
+        response = kikimr_msgbus.TResponse()
+        response.Status = MessageBusStatus.MSTATUS_OK
+        response.BlobStorageConfigResponse.CopyFrom(config_response)
+        return response

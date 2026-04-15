@@ -11,14 +11,13 @@ bool IsValidForRange(const NYql::TExprNode::TPtr& node) {
     if (auto sqlin = expr.Maybe<TCoSqlIn>()) {
         auto collection = sqlin.Cast().Collection().Ptr();
         bool result = true;
-        VisitExpr(collection,
-            [&](const TExprNode::TPtr& node) {
-                if (node->IsCallable() && (node->Content().StartsWith("Dq") || node->Content().StartsWith("Kql") || node->Content().StartsWith("Kqp"))) {
-                    result = false;
-                    return false;
-                }
-                return true;
-            });
+        VisitExpr(collection, [&](const TExprNode::TPtr& node) {
+            if (node->IsCallable() && (node->Content().StartsWith("Dq") || node->Content().StartsWith("Kql") || node->Content().StartsWith("Kqp"))) {
+                result = false;
+                return false;
+            }
+            return true;
+        });
         return result;
     }
     return true;
@@ -42,10 +41,65 @@ bool IsLambdaOptionalType(TExprNode::TPtr node, const TTypeAnnotationNode* struc
         return false;
     }
 
-    return !lambdaType->IsOptionalOrNull();
+    return lambdaType->IsOptionalOrNull();
 }
 
-bool IsSuitableToExtractAndPushRanges(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx) {
+TExprNode::TPtr GetLambdaForRangeExtractor(TExprNode::TPtr node, const TTypeAnnotationNode* inputType, TRBOContext& rboCtx) {
+    if (!inputType) {
+        return node;
+    }
+
+    auto& ctx = rboCtx.ExprCtx;
+    auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    if (!IsLambdaOptionalType(node, structType, rboCtx)) {
+        return node;
+    }
+
+    auto lambda = TCoLambda(node);
+    // clang-format off
+    auto newBody = Build<TCoCoalesce>(ctx, node->Pos())
+        .Predicate(lambda.Body())
+        .Value<TCoBool>()
+            .Literal().Build("false")
+        .Build()
+    .Done();
+    // clang-format on
+
+    // clang-format off
+    auto newLambda = Build<TCoLambda>(ctx, node->Pos())
+        .Args({"arg"})
+        .Body<TExprApplier>()
+            .Apply(newBody)
+            .With(lambda.Args().Arg(0), "arg")
+        .Build()
+    .Done();
+    // clang-format on
+
+    TVector<const TTypeAnnotationNode*> argTypes{structType};
+    // clang-format off
+    auto predicateClosure = Build<TKqpPredicateClosure>(ctx, node->Pos())
+        .Lambda(newLambda)
+        .ArgsType(ExpandType(node->Pos(), *ctx.MakeType<TTupleExprType>(argTypes), ctx))
+    .Done();
+    // clang-format on
+
+    YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Range exctractor, before peephole: " << KqpExprToPrettyString(predicateClosure, ctx);
+
+    TExprNode::TPtr afterPeephole;
+    bool hasNonDeterministicFunctions;
+    if (const auto status = PeepHoleOptimizeNode(predicateClosure.Ptr(), afterPeephole, ctx, rboCtx.TypeCtx, &(rboCtx.PeepholeTypeAnnTransformer),
+                                                 hasNonDeterministicFunctions);
+        status != IGraphTransformer::TStatus::Ok) {
+        YQL_CLOG(ERROR, ProviderKqp) << "[NEW RBO] Peephole failed with status: " << status << Endl;
+        afterPeephole = nullptr;
+    }
+    Y_ENSURE(afterPeephole);
+    YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Range exctractor, after peephole: " << KqpExprToPrettyString(TExprBase(afterPeephole), ctx);
+
+    return TExprBase(afterPeephole).Cast<TKqpPredicateClosure>().Lambda().Ptr();
+}
+
+bool IsSuitableToExtractAndPushRanges(const TIntrusivePtr<IOperator>& input) {
     if (input->Kind != EOperator::Filter) {
         return false;
     }
@@ -56,21 +110,14 @@ bool IsSuitableToExtractAndPushRanges(const TIntrusivePtr<IOperator>& input, TRB
         return false;
     }
 
+    const auto type = filter->FilterExpr.Node->GetTypeAnn();
+    if (!type || type->GetKind() == ETypeAnnotationKind::Pg) {
+        return false;
+    }
+
     const auto read = CastOperator<TOpRead>(maybeRead);
     // Currently supported only for cs.
-    if (read->GetRanges() || read->GetTableStorageType() != NYql::EStorageType::ColumnStorage || !filter->GetTypeAnn()) {
-        return false;
-    }
-
-    const TTypeAnnotationNode* inputType = read->Type;
-    if (!inputType) {
-        return false;
-    }
-
-    auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    auto lambda = filter->FilterExpr.Node;
-    // FIXME: We should be able to work with optional<bool> by inserting coalesce.
-    return IsLambdaOptionalType(lambda, structType, ctx);
+    return !read->GetRanges() && read->GetTableStorageType() == NYql::EStorageType::ColumnStorage;
 }
 
 TPredicateExtractorSettings PrepareExtractorSettings(TKqpOptimizeContext& kqpCtx) {
@@ -108,7 +155,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         return input;
     }
 
-    if (!IsSuitableToExtractAndPushRanges(input, rboCtx)) {
+    if (!IsSuitableToExtractAndPushRanges(input)) {
         return input;
     }
 
@@ -122,16 +169,14 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         return input;
     }
 
-    THashSet<TString> possibleKeys;
-    auto settings = PrepareExtractorSettings(kqpCtx);
-    auto extractor = MakePredicateRangeExtractor(settings);
-
-    YQL_ENSURE(tableDesc->SchemeNode);
-    auto lambda = TCoLambda(filter->FilterExpr.Node);
+    auto lambda = TCoLambda(GetLambdaForRangeExtractor(filter->FilterExpr.Node, read->Type, rboCtx));
     // Predicate extract lib requires constraints.
     auto arg = lambda.Args().Arg(0).Ptr();
     arg->AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
 
+    THashSet<TString> possibleKeys;
+    auto settings = PrepareExtractorSettings(kqpCtx);
+    auto extractor = MakePredicateRangeExtractor(settings);
     const bool prepareSuccess = extractor->Prepare(lambda.Ptr(), *arg->GetTypeAnn(), possibleKeys, ctx, typeCtx);
     YQL_ENSURE(prepareSuccess);
 
@@ -159,4 +204,4 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(buildResult.PrunedLambda, &ctx, &props));
 }
 } // namespace NKqp
-}
+} // namespace NKikimr

@@ -380,7 +380,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         std::vector<std::string> results = {
             R"([[1;1]])",
             R"([[2;2];[3;3];[4;4];[5;5];[6;6];[7;7];[8;8];[9;9]])",
-            R"([[2;2];[3;3];[4;4];[5;5];[6;6];[7;7];[8;8]])"
+            R"([[2;2];[3;3];[4;4];[5;5];[6;6];[7;7];[8;8]])",
+            R"([[2;2];[3;3];[4;4];[5;5];[6;6];[7;7];[8;8]])",
+            R"([[1;1]])",
         };
 
         std::vector<std::string> queries = {
@@ -392,6 +394,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             )",
             R"(
                 SELECT t1.a, t1.b FROM `/Root/t1` as t1 WHERE t1.a > 1 and t1.a < 9 order by t1.a;
+            )",
+            R"(
+                SELECT t1.a, t1.b FROM `/Root/t1` as t1 WHERE t1.a > 1 and t1.c < 9 order by t1.a;
+            )",
+            R"(
+                SELECT t1.a, t1.b FROM `/Root/t1` as t1 WHERE t1.a = 1 and t1.c = 1 order by t1.a;
             )",
         };
 

@@ -26,7 +26,7 @@ constexpr TDuration AcquireSemaphorePeriod = TDuration::Seconds(3);
 
 constexpr char SemaphoreName[] = "RowDispatcher";
 constexpr char DefaultCoordinationNodePath[] = ".metadata/streaming/coordination_node";
-constexpr TDuration SessionTimeout = TDuration::Seconds(1);
+constexpr TDuration SessionTimeout = TDuration::Seconds(10);
 
 using TRpcIn = Ydb::Coordination::SessionRequest;
 using TRpcOut = Ydb::Coordination::SessionResponse;
@@ -203,7 +203,7 @@ private:
             .Promise = promise,
             .OperationName = "local_coordination_rpc_operation",
         });
-        Register(actor, TMailboxType::HTSwap, TActivationContext::ActorSystem()->AppData<NKikimr::TAppData>()->UserPoolId);
+        Register(actor, TMailboxType::HTSwap, TActivationContext::ActorSystem()->AppData<NKikimr::TAppData>()->SystemPoolId);
         return promise.GetFuture();
     }
 
